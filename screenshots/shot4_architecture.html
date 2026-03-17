@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Program Architecture — GhostRigger-K1-K2</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@300;400;500;600;700;800&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: #0d1117;
+    width: 1280px;
+    height: 800px;
+    font-family: 'Inter', sans-serif;
+    color: #e6edf3;
+    overflow: hidden;
+  }
+
+  /* Header */
+  .page-header {
+    background: #161b22;
+    border-bottom: 1px solid #21262d;
+    padding: 16px 40px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  .page-tag {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #58a6ff;
+  }
+  .page-title {
+    font-size: 20px;
+    font-weight: 800;
+    color: #e6edf3;
+    line-height: 1.1;
+  }
+  .page-sub { font-size: 12px; color: #8b949e; margin-top: 2px; }
+  .header-badges { margin-left: auto; display: flex; gap: 10px; }
+  .hbadge {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #8b949e;
+  }
+  .hbadge.blue  { border-color: #1f6feb; color: #58a6ff; background: #0c1421; }
+  .hbadge.green { border-color: #3fb950; color: #3fb950; background: #0d1a12; }
+  .hbadge.amber { border-color: #ffa657; color: #ffa657; background: #1a1408; }
+
+  /* Layout */
+  .arch-body {
+    padding: 20px 36px;
+    height: calc(800px - 73px);
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 14px;
+    align-content: start;
+  }
+
+  /* ── Node boxes ── */
+  .node {
+    border-radius: 8px;
+    border: 1px solid #21262d;
+    overflow: hidden;
+    position: relative;
+  }
+  .node-head {
+    padding: 10px 14px 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .node-icon { font-size: 16px; }
+  .node-name {
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .node-file {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #484f58;
+    margin-left: auto;
+  }
+  .node-body {
+    padding: 0 14px 10px;
+  }
+  .node-desc {
+    font-size: 11.5px;
+    color: #8b949e;
+    line-height: 1.5;
+    margin-bottom: 7px;
+  }
+  .tag-row { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tag {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+
+  /* Colour themes */
+  .node.parse  { background: #0c1421; border-color: #1f6feb; }
+  .node.parse  .node-head  { background: #0c1421; border-bottom: 1px solid #1a2a40; }
+  .node.parse  .node-name  { color: #58a6ff; }
+  .node.parse  .tag { background: #1a2a40; color: #58a6ff; }
+
+  .node.data   { background: #1a1408; border-color: #ffa657; }
+  .node.data   .node-head  { background: #1a1408; border-bottom: 1px solid #2a2010; }
+  .node.data   .node-name  { color: #ffa657; }
+  .node.data   .tag { background: #2a2010; color: #ffa657; }
+
+  .node.render { background: #1c1430; border-color: #d2a8ff; }
+  .node.render .node-head  { background: #1c1430; border-bottom: 1px solid #2a1a40; }
+  .node.render .node-name  { color: #d2a8ff; }
+  .node.render .tag { background: #2a1a40; color: #d2a8ff; }
+
+  .node.tex    { background: #0d1a12; border-color: #3fb950; }
+  .node.tex    .node-head  { background: #0d1a12; border-bottom: 1px solid #1a2a1a; }
+  .node.tex    .node-name  { color: #3fb950; }
+  .node.tex    .tag { background: #1a2a1a; color: #3fb950; }
+
+  .node.ui     { background: #1a1010; border-color: #f85149; }
+  .node.ui     .node-head  { background: #1a1010; border-bottom: 1px solid #2a1a1a; }
+  .node.ui     .node-name  { color: #f85149; }
+  .node.ui     .tag { background: #2a1a1a; color: #f85149; }
+
+  .node.export { background: #181208; border-color: #f2cc60; }
+  .node.export .node-head  { background: #181208; border-bottom: 1px solid #28220a; }
+  .node.export .node-name  { color: #f2cc60; }
+  .node.export .tag { background: #28220a; color: #f2cc60; }
+
+  .node.rig    { background: #10181a; border-color: #39d3c0; }
+  .node.rig    .node-head  { background: #10181a; border-bottom: 1px solid #1a2a2c; }
+  .node.rig    .node-name  { color: #39d3c0; }
+  .node.rig    .tag { background: #1a2a2c; color: #39d3c0; }
+
+  /* ── Arrow flow strip ── */
+  .flow-strip {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 8px;
+    padding: 10px 20px;
+    overflow: hidden;
+  }
+  .flow-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    gap: 4px;
+  }
+  .flow-box {
+    padding: 5px 12px;
+    border-radius: 5px;
+    font-size: 11.5px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .flow-label {
+    font-size: 9.5px;
+    color: #484f58;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .flow-arrow {
+    color: #484f58;
+    font-size: 18px;
+    flex-shrink: 0;
+    padding: 0 4px;
+    margin-bottom: 14px;
+  }
+
+  .fb-archive  { background:#0c1421; border:1px solid #1f6feb; color:#58a6ff; }
+  .fb-parse    { background:#0c1421; border:1px solid #1f6feb; color:#58a6ff; }
+  .fb-model    { background:#1a1408; border:1px solid #ffa657; color:#ffa657; }
+  .fb-viewport { background:#1c1430; border:1px solid #d2a8ff; color:#d2a8ff; }
+  .fb-tex      { background:#0d1a12; border:1px solid #3fb950; color:#3fb950; }
+  .fb-rig      { background:#10181a; border:1px solid #39d3c0; color:#39d3c0; }
+  .fb-export   { background:#181208; border:1px solid #f2cc60; color:#f2cc60; }
+
+  /* line count note */
+  .loc-note {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #484f58;
+    margin-top: 2px;
+  }
+
+  /* stat row */
+  .stat-footer {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 10px;
+  }
+  .sf-pill {
+    flex:1;
+    background:#161b22;
+    border:1px solid #21262d;
+    border-radius:8px;
+    padding: 10px 14px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .sf-val {
+    font-family:'JetBrains Mono',monospace;
+    font-size:20px;
+    font-weight:700;
+    line-height:1;
+  }
+  .sf-sub {
+    font-size:10.5px;
+    color:#8b949e;
+    line-height:1.4;
+  }
+  .sf-label { font-size:9.5px; color:#484f58; text-transform:uppercase; letter-spacing:0.7px; font-weight:600; margin-top:2px; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div>
+    <div class="page-tag">Program Architecture · GhostRigger-K1-K2</div>
+    <div class="page-title">Pipeline Overview — KotOR Mod Toolkit</div>
+    <div class="page-sub">Python 3.10 · Tkinter · PIL · NumPy · PyOpenGL · ModernGL</div>
+  </div>
+  <div class="header-badges">
+    <div class="hbadge blue">88 source files</div>
+    <div class="hbadge amber">55,000 lines</div>
+    <div class="hbadge green">1,596 tests</div>
+  </div>
+</div>
+
+<div class="arch-body">
+
+  <!-- Flow strip -->
+  <div class="flow-strip">
+    <div class="flow-step">
+      <div class="flow-box fb-archive">KEY / BIF / ERF</div>
+      <div class="flow-label">Game Archives</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-box fb-parse">MDL Binary / ASCII</div>
+      <div class="flow-label">mdl_parser.py</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-box fb-model">KotorModel + Nodes</div>
+      <div class="flow-label">model_data.py</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-box fb-viewport">3D Viewport</div>
+      <div class="flow-label">viewport.py (PIL)</div>
+    </div>
+    <div class="flow-arrow">+</div>
+    <div class="flow-step">
+      <div class="flow-box fb-tex">TGA / TPC / TXI</div>
+      <div class="flow-label">Texture System</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-box fb-rig">Auto-Rigger</div>
+      <div class="flow-label">accurig.py</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-box fb-export">OBJ / FBX / MDL</div>
+      <div class="flow-label">Exporters</div>
+    </div>
+  </div>
+
+  <!-- Row 1: 3 nodes -->
+  <div class="node parse">
+    <div class="node-head">
+      <div class="node-icon">📦</div>
+      <div>
+        <div class="node-name">MDL Parser</div>
+        <div class="loc-note">mdl_parser.py · 2,078 lines</div>
+      </div>
+      <div class="node-file">src/core/</div>
+    </div>
+    <div class="node-body">
+      <div class="node-desc">Parses binary (K1 & K2) and ASCII MDL/MDX pairs into KotorModel objects. Handles pointer-offset scheme relative to data section, name tables, geometry blocks, and animation controllers.</div>
+      <div class="tag-row">
+        <span class="tag">struct unpack</span>
+        <span class="tag">binary MDL</span>
+        <span class="tag">ASCII MDL</span>
+        <span class="tag">MDX vertex data</span>
+        <span class="tag">KEY/BIF/ERF</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="node data">
+    <div class="node-head">
+      <div class="node-icon">🧱</div>
+      <div>
+        <div class="node-name">Model Data Layer</div>
+        <div class="loc-note">model_data.py · core module</div>
+      </div>
+      <div class="node-file">src/core/</div>
+    </div>
+    <div class="node-body">
+      <div class="node-desc">KotorModel / ModelNode dataclasses hold geometry, bone hierarchy, UV sets, weights, animations and controller tracks. Shared across renderer, exporter, and auto-rigger.</div>
+      <div class="tag-row">
+        <span class="tag">KotorModel</span>
+        <span class="tag">ModelNode</span>
+        <span class="tag">Animation</span>
+        <span class="tag">BoneWeight</span>
+        <span class="tag">NodeFlags</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="node tex">
+    <div class="node-head">
+      <div class="node-icon">🖼</div>
+      <div>
+        <div class="node-name">Texture System</div>
+        <div class="loc-note">viewport.py · TexCache</div>
+      </div>
+      <div class="node-file">src/gui/</div>
+    </div>
+    <div class="node-body">
+      <div class="node-desc">Loads TGA and proprietary TPC textures (DXT1/DXT5 decode). Parses embedded TXI metadata for flipbook animations, additive blending, UV tiling. Mip1 half-res cache for LQ renders.</div>
+      <div class="tag-row">
+        <span class="tag">TPC/DXT1/DXT5</span>
+        <span class="tag">TXI metadata</span>
+        <span class="tag">mip1 cache</span>
+        <span class="tag">flipbook</span>
+        <span class="tag">additive blend</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2 -->
+  <div class="node render">
+    <div class="node-head">
+      <div class="node-icon">🎮</div>
+      <div>
+        <div class="node-name">3D Viewport</div>
+        <div class="loc-note">viewport.py · 6,077 lines</div>
+      </div>
+      <div class="node-file">src/gui/</div>
+    </div>
+    <div class="node-body">
+      <div class="node-desc">Pure-PIL software rasterizer. Arc-ball camera, painter-sort depth, flat/solid/textured/wireframe modes. UV seam fix, V-flip, tiling, UV scrolling, TXI rotation. BG thread + result queue.</div>
+      <div class="tag-row">
+        <span class="tag">PIL AFFINE</span>
+        <span class="tag">painter sort</span>
+        <span class="tag">arc-ball cam</span>
+        <span class="tag">UV seam fix</span>
+        <span class="tag">mip LOD</span>
+        <span class="tag">2-pass render</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="node rig">
+    <div class="node-head">
+      <div class="node-icon">🦴</div>
+      <div>
+        <div class="node-name">Auto-Rigger</div>
+        <div class="loc-note">accurig.py · 1,114 lines</div>
+      </div>
+      <div class="node-file">src/autorig/</div>
+    </div>
+    <div class="node-body">
+      <div class="node-desc">Automatic bone weight assignment for KotOR humanoid and creature skeletons. Heat-diffusion skinning, cloth/dangly rig, FBX bone name retargeting to KotOR naming convention.</div>
+      <div class="tag-row">
+        <span class="tag">heat-diffusion</span>
+        <span class="tag">cloth rig</span>
+        <span class="tag">FBX retarget</span>
+        <span class="tag">K1/K2 skeleton</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="node export">
+    <div class="node-head">
+      <div class="node-icon">📤</div>
+      <div>
+        <div class="node-name">Exporters</div>
+        <div class="loc-note">mesh_converter.py · 1,206 lines</div>
+      </div>
+      <div class="node-file">src/converters/</div>
+    </div>
+    <div class="node-body">
+      <div class="node-desc">OBJ+MTL, FBX (pyassimp), and ASCII MDL write-back for MDLOps compilation. TGA↔TPC texture conversion with mipmap generation. GFF reader/writer for module data.</div>
+      <div class="tag-row">
+        <span class="tag">OBJ/MTL</span>
+        <span class="tag">FBX</span>
+        <span class="tag">ASCII MDL</span>
+        <span class="tag">TGA↔TPC</span>
+        <span class="tag">GFF</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stat footer -->
+  <div class="stat-footer">
+    <div class="sf-pill">
+      <span class="sf-val" style="color:#58a6ff">6,077</span>
+      <div><div class="sf-sub">viewport.py</div><div class="sf-label">largest module</div></div>
+    </div>
+    <div class="sf-pill">
+      <span class="sf-val" style="color:#ffa657">88</span>
+      <div><div class="sf-sub">Python files</div><div class="sf-label">total source</div></div>
+    </div>
+    <div class="sf-pill">
+      <span class="sf-val" style="color:#f2cc60">55K</span>
+      <div><div class="sf-sub">lines of code</div><div class="sf-label">total project</div></div>
+    </div>
+    <div class="sf-pill">
+      <span class="sf-val" style="color:#3fb950">37</span>
+      <div><div class="sf-sub">test files</div><div class="sf-label">1,596 passing</div></div>
+    </div>
+    <div class="sf-pill">
+      <span class="sf-val" style="color:#d2a8ff">2,527</span>
+      <div><div class="sf-sub">game models</div><div class="sf-label">crash audit</div></div>
+    </div>
+    <div class="sf-pill">
+      <span class="sf-val" style="color:#39d3c0">5 wks</span>
+      <div><div class="sf-sub">development</div><div class="sf-label">timeline</div></div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

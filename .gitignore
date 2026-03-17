@@ -1,0 +1,26 @@
+# PyInstaller build artifacts
+KotorModTools/build/
+KotorModTools/dist/
+KotorModTools/__pycache__/
+KotorModTools/src/**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.spec.bak
+
+# Release zip (too large for git)
+KotorModTools_v1.0.zip
+KotorModTools_Release/
+
+# Settings
+KotorModTools/settings.json
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp

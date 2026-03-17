@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Progressive Render — _lq_tex_mode wiring</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600;700;800&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: #0d1117;
+    width: 1280px;
+    min-height: 800px;
+    font-family: 'Inter', sans-serif;
+    color: #e6edf3;
+    overflow: hidden;
+  }
+
+  /* ── Editor chrome ── */
+  .titlebar {
+    height: 38px;
+    background: #161b22;
+    border-bottom: 1px solid #21262d;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 8px;
+  }
+  .dot { width:12px; height:12px; border-radius:50%; }
+  .dot.red   { background:#ff5f57; }
+  .dot.amber { background:#febc2e; }
+  .dot.green { background:#28c840; }
+  .titlebar-text { margin: 0 auto; color:#8b949e; font-size:12px; font-family:'JetBrains Mono',monospace; }
+
+  .tab-bar {
+    height: 36px;
+    background: #161b22;
+    border-bottom: 1px solid #21262d;
+    display: flex;
+    align-items: stretch;
+  }
+  .tab {
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: #8b949e;
+    border-right: 1px solid #21262d;
+  }
+  .tab.active { background:#0d1117; color:#e6edf3; border-bottom:2px solid #1f6feb; margin-bottom:-1px; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    height: calc(800px - 74px);
+  }
+
+  /* ── Code section ── */
+  .code-col {
+    border-right: 1px solid #21262d;
+    display: flex;
+    flex-direction: column;
+  }
+  .breadcrumb {
+    height: 28px;
+    background: #161b22;
+    border-bottom: 1px solid #21262d;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 6px;
+    font-size: 11px;
+    color: #8b949e;
+    font-family: 'JetBrains Mono', monospace;
+    flex-shrink: 0;
+  }
+  .breadcrumb span { color:#58a6ff; }
+  .breadcrumb .sep { color:#484f58; }
+  .breadcrumb .pos { margin-left:auto; }
+
+  pre.code {
+    flex: 1;
+    padding: 10px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    line-height: 1.65;
+    overflow: hidden;
+  }
+  .line {
+    display: flex;
+    align-items: baseline;
+    padding-right: 24px;
+    min-height: 20px;
+  }
+  .line.hl-green { background:#0d1a12; border-left:3px solid #3fb950; }
+  .line.hl-blue  { background:#0c1421; border-left:3px solid #1f6feb; }
+  .line.hl-amber { background:#1a1408; border-left:3px solid #ffa657; }
+  .line.hl-red   { background:#1c1010; border-left:3px solid #f85149; }
+  .line.dim { opacity:0.55; }
+  .ln { width:50px; min-width:50px; text-align:right; color:#484f58; font-size:11.5px; padding-right:18px; user-select:none; flex-shrink:0; }
+  .code-text { color:#e6edf3; white-space:pre; }
+  .kw   { color:#ff7b72; }
+  .fn   { color:#d2a8ff; }
+  .var  { color:#ffa657; }
+  .str  { color:#a5d6ff; }
+  .num  { color:#79c0ff; }
+  .op   { color:#ff7b72; }
+  .cm   { color:#6e7681; font-style:italic; }
+  .punc { color:#e6edf3; }
+  .bool { color:#79c0ff; }
+  .dec  { color:#f2cc60; }
+
+  .status-bar {
+    height: 28px;
+    background: #161b22;
+    border-top: 1px solid #21262d;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 16px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #484f58;
+    flex-shrink: 0;
+  }
+  .status-bar span { color: #8b949e; }
+
+  /* ── Right panel ── */
+  .right-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    background: #0d1117;
+  }
+
+  .panel {
+    border-bottom: 1px solid #21262d;
+    padding: 16px 20px;
+  }
+  .panel-title {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #484f58;
+    margin-bottom: 12px;
+  }
+
+  /* Timeline diagram */
+  .timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .tl-label {
+    font-size: 11px;
+    color: #8b949e;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 4px;
+  }
+  .tl-track {
+    display: flex;
+    height: 26px;
+    border-radius: 5px;
+    overflow: hidden;
+    gap: 2px;
+    align-items: center;
+  }
+  .tl-seg {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    border-radius: 3px;
+  }
+  .tl-gap {
+    height: 2px;
+    background: #21262d;
+    flex: 1;
+  }
+  .seg-drag   { background: #1c2a3a; border: 1px solid #1f6feb; color: #58a6ff; }
+  .seg-lq     { background: #1a2a1a; border: 1px solid #3fb950; color: #3fb950; }
+  .seg-hq     { background: #1c2040; border: 1px solid #d2a8ff; color: #d2a8ff; }
+  .seg-freeze { background: #2a1a1a; border: 1px solid #f85149; color: #f85149; }
+
+  .tl-axis {
+    display: flex;
+    font-size: 10px;
+    color: #484f58;
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 2px;
+  }
+
+  /* State machine */
+  .state-machine {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .state-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .state-flag {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 11px;
+    min-width: 130px;
+    text-align: center;
+  }
+  .state-flag.on  { border-color: #3fb950; color: #3fb950; background: #0d1a12; }
+  .state-flag.off { border-color: #f85149; color: #f85149; background: #1c1010; }
+  .state-flag.neutral { color: #8b949e; }
+  .state-arrow { color: #484f58; font-size: 12px; }
+  .state-event { font-size: 10.5px; color: #8b949e; }
+
+  /* Stat pills */
+  .mini-stats {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .mini-pill {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 6px;
+    padding: 8px 12px;
+    text-align: center;
+    flex: 1;
+    min-width: 80px;
+  }
+  .mini-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 17px;
+    font-weight: 700;
+    display: block;
+    line-height: 1.1;
+    margin-bottom: 3px;
+  }
+  .mini-label { font-size: 9.5px; color: #484f58; text-transform: uppercase; letter-spacing: 0.6px; font-weight:600; }
+  .green { color: #3fb950; }
+  .red   { color: #f85149; }
+  .blue  { color: #58a6ff; }
+  .amber { color: #ffa657; }
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <div class="dot red"></div><div class="dot amber"></div><div class="dot green"></div>
+  <div class="titlebar-text">viewport.py — Progressive Render Fix (v10.3) — GhostRigger-K1-K2</div>
+</div>
+
+<div class="tab-bar">
+  <div class="tab active"><span>🐍</span> viewport.py</div>
+  <div class="tab"><span>🐍</span> test_v49_uv_wrapping_fix.py</div>
+</div>
+
+<div class="layout">
+
+  <!-- CODE column -->
+  <div class="code-col">
+    <div class="breadcrumb">
+      src <span class="sep">›</span> gui <span class="sep">›</span>
+      <span>viewport.py</span> <span class="sep">›</span>
+      <span>ViewportWidget</span> <span class="sep">›</span>
+      <span>_release_lmb</span>
+      <span class="pos">Ln 5615, Col 8</span>
+    </div>
+    <pre class="code">
+<div class="line dim"><span class="ln">5597</span><span class="code-text"><span class="kw">        if</span> <span class="var">self</span><span class="punc">.</span><span class="var">_is_dragging</span><span class="punc">:</span></span></div>
+<div class="line dim"><span class="ln">5598</span><span class="code-text">            <span class="var">dx</span><span class="punc">,</span> <span class="var">dy</span> <span class="op">=</span> <span class="var">e</span><span class="punc">.</span><span class="var">x</span> <span class="op">-</span> <span class="var">self</span><span class="punc">.</span><span class="var">_mx</span><span class="punc">,</span> <span class="var">e</span><span class="punc">.</span><span class="var">y</span> <span class="op">-</span> <span class="var">self</span><span class="punc">.</span><span class="var">_my</span></span></div>
+<div class="line dim"><span class="ln">5599</span><span class="code-text">            <span class="var">self</span><span class="punc">.</span><span class="var">camera</span><span class="punc">.</span><span class="fn">orbit</span><span class="punc">(</span><span class="var">dx</span> <span class="op">*</span> <span class="num">0.4</span><span class="punc">,</span> <span class="op">-</span><span class="var">dy</span> <span class="op">*</span> <span class="num">0.4</span><span class="punc">)</span></span></div>
+<div class="line dim"><span class="ln">5600</span><span class="code-text">            <span class="kw">if</span> <span class="fn">getattr</span><span class="punc">(</span><span class="var">self</span><span class="punc">,</span> <span class="str">'_fast_drag_enabled'</span><span class="punc">,</span> <span class="bool">True</span><span class="punc">):</span></span></div>
+<div class="line dim"><span class="ln">5601</span><span class="code-text">                <span class="var">self</span><span class="punc">.</span><span class="var">_renderer</span><span class="punc">.</span><span class="var">is_interactive</span> <span class="op">=</span> <span class="bool">True</span>  <span class="cm"># flat-shade LOD</span></span></div>
+<div class="line dim"><span class="ln">5602</span><span class="code-text">            <span class="var">self</span><span class="punc">.</span><span class="fn">_request_render</span><span class="punc">(</span><span class="var">fast</span><span class="op">=</span><span class="bool">True</span><span class="punc">)</span></span></div>
+<div class="line"><span class="ln">5603</span><span class="code-text"></span></div>
+<div class="line"><span class="ln">5604</span><span class="code-text">    <span class="kw">def</span> <span class="fn">_release_lmb</span><span class="punc">(</span><span class="var">self</span><span class="punc">,</span> <span class="var">e</span><span class="punc">):</span></span></div>
+<div class="line dim"><span class="ln">5605</span><span class="code-text">        <span class="str">"""LMB release: finish gimbal drag or check for bone/node click."""</span></span></div>
+<div class="line"><span class="ln">5606</span><span class="code-text">        <span class="kw">if</span> <span class="var">self</span><span class="punc">.</span><span class="var">_gimbal_dragging</span><span class="punc">:</span>  <span class="cm"># … gimbal finalize omitted …</span></span></div>
+<div class="line"><span class="ln">5607</span><span class="code-text">            <span class="var">self</span><span class="punc">.</span><span class="fn">_request_render</span><span class="punc">()</span><span class="punc">;</span> <span class="kw">return</span></span></div>
+<div class="line"><span class="ln">5608</span><span class="code-text"></span></div>
+<div class="line"><span class="ln">5609</span><span class="code-text">        <span class="var">self</span><span class="punc">.</span><span class="var">_renderer</span><span class="punc">.</span><span class="var">_hovered_bone</span> <span class="op">=</span> <span class="bool">None</span></span></div>
+<div class="line hl-blue"><span class="ln">5610</span><span class="code-text">        <span class="var">self</span><span class="punc">.</span><span class="var">_renderer</span><span class="punc">.</span><span class="var">is_interactive</span> <span class="op">=</span> <span class="bool">False</span>  <span class="cm"># restore full quality</span></span></div>
+<div class="line"><span class="ln">5611</span><span class="code-text"></span></div>
+<div class="line hl-green"><span class="ln">5612</span><span class="code-text">        <span class="cm"># ── Progressive two-pass render after drag ──────────────────────</span></span></div>
+<div class="line hl-green"><span class="ln">5613</span><span class="code-text">        <span class="cm"># FIX v10.3: _lq_tex_mode flag existed but was NEVER set True.</span></span></div>
+<div class="line hl-green"><span class="ln">5614</span><span class="code-text">        <span class="cm"># Every drag release was triggering a full HQ render immediately.</span></span></div>
+<div class="line hl-green"><span class="ln">5615</span><span class="code-text">        <span class="kw">if</span> <span class="var">self</span><span class="punc">.</span><span class="var">_renderer</span><span class="punc">.</span><span class="var">show_texture</span> <span class="kw">and</span> <span class="var">self</span><span class="punc">.</span><span class="var">_is_dragging</span><span class="punc">:</span></span></div>
+<div class="line hl-green"><span class="ln">5616</span><span class="code-text">            <span class="var">self</span><span class="punc">.</span><span class="var">_renderer</span><span class="punc">.</span><span class="var">_lq_tex_mode</span> <span class="op">=</span> <span class="bool">True</span>   <span class="cm"># pass 1: mip1 half-res</span></span></div>
+<div class="line hl-green"><span class="ln">5617</span><span class="code-text">            <span class="var">self</span><span class="punc">.</span><span class="var">_lq_pending_hq</span> <span class="op">=</span> <span class="bool">True</span>          <span class="cm"># flag: queue HQ after LQ</span></span></div>
+<div class="line hl-green"><span class="ln">5618</span><span class="code-text">        <span class="var">self</span><span class="punc">.</span><span class="fn">_request_render</span><span class="punc">()</span>               <span class="cm"># trigger LQ (or full if no tex)</span></span></div>
+<div class="line"><span class="ln">5619</span><span class="code-text"></span></div>
+<div class="line hl-amber"><span class="ln">5620</span><span class="code-text">    <span class="cm">    # … in _schedule_render (render result callback) …</span></span></div>
+<div class="line hl-amber"><span class="ln">5621</span><span class="code-text">        <span class="kw">if</span> <span class="fn">getattr</span><span class="punc">(</span><span class="var">self</span><span class="punc">,</span> <span class="str">'_lq_pending_hq'</span><span class="punc">,</span> <span class="bool">False</span><span class="punc">)</span> <span class="kw">and</span> <span class="var">self</span><span class="punc">.</span><span class="var">_renderer</span><span class="punc">.</span><span class="var">_lq_tex_mode</span><span class="punc">:</span></span></div>
+<div class="line hl-amber"><span class="ln">5622</span><span class="code-text">            <span class="var">self</span><span class="punc">.</span><span class="var">_renderer</span><span class="punc">.</span><span class="var">_lq_tex_mode</span> <span class="op">=</span> <span class="bool">False</span>  <span class="cm"># done with mip1</span></span></div>
+<div class="line hl-amber"><span class="ln">5623</span><span class="code-text">            <span class="var">self</span><span class="punc">.</span><span class="var">_lq_pending_hq</span> <span class="op">=</span> <span class="bool">False</span></span></div>
+<div class="line hl-amber"><span class="ln">5624</span><span class="code-text">            <span class="var">self</span><span class="punc">.</span><span class="fn">_request_render</span><span class="punc">()</span>             <span class="cm"># pass 2: full HQ</span></span></div>
+<div class="line"><span class="ln">5625</span><span class="code-text"></span></div>
+<div class="line hl-red"><span class="ln">5626</span><span class="code-text">    <span class="cm">    # … in _drag_motion (new drag cancels pending HQ) …</span></span></div>
+<div class="line hl-red"><span class="ln">5627</span><span class="code-text">        <span class="kw">if</span> <span class="op">not</span> <span class="var">self</span><span class="punc">.</span><span class="var">_is_dragging</span> <span class="kw">and</span> <span class="punc">(</span><span class="var">dx_total</span> <span class="op">&gt;</span> <span class="var">self</span><span class="punc">.</span><span class="var">_drag_threshold</span><span class="punc">):</span></span></div>
+<div class="line hl-red"><span class="ln">5628</span><span class="code-text">            <span class="var">self</span><span class="punc">.</span><span class="var">_lq_pending_hq</span> <span class="op">=</span> <span class="bool">False</span>       <span class="cm"># cancel HQ if user re-drags</span></span></div>
+<div class="line hl-red"><span class="ln">5629</span><span class="code-text">            <span class="var">self</span><span class="punc">.</span><span class="var">_renderer</span><span class="punc">.</span><span class="var">_lq_tex_mode</span> <span class="op">=</span> <span class="bool">False</span></span></div>
+</pre>
+    <div class="status-bar">
+      <span class="blue">⬤</span> <span style="color:#1f6feb">_release_lmb: LQ pass</span> &nbsp;&nbsp;
+      <span class="amber" style="color:#ffa657">⬤</span> <span>_schedule_render: HQ follow-up</span> &nbsp;&nbsp;
+      <span class="red" style="color:#f85149">⬤</span> <span>_drag_motion: HQ cancel</span> &nbsp;&nbsp;
+      <span style="margin-left:auto">viewport.py</span>
+      <span>Python 3.10</span>
+    </div>
+  </div>
+
+  <!-- RIGHT panel -->
+  <div class="right-col">
+
+    <!-- Timeline -->
+    <div class="panel">
+      <div class="panel-title">⏱ Render Timeline</div>
+      <div class="timeline">
+
+        <div>
+          <div class="tl-label">BEFORE fix — single blocking HQ render</div>
+          <div class="tl-track">
+            <div class="tl-seg seg-drag" style="width:30%">drag</div>
+            <div class="tl-seg seg-freeze" style="width:70%">▓ HQ FREEZE ~520 ms</div>
+          </div>
+          <div class="tl-axis"><span>0 ms</span><span style="margin-left:auto">520 ms</span></div>
+        </div>
+
+        <div style="margin-top:6px">
+          <div class="tl-label">AFTER fix — two-pass progressive</div>
+          <div class="tl-track">
+            <div class="tl-seg seg-drag" style="width:26%">drag</div>
+            <div class="tl-seg seg-lq" style="width:26%">LQ ~100ms</div>
+            <div class="tl-seg seg-hq" style="width:48%">HQ ~500ms</div>
+          </div>
+          <div class="tl-axis"><span>0 ms</span><span style="margin-left:44%">~260 ms</span><span style="margin-left:auto">~760 ms</span></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- State machine -->
+    <div class="panel">
+      <div class="panel-title">🔀 State Flow</div>
+      <div class="state-machine">
+        <div class="state-row">
+          <div class="state-flag neutral">drag active</div>
+          <div class="state-arrow">→</div>
+          <div>
+            <div class="state-flag on">is_interactive = True</div>
+            <div class="state-event" style="margin-top:2px">flat-shade LOD · 60fps</div>
+          </div>
+        </div>
+        <div class="state-row">
+          <div class="state-flag neutral">mouse release</div>
+          <div class="state-arrow">→</div>
+          <div>
+            <div class="state-flag on">_lq_tex_mode = True</div>
+            <div class="state-event" style="margin-top:2px">mip1 half-res · pass 1</div>
+          </div>
+        </div>
+        <div class="state-row">
+          <div class="state-flag neutral">LQ frame done</div>
+          <div class="state-arrow">→</div>
+          <div>
+            <div class="state-flag off">_lq_tex_mode = False</div>
+            <div class="state-event" style="margin-top:2px">full-res · pass 2</div>
+          </div>
+        </div>
+        <div class="state-row">
+          <div class="state-flag neutral">new drag starts</div>
+          <div class="state-arrow">→</div>
+          <div>
+            <div class="state-flag off">_lq_pending_hq = False</div>
+            <div class="state-event" style="margin-top:2px">cancel stale HQ render</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mini stats -->
+    <div class="panel">
+      <div class="panel-title">📈 Impact</div>
+      <div class="mini-stats">
+        <div class="mini-pill">
+          <span class="mini-val green">~260ms</span>
+          <span class="mini-label">LQ appears</span>
+        </div>
+        <div class="mini-pill">
+          <span class="mini-val red">~520ms</span>
+          <span class="mini-label">old freeze</span>
+        </div>
+        <div class="mini-pill">
+          <span class="mini-val amber">−50%</span>
+          <span class="mini-label">LQ speedup</span>
+        </div>
+      </div>
+      <div style="margin-top:12px; padding:10px; background:#161b22; border-radius:6px; border:1px solid #21262d; font-size:11px; color:#8b949e; font-family:'JetBrains Mono',monospace; line-height:1.7;">
+        <span style="color:#f2cc60">NOTE:</span> _lq_tex_mode existed on<br>
+        FrameRenderer since v7.0 but<br>
+        was never set True anywhere<br>
+        in ViewportWidget. Three lines<br>
+        in _release_lmb activated the<br>
+        entire dormant subsystem.
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</body>
+</html>

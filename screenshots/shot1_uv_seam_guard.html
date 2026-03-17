@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UV Seam Guard Fix — viewport.py</title>
+<style>
+  
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: #0d1117;
+    width: 1280px;
+    min-height: 800px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+  }
+
+  /* ── Editor chrome ── */
+  .editor-chrome {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-height: 800px;
+  }
+
+  .titlebar {
+    height: 38px;
+    background: #161b22;
+    border-bottom: 1px solid #21262d;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .dot { width:12px; height:12px; border-radius:50%; }
+  .dot.red   { background:#ff5f57; }
+  .dot.amber { background:#febc2e; }
+  .dot.green { background:#28c840; }
+
+  .titlebar-text {
+    margin-left: auto;
+    color: #8b949e;
+    font-size: 12px;
+    font-family: 'Courier New', 'Consolas', monospace;
+    margin-right: auto;
+    letter-spacing: 0.5px;
+  }
+
+  .tab-bar {
+    height: 36px;
+    background: #161b22;
+    border-bottom: 1px solid #21262d;
+    display: flex;
+    align-items: stretch;
+    flex-shrink: 0;
+  }
+  .tab {
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #8b949e;
+    border-right: 1px solid #21262d;
+    cursor: pointer;
+  }
+  .tab.active {
+    background: #0d1117;
+    color: #e6edf3;
+    border-bottom: 2px solid #1f6feb;
+    margin-bottom: -1px;
+  }
+  .tab-icon { font-size: 11px; }
+
+  .editor-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* ── Sidebar breadcrumb ── */
+  .sidebar {
+    width: 200px;
+    background: #161b22;
+    border-right: 1px solid #21262d;
+    padding: 12px 0;
+    flex-shrink: 0;
+  }
+  .sidebar-item {
+    padding: 4px 16px;
+    font-size: 11.5px;
+    font-family: 'Courier New', 'Consolas', monospace;
+    color: #8b949e;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .sidebar-item.active { color: #e6edf3; background: #21262d; }
+  .sidebar-item.folder { color: #58a6ff; }
+  .sidebar-section {
+    font-size: 10px;
+    color: #484f58;
+    padding: 8px 16px 4px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  /* ── Code pane ── */
+  .code-pane {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* breadcrumb */
+  .breadcrumb {
+    height: 28px;
+    background: #161b22;
+    border-bottom: 1px solid #21262d;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 6px;
+    font-size: 11px;
+    color: #8b949e;
+    font-family: 'Courier New', 'Consolas', monospace;
+    flex-shrink: 0;
+  }
+  .breadcrumb span { color: #58a6ff; }
+  .breadcrumb .sep { color: #484f58; }
+
+  pre.code {
+    flex: 1;
+    padding: 16px 0 16px 0;
+    overflow: hidden;
+    font-family: 'Courier New', 'Consolas', monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    counter-reset: line 1838;
+  }
+
+  .line {
+    display: flex;
+    align-items: baseline;
+    padding: 0 24px 0 0;
+    min-height: 21px;
+  }
+  .line:hover { background: #161b22; }
+  .line.highlight { background: #1c2128; border-left: 3px solid #1f6feb; }
+  .line.highlight-red { background: #1c1010; border-left: 3px solid #f85149; }
+  .line.highlight-green { background: #0d1a12; border-left: 3px solid #3fb950; }
+  .line.comment-block { background: #0d1a24; }
+
+  .ln {
+    width: 52px;
+    min-width: 52px;
+    text-align: right;
+    color: #484f58;
+    font-size: 12px;
+    padding-right: 20px;
+    user-select: none;
+    flex-shrink: 0;
+  }
+  .code-text { color: #e6edf3; white-space: pre; }
+
+  /* Syntax colours */
+  .kw   { color: #ff7b72; }  /* keyword */
+  .fn   { color: #d2a8ff; }  /* function */
+  .var  { color: #ffa657; }  /* variable / param */
+  .str  { color: #a5d6ff; }  /* string */
+  .num  { color: #79c0ff; }  /* number */
+  .op   { color: #ff7b72; }  /* operator */
+  .cm   { color: #8b949e; font-style: italic; }  /* comment */
+  .cls  { color: #ffa657; }  /* class */
+  .dec  { color: #f2cc60; }  /* decorator */
+  .bool { color: #79c0ff; }  /* bool / None */
+  .punc { color: #e6edf3; }  /* punctuation */
+
+  /* ── Badge strip ── */
+  .badge-strip {
+    height: 34px;
+    background: #161b22;
+    border-top: 1px solid #21262d;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+  .badge {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-family: 'Courier New', 'Consolas', monospace;
+  }
+  .badge-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .badge.green .badge-dot { background: #3fb950; }
+  .badge.red   .badge-dot { background: #f85149; }
+  .badge.blue  .badge-dot { background: #58a6ff; }
+  .badge.green { color: #3fb950; }
+  .badge.red   { color: #f85149; }
+  .badge.blue  { color: #58a6ff; }
+
+  .status-right {
+    margin-left: auto;
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    font-size: 11px;
+    font-family: 'Courier New', 'Consolas', monospace;
+    color: #484f58;
+  }
+  .status-right span { color: #8b949e; }
+
+  /* ── Callout box ── */
+  .callout {
+    position: absolute;
+    right: 24px;
+    top: 140px;
+    width: 270px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 12px;
+  }
+  .callout-title {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 11px;
+    color: #f2cc60;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 8px;
+  }
+  .callout-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 6px;
+    color: #8b949e;
+    font-family: 'Courier New', 'Consolas', monospace;
+    font-size: 11.5px;
+    line-height: 1.5;
+  }
+  .callout-row .icon { color: #f85149; flex-shrink: 0; }
+  .callout-row .icon.ok { color: #3fb950; }
+  .callout-row .label { color: #e6edf3; }
+</style>
+</head>
+<body>
+<div class="editor-chrome">
+
+  <!-- Title bar -->
+  <div class="titlebar">
+    <div class="dot red"></div>
+    <div class="dot amber"></div>
+    <div class="dot green"></div>
+    <div class="titlebar-text">GhostRigger-K1-K2 — Visual Studio Code</div>
+  </div>
+
+  <!-- Tab bar -->
+  <div class="tab-bar">
+    <div class="tab active"><span class="tab-icon">🐍</span> viewport.py</div>
+    <div class="tab"><span class="tab-icon">🐍</span> mdl_parser.py</div>
+    <div class="tab"><span class="tab-icon">🐍</span> model_data.py</div>
+    <div class="tab"><span class="tab-icon">📄</span> test_v49_uv_wrapping_fix.py</div>
+  </div>
+
+  <div class="editor-body">
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-section">Explorer</div>
+      <div class="sidebar-item folder">📁 GhostRigger-K1-K2</div>
+      <div class="sidebar-item">  📁 src</div>
+      <div class="sidebar-item">    📁 core</div>
+      <div class="sidebar-item">    📁 gui</div>
+      <div class="sidebar-item active">      🐍 viewport.py</div>
+      <div class="sidebar-item">      🐍 main_window.py</div>
+      <div class="sidebar-item">    📁 formats</div>
+      <div class="sidebar-item">  📁 tests</div>
+      <div class="sidebar-item">  📁 devlog</div>
+      <div class="sidebar-item">  📄 requirements.txt</div>
+      <div class="sidebar-item">  📄 README.md</div>
+      <div class="sidebar-section" style="margin-top:16px">Outline</div>
+      <div class="sidebar-item">  ƒ _uwrap_global</div>
+      <div class="sidebar-item">  ƒ _edge_has_seam_global</div>
+      <div class="sidebar-item active">  ƒ _paste_textured_triangle</div>
+      <div class="sidebar-item">  ƒ _draw_mesh_textured</div>
+    </div>
+
+    <!-- Code -->
+    <div class="code-pane">
+      <div class="breadcrumb">
+        src <span class="sep">›</span> gui <span class="sep">›</span>
+        <span>viewport.py</span> <span class="sep">›</span>
+        <span>_paste_textured_triangle</span>
+        <span class="sep" style="margin-left:auto">Ln 1857, Col 12</span>
+      </div>
+
+      <pre class="code">
+<div class="line cm comment-block"><span class="ln">1840</span><span class="code-text cm">    # ── U seam unwrap ─────────────────────────────────────────────────────</span></div>
+<div class="line cm comment-block"><span class="ln">1841</span><span class="code-text cm">    # Fast-path: all three U coords safely inside [0.05, 0.95] → no seam.</span></div>
+<div class="line"><span class="ln">1842</span><span class="code-text"><span class="var">    _U_SEAM_SAFE</span> <span class="op">=</span> <span class="punc">(</span><span class="num">0.05</span> <span class="op">&lt;=</span> <span class="var">u0</span> <span class="op">&lt;=</span> <span class="num">0.95</span> <span class="op">and</span></span></div>
+<div class="line"><span class="ln">1843</span><span class="code-text">                    <span class="num">0.05</span> <span class="op">&lt;=</span> <span class="var">u1_raw</span> <span class="op">&lt;=</span> <span class="num">0.95</span> <span class="op">and</span></span></div>
+<div class="line"><span class="ln">1844</span><span class="code-text">                    <span class="num">0.05</span> <span class="op">&lt;=</span> <span class="var">u2_raw</span> <span class="op">&lt;=</span> <span class="num">0.95</span><span class="punc">)</span></span></div>
+<div class="line"><span class="ln">1845</span><span class="code-text"></span></div>
+<div class="line"><span class="ln">1846</span><span class="code-text">    <span class="kw">if</span> <span class="var">_U_SEAM_SAFE</span><span class="punc">:</span></span></div>
+<div class="line"><span class="ln">1847</span><span class="code-text">        <span class="var">u1</span><span class="punc">,</span> <span class="var">u2</span> <span class="op">=</span> <span class="var">u1_raw</span><span class="punc">,</span> <span class="var">u2_raw</span></span></div>
+<div class="line"><span class="ln">1848</span><span class="code-text">    <span class="kw">elif</span> <span class="var">_u_span_raw</span> <span class="op">&lt;</span> <span class="num">1.0</span><span class="punc">:</span></span></div>
+<div class="line"><span class="ln">1849</span><span class="code-text">        <span class="var">u_has_seam</span> <span class="op">=</span> <span class="punc">(</span><span class="fn">_edge_has_seam_global</span><span class="punc">(</span><span class="var">u0</span><span class="punc">,</span> <span class="var">u1_raw</span><span class="punc">)</span> <span class="op">or</span></span></div>
+<div class="line"><span class="ln">1850</span><span class="code-text">                      <span class="fn">_edge_has_seam_global</span><span class="punc">(</span><span class="var">u0</span><span class="punc">,</span> <span class="var">u2_raw</span><span class="punc">)</span> <span class="op">or</span></span></div>
+<div class="line"><span class="ln">1851</span><span class="code-text">                      <span class="fn">_edge_has_seam_global</span><span class="punc">(</span><span class="var">u1_raw</span><span class="punc">,</span> <span class="var">u2_raw</span><span class="punc">))</span></span></div>
+<div class="line"><span class="ln">1852</span><span class="code-text">        <span class="kw">if</span> <span class="var">u_has_seam</span><span class="punc">:</span></span></div>
+<div class="line"><span class="ln">1853</span><span class="code-text">            <span class="var">u1_try</span> <span class="op">=</span> <span class="fn">_uwrap_global</span><span class="punc">(</span><span class="var">u0</span><span class="punc">,</span> <span class="var">u1_raw</span><span class="punc">)</span></span></div>
+<div class="line"><span class="ln">1854</span><span class="code-text">            <span class="var">u2_try</span> <span class="op">=</span> <span class="fn">_uwrap_global</span><span class="punc">(</span><span class="var">u0</span><span class="punc">,</span> <span class="var">u2_raw</span><span class="punc">)</span></span></div>
+<div class="line"><span class="ln">1855</span><span class="code-text"></span></div>
+<div class="line highlight-red"><span class="ln">1856</span><span class="code-text cm">            <span class="cm"># ✗ OLD guard (v10.2): accepted u=[0.9,0.1,0.8] → u1_try=1.1 → dark corner</span></span></div>
+<div class="line highlight-red"><span class="ln">1857</span><span class="code-text">            <span class="cm">#   new_span=0.30 &lt; 0.80*0.70=0.56 → ACCEPTED  ← BUG</span></span></div>
+<div class="line highlight-red"><span class="ln">1858</span><span class="code-text cm">            <span class="cm">#   if new_span &lt; _u_span_raw * 0.70:  u1, u2 = u1_try, u2_try</span></span></div>
+<div class="line"><span class="ln">1859</span><span class="code-text"></span></div>
+<div class="line highlight-green"><span class="ln">1860</span><span class="code-text">            <span class="var">new_span</span> <span class="op">=</span> <span class="fn">max</span><span class="punc">(</span><span class="var">u0</span><span class="punc">,</span> <span class="var">u1_try</span><span class="punc">,</span> <span class="var">u2_try</span><span class="punc">)</span> <span class="op">-</span> <span class="fn">min</span><span class="punc">(</span><span class="var">u0</span><span class="punc">,</span> <span class="var">u1_try</span><span class="punc">,</span> <span class="var">u2_try</span><span class="punc">)</span></span></div>
+<div class="line highlight-green"><span class="ln">1861</span><span class="code-text cm">            <span class="cm"># ✓ NEW guard (v10.3): strict in-bounds check — if fix would place</span></span></div>
+<div class="line highlight-green"><span class="ln">1862</span><span class="code-text cm">            <span class="cm">#   any UV outside (-0.1, 1.1), PIL AFFINE will sample the transparent</span></span></div>
+<div class="line highlight-green"><span class="ln">1863</span><span class="code-text cm">            <span class="cm">#   fillcolor → reject fix.  Real KotOR seam verts wrap to ~1.01-1.07.</span></span></div>
+<div class="line highlight-green"><span class="ln">1864</span><span class="code-text">            <span class="var">_u1_ok</span> <span class="op">=</span> <span class="op">-</span><span class="num">0.1</span> <span class="op">&lt;</span> <span class="var">u1_try</span> <span class="op">&lt;</span> <span class="num">1.1</span></span></div>
+<div class="line highlight-green"><span class="ln">1865</span><span class="code-text">            <span class="var">_u2_ok</span> <span class="op">=</span> <span class="op">-</span><span class="num">0.1</span> <span class="op">&lt;</span> <span class="var">u2_try</span> <span class="op">&lt;</span> <span class="num">1.1</span></span></div>
+<div class="line highlight-green"><span class="ln">1866</span><span class="code-text">            <span class="kw">if</span> <span class="var">new_span</span> <span class="op">&lt;</span> <span class="var">_u_span_raw</span> <span class="op">*</span> <span class="num">0.70</span> <span class="kw">and</span> <span class="var">_u1_ok</span> <span class="kw">and</span> <span class="var">_u2_ok</span><span class="punc">:</span></span></div>
+<div class="line highlight-green"><span class="ln">1867</span><span class="code-text">                <span class="var">u1</span><span class="punc">,</span> <span class="var">u2</span> <span class="op">=</span> <span class="var">u1_try</span><span class="punc">,</span> <span class="var">u2_try</span>   <span class="cm"># ✓ seam fix accepted</span></span></div>
+<div class="line"><span class="ln">1868</span><span class="code-text">            <span class="kw">else</span><span class="punc">:</span></span></div>
+<div class="line"><span class="ln">1869</span><span class="code-text">                <span class="var">u1</span><span class="punc">,</span> <span class="var">u2</span> <span class="op">=</span> <span class="var">u1_raw</span><span class="punc">,</span> <span class="var">u2_raw</span>  <span class="cm"># wide-triangle: keep raw UVs</span></span></div>
+<div class="line"><span class="ln">1870</span><span class="code-text">        <span class="kw">else</span><span class="punc">:</span></span></div>
+<div class="line"><span class="ln">1871</span><span class="code-text">            <span class="var">u1</span><span class="punc">,</span> <span class="var">u2</span> <span class="op">=</span> <span class="var">u1_raw</span><span class="punc">,</span> <span class="var">u2_raw</span></span></div>
+<div class="line"><span class="ln">1872</span><span class="code-text">    <span class="kw">else</span><span class="punc">:</span>  <span class="cm"># _u_span_raw &gt;= 1.0 → wide tile span, skip fix</span></span></div>
+<div class="line"><span class="ln">1873</span><span class="code-text">        <span class="var">u1</span><span class="punc">,</span> <span class="var">u2</span> <span class="op">=</span> <span class="var">u1_raw</span><span class="punc">,</span> <span class="var">u2_raw</span></span></div>
+</pre>
+
+      <!-- Status bar / badges -->
+      <div class="badge-strip">
+        <div class="badge red"><div class="badge-dot"></div> BUG v10.2: ratio guard accepts wide-triangle false positive</div>
+        <div class="badge green"><div class="badge-dot"></div> FIX v10.3: strict in-bounds check (-0.1, 1.1)</div>
+        <div class="status-right">
+          <span>viewport.py</span>
+          <span>Python 3.10</span>
+          <span>UTF-8</span>
+          <span>GhostRigger-K1-K2</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
