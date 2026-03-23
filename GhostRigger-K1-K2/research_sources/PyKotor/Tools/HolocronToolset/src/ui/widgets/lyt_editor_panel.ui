@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>300</width>
+    <height>400</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <layout class="QHBoxLayout" name="gridControlsLayout">
+     <item>
+      <widget class="QCheckBox" name="showGridCheckbox">
+       <property name="text">
+        <string>Show Grid</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="snapGridCheckbox">
+       <property name="text">
+        <string>Snap to Grid</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="gridSizeLabel">
+       <property name="text">
+        <string>Grid Size:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QSpinBox" name="gridSizeSpinBox">
+       <property name="minimum">
+        <number>10</number>
+       </property>
+       <property name="maximum">
+        <number>1000</number>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="buttonLayout">
+     <item>
+      <widget class="QPushButton" name="addRoomButton">
+       <property name="text">
+        <string>Add Room</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="addTrackButton">
+       <property name="text">
+        <string>Add Track</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="addObstacleButton">
+       <property name="text">
+        <string>Add Obstacle</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="placeDoorHookButton">
+       <property name="text">
+        <string>Place Door Hook</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="zoomLayout">
+     <item>
+      <widget class="QLabel" name="zoomLabel">
+       <property name="text">
+        <string>Zoom:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QSlider" name="zoomSlider">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="minimum">
+        <number>10</number>
+       </property>
+       <property name="maximum">
+        <number>200</number>
+       </property>
+       <property name="value">
+        <number>100</number>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QListWidget" name="textureList"/>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

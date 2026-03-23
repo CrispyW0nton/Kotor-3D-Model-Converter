@@ -541,6 +541,63 @@ class ModelLibraryEntry:
         if self.model_class: parts.append(self.model_class[:4])
         return '  '.join(parts)
 
+    @property
+    def display_label_rich(self) -> str:
+        """Extended label that includes area name for module models."""
+        r = self.resref.lower()
+        # K2 module: 3-digit area code
+        if len(r) >= 5 and r[:3].isdigit() and r[3:5].isalpha():
+            area_key = r[:3]
+            # Inline minimal K2 area lookup (avoids circular import)
+            _K2_SHORT = {
+                '101':'Peragus','102':'Peragus','103':'Peragus','104':'Peragus',
+                '105':'Peragus','106':'Peragus','107':'Peragus',
+                '151':'Harbinger','152':'Harbinger','153':'Harbinger',
+                '201':'Telos CS','202':'Telos CS','203':'Telos CS','204':'Telos CS',
+                '207':'Telos CS','208':'Telos MB','209':'Telos RZ',
+                '211':'Telos Surf','220':'Telos Pol','221':'Telos Pol',
+                '222':'Telos Pol','231':'Telos UG','232':'Telos RZ',
+                '261':'HK Factory','262':'HK Factory',
+                '298':'Atris Acad','299':'Atris Acad',
+                '301':'Nar Shadd','302':'Nar Shadd','303':'Nar Shadd',
+                '304':'Goto Yacht','305':'Nar Shadd','306':'Nar Shadd',
+                '351':'Goto Yacht','352':'Goto Yacht','371':'Nar Shadd',
+                '401':'Dxun','402':'Dxun','403':'Dxun',
+                '410':'Dxun','411':'Dxun Tomb',
+                '421':'Onderon','501':'Onderon','502':'Onderon',
+                '503':'Onderon','504':'Onderon','505':'Onderon',
+                '506':'Onderon','510':'Onderon','511':'Onderon',
+                '601':'Dantooine','602':'Dantooine','604':'Dantooine',
+                '605':'Dantooine','610':'Khoonda','650':'Dantooine',
+                '701':'Korriban','702':'Korriban','710':'Korriban','711':'Korriban',
+                '801':'Malachor','802':'Malachor','803':'Trayus',
+                '804':'Trayus','805':'Trayus','806':'Trayus','807':'Trayus',
+                '851':'Ravager','852':'Ravager',
+            }
+            area_name = _K2_SHORT.get(area_key, f'K2-{area_key}')
+            return f"{self.resref}  [{area_name}]"
+        # K1 module: m + 2-digit area code
+        if r.startswith('m') and len(r) >= 3 and r[1:3].isdigit():
+            area_key = r[1:3]
+            _K1_SHORT = {
+                '01':'Endar Spire','02':'Endar Spire','03':'Taris',
+                '04':'Taris','05':'Taris','08':'Undercity','09':'Sewers',
+                '10':'Sith Base','11':'Hidden Bek','12':'Dantooine',
+                '13':'Dantooine','14':'Dantooine','15':'Dantooine',
+                '16':'Tatooine','17':'Dune Sea','18':'Sand People',
+                '19':'Krayt Cave','20':'Kashyyyk','21':'Kashyyyk',
+                '22':'Kashyyyk','23':'Shadowlands','24':'Shadowlands',
+                '25':'Manaan','26':'Manaan','27':'Manaan Ocean',
+                '28':'Korriban','31':'Leviathan','33':'Leviathan',
+                '34':'Leviathan','35':'Leviathan','36':'Unknown World',
+                '37':'Unknown World','38':'Temple','39':'Temple',
+                '40':'Star Forge','41':'Star Forge','42':'Star Forge',
+                '43':'Star Forge','44':'Ebon Hawk','45':'Yavin',
+            }
+            area_name = _K1_SHORT.get(area_key, f'K1-m{area_key}')
+            return f"{self.resref}  [{area_name}]"
+        return self.display_label
+
 
 class GameLibrary:
     """
@@ -587,7 +644,8 @@ class GameLibrary:
         self._2da_cache.clear()
 
     def scan(self, game_dir: str = None, k2_dir: str = None,
-             progress_cb=None, deep_scan: bool = False):
+             progress_cb=None, deep_scan: bool = False,
+             auto_detect: bool = True):
         """
         Scan game directories.
 
@@ -604,11 +662,36 @@ class GameLibrary:
             metadata (slower but richer display in the library panel).
         progress_cb : callable, optional
             Called with a status string at regular intervals.
+        auto_detect : bool
+            If True (default) and no k1_dir / k2_dir are set, attempt to
+            auto-detect KotOR installations via game_detector.  Saves found
+            paths to ~/.ghostrigger/config.json for future sessions.
         """
         if game_dir is not None:
             self.set_k1_dir(game_dir)
         if k2_dir is not None:
             self.set_k2_dir(k2_dir)
+
+        # ── Auto-detect installation paths when none are set ──────────────────
+        if auto_detect and not self.k1_dir and not self.k2_dir:
+            try:
+                from .game_detector import detect_kotor_dirs, save_config
+                detected_k1, detected_k2 = detect_kotor_dirs()
+                if detected_k1:
+                    self.set_k1_dir(detected_k1)
+                    log.info(f"Auto-detected KotOR 1: {detected_k1}")
+                if detected_k2:
+                    self.set_k2_dir(detected_k2)
+                    log.info(f"Auto-detected KotOR 2: {detected_k2}")
+                if detected_k1 or detected_k2:
+                    save_config(detected_k1, detected_k2)
+                    if progress_cb:
+                        parts = []
+                        if detected_k1: parts.append(f"K1: {Path(detected_k1).name}")
+                        if detected_k2: parts.append(f"K2: {Path(detected_k2).name}")
+                        progress_cb("Auto-detected: " + ", ".join(parts))
+            except Exception as _e:
+                log.debug(f"Auto-detect failed: {_e}")
 
         self.models   = []
         self.textures = []

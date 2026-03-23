@@ -21,7 +21,10 @@ The auto-rigger v2:
 
 import math, logging, colorsys
 from typing import List, Dict, Optional, Tuple
-from ..core.model_data import KotorModel, ModelNode, NodeFlags, VertexSkinData, BoneWeight
+try:
+    from ..core.model_data import KotorModel, ModelNode, NodeFlags, VertexSkinData, BoneWeight
+except ImportError:
+    from core.model_data import KotorModel, ModelNode, NodeFlags, VertexSkinData, BoneWeight  # type: ignore[no-redef]
 
 log = logging.getLogger(__name__)
 

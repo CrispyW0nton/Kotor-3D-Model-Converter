@@ -1,0 +1,104 @@
+# Editor temp files
+.sw[po]
+.*.sw[po]
+*~
+
+# MSVC files
+Debug/
+Release/
+ipch/
+*.suo
+*.sdf
+*.opensdf
+
+# Build files
+*.[oa]
+*.l[oa]
+*.d
+.dirstamp
+.libs/
+.deps/
+
+# autotools temp files
+Makefile
+Makefile.in
+/INSTALL
+/aclocal.m4
+/autom4te.cache/
+/build-aux/
+/config.h
+/config.h.in
+/config.log
+/config.status
+/configure
+/libtool
+/m4/libtool.m4
+/m4/ltoptions.m4
+/m4/ltsugar.m4
+/m4/ltversion.m4
+/m4/lt~obsolete.m4
+/m4/pkg.m4
+/stamp-h1
+
+# CMake temp file
+/CMakeCache.txt
+/CMakeFiles/
+/cmake_install.cmake
+/lua/rules.mk.cmake
+/toluapp/rules.mk.cmake
+/src/rules.mk.cmake
+/doc/rules.mk.cmake
+/man/rules.mk.cmake
+/external/*/rules.mk.cmake
+/bin/
+/tests/rules.mk.cmake
+/CTestTestfile.cmake
+/CMakeUninstall.cmake
+/Testing/
+
+# Eclipse project files
+/.autotools
+/.cproject
+/.project
+/.settings
+
+# Netbeans project files
+/nbproject/
+
+# CLion project files
+/.idea/
+
+# Debian temp files
+/debian
+/dists/debian/autoreconf.after
+/dists/debian/autoreconf.before
+/dists/debian/files
+/dists/debian/xoreos.debhelper.log
+/dists/debian/xoreos.substvars
+/dists/debian/xoreos/
+
+# Doxygen files
+/Doxyerror
+/doc/doxygen/html/
+/doc/doxygen/latex/
+/doc/doxygen/man/
+/doc/doxygen/*.tmp
+/doc/doxygen/*.db
+
+# git versioning stamp
+/src/version/gitstamp
+
+# Unit tests
+/test-suite.log
+/tests/common/testfile_*
+/tests/common/test_*
+/tests/aurora/test_*
+/tests/images/test_*
+/tests/engines/test_*
+/tests/engines/nwn2/test_*
+
+# Unix binary
+/src/xoreos
+
+# Windows binary
+/src/xoreos.exe

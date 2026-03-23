@@ -1,0 +1,870 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Dialog</class>
+ <widget class="QDialog" name="Dialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1400</width>
+    <height>900</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>TSLPatchData Editor - Create HoloPatcher Mod</string>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing">
+    <number>6</number>
+   </property>
+   <property name="leftMargin">
+    <number>9</number>
+   </property>
+   <property name="topMargin">
+    <number>9</number>
+   </property>
+   <property name="rightMargin">
+    <number>9</number>
+   </property>
+   <property name="bottomMargin">
+    <number>9</number>
+   </property>
+   <item>
+    <layout class="QHBoxLayout" name="headerLayout">
+     <item>
+      <widget class="QLabel" name="pathLabel">
+       <property name="text">
+        <string>&lt;b&gt;TSLPatchData Folder:&lt;/b&gt;</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="pathEdit"/>
+     </item>
+     <item>
+      <widget class="QPushButton" name="browseBtn">
+       <property name="text">
+        <string>Browse...</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="createBtn">
+       <property name="text">
+        <string>Create New</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QSplitter" name="mainSplitter">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <widget class="QWidget" name="leftPanel" native="true">
+      <layout class="QVBoxLayout" name="leftLayout">
+       <property name="spacing">
+        <number>6</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="filesLabel">
+         <property name="text">
+          <string>&lt;b&gt;Files to Package:&lt;/b&gt;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QTreeWidget" name="fileTree">
+         <property name="headerLabels">
+          <stringlist>
+           <string>File</string>
+           <string>Type</string>
+           <string>Status</string>
+          </stringlist>
+         </property>
+         <column>
+          <property name="text">
+           <string>File</string>
+          </property>
+          <property name="width">
+           <number>300</number>
+          </property>
+         </column>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="fileBtnLayout">
+         <item>
+          <widget class="QPushButton" name="addFileBtn">
+           <property name="text">
+            <string>Add File</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="removeFileBtn">
+           <property name="text">
+            <string>Remove</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="scanDiffBtn">
+           <property name="text">
+            <string>Scan from Diff</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QTabWidget" name="configTabs">
+      <property name="currentIndex">
+       <number>0</number>
+      </property>
+      <widget class="QWidget" name="generalTab">
+       <attribute name="title">
+        <string>General</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="generalLayout">
+        <property name="spacing">
+         <number>6</number>
+        </property>
+        <property name="leftMargin">
+         <number>9</number>
+        </property>
+        <property name="topMargin">
+         <number>9</number>
+        </property>
+        <property name="rightMargin">
+         <number>9</number>
+        </property>
+        <property name="bottomMargin">
+         <number>9</number>
+        </property>
+        <item>
+         <widget class="QGroupBox" name="modInfoGroup">
+          <property name="title">
+           <string>Mod Information</string>
+          </property>
+          <layout class="QVBoxLayout" name="modInfoLayout">
+           <item>
+            <layout class="QHBoxLayout" name="nameLayout">
+             <item>
+              <widget class="QLabel" name="modNameLabel">
+               <property name="text">
+                <string>Mod Name:</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="modNameEdit"/>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="authorLayout">
+             <item>
+              <widget class="QLabel" name="modAuthorLabel">
+               <property name="text">
+                <string>Author:</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="modAuthorEdit"/>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QLabel" name="descriptionLabel">
+             <property name="text">
+              <string>Description:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="modDescriptionEdit">
+             <property name="maximumHeight">
+              <number>100</number>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="installOptionsGroup">
+          <property name="title">
+           <string>Installation Options</string>
+          </property>
+          <layout class="QVBoxLayout" name="installOptionsLayout">
+           <item>
+            <widget class="QCheckBox" name="installToOverrideCheck">
+             <property name="text">
+              <string>Install files to Override folder</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="backupFilesCheck">
+             <property name="text">
+              <string>Backup original files</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="confirmOverwritesCheck">
+             <property name="text">
+              <string>Confirm before overwriting files</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <spacer name="generalSpacer">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="twodaMemoryTab">
+       <attribute name="title">
+        <string>2DA Memory</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="twodaMemoryLayout">
+        <property name="spacing">
+         <number>6</number>
+        </property>
+        <property name="leftMargin">
+         <number>9</number>
+        </property>
+        <property name="topMargin">
+         <number>9</number>
+        </property>
+        <property name="rightMargin">
+         <number>9</number>
+        </property>
+        <property name="bottomMargin">
+         <number>9</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="twodaMemoryLabel">
+          <property name="text">
+           <string>&lt;b&gt;2DA Memory Tokens:&lt;/b&gt;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="twodaMemoryDescLabel">
+          <property name="text">
+           <string>Track row numbers in 2DA files that will change during installation.</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSplitter" name="twodaSplitter">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <widget class="QWidget" name="twodaLeftWidget" native="true">
+           <layout class="QVBoxLayout" name="twodaLeftLayout">
+            <property name="spacing">
+             <number>6</number>
+            </property>
+            <property name="leftMargin">
+             <number>0</number>
+            </property>
+            <property name="topMargin">
+             <number>0</number>
+            </property>
+            <property name="rightMargin">
+             <number>0</number>
+            </property>
+            <property name="bottomMargin">
+             <number>0</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="twodaListLabel">
+              <property name="text">
+               <string>2DA Files:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QListWidget" name="twodaList"/>
+            </item>
+            <item>
+             <widget class="QPushButton" name="add2daBtn">
+              <property name="text">
+               <string>Add 2DA Memory Token</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="twodaRightWidget" native="true">
+           <layout class="QVBoxLayout" name="twodaRightLayout">
+            <property name="spacing">
+             <number>6</number>
+            </property>
+            <property name="leftMargin">
+             <number>0</number>
+            </property>
+            <property name="topMargin">
+             <number>0</number>
+            </property>
+            <property name="rightMargin">
+             <number>0</number>
+            </property>
+            <property name="bottomMargin">
+             <number>0</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="twodaTokensLabel">
+              <property name="text">
+               <string>Memory Tokens:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QTreeWidget" name="twodaTokensTree">
+              <property name="headerLabels">
+               <stringlist>
+                <string>Token Name</string>
+                <string>Column</string>
+                <string>Row Label</string>
+                <string>Used By</string>
+               </stringlist>
+              </property>
+              <column>
+               <property name="text">
+                <string>Token Name</string>
+               </property>
+               <property name="width">
+                <number>150</number>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Column</string>
+               </property>
+               <property name="width">
+                <number>100</number>
+               </property>
+              </column>
+             </widget>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="tokenBtnLayout">
+              <item>
+               <widget class="QPushButton" name="addTokenBtn">
+                <property name="text">
+                 <string>Add Token</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="editTokenBtn">
+                <property name="text">
+                 <string>Edit Token</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="removeTokenBtn">
+                <property name="text">
+                 <string>Remove Token</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </widget>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tlkStrrefTab">
+       <attribute name="title">
+        <string>TLK StrRef</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="tlkStrrefLayout">
+        <property name="spacing">
+         <number>6</number>
+        </property>
+        <property name="leftMargin">
+         <number>9</number>
+        </property>
+        <property name="topMargin">
+         <number>9</number>
+        </property>
+        <property name="rightMargin">
+         <number>9</number>
+        </property>
+        <property name="bottomMargin">
+         <number>9</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="tlkStrrefLabel">
+          <property name="text">
+           <string>&lt;b&gt;TLK String References:&lt;/b&gt;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="tlkStrrefDescLabel">
+          <property name="text">
+           <string>Manage string references that will be added to dialog.tlk.</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QTreeWidget" name="tlkStringTree">
+          <property name="headerLabels">
+           <stringlist>
+            <string>Token Name</string>
+            <string>String</string>
+            <string>Used By</string>
+           </stringlist>
+          </property>
+          <column>
+           <property name="text">
+            <string>Token Name</string>
+           </property>
+           <property name="width">
+            <number>150</number>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>String</string>
+           </property>
+           <property name="width">
+            <number>400</number>
+           </property>
+          </column>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="tlkBtnLayout">
+          <item>
+           <widget class="QPushButton" name="addTlkStrBtn">
+            <property name="text">
+             <string>Add TLK String</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="editTlkStrBtn">
+            <property name="text">
+             <string>Edit String</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="removeTlkStrBtn">
+            <property name="text">
+             <string>Remove String</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="openTlkEditorBtn">
+            <property name="text">
+             <string>Open TLK Editor</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="tlkSpacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="gffFieldsTab">
+       <attribute name="title">
+        <string>GFF Fields</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="gffFieldsLayout">
+        <property name="spacing">
+         <number>6</number>
+        </property>
+        <property name="leftMargin">
+         <number>9</number>
+        </property>
+        <property name="topMargin">
+         <number>9</number>
+        </property>
+        <property name="rightMargin">
+         <number>9</number>
+        </property>
+        <property name="bottomMargin">
+         <number>9</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="gffFieldsLabel">
+          <property name="text">
+           <string>&lt;b&gt;GFF Field Modifications:&lt;/b&gt;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="gffFieldsDescLabel">
+          <property name="text">
+           <string>View and edit fields that will be modified in GFF files.</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSplitter" name="gffSplitter">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <widget class="QWidget" name="gffLeftWidget" native="true">
+           <layout class="QVBoxLayout" name="gffLeftLayout">
+            <property name="spacing">
+             <number>6</number>
+            </property>
+            <property name="leftMargin">
+             <number>0</number>
+            </property>
+            <property name="topMargin">
+             <number>0</number>
+            </property>
+            <property name="rightMargin">
+             <number>0</number>
+            </property>
+            <property name="bottomMargin">
+             <number>0</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="gffFileListLabel">
+              <property name="text">
+               <string>Modified GFF Files:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QListWidget" name="gffFileList"/>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="gffRightWidget" native="true">
+           <layout class="QVBoxLayout" name="gffRightLayout">
+            <property name="spacing">
+             <number>6</number>
+            </property>
+            <property name="leftMargin">
+             <number>0</number>
+            </property>
+            <property name="topMargin">
+             <number>0</number>
+            </property>
+            <property name="rightMargin">
+             <number>0</number>
+            </property>
+            <property name="bottomMargin">
+             <number>0</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="gffFieldsTreeLabel">
+              <property name="text">
+               <string>Field Modifications:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QTreeWidget" name="gffFieldsTree">
+              <property name="headerLabels">
+               <stringlist>
+                <string>Field Path</string>
+                <string>Old Value</string>
+                <string>New Value</string>
+                <string>Type</string>
+               </stringlist>
+              </property>
+              <column>
+               <property name="text">
+                <string>Field Path</string>
+               </property>
+               <property name="width">
+                <number>200</number>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Old Value</string>
+               </property>
+               <property name="width">
+                <number>150</number>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>New Value</string>
+               </property>
+               <property name="width">
+                <number>150</number>
+               </property>
+              </column>
+             </widget>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="gffBtnLayout">
+              <item>
+               <widget class="QPushButton" name="openGffEditorBtn">
+                <property name="text">
+                 <string>Open in GFF Editor</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="gffSpacer">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </widget>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="scriptsTab">
+       <attribute name="title">
+        <string>Scripts</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="scriptsLayout">
+        <property name="spacing">
+         <number>6</number>
+        </property>
+        <property name="leftMargin">
+         <number>9</number>
+        </property>
+        <property name="topMargin">
+         <number>9</number>
+        </property>
+        <property name="rightMargin">
+         <number>9</number>
+        </property>
+        <property name="bottomMargin">
+         <number>9</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="scriptsLabel">
+          <property name="text">
+           <string>&lt;b&gt;Scripts:&lt;/b&gt;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="scriptsDescLabel">
+          <property name="text">
+           <string>Compiled scripts (.ncs) that will be installed.</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QListWidget" name="scriptList"/>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="scriptBtnLayout">
+          <item>
+           <widget class="QPushButton" name="addScriptBtn">
+            <property name="text">
+             <string>Add Script</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="removeScriptBtn">
+            <property name="text">
+             <string>Remove Script</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="scriptSpacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="iniPreviewTab">
+       <attribute name="title">
+        <string>INI Preview</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="iniPreviewLayout">
+        <property name="spacing">
+         <number>6</number>
+        </property>
+        <property name="leftMargin">
+         <number>9</number>
+        </property>
+        <property name="topMargin">
+         <number>9</number>
+        </property>
+        <property name="rightMargin">
+         <number>9</number>
+        </property>
+        <property name="bottomMargin">
+         <number>9</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="iniPreviewLabel">
+          <property name="text">
+           <string>&lt;b&gt;changes.ini Preview:&lt;/b&gt;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QTextEdit" name="iniPreviewText">
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="iniPreviewBtnLayout">
+          <item>
+           <widget class="QPushButton" name="refreshPreviewBtn">
+            <property name="text">
+             <string>Refresh Preview</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="iniPreviewSpacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="buttonLayout">
+     <item>
+      <spacer name="buttonSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="generateBtn">
+       <property name="text">
+        <string>Generate TSLPatchData</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="previewBtn">
+       <property name="text">
+        <string>Preview INI</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="saveBtn">
+       <property name="text">
+        <string>Save Configuration</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="closeBtn">
+       <property name="text">
+        <string>Close</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

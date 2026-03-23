@@ -203,7 +203,15 @@ class AnimationEngine:
         # Cross-fade transition blending state
         self._blend_from_pose: Optional[AnimPose] = None
         self._blend_t:         float = 0.0   # blend fraction [0.0 → 1.0]
+        self._blend_elapsed:   float = 0.0   # wall-clock elapsed since blend start (s)
         self._blend_duration:  float = 0.0   # total blend duration in seconds
+        # Phase-synchronized cross-fade support (Gregory §12.6.3)
+        # When sync_phase=True is passed to play(), we start the new clip at the
+        # same NORMALIZED phase as the previous clip, preventing foot-slip during
+        # transitions between locomotion cycles of different durations.
+        self._blend_sync_phase: bool  = False  # whether to use phase-synced blend
+        self._blend_from_anim:  Optional[Animation] = None   # previous clip for phase eval
+        self._blend_from_time:  float = 0.0   # previous clip's local time at blend start
         # Fired-event tracking so each event fires exactly once per loop
         self._fired_events: set = set()  # indices into current_anim.events
 
@@ -221,12 +229,28 @@ class AnimationEngine:
     def current_time(self) -> float:
         return self._time
 
-    def play(self, anim_name: str, loop: bool = True, blend: bool = True):
+    def play(self, anim_name: str, loop: bool = True, blend: bool = True,
+             sync_phase: bool = False):
         """Start playing the named animation.
 
         If *blend* is True and an animation is already active, captures a
         pose snapshot and cross-fades from it to the new animation over the
         new animation's ``transition_time`` seconds.
+
+        Parameters
+        ----------
+        anim_name   : name of the animation to play (case-insensitive)
+        loop        : whether to loop the animation
+        blend       : if True, cross-fade from the current pose
+        sync_phase  : if True, start the new clip at the same NORMALIZED phase
+                      (u = t/T) as the current clip.  This prevents foot-slip
+                      when blending between locomotion cycles of different
+                      durations (e.g. walk→run).  Has no effect if blend=False.
+
+                      Reference: Gregory §12.6.3 — phase-synchronized cross-fade.
+                      Normalized time u ∈ [0,1]: u_new = u_old means both clips
+                      start at the same relative point in their cycle, keeping
+                      foot contacts aligned throughout the blend.
         """
         anim = self._find_anim(anim_name)
         if anim is None:
@@ -237,15 +261,35 @@ class AnimationEngine:
             self._blend_from_pose = self.evaluate()
             self._blend_t         = 0.0
             self._blend_duration  = max(0.0, anim.transition_time)
+            # Phase-synchronization: record previous clip's state for phase-aware eval
+            self._blend_sync_phase = sync_phase
+            self._blend_from_anim  = self._current_anim
+            self._blend_from_time  = self._time
         else:
-            self._blend_from_pose = None
-            self._blend_t         = 0.0
-            self._blend_duration  = 0.0
+            self._blend_from_pose  = None
+            self._blend_t          = 0.0
+            self._blend_elapsed    = 0.0
+            self._blend_duration   = 0.0
+            self._blend_sync_phase = False
+            self._blend_from_anim  = None
+            self._blend_from_time  = 0.0
         self._current_anim = anim
         self._loop         = loop
         self._playing      = True
-        self._time         = 0.0
         self._fired_events = set()
+
+        # Phase-sync: start new clip at the same normalized time as the old one
+        if sync_phase and self._blend_from_anim is not None:
+            old_length = max(0.001, self._blend_from_anim.length)
+            old_phase  = self._blend_from_time / old_length          # u ∈ [0,1]
+            new_length = max(0.001, anim.length)
+            self._time = old_phase * new_length                       # map phase to new T
+            log.debug(
+                f"Phase-sync: '{self._blend_from_anim.name}'(t={self._blend_from_time:.3f}/"
+                f"{old_length:.3f}) → '{anim.name}' starts at t={self._time:.3f}/{new_length:.3f}"
+            )
+        else:
+            self._time = 0.0
         return True
 
     def stop(self):
@@ -263,6 +307,7 @@ class AnimationEngine:
             # Cancel any in-progress blend when manually seeking
             self._blend_from_pose = None
             self._blend_t         = 0.0
+            self._blend_elapsed   = 0.0
             self._blend_duration  = 0.0
 
     def advance(self, dt: float) -> bool:
@@ -284,11 +329,19 @@ class AnimationEngine:
                 log.debug(f"AnimEvent '{ev.name}' fired @ {ev.time:.3f}s")
 
         # ── Advance cross-fade blend ──────────────────────────────────────────
+        # _blend_elapsed tracks real time since the blend started, independent
+        # of the new clip's absolute time (_time).  This is essential when
+        # phase-sync starts the new clip mid-way through (e.g. _time=1.125 after
+        # a phase-sync walk→run transition): using _time/duration would
+        # immediately finish the blend since _time >> duration.
+        # Reference: Gregory §12.6.3 — blend fraction β = elapsed/duration.
         if self._blend_duration > 0.0:
-            self._blend_t = min(1.0, self._time / self._blend_duration)
+            self._blend_elapsed += dt
+            self._blend_t = min(1.0, self._blend_elapsed / self._blend_duration)
             if self._blend_t >= 1.0:
                 self._blend_from_pose = None  # blend finished
                 self._blend_t         = 0.0
+                self._blend_elapsed   = 0.0
                 self._blend_duration  = 0.0
 
         # ── Loop / stop ───────────────────────────────────────────────────────
@@ -312,6 +365,12 @@ class AnimationEngine:
         ``_blend_from_pose`` towards the new animation pose using the
         current ``_blend_t`` fraction [0 = old, 1 = new].
 
+        When ``sync_phase=True`` was passed to :meth:`play`, the "from" pose
+        is re-evaluated every frame at the same normalized phase as the new
+        clip, preventing foot-slip during locomotion-cycle transitions.
+
+        Reference: Gregory §12.6.3 — phase-synchronized cross-fade.
+
         Returns an :class:`AnimPose` with all animated node transforms.
         """
         if t is None:
@@ -329,8 +388,31 @@ class AnimationEngine:
         # ── Cross-fade blend ──────────────────────────────────────────────────
         if self._blend_from_pose is not None and 0.0 < self._blend_t < 1.0:
             alpha = self._blend_t  # 0 = fully old pose, 1 = fully new pose
+
+            # Phase-synchronized "from" pose: re-evaluate the old clip every frame
+            # at a time that corresponds to the same normalized phase as the new clip.
+            # This prevents foot contacts from sliding during the blend transition.
+            # Reference: Gregory §12.6.3 — u_old = u_new (normalized time matching).
+            if (self._blend_sync_phase and
+                    self._blend_from_anim is not None and
+                    self._blend_from_anim.nodes):
+                old_anim = self._blend_from_anim
+                old_length = max(0.001, old_anim.length)
+                new_length = max(0.001, anim.length)
+                u_new = (t % new_length) / new_length              # [0, 1]
+                old_t = u_new * old_length                          # same phase in old clip
+                # Build a live "from" pose by evaluating old clip at old_t
+                live_from: Dict[str, NodePose] = {}
+                for anim_node in old_anim.nodes:
+                    np_ = self._eval_node(anim_node, old_t)
+                    if np_:
+                        live_from[np_.name.lower()] = np_
+                from_nodes = live_from
+            else:
+                from_nodes = self._blend_from_pose.nodes
+
             for name, new_np in list(pose.nodes.items()):
-                old_np = self._blend_from_pose.nodes.get(name)
+                old_np = from_nodes.get(name)
                 if old_np is None:
                     continue
                 # Lerp position
@@ -883,3 +965,235 @@ def _get_ctrl(node: ModelNode, ctrl_type: int) -> Tuple[List, List]:
         if c['type'] == ctrl_type:
             return c['times'], c['values']
     return [], []
+
+
+# ─────────────────────────────────────────────────────────────────
+#  Dangly Mesh Verlet Cloth Simulator
+# ─────────────────────────────────────────────────────────────────
+
+class DanglySimulator:
+    """
+    Self-contained Verlet integration cloth simulator for KotOR dangly mesh nodes.
+
+    KotOR dangly nodes model cloth/chain geometry with per-vertex physics constraints:
+      - dangly_displacement: maximum allowed displacement from rest position (in units)
+      - dangly_tightness:    spring stiffness [0,1] — 1 = rigid, 0 = floppy
+      - dangly_period:       oscillation period (seconds) — lower = faster oscillation
+      - dangly_constraints:  per-vertex constraint value [0,1]
+                             1.0 = fully pinned (fixed vertex, cannot move)
+                             0.0 = fully free (obeys physics)
+
+    Implementation uses position-based Verlet integration with spring-mass system.
+    This is the method described in:
+      - Millington, *Game Physics Engine Development* §13 (spring-mass cloth)
+      - Lengyel, *Mathematics for 3D Game Programming* §15.2
+      - Game Engine Architecture §12.7 (cloth/dangly simulation)
+
+    Usage:
+        sim = DanglySimulator(node)
+        sim.reset()           # initialize to bind pose
+        # each frame:
+        positions = sim.step(dt, wind_dir=(0.1, 0.0, 0.0), gravity_scale=0.5)
+        # positions is List[Tuple[float,float,float]] — world-space vertex positions
+    """
+
+    # Pin threshold: vertices with constraint >= this value are treated as fully pinned
+    PIN_THRESHOLD: float = 0.95
+
+    def __init__(self, node: ModelNode):
+        self.node = node
+        nv = len(node.vertices)
+
+        # Current and previous positions (Verlet integration state)
+        self._pos:      List[List[float]] = [[v[0], v[1], v[2]] for v in node.vertices]
+        self._prev_pos: List[List[float]] = [[v[0], v[1], v[2]] for v in node.vertices]
+
+        # Constraint values clamped to [0, 1]
+        constraints = node.dangly_constraints
+        self._constraints: List[float] = [
+            max(0.0, min(1.0, constraints[i] if i < len(constraints) else 0.0))
+            for i in range(nv)
+        ]
+
+        # Physics parameters from node
+        self._displacement = max(0.001, node.dangly_displacement)
+        self._tightness    = max(0.0, min(1.0, node.dangly_tightness))
+        self._period       = max(0.01, node.dangly_period)
+
+        # Build spring edges from face adjacency
+        self._edges: List[Tuple[int, int, float]] = self._build_edges()
+
+    def _build_edges(self) -> List[Tuple[int, int, float]]:
+        """Build spring edges from mesh faces with rest lengths."""
+        verts = self.node.vertices
+        edges: set = set()
+        for face in self.node.faces:
+            i0, i1, i2 = face
+            for a, b in ((i0, i1), (i1, i2), (i0, i2)):
+                if a != b:
+                    edges.add((min(a, b), max(a, b)))
+        result = []
+        for a, b in edges:
+            if a < len(verts) and b < len(verts):
+                va, vb = verts[a], verts[b]
+                dx = vb[0] - va[0]; dy = vb[1] - va[1]; dz = vb[2] - va[2]
+                rest = math.sqrt(dx*dx + dy*dy + dz*dz)
+                if rest > 1e-6:
+                    result.append((a, b, rest))
+        return result
+
+    def reset(self) -> None:
+        """Reset simulation to bind pose (stops all motion)."""
+        verts = self.node.vertices
+        self._pos      = [[v[0], v[1], v[2]] for v in verts]
+        self._prev_pos = [[v[0], v[1], v[2]] for v in verts]
+
+    def step(self,
+             dt: float,
+             wind_dir: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+             gravity_scale: float = 1.0,
+             wind_strength: float = 0.3) -> List[Tuple[float, float, float]]:
+        """
+        Advance simulation by dt seconds and return updated vertex positions.
+
+        Parameters
+        ----------
+        dt              : time step in seconds (typically 1/60 or 1/30)
+        wind_dir        : normalized wind direction vector
+        gravity_scale   : gravity multiplier (default 1.0 = standard gravity)
+        wind_strength   : wind force magnitude
+
+        Returns
+        -------
+        List of (x, y, z) tuples — one per vertex, in model/world space.
+
+        NOTE: For pinned vertices (constraint >= PIN_THRESHOLD), the original
+        bind-pose position is always returned unchanged.
+        """
+        if dt <= 0.0:
+            return [(p[0], p[1], p[2]) for p in self._pos]
+
+        # Clamp dt to avoid instability on lag spikes
+        dt = min(dt, 0.05)
+
+        GRAVITY = (0.0, 0.0, -9.8 * gravity_scale)
+        nv = len(self._pos)
+        bind_verts = self.node.vertices
+
+        # --- Verlet integration step ---
+        # Stiffness coefficient from tightness: higher tightness → stronger return force
+        # period controls oscillation speed: shorter period → faster spring
+        stiffness = self._tightness * (4.0 * math.pi * math.pi / (self._period * self._period))
+
+        new_pos = [[0.0, 0.0, 0.0] for _ in range(nv)]
+        for i in range(nv):
+            c = self._constraints[i]
+            if c >= self.PIN_THRESHOLD:
+                # Pinned vertex: always at bind pose
+                bv = bind_verts[i]
+                new_pos[i] = [bv[0], bv[1], bv[2]]
+                continue
+
+            cx, cy, cz = self._pos[i]
+            px, py, pz = self._prev_pos[i]
+            bx, by, bz = bind_verts[i]
+
+            # Verlet: new_pos = 2*pos - prev_pos + acceleration * dt^2
+            # Acceleration = gravity + wind + spring-return-to-bind
+            spring_ax = stiffness * (bx - cx) * (1.0 - c)
+            spring_ay = stiffness * (by - cy) * (1.0 - c)
+            spring_az = stiffness * (bz - cz) * (1.0 - c)
+
+            wdx, wdy, wdz = wind_dir
+            wind_ax = wdx * wind_strength * (1.0 - c)
+            wind_ay = wdy * wind_strength * (1.0 - c)
+            wind_az = wdz * wind_strength * (1.0 - c)
+
+            ax = GRAVITY[0] + spring_ax + wind_ax
+            ay = GRAVITY[1] + spring_ay + wind_ay
+            az = GRAVITY[2] + spring_az + wind_az
+
+            dt2 = dt * dt
+            nx = 2*cx - px + ax * dt2
+            ny = 2*cy - py + ay * dt2
+            nz = 2*cz - pz + az * dt2
+
+            # Clamp displacement to dangly_displacement limit
+            ddx = nx - bx; ddy = ny - by; ddz = nz - bz
+            dist = math.sqrt(ddx*ddx + ddy*ddy + ddz*ddz)
+            if dist > self._displacement:
+                scale = self._displacement / dist
+                nx = bx + ddx * scale
+                ny = by + ddy * scale
+                nz = bz + ddz * scale
+
+            new_pos[i] = [nx, ny, nz]
+
+        # --- Spring constraint relaxation (1 iteration) ---
+        for a, b, rest in self._edges:
+            ca = self._constraints[a]
+            cb = self._constraints[b]
+            if ca >= self.PIN_THRESHOLD and cb >= self.PIN_THRESHOLD:
+                continue
+            pax, pay, paz = new_pos[a]
+            pbx, pby, pbz = new_pos[b]
+            dx = pbx - pax; dy = pby - pay; dz = pbz - paz
+            dist = math.sqrt(dx*dx + dy*dy + dz*dz)
+            if dist < 1e-6:
+                continue
+            diff = (dist - rest) / (dist * 2.0)
+            # Distribute correction weighted by which end is more free
+            wa = (1.0 - ca) if ca < self.PIN_THRESHOLD else 0.0
+            wb = (1.0 - cb) if cb < self.PIN_THRESHOLD else 0.0
+            total = wa + wb
+            if total < 1e-6:
+                continue
+            corr_a = wa / total
+            corr_b = wb / total
+            if ca < self.PIN_THRESHOLD:
+                new_pos[a][0] += dx * diff * corr_a
+                new_pos[a][1] += dy * diff * corr_a
+                new_pos[a][2] += dz * diff * corr_a
+            if cb < self.PIN_THRESHOLD:
+                new_pos[b][0] -= dx * diff * corr_b
+                new_pos[b][1] -= dy * diff * corr_b
+                new_pos[b][2] -= dz * diff * corr_b
+
+        # Commit new state
+        self._prev_pos = self._pos
+        self._pos = new_pos
+
+        # Pinned vertices always snap back to bind pose
+        for i in range(nv):
+            if self._constraints[i] >= self.PIN_THRESHOLD:
+                bv = bind_verts[i]
+                self._pos[i] = [bv[0], bv[1], bv[2]]
+                self._prev_pos[i] = [bv[0], bv[1], bv[2]]
+
+        # Post-constraint displacement clamp: re-enforce maximum displacement after
+        # spring relaxation, since relaxation can push vertices slightly beyond the limit.
+        # Applied only to free (non-pinned) vertices.
+        for i in range(nv):
+            if self._constraints[i] >= self.PIN_THRESHOLD:
+                continue
+            bv = bind_verts[i]
+            px_, py_, pz_ = self._pos[i]
+            ddx_ = px_ - bv[0]; ddy_ = py_ - bv[1]; ddz_ = pz_ - bv[2]
+            dist_ = math.sqrt(ddx_*ddx_ + ddy_*ddy_ + ddz_*ddz_)
+            if dist_ > self._displacement:
+                scale_ = self._displacement / dist_
+                self._pos[i][0] = bv[0] + ddx_ * scale_
+                self._pos[i][1] = bv[1] + ddy_ * scale_
+                self._pos[i][2] = bv[2] + ddz_ * scale_
+
+        return [(p[0], p[1], p[2]) for p in self._pos]
+
+    @property
+    def num_free_vertices(self) -> int:
+        """Return count of physics-driven (non-pinned) vertices."""
+        return sum(1 for c in self._constraints if c < self.PIN_THRESHOLD)
+
+    @property
+    def num_pinned_vertices(self) -> int:
+        """Return count of pinned (fixed) vertices."""
+        return sum(1 for c in self._constraints if c >= self.PIN_THRESHOLD)

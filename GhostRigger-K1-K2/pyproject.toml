@@ -1,0 +1,133 @@
+# GhostRigger — KotOR 1 & 2 MDL/Animation Tool
+# pip-installable Python package (Phase 10.1)
+#
+# References:
+#   PEP 517/518 (build-system table)
+#   PEP 621    (project metadata)
+#   Setuptools docs: https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html
+
+[build-system]
+requires      = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name        = "ghostrigger"
+version     = "5.0.0"
+description = "KotOR 1 & 2 3D model viewer, skeletal animation pipeline, MDL/MDX reader+writer"
+license     = { text = "MIT" }
+readme      = "README.md"
+requires-python = ">=3.10"
+
+keywords = [
+    "kotor", "star-wars", "mdl", "skeletal-animation",
+    "game-tools", "3d-model", "bioware",
+]
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Topic :: Games/Entertainment",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+
+# ── Core runtime dependencies ───────────────────────────────────────────────
+# All optional for the pure-data pipeline; required for the GUI.
+dependencies = [
+    "Pillow>=9.0.0",
+    "numpy>=1.21.0",
+    "pygltflib>=1.15.0",
+    "flask>=2.3.0",
+    "requests>=2.28.0",
+]
+
+# ── Authors ─────────────────────────────────────────────────────────────────
+[[project.authors]]
+name  = "GhostRigger Contributors"
+email = "ghostrigger@example.com"
+
+# ── Project URLs ─────────────────────────────────────────────────────────────
+[project.urls]
+Homepage    = "https://github.com/CrispyW0nton/Kotor-3D-Model-Converter"
+Repository  = "https://github.com/CrispyW0nton/Kotor-3D-Model-Converter"
+"Bug Tracker" = "https://github.com/CrispyW0nton/Kotor-3D-Model-Converter/issues"
+
+# ── CLI entry points ─────────────────────────────────────────────────────────
+[project.scripts]
+ghostrigger = "src.main:main"
+
+# ── Optional dependency groups ───────────────────────────────────────────────
+[project.optional-dependencies]
+gui = [
+    "PyOpenGL>=3.1.0",
+    "PyOpenGL_accelerate>=3.1.0",
+    "moderngl>=5.8.0",
+]
+kotor = [
+    "pykotor>=2.3.1",
+]
+mesh = [
+    "trimesh[easy]>=3.15.0",
+    "pygltflib>=1.15.0",
+]
+mcp = [
+    "mcp>=1.0.0",
+    "pydantic>=2.0.0",
+    "uvicorn[standard]>=0.20.0",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "mypy>=1.0",
+    "ruff>=0.1.0",
+]
+all = [
+    "ghostrigger[gui,kotor,mesh,mcp,dev]",
+]
+
+# ── Setuptools package discovery ─────────────────────────────────────────────
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where   = ["."]
+include = ["src*"]
+exclude = ["tests*", "research_sources*", "docs*"]
+
+[tool.setuptools.package-data]
+"src" = ["**/*.json", "**/*.md", "**/*.txt"]
+
+# ── Pytest configuration ──────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths    = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts      = "-q --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning:pkg_resources",
+    "ignore::UserWarning:pygltflib",
+]
+
+# ── Ruff linter configuration ─────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = ["E", "F", "W", "I"]
+ignore = [
+    "E501",   # line too long (we have long binary-format comments)
+    "F401",   # imported but unused (some __init__ re-exports)
+    "E741",   # ambiguous variable name (l, O, I used in binary parsing)
+]
+
+# ── mypy type-checking configuration ─────────────────────────────────────────
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_ignores    = false

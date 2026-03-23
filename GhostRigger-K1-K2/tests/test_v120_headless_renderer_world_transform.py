@@ -310,3 +310,118 @@ class TestCollectRenderableNodes:
         nodes = _hr.collect_renderable_nodes(model)
         assert any(n.name == 'deep_body' for n in nodes), \
             "Nested renderable node must be found by collector"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  FIX-HEADLESS-CAM: _cam_view_matrix() shim tests
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestCamViewMatrixShim:
+    """
+    Verify FrameRenderer._cam_view_matrix() works with both ArcBallCamera
+    objects and duck-typed plain-namespace cameras (as used by
+    render_model_autoframe / _render_cpu).
+
+    FIX-HEADLESS-CAM: Previously FrameRenderer._render_inner called
+    self.cam._view_matrix() which raised AttributeError for duck-typed cameras
+    that only have eye/target/up attributes.  The shim now detects the
+    attribute type and builds the view matrix from raw geometry.
+    """
+
+    def _get_frame_renderer(self):
+        """Return a FrameRenderer instance using a minimal duck-typed camera."""
+        try:
+            from src.gui.viewport import FrameRenderer
+        except ImportError:
+            pytest.skip("viewport not importable")
+
+        class _DuckCam:
+            eye    = (0.0, 5.0, 0.0)
+            target = (0.0, 0.0, 0.0)
+            up     = (0.0, 0.0, 1.0)
+            fov    = 45.0
+            near   = 0.01
+            far    = 1000.0
+
+        cam = _DuckCam()
+        renderer = FrameRenderer(cam)
+        return renderer
+
+    def test_duck_cam_returns_four_vectors(self):
+        """_cam_view_matrix() must return a (right, up, fwd, eye) 4-tuple."""
+        renderer = self._get_frame_renderer()
+        result = renderer._cam_view_matrix()
+        assert len(result) == 4, "_cam_view_matrix must return (right, up, fwd, eye)"
+        right, up, fwd, eye = result
+        assert len(right) == 3 and len(up) == 3 and len(fwd) == 3 and len(eye) == 3
+
+    def test_duck_cam_eye_matches(self):
+        """eye component must equal camera.eye."""
+        renderer = self._get_frame_renderer()
+        _, _, _, eye = renderer._cam_view_matrix()
+        assert abs(eye[1] - 5.0) < 1e-5, f"Expected eye.y=5.0, got {eye[1]}"
+
+    def test_duck_cam_fwd_points_toward_target(self):
+        """fwd should point from eye (0,5,0) toward target (0,0,0) = (0,-1,0)."""
+        renderer = self._get_frame_renderer()
+        _, _, fwd, _ = renderer._cam_view_matrix()
+        # fwd = normalize((0,0,0)-(0,5,0)) = (0,-1,0)
+        assert abs(fwd[1] - (-1.0)) < 1e-4, f"fwd.y should be ~-1, got {fwd[1]}"
+
+    def test_duck_cam_right_is_unit_vector(self):
+        """right vector must be unit length."""
+        import math
+        renderer = self._get_frame_renderer()
+        right, _, _, _ = renderer._cam_view_matrix()
+        length = math.sqrt(right[0]**2 + right[1]**2 + right[2]**2)
+        assert abs(length - 1.0) < 1e-5, f"right must be unit length, got {length}"
+
+    def test_arcball_cam_uses_native_view_matrix(self):
+        """When cam has _view_matrix(), the shim must delegate to it."""
+        try:
+            from src.gui.viewport import FrameRenderer, ArcBallCamera
+        except ImportError:
+            pytest.skip("viewport not importable")
+
+        cam = ArcBallCamera()
+        renderer = FrameRenderer(cam)
+        # Should not raise
+        result = renderer._cam_view_matrix()
+        assert len(result) == 4
+
+    def test_render_model_autoframe_duck_cam_no_error(self):
+        """render_model_autoframe must run without '_view_matrix' AttributeError."""
+        try:
+            from src.core.model_data import KotorModel, ModelNode, NodeFlags
+            from src.gui.gpu_renderer import render_model_autoframe
+        except ImportError:
+            pytest.skip("gpu_renderer or model_data not importable")
+
+        # Build minimal model with one visible mesh
+        model = KotorModel(name='test_model')
+        root = ModelNode(name='scene_root', flags=int(NodeFlags.HEADER))
+        model.root_node = root
+        mesh = ModelNode(name='body', flags=int(NodeFlags.MESH | NodeFlags.SKIN))
+        mesh.texture    = ''
+        mesh.vertices   = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
+        mesh.uvs        = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]
+        mesh.faces      = [[0, 1, 2]]
+        mesh.render     = True
+        mesh.alpha      = 1.0
+        mesh.diffuse    = (0.8, 0.8, 0.8)
+        mesh.ambient    = (0.2, 0.2, 0.2)
+        mesh.position   = (0.0, 0.0, 0.0)
+        mesh.rotation   = (0.0, 0.0, 0.0, 1.0)
+        mesh.parent     = root
+        root.children.append(mesh)
+        # Note: model.nodes is a read-only property derived from root_node tree,
+        # so we do not set model.nodes directly.
+
+        # Must not raise AttributeError about _view_matrix
+        try:
+            result = render_model_autoframe(model, textures={}, W=64, H=64,
+                                            views=['front'])
+        except AttributeError as exc:
+            pytest.fail(f"render_model_autoframe raised AttributeError: {exc}")
+        # Result may be empty if renderer has no GPU context, that's fine
+        assert isinstance(result, dict)

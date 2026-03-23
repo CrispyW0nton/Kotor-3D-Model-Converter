@@ -1,0 +1,8 @@
+This is the source of Dear ImGui (<https://github.com/ocornut/imgui>),
+version 1.77.
+
+Changes:
+========
+
+- Optionally use our internal GLEW code in the OpenGL 3 path
+- Shut up another compiler warning in the freetype code

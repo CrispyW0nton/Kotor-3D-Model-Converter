@@ -1,5 +1,35 @@
-PyOpenGL>=3.1.0
-PyOpenGL_accelerate>=3.1.0
+# GhostRigger KotOR MDL Tool — Python dependencies
+# Install with: pip install -r requirements.txt
+
+# ── Core rendering ──────────────────────────────────────────────────────────
 Pillow>=9.0.0
 numpy>=1.21.0
-pyinstaller>=5.0
+PyOpenGL>=3.1.0
+PyOpenGL_accelerate>=3.1.0     # optional GPU acceleration for PyOpenGL
+moderngl>=5.8.0                 # ModernGL for GPU-accelerated preview rendering
+
+# ── KotOR file format library ───────────────────────────────────────────────
+# OldRepublicDevs/PyKotor — battle-tested KotOR MDL/TPC/TXI/ERF/BIF reader+writer
+# Provides: read_tpc, write_tga, read_mdl, write_mdl, ERF/BIF archive access
+pykotor>=2.3.1
+
+# ── 3D mesh import/export ───────────────────────────────────────────────────
+trimesh[easy]>=3.15.0           # OBJ/DAE import + fallback GLTF reader
+pygltflib>=1.15.0               # GLTF 2.0 / GLB import+export (pure Python)
+pyassimp>=5.2.0                 # FBX importer — requires libassimp system library
+                                # Ubuntu/Debian: sudo apt install libassimp-dev
+                                # macOS:         brew install assimp
+
+# ── IPC / HTTP server ────────────────────────────────────────────────────────
+flask>=2.3.0                    # GhostRigger IPC server (port 7001, Ghostworks pipeline)
+requests>=2.28.0                # IPC client HTTP calls
+
+# ── MCP (Model Context Protocol) integration ─────────────────────────────────
+# KotorMCP embedded server — exposes KotOR resources + GhostRigger tools to AI agents
+# Optional: only needed for MCP stdio/SSE transport. HTTP fallback works without it.
+mcp>=1.0.0                      # Model Context Protocol Python SDK
+pydantic>=2.0.0                 # Input validation for MCP tool arguments
+uvicorn[standard]>=0.20.0       # ASGI server for HTTP/SSE MCP transport (optional)
+
+# ── Build / packaging ───────────────────────────────────────────────────────
+pyinstaller>=5.0                # standalone executable packaging

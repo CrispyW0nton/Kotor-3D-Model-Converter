@@ -1,0 +1,20 @@
+This is a combination of the "src" and "include" directories of the
+lua (<https://www.lua.org/>) 5.0.3 source package.
+This file will list changes applied to it:
+
+Changes:
+========
+
+- Silenced a compiler warning (unused value) in liolib.c
+- Increased the size of lu_hash, so it won't make any problem on 64bit
+  systems
+- Changed the definition of IntPoint() to work warning-less on systems
+  where sizeof(void *) < sizeof(lu_hash)
+- Forced a 32-bit bytecode on all platforms
+- Renamed *.c to *.cpp, to compile them with a C++ compiler
+- Renamed the VERSION and VERSION0 macros to CHUNK_VERSION and
+  CHUNK_VERSION0
+- Added our NORETURN macros to luaD_throw() and its callers
+- #include'd src/common/types.h in llimits.h
+- Disabled io_popen()
+- Disabled io_execute()

@@ -7,11 +7,18 @@ TGA ↔ TPC texture conversion
 import os, struct, math, logging
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
-from ..core.model_data import (
-    KotorModel, ModelNode, NodeFlags, GameVersion,
-    VertexSkinData, BoneWeight,
-    _quat_rotate, _quat_conjugate, _quat_normalize_bind, _quat_normalize, _quat_mul
-)
+try:
+    from ..core.model_data import (
+        KotorModel, ModelNode, NodeFlags, GameVersion,
+        VertexSkinData, BoneWeight,
+        _quat_rotate, _quat_conjugate, _quat_normalize_bind, _quat_normalize, _quat_mul
+    )
+except ImportError:
+    from core.model_data import (  # type: ignore[no-redef]  # tests add src/ to sys.path
+        KotorModel, ModelNode, NodeFlags, GameVersion,
+        VertexSkinData, BoneWeight,
+        _quat_rotate, _quat_conjugate, _quat_normalize_bind, _quat_normalize, _quat_mul
+    )
 
 log = logging.getLogger(__name__)
 
@@ -188,16 +195,25 @@ class FBXImporter:
                     supermodel: str = "NULL",
                     classification: str = "character") -> Optional[KotorModel]:
         if not model_name: model_name = Path(path).stem[:32]
-        # Try pyassimp first, then trimesh
+        # Try pyassimp first (handles binary FBX), then trimesh (handles FBX ASCII + other)
         try:
             return self._load_assimp(path, model_name, game_version, supermodel, classification)
         except ImportError:
-            pass
+            log.debug("pyassimp not available for FBX import — trying trimesh")
+        except Exception as e:
+            log.debug(f"pyassimp FBX load failed: {e} — trying trimesh")
         try:
             return self._load_trimesh(path, model_name, game_version, supermodel, classification)
         except ImportError:
-            pass
-        log.error("FBX import: install 'pyassimp' or 'trimesh[easy]'")
+            log.debug("trimesh not available for FBX import")
+        except Exception as e:
+            log.debug(f"trimesh FBX load failed: {e}")
+        log.error(
+            "FBX import: pyassimp is required for binary FBX files.\n"
+            "  Install: pip install pyassimp\n"
+            "  Also requires the Assimp shared library (libassimp).\n"
+            "  Alternatively, export your model as OBJ or GLB for import."
+        )
         return None
 
     def _load_assimp(self, path, model_name, gv, sm, cl) -> KotorModel:
@@ -584,6 +600,10 @@ def _renderable_mesh_nodes(model: KotorModel):
     produce identical output meshes.
     """
     return [n for n in model.mesh_nodes() if OBJExporter._is_renderable(n)]
+
+
+# Alias used by GLTFExporter (consistent naming across the exporter family)
+_iter_visible_mesh_nodes = _renderable_mesh_nodes
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -1384,3 +1404,482 @@ def _gen_mips(data: bytes, w: int, h: int, bpp: int) -> List[bytes]:
                     nxt[(y*nw+x)*bpp+c] = sum(s)//4
         mips.append(bytes(nxt)); cur=nxt; cw,ch=nw,nh
     return mips
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  GLTF 2.0 / GLB Importer
+# ──────────────────────────────────────────────────────────────────────
+
+class GLTFImporter:
+    """
+    Import GLTF 2.0 / GLB files into KotorModel.
+
+    Uses pygltflib if available (preferred), otherwise falls back to
+    trimesh which also supports GLTF/GLB.
+
+    KotOR UV convention: V is stored bottom-up. GLTF stores V top-down
+    (same as DirectX), so we flip V on import: v_kotor = 1.0 - v_gltf.
+    """
+
+    def import_file(self, path: str,
+                    model_name: str = "",
+                    game_version: GameVersion = GameVersion.K1,
+                    supermodel: str = "NULL",
+                    classification: str = "character") -> Optional[KotorModel]:
+        if not model_name:
+            model_name = Path(path).stem[:32]
+        try:
+            return self._load_pygltflib(path, model_name, game_version, supermodel, classification)
+        except ImportError:
+            pass
+        try:
+            return self._load_trimesh(path, model_name, game_version, supermodel, classification)
+        except ImportError:
+            pass
+        log.error("GLTF import: install 'pygltflib' or 'trimesh'")
+        return None
+
+    def _load_pygltflib(self, path, model_name, gv, sm, cl) -> KotorModel:
+        import pygltflib
+        import numpy as np
+        import struct as st
+
+        gltf = pygltflib.GLTF2().load(path)
+        model = KotorModel(name=model_name, supermodel=sm, game_version=gv, classification=cl)
+        root  = ModelNode(name=model_name, flags=int(NodeFlags.HEADER))
+        model.root_node = root
+
+        def _get_accessor_data(acc_idx):
+            """Decode GLTF accessor data into numpy array."""
+            if acc_idx is None:
+                return None
+            acc = gltf.accessors[acc_idx]
+            bv  = gltf.bufferViews[acc.bufferView]
+            buf = gltf.buffers[bv.buffer]
+            # Get raw bytes
+            raw = gltf.get_data_from_buffer_uri(buf.uri) if buf.uri else bytes(gltf.binary_blob())
+            offset = (bv.byteOffset or 0) + (acc.byteOffset or 0)
+            count  = acc.count
+            type_map = {
+                'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4,
+                'MAT2': 4, 'MAT3': 9, 'MAT4': 16
+            }
+            comp_map = {5120: np.int8, 5121: np.uint8, 5122: np.int16,
+                        5123: np.uint16, 5125: np.uint32, 5126: np.float32}
+            n_comp = type_map.get(acc.type, 1)
+            dtype  = comp_map.get(acc.componentType, np.float32)
+            stride = bv.byteStride or (np.dtype(dtype).itemsize * n_comp)
+            result = []
+            for i in range(count):
+                row = []
+                for j in range(n_comp):
+                    off2 = offset + i * stride + j * np.dtype(dtype).itemsize
+                    val  = st.unpack_from('<' + ('f' if dtype == np.float32 else
+                                                 ('I' if dtype == np.uint32 else
+                                                  ('H' if dtype == np.uint16 else 'B'))),
+                                          raw, off2)[0]
+                    row.append(val)
+                result.append(row[0] if n_comp == 1 else tuple(row))
+            return result
+
+        for gnode in (gltf.nodes or []):
+            nm = (gnode.name or "node")[:32]
+            tx, ty, tz = 0.0, 0.0, 0.0
+            if gnode.translation:
+                tx, ty, tz = float(gnode.translation[0]), float(gnode.translation[1]), float(gnode.translation[2])
+            qx, qy, qz, qw = 0.0, 0.0, 0.0, 1.0
+            if gnode.rotation:
+                qx, qy, qz, qw = (float(gnode.rotation[0]), float(gnode.rotation[1]),
+                                   float(gnode.rotation[2]), float(gnode.rotation[3]))
+
+            flags = int(NodeFlags.HEADER)
+            mnode = ModelNode(name=nm, flags=flags, position=(tx, ty, tz),
+                              rotation=(qx, qy, qz, qw), parent=root)
+            root.children.append(mnode)
+
+            if gnode.mesh is not None:
+                gmesh = gltf.meshes[gnode.mesh]
+                for prim in (gmesh.primitives or []):
+                    pnm = (gmesh.name or nm)[:32]
+                    mesh_node = ModelNode(name=pnm, flags=int(NodeFlags.HEADER | NodeFlags.MESH),
+                                         parent=mnode)
+                    attrs = prim.attributes
+
+                    pos_data = _get_accessor_data(getattr(attrs, 'POSITION', None))
+                    if pos_data:
+                        mesh_node.vertices = [(float(v[0]), float(v[1]), float(v[2]))
+                                              for v in pos_data]
+                    norm_data = _get_accessor_data(getattr(attrs, 'NORMAL', None))
+                    if norm_data:
+                        mesh_node.normals = [(float(n[0]), float(n[1]), float(n[2]))
+                                             for n in norm_data]
+                    uv_data = _get_accessor_data(getattr(attrs, 'TEXCOORD_0', None))
+                    if uv_data:
+                        # GLTF UV: V is top-down → flip to KotOR bottom-up
+                        mesh_node.uvs = [(float(u[0]), 1.0 - float(u[1])) for u in uv_data]
+                    uv2_data = _get_accessor_data(getattr(attrs, 'TEXCOORD_1', None))
+                    if uv2_data:
+                        mesh_node.uvs_lm = [(float(u[0]), 1.0 - float(u[1])) for u in uv2_data]
+
+                    idx_data = _get_accessor_data(prim.indices)
+                    if idx_data and len(idx_data) % 3 == 0:
+                        mesh_node.faces = [(int(idx_data[i]), int(idx_data[i+1]), int(idx_data[i+2]))
+                                           for i in range(0, len(idx_data), 3)]
+
+                    # Material name
+                    if prim.material is not None and gltf.materials:
+                        mat = gltf.materials[prim.material]
+                        if mat.name:
+                            mesh_node.texture = mat.name[:32]
+
+                    mesh_node.render = True
+                    mesh_node.has_shadow = True
+                    mesh_node.compute_bounds()
+                    mnode.children.append(mesh_node)
+
+        model.compute_bounds()
+        return model
+
+    def _load_trimesh(self, path, model_name, gv, sm, cl) -> KotorModel:
+        import trimesh
+        scene = trimesh.load(path)
+        model = KotorModel(name=model_name, supermodel=sm, game_version=gv, classification=cl)
+        root  = ModelNode(name=model_name, flags=int(NodeFlags.HEADER))
+        model.root_node = root
+        geoms = scene.geometry if hasattr(scene, 'geometry') else {model_name: scene}
+        for gname, mesh in geoms.items():
+            n = ModelNode(name=gname[:32], flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=root)
+            n.vertices = [tuple(v) for v in mesh.vertices.tolist()]
+            n.faces    = [tuple(f) for f in mesh.faces.tolist()]
+            if hasattr(mesh, 'vertex_normals') and mesh.vertex_normals is not None:
+                n.normals = [tuple(x) for x in mesh.vertex_normals.tolist()]
+            if (hasattr(mesh, 'visual') and hasattr(mesh.visual, 'uv')
+                    and mesh.visual.uv is not None):
+                n.uvs = [(float(u), 1.0 - float(v)) for u, v in mesh.visual.uv.tolist()]
+            n.render = True
+            n.has_shadow = True
+            n.compute_bounds()
+            root.children.append(n)
+        model.compute_bounds()
+        return model
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  GLTF 2.0 / GLB Exporter
+# ──────────────────────────────────────────────────────────────────────
+
+class GLTFExporter:
+    """
+    Export KotorModel to GLTF 2.0 / GLB.
+
+    Uses pygltflib for structured output. Falls back to manual JSON+binary
+    GLTF 2.0 if pygltflib is not available.
+
+    UV convention: KotOR stores V bottom-up; GLTF stores V top-down.
+    We flip V on export: v_gltf = 1.0 - v_kotor.
+    """
+
+    def export(self, model: KotorModel, path: str,
+               binary: bool = True) -> bool:
+        """
+        Export model to GLB (binary=True) or GLTF JSON (binary=False).
+        Returns True on success.
+        """
+        try:
+            return self._export_pygltflib(model, path, binary)
+        except ImportError:
+            pass
+        try:
+            return self._export_manual(model, path, binary)
+        except Exception as e:
+            log.error(f"GLTF export failed: {e}")
+            return False
+
+    # ── pygltflib path ────────────────────────────────────────────────
+
+    def _export_pygltflib(self, model: KotorModel, path: str, binary: bool) -> bool:
+        import pygltflib
+        import struct as st
+        import base64
+
+        gltf = pygltflib.GLTF2()
+        gltf.asset = pygltflib.Asset(version="2.0",
+                                     generator="GhostRigger-K1-K2")
+        scene = pygltflib.Scene(name=model.name, nodes=[])
+        gltf.scenes.append(scene)
+        gltf.scene = 0
+
+        bin_data = bytearray()
+
+        def _add_accessor(data_bytes: bytes, count: int, type_: str,
+                          component_type: int,
+                          min_vals=None, max_vals=None) -> int:
+            offset = len(bin_data)
+            bin_data.extend(data_bytes)
+            # Pad to 4-byte alignment
+            while len(bin_data) % 4:
+                bin_data.append(0)
+            bv = pygltflib.BufferView(
+                buffer=0,
+                byteOffset=offset,
+                byteLength=len(data_bytes),
+            )
+            bv_idx = len(gltf.bufferViews)
+            gltf.bufferViews.append(bv)
+            acc = pygltflib.Accessor(
+                bufferView=bv_idx,
+                byteOffset=0,
+                componentType=component_type,
+                count=count,
+                type=type_,
+            )
+            if min_vals is not None:
+                acc.min = list(min_vals)
+            if max_vals is not None:
+                acc.max = list(max_vals)
+            acc_idx = len(gltf.accessors)
+            gltf.accessors.append(acc)
+            return acc_idx
+
+        nodes = _iter_visible_mesh_nodes(model)
+        for node in nodes:
+            verts   = node.vertices or []
+            normals = node.normals  or []
+            uvs     = node.uvs     or []
+            faces   = node.faces   or []
+            if not verts or not faces:
+                continue
+
+            n_v = len(verts)
+            n_f = len(faces)
+
+            # Position buffer (float32, VEC3)
+            pos_buf = bytearray()
+            for v in verts:
+                pos_buf += st.pack('<fff', float(v[0]), float(v[1]), float(v[2]))
+            px = [v[0] for v in verts]; py = [v[1] for v in verts]; pz = [v[2] for v in verts]
+            pos_acc = _add_accessor(bytes(pos_buf), n_v, "VEC3", 5126,
+                                    [min(px), min(py), min(pz)],
+                                    [max(px), max(py), max(pz)])
+
+            # Normal buffer (float32, VEC3)
+            norm_acc = None
+            if len(normals) == n_v:
+                norm_buf = bytearray()
+                for n in normals:
+                    norm_buf += st.pack('<fff', float(n[0]), float(n[1]), float(n[2]))
+                norm_acc = _add_accessor(bytes(norm_buf), n_v, "VEC3", 5126)
+
+            # UV buffer (float32, VEC2) — flip V for GLTF
+            uv_acc = None
+            if len(uvs) == n_v:
+                uv_buf = bytearray()
+                for u in uvs:
+                    uv_buf += st.pack('<ff', float(u[0]), 1.0 - float(u[1]))
+                uv_acc = _add_accessor(bytes(uv_buf), n_v, "VEC2", 5126)
+
+            # Index buffer (uint32, SCALAR)
+            idx_buf = bytearray()
+            for f in faces:
+                idx_buf += st.pack('<III', int(f[0]), int(f[1]), int(f[2]))
+            idx_acc = _add_accessor(bytes(idx_buf), n_f * 3, "SCALAR", 5125)
+
+            # Primitive attributes
+            prim_attrs = pygltflib.Attributes(POSITION=pos_acc)
+            if norm_acc is not None:
+                prim_attrs.NORMAL = norm_acc
+            if uv_acc is not None:
+                prim_attrs.TEXCOORD_0 = uv_acc
+
+            # Material
+            mat_idx = None
+            tex_name = str(getattr(node, 'texture', '') or '').strip()
+            if tex_name and tex_name.upper() not in ('NULL', ''):
+                mat = pygltflib.Material(name=tex_name, doubleSided=False)
+                diff = getattr(node, 'diffuse', (1.0, 1.0, 1.0))
+                mat.pbrMetallicRoughness = pygltflib.PbrMetallicRoughness(
+                    baseColorFactor=[float(diff[0]), float(diff[1]), float(diff[2]), 1.0],
+                    metallicFactor=0.0,
+                    roughnessFactor=0.8,
+                )
+                mat_idx = len(gltf.materials)
+                gltf.materials.append(mat)
+
+            prim = pygltflib.Primitive(
+                attributes=prim_attrs,
+                indices=idx_acc,
+                material=mat_idx,
+            )
+            gmesh = pygltflib.Mesh(name=node.name, primitives=[prim])
+            mesh_idx = len(gltf.meshes)
+            gltf.meshes.append(gmesh)
+
+            pos = node.position or (0.0, 0.0, 0.0)
+            rot = node.rotation or (0.0, 0.0, 0.0, 1.0)
+            gnode = pygltflib.Node(
+                name=node.name,
+                mesh=mesh_idx,
+                translation=list(pos),
+                rotation=list(rot),  # GLTF: [x, y, z, w]
+            )
+            node_idx = len(gltf.nodes)
+            gltf.nodes.append(gnode)
+            scene.nodes.append(node_idx)
+
+        # Finalize buffer
+        gltf.buffers.append(pygltflib.Buffer(byteLength=len(bin_data)))
+        gltf.set_binary_blob(bytes(bin_data))
+
+        if binary or path.endswith('.glb'):
+            gltf.save(path if path.endswith('.glb') else path.replace('.gltf', '.glb'))
+        else:
+            gltf.save(path)
+
+        log.info(f"GLTF export → {Path(path).name}")
+        return True
+
+    # ── Manual GLTF JSON+BIN path (no external deps) ─────────────────
+
+    def _export_manual(self, model: KotorModel, path: str, binary: bool) -> bool:
+        """
+        Write a minimal GLTF 2.0 file without external dependencies.
+        Outputs .gltf + embedded base64 buffer or .glb binary container.
+        """
+        import json, struct as st, base64
+
+        buffers_bytes = bytearray()
+        accessors   = []
+        buffer_views = []
+        meshes      = []
+        nodes_list  = []
+        materials   = []
+        scene_nodes = []
+
+        def _add_bv(data: bytes) -> int:
+            off = len(buffers_bytes)
+            buffers_bytes.extend(data)
+            while len(buffers_bytes) % 4:
+                buffers_bytes.append(0)
+            bv = {"buffer": 0, "byteOffset": off, "byteLength": len(data)}
+            idx = len(buffer_views)
+            buffer_views.append(bv)
+            return idx
+
+        def _add_acc(data: bytes, count: int, typ: str, comp: int,
+                     min_v=None, max_v=None) -> int:
+            bv_i = _add_bv(data)
+            acc  = {"bufferView": bv_i, "byteOffset": 0,
+                    "componentType": comp, "count": count, "type": typ}
+            if min_v: acc["min"] = list(min_v)
+            if max_v: acc["max"] = list(max_v)
+            idx = len(accessors)
+            accessors.append(acc)
+            return idx
+
+        for node in _iter_visible_mesh_nodes(model):
+            verts  = node.vertices or []
+            norms  = node.normals  or []
+            uvs    = node.uvs      or []
+            faces  = node.faces    or []
+            if not verts or not faces:
+                continue
+            nv = len(verts)
+            nf = len(faces)
+
+            pb  = bytearray()
+            for v in verts: pb += st.pack('<fff', *[float(x) for x in v])
+            px = [v[0] for v in verts]; py = [v[1] for v in verts]; pz = [v[2] for v in verts]
+            pa = _add_acc(bytes(pb), nv, "VEC3", 5126,
+                          [min(px), min(py), min(pz)], [max(px), max(py), max(pz)])
+
+            na = None
+            if len(norms) == nv:
+                nb = bytearray()
+                for n in norms: nb += st.pack('<fff', *[float(x) for x in n])
+                na = _add_acc(bytes(nb), nv, "VEC3", 5126)
+
+            ua = None
+            if len(uvs) == nv:
+                ub = bytearray()
+                for u in uvs: ub += st.pack('<ff', float(u[0]), 1.0 - float(u[1]))
+                ua = _add_acc(bytes(ub), nv, "VEC2", 5126)
+
+            ib  = bytearray()
+            for f in faces: ib += st.pack('<III', *[int(x) for x in f[:3]])
+            ia  = _add_acc(bytes(ib), nf * 3, "SCALAR", 5125)
+
+            attrs = {"POSITION": pa}
+            if na is not None: attrs["NORMAL"] = na
+            if ua is not None: attrs["TEXCOORD_0"] = ua
+
+            mat_i = None
+            tex   = str(getattr(node, 'texture', '') or '').strip()
+            if tex and tex.upper() not in ('NULL', ''):
+                diff = getattr(node, 'diffuse', (1.0, 1.0, 1.0))
+                mat_i = len(materials)
+                materials.append({
+                    "name": tex,
+                    "pbrMetallicRoughness": {
+                        "baseColorFactor": [float(diff[0]), float(diff[1]),
+                                            float(diff[2]), 1.0],
+                        "metallicFactor": 0.0, "roughnessFactor": 0.8
+                    }
+                })
+
+            prim = {"attributes": attrs, "indices": ia}
+            if mat_i is not None: prim["material"] = mat_i
+            meshes.append({"name": node.name, "primitives": [prim]})
+            mi = len(meshes) - 1
+
+            pos = list(node.position or (0.0, 0.0, 0.0))
+            rot = list(node.rotation or (0.0, 0.0, 0.0, 1.0))
+            ni = len(nodes_list)
+            nodes_list.append({"name": node.name, "mesh": mi,
+                                "translation": pos, "rotation": rot})
+            scene_nodes.append(ni)
+
+        buf_b64 = base64.b64encode(bytes(buffers_bytes)).decode('ascii')
+
+        gltf_json = {
+            "asset": {"version": "2.0", "generator": "GhostRigger-K1-K2"},
+            "scene": 0,
+            "scenes": [{"name": model.name, "nodes": scene_nodes}],
+            "nodes": nodes_list,
+            "meshes": meshes,
+            "accessors": accessors,
+            "bufferViews": buffer_views,
+            "buffers": [{"byteLength": len(buffers_bytes),
+                         "uri": "data:application/octet-stream;base64," + buf_b64}],
+        }
+        if materials:
+            gltf_json["materials"] = materials
+
+        out_path = path
+        if binary or path.endswith('.glb'):
+            # Write GLB container
+            if not out_path.endswith('.glb'):
+                out_path = str(Path(path).with_suffix('.glb'))
+            json_bytes = json.dumps(gltf_json).encode('utf-8')
+            while len(json_bytes) % 4:
+                json_bytes += b' '
+            buf_bytes = bytes(buffers_bytes)
+            while len(buf_bytes) % 4:
+                buf_bytes += b'\x00'
+            total = 12 + 8 + len(json_bytes) + 8 + len(buf_bytes)
+            with open(out_path, 'wb') as f:
+                f.write(st.pack('<III', 0x46546C67, 2, total))  # magic, version, length
+                f.write(st.pack('<II', len(json_bytes), 0x4E4F534A))  # chunk len, JSON
+                f.write(json_bytes)
+                f.write(st.pack('<II', len(buf_bytes), 0x004E4942))   # chunk len, BIN
+                f.write(buf_bytes)
+        else:
+            # Remove embedded buffer URI for external bin file
+            bin_path = str(Path(path).with_suffix('.bin'))
+            gltf_json["buffers"][0]["uri"] = Path(bin_path).name
+            with open(bin_path, 'wb') as f:
+                f.write(bytes(buffers_bytes))
+            with open(path, 'w') as f:
+                json.dump(gltf_json, f, indent=2)
+
+        log.info(f"GLTF manual export → {Path(out_path).name}")
+        return True

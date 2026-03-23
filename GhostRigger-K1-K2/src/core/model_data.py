@@ -283,16 +283,21 @@ class ModelNode:
     # ── TXI metadata (parsed from embedded TPC TXI or standalone .txi file) ──
     # These fields affect how the texture is rendered:
     #   txi_blending      : 0=none, 1=additive, 2=punchthrough
-    #   txi_cube          : True if texture is a cubemap
+    #   txi_cube          : True if texture is a cubemap (env sphere/cube map)
     #   txi_proceduretype : animation type ('cycle','water','arturo', etc.)
     #   txi_numx/numy     : flipbook grid dimensions (used with proceduretype='cycle')
     #   txi_fps           : flipbook animation frames-per-second
     #   txi_envmaptexture : name of environment-map companion texture
-    #   txi_bumpmaptexture: name of bumpmap companion texture
+    #                       (set by both 'envmaptexture' AND 'bumpyshinytexture' TXI cmds)
+    #   txi_bumpmaptexture: name of bumpmap / normal-map companion texture
     #   txi_bumpmapscaling: bumpmap intensity scale factor
     #   txi_rotate        : additional UV rotation in degrees (from TXI 'rotate' cmd)
     #   txi_loop          : True if animation should loop
     #   txi_clamp_s/t     : True = clamp-to-edge, False = repeat (GL_REPEAT default)
+    #   txi_wateralpha    : TXI wateralpha (0..1) — semi-transparent water/glass surfaces
+    #   txi_decal         : True = decal surface (alpha used as blend weight over bg)
+    #   txi_isbumpmap     : True = this texture IS a bump/normal map (affects its loading)
+    #   txi_islightmap    : True = this texture IS a lightmap
     txi_blending:       int   = 0
     txi_cube:           bool  = False
     txi_proceduretype:  str   = ''
@@ -306,8 +311,15 @@ class ModelNode:
     txi_loop:           bool  = True
     txi_clamp_s:        bool  = False  # S (U) wrap mode: False=repeat, True=clamp
     txi_clamp_t:        bool  = False  # T (V) wrap mode
-    txi_wateralpha:     float = 1.0    # Water/transparency alpha multiplier
+    txi_wateralpha:     float = 1.0    # Water/transparency alpha multiplier (TXI wateralpha)
+    txi_decal:          bool  = False  # TXI decal: alpha is blend weight over background
+    txi_isbumpmap:      bool  = False  # TXI isbumpmap: this texture is a bump/normal map
+    txi_islightmap:     bool  = False  # TXI islightmap: this texture is a lightmap
     txi_specularcolour: str   = ''     # Specular colour map texture name
+    txi_alpha_test:    float = 0.5   # Per-node punchthrough threshold from TPC header [4-7]
+                                      # Kotor.NET KotorModelLoader.cs: TransparencyHint at +84,
+                                      # alpha_test float at TPC header bytes [4-7] (Aurora engine).
+                                      # Default 0.5 matches the engine default discard threshold.
 
     # ── Skin weights ──
     skin_data:       List[VertexSkinData] = field(default_factory=list)
@@ -332,6 +344,27 @@ class ModelNode:
 
     # ── Emitter ──
     emitter_params: Dict[str, Any] = field(default_factory=dict)
+
+    # ── K2/TSL extra mesh fields (Kotor.NET TrimeshHeader TSLUnknown1/2) ──
+    # Layout of the 8 bytes after the flag sequence in K2/TSL trimesh headers:
+    #   byte 0: dirtenabled      — 1 = dirt decal overlay enabled
+    #   byte 1: padding
+    #   uint16 2-3: dirt_texture — dirt texture index (into global texture table)
+    #   uint16 4-5: dirt_coord_space — coordinate space for dirt mapping
+    #   byte 6: hide_in_holograms — 1 = do NOT render this mesh in hologram mode
+    #   byte 7: padding
+    # Reference: Kotor.NET MDLBinaryStructure.cs TrimeshHeader.TSLUnknown1/2 comment
+    dirt_enabled:       bool  = False   # K2 only: dirt decal overlay
+    dirt_texture:       int   = 0       # K2 only: dirt texture slot index
+    dirt_coord_space:   int   = 0       # K2 only: dirt mapping coordinate space
+    hide_in_holograms:  bool  = False   # K2 only: hide mesh in hologram rendering mode
+
+    # ── Mesh average position (from TrimeshHeader AveragePoint / AveragePosition) ──
+    # The Aurora engine stores the centroid of all face vertices (average of all vertex
+    # positions) in the mesh header.  Used for transparent surface depth sorting:
+    # when available, this gives a more accurate centroid than the bounding-box midpoint.
+    # Kotor.NET: TrimeshHeader.AveragePoint; xoreos: _averagePoint.
+    mesh_average_point: Tuple[float,float,float] = (0.0, 0.0, 0.0)
 
     # Bounding sphere / box
     bb_min: Tuple[float,float,float] = (0.0, 0.0, 0.0)
@@ -550,6 +583,102 @@ class ModelNode:
 
         return (wx, wy, wz), tuple(aq)
 
+    def compute_tangents(self) -> None:
+        """
+        Compute per-vertex tangent vectors using the Lengyel (2001) Gram-Schmidt
+        method and store them in ``self.tangents``.
+
+        References:
+          - Lengyel, *Mathematics for 3D Game Programming* §7.8.3
+          - Lengyel, *FGED Vol.2: Rendering* §7
+          - Game Engine Architecture §11.1
+
+        Algorithm
+        ---------
+        For each triangle we compute the tangent vector from the UV-space and
+        position-space edge vectors (standard "UV gradient" method), then
+        accumulate the tangent contributions per vertex, and finally
+        Gram-Schmidt orthogonalize against the vertex normal.
+
+        Bitangents are NOT stored here; they can be recomputed at render time
+        via ``cross(normal, tangent)``.  The tangent w-component (handedness,
+        ±1) is not stored in this Python list — it is always +1 for KotOR MDL
+        geometry; store it explicitly if you need GPU upload.
+
+        If UV data is missing, a default tangent (1,0,0) is used.
+        """
+        nv = len(self.vertices)
+        if nv == 0 or not self.faces:
+            self.tangents = []
+            return
+
+        # Accumulation buffers
+        tan: List[List[float]] = [[0.0, 0.0, 0.0] for _ in range(nv)]
+
+        verts = self.vertices
+        norms = self.normals
+        uvs   = self.uvs
+
+        for fi, face in enumerate(self.faces):
+            if len(face) < 3:
+                continue
+            i0, i1, i2 = face[0], face[1], face[2]
+            if i0 >= nv or i1 >= nv or i2 >= nv:
+                continue
+
+            # Get UVs — honour face_uvs when present (ASCII MDL tvert indexing)
+            if self.face_uvs and fi < len(self.face_uvs):
+                fu = self.face_uvs[fi]
+                u0 = uvs[fu[0]] if uvs and fu[0] < len(uvs) else (0.0, 0.0)
+                u1 = uvs[fu[1]] if uvs and fu[1] < len(uvs) else (0.0, 0.0)
+                u2 = uvs[fu[2]] if uvs and fu[2] < len(uvs) else (0.0, 0.0)
+            else:
+                u0 = uvs[i0] if uvs and i0 < len(uvs) else (0.0, 0.0)
+                u1 = uvs[i1] if uvs and i1 < len(uvs) else (0.0, 0.0)
+                u2 = uvs[i2] if uvs and i2 < len(uvs) else (0.0, 0.0)
+
+            # Position deltas
+            v0 = verts[i0]; v1 = verts[i1]; v2 = verts[i2]
+            dx1 = v1[0]-v0[0]; dy1 = v1[1]-v0[1]; dz1 = v1[2]-v0[2]
+            dx2 = v2[0]-v0[0]; dy2 = v2[1]-v0[1]; dz2 = v2[2]-v0[2]
+
+            # UV deltas
+            ds1 = u1[0]-u0[0]; dt1 = u1[1]-u0[1]
+            ds2 = u2[0]-u0[0]; dt2 = u2[1]-u0[1]
+
+            r = ds1*dt2 - ds2*dt1
+            if abs(r) < 1e-9:
+                # Degenerate UV triangle — use world X axis as fallback tangent
+                tx, ty, tz = 1.0, 0.0, 0.0
+            else:
+                inv_r = 1.0 / r
+                tx = inv_r * (dt2*dx1 - dt1*dx2)
+                ty = inv_r * (dt2*dy1 - dt1*dy2)
+                tz = inv_r * (dt2*dz1 - dt1*dz2)
+
+            for vi in (i0, i1, i2):
+                tan[vi][0] += tx
+                tan[vi][1] += ty
+                tan[vi][2] += tz
+
+        # Gram-Schmidt orthogonalization against vertex normals
+        result: List[Tuple[float,float,float]] = []
+        for vi in range(nv):
+            n_vec = norms[vi] if (norms and vi < len(norms)) else (0.0, 0.0, 1.0)
+            t_vec = tan[vi]
+            # t' = normalize(t - (n · t) * n)
+            dot = n_vec[0]*t_vec[0] + n_vec[1]*t_vec[1] + n_vec[2]*t_vec[2]
+            ox = t_vec[0] - dot*n_vec[0]
+            oy = t_vec[1] - dot*n_vec[1]
+            oz = t_vec[2] - dot*n_vec[2]
+            mag = math.sqrt(ox*ox + oy*oy + oz*oz)
+            if mag > 1e-9:
+                result.append((ox/mag, oy/mag, oz/mag))
+            else:
+                result.append((1.0, 0.0, 0.0))   # degenerate — use X axis
+
+        self.tangents = result
+
     def clone_shallow(self) -> 'ModelNode':
         n = ModelNode(name=self.name, flags=self.flags, index=self.index)
         n.position = self.position
@@ -557,6 +686,28 @@ class ModelNode:
         n.texture  = self.texture
         n.diffuse  = self.diffuse
         n.ambient  = self.ambient
+        n.shininess = self.shininess
+        # Phase 3.7 fields
+        n.mesh_average_point = self.mesh_average_point
+        n.hide_in_holograms  = self.hide_in_holograms
+        n.dirt_enabled       = self.dirt_enabled
+        n.dirt_texture       = self.dirt_texture
+        n.dirt_coord_space   = self.dirt_coord_space
+        # Phase 3.8 TXI fields
+        n.txi_specularcolour  = self.txi_specularcolour
+        n.txi_envmaptexture   = self.txi_envmaptexture
+        n.txi_bumpmaptexture  = self.txi_bumpmaptexture
+        n.txi_bumpmapscaling  = self.txi_bumpmapscaling
+        n.txi_blending        = self.txi_blending
+        n.txi_alpha_test      = self.txi_alpha_test
+        n.txi_wateralpha      = self.txi_wateralpha
+        n.txi_decal           = self.txi_decal
+        n.txi_isbumpmap       = self.txi_isbumpmap
+        n.txi_islightmap      = self.txi_islightmap
+        n.txi_proceduretype   = self.txi_proceduretype
+        n.txi_numx            = self.txi_numx
+        n.txi_numy            = self.txi_numy
+        n.txi_fps             = self.txi_fps
         return n
 
 # ──────────────────────────────────────────────────────────────
@@ -611,6 +762,17 @@ class KotorModel:
     mdl_path: str = ""
     mdx_path: str = ""
 
+    @property
+    def nodes(self) -> List[ModelNode]:
+        """Convenience alias for all_nodes() — returns all nodes in DFS order.
+
+        Provided so that code written against the naive ``model.nodes`` API
+        (common in external scripts and documentation examples) works without
+        needing to call the method explicitly.  Internally delegates to
+        ``all_nodes()``.
+        """
+        return self.all_nodes()
+
     def all_nodes(self) -> List[ModelNode]:
         """Return all nodes in DFS order using an iterative stack.
 
@@ -651,6 +813,31 @@ class KotorModel:
         for n in self.all_nodes():
             if n.name.lower() == nl: return n
         return None
+
+    def compute_all_tangents(self) -> int:
+        """
+        Compute per-vertex tangent vectors for all mesh nodes that have UVs.
+
+        Calls ``ModelNode.compute_tangents()`` on every mesh node.
+        Returns the number of nodes that were processed.
+
+        This should be called once after model load (mdl_parser already calls
+        compute_bounds at parse time; tangents are computed lazily here so that
+        callers that don't need TBN don't pay the cost).
+
+        The computed tangents are stored in ``node.tangents`` and used by:
+          - The GPU renderer (Phase 5) to build TBN matrices in the vertex shader
+          - The diagnostics panel to report tangent data availability
+          - The normal-map export pipeline (src/converters/normal_map.py)
+
+        Reference: Lengyel §7.8.3; FGED Vol.2 §7 (TBN for normal mapping).
+        """
+        count = 0
+        for n in self.mesh_nodes():
+            if n.vertices and n.uvs:
+                n.compute_tangents()
+                count += 1
+        return count
 
     def compute_bounds(self):
         """
@@ -936,6 +1123,16 @@ class KotorModel:
                 if t and t.upper() not in ('NULL', '') and t not in seen:
                     seen.add(t); result.append(t)
         return result
+
+    def _compute_all_tangents_legacy(self) -> None:
+        """Legacy no-return version kept for back-compat. Use compute_all_tangents()."""
+        for node in self.all_nodes():
+            if (node.flags & NodeFlags.MESH or
+                    node.flags & NodeFlags.SKIN or
+                    node.flags & NodeFlags.DANGLY or
+                    node.flags & NodeFlags.SABER):
+                if node.vertices:
+                    node.compute_tangents()
 
     @classmethod
     def load(cls, mdl_path: str, mdx_path: str = "") -> 'KotorModel':

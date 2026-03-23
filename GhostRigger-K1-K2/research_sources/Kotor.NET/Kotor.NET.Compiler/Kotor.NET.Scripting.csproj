@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="FsLexYacc" Version="11.2.0" />
+    <PackageReference Include="YaccLexTools" Version="1.2.0" />
+  </ItemGroup>
+  <ItemGroup Label="Calculator">
+    <YaccFile Include="Calculator\Calculator.Language.grammar.y">
+      <OutputFile>Calculator\Calculator.Parser.Generated.cs</OutputFile>
+      <Arguments>/gplex /nolines</Arguments>
+    </YaccFile>
+    <LexFile Include="Calculator\Calculator.Language.analyzer.lex">
+      <OutputFile>Calculator\Calculator.Scanner.Generated.cs</OutputFile>
+    </LexFile>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Kotor.NET\Kotor.NET.csproj" />
+  </ItemGroup>
+</Project>

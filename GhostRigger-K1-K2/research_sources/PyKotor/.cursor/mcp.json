@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "ai-context": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--refresh",
+        "--from",
+        "git+https://github.com/doobidoo/mcp-memory-service",
+        "memory",
+        "server"
+      ]
+    }
+  }
+}

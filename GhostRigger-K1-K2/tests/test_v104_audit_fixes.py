@@ -447,15 +447,23 @@ class TestUVSeamGuardRegression:
 
     def test_vflip_nontiled(self):
         from src.gui.viewport import _vflip_nontiled
-        # v=0 → bottom of image = th pixels from top
+        # KotOR MDX UVs use OpenGL convention (V=0=bottom).
+        # PIL images are top-down (row 0=top).
+        # Flip formula: tv = (1.0 - v) * th
+        # v=0 (GL bottom) → (1-0)*256 = 256.0  (bottom of PIL image)
         assert _vflip_nontiled(0.0, 256.0) == 256.0
-        # v=1 → top of image = 0 pixels from top
+        # v=1 (GL top) → (1-1)*256 = 0.0  (top of PIL image = row 0)
         assert _vflip_nontiled(1.0, 256.0) == 0.0
+        # midpoint
+        assert abs(_vflip_nontiled(0.5, 256.0) - 128.0) < 1e-9
 
     def test_vflip_tiled(self):
         from src.gui.viewport import _vflip_tiled
-        # tile_v=1, src_h=256: same as non-tiled single-tile case
+        # Tiled path uses same GL V=0=bottom convention.
+        # tv = (tile_v - v) * src_h
+        # tile_v=1, src_h=256, v=0: (1-0)*256 = 256.0
         assert _vflip_tiled(0.0, 1.0, 256.0) == 256.0
+        # v=1: (1-1)*256 = 0.0
         assert _vflip_tiled(1.0, 1.0, 256.0) == 0.0
 
 

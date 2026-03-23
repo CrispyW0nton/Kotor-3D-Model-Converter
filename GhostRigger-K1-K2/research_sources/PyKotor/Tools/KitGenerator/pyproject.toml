@@ -1,0 +1,135 @@
+[build-system]
+requires = ["setuptools>=42,<70", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kit-generator"
+version = "1.0.0"
+description = "Kit Generator GUI for PyKotor CLI - generates Holocron-compatible kits from KOTOR modules (shim package, functionality now in pykotor.cli.commands.kit_generate)"
+authors = [{ name = "th3w1zard1" }]
+maintainers = [{ name = "th3w1zard1", email = "boden.crouch@gmail.com" }]
+readme = { file = "README.md", content-type = "text/markdown" }
+license = { text = "LGPL-3.0-or-later" }
+keywords = [
+  "kotor",
+  "kotor1",
+  "kotor2",
+  "tsl",
+  "kit",
+  "generator",
+  "extract",
+  "modding",
+  "pykotor",
+  "holocron",
+]
+requires-python = ">=3.8"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Games/Entertainment",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Environment :: Console",
+  "Environment :: X11 Applications",
+  "Environment :: Win32 (MS Windows)",
+]
+dependencies = ["pykotor[encodings,updater]>=2.3.1"]
+
+[project.scripts]
+kit-generator = "kitgenerator.__main__:main"
+kit_generator = "kitgenerator.__main__:main"
+kitgenerator = "kitgenerator.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/OldRepublicDevs/PyKotor"
+Documentation = "https://github.com/OldRepublicDevs/PyKotor/wiki"
+Repository = "https://github.com/OldRepublicDevs/PyKotor.git"
+Issues = "https://github.com/OldRepublicDevs/PyKotor/issues"
+Changelog = "https://github.com/OldRepublicDevs/PyKotor/releases"
+
+# Poetry configuration
+[tool.poetry]
+name = "kit-generator"
+version = "1.0.0"
+description = "Kit Generator GUI for PyKotor CLI - generates Holocron-compatible kits from KOTOR modules (shim package, functionality now in pykotor.cli.commands.kit_generate)"
+authors = ["th3w1zard1 <boden.crouch@gmail.com>"]
+maintainers = ["th3w1zard1 <boden.crouch@gmail.com>"]
+readme = "README.md"
+license = "LGPL-3.0-or-later"
+packages = [{ include = "kitgenerator", from = "src" }]
+keywords = [
+  "kotor",
+  "kotor1",
+  "kotor2",
+  "tsl",
+  "kit",
+  "generator",
+  "extract",
+  "modding",
+  "pykotor",
+  "holocron",
+]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+pykotor = { version = "^2.3.1", extras = ["encodings", "updater"] }
+
+[tool.poetry.scripts]
+kit-generator = "kitgenerator.__main__:main"
+kit_generator = "kitgenerator.__main__:main"
+kitgenerator = "kitgenerator.__main__:main"
+
+[tool.poetry.urls]
+Homepage = "https://github.com/OldRepublicDevs/PyKotor"
+Documentation = "https://github.com/OldRepublicDevs/PyKotor/wiki"
+Repository = "https://github.com/OldRepublicDevs/PyKotor.git"
+Issues = "https://github.com/OldRepublicDevs/PyKotor/issues"
+Changelog = "https://github.com/OldRepublicDevs/PyKotor/releases"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pyright]
+include = ["src"]
+extraPaths = ["../../Libraries/PyKotor/src"]
+pythonVersion = "3.8"
+typeCheckingMode = "basic"
+reportMissingImports = "warning"
+reportMissingTypeStubs = false
+
+[tool.pyinstaller]
+console = true
+hidden-imports = [
+  "utility",
+  "utility.gui",
+  "utility.gui.tkinter",
+  "utility.gui.tkinter.base_app",
+]
+exclude-modules = [
+  "numpy",
+  "PyQt5",
+  "PyQt6",
+  "PySide2",
+  "PySide6",
+  "PIL",
+  "matplotlib",
+  "PyOpenGL",
+  "PyGLM",
+  "dl_translate",
+  "torch",
+]
+
+[tool.dependencies]
+linux-profiles = ["tk"]

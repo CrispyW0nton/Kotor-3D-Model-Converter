@@ -1,0 +1,4 @@
+qtpy
+PyQt5>=5.15; python_implementation == "CPython" and python_version=="3.8"
+PyQt6; python_implementation == "CPython" and python_version>="3.9"
+PySide2; python_implementation == "PyPy"

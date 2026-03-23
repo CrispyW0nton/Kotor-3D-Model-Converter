@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Dialog</class>
+ <widget class="QDialog" name="Dialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>600</width>
+    <height>400</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>500</width>
+    <height>0</height>
+   </size>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>700</width>
+    <height>16777215</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Command Palette</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog {
+    background-color: palette(window);
+    border: 1px solid palette(mid);
+    border-radius: 4px;
+}
+QLineEdit {
+    background-color: palette(base);
+    color: palette(text);
+    border: none;
+    padding: 8px;
+    font-size: 13px;
+    border-bottom: 1px solid palette(mid);
+}
+QListWidget {
+    background-color: palette(base);
+    color: palette(text);
+    border: none;
+    padding: 4px;
+}
+QListWidget::item {
+    padding: 6px 8px;
+    border-radius: 2px;
+}
+QListWidget::item:selected {
+    background-color: palette(highlight);
+    color: palette(highlightedText);
+}
+QListWidget::item:hover {
+    background-color: palette(button);
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QLineEdit" name="searchEdit">
+     <property name="placeholderText">
+      <string>Type to search commands...</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QListWidget" name="commandList">
+     <property name="selectionMode">
+      <enum>QAbstractItemView::SingleSelection</enum>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="statusLabel">
+     <property name="text">
+      <string/>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">padding: 4px 8px; color: palette(mid); font-size: 11px;</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

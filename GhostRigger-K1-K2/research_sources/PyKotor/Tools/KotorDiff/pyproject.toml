@@ -1,0 +1,132 @@
+[build-system]
+requires = ["setuptools>=42,<70", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kotordiff"
+version = "1.0.1"
+description = "KotOR Diff Tool - generates TSLPatcher patch data from file differences (shim package, functionality now in pykotor.diff_tool)"
+authors = [{ name = "th3w1zard1" }]
+maintainers = [{ name = "th3w1zard1", email = "boden.crouch@gmail.com" }]
+readme = { file = "README.md", content-type = "text/markdown" }
+license = { text = "LGPL-3.0-or-later" }
+keywords = [
+  "kotor",
+  "kotor1",
+  "kotor2",
+  "tsl",
+  "diff",
+  "comparison",
+  "patch",
+  "tslpatcher",
+  "modding",
+  "pykotor",
+]
+requires-python = ">=3.8"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Games/Entertainment",
+  "Topic :: Software Development :: Version Control :: Git",
+  "Topic :: Utilities",
+  "Environment :: Console",
+]
+dependencies = ["pykotor[encodings,updater]>=2.3.1"]
+
+[project.scripts]
+kotordiff = "kotordiff.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/OldRepublicDevs/PyKotor"
+Documentation = "https://github.com/OldRepublicDevs/PyKotor/wiki"
+Repository = "https://github.com/OldRepublicDevs/PyKotor.git"
+Issues = "https://github.com/OldRepublicDevs/PyKotor/issues"
+Changelog = "https://github.com/OldRepublicDevs/PyKotor/releases"
+
+# Poetry configuration
+[tool.poetry]
+name = "kotordiff"
+version = "1.0.1"
+description = "KotOR Diff Tool - generates TSLPatcher patch data from file differences (shim package, functionality now in pykotor.diff_tool)"
+authors = ["th3w1zard1 <boden.crouch@gmail.com>"]
+maintainers = ["th3w1zard1 <boden.crouch@gmail.com>"]
+readme = "README.md"
+license = "LGPL-3.0-or-later"
+packages = [{ include = "kotordiff", from = "src" }]
+keywords = [
+  "kotor",
+  "kotor1",
+  "kotor2",
+  "tsl",
+  "diff",
+  "comparison",
+  "patch",
+  "tslpatcher",
+  "modding",
+  "pykotor",
+]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+pykotor = { version = "^2.3.1", extras = ["encodings", "updater"] }
+
+[tool.poetry.scripts]
+kotordiff = "kotordiff.__main__:main"
+
+[tool.poetry.urls]
+Homepage = "https://github.com/OldRepublicDevs/PyKotor"
+Documentation = "https://github.com/OldRepublicDevs/PyKotor/wiki"
+Repository = "https://github.com/OldRepublicDevs/PyKotor.git"
+Issues = "https://github.com/OldRepublicDevs/PyKotor/issues"
+Changelog = "https://github.com/OldRepublicDevs/PyKotor/releases"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pyright]
+include = ["src"]
+extraPaths = ["../../Libraries/PyKotor/src"]
+pythonVersion = "3.8"
+typeCheckingMode = "basic"
+reportMissingImports = "warning"
+reportMissingTypeStubs = false
+
+[tool.pyinstaller]
+console = true
+hidden-imports = [
+  "utility",
+  "utility.gui",
+  "utility.gui.tkinter",
+  "utility.gui.tkinter.base_app",
+  "utility.system",
+]
+upx-exclude = ["python*.dll", "*.pyd"]
+exclude-modules = [
+  "numpy",
+  "PyQt5",
+  "PyQt6",
+  "PySide2",
+  "PySide6",
+  "PIL",
+  "matplotlib",
+  "PyOpenGL",
+  "PyGLM",
+  "dl_translate",
+  "torch",
+]
+
+[tool.dependencies]
+# No special system packages needed for KotorDiff

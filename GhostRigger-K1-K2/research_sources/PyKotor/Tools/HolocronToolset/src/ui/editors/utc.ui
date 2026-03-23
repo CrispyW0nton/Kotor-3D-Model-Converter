@@ -1,0 +1,2848 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1007</width>
+    <height>585</height>
+   </rect>
+  </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
+  </property>
+  <property name="windowTitle">
+   <string>MainWindow</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QHBoxLayout" name="horizontalLayout_15">
+    <item>
+     <layout class="QVBoxLayout" name="verticalLayout_preview">
+      <item>
+       <widget class="ModelRenderer" name="previewRenderer">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>350</width>
+          <height>0</height>
+         </size>
+        </property>
+        <property name="mouseTracking">
+         <bool>true</bool>
+        </property>
+        <property name="focusPolicy">
+         <enum>Qt::StrongFocus</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="modelInfoGroupBox">
+        <property name="title">
+         <string>Model Info</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="checked">
+         <bool>false</bool>
+        </property>
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_modelInfo">
+         <item>
+          <widget class="QLabel" name="modelInfoSummaryLabel">
+           <property name="toolTip">
+            <string>Summary of the creature's 3D model (from Appearance). Expand to see full model
+             path, textures, and animation info. Display-only; change Appearance to change the
+             model. Not stored in the GFF.</string>
+           </property>
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>20</height>
+            </size>
+           </property>
+           <property name="text">
+            <string>Click to expand model information...</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="modelInfoLabel">
+           <property name="toolTip">
+            <string>Detailed model information (mesh, textures, animations) for the current
+             Appearance. Derived from appearance.2da and model files. Display-only; not a GFF field.</string>
+           </property>
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>100</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>300</height>
+            </size>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+           <property name="text">
+            <string>Model information will appear here...</string>
+           </property>
+           <property name="textFormat">
+            <enum>Qt::PlainText</enum>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QTabWidget" name="tabWidget">
+      <property name="currentIndex">
+       <number>0</number>
+      </property>
+      <widget class="QWidget" name="tab">
+       <attribute name="title">
+        <string>Basic</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout" stretch="1,0,0,0">
+        <item>
+         <widget class="QGroupBox" name="groupBox">
+          <property name="title">
+           <string>Profile</string>
+          </property>
+          <layout class="QGridLayout" name="gridLayout_2">
+           <item row="1" column="0">
+            <layout class="QFormLayout" name="formLayout">
+             <item row="0" column="0">
+              <widget class="QLabel" name="label">
+               <property name="text">
+                <string>First Name:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <layout class="QHBoxLayout" name="horizontalLayout" stretch="0,0">
+               <item>
+                <widget class="LocalizedStringLineEdit" name="firstnameEdit" native="true">
+                 <property name="toolTip">
+                  <string>First Name (GFF: FirstName). CExoLocString stored in creature stats;
+                   loaded and saved with the creature. The engine uses it wherever the creature's
+                   display name is shown (dialogue, character sheet, targeting HUD). Resolved by
+                   game language. Empty is valid. Modders: set the displayed name; use ? to
+                   randomize from name tables. Scripts find creatures by Tag, not by this name.</string>
+                 </property>
+                 <property name="minimumSize">
+                  <size>
+                   <width>0</width>
+                   <height>23</height>
+                  </size>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="firstnameRandomButton">
+                 <property name="toolTip">
+                  <string>&lt;p&gt;&lt;b&gt;Randomize first name.&lt;/b&gt; Fills the First Name
+                   field with a random entry from the name table (names.2da or game-specific
+                   tables).&lt;/p&gt;&lt;p&gt;&lt;i&gt;Modders:&lt;/i&gt; Useful for quickly
+                   generating generic NPC names. The game uses First Name in dialogue and the
+                   character sheet; this button only edits the stored value.&lt;/p&gt;</string>
+                 </property>
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="maximumSize">
+                  <size>
+                   <width>26</width>
+                   <height>16777215</height>
+                  </size>
+                 </property>
+                 <property name="text">
+                  <string>?</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="label_2">
+               <property name="text">
+                <string>Last Name:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <layout class="QHBoxLayout" name="horizontalLayout_2" stretch="0,0">
+               <item>
+                <widget class="LocalizedStringLineEdit" name="lastnameEdit" native="true">
+                 <property name="toolTip">
+                  <string>Last Name (GFF: LastName). CExoLocString in creature stats; loaded and
+                   saved with the creature. Displayed with first name in dialogue and UI. Empty is
+                   valid. Modders: use ? to randomize. Scripts use Tag for lookups, not this field.</string>
+                 </property>
+                 <property name="minimumSize">
+                  <size>
+                   <width>0</width>
+                   <height>23</height>
+                  </size>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="lastnameRandomButton">
+                 <property name="toolTip">
+                  <string>Randomize last name. Fills the Last Name field with a random entry from
+                   the name table. The game uses Last Name for dialogue and character display. This
+                   button only edits the stored GFF value; it does not affect loading.</string>
+                 </property>
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="maximumSize">
+                  <size>
+                   <width>26</width>
+                   <height>16777215</height>
+                  </size>
+                 </property>
+                 <property name="text">
+                  <string>?</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="label_3">
+               <property name="text">
+                <string>Tag:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <layout class="QHBoxLayout" name="horizontalLayout_3">
+               <item>
+                <widget class="QLineEdit" name="tagEdit">
+                 <property name="toolTip">
+                  <string>Tag (GFF: Tag). Loaded into creature stats and saved with the creature.
+                   The script command GetObjectByTag(sTag, nNth) looks up objects by this string
+                   (case-insensitive); the engine uses it for story logic and companion checks. If
+                   multiple creatures share a tag, nNth selects which instance. Must be unique per
+                   module for scripts that expect a single match. Empty is valid but scripts cannot
+                   find this creature by tag. Modders: set a unique tag that matches any
+                   GetObjectByTag calls in scripts/dialogue; changing a tag breaks existing
+                   references.</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="tagGenerateButton">
+                 <property name="toolTip">
+                  <string>Generate tag from ResRef. Copies the Template ResRef (ResRef field) into
+                   the Tag field, converting to a valid creature tag (lowercase, no extension).
+                   Scripts and dialogues reference creatures by Tag; the tag must be unique per
+                   area. Modders: use this to keep Tag and ResRef in sync when the ResRef is the
+                   main identifier, or type a custom tag (e.g. for scripting).</string>
+                 </property>
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="maximumSize">
+                  <size>
+                   <width>26</width>
+                   <height>16777215</height>
+                  </size>
+                 </property>
+                 <property name="text">
+                  <string>-</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacer">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="sizeType">
+                  <enum>QSizePolicy::Fixed</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>32</width>
+                   <height>0</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+             <item row="3" column="0">
+              <widget class="QLabel" name="label_7">
+               <property name="text">
+                <string>ResRef:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="1">
+              <layout class="QHBoxLayout" name="horizontalLayout_8" stretch="0,0">
+               <item>
+                <widget class="QLineEdit" name="resrefEdit">
+                 <property name="toolTip">
+                  <string>Template ResRef (GFF: TemplateResRef). ResRef (max 16 characters)
+                   identifying this creature template. The engine stores ResRefs in a 16-byte
+                   structure; longer strings are truncated. When the game loads a creature from a
+                   GIT file it can use this field to know which UTC template the instance uses; when
+                   loading a UTC file directly the resource filename is the template resref.
+                   In-game: used to load the correct UTC data for the creature. Modders: set this to
+                   match the UTC filename (without .utc); keep under 16 characters. If you rename
+                   the UTC file outside the toolset, update this field to match or references may
+                   break. Empty is valid but unusual.</string>
+                 </property>
+                 <property name="maxLength">
+                  <number>16</number>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacer_2">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="sizeType">
+                  <enum>QSizePolicy::Fixed</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>32</width>
+                   <height>0</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+             <item row="4" column="0">
+              <widget class="QLabel" name="label_4">
+               <property name="text">
+                <string>Appearance:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="1">
+              <layout class="QHBoxLayout" name="horizontalLayout_4">
+               <item>
+                <widget class="ComboBox2DA" name="appearanceSelect">
+                 <property name="toolTip">
+                  <string>Appearance (GFF: Appearance_Type). WORD index into appearance.2da. Picks
+                   the 3D model and skin. Valid range 0 to 65535; use a row that exists in
+                   appearance.2da or the model may not show. Modders: change to swap the creature's
+                   look; the preview updates when you change this.</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacer_5">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="sizeType">
+                  <enum>QSizePolicy::Fixed</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>32</width>
+                   <height>0</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+             <item row="5" column="0">
+              <widget class="QLabel" name="label_10">
+               <property name="text">
+                <string>Soundset:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="1">
+              <layout class="QHBoxLayout" name="horizontalLayout_10">
+               <item>
+                <widget class="ComboBox2DA" name="soundsetSelect">
+                 <property name="toolTip">
+                  <string>Soundset (GFF: SoundSetFile). WORD index into soundset.2da. Chooses voice
+                   and combat barks. Valid range 0 to 65535; use a valid row or sounds may be wrong.
+                   Modders: pick a row from soundset.2da to change dialogue and battle sounds.</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacer_6">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="sizeType">
+                  <enum>QSizePolicy::Fixed</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>32</width>
+                   <height>0</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+             <item row="6" column="0">
+              <widget class="QLabel" name="label_5">
+               <property name="text">
+                <string>Conversation:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="6" column="1">
+              <layout class="QHBoxLayout" name="horizontalLayout_5">
+               <item>
+                <widget class="FilterComboBox" name="conversationEdit">
+                 <property name="toolTip">
+                  <string>Conversation (GFF: Conversation). ResRef of the dialogue (DLG) file; max
+                   16 characters. When the player talks to this creature, the game runs this
+                   dialogue. Blank means no dialogue. Modders: set to a DLG resref and use Edit to
+                   open the dialogue editor.</string>
+                 </property>
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                   <horstretch>1</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="conversationModifyButton">
+                 <property name="toolTip">
+                  <string>Open the dialogue editor for the Conversation (DLG) assigned to this
+                   creature. The game runs this dialogue when the player talks to the creature. If
+                   no conversation is set, this button may open a new or default dialogue. Modders:
+                   use this to edit the creature's dialogue without leaving the UTC editor.</string>
+                 </property>
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="font">
+                  <font>
+                   <stylestrategy>PreferAntialias</stylestrategy>
+                  </font>
+                 </property>
+                 <property name="text">
+                  <string>Edit</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacer_10">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="sizeType">
+                  <enum>QSizePolicy::Fixed</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>32</width>
+                   <height>0</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="groupBox_15">
+          <property name="title">
+           <string>Inventory</string>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_10">
+           <item>
+            <widget class="QLabel" name="inventoryCountLabel">
+             <property name="toolTip">
+              <string>Shows how many items are in this creature's inventory (ItemList) plus equipped
+               gear (Equip_ItemList). The game loads these when the creature spawns.</string>
+             </property>
+             <property name="text">
+              <string>Total Items:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="inventoryButton">
+             <property name="toolTip">
+              <string>Edit creature inventory (GFF: ItemList). Opens an editor where you can add,
+               remove, or reorder items (UTI ResRefs) and equip them to slots. The game loads this
+               list when the creature spawns; items appear in the creature's inventory and equipped
+               slots in-game. Modders: add weapons, armor, and loot here; use Equipped slots to set
+               what the creature has on (e.g. right hand, armor). Empty list is valid—creature
+               starts with no items.</string>
+             </property>
+             <property name="text">
+              <string>Edit Inventory</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="groupBox_2">
+          <property name="title">
+           <string>Portrait</string>
+          </property>
+          <layout class="QHBoxLayout" name="horizontalLayout_7">
+           <item>
+            <widget class="QLabel" name="portraitPicture">
+             <property name="toolTip">
+              <string>Preview of the portrait image. Shows the portrait that will appear in dialogue
+               and the party panel based on the Portrait (PortraitId) and optional Portrait ResRef
+               settings above. This is display-only; change the Portrait dropdown or Portrait ResRef
+               to change the image. If the selected row or resref is invalid, the preview may be
+               blank or show a fallback.</string>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>64</width>
+               <height>64</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>64</width>
+               <height>64</height>
+              </size>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">background-color: black;</string>
+             </property>
+             <property name="frameShape">
+              <enum>QFrame::Box</enum>
+             </property>
+             <property name="text">
+              <string />
+             </property>
+             <property name="scaledContents">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_6">
+             <item>
+              <widget class="ComboBox2DA" name="portraitSelect">
+               <property name="toolTip">
+                <string>Portrait (GFF: PortraitId). WORD. Image shown in dialogue and party panel.
+                 Engine: if value &lt; 65534, use as portrait.2da row (0–65533); if 65534 or 65535,
+                 use the Portrait ResRef field instead. The portrait can change with alignment
+                 (light/dark) in-game. Modders: pick a row from portrait.2da (valid row 0–65533) or
+                 use 65535 to use a custom Portrait ResRef; invalid rows may show a wrong or blank
+                 portrait.</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <spacer name="verticalSpacer_5">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="advancedTab">
+       <attribute name="title">
+        <string>Advanced</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_4" stretch="1,1,0,0">
+        <item>
+         <widget class="QGroupBox" name="groupBox_3">
+          <property name="title">
+           <string>Flags</string>
+          </property>
+          <layout class="QHBoxLayout" name="horizontalLayout_9">
+           <item>
+            <layout class="QVBoxLayout" name="verticalLayout_2">
+             <item>
+              <widget class="QCheckBox" name="disarmableCheckbox">
+               <property name="toolTip">
+                <string>Disarmable (GFF: Disarmable). BYTE 0/1. If set, the creature can be disarmed
+                 in combat (loses weapon). Modders: enable for NPCs that should be disarmable.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Disarmable</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="noPermDeathCheckbox">
+               <property name="toolTip">
+                <string>No Perm Death (GFF: NoPermDeath). BYTE 0 or 1. When checked (1), the
+                 creature cannot be permanently killed and can be raised from death (e.g. by spells
+                 or scripts). The game uses this for important NPCs that must stay revivable.
+                 Unchecked (0) = normal death behavior. Does not stop the corpse from fading or
+                 prevent scripts from destroying the object; use Plot or Min 1 HP for extra
+                 protection. Modders: enable for NPCs that must reappear or be raiseable; leave off
+                 for normal enemies. Note: KotOR 1 also reads the IsRaiseable field when loading
+                 creatures; both affect whether the creature can be raised.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>No Perm Death</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="min1HpCheckbox">
+               <property name="toolTip">
+                <string>Min 1 HP (GFF: Min1HP). BYTE 0/1. If set, the creature's HP cannot go below
+                 1 from damage. Modders: use for plot NPCs that must not die from damage (scripts
+                 can still kill).</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Min 1 HP</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="plotCheckbox">
+               <property name="toolTip">
+                <string>Plot (GFF: Plot). BYTE 0/1. When set, the creature is plot-critical: the
+                 game will not allow it to die permanently (e.g. companion NPCs). Does not prevent
+                 knockdown or temporary death; scripts can still destroy the object. Modders: enable
+                 for story-essential NPCs; leave off for normal enemies.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Plot</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="isPcCheckbox">
+               <property name="toolTip">
+                <string>Is PC (GFF: IsPC). BYTE 0/1. When set, the engine treats this creature as a
+                 player character (e.g. for controls, camera, or UI). Rarely used on NPCs; mainly
+                 for the player's creature in save games. Modders: leave unchecked for normal NPCs;
+                 enabling can cause odd behavior.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Is PC</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QVBoxLayout" name="verticalLayout_3">
+             <item>
+              <widget class="QCheckBox" name="noReorientateCheckbox">
+               <property name="toolTip">
+                <string>Doesn't Reorient on PC (GFF: NotReorienting). BYTE 0/1. When set, the
+                 creature does not turn to face the player when the player approaches. Useful for
+                 NPCs that should keep a fixed orientation (e.g. sitting, working). Modders: enable
+                 for static or scripted facing.</string>
+               </property>
+               <property name="text">
+                <string>Doesn't Reorientate on PC</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="noBlockCheckbox">
+               <property name="toolTip">
+                <string>Doesn't Block PC (GFF: IgnoreCrePath). BYTE 0/1. When set, the creature is
+                 ignored by pathfinding: the player and party can walk through it. Useful for
+                 non-solid NPCs or holograms. Modders: enable for ghosts, holograms, or decorative
+                 creatures that should not block movement.</string>
+               </property>
+               <property name="text">
+                <string>Doesn't Block PC</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="hologramCheckbox">
+               <property name="toolTip">
+                <string>Hologram (GFF: Hologram). BYTE 0/1. When set, the creature is rendered as a
+                 hologram (shader effect). Used for holographic NPCs in KotOR. Modders: enable for
+                 holocomm or hologram encounters; has no effect on dialogue or scripts.</string>
+               </property>
+               <property name="text">
+                <string>Hologram</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="verticalSpacer">
+               <property name="orientation">
+                <enum>Qt::Vertical</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>20</width>
+                 <height>40</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="groupBox_4">
+          <property name="title">
+           <string>Race</string>
+          </property>
+          <layout class="QFormLayout" name="formLayout_2">
+           <item row="0" column="0">
+            <widget class="QLabel" name="label_8">
+             <property name="text">
+              <string>Race:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="ComboBox2DA" name="raceSelect">
+             <property name="toolTip">
+              <string>Race (GFF: Race). Index into racialtypes.2da (row 0, 1, 2, …). The game uses
+               this for hit dice, skill points, available classes, model options, and race-specific
+               checks. Modders: choose a row that exists in racialtypes.2da (e.g. Human, Droid).
+               Important: if the value is greater than or equal to the number of rows in race.2da,
+               the creature will fail to load in-game. Keep the index within the valid range for
+               your game/mod.</string>
+             </property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="label_9">
+             <property name="text">
+              <string>Subrace:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="ComboBox2DA" name="subraceSelect">
+             <property name="toolTip">
+              <string>Subrace (GFF: SubraceIndex). Index into subrace.2da; refines the selected race
+               (e.g. subspecies). The game uses this for appearance and sometimes stat tweaks.
+               Modders: use a row that exists in subrace.2da and matches the race; 0 is often valid.
+               Invalid indices are not rejected by the engine but can cause odd appearance or
+               behavior.</string>
+             </property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="groupBox_5">
+          <property name="title">
+           <string>Other</string>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_18">
+           <item>
+            <layout class="QFormLayout" name="formLayout_3">
+             <item row="0" column="0">
+              <widget class="QLabel" name="label_16">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>1</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Speed:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="ComboBox2DA" name="speedSelect">
+               <property name="toolTip">
+                <string>Speed (GFF: WalkRate). Row index into creaturespeed.2da (WALKRATE column).
+                 The game uses this value to set the creature's walk and run movement speed for
+                 pathfinding and animation. Modders: choose a row that exists in creaturespeed.2da
+                 (typically 0 to number of rows minus one). An invalid index may result in default
+                 speed or broken movement in-game.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="label_11">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>1</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Faction:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="ComboBox2DA" name="factionSelect">
+               <property name="toolTip">
+                <string>Faction (GFF: FactionID). Index into repute.2da (or faction table).
+                 Determines who the creature is hostile or friendly to. The game uses this for
+                 combat targeting and dialogue reactions. Modders: set to match your module's
+                 factions; wrong values can make NPCs attack the party or ignore enemies.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="genderAdvancedLabel">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>1</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Gender:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="ComboBox2DA" name="genderSelect">
+               <property name="toolTip">
+                <string>Gender (GFF: Gender). BYTE index into gender.2da (0=Male, 1=Female, etc.).
+                 The game clamps values over 4 to 4 when loading. Affects voice, name tables, and
+                 appearance. Used for dialogue and LTR name generation. Modders: use 0–4; must match
+                 a row in gender.2da or the engine clamps to 4. Edge case: values above 4 in the GFF
+                 are clamped when loaded.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="0">
+              <widget class="QLabel" name="label_12">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>1</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Perception:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="1">
+              <widget class="ComboBox2DA" name="perceptionSelect">
+               <property name="toolTip">
+                <string>Perception (GFF: PerceptionRange). Stored as BYTE (0–255). Row index into
+                 ranges.2da that defines primary and secondary detection range (how far the creature
+                 can see and hear). The game uses this for AI awareness, stealth detection, and
+                 targeting. Default for NPCs is 11 when missing. Special: value 12 (0xC) uses the
+                 appearance's PERCEPTIONDIST from appearance.2da instead of a ranges.2da row.
+                 Invalid row indices can cause the creature to fail to load in-game (engine error).
+                 Modders: pick a valid row from ranges.2da; higher row indices generally mean larger
+                 perception range. Only used for non-player creatures; PCs use a fixed range.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="0">
+              <widget class="QLabel" name="label_13">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>1</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Challenge Rating:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="1">
+              <widget class="QDoubleSpinBox" name="challengeRatingSpin">
+               <property name="minimum">
+                <double>0.000000000000000</double>
+               </property>
+               <property name="maximum">
+                <double>100.000000000000000</double>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>Challenge Rating (GFF: ChallengeRating). FLOAT. Used by the game for
+                 encounter difficulty and XP calculations. Modders: set 0–100; higher values make
+                 the creature count as tougher for reward and scaling. Has no effect on actual
+                 combat stats.</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QFrame" name="k2onlyBox">
+             <property name="frameShape">
+              <enum>QFrame::NoFrame</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Plain</enum>
+             </property>
+             <layout class="QFormLayout" name="formLayout_24">
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <property name="bottomMargin">
+               <number>0</number>
+              </property>
+              <item row="1" column="0">
+               <widget class="QLabel" name="label_102">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                  <horstretch>1</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="text">
+                 <string>Blindspot:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QDoubleSpinBox" name="blindSpotSpin">
+                <property name="minimum">
+                 <double>0.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>360.000000000000000</double>
+                </property>
+                <property name="toolTip">
+                 <string>Blindspot (GFF: BlindSpot). KotOR 2 only. FLOAT. Angle in degrees behind
+                  the creature that is not perceived. Modders: 0 = no blind spot; 360 = effectively
+                  blind. Used by AI perception.</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="label_110">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                  <horstretch>1</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="text">
+                 <string>Multiplier Set:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="Line" name="line">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QSpinBox" name="multiplierSetSpin">
+                <property name="toolTip">
+                 <string>Multiplier Set (GFF: MultiplierSet). KotOR 2 only. Stored as BYTE (0–255).
+                  Used for encounter scaling (e.g. difficulty or reward multipliers). The game reads
+                  and writes this when saving creature stats. Modders: use 0 for default behavior;
+                  other values depend on game scripts and encounter tables. Invalid or out-of-range
+                  values may have no effect or use default. Leave 0 if unsure.</string>
+                </property>
+                <property name="minimum">
+                 <number>0</number>
+                </property>
+                <property name="maximum">
+                 <number>255</number>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <spacer name="verticalSpacer_4">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="statsTab">
+       <attribute name="title">
+        <string>Stats</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_11">
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout_5">
+          <item>
+           <widget class="QGroupBox" name="groupBox_6">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="title">
+             <string>Skills</string>
+            </property>
+            <layout class="QFormLayout" name="formLayout_4">
+             <item row="0" column="0">
+              <widget class="QLabel" name="label_17">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Computer Use:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QSpinBox" name="computerUseSpin">
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>255</number>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>Computer Use (GFF: SkillList Rank for this skill). BYTE 0–255. Base skill
+                 rank before modifiers. In-game: used for computer spikes, hacking, droid repair.
+                 Modders: typical ranks 0–30; 255 is max. Cross-class ranks may use negative values
+                 internally; editor uses 0–255.</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="label_18">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Demolitions:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QSpinBox" name="demolitionsSpin">
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>255</number>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>Demolitions (GFF: SkillList Rank). BYTE 0–255. Base rank for placing and
+                 disarming mines and explosives. In-game: affects trap DC and disarm checks.
+                 Modders: 0–30 typical; 255 max.</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="label_19">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Stealth:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QSpinBox" name="stealthSpin">
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>255</number>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>Stealth (GFF: SkillList Rank). BYTE 0–255. Base rank for hiding and moving
+                 silently. In-game: opposed by Awareness; affects detection range. Modders: 0–30
+                 typical.</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="0">
+              <widget class="QLabel" name="label_20">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Awareness:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="1">
+              <widget class="QSpinBox" name="awarenessSpin">
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>255</number>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>Awareness (GFF: SkillList Rank). BYTE 0–255. Base rank for spotting traps,
+                 stealth, and hidden objects. In-game: opposed by Stealth; affects perception.
+                 Modders: 0–30 typical.</string>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="0">
+              <widget class="QLabel" name="label_21">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Persuade:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="1">
+              <widget class="QSpinBox" name="persuadeSpin">
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>255</number>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>Persuade (GFF: SkillList Rank). BYTE 0–255. Base rank for dialogue
+                 persuasion and intimidation. In-game: affects [Persuade] options and DCs. Modders:
+                 0–30 typical; high values make dialogue checks easier.</string>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="0">
+              <widget class="QLabel" name="label_22">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Repair:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="1">
+              <widget class="QSpinBox" name="repairSpin">
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>255</number>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>Repair (GFF: SkillList Rank). BYTE 0–255. Base rank for repairing items and
+                 droids. In-game: affects repair DCs and droid healing. Modders: 0–30 typical.</string>
+               </property>
+              </widget>
+             </item>
+             <item row="6" column="0">
+              <widget class="QLabel" name="label_23">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Security:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="6" column="1">
+              <widget class="QSpinBox" name="securitySpin">
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>255</number>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>Security (GFF: SkillList Rank). BYTE 0–255. Base rank for unlocking doors
+                 and containers. In-game: opposed by lock DC. Modders: 0–30 typical.</string>
+               </property>
+              </widget>
+             </item>
+             <item row="7" column="0">
+              <widget class="QLabel" name="label_24">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Treat Injury:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="7" column="1">
+              <widget class="QSpinBox" name="treatInjurySpin">
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>255</number>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>Treat Injury (GFF: SkillList Rank). BYTE 0–255. Base rank for healing with
+                 medpacs and first aid. In-game: affects heal amount and DC. Modders: 0–30 typical.</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QGroupBox" name="groupBox_8">
+            <property name="title">
+             <string>Saves</string>
+            </property>
+            <layout class="QFormLayout" name="formLayout_6">
+             <item row="0" column="0">
+              <widget class="QLabel" name="label_31">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Fortitude:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QSpinBox" name="fortitudeSpin">
+               <property name="minimum">
+                <number>-128</number>
+               </property>
+               <property name="maximum">
+                <number>127</number>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>Fortitude save bonus (GFF: fortbonus). Stored as SHORT; engine uses signed
+                 byte range -128–127. Flat bonus added to Fortitude saving throws (Con-based).
+                 In-game: added to base save + Con modifier. Modders: 0 = no bonus; negative values
+                 weaken saves. Typical 0–10.</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="label_32">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Reflex:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="label_33">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Will:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QSpinBox" name="reflexSpin">
+               <property name="minimum">
+                <number>-128</number>
+               </property>
+               <property name="maximum">
+                <number>127</number>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>Reflex save bonus (GFF: refbonus). Stored as SHORT; engine uses -128–127.
+                 Flat bonus to Reflex saving throws (Dex-based). In-game: added to base save + Dex
+                 modifier. Modders: 0 = no bonus; typical 0–10.</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QSpinBox" name="willSpin">
+               <property name="minimum">
+                <number>-128</number>
+               </property>
+               <property name="maximum">
+                <number>127</number>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>Will save bonus (GFF: willbonus). Stored as SHORT; engine uses -128–127.
+                 Flat bonus to Will saving throws (Wis-based). In-game: added to base save + Wis
+                 modifier. Modders: 0 = no bonus; typical 0–10.</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QGroupBox" name="groupBox_9">
+            <property name="title">
+             <string>Armor Class</string>
+            </property>
+            <layout class="QFormLayout" name="formLayout_7">
+             <item row="0" column="0">
+              <widget class="QLabel" name="label_34">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Armor Class:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QSpinBox" name="armorClassSpin">
+               <property name="toolTip">
+                <string>Natural AC (GFF: NaturalAC). BYTE 0–255. Flat bonus to Armor Class from
+                 natural armor (scales, hide, etc.). The game adds this to base AC and equipment.
+                 Modders: typical values 0–20; high values make the creature very hard to hit.
+                 Stacks with armor and Dexterity.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>255</number>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <spacer name="verticalSpacer_3">
+            <property name="orientation">
+             <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout_6">
+          <item>
+           <widget class="QGroupBox" name="groupBox_7">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="title">
+             <string>Attributes</string>
+            </property>
+            <layout class="QFormLayout" name="formLayout_5">
+             <item row="0" column="0">
+              <widget class="QLabel" name="label_25">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Strength:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QSpinBox" name="strengthSpin">
+               <property name="toolTip">
+                <string>Strength (GFF: Str). BYTE. Base strength; engine reads via ReadFieldBYTE in
+                 ReadStatsFromGff. Default when missing: 0. In-game: affects melee damage, carry
+                 weight, Str-based skills. Modders: valid range 0–255; typical values 8–20. Modifier
+                 = (Str - 10) / 2 (min -5).</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>255</number>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="label_26">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Dexterity:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QSpinBox" name="dexteritySpin">
+               <property name="toolTip">
+                <string>Dexterity (GFF: Dex). BYTE. Base dexterity; engine reads via ReadFieldBYTE.
+                 Default when missing: 0. In-game: affects AC, reflex, ranged attack, Dex-based
+                 skills. Modders: valid range 0–255; typical 8–20.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>255</number>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="label_27">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Constitution:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QSpinBox" name="constitutionSpin">
+               <property name="toolTip">
+                <string>Constitution (GFF: Con). BYTE. Base constitution; engine reads via
+                 ReadFieldBYTE. Default when missing: 0. In-game: affects HP per level, fortitude.
+                 Modders: valid range 0–255; typical 8–20.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>255</number>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="0">
+              <widget class="QLabel" name="label_28">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Intelligence:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="1">
+              <widget class="QSpinBox" name="intelligenceSpin">
+               <property name="toolTip">
+                <string>Intelligence (GFF: Int). BYTE. Base intelligence; engine reads via
+                 ReadFieldBYTE. Default when missing: 0. In-game: affects skill points, spell slots
+                 (wizards), Int-based skills. Modders: valid range 0–255; typical 8–20.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>255</number>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="0">
+              <widget class="QLabel" name="label_29">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Wisdom:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="1">
+              <widget class="QSpinBox" name="wisdomSpin">
+               <property name="toolTip">
+                <string>Wisdom (GFF: Wis). BYTE. Base wisdom; engine reads via ReadFieldBYTE.
+                 Default when missing: 0. In-game: affects Will, Force points (Jedi/Sith), Wis-based
+                 skills. Modders: valid range 0–255; typical 8–20.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>255</number>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="0">
+              <widget class="QLabel" name="label_30">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Charisma:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="1">
+              <widget class="QSpinBox" name="charismaSpin">
+               <property name="toolTip">
+                <string>Charisma (GFF: Cha). BYTE. Base charisma; engine reads via ReadFieldBYTE.
+                 Default when missing: 0. In-game: affects Persuade, Force points, Cha-based skills.
+                 Modders: valid range 0–255; typical 8–20.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>255</number>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QGroupBox" name="groupBox_10">
+            <property name="title">
+             <string>Hit Points</string>
+            </property>
+            <layout class="QFormLayout" name="formLayout_8">
+             <item row="0" column="0">
+              <widget class="QLabel" name="label_35">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Base HP:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="label_36">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Current HP:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="label_37">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Max HP:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QSpinBox" name="baseHpSpin">
+               <property name="toolTip">
+                <string>Base HP (GFF: HitPoints). SHORT. Read by the engine in ReadStatsFromGff;
+                 stored as object.hit_points (max HP before modifiers). Default when missing: 0.
+                 In-game: used as base for NPC max HP calculation (with Con modifier and level).
+                 Modders: valid range 0–32767 (signed 16-bit); for blueprints often matches or is
+                 less than Max HP. Negative values are not used by the game.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>32767</number>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QSpinBox" name="currentHpSpin">
+               <property name="toolTip">
+                <string>Current HP (GFF: CurrentHitPoints). SHORT. Creature's current hit points
+                 when the template is loaded; can exceed Max HP from temporary buffs. Default when
+                 missing: 0. In-game: the engine reads this then for NPCs may recompute current HP
+                 via SetCurrentHitPoints (level + Con modifier); combat and healing update this at
+                 runtime. Modders: valid range 0–32767; for blueprints set equal to Max HP for a
+                 full-health start. The game does not use negative HP.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>32767</number>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QSpinBox" name="maxHpSpin">
+               <property name="toolTip">
+                <string>Max HP (GFF: MaxHitPoints). SHORT. Maximum hit points after level and Con;
+                 the creature cannot exceed this from healing. Default when missing: 0. In-game:
+                 ceiling for healing and display. Modders: valid range 0–32767; usually ≥ Current
+                 HP; often derived from Base HP + Con. Edge case: if Current HP &gt; Max HP (e.g.
+                 buffs), the engine may still use the stored value until next update.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>32767</number>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QGroupBox" name="groupBox_11">
+            <property name="title">
+             <string>Force Points</string>
+            </property>
+            <layout class="QFormLayout" name="formLayout_9">
+             <item row="0" column="0">
+              <widget class="QLabel" name="label_39">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Current FP:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QSpinBox" name="currentFpSpin">
+               <property name="toolTip">
+                <string>Current FP (GFF: CurrentForce). SHORT. Current Force points when the
+                 template is loaded; used by Jedi/Sith for powers. Default when missing: 0. In-game:
+                 engine reads this then for NPCs may set max FP from level and Wis/Cha modifiers.
+                 Modders: valid range 0–32767; for NPCs often set equal to Max FP for full Force.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>32767</number>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="label_40">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>Max FP:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QSpinBox" name="maxFpSpin">
+               <property name="toolTip">
+                <string>Max FP (GFF: ForcePoints). SHORT. Maximum Force points (from level and
+                 Wis/Cha modifiers). Default when missing: 0. In-game: ceiling for Force recovery;
+                 Jedi/Sith use this for power costs. Modders: valid range 0–32767; usually ≥ Current
+                 FP.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>32767</number>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <spacer name="verticalSpacer_2">
+            <property name="orientation">
+             <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="classesTab">
+       <attribute name="title">
+        <string>Classes</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_7">
+        <item>
+         <widget class="QGroupBox" name="groupBox_13">
+          <property name="title">
+           <string>Classes</string>
+          </property>
+          <layout class="QGridLayout" name="gridLayout_3">
+           <item row="0" column="0">
+            <layout class="QHBoxLayout" name="horizontalLayout_13" stretch="3,1,2">
+             <item>
+              <widget class="ComboBox2DA" name="class1Select">
+               <property name="toolTip">
+                <string>Class 1 (GFF: ClassList[0].Class). Index into classes.2da. The creature's
+                 primary class (e.g. Soldier, Scout, Jedi Guardian). Determines BAB, saves, and
+                 available feats. Modders: must pick a valid row; this plus Class 2 define the
+                 creature's progression.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QSpinBox" name="class1LevelSpin">
+               <property name="toolTip">
+                <string>Class 1 Level (GFF: ClassList[0].ClassLevel). SHORT 0–32767. Level in the
+                 first class; determines HP, BAB, saves, and skill points. The game uses this for
+                 all level-based calculations. Modders: typical 1–20; must be at least 1 for a valid
+                 class. Stored as signed 16-bit.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>32767</number>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="horizontalSpacer_8">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </item>
+           <item row="1" column="0">
+            <layout class="QHBoxLayout" name="horizontalLayout_14" stretch="3,1,2">
+             <item>
+              <widget class="ComboBox2DA" name="class2Select">
+               <property name="toolTip">
+                <string>Class 2 (GFF: ClassList[1].Class). Index into classes.2da. Optional second
+                 class for multiclassing. Choose [Unset] for single-class. Modders: multiclass uses
+                 the higher BAB/save progression; both classes contribute to HP and skills.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QSpinBox" name="class2LevelSpin">
+               <property name="toolTip">
+                <string>Class 2 Level (GFF: ClassList[1].ClassLevel). SHORT 0–32767. Level in the
+                 second class (multiclass). Use [Unset] in the class dropdown to have only one
+                 class. Modders: typical 1–20; total levels (class1 + class2) drive BAB and saves.</string>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimum">
+                <number>0</number>
+               </property>
+               <property name="maximum">
+                <number>32767</number>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="horizontalSpacer_9">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="groupBox_12">
+          <property name="title">
+           <string>Alignment</string>
+          </property>
+          <layout class="QHBoxLayout" name="horizontalLayout_12">
+           <item>
+            <widget class="QLabel" name="label_52">
+             <property name="text">
+              <string>Dark</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSlider" name="alignmentSlider">
+             <property name="minimum">
+              <number>0</number>
+             </property>
+             <property name="maximum">
+              <number>100</number>
+             </property>
+             <property name="toolTip">
+              <string>Alignment (GFF: GoodEvil). 0 = Dark, 100 = Light. Stored as BYTE; the game
+               clamps values over 100 down to 100. Affects portrait (light-side vs dark-side face),
+               dialogue options, and story flags. Modders: 50 = neutral; 0 or 100 for full
+               dark/light. Does not affect combat stats. Edge case: values above 100 in the GFF are
+               clamped when loaded.</string>
+             </property>
+             <property name="value">
+              <number>50</number>
+             </property>
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_53">
+             <property name="text">
+              <string>Light</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <spacer name="spacer">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>0</width>
+            <height>0</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="featsTab">
+       <attribute name="title">
+        <string>Feats</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_8" stretch="2,1">
+        <item>
+         <widget class="QListWidget" name="featList">
+          <property name="toolTip">
+           <string>Feat List (GFF: FeatList). Lists all feats granted to this creature. Each entry
+            stores a Feat index (BYTE 0–255) referencing feats.2da. The game uses these to grant
+            abilities such as Weapon Proficiency, Power Attack, or class-specific feats. Modders:
+            add/remove feats to customize NPC capabilities. The creature must meet prereqs in
+            feats.2da or the feat may have no effect. Duplicate feat IDs are allowed in the GFF but
+            typically unnecessary. Use the Add/Remove buttons to manage entries.</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="groupBox_14">
+          <property name="title">
+           <string>Feat Summary</string>
+          </property>
+          <layout class="QGridLayout" name="gridLayout_4">
+           <item row="0" column="0">
+            <widget class="QPlainTextEdit" name="featSummaryEdit">
+             <property name="toolTip">
+              <string>Read-only summary of the creature's feats (GFF: FeatList). Lists feat names
+               from feats.2da for each Feat index in the list. Add or remove feats using the Feat
+               list above; this panel updates automatically. The game grants these feats when the
+               creature loads.</string>
+             </property>
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="powersTab">
+       <attribute name="title">
+        <string>Powers</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_17" stretch="2,1">
+        <item>
+         <widget class="QListWidget" name="powerList">
+          <property name="toolTip">
+           <string>Force Power List (GFF: ClassList → KnownList0/1/2). Lists Force powers and spells
+            known by this creature. Powers are stored per class in ClassList: each class has
+            KnownList0 (level 1), KnownList1 (level 2), KnownList2 (level 3) containing Spell IDs
+            (WORD 0–65535) that reference spells.2da. The game uses these for Jedi/Sith Force
+            abilities and special attacks. Modders: add powers to grant Force Push, Heal, etc.;
+            remove to restrict NPCs. Powers must match the creature's classes (e.g. Jedi Guardian
+            powers for Guardian class). Invalid spell IDs are ignored at runtime.</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="groupBox_29">
+          <property name="title">
+           <string>Force Power Summary</string>
+          </property>
+          <layout class="QGridLayout" name="gridLayout_8">
+           <item row="0" column="0">
+            <widget class="QPlainTextEdit" name="powerSummaryEdit">
+             <property name="toolTip">
+              <string>Read-only summary of the creature's Force powers and spells (GFF: ClassList →
+               KnownList0/1/2). Lists power names from spells.2da. Add or remove powers using the
+               Powers list above; this panel updates automatically. The game grants these abilities
+               when the creature loads.</string>
+             </property>
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="Scripts">
+       <attribute name="title">
+        <string>Scripts</string>
+       </attribute>
+       <layout class="QFormLayout" name="formLayout_22">
+        <item row="0" column="0">
+         <widget class="QLabel" name="label_95">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>1</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>OnBlocked:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_29">
+          <item>
+           <widget class="FilterComboBox" name="onBlockedEdit">
+            <property name="toolTip">
+             <string>On Blocked (GFF: ScriptOnBlocked). ResRef of NCS script (max 16 chars). Fires
+              when the creature's movement is blocked (e.g. by a door or another creature). Leave
+              blank for no script. Modders: use for custom blocked behavior or pathing logic.</string>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="label_106">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>1</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>OnAttacked:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_30">
+          <item>
+           <widget class="FilterComboBox" name="onAttackedEdit">
+            <property name="toolTip">
+             <string>On Attacked (GFF: ScriptAttacked). ResRef of NCS script. Fires when the
+              creature is targeted by an attack (before damage). Use for counter-attacks or
+              dialogue. Leave blank for no script. Max 16 characters.</string>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="label_96">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>1</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>OnNoticed:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_31">
+          <item>
+           <widget class="FilterComboBox" name="onNoticeEdit">
+            <property name="toolTip">
+             <string>On Noticed (GFF: ScriptOnNotice). ResRef of NCS script. Fires when the creature
+              notices an enemy (enters perception). Use for alarm, dialogue, or AI triggers. Leave
+              blank for no script. Max 16 characters.</string>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="3" column="0">
+         <widget class="QLabel" name="label_97">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>1</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>OnConversation:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_32">
+          <item>
+           <widget class="FilterComboBox" name="onConversationEdit">
+            <property name="toolTip">
+             <string>On Conversation (GFF: ScriptDialogue). ResRef of NCS script. Fires when the
+              player starts dialogue with this creature (before the DLG runs). Use to set variables
+              or change state. Leave blank for no script. Max 16 characters.</string>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="4" column="0">
+         <widget class="QLabel" name="label_98">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>1</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>OnDamaged:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_33">
+          <item>
+           <widget class="FilterComboBox" name="onDamagedEdit">
+            <property name="toolTip">
+             <string>On Damaged (GFF: ScriptDamaged). ResRef of NCS script. Fires when the creature
+              takes damage. Use for pain barks, counters, or state changes. Leave blank for no
+              script. Max 16 characters.</string>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="5" column="0">
+         <widget class="QLabel" name="label_109">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>1</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>OnDeath:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_34">
+          <item>
+           <widget class="FilterComboBox" name="onDeathEdit">
+            <property name="toolTip">
+             <string>On Death (GFF: ScriptDeath). ResRef of NCS script. Fires when the creature
+              dies. Use for loot drops, quest updates, or spawning. Leave blank for no script. Max
+              16 characters.</string>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="6" column="0">
+         <widget class="QLabel" name="label_107">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>1</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>OnEndRound:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_35">
+          <item>
+           <widget class="FilterComboBox" name="onEndRoundEdit">
+            <property name="toolTip">
+             <string>On End Round (GFF: ScriptEndRound). ResRef of NCS script. Fires at the end of
+              each combat round while the creature is in combat. Use for per-round effects or AI.
+              Leave blank for no script. Max 16 characters.</string>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="7" column="0">
+         <widget class="QLabel" name="label_108">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>1</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>OnEndConversation:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="7" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_36">
+          <item>
+           <widget class="FilterComboBox" name="onEndConversationEdit">
+            <property name="toolTip">
+             <string>On End Conversation (GFF: ScriptEndDialogu). ResRef of NCS script. Fires when
+              the player ends dialogue with this creature. Use to apply choices or set flags. Leave
+              blank for no script. Max 16 characters.</string>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="8" column="0">
+         <widget class="QLabel" name="label_100">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>1</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>OnDisturbed:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="8" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_38">
+          <item>
+           <widget class="FilterComboBox" name="onDisturbedEdit">
+            <property name="toolTip">
+             <string>On Disturbed (GFF: ScriptDisturbed). ResRef of NCS script. Fires when the
+              creature's inventory is opened or items are added/removed. Use for trap or theft
+              detection. Leave blank for no script. Max 16 characters.</string>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="9" column="0">
+         <widget class="QLabel" name="label_101">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>1</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>OnHeartbeat:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="9" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_39">
+          <item>
+           <widget class="FilterComboBox" name="onHeartbeatSelect">
+            <property name="toolTip">
+             <string>On Heartbeat (GFF: ScriptHeartbeat). ResRef of NCS script. Fires periodically
+              (every few seconds) while the creature is in the area. Use for patrols, timers, or
+              ambient behavior. Leave blank for no script. Max 16 characters.</string>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="10" column="0">
+         <widget class="QLabel" name="label_103">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>1</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>OnSpawn:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="10" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_41">
+          <item>
+           <widget class="FilterComboBox" name="onSpawnEdit">
+            <property name="toolTip">
+             <string>On Spawn (GFF: ScriptSpawn). ResRef of NCS script. Fires once when the creature
+              is first created in the area. Use for initial setup, variables, or equipment. Leave
+              blank for no script. Max 16 characters.</string>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="11" column="0">
+         <widget class="QLabel" name="label_104">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>1</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>OnSpellCastAt:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="11" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_42">
+          <item>
+           <widget class="FilterComboBox" name="onSpellCastEdit">
+            <property name="toolTip">
+             <string>On Spell Cast At (GFF: ScriptSpellAt). ResRef of NCS script. Fires when a spell
+              or power is cast at this creature (before effect). Use for reflection or counters.
+              Leave blank for no script. Max 16 characters.</string>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="12" column="0">
+         <widget class="QLabel" name="label_105">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>1</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>OnUserDefined:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="12" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_43">
+          <item>
+           <widget class="FilterComboBox" name="onUserDefinedSelect">
+            <property name="toolTip">
+             <string>On User Defined (GFF: ScriptUserDefine). ResRef of NCS script. Fires when
+              another script calls ExecuteScript with this creature and the user-defined event. Use
+              for custom triggers from dialogue or other scripts. Leave blank for no script. Max 16
+              characters.</string>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="commentsTab">
+       <attribute name="title">
+        <string>Comments</string>
+       </attribute>
+       <layout class="QGridLayout" name="gridLayout_9">
+        <item row="0" column="0">
+         <widget class="QPlainTextEdit" name="comments">
+          <property name="toolTip">
+           <string>Comments (GFF: Comment). CExoString. Developer notes only—the game never reads or
+            displays this. Use it to document the creature (e.g. purpose, author, change log).
+            Modders: add notes for yourself or your team; no length limit in GFF, but keep readable.</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1007</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>File</string>
+    </property>
+    <addaction name="actionNew" />
+    <addaction name="actionOpen" />
+    <addaction name="actionSave" />
+    <addaction name="actionSave_As" />
+    <addaction name="separator" />
+    <addaction name="actionRevert" />
+    <addaction name="separator" />
+    <addaction name="actionExit" />
+   </widget>
+   <widget class="QMenu" name="menuTools">
+    <property name="title">
+     <string>Tools</string>
+    </property>
+    <addaction name="actionSaveUnusedFields" />
+    <addaction name="actionAlwaysSaveK2Fields" />
+   </widget>
+   <widget class="QMenu" name="menuView">
+    <property name="title">
+     <string>View</string>
+    </property>
+    <addaction name="actionShowPreview" />
+   </widget>
+   <addaction name="menuFile" />
+   <addaction name="menuView" />
+   <addaction name="menuTools" />
+  </widget>
+  <action name="actionNew">
+   <property name="text">
+    <string>New</string>
+   </property>
+  </action>
+  <action name="actionOpen">
+   <property name="text">
+    <string>Open</string>
+   </property>
+  </action>
+  <action name="actionSave">
+   <property name="text">
+    <string>Save</string>
+   </property>
+  </action>
+  <action name="actionSave_As">
+   <property name="text">
+    <string>Save As</string>
+   </property>
+  </action>
+  <action name="actionRevert">
+   <property name="text">
+    <string>Revert</string>
+   </property>
+  </action>
+  <action name="actionExit">
+   <property name="text">
+    <string>Exit</string>
+   </property>
+  </action>
+  <action name="actionSaveUnusedFields">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Save Unused Fields</string>
+   </property>
+  </action>
+  <action name="actionAlwaysSaveK2Fields">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Always Save K2 Fields</string>
+   </property>
+  </action>
+  <action name="actionShowPreview">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Preview</string>
+   </property>
+  </action>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>ComboBox2DA</class>
+   <extends>QComboBox</extends>
+   <header location="global">toolset.gui.widgets.edit.combobox_2da</header>
+  </customwidget>
+  <customwidget>
+   <class>FilterComboBox</class>
+   <extends>QComboBox</extends>
+   <header location="global">utility.gui.qt.widgets.widgets.combobox</header>
+  </customwidget>
+  <customwidget>
+   <class>ModelRenderer</class>
+   <extends>QWidget</extends>
+   <header location="global">toolset.gui.widgets.renderer.model</header>
+  </customwidget>
+  <customwidget>
+   <class>LocalizedStringLineEdit</class>
+   <extends>QWidget</extends>
+   <header location="global">toolset.gui.widgets.edit.locstring</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
+ <resources />
+ <connections />
+</ui>

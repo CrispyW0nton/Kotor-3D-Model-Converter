@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Viewer.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Resources\kotor.fshader" />
+    <None Remove="Resources\kotor.vshader" />
+    <None Remove="Resources\test.fshader" />
+    <None Remove="Resources\test.vshader" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\test.fshader" />
+    <EmbeddedResource Include="Resources\test.vshader" />
+    <EmbeddedResource Include="Resources\kotor.fshader" />
+    <EmbeddedResource Include="Resources\kotor.vshader" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Silk.NET.OpenGLES" Version="2.20.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Kotor.NET\Kotor.NET.csproj" />
+  </ItemGroup>
+
+</Project>

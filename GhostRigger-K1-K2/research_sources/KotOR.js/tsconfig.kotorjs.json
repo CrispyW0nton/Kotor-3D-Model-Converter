@@ -1,0 +1,11 @@
+// tsconfig.kotorjs.json
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/index.d.ts"
+  ],
+  "compilerOptions": {
+    // "noResolve": true
+  },
+  "skipLibCheck": true
+}

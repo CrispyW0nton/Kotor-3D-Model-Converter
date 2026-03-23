@@ -1,0 +1,298 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>900</width>
+    <height>700</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Create Patcher INI From Diff - Holocron Toolset</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="mainLayout">
+    <item>
+     <widget class="QGroupBox" name="pathGroup">
+      <property name="title">
+       <string>Paths</string>
+      </property>
+      <layout class="QVBoxLayout" name="pathLayout">
+       <item>
+        <layout class="QVBoxLayout" name="path1Layout">
+         <item>
+          <widget class="QLabel" name="path1Label">
+           <property name="text">
+            <string>Path 1 (Mine/Modified):</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="path1RadioLayout">
+           <item>
+            <widget class="QRadioButton" name="path1InstallationRadio">
+             <property name="text">
+              <string>Use Installation</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="path1CustomRadio">
+             <property name="text">
+              <string>Custom Path</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QComboBox" name="path1Combo">
+           <property name="editable">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="path1CustomLayout">
+           <item>
+            <widget class="QLineEdit" name="path1Edit">
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="path1Browse">
+             <property name="text">
+              <string>Browse...</string>
+             </property>
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QVBoxLayout" name="path2Layout">
+         <item>
+          <widget class="QLabel" name="path2Label">
+           <property name="text">
+            <string>Path 2 (Older/Vanilla):</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="path2RadioLayout">
+           <item>
+            <widget class="QRadioButton" name="path2InstallationRadio">
+             <property name="text">
+              <string>Use Installation</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="path2CustomRadio">
+             <property name="text">
+              <string>Custom Path</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QComboBox" name="path2Combo">
+           <property name="editable">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="path2CustomLayout">
+           <item>
+            <widget class="QLineEdit" name="path2Edit">
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="path2Browse">
+             <property name="text">
+              <string>Browse...</string>
+             </property>
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="optionsGroup">
+      <property name="title">
+       <string>Options</string>
+      </property>
+      <layout class="QVBoxLayout" name="optionsLayout">
+       <item>
+        <widget class="QCheckBox" name="compareHashesCheck">
+         <property name="text">
+          <string>Compare hashes</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="tslpatchLayout">
+         <item>
+          <widget class="QCheckBox" name="tslpatchdataCheck">
+           <property name="text">
+            <string>Generate TSLPatchData</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="tslpatchdataEdit">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="tslpatchdataBrowseBtn">
+           <property name="text">
+            <string>Browse...</string>
+           </property>
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="iniLayout">
+         <item>
+          <widget class="QLabel" name="iniLabel">
+           <property name="text">
+            <string>INI Filename:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="iniNameEdit">
+           <property name="text">
+            <string>changes.ini</string>
+           </property>
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="logLayout">
+         <item>
+          <widget class="QLabel" name="logLevelLabel">
+           <property name="text">
+            <string>Log Level:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="logLevelCombo">
+           <item>
+            <property name="text">
+             <string>debug</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>info</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>warning</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>error</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>critical</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="outputGroup">
+      <property name="title">
+       <string>Output</string>
+      </property>
+      <layout class="QVBoxLayout" name="outputLayout">
+       <item>
+        <widget class="QTextEdit" name="outputText">
+         <property name="readOnly">
+          <bool>true</bool>
+         </property>
+         <property name="acceptRichText">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="buttonLayout">
+      <item>
+       <widget class="QPushButton" name="runBtn">
+        <property name="text">
+         <string>Run Diff</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="clearBtn">
+        <property name="text">
+         <string>Clear Output</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="closeBtn">
+        <property name="text">
+         <string>Close</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources />
+ <connections />
+</ui>

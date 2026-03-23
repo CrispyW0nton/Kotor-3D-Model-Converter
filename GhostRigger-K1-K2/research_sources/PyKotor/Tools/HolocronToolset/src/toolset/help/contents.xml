@@ -1,0 +1,292 @@
+<Contents version="4">
+  <Folder name="Introduction">
+    <Document name="New Features Quick Guide" file="wiki/New-Features-Guide.md" />
+    <Document name="Getting Started" file="introduction1-gettingStarted.md" />
+    <Document name="Core Tab" file="introduction2-coreResources.md" />
+    <Document name="Modules Tab" file="introduction3-moduleResources.md" />
+    <Document name="Override Tab" file="introduction4-overrideResources.md" />
+  </Folder>
+  <Folder name="Tools">
+    <Document name="Module Editor" file="tools/1-moduleEditor.md" />
+    <Document name="Map Builder" file="tools/2-mapBuilder.md" />
+  </Folder>
+  <Folder name="Tutorials">
+    <Document name="Custom Robes" file="tutorials/1-creatingCustomRobes.md" />
+    <Document name="New Store" file="tutorials/2-creatingANewStore.md" />
+    <Document name="Area Transitions" file="tutorials/3-areaTransition.md" />
+    <Document name="DLG Static Cameras" file="tutorials/4-creatingStaticCameras.md" />
+  </Folder>
+  <Folder name="Official BioWare Aurora Documentation (KotOR Odyssey engine's predecessor)">
+    <Document name="2DA - Aurora Two-Dimensional Array Format" file="wiki/Bioware-Aurora-2DA.md" />
+    <Document name="GFF - Aurora Generic File Format" file="wiki/Bioware-Aurora-GFF.md" />
+    <Document name="Common Aurora GFF Structs" file="wiki/Bioware-Aurora-CommonGFFStructs.md" />
+    <Document name="ARE - Aurora Area file GFF" file="wiki/Bioware-Aurora-AreaFile.md" />
+    <Document name="DLG - Aurora Conversation GFF" file="wiki/Bioware-Aurora-Conversation.md" />
+    <Document name="JRL - Aurora Journal" file="wiki/Bioware-Aurora-Journal.md" />
+    <Document name="UTC - Aurora Creature GFF" file="wiki/Bioware-Aurora-Creature.md" />
+    <Document name="UTD/UTP - Aurora Door/Placeable GFFs"
+      file="wiki/Bioware-Aurora-DoorPlaceableGFF.md" />
+    <Document name="UTE - Aurora Encounter GFF" file="wiki/Bioware-Aurora-Encounter.md" />
+    <Document name="UTI - Aurora Item GFF" file="wiki/Bioware-Aurora-Item.md" />
+    <Document name="UTM - Aurora Merchant/Store GFF" file="wiki/Bioware-Aurora-Store.md" />
+    <Document name="UTS - Aurora Sound Object GFF" file="wiki/Bioware-Aurora-SoundObject.md" />
+    <Document name="FAC - Aurora Faction GFF" file="wiki/Bioware-Aurora-Faction.md" />
+    <Document name="IFO - Aurora Module Info GFF" file="wiki/Bioware-Aurora-IFO.md" />
+    <Document name="UTT - Aurora Trigger GFF" file="wiki/Bioware-Aurora-Trigger.md" />
+    <Document name="UTW - Aurora Waypoint" file="wiki/Bioware-Aurora-Waypoint.md" />
+    <Document name="CExoLocString - Aurora Localized Strings"
+      file="wiki/Bioware-Aurora-LocalizedStrings.md" />
+    <Document name="TLK - Aurora TalkTable" file="wiki/Bioware-Aurora-TalkTable.md" />
+    <Document name="ERF/MOD - Aurora Encapsulated Resource Files"
+      file="wiki/Bioware-Aurora-ERF.md" />
+    <Document name="SSF - Aurora Sound Set Files" file="wiki/Bioware-Aurora-SSF.md" />
+    <Document name="Aurora KEY / BIF Format" file="wiki/Bioware-Aurora-KeyBIF.md" />
+    <Document name="ITP - Aurora Palette Format" file="wiki/Bioware-Aurora-PaletteITP.md" />
+  </Folder>
+  <Folder name="PyKotor Wiki Documentation">
+    <Document name="Home" file="wiki/Home.md" />
+    <Folder name="2DA Files">
+      <Document name="2DA File Format" file="wiki/2DA-File-Format.md" />
+      <Document name="Acbonus" file="wiki/2DA-acbonus.md" />
+      <Document name="Ambientmusic" file="wiki/2DA-ambientmusic.md" />
+      <Document name="Ambientsound" file="wiki/2DA-ambientsound.md" />
+      <Document name="Ammunitiontypes" file="wiki/2DA-ammunitiontypes.md" />
+      <Document name="Animations" file="wiki/2DA-animations.md" />
+      <Document name="Appearance" file="wiki/2DA-appearance.md" />
+      <Document name="Appearancesndset" file="wiki/2DA-appearancesndset.md" />
+      <Document name="Baseitems" file="wiki/2DA-baseitems.md" />
+      <Document name="Bindablekeys" file="wiki/2DA-bindablekeys.md" />
+      <Document name="Bodybag" file="wiki/2DA-bodybag.md" />
+      <Document name="Camerastyle" file="wiki/2DA-camerastyle.md" />
+      <Document name="Classes" file="wiki/2DA-classes.md" />
+      <Document name="Classpowergain" file="wiki/2DA-classpowergain.md" />
+      <Document name="Combatanimations" file="wiki/2DA-combatanimations.md" />
+      <Document name="Creaturespeed" file="wiki/2DA-creaturespeed.md" />
+      <Document name="Cursors" file="wiki/2DA-cursors.md" />
+      <Document name="Dialoganimations" file="wiki/2DA-dialoganimations.md" />
+      <Document name="Difficultyopt" file="wiki/2DA-difficultyopt.md" />
+      <Document name="Disease" file="wiki/2DA-disease.md" />
+      <Document name="Doortypes" file="wiki/2DA-doortypes.md" />
+      <Document name="Droiddischarge" file="wiki/2DA-droiddischarge.md" />
+      <Document name="Effecticon" file="wiki/2DA-effecticon.md" />
+      <Document name="Emotion" file="wiki/2DA-emotion.md" />
+      <Document name="Encdifficulty" file="wiki/2DA-encdifficulty.md" />
+      <Document name="Exptable" file="wiki/2DA-exptable.md" />
+      <Document name="Facialanim" file="wiki/2DA-facialanim.md" />
+      <Document name="Feat" file="wiki/2DA-feat.md" />
+      <Document name="Featgain" file="wiki/2DA-featgain.md" />
+      <Document name="Feedbacktext" file="wiki/2DA-feedbacktext.md" />
+      <Document name="Footstepsounds" file="wiki/2DA-footstepsounds.md" />
+      <Document name="Forceshields" file="wiki/2DA-forceshields.md" />
+      <Document name="Fractionalcr" file="wiki/2DA-fractionalcr.md" />
+      <Document name="Gender" file="wiki/2DA-gender.md" />
+      <Document name="Genericdoors" file="wiki/2DA-genericdoors.md" />
+      <Document name="Globalcat" file="wiki/2DA-globalcat.md" />
+      <Document name="Grenadesnd" file="wiki/2DA-grenadesnd.md" />
+      <Document name="Guisounds" file="wiki/2DA-guisounds.md" />
+      <Document name="Heads" file="wiki/2DA-heads.md" />
+      <Document name="Inventorysnds" file="wiki/2DA-inventorysnds.md" />
+      <Document name="Iprp_Abilities" file="wiki/2DA-iprp_abilities.md" />
+      <Document name="Iprp_Acmodtype" file="wiki/2DA-iprp_acmodtype.md" />
+      <Document name="Iprp_Aligngrp" file="wiki/2DA-iprp_aligngrp.md" />
+      <Document name="Iprp_Ammotype" file="wiki/2DA-iprp_ammotype.md" />
+      <Document name="Iprp_Combatdam" file="wiki/2DA-iprp_combatdam.md" />
+      <Document name="Iprp_Costtable" file="wiki/2DA-iprp_costtable.md" />
+      <Document name="Iprp_Damagecost" file="wiki/2DA-iprp_damagecost.md" />
+      <Document name="Iprp_Damagetype" file="wiki/2DA-iprp_damagetype.md" />
+      <Document name="Iprp_Immunity" file="wiki/2DA-iprp_immunity.md" />
+      <Document name="Iprp_Lightcol" file="wiki/2DA-iprp_lightcol.md" />
+      <Document name="Iprp_Monstdam" file="wiki/2DA-iprp_monstdam.md" />
+      <Document name="Iprp_Mosterhit" file="wiki/2DA-iprp_mosterhit.md" />
+      <Document name="Iprp_Onhit" file="wiki/2DA-iprp_onhit.md" />
+      <Document name="Iprp_Paramtable" file="wiki/2DA-iprp_paramtable.md" />
+      <Document name="Iprp_Protection" file="wiki/2DA-iprp_protection.md" />
+      <Document name="Iprp_Saveelement" file="wiki/2DA-iprp_saveelement.md" />
+      <Document name="Iprp_Savingthrow" file="wiki/2DA-iprp_savingthrow.md" />
+      <Document name="Iprp_Walk" file="wiki/2DA-iprp_walk.md" />
+      <Document name="Itempropdef" file="wiki/2DA-itempropdef.md" />
+      <Document name="Itemprops" file="wiki/2DA-itemprops.md" />
+      <Document name="Keymap" file="wiki/2DA-keymap.md" />
+      <Document name="Loadscreenhints" file="wiki/2DA-loadscreenhints.md" />
+      <Document name="Loadscreens" file="wiki/2DA-loadscreens.md" />
+      <Document name="Masterfeats" file="wiki/2DA-masterfeats.md" />
+      <Document name="Modulesave" file="wiki/2DA-modulesave.md" />
+      <Document name="Movies" file="wiki/2DA-movies.md" />
+      <Document name="Pazaakdecks" file="wiki/2DA-pazaakdecks.md" />
+      <Document name="Placeableobjsnds" file="wiki/2DA-placeableobjsnds.md" />
+      <Document name="Placeables" file="wiki/2DA-placeables.md" />
+      <Document name="Planetary" file="wiki/2DA-planetary.md" />
+      <Document name="Plot" file="wiki/2DA-plot.md" />
+      <Document name="Poison" file="wiki/2DA-poison.md" />
+      <Document name="Portraits" file="wiki/2DA-portraits.md" />
+      <Document name="Prioritygroups" file="wiki/2DA-prioritygroups.md" />
+      <Document name="Racialtypes" file="wiki/2DA-racialtypes.md" />
+      <Document name="Ranges" file="wiki/2DA-ranges.md" />
+      <Document name="Regeneration" file="wiki/2DA-regeneration.md" />
+      <Document name="Repute" file="wiki/2DA-repute.md" />
+      <Document name="Skills" file="wiki/2DA-skills.md" />
+      <Document name="Soundset" file="wiki/2DA-soundset.md" />
+      <Document name="Spells" file="wiki/2DA-spells.md" />
+      <Document name="Stringtokens" file="wiki/2DA-stringtokens.md" />
+      <Document name="Subrace" file="wiki/2DA-subrace.md" />
+      <Document name="Surfacemat" file="wiki/2DA-surfacemat.md" />
+      <Document name="Texpacks" file="wiki/2DA-texpacks.md" />
+      <Document name="Traps" file="wiki/2DA-traps.md" />
+      <Document name="Tutorial" file="wiki/2DA-tutorial.md" />
+      <Document name="Upcrystals" file="wiki/2DA-upcrystals.md" />
+      <Document name="Upgrade" file="wiki/2DA-upgrade.md" />
+      <Document name="Videoeffects" file="wiki/2DA-videoeffects.md" />
+      <Document name="Visualeffects" file="wiki/2DA-visualeffects.md" />
+      <Document name="Weaponsounds" file="wiki/2DA-weaponsounds.md" />
+      <Document name="Xptable" file="wiki/2DA-xptable.md" />
+    </Folder>
+    <Folder name="Odyssey File Formats">
+      <Document name="BIF File Format" file="wiki/BIF-File-Format.md" />
+      <Document name="BWM File Format" file="wiki/BWM-File-Format.md" />
+      <Document name="ERF File Format" file="wiki/ERF-File-Format.md" />
+      <Document name="KEY File Format" file="wiki/KEY-File-Format.md" />
+      <Document name="LIP File Format" file="wiki/LIP-File-Format.md" />
+      <Document name="LTR File Format" file="wiki/LTR-File-Format.md" />
+      <Document name="LYT File Format" file="wiki/LYT-File-Format.md" />
+      <Document name="MDL/MDX File Formats" file="wiki/MDL-MDX-File-Format.md" />
+      <Document name="NCS File Format" file="wiki/NCS-File-Format.md" />
+      <Document name="NSS File Format" file="wiki/NSS-File-Format.md" />
+      <Document name="PLT File Format" file="wiki/PLT-File-Format.md" />
+      <Document name="SSF File Format" file="wiki/SSF-File-Format.md" />
+      <Document name="TLK File Format" file="wiki/TLK-File-Format.md" />
+      <Document name="TPC File Format" file="wiki/TPC-File-Format.md" />
+      <Document name="TXI File Format" file="wiki/TXI-File-Format.md" />
+      <Document name="VIS File Format" file="wiki/VIS-File-Format.md" />
+      <Document name="WAV File Format" file="wiki/WAV-File-Format.md" />
+    </Folder>
+    <Document name="Indoor Map Builder User Guide" file="wiki/Indoor-Map-Builder-User-Guide.md" />
+    <Document name="Indoor Map Builder Implementation Guide"
+      file="wiki/Indoor-Map-Builder-Implementation-Guide.md" />
+    <Document name="KIT Structure Documentation" file="wiki/Kit-Structure-Documentation.md" />
+    <Document name="Extra Mod Creation Best Practices"
+      file="wiki/Mod-Creation-Best-Practices.md" />
+    <Folder name="GFF Files">
+      <Document name="ARE" file="wiki/GFF-ARE.md" />
+      <Document name="DLG" file="wiki/GFF-DLG.md" />
+      <Document name="GFF" file="wiki/GFF-File-Format.md" />
+      <Document name="GIT" file="wiki/GFF-GIT.md" />
+      <Document name="GUI" file="wiki/GFF-GUI.md" />
+      <Document name="IFO" file="wiki/GFF-IFO.md" />
+      <Document name="JRL" file="wiki/GFF-JRL.md" />
+      <Document name="PTH" file="wiki/GFF-PTH.md" />
+      <Document name="UTC" file="wiki/GFF-UTC.md" />
+      <Document name="UTC Editor Field Types" file="wiki/UTC-Editor-Field-Types.md" />
+      <Document name="UTD" file="wiki/GFF-UTD.md" />
+      <Document name="UTE" file="wiki/GFF-UTE.md" />
+      <Document name="UTI" file="wiki/GFF-UTI.md" />
+      <Document name="UTM" file="wiki/GFF-UTM.md" />
+      <Document name="UTP" file="wiki/GFF-UTP.md" />
+      <Document name="UTS" file="wiki/GFF-UTS.md" />
+      <Document name="UTT" file="wiki/GFF-UTT.md" />
+      <Document name="UTW" file="wiki/GFF-UTW.md" />
+    </Folder>
+    <Folder name="NSS Scripting - Shared Constants">
+      <Document name="Ability Constants" file="wiki/NSS-Shared-Constants-Ability-Constants.md" />
+      <Document name="Alignment Constants" file="wiki/NSS-Shared-Constants-Alignment-Constants.md" />
+      <Document name="Class Type Constants"
+        file="wiki/NSS-Shared-Constants-Class-Type-Constants.md" />
+      <Document name="Inventory Constants" file="wiki/NSS-Shared-Constants-Inventory-Constants.md" />
+      <Document name="NPC Constants" file="wiki/NSS-Shared-Constants-NPC-Constants.md" />
+      <Document name="Object Type Constants"
+        file="wiki/NSS-Shared-Constants-Object-Type-Constants.md" />
+      <Document name="Other Constants" file="wiki/NSS-Shared-Constants-Other-Constants.md" />
+      <Document name="Planet Constants" file="wiki/NSS-Shared-Constants-Planet-Constants.md" />
+      <Document name="Visual Effects (VFX)"
+        file="wiki/NSS-Shared-Constants-Visual-Effects-(VFX).md" />
+    </Folder>
+    <Folder name="NSS Scripting - Shared Functions">
+      <Document name="Abilities and Stats" file="wiki/NSS-Shared-Functions-Abilities-and-Stats.md" />
+      <Document name="Actions" file="wiki/NSS-Shared-Functions-Actions.md" />
+      <Document name="Alignment System" file="wiki/NSS-Shared-Functions-Alignment-System.md" />
+      <Document name="Class System" file="wiki/NSS-Shared-Functions-Class-System.md" />
+      <Document name="Combat Functions" file="wiki/NSS-Shared-Functions-Combat-Functions.md" />
+      <Document name="Dialog and Conversation Functions"
+        file="wiki/NSS-Shared-Functions-Dialog-and-Conversation-Functions.md" />
+      <Document name="Effects System" file="wiki/NSS-Shared-Functions-Effects-System.md" />
+      <Document name="Global Variables" file="wiki/NSS-Shared-Functions-Global-Variables.md" />
+      <Document name="Item Management" file="wiki/NSS-Shared-Functions-Item-Management.md" />
+      <Document name="Item Properties" file="wiki/NSS-Shared-Functions-Item-Properties.md" />
+      <Document name="Local Variables" file="wiki/NSS-Shared-Functions-Local-Variables.md" />
+      <Document name="Module and Area Functions"
+        file="wiki/NSS-Shared-Functions-Module-and-Area-Functions.md" />
+      <Document name="Object Query and Manipulation"
+        file="wiki/NSS-Shared-Functions-Object-Query-and-Manipulation.md" />
+      <Document name="Other Functions" file="wiki/NSS-Shared-Functions-Other-Functions.md" />
+      <Document name="Party Management" file="wiki/NSS-Shared-Functions-Party-Management.md" />
+      <Document name="Player Character Functions"
+        file="wiki/NSS-Shared-Functions-Player-Character-Functions.md" />
+      <Document name="Skills and Feats" file="wiki/NSS-Shared-Functions-Skills-and-Feats.md" />
+      <Document name="Sound and Music Functions"
+        file="wiki/NSS-Shared-Functions-Sound-and-Music-Functions.md" />
+    </Folder>
+    <Folder name="NSS Scripting - K1 Only">
+      <Document name="Constants NPC Constants" file="wiki/NSS-K1-Only-Constants-NPC-Constants.md" />
+      <Document name="Constants Other Constants"
+        file="wiki/NSS-K1-Only-Constants-Other-Constants.md" />
+      <Document name="Constants Planet Constants"
+        file="wiki/NSS-K1-Only-Constants-Planet-Constants.md" />
+      <Document name="Functions Other Functions"
+        file="wiki/NSS-K1-Only-Functions-Other-Functions.md" />
+    </Folder>
+    <Folder name="NSS Scripting - TSL Only">
+      <Document name="Constants Class Type Constants"
+        file="wiki/NSS-TSL-Only-Constants-Class-Type-Constants.md" />
+      <Document name="Constants Inventory Constants"
+        file="wiki/NSS-TSL-Only-Constants-Inventory-Constants.md" />
+      <Document name="Constants NPC Constants" file="wiki/NSS-TSL-Only-Constants-NPC-Constants.md" />
+      <Document name="Constants Other Constants"
+        file="wiki/NSS-TSL-Only-Constants-Other-Constants.md" />
+      <Document name="Constants Planet Constants"
+        file="wiki/NSS-TSL-Only-Constants-Planet-Constants.md" />
+      <Document name="Constants Visual Effects (VFX)"
+        file="wiki/NSS-TSL-Only-Constants-Visual-Effects-(VFX).md" />
+      <Document name="Functions Actions" file="wiki/NSS-TSL-Only-Functions-Actions.md" />
+      <Document name="Functions Class System" file="wiki/NSS-TSL-Only-Functions-Class-System.md" />
+      <Document name="Functions Combat Functions"
+        file="wiki/NSS-TSL-Only-Functions-Combat-Functions.md" />
+      <Document name="Functions Dialog and Conversation Functions"
+        file="wiki/NSS-TSL-Only-Functions-Dialog-and-Conversation-Functions.md" />
+      <Document name="Functions Effects System"
+        file="wiki/NSS-TSL-Only-Functions-Effects-System.md" />
+      <Document name="Functions Global Variables"
+        file="wiki/NSS-TSL-Only-Functions-Global-Variables.md" />
+      <Document name="Functions Item Management"
+        file="wiki/NSS-TSL-Only-Functions-Item-Management.md" />
+      <Document name="Functions Object Query and Manipulation"
+        file="wiki/NSS-TSL-Only-Functions-Object-Query-and-Manipulation.md" />
+      <Document name="Functions Other Functions"
+        file="wiki/NSS-TSL-Only-Functions-Other-Functions.md" />
+      <Document name="Functions Party Management"
+        file="wiki/NSS-TSL-Only-Functions-Party-Management.md" />
+      <Document name="Functions Player Character Functions"
+        file="wiki/NSS-TSL-Only-Functions-Player-Character-Functions.md" />
+      <Document name="Functions Skills and Feats"
+        file="wiki/NSS-TSL-Only-Functions-Skills-and-Feats.md" />
+      <Document name="Functions Sound and Music Functions"
+        file="wiki/NSS-TSL-Only-Functions-Sound-and-Music-Functions.md" />
+    </Folder>
+    <Folder name="TSLPatcher">
+      <Document name="TSLPatcher's Official Readme" file="wiki/TSLPatcher's-Official-Readme.md" />
+      <Document name="2DAList Syntax" file="wiki/TSLPatcher-2DAList-Syntax.md" />
+      <Document name="GFFList Syntax" file="wiki/TSLPatcher-GFFList-Syntax.md" />
+      <Document name="HACKList Syntax" file="wiki/TSLPatcher-HACKList-Syntax.md" />
+      <Document name="InstallList Syntax" file="wiki/TSLPatcher-InstallList-Syntax.md" />
+      <Document name="SSFList Syntax" file="wiki/TSLPatcher-SSFList-Syntax.md" />
+      <Document name="TLKList Syntax" file="wiki/TSLPatcher-TLKList-Syntax.md" />
+      <Document name="Original TSLPatcher Release Thread" file="wiki/TSLPatcher_Thread_Complete.md" />
+    </Folder>
+    <Folder name="HoloPatcher">
+      <Document name="Explanations on Internal Logic"
+        file="wiki/Explanations-on-HoloPatcher-Internal-Logic.md" />
+      <Document name="README for mod developers."
+        file="wiki/HoloPatcher-README-for-mod-developers..md" />
+      <Document name="Installing Mods with HoloPatcher"
+        file="wiki/Installing-Mods-with-HoloPatcher.md" />
+    </Folder>
+  </Folder>
+</Contents>
