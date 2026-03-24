@@ -1,6 +1,6 @@
 # GhostRigger-K1-K2 — Development Roadmap
 
-> **Last updated:** 2026-03-23 (Phase 7.1/7.2/7.3 — Binary MDL Writer + MDX; Phase 12.1 — Override Layer; Phase 10.1 — pyproject.toml; 164 new tests; full suite 3333 passed 0 failures)
+> **Last updated:** 2026-03-24 (Phase 13.1 — Texture-Loading Overhaul; 67 new tests; full suite 3427 passed 0 failures)
 > Tracked on the [genspark_ai_developer branch](https://github.com/CrispyW0nton/Kotor-3D-Model-Converter/tree/genspark_ai_developer)
 >
 > **See [TEXTBOOK_RESEARCH_REPORT.md](TEXTBOOK_RESEARCH_REPORT.md) for the full ~7,000-word analysis.**
@@ -17,6 +17,76 @@
 | ⏳ | Pending — scoped but not started |
 | 🚧 | Blocked / needs more research |
 | ❌ | Descoped / not planned |
+
+---
+
+## Phase 13.1 — Comprehensive Texture-Loading Overhaul ✅
+
+**Completed 2026-03-24**
+
+### Overview
+
+Thorough audit and systematic repair of every code path in the TPC/TGA texture loading pipeline — from raw bytes through PyKotor, the legacy decoder, tpc_render_utils, TextureCache, and the GPU/CPU renderers. Cross-referenced against PyKotor (v2.3.3) source and the HolocronToolset viewer to ensure compatibility.
+
+### Bugs Fixed
+
+| Bug ID | File | Description |
+|--------|------|-------------|
+| `BUG-BGRA-1` | `src/gui/viewport.py` | `_load_tpc_bytes_legacy`: enc=12 (BGRA uncompressed, data_sz=0) was treated as DXT1 (enc=10/12 combined check), returning black/zero pixels. Fixed: detect BGRA by `enc==12 AND data_sz==0`, decode with B↔R channel swap + V-flip. |
+| `BUG-BGRA-2` | `src/gui/tpc_render_utils.py` | Same `encoding in (10, 12)` DXT1 misidentification. Fixed: BGRA branch before DXT1 check. |
+| `BUG-ENC12-COMMENT` | Both files | Incorrect comment `12=DXT1_alpha`; Aurora engine enc=12 with data_sz=0 is BGRA (Xbox variant). |
+
+### Architecture Confirmed Correct
+
+Deep audit verified these aspects of the pipeline are implemented correctly:
+
+1. **PyKotor integration** (`_load_tpc_bytes`):
+   - Uses `pykotor.resource.formats.tpc.tpc_auto.read_tpc(bytes)` directly
+   - TXI string read from `tpc.txi` (set by pykotor reader from trailing bytes after all mip data)
+   - `_is_compressed` detection from `TPCTextureFormat.DXT1/DXT3/DXT5` — excludes BGRA (uncompressed)
+   - V-flip applied only for uncompressed formats (bottom-up in Aurora); DXT is top-down
+   - `_txi_str`, `_tpc_raw`, `_txi_alpha_test` attached to PIL image for downstream consumers
+
+2. **Legacy decoder** (`_load_tpc_bytes_legacy`):
+   - All enc values now correctly handled: 1=Grey, 2=DXT1/RGB, 4=DXT5/RGBA, 10=DXT1, 12=BGRA|DXT1, 13/14=DXT5
+   - enc=2/4 disambiguation: data_sz comparison to DXT block size vs raw byte size
+   - V-flip for uncompressed (enc=1, raw RGB enc=2, raw RGBA enc=4, BGRA enc=12)
+   - No flip for DXT compressed formats
+
+3. **TXI pipeline**:
+   - pykotor normalises `blending punchthrough` → `blending 2`, `blending additive` → `blending 1`
+   - `_parse_txi_string` handles both raw and normalised TXI forms
+   - `_apply_txi_to_node` sets `txi_blending`, `txi_alpha_test`, `txi_envmaptexture`, `bump_map` etc.
+   - `_apply_txi_from_textures_to_model` reads `_txi_str` from PIL image attributes; calls `_apply_txi_to_node` for all mesh nodes using the texture
+
+4. **Override priority** (`GameLibrary.get_texture_data`):
+   - Order: Override/ folder → ERF TPA → ERF TPB → ERF TPC → ERF GUI → other ERFs → KEY/BIF
+   - Strip-digit and forward-digit-append fallbacks preserved
+   - Cross-game (K1↔K2) fallback preserved
+
+5. **Alpha handling** (`TextureCache._apply_kotor_alpha`):
+   - bumpmaptexture → force alpha=255 (bump data, not transparency)
+   - envmaptexture → preserve alpha (env map blend weight)
+   - blending=2 → apply TPC header alpha_test threshold as binary cutoff
+   - blending=1 (additive) → keep alpha
+   - blending=0, no bump, no env → force alpha=255 (DXT5 alpha = specular/bump, not transparency)
+
+### Changes
+
+| File | Change |
+|------|--------|
+| `src/gui/viewport.py` | Fixed `_load_tpc_bytes_legacy` enc=12 BGRA handling |
+| `src/gui/tpc_render_utils.py` | Fixed `_load_tpc_bytes` enc=12 BGRA handling |
+| `tests/test_v210_texture_comprehensive.py` | 67 new tests: all TPC formats, BGRA fix, V-flip, TXI, mip/cubemap, TextureCache pipeline |
+| `README.md` | Updated What's New + bug fix table |
+| `ROADMAP.md` | Added Phase 13.1 entry |
+
+### Tests
+
+```
+tests/test_v210_texture_comprehensive.py  67 new tests, all passing
+Total suite: 3427 passed, 157 skipped, 0 failures
+```
 
 ---
 

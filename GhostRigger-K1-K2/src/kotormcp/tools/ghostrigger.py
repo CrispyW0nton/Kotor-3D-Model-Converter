@@ -305,8 +305,65 @@ async def handle_render_model(arguments: Dict[str, Any]) -> Dict[str, Any]:
         if _project_root not in sys.path:
             sys.path.insert(0, _project_root)
 
-        from src.gui.gpu_renderer import GpuRenderer  # noqa: PLC0415
-        from src.gui.viewport import ArcBallCamera    # noqa: PLC0415
+        from src.gui.gpu_renderer import GpuRenderer, render_model_autoframe  # noqa: PLC0415
+        from src.gui.viewport import ArcBallCamera, _load_tpc_bytes, _is_tpc_data  # noqa: PLC0415
+
+        # ── Build texture dict from model nodes + game library ─────────────────
+        # Collect all texture names referenced by the model
+        tex_names: list = []
+        seen_tex: set = set()
+        try:
+            all_nodes_fn = getattr(model, 'all_nodes', None)
+            nodes = list(all_nodes_fn()) if all_nodes_fn else []
+            for _n in nodes:
+                if not getattr(_n, 'is_mesh', False):
+                    continue
+                for attr in ('texture', 'lightmap', 'bump_map',
+                             'txi_envmaptexture', 'txi_specularcolour'):
+                    _t = str(getattr(_n, attr, '') or '').strip().lower()
+                    if _t and _t not in ('null', '', 'none') and _t not in seen_tex:
+                        tex_names.append(_t)
+                        seen_tex.add(_t)
+                # Also check texture_names list (multi-texture nodes)
+                for _tn in getattr(_n, 'texture_names', []):
+                    _t = str(_tn or '').strip().lower()
+                    if _t and _t not in ('null', '', 'none') and _t not in seen_tex:
+                        tex_names.append(_t)
+                        seen_tex.add(_t)
+        except Exception:
+            pass
+
+        textures: dict = {}
+        _lib = getattr(svc, 'library', None) or getattr(svc, 'lib', None)
+        # Try to find game library from service
+        if _lib is None:
+            try:
+                from src.resources.game_library import GameLibrary  # noqa: PLC0415
+                _lib = GameLibrary()
+                if game_path and os.path.isdir(game_path):
+                    _lib.scan(game_path)
+            except Exception:
+                pass
+        if _lib is not None:
+            _game_tag = 'K2' if (game or '').upper() in ('K2', 'TSL', 'KOTOR2') else 'K1'
+            for tname in tex_names:
+                try:
+                    raw = _lib.get_texture_data(tname, _game_tag)
+                    if raw:
+                        img_tex = None
+                        if _is_tpc_data(raw):
+                            img_tex = _load_tpc_bytes(raw)
+                        else:
+                            try:
+                                import io as _io
+                                from PIL import Image as _PILImg  # noqa: PLC0415
+                                img_tex = _PILImg.open(_io.BytesIO(raw)).convert('RGBA')
+                            except Exception:
+                                pass
+                        if img_tex is not None:
+                            textures[tname] = img_tex
+                except Exception:
+                    pass
 
         # Auto-frame the model from its bounding box
         camera = ArcBallCamera()
@@ -322,7 +379,7 @@ async def handle_render_model(arguments: Dict[str, Any]) -> Dict[str, Any]:
 
         renderer = GpuRenderer()
         renderer.force_cpu = True  # headless environment: always use CPU/PIL fallback
-        img = renderer.render(model, camera, width, height)
+        img = renderer.render(model, camera, width, height, textures=textures)
 
         if img is None:
             return json_content({"error": "Renderer returned None (Pillow may be missing)"})

@@ -2070,11 +2070,60 @@ class GpuRenderer:
             renderer.textures     = textures
             renderer._anim_pose   = anim_pose
             renderer._anim_time   = anim_time
-            # Build texture cache from provided dict
-            from .viewport import _load_tpc_bytes
-            renderer.tex_cache = type('_TC', (), {
-                'get': lambda self, name: textures.get(name.lower() if name else '')
-            })()
+            # Build texture cache from provided dict.
+            # Use a proxy that first checks the provided textures dict, then falls
+            # back to the real TextureCache (which searches disk + BIF archives).
+            # This ensures textured rendering even when textures dict is partial.
+            _real_tc = getattr(renderer, 'tex_cache', None)
+            _tex_snapshot = dict(textures)  # local copy to avoid mutation
+
+            class _ProxyTC:
+                """Proxy texture cache: dict first, then real cache fallback."""
+                def get(self, name):
+                    if not name:
+                        return None
+                    k = name.lower()
+                    hit = _tex_snapshot.get(k)
+                    if hit is not None:
+                        return hit
+                    # Fallback to real TextureCache (searches disk dirs + BIF)
+                    if _real_tc is not None and hasattr(_real_tc, 'get'):
+                        try:
+                            return _real_tc.get(k)
+                        except Exception:
+                            pass
+                    return None
+
+                def get_mip1(self, img):
+                    if _real_tc is not None and hasattr(_real_tc, 'get_mip1'):
+                        return _real_tc.get_mip1(img)
+                    return img
+
+                def sample(self, img, u, v, interp=True):
+                    if _real_tc is not None and hasattr(_real_tc, 'sample'):
+                        return _real_tc.sample(img, u, v, interp)
+                    return (128, 128, 128)
+
+                def sample_bilinear(self, img, u, v):
+                    if _real_tc is not None and hasattr(_real_tc, 'sample_bilinear'):
+                        return _real_tc.sample_bilinear(img, u, v)
+                    return (128, 128, 128, 255)
+
+                def get_txi(self, name):
+                    if _real_tc is not None and hasattr(_real_tc, 'get_txi'):
+                        return _real_tc.get_txi(name)
+                    return ''
+
+                def get_raw_header(self, name):
+                    if _real_tc is not None and hasattr(_real_tc, 'get_raw_header'):
+                        return _real_tc.get_raw_header(name)
+                    return None
+
+                def clear_mip_cache(self):
+                    if _real_tc is not None and hasattr(_real_tc, 'clear_mip_cache'):
+                        _real_tc.clear_mip_cache()
+
+            renderer.tex_cache = _ProxyTC()
             img = renderer.render(W, H)
             # Kill the alpha layer — flatten RGBA to RGB against the background
             if img is not None and getattr(img, 'mode', 'RGB') == 'RGBA':
@@ -2314,11 +2363,21 @@ def _apply_txi_from_textures_to_model(model, textures: dict) -> None:
     """
     if not textures:
         return
-    try:
-        from src.gui.viewport import _extract_txi_from_tpc, _parse_txi_string, _apply_txi_to_node
-        _have_txi_tools = True
-    except ImportError:
-        _have_txi_tools = False
+    _extract_txi_from_tpc = None
+    _parse_txi_string = None
+    _apply_txi_to_node = None
+    for _import_path in ('src.gui.viewport', 'gui.viewport'):
+        try:
+            import importlib as _il
+            _m = _il.import_module(_import_path)
+            _extract_txi_from_tpc = getattr(_m, '_extract_txi_from_tpc', None)
+            _parse_txi_string     = getattr(_m, '_parse_txi_string', None)
+            _apply_txi_to_node    = getattr(_m, '_apply_txi_to_node', None)
+            if _extract_txi_from_tpc and _parse_txi_string and _apply_txi_to_node:
+                break
+        except ImportError:
+            pass
+    _have_txi_tools = bool(_extract_txi_from_tpc and _parse_txi_string and _apply_txi_to_node)
 
     if not _have_txi_tools:
         return
@@ -2366,10 +2425,9 @@ def _apply_txi_from_textures_to_model(model, textures: dict) -> None:
             except Exception:
                 pass
 
-    if not _txi_cache:
-        return
-
-    # Apply TXI to each node that uses a texture with available TXI data
+    # Apply TXI and alpha_test to each mesh node.
+    # NOTE: We apply even when _txi_cache is empty — nodes still need txi_alpha_test
+    # set from the TPC header for correct punchthrough threshold on hair/fur meshes.
     try:
         all_nodes_fn = getattr(model, 'all_nodes', None)
         nodes = list(all_nodes_fn()) if all_nodes_fn else getattr(model, 'nodes', [])
@@ -2379,12 +2437,12 @@ def _apply_txi_from_textures_to_model(model, textures: dict) -> None:
             tex_name = str(getattr(node, 'texture', '') or '').strip().lower()
             if not tex_name or tex_name in ('null', '', 'none'):
                 continue
-            txi_str = _txi_cache.get(tex_name)
-            if txi_str:
-                # FIX-ALPHATEST: Use TPC header alpha_test (if available) as the
-                # punchthrough threshold; fall back to node's existing value.
-                _alpha_test = _at_cache.get(tex_name,
-                                            float(getattr(node, 'txi_alpha_test', 0.5)))
+            txi_str = _txi_cache.get(tex_name, '')
+            _alpha_test = _at_cache.get(tex_name,
+                                        float(getattr(node, 'txi_alpha_test', 0.5)))
+            # Always call _apply_txi_to_node when there is TXI or a non-default threshold
+            # (needed for punchthrough threshold on hair/fur meshes even without TXI text).
+            if txi_str or _alpha_test != 0.5:
                 try:
                     _apply_txi_to_node(node, txi_str, _alpha_test)
                 except Exception:

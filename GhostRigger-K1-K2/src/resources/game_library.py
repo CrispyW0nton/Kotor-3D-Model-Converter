@@ -159,11 +159,17 @@ class ResourceEntry:
         """True if this is a TPC/TGA texture."""
         if self.res_type == RES_TGA:
             return True
+        # RES_TPC_ERF (0x0BBF) = TPC in ERF/TexturePack archive
+        if self.res_type == 0x0BBF:
+            return True
         if self.res_type == 0x07D2:
             # TPC textures come from items.bif, textures.bif, swpc_tex* etc.
+            # Also allow any BIF that doesn't look like a model BIF.
             bn = self.bif_name.lower()
-            return ('items' in bn or 'textures' in bn or 'tex' in bn
-                    or 'swpc' in bn)
+            if ('models' in bn or 'party' in bn or 'player' in bn):
+                return False   # these are MDL model BIFs, not textures
+            # Everything else with type 0x07D2 that is NOT a model BIF is a texture
+            return True
         return False
 
     @property
@@ -1107,10 +1113,11 @@ class GameLibrary:
 
     def get_texture_data(self, resref: str, game: str = "K1") -> Optional[bytes]:
         """
-        Find texture bytes: checks ERF texture packs first, then KEY/BIF.
+        Find texture bytes: Override folder first, then ERF texture packs, then KEY/BIF.
         Returns raw bytes (may be TPC or TGA depending on source).
 
         Lookup order (highest priority first):
+          0. Override/ folder loose .tpc / .tga files (KotOR engine override priority)
           1. ERF/TexturePack archives for `game` – type 0x0BBF (TPC in ERF) or 0x07D2 or 0x0003
           2. KEY/BIF archives for `game` – TPC (0x07D2 from items/party/player BIFs) or TGA
           3. Retry with trailing-digit-stripped name (e.g. "c_bantha01" -> "c_bantha")
@@ -1119,6 +1126,26 @@ class GameLibrary:
              which game_tag the TextureCache was configured with.
         """
         name_lower = resref.lower()
+
+        def _search_override_for(gametag: str, name: str) -> Optional[bytes]:
+            """Check Override/ folder for loose texture files (highest priority)."""
+            gdir = self.k1_dir if gametag == "K1" else self.k2_dir
+            if not gdir:
+                return None
+            gd = Path(gdir)
+            for override_sub in ('Override', 'override'):
+                override = gd / override_sub
+                if not override.is_dir():
+                    continue
+                # Check .tpc first (binary TPC), then .tga (may be TPC or TGA)
+                for ext in ('.tpc', '.TPC', '.tga', '.TGA'):
+                    p = override / (name + ext)
+                    if p.exists():
+                        try:
+                            return p.read_bytes()
+                        except Exception:
+                            pass
+            return None
 
         def _search_erfs_for(gametag: str, name: str) -> Optional[bytes]:
             erfs = self._k1_erfs if gametag == "K1" else self._k2_erfs
@@ -1172,6 +1199,11 @@ class GameLibrary:
                 return raw
             return _search_key_for(gametag, name)
 
+        # 0. Check Override folder first (highest priority – KotOR engine rule)
+        raw = _search_override_for(game, name_lower)
+        if raw:
+            return raw
+
         # 1 + 2. Try exact name in ERF / KEY for the requested game
         raw = _search_game(game, name_lower)
         if raw:
@@ -1207,6 +1239,10 @@ class GameLibrary:
         other = "K2" if game == "K1" else "K1"
         other_dir = self.k2_dir if other == "K2" else self.k1_dir
         if other_dir:
+            # Check other game's Override folder first
+            raw = _search_override_for(other, name_lower)
+            if raw:
+                return raw
             raw = _search_game(other, name_lower)
             if raw:
                 return raw

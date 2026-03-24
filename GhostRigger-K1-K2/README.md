@@ -7,7 +7,42 @@ GhostRigger is an open-source Python tool for working with KotOR's Odyssey Engin
 It also integrates with **AgentDecompile** — an AI-powered Ghidra reverse-engineering backend that hosts the fully-analysed KotOR Odyssey Engine binaries (`swkotor.exe`, `swkotor2.exe`) on a shared server. This lets an AI assistant decompile any engine function, search symbols, trace data flow, and inspect memory — all without a local Ghidra install.
 
 > **See [ROADMAP.md](ROADMAP.md) for a full breakdown of completed phases, in-progress work, known bugs, and future plans.**
-> **Latest: v5.1 (2026-03-23) — Phase 7.1/7.2/7.3 Binary MDL Writer + Phase 12.1 Override Layer + Phase 10.1 pyproject.toml; 3333 tests passing.**
+> **Latest: v5.2 (2026-03-24) — Phase 13.1 Texture-Loading Overhaul; 3427 tests passing.**
+
+---
+
+## What's New (v5.2 — 2026-03-24)
+
+### Phase 13.1 — Comprehensive Texture-Loading Overhaul
+
+Thorough audit and systematic repair of every code path involved in KotOR TPC/TGA texture loading, mapping, and rendering. **67 new tests**, full suite at **3427 passed / 0 failures**.
+
+#### Bugs Fixed
+
+| Bug | Location | Description |
+|-----|----------|-------------|
+| `BUG-BGRA-1` | `src/gui/viewport.py` | `_load_tpc_bytes_legacy`: enc=12 (BGRA uncompressed) was treated as DXT1, returning black pixels instead of correct colors. Fixed: added explicit BGRA branch with B↔R channel swap and V-flip. |
+| `BUG-BGRA-2` | `src/gui/tpc_render_utils.py` | Same enc=12 DXT1 misidentification in standalone render utils. Fixed: same BGRA branch added. |
+| `BUG-ENC12-1` | Both decoders | `encoding == 12` now only treated as DXT1 when `data_sz != 0` (compressed). When `data_sz == 0`, it is BGRA uncompressed (Aurora engine / Xbox variant) per PyKotor `TPCBinaryReader`. |
+
+#### Architecture Verified Correct
+
+After deep audit against PyKotor (v2.3.3) and HolocronToolset source:
+
+- **V-flip convention**: Uncompressed TPC (enc=1/2/4 with raw data) is stored bottom-up (OpenGL). The loader flips to top-down (PIL). DXT formats (enc=2/4 DXT, enc=10/12/13/14) are top-down. The GPU renderer's `_GlTexCache._upload` always flips the PIL image before GL upload, and the vertex shader applies `1-uv.y`. This is the correct double-flip flow.
+- **TXI extraction**: `_load_tpc_bytes` (via pykotor) correctly reads the TXI trailer from `tpc.txi` after all mipmap data. pykotor normalises `blending punchthrough` → `blending 2`. The `_parse_txi_string` function handles both raw TXI (`punchthrough`) and normalised forms (`2`).
+- **Alpha-test threshold**: The float at TPC header bytes [4-7] is now reliably attached to loaded images as `_txi_alpha_test`. The GPU renderer passes it as `u_alpha_test` per draw-call.
+- **TXI-to-node pipeline**: `_apply_txi_from_textures_to_model` correctly reads `_txi_str` from PIL images and updates `node.txi_blending`, `txi_alpha_test`, `txi_envmaptexture`, `bump_map`, etc. The condition `if txi_str or _alpha_test != 0.5` ensures nodes with only a non-default threshold still receive the correct punchthrough alpha.
+- **Override folder priority**: `GameLibrary.get_texture_data` checks the Override/ folder before ERF/BIF archives, matching the KotOR engine's override rule.
+- **ERF quality order**: TPA > TPB > TPC > GUI > other ERFs for texture pack selection.
+- **Cubemap handling**: `height == 6 * width` cubemaps are correctly detected and the first face is returned.
+- **BGRA uncompressed**: Now fully supported in both the pykotor path (native BGRA→RGBA conversion) and legacy fallback decoder.
+
+#### New Test File
+
+| Test File | Tests | Coverage |
+|-----------|-------|---------|
+| `tests/test_v210_texture_comprehensive.py` | 67 | TPC detection for all encodings; DXT1/DXT5/RGBA/RGB/greyscale/BGRA loading; V-flip orientation; mipmap chains; cubemaps; TXI extraction/parsing; alpha-test attribute; TextureCache pipeline; apply-TXI-to-node integration; legacy decoder; tpc_render_utils |
 
 ---
 

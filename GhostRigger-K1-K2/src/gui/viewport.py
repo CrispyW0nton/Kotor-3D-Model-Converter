@@ -472,6 +472,11 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
             _txi = (tpc.txi or '').strip() if isinstance(getattr(tpc, 'txi', None), str) else ''
         except Exception:
             pass
+        # Record the original format BEFORE conversion (used for orientation detection below)
+        _orig_format = tpc.format()
+        _is_compressed = _orig_format in (
+            TPCTextureFormat.DXT1, TPCTextureFormat.DXT3, TPCTextureFormat.DXT5
+        ) if hasattr(TPCTextureFormat, 'DXT1') else (data[:4] != b'\x00\x00\x00\x00' and data[12] in (2, 4) and struct.unpack_from('<I', data, 0)[0] != 0)
         tpc.convert(TPCTextureFormat.RGBA)
         mip = tpc.get(0, 0)          # first layer, first (largest) mipmap
         img = mip.to_pil_image()
@@ -479,15 +484,28 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
             raise ValueError("pykotor returned None image")
         if img.mode != 'RGBA':
             img = img.convert('RGBA')
+        # FIX-VFLIP: pykotor returns:
+        #   - Uncompressed (RGBA/RGB/Grey): bottom-up (OpenGL convention).
+        #     Must flip to top-down for CPU rasterizer and correct GPU upload.
+        #   - DXT1/DXT3/DXT5: top-down (standard block ordering).
+        #     No flip needed.
+        # The GPU path's _GlTexCache._upload always does FLIP_TOP_BOTTOM before
+        # uploading, then the shader does `1-uv.y`.  For this to give correct results:
+        #   - DXT (top-down): flip in upload → bottom-up in GL → shader flip → correct
+        #   - Uncompressed (bottom-up): we flip here → top-down → flip in upload →
+        #     bottom-up in GL → shader flip → correct
+        # The CPU path needs top-down images for PIL row operations.
+        if not _is_compressed:
+            img = img.transpose(Image.FLIP_TOP_BOTTOM)
         # FIX-TXI-ATTR: Attach TXI string so GPU renderer can apply blending modes
         img._txi_str = _txi  # type: ignore[attr-defined]
+        # Also store raw data so legacy _extract_txi path works as fallback
+        img._tpc_raw = data   # type: ignore[attr-defined]
         # FIX-ALPHATEST: Attach alpha_test from TPC header for punchthrough threshold
         try:
-            import struct as _st
-            if len(data) >= 8:
-                _at = _st.unpack_from('<f', data, 4)[0]
-                if 0.0 < _at <= 1.0:
-                    img._txi_alpha_test = _at  # type: ignore[attr-defined]
+            _at = struct.unpack_from('<f', data, 4)[0]
+            if 0.0 < _at <= 1.0:
+                img._txi_alpha_test = _at  # type: ignore[attr-defined]
         except Exception:
             pass
         return img
@@ -498,18 +516,20 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
     # ── Legacy software decoder (fallback when pykotor is unavailable) ────────
     img = _load_tpc_bytes_legacy(data)
     if img is not None:
-        # FIX-TXI-ATTR: Attach raw TPC bytes so GPU renderer can extract TXI via
-        # _extract_txi_from_tpc(img._tpc_raw) in _apply_txi_from_textures_to_model()
+        # FIX-TXI-ATTR: Attach raw TPC bytes AND extract TXI string immediately
+        # so _apply_txi_from_textures_to_model() gets blending/envmap metadata.
         img._tpc_raw = data  # type: ignore[attr-defined]
-        img._txi_str = ''    # type: ignore[attr-defined]  will be extracted later
+        try:
+            _txi = _extract_txi_from_tpc_legacy(data)
+            img._txi_str = _txi  # type: ignore[attr-defined]
+        except Exception:
+            img._txi_str = ''  # type: ignore[attr-defined]
         # FIX-ALPHATEST: Attach alpha_test from TPC header bytes[4-7] so that
         # _apply_txi_from_textures_to_model() can pass the correct threshold.
         try:
-            import struct as _st
-            if len(data) >= 8:
-                _at = _st.unpack_from('<f', data, 4)[0]
-                if 0.0 < _at <= 1.0:
-                    img._txi_alpha_test = _at  # type: ignore[attr-defined]
+            _at = struct.unpack_from('<f', data, 4)[0]
+            if 0.0 < _at <= 1.0:
+                img._txi_alpha_test = _at  # type: ignore[attr-defined]
         except Exception:
             pass
     return img
@@ -710,8 +730,26 @@ def _load_tpc_bytes_legacy(data: bytes) -> Optional['Image.Image']:
                 return _flip(Image.frombytes('RGBA', (width, height),
                                              pixel_data[:sz4]))
 
-        # ── DXT1 (encoding 10 or 12) — top-down, no flip ────────────────
-        if encoding in (10, 12):
+        # ── BGRA uncompressed (encoding 12, data_sz == 0) — bottom-up, flip ─
+        # Per PyKotor TPCBinaryReader: (compressed=False, pixel_type=12) → BGRA.
+        # compressed = (data_sz != 0), so BGRA always has data_sz == 0.
+        # BGRA stores bytes as [B,G,R,A]; PIL needs [R,G,B,A].
+        # We swap B↔R (convert mode 'RGBA' from bytes arranged as BGRA).
+        if encoding == 12 and data_sz == 0:
+            if len(pixel_data) >= sz4:
+                # Convert BGRA → RGBA by swapping B and R channels
+                try:
+                    bgra_img = Image.frombytes('RGBA', (width, height), pixel_data[:sz4])
+                    r, g, b, a = bgra_img.split()
+                    rgba_img = Image.merge('RGBA', (b, g, r, a))
+                    return _flip(rgba_img)
+                except Exception as e:
+                    log.debug(f"TPC BGRA swap error: {e}")
+
+        # ── DXT1 (encoding 10 or 12 with data_sz≠0) — top-down, no flip ──────
+        # enc=12 with data_sz≠0 is treated as DXT1 (Aurora engine variant).
+        # enc=10 is the explicit DXT1 encoding byte.
+        if encoding == 10 or (encoding == 12 and data_sz != 0):
             if len(pixel_data) >= dxt1_sz:
                 raw = _decompress_dxt1_bytes(pixel_data, width, height)
                 return Image.frombytes('RGBA', (width, height), bytes(raw))
