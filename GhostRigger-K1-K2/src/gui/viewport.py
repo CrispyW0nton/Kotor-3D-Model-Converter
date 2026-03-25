@@ -514,24 +514,8 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
     except Exception as e:
         log.debug(f"pykotor TPC load failed ({e}), trying legacy decoder")
     # ── Legacy software decoder (fallback when pykotor is unavailable) ────────
+    # _load_tpc_bytes_legacy already attaches _txi_str, _tpc_raw, _txi_alpha_test.
     img = _load_tpc_bytes_legacy(data)
-    if img is not None:
-        # FIX-TXI-ATTR: Attach raw TPC bytes AND extract TXI string immediately
-        # so _apply_txi_from_textures_to_model() gets blending/envmap metadata.
-        img._tpc_raw = data  # type: ignore[attr-defined]
-        try:
-            _txi = _extract_txi_from_tpc_legacy(data)
-            img._txi_str = _txi  # type: ignore[attr-defined]
-        except Exception:
-            img._txi_str = ''  # type: ignore[attr-defined]
-        # FIX-ALPHATEST: Attach alpha_test from TPC header bytes[4-7] so that
-        # _apply_txi_from_textures_to_model() can pass the correct threshold.
-        try:
-            _at = struct.unpack_from('<f', data, 4)[0]
-            if 0.0 < _at <= 1.0:
-                img._txi_alpha_test = _at  # type: ignore[attr-defined]
-        except Exception:
-            pass
     return img
 
 
@@ -560,9 +544,39 @@ def _extract_txi_from_tpc(data: bytes) -> str:
 
 
 def _load_tpc_bytes_legacy(data: bytes) -> Optional['Image.Image']:
+    """Load KotOR TPC from raw bytes (legacy pure-Python decoder).
+
+    Wraps _load_tpc_bytes_legacy_inner and attaches TXI metadata attributes
+    (_txi_str, _tpc_raw, _txi_alpha_test) to the returned PIL Image so that
+    callers can access blending/alpha-mode without re-fetching the raw bytes.
+    Returns None if decoding fails.
+    """
+    img = _load_tpc_bytes_legacy_inner(data)
+    if img is not None:
+        # Attach _tpc_raw (raw bytes for fallback TXI / header reading)
+        img._tpc_raw = data  # type: ignore[attr-defined]
+        # Attach _txi_str — extracted from embedded TPC TXI trailer
+        # NOTE: _extract_txi_from_tpc_legacy is defined after this function;
+        # Python resolves it at call-time so forward reference is fine.
+        try:
+            img._txi_str = _extract_txi_from_tpc_legacy(data)  # type: ignore[attr-defined]
+        except Exception:
+            img._txi_str = ''  # type: ignore[attr-defined]
+        # Attach _txi_alpha_test from TPC header bytes [4-7]
+        try:
+            at = struct.unpack_from('<f', data, 4)[0]
+            if 0.0 < at <= 1.0:
+                img._txi_alpha_test = at  # type: ignore[attr-defined]
+        except Exception:
+            pass
+    return img
+
+
+def _load_tpc_bytes_legacy_inner(data: bytes) -> Optional['Image.Image']:
     # Legacy software TPC decoder — used as fallback when pykotor unavailable.
     """
     Load a KotOR TPC image from raw bytes. Returns PIL RGBA Image or None.
+    (Called exclusively by _load_tpc_bytes_legacy which attaches TXI attrs.)
 
     KotOR TPC header layout (BioWare / Aurora engine format):
       [0-3]   uint32  data_sz   – first-mip pixel data size (0 = use mip chain)
@@ -810,6 +824,14 @@ def _extract_txi_from_tpc_legacy(data: bytes) -> str:
     KotorBlender reads: image.txi_lines = remaining_bytes.decode('utf-8').splitlines()
 
     Returns the TXI string (may be empty string if none present).
+
+    FIX-TXI-OFFSET: Stock KotOR BIF textures use data_sz=0 with enc=2 (DXT1) or enc=4
+    (DXT5).  The original code used `_is_compressed = (data_sz != 0)` which is the
+    PyKotor rule — but PyKotor's read_tpc *fails* on these files (it reads enc=2/data_sz=0
+    as uncompressed RGB, computing the wrong data size).  For TXI extraction we must
+    independently infer whether the pixel data is DXT-compressed by comparing the pixel
+    data length against the uncompressed size: if the total file is too small to hold
+    uncompressed data, the texture must be DXT-compressed.
     """
     if len(data) < 128:
         return ''
@@ -820,36 +842,88 @@ def _extract_txi_from_tpc_legacy(data: bytes) -> str:
         pixel_type  = data[12]   # PyKotor: pixel_type at 0x0C; 1=grey,2=RGB,4=RGBA,12=BGRA
         mip_cnt     = max(1, data[13])  # mipmap count at 0x0D
 
+        if width == 0 or height == 0:
+            return ''
+
+        # Cubemap: height = 6 * width
+        if height > 0 and width > 0 and height // width == 6 and height % width == 0:
+            height = width  # use first face only for size computation
+
         # Compute size of all mipmaps to find TXI start offset.
-        # Per PyKotor TPCBinaryReader: "compressed" = (data_sz != 0).
-        # Pixel type to bytes-per-pixel for uncompressed formats:
-        #   pixel_type=1 → 1 bpp (greyscale)
-        #   pixel_type=2 → 3 bpp (RGB)
-        #   pixel_type=4 → 4 bpp (RGBA)
-        #   pixel_type=12 → 4 bpp (BGRA, Xbox)
-        # Compressed formats (data_sz != 0): DXT1 = 8 bytes/block, DXT5 = 16 bytes/block.
-        # DXT1 is used for pixel_type=2 when compressed; DXT5 for pixel_type=4.
         bx = max(1, (width  + 3) // 4)
         by = max(1, (height + 3) // 4)
+        dxt1_sz0 = bx * by * 8
+        dxt5_sz0 = bx * by * 16
+        sz1_0    = width * height          # greyscale
+        sz3_0    = width * height * 3      # RGB
+        sz4_0    = width * height * 4      # RGBA / BGRA
 
-        # Determine bytes-per-mip-0 based on pixel_type and compression flag
-        _is_compressed = (data_sz != 0)
+        pixel_data_len = len(data) - 128
+
+        # FIX-TXI-OFFSET: Determine if this is a DXT-compressed texture.
+        # PyKotor rule (data_sz != 0) is WRONG for stock KotOR BIF textures which
+        # have enc=2 or enc=4 with data_sz=0 but DXT1/DXT5 pixel data.
+        # Correct rule: if data_sz != 0 AND matches DXT size → definitely compressed;
+        # if data_sz == 0 AND pixel_data_len < uncompressed size → must be compressed.
+        if data_sz != 0:
+            # Non-zero data_sz: use PyKotor's rule for the compressed flag
+            _is_compressed = True
+        else:
+            # data_sz == 0: infer from actual pixel data size
+            # If pixel_data_len is too small to hold uncompressed pixels,
+            # it must be DXT-compressed (stock KotOR BIF format).
+            _uncompressed_min = {1: sz1_0, 2: sz3_0, 4: sz4_0, 12: sz4_0}.get(pixel_type, sz4_0)
+            _is_compressed = (pixel_data_len < _uncompressed_min)
+
+        # Determine per-block or per-pixel size for mip chain calculation
         if _is_compressed:
-            # DXT1 for types 2 and <= 2; DXT5 for types 4 and BGRA(12)
-            _bytes_per_block = 8 if pixel_type in (2,) else 16
+            if data_sz != 0:
+                # Use explicit data_sz if it matches a known DXT block size
+                if data_sz == dxt1_sz0:
+                    _bytes_per_block = 8
+                elif data_sz == dxt5_sz0:
+                    _bytes_per_block = 16
+                else:
+                    # Guess from pixel_type: enc=2 → DXT1 (8 bytes/block), enc=4 → DXT5 (16)
+                    _bytes_per_block = 8 if pixel_type in (2,) else 16
+                    # Fall back to data_sz as mip0 size
+                    if 0 < data_sz <= pixel_data_len:
+                        mip0_sz = data_sz
+                        def mip_sz_fn(w, h):  # type: ignore[misc]
+                            _bx = max(1, (w+3)//4); _by = max(1, (h+3)//4)
+                            return max(_bytes_per_block, _bx * _by * _bytes_per_block)
+                        total_pix = mip0_sz
+                        mw, mh = max(1, width >> 1), max(1, height >> 1)
+                        for _ in range(mip_cnt - 1):
+                            total_pix += mip_sz_fn(mw, mh)
+                            mw = max(1, mw >> 1); mh = max(1, mh >> 1)
+                        txi_start = 128 + total_pix
+                        if txi_start < len(data):
+                            raw = data[txi_start:]
+                            txi = raw.rstrip(b'\x00').decode('utf-8', errors='replace').strip()
+                            if txi:
+                                first_line = txi.split('\n')[0].strip()
+                                first_word = first_line.split()[0] if first_line.split() else ''
+                                all_printable = all(32 <= ord(c) <= 126 or c in '\r\n\t' for c in txi[:256])
+                                if first_word.isascii() and first_word.isalpha() and all_printable:
+                                    return txi
+                        return ''
+            else:
+                # data_sz == 0, compressed: infer DXT block size from pixel_type
+                # enc=2 → DXT1 (8 bytes/block), enc=4 → DXT5 (16 bytes/block)
+                # Also check pixel data fits dxt5 vs dxt1
+                if pixel_type in (2,) or pixel_data_len < dxt5_sz0:
+                    _bytes_per_block = 8
+                else:
+                    _bytes_per_block = 16
             mip0_sz = bx * by * _bytes_per_block
-            # If data_sz doesn't match expected DXT1/DXT5, try both
-            if data_sz not in (bx * by * 8, bx * by * 16):
-                # Use data_sz directly if within reasonable range
-                if 0 < data_sz <= len(data) - 128:
-                    mip0_sz = data_sz
-            def mip_sz_fn(w, h):
+            def mip_sz_fn(w, h):  # type: ignore[misc]
                 return max(_bytes_per_block,
                            max(1, (w+3)//4) * max(1, (h+3)//4) * _bytes_per_block)
         else:
             bpp = {1: 1, 2: 3, 4: 4, 12: 4}.get(pixel_type, 4)
             mip0_sz = width * height * bpp
-            def mip_sz_fn(w, h):
+            def mip_sz_fn(w, h):  # type: ignore[misc]
                 return max(1, w) * max(1, h) * bpp
 
         total_pix = mip0_sz
@@ -1730,6 +1804,14 @@ class TextureCache:
           2. 'blending punchthrough' → apply TPC alpha_test_threshold as binary cutoff.
              Uses the float at TPC header bytes [4-7] as the GL_ALPHA_TEST value.
           3. Standard → alpha as-is (glass, hair, transparent effects).
+
+        FIX-TXI-PREFER: _load_tpc_bytes / _load_tpc_bytes_legacy attach _txi_str
+        directly to the returned PIL Image when they successfully extract TXI from
+        the embedded TPC trailer.  We now prefer that attached TXI string over the
+        result of get_txi() so that stock KotOR BIF textures (enc=2/4, data_sz=0)
+        with embedded TXI get their blending/alpha modes applied correctly.
+        The external get_txi() call is kept as a fallback for sidecar .txi files
+        and archive TXI resources not embedded in the TPC itself.
         """
         # Snapshot search dirs under lock to avoid TOCTOU with set_search_dirs()
         with self._lock:
@@ -1748,11 +1830,16 @@ class TextureCache:
                     img = self._load_file(path)
                     if img is not None:
                         img = self._resize_if_needed(img, name)
-                        # Apply TXI-aware alpha processing for on-disk textures
+                        # Apply TXI-aware alpha processing for on-disk textures.
+                        # FIX-TXI-PREFER: use _txi_str already attached to img
+                        # (by _load_tpc_bytes/legacy) if available, then fall back
+                        # to get_txi() for sidecar files / archive TXI resources.
                         try:
                             with open(path, 'rb') as fraw:
                                 raw_bytes = fraw.read(512)  # header only for alpha_test
-                            txi_s = self.get_txi(name)
+                            txi_s = getattr(img, '_txi_str', None)
+                            if txi_s is None:
+                                txi_s = self.get_txi(name)
                             txi_m = _parse_txi_string(txi_s) if txi_s else _parse_txi_string('')
                             img = self._apply_kotor_alpha(raw_bytes, img, txi_m)
                         except Exception:
@@ -1772,9 +1859,15 @@ class TextureCache:
                     img = self._load_bytes(raw)
                     if img is not None:
                         img = self._resize_if_needed(img, name)
-                        # Apply TXI-aware alpha processing for BIF textures
+                        # Apply TXI-aware alpha processing for BIF textures.
+                        # FIX-TXI-PREFER: _load_bytes → _load_tpc_bytes attaches
+                        # _txi_str to img if it successfully parsed embedded TXI.
+                        # Use that first; fall back to get_txi() which re-fetches
+                        # from the archive (slower but works for sidecar .txi).
                         try:
-                            txi_s = self.get_txi(name)
+                            txi_s = getattr(img, '_txi_str', None)
+                            if not txi_s:
+                                txi_s = self.get_txi(name)
                             txi_m = _parse_txi_string(txi_s) if txi_s else _parse_txi_string('')
                             img = self._apply_kotor_alpha(raw, img, txi_m)
                         except Exception:

@@ -7,7 +7,29 @@ GhostRigger is an open-source Python tool for working with KotOR's Odyssey Engin
 It also integrates with **AgentDecompile** — an AI-powered Ghidra reverse-engineering backend that hosts the fully-analysed KotOR Odyssey Engine binaries (`swkotor.exe`, `swkotor2.exe`) on a shared server. This lets an AI assistant decompile any engine function, search symbols, trace data flow, and inspect memory — all without a local Ghidra install.
 
 > **See [ROADMAP.md](ROADMAP.md) for a full breakdown of completed phases, in-progress work, known bugs, and future plans.**
-> **Latest: v5.2 (2026-03-24) — Phase 13.1 Texture-Loading Overhaul; 3427 tests passing.**
+> **Latest: v5.3 (2026-03-25) — Phase 14.1 TXI Extraction Fix; 3471 tests passing.**
+
+---
+
+## What's New (v5.3 — 2026-03-25)
+
+### Phase 14.1 — TXI Extraction Root-Bug Fix and Alpha-Mode Pipeline
+
+Discovered and fixed two critical root-level bugs that caused TXI metadata (blending mode, env-map texture, bump-map texture) to be silently dropped for all stock KotOR BIF textures. **44 new tests**, full suite at **3471 passed / 0 failures**.
+
+#### Root Bugs Fixed
+
+| Bug | Location | Symptom | Fix |
+|-----|----------|---------|-----|
+| `BUG-TXI-OFFSET` | `_extract_txi_from_tpc_legacy` in `viewport.py` | Stock KotOR BIF textures (enc=2/4 DXT1/DXT5 with `data_sz=0`) had TXI silently dropped because `_is_compressed = (data_sz != 0)` treated them as uncompressed, placing the TXI-start offset `w*h*bpp` bytes past the 128-byte header (256–768 bytes past reality). TXI was never found. Result: alpha mode always defaulted to Case 5 (force alpha=255) → punchthrough hair/fur rendered as solid blocks; bumpmap surfaces appeared translucent; env-map textures lost reflection weight. | Infer compression from pixel-data length vs uncompressed size: if `pixel_data_len < w*h*bpp` the texture must be DXT-compressed. Compute TXI offset from DXT block count, not raw pixel count. |
+| `BUG-TXI-MISSING-ATTR` | `_load_tpc_bytes_legacy` in `viewport.py` | `_load_tpc_bytes_legacy` returned a raw PIL Image without `_txi_str` attached. When used as a fallback in `_load_tpc_bytes`, TXI attrs were added by the caller — but direct callers (tests, other paths) received an image with no `_txi_str`, causing `TextureCache._apply_kotor_alpha` to receive `blending=0` and force alpha=255 on all textures. | Wrap the legacy decoder in a new `_load_tpc_bytes_legacy_inner` function; the outer `_load_tpc_bytes_legacy` calls it and always attaches `_txi_str`, `_tpc_raw`, `_txi_alpha_test` before returning. |
+| `BUG-TXI-PREFER` | `TextureCache._load()` in `viewport.py` | `_load()` called `get_txi(name)` to get the TXI for alpha processing, ignoring `img._txi_str` already attached by `_load_tpc_bytes`. If `get_txi()` failed or returned empty (e.g., slow archive lookup, or same data_sz=0 extraction bug), TXI was lost a second time. | In `_load()`, prefer `img._txi_str` (fast, already correct) and only call `get_txi()` as a fallback for sidecar `.txi` files not embedded in the TPC. |
+
+#### Architecture Verified
+
+- **enc=2/4 data_sz=0 DXT detection**: The `_is_compressed` check now correctly identifies stock KotOR BIF textures as DXT-compressed even when `data_sz=0` by comparing the pixel payload size against the uncompressed byte count.
+- **Multi-mip TXI offset**: The mip-size chain is computed correctly for both DXT (blocks) and uncompressed (bpp) formats, placing the TXI start exactly after all mipmap data.
+- **_txi_str always set**: Both `_load_tpc_bytes` (pykotor path and legacy path) and `_load_tpc_bytes_legacy` (direct call) now always attach `_txi_str = ''` at minimum, preventing `getattr` falling through to stale data.
 
 ---
 
