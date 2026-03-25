@@ -424,11 +424,18 @@ class TestTpcHeaderAndTxiExtraction:
     """Test TPC header parsing and TXI extraction with corrected PyKotor layout."""
 
     def test_tpc_header_with_txi_extract(self):
-        """TXI string embedded after DXT1 pixel data should be extracted correctly."""
+        """TXI string embedded after DXT1 pixel data should be extracted correctly.
+
+        PyKotor normalizes TXI blending keywords to integers on round-trip:
+          'blending additive' → 'blending 1'
+        Both forms represent additive blending; accept either.
+        """
         txi_content = 'blending additive\nnumx 4\nnumy 4\nfps 10\n'
         tpc_data = _make_tpc_with_txi(32, 32, 2, txi_content, compressed=True)
         result = _extract_txi_from_tpc(tpc_data)
-        assert 'blending additive' in result
+        # Accept either the literal keyword or pykotor's normalised numeric form
+        assert ('blending additive' in result or 'blending 1' in result), (
+            f"Expected blending=additive(1) in TXI result, got: {result!r}")
         assert 'numx 4' in result
 
     def test_tpc_header_without_txi_returns_empty(self):
@@ -1019,3 +1026,175 @@ class TestTpcPixelFormats:
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  New tests for FIX-TXI-ATTR and FIX-ALPHATEST (added in v4.5+)
+#  Tests _load_tpc_bytes attaching _txi_str, _tpc_raw, _txi_alpha_test
+#  and _apply_txi_from_textures_to_model using per-texture alpha_test.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestLoadTpcBytesAttributes:
+    """Test that _load_tpc_bytes attaches TXI-related attributes to returned images.
+
+    FIX-TXI-ATTR: _load_tpc_bytes must set _txi_str (or _tpc_raw) so that
+    _apply_txi_from_textures_to_model can extract punchthrough/blending data
+    from TPC files without requiring a separate TXI file.
+
+    FIX-ALPHATEST: The TPC header float at bytes 4-7 is the engine's alpha-test
+    threshold.  _load_tpc_bytes must expose this as _txi_alpha_test so the GPU
+    renderer can pass the correct per-node threshold to the shader.
+    """
+
+    def _make_tpc_with_alpha_and_txi(self, width: int, height: int,
+                                      alpha_test: float, txi: str) -> bytes:
+        """Build a minimal DXT5 TPC with given alpha_test and embedded TXI."""
+        bx = max(1, (width  + 3) // 4)
+        by = max(1, (height + 3) // 4)
+        pixel_data_size = bx * by * 16   # DXT5
+        header = bytearray(128)
+        struct.pack_into('<I', header, 0, pixel_data_size)  # data_sz
+        struct.pack_into('<f', header, 4, alpha_test)       # alpha_test
+        struct.pack_into('<H', header, 8,  width)
+        struct.pack_into('<H', header, 10, height)
+        header[12] = 4   # DXT5 encoding
+        header[13] = 1   # 1 mip
+        pixel_data = bytes(pixel_data_size)
+        txi_bytes = txi.encode('utf-8')
+        return bytes(header) + pixel_data + txi_bytes
+
+    def test_loaded_image_has_tpc_raw_or_txi_str(self):
+        """_load_tpc_bytes() must set _txi_str or _tpc_raw on the result."""
+        tpc = self._make_tpc_with_alpha_and_txi(4, 4, 0.5, 'blending punchthrough\n')
+        img = _load_tpc_bytes(tpc)
+        assert img is not None
+        has_txi_str = hasattr(img, '_txi_str')
+        has_tpc_raw = hasattr(img, '_tpc_raw')
+        assert has_txi_str or has_tpc_raw, (
+            "_load_tpc_bytes must set _txi_str or _tpc_raw for TXI extraction"
+        )
+
+    def test_loaded_image_has_txi_alpha_test(self):
+        """_load_tpc_bytes() must attach _txi_alpha_test from TPC header bytes 4-7."""
+        tpc = self._make_tpc_with_alpha_and_txi(4, 4, 0.9333, 'blending punchthrough\n')
+        img = _load_tpc_bytes(tpc)
+        assert img is not None
+        assert hasattr(img, '_txi_alpha_test'), (
+            "_load_tpc_bytes must attach _txi_alpha_test to the PIL image"
+        )
+        at = img._txi_alpha_test  # type: ignore[attr-defined]
+        assert abs(at - 0.9333) < 0.001, f"Expected ~0.9333, got {at}"
+
+    def test_alpha_test_0717_preserved(self):
+        """Alpha test value 0.7176 (c_banthh01) is stored correctly."""
+        tpc = self._make_tpc_with_alpha_and_txi(4, 4, 0.7176, 'blending punchthrough\n')
+        img = _load_tpc_bytes(tpc)
+        assert img is not None
+        if hasattr(img, '_txi_alpha_test'):
+            at = img._txi_alpha_test  # type: ignore[attr-defined]
+            assert abs(at - 0.7176) < 0.001, f"Expected ~0.7176, got {at}"
+
+    def test_alpha_test_zero_not_attached(self):
+        """Alpha test 0.0 (no punchthrough) must not set _txi_alpha_test."""
+        tpc = self._make_tpc_with_alpha_and_txi(4, 4, 0.0, '')
+        img = _load_tpc_bytes(tpc)
+        assert img is not None
+        # _txi_alpha_test should not be set when alpha_test = 0.0
+        if hasattr(img, '_txi_alpha_test'):
+            # If set, must be a valid positive value (0.0 should be skipped)
+            at = img._txi_alpha_test  # type: ignore[attr-defined]
+            assert at > 0.0, "_txi_alpha_test must be > 0 when set"
+
+
+class TestApplyTxiAlphaTestFromTpcHeader:
+    """Test that _apply_txi_from_textures_to_model uses per-texture alpha_test.
+
+    FIX-ALPHATEST: The function must read _txi_alpha_test from the PIL image
+    and pass it to _apply_txi_to_node() so nodes get the correct per-texture
+    punchthrough threshold instead of the hardcoded 0.5 default.
+    """
+
+    def _make_node(self, name: str, tex: str):
+        """Build a minimal mesh ModelNode."""
+        from src.core.model_data import ModelNode, NodeFlags
+        node = ModelNode(name=name, flags=NodeFlags.MESH)
+        node.texture = tex
+        node.vertices = [(0, 0, 0), (1, 0, 0), (0, 1, 0)]
+        node.faces = [(0, 1, 2)]
+        node.uvs = [(0, 0), (1, 0), (0, 1)]
+        node.render = True
+        node.txi_blending = 0
+        node.txi_alpha_test = 0.5  # default
+        return node
+
+    def _make_tpc_image(self, alpha_test: float, txi: str) -> 'PIL.Image.Image':
+        """Build a minimal TPC image with _txi_alpha_test and _tpc_raw."""
+        bx, by = 1, 1
+        pixel_data_size = bx * by * 16
+        header = bytearray(128)
+        struct.pack_into('<I', header, 0, pixel_data_size)
+        struct.pack_into('<f', header, 4, alpha_test)
+        struct.pack_into('<H', header, 8, 4)   # width=4
+        struct.pack_into('<H', header, 10, 4)  # height=4
+        header[12] = 4  # DXT5
+        header[13] = 1  # 1 mip
+        raw = bytes(header) + bytes(pixel_data_size) + txi.encode('utf-8')
+        img = _load_tpc_bytes(raw)
+        return img
+
+    def test_alpha_test_from_tpc_header_applied_to_node(self):
+        """After apply, node.txi_alpha_test should equal TPC header alpha_test."""
+        from src.gui.gpu_renderer import _apply_txi_from_textures_to_model
+
+        # Create a mock model with a single mesh node
+        class MockModel:
+            def __init__(self, nodes):
+                self.nodes = nodes
+            def all_nodes(self):
+                return self.nodes
+
+        node = self._make_node('bthair', 'c_banthh01')
+        model = MockModel([node])
+
+        img = self._make_tpc_image(0.7176, 'blending punchthrough\n')
+        if img is None:
+            pytest.skip("_load_tpc_bytes returned None for synthetic TPC")
+
+        textures = {'c_banthh01': img}
+        _apply_txi_from_textures_to_model(model, textures)
+
+        # Node should now have punchthrough blending
+        assert node.txi_blending == 2, (
+            f"Expected txi_blending=2 (punchthrough), got {node.txi_blending}"
+        )
+        # Alpha test should be the TPC header value, not the 0.5 default
+        if hasattr(img, '_txi_alpha_test'):
+            assert abs(node.txi_alpha_test - 0.7176) < 0.01, (
+                f"Expected txi_alpha_test≈0.7176, got {node.txi_alpha_test}"
+            )
+
+    def test_bantha_body_alpha_test_0933_applied(self):
+        """Bantha body texture 0.9333 threshold applied via _apply_txi function."""
+        from src.gui.gpu_renderer import _apply_txi_from_textures_to_model
+
+        class MockModel:
+            def __init__(self, nodes):
+                self.nodes = nodes
+            def all_nodes(self):
+                return self.nodes
+
+        node = self._make_node('btBody_front', 'c_bantha01')
+        model = MockModel([node])
+
+        img = self._make_tpc_image(0.9333, 'blending punchthrough\n')
+        if img is None:
+            pytest.skip("_load_tpc_bytes returned None for synthetic TPC")
+
+        textures = {'c_bantha01': img}
+        _apply_txi_from_textures_to_model(model, textures)
+
+        assert node.txi_blending == 2
+        if hasattr(img, '_txi_alpha_test'):
+            assert abs(node.txi_alpha_test - 0.9333) < 0.01, (
+                f"Expected txi_alpha_test≈0.9333, got {node.txi_alpha_test}"
+            )

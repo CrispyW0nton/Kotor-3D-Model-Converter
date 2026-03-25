@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Widget</class>
+ <widget class="QWidget" name="Widget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>600</width>
+    <height>400</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QPlainTextEdit" name="terminalOutput">
+     <property name="readOnly">
+      <bool>true</bool>
+     </property>
+     <property name="lineWrapMode">
+      <enum>QPlainTextEdit::WidgetWidth</enum>
+     </property>
+     <property name="verticalScrollBarPolicy">
+      <enum>Qt::ScrollBarAlwaysOn</enum>
+     </property>
+     <property name="horizontalScrollBarPolicy">
+      <enum>Qt::ScrollBarAsNeeded</enum>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">QPlainTextEdit {
+       background-color: palette(base);
+       color: palette(text);
+       border: none;
+       padding: 8px;
+       selection-background-color: palette(highlight);
+       selection-color: palette(highlighted-text);
+       }
+       QScrollBar:vertical {
+       background-color: palette(base);
+       width: 14px;
+       border: none;
+       }
+       QScrollBar::handle:vertical {
+       background-color: palette(mid);
+       min-height: 30px;
+       border-radius: 7px;
+       }
+       QScrollBar::handle:vertical:hover {
+       background-color: palette(dark);
+       }
+       QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+       height: 0px;
+       }</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLineEdit" name="terminalInput">
+     <property name="styleSheet">
+      <string notr="true">QLineEdit {
+       background-color: palette(base);
+       color: palette(text);
+       border: none;
+       padding: 6px 8px;
+       selection-background-color: palette(highlight);
+       selection-color: palette(highlighted-text);
+       }</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources />
+ <connections />
+</ui>

@@ -327,10 +327,24 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
                 return _flip(Image.frombytes('RGBA', (width, height),
                                              pixel_data[:sz4]))
 
-        # enc=10,12: DXT1
-        if encoding in (10, 12) and len(pixel_data) >= dxt1_sz:
-            raw = _decompress_dxt1_bytes(pixel_data, width, height)
-            return Image.frombytes('RGBA', (width, height), bytes(raw))
+        # enc=12 with data_sz==0: BGRA uncompressed (Xbox/Aurora variant).
+        # Per PyKotor: (compressed=False, pixel_type=12) → BGRA.
+        # compressed = (data_sz != 0), so BGRA always has data_sz == 0.
+        # BGRA stores [B,G,R,A]; must swap B↔R to get PIL RGBA.
+        if encoding == 12 and data_sz == 0 and len(pixel_data) >= sz4:
+            try:
+                bgra_img = Image.frombytes('RGBA', (width, height), pixel_data[:sz4])
+                r, g, b, a = bgra_img.split()
+                rgba_img = Image.merge('RGBA', (b, g, r, a))
+                return _flip(rgba_img)
+            except Exception:
+                pass
+
+        # enc=10 or enc=12 with data_sz≠0: DXT1 (top-down, no flip)
+        if encoding == 10 or (encoding == 12 and data_sz != 0):
+            if len(pixel_data) >= dxt1_sz:
+                raw = _decompress_dxt1_bytes(pixel_data, width, height)
+                return Image.frombytes('RGBA', (width, height), bytes(raw))
 
         # enc=13,14: DXT5
         if encoding in (13, 14) and len(pixel_data) >= dxt5_sz:

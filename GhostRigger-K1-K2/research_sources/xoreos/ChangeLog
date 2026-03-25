@@ -1,0 +1,288 @@
+Monday, 2020-08-03 (Version 0.0.6)
+	- BUILD:
+		- Opened xoreos up for C++11
+		- Replaced a few Boost libraries with C++11 features
+		- Made some library dependencies optional,
+		  disabling xoreos features
+	- COMMON:
+		- Cleaned up threading, now using C++11 threads
+	- GRAPHICS:
+		- Added support for swizzled SBM images
+		- Added a work-in-progress shader-based renderer
+	- AURORA:
+		- Added support for ERF V2.1
+		- Added support for big-endian GFF4 files
+		- Added support for big-endian GFF4'd TLK files
+		- Added support for SAC files
+	- ACTIONSCRIPT:
+		- Added a partial ActionScript implementation
+		- Added a partial ScaleForm GFx implementation
+	- SOUND:
+		- Added preliminary support for XACT WaveBanks
+		- Added preliminary support for XACT SoundBanks
+		- Added preliminary support for FMOD SampleBanks
+		- Added a partial implementation of FMOD Events
+		- Added preliminary support for Wwise SoundBanks
+	- VIDEO:
+		- Reorganized video decoding
+		- Implemented WebM (Matroska + VPx) decoding
+	- EVENTS:
+		- Added partial game controller support
+	- ENGINES:
+		- All engines now store objects in containers as an ID instead
+		  of as direct pointers
+		- NWN:
+			- Implemented pathfinding, not yet hooked up
+		- KOTOR/KOTOR2:
+			- Restructured code to unify these two games more
+			- Changed key input to use scancodes
+			- Restructured config options
+			- Implemented changing texture packs
+			- Partially implemented the action queue
+			- Partially implemented party selection
+			- Partially implemented ingame GUI scaling
+			- Partially implemented unlocking doors
+			- Made the camera bounce back from walls
+			- Added object tooltips
+			- Implemented correct object targetting behaviour
+			- Implemented object heartbeat scripts
+			- Implemented lightsaber loading
+			- Implemented pathfinding
+			- Partially implemented the tutorial gameplay
+		- KOTOR:
+			- Added Malak to the main menu
+			- Added support for the (extracted) Android version
+		- KOTOR2:
+			- Added ability to skip the prologue
+			- Added moving the PC out of the Kolto tank
+			- Implemented GUI scaling
+		- JADE:
+			- Fixed TLK encodings for non-English version
+			- Added support for the (extracted) Android version
+			- Fixed font rendering in the Xbox version
+			- Added area background music
+			- Partially implemented the character generation menu
+		- NWN2:
+			- Filled in the object classes some more
+			- Implemented more NWScript engine functions
+			- Added cursors
+			- Partially implemented the party roster
+			- Added traps and triggers, trapped doors and
+			  trapped placeables
+			- Added items and item properties
+			- Added inventories and stores
+		- DRAGONAGE:
+			- Added a probe for the Xbox 360 version
+			- Fixed resource loading on Windows
+		- DRAGONAGE2:
+			- Partially implemented area transitions
+			- Fixed resource loading on Windows
+		- WITCHER:
+			- Stubbed more Lua methods
+	- TESTS
+		- Started adding engine-level unit tests
+	- MISC
+		- Moved third-party code into external/
+
+Tuesday, 2018-07-03 (Version 0.0.5)
+	- DOCS:
+		- Improved documentation in various files
+	- BUILD:
+		- Simplified compilation to only use a C++ compiler
+		- Added more optional compilation warning flags
+		- Sped up boost.m4 by caching the library suffix
+		- Changed our autotools setup to be non-recursive
+		- Added support for SOURCE_DATE_EPOCH when building, which
+		  is necessary for reproducible builds
+		- Dropped telling the compiler to build in C++03 mode, many
+		  Linux distros build libraries with C++11 features now
+		- Changed configure script to use pkg-config for FreeType2
+		- Made several libraries optional, with certain features
+		  disabled in xoreos when compiling without
+	- MAIN:
+		- Made --help display the user directories and config file
+		- Changed the behaviour of debug channels. Each debug channel
+		  now has its own verbosity level. The options "debuglevel"
+		  and "debugchannel" (--debuglevel and --debugchannel) have
+		  been replaced by "debug" (--debug)
+		- Changed the error handler to also run deinit code on error
+	- COMMON:
+		- Added missing kEncodingCP1251 handling in several functions
+		- Moved DEFLATE and LZMA decompression into their own files
+		- Corrected the StreamTokenizer behaviour in a corner case
+		- Deleted Matrix, renamed TransformationMatrix to Matrix4x4
+		- Added checks for nullptr in stream and encoding methods
+		- Fixed composeString() for the INT*_MIN cases
+	- AURORA:
+		- Unified some code between xoreos and xoreos-tools
+		- Fixed a potential field overflow in the binary 2DA writer
+		- Fixed SSF V1.1 loading for NWN2
+		- Fixed reading of NSBTX with truncated palette
+		- Fixed reading of 2DA with indented rows
+		- Added exceptions for as of yet unknown GFF4 configurations
+	- GRAPHICS:
+		- Loosened restrictions on textures, allowing NPOT textures
+		- Fixed a potential race condition between environment
+		  mapping and cursor drawing
+		- Added option to create an OpenGL debug config ("debuggl")
+		- Fixed some OpenGL warnings that appeared in debug mode
+		- Added detection for duplicate NWN model nodes
+		- Fixed GraphicsManager::setGamma() to actually work
+		- Separated window handling into a new WindowManager
+		- Added detection for duplicate KotOR model animations
+		- Fixed usage of GL_UNPACK_ALIGNMENT
+	- SOUND:
+		- Unified sound code between xoreos and Phaethon
+		- Added debug messages for easier sound issue tracing
+		- Fixed an undefined shift in the WMA decoder
+		- Corrected the signature of AudioStream::readBuffer()
+	- VIDEO:
+		- Added debug messages for easier video issue tracing
+		- Fixed an invalid negative shift in the Bink decoder
+	- ENGINES:
+		- Restructured probes again
+		- Added debug messages for engine-level script execution
+		- Fixed various script engine functions in all engines
+		- NWN:
+			- Partially implemented the character generator
+			- Fixed various issues and glitches in the animation
+			  system, including scaling and frame interpolation
+			- Implemented PlayAnimation() for creatures
+		- KOTOR:
+			- Implemented animations
+			- Added more main menu dialogs
+			- Partially implemented the character generator
+			- Added ingame GUI elements
+			- Implemented simple PC walking, with area walkmesh
+			  evaluation and over-the-shoulder camera
+			- Partially implemented conversations
+			- Implemented triggers
+		- KOTOR2:
+			- Implemented animations
+			- Partially implemented the character generator
+			- Implemented simple PC walking, with area walkmesh
+			  evaluation and over-the-shoulder camera
+			- Partially implemented conversations
+			- Implemented triggers
+		- JADE:
+			- Implemented more engine script functions
+			- Implemented loading of lightmap textures
+			- Added the first screen of the main menu
+			- Added options menu screens
+		- WITCHER:
+			- Started implementing Lua script support
+	- DIST:
+		- Added Fedora package build files
+	- MISC:
+		- Improved code consistency in some places
+		- Marked several classes correctly as noncopyable
+		- Introduced various smart pointer templates into the codebase,
+		  making it cleaner and more leak-free
+		- Added support for and implemented unit tests for many classes
+		  in the Common and Aurora namespaces
+
+Monday, 2016-02-01 (Version 0.0.4)
+	- DOCS:
+		- Improved documentation in various files
+		- Rewrote manpage to use semantic -mdoc macros
+	- BUILD:
+		- Fixed various little problems in the CMake system related to
+		  non-MSVC compilers
+		- Added configure/CMake option to let the user select between
+		  internal and external GLEW libraries
+		- Added dynamic supported warning flag detection to CMake
+	- GRAPHICS:
+		- Made TextureFont codepage-aware
+	- ENGINES:
+		- NWN:
+			- Implemented support for premium modules
+			- Implemented speech bubbles
+		- DRAGONAGE:
+			- Added engine script functions from the 1.01 and 1.03
+			  updates
+	- MISC:
+		- Changed C-style casts to static_cast and reinterpret_cast
+		  in various places
+		- Improved const-correctness in various places
+		- Ran many file format loaders through afl and fixed all crashes
+
+Wednesday, 2015-09-30 (Version 0.0.3)
+	- DOCS:
+		- Added xoreos.conf.example
+	- BUILD:
+		- Fixed autotools out-of-tree builds
+		- Fixed CMake compilation on Windows with MSVC
+		- Fixed configure with zlib 1.2.3.4 - 1.2.3.9
+	- ENGINES:
+		- Restructured probes
+		- NWN:
+			- Rewrote script system
+			- Restructured main game loop
+			- Implemented partial placeable handling
+			- Implemented preliminary reflective environment mapping
+			- Implemented preliminary normal smoothing on binary models
+		- KOTOR:
+			- Restructured main game loop
+			- Restructured object classes to match NWN
+			- Added script system
+			- Implemented partial placeable and door handling
+			- Implemented preliminary reflective environment mapping
+		- KOTOR2:
+			- Restructured main game loop
+			- Added duplicates of KotOR object classes
+			- Added script system
+			- Implemented partial placeable and door handling
+			- Implemented preliminary reflective environment mapping
+		- JADE:
+			- Restructured main game loop
+			- Restructured object classes to match NWN
+			- Added script system
+			- Implemented partial area object loading and handling
+		- NWN2:
+			- Restructured main game loop
+			- Restructured object classes to match NWN
+			- Added script system
+			- Implemented partial placeable and door handling
+		- WITCHER:
+			- Fixed init without premium modules
+			- Restructured object classes to match NWN
+			- Added script system
+			- Implemented partial placeable and door handling
+		- DRAGONAGE:
+			- Restructured main game loop
+			- Added script system
+		- DRAGONAGE2:
+			- Restructured main game loop
+			- Added script system
+		- SONIC:
+			- Restructured engine to match the others
+
+Monday, 2015-07-27 (Version 0.0.2)
+	- Loading resources
+	- Reading basic file formats
+	- Graphics, sound, video, events subsystems
+	- NWN:
+		- Main menu
+		- Area loading with objects
+		- NPC animations
+		- Scripts
+		- Dialogs
+	- KOTOR/KOTOR2:
+		- Partial main menu
+		- Area loading with objects
+	- JADE:
+		- Area loading with objects
+	- NWN2:
+		- Area loading with objects
+	- WITCHER:
+		- Area loading with objects
+	- SONIC:
+		- Area loading with objects
+	- DRAGONAGE/DRAGONAGE2:
+		- Area loading with objects
+	- Fixed Windows UTF-8 compatibility
+	- Added a man page for xoreos
+	- Added build files for Arch and Debian packages
+
+Friday, 2010-03-26 (Version 0.0.1)
+	- Initial empty frame

@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>600</width>
+    <height>500</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <layout class="QHBoxLayout" name="audioLayout">
+     <item>
+      <widget class="QLabel" name="audioFileLabel">
+       <property name="text">
+        <string>Audio File:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="audioPath">
+       <property name="readOnly">
+        <bool>true</bool>
+       </property>
+       <property name="toolTip">
+        <string>Path to the WAV audio file</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="loadAudioButton">
+       <property name="text">
+        <string>Load Audio</string>
+       </property>
+       <property name="toolTip">
+        <string>Load a WAV audio file (Ctrl+O)</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="durationLayout">
+     <item>
+      <widget class="QLabel" name="durationLabel">
+       <property name="text">
+        <string>Duration:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="durationValueLabel">
+       <property name="text">
+        <string>0.000s</string>
+       </property>
+       <property name="toolTip">
+        <string>Duration of the loaded audio file</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QListWidget" name="previewList">
+     <property name="toolTip">
+      <string>List of keyframes (right-click for options)</string>
+     </property>
+     <property name="contextMenuPolicy">
+      <enum>Qt::CustomContextMenu</enum>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="keyframeLayout">
+     <item>
+      <widget class="QLabel" name="timeLabel">
+       <property name="text">
+        <string>Time:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QDoubleSpinBox" name="timeInput">
+       <property name="toolTip">
+        <string>Time in seconds for the keyframe</string>
+       </property>
+       <property name="decimals">
+        <number>3</number>
+       </property>
+       <property name="minimum">
+        <double>0.000000000000000</double>
+       </property>
+       <property name="maximum">
+        <double>999.998999999999990</double>
+       </property>
+       <property name="singleStep">
+        <double>0.100000000000000</double>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="shapeLabel">
+       <property name="text">
+        <string>Shape:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="shapeSelect">
+       <property name="toolTip">
+        <string>Lip shape/viseme for the keyframe</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="buttonLayout">
+     <item>
+      <widget class="QPushButton" name="addKeyframeButton">
+       <property name="text">
+        <string>Add Keyframe</string>
+       </property>
+       <property name="toolTip">
+        <string>Add a new keyframe (Insert)</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="updateKeyframeButton">
+       <property name="text">
+        <string>Update Keyframe</string>
+       </property>
+       <property name="toolTip">
+        <string>Update selected keyframe (Enter)</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="deleteKeyframeButton">
+       <property name="text">
+        <string>Delete Keyframe</string>
+       </property>
+       <property name="toolTip">
+        <string>Delete selected keyframe (Delete)</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="previewLayout">
+     <item>
+      <widget class="QLabel" name="currentShapeLabel">
+       <property name="text">
+        <string>Current Shape:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="previewLabel">
+       <property name="text">
+        <string>None</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="playbackLayout">
+     <item>
+      <widget class="QPushButton" name="playButton">
+       <property name="text">
+        <string>Play</string>
+       </property>
+       <property name="toolTip">
+        <string>Play preview (Space)</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="stopButton">
+       <property name="text">
+        <string>Stop</string>
+       </property>
+       <property name="toolTip">
+        <string>Stop preview (Esc)</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

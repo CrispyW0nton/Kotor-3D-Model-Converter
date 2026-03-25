@@ -1,0 +1,97 @@
+# xoreos - A reimplementation of BioWare's Aurora engine
+#
+# xoreos is the legal property of its developers, whose names
+# can be found in the AUTHORS file distributed with this source
+# distribution.
+#
+# xoreos is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 3
+# of the License, or (at your option) any later version.
+#
+# xoreos is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with xoreos. If not, see <http://www.gnu.org/licenses/>.
+
+# Main xoreos entry point.
+
+# Windows resources
+.rc.o:
+	$(AM_V_GEN)$(RC) -DHAVE_CONFIG_H -I$(srcdir) -I. -o $@ $<
+
+bin_PROGRAMS += src/xoreos
+src_xoreos_SOURCES =
+src_xoreos_LDADD =
+
+src_xoreos_SOURCES += \
+    src/cline.h \
+    src/engines.h \
+    $(EMPTY)
+
+src_xoreos_SOURCES += \
+    src/cline.cpp \
+    src/engines.cpp \
+    src/xoreos.cpp \
+    $(EMPTY)
+
+if WIN32
+src_xoreos_SOURCES += dists/win32/xoreos.rc
+endif
+
+if ENABLE_DRAGONAGE2
+src_xoreos_LDADD += src/engines/dragonage2/libdragonage2.la
+endif
+if ENABLE_DRAGONAGE2
+src_xoreos_LDADD += src/engines/dragonage/libdragonage.la
+endif
+if ENABLE_SONIC
+src_xoreos_LDADD += src/engines/sonic/libsonic.la
+endif
+if ENABLE_WITCHER
+src_xoreos_LDADD += src/engines/witcher/libwitcher.la
+endif
+if ENABLE_JADE
+src_xoreos_LDADD += src/engines/jade/libjade.la
+endif
+if ENABLE_KOTOR2
+src_xoreos_LDADD += src/engines/kotor2/libkotor2.la
+endif
+if ENABLE_KOTOR
+src_xoreos_LDADD += src/engines/kotor/libkotor.la
+endif
+if ENABLE_NWN2
+src_xoreos_LDADD += src/engines/nwn2/libnwn2.la
+endif
+if ENABLE_NWN
+src_xoreos_LDADD += src/engines/nwn/libnwn.la
+endif
+
+src_xoreos_LDADD += \
+    src/engines/libengines.la \
+    src/events/libevents.la \
+    src/video/libvideo.la \
+    src/sound/libsound.la \
+    src/graphics/libgraphics.la \
+    src/aurora/libaurora.la \
+    src/common/libcommon.la \
+    src/version/libversion.la \
+    external/lua/liblua.la \
+    external/toluapp/libtoluapp.la \
+    external/imgui/libimgui.la \
+    $(LDADD) \
+    $(EMPTY)
+
+# Subdirectories
+
+include src/version/rules.mk
+include src/common/rules.mk
+include src/aurora/rules.mk
+include src/graphics/rules.mk
+include src/sound/rules.mk
+include src/video/rules.mk
+include src/events/rules.mk
+include src/engines/rules.mk

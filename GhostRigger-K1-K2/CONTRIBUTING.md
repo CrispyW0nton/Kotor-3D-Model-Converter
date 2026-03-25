@@ -19,12 +19,56 @@ If you've reverse-engineered something new about the KotOR MDL/MDX/TPC/GFF forma
 
 #### Setup
 ```bash
-git clone https://github.com/<your-fork>/GhostRigger-K1-K2.git
+# ── Recommended: clone with submodules in one step ──────────────────────────
+git clone --recurse-submodules https://github.com/<your-fork>/GhostRigger-K1-K2.git
 cd GhostRigger-K1-K2
+
+# ── OR: if you already cloned without --recurse-submodules ──────────────────
+# git clone https://github.com/<your-fork>/GhostRigger-K1-K2.git
+# cd GhostRigger-K1-K2
+# git submodule update --init --recursive   ← REQUIRED, see note below
+
 pip install -r requirements.txt
 pip install pytest
 pytest tests/          # all tests should pass before you start
 ```
+
+> **⚠️ Git submodule initialisation is required**
+>
+> GhostRigger embeds **PyKotor** (and optionally **Tools**) as Git submodules.
+> Without initialising them the `PyKotor/` directory is empty and TPC decoding,
+> KEY/BIF archive access, and GFF format support will fall back to slower
+> built-in paths (or fail with `ModuleNotFoundError: pykotor`).
+>
+> ```bash
+> # Fetch and check out all submodules after a plain git clone:
+> git submodule update --init --recursive
+>
+> # After a git pull that moves a submodule pointer:
+> git submodule update --recursive
+>
+> # Check current submodule state:
+> git submodule status
+> # '  <sha>  PyKotor (heads/main)'  → up to date
+> # '- <sha>  PyKotor'               → not yet initialised → run update --init
+> # '+ <sha>  PyKotor'               → ahead of recorded commit → run update
+> ```
+>
+> **Optional:** install PyKotor in editable mode if you want to modify it
+> alongside GhostRigger:
+> ```bash
+> pip install -e PyKotor/
+> ```
+>
+> **Common pitfalls**
+>
+> | Symptom | Cause | Fix |
+> |---------|-------|-----|
+> | `PyKotor/` directory is empty | Cloned without `--recurse-submodules` | `git submodule update --init --recursive` |
+> | `ModuleNotFoundError: pykotor` | Submodule not initialised or `PYTHONPATH` missing | Run `git submodule update --init --recursive`, then `pip install -e PyKotor/` |
+> | `fatal: no submodule mapping found for path 'PyKotor'` | `.gitmodules` out of sync | `git submodule sync && git submodule update --init --recursive` |
+> | Submodule shows `-` prefix in `git submodule status` | Not yet checked out | `git submodule update --init PyKotor` |
+> | TPC/archive tests skipped | `KOTOR_K1_DIR` / `KOTOR_K2_DIR` env vars not set | Set them to your KotOR install paths, or ignore — game-file tests always skip in CI |
 
 #### Branch naming
 ```

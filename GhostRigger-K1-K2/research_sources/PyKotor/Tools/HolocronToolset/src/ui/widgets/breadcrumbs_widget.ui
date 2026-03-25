@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Widget</class>
+ <widget class="QWidget" name="Widget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>400</width>
+    <height>30</height>
+   </rect>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QWidget {
+    background-color: palette(window);
+    }
+    QPushButton {
+    background-color: transparent;
+    color: palette(windowText);
+    border: none;
+    padding: 2px 4px;
+    text-align: left;
+    }
+    QPushButton:hover {
+    background-color: palette(button);
+    }
+    QLabel {
+    color: palette(mid);
+    }</string>
+  </property>
+  <layout class="QHBoxLayout" name="mainLayout">
+   <property name="spacing">
+    <number>2</number>
+   </property>
+   <property name="leftMargin">
+    <number>4</number>
+   </property>
+   <property name="topMargin">
+    <number>2</number>
+   </property>
+   <property name="rightMargin">
+    <number>4</number>
+   </property>
+   <property name="bottomMargin">
+    <number>2</number>
+   </property>
+  </layout>
+ </widget>
+ <resources />
+ <connections />
+</ui>

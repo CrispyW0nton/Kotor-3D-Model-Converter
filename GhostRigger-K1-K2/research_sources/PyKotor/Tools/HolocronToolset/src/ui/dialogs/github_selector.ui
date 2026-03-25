@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Dialog</class>
+ <widget class="QDialog" name="Dialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>600</width>
+    <height>500</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>600</width>
+    <height>400</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Select a GitHub Repository File</string>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <item>
+    <widget class="QLabel" name="label">
+     <property name="text">
+      <string>Please select the correct script path or enter manually:</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="forkLabel">
+     <property name="text">
+      <string>Select Fork:</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QComboBox" name="forkComboBox">
+     <property name="minimumSize">
+      <size>
+       <width>300</width>
+       <height>0</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>300</width>
+       <height>16777215</height>
+      </size>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="filterLayout">
+     <item>
+      <widget class="QLineEdit" name="filterEdit">
+       <property name="placeholderText">
+        <string>Type to filter paths...</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="searchButton">
+       <property name="text">
+        <string>Search</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="refreshButton">
+       <property name="text">
+        <string>Refresh</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QTreeWidget" name="repoTreeWidget">
+     <property name="columnCount">
+      <number>1</number>
+     </property>
+     <property name="headerLabel">
+      <string>GitHub Repository</string>
+     </property>
+     <column>
+      <property name="text">
+       <string>GitHub Repository</string>
+      </property>
+     </column>
+    </widget>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="cloneButton">
+     <property name="text">
+      <string>Clone Repository</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QStatusBar" name="statusBar" />
+   </item>
+  </layout>
+ </widget>
+ <resources />
+ <connections />
+</ui>

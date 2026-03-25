@@ -1238,8 +1238,11 @@ class TestWontfixBoneNames:
 
     def test_3dgui_digit_bone_is_wontfix(self):
         """
-        3dgui has bone name '3DGui' (digit-start).
-        It must be classified as WONTFIX, not a real bone error.
+        3dgui has a root node named '3DGui' (digit-start).
+        After the bone_parts active_count fix (v6.2), garbage bone_parts entries
+        that previously resolved to the root node (index 0 → '3DGui') are
+        correctly filtered out.  The model must parse cleanly with NO invalid
+        bone names in any skin mesh bone_map.
         """
         import re, pytest
         BONE_NAME_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')
@@ -1251,14 +1254,18 @@ class TestWontfixBoneNames:
             pytest.skip("3dgui not available")
         p = MDLBinaryParser(mdl_data, mdx_data or b'')
         model = p.parse()
+        # Verify the root node is indeed named '3DGui'
+        root = next((n for n in model.nodes if n.number == 0), None)
+        assert root is not None and root.name == '3DGui', \
+            "3dgui.mdl root node should be named '3DGui'"
+        # After the bone_parts active_count fix, all skin bone_map entries must
+        # be valid identifier-style names (no garbage like root node '3DGui').
         bad_bones = []
         for n in model.mesh_nodes():
             if n.is_skin:
                 for b in n.bone_map:
                     if b and not BONE_NAME_RE.match(b):
                         bad_bones.append(b)
-        assert any(b == '3DGui' for b in bad_bones), \
-            "3dgui should have digit-start bone name '3DGui'"
         real_bad = [b for b in bad_bones if not self._is_wontfix(b)]
         assert real_bad == [], \
             f"All bad bones in 3dgui should be WONTFIX, got real errors: {real_bad}"

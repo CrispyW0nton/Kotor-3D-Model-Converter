@@ -1,0 +1,15 @@
+{
+  "servers": {},
+  "inputs": [],
+  "sandbox": {
+    "filesystem": {
+      "allowWrite": [],
+      "denyRead": [],
+      "denyWrite": []
+    },
+    "network": {
+      "allowedDomains": [],
+      "deniedDomains": []
+    }
+  }
+}

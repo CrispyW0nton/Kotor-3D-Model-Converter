@@ -1,0 +1,1 @@
+const App = require('./dist/electron');

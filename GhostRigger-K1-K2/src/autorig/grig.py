@@ -50,9 +50,15 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Set, Any
 from enum import Enum
 
-from ..core.model_data import (
-    KotorModel, ModelNode, NodeFlags, VertexSkinData, BoneWeight
-)
+try:
+    from ..core.model_data import (
+        KotorModel, ModelNode, NodeFlags, VertexSkinData, BoneWeight
+    )
+except ImportError:
+    from core.model_data import (  # type: ignore[no-redef]
+        KotorModel, ModelNode, NodeFlags, VertexSkinData, BoneWeight
+    )
+
 from .accurig import (
     RigGuide, MIRROR_PAIRS, BONE_COLOURS,
     HUMANOID_GUIDES, QUADRUPED_GUIDES, DROID_GUIDES,

@@ -1,0 +1,359 @@
+[build-system]
+requires = ["setuptools>=67.8.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+py-modules = ["resources_rc"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["toolset*"]
+exclude = ["plugin*", "*.plugin*", "*plugin*", "plugin"]
+
+[tool.setuptools.package-data]
+toolset = [
+  "help/**/*.xml",
+  "help/**/*.md",
+  "wiki/**/*.md",  # Wiki files copied during build from ../../wiki/ to src/toolset/help/wiki/
+]
+
+[project]
+name = "holocrontoolset"
+description = "A PyQt-backed program with a collection of tools and editors that make it easy to work with kotor files"
+version = "4.0.0b18"
+requires-python = ">=3.8"
+dependencies = [
+  "certifi>=2021.10.8",
+  "comtypes>=1.4.0; sys_platform == \"win32\"",
+  "idna>=3.11",
+  "jsonpickle>=4.1.1",
+  "Markdown>=3.4.4,<3.9; python_version<\"3.9\"",
+  "Markdown>=3.4.4; python_version>=\"3.9\"",
+  "numpy>=1.19.0,<1.25.0; python_version<\"3.9\"",
+  "numpy>=1.19.0; python_version>=\"3.9\"",
+  "Pillow>=12.1.1",
+  "pykotor[encodings,extra,font,gl,updater]>=2.3.1",
+  "PyQt5-Qt5>=5.15; python_version==\"3.8\"",
+  "PyQt5-sip>=12.10; python_version==\"3.8\"",
+  "PyQt5>=5.15; python_version==\"3.8\"",
+  "PyQt6-Qt6>=6.10.1; python_version>=\"3.9\"",
+  "PyQt6-Qt6>=6.6.1,<6.10.1; python_version==\"3.8\"",
+  "PyQt6-sip>=12.10,<13.10.3; python_version<\"3.10\"",
+  "PyQt6-sip>=13.10.3; python_version>=\"3.10\"",
+  "PyQt6>=6.10.1; python_version>=\"3.9\"",
+  "PyQt6>=6.6.1,<6.10.1; python_version==\"3.8\"",
+  "PySide6_Addons>=6.10.1; python_implementation == 'PyPy' and python_version >= '3.9'",
+  "PySide6_Essentials>=6.10.1; python_implementation == 'PyPy' and python_version >= '3.9'",
+  "PySide6; python_implementation == 'PyPy' and python_version >= '3.9'",
+  "PySide6>=6.10.1; python_implementation == 'PyPy' and python_version >= '3.9'",
+  "qtpy>=2.4.3",
+  "requests>=2.32.4",
+  "send2trash>=1.8.3",
+  "urllib3>=2.6.3",
+]
+authors = [{ name = "Nick Hugi" }, { name = "th3w1zard1" }]
+maintainers = [{ name = "th3w1zard1", email = "boden.crouch@gmail.com" }]
+readme = { file = "README.md", content-type = "text/markdown" }
+license = { text = "LGPL-3.0-or-later" }
+keywords = [
+  "3d",
+  "bioware",
+  "dlg",
+  "editor",
+  "gff",
+  "holocron",
+  "knights-of-the-old-republic",
+  "kotor",
+  "kotor1",
+  "kotor2",
+  "modding",
+  "module-designer",
+  "opengl",
+  "pykotor",
+  "pyqt5",
+  "star-wars",
+  "toolset",
+  "tsl",
+]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: End Users/Desktop",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Games/Entertainment",
+  "Topic :: Games/Entertainment :: Role-Playing",
+  "Topic :: Multimedia :: Graphics :: 3D Modeling",
+  "Topic :: Text Editors :: Integrated Development Environments (IDE)",
+  "Environment :: X11 Applications :: Qt",
+  "Environment :: Win32 (MS Windows)",
+  "Environment :: MacOS X",
+]
+
+[project.scripts]
+holocrontoolset = "toolset.__main__:main"
+kotor-editor = "toolset.gui.editors.standalone:main"
+kotor-module-designer = "toolset.gui.editors.standalone:launch_module_designer"
+kotor-indoor-builder = "toolset.gui.editors.standalone:launch_indoor_builder"
+kotor-2da-editor = "toolset.gui.editors.standalone:launch_twoda"
+kotor-are-editor = "toolset.gui.editors.standalone:launch_are"
+kotor-bwm-editor = "toolset.gui.editors.standalone:launch_bwm"
+kotor-dlg-editor = "toolset.gui.editors.standalone:launch_dlg"
+kotor-erf-editor = "toolset.gui.editors.standalone:launch_erf"
+kotor-gff-editor = "toolset.gui.editors.standalone:launch_gff"
+kotor-git-editor = "toolset.gui.editors.standalone:launch_git"
+kotor-ifo-editor = "toolset.gui.editors.standalone:launch_ifo"
+kotor-jrl-editor = "toolset.gui.editors.standalone:launch_jrl"
+kotor-lip-editor = "toolset.gui.editors.standalone:launch_lip"
+kotor-mdl-editor = "toolset.gui.editors.standalone:launch_mdl"
+kotor-nss-editor = "toolset.gui.editors.standalone:launch_nss"
+kotor-pth-editor = "toolset.gui.editors.standalone:launch_pth"
+kotor-savegame-editor = "toolset.gui.editors.standalone:launch_savegame"
+kotor-ssf-editor = "toolset.gui.editors.standalone:launch_ssf"
+kotor-tlk-editor = "toolset.gui.editors.standalone:launch_tlk"
+kotor-tpc-editor = "toolset.gui.editors.standalone:launch_tpc"
+kotor-txt-editor = "toolset.gui.editors.standalone:launch_txt"
+kotor-utc-editor = "toolset.gui.editors.standalone:launch_utc"
+kotor-utd-editor = "toolset.gui.editors.standalone:launch_utd"
+kotor-ute-editor = "toolset.gui.editors.standalone:launch_ute"
+kotor-uti-editor = "toolset.gui.editors.standalone:launch_uti"
+kotor-utm-editor = "toolset.gui.editors.standalone:launch_utm"
+kotor-utp-editor = "toolset.gui.editors.standalone:launch_utp"
+kotor-uts-editor = "toolset.gui.editors.standalone:launch_uts"
+kotor-utt-editor = "toolset.gui.editors.standalone:launch_utt"
+kotor-utw-editor = "toolset.gui.editors.standalone:launch_utw"
+kotor-wav-editor = "toolset.gui.editors.standalone:launch_wav"
+
+[project.urls]
+Homepage = "https://github.com/OldRepublicDevs/PyKotor"
+Documentation = "https://github.com/OldRepublicDevs/PyKotor/wiki"
+Repository = "https://github.com/OldRepublicDevs/PyKotor.git"
+Issues = "https://github.com/OldRepublicDevs/PyKotor/issues"
+Changelog = "https://github.com/OldRepublicDevs/PyKotor/releases"
+
+# Optional Poetry configuration for those who prefer it
+[tool.poetry]
+name = "holocrontoolset"
+version = "4.0.0b18"
+description = "A PyQt-backed program with a collection of tools and editors that make it easy to work with kotor files"
+authors = ["Nick Hugi", "th3w1zard1 <boden.crouch@gmail.com>"]
+maintainers = ["th3w1zard1 <boden.crouch@gmail.com>"]
+readme = "README.md"
+license = "LGPL-3.0-or-later"
+packages = [{ include = "toolset", from = "src" }]
+keywords = [
+  "3d",
+  "bioware",
+  "dlg",
+  "editor",
+  "gff",
+  "holocron",
+  "knights-of-the-old-republic",
+  "kotor",
+  "kotor1",
+  "kotor2",
+  "modding",
+  "module-designer",
+  "opengl",
+  "pykotor",
+  "pyqt5",
+  "star-wars",
+  "toolset",
+  "tsl",
+]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pykotor = { version = "^2.3.1", extras = ["encodings", "extra", "font", "gl", "updater"] }
+certifi = ">=2021.10.8"
+comtypes = { version = ">=1.4.0", markers = "sys_platform == 'win32'" }
+idna = ">=3.11"
+jsonpickle = ">=4.1.1"
+Markdown = [
+  { version = ">=3.4.4,<3.9", markers = "python_version < \"3.9\"" },
+  { version = ">=3.4.4", markers = "python_version >= \"3.9\"" },
+]
+numpy = [
+  { version = ">=1.19.0,<1.25.0", markers = "python_version < \"3.9\"" },
+  { version = ">=1.19.0", markers = "python_version >= \"3.9\"" },
+]
+Pillow = { version = ">=12.1.1" }
+PyQt5 = { version = ">=5.15", markers = "python_version == \"3.8\"" }
+PyQt5-Qt5 = { version = ">=5.15", markers = "python_version == \"3.8\"" }
+PyQt5-sip = { version = ">=12.10", markers = "python_version == \"3.8\"" }
+PyQt6 = [
+  { version = ">=6.10.1", markers = "python_version >= \"3.9\"" },
+  { version = ">=6.6.1,<6.10.1", markers = "python_version == \"3.8\"" },
+]
+PyQt6-Qt6 = [
+  { version = ">=6.10.1", markers = "python_version >= \"3.9\"" },
+  { version = ">=6.6.1,<6.10.1", markers = "python_version == \"3.8\"" },
+]
+PyQt6-sip = [
+  { version = ">=12.10,<13.10.3", markers = "python_version < \"3.10\"" },
+  { version = ">=13.10.3", markers = "python_version >= \"3.10\"" },
+]
+PySide6 = { version = ">=6.10.1", markers = "python_implementation == 'PyPy' and python_version >= '3.9'" }
+PySide6_Addons = { version = ">=6.10.1", markers = "python_implementation == 'PyPy' and python_version >= '3.9'" }
+PySide6_Essentials = { version = ">=6.10.1", markers = "python_implementation == 'PyPy' and python_version >= '3.9'" }
+qtpy = ">=2.4.3"
+requests = ">=2.32.4"
+send2trash = ">=1.8.3"
+urllib3 = ">=2.6.3"
+
+[tool.poetry.group.dev.dependencies]
+pytest-qt = ">=4.2.0"
+pytest-xvfb = ">=3.0.0"
+types-Pillow = "*"
+types-Send2Trash = "*"
+
+[tool.poetry.scripts]
+holocrontoolset = "toolset.__main__:main"
+kotor-editor = "toolset.gui.editors.standalone:main"
+kotor-module-designer = "toolset.gui.editors.standalone:launch_module_designer"
+kotor-indoor-builder = "toolset.gui.editors.standalone:launch_indoor_builder"
+kotor-2da-editor = "toolset.gui.editors.standalone:launch_twoda"
+kotor-are-editor = "toolset.gui.editors.standalone:launch_are"
+kotor-bwm-editor = "toolset.gui.editors.standalone:launch_bwm"
+kotor-dlg-editor = "toolset.gui.editors.standalone:launch_dlg"
+kotor-erf-editor = "toolset.gui.editors.standalone:launch_erf"
+kotor-gff-editor = "toolset.gui.editors.standalone:launch_gff"
+kotor-git-editor = "toolset.gui.editors.standalone:launch_git"
+kotor-ifo-editor = "toolset.gui.editors.standalone:launch_ifo"
+kotor-jrl-editor = "toolset.gui.editors.standalone:launch_jrl"
+kotor-lip-editor = "toolset.gui.editors.standalone:launch_lip"
+kotor-mdl-editor = "toolset.gui.editors.standalone:launch_mdl"
+kotor-nss-editor = "toolset.gui.editors.standalone:launch_nss"
+kotor-pth-editor = "toolset.gui.editors.standalone:launch_pth"
+kotor-savegame-editor = "toolset.gui.editors.standalone:launch_savegame"
+kotor-ssf-editor = "toolset.gui.editors.standalone:launch_ssf"
+kotor-tlk-editor = "toolset.gui.editors.standalone:launch_tlk"
+kotor-tpc-editor = "toolset.gui.editors.standalone:launch_tpc"
+kotor-txt-editor = "toolset.gui.editors.standalone:launch_txt"
+kotor-utc-editor = "toolset.gui.editors.standalone:launch_utc"
+kotor-utd-editor = "toolset.gui.editors.standalone:launch_utd"
+kotor-ute-editor = "toolset.gui.editors.standalone:launch_ute"
+kotor-uti-editor = "toolset.gui.editors.standalone:launch_uti"
+kotor-utm-editor = "toolset.gui.editors.standalone:launch_utm"
+kotor-utp-editor = "toolset.gui.editors.standalone:launch_utp"
+kotor-uts-editor = "toolset.gui.editors.standalone:launch_uts"
+kotor-utt-editor = "toolset.gui.editors.standalone:launch_utt"
+kotor-utw-editor = "toolset.gui.editors.standalone:launch_utw"
+kotor-wav-editor = "toolset.gui.editors.standalone:launch_wav"
+
+[tool.poetry.urls]
+Homepage = "https://github.com/OldRepublicDevs/PyKotor"
+Documentation = "https://github.com/OldRepublicDevs/PyKotor/wiki"
+Repository = "https://github.com/OldRepublicDevs/PyKotor.git"
+Issues = "https://github.com/OldRepublicDevs/PyKotor/issues"
+Changelog = "https://github.com/OldRepublicDevs/PyKotor/releases"
+
+########################################################
+## UV workspace configuration                         ##
+########################################################
+
+[dependency-groups]
+dev = []
+
+########################################################
+## define only linter configurations below this point ##
+########################################################
+
+[tool.pyright]
+include = ["*.py"]
+exclude = [
+  "**/node_modules/**",
+  "**/__pycache__/**",
+  "**/build/**",
+  "**/dist/**",
+  "**/venv/**",
+  "**/__pycache__/**",
+]
+extraPaths = [
+  "Libraries/PyKotor/src",
+  "Tools/BatchPatcher/src",
+  "Tools/HolocronToolset/src",
+  "Tools/HoloPatcher/src",
+  "Tools/HoloPazaak/src",
+  "Tools/KotorDiff/src",
+]
+pythonVersion = "3.8"
+analyzeUnannotatedFunctions = true
+deprecateTypingAliases = false
+reportIncompatibleMethodOverride = false
+reportMissingImports = true
+reportMissingTypeStubs = false
+reportOptionalMemberAccess = false
+
+[tool.pyright.defineConstant]
+PYQT5 = false
+PYSIDE2 = false
+PYQT6 = true
+PYSIDE6 = false
+
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+
+[tool.ruff.lint]
+ignore = [
+  "N",       # disable snake_case vs PascalCase/camelCase checks for pyqt5
+  "SLF001",  # private member access
+  "PLR0913", # too many arguments in function definition
+  "FBT001",  # boolean-typed positional argument in function definition
+  "E402",    # Module level import not at top of file
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["ALL"]
+".github/*py" = ["INP001"]
+"__init__.py" = ["I001", "F401"]
+"globalsettings.py" = ["I001", "F401"]
+"./src/toolset/*.py" = ["FBT003", "N802", "N803", "N806", "A001"]
+"./src/toolset/uic/*.py" = ["ALL"]                                # uic's are auto-generated
+"resources_rc.py" = ["ALL"]
+".mdx" = ["ALL"]
+".mdl" = ["ALL"]
+"pykotor/resource/formats/ncs/compiler/*.py" = ["ALL"]
+
+[tool.ruff.lint.flake8-pytest-style]
+fixture-parentheses = false
+
+[tool.ruff.lint.isort]
+required-imports = ["from __future__ import annotations"]
+
+[tool.ruff.lint.pyupgrade]
+keep-runtime-typing = true
+
+[tool.mccabe]
+max-complexity = 25
+
+[tool.style]
+based_on_style = "pep8"
+split_before_named_assigns = true
+split_complex_comprehension = true
+split_arguments_when_comma_terminated = true
+
+[tool.pylintrc]
+max-line-length = 175
+
+[tool.pyinstaller]
+name = "toolset"
+windowed = true
+icon = "src/resources/icons/sith.ico"
+exclude-modules = ["numpy", "PyOpenGL", "PyGLM", "dl_translate", "torch"]
+hidden-imports = ["PIL._tkinter_finder"]
+
+[tool.dependencies]
+qt-api = "PyQt6"
+linux-profiles = ["qt_gui"]
+windows-packages = ["comtypes", "pywin32"]

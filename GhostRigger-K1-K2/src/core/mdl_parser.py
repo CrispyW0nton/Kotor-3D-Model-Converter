@@ -607,38 +607,37 @@ class MDLBinaryParser:
         # KotorBlender types.py EMITTER_CONTROLLER_KEYS.  All 31 emitter
         # controllers decoded.  Light controllers (76–140) also distinguished
         # from mesh controllers.
+        # Controller type ID → human-readable name mapping.
+        # IDs that overlap between Light, Mesh, and Emitter contexts
+        # (Python dict: later entry wins, so emitter names take priority for
+        # overlapping IDs — this matches how the KotOR engine resolves them):
+        #   80  = CTRL_EMITTER_ALPHAEND   (was CTRL_LIGHT_ALPHAEND — same value)
+        #   84  = CTRL_EMITTER_ALPHASTART (was CTRL_LIGHT_ALPHASTART)
+        #   88  = CTRL_LIGHT_RADIUS = 88 (KotOR.js); CTRL_EMITTER_BIRTHRATE = 88
+        #   96  = CTRL_EMITTER_COMBINETIME (also CTRL_LIGHT_SHADOWRADIUS)
+        #   100 = CTRL_MESH_SELFILLUMCOLOR=3ch / CTRL_EMITTER_DRAG=1ch (node type disambiguates)
+        #   140 = CTRL_EMITTER_RANDVEL (also CTRL_LIGHT_MULTIPLIER)
         CTRL_TYPE_NAMES = {
-            # Base / mesh controllers
             8:   'position',
             20:  'orientation',
             36:  'scale',
-            76:  'color',              # CTRL_LIGHT_COLOR (also mesh selfillum backup)
-            80:  'radius',             # CTRL_LIGHT_RADIUS (also CTRL_EMITTER_ALPHAEND)
-            84:  'shadow_radius',      # CTRL_LIGHT_SHADOWRADIUS / CTRL_EMITTER_ALPHASTART
-            88:  'vertical_displacement',  # CTRL_LIGHT_VERTICALDISPL / CTRL_EMITTER_BIRTHRATE
-            96:  'multiplier',         # CTRL_LIGHT_SHADOWRADIUS / CTRL_EMITTER_COMBINETIME
-            100: 'selfillum_color',    # CTRL_MESH_SELFILLUMCOLOR = 100 (3 floats r,g,b)
-            128: 'alpha_xoreos',       # xoreos CTRL_ALPHA = 128 (1 float)
-            132: 'alpha',              # CTRL_MESH_ALPHA = 132 (1 float) KotorBlender
-            140: 'texture_anim',       # CTRL_LIGHT_MULTIPLIER = 140
-            # Emitter-only controllers (KotorBlender types.py EMITTER_CONTROLLER_KEYS)
-            # These controllers appear ONLY in emitter nodes.
+            76:  'color',              # CTRL_LIGHT_COLOR (3 floats r,g,b)
             80:  'alphaend',           # CTRL_EMITTER_ALPHAEND = 80
             84:  'alphastart',         # CTRL_EMITTER_ALPHASTART = 84
-            88:  'birthrate',          # CTRL_EMITTER_BIRTHRATE = 88
+            88:  'radius',             # CTRL_LIGHT_RADIUS=88 (KotOR.js) / CTRL_EMITTER_BIRTHRATE=88
             92:  'bounce_co',          # CTRL_EMITTER_BOUNCE_CO = 92
             96:  'combinetime',        # CTRL_EMITTER_COMBINETIME = 96
-            100: 'drag',               # CTRL_EMITTER_DRAG = 100 (overloaded with SELFILLUM)
+            100: 'selfillum_color',    # CTRL_MESH_SELFILLUMCOLOR = 100 (3 floats r,g,b)
             104: 'fps',                # CTRL_EMITTER_FPS = 104
             108: 'frameend',           # CTRL_EMITTER_FRAMEEND = 108
             112: 'framestart',         # CTRL_EMITTER_FRAMESTART = 112
             116: 'grav',               # CTRL_EMITTER_GRAV = 116
             120: 'lifeexp',            # CTRL_EMITTER_LIFEEXP = 120
             124: 'mass',               # CTRL_EMITTER_MASS = 124
-            128: 'p2p_bezier2',        # CTRL_EMITTER_P2P_BEZIER2 = 128
-            132: 'p2p_bezier3',        # CTRL_EMITTER_P2P_BEZIER3 = 132
+            128: 'alpha_xoreos',       # xoreos CTRL_ALPHA = 128 (1 float)
+            132: 'alpha',              # CTRL_MESH_ALPHA = 132 (1 float) KotorBlender
             136: 'particlerot',        # CTRL_EMITTER_PARTICLEROT = 136
-            140: 'randvel',            # CTRL_EMITTER_RANDVEL = 140
+            140: 'randvel',            # CTRL_EMITTER_RANDVEL = 140 / CTRL_LIGHT_MULTIPLIER
             144: 'sizestart',          # CTRL_EMITTER_SIZESTART = 144
             148: 'sizeend',            # CTRL_EMITTER_SIZEEND = 148
             152: 'sizestart_y',        # CTRL_EMITTER_SIZESTART_Y = 152
@@ -660,8 +659,7 @@ class MDLBinaryParser:
             228: 'percentend',         # CTRL_EMITTER_PERCENTEND = 228
             232: 'sizemid',            # CTRL_EMITTER_SIZEMID = 232
             236: 'sizemid_y',          # CTRL_EMITTER_SIZEMID_Y = 236
-            240: 'randombirthrate',    # CTRL_EMITTER_RANDOMBIRTHRATE = 240 (KotorBlender-confirmed)
-                                        # Float variance around base birthrate(88).
+            240: 'randombirthrate',    # CTRL_EMITTER_RANDOMBIRTHRATE = 240
             252: 'targetsize',         # CTRL_EMITTER_TARGETSIZE = 252
             256: 'numcontrolpts',      # CTRL_EMITTER_NUMCONTROLPTS = 256
             260: 'controlptradius',    # CTRL_EMITTER_CONTROLPTRADIUS = 260
@@ -671,6 +669,7 @@ class MDLBinaryParser:
             284: 'colormid',           # CTRL_EMITTER_COLORMID = 284 (3 floats RGB)
             380: 'colorend',           # CTRL_EMITTER_COLOREND = 380 (3 floats RGB)
             392: 'colorstart',         # CTRL_EMITTER_COLORSTART = 392 (3 floats RGB)
+            502: 'detonate',           # CTRL_EMITTER_DETONATE = 502 (KotOR.js Detonate)
         }
 
         ctrl_data_abs = B + ctrl_data_off
@@ -840,6 +839,7 @@ class MDLBinaryParser:
                     284: 3,   # colormid (r,g,b)
                     380: 3,   # colorend (r,g,b)
                     392: 3,   # colorstart (r,g,b)
+                    502: 1,   # CTRL_EMITTER_DETONATE = 502 (KotOR.js Detonate, 1 float)
                 }
                 canon = _CANONICAL_COLS.get(ctrl_type, columns)
                 read_cols = min(columns, canon)
@@ -988,6 +988,16 @@ class MDLBinaryParser:
                 except Exception as e:
                     log.debug(f"_parse_node emitter parse error ({name}): {e}")
 
+            # Parse reference node: stores the referenced model name (char[32])
+            # and a reattachable flag (uint32).
+            # Reference:  PyKotor io_mdl.py _ReferenceHeader (model:char[32], reattachable:uint32)
+            #             xoreos  aurora/modelnode.cpp NWN::ModelNodeReference::load()
+            if node_type & NodeFlags.REFERENCE:
+                try:
+                    self._parse_reference(node, o)
+                except Exception as e:
+                    log.debug(f"_parse_node reference parse error ({name}): {e}")
+
             # Parse mesh data
             if node_type & NodeFlags.MESH:
                 try:
@@ -1126,6 +1136,46 @@ class MDLBinaryParser:
         except Exception as e:
             log.debug(f"Emitter parse error on {node.name}: {e}")
 
+    def _parse_reference(self, node: ModelNode, off: int):
+        """
+        Parse the binary reference node header.
+
+        Binary layout (PyKotor io_mdl.py _ReferenceHeader):
+          +0   model         (char[32])  — null-terminated resref of the referenced model
+          +32  reattachable  (uint32)    — 1 = reattachable (can be detached/reattached)
+
+        Reference nodes are used for:
+          - Placeable objects that reference a separate model (e.g., gi_datapad01)
+          - Dynamic props in area models (lights/effects that are spawned at runtime)
+          - Head/body hooks that reference specific model resrefs
+
+        The parsed data is stored in node.emitter_params (repurposed as a generic
+        node-extra-data dict, since reference nodes have no mesh geometry).
+
+        Reference: PyKotor io_mdl.py _ReferenceHeader
+                   xoreos  src/aurora/modelnode.cpp NWN::ModelNodeReference::load()
+        """
+        d = self.mdl
+        o = off
+        if o + 36 > len(d):
+            return
+        try:
+            raw_name = d[o:o+32]
+            # Null-terminate and strip
+            null_pos = raw_name.find(b'\x00')
+            if null_pos >= 0:
+                raw_name = raw_name[:null_pos]
+            ref_model = raw_name.decode('ascii', errors='replace').strip().lower()
+            reattachable = struct.unpack_from('<I', d, o + 32)[0]
+            node.emitter_params['ref_model']     = ref_model
+            node.emitter_params['reattachable']  = bool(reattachable)
+            log.debug(
+                f"  REFERENCE [{node.name}]: ref_model={ref_model!r} "
+                f"reattachable={bool(reattachable)}"
+            )
+        except Exception as e:
+            log.debug(f"Reference parse error on {node.name}: {e}")
+
     def _parse_mesh(self, node: ModelNode, off: int):
         d   = self.mdl
         mdx = self.mdx
@@ -1183,7 +1233,7 @@ class MDLBinaryParser:
         bx1,by1,bz1 = struct.unpack_from('<fff',d,o); o+=12
         bx2,by2,bz2 = struct.unpack_from('<fff',d,o); o+=12
         o += 4   # radius
-        o += 12  # average position
+        avg_px, avg_py, avg_pz = struct.unpack_from('<fff',d,o); o+=12  # average position (AveragePoint)
 
         dr,dg,db = struct.unpack_from('<fff',d,o); o+=12
         ar,ag,ab = struct.unpack_from('<fff',d,o); o+=12
@@ -1270,8 +1320,18 @@ class MDLBinaryParser:
         # These 8 bytes come BEFORE the standard skip(2)+total_area+skip(4) section.
         # PREVIOUS BUG: these 8 bytes were added AFTER the padding/area section,
         # shifting mdx_data_off and verts_off by 8 bytes for ALL K2 models.
+        # Reference: Kotor.NET MDLBinaryStructure.cs TrimeshHeader TSLUnknown1/2 comment.
+        k2_dirt_enabled = False
+        k2_dirt_texture = 0
+        k2_dirt_coord_space = 0
+        k2_hide_in_holograms = False
         if self.model.game_version == GameVersion.K2:
-            o += 8  # K2/TSL: dirt + hologram fields (8 bytes)
+            k2_dirt_enabled      = bool(struct.unpack_from('B',d,o)[0]); o+=1
+            o += 1  # padding byte
+            k2_dirt_texture      = struct.unpack_from('<H',d,o)[0]; o+=2
+            k2_dirt_coord_space  = struct.unpack_from('<H',d,o)[0]; o+=2
+            k2_hide_in_holograms = bool(struct.unpack_from('B',d,o)[0]); o+=1
+            o += 1  # padding byte
 
         o += 2   # 2 unknown/padding bytes
         o += 4   # total_area (float)
@@ -1313,6 +1373,16 @@ class MDLBinaryParser:
                 mdx_data_off = mdx_data_off_k2
                 verts_off    = verts_off_k2
                 o = o_retry + 4   # advance past verts_off_k2
+                # Also go back and re-read the K2 dirt/hologram fields now that
+                # we know the model is K2. Rewind to just after the 6 flag bytes,
+                # which are at (o_retry - 8 - 2 - 4 - 4).
+                dirt_base = o_retry - 8 - 10  # 8=dirty skip, 10=padding(2)+area(4)+skip(4)
+                if dirt_base >= 0 and dirt_base + 8 <= len(d):
+                    k2_dirt_enabled      = bool(struct.unpack_from('B',d,dirt_base)[0])
+                    # byte 1: padding — skip
+                    k2_dirt_texture      = struct.unpack_from('<H',d,dirt_base+2)[0]
+                    k2_dirt_coord_space  = struct.unpack_from('<H',d,dirt_base+4)[0]
+                    k2_hide_in_holograms = bool(struct.unpack_from('B',d,dirt_base+6)[0])
 
         # ── Store mesh properties ────────────────────────────────────────────
         node.texture      = tex_name
@@ -1327,6 +1397,15 @@ class MDLBinaryParser:
         node.transparency_hint = transp
         node.bb_min = (bx1,by1,bz1)
         node.bb_max = (bx2,by2,bz2)
+        # Average position (AveragePoint): centroid of all face vertices in mesh-local space.
+        # Kotor.NET TrimeshHeader.AveragePoint; xoreos _averagePoint.
+        # Used for accurate transparent-surface depth sorting.
+        node.mesh_average_point = (avg_px, avg_py, avg_pz)
+        # K2/TSL dirt and hologram fields (parsed above; 0/False for K1 models)
+        node.dirt_enabled       = k2_dirt_enabled
+        node.dirt_texture       = k2_dirt_texture
+        node.dirt_coord_space   = k2_dirt_coord_space
+        node.hide_in_holograms  = k2_hide_in_holograms
         # UV animation parameters (from mesh header animate_uv + direction/jitter fields)
         node.animate_uv    = bool(animate_uv)
         node.uv_dir_x      = float(uv_dir_x)
@@ -1766,15 +1845,34 @@ class MDLBinaryParser:
             sbr_off = _ru32(d, o); o += 4   # MDX bone-ref channel offset in stride
             bm_off  = _ru32(d, o); o += 4   # bone_map offset in MDL (from BASE)
             bm_cnt  = _ru32(d, o); o += 4   # number of bone_map entries
-            # Skip the qbone, tbone, garbage arrays and bone_indices[16]+padding
-            # that follow bm_cnt.  Previous code omitted these 72 bytes, causing the
-            # dangly header (for SKIN+DANGLY nodes) to be read at the wrong offset,
-            # and causing crashes when KotOR bantha/creature models with extra skin
-            # data were loaded.  Verified against KotorBlender reader.py skin section.
-            # qbone_arr(12) + tbone_arr(12) + garbage_arr(12) + bone_indices[16](32) + padding(4)
-            o += 72   # skip: qbone(12) + tbone(12) + garbage(12) + bone_idx[16](32) + pad(4)
+            # ── Read qbone/tbone inverse-bind descriptors ───────────────────
+            # qbone_arr descriptor (3 × uint32 = 12 bytes): off, count, count2
+            # tbone_arr descriptor (3 × uint32 = 12 bytes): off, count, count2
+            # These contain the per-compact-bone inverse bind quaternion/position,
+            # i.e. the stored inverse of the bone's world transform at bind pose.
+            # KotOR.js reads these as bone_inverse_matrix and passes to THREE.Skeleton.
+            # References: OdysseyModelNodeSkin.ts boneQuaternionDefinition / bonePositionDefinition
+            qb_off = _ru32(d, o); qb_cnt = _ru32(d, o+4); o += 12   # qbone array descriptor
+            tb_off = _ru32(d, o); tb_cnt = _ru32(d, o+4); o += 12   # tbone array descriptor
+            o += 12   # skip garbage_array descriptor (3 × uint32)
 
-            # ── Read bone map ─────────────────────────────────────────────────
+            # ── Read bone_parts (17 uint16 entries) ──────────────────────────
+            # bone_parts[i] = the node_number of the i-th compact bone in this skin mesh.
+            # MDX per-vertex bone_ref float k → compact index k → node_num = bone_parts[k].
+            # This is the CORRECT way to resolve compact bone indices to node names.
+            # KotOR.js (OdysseyModelNodeSkin.ts) reads 17 uint16 entries here.
+            # Note: the array is always 17 uint16 = 34 bytes; valid entries are at [0..N-1]
+            # where N = number of active (non -1.0) entries in bone_map_floats.
+            # Unused trailing slots contain garbage bytes (NOT 0xFFFF).
+            # We read all 17 here and slice to active_count later (after reading bone_map).
+            bone_parts_raw: List[int] = []
+            for i in range(17):
+                val = struct.unpack_from('<H', d, o)[0]
+                bone_parts_raw.append(val)
+                o += 2
+            o += 2   # 2-byte pad: 17×2=34 bytes + 2 pad = 36 → total header 12+4+4+4+4+12+12+12+36 = 100 bytes ✓
+
+            # ── Read bone map (to determine active_count) ─────────────────────
             # PC:   float32 per entry (4 bytes), -1.0 = unused
             # Xbox: Sint16LE per entry (2 bytes), cast directly to float
             #       -1 (0xFFFF signed) = unused  (no scale factor!)
@@ -1792,32 +1890,83 @@ class MDLBinaryParser:
                     v = _rf32(d, ptr)
                 bone_map_floats.append(v)
 
-            # Build a node-number → node-name map for resolving bone names
+            # active_count = number of non-(-1) entries in bone_map.
+            # bone_parts_raw[0..active_count-1] are the valid compact bone node numbers.
+            # Trailing entries (active_count..16) are garbage and must be discarded.
+            active_count = sum(1 for v in bone_map_floats if v >= 0.0)
+
+            # Build num_to_name map for bone name resolution.
             # Walk the parsed cache to map node.number → node.name
             num_to_name: Dict[int, str] = {}
             for _off, cached_node in self._cache.items():
                 num_to_name[cached_node.number] = cached_node.name
 
-            # Build the COMPACT bone list: active (non -1) entries in order.
-            # MDX bone_ref float k → compact_bones[k] = node_number
-            compact_bones: List[int] = []
-            for v in bone_map_floats:
-                if v >= 0:
-                    compact_bones.append(int(round(v)))
+            # Slice bone_parts to active_count (the actual number of compact bones).
+            # This discards garbage beyond the valid entries without relying on sentinel
+            # values (which are absent in KotOR's bone_parts array).
+            bone_parts: List[int] = bone_parts_raw[:active_count]
 
-            # node.bone_map: compact index → bone name
-            node.bone_map_floats = bone_map_floats  # keep raw floats
-            node.bone_map = []  # reset, will fill with compact list
-            for node_num in compact_bones:
-                bname = num_to_name.get(node_num, '')
-                if not bname and node_num < len(self._names):
-                    bname = self._names[node_num]
-                if not bname:
-                    bname = f'bone_{node_num}'
-                node.bone_map.append(bname)
+            # Read qbone quaternions (w,x,y,z each as float32, 16 bytes per entry)
+            # These are the inverse-bind rotations, indexed by compact bone index (0..active_count-1).
+            # KotOR.js: bone_quaternions[i] at boneQuaternionDefinition.offset + i*16
+            qbones: List = []
+            if qb_cnt > 0 and qb_off > 0 and qb_off < len(d):
+                for i in range(min(qb_cnt, 128)):
+                    ptr = B + qb_off + i * 16
+                    if ptr + 16 > len(d):
+                        break
+                    # KotOR.js reads w first, then x,y,z
+                    w, x, y, z = struct.unpack_from('<ffff', d, ptr)
+                    qbones.append((x, y, z, w))  # store as (x,y,z,w) for internal convention
+            node.inv_bind_quats = qbones   # compact-index → (x,y,z,w) inverse-bind quaternion
 
-            log.debug(f"  {node.name}: bone_map {len(bone_map_floats)} slots → "
-                      f"{len(compact_bones)} active compact bones")
+            # Read tbone translations (x,y,z each as float32, 12 bytes per entry)
+            # These are the inverse-bind positions, indexed by compact bone index.
+            tbones: List = []
+            if tb_cnt > 0 and tb_off > 0 and tb_off < len(d):
+                for i in range(min(tb_cnt, 128)):
+                    ptr = B + tb_off + i * 12
+                    if ptr + 12 > len(d):
+                        break
+                    x, y, z = struct.unpack_from('<fff', d, ptr)
+                    tbones.append((x, y, z))
+            node.inv_bind_positions = tbones  # compact-index → (x,y,z) inverse-bind position
+
+            log.debug(f"  {node.name}: active_count={active_count} bone_parts={len(bone_parts)} "
+                      f"qbone={len(qbones)} tbone={len(tbones)}")
+
+            # ── Build bone_map from bone_parts (the correct compact index mapping) ──
+            # bone_parts[i] = node_number of the i-th compact bone slot.
+            # MDX per-vertex bone_refs are compact indices 0..N-1 that index into bone_parts.
+            # This correctly maps left-side skin nodes to left-side bones (and right to right).
+            #
+            # FIX-BONE-PARTS (v7.0): Use bone_parts to build bone_map instead of bone_map_floats.
+            # Reference: KotOR.js OdysseyModelNodeSkin.ts bone_parts array + bone_inverse_matrix.
+            #
+            # Fallback: if bone_parts is empty (e.g. Xbox models or unusual PC models),
+            # fall back to the compact list derived from bone_map_floats.
+            node.bone_map_floats = bone_map_floats   # store for reference / Xbox fallback
+            node.bone_map = []
+            if bone_parts:
+                for node_num in bone_parts:
+                    bname = num_to_name.get(node_num, '')
+                    if not bname and node_num < len(self._names):
+                        bname = self._names[node_num]
+                    if not bname:
+                        bname = f'bone_{node_num}'
+                    node.bone_map.append(bname)
+                log.debug(f"  {node.name}: bone_parts bone_map → {len(node.bone_map)} bones")
+            else:
+                # Fallback: derive compact bone list from bone_map_floats (active entries only)
+                compact_bones_fb: List[int] = [int(round(v)) for v in bone_map_floats if v >= 0]
+                for node_num in compact_bones_fb:
+                    bname = num_to_name.get(node_num, '')
+                    if not bname and node_num < len(self._names):
+                        bname = self._names[node_num]
+                    if not bname:
+                        bname = f'bone_{node_num}'
+                    node.bone_map.append(bname)
+                log.debug(f"  {node.name}: fallback bone_map → {len(node.bone_map)} bones")
 
             # ── Read per-vertex weights from MDX ─────────────────────────────
             # PC:   bone_ref values are float32 compact indices (4×4 = 16 bytes)
@@ -1862,7 +2011,7 @@ class MDLBinaryParser:
                         wj = wts[j]
                         if wj > 1e-5 and brs[j] >= 0:
                             compact_idx = int(round(brs[j]))
-                            if 0 <= compact_idx < len(compact_bones):
+                            if 0 <= compact_idx < len(node.bone_map):
                                 sd.influences.append(BoneWeight(compact_idx, wj))
                     # UE-inspired: normalize bone weights so they sum to 1.0
                     # (UE applies VECTOR_INV_65535 normalization to uint16 weights;

@@ -1,0 +1,33 @@
+Build-time library dependencies
+===============================
+
+- iconv
+- zlib (>= 1.2.3)
+- liblzma (>= 5.0.3)
+- libxml2 (>= 2.8.0)
+
+- Boost (>= 1.53.0)
+  - Boost.Utility
+  - Boost.StringAlgo
+  - Boost.System
+  - Boost.Filesystem
+  - Boost.Date_Time
+  - Boost.Uuid
+  - Boost.Smart_Ptr
+  - Boost.ScopeExit
+  - Boost.Locale
+  - Boost.TypeTraits
+
+- OpenGL (>= 2.1)
+- SDL2 (>= 2.0.4)
+- FreeType 2 (>= 2.4.0 (libtool number >= 11.0.5))
+
+- OpenAL Soft (>= 1.12)
+- MAD (>= 0.15.1b)
+- libogg (>= 1.2.0)
+- libvorbis (>= 1.3.1)
+- libvorbisfile (>= 1.3.1)
+- libfaad (>= 2.7)
+
+- libxvidcore (>= 1.2.2)
+- libvpx (>= 1.6.0)

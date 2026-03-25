@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Dialog</class>
+ <widget class="QDialog" name="Dialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>400</width>
+    <height>500</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Reference Search Options</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QGroupBox" name="optionsGroup">
+     <property name="title">
+      <string>Search Options</string>
+     </property>
+     <layout class="QVBoxLayout" name="optionsLayout">
+      <item>
+       <widget class="QCheckBox" name="partialMatchCheck">
+        <property name="text">
+         <string>Partial match</string>
+        </property>
+        <property name="toolTip">
+         <string>Allow partial matches (e.g., 'test' matches 'testscript')</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="caseSensitiveCheck">
+        <property name="text">
+         <string>Case sensitive</string>
+        </property>
+        <property name="toolTip">
+         <string>Perform case-sensitive matching</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="patternGroup">
+     <property name="title">
+      <string>File Pattern (optional)</string>
+     </property>
+     <layout class="QVBoxLayout" name="patternLayout">
+      <item>
+       <widget class="QLabel" name="patternLabel">
+        <property name="text">
+         <string>Filter results by filename pattern (e.g., *.mod, *_s.rim):</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="filePatternEdit">
+        <property name="placeholderText">
+         <string>Leave empty to search all files</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="typesGroup">
+     <property name="title">
+      <string>File Types</string>
+     </property>
+     <layout class="QVBoxLayout" name="typesLayout">
+      <item>
+       <widget class="QLabel" name="typesLabel">
+        <property name="text">
+         <string>Select file types to search (leave all checked to search all supported types):</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QScrollArea" name="fileTypesScrollArea">
+        <property name="widgetResizable">
+         <bool>true</bool>
+        </property>
+        <widget class="QWidget" name="fileTypesScrollAreaWidgetContents">
+         <property name="geometry">
+          <rect>
+           <x>0</x>
+           <y>0</y>
+           <width>382</width>
+           <height>200</height>
+          </rect>
+         </property>
+         <layout class="QVBoxLayout" name="fileTypesContainerLayout">
+         </layout>
+        </widget>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources />
+ <connections />
+</ui>

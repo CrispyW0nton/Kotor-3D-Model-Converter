@@ -42,8 +42,16 @@ import math, os, logging, struct, threading, time as _time_mod
 import tkinter as tk
 from tkinter import ttk
 from typing import Optional, Dict, List, Tuple
-from ..core.model_data import (KotorModel, ModelNode, NodeFlags, _quat_rotate, _quat_conjugate,
-                               KOTOR_BASE_SKELETONS)
+try:
+    from ..core.model_data import (KotorModel, ModelNode, NodeFlags, _quat_rotate, _quat_conjugate,
+                                   KOTOR_BASE_SKELETONS)
+    from ..core.animation_engine import DanglySimulator
+except ImportError:
+    from core.model_data import (  # type: ignore[no-redef]  # tests add src/ to sys.path
+        KotorModel, ModelNode, NodeFlags, _quat_rotate, _quat_conjugate,
+        KOTOR_BASE_SKELETONS
+    )
+    from core.animation_engine import DanglySimulator  # type: ignore[no-redef]
 
 log = logging.getLogger(__name__)
 
@@ -437,8 +445,138 @@ def _decompress_dxt5_bytes(data: bytes, w: int, h: int) -> bytearray:
 
 
 def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
+    """Load a KotOR TPC image from raw bytes using pykotor's battle-tested reader.
+
+    pykotor.read_tpc handles DXT1/DXT3/DXT5 decompression, greyscale, RGB/RGBA,
+    cubemap slicing, and TXI extraction correctly across K1 and K2 content.
+    Falls back to the legacy software decompressor if pykotor is unavailable.
+
+    Returns a PIL RGBA Image (top-down orientation) or None on failure.
+
+    FIX-TXI-ATTR: The returned image always has '_txi_str' set (may be empty
+    string if no TXI is present).  This allows _apply_txi_from_textures_to_model()
+    in gpu_renderer.py to extract punchthrough/blending/envmap metadata from TPC
+    files and apply it to model nodes at render time.  Without this attribute the
+    TXI cache in that function stays empty and blending modes are never updated
+    (causing bantha hair/fur to render as solid blocks instead of cut-out geometry).
+    """
+    if not _PIL or not data or len(data) < 128:
+        return None
+    try:
+        from pykotor.resource.formats.tpc.tpc_auto import read_tpc as _pk_read_tpc
+        from pykotor.resource.formats.tpc.tpc_data import TPCTextureFormat
+        tpc = _pk_read_tpc(data)   # pykotor accepts raw bytes directly
+        # FIX-TXI-ATTR: Extract TXI string before converting (tpc.txi is set after load)
+        _txi = ''
+        try:
+            _txi = (tpc.txi or '').strip() if isinstance(getattr(tpc, 'txi', None), str) else ''
+        except Exception:
+            pass
+        # Record the original format BEFORE conversion (used for orientation detection below)
+        _orig_format = tpc.format()
+        _is_compressed = _orig_format in (
+            TPCTextureFormat.DXT1, TPCTextureFormat.DXT3, TPCTextureFormat.DXT5
+        ) if hasattr(TPCTextureFormat, 'DXT1') else (data[:4] != b'\x00\x00\x00\x00' and data[12] in (2, 4) and struct.unpack_from('<I', data, 0)[0] != 0)
+        tpc.convert(TPCTextureFormat.RGBA)
+        mip = tpc.get(0, 0)          # first layer, first (largest) mipmap
+        img = mip.to_pil_image()
+        if img is None:
+            raise ValueError("pykotor returned None image")
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+        # FIX-VFLIP: pykotor returns:
+        #   - Uncompressed (RGBA/RGB/Grey): bottom-up (OpenGL convention).
+        #     Must flip to top-down for CPU rasterizer and correct GPU upload.
+        #   - DXT1/DXT3/DXT5: top-down (standard block ordering).
+        #     No flip needed.
+        # The GPU path's _GlTexCache._upload always does FLIP_TOP_BOTTOM before
+        # uploading, then the shader does `1-uv.y`.  For this to give correct results:
+        #   - DXT (top-down): flip in upload → bottom-up in GL → shader flip → correct
+        #   - Uncompressed (bottom-up): we flip here → top-down → flip in upload →
+        #     bottom-up in GL → shader flip → correct
+        # The CPU path needs top-down images for PIL row operations.
+        if not _is_compressed:
+            img = img.transpose(Image.FLIP_TOP_BOTTOM)
+        # FIX-TXI-ATTR: Attach TXI string so GPU renderer can apply blending modes
+        img._txi_str = _txi  # type: ignore[attr-defined]
+        # Also store raw data so legacy _extract_txi path works as fallback
+        img._tpc_raw = data   # type: ignore[attr-defined]
+        # FIX-ALPHATEST: Attach alpha_test from TPC header for punchthrough threshold
+        try:
+            _at = struct.unpack_from('<f', data, 4)[0]
+            if 0.0 < _at <= 1.0:
+                img._txi_alpha_test = _at  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        return img
+    except ImportError:
+        pass  # pykotor not installed — fall through to legacy decoder
+    except Exception as e:
+        log.debug(f"pykotor TPC load failed ({e}), trying legacy decoder")
+    # ── Legacy software decoder (fallback when pykotor is unavailable) ────────
+    # _load_tpc_bytes_legacy already attaches _txi_str, _tpc_raw, _txi_alpha_test.
+    img = _load_tpc_bytes_legacy(data)
+    return img
+
+
+def _extract_txi_from_tpc(data: bytes) -> str:
+    """Extract TXI metadata string from TPC binary data.
+
+    Uses pykotor.read_tpc() which correctly parses the TXI trailer embedded
+    after all mipmap pixel data.  Falls back to manual extraction if pykotor
+    is unavailable.
+
+    Returns the TXI string (may be empty if none present).
+    """
+    if not data or len(data) < 128:
+        return ''
+    try:
+        from pykotor.resource.formats.tpc.tpc_auto import read_tpc as _pk_read_tpc
+        tpc = _pk_read_tpc(data)   # pykotor accepts raw bytes directly
+        txi = tpc.txi or ''
+        return txi.strip() if isinstance(txi, str) else ''
+    except ImportError:
+        pass
+    except Exception as e:
+        log.debug(f"pykotor TXI extraction error: {e}")
+    # Fallback: manual TXI extraction (legacy method)
+    return _extract_txi_from_tpc_legacy(data)
+
+
+def _load_tpc_bytes_legacy(data: bytes) -> Optional['Image.Image']:
+    """Load KotOR TPC from raw bytes (legacy pure-Python decoder).
+
+    Wraps _load_tpc_bytes_legacy_inner and attaches TXI metadata attributes
+    (_txi_str, _tpc_raw, _txi_alpha_test) to the returned PIL Image so that
+    callers can access blending/alpha-mode without re-fetching the raw bytes.
+    Returns None if decoding fails.
+    """
+    img = _load_tpc_bytes_legacy_inner(data)
+    if img is not None:
+        # Attach _tpc_raw (raw bytes for fallback TXI / header reading)
+        img._tpc_raw = data  # type: ignore[attr-defined]
+        # Attach _txi_str — extracted from embedded TPC TXI trailer
+        # NOTE: _extract_txi_from_tpc_legacy is defined after this function;
+        # Python resolves it at call-time so forward reference is fine.
+        try:
+            img._txi_str = _extract_txi_from_tpc_legacy(data)  # type: ignore[attr-defined]
+        except Exception:
+            img._txi_str = ''  # type: ignore[attr-defined]
+        # Attach _txi_alpha_test from TPC header bytes [4-7]
+        try:
+            at = struct.unpack_from('<f', data, 4)[0]
+            if 0.0 < at <= 1.0:
+                img._txi_alpha_test = at  # type: ignore[attr-defined]
+        except Exception:
+            pass
+    return img
+
+
+def _load_tpc_bytes_legacy_inner(data: bytes) -> Optional['Image.Image']:
+    # Legacy software TPC decoder — used as fallback when pykotor unavailable.
     """
     Load a KotOR TPC image from raw bytes. Returns PIL RGBA Image or None.
+    (Called exclusively by _load_tpc_bytes_legacy which attaches TXI attrs.)
 
     KotOR TPC header layout (BioWare / Aurora engine format):
       [0-3]   uint32  data_sz   – first-mip pixel data size (0 = use mip chain)
@@ -478,11 +616,12 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
     """
     if not _PIL or len(data) < 128:
         return None
-    data_sz  = struct.unpack_from('<I', data, 0)[0]
-    width    = struct.unpack_from('<H', data, 8)[0]
-    height   = struct.unpack_from('<H', data, 10)[0]
-    encoding = data[12]   # ENCODING at offset 12 (Aurora engine format)
-    mip_cnt  = data[13]   # mip count at offset 13
+    data_sz       = struct.unpack_from('<I', data, 0)[0]
+    _tpc_alpha_at = struct.unpack_from('<f', data, 4)[0]  # FIX-ALPHATEST: TPC header alpha_test
+    width         = struct.unpack_from('<H', data, 8)[0]
+    height        = struct.unpack_from('<H', data, 10)[0]
+    encoding      = data[12]   # ENCODING at offset 12 (Aurora engine format)
+    mip_cnt       = data[13]   # mip count at offset 13
     # NOTE: data[14] is ALWAYS 0 in genuine KotOR TPC files (reserved)
     if width == 0 or height == 0:
         return None
@@ -605,8 +744,26 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
                 return _flip(Image.frombytes('RGBA', (width, height),
                                              pixel_data[:sz4]))
 
-        # ── DXT1 (encoding 10 or 12) — top-down, no flip ────────────────
-        if encoding in (10, 12):
+        # ── BGRA uncompressed (encoding 12, data_sz == 0) — bottom-up, flip ─
+        # Per PyKotor TPCBinaryReader: (compressed=False, pixel_type=12) → BGRA.
+        # compressed = (data_sz != 0), so BGRA always has data_sz == 0.
+        # BGRA stores bytes as [B,G,R,A]; PIL needs [R,G,B,A].
+        # We swap B↔R (convert mode 'RGBA' from bytes arranged as BGRA).
+        if encoding == 12 and data_sz == 0:
+            if len(pixel_data) >= sz4:
+                # Convert BGRA → RGBA by swapping B and R channels
+                try:
+                    bgra_img = Image.frombytes('RGBA', (width, height), pixel_data[:sz4])
+                    r, g, b, a = bgra_img.split()
+                    rgba_img = Image.merge('RGBA', (b, g, r, a))
+                    return _flip(rgba_img)
+                except Exception as e:
+                    log.debug(f"TPC BGRA swap error: {e}")
+
+        # ── DXT1 (encoding 10 or 12 with data_sz≠0) — top-down, no flip ──────
+        # enc=12 with data_sz≠0 is treated as DXT1 (Aurora engine variant).
+        # enc=10 is the explicit DXT1 encoding byte.
+        if encoding == 10 or (encoding == 12 and data_sz != 0):
             if len(pixel_data) >= dxt1_sz:
                 raw = _decompress_dxt1_bytes(pixel_data, width, height)
                 return Image.frombytes('RGBA', (width, height), bytes(raw))
@@ -654,7 +811,8 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
         return None
 
 
-def _extract_txi_from_tpc(data: bytes) -> str:
+def _extract_txi_from_tpc_legacy(data: bytes) -> str:
+    # Legacy manual TXI extraction — fallback when pykotor unavailable.
     """
     Extract TXI metadata string from TPC binary data (PyKotor/KotorBlender-compatible).
 
@@ -666,6 +824,14 @@ def _extract_txi_from_tpc(data: bytes) -> str:
     KotorBlender reads: image.txi_lines = remaining_bytes.decode('utf-8').splitlines()
 
     Returns the TXI string (may be empty string if none present).
+
+    FIX-TXI-OFFSET: Stock KotOR BIF textures use data_sz=0 with enc=2 (DXT1) or enc=4
+    (DXT5).  The original code used `_is_compressed = (data_sz != 0)` which is the
+    PyKotor rule — but PyKotor's read_tpc *fails* on these files (it reads enc=2/data_sz=0
+    as uncompressed RGB, computing the wrong data size).  For TXI extraction we must
+    independently infer whether the pixel data is DXT-compressed by comparing the pixel
+    data length against the uncompressed size: if the total file is too small to hold
+    uncompressed data, the texture must be DXT-compressed.
     """
     if len(data) < 128:
         return ''
@@ -676,36 +842,88 @@ def _extract_txi_from_tpc(data: bytes) -> str:
         pixel_type  = data[12]   # PyKotor: pixel_type at 0x0C; 1=grey,2=RGB,4=RGBA,12=BGRA
         mip_cnt     = max(1, data[13])  # mipmap count at 0x0D
 
+        if width == 0 or height == 0:
+            return ''
+
+        # Cubemap: height = 6 * width
+        if height > 0 and width > 0 and height // width == 6 and height % width == 0:
+            height = width  # use first face only for size computation
+
         # Compute size of all mipmaps to find TXI start offset.
-        # Per PyKotor TPCBinaryReader: "compressed" = (data_sz != 0).
-        # Pixel type to bytes-per-pixel for uncompressed formats:
-        #   pixel_type=1 → 1 bpp (greyscale)
-        #   pixel_type=2 → 3 bpp (RGB)
-        #   pixel_type=4 → 4 bpp (RGBA)
-        #   pixel_type=12 → 4 bpp (BGRA, Xbox)
-        # Compressed formats (data_sz != 0): DXT1 = 8 bytes/block, DXT5 = 16 bytes/block.
-        # DXT1 is used for pixel_type=2 when compressed; DXT5 for pixel_type=4.
         bx = max(1, (width  + 3) // 4)
         by = max(1, (height + 3) // 4)
+        dxt1_sz0 = bx * by * 8
+        dxt5_sz0 = bx * by * 16
+        sz1_0    = width * height          # greyscale
+        sz3_0    = width * height * 3      # RGB
+        sz4_0    = width * height * 4      # RGBA / BGRA
 
-        # Determine bytes-per-mip-0 based on pixel_type and compression flag
-        _is_compressed = (data_sz != 0)
+        pixel_data_len = len(data) - 128
+
+        # FIX-TXI-OFFSET: Determine if this is a DXT-compressed texture.
+        # PyKotor rule (data_sz != 0) is WRONG for stock KotOR BIF textures which
+        # have enc=2 or enc=4 with data_sz=0 but DXT1/DXT5 pixel data.
+        # Correct rule: if data_sz != 0 AND matches DXT size → definitely compressed;
+        # if data_sz == 0 AND pixel_data_len < uncompressed size → must be compressed.
+        if data_sz != 0:
+            # Non-zero data_sz: use PyKotor's rule for the compressed flag
+            _is_compressed = True
+        else:
+            # data_sz == 0: infer from actual pixel data size
+            # If pixel_data_len is too small to hold uncompressed pixels,
+            # it must be DXT-compressed (stock KotOR BIF format).
+            _uncompressed_min = {1: sz1_0, 2: sz3_0, 4: sz4_0, 12: sz4_0}.get(pixel_type, sz4_0)
+            _is_compressed = (pixel_data_len < _uncompressed_min)
+
+        # Determine per-block or per-pixel size for mip chain calculation
         if _is_compressed:
-            # DXT1 for types 2 and <= 2; DXT5 for types 4 and BGRA(12)
-            _bytes_per_block = 8 if pixel_type in (2,) else 16
+            if data_sz != 0:
+                # Use explicit data_sz if it matches a known DXT block size
+                if data_sz == dxt1_sz0:
+                    _bytes_per_block = 8
+                elif data_sz == dxt5_sz0:
+                    _bytes_per_block = 16
+                else:
+                    # Guess from pixel_type: enc=2 → DXT1 (8 bytes/block), enc=4 → DXT5 (16)
+                    _bytes_per_block = 8 if pixel_type in (2,) else 16
+                    # Fall back to data_sz as mip0 size
+                    if 0 < data_sz <= pixel_data_len:
+                        mip0_sz = data_sz
+                        def mip_sz_fn(w, h):  # type: ignore[misc]
+                            _bx = max(1, (w+3)//4); _by = max(1, (h+3)//4)
+                            return max(_bytes_per_block, _bx * _by * _bytes_per_block)
+                        total_pix = mip0_sz
+                        mw, mh = max(1, width >> 1), max(1, height >> 1)
+                        for _ in range(mip_cnt - 1):
+                            total_pix += mip_sz_fn(mw, mh)
+                            mw = max(1, mw >> 1); mh = max(1, mh >> 1)
+                        txi_start = 128 + total_pix
+                        if txi_start < len(data):
+                            raw = data[txi_start:]
+                            txi = raw.rstrip(b'\x00').decode('utf-8', errors='replace').strip()
+                            if txi:
+                                first_line = txi.split('\n')[0].strip()
+                                first_word = first_line.split()[0] if first_line.split() else ''
+                                all_printable = all(32 <= ord(c) <= 126 or c in '\r\n\t' for c in txi[:256])
+                                if first_word.isascii() and first_word.isalpha() and all_printable:
+                                    return txi
+                        return ''
+            else:
+                # data_sz == 0, compressed: infer DXT block size from pixel_type
+                # enc=2 → DXT1 (8 bytes/block), enc=4 → DXT5 (16 bytes/block)
+                # Also check pixel data fits dxt5 vs dxt1
+                if pixel_type in (2,) or pixel_data_len < dxt5_sz0:
+                    _bytes_per_block = 8
+                else:
+                    _bytes_per_block = 16
             mip0_sz = bx * by * _bytes_per_block
-            # If data_sz doesn't match expected DXT1/DXT5, try both
-            if data_sz not in (bx * by * 8, bx * by * 16):
-                # Use data_sz directly if within reasonable range
-                if 0 < data_sz <= len(data) - 128:
-                    mip0_sz = data_sz
-            def mip_sz_fn(w, h):
+            def mip_sz_fn(w, h):  # type: ignore[misc]
                 return max(_bytes_per_block,
                            max(1, (w+3)//4) * max(1, (h+3)//4) * _bytes_per_block)
         else:
             bpp = {1: 1, 2: 3, 4: 4, 12: 4}.get(pixel_type, 4)
             mip0_sz = width * height * bpp
-            def mip_sz_fn(w, h):
+            def mip_sz_fn(w, h):  # type: ignore[misc]
                 return max(1, w) * max(1, h) * bpp
 
         total_pix = mip0_sz
@@ -885,9 +1103,12 @@ def _parse_txi_string(txi: str) -> dict:
                 result['numy'] = int(arg)
             elif cmd == 'fps':
                 result['fps'] = float(arg)
-            elif cmd == 'envmaptexture':
+            elif cmd in ('envmaptexture', 'env_map_texture'):
+                # FIX-ENVMAP: envmaptexture and bumpyshinytexture both specify the
+                # reflection/environment-map companion texture for the diffuse layer.
+                # Reference: KotOR.js TXI.ts:161-164, xoreos modelnode.cpp:479-482.
                 result['envmaptexture'] = arg.lower()
-            elif cmd in ('bumpmaptexture', 'bumpmap', 'bumpmaptexture'):
+            elif cmd in ('bumpmaptexture', 'bumpmap'):
                 result['bumpmaptexture'] = arg.lower()
             elif cmd == 'bumpmapscaling':
                 result['bumpmapscaling'] = float(arg)
@@ -949,7 +1170,15 @@ def _parse_txi_string(txi: str) -> dict:
                     result['diffusebumpmap'] = arg.lower()
                 else:
                     result['isbumpmap'] = True
-            elif cmd in ('isspecularbumpmap', 'specularbumpmap', 'bumpyshinytexture'):
+            elif cmd == 'bumpyshinytexture':
+                # KotOR/xoreos: bumpyshinytexture is an ALIAS for envmaptexture.
+                # Both KotOR.js (TXI.ts:161-164) and xoreos (modelnode.cpp:479-482)
+                # treat this as the environment-map companion texture.
+                # Do NOT treat it as a bump map — it is a reflection/env map.
+                if arg and not arg.lstrip('-').replace('.', '').isdigit():
+                    result['envmaptexture'] = arg.lower()
+                # else: malformed line, skip
+            elif cmd in ('isspecularbumpmap', 'specularbumpmap'):
                 if arg and not arg.lstrip('-').replace('.', '').isdigit():
                     result['specbumpmap'] = arg.lower()
                 else:
@@ -1000,7 +1229,41 @@ def _parse_txi_string(txi: str) -> dict:
     return result
 
 
-def _apply_txi_to_node(node, txi_str: str) -> None:
+def _extract_alpha_test_from_tpc(raw_bytes: bytes) -> float:
+    """Extract the alpha_test_threshold float from TPC header bytes [4-7].
+
+    KotOR TPC header layout (Aurora engine):
+      [0-3]  uint32  data_sz
+      [4-7]  float   alpha_test_threshold  (0.0 = ignore, >0 = discard threshold)
+      [8-9]  uint16  width
+      [10-11]uint16  height
+      [12]   uint8   encoding
+      ...
+
+    Used only for blending=punchthrough surfaces (TXI 'blending punchthrough').
+    The engine's GL_ALPHA_TEST reference value; values above this pass the test.
+
+    References:
+        Kotor.NET KotorModelLoader.cs — reads TransparencyHint at +84 (mesh),
+        alpha_test float from TPC header [4-7].
+        xoreos tpc.cpp — alpha_test_threshold at offset 4.
+        PyKotor io_tpc.py — alpha_test field in TPCHeader struct.
+
+    Returns:
+        float alpha_test_threshold (0.0..1.0). Default 0.5 if not present.
+    """
+    if not raw_bytes or len(raw_bytes) < 8:
+        return 0.5
+    try:
+        at = struct.unpack_from('<f', raw_bytes, 4)[0]
+        if 0.0 < at <= 1.0:
+            return at
+    except Exception:
+        pass
+    return 0.5
+
+
+def _apply_txi_to_node(node, txi_str: str, alpha_test: float = 0.5) -> None:
     """
     Parse a TXI string and apply the metadata fields to a ModelNode.
 
@@ -1010,9 +1273,19 @@ def _apply_txi_to_node(node, txi_str: str) -> None:
     other node fields remain at their ModelNode defaults.
 
     Args:
-        node   : ModelNode instance to update
-        txi_str: Raw TXI ASCII string (may be empty)
+        node      : ModelNode instance to update
+        txi_str   : Raw TXI ASCII string (may be empty)
+        alpha_test: Per-node punchthrough threshold from TPC header [4-7].
+                    FIX-ALPHATEST: Stored on node.txi_alpha_test so the GPU
+                    renderer can pass it as u_alpha_test per draw-call instead
+                    of using the hardcoded 0.5 global default.
+                    Default: 0.5 (matches Aurora engine default).
     """
+    # Always store alpha_test on node (even if txi_str is empty —
+    # punchthrough threshold comes from TPC header, not TXI content).
+    if hasattr(node, 'txi_alpha_test'):
+        node.txi_alpha_test = float(alpha_test) if 0.0 < alpha_test <= 1.0 else 0.5
+
     if not txi_str:
         return
     meta = _parse_txi_string(txi_str)
@@ -1036,6 +1309,9 @@ def _apply_txi_to_node(node, txi_str: str) -> None:
         node.txi_fps = meta['fps']
 
     # Companion textures
+    # FIX-ENVMAP: envmaptexture and bumpyshinytexture both name the env-map companion.
+    # _parse_txi_string already maps bumpyshinytexture → result['envmaptexture'],
+    # so both keywords are handled via the same field here.
     if meta['envmaptexture']:
         node.txi_envmaptexture = meta['envmaptexture']
     if meta['bumpmaptexture']:
@@ -1067,6 +1343,18 @@ def _apply_txi_to_node(node, txi_str: str) -> None:
     # Specular colour map (bumpyshinytexture / specularcolour)
     if meta.get('specularcolour'):
         node.txi_specularcolour = meta['specularcolour']
+
+    # Decal: TXI decal flag — surface is a decal (alpha as blend weight over bg)
+    if meta.get('decal'):
+        node.txi_decal = True
+
+    # Bump/normal-map flag — this texture slot IS a bump/normal map
+    if meta.get('isbumpmap'):
+        node.txi_isbumpmap = True
+
+    # Lightmap flag — this texture slot IS a lightmap
+    if meta.get('islightmap'):
+        node.txi_islightmap = True
 
 
 def _compute_flipbook_uv(u: float, v: float, numx: int, numy: int,
@@ -1415,6 +1703,55 @@ class TextureCache:
             self._txi_cache[key] = txi_str
         return txi_str
 
+    def get_raw_header(self, name: str) -> Optional[bytes]:
+        """Return the first 128 bytes of the TPC/TGA file for a texture.
+
+        Used by _load_txi_metadata_for_model() to extract the alpha_test_threshold
+        float from TPC header bytes [4-7] (FIX-ALPHATEST).
+
+        Returns 128-byte header bytes if the texture is a TPC file, else None.
+        The caller uses _extract_alpha_test_from_tpc() to read the float value.
+
+        References:
+            Kotor.NET TPC.cs — TPC header layout (width/height/encoding/alpha_test)
+            xoreos tpc.cpp — alpha_test_threshold at header offset 4
+            PyKotor io_tpc.py — TPCHeader.alpha_test_threshold field
+        """
+        if not name:
+            return None
+        clean = _clean_tex_name(name)
+        if not clean:
+            return None
+        try:
+            with self._lock:
+                search_dirs = list(self._search_dirs)
+                game_library = self._game_library
+                game_tag = self._game_tag
+            # 1. Search on-disk directories
+            for search_dir in search_dirs:
+                for ext in ('.tga', '.TGA', '.tpc', '.TPC'):
+                    path = os.path.join(search_dir, clean + ext)
+                    if not os.path.exists(path):
+                        continue
+                    try:
+                        with open(path, 'rb') as f:
+                            header = f.read(128)
+                        if _is_tpc_data(header):
+                            return header
+                    except Exception:
+                        pass
+            # 2. BIF/ERF archive
+            if game_library is not None:
+                try:
+                    raw = game_library.get_texture_data(clean, game_tag)
+                    if raw and len(raw) >= 128 and _is_tpc_data(raw[:128]):
+                        return raw[:128]
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return None
+
     def get(self, name: str) -> Optional['Image.Image']:
         if not _PIL or not name:
             return None
@@ -1467,6 +1804,14 @@ class TextureCache:
           2. 'blending punchthrough' → apply TPC alpha_test_threshold as binary cutoff.
              Uses the float at TPC header bytes [4-7] as the GL_ALPHA_TEST value.
           3. Standard → alpha as-is (glass, hair, transparent effects).
+
+        FIX-TXI-PREFER: _load_tpc_bytes / _load_tpc_bytes_legacy attach _txi_str
+        directly to the returned PIL Image when they successfully extract TXI from
+        the embedded TPC trailer.  We now prefer that attached TXI string over the
+        result of get_txi() so that stock KotOR BIF textures (enc=2/4, data_sz=0)
+        with embedded TXI get their blending/alpha modes applied correctly.
+        The external get_txi() call is kept as a fallback for sidecar .txi files
+        and archive TXI resources not embedded in the TPC itself.
         """
         # Snapshot search dirs under lock to avoid TOCTOU with set_search_dirs()
         with self._lock:
@@ -1485,11 +1830,16 @@ class TextureCache:
                     img = self._load_file(path)
                     if img is not None:
                         img = self._resize_if_needed(img, name)
-                        # Apply TXI-aware alpha processing for on-disk textures
+                        # Apply TXI-aware alpha processing for on-disk textures.
+                        # FIX-TXI-PREFER: use _txi_str already attached to img
+                        # (by _load_tpc_bytes/legacy) if available, then fall back
+                        # to get_txi() for sidecar files / archive TXI resources.
                         try:
                             with open(path, 'rb') as fraw:
                                 raw_bytes = fraw.read(512)  # header only for alpha_test
-                            txi_s = self.get_txi(name)
+                            txi_s = getattr(img, '_txi_str', None)
+                            if txi_s is None:
+                                txi_s = self.get_txi(name)
                             txi_m = _parse_txi_string(txi_s) if txi_s else _parse_txi_string('')
                             img = self._apply_kotor_alpha(raw_bytes, img, txi_m)
                         except Exception:
@@ -1509,9 +1859,15 @@ class TextureCache:
                     img = self._load_bytes(raw)
                     if img is not None:
                         img = self._resize_if_needed(img, name)
-                        # Apply TXI-aware alpha processing for BIF textures
+                        # Apply TXI-aware alpha processing for BIF textures.
+                        # FIX-TXI-PREFER: _load_bytes → _load_tpc_bytes attaches
+                        # _txi_str to img if it successfully parsed embedded TXI.
+                        # Use that first; fall back to get_txi() which re-fetches
+                        # from the archive (slower but works for sidecar .txi).
                         try:
-                            txi_s = self.get_txi(name)
+                            txi_s = getattr(img, '_txi_str', None)
+                            if not txi_s:
+                                txi_s = self.get_txi(name)
                             txi_m = _parse_txi_string(txi_s) if txi_s else _parse_txi_string('')
                             img = self._apply_kotor_alpha(raw, img, txi_m)
                         except Exception:
@@ -1534,11 +1890,24 @@ class TextureCache:
         Apply correct KotOR alpha processing to a loaded RGBA texture.
 
         KotOR uses DXT5 alpha for different purposes:
-          1. bumpmaptexture in TXI → alpha = bump map data, NOT transparency.
+          1. bumpmaptexture in TXI → alpha = normal/bump map data, NOT transparency.
              Force alpha = 255 (solid opaque surface).
-          2. blending punchthrough in TXI → binary alpha cutoff at TPC threshold.
+          2. envmaptexture / bumpyshinytexture in TXI → alpha = env-map blend weight.
+             KotOR uses "EnvironmentBlendedOver" (xoreos/modelnode.cpp:726-773):
+             The env map is drawn ADDITIVELY on top of the diffuse, weighted by
+             (1 - diffuse.alpha).  Where alpha=0, env shows at full strength.
+             Where alpha=1, env barely contributes.  We PRESERVE the alpha channel
+             here so the GPU fragment shader can use it for BlendedOver blending.
+             IMPORTANT: 'bumpyshinytexture' is an alias for 'envmaptexture' in
+             both KotOR.js (TXI.ts:161-164) and xoreos (modelnode.cpp:479-482).
+          3. blending punchthrough in TXI → binary alpha cutoff at TPC threshold.
              Read alpha_test_threshold from TPC header bytes [4-7].
-          3. Standard → alpha as-is.
+          4. blending additive (1) → keep alpha as-is for additive particle effects.
+          5. Standard (blending=0, no bump, no envmap) → FORCE alpha=255.
+             KotOR DXT5 textures store bump/specular data in the alpha
+             channel by default — treating it as transparency makes models
+             look see-through.  The engine itself ignores alpha on opaque
+             surfaces; we must do the same.
 
         Returns modified image (or original if no processing needed).
         """
@@ -1547,14 +1916,23 @@ class TextureCache:
         try:
             blending = txi_meta.get('blending', 0)
             has_bump = bool(txi_meta.get('bumpmaptexture', ''))
+            has_env  = bool(txi_meta.get('envmaptexture', ''))
             if has_bump:
-                # Case 1: bump map texture — alpha is surface data, not transparency
+                # Case 1: bump map — alpha is normal/bump data, NOT transparency.
+                # Force fully opaque so the model renders solid.
                 arr = np.array(img)
-                if arr[:, :, 3].min() < 255:   # only modify if alpha is not already all 255
+                if arr[:, :, 3].min() < 255:
                     arr[:, :, 3] = 255
                     return Image.fromarray(arr, 'RGBA')
+            elif has_env:
+                # Case 2: env map — alpha = blend weight between surface and env map.
+                # PRESERVE the alpha channel (do NOT force to 255).
+                # The GPU shader reads alpha as env_weight; the surface is opaque
+                # (final_alpha=1 is forced in the shader when u_has_env=1).
+                # The CPU path must also not override this channel.
+                pass  # keep original alpha for env map blending
             elif blending == 2:
-                # Case 2: punchthrough alpha — apply TPC threshold as hard cutoff
+                # Case 3: punchthrough alpha — apply TPC threshold as hard cutoff
                 threshold = 128  # default if TPC header not available
                 if raw_bytes and len(raw_bytes) >= 8:
                     import struct as _s
@@ -1570,6 +1948,17 @@ class TextureCache:
                     if not (np.all(alpha >= threshold) or np.all(alpha < threshold)):
                         arr[:, :, 3] = np.where(alpha >= threshold, 255, 0).astype(np.uint8)
                         return Image.fromarray(arr, 'RGBA')
+            elif blending == 1:
+                # Case 4: additive blend — keep alpha for additive particle effects
+                pass
+            else:
+                # Case 5: standard opaque surface (blending=0, no bump, no envmap) —
+                # ALWAYS force alpha=255.  KotOR DXT5 encodes bump/specular in
+                # alpha; using it as transparency makes character skin see-through.
+                arr = np.array(img)
+                if arr[:, :, 3].min() < 255:
+                    arr[:, :, 3] = 255
+                    return Image.fromarray(arr, 'RGBA')
         except Exception as e:
             log.debug(f"_apply_kotor_alpha error: {e}")
         return img
@@ -1973,7 +2362,8 @@ def _paste_textured_triangle(
         skip_seam_u: bool = False,   # True → bypass U-axis seam fix
         skip_seam_v: bool = False,   # True → bypass V-axis seam fix
         clamp_s: bool = False,       # True → GL_CLAMP_TO_EDGE on U axis (TXI clamp S bit)
-        clamp_t: bool = False):      # True → GL_CLAMP_TO_EDGE on V axis (TXI clamp T bit)
+        clamp_t: bool = False,       # True → GL_CLAMP_TO_EDGE on V axis (TXI clamp T bit)
+        is_punchthrough: bool = False):  # TXI blending=2 → use texture alpha as binary cutout mask
     """
     Paste a UV-mapped texture triangle onto `img` using PIL's fast PERSPECTIVE
     (projective) transform.
@@ -2507,20 +2897,25 @@ def _paste_textured_triangle(
             patch = patch.point(r_lut + g_lut + b_lut + a_lut)
 
     # ── Triangle mask + alpha composite ──────────────────────────────
-    # PERF-FIX (v10.3): For fully-opaque node alpha and opaque textures, skip
-    # the polygon mask creation entirely.  Instead use patch.split()[3] directly
-    # as the mask: with fillcolor=(0,0,0,0) the AFFINE warp already fills
-    # outside-UV pixels with alpha=0, so the patch alpha channel IS the correct
-    # UV-boundary mask.  This removes the Image.new + ImageDraw.Draw + polygon
-    # draw + numpy minimum operations (~64µs / triangle saved = ~17% speedup).
+    # For fully-opaque node alpha (no transparency) we MUST use a polygon mask
+    # rather than the patch's alpha channel.  KotOR DXT5 textures store
+    # bump/specular data in the alpha channel — using it as transparency makes
+    # character skin appear see-through.  _apply_kotor_alpha already forces
+    # alpha=255 for standard textures, but as a belt-and-suspenders fix we also
+    # ignore the texture alpha entirely when the node is fully opaque.
     #
-    # When node_alpha < 1 (transparent surfaces) we must still scale the alpha.
-    # When the texture has a true alpha channel (cutout/glass textures), the patch
-    # alpha already encodes the cutout correctly so split()[3] is still correct.
+    # EXCEPTION: Punchthrough (blending=2) nodes use the texture alpha channel
+    # as a binary cutout mask.  _apply_kotor_alpha has already processed the
+    # texture so that alpha < threshold → 0 and alpha >= threshold → 255.
+    # For these nodes we MUST use the texture alpha (not polygon mask) to
+    # achieve correct hair/fur/eye cutout rendering.
     #
-    # We fall back to the polygon-mask path only for additive blending (which
+    # Only for genuinely transparent nodes (node_alpha < 1) or punch-through
+    # (punchthrough blending) do we honour the texture alpha channel.
+    #
+    # We fall back to the polygon-mask path for additive blending too (which
     # uses a separate mask_arr in numpy) to keep the additive path simple.
-    _need_poly_mask = is_additive  # additive path uses mask separately
+    _need_poly_mask = is_additive or (node_alpha >= 0.999 and not is_punchthrough)
     if _need_poly_mask:
         mask = Image.new('L', (bw, bh), 0)
         ImageDraw.Draw(mask).polygon([(rx0, ry0), (rx1, ry1), (rx2, ry2)], fill=255)
@@ -2533,7 +2928,7 @@ def _paste_textured_triangle(
             except Exception:
                 mask = mask.point(lambda p: p * alpha_val // 255)
     else:
-        # Fast path: use patch alpha directly (no polygon draw needed)
+        # Transparent node: use patch alpha (may contain punchthrough cutout data)
         # patch.split()[3] returns the A channel as an 'L' image.
         # fillcolor=(0,0,0,0) ensures pixels outside the UV triangle have alpha=0.
         mask = patch.split()[3]
@@ -2773,6 +3168,10 @@ class FrameRenderer:
         # Per-pose bone-transform cache: reused across all skin nodes in one frame
         self._bone_transforms_cache: Optional[Dict] = None
         self._bone_transforms_pose_id: int = -1
+        # ── Dangly mesh Verlet cloth simulators (Phase 4.6) ────────────────
+        # Maps node id() → DanglySimulator.  Created lazily on first animation tick.
+        self._dangly_sims: Dict[int, 'DanglySimulator'] = {}
+        self._dangly_last_time: float = 0.0   # wall-clock time of last sim step
 
         # ── Gimbal / transform overlay ────────────────────────────────
         # gimbal_mode: 0=none, 1=translate, 2=rotate
@@ -2785,7 +3184,48 @@ class FrameRenderer:
         self._ext_skel_offset: List[float] = [0.0, 0.0, 0.0]
 
     def set_animation_pose(self, pose, name: str = "", time: float = 0.0, length: float = 0.0):
-        """Set the animation pose for rendering. Pass None to clear (bind pose)."""
+        """Set the animation pose for rendering. Pass None to clear (bind pose).
+
+        When an animated pose is supplied, advances all DanglySimulators by the
+        wall-clock time since the previous call so cloth/chain nodes oscillate
+        live during animation playback.  (Phase 4.6 — Dangly Verlet wiring.)
+        """
+        import time as _time_mod
+        now = _time_mod.perf_counter()
+
+        # Advance dangly simulators when we have an active pose and a model
+        if pose is not None and self.model is not None and DanglySimulator is not None:
+            if self._dangly_last_time <= 0.0:
+                # First tick — initialise so we don’t get a huge dt on the second
+                self._dangly_last_time = now
+                dt = 0.0
+            else:
+                dt = now - self._dangly_last_time
+            self._dangly_last_time = now
+
+            if dt > 0.0:
+                for n in self.model.all_nodes():
+                    if not n.is_dangly or not n.vertices:
+                        continue
+                    nid = id(n)
+                    if nid not in self._dangly_sims:
+                        try:
+                            self._dangly_sims[nid] = DanglySimulator(n)
+                        except Exception:
+                            continue
+                    try:
+                        self._dangly_sims[nid].step(dt)
+                    except Exception:
+                        pass
+        elif pose is None:
+            # Pose cleared — reset simulators to bind pose
+            for sim in self._dangly_sims.values():
+                try:
+                    sim.reset()
+                except Exception:
+                    pass
+            self._dangly_last_time = 0.0
+
         self._anim_pose = pose
         self._anim_name = name
         self._anim_time = time
@@ -2810,6 +3250,9 @@ class FrameRenderer:
         self._bone_transforms_cache = None   # invalidate bone-transform cache
         self._bone_transforms_pose_id = -1
         self._outlier_skin_nodes: set = set()   # node ids to skip for accessory models
+        # Clear dangly simulators: new model may have different nodes
+        self._dangly_sims = {}
+        self._dangly_last_time = 0.0
         # Invalidate render-bounds cache
         self._render_bounds_cache = None
         self._render_bounds_model_id = id(m) if m else -1
@@ -2929,6 +3372,11 @@ class FrameRenderer:
         texture (and secondary textures), then updates the TXI fields on each node
         (txi_blending, txi_cube, txi_proceduretype, etc.) via _apply_txi_to_node().
 
+        FIX-ALPHATEST: Also extracts the per-texture alpha_test_threshold from the
+        TPC header bytes [4-7] and stores it as node.txi_alpha_test so the GPU
+        renderer can use the per-node discard threshold instead of a global 0.5.
+        References: Kotor.NET TPC.cs, xoreos tpc.cpp, PyKotor io_tpc.py.
+
         This is called once when a model is loaded (set_model) and only affects
         nodes whose primary texture has TXI data in the cache or on disk.
         """
@@ -2942,8 +3390,17 @@ class FrameRenderer:
                 if not tex_name or tex_name.upper() in ('NULL', ''):
                     continue
                 txi_str = self.tex_cache.get_txi(tex_name)
-                if txi_str:
-                    _apply_txi_to_node(node, txi_str)
+                # FIX-ALPHATEST: extract alpha_test_threshold from raw TPC header
+                alpha_test = 0.5  # Aurora engine default
+                try:
+                    raw = self.tex_cache.get_raw_header(tex_name)
+                    if raw:
+                        alpha_test = _extract_alpha_test_from_tpc(raw)
+                except Exception:
+                    pass
+                # Always call _apply_txi_to_node to set txi_alpha_test even
+                # when there is no TXI string (punchthrough threshold comes from TPC).
+                _apply_txi_to_node(node, txi_str or '', alpha_test)
         except Exception as e:
             log.debug(f"_load_txi_metadata_for_model error: {e}")
 
@@ -3105,6 +3562,33 @@ class FrameRenderer:
         """Return True if this node is a far-outlier skin proxy in an accessory model."""
         return id(node) in self._outlier_skin_nodes
 
+    def _cam_view_matrix(self):
+        """Return (right, up, fwd, eye) from the camera, supporting both
+        ArcBallCamera objects (which have _view_matrix()) and duck-typed
+        camera objects (which only have eye, target, up attributes).
+
+        FIX-HEADLESS-CAM: render_model_autoframe / _render_cpu pass a plain
+        namespace camera with no _view_matrix() method.  This shim computes
+        the view matrix from the raw eye/target/up attributes so that
+        FrameRenderer works in headless/batch mode without an ArcBallCamera.
+        """
+        if callable(getattr(self.cam, '_view_matrix', None)):
+            return self.cam._view_matrix()
+        # Duck-typed camera: compute view matrix from eye/target/up
+        _eye = self.cam.eye
+        if callable(_eye):
+            _eye = _eye()
+        target = getattr(self.cam, 'target', (0.0, 0.0, 0.0))
+        world_up_hint = getattr(self.cam, 'up', (0.0, 0.0, 1.0))
+        fwd = _normalize(_sub(target, _eye))
+        right = _normalize(_cross(fwd, world_up_hint))
+        if _dot(right, right) < 1e-6:
+            # up is parallel to fwd — use fallback world-up
+            _fb = (0.0, 1.0, 0.0) if abs(world_up_hint[2]) > 0.9 else (0.0, 0.0, 1.0)
+            right = _normalize(_cross(fwd, _fb))
+        up = _cross(right, fwd)
+        return right, up, fwd, _eye
+
     def render(self, W: int, H: int) -> Optional['Image.Image']:
         if not _PIL:
             return None
@@ -3191,7 +3675,9 @@ class FrameRenderer:
 
         # Cache view matrix for this frame so _proj() doesn't recompute it
         # per-triangle (saves significant CPU for high-poly models like bantha)
-        self._frame_view = self.cam._view_matrix()  # (right, up, fwd, eye)
+        # FIX-HEADLESS-CAM: use _cam_view_matrix() shim so duck-typed cameras
+        # (e.g. _AutoCam from render_model_autoframe) work without _view_matrix()
+        self._frame_view = self._cam_view_matrix()  # (right, up, fwd, eye)
 
         # PERF-FIX (v10.2): Per-frame world-vertex and world-normal caches.
         # _get_world_verts_for_node and _get_world_normals_for_node are called
@@ -3282,7 +3768,7 @@ class FrameRenderer:
         cx = dx*right[0] + dy*right[1] + dz*right[2]
         cy = dx*up[0]    + dy*up[1]    + dz*up[2]
         cz = dx*fwd[0]   + dy*fwd[1]   + dz*fwd[2]
-        if cz < self.cam._near:
+        if cz < getattr(self.cam, '_near', getattr(self.cam, 'near', 0.01)):
             return None
         import math as _m
         f  = 1.0 / _m.tan(_m.radians(self.cam.fov) * 0.5)
@@ -3299,9 +3785,9 @@ class FrameRenderer:
         v10.5: Eliminated the post-NumPy Python result-list loop using np.ndarray
         fancy indexing, reducing per-call overhead by ~30% on 1k-vertex meshes.
         """
-        fv = getattr(self, '_frame_view', None) or self.cam._view_matrix()
+        fv = getattr(self, '_frame_view', None) or self._cam_view_matrix()
         right, up, fwd, eye = fv
-        near = self.cam._near
+        near = getattr(self.cam, '_near', getattr(self.cam, 'near', 0.01))
         import math as _m
         f = 1.0 / _m.tan(_m.radians(self.cam.fov) * 0.5)
         ex, ey, ez = eye
@@ -3931,21 +4417,40 @@ class FrameRenderer:
                 xfm = self._apply_vertex_transform
                 return [xfm(node, v, wp_s, wo_s, is_id_s) for v in verts]
             else:
-                # Standalone model: skin vertices already in model/world space.
-                # Also apply centroid heuristic as a fallback for edge cases
-                # (models without proper supermodel info whose skin verts are
-                # still in local space).
-                wp_s, wo_s, is_id_s = self._node_world_transform(node)
-                wp_mag = (wp_s[0]**2 + wp_s[1]**2 + wp_s[2]**2) ** 0.5
-                if wp_mag > 0.5 and len(verts) >= 3:
-                    sample_n = min(50, len(verts))
-                    cz = sum(v[2] for v in verts[:sample_n]) / sample_n
-                    adjusted_cz = cz + wp_s[2]
-                    raw_below = cz < -0.2
-                    adjusted_near_zero = abs(adjusted_cz) < abs(cz) * 0.6
-                    if raw_below and adjusted_near_zero:
-                        xfm = self._apply_vertex_transform
-                        return [xfm(node, v, wp_s, wo_s, is_id_s) for v in verts]
+                # Standalone model: skin vertices are in model/world space (bind pose).
+                # The node's position is the BONE PIVOT for animation — do NOT add it.
+                #
+                # FIX-SKIN-NODEROT: Some KotOR exporters (MDLOps, older toolchains)
+                # store skin vertices pre-multiplied by the parent chain but NOT the
+                # skin node's own LOCAL orientation.  The node's local rotation then
+                # acts as a corrective rotation.
+                #
+                # Evidence: c_terantanak Torso/feet/Tail carry (0,0,~1,~0) = 180° Z.
+                # Without applying this rotation the Torso shoulder verts land at
+                # Y ≈ [-0.88,-0.25] while RArm inner verts are at Y ≈ [0.25,0.76] —
+                # a Y-sign flip that makes the seam appear disconnected.
+                # After the fix both ranges share Y ≈ [0.25,0.88] — fully connected.
+                #
+                # Apply ONLY the node's LOCAL rotation (not the full world_orient
+                # which includes the parent chain) to avoid double-applying.
+                # NEVER add the node's position/wp_s — that is the bone pivot, not
+                # an offset to the geometry.
+                #
+                # References: KotOR.js OdysseyModel3D.ts (SkinnedMesh, no JS
+                # pre-transform); KotorBlender reader.py (from_root for bone helpers
+                # only); PyKotor GL mdl.py (verts uploaded to GPU as-is).
+                local_rot = getattr(node, 'rotation', (0.0, 0.0, 0.0, 1.0))
+                lrx, lry, lrz, lrw = local_rot
+                lr_len = (lrx*lrx + lry*lry + lrz*lrz + lrw*lrw) ** 0.5
+                if lr_len > 1e-9:
+                    lrx /= lr_len; lry /= lr_len; lrz /= lr_len; lrw /= lr_len
+                local_is_identity = (abs(lrw) > 0.9999 and abs(lrx) < 1e-4 and
+                                     abs(lry) < 1e-4 and abs(lrz) < 1e-4)
+                if not local_is_identity:
+                    # Apply ONLY the local rotation — no translation.
+                    local_rot_n = (lrx, lry, lrz, lrw)
+                    return [_quat_rotate(local_rot_n, v) for v in verts]
+                # Identity rotation → vertices already in world/bind-pose space.
                 return list(verts)
 
         # ── Non-skin (trimesh/dangly): apply full world transform ─────────────
@@ -3982,27 +4487,24 @@ class FrameRenderer:
             if cent_dist > 1.5 and cent_to_wp > cent_dist * 1.2:
                 return list(verts)
 
-        # ── UE-inspired FIXED_VERTEX_INDEX pin-weight guard for dangly meshes ──
-        # In UE5's SkeletalRenderCPUSkin.cpp the cloth simulation stores
-        # FIXED_VERTEX_INDEX = 0xFFFF for vertices that must not be moved by
-        # simulation (sewn vertices, attachment points).
-        # KotOR dangly meshes store an analogous "constraint" value per vertex
-        # (0.0 = fully free, 1.0 = fully pinned/fixed).  We respect this flag
-        # in the static-pose renderer: vertices whose constraint is ≥ the
-        # _DANGLY_PIN_THRESHOLD are treated as pinned — their world position is
-        # computed normally from the node transform (no cloth displacement).
-        # Vertices below the threshold are also rendered from the bind pose
-        # because we don't simulate cloth in the static viewport, but the
-        # distinction is preserved for downstream systems (exporter, animator).
+        # ── UE-inspired FIXED_VERTEX_INDEX / DanglySimulator path ────────────
+        # When animation is active and a DanglySimulator has been stepped for
+        # this node, use its simulated positions; pinned verts (constraint >=
+        # PIN_THRESHOLD) always use the static node-world-transform result.
+        # In static (bind-pose) view, all vertices get the normal transform.
         if node.is_dangly and node.dangly_constraints:
-            result = []
             constraints = node.dangly_constraints
-            nc = len(constraints)
+            sim = self._dangly_sims.get(id(node)) if self._anim_pose is not None else None
+            result = []
             for i, v in enumerate(verts):
-                # constraint >= threshold → "pinned" (FIXED_VERTEX_INDEX pattern)
-                # Both pinned and free verts get the world transform in static view;
-                # the flag is meaningful for a future cloth-sim pass.
-                result.append(xfm(node, v, wp, wo, is_id))
+                c = constraints[i] if i < len(constraints) else 0.0
+                is_pinned = (c >= (DanglySimulator.PIN_THRESHOLD
+                                   if DanglySimulator is not None else 0.95))
+                if sim is not None and not is_pinned and i < len(sim.positions):
+                    # Use simulated position directly (already in world/model space)
+                    result.append(sim.positions[i])
+                else:
+                    result.append(xfm(node, v, wp, wo, is_id))
             return result
 
         return [xfm(node, v, wp, wo, is_id) for v in verts]
@@ -4200,8 +4702,10 @@ class FrameRenderer:
             # Per-node alpha — transparent nodes (glass, droid eyes) get blended
             node_alpha = float(getattr(node, 'alpha', 1.0))
             node_alpha = _clamp(node_alpha, 0.0, 1.0)
-            if getattr(node, 'transparency_hint', 0) == 2 and node_alpha >= 0.999:
-                node_alpha = 0.55
+            # transparency_hint is a render-mode flag, NOT an alpha value:
+            #   0 = opaque (default), 1 = additive, 2 = subtractive/special.
+            # Do NOT force partial alpha from transparency_hint alone —
+            # only honour explicit alpha < 1.0 set by CTRL_MESH_ALPHA or node.alpha.
 
             # Apply animated alpha from pose (CTRL_MESH_ALPHA=132)
             if self._anim_pose is not None:
@@ -4438,8 +4942,8 @@ class FrameRenderer:
                                  and bool(getattr(node, 'face_mats', []))
                                  and bool(getattr(node, 'texture_names', [])))
             node_alpha = float(_clamp(getattr(node, 'alpha', 1.0), 0.0, 1.0))
-            if getattr(node, 'transparency_hint', 0) == 2 and node_alpha >= 0.999:
-                node_alpha = 0.55
+            # transparency_hint is a render-mode flag, not an alpha override.
+            # Only explicit node.alpha < 1 or CTRL_MESH_ALPHA animation sets transparency.
 
             # Animation overrides
             if self._anim_pose is not None:
@@ -4815,6 +5319,16 @@ class FrameRenderer:
             if _node_has_lm and _lm_tex_name and _has_lm_uvs:
                 lm_img = self._get_tex_by_name(_lm_tex_name)
 
+            # ── Environment map setup (TXI envmaptexture) ──────────────────
+            # When TXI defines 'envmaptexture <name>', the diffuse texture alpha
+            # channel is the blend weight between the surface colour and the env map.
+            # We load the env-map texture here for use in _apply_envmap_to_patch()
+            # called per-triangle after the diffuse paste.
+            # Note: _apply_kotor_alpha now PRESERVES the alpha channel for env-map
+            # textures so the blend weight survives into the rasteriser.
+            _node_env_tex_name = str(getattr(node, 'txi_envmaptexture', '')).strip().lower()
+            _env_img = self._get_tex_by_name(_node_env_tex_name) if _node_env_tex_name else None
+
 
             node_alpha = float(getattr(node, 'alpha', 1.0))
             node_alpha = _clamp(node_alpha, 0.0, 1.0)
@@ -4827,15 +5341,13 @@ class FrameRenderer:
             # The hint only affects default alpha — explicit CTRL_MESH_ALPHA (132) controller
             # values always override it.
             _transp_hint = int(getattr(node, 'transparency_hint', 0))
-            if _transp_hint == 1 and node_alpha >= 0.999:
-                # Mesh is marked transparent but has no explicit alpha controller;
-                # use 0.85 as a sensible default (visible but translucent).
-                # NOTE: many KotOR skin meshes use hint=1 for alpha-test (punch-through),
-                # not for full translucency — if txi_blending==2 it is punch-through.
-                if int(getattr(node, 'txi_blending', 0)) != 2:
-                    node_alpha = 0.85
-            elif _transp_hint >= 2 and node_alpha >= 0.999:
-                node_alpha = 0.55  # default glass opacity when no explicit alpha set
+            # transparency_hint is a render-mode flag ONLY — do NOT force partial
+            # alpha from it.  Real glass/additive uses explicit CTRL_MESH_ALPHA (132)
+            # or txi_blending flags.  Many KotOR skin meshes have hint=1 but are
+            # fully opaque (bump/specular data in DXT5 alpha channel, not transparency).
+            # transparency_hint >= 2 is an engine render-mode flag only — do NOT
+            # force partial alpha from it.  Real glass/additive uses explicit
+            # CTRL_MESH_ALPHA or txi_blending flags.
 
             # ── Animation overrides: alpha and selfillum from pose ──────────
             # CTRL_MESH_ALPHA (132) and CTRL_MESH_SELFILLUMCOLOR (100) are material
@@ -4906,6 +5418,23 @@ class FrameRenderer:
             _node_txi_blending    = int(getattr(node, 'txi_blending', 0))
             _node_txi_clamp_s     = bool(getattr(node, 'txi_clamp_s', False))
             _node_txi_clamp_t     = bool(getattr(node, 'txi_clamp_t', False))
+            # FIX-EDGEBLEED (CPU): Match GPU renderer behaviour — if the node has no
+            # explicit TXI repeat/tile setting and all UVs stay within [0,1] (i.e. a
+            # UV-atlased character/creature mesh), default to clamp-to-edge on both
+            # axes.  This prevents bright corner pixels (e.g. yellow at V≈1.0 of the
+            # bantha texture) from bleeding into near-boundary UVs through bilinear
+            # interpolation.  Tiling nodes (UVs outside [0,1]) keep GL_REPEAT.
+            if not _node_txi_clamp_s or not _node_txi_clamp_t:
+                _has_explicit_repeat = bool(getattr(node, 'txi_blending', 0) == 0 and
+                                            getattr(node, 'txi_proceduretype', '') == '' and
+                                            not getattr(node, 'animate_uv', False))
+                if _has_explicit_repeat and node.uvs:
+                    _sample = node.uvs[:min(30, len(node.uvs))]
+                    _uv_in_range = all(0.0 <= u <= 1.0 and 0.0 <= v <= 1.0
+                                       for u, v in _sample)
+                    if _uv_in_range:
+                        _node_txi_clamp_s = True
+                        _node_txi_clamp_t = True
             # Beaming nodes use additive blending (glow/lightshaft effect).
             # background_geometry nodes (skybox/floor tiles) need no special depth bias —
             # they are sorted naturally by depth, just like opaque geometry.
@@ -5383,6 +5912,7 @@ class FrameRenderer:
                     # node_alpha drives transparency for glass/droid-eye surfaces.
                     # TXI additive blending=1: screen-space additive composite (src+dst).
                     _is_add = (txi_blend == 1)
+                    _is_punch = (txi_blend == 2)
                     try:
                         _paste_textured_triangle(
                             img, tex_img,
@@ -5395,7 +5925,8 @@ class FrameRenderer:
                             skip_seam_u=(not _tri_face_has_u_seam),
                             skip_seam_v=(not _tri_face_has_v_seam),
                             clamp_s=_tri_clamp_s,
-                            clamp_t=_tri_clamp_t
+                            clamp_t=_tri_clamp_t,
+                            is_punchthrough=_is_punch
                         )
                         _mem_error_count = 0  # reset on success
                         # ── Lightmap pass: multiply-blend lightmap over diffuse ──
@@ -6025,7 +6556,7 @@ class FrameRenderer:
     def _draw_axes(self, draw: 'ImageDraw.Draw', W: int, H: int):
         ox, oy = 45, H - 45
         L      = 28
-        right, up, fwd, _ = self.cam._view_matrix()
+        right, up, fwd, _ = self._cam_view_matrix()
 
         def axis_end(ax):
             dx = _dot(ax, right)
@@ -7615,6 +8146,13 @@ class ViewportWidget(tk.Frame):
                     self._fps_frames = 0
                 if img is not None:
                     try:
+                        # Kill any residual alpha layer before display.
+                        # ImageTk.PhotoImage with RGBA mode shows transparent pixels
+                        # as see-through on the Tkinter canvas; flatten to RGB first.
+                        if getattr(img, 'mode', 'RGB') == 'RGBA':
+                            _bg_flat = Image.new('RGB', img.size, _BG[:3])
+                            _bg_flat.paste(img, mask=img.split()[3])
+                            img = _bg_flat
                         photo = ImageTk.PhotoImage(img)
                         self._photo = photo   # keep reference – must be kept alive
                         self.canvas.delete("all")

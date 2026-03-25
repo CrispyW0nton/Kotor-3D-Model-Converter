@@ -172,7 +172,72 @@ class GhostRiggerIPCServer:
         @app.route("/api/health", methods=["GET"])
         def route_health():
             return jsonify({"status": "ok", "program": _PROGRAM_NAME,
-                            "port": self._port, "version": "2.7"})
+                            "port": self._port, "version": "2.8",
+                            "mcp": True})
+
+        # ── KotorMCP tool endpoints ────────────────────────────────────────
+        # These mirror the KotorMCP JSON API so Claude and other agents can
+        # call KotOR resource tools directly via the IPC server.
+
+        @app.route("/mcp/tools/list", methods=["GET", "POST"])
+        def route_mcp_tools_list():
+            """Return all available MCP tool definitions."""
+            try:
+                from kotormcp.tools import get_all_tools  # noqa: PLC0415
+                return jsonify({"tools": get_all_tools()})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/mcp/tools/call", methods=["POST"])
+        def route_mcp_tools_call():
+            """
+            Call an MCP tool by name.
+            Body: {"name": "toolName", "arguments": {...}}
+            """
+            import asyncio  # noqa: PLC0415
+            try:
+                body = request.get_json(force=True, silent=True) or {}
+                tool_name = body.get("name", "")
+                arguments = body.get("arguments", {})
+                if not tool_name:
+                    return jsonify({"error": "Missing 'name' in request body"}), 400
+                from kotormcp.tools import handle_tool  # noqa: PLC0415
+                result = asyncio.run(handle_tool(tool_name, arguments))
+                return jsonify({"result": result})
+            except ValueError as exc:
+                return jsonify({"error": str(exc)}), 404
+            except Exception as exc:
+                log.error("MCP tool call error: %s", exc)
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/mcp/resources/list", methods=["GET", "POST"])
+        def route_mcp_resources_list():
+            """Return the kotor:// URI resource template list."""
+            import asyncio  # noqa: PLC0415
+            try:
+                from kotormcp import mcp_resources  # noqa: PLC0415
+                resources = asyncio.run(mcp_resources.list_resources())
+                return jsonify({"resources": resources})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/mcp/resources/read", methods=["POST"])
+        def route_mcp_resources_read():
+            """
+            Read a kotor:// resource URI.
+            Body: {"uri": "kotor://k1/2da/appearance"}
+            """
+            import asyncio  # noqa: PLC0415
+            try:
+                body = request.get_json(force=True, silent=True) or {}
+                uri = body.get("uri", "")
+                if not uri:
+                    return jsonify({"error": "Missing 'uri' in request body"}), 400
+                from kotormcp import mcp_resources  # noqa: PLC0415
+                content = asyncio.run(mcp_resources.read_resource(uri))
+                return jsonify({"content": content})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
 
         @app.route("/api/<path:action_name>", methods=["POST"])
         def route_catch_all(action_name):

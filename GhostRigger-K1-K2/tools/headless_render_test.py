@@ -388,7 +388,13 @@ MODELS = [
     ('c_drexl',       'K2', 'K2 DXT1-512 TPA'),
 ]
 
-VIEWS   = [('front',0), ('right',90), ('back',180), ('left',270)]
+# FIX-LABEL: KotOR creatures face +Y (nose/eyes at the +Y end of the model).
+# The proj() azimuth rotates in the XZ plane (Y is the viewing/forward axis).
+#   az=0   → camera along +Y looking toward -Y → sees the face     → 'front'
+#   az=90  → camera along +X looking toward -X → right profile     → 'right'
+#   az=180 → camera along -Y looking toward +Y → sees rear/tail    → 'back'
+#   az=270 → camera along -X looking toward +X → left profile      → 'left'
+VIEWS   = [('front', 0), ('right', 90), ('back', 180), ('left', 270)]
 PANEL_W = 350
 PANEL_H = 350
 LABEL_H = 24

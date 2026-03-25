@@ -1,0 +1,231 @@
+xoreos - A reimplementation of BioWare's Aurora engine
+Copyright (c) 2010-2025 by the following:
+
+Sven Hesse (DrMcCoy) <drmccoy@drmccoy.de>
+Matthew Hoops (clone2727) <clone2727@gmail.com>
+Nathaniel Brandes (ImperatorPrime) <ndbrandes@gmail.com>
+Manuel Tondeur (Supermanu) <manueltondeur@gmail.com>
+
+Contributors:
+
+Christoph Peltz (Firewing) <admin@keeg.de>
+Johannes Schickel (LordHoto) <lordhoto@gmail.com>
+Javier Jardón (jjardon) <jjardon@gnome.org>
+John C Barstow (jbowtie) <jbowtie@amathaine.com>
+Michael Drüing (darkstar) <michael@drueing.de>
+Sergej Forat (logzero) <core13@gmx.net>
+vobject <vobject@gmail.com>
+Beren Minor <beren.minor+git@gmail.com>
+Daniel Maloney (harmonise) <daniel.r.maloney@gmail.com>
+mirv <mirv.sillyfish@gmail.com>
+cc9cii <cc9c@iinet.net.au>
+Enrico Horn (Farmboy0) <farmboy0+git@googlemail.com>
+kevL <k3v1s73n@gmail.com>
+Anthony J. Bentley <anthony@anjbe.name>
+Koffeinfriedhof <Koffeinfriedhof@arcor.de>
+Ben Rosser (TC01) <rosser.bjr@gmail.com>
+Charlotte Koch <cfkoch@edgebsd.org>
+Stanislav Bas (smbas) <stanislav.m.bas@gmail.com>
+Patrick (Nostritius) <nostritius@googlemail.com>
+Vsevolod Kremianskii (seedhartha) <vkremianskii@gmail.com>
+Michael McAssey <michael.mcassey1@gmail.com>
+Cameron Cawley (ccawley2011) <ccawley2011@gmail.com>
+Bob Hall (rjshae) <rjh405@gmail.com>
+
+
+xoreos is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 3
+of the License, or (at your option) any later version.
+
+xoreos is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with xoreos. If not, see <https://gnu.org/licenses/gpl-3.0.html>.
+
+
+The Infinity engine, Aurora engine, Odyssey engine and Eclipse engine are
+registered trademarks of BioWare Corp., a subsidiary of Electronic Arts, Inc.
+The Electron engine and Lycium engine are trademarks of BioWare Corp., a
+subsidiary of Electronic Arts, Inc. Bink is a registered trademark of RAD Game
+Tools, Inc. Neverwinter Nights is a registered trademark of Wizards of the
+Coast, a subsidiary of Hasbro Inc. Star Wars, Knights of the Old Republic and
+The Sith Lords are registered trademarks of Lucasfilm Entertainment Company
+Ltd., a subsidiary of The Walt Disney Company. Jade Empire is a registered
+trademark of BioWare Corp., a subsidiary of Electronic Arts, Inc. Sonic the
+Hedgehog is a registered trademark of Sega Corporation. The Witcher is a
+registered trademark of CD Projekt S.A. Dragon Age is a registered trademark
+of Electronic Arts, Inc. All rights reserved.
+
+
+Logo and icon
+*************
+   The xoreos logo and icon are the word "xoreos" and the letter "x",
+   respectively, rendered in the freeware font Rezland by Fraser Davidson
+   (<http://fraserdavidson.co.uk/>). Both the xoreos logo and the xoreos icon
+   are licensed under the terms of the Creative Commons Attribution-ShareAlike
+   3.0 Unported License (<https://creativecommons.org/licenses/by-sa/3.0/>).
+   Thanks to Alex Bevilacqua for the idea and initial design of the logo.
+
+boost.m4
+********
+   xoreos uses Benoit Sigoure's boost.m4 autoconf macros
+   (<https://github.com/tsuna/boost.m4>) to check for the needed Boost
+   libraries. boost.m4 is licensed under version 3 or later of the GNU General
+   Public License. For the full license text, see COPYING or
+   <https://gnu.org/licenses/gpl-3.0.html>.
+
+ax_check_gl.m4
+**************
+   xoreos uses a (modified) autoconf macro by Braden McDaniel
+   (<https://code.google.com/p/autoconf-gl-macros/>) to check for OpenGL,
+   licensed under version 2 or later of the GNU General Public License.
+   For the full license text, see doc/LICENSE.GPLv2 or
+   <https://gnu.org/licenses/gpl-2.0.html>.
+
+glew
+****
+   xoreos uses glew, The OpenGL Extension Wrangler Library
+   (<http://glew.sourceforge.net/>), to safely check for and use OpenGL 1.2+
+   features and extensions. To minimize dependencies on "uncommon" libraries,
+   xoreos completely includes the glew code, one of its suggested use methods.
+   glew is licensed under the Modified BSD License, the Mesa 3-D License
+   (MIT License), and the Khronos License (MIT License). For the full
+   license text, see external/glew/LICENSE.txt or
+   <http://glew.sourceforge.net/credits.html>.
+
+lua
+***
+   xoreos uses lua, a lightweight scripting language (<https://www.lua.org/>),
+   to handle scripts from The Witcher. To minimize dependencies on "uncommon"
+   libraries, xoreos completely includes the lua 5.0.3 code. Lua is licensed
+   under the terms of the MIT license. For the full license text, see
+   external/lua/COPYRIGHT or <https://www.lua.org/license.html>.
+
+tolua++
+*******
+   xoreos uses tolua++, a tool to integrate C/C++ code with Lua, to handle
+   scripts from The Witcher. To minimize dependencies on "uncommon" libraries,
+   xoreos completely includes the toluapp 1.0.92 library code. tolua++ is
+   licensed under the terms of the MIT license. For the full license text,
+   see external/toluapp/COPYRIGHT or <https://opensource.org/licenses/MIT>.
+
+UTF-8 CPP
+*********
+   xoreos uses the lightweight header-only UTF-8 CPP library
+   (<https://github.com/nemtrif/utfcpp>) for handling UTF-8 encoded strings.
+   UTF-8 CPP is licensed under the Boost Software License. See
+   external/utf8cpp/LICENSE or <https://www.boost.org/users/license.html>
+   for details.
+
+mingw-std-threads
+*****************
+   xoreos uses and includes the header-only mingw-std-threads library
+   (<https://github.com/meganz/mingw-std-threads/>) as an alternative to
+   libwinpthread for C++11 std::thread in MinGW builds. mingw-std-threads
+   is licensed under the terms of the 2-clause BSD license. For the full
+   text, see external/mingw-std-threads/LICENSE or
+   <https://github.com/meganz/mingw-std-threads/blob/master/LICENSE>.
+
+GLM
+***
+   xoreos uses the header-only C++ mathematics library for graphics software
+   OpenGL Mathematics (GLM) (<https://glm.g-truc.net/>), completely including
+   the GLM headers. GLM can be distributed and/or modified under the terms
+   of either a) The Happy Bunny License, or b) the MIT License. For the
+   full license text, see external/glm/copying.txt or
+   <https://glm.g-truc.net/copying.txt>.
+
+Dear ImGui
+***********
+   xoreos uses the bloat-free graphical user interface library Dear ImGui
+   (<https://github.com/ocornut/imgui>), licensed under the terms of the
+   MIT license. For the full license text, see external/imgui/LICENSE.txt or
+   (<https://github.com/ocornut/imgui/blob/master/LICENSE.txt>).
+
+ScummVM code
+************
+   xoreos uses some ScummVM (<https://scummvm.org/>) code, most prominently the
+   endian, singleton, stream and audio stream code. ScummVM is licensed under
+   version 2 or later of the GNU General Public License. For the full license
+   text, see doc/LICENSE.GPLv2 or <https://gnu.org/licenses/gpl-2.0.html>.
+
+Bink
+****
+   The Bink decoder used in xoreos is based (heavily) on the Bink decoder in
+   FFmpeg (<https://ffmpeg.org/>), licensed under the GNU Lesser General Public
+   License (LGPL) version 2.1 or later. For the full license text, see
+   doc/LICENSE.LGPLv2.1 or <https://gnu.org/licenses/lgpl-2.1.html>. Many thanks
+   to Kostya Shishkov (<https://codecs.multimedia.cx/>) for doing the hard work.
+
+WMA
+***
+   The WMA decoder used in xoreos is based (heavily) on the WMA decoder in
+   FFmpeg (<https://ffmpeg.org/>), licensed under the GNU Lesser General Public
+   License (LGPL) version 2.1 or later. For the full license text, see
+   doc/LICENSE.LGPLv2.1 or <https://gnu.org/licenses/lgpl-2.1.html>.
+
+DejaVu Sans Mono Bold
+*********************
+   xoreos includes DejaVu Sans Mono Bold (<https://dejavu-fonts.org/>) as a
+   monospaced system font. The DejaVu font family is based on the Vera Fonts
+   (<https://gnome.org/fonts/>), distributed under the Bitstream Vera Fonts
+   license. Glyphs imported from Arev fonts are Copyright 2006 by Tavmjung Bah.
+   For the full license texts, see doc/LICENSE.Bitstream and doc/LICENSE.Arev,
+   or <https://dejavu-fonts.org/wiki/License>.
+
+Nintendo DS formats
+*******************
+   xoreos includes readers for various Nintendo DS file formats, based on
+   code in Tinke by pleoNeX (<https://github.com/pleonex/tinke>), licensed
+   under version 3 or later of the GNU General Public License. For the full
+   license text, see COPYING or <https://gnu.org/licenses/gpl-3.0.html>.
+   They are also based on lowlines' file format specifications
+   (<http://llref.emutalk.net/docs/>) and the Nintendo DS information
+   documentation GBATEK by Martin Korth (<https://problemkaputt.de/gbatek.htm>).
+
+Google Test
+***********
+   xoreos uses Google Test (<https://github.com/google/googletest>), Google's
+   C++ test framework. Google Test is licensed under the terms of the 3-clause
+   BSD license. For the full license text, see tests/googletest/LICENSE or
+   <https://github.com/google/googletest/blob/master/googletest/LICENSE>.
+
+libmspack
+*********
+   xoreos uses libmspack, a library for Microsoft compression formats
+   (<https://www.cabextract.org.uk/libmspack/>). This is needed to handle
+   Xbox LZX decoding. Since the library does not offer a direct API to
+   the LZX decoding, xoreos completely includes the library code. libmspack
+   is licensed under the GNU Lesser General Public License (LGPL) version 2.1.
+   For the full license text, see external/mspack/COPYING.LIB or
+   <https://gnu.org/licenses/lgpl-2.1.html>.
+
+UEViewer
+********
+   xoreos includes code based on UEViewer (<https://www.gildor.org/en/projects/umodel>)
+   to handle the Xbox LZX decompression. UEViewer is licensed under the terms of the
+   MIT license. For the full license text, see <<https://opensource.org/licenses/MIT>.
+
+Libraries
+*********
+   In addition to the above, xoreos is also only possible because of the people
+   working for the following libraries and organizations. Many thanks!
+   - libiconv <https://www.gnu.org/software/libiconv/>
+   - zlib <https://zlib.net/>
+   - liblzma <https://tukaani.org/xz/>
+   - libxml2 <http://www.xmlsoft.org/>
+   - Boost <https://www.boost.org/>
+   - OpenGL <https://www.opengl.org/>
+   - SDL2 <https://www.libsdl.org/>
+   - FreeType <https://www.freetype.org/>
+   - OpenAL Soft <http://kcat.strangesoft.net/openal.html>
+   - MAD <https://www.underbit.com/products/mad/>
+   - libogg <https://xiph.org/ogg/>
+   - libvorbis and libvorbisfile <https://xiph.org/vorbis/>
+   - libfaad <http://www.audiocoding.com/faad2.html>
+   - libxvidcore <https://www.xvid.com/>
+   - libvpx <https://www.webmproject.org/code/>

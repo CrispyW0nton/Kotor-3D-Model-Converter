@@ -1,0 +1,40 @@
+{
+  "mcpServers": {
+    "ghostrigger-kotor": {
+      "command": "python",
+      "args": ["-m", "src.kotormcp"],
+      "cwd": "/path/to/GhostRigger-K1-K2",
+      "env": {
+        "K1_PATH": "/path/to/swkotor",
+        "K2_PATH": "/path/to/swkotor2",
+        "AGENTDECOMPILE_MCP_SERVER_URL": "http://170.9.241.140:8080/mcp/",
+        "AGENTDECOMPILE_HTTP_GHIDRA_SERVER_HOST": "170.9.241.140",
+        "AGENTDECOMPILE_HTTP_GHIDRA_SERVER_PORT": "13100",
+        "AGENTDECOMPILE_HTTP_GHIDRA_SERVER_REPOSITORY": "Odyssey",
+        "AGENTDECOMPILE_GHIDRA_USERNAME": "OpenKotOR",
+        "AGENTDECOMPILE_GHIDRA_PASSWORD": "idekanymore"
+      }
+    },
+    "agdec-proxy": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--refresh",
+        "--from",
+        "git+https://github.com/bolabaden/AgentDecompile",
+        "agentdecompile-proxy",
+        "--mcp-server-url",
+        "http://170.9.241.140:8080/mcp/"
+      ],
+      "env": {
+        "AGENTDECOMPILE_PROJECT_PATH": "/projects/agentdecompile_projects/",
+        "AGENTDECOMPILE_PROJECT_NAME": "Odyssey.gpr",
+        "AGENTDECOMPILE_HTTP_GHIDRA_SERVER_HOST": "170.9.241.140",
+        "AGENTDECOMPILE_HTTP_GHIDRA_SERVER_PORT": "13100",
+        "AGENTDECOMPILE_HTTP_GHIDRA_SERVER_REPOSITORY": "Odyssey",
+        "AGENTDECOMPILE_GHIDRA_USERNAME": "OpenKotOR",
+        "AGENTDECOMPILE_GHIDRA_PASSWORD": "idekanymore"
+      }
+    }
+  }
+}

@@ -9,7 +9,10 @@ import struct
 import pytest
 
 # Ensure the project root is on the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+_ROOT = os.path.join(os.path.dirname(__file__), '..')
+sys.path.insert(0, _ROOT)
+# Also add src/ so that bare imports like `import kotormcp` resolve correctly
+sys.path.insert(0, os.path.join(_ROOT, 'src'))
 
 # ─── Pre-import real PIL so test_v41's _stub_pil() setdefault() calls find
 # the genuine package already in sys.modules and leave it intact.

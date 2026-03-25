@@ -20,7 +20,8 @@ from .viewport import ViewportWidget
 from ..core.model_data import KotorModel, ModelNode, NodeFlags, GameVersion
 from ..core.mdl_parser  import MDLBinaryParser, MDLAsciiParser, MDLAsciiWriter
 from ..resources.game_library import GameLibrary, ModelLibraryEntry
-from ..converters.mesh_converter import OBJImporter, FBXImporter, OBJExporter, FBXExporter, tga_to_tpc, tpc_to_tga
+from ..converters.mesh_converter import (OBJImporter, FBXImporter, OBJExporter, FBXExporter,
+                                        GLTFImporter, GLTFExporter, tga_to_tpc, tpc_to_tga)
 from ..autorig.auto_rigger import AutoRigger, build_skeleton, HUMANOID_BONES
 from ..autorig.accurig import (
     AcuRig, RigGuide, BoneMask, SymmetryEnforcer, ProfileDetector,
@@ -140,6 +141,10 @@ class Settings:
 
     def __getitem__(self, k): return self.data.get(k, self.DEFAULTS.get(k, ""))
     def __setitem__(self, k, v): self.data[k] = v; self.save()
+    def get(self, k, default=None):
+        """dict-style .get() with optional default (mirrors __getitem__ fallback)."""
+        val = self.data.get(k, self.DEFAULTS.get(k))
+        return val if val is not None else default
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -463,20 +468,194 @@ class PropertiesPanel(tk.Frame):
 
 # ── Category helpers ──────────────────────────────────────────────────────
 
-# KotOR module/area model prefixes (used to identify module geometry)
+# KotOR K1 module/area model alpha-prefixes
 _MODULE_PREFIXES = (
     'lev_', 'man_', 'kas_', 'dan_', 'tat_', 'kor_', 'bek_', 'sth_',
     'fsh_', 'und_', 'endar', 'taris', 'manaan', 'kashyyyk', 'korriban',
     'tatooine', 'leviathan', 'starforge', 'unknownworld', 'dantooine',
-    'm12aa', 'm13aa', 'm14aa', 'm26aa', 'ebk', 'pol_', 'per_',
-    'lev', 'man', 'kas', 'dan', 'tat', 'kor', 'end',
+    'ebk', 'pol_', 'per_',
 )
+
+# ── K2 Module area-code → display name mapping ────────────────────────────
+# Format: 3-digit area code prefix → (location_abbreviation, display_name)
+_K2_AREA_NAMES: Dict[str, str] = {
+    '000': 'Test Area',
+    '001': 'Ebon Hawk (Intro)',
+    '002': 'Ebon Hawk (Fly)',
+    '003': 'Ebon Hawk',
+    '101': 'Peragus II',
+    '102': 'Peragus (Administration)',
+    '103': 'Peragus (Fuel Depot)',
+    '104': 'Peragus (Dormitories)',
+    '105': 'Peragus (Asteroid Exterior)',
+    '106': 'Peragus (Mining Tunnels)',
+    '107': 'Peragus (Hangar Bay)',
+    '151': 'Harbinger',
+    '152': 'Harbinger (Command Deck)',
+    '153': 'Harbinger (Crew Quarters)',
+    '201': 'Telos (Citadel Station)',
+    '202': 'Telos (Entertainment Module)',
+    '203': 'Telos (Residential East)',
+    '204': 'Telos (Residential West)',
+    '207': 'Telos (Dock Module)',
+    '208': 'Telos (Military Base)',
+    '209': 'Telos (Restoration Zone)',
+    '211': 'Telos (Surface)',
+    '220': 'Telos (Polar Plateau)',
+    '221': 'Telos (Polar Academy)',
+    '222': 'Telos (Polar Exterior)',
+    '231': 'Telos (Underground Base)',
+    '232': 'Telos (Restoration Zone 2)',
+    '233': 'Telos (Communication)',
+    '261': 'Telos (HK Factory Entrance)',
+    '262': 'Telos (HK Factory)',
+    '298': 'Telos (Atris Academy)',
+    '299': 'Telos (Atris Academy 2)',
+    '301': 'Nar Shaddaa (Docking)',
+    '302': 'Nar Shaddaa (Refugee Sector)',
+    '303': 'Nar Shaddaa (Entertainment)',
+    '304': 'Nar Shaddaa (Goto Yacht)',
+    '305': 'Nar Shaddaa (Refugee Landing)',
+    '306': 'Nar Shaddaa (Hangar)',
+    '351': 'Nar Shaddaa (Goto\'s Yacht)',
+    '352': 'Nar Shaddaa (Yacht Interior)',
+    '371': 'Nar Shaddaa (Bonus Area)',
+    '400': 'Dxun (Jungle)',
+    '401': 'Dxun (Mandalorian Ruins)',
+    '402': 'Dxun (Jungle Camp)',
+    '403': 'Dxun (Mandalorian Cache)',
+    '410': 'Dxun (Jungle Clearing)',
+    '411': 'Dxun (Sith Tomb)',
+    '421': 'Onderon (Palace District)',
+    '501': 'Onderon (Merchant District)',
+    '502': 'Onderon (Cantina)',
+    '503': 'Onderon (Sky Ramp)',
+    '504': 'Onderon (Beast Rider Enclave)',
+    '505': 'Onderon (Royal Palace)',
+    '506': 'Onderon (Palace Interior)',
+    '510': 'Onderon (City)',
+    '511': 'Onderon (Spaceport)',
+    '512': 'Onderon (Iziz Cantina)',
+    '601': 'Dantooine (Enclave Ruins)',
+    '602': 'Dantooine (Khoonda Plains)',
+    '604': 'Dantooine (Crystal Cave)',
+    '605': 'Dantooine (Jedi Enclave)',
+    '610': 'Dantooine (Khoonda)',
+    '650': 'Dantooine (Sublevel)',
+    '701': 'Korriban (Valley of the Dark Lords)',
+    '702': 'Korriban (Sith Academy)',
+    '710': 'Korriban (Tomb of Naga Sadow)',
+    '711': 'Korriban (Tomb of Ludo Kressh)',
+    '801': 'Malachor (Surface)',
+    '802': 'Malachor (Depths)',
+    '803': 'Malachor (Trayus Academy Entrance)',
+    '804': 'Malachor (Trayus Academy)',
+    '805': 'Malachor (Trayus Crescent)',
+    '806': 'Malachor (Trayus Core)',
+    '807': 'Malachor (Trayus Proving Grounds)',
+    '851': 'Nihilus Ship (Ravager)',
+    '852': 'Ravager (Bridge)',
+}
+
+# ── K1 Module area-code → display name mapping ────────────────────────────
+# Format: 'm' + 2-digit code prefix → display_name
+_K1_AREA_NAMES: Dict[str, str] = {
+    'm01': 'Endar Spire (Command Module)',
+    'm02': 'Endar Spire (Starboard Section)',
+    'm03': 'Taris (Apartments/Streets)',
+    'm04': 'Taris (Undercity Entrance)',
+    'm05': 'Taris (Lower City)',
+    'm08': 'Taris (Undercity)',
+    'm09': 'Taris (Sewers)',
+    'm10': 'Taris (Sith Base)',
+    'm11': 'Taris (Hidden Bek Base)',
+    'm12': 'Dantooine (Enclave)',
+    'm13': 'Dantooine (Courtyard)',
+    'm14': 'Dantooine (Grove/Ruins)',
+    'm15': 'Dantooine (Plains)',
+    'm16': 'Tatooine (Anchorhead)',
+    'm17': 'Tatooine (Dune Sea)',
+    'm18': 'Tatooine (Sand People Enclave)',
+    'm19': 'Tatooine (Krayt Dragon Cave)',
+    'm20': 'Kashyyyk (Czerka Port)',
+    'm21': 'Kashyyyk (The Great Walkway)',
+    'm22': 'Kashyyyk (Village of Rwookrrorro)',
+    'm23': 'Kashyyyk (Upper Shadowlands)',
+    'm24': 'Kashyyyk (Lower Shadowlands)',
+    'm25': 'Manaan (Ahto City West)',
+    'm26': 'Manaan (Ahto City East/Sith Base)',
+    'm27': 'Manaan (Underwater)',
+    'm28': 'Korriban (Dreshdae/Sith Academy)',
+    'm31': 'Leviathan (Prison Block)',
+    'm33': 'Leviathan (Command Deck)',
+    'm34': 'Leviathan (Bridge)',
+    'm35': 'Leviathan (Hangar)',
+    'm36': 'Unknown World (Beach)',
+    'm37': 'Unknown World (Temple Exterior)',
+    'm38': 'Unknown World (Temple Interior)',
+    'm39': 'Unknown World (Temple Summit)',
+    'm40': 'Star Forge (Deck 1)',
+    'm41': 'Star Forge (Deck 2)',
+    'm42': 'Star Forge (Deck 3)',
+    'm43': 'Star Forge (Command Module)',
+    'm44': 'Ebon Hawk',
+    'm45': 'Yavin Space Station',
+}
 
 # KotOR item/placeable/weapon/armor prefixes
 _ITEM_PREFIXES = (
     'i_', 'plc_', 'placeables', 'w_', 'a_', 'g_',
     'upcryst', 'upcasing', 'swoop',
 )
+
+
+def _is_module_resref(r: str) -> bool:
+    """Return True if resref 'r' (lower-case) looks like a KotOR module model.
+
+    Handles both naming conventions:
+      K1: m + 2-digit area code  →  m12aa_01a, m26mg_03b, m03mg …
+      K2: 3-digit area code + location abbreviation  →  101per_01a, 211tela, 003ebo …
+      K1 alternative area-code prefixes  →  lev_, kas_, dan_, tat_, kor_ …
+    """
+    # K1 m-prefix modules: m followed by exactly 2 digits
+    if r.startswith('m') and len(r) >= 3 and r[1:3].isdigit():
+        return True
+    # K2 numeric modules: 3 leading digits then at least 2 alpha chars
+    if len(r) >= 5 and r[:3].isdigit() and r[3:5].isalpha():
+        return True
+    # K1 area-code alpha prefixes
+    for pfx in _MODULE_PREFIXES:
+        if r.startswith(pfx):
+            return True
+    return False
+
+
+def _get_module_area_key(resref: str) -> str:
+    """Return the area key for a module resref (e.g. '101' for K2 or 'm12' for K1).
+    Returns '' if not a module resref."""
+    r = resref.lower()
+    # K2: 3-digit numeric prefix
+    if len(r) >= 5 and r[:3].isdigit() and r[3:5].isalpha():
+        return r[:3]
+    # K1: 'm' + 2-digit area code
+    if r.startswith('m') and len(r) >= 3 and r[1:3].isdigit():
+        return r[:3]
+    return ''
+
+
+def _get_module_area_display(resref: str) -> str:
+    """Return a human-readable area name for a module resref."""
+    key = _get_module_area_key(resref)
+    if not key:
+        return ''
+    r = resref.lower()
+    if r[:1] == 'm' and not r[:3].isdigit():
+        # K1
+        return _K1_AREA_NAMES.get(key, f'K1 Area {key[1:]}')
+    else:
+        # K2
+        return _K2_AREA_NAMES.get(key, f'K2 Area {key}')
+
 
 def _infer_model_category(resref: str, model_class: str = "") -> str:
     """
@@ -486,7 +665,7 @@ def _infer_model_category(resref: str, model_class: str = "") -> str:
     """
     r = resref.lower()
 
-    # Explicit classification from MDL header
+    # Explicit classification from MDL header (highest priority)
     if model_class == 'tile':
         return 'Module'
     if model_class == 'character':
@@ -497,18 +676,24 @@ def _infer_model_category(resref: str, model_class: str = "") -> str:
     if model_class in ('door', 'effect'):
         return 'Other'
 
-    # Heuristic by name prefix
+    # Heuristic by name prefix – ordered from most to least specific
     if r.startswith('c_'):
         return 'Creature'
-    if r.startswith(('p_', 'n_', 'k_p_', 'k_m_', 'darkjedi', 'malak',
-                     'bastila', 'trask', 'canderous', 'revan', 'jolee',
-                     'juhani', 'carth', 'mission', 'zaalbar', 'hk47',
-                     'g0t0', 't3m4', 'kreia', 'atton', 'mical', 'bao',
-                     'visas', 'hanharr', 'mandra', 'darth')):
+    if r.startswith(('p_', 'n_', 'k_p_', 'k_m_',
+                     # PC body/head models (KotOR player character parts)
+                     'pmh', 'pmb', 'pmf', 'pmc', 'po_',
+                     'pfh', 'pfb', 'pff', 'pfc',
+                     # KotOR supermodels
+                     's_male', 's_female', 's_human',
+                     # Named companions / major NPCs
+                     'darkjedi', 'malak', 'bastila', 'trask', 'canderous',
+                     'revan', 'jolee', 'juhani', 'carth', 'mission',
+                     'zaalbar', 'hk47', 'g0t0', 't3m4', 'kreia', 'atton',
+                     'mical', 'bao', 'visas', 'hanharr', 'mandra', 'darth')):
         return 'Character'
-    for pfx in _MODULE_PREFIXES:
-        if r.startswith(pfx) or (len(r) >= 3 and r[:3] in ('m12','m13','m14','m26','lev','man','kas','dan','tat','kor','end','bek','und')):
-            return 'Module'
+    # Module check (covers both K1 m-prefix and K2 3-digit prefix)
+    if _is_module_resref(r):
+        return 'Module'
     for pfx in _ITEM_PREFIXES:
         if r.startswith(pfx):
             return 'Item/Armor/Weapons'
@@ -530,7 +715,11 @@ def _infer_model_category(resref: str, model_class: str = "") -> str:
 
 class LibraryPanel(tk.Frame):
     """Game Library panel with category tabs: All / Creature / Character /
-    Item·Armor·Weapons / Module / Other."""
+    Item·Armor·Weapons / Module / Other.
+
+    The Module tab includes an area filter dropdown that groups models by
+    KotOR 1 and KotOR 2 map/level area codes for easy navigation.
+    """
 
     # Category definitions: (display_name, internal_key)
     CATEGORIES = [
@@ -549,6 +738,7 @@ class LibraryPanel(tk.Frame):
         self.library  = GameLibrary()
         self._all_entries: List[ModelLibraryEntry] = []
         self._category_var = tk.StringVar(value="All")
+        self._module_area_var = tk.StringVar(value="All Areas")
         self._build()
 
     def _build(self):
@@ -566,11 +756,16 @@ class LibraryPanel(tk.Frame):
         # Game filter (K1 / K2 / All)
         ff = tk.Frame(self, bg=C['panel2']); ff.pack(fill='x', padx=4, pady=1)
         self._filter_var = tk.StringVar(value="All")
+        def _on_game_filter_changed():
+            # When game filter changes and Module tab is active, rebuild area list
+            if self._category_var.get() == 'Module':
+                self._rebuild_module_area_choices()
+            self._apply_filter()
         for g in ("All", "K1", "K2"):
             tk.Radiobutton(ff, text=g, variable=self._filter_var, value=g,
                            bg=C['panel2'], fg=C['text2'], selectcolor=C['selected'],
                            activebackground=C['panel2'], font=("Segoe UI", 8),
-                           command=self._apply_filter).pack(side='left', padx=3)
+                           command=_on_game_filter_changed).pack(side='left', padx=3)
 
         # Category tabs (Notebook)
         cat_nb = ttk.Notebook(self)
@@ -582,6 +777,32 @@ class LibraryPanel(tk.Frame):
             f = tk.Frame(cat_nb, bg=C['panel2'], height=0)
             cat_nb.add(f, text=label)
         cat_nb.bind('<<NotebookTabChanged>>', self._on_cat_changed)
+
+        # ── Module area filter row (only visible in Module tab) ─────────────
+        self._module_filter_row = tk.Frame(self, bg=C['panel2'])
+        _label(self._module_filter_row, "Area:", "small",
+               bg=C['panel2']).pack(side='left', padx=(0, 3))
+        self._module_area_combo = ttk.Combobox(
+            self._module_filter_row,
+            textvariable=self._module_area_var,
+            state='readonly', font=("Segoe UI", 8), width=28,
+        )
+        self._module_area_combo.pack(side='left', fill='x', expand=True, padx=(0, 2))
+        def _on_area_selected(event=None):
+            # Prevent selection of separator entries
+            sel = self._module_area_var.get()
+            if sel.startswith('──'):
+                self._module_area_var.set('All Areas')
+            self._apply_filter()
+        self._module_area_combo.bind('<<ComboboxSelected>>', _on_area_selected)
+        # Reset area filter button
+        tk.Button(
+            self._module_filter_row, text="✕",
+            command=lambda: (self._module_area_var.set("All Areas"), self._apply_filter()),
+            bg=C['panel2'], fg=C['text2'], relief='flat',
+            font=("Segoe UI", 7), padx=2, pady=0, cursor="hand2",
+        ).pack(side='right', padx=1)
+        # (Row is packed/forgotten dynamically in _on_cat_changed)
 
         # Search bar
         sf = tk.Frame(self, bg=C['panel2']); sf.pack(fill='x', padx=4, pady=1)
@@ -607,6 +828,23 @@ class LibraryPanel(tk.Frame):
         self.listbox.pack(fill='both', expand=True)
         sb.configure(command=self.listbox.yview)
         self.listbox.bind('<Double-Button-1>', self._load_selected)
+        self.listbox.bind('<<ListboxSelect>>', self._on_list_select)
+
+        # Thumbnail preview strip (shows pre-rendered front PNG)
+        thumb_row = tk.Frame(self, bg=C['panel2'])
+        thumb_row.pack(fill='x', padx=4, pady=(1, 0))
+        self._thumb_label = tk.Label(
+            thumb_row, bg=C['panel2'], relief='flat',
+            cursor='hand2', text=""
+        )
+        self._thumb_label.pack(side='left', padx=2, pady=2)
+        self._thumb_label.bind('<Button-1>', self._load_selected)
+        self._thumb_info_var = tk.StringVar(value="")
+        _label(thumb_row, "", "small", bg=C['panel2'],
+               textvariable=self._thumb_info_var,
+               wraplength=160, justify='left').pack(
+            side='left', padx=(4, 2), anchor='nw')
+        self._thumb_photo = None   # hold reference to avoid GC
 
         # Category count labels + filter result count
         count_row = tk.Frame(self, bg=C['panel2']); count_row.pack(fill='x', padx=4)
@@ -634,12 +872,62 @@ class LibraryPanel(tk.Frame):
         _btn(bf2, "🖼 Batch TGA",   self._batch_extract_tex,  small=True).pack(side='left', padx=2)
 
         self._displayed_entries: List[ModelLibraryEntry] = []
+        self._renders_dir = Path(__file__).parent.parent.parent / \
+            'audit_output' / 'batch_render' / 'renders'
 
     def _on_cat_changed(self, event=None):
         idx = self._cat_nb.index('current')
         if 0 <= idx < len(self.CATEGORIES):
             self._category_var.set(self.CATEGORIES[idx][1])
+        # Show/hide module area filter and rebuild area choices
+        cat = self._category_var.get()
+        if cat == 'Module':
+            self._rebuild_module_area_choices()
+            self._module_filter_row.pack(fill='x', padx=4, pady=(0, 1))
+        else:
+            self._module_filter_row.pack_forget()
+            self._module_area_var.set("All Areas")
         self._apply_filter()
+
+    def _rebuild_module_area_choices(self):
+        """Rebuild the area dropdown from entries currently visible (game filter applied)."""
+        game_filter = self._filter_var.get()
+        area_counts: Dict[str, int] = {}
+        for e in self._all_entries:
+            if game_filter != 'All' and e.game != game_filter:
+                continue
+            cat = _infer_model_category(e.resref, e.model_class)
+            if cat != 'Module':
+                continue
+            area_key = _get_module_area_key(e.resref)
+            if area_key:
+                area_counts[area_key] = area_counts.get(area_key, 0) + 1
+
+        # Build sorted display list: separate K1 and K2
+        k1_areas = []
+        k2_areas = []
+        for key, cnt in sorted(area_counts.items()):
+            r_sample = key  # key is '101' or 'm12'
+            if r_sample.startswith('m') and not r_sample[:3].isdigit():
+                name = _K1_AREA_NAMES.get(key, f'K1 Area {key[1:]}')
+                k1_areas.append((f'K1 {key}: {name} ({cnt})', key))
+            else:
+                name = _K2_AREA_NAMES.get(key, f'K2 Area {key}')
+                k2_areas.append((f'K2 {key}: {name} ({cnt})', key))
+
+        choices = ["All Areas"]
+        if k1_areas:
+            choices.append("── KotOR I ──")
+            choices += [label for label, _ in k1_areas]
+        if k2_areas:
+            choices.append("── KotOR II ──")
+            choices += [label for label, _ in k2_areas]
+
+        self._module_area_combo['values'] = choices
+        self._module_area_choices = {label: key for label, key in k1_areas + k2_areas}
+        # Reset if current selection no longer valid
+        if self._module_area_var.get() not in choices:
+            self._module_area_var.set("All Areas")
 
     def _set_k1(self):
         d = filedialog.askdirectory(title="Select KotOR 1 Game Directory")
@@ -939,7 +1227,12 @@ class LibraryPanel(tk.Frame):
                         pass
                 self.library.scan(progress_cb=_safe_progress)
                 self._all_entries = list(self.library.models)
-                self.listbox.after(0, self._apply_filter)
+                def _post_scan():
+                    self._apply_filter()
+                    # If module tab is currently active, rebuild area choices
+                    if self._category_var.get() == 'Module':
+                        self._rebuild_module_area_choices()
+                self.listbox.after(0, _post_scan)
                 n = len(self._all_entries)
                 self.listbox.after(0, lambda: self._status_var.set(f"{n} models found"))
                 # Notify the app to refresh 2DA/resource panels
@@ -976,7 +1269,11 @@ class LibraryPanel(tk.Frame):
                         pass
                 self.library.scan(progress_cb=_safe_progress, deep_scan=True)
                 self._all_entries = list(self.library.models)
-                self.listbox.after(0, self._apply_filter)
+                def _post_deep_scan():
+                    self._apply_filter()
+                    if self._category_var.get() == 'Module':
+                        self._rebuild_module_area_choices()
+                self.listbox.after(0, _post_deep_scan)
                 n = len(self._all_entries)
                 self.listbox.after(0, lambda: self._status_var.set(f"{n} models (deep scan)"))
                 self.listbox.after(300, self._notify_scan_done)
@@ -993,6 +1290,12 @@ class LibraryPanel(tk.Frame):
         cat = self._category_var.get()   # from category notebook tab
         q   = self._search_var.get().lower()
 
+        # Module area sub-filter
+        area_selection = self._module_area_var.get() if cat == 'Module' else 'All Areas'
+        area_key_filter = ''
+        if area_selection not in ('All Areas', '── KotOR I ──', '── KotOR II ──', ''):
+            area_key_filter = getattr(self, '_module_area_choices', {}).get(area_selection, '')
+
         filtered = []
         for e in self._all_entries:
             if g != "All" and e.game != g:
@@ -1003,17 +1306,27 @@ class LibraryPanel(tk.Frame):
                 entry_cat = _infer_model_category(e.resref, e.model_class)
                 if entry_cat != cat:
                     continue
+            # Module area sub-filter
+            if area_key_filter:
+                if _get_module_area_key(e.resref) != area_key_filter:
+                    continue
             filtered.append(e)
 
         self.listbox.delete(0, 'end')
         self._displayed_entries = filtered
 
-        # Color-code by game version
+        # Color-code by game version; use rich label for module entries
         col_k1 = "#88aaff"
         col_k2 = "#aaffaa"
+        is_module_tab = (cat == 'Module')
         for i, e in enumerate(filtered):
-            label = f"[{e.game}] {e.display_label}" if hasattr(e, 'display_label') \
-                    else f"[{e.game}] {e.resref}"
+            if is_module_tab and hasattr(e, 'display_label_rich'):
+                base_label = e.display_label_rich
+            elif hasattr(e, 'display_label'):
+                base_label = e.display_label
+            else:
+                base_label = e.resref
+            label = f"[{e.game}] {base_label}"
             self.listbox.insert('end', label)
             self.listbox.itemconfig(i, fg=col_k1 if e.game == "K1" else col_k2)
 
@@ -1023,14 +1336,24 @@ class LibraryPanel(tk.Frame):
             for e in self._all_entries:
                 c = _infer_model_category(e.resref, e.model_class)
                 counts[c] = counts.get(c, 0) + 1
+            # Short label map for compact display
+            _SHORT = {
+                'Creature': 'Cre', 'Character': 'Chr',
+                'Item/Armor/Weapons': 'Itm', 'Module': 'Mod', 'Other': 'Oth',
+            }
             parts = [f"All:{len(self._all_entries)}"]
             for _, key in self.CATEGORIES[1:]:
                 if key in counts:
-                    parts.append(f"{key[:3]}:{counts[key]}")
+                    parts.append(f"{_SHORT.get(key, key[:3])}:{counts[key]}")
             self._cat_count_var.set("  ".join(parts))
-            # Show filter result count
+            # Show filter result count (include area name if module area filter active)
             if len(filtered) < len(self._all_entries):
-                self._filter_count_var.set(f"Showing {len(filtered)}")
+                if area_key_filter and cat == 'Module':
+                    area_name = _K2_AREA_NAMES.get(area_key_filter,
+                                _K1_AREA_NAMES.get(area_key_filter, area_key_filter))
+                    self._filter_count_var.set(f"{len(filtered)} in {area_name}")
+                else:
+                    self._filter_count_var.set(f"Showing {len(filtered)}")
             else:
                 self._filter_count_var.set("")
         else:
@@ -1057,6 +1380,60 @@ class LibraryPanel(tk.Frame):
                 except Exception:
                     pass
         threading.Thread(target=run, daemon=True, name=f"load_{entry.resref}").start()
+
+    def _on_list_select(self, event=None):
+        """Called when a listbox item is selected – update thumbnail preview."""
+        sel = self.listbox.curselection()
+        if not sel or not self._displayed_entries:
+            self._clear_thumbnail()
+            return
+        idx = sel[0]
+        if idx >= len(self._displayed_entries):
+            return
+        entry = self._displayed_entries[idx]
+        self._update_thumbnail(entry)
+
+    def _clear_thumbnail(self):
+        """Clear thumbnail preview."""
+        self._thumb_label.config(image='', text='', width=0, height=0)
+        self._thumb_photo = None
+        self._thumb_info_var.set('')
+
+    def _update_thumbnail(self, entry: 'ModelLibraryEntry'):
+        """Load and display the pre-rendered front thumbnail for entry."""
+        try:
+            from PIL import Image, ImageTk
+            # Look for pre-rendered front PNG in the renders directory
+            png_path = self._renders_dir / f"{entry.game}_{entry.resref}_front.png"
+            if png_path.exists():
+                img = Image.open(str(png_path)).convert('RGBA')
+                # Scale to 80×80, preserving aspect
+                img.thumbnail((80, 80), Image.LANCZOS)
+                # Create dark background for transparent PNGs
+                bg = Image.new('RGBA', img.size, (30, 30, 46, 255))
+                bg.paste(img, mask=img.split()[3] if img.mode == 'RGBA' else None)
+                photo = ImageTk.PhotoImage(bg.convert('RGB'))
+                self._thumb_photo = photo   # keep reference
+                self._thumb_label.config(image=photo, text='',
+                                         width=80, height=80)
+                # Info line
+                mesh_info = f"{entry.mesh_count} meshes" if entry.mesh_count else ""
+                skin_info = "  skin" if entry.has_skin else ""
+                cls_info  = f"  {entry.model_class}" if entry.model_class else ""
+                self._thumb_info_var.set(
+                    f"{entry.resref}\n[{entry.game}]{cls_info}{skin_info}\n{mesh_info}"
+                )
+            else:
+                # No pre-rendered thumb — show placeholder
+                self._thumb_label.config(image='', text='🖼', width=6, height=4,
+                                         fg=C.get('text2', '#888'), font=("Segoe UI", 14))
+                self._thumb_photo = None
+                self._thumb_info_var.set(f"{entry.resref}\n[{entry.game}]  no preview")
+        except ImportError:
+            # PIL not available
+            self._clear_thumbnail()
+        except Exception as _e:
+            self._clear_thumbnail()
 
     def _extract_selected(self):
         sel = self.listbox.curselection()
@@ -5067,7 +5444,7 @@ class ResourceBrowserPanel(tk.Frame):
 
 class KotorModToolsApp(tk.Tk):
     APP_TITLE   = "GhostRigger-K1-K2  ▸  Odyssey Engine Pipeline"
-    APP_VERSION = "2.7.0"  # Cloth Rigging + Ghostworks IPC
+    APP_VERSION = "4.2.0"  # v4.2: auto-detect startup + visual audit verification
     WIN_SIZE    = "1600x950"
 
     def __init__(self):
@@ -5099,9 +5476,13 @@ class KotorModToolsApp(tk.Tk):
             self.settings['k1_dir'],
             self.settings['k2_dir'])
 
-        # If neither game dir is saved yet, try auto-detection silently
+        # Auto-detect on first launch; auto-scan if dirs are already known
         if not self.settings['k1_dir'] and not self.settings['k2_dir']:
+            # First run: find game directories in background then auto-scan
             self.after(200, self._silent_auto_detect)
+        else:
+            # Dirs already saved — auto-scan silently on startup
+            self.after(800, self.lib_panel._scan)
 
         # Start GhostRigger IPC server on port 7001 (Ghostworks Pipeline)
         self._ipc_server = GhostRiggerIPCServer({
@@ -5113,9 +5494,12 @@ class KotorModToolsApp(tk.Tk):
         self._ipc_server.start()
         self.after(800, self._update_ipc_status)
 
-        self.log("GhostRigger-K1-K2 v2.7 ready.", "success")
+        self.log("GhostRigger-K1-K2 v4.2 ready.", "success")
         self.log(f"→ Ghostworks IPC server on port {PORT_GHOSTRIGGER} (GhostRigger).")
-        self.log("→ Set K1/K2 directories in the Library panel, or open an MDL file.")
+        if self.settings.get('k1_dir') or self.settings.get('k2_dir'):
+            self.log("→ Game directories loaded from saved config. Click '⟳ Scan' to refresh.")
+        else:
+            self.log("→ Scanning for KotOR installation automatically…")
 
     # ── TTK Theme ─────────────────────────────────────────────────────────
 
@@ -5123,37 +5507,67 @@ class KotorModToolsApp(tk.Tk):
         """Try to auto-detect KotOR game directories silently on startup.
 
         Called once when no game directories have been saved yet.
-        Does NOT show a popup — just logs the result.  Uses the same
-        directory-scanning logic as LibraryPanel._auto_detect_dirs().
+        Uses game_detector.py (Steam/GOG/default-path scanning) directly so
+        we never block the UI and never show a pop-up.  If at least one game
+        directory is found the library scan is triggered automatically so
+        models are ready to browse without any manual steps.
         """
-        try:
-            self.lib_panel._auto_detect_dirs.__func__  # verify method exists
-        except AttributeError:
-            return
-        # Temporarily replace messagebox calls to suppress popups
-        import tkinter.messagebox as _mb
-        _orig_info = _mb.showinfo
-        _orig_warn = _mb.showwarning
-        _mb.showinfo  = lambda *a, **kw: None   # suppress success popup
-        _mb.showwarning = lambda *a, **kw: None  # suppress failure popup
-        try:
-            self.lib_panel._auto_detect_dirs()
-        except Exception:
-            pass
-        finally:
-            _mb.showinfo  = _orig_info
-            _mb.showwarning = _orig_warn
-        # Log results
-        k1 = self.lib_panel.library.k1_dir
-        k2 = self.lib_panel.library.k2_dir
+        def _run_detection():
+            try:
+                from src.resources.game_detector import detect_kotor_dirs, save_config
+                k1, k2 = detect_kotor_dirs()
+                return k1, k2
+            except Exception as _e:
+                log.debug(f"_silent_auto_detect: game_detector failed: {_e}")
+                # Fallback: delegate to the existing inline scanner
+                try:
+                    import tkinter.messagebox as _mb
+                    _orig_info    = _mb.showinfo
+                    _orig_warn    = _mb.showwarning
+                    _mb.showinfo    = lambda *a, **kw: None
+                    _mb.showwarning = lambda *a, **kw: None
+                    try:
+                        self.lib_panel._auto_detect_dirs()
+                    except Exception:
+                        pass
+                    finally:
+                        _mb.showinfo    = _orig_info
+                        _mb.showwarning = _orig_warn
+                except Exception:
+                    pass
+                k1 = self.lib_panel.library.k1_dir
+                k2 = self.lib_panel.library.k2_dir
+                return k1, k2
+
+        import threading
+        def _worker():
+            k1, k2 = _run_detection()
+            # Marshal back to main thread
+            self.after(0, lambda: self._on_silent_detect_done(k1, k2))
+
+        threading.Thread(target=_worker, daemon=True,
+                         name="startup_auto_detect").start()
+
+    def _on_silent_detect_done(self, k1: Optional[str], k2: Optional[str]):
+        """Main-thread callback after background auto-detection completes."""
+        if k1:
+            self.lib_panel.library.set_k1_dir(k1)
+            self.settings['k1_dir'] = k1
+            self.log(f"✓ Auto-detected KotOR 1: {k1}", "success")
+        if k2:
+            self.lib_panel.library.set_k2_dir(k2)
+            self.settings['k2_dir'] = k2
+            self.log(f"✓ Auto-detected KotOR 2: {k2}", "success")
         if k1 or k2:
-            if k1:
-                self.log(f"✓ Auto-detected KotOR 1: {k1}", "success")
-                self.settings['k1_dir'] = k1   # persist for next launch
-            if k2:
-                self.log(f"✓ Auto-detected KotOR 2: {k2}", "success")
-                self.settings['k2_dir'] = k2   # persist for next launch
-            self.log("  Click '⟳ Scan' in the Library panel to load models.")
+            # Persist to ~/.ghostrigger/config.json for future sessions
+            try:
+                from src.resources.game_detector import save_config
+                save_config(k1, k2)
+            except Exception:
+                pass
+            # Auto-scan so models are immediately available
+            self.log("  Auto-scanning library…")
+            self.after(300, self.lib_panel._scan)
         else:
             self.log("  No KotOR installation found automatically. "
                      "Use 'Set K1/K2 Dir' or '🔍 Auto' in the Library panel.")
@@ -5271,12 +5685,14 @@ class KotorModToolsApp(tk.Tk):
         fm.add_command(label="Open MDL (binary)…",      command=self._open_mdl_binary)
         fm.add_command(label="Open MDL (ASCII text)…",  command=self._open_mdl_ascii)
         fm.add_separator()
-        fm.add_command(label="Import OBJ…",  command=self._import_obj)
-        fm.add_command(label="Import FBX…",  command=self._import_fbx)
+        fm.add_command(label="Import OBJ…",       command=self._import_obj)
+        fm.add_command(label="Import FBX…",       command=self._import_fbx)
+        fm.add_command(label="Import GLB/GLTF…",  command=self._import_gltf)
         fm.add_separator()
         fm.add_command(label="Save ASCII MDL…",   command=self._save_ascii_mdl)
         fm.add_command(label="Export OBJ…",        command=self._export_obj)
         fm.add_command(label="Export FBX…",        command=self._export_fbx)
+        fm.add_command(label="Export GLB…",        command=self._export_gltf)
         fm.add_separator()
         fm.add_command(label="Set Texture Directory…", command=self._set_texture_dir)
         fm.add_separator()
@@ -5415,8 +5831,10 @@ class KotorModToolsApp(tk.Tk):
             ("📂 Open MDL",      self._open_mdl_binary,  False),
             ("⬆ Import OBJ",    self._import_obj,        False),
             ("⬆ Import FBX",    self._import_fbx,        False),
+            ("⬆ Import GLB",    self._import_gltf,       False),
             ("⬇ Export OBJ",    self._export_obj,        False),
             ("⬇ Export FBX",    self._export_fbx,        False),
+            ("⬇ Export GLB",    self._export_gltf,       False),
             ("🦴 Auto-Rig",     self._quick_autorig,     True ),
             ("🧥 Cloth Rig",    lambda: self._switch_tab("cloth"), False),
             ("🖼 Set Tex Dir",  self._set_texture_dir,   False),
@@ -6053,10 +6471,17 @@ class KotorModToolsApp(tk.Tk):
 
     def _import_fbx(self):
         path = filedialog.askopenfilename(
-            title="Import FBX", filetypes=[("FBX files","*.fbx"),
-                                            ("All 3D files","*.fbx;*.obj;*.dae")])
+            title="Import FBX",
+            filetypes=[("FBX files",     "*.fbx"),
+                       ("All 3D files",  "*.fbx *.obj *.dae *.glb *.gltf")])
         if not path: return
-        gv = GameVersion.K1 if self.settings['default_game']=="K1" else GameVersion.K2
+        # Delegate GLB/GLTF/OBJ to their dedicated importers
+        ext = Path(path).suffix.lower()
+        if ext in ('.glb', '.gltf'):
+            return self._import_gltf_from_path(path)
+        if ext == '.obj':
+            return self._import_obj_from_path(path)
+        gv = GameVersion.K1 if self.settings.get('default_game', 'K1') == "K1" else GameVersion.K2
         try:
             model = FBXImporter().import_file(path, game_version=gv)
             if model:
@@ -6064,10 +6489,13 @@ class KotorModToolsApp(tk.Tk):
                 self._model_path  = path
                 self._texture_dir = str(Path(path).parent)
                 self._set_model_internal(model)
-                self.log(f"Imported: {Path(path).name}  "
+                self.log(f"Imported FBX: {Path(path).name}  "
                          f"({len(model.mesh_nodes())} meshes)", 'success')
             else:
-                self.log("FBX import failed – see log for details", 'error')
+                self.log(
+                    "FBX import failed — pyassimp (with libassimp) is required "
+                    "for binary FBX.  Try exporting as OBJ or GLB instead.",
+                    'error')
         except Exception as e:
             self.log(f"FBX import error: {e}", 'error')
 
@@ -6114,6 +6542,72 @@ class KotorModToolsApp(tk.Tk):
             else:  self.log(f"FBX export fell back to OBJ (pyassimp not installed)", 'warning')
         except Exception as e:
             self.log(f"Export error: {e}", 'error')
+
+    def _import_gltf(self):
+        """Import GLB / GLTF 2.0 into the current model slot."""
+        path = filedialog.askopenfilename(
+            title="Import GLB / GLTF",
+            filetypes=[("GLB/GLTF files", "*.glb *.gltf"),
+                       ("GLB binary",    "*.glb"),
+                       ("GLTF JSON",     "*.gltf"),
+                       ("All 3D files",  "*.glb *.gltf *.fbx *.obj")])
+        if not path:
+            return
+        self._import_gltf_from_path(path)
+
+    def _import_gltf_from_path(self, path: str):
+        """Shared GLTF import implementation."""
+        gv = GameVersion.K1 if self.settings.get('default_game', 'K1') == "K1" else GameVersion.K2
+        try:
+            model = GLTFImporter().import_file(path, game_version=gv)
+            if model:
+                self._model_path  = path
+                self._texture_dir = str(Path(path).parent)
+                self._set_model_internal(model)
+                self.log(f"Imported GLB/GLTF: {Path(path).name}  "
+                         f"({len(model.mesh_nodes())} meshes)", 'success')
+            else:
+                self.log("GLTF import failed – install 'pygltflib' or 'trimesh'", 'error')
+        except Exception as e:
+            self.log(f"GLTF import error: {e}", 'error')
+
+    def _import_obj_from_path(self, path: str):
+        """Shared OBJ import implementation (called by FBX handler for .obj files)."""
+        gv = GameVersion.K1 if self.settings.get('default_game', 'K1') == "K1" else GameVersion.K2
+        try:
+            model = OBJImporter().import_file(path, game_version=gv)
+            if model:
+                self._model_path  = path
+                self._texture_dir = str(Path(path).parent)
+                self._set_model_internal(model)
+                self.log(f"Imported OBJ: {Path(path).name}  "
+                         f"({len(model.mesh_nodes())} meshes)", 'success')
+            else:
+                self.log("OBJ import failed", 'error')
+        except Exception as e:
+            self.log(f"OBJ import error: {e}", 'error')
+
+    def _export_gltf(self):
+        """Export current model to GLB (binary GLTF 2.0)."""
+        if not self._model:
+            messagebox.showwarning("No Model", "Load a model first.")
+            return
+        path = filedialog.asksaveasfilename(
+            initialfile=self._model.name + '.glb',
+            defaultextension='.glb',
+            filetypes=[("GLB binary", "*.glb"),
+                       ("GLTF JSON",  "*.gltf")])
+        if not path:
+            return
+        try:
+            binary = path.lower().endswith('.glb')
+            ok = GLTFExporter().export(self._model, path, binary=binary)
+            if ok:
+                self.log(f"Exported {'GLB' if binary else 'GLTF'} → {Path(path).name}", 'success')
+            else:
+                self.log("GLTF export failed – install 'pygltflib'", 'error')
+        except Exception as e:
+            self.log(f"GLTF export error: {e}", 'error')
 
     # ── MDLOps bridge ──────────────────────────────────────────────────────
 
@@ -6355,12 +6849,58 @@ class KotorModToolsApp(tk.Tk):
     # ── IPC callback handlers ─────────────────────────────────────────────
 
     def _ipc_open_utc(self, resref: str, module_dir: str = ""):
-        """Handle open_utc IPC request — open a creature blueprint."""
+        """Handle open_utc IPC request — open a creature blueprint.
+
+        Phase 3.3: Try the full UTC→appearance.2da→body+head pipeline first.
+        Fall back to a direct model resref search if no UTC is found.
+        """
         self.log(f"IPC: open_utc resref='{resref}' module_dir='{module_dir}'")
-        # Try to find and load the model for the creature
         if resref:
-            self._try_load_from_library(resref)
+            # ── Phase 3.3: attempt UTC appearance pipeline ────────────────
+            loaded = self._try_load_utc_creature(resref)
+            if not loaded:
+                # Fallback: treat resref as a direct model resref
+                self._try_load_from_library(resref)
         self.lift(); self.focus_force()
+
+    def _try_load_utc_creature(self, resref: str) -> bool:
+        """
+        Phase 3.3 UTC→Viewport pipeline.
+
+        Load a .utc creature template, resolve appearance.2da for the body model
+        and heads.2da for the head model, then set the body model in the viewport.
+        Returns True if the UTC was found and a model was loaded successfully.
+        """
+        import time as _t
+        _t0 = _t.perf_counter()
+        try:
+            lib = getattr(self.lib_panel, 'library', None)
+            if lib is None:
+                return False
+            from ..core.creature_appearance import load_utc_into_viewport
+            game = "K1" if self.settings.get('default_game', 'K1') == 'K1' else 'K2'
+            creature_set = load_utc_into_viewport(resref, lib, game=game)
+            if creature_set is None or creature_set.body_model is None:
+                return False
+            model = creature_set.body_model
+            _ms = (_t.perf_counter() - _t0) * 1000.0
+            # Log appearance info
+            ap = creature_set.appearance
+            self.log(
+                f"IPC UTC: '{resref}' → "
+                f"body={ap.primary_model!r} tex={ap.body_tex!r} "
+                f"head={ap.head_model!r} ({_ms:.0f} ms)",
+                'success',
+            )
+            if creature_set.merge_warnings:
+                for w in creature_set.merge_warnings:
+                    self.log(f"  ⚠ {w}", 'warning')
+            self._set_model_internal(model)
+            return True
+        except Exception as exc:
+            _ms = (_t.perf_counter() - _t0) * 1000.0
+            log.debug("_try_load_utc_creature '%s': %s (%.0f ms)", resref, exc, _ms)
+            return False
 
     def _ipc_open_utp(self, resref: str, module_dir: str = ""):
         """Handle open_utp IPC request — open a placeable blueprint."""
