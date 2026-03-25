@@ -3,6 +3,12 @@ MDL Binary Parser  – reads KotOR 1 & 2 .mdl + .mdx files
 MDL ASCII Parser   – reads decompiled text MDL (mdlops output)
 MDL ASCII Writer   – writes text MDL for mdlops compilation
 MDL Binary Writer  – writes binary MDL + MDX
+
+Loading strategy (Phase 14.2):
+  parse_files() → tries PyKotor bridge first (real disk KotOR MDL files),
+                  falls back to legacy parser if bridge unavailable/fails.
+  parse()       → always uses legacy parser (correct for synthetic MDLs
+                  produced by MDLBinaryWriter; PyKotor may mis-read them).
 """
 
 import struct, math, logging, os
@@ -14,6 +20,18 @@ from .model_data import (
 )
 
 log = logging.getLogger(__name__)
+
+# ── PyKotor bridge (optional) ────────────────────────────────────────────────
+_BRIDGE_AVAILABLE = False
+try:
+    from .pykotor_bridge import (
+        load_model_via_pykotor as _bridge_load_mdl,
+        is_pykotor_available as _bridge_is_available,
+    )
+    _BRIDGE_AVAILABLE = _bridge_is_available()
+    log.debug(f"mdl_parser: PyKotor bridge {'available' if _BRIDGE_AVAILABLE else 'not available'}")
+except Exception as _bridge_err:
+    log.debug(f"mdl_parser: bridge import failed ({_bridge_err})")
 
 # ─────────────────────────────  Helper  ──────────────────────────────
 
@@ -83,11 +101,26 @@ class MDLBinaryParser:
 
     @classmethod
     def parse_files(cls, mdl_path: str, mdx_path: str = "") -> KotorModel:
-        """One-shot: parse MDL/MDX files and return KotorModel."""
+        """One-shot: parse MDL/MDX files and return KotorModel.
+
+        Tries the PyKotor bridge first (correct UV, skin, animation handling),
+        falls back to the legacy parser if the bridge is unavailable or fails.
+        """
+        if _BRIDGE_AVAILABLE:
+            try:
+                model = _bridge_load_mdl(str(mdl_path), str(mdx_path) if mdx_path else '')
+                if model is not None:
+                    log.debug(f"parse_files: loaded '{mdl_path}' via PyKotor bridge")
+                    return model
+            except Exception as e:
+                log.debug(f"parse_files: bridge failed ({e}), falling back to legacy parser")
+
+        # Legacy parser fallback
         parser = cls.from_files(mdl_path, mdx_path)
         model  = parser.parse()
         model.mdl_path = str(mdl_path)
         model.mdx_path = str(mdx_path) if mdx_path else str(Path(mdl_path).with_suffix('.mdx'))
+        log.debug(f"parse_files: loaded '{mdl_path}' via legacy parser")
         return model
 
     # ── Public entry point ──────────────────────────────────────────────────

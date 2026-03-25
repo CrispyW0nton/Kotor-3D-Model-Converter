@@ -31,6 +31,22 @@ try:
 except ImportError:
     pass
 
+# ── PyKotor bridge (optional) ─────────────────────────────────────────────────
+_BRIDGE_TPC = None
+try:
+    import sys as _sys, os as _os
+    _br_path = _os.path.join(_os.path.dirname(__file__), '..', 'core')
+    if _br_path not in _sys.path:
+        _sys.path.insert(0, _br_path)
+    from core.pykotor_bridge import pykotor_tpc_to_pil as _bridge_tpc_to_pil
+    _BRIDGE_TPC = _bridge_tpc_to_pil
+except Exception:
+    try:
+        from pykotor_bridge import pykotor_tpc_to_pil as _bridge_tpc_to_pil  # type: ignore
+        _BRIDGE_TPC = _bridge_tpc_to_pil
+    except Exception:
+        pass
+
 _UV_SENTINEL = 20.0
 
 # ── Math helpers ─────────────────────────────────────────────────────────────
@@ -221,6 +237,15 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
     """
     Load a KotOR TPC image from raw bytes.  Returns PIL RGBA Image or None.
 
+    Primary path: uses PyKotor via pykotor_bridge (handles DXT1/DXT5, V-flip,
+    TXI extraction).  Falls back to the legacy pure-Python decoder if PyKotor
+    is unavailable.
+
+    The returned image always has:
+      ._txi_str        (str)         — TXI metadata string (may be empty)
+      ._tpc_raw        (bytes)       — original raw TPC bytes
+      ._txi_alpha_test (float|None)  — alpha cutoff from TPC header, or None
+
     KotOR TPC header layout (BioWare / Aurora engine format):
       [0-3]   uint32  data_sz   – first-mip pixel data size (0 = use mip chain)
       [4-7]   float   alpha_test
@@ -248,6 +273,23 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
     if not _PIL or len(data) < 128:
         return None
 
+    # ── Primary path: PyKotor bridge ────────────────────────────────────────
+    if _BRIDGE_TPC is not None:
+        try:
+            img = _BRIDGE_TPC(data)
+            if img is not None:
+                # Ensure TXI attributes are set (bridge always sets them)
+                if not hasattr(img, '_txi_str'):
+                    img._txi_str = ''        # type: ignore[attr-defined]
+                if not hasattr(img, '_tpc_raw'):
+                    img._tpc_raw = data      # type: ignore[attr-defined]
+                if not hasattr(img, '_txi_alpha_test'):
+                    img._txi_alpha_test = None  # type: ignore[attr-defined]
+                return img
+        except Exception:
+            pass  # fall through to legacy decoder
+
+    # ── Legacy pure-Python decoder (fallback) ───────────────────────────────
     data_sz  = struct.unpack_from('<I', data, 0)[0]
     width    = struct.unpack_from('<H', data, 8)[0]
     height   = struct.unpack_from('<H', data, 10)[0]
