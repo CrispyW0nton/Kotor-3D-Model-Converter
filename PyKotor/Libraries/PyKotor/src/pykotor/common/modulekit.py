@@ -1,0 +1,499 @@
+"""Implicit ModuleKit support (headless).
+
+This mirrors Holocron Toolset's implicit-kit pipeline (ModuleKit) but without any `toolset.*`
+or Qt dependencies so it can be used from `pykotor.tools.indoormap` and Pykotorcli.
+
+Design rule (repo convention):
+- `pykotor.common.*` contains **classes / data models**
+- `pykotor.tools.*` contains **functions / workflows**
+"""
+
+from __future__ import annotations
+
+import math
+
+from copy import deepcopy
+from typing import TYPE_CHECKING
+
+from loggerplus import RobustLogger
+from pykotor.common.indoorkit import Kit, KitComponent, KitComponentHook, KitDoor
+from pykotor.common.module import Module
+from pykotor.resource.formats.bwm import BWM, read_bwm
+from pykotor.resource.generics.utd import UTD
+from pykotor.resource.type import ResourceType
+from pykotor.tools.kit import _extract_doorhooks_from_bwm  # NOTE: shared logic (function)
+from utility.common.geometry import Vector3
+
+if TYPE_CHECKING:
+    from pykotor.extract.installation import Installation
+    from pykotor.resource.formats.bwm import BWMEdge
+    from pykotor.resource.formats.lyt import LYT, LYTRoom
+
+
+_MODULE_DISPLAY_EXTENSIONS: tuple[str, ...] = (".mod", "_s.rim", ".rim", "_dlg.erf", "_adx.rim", "_a.rim")
+
+
+class ModuleKit(Kit):
+    """A Kit generated dynamically from a game module.
+
+    This kit is generated lazily from module data and provides components
+    that represent the rooms defined in the module's LYT file.
+
+    Unlike regular Kits which are loaded from JSON files, ModuleKits are
+    created on-demand from module archives and use the module's resources.
+    """
+
+    def __init__(
+        self,
+        #        name: str,
+        module_root: str,
+        installation: Installation,
+    ):
+        # Use module_root as both the stable id and the display name.
+        super().__init__(name=module_root.upper(), kit_id=module_root.lower())
+        self.module_root: str = module_root.lower()
+        self._installation: Installation = installation
+        self._loaded: bool = False
+        self._module: Module | None = None
+        self._lyt_room_indexes: dict[str, int] | None = None
+        self._door_lookup_by_name: dict[str, KitDoor] | None = None
+
+        # Duck-typed marker used by Toolset/CLI to know this kit is module-backed.
+        self.is_module_kit: bool = True
+
+    def ensure_loaded(self) -> bool:
+        """Lazily load the module components if not already loaded.
+
+        Returns:
+            True if components were loaded successfully, False otherwise.
+        """
+        if self._loaded:
+            return bool(self.components)
+        self._loaded = True
+        try:
+            self._load_module_components()
+        except Exception:  # noqa: BLE001
+            RobustLogger().exception("Failed to load ModuleKit for '%s'", self.module_root)
+            return False
+        return bool(self.components)
+
+    def _load_module_components(self) -> None:
+        """Load components from the module's LYT and resources."""
+        # IMPORTANT: use composite module loading (rim/_s.rim/_dlg.erf/.mod) rather than a single
+        # capsule file. This matches how real installs load modules and avoids relying on resrefs
+        # matching the module root.
+        # Use fast composite module loading; Module.reload_resources() texture crawling is a major bottleneck
+        # and is unnecessary for ModuleKit (we only need module-local LYT/WOK/MDL/MDX).
+        self._module = Module(self.module_root, self._installation, use_dot_mod=True, load_textures=False)
+
+        layout_res = self._module.layout()
+        if layout_res is None:
+            RobustLogger().warning("Module '%s' has no LYT resource", self.module_root)
+            return
+        lyt_data = layout_res.resource()
+        if lyt_data is None:
+            RobustLogger().warning("Failed to parse LYT data for module '%s'", self.module_root)
+            return
+
+        # Create a default door for hooks
+        default_door: KitDoor = self._create_default_door()
+        self.doors.append(default_door)
+        self._refresh_doors_lookup()
+
+        # Extract rooms from LYT
+        lyt_room_to_component: dict[int, KitComponent] = {}
+        for room_idx, lyt_room in enumerate(lyt_data.rooms):
+            component: KitComponent | None = self._component_from_lyt_room(lyt_room, room_idx, default_door)
+            if component is not None:
+                self.components.append(component)
+                lyt_room_to_component[room_idx] = component
+        self._refresh_lyt_room_lookup(lyt_data)
+
+        # Also load any doorhooks from LYT as potential hook points
+        self._process_lyt_doorhooks(lyt_data, lyt_room_to_component)
+
+    def _create_default_door(self) -> KitDoor:
+        """Create a default door for module components."""
+        utd = UTD()
+        utd.resref.set_data("sw_door")
+        utd.tag = "module_door"
+        return KitDoor(utdK1=utd, utdK2=utd, width=2.0, height=3.0)
+
+    def _refresh_lyt_room_lookup(self, lyt_data: LYT) -> None:
+        """Build a fast room name lookup map for this LYT."""
+        self._lyt_room_indexes = {f"room{idx}": idx for idx in range(len(lyt_data.rooms))}
+        self._lyt_room_indexes.update(
+            {
+                (lyt_room.model or f"room{idx}").lower(): idx
+                for idx, lyt_room in enumerate(lyt_data.rooms)
+            },
+        )
+
+    def _refresh_doors_lookup(self) -> None:
+        """Build a fast door lookup map from lower-case resrefs."""
+        self._door_lookup_by_name = {}
+        for door in self.doors:
+            self._door_lookup_by_name[door.utdK1.resref.get().lower()] = door
+            self._door_lookup_by_name[door.utdK2.resref.get().lower()] = door
+
+    def _component_from_lyt_room(
+        self,
+        lyt_room: LYTRoom,
+        idx: int,
+        default_door: KitDoor,
+    ) -> KitComponent | None:
+        """Create a KitComponent from a LYT room definition.
+
+        We intentionally create one component per LYT room, even if model names repeat,
+        to keep indoor JSON stable and unambiguous for roundtrips.
+        """
+        model_name = (lyt_room.model or f"room{idx}").lower()
+        component_id = f"{model_name}_{idx}"
+        room_position = lyt_room.position
+
+        # Try to get the walkmesh (WOK) for this room
+        bwm = self._get_room_walkmesh(model_name)
+        # IMPORTANT: never synthesize placeholder geometry for missing WOK.
+        # Some rooms legitimately have no walkmesh; we represent those as an empty BWM.
+        if bwm is None:
+            bwm = BWM()
+        else:
+            # Make a deep copy of the BWM so each component has its own instance
+            # This prevents issues if multiple rooms share the same model name
+            bwm = deepcopy(bwm)
+
+        # CRITICAL FIX (double-translation bug):
+        #
+        # Game module WOKs are stored in **world space** (coordinates already include the LYT position).
+        # The engine consumes binary WOKs without applying LYT transforms at runtime.
+        # (Reference:  - CSWCollisionMesh__LoadMeshBinary sets field9_0x4c=1,
+        #  and CSWCollisionMesh__TransformToWorld is a no-op when field9_0x4c=1.)
+        #
+        # When we build a module, IndoorMap.process_bwm() adds room.position to the BWM.
+        # If we store the BWM in world space here, we get **double translation**:
+        #   - Original WOK is at world position (e.g. x=82)
+        #   - process_bwm adds room.position again (x += 82)
+        #   - Result: x=164 (wrong!)
+        #
+        # FIX: Subtract the LYT position from the BWM to convert to local (room) coordinates.
+        # Then when building, process_bwm will add the position back correctly.
+        if bwm.faces:
+            try:
+                bwm.translate(-room_position.x, -room_position.y, -room_position.z)
+            except Exception as e:
+                # Defensive: if translation fails, log but don't crash
+                # This should never happen, but protects against edge cases
+                RobustLogger().warning(
+                    "Failed to translate BWM for room %d (model=%s): %s. BWM will remain in world coordinates (may cause double-translation).",
+                    idx,
+                    model_name,
+                    e,
+                )
+
+        # Try to get the model data
+        mdl = self._get_room_model(model_name, ResourceType.MDL) or b""
+        mdx = self._get_room_model(model_name, ResourceType.MDX) or b""
+
+        # Create display name - include room index to ensure uniqueness
+        # This helps distinguish rooms that share the same model name
+        if lyt_room.model:
+            component_name = f"{model_name.upper()}_{idx}"
+        else:
+            component_name = f"ROOM{idx}"
+
+        component = KitComponent(kit=self, name=component_name, component_id=component_id, bwm=bwm, mdl=mdl, mdx=mdx)
+        # Persist the original room placement so extract/build roundtrips can preserve layout.
+        component.default_position = Vector3(room_position.x, room_position.y, room_position.z)  # type: ignore[attr-defined]
+
+        self._append_extracted_bwm_hooks(component, bwm, default_door)
+
+        return component
+
+    def _get_room_walkmesh(
+        self,
+        model_name: str,
+    ) -> BWM | None:
+        """Get the walkmesh for a room from the module.
+
+        Returns the parsed walkmesh (BWM) exactly as read from the module's WOK resource.
+        """
+        data = self._get_module_resource_data(model_name, ResourceType.WOK)
+        if not data:
+            return None
+        if isinstance(data, BWM):
+            return data
+        try:
+            return read_bwm(data)
+        except Exception:  # noqa: BLE001
+            RobustLogger().warning("Failed to read WOK for '%s' in module '%s'", model_name, self.module_root)
+            return None
+
+    def _get_room_model(
+        self,
+        model_name: str,
+        restype: ResourceType,
+    ) -> bytes | None:
+        """Return raw model payload for the requested room resource type."""
+        data = self._get_module_resource_data(model_name, restype)
+        if not data:
+            return None
+        return bytes(data) if isinstance(data, (bytes, bytearray)) else None
+
+    def _get_module_resource_data(
+        self,
+        model_name: str,
+        restype: ResourceType,
+    ) -> bytes | BWM | None:
+        """Read module resource payload with shared null/empty handling."""
+        if self._module is None:
+            return None
+        res = self._module.resource(model_name, restype)
+        if res is None:
+            return None
+        data = res.data()
+        return data if data else None
+
+    def _append_extracted_bwm_hooks(
+        self,
+        component: KitComponent,
+        bwm: BWM,
+        default_door: KitDoor,
+    ) -> None:
+        """Create component hooks from doorhook markers extracted from BWM."""
+        doorhooks = _extract_doorhooks_from_bwm(bwm, num_doors=len(self.doors))
+        for doorhook in doorhooks:
+            position = Vector3(float(doorhook["x"]), float(doorhook["y"]), float(doorhook["z"]))
+            rotation = float(doorhook["rotation"])
+            door_index = int(doorhook["door"])
+            edge = int(doorhook["edge"])
+            door = self.doors[door_index] if 0 <= door_index < len(self.doors) else default_door
+            component.hooks.append(KitComponentHook(position, rotation, edge, door))
+
+    def _process_lyt_doorhooks(
+        self,
+        lyt_data: LYT,
+        lyt_room_to_component: dict[int, KitComponent],
+    ) -> None:
+        """Process LYT doorhooks to create component hooks.
+
+        Maps LYT doorhooks (world-space door positions) to KitComponentHook objects
+        in local-space coordinates. This enables roundtrip preservation of door placements
+        when extracting modules to indoor JSON and rebuilding them.
+
+        Args:
+            lyt_data: The LYT data to process.
+            lyt_room_to_component: A dictionary mapping LYT room indices to KitComponents.
+        """
+        if not lyt_data.doorhooks:
+            return
+
+        for doorhook in lyt_data.doorhooks:
+            room_idx = self._find_lyt_room_index(lyt_data, doorhook.room)
+            if room_idx is None:
+                RobustLogger().warning(
+                    "Doorhook references room '%s' which doesn't exist in LYT for module '%s'",
+                    doorhook.room,
+                    self.module_root,
+                )
+                continue
+
+            # Use the mapping to find the component (handles cases where component creation failed)
+            matching_component: KitComponent | None = lyt_room_to_component.get(room_idx)
+            if matching_component is None:
+                RobustLogger().warning(
+                    "Doorhook room '%s' (index %d) has no corresponding component in module '%s' (component creation may have failed)",
+                    doorhook.room,
+                    room_idx,
+                    self.module_root,
+                )
+                continue
+
+            room_position: Vector3 = matching_component.default_position
+            local_position: Vector3 = Vector3(
+                doorhook.position.x - room_position.x,
+                doorhook.position.y - room_position.y,
+                doorhook.position.z - room_position.z,
+            )
+
+            euler: Vector3 = doorhook.orientation.to_euler()
+            rotation_deg: float = math.degrees(euler.z) % 360
+            if rotation_deg < 0:
+                rotation_deg += 360
+
+            closest_edge: int | None = self._find_closest_edge(matching_component.bwm, local_position)
+            edge_index: int = 0 if closest_edge is None else closest_edge
+
+            door = self._resolve_matching_door(doorhook.door)
+
+            hook = KitComponentHook(
+                position=local_position,
+                rotation=rotation_deg,
+                edge=edge_index,
+                door=door,
+            )
+            matching_component.hooks.append(hook)
+
+    @staticmethod
+    def _edge_points(
+        face,
+        local_edge_index: int,
+    ) -> tuple[Vector3, Vector3]:
+        """Return the face vertices for a face-local edge index."""
+        if local_edge_index == 0:
+            return face.v1, face.v2
+        if local_edge_index == 1:
+            return face.v2, face.v3
+        return face.v3, face.v1
+
+    def _find_lyt_room_index(
+        self,
+        lyt_data: LYT,
+        room_name: str,
+    ) -> int | None:
+        """Resolve a doorhook room name to the corresponding LYT room index."""
+        if self._lyt_room_indexes is None:
+            self._refresh_lyt_room_lookup(lyt_data)
+        return self._lyt_room_indexes.get(room_name.lower())
+
+    def _resolve_matching_door(
+        self,
+        door_name: str,
+    ) -> KitDoor:
+        """Resolve door by resref name, falling back to default module door."""
+        default_door = self.doors[0] if self.doors else self._create_default_door()
+        door_name_lower = door_name.lower()
+        if self._door_lookup_by_name is None:
+            self._refresh_doors_lookup()
+        return self._door_lookup_by_name.get(door_name_lower, default_door)
+
+    def _find_closest_edge(
+        self,
+        bwm: BWM,
+        position: Vector3,
+    ) -> int | None:
+        edges: list[BWMEdge] = bwm.edges()
+        if not edges:
+            return None
+
+        face_to_index: dict[int, int] = {id(f): i for i, f in enumerate(bwm.faces)}
+        min_distance: float = float("inf")
+        closest_edge_index: int | None = None
+
+        for edge in edges:
+            face = edge.face
+            # NOTE: `edge.index` is a GLOBAL edge index computed as `face_index * 3 + local_edge_index`.
+            local_edge_index: int = edge.index % 3
+
+            v1, v2 = self._edge_points(face, local_edge_index)
+
+            edge_vec: Vector3 = Vector3(v2.x - v1.x, v2.y - v1.y, 0.0)
+            point_vec: Vector3 = Vector3(position.x - v1.x, position.y - v1.y, 0.0)
+
+            edge_len_sq: float = edge_vec.x * edge_vec.x + edge_vec.y * edge_vec.y
+            if edge_len_sq < 1e-6:
+                continue
+
+            t: float = max(0.0, min(1.0, (point_vec.x * edge_vec.x + point_vec.y * edge_vec.y) / edge_len_sq))
+            closest_point: Vector3 = Vector3(
+                v1.x + t * edge_vec.x,
+                v1.y + t * edge_vec.y,
+                v1.z + t * (v2.z - v1.z),
+            )
+
+            dx: float = position.x - closest_point.x
+            dy: float = position.y - closest_point.y
+            distance: float = math.sqrt(dx * dx + dy * dy)
+
+            if distance < min_distance:
+                min_distance = distance
+                face_index: int | None = face_to_index.get(id(face))
+                if face_index is None:
+                    try:
+                        face_index = bwm.faces.index(face)
+                    except ValueError:
+                        RobustLogger().warning("Encountered unmatched face object while resolving closest edge; skipping this edge.")
+                        continue
+                closest_edge_index = face_index * 3 + local_edge_index
+
+        return closest_edge_index
+
+
+class ModuleKitManager:
+    """Manages lazy loading of ModuleKits from an installation.
+
+    Provides methods to list available modules and convert them to kits
+    on demand. Only loads module data when a specific module is selected.
+    """
+
+    def __init__(self, installation: Installation):
+        self._installation: Installation = installation
+        self._cache: dict[str, ModuleKit] = {}
+        self._module_names: dict[str, str | None] | None = None
+
+    def get_module_names(self) -> dict[str, str | None]:
+        """Get dictionary mapping module filenames to display names.
+
+        Uses the installation's module_names method for display names.
+
+        Returns:
+            Dict mapping module filename to display name (or None).
+        """
+        if self._module_names is None:
+            self._module_names = self._installation.module_names(use_hardcoded=True)
+        return self._module_names
+
+    def get_module_roots(self) -> list[str]:
+        """Get list of unique module roots from the installation.
+
+        Returns:
+            List of module root names (without extensions).
+        """
+        roots = {self._installation.get_module_root(module_filename) for module_filename in self.get_module_names()}
+        return sorted(roots)
+
+    def get_module_display_name(self, module_root: str) -> str:
+        """Get the display name for a module root.
+
+        Args:
+            module_root: The module root name.
+
+        Returns:
+            Display name combining root and area name if available.
+        """
+        module_names = self.get_module_names()
+        for filename in (f"{module_root}{ext}" for ext in _MODULE_DISPLAY_EXTENSIONS):
+            area_name: str | None = module_names.get(filename)
+            if area_name is None:
+                continue
+            return f"{module_root.upper()} - {area_name}"
+
+        return module_root.upper()
+
+    def get_module_kit(self, module_root: str) -> ModuleKit:
+        """Get or create a ModuleKit for the specified module.
+
+        Kits are cached so repeated requests for the same module return
+        the same kit instance.
+
+        Args:
+            module_root: The module root name (e.g., "danm13").
+
+        Returns:
+            A ModuleKit for the specified module.
+        """
+        key: str = module_root.lower()
+        if key not in self._cache:
+            self._cache[key] = ModuleKit(
+                module_root=key,
+                installation=self._installation,
+            )
+        return self._cache[key]
+
+    def clear_cache(self) -> None:
+        """Clear the kit cache to free memory."""
+        self._cache.clear()
+        self._module_names = None
+
+    def is_kit_valid(self, module_root: str) -> bool:
+        """Check if a module kit is valid."""
+        return module_root.lower() in self._cache

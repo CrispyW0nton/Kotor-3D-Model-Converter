@@ -456,10 +456,16 @@ class TestTpcBottomUpFlip(unittest.TestCase):
 
     def test_tpc_uncompressed_rgb_flip(self):
         """
-        After _load_tpc_bytes, row 0 of the PIL image (top) must be the color
-        that was in the LAST row of the raw file (because the raw file is
-        bottom-up: row 0 = bottom).  After the vertical flip, that last-raw-row
-        color should now be at the image bottom (last PIL row).
+        KotOR uncompressed RGB TPC textures are stored bottom-up (OpenGL convention).
+        _load_tpc_bytes must NOT flip them — the renderer's (1-v)*h formula handles
+        V-inversion at render time.
+
+        Correct TPC header: data_sz=0 (uncompressed), pixel_type at byte 12.
+        data_sz != 0 signals DXT-compressed in the PyKotor/KotOR convention.
+
+        NOTE: The old version of this test used data_sz=W*H*3 (non-zero) and
+        encoding at byte 14 — both are incorrect.  The real game TPC format puts
+        pixel_type at byte 12 and uses data_sz=0 for uncompressed textures.
         """
         try:
             from PIL import Image
@@ -467,26 +473,26 @@ class TestTpcBottomUpFlip(unittest.TestCase):
             self.skipTest("PIL not available")
 
         W, H = 8, 4
-        top_color  = (200, 100,  50)   # raw last row → after flip: PIL last row
-        bot_color  = ( 50, 200, 100)   # raw first row → after flip: PIL first row
+        # Row 0 in file (OpenGL bottom, V=0) = bot_color
+        # Row H-1 in file (OpenGL top, V=1) = top_color
+        top_color  = (200, 100,  50)
+        bot_color  = ( 50, 200, 100)
 
-        # Build header manually
-        # TPC header: byte 12 = layers, byte 13 = mip_count, byte 14 = encoding
-        data_sz = W * H * 3
+        # Correct TPC header: data_sz=0 → uncompressed, pixel_type=2 (RGB) at byte 12
         header = bytearray(128)
-        struct.pack_into('<I', header, 0, data_sz)
+        struct.pack_into('<I', header, 0, 0)       # data_sz = 0 (uncompressed)
+        struct.pack_into('<f', header, 4, 1.0)     # alpha_test
         struct.pack_into('<H', header, 8, W)
         struct.pack_into('<H', header, 10, H)
-        header[12] = 3   # layers = 3 (RGB)
+        header[12] = 2   # pixel_type = 2 (RGB/DXT1) — data_sz=0 → uncompressed RGB
         header[13] = 1   # mip_count = 1
-        header[14] = 2   # encoding = raw RGB (byte 14)
 
         pixel_data = bytearray(W * H * 3)
-        # Row 0 in file = bottom row of image (before flip)
+        # Row 0 in file = bottom-up row 0 (OpenGL V=0)
         for x in range(W):
             base = x * 3
             pixel_data[base:base+3] = bot_color
-        # Row H-1 in file = top row of image (before flip)
+        # Row H-1 in file = bottom-up top row (OpenGL V=1)
         for x in range(W):
             base = (H-1) * W * 3 + x * 3
             pixel_data[base:base+3] = top_color
@@ -496,37 +502,42 @@ class TestTpcBottomUpFlip(unittest.TestCase):
         if img is None:
             self.skipTest("_load_tpc_bytes returned None (PIL not available)")
 
-        # After _flip (FLIP_TOP_BOTTOM):
-        # What was row 0 in file (bot_color) is now PIL row H-1 (bottom)
-        # What was row H-1 in file (top_color) is now PIL row 0 (top)
-        pix_top = img.getpixel((0, 0))[:3]
-        pix_bot = img.getpixel((0, H - 1))[:3]
-        self.assertEqual(pix_top, top_color,
-                         f"PIL top row should be {top_color}, got {pix_top}")
-        self.assertEqual(pix_bot, bot_color,
-                         f"PIL bottom row should be {bot_color}, got {pix_bot}")
+        # Uncompressed textures are NOT flipped (already bottom-up, OpenGL convention).
+        # PIL row 0 = file row 0 = bot_color (OpenGL V=0 / bottom)
+        # PIL row H-1 = file row H-1 = top_color (OpenGL V=1 / top)
+        pix_row0 = img.getpixel((0, 0))[:3]
+        pix_rowN = img.getpixel((0, H - 1))[:3]
+        self.assertEqual(pix_row0, bot_color,
+                         f"PIL row 0 should be bot_color {bot_color} (no flip), got {pix_row0}")
+        self.assertEqual(pix_rowN, top_color,
+                         f"PIL row H-1 should be top_color {top_color} (no flip), got {pix_rowN}")
 
     def test_tpc_greyscale_flip(self):
-        """Greyscale TPC (encoding=1) must also be flipped."""
+        """Greyscale TPC (pixel_type=1) is uncompressed and already bottom-up — no flip.
+
+        Correct TPC header: data_sz=0, pixel_type=1 (Greyscale) at byte 12.
+
+        NOTE: The old version of this test used data_sz=W*H and encoding at byte 14
+        which is incorrect.  Uncompressed textures use data_sz=0 and pixel_type at byte 12.
+        Uncompressed textures are NOT flipped; they are already in OpenGL bottom-up order.
+        """
         try:
             from PIL import Image
         except ImportError:
             self.skipTest("PIL not available")
 
         W, H = 4, 4
-        data_sz = W * H
         header = bytearray(128)
-        struct.pack_into('<I', header, 0, data_sz)
+        struct.pack_into('<I', header, 0, 0)       # data_sz = 0 (uncompressed)
+        struct.pack_into('<f', header, 4, 1.0)     # alpha_test
         struct.pack_into('<H', header, 8, W)
         struct.pack_into('<H', header, 10, H)
-        # TPC header: byte 12 = layers, byte 13 = mip_count, byte 14 = encoding
-        header[12] = 1   # layers = 1 (greyscale)
+        header[12] = 1   # pixel_type = 1 (Greyscale)
         header[13] = 1   # mip_count = 1
-        header[14] = 1   # encoding = greyscale (byte 14)
 
         pixel_data = bytearray(W * H)
-        pixel_data[0] = 10    # bottom row (file row 0)
-        pixel_data[(H-1)*W] = 240  # top row (file row H-1)
+        pixel_data[0] = 10         # file row 0 (OpenGL bottom)
+        pixel_data[(H-1)*W] = 240  # file row H-1 (OpenGL top)
 
         raw = bytes(header) + bytes(pixel_data)
         from src.gui.viewport import _load_tpc_bytes
@@ -534,17 +545,17 @@ class TestTpcBottomUpFlip(unittest.TestCase):
         if img is None:
             self.skipTest("_load_tpc_bytes returned None")
 
-        # After flip: what was file row 0 (value=10) → PIL row H-1
-        # What was file row H-1 (value=240) → PIL row 0
-        pix_top = img.getpixel((0, 0))
-        pix_bot = img.getpixel((0, H - 1))
-        # RGBA: all channels from greyscale
-        top_val = pix_top[0] if hasattr(pix_top, '__len__') else pix_top
-        bot_val = pix_bot[0] if hasattr(pix_bot, '__len__') else pix_bot
-        self.assertEqual(top_val, 240,
-                         f"PIL top row should be value 240, got {top_val}")
-        self.assertEqual(bot_val, 10,
-                         f"PIL bottom row should be value 10, got {bot_val}")
+        # Uncompressed textures are NOT flipped (already bottom-up).
+        # PIL row 0 = file row 0 = value 10 (OpenGL bottom)
+        # PIL row H-1 = file row H-1 = value 240 (OpenGL top)
+        pix_row0 = img.getpixel((0, 0))
+        pix_rowN = img.getpixel((0, H - 1))
+        row0_val = pix_row0[0] if hasattr(pix_row0, '__len__') else pix_row0
+        rowN_val = pix_rowN[0] if hasattr(pix_rowN, '__len__') else pix_rowN
+        self.assertEqual(row0_val, 10,
+                         f"PIL row 0 should be value 10 (no flip, uncompressed), got {row0_val}")
+        self.assertEqual(rowN_val, 240,
+                         f"PIL row H-1 should be value 240 (no flip, uncompressed), got {rowN_val}")
 
 
 # ─────────────────────────────────────────────────────────────────────────

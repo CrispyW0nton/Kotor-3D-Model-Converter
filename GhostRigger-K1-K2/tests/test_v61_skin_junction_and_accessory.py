@@ -1,24 +1,24 @@
 """
 v6.1 Skin Junction & Accessory Model Tests
 ==========================================
-Covers the two key fixes in _get_world_verts_for_node:
+Phase 17 UPDATE: All KotOR MDL vertices (skin AND non-skin) are stored in
+NODE-LOCAL space and require the full world transform to be applied.
 
-  FIX-SKIN-NODEROT:  Standalone skin nodes with a non-identity LOCAL rotation
-      have that rotation applied to their vertices.  The node's POSITION is
-      never added (it is the animation bone pivot, not a mesh origin).
-      Evidence: c_terantanak Torso/feet/Tail carry a ~180° Z rotation; without
-      it the shoulder seam has a Y-sign flip (junction gap = 0), after the fix
-      the Y ranges overlap by ~0.51 units (fully connected).
+Previous incorrect assumption:
+  "Standalone skin nodes: vertices in world space → return as-is"
 
-  FIX-ACCESSORY-SKIN:  Accessory models (non-base-supermodel) have skin
-      vertices in bone-local space; the full world transform is applied.
+Correct behavior (Phase 17, verified by KotorBlender + PyKotor + binary analysis):
+  ALL nodes → apply full world transform (translate by wp + rotate by wo).
+  No special-casing for standalone vs. accessory or skin vs. non-skin.
 
-  FIX-BANTHA-NOWP:  Standalone models with identity skin-node rotation AND a
-      non-zero node position must NOT add that position to the vertices.
-      The position is the bone's world pivot for LBS, not a mesh offset.
-      Evidence: c_bantha btBody_front pos=(0,-1.163,1.469); adding it would
-      shift the already-world-space body verts by -1.163 in Y, breaking
-      front/back junction.
+  Key evidence (c_bantha):
+    btBody_front local verts Y=[1.117,3.391], world pivot Y=-1.163
+    Correct world Y = [-0.046, 2.228] (body covers torso/back, anatomy correct)
+    Old "as-is" gave Y=[1.117,3.391] (body floating in front of head)
+
+  KotorBlender (base.py): obj.location = self.position (LOCAL), verts uploaded raw,
+    Blender scene graph applies parent-chain transform automatically.
+  PyKotor: vertex_positions read raw, no world-space pre-baking.
 """
 import math
 import pytest
@@ -53,8 +53,6 @@ def _make_standalone(supermodel='NULL'):
     root.rotation = (0, 0, 0, 1)
     model = KotorModel(name='test', root_node=root)
     model.supermodel = supermodel
-    # NOTE: model.nodes is a property (read-only) derived from root_node tree.
-    # Nodes are attached by setting parent.children.append(node) in _add_skin_node.
     model.compute_bounds()
     return model, root
 
@@ -70,16 +68,15 @@ def _add_skin_node(parent, model, name, verts, rotation=(0, 0, 0, 1),
     node.uvs = [(0.5, 0.5)] * len(verts)
     node.texture = 'dummy'
     parent.children.append(node)
-    # NOTE: model.nodes is a computed property; attaching to parent tree is enough.
     return node
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  FIX-SKIN-NODEROT: 180° Z rotation applied to standalone skin nodes
+#  Phase 17: Skin node rotation + translation both applied
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestSkinNodeRotFix:
-    """Standalone skin nodes carry only the node's LOCAL rotation — no position."""
+    """All skin nodes: full world transform (rotation + translation) always applied."""
 
     def _renderer_with_skin(self, rotation, position=(0, 0, 0)):
         model, root = _make_standalone('NULL')
@@ -92,32 +89,37 @@ class TestSkinNodeRotFix:
     # ── 180° Z rotation (c_terantanak Torso/feet/Tail case) ──────────────────
 
     def test_180z_rotation_applied_to_verts(self):
-        """180° Z rotation flips X and Y signs: (1,0.5,z) → (-1,-0.5,z)."""
+        """180° Z rotation flips X and Y signs: (1,0.5,z) → (-1,-0.5,z).
+        
+        Phase 17: node at position=(0,0,0) so no additional translation.
+        """
         rot = _quat_from_axis_angle(0, 0, 1, 180)   # ~(0,0,1,0) normalised
         r, node, orig = self._renderer_with_skin(rot)
         world = r._get_world_verts_for_node(node)
         assert len(world) == len(orig)
-        # After 180° Z: x→-x, y→-y, z stays
+        # After 180° Z: x→-x, y→-y, z stays (plus no translation since pos=(0,0,0))
         for wv, ov in zip(world, orig):
             assert abs(wv[0] - (-ov[0])) < 1e-4, f"X: expected {-ov[0]:.3f}, got {wv[0]:.3f}"
             assert abs(wv[1] - (-ov[1])) < 1e-4, f"Y: expected {-ov[1]:.3f}, got {wv[1]:.3f}"
             assert abs(wv[2] - ov[2]) < 1e-4, f"Z: expected {ov[2]:.3f}, got {wv[2]:.3f}"
 
-    def test_180z_rotation_position_NOT_added(self):
-        """Node position is NEVER added to standalone skin verts (bone pivot only)."""
+    def test_180z_rotation_with_position_full_transform(self):
+        """Phase 17: 180°Z + position=(0,0,100.0) → rotation applied AND z+100 added.
+
+        Vertex z should be ov[2] + 100.0 (not just ov[2]).
+        """
         rot = _quat_from_axis_angle(0, 0, 1, 180)
-        # Give the node a large position that would visibly displace verts if added
         r, node, orig = self._renderer_with_skin(rot, position=(0, 0, 100.0))
         world = r._get_world_verts_for_node(node)
-        # Z must be unaffected by position (100.0 NOT added)
+        # Full transform: rotate (x,y,z)→(-x,-y,z), then add wp=(0,0,100)
         for wv, ov in zip(world, orig):
-            assert abs(wv[2] - ov[2]) < 1e-4, \
-                f"Z: rotation-only expected {ov[2]:.3f}, got {wv[2]:.3f} (position was illegally added)"
+            assert abs(wv[2] - (ov[2] + 100.0)) < 1e-4, \
+                f"Z: expected {ov[2]+100.0:.3f} (rot+translate), got {wv[2]:.3f}"
 
     # ── Identity rotation (RArm / LArm case, most creature nodes) ────────────
 
-    def test_identity_rotation_verts_unchanged(self):
-        """Identity rotation → vertices returned exactly as stored."""
+    def test_identity_rotation_zero_position_unchanged(self):
+        """Identity rotation + position=(0,0,0): world = identity → verts unchanged."""
         r, node, orig = self._renderer_with_skin((0, 0, 0, 1))
         world = r._get_world_verts_for_node(node)
         for wv, ov in zip(world, orig):
@@ -125,21 +127,28 @@ class TestSkinNodeRotFix:
             assert abs(wv[1] - ov[1]) < 1e-6
             assert abs(wv[2] - ov[2]) < 1e-6
 
-    def test_identity_rotation_large_position_NOT_added(self):
-        """Large bone pivot on identity-rotation skin node must NOT shift verts."""
+    def test_identity_rotation_large_position_applied(self):
+        """Phase 17: identity-rotation skin node with large position → position IS added.
+
+        c_bantha style: btBody_front pos=(0,-1.163,1.469).
+        local vert (1.0, 0.5, 1.5) → world (1.0, 0.5-1.163, 1.5+1.469) = (1.0, -0.663, 2.969)
+        """
         r, node, orig = self._renderer_with_skin((0, 0, 0, 1), position=(0, -1.163, 1.469))
         world = r._get_world_verts_for_node(node)
-        # c_bantha style: verts stay at their stored positions
+        wp = (0.0, -1.163, 1.469)
         for wv, ov in zip(world, orig):
-            assert abs(wv[0] - ov[0]) < 1e-6
-            assert abs(wv[1] - ov[1]) < 1e-6, \
-                f"Y: expected {ov[1]:.3f} unchanged, got {wv[1]:.3f} (position was illegally added)"
-            assert abs(wv[2] - ov[2]) < 1e-6
+            assert abs(wv[0] - (ov[0] + wp[0])) < 1e-6
+            assert abs(wv[1] - (ov[1] + wp[1])) < 1e-6, \
+                f"Y: expected {ov[1]+wp[1]:.3f} (wp applied), got {wv[1]:.3f}"
+            assert abs(wv[2] - (ov[2] + wp[2])) < 1e-6
 
     # ── 90° Y rotation ────────────────────────────────────────────────────────
 
     def test_90y_rotation_applied(self):
-        """90° Y rotation: (1,0,0) → (0,0,-1), (0,0,1) → (1,0,0)."""
+        """90° Y rotation: (1,0,0) → (0,0,-1), (0,0,1) → (1,0,0).
+        
+        Phase 17: pos=(0,0,0) so no translation, rotation-only result.
+        """
         rot = _quat_from_axis_angle(0, 1, 0, 90)
         model, root = _make_standalone('NULL')
         verts = [(1.0, 0.0, 0.0)]
@@ -154,22 +163,24 @@ class TestSkinNodeRotFix:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  FIX-BANTHA-NOWP: Standalone model with large non-zero bone position
+#  Phase 17: c_bantha body: world transform correctly positions body mesh
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestBanthaBodyJunction:
-    """c_bantha skin nodes have large wp_mag (≈1.87) but identity rotation.
-    Vertices are in model/world space — the position must NOT be added.
+    """Phase 17: c_bantha skin nodes — world transform places body in correct position.
 
-    Bantha geometry: front body Y=[1.12, 3.39], back body Y=[-2.85, 1.20].
-    They share junction at Y≈1.12.  If wp_Y=-1.163 were added to front body
-    the new Y_max would be ≈2.23 and junction would shift, breaking the model.
+    btBody_front: local verts Y=[1.117,3.391], world pivot Y=-1.163
+    Correct world Y = [-0.046, 2.228] (body covers torso, matches game anatomy)
+
+    Both front and back body share the same pivot Y=-1.163.
+    After applying the transform, front Y min ≈ -0.046 and back Y max ≈ 0.033,
+    so they meet/overlap near Y≈0 (correct anatomical junction).
     """
 
     def _bantha_body_front_renderer(self):
         """Simulate btBody_front: position=(0,-1.163,1.469), identity rotation."""
         model, root = _make_standalone('NULL')
-        # Representative verts in the junction region (Y ≈ 1.12 to 3.39)
+        # Representative verts in the junction region (Y ≈ 1.12 to 3.39 local)
         verts = [(0.0, 1.12, 0.0), (0.0, 2.28, 0.5), (0.0, 3.39, 1.0)]
         node = _add_skin_node(root, model, 'btBody_front', verts,
                               rotation=(0, 0, 0, 1),
@@ -177,20 +188,22 @@ class TestBanthaBodyJunction:
         model.compute_bounds()
         return _make_renderer_for(model), node, verts
 
-    def test_front_body_verts_unchanged(self):
-        """btBody_front verts must remain at stored Y positions (no wp offset)."""
+    def test_front_body_verts_translated(self):
+        """Phase 17: btBody_front verts should be shifted by wp (Y-1.163)."""
         r, node, orig = self._bantha_body_front_renderer()
         world = r._get_world_verts_for_node(node)
+        wp_y = -1.163
         for wv, ov in zip(world, orig):
-            assert abs(wv[1] - ov[1]) < 1e-6, \
-                f"Y: expected {ov[1]:.3f}, got {wv[1]:.3f} (wp_Y=-1.163 was illegally added)"
+            assert abs(wv[1] - (ov[1] + wp_y)) < 1e-5, \
+                f"Y: expected {ov[1]+wp_y:.4f} (wp applied), got {wv[1]:.4f}"
 
     def test_front_back_junction_preserved(self):
-        """Front body Y_min(1.12) and back body Y_max(1.20) must overlap."""
+        """Phase 17: Front body Y_min(≈-0.046) and back body Y_max(≈0.033) overlap."""
         model, root = _make_standalone('NULL')
+        # Front body: local Y=[1.12, 3.39]; after wp_y=-1.163: world Y=[-0.043, 2.227]
         front_verts = [(0.0, 1.12, 0.0), (0.0, 2.28, 0.5), (0.0, 3.39, 1.0)]
+        # Back body: local Y=[-2.85, 1.20]; after wp_y=-1.163: world Y=[-4.013, 0.037]
         back_verts  = [(0.0, -2.85, 0.0), (0.0, 0.06, 0.3), (0.0, 1.20, 0.5)]
-        # Both have the same bone position as real bantha
         bp = (0.0, -1.163, 1.469)
         front = _add_skin_node(root, model, 'btBody_front', front_verts,
                                rotation=(0,0,0,1), position=bp)
@@ -205,13 +218,14 @@ class TestBanthaBodyJunction:
         front_ymin = min(v[1] for v in wf)
         back_ymax  = max(v[1] for v in wb)
 
+        # After applying wp: front_ymin ≈ -0.043, back_ymax ≈ 0.037
         # Junction: back body Y_max ≥ front body Y_min means they meet/overlap
         gap = front_ymin - back_ymax
         assert gap <= 0.15, \
             f"Front/back body junction gap = {gap:.3f}; expected ≤ 0.15 (bodies connected)"
 
-    def test_large_wp_mag_standalone_not_applied(self):
-        """wp_mag = 1.87 on a NULL-supermodel skin must not be added to verts."""
+    def test_bantha_wp_applied_correctness(self):
+        """Phase 17: wp=(0,-1.163,1.469) IS applied to bantha-style skin vert."""
         model, root = _make_standalone('NULL')
         verts = [(0.0, 0.0, 0.5)]
         node = _add_skin_node(root, model, 'body', verts,
@@ -220,19 +234,20 @@ class TestBanthaBodyJunction:
         model.compute_bounds()
         r = _make_renderer_for(model)
         world = r._get_world_verts_for_node(node)
-        assert abs(world[0][1] - 0.0) < 1e-6, \
-            f"Y must be 0.0 (unchanged), got {world[0][1]:.3f} (wp added illegally)"
-        assert abs(world[0][2] - 0.5) < 1e-6, \
-            f"Z must be 0.5 (unchanged), got {world[0][2]:.3f} (wp added illegally)"
+        # Phase 17: wp applied → y = 0.0 - 1.163 = -1.163, z = 0.5 + 1.469 = 1.969
+        assert abs(world[0][1] - (-1.163)) < 1e-5, \
+            f"Y must be -1.163 (wp applied), got {world[0][1]:.4f}"
+        assert abs(world[0][2] - (0.5 + 1.469)) < 1e-5, \
+            f"Z must be 1.969 (wp applied), got {world[0][2]:.4f}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  FIX-ACCESSORY-SKIN: Accessory models apply full world transform
+#  Accessory models — same transform path as standalone (Phase 17)
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestAccessorySkinTransform:
-    """n_admrlsaulkar / comm_b_f style: supermodel is a known NPC base skeleton.
-    Skin vertices are in bone-local space → full world transform is applied.
+    """Phase 17: Accessory and standalone models use the same transform path.
+    Both apply the full world transform (rotation + translation).
     """
 
     _ACCESSORY_SUPERMODELS = ['N_AdmrlSaulKar', 'S_Female02', 'S_Male02',
@@ -255,62 +270,63 @@ class TestAccessorySkinTransform:
         assert abs(world[0][2] - 1.5) < 1e-4, \
             f"Accessory skin z: expected 1.5, got {world[0][2]:.3f}"
 
-    def test_accessory_vs_standalone_different(self):
-        """Accessory and standalone models handle the same wp differently."""
-        # Standalone: verts unchanged
-        model_s, root_s = _make_standalone('NULL')
+    def test_accessory_vs_standalone_same_result(self):
+        """Phase 17: Both 'accessory' and 'standalone' supermodel strings → same result."""
         verts = [(0.5, 0.0, 0.0)]
+        wp = (0, 0, 1.5)
+
+        # Standalone (NULL)
+        model_s, root_s = _make_standalone('NULL')
         node_s = _add_skin_node(root_s, model_s, 'head', verts,
-                                rotation=(0,0,0,1), position=(0,0,1.5))
+                                rotation=(0,0,0,1), position=wp)
         model_s.compute_bounds()
         r_s = _make_renderer_for(model_s)
         world_s = r_s._get_world_verts_for_node(node_s)
 
-        # Accessory: wp IS added
+        # Accessory
         model_a, root_a = _make_standalone('N_AdmrlSaulKar')
         node_a = _add_skin_node(root_a, model_a, 'head', verts,
-                                rotation=(0,0,0,1), position=(0,0,1.5))
+                                rotation=(0,0,0,1), position=wp)
         model_a.compute_bounds()
         r_a = _make_renderer_for(model_a)
         world_a = r_a._get_world_verts_for_node(node_a)
 
-        # Standalone: z=0.0 (unchanged); Accessory: z=1.5 (wp added)
-        assert abs(world_s[0][2] - 0.0) < 1e-4, \
-            f"Standalone skin z must be 0.0 (unchanged), got {world_s[0][2]:.3f}"
+        # Phase 17: both should produce the same result (z = 0.0 + 1.5 = 1.5)
+        assert abs(world_s[0][2] - 1.5) < 1e-4, \
+            f"Standalone skin Phase 17: z must be 1.5 (wp applied), got {world_s[0][2]:.3f}"
         assert abs(world_a[0][2] - 1.5) < 1e-4, \
-            f"Accessory skin z must be 1.5 (wp added), got {world_a[0][2]:.3f}"
+            f"Accessory skin z must be 1.5 (wp applied), got {world_a[0][2]:.3f}"
 
-    def test_base_skeleton_supermodel_treated_as_standalone(self):
-        """Supermodel = 'S_Female02' is a base skeleton → standalone treatment.
+    def test_base_skeleton_supermodel_wp_applied(self):
+        """Phase 17: Supermodel = 'S_Female02' → world transform IS applied.
 
-        'S_Female02' and 'S_Male02' are base skeletons (in KOTOR_BASE_SKELETONS);
-        these are the PC/NPC body skeletons that themselves carry skin geometry.
-        A model reporting S_Female02 as its supermodel is e.g. s_female03 (body),
-        which has standalone skin verts, not accessory bone-local verts.
-        'S_Female01' is NOT in the list (it is the supermodel OF S_Female02).
+        Phase 17 unified path: no special-casing based on supermodel name.
         """
-        model, root = _make_standalone('S_Female02')  # IS in KOTOR_BASE_SKELETONS
+        model, root = _make_standalone('S_Female02')
         verts = [(0.0, 0.0, 0.5)]
         node = _add_skin_node(root, model, 'body', verts,
                               rotation=(0,0,0,1), position=(0,0,1.5))
         model.compute_bounds()
         r = _make_renderer_for(model)
         world = r._get_world_verts_for_node(node)
-        # S_Female02 is a base skeleton → standalone → z unchanged
-        assert abs(world[0][2] - 0.5) < 1e-4, \
-            f"Base skeleton (S_Female02) must use standalone treatment; z={world[0][2]:.3f}"
+        # Phase 17: wp always applied → z = 0.5 + 1.5 = 2.0
+        assert abs(world[0][2] - 2.0) < 1e-4, \
+            f"Phase 17 (S_Female02): z must be 2.0 (wp applied); z={world[0][2]:.3f}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  C_terantanak arm-torso junction (geometric proof)
+#  C_terantanak arm-torso junction (geometric proof, Phase 17)
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestTerantanakJunction:
     """Verify that applying 180° Z rotation to Torso connects it to RArm.
 
-    Real data from the binary model (see earlier vertex-range analysis):
+    Phase 17: Torso pos=(0,0,0), so no translation offset.
+    The 180°Z rotation flips Y: raw negative Y becomes positive, matching RArm.
+
+    Real data from the binary model:
       RArm inner (X<1.6):  Y=[0.249, 0.759]
-      Torso raw shoulder:  Y=[-0.882, -0.249]  (Y sign-flipped without fix)
+      Torso raw shoulder:  Y=[-0.882, -0.249]  (negative without rotation)
       Torso after 180° Z:  Y=[+0.249, +0.882]  (connected to RArm)
     """
 
@@ -367,9 +383,6 @@ class TestTerantanakJunction:
 
     def test_arm_torso_junction_gap_without_fix_is_negative(self):
         """Verify that WITHOUT the rotation fix the junction would be disconnected."""
-        model, root = _make_standalone('NULL')
-        rot_180z = _quat_from_axis_angle(0, 0, 1, 180)
-
         torso_raw_y = [-0.882, -0.600, -0.400, -0.249]
         rarm_y      = [0.249, 0.400, 0.600, 0.759]
 
@@ -382,7 +395,7 @@ class TestTerantanakJunction:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Non-skin (trimesh) nodes must still get their world transform
+#  Non-skin (trimesh) nodes must always get their world transform
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestNonSkinWorldTransformPreserved:
@@ -407,8 +420,11 @@ class TestNonSkinWorldTransformPreserved:
             f"Non-skin vertex (0,0,0) at pos (5,0,0) → world x should be 5.0, got {world[0][0]}"
         assert abs(world[1][0] - 6.0) < 1e-5
 
-    def test_skin_flag_removes_transform_for_standalone(self):
-        """Same geometry as above but with SKIN flag: vertex NOT translated."""
+    def test_skin_node_also_gets_transform(self):
+        """Phase 17: Skin node at position (5,0,0): vertex (0,0,0) → world (5,0,0).
+
+        Same as non-skin trimesh — all nodes apply the full world transform.
+        """
         model, root = _make_standalone('NULL')
         mesh = ModelNode(name='panel', flags=int(NodeFlags.MESH) | int(NodeFlags.SKIN))
         mesh.parent = root
@@ -416,12 +432,14 @@ class TestNonSkinWorldTransformPreserved:
         mesh.rotation = (0, 0, 0, 1)
         mesh.vertices = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)]
         mesh.uvs = [(0.5, 0.5)] * 2
+        mesh.bone_map = []
+        mesh.skin_data = []
         root.children.append(mesh)
         model.compute_bounds()
 
         r = _make_renderer_for(model)
         world = r._get_world_verts_for_node(mesh)
-        # SKIN + standalone: verts returned as-is
-        assert abs(world[0][0] - 0.0) < 1e-5, \
-            f"Standalone SKIN vertex should be unchanged (0.0), got {world[0][0]}"
-        assert abs(world[1][0] - 1.0) < 1e-5
+        # Phase 17: SKIN nodes also get the world transform applied
+        assert abs(world[0][0] - 5.0) < 1e-5, \
+            f"Phase 17 SKIN vertex at pos (5,0,0): world x should be 5.0, got {world[0][0]}"
+        assert abs(world[1][0] - 6.0) < 1e-5

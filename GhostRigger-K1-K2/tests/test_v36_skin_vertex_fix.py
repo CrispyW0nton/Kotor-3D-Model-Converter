@@ -158,25 +158,30 @@ class TestSkinVertexModelSpace:
 
 
 class TestGetWorldVertsForSkin:
-    """_get_world_verts_for_node for skin nodes: in bind pose, returns verts AS-IS.
+    """_get_world_verts_for_node for skin nodes: Phase 17 — full world transform applied.
 
-    KotOR MDL skin vertices are stored in MODEL SPACE (= world/bind-pose space).
-    The skin node's world position is the bone PIVOT for animation, NOT a mesh
-    origin to add to vertex coordinates.  In bind pose, skin verts are returned
-    unchanged (no translation).  This is the authoritative KotOR MDL convention
-    confirmed against MDLOpsM.pm, xoreos, KotorBlender, and the Bantha binary model.
+    KotOR MDL skin vertices are stored in NODE-LOCAL space (same as non-skin nodes).
+    The full world transform (translation + rotation via the parent chain) must
+    always be applied to produce correct world-space coordinates.
 
-    v12.14 FIX: Updated tests to reflect the CORRECT behaviour (skin verts in
-    model space, wp NOT added).  The old implementation incorrectly added the
-    skin node wp to already-world-space vertices, displacing all creature geometry.
+    Phase 17 verified by:
+    - KotorBlender (base.py): obj.location = self.position (LOCAL), verts raw
+    - PyKotor: vertex_positions read raw, no world-space pre-baking
+    - c_bantha binary analysis: btBody_front local Y=[1.117,3.391], pivot Y=-1.163
+      → correct world Y=[-0.046,2.228]
+
+    In _make_simple_model: root → bone(z=1.2) → skin(parented to bone, pos=0,0,0).
+    The skin's world position = bone world position = (0,0,1.2).
+    Skin vertex at z=0.5 → world z = 0.5 + 1.2 = 1.7.
     """
 
     def test_skin_verts_translated_by_skin_node_wp(self):
-        """Bind pose: skin verts are returned AS-IS (model/world space, no wp offset).
+        """Phase 17: skin verts have world transform applied.
 
-        In _make_simple_model: root → bone(z=1.2) → skin(z=0).
-        Skin vertices are stored in MODEL SPACE already, so wp must NOT be added.
-        verts(z=0.5) → returned as z=0.5 (unchanged).
+        In _make_simple_model: root → bone(z=1.2) → skin(pos=(0,0,0), parented to bone).
+        Skin vertices are in skin-node-LOCAL space (which is the same as bone-local
+        when skin.position=(0,0,0)). The skin world position = bone position = z=1.2.
+        verts(z=0.5) → world z = 0.5 + 1.2 = 1.7.
         """
         model, root, bone, skin = _make_simple_model(bone_pos=(0, 0, 1.2))
         cam = ArcBallCamera()
@@ -186,18 +191,19 @@ class TestGetWorldVertsForSkin:
 
         verts = r._get_world_verts_for_node(skin)
         assert len(verts) == len(skin.vertices)
-        # Skin verts are in MODEL SPACE — returned as-is (wp is NOT added)
+        # Phase 17: skin wp = (0,0,1.2) is applied → z = vert_z + 1.2
         for wv, sv in zip(verts, skin.vertices):
-            assert abs(wv[0] - sv[0]) < 1e-6, f"x mismatch: got {wv[0]}, expected {sv[0]} (model space)"
+            assert abs(wv[0] - sv[0]) < 1e-6, f"x mismatch: got {wv[0]}, expected {sv[0]}"
             assert abs(wv[1] - sv[1]) < 1e-6
-            assert abs(wv[2] - sv[2]) < 1e-6, f"z mismatch: got {wv[2]}, expected {sv[2]} (model space, no wp)"
+            expected_z = sv[2] + 1.2
+            assert abs(wv[2] - expected_z) < 1e-5, \
+                f"z mismatch: got {wv[2]}, expected {expected_z:.4f} (sv[2]+1.2)"
 
     def test_skin_verts_shifted_by_skin_node_position(self):
-        """Bind pose: skin vert at z=0.5 with bone at z=1.2 → vert still at z=0.5.
+        """Phase 17: skin vert at z=0.5 with bone at z=1.2 → world z = 1.7.
 
-        Skin vertices are in MODEL SPACE — the bone position does NOT offset them.
-        This aligns with the KotOR MDL convention: skin verts are pre-transformed
-        into model space by the KotOR exporter; the renderer returns them as-is.
+        Skin node position (0,0,0) + bone world pivot (0,0,1.2) = skin world = (0,0,1.2).
+        Vertex local z=0.5 → world z = 0.5 + 1.2 = 1.7.
         """
         model, root, bone, skin = _make_simple_model(bone_pos=(0, 0, 1.2))
         cam = ArcBallCamera()
@@ -206,55 +212,53 @@ class TestGetWorldVertsForSkin:
         r._anim_pose = None
 
         verts = r._get_world_verts_for_node(skin)
-        # First vertex at (0, 0, 0.5) in model space → returned as (0, 0, 0.5)
-        assert abs(verts[0][2] - 0.5) < 1e-5, \
-            f"z should be 0.5 (model-space vertex returned as-is, wp NOT added), got {verts[0][2]}"
+        # First vertex at (0, 0, 0.5) in local space → world z = 0.5 + 1.2 = 1.7
+        assert abs(verts[0][2] - 1.7) < 1e-5, \
+            f"Phase 17: z should be 1.7 (vert_z + bone_z), got {verts[0][2]}"
 
 
 class TestComputeBoundsModelData:
-    """KotorModel.compute_bounds() and render_bounds() use skin verts AS-IS (model space).
+    """KotorModel.compute_bounds() and render_bounds() — Phase 17: world transform applied.
 
-    Skin vertices are in MODEL SPACE.  compute_bounds() and render_bounds() must
-    NOT add the skin node's wp offset — the verts are already in world/model space.
-    This matches FrameRenderer._get_world_verts_for_node() which also returns
-    skin verts unchanged in bind pose.
+    Phase 17: Skin vertices are in NODE-LOCAL space. The full world transform
+    (translate + rotate via parent chain) is always applied.
 
-    v12.14 FIX: Updated tests to reflect the CORRECT behaviour (model-space skin
-    verts, no wp offset).  The old tests expected the incorrect wp-offset behaviour.
+    In _make_simple_model: root → bone(z=bone_pos) → skin(pos=(0,0,0)).
+    Skin world position = bone world position.
+    Vertex local z=0.5 → world z = 0.5 + bone_pos_z.
+    Vertex local z=1.0 → world z = 1.0 + bone_pos_z.
     """
 
-    def test_compute_bounds_skin_verts_adds_wp_offset(self):
-        """Skin node at non-zero position: bounds use skin verts as-is (model space).
+    def test_compute_bounds_skin_verts_with_wp_offset(self):
+        """Phase 17: Skin node bounds include world transform (bone z=1.2 added).
 
-        Skin vertices are at z=0.5, z=1.0, z=0.8 in MODEL SPACE.
-        Bone position z=1.2 is NOT added to bounds.
-        Expected max z = 1.0 (the max vertex z-coordinate).
+        Skin vertices at local z=0.5, z=1.0, z=0.8.
+        Skin world pos = bone pos z=1.2 (skin.pos=(0,0,0), parented to bone).
+        Expected bounds max z = 1.0 + 1.2 = 2.2 (world-transformed).
         """
         model, root, bone, skin = _make_simple_model(bone_pos=(0, 0, 1.2))
         model.compute_bounds()
-        # Skin vertices are at z=0.5, z=1.0, z=0.8 in model space — NO wp offset
-        # Expected max z = 1.0 (raw vertex max), NOT 2.2 (wrong wp-offset behaviour)
-        assert model.bb_max[2] >= 0.9, \
-            f"bb_max.z={model.bb_max[2]}: should capture max skin vertex z (≈1.0)"
-        assert model.bb_max[2] <= 1.1, \
-            f"bb_max.z={model.bb_max[2]}: wp offset must NOT be added to skin bounds (expected ~1.0, not ~2.2)"
+        # Phase 17: wp (z=1.2) applied → max z = 1.0 + 1.2 = 2.2
+        assert model.bb_max[2] >= 2.1, \
+            f"bb_max.z={model.bb_max[2]}: should be ~2.2 (skin verts + bone z=1.2)"
+        assert model.bb_max[2] <= 2.3, \
+            f"bb_max.z={model.bb_max[2]}: expected ~2.2, not {model.bb_max[2]:.3f}"
 
-    def test_render_bounds_skin_verts_adds_wp_offset(self):
-        """render_bounds() uses skin verts as-is (model space, no wp offset).
+    def test_render_bounds_skin_verts_with_wp_offset(self):
+        """Phase 17: render_bounds() includes world transform.
 
-        Skin vertices are at z=0.5, z=1.0, z=0.8 in MODEL SPACE.
-        Bone position z=5.0 is NOT added to render bounds.
-        Expected render max z = 1.0, NOT 6.0.
+        Skin vertices at local z=0.5, z=1.0, z=0.8.
+        Bone position z=5.0 added → world max z = 1.0 + 5.0 = 6.0.
         """
         model, root, bone, skin = _make_simple_model(bone_pos=(0, 0, 5.0))
         # Add UVs to make node visible (render_bounds filters non-UV nodes)
         skin.uvs = [(0.5, 0.5)] * len(skin.vertices)
         rbb_min, rbb_max = model.render_bounds()
-        # Max z must be ~1.0 (raw model-space vertex), NOT ~6.0 (wrong wp-offset)
-        assert rbb_max[2] >= 0.9, \
-            f"rbb_max.z={rbb_max[2]}: render_bounds should capture max skin vert z (≈1.0)"
-        assert rbb_max[2] <= 1.1, \
-            f"rbb_max.z={rbb_max[2]}: render_bounds must NOT add wp to skin verts (expected ~1.0, not ~6.0)"
+        # Phase 17: wp (z=5.0) applied → max z = 1.0 + 5.0 = 6.0
+        assert rbb_max[2] >= 5.9, \
+            f"rbb_max.z={rbb_max[2]}: Phase 17 expects ~6.0 (skin verts + bone z=5.0)"
+        assert rbb_max[2] <= 6.1, \
+            f"rbb_max.z={rbb_max[2]}: expected ~6.0, not {rbb_max[2]:.3f}"
 
 
 # ─────────────────────────────────────────────────────────────────────

@@ -595,18 +595,20 @@ class TestFracClampRemoved:
 @pytest.mark.skipif(not _PIL, reason="PIL not available")
 class TestUVSentinelV60:
     """
-    Verify that faces with |u| or |v| > _UV_SENTINEL (20.0) are skipped.
+    Verify that faces with |u| or |v| > _UV_SENTINEL (100.0) are skipped.
     These are sentinel stitching values used in KotOR skin meshes.
+    Phase 18: sentinel raised from 20.0 to 100.0 to avoid filtering legitimate
+    large-UV meshes (e.g. mRobe2_g U=[-13.58, 13.58]).
     """
 
     def test_sentinel_u_skips_face(self):
-        """Face with u=25.0 (|u| > 20) must be skipped (no pixels rendered)."""
+        """Face with u=125.0 (|u| > 100) must be skipped (no pixels rendered)."""
         paste = _get_paste_fn()
         tex = _solid_texture(color=(255, 0, 0, 255))
         img = Image.new('RGB', (64, 64), (128, 128, 128))
         paste(img, tex,
               (5, 5), (59, 5), (32, 50),
-              (25.0, 0.5), (0.3, 0.5), (0.5, 0.8),
+              (125.0, 0.5), (0.3, 0.5), (0.5, 0.8),
               64, 64, (255, 255, 255))
         # All pixels must remain background
         for y in range(64):
@@ -615,13 +617,13 @@ class TestUVSentinelV60:
                     f"Sentinel face must not render, but pixel ({x},{y}) = {img.getpixel((x,y))}"
 
     def test_sentinel_v_skips_face(self):
-        """Face with v=21.5 (|v| > 20) must be skipped (no pixels rendered)."""
+        """Face with v=127.0 (|v| > 100) must be skipped (no pixels rendered)."""
         paste = _get_paste_fn()
         tex = _solid_texture(color=(255, 0, 0, 255))
         img = Image.new('RGB', (64, 64), (128, 128, 128))
         paste(img, tex,
               (5, 5), (59, 5), (32, 50),
-              (0.1, 21.5), (0.4, 0.5), (0.3, 0.8),
+              (0.1, 127.0), (0.4, 0.5), (0.3, 0.8),
               64, 64, (255, 255, 255))
         non_bg = sum(1 for x in range(64) for y in range(64)
                      if img.getpixel((x, y)) != (128, 128, 128))
@@ -660,17 +662,19 @@ class TestUVSentinelV60:
         assert img is not None
 
     def test_sentinel_above_20_skips_face(self):
-        """u=20.001 (> _UV_SENTINEL=20.0) must be skipped."""
+        """u=100.001 (> _UV_SENTINEL=100.0) must be skipped.
+        Phase 18: sentinel was 20.0, now 100.0. Values up to 100 may be
+        legitimate large-UV tiled meshes and should NOT be skipped."""
         paste = _get_paste_fn()
         tex = _solid_texture(color=(255, 0, 0, 255))
         img = Image.new('RGB', (64, 64), (128, 128, 128))
         paste(img, tex,
               (5, 5), (59, 5), (32, 50),
-              (20.001, 0.5), (0.3, 0.5), (0.5, 0.8),
+              (100.001, 0.5), (0.3, 0.5), (0.5, 0.8),
               64, 64, (255, 255, 255))
         non_bg = sum(1 for x in range(64) for y in range(64)
                      if img.getpixel((x, y)) != (128, 128, 128))
-        assert non_bg == 0, f"u=20.001 must skip face (> sentinel), got {non_bg} pixels"
+        assert non_bg == 0, f"u=100.001 must skip face (> sentinel=100), got {non_bg} pixels"
 
 
 # ─── Integration: Belt Mesh Large Tiling ─────────────────────────────────────

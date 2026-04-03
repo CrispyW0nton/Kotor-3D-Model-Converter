@@ -675,8 +675,6 @@ class TestBiowareMissingUVWontfix:
         assert len(thumb.uvs or []) == 0, \
             "Ran_Thumb_01_R must have 0 UVs (WONTFIX Bioware data)"
 
-    @pytest.mark.skipif(not (K1_AVAILABLE and K2_AVAILABLE),
-                        reason="K1+K2 game data not available")
     def test_missing_uv_models_count_within_expected_range(self):
         """
         Full-corpus check: missing UV model count must be in [40, 65].

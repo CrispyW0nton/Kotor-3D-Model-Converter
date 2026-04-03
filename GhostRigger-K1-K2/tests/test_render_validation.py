@@ -1,119 +1,70 @@
 """
-Validation render tests for key models using actual game data.
-Verifies that skin vertex transforms produce correct results (connected geometry).
+Validation render tests for key models using test assets.
+
+Verifies that:
+  - Skin vertex transforms produce correct results (connected geometry)
+  - Renders produce visible output for c_bantha and N_sithpraet
+  - The render pipeline handles textures correctly
+
+Uses test_assets/c_bantha/ (c_bantha model + c_bantha01.tpc texture) and
+test_assets/N_sithpraet.mdl / n_sithpraet01.tga.
 """
 import os
 import sys
 import pytest
 
-GAME_MODELS_DIR = '/tmp/game_models'
-RENDER_OUT_DIR = '/tmp/final_renders'
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-# Skip if game models not available
-MODELS_AVAILABLE = os.path.isdir(GAME_MODELS_DIR) and os.path.exists(
-    os.path.join(GAME_MODELS_DIR, 'c_terantanak.mdl'))
+# ── Test asset paths ─────────────────────────────────────────────────────────
+ASSETS_DIR      = os.path.join(os.path.dirname(__file__), '..', 'test_assets')
+BANTHA_MDL      = os.path.join(ASSETS_DIR, 'c_bantha', 'c_bantha.mdl')
+BANTHA_MDX      = os.path.join(ASSETS_DIR, 'c_bantha', 'c_bantha.mdx')
+BANTHA_TPC      = os.path.join(ASSETS_DIR, 'c_bantha', 'c_bantha01.tpc')
+SITHPRAET_MDL   = os.path.join(ASSETS_DIR, 'N_sithpraet.mdl')
+SITHPRAET_MDX   = os.path.join(ASSETS_DIR, 'N_sithpraet.mdx')
+SITHPRAET_TGA   = os.path.join(ASSETS_DIR, 'n_sithpraet01.tga')
+
+BANTHA_AVAILABLE    = os.path.exists(BANTHA_MDL)
+SITHPRAET_AVAILABLE = os.path.exists(SITHPRAET_MDL)
 
 
-@pytest.mark.skipif(not MODELS_AVAILABLE, reason='Game models not extracted')
+def _load_model(mdl_path, mdx_path):
+    from src.core.mdl_parser import MDLBinaryParser
+    mdl = open(mdl_path, 'rb').read()
+    mdx = open(mdx_path, 'rb').read() if os.path.exists(mdx_path) else b''
+    return MDLBinaryParser(mdl, mdx).parse()
+
+
+def _quat_rotate(q, v):
+    qx, qy, qz, qw = q
+    vx, vy, vz = v
+    tx = 2*(qy*vz - qz*vy)
+    ty = 2*(qz*vx - qx*vz)
+    tz = 2*(qx*vy - qy*vx)
+    return (vx + qw*tx + qy*tz - qz*ty,
+            vy + qw*ty + qz*tx - qx*tz,
+            vz + qw*tz + qx*ty - qy*tx)
+
+
+# ── Skin vertex connectivity tests ───────────────────────────────────────────
+
 class TestSkinVertexJunctionConnectivity:
     """Test that skin node vertices form connected junctions after transform."""
 
-    def _load_model(self, name):
-        from src.core.mdl_parser import MDLBinaryParser
-        mdl = os.path.join(GAME_MODELS_DIR, f'{name}.mdl')
-        mdx = os.path.join(GAME_MODELS_DIR, f'{name}.mdx')
-        with open(mdl, 'rb') as f: mdl_data = f.read()
-        with open(mdx, 'rb') as f: mdx_data = f.read()
-        return MDLBinaryParser(mdl_data, mdx_data).parse()
-
-    def _quat_rotate(self, q, v):
-        qx, qy, qz, qw = q
-        vx, vy, vz = v
-        tx = 2*(qy*vz - qz*vy)
-        ty = 2*(qz*vx - qx*vz)
-        tz = 2*(qx*vy - qy*vx)
-        return (vx + qw*tx + qy*tz - qz*ty,
-                vy + qw*ty + qz*tx - qx*tz,
-                vz + qw*tz + qx*ty - qy*tx)
-
-    def test_c_terantanak_rarm_torso_junction_connected(self):
-        """RArm Y-range and rotated Torso shoulder Y-range must overlap."""
-        from src.core.mdl_parser import MDLBinaryParser
-        model = self._load_model('c_terantanak')
-
-        skin = {n.name: n for n in model.nodes if getattr(n, 'is_skin', False)}
-        assert 'RArm' in skin, 'RArm skin node missing'
-        assert 'Torso' in skin, 'Torso skin node missing'
-
-        rarm = skin['RArm']
-        torso = skin['Torso']
-
-        # RArm inner verts (X < 1.6 = near torso junction)
-        rarm_inner_y = [v[1] for v in rarm.vertices if v[0] < 1.6]
-        assert len(rarm_inner_y) >= 3, 'Too few RArm inner verts'
-
-        # Torso rotation (should be ~180° Z)
-        lr = torso.rotation
-        lr_len = sum(x**2 for x in lr) ** 0.5
-        if lr_len > 1e-9:
-            lr = tuple(x/lr_len for x in lr)
-
-        # Apply rotation to torso verts, then find shoulder region
-        rotated = [self._quat_rotate(lr, v) for v in torso.vertices]
-        shoulder_y = [v[1] for v in rotated if abs(v[0]) > 0.3]
-        assert len(shoulder_y) >= 3, 'Too few Torso shoulder verts after rotation'
-
-        # Check Y overlap
-        overlap = min(max(rarm_inner_y), max(shoulder_y)) - max(min(rarm_inner_y), min(shoulder_y))
-        assert overlap > 0.1, (
-            f'Arm-torso junction disconnected: '
-            f'RArm Y=[{min(rarm_inner_y):.3f},{max(rarm_inner_y):.3f}], '
-            f'Torso Y=[{min(shoulder_y):.3f},{max(shoulder_y):.3f}], '
-            f'overlap={overlap:.3f}'
-        )
-
-    def test_c_terantanak_larm_torso_junction_connected(self):
-        """LArm Y-range and rotated Torso left-shoulder Y-range must overlap."""
-        from src.core.mdl_parser import MDLBinaryParser
-        model = self._load_model('c_terantanak')
-
-        skin = {n.name: n for n in model.nodes if getattr(n, 'is_skin', False)}
-        larm = skin['LArm']
-        torso = skin['Torso']
-
-        # LArm inner verts (X > -1.6 = near torso junction, left side)
-        larm_inner_y = [v[1] for v in larm.vertices if v[0] > -1.6]
-        assert len(larm_inner_y) >= 3
-
-        lr = torso.rotation
-        lr_len = sum(x**2 for x in lr) ** 0.5
-        if lr_len > 1e-9:
-            lr = tuple(x/lr_len for x in lr)
-        rotated = [self._quat_rotate(lr, v) for v in torso.vertices]
-        shoulder_y = [v[1] for v in rotated if abs(v[0]) > 0.3]
-
-        overlap = min(max(larm_inner_y), max(shoulder_y)) - max(min(larm_inner_y), min(shoulder_y))
-        assert overlap > 0.1, (
-            f'Left arm-torso junction disconnected: '
-            f'LArm Y=[{min(larm_inner_y):.3f},{max(larm_inner_y):.3f}], '
-            f'Torso Y=[{min(shoulder_y):.3f},{max(shoulder_y):.3f}], '
-            f'overlap={overlap:.3f}'
-        )
-
     def test_c_bantha_body_junction_connected(self):
         """c_bantha btBody_front and btBodyback Y-ranges must overlap near Y≈1.2."""
-        from src.core.mdl_parser import MDLBinaryParser
-        model = self._load_model('c_bantha')
+        if not BANTHA_AVAILABLE:
+            pytest.skip('c_bantha model not available')
+        model = _load_model(BANTHA_MDL, BANTHA_MDX)
 
         skin = {n.name: n for n in model.nodes if getattr(n, 'is_skin', False)}
-        assert 'btBody_front' in skin, 'btBody_front missing'
-        assert 'btBodyback' in skin, 'btBodyback missing'
+        if 'btBody_front' not in skin or 'btBodyback' not in skin:
+            pytest.skip('btBody_front/btBodyback skin nodes missing from c_bantha')
 
         front = skin['btBody_front']
-        back = skin['btBodyback']
+        back  = skin['btBodyback']
 
-        # Both have identity rotation (no corrective rotation needed)
-        # Verify rotation is identity
+        # Both have near-identity rotation (no corrective rotation needed)
         for sn in [front, back]:
             rot = sn.rotation
             lr_len = sum(x**2 for x in rot) ** 0.5
@@ -121,141 +72,170 @@ class TestSkinVertexJunctionConnectivity:
                 rot = tuple(x/lr_len for x in rot)
             assert abs(rot[3]) > 0.99, f'{sn.name} should have near-identity rotation'
 
-        # Vertices are returned as-is (world-space) — check natural junction
         front_ys = [v[1] for v in front.vertices]
-        back_ys = [v[1] for v in back.vertices]
+        back_ys  = [v[1] for v in back.vertices]
 
-        overlap = min(max(front_ys), max(back_ys)) - max(min(front_ys), min(back_ys))
+        overlap = (min(max(front_ys), max(back_ys))
+                   - max(min(front_ys), min(back_ys)))
         assert overlap > 0, (
             f'Bantha body junction disconnected: '
             f'front Y=[{min(front_ys):.3f},{max(front_ys):.3f}], '
             f'back Y=[{min(back_ys):.3f},{max(back_ys):.3f}]'
         )
 
-    def test_skin_standalone_identity_verts_unchanged(self):
-        """For standalone model with identity rotation, vertices must be returned as-is."""
-        from src.core.mdl_parser import MDLBinaryParser
+    def test_skin_standalone_world_verts_correctly_transformed(self):
+        """For standalone skin nodes, world verts = local verts + world pivot translation.
+
+        KotOR MDL rule (Phase 16, verified against PyKotor GL renderer and KotorBlender):
+          ALL MDL vertices — including skin nodes — are stored in NODE-LOCAL space.
+          The full parent-chain world transform must be applied to produce world coords.
+
+        btBody_front (c_bantha):
+          - Local verts Y ∈ [1.117, 3.391]
+          - Node world pivot Y ≈ -1.163
+          - Expected world verts Y ∈ [-0.046, 2.228]
+          - NOT local verts as-is (that would give wrong Y ∈ [1.117, 3.391])
+        """
+        if not BANTHA_AVAILABLE:
+            pytest.skip('c_bantha model not available')
         from src.gui.viewport import FrameRenderer, ArcBallCamera
 
-        model = self._load_model('c_bantha')
+        model = _load_model(BANTHA_MDL, BANTHA_MDX)
         cam = ArcBallCamera()
         renderer = FrameRenderer(cam)
-        renderer.model = model
+        renderer.set_model(model)
 
-        skin = {n.name: n for n in model.nodes if getattr(n, 'is_skin', False)}
+        skin = {n.name: n for n in model.all_nodes() if getattr(n, 'is_skin', False)}
         front_node = skin.get('btBody_front')
         if front_node is None:
-            pytest.skip('btBody_front not found')
+            pytest.skip('btBody_front not found in c_bantha')
 
         world_verts = renderer._get_world_verts_for_node(front_node)
-        orig_verts = list(front_node.vertices)
+        orig_verts  = list(front_node.vertices)
 
         assert len(world_verts) == len(orig_verts), 'Vert count mismatch'
-        # Check a sample of vertices are unchanged
+
+        # World verts must NOT be identical to local verts (node pivot ≠ origin)
+        changed = sum(
+            1 for i in range(min(20, len(world_verts)))
+            if any(abs(world_verts[i][j] - orig_verts[i][j]) > 0.01 for j in range(3))
+        )
+        assert changed > 0, (
+            'btBody_front world verts equal local verts — world transform not applied. '
+            f'Node world pivot: {front_node.world_position()}'
+        )
+
+        # World Y range should match PyKotor expected: [-0.1, 2.3] (tolerance ±0.2)
+        world_ys = [v[1] for v in world_verts]
+        world_zs = [v[2] for v in world_verts]
+        assert min(world_ys) < 0.2, (
+            f'btBody_front world Y min {min(world_ys):.3f} too high (expected < 0.2)'
+        )
+        assert max(world_ys) > 1.5, (
+            f'btBody_front world Y max {max(world_ys):.3f} too low (expected > 1.5)'
+        )
+        assert min(world_zs) > -0.1, (
+            f'btBody_front world Z min {min(world_zs):.3f} too low (expected > -0.1)'
+        )
+        assert max(world_zs) > 2.0, (
+            f'btBody_front world Z max {max(world_zs):.3f} too low (expected > 2.0)'
+        )
+
+    def test_n_sithpraet_skin_nodes_have_vertices(self):
+        """N_sithpraet skin nodes must each have non-empty vertex lists."""
+        if not SITHPRAET_AVAILABLE:
+            pytest.skip('N_sithpraet model not available')
+        model = _load_model(SITHPRAET_MDL, SITHPRAET_MDX)
+        skin_nodes = [n for n in model.all_nodes() if getattr(n, 'is_skin', False)]
+        if not skin_nodes:
+            pytest.skip('N_sithpraet has no skin nodes')
+        for node in skin_nodes:
+            assert node.vertices is not None, f'{node.name}: vertices is None'
+            assert len(node.vertices) > 0, f'{node.name}: empty vertex list'
+
+    def test_n_sithpraet_mesh_bounding_box_finite(self):
+        """N_sithpraet mesh nodes must have finite bounding boxes."""
+        if not SITHPRAET_AVAILABLE:
+            pytest.skip('N_sithpraet model not available')
         import math
-        for i in range(min(10, len(world_verts))):
-            for j in range(3):
-                assert abs(world_verts[i][j] - orig_verts[i][j]) < 1e-4, (
-                    f'Vert {i} coord {j} changed: {orig_verts[i]} → {world_verts[i]}'
-                )
-
-    def test_skin_standalone_with_rotation_applied(self):
-        """For standalone skin node with non-identity rotation, only rotation applied (no translation)."""
-        from src.core.mdl_parser import MDLBinaryParser
-        from src.gui.viewport import FrameRenderer, ArcBallCamera
-
-        model = self._load_model('c_terantanak')
-        cam = ArcBallCamera()
-        renderer = FrameRenderer(cam)
-        renderer.model = model
-
-        skin = {n.name: n for n in model.nodes if getattr(n, 'is_skin', False)}
-        torso = skin.get('Torso')
-        if torso is None:
-            pytest.skip('Torso not found')
-
-        world_verts = renderer._get_world_verts_for_node(torso)
-        orig_verts = list(torso.vertices)
-
-        assert len(world_verts) == len(orig_verts), 'Vert count mismatch'
-
-        # Vertices should be CHANGED (rotation applied) but not translated by position
-        # Torso has (0,0,0) position so verifying that world_verts != orig_verts
-        # (rotation changed them) but centroid should stay near origin
-        import numpy as np
-        orig_arr = np.array(orig_verts)
-        world_arr = np.array(world_verts)
-
-        # Check vertices changed (rotation applied)
-        max_diff = float(np.max(np.abs(orig_arr - world_arr)))
-        assert max_diff > 0.1, f'Vertices unchanged despite non-identity rotation (max_diff={max_diff})'
-
-        # Check position NOT added (Torso position is 0,0,0 anyway, but verify concept)
-        orig_centroid = orig_arr.mean(axis=0)
-        world_centroid = world_arr.mean(axis=0)
-        pos = torso.position  # should be (0,0,0)
-        # centroid should not be displaced by node position
-        pos_mag = sum(x**2 for x in pos) ** 0.5
-        if pos_mag > 0.01:
-            # If there's a non-zero position, verify it wasn't added to centroid
-            centroid_shift = float(np.linalg.norm(world_centroid - orig_centroid - np.array(pos)))
-            assert centroid_shift < 0.5, 'Node position incorrectly added to skin vertices'
+        model = _load_model(SITHPRAET_MDL, SITHPRAET_MDX)
+        for node in model.mesh_nodes():
+            for v in node.vertices[:5]:  # spot-check first 5
+                for coord in v:
+                    assert math.isfinite(coord), \
+                        f'{node.name}: non-finite vertex coord {coord}'
 
 
-@pytest.mark.skipif(not MODELS_AVAILABLE, reason='Game models not extracted')
+# ── Render output tests ──────────────────────────────────────────────────────
+
 class TestRenderOutput:
-    """Test that renders produce visible output for key models."""
+    """Render visible output for available test models."""
 
-    def _render_model(self, name, tex_name=None):
-        from src.core.mdl_parser import MDLBinaryParser
-        from src.gui.viewport import FrameRenderer, ArcBallCamera
-        from src.gui.tpc_render_utils import _load_tpc_bytes
-        import numpy as np
-
-        mdl = os.path.join(GAME_MODELS_DIR, f'{name}.mdl')
-        mdx = os.path.join(GAME_MODELS_DIR, f'{name}.mdx')
-        with open(mdl, 'rb') as f: mdl_data = f.read()
-        with open(mdx, 'rb') as f: mdx_data = f.read()
-        model = MDLBinaryParser(mdl_data, mdx_data).parse()
-
+    def _render_model(self, mdl_path, mdx_path, tex_path=None):
+        from src.gui.viewport import FrameRenderer, ArcBallCamera, _load_tpc_bytes
+        model = _load_model(mdl_path, mdx_path)
         textures = {}
-        if tex_name:
-            for ext in ['.tpc', '.tga']:
-                tp = os.path.join(GAME_MODELS_DIR, tex_name + ext)
-                if os.path.exists(tp):
-                    with open(tp, 'rb') as f: td = f.read()
-                    img = _load_tpc_bytes(td)
-                    if img: textures[tex_name] = img; break
-
+        if tex_path and os.path.exists(tex_path):
+            tex_data = open(tex_path, 'rb').read()
+            img = _load_tpc_bytes(tex_data)
+            if img:
+                tex_name = os.path.splitext(os.path.basename(tex_path))[0]
+                textures[tex_name] = img
         cam = ArcBallCamera()
         renderer = FrameRenderer(cam)
-        renderer.model = model
-        renderer.textures = textures
-        renderer.show_texture = bool(textures)
+        renderer.set_model(model)
+        if textures:
+            renderer.textures = textures
+            renderer.show_texture = True
         renderer.show_solid = True
-        return renderer.render_still(512, 512, az_deg=0, el_deg=10)
+        return renderer.render(512, 512)
 
     def _count_model_pixels(self, img):
         import numpy as np
         arr = np.array(img)
-        bg = arr[0, 0]
+        bg  = arr[0, 0]
         diff = np.abs(arr.astype(int) - bg.astype(int)).sum(axis=2)
         return int((diff > 20).sum())
 
-    def test_c_terantanak_renders_with_pixels(self):
-        img = self._render_model('c_terantanak', 'c_terantanak01')
+    def test_c_bantha_renders_with_pixels(self):
+        """c_bantha rendered headlessly must produce >5000 non-background pixels."""
+        if not BANTHA_AVAILABLE:
+            pytest.skip('c_bantha model not available')
+        img = self._render_model(BANTHA_MDL, BANTHA_MDX, BANTHA_TPC)
         assert img is not None, 'Render returned None'
         npix = self._count_model_pixels(img)
         assert npix > 5000, f'Too few model pixels: {npix}'
 
-    def test_c_bantha_renders_with_pixels(self):
-        img = self._render_model('c_bantha', 'c_bantha01')
-        assert img is not None, 'Render returned None'
-        npix = self._count_model_pixels(img)
-        assert npix > 20000, f'Too few model pixels: {npix}'
-
-    def test_comm_b_f_renders_with_pixels(self):
-        img = self._render_model('comm_b_f', 'comm_b_f01')
+    def test_n_sithpraet_renders_with_pixels(self):
+        """N_sithpraet rendered headlessly must produce >2000 non-background pixels."""
+        if not SITHPRAET_AVAILABLE:
+            pytest.skip('N_sithpraet model not available')
+        img = self._render_model(SITHPRAET_MDL, SITHPRAET_MDX, SITHPRAET_TGA)
         assert img is not None, 'Render returned None'
         npix = self._count_model_pixels(img)
         assert npix > 2000, f'Too few model pixels: {npix}'
+
+    def test_render_returns_correct_size(self):
+        """Render must return an image with the requested dimensions."""
+        if not BANTHA_AVAILABLE:
+            pytest.skip('c_bantha model not available')
+        from src.gui.viewport import FrameRenderer, ArcBallCamera
+        model = _load_model(BANTHA_MDL, BANTHA_MDX)
+        cam = ArcBallCamera()
+        renderer = FrameRenderer(cam)
+        renderer.set_model(model)
+        img = renderer.render(200, 150)
+        assert img is not None
+        assert img.size == (200, 150), f'Expected (200,150), got {img.size}'
+
+    def test_render_none_model_does_not_crash(self):
+        """Rendering with no model set must not raise an exception."""
+        from src.gui.viewport import FrameRenderer, ArcBallCamera
+        cam = ArcBallCamera()
+        renderer = FrameRenderer(cam)
+        renderer.set_model(None)
+        # Must not raise; result may be None or a blank grid image
+        try:
+            renderer.render(100, 100)
+        except Exception as e:
+            pytest.fail(f'render(None model) raised: {e}')

@@ -226,7 +226,9 @@ class TestLightmapCompositing:
         assert before == after, "None lm_img should be a no-op"
 
     def test_lightmap_sentinel_uv_skipped(self):
-        """Sentinel UV values (|u|>20) must prevent lightmap application."""
+        """Sentinel UV values (|u|>100) must prevent lightmap application.
+        Phase 18: sentinel raised from 20.0 to 100.0. Using 125.0 which is
+        genuinely a placeholder value (above the new threshold)."""
         from src.gui.viewport import _paste_lightmap_triangle
         canvas = _make_canvas(200, 200, (150, 150, 150))
         lm     = _solid_lm_image(32, 32, (0, 0, 0))  # would darken
@@ -234,7 +236,7 @@ class TestLightmapCompositing:
         _paste_lightmap_triangle(
             canvas, lm,
             _SP0, _SP1, _SP2,
-            (25.0, 0.0), _UV1, _UV2,   # sentinel UV0
+            (125.0, 0.0), _UV1, _UV2,   # sentinel UV0 (above new threshold 100)
             canvas.width, canvas.height
         )
         after = list(canvas.getdata())

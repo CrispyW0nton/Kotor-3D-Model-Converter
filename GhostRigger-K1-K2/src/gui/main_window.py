@@ -20,6 +20,8 @@ from .viewport import ViewportWidget
 from ..core.model_data import KotorModel, ModelNode, NodeFlags, GameVersion
 from ..core.mdl_parser  import MDLBinaryParser, MDLAsciiParser, MDLAsciiWriter
 from ..resources.game_library import GameLibrary, ModelLibraryEntry
+from ..core.kotor_install import KotorInstallation
+from ..core.resource_manager import ResourceManager, get_manager
 from ..converters.mesh_converter import (OBJImporter, FBXImporter, OBJExporter, FBXExporter,
                                         GLTFImporter, GLTFExporter, tga_to_tpc, tpc_to_tga)
 from ..autorig.auto_rigger import AutoRigger, build_skeleton, HUMANOID_BONES
@@ -66,6 +68,8 @@ C = {
     'hover':     "#2a2a6a",
     'selected':  "#1a3a6a",
     'warning':   "#ff8844",
+    'success':   "#44cc88",
+    'sep':       "#252550",
 }
 
 
@@ -80,6 +84,47 @@ def _btn(master, text, command, accent=False, small=False, **kw):
     b.bind("<Enter>", lambda e: b.configure(bg=C['accent2'] if accent else C['hover']))
     b.bind("<Leave>", lambda e: b.configure(bg=bg))
     return b
+
+
+def _sep(master, orient='vertical'):
+    """Thin visual separator for toolbars."""
+    if orient == 'vertical':
+        return tk.Frame(master, bg=C['sep'], width=1)
+    return tk.Frame(master, bg=C['sep'], height=1)
+
+
+def _tooltip(widget, text: str):
+    """Attach a simple tooltip (hover label) to a widget."""
+    tip = None
+
+    def _show(event):
+        nonlocal tip
+        if tip:
+            return
+        x = widget.winfo_rootx() + 4
+        y = widget.winfo_rooty() + widget.winfo_height() + 4
+        tip = tk.Toplevel(widget)
+        tip.wm_overrideredirect(True)
+        tip.wm_geometry(f"+{x}+{y}")
+        tk.Label(tip, text=text, justify='left',
+                 bg="#2a2a5a", fg="#e0e0ff",
+                 font=("Segoe UI", 8),
+                 relief='flat', padx=6, pady=3,
+                 bd=1, highlightthickness=1,
+                 highlightbackground="#5050aa").pack()
+
+    def _hide(event):
+        nonlocal tip
+        if tip:
+            try:
+                tip.destroy()
+            except Exception:
+                pass
+            tip = None
+
+    widget.bind("<Enter>", _show, add='+')
+    widget.bind("<Leave>", _hide, add='+')
+    widget.bind("<ButtonPress>", _hide, add='+')
 
 
 def _label(master, text, style="normal", **kw):
@@ -158,26 +203,37 @@ class SkeletonPanel(tk.Frame):
         self._build()
 
     def _build(self):
-        _label(self, "Skeleton / Nodes", "heading", bg=C['panel2']).pack(
-            fill='x', padx=6, pady=(6,2))
+        # Header row with node count
+        hf = tk.Frame(self, bg=C['panel2']); hf.pack(fill='x', padx=6, pady=(6,2))
+        _label(hf, "Skeleton / Nodes", "heading", bg=C['panel2']).pack(side='left')
+        self._node_count_var = tk.StringVar(value="")
+        tk.Label(hf, textvariable=self._node_count_var,
+                 bg=C['panel2'], fg=C['text2'],
+                 font=("Segoe UI", 7)).pack(side='right')
 
-        # Search bar
+        # Search bar with clear button
         sf = tk.Frame(self, bg=C['panel2']); sf.pack(fill='x', padx=4, pady=2)
         self._search_var = tk.StringVar()
         self._search_var.trace_add('write', self._filter)
+        tk.Label(sf, text="🔍", bg=C['panel2'], fg=C['text2'],
+                 font=("Segoe UI", 9)).pack(side='left', padx=(2,0))
         tk.Entry(sf, textvariable=self._search_var, bg=C['bg2'], fg=C['text'],
                  insertbackground=C['text'], relief='flat',
-                 font=("Segoe UI",8)).pack(fill='x', padx=2)
+                 font=("Segoe UI", 8)).pack(side='left', fill='x', expand=True, padx=2)
+        tk.Button(sf, text="✕", command=lambda: self._search_var.set(""),
+                  bg=C['panel2'], fg=C['text2'], relief='flat',
+                  font=("Segoe UI", 7), padx=2, pady=0,
+                  cursor="hand2").pack(side='right', padx=1)
 
         # Tree
-        cols = ("Type","Verts","Faces")
+        cols = ("Type", "Verts", "Faces")
         self.tree = ttk.Treeview(self, columns=cols, show='tree headings',
                                   selectmode='browse', height=20)
-        self.tree.heading('#0', text='Name')
-        self.tree.column('#0', width=130, minwidth=80)
-        for c,w in zip(cols,(55,50,50)):
-            self.tree.heading(c, text=c)
-            self.tree.column(c, width=w, minwidth=30, anchor='center')
+        self.tree.heading('#0', text='Name', anchor='w')
+        self.tree.column('#0', width=120, minwidth=80)
+        for c, w in zip(cols, (55, 48, 48)):
+            self.tree.heading(c, text=c, anchor='center')
+            self.tree.column(c, width=w, minwidth=28, anchor='center')
 
         sb = ttk.Scrollbar(self, orient='vertical', command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb.set)
@@ -190,7 +246,12 @@ class SkeletonPanel(tk.Frame):
     def load_model(self, model: Optional[KotorModel]):
         self.tree.delete(*self.tree.get_children())
         self._all_items.clear()
-        if not model or not model.root_node: return
+        if not model or not model.root_node:
+            self._node_count_var.set("")
+            return
+        n_nodes = model.node_count()
+        n_mesh  = len(model.mesh_nodes())
+        self._node_count_var.set(f"{n_nodes} nodes  {n_mesh} mesh")
         # Use iterative BFS/DFS to avoid Python recursion limit crashes on
         # deeply nested models such as c_brith (RARE_CHAR type-64) which can
         # have 600+ nested child nodes and would overflow sys.getrecursionlimit.
@@ -255,6 +316,9 @@ class SkeletonPanel(tk.Frame):
         self.tree.tag_configure('dummy',      foreground="#aaaacc")
         self.tree.tag_configure('light',      foreground="#ffff88")
         self.tree.tag_configure('emitter',    foreground="#ff88ff")
+        self.tree.tag_configure('reference',  foreground="#7cd6f5")  # cyan – external model ref
+        self.tree.tag_configure('aabb',       foreground="#cc8855")  # orange – bounding-box node
+        self.tree.tag_configure('lightsaber', foreground="#ffffff")  # white – saber blade
 
     def _insert_node(self, node: 'ModelNode', parent_id: str):
         """Legacy recursive method — kept for API compatibility but now calls
@@ -363,9 +427,11 @@ class PropertiesPanel(tk.Frame):
             log.debug(f"PropertiesPanel._apply_transform: {exc}")
 
     def show_model(self, model: KotorModel):
-        mesh_nodes = model.mesh_nodes()
-        bone_nodes = model.bone_nodes()
-        skin_nodes = [n for n in mesh_nodes if n.is_skin]
+        all_nodes   = model.all_nodes()
+        mesh_nodes  = model.mesh_nodes()
+        bone_nodes  = model.bone_nodes()
+        skin_nodes  = [n for n in mesh_nodes if n.is_skin]
+        ref_nodes   = [n for n in all_nodes if getattr(n, 'is_reference', False)]
         total_verts = sum(len(n.vertices) for n in mesh_nodes)
         total_faces = sum(len(n.faces) for n in mesh_nodes)
         textures    = model.texture_list()
@@ -380,6 +446,7 @@ class PropertiesPanel(tk.Frame):
             f"Mesh:  {len(mesh_nodes)}",
             f"Skin:  {len(skin_nodes)}",
             f"Bones: {len(bone_nodes)}",
+            f"Refs:  {len(ref_nodes)}",
             f"Anims: {len(model.animations)}",
             f"",
             f"── Geometry ──",
@@ -394,6 +461,15 @@ class PropertiesPanel(tk.Frame):
             f"",
             f"── Textures ──",
         ] + [f"  {t}" for t in textures]
+        # Show reference node targets if any
+        if ref_nodes:
+            lines.append(f"")
+            lines.append(f"── Reference Nodes ──")
+            for rn in ref_nodes[:8]:
+                ref_tgt = (rn.emitter_params or {}).get('ref_model', '?')
+                lines.append(f"  ⊕ {rn.name} → {ref_tgt}")
+            if len(ref_nodes) > 8:
+                lines.append(f"  … ({len(ref_nodes)-8} more)")
         self._set(lines)
 
     def show_node(self, node: ModelNode):
@@ -453,6 +529,18 @@ class PropertiesPanel(tk.Frame):
                         avg_infl = sum(infl_counts) / len(infl_counts)
                         max_infl = max(infl_counts)
                         lines.append(f"Infl:  avg {avg_infl:.1f}, max {max_infl}")
+        # Reference node — show which external model it points to
+        if getattr(node, 'is_reference', False):
+            ep = node.emitter_params or {}
+            ref_name = ep.get('ref_model', '(unknown)')
+            reattach = ep.get('reattachable', False)
+            lines += [
+                f"",
+                f"── Reference ──",
+                f"Ref:   {ref_name}",
+                f"Reatt: {reattach}",
+                f"(geometry from external MDL)",
+            ]
         self._set(lines)
 
     def _set(self, lines: List[str]):
@@ -736,6 +824,10 @@ class LibraryPanel(tk.Frame):
         self._on_load    = on_load
         self._on_dir_set = on_dir_set   # callback(k1_dir, k2_dir) to persist settings
         self.library  = GameLibrary()
+        self._k1_install: Optional[KotorInstallation] = None
+        self._k2_install: Optional[KotorInstallation] = None
+        # Unified ResourceManager — single source of truth for all resource access
+        self._resource_manager: Optional[ResourceManager] = None
         self._all_entries: List[ModelLibraryEntry] = []
         self._category_var = tk.StringVar(value="All")
         self._module_area_var = tk.StringVar(value="All Areas")
@@ -804,19 +896,22 @@ class LibraryPanel(tk.Frame):
         ).pack(side='right', padx=1)
         # (Row is packed/forgotten dynamically in _on_cat_changed)
 
-        # Search bar
+        # Search bar with placeholder
         sf = tk.Frame(self, bg=C['panel2']); sf.pack(fill='x', padx=4, pady=1)
+        _label(sf, "🔍", bg=C['panel2']).pack(side='left', padx=(2, 0))
         self._search_var = tk.StringVar()
         self._search_var.trace_add('write', self._apply_filter)
-        tk.Entry(sf, textvariable=self._search_var, bg=C['bg2'], fg=C['text'],
+        _search_entry = tk.Entry(sf, textvariable=self._search_var,
+                 bg=C['bg2'], fg=C['text'],
                  insertbackground=C['text'], relief='flat',
-                 font=("Segoe UI", 8), width=22).pack(side='left', fill='x', expand=True)
-        _label(sf, "🔍", bg=C['panel2']).pack(side='right')
+                 font=("Segoe UI", 8), width=22)
+        _search_entry.pack(side='left', fill='x', expand=True, padx=2)
         # Clear search button
         tk.Button(sf, text="✕", command=lambda: self._search_var.set(""),
                   bg=C['panel2'], fg=C['text2'], relief='flat',
                   font=("Segoe UI", 7), padx=2, pady=0,
                   cursor="hand2").pack(side='right', padx=1)
+        _tooltip(_search_entry, "Type to filter models  (Ctrl+F to focus)")
 
         # Model list
         lf = tk.Frame(self, bg=C['panel2']); lf.pack(fill='both', expand=True, padx=4, pady=2)
@@ -828,6 +923,7 @@ class LibraryPanel(tk.Frame):
         self.listbox.pack(fill='both', expand=True)
         sb.configure(command=self.listbox.yview)
         self.listbox.bind('<Double-Button-1>', self._load_selected)
+        self.listbox.bind('<Return>',          self._load_selected)
         self.listbox.bind('<<ListboxSelect>>', self._on_list_select)
 
         # Thumbnail preview strip (shows pre-rendered front PNG)
@@ -861,9 +957,12 @@ class LibraryPanel(tk.Frame):
                textvariable=self._status_var).pack(padx=4, pady=1)
 
         bf = tk.Frame(self, bg=C['panel2']); bf.pack(fill='x', padx=4, pady=4)
-        _btn(bf, "⬇ Load Model", self._load_selected, accent=True).pack(
-            side='left', fill='x', expand=True, padx=2)
-        _btn(bf, "📂 Extract", self._extract_selected).pack(side='right', padx=2)
+        b_load = _btn(bf, "⬇ Load Model  ↵", self._load_selected, accent=True)
+        b_load.pack(side='left', fill='x', expand=True, padx=2)
+        _tooltip(b_load, "Load selected model into viewport  (Enter / double-click)")
+        b_extract = _btn(bf, "📂 Extract", self._extract_selected)
+        b_extract.pack(side='right', padx=2)
+        _tooltip(b_extract, "Extract selected MDL/MDX to a folder")
 
         # Batch export row
         bf2 = tk.Frame(self, bg=C['panel2']); bf2.pack(fill='x', padx=4, pady=(0,4))
@@ -933,6 +1032,8 @@ class LibraryPanel(tk.Frame):
         d = filedialog.askdirectory(title="Select KotOR 1 Game Directory")
         if d:
             self.library.set_k1_dir(d)
+            self._create_k1_install(d)
+            self._update_resource_manager()
             if self._on_dir_set:
                 self._on_dir_set(d, None)
 
@@ -940,8 +1041,87 @@ class LibraryPanel(tk.Frame):
         d = filedialog.askdirectory(title="Select KotOR 2 TSL Game Directory")
         if d:
             self.library.set_k2_dir(d)
+            self._create_k2_install(d)
+            self._update_resource_manager()
             if self._on_dir_set:
                 self._on_dir_set(None, d)
+
+    def _create_k1_install(self, d: str):
+        """Create/update ResourceManager for K1 (preferred) with KotorInstallation fallback."""
+        # Primary: update ResourceManager (single source of truth)
+        self._update_resource_manager()
+        # Legacy fallback: KotorInstallation for texture cache wiring
+        try:
+            self._k1_install = KotorInstallation(d)
+            top = self.winfo_toplevel()
+            if hasattr(top, 'viewport'):
+                mgr = self._resource_manager
+                if mgr and mgr.is_ready():
+                    top.viewport.set_resource_manager(mgr, "K1")
+                else:
+                    top.viewport.set_installation(self._k1_install, "K1")
+        except Exception as _e:
+            log.warning(f"KotorInstallation K1 failed: {_e}")
+
+    def _create_k2_install(self, d: str):
+        """Create/update ResourceManager for K2 (preferred) with KotorInstallation fallback."""
+        # Primary: update ResourceManager (single source of truth)
+        self._update_resource_manager()
+        # Legacy fallback: KotorInstallation for texture cache wiring
+        try:
+            self._k2_install = KotorInstallation(d)
+            top = self.winfo_toplevel()
+            if hasattr(top, 'viewport'):
+                mgr = self._resource_manager
+                if mgr and mgr.is_ready():
+                    top.viewport.set_resource_manager(mgr, "K2")
+                else:
+                    top.viewport.set_installation(self._k2_install, "K2")
+        except Exception as _e:
+            log.warning(f"KotorInstallation K2 failed: {_e}")
+
+    def _update_resource_manager(self):
+        """
+        Build / update the unified ResourceManager from current game dirs
+        and wire it into the viewport texture cache.
+
+        Called whenever a new game directory is set or a scan completes.
+        The ResourceManager is the single source of truth — it replaces the
+        split KotorInstallation + GameLibrary texture-loading paths.
+        """
+        k1d = self.library.k1_dir
+        k2d = self.library.k2_dir
+
+        # Reuse existing manager if present, else create new one
+        mgr = self._resource_manager
+        if mgr is None:
+            mgr = ResourceManager()
+            self._resource_manager = mgr
+
+        if k1d and os.path.isdir(k1d):
+            try:
+                mgr.set_k1_dir(k1d)
+                log.info(f"ResourceManager: K1 indexed {k1d!r}")
+            except Exception as _e:
+                log.warning(f"ResourceManager K1 failed: {_e}")
+
+        if k2d and os.path.isdir(k2d):
+            try:
+                mgr.set_k2_dir(k2d)
+                log.info(f"ResourceManager: K2 indexed {k2d!r}")
+            except Exception as _e:
+                log.warning(f"ResourceManager K2 failed: {_e}")
+
+        # Wire into viewport if available
+        try:
+            top = self.winfo_toplevel()
+            if hasattr(top, 'viewport') and mgr.is_ready():
+                # Determine which game tag to use for current context
+                tag = "K1" if (k1d and os.path.isdir(k1d)) else "K2"
+                top.viewport.set_resource_manager(mgr, tag)
+                log.info(f"ResourceManager wired into viewport ({tag})")
+        except Exception as _e:
+            log.warning(f"ResourceManager viewport wire failed: {_e}")
 
     def _auto_detect_dirs(self):
         """Auto-detect installed KotOR 1 and KotOR 2 game directories.
@@ -1219,7 +1399,69 @@ class LibraryPanel(tk.Frame):
             # intermittent "main thread is not in main loop" crashes.
             try:
                 self.listbox.after(0, lambda: self._status_var.set("Scanning…"))
-                # Thread-safe progress callback: always dispatch via after(0, ...)
+
+                k1d = self.library.k1_dir
+                k2d = self.library.k2_dir
+
+                # ── Phase 1: ResourceManager fast index (<200 ms total) ───────
+                # Create a unified ResourceManager and immediately populate the
+                # model list.  This replaces the split KotorInstallation approach
+                # with a single object that handles all resource types correctly.
+                mgr = ResourceManager()
+                fast_entries: List[ModelLibraryEntry] = []
+
+                if k1d and os.path.isdir(k1d):
+                    try:
+                        ok = mgr.set_k1_dir(k1d)
+                        if ok:
+                            # Also keep legacy KotorInstallation for compatibility
+                            try:
+                                self._k1_install = KotorInstallation(k1d)
+                            except Exception:
+                                pass
+                            k1_models = mgr.list_models('K1')
+                            for resref, _ in k1_models:
+                                fast_entries.append(ModelLibraryEntry(
+                                    resref=resref, game="K1",
+                                    source=k1d, has_mdx=True))
+                            log.info(f"ResourceManager K1: {len(fast_entries)} models")
+                    except Exception as _fe:
+                        log.warning(f"ResourceManager K1 scan failed: {_fe}")
+
+                k2_start = len(fast_entries)
+                if k2d and os.path.isdir(k2d):
+                    try:
+                        ok = mgr.set_k2_dir(k2d)
+                        if ok:
+                            try:
+                                self._k2_install = KotorInstallation(k2d)
+                            except Exception:
+                                pass
+                            k2_models = mgr.list_models('K2')
+                            for resref, _ in k2_models:
+                                fast_entries.append(ModelLibraryEntry(
+                                    resref=resref, game="K2",
+                                    source=k2d, has_mdx=True))
+                            log.info(f"ResourceManager K2: {len(fast_entries) - k2_start} models")
+                    except Exception as _fe:
+                        log.warning(f"ResourceManager K2 scan failed: {_fe}")
+
+                # Store ResourceManager and show fast results immediately
+                if mgr.is_ready():
+                    self._resource_manager = mgr
+                    if fast_entries:
+                        self._all_entries = fast_entries
+                        n_fast = len(fast_entries)
+                        self.listbox.after(0, self._apply_filter)
+                        self.listbox.after(0, lambda: self._status_var.set(
+                            f"{n_fast} models (fast index — full scan running…)"))
+                        # Wire ResourceManager into viewport immediately.
+                        # Use after(0, ...) so it runs on the main thread as soon
+                        # as the event loop picks it up (no arbitrary 50ms wait).
+                        self.listbox.after(0, self._wire_resource_manager_to_viewport)
+                        self.listbox.after(0, self._notify_scan_done)
+
+                # ── Phase 2: Full GameLibrary scan (richer metadata) ──────────
                 def _safe_progress(msg):
                     try:
                         self.listbox.after(0, lambda m=msg: self._status_var.set(m))
@@ -1227,17 +1469,14 @@ class LibraryPanel(tk.Frame):
                         pass
                 self.library.scan(progress_cb=_safe_progress)
                 self._all_entries = list(self.library.models)
+
                 def _post_scan():
                     self._apply_filter()
-                    # If module tab is currently active, rebuild area choices
                     if self._category_var.get() == 'Module':
                         self._rebuild_module_area_choices()
                 self.listbox.after(0, _post_scan)
                 n = len(self._all_entries)
                 self.listbox.after(0, lambda: self._status_var.set(f"{n} models found"))
-                # Notify the app to refresh 2DA/resource panels
-                if self._on_dir_set:
-                    self.listbox.after(200, lambda: None)  # signal scan done
                 self.listbox.after(300, self._notify_scan_done)
             except Exception as _e:
                 log.error(f"_scan thread error: {_e}", exc_info=True)
@@ -1246,6 +1485,48 @@ class LibraryPanel(tk.Frame):
                 except Exception:
                     pass
         threading.Thread(target=run, daemon=True, name="lib_scan").start()
+
+    def _wire_resource_manager_to_viewport(self):
+        """Wire the ResourceManager into the viewport texture cache (main-thread safe).
+
+        Called via after(0, ...) so it always runs on the Tkinter main thread.
+        After wiring it immediately triggers _refresh_resource_panels so
+        show_texture is auto-enabled and a re-render is requested.
+        """
+        try:
+            mgr = self._resource_manager
+            if mgr is None or not mgr.is_ready():
+                return
+            top = self.winfo_toplevel()
+            if not hasattr(top, 'viewport'):
+                return
+            # Determine game tag: prefer K1 if available, otherwise K2
+            k1d = self.library.k1_dir
+            tag = "K1" if (k1d and os.path.isdir(k1d)) else "K2"
+            top.viewport.set_resource_manager(mgr, tag)
+            log.info(f"ResourceManager wired into viewport from scan ({tag})")
+            # Trigger auto-enable of texture rendering and a fresh render.
+            # Also re-run prewarm so textures from the new backend get loaded.
+            if hasattr(top, '_refresh_resource_panels'):
+                top._refresh_resource_panels()
+            else:
+                # Minimal fallback: flip show_texture on if a model is loaded
+                try:
+                    renderer = top.viewport._renderer
+                    if not renderer.show_texture and renderer.model:
+                        renderer.show_texture = True
+                        top.viewport._btn_tex.configure(bg="#224422")
+                        top.viewport._request_render()
+                except Exception:
+                    pass
+            # Re-run prewarm for current model with the newly wired ResourceManager
+            try:
+                if hasattr(top, 'viewport') and top.viewport._renderer.model:
+                    top.viewport._prewarm_textures(top.viewport._renderer.model)
+            except Exception:
+                pass
+        except Exception as _e:
+            log.warning(f"_wire_resource_manager_to_viewport failed: {_e}")
 
     def _notify_scan_done(self):
         """Notify parent app that library scan is complete."""
@@ -1269,6 +1550,21 @@ class LibraryPanel(tk.Frame):
                         pass
                 self.library.scan(progress_cb=_safe_progress, deep_scan=True)
                 self._all_entries = list(self.library.models)
+
+                # ── Create fast KotorInstallation objects after scan ──────
+                k1d = self.library.k1_dir
+                k2d = self.library.k2_dir
+                if k1d and os.path.isdir(k1d):
+                    try:
+                        self._k1_install = KotorInstallation(k1d)
+                    except Exception as _ie:
+                        log.warning(f"KotorInstallation K1 init failed: {_ie}")
+                if k2d and os.path.isdir(k2d):
+                    try:
+                        self._k2_install = KotorInstallation(k2d)
+                    except Exception as _ie:
+                        log.warning(f"KotorInstallation K2 init failed: {_ie}")
+
                 def _post_deep_scan():
                     self._apply_filter()
                     if self._category_var.get() == 'Module':
@@ -1319,6 +1615,14 @@ class LibraryPanel(tk.Frame):
         col_k1 = "#88aaff"
         col_k2 = "#aaffaa"
         is_module_tab = (cat == 'Module')
+        # Category icons for list entries
+        _cat_icons = {
+            'Creature':          '🐉',
+            'Character':         '🧍',
+            'Item/Armor/Weapons':'⚔',
+            'Module':            '🏛',
+            'Other':             '📦',
+        }
         for i, e in enumerate(filtered):
             if is_module_tab and hasattr(e, 'display_label_rich'):
                 base_label = e.display_label_rich
@@ -1326,7 +1630,13 @@ class LibraryPanel(tk.Frame):
                 base_label = e.display_label
             else:
                 base_label = e.resref
-            label = f"[{e.game}] {base_label}"
+            # Add category icon when viewing 'All' tab
+            if cat == 'All':
+                entry_cat = _infer_model_category(e.resref, e.model_class)
+                icon = _cat_icons.get(entry_cat, '•')
+                label = f"{icon} [{e.game}] {base_label}"
+            else:
+                label = f"[{e.game}] {base_label}"
             self.listbox.insert('end', label)
             self.listbox.itemconfig(i, fg=col_k1 if e.game == "K1" else col_k2)
 
@@ -1367,7 +1677,36 @@ class LibraryPanel(tk.Frame):
         self._status_var.set(f"Loading {entry.resref}…")
         def run():
             try:
-                mdl, mdx = self.library.get_model_data(entry)
+                mdl, mdx = None, None
+                resref_lower = entry.resref.lower()
+
+                # ── Primary: ResourceManager (unified BIF/ERF, <2 ms) ──────
+                mgr = getattr(self, '_resource_manager', None)
+                if mgr is not None:
+                    try:
+                        mdl = mgr.get_mdl(resref_lower, entry.game)
+                        if mdl:
+                            mdx = mgr.get_mdx(resref_lower, entry.game) or b''
+                    except Exception:
+                        mdl = None
+
+                # ── Legacy: KotorInstallation fallback ───────────────────
+                if not mdl:
+                    k1_inst = getattr(self, '_k1_install', None)
+                    k2_inst = getattr(self, '_k2_install', None)
+                    inst = k1_inst if entry.game == "K1" else k2_inst
+                    if inst is not None:
+                        try:
+                            mdl = inst.get_mdl(resref_lower)
+                            if mdl:
+                                mdx = inst.get_mdx(resref_lower) or b''
+                        except Exception:
+                            mdl = None
+
+                # ── Slow fallback: GameLibrary ────────────────────────────
+                if not mdl:
+                    mdl, mdx = self.library.get_model_data(entry)
+
                 self.listbox.after(0, lambda: self._on_load(entry, mdl, mdx))
                 resref = entry.resref
                 self.listbox.after(0, lambda: self._status_var.set(f"Loaded: {resref}"))
@@ -1424,11 +1763,21 @@ class LibraryPanel(tk.Frame):
                     f"{entry.resref}\n[{entry.game}]{cls_info}{skin_info}\n{mesh_info}"
                 )
             else:
-                # No pre-rendered thumb — show placeholder
-                self._thumb_label.config(image='', text='🖼', width=6, height=4,
-                                         fg=C.get('text2', '#888'), font=("Segoe UI", 14))
+                # No pre-rendered thumb — show category icon as placeholder
+                _cat_icons2 = {
+                    'Creature':'🐉', 'Character':'🧍',
+                    'Item/Armor/Weapons':'⚔', 'Module':'🏛', 'Other':'📦',
+                }
+                entry_cat = _infer_model_category(entry.resref, entry.model_class)
+                icon = _cat_icons2.get(entry_cat, '📦')
+                self._thumb_label.config(image='', text=icon, width=4, height=2,
+                                         fg=C.get('gold', '#ffcc44'),
+                                         font=("Segoe UI", 20))
                 self._thumb_photo = None
-                self._thumb_info_var.set(f"{entry.resref}\n[{entry.game}]  no preview")
+                cls_str = f"  {entry.model_class}" if entry.model_class else ""
+                self._thumb_info_var.set(
+                    f"{entry.resref}\n[{entry.game}]{cls_str}\n↵ or dbl-click to load"
+                )
         except ImportError:
             # PIL not available
             self._clear_thumbnail()
@@ -4243,28 +4592,62 @@ class LogPanel(tk.Frame):
         self._build()
 
     def _build(self):
+        # ── Header bar (collapsible) ──────────────────────────────────
         hf = tk.Frame(self, bg=C['bg']); hf.pack(fill='x')
-        _label(hf, "Output Log", "heading", bg=C['bg']).pack(side='left', padx=4)
-        _btn(hf, "Clear",   self._clear,          small=True).pack(side='right', padx=2, pady=2)
-        _btn(hf, "📋 Copy", self._copy_to_clipboard, small=True).pack(side='right', padx=2, pady=2)
-        _btn(hf, "💾 Save", self._save_log,         small=True).pack(side='right', padx=2, pady=2)
+        self._collapsed = False
 
-        self.text = tk.Text(self, bg=C['bg2'], fg=C['text2'],
-                            font=("Consolas",8), relief='flat',
-                            height=6, state='disabled',
-                            wrap='word', padx=4, pady=4)
-        sb = ttk.Scrollbar(self, command=self.text.yview)
+        self._toggle_btn = tk.Button(
+            hf, text="▼ Output Log", font=("Segoe UI", 8, "bold"),
+            bg=C['bg'], fg=C['text2'], relief='flat', cursor='hand2',
+            padx=6, pady=2, command=self._toggle_collapse,
+            bd=0, highlightthickness=0)
+        self._toggle_btn.pack(side='left')
+
+        _btn(hf, "✕ Clear",  self._clear,             small=True).pack(side='right', padx=2, pady=1)
+        _btn(hf, "📋 Copy",  self._copy_to_clipboard,  small=True).pack(side='right', padx=2, pady=1)
+        _btn(hf, "💾 Save",  self._save_log,            small=True).pack(side='right', padx=2, pady=1)
+
+        # Level filter checkboxes
+        self._show_info    = tk.BooleanVar(value=True)
+        self._show_success = tk.BooleanVar(value=True)
+        self._show_warning = tk.BooleanVar(value=True)
+        self._show_error   = tk.BooleanVar(value=True)
+
+        # ── Text area ─────────────────────────────────────────────────
+        self._body = tk.Frame(self, bg=C['bg2'])
+        self._body.pack(fill='both', expand=True)
+
+        self.text = tk.Text(self._body, bg=C['bg2'], fg=C['text2'],
+                            font=("Consolas", 8), relief='flat',
+                            height=5, state='disabled',
+                            wrap='word', padx=6, pady=4)
+        sb = ttk.Scrollbar(self._body, command=self.text.yview)
         self.text.configure(yscrollcommand=sb.set)
         sb.pack(side='right', fill='y')
-        self.text.pack(fill='both', expand=True, padx=4, pady=4)
+        self.text.pack(fill='both', expand=True)
 
+        # Color tags
         self.text.tag_configure('info',    foreground=C['text2'])
-        self.text.tag_configure('success', foreground=C['green'])
+        self.text.tag_configure('success', foreground=C['success'])
         self.text.tag_configure('warning', foreground=C['warning'])
         self.text.tag_configure('error',   foreground=C['red'])
+        self.text.tag_configure('ts',      foreground='#505080', font=("Consolas", 7))
+
+    def _toggle_collapse(self):
+        """Collapse/expand the log body."""
+        self._collapsed = not self._collapsed
+        if self._collapsed:
+            self._body.pack_forget()
+            self._toggle_btn.configure(text="▶ Output Log")
+        else:
+            self._body.pack(fill='both', expand=True)
+            self._toggle_btn.configure(text="▼ Output Log")
 
     def log(self, msg: str, level: str = 'info'):
+        import time as _t
+        ts = _t.strftime("%H:%M:%S")
         self.text.configure(state='normal')
+        self.text.insert('end', f"[{ts}] ", 'ts')
         self.text.insert('end', f"{msg}\n", level)
         # Trim oldest lines if log gets too long (prevents UI slowdown on
         # models with many warnings / repeated loads)
@@ -4563,6 +4946,9 @@ class AnimationsPanel(tk.Frame):
 
         self._tree.bind("<<TreeviewSelect>>", self._on_select)
         self._tree.bind("<Double-1>",         self._on_double_click)
+        # Keyboard shortcuts on the treeview
+        self._tree.bind("<Return>",           lambda e: self._play())
+        self._tree.bind("<space>",            lambda e: self._toggle_play_pause())
 
         # Info strip
         info_frame = tk.Frame(self, bg=C['panel2'])
@@ -4602,35 +4988,58 @@ class AnimationsPanel(tk.Frame):
         ctrl_frame = tk.Frame(self, bg=C['panel2'])
         ctrl_frame.pack(fill='x', padx=6, pady=4)
 
-        self._btn_play  = _btn(ctrl_frame, "▶ Play",   self._play,   accent=True,  small=True)
-        self._btn_stop  = _btn(ctrl_frame, "■ Stop",   self._stop,   small=True)
-        self._btn_pause = _btn(ctrl_frame, "⏸ Pause",  self._pause,  small=True)
-        self._btn_loop  = _btn(ctrl_frame, "↺ Loop ON", self._toggle_loop, small=True)
         self._loop_on   = True
+        self._btn_play  = _btn(ctrl_frame, "▶ Play  ↵", self._play,   accent=True,  small=True)
+        self._btn_stop  = _btn(ctrl_frame, "■ Stop",    self._stop,   small=True)
+        self._btn_pause = _btn(ctrl_frame, "⏸ Pause",   self._pause,  small=True)
+        self._btn_loop  = _btn(ctrl_frame, "↺ Loop ON", self._toggle_loop, small=True)
+
+        _tooltip(self._btn_play,  "Play selected animation  (Enter / double-click)")
+        _tooltip(self._btn_stop,  "Stop playback and reset to frame 0")
+        _tooltip(self._btn_pause, "Pause / Resume playback  (Space in list)")
+        _tooltip(self._btn_loop,  "Toggle looping on/off")
 
         for b in (self._btn_play, self._btn_stop, self._btn_pause, self._btn_loop):
             b.pack(side='left', padx=2)
 
-        # FPS selector
+        # FPS selector + anim status inline
         fps_frame = tk.Frame(self, bg=C['panel2'])
         fps_frame.pack(fill='x', padx=6, pady=(0,4))
-        tk.Label(fps_frame, text="Playback FPS:", bg=C['panel2'],
-                 fg=C['text2'], font=("Segoe UI",8)).pack(side='left')
+        tk.Label(fps_frame, text="FPS:", bg=C['panel2'],
+                 fg=C['text2'], font=("Segoe UI", 8)).pack(side='left')
         self._fps_var = tk.StringVar(value="30")
         fps_combo = ttk.Combobox(fps_frame, textvariable=self._fps_var,
                                   values=["15","24","25","30","60"],
                                   width=5, state='readonly')
         fps_combo.pack(side='left', padx=4)
         fps_combo.bind("<<ComboboxSelected>>", self._on_fps_change)
+        _tooltip(fps_combo, "Playback frame rate (auto-set from animation data)")
 
-        # Export / Import buttons
+        # Export / Import – collapsible into a dropdown-style row
         exp_frame = tk.Frame(self, bg=C['panel2'])
         exp_frame.pack(fill='x', padx=6, pady=(0,4))
 
-        _btn(exp_frame, "💾 Export JSON",  self._export_json,  small=True).pack(side='left', padx=2)
-        _btn(exp_frame, "💾 Export BVH",   self._export_bvh,   small=True).pack(side='left', padx=2)
-        _btn(exp_frame, "📦 Export All",   self._export_all,   small=True).pack(side='left', padx=2)
-        _btn(exp_frame, "📂 Import JSON",  self._import_json,  small=True, accent=True).pack(side='left', padx=2)
+        exp_btn_anim = _btn(exp_frame, "💾 Export ▾", None, small=True)
+        exp_btn_anim.pack(side='left', padx=2)
+        exp_menu_anim = tk.Menu(exp_btn_anim, tearoff=False, bg=C['panel'],
+                                fg=C['text'], activebackground=C['hover'],
+                                activeforeground='white', font=("Segoe UI", 8))
+        exp_menu_anim.add_command(label="Export JSON…",     command=self._export_json)
+        exp_menu_anim.add_command(label="Export BVH…",      command=self._export_bvh)
+        exp_menu_anim.add_separator()
+        exp_menu_anim.add_command(label="Export All (JSON)…", command=self._export_all)
+        def _show_exp_anim_menu():
+            try:
+                exp_menu_anim.tk_popup(
+                    exp_btn_anim.winfo_rootx(),
+                    exp_btn_anim.winfo_rooty() + exp_btn_anim.winfo_height())
+            finally:
+                exp_menu_anim.grab_release()
+        exp_btn_anim.configure(command=_show_exp_anim_menu)
+        _tooltip(exp_btn_anim, "Export selected or all animations")
+
+        _btn(exp_frame, "📂 Import JSON", self._import_json, small=True, accent=True).pack(
+            side='left', padx=2)
 
     # ── Model loading ───────────────────────────────────────────────────────
 
@@ -4688,11 +5097,32 @@ class AnimationsPanel(tk.Frame):
                         f"{a.name}  │  {a.length:.3f}s  │  "
                         f"~{fps:.0f}fps  │  root: {a.anim_root or 'none'}  "
                         f"{'│  events: '+evts if evts else ''}")
+                    # Auto-set the FPS combobox to the animation's native rate
+                    rec_fps = self._engine.get_recommended_playback_fps(a)
+                    try:
+                        self._fps_var.set(str(rec_fps))
+                        self._playback_fps = rec_fps
+                    except Exception:
+                        pass
                     break
 
     def _on_double_click(self, event):
         """Double-click plays the animation."""
         self._play()
+
+    def _toggle_play_pause(self):
+        """Space bar: play if stopped, pause/resume if playing."""
+        if not self._engine:
+            return
+        if self._engine.is_playing:
+            self._pause()
+        else:
+            # If we have a selection, play it; otherwise resume
+            sel = self._tree.selection()
+            if sel and not self._engine.current_animation:
+                self._play()
+            else:
+                self._pause()  # resumes if paused
 
     # ── Playback ────────────────────────────────────────────────────────────
 
@@ -4799,20 +5229,31 @@ class AnimationsPanel(tk.Frame):
 
         Uses real-elapsed-time (perf_counter) instead of a fixed dt=1/fps so
         that the animation position stays locked to wall-clock time regardless
-        of how long the previous render took.  The first tick after play() uses
-        the nominal frame interval as dt to avoid a large first jump.
+        of how long the previous render took.
+
+        Timing strategy (v2):
+          • First tick:  dt = 1/fps  (avoids a big first jump)
+          • Normal tick: dt = wall-clock elapsed, clamped to [1/fps*0.5, 0.25 s]
+            The lower clamp prevents artificial slow-motion when the Tkinter
+            event loop delivers a tick slightly ahead of schedule.
+          • Residual scheduling: next tick is scheduled for
+              max(1, interval_ms - render_overhead_ms)
+            so that the *total* time between ticks stays close to interval_ms
+            even when the render step takes e.g. 8 ms.
         """
         import time as _time
         if not self._engine or not self._engine.is_playing:
             return
         fps = max(1, self._playback_fps)
+        nominal_dt = 1.0 / fps
         now = _time.perf_counter()
+
         if not hasattr(self, '_tick_last_time') or self._tick_last_time is None:
-            dt = 1.0 / fps
+            dt = nominal_dt
         else:
             dt = now - self._tick_last_time
-            # Clamp dt: if the UI was paused/busy for > 0.25 s, don't skip ahead
-            dt = min(dt, 0.25)
+            # Clamp: lower = half-nominal (prevent jitter), upper = 0.25s (handle lag)
+            dt = max(nominal_dt * 0.5, min(dt, 0.25))
         self._tick_last_time = now
 
         still_playing = self._engine.advance(dt)
@@ -4825,6 +5266,7 @@ class AnimationsPanel(tk.Frame):
                 anim = self._engine.current_animation
                 anim_name   = anim.name   if anim else ""
                 anim_length = anim.length if anim else 0.0
+                fps_est     = self._engine.get_animation_fps_estimate(anim) if anim else fps
                 vp.set_animation_pose(pose,
                                       name=anim_name,
                                       time=self._engine.current_time,
@@ -4835,7 +5277,7 @@ class AnimationsPanel(tk.Frame):
         # Update seek slider + time label
         anim = self._engine.current_animation
         if anim and anim.length > 0:
-            pct = (self._engine.current_time / anim.length) * 100
+            pct = (self._engine.current_time / anim.length) * 100.0
             self._progress['value'] = pct
             if not self._seek_dragging:
                 try:
@@ -4846,8 +5288,12 @@ class AnimationsPanel(tk.Frame):
                 f"{self._engine.current_time:6.3f} / {anim.length:.3f} s")
 
         if still_playing:
-            interval_ms = max(16, int(1000 / fps))
-            self._after_id = self.after(interval_ms, self._tick)
+            # Adaptive scheduling: subtract time already spent this tick so we
+            # keep the inter-tick period close to interval_ms
+            interval_ms = max(16, int(1000.0 / fps))
+            elapsed_ms  = int(((_time.perf_counter() - now) * 1000) + 0.5)
+            next_ms     = max(4, interval_ms - elapsed_ms)
+            self._after_id = self.after(next_ms, self._tick)
 
     # ── Export / Import ─────────────────────────────────────────────────────
 
@@ -5130,16 +5576,80 @@ class TwoDaBrowserPanel(tk.Frame):
             return
         self._tda = tda
         self._tda_name = name
+        # Try pykotor for richer display; fall back to internal TwoDA
+        try:
+            import sys as _sys
+            _pk_path = '/home/user/webapp/PyKotor/Libraries/PyKotor/src'
+            if _pk_path not in _sys.path:
+                _sys.path.insert(0, _pk_path)
+            from pykotor.resource.formats.twoda import read_2da as _pk_read_2da
+            raw = lib._get_2da_raw(name, game)  # internal raw-bytes accessor
+            if raw:
+                pk_tda = _pk_read_2da(raw)
+                n_rows = len(pk_tda)
+                n_cols = len(pk_tda.get_headers())
+                self._tda_label.config(
+                    text=f"{name}.2da  —  {n_rows} rows × {n_cols} cols  [pykotor]")
+                self._pk_tda = pk_tda   # save for potential enhanced export
+                self._populate_table()
+                return
+        except Exception:
+            pass
+        self._pk_tda = None
         self._tda_label.config(
-            text=f"{name}.2da  — {len(tda)} rows × {len(tda.columns)} cols")
+            text=f"{name}.2da  —  {len(tda)} rows × {len(tda.columns)} cols")
         self._populate_table()
 
     def _populate_table(self, filter_text: str = ""):
-        """Fill the Treeview with the current TwoDA data."""
+        """Fill the Treeview with the current TwoDA data.
+
+        Prefers the pykotor TwoDA object (_pk_tda) for richer data access;
+        falls back to the internal TwoDA object (_tda) for compatibility.
+        """
         self._clear_table(keep_columns=False)
         if self._tda is None:
             return
 
+        ft = filter_text.lower()
+        count = 0
+
+        # ── PyKotor path (preferred) ──────────────────────────────────────
+        pk_tda = getattr(self, '_pk_tda', None)
+        if pk_tda is not None:
+            try:
+                headers = pk_tda.get_headers()
+                cols = ['#'] + list(headers)
+                self._tv.config(columns=cols)
+                for c in cols:
+                    if c == '#':
+                        self._tv.heading('#', text='#')
+                        self._tv.column('#', width=48, minwidth=30, stretch=False, anchor='e')
+                    else:
+                        self._tv.heading(c, text=c, anchor='w',
+                                         command=lambda _c=c: self._sort_by_col(_c))
+                        self._tv.column(c, width=110, minwidth=40, stretch=True, anchor='w')
+                n_rows = len(pk_tda)
+                for row_idx in range(n_rows):
+                    row_vals = [str(row_idx)]
+                    for h in headers:
+                        try:
+                            cell = pk_tda.get_cell(row_idx, h)
+                            row_vals.append('' if cell in ('****', None) else str(cell))
+                        except Exception:
+                            row_vals.append('')
+                    if ft and not any(ft in v.lower() for v in row_vals):
+                        continue
+                    tag = 'even' if count % 2 == 0 else 'odd'
+                    self._tv.insert('', 'end', values=row_vals, tags=(tag,))
+                    count += 1
+                self._row_count_lbl.config(
+                    text=f"{count} rows" + (" (filtered)" if ft else "")
+                         + "  [pykotor]")
+                return
+            except Exception:
+                pass  # fall through to legacy path
+
+        # ── Legacy internal TwoDA path ─────────────────────────────────────
         cols = ['#'] + self._tda.columns
         self._tv.config(columns=cols)
         for c in cols:
@@ -5151,8 +5661,6 @@ class TwoDaBrowserPanel(tk.Frame):
                                   command=lambda _c=c: self._sort_by_col(_c))
                 self._tv.column(c, width=110, minwidth=40, stretch=True, anchor='w')
 
-        ft = filter_text.lower()
-        count = 0
         for row in self._tda:
             values = [str(row.index)] + [
                 (v if v and v != '****' else '') for v in row._data]
@@ -5162,7 +5670,7 @@ class TwoDaBrowserPanel(tk.Frame):
             self._tv.insert('', 'end', values=values, tags=(tag,))
             count += 1
         self._row_count_lbl.config(
-            text=f"{count} rows" + (f" (filtered)" if ft else ""))
+            text=f"{count} rows" + (" (filtered)" if ft else ""))
 
     def _clear_table(self, keep_columns: bool = True):
         for item in self._tv.get_children():
@@ -5195,12 +5703,36 @@ class TwoDaBrowserPanel(tk.Frame):
             defaultextension=".tsv",
             filetypes=[("TSV", "*.tsv"), ("All", "*")],
             initialfile=f"{self._tda_name}.tsv")
-        if path:
-            try:
-                self._tda.to_tsv(path)
-                messagebox.showinfo("Exported", f"Saved to:\n{path}")
-            except Exception as ex:
-                messagebox.showerror("Export error", str(ex))
+        if not path:
+            return
+        try:
+            # Prefer pykotor write if available
+            pk_tda = getattr(self, '_pk_tda', None)
+            if pk_tda is not None:
+                try:
+                    from pykotor.resource.formats.twoda import write_2da as _pk_write_2da
+                    raw = _pk_write_2da(pk_tda)
+                    # Write as TSV manually from pykotor data
+                    headers = pk_tda.get_headers()
+                    with open(path, 'w', encoding='utf-8') as f:
+                        f.write('#\t' + '\t'.join(headers) + '\n')
+                        for i in range(len(pk_tda)):
+                            row_vals = [str(i)]
+                            for h in headers:
+                                try:
+                                    cell = pk_tda.get_cell(i, h)
+                                    row_vals.append('' if cell in ('****', None) else str(cell))
+                                except Exception:
+                                    row_vals.append('')
+                            f.write('\t'.join(row_vals) + '\n')
+                    messagebox.showinfo("Exported", f"Saved to:\n{path}  [pykotor]")
+                    return
+                except Exception:
+                    pass
+            self._tda.to_tsv(path)
+            messagebox.showinfo("Exported", f"Saved to:\n{path}")
+        except Exception as ex:
+            messagebox.showerror("Export error", str(ex))
 
     def _export_csv(self):
         if self._tda is None:
@@ -5210,22 +5742,61 @@ class TwoDaBrowserPanel(tk.Frame):
             defaultextension=".csv",
             filetypes=[("CSV", "*.csv"), ("All", "*")],
             initialfile=f"{self._tda_name}.csv")
-        if path:
-            try:
-                import csv
-                with open(path, 'w', newline='', encoding='utf-8') as f:
-                    w = csv.writer(f)
-                    w.writerow(['#'] + self._tda.columns)
-                    for row in self._tda:
-                        w.writerow([str(row.index)] + list(row._data))
-                messagebox.showinfo("Exported", f"Saved to:\n{path}")
-            except Exception as ex:
-                messagebox.showerror("Export error", str(ex))
+        if not path:
+            return
+        try:
+            import csv
+            pk_tda = getattr(self, '_pk_tda', None)
+            if pk_tda is not None:
+                try:
+                    headers = pk_tda.get_headers()
+                    with open(path, 'w', newline='', encoding='utf-8') as f:
+                        w = csv.writer(f)
+                        w.writerow(['#'] + list(headers))
+                        for i in range(len(pk_tda)):
+                            row_vals = [str(i)]
+                            for h in headers:
+                                try:
+                                    cell = pk_tda.get_cell(i, h)
+                                    row_vals.append('' if cell in ('****', None) else str(cell))
+                                except Exception:
+                                    row_vals.append('')
+                            w.writerow(row_vals)
+                    messagebox.showinfo("Exported", f"Saved to:\n{path}  [pykotor]")
+                    return
+                except Exception:
+                    pass
+            with open(path, 'w', newline='', encoding='utf-8') as f:
+                w = csv.writer(f)
+                w.writerow(['#'] + self._tda.columns)
+                for row in self._tda:
+                    w.writerow([str(row.index)] + list(row._data))
+            messagebox.showinfo("Exported", f"Saved to:\n{path}")
+        except Exception as ex:
+            messagebox.showerror("Export error", str(ex))
 
 
 # ──────────────────────────────────────────────────────────────────────
 #  RESOURCE BROWSER PANEL (UTC/UTI/DLG/ARE/FAC/WOK etc.)
 # ──────────────────────────────────────────────────────────────────────
+
+# GFF resource type IDs – these are parsed with pykotor read_gff
+_GFF_RES_TYPES: frozenset = frozenset({
+    0x07D9,  # UTC (Creature Template)
+    0x07DA,  # UTI (Item Template)
+    0x07DB,  # UTM (Merchant)
+    0x07DC,  # UTP (Placeable)
+    0x07DD,  # UTD (Door)
+    0x07DE,  # UTE (Encounter)
+    0x07DF,  # UTT (Trigger)
+    0x07E0,  # DLG (Dialog)
+    0x07E7,  # ARE (Area)
+    0x07E8,  # IFO (Module Info)
+    0x07E9,  # FAC (Factions)
+    0x07EA,  # GIT (Git Instance)
+    0x07EB,  # ITP (Item Properties)
+})
+
 
 class ResourceBrowserPanel(tk.Frame):
     """
@@ -5395,22 +5966,41 @@ class ResourceBrowserPanel(tk.Frame):
             self._set_text(self._preview_text, f"Error reading: {ex}")
             return
 
-        # Text preview
-        if entry.res_type == 0x07E1:  # 2DA
+        # ── Text preview ────────────────────────────────────────────────
+        res_type = entry.res_type
+
+        if res_type == 0x07E1:  # 2DA – use pykotor read_2da (preferred) or legacy TwoDA
             try:
-                from ..core.twoda import TwoDA
-                tda = TwoDA.from_bytes(raw, name=entry.resref)
-                lines = [f"{entry.resref}.2da – {len(tda)} rows × {len(tda.columns)} cols",
-                         "",
-                         "\t".join(['#'] + tda.columns)]
-                for i, row in enumerate(tda):
-                    lines.append("\t".join([str(i)] + list(row._data)))
-                    if i >= 100:
-                        lines.append(f"... (showing first 100 of {len(tda)} rows)")
-                        break
-                self._set_text(self._preview_text, "\n".join(lines))
+                text = self._preview_2da_pykotor(raw, entry.resref)
+            except Exception:
+                try:
+                    from ..core.twoda import TwoDA
+                    tda = TwoDA.from_bytes(raw, name=entry.resref)
+                    lines = [
+                        f"{entry.resref}.2da  —  {len(tda)} rows × {len(tda.columns)} cols",
+                        "", "\t".join(['#'] + tda.columns)]
+                    for i, row in enumerate(tda):
+                        lines.append("\t".join([str(i)] + list(row._data)))
+                        if i >= 100:
+                            lines.append(f"… (showing first 100 of {len(tda)} rows)")
+                            break
+                    text = "\n".join(lines)
+                except Exception as ex2:
+                    text = f"2DA parse error: {ex2}"
+            self._set_text(self._preview_text, text)
+
+        elif res_type in _GFF_RES_TYPES:  # GFF-based: UTC/UTI/DLG/ARE/GIT/IFO etc.
+            try:
+                text = self._preview_gff_pykotor(raw, entry.resref)
             except Exception as ex:
-                self._set_text(self._preview_text, f"2DA parse error: {ex}")
+                # Fallback to raw latin-1 decode
+                try:
+                    text = raw[:4096].decode('latin-1', errors='replace')
+                    text = f"[GFF parse failed: {ex}]\n\n{text}"
+                except Exception:
+                    text = f"[binary: {len(raw)} bytes]"
+            self._set_text(self._preview_text, text)
+
         else:
             # Generic text view: try latin-1 decode
             try:
@@ -5420,7 +6010,7 @@ class ResourceBrowserPanel(tk.Frame):
             except Exception:
                 self._set_text(self._preview_text, f"[binary: {len(raw)} bytes]")
 
-        # Hex view
+        # ── Hex view (always shown) ──────────────────────────────────────
         hex_lines = []
         for i in range(0, min(len(raw), 1024), 16):
             chunk = raw[i:i+16]
@@ -5428,8 +6018,115 @@ class ResourceBrowserPanel(tk.Frame):
             text_part = ''.join(chr(b) if 32 <= b < 127 else '.' for b in chunk)
             hex_lines.append(f"{i:06x}  {hex_part:<48}  {text_part}")
         if len(raw) > 1024:
-            hex_lines.append(f"... ({len(raw)} total bytes)")
+            hex_lines.append(f"… ({len(raw)} total bytes)")
         self._set_text(self._hex_text, "\n".join(hex_lines))
+
+    # ── PyKotor-backed preview helpers ─────────────────────────────────
+
+    @staticmethod
+    def _preview_2da_pykotor(raw: bytes, resref: str) -> str:
+        """Use pykotor read_2da to parse and format a 2DA resource."""
+        try:
+            import sys as _sys
+            import io as _io
+            _pk_path = '/home/user/webapp/PyKotor/Libraries/PyKotor/src'
+            if _pk_path not in _sys.path:
+                _sys.path.insert(0, _pk_path)
+            from pykotor.resource.formats.twoda import read_2da as _pk_read_2da
+        except ImportError:
+            raise  # Let caller fall back to legacy path
+        tda = _pk_read_2da(raw)
+        cols = tda.get_headers()
+        n_rows = len(tda)
+        lines = [
+            f"[pykotor]  {resref}.2da  —  {n_rows} rows × {len(cols)} cols",
+            "",
+            "  ".join(["#".rjust(4)] + [c[:14].ljust(14) for c in cols])
+        ]
+        lines.append("  ".join(["─" * 4] + ["─" * 14] * len(cols)))
+        for row_idx in range(min(n_rows, 200)):
+            row_data = [tda.get_cell(row_idx, c) or "" for c in cols]
+            lines.append("  ".join(
+                [str(row_idx).rjust(4)] +
+                [str(v)[:14].ljust(14) for v in row_data]
+            ))
+        if n_rows > 200:
+            lines.append(f"… (showing first 200 of {n_rows} rows)")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _preview_gff_pykotor(raw: bytes, resref: str) -> str:
+        """Use pykotor read_gff to parse and format a GFF resource as readable text."""
+        try:
+            import sys as _sys
+            _pk_path = '/home/user/webapp/PyKotor/Libraries/PyKotor/src'
+            if _pk_path not in _sys.path:
+                _sys.path.insert(0, _pk_path)
+            from pykotor.resource.formats.gff import read_gff as _pk_read_gff
+        except ImportError:
+            raise  # Let caller handle
+        gff = _pk_read_gff(raw)
+        root = gff.root
+        lines = [f"[pykotor GFF]  {resref}  (content: {gff.content.name})"]
+        lines.append("")
+        ResourceBrowserPanel._gff_struct_lines(root, lines, indent=0, max_depth=5)
+        return "\n".join(lines)
+
+    @staticmethod
+    def _gff_struct_lines(struct, lines: list, indent: int, max_depth: int):
+        """Recursively render GFF struct fields as indented text lines.
+
+        Handles the pykotor GFFStruct iteration API which yields
+        (label, GFFFieldType, value) tuples.
+        """
+        if indent > max_depth:
+            lines.append("  " * indent + "…")
+            return
+        pad = "  " * indent
+        try:
+            for field_entry in struct:
+                try:
+                    # pykotor iterates as (label_str, GFFFieldType, value) tuples
+                    if isinstance(field_entry, tuple) and len(field_entry) >= 3:
+                        label, _ftype, val = field_entry[0], field_entry[1], field_entry[2]
+                    else:
+                        # Fallback: treat as plain label and read via get_* methods
+                        label = str(field_entry)
+                        val   = None
+                        try:
+                            val = struct.value(label)
+                        except Exception:
+                            pass
+
+                    if val is None:
+                        lines.append(f"{pad}{label}:  (null)")
+                    elif hasattr(val, 'items') or (hasattr(val, 'fields') and
+                                                    not isinstance(val, str)):
+                        # Nested GFFStruct
+                        lines.append(f"{pad}{label}:  {{")
+                        ResourceBrowserPanel._gff_struct_lines(
+                            val, lines, indent + 1, max_depth)
+                        lines.append(f"{pad}}}")
+                    elif hasattr(val, '__iter__') and not isinstance(val, (str, bytes)):
+                        # GFFList
+                        try:
+                            items = list(val)
+                        except Exception:
+                            items = []
+                        lines.append(f"{pad}{label}:  [{len(items)} entries]")
+                        for i, item in enumerate(items[:3]):
+                            lines.append(f"{pad}  [{i}] {{")
+                            ResourceBrowserPanel._gff_struct_lines(
+                                item, lines, indent + 2, max_depth)
+                            lines.append(f"{pad}  }}")
+                        if len(items) > 3:
+                            lines.append(f"{pad}  … ({len(items)-3} more)")
+                    else:
+                        lines.append(f"{pad}{label}:  {val!r}")
+                except Exception as fe:
+                    lines.append(f"{pad}<field error: {fe}>")
+        except Exception as se:
+            lines.append(f"{pad}<struct error: {se}>")
 
     def _set_text(self, widget: tk.Text, text: str):
         widget.config(state='normal')
@@ -5444,7 +6141,7 @@ class ResourceBrowserPanel(tk.Frame):
 
 class KotorModToolsApp(tk.Tk):
     APP_TITLE   = "GhostRigger-K1-K2  ▸  Odyssey Engine Pipeline"
-    APP_VERSION = "4.2.0"  # v4.2: auto-detect startup + visual audit verification
+    APP_VERSION = "4.3.0"  # v4.3: Phase 18 — full UI polish pass, keyboard shortcuts, PyKotor preview
     WIN_SIZE    = "1600x950"
 
     def __init__(self):
@@ -5607,43 +6304,76 @@ class KotorModToolsApp(tk.Tk):
                 self.res_browser.refresh()
         except Exception:
             pass
-        # Wire the game library into the viewport texture cache so BIF textures load
+        # Wire ResourceManager (new unified path) into viewport texture cache
         try:
-            lib = self.lib_panel.library
-            if lib and hasattr(self, 'viewport'):
-                # Determine correct game_tag for texture lookup:
-                # - If both K1+K2 dirs are set, use the currently loaded model's
-                #   game version to pick the primary archive (cross-game fallback
-                #   in get_texture_data handles the other game automatically).
-                # - If only one dir is set, use that game tag.
-                if lib.k1_dir and lib.k2_dir:
-                    model = getattr(self, '_model', None)
-                    if model and hasattr(model, 'game_version'):
-                        from ..core.model_data import GameVersion as _GV
-                        game_tag = "K2" if model.game_version == _GV.K2 else "K1"
-                    else:
-                        game_tag = "K1"
-                elif lib.k2_dir and not lib.k1_dir:
-                    game_tag = "K2"
-                else:
-                    game_tag = "K1"
+            lib_panel = self.lib_panel
+            lib = lib_panel.library
+            mgr = getattr(lib_panel, '_resource_manager', None)
+            k1_inst = getattr(lib_panel, '_k1_install', None)
+            k2_inst = getattr(lib_panel, '_k2_install', None)
+            if not hasattr(self, 'viewport'):
+                return
+
+            # Determine game tag from currently loaded model or available dirs
+            model = getattr(self, '_model', None)
+            if model and hasattr(model, 'game_version'):
+                from ..core.model_data import GameVersion as _GV
+                game_tag = "K2" if model.game_version == _GV.K2 else "K1"
+            elif lib.k2_dir and not lib.k1_dir:
+                game_tag = "K2"
+            else:
+                game_tag = "K1"
+
+            # Prefer ResourceManager (new unified backend)
+            if mgr is not None and mgr.is_ready():
+                self.viewport.set_resource_manager(mgr, game_tag)
+                stats = mgr.stats()
+                k1_s = stats.get('K1') or {}
+                k2_s = stats.get('K2') or {}
+                tex_erfs = (k1_s.get('tex_erfs', 0) if game_tag == 'K1'
+                            else k2_s.get('tex_erfs', 0))
+                self.log(f"Texture cache: ResourceManager ready ({game_tag}, "
+                         f"{tex_erfs} texture packs)", 'success')
+            # Fallback: legacy KotorInstallation
+            elif k1_inst is not None or k2_inst is not None:
+                inst = k1_inst if game_tag == "K1" else k2_inst
+                if inst is None:
+                    inst = k1_inst or k2_inst
+                self.viewport.set_installation(inst, game_tag)
+                self.log("Texture cache: KotorInstallation ready (legacy path)", 'info')
+            # Last resort: GameLibrary
+            elif lib is not None:
                 self.viewport.set_game_library(lib, game_tag)
-                self.log("Texture cache: BIF/KEY archives wired for in-game texture loading",
-                         'success')
-                # Auto-enable textured rendering now that BIF textures are available
-                renderer = self.viewport._renderer
-                if not renderer.show_texture and len(lib.textures) > 0:
-                    renderer.show_texture = True
-                    try:
-                        self.viewport._btn_tex.configure(
-                            bg="#224422" if renderer.show_texture else "#1e1e3a")
-                    except Exception:
-                        pass
-                    self.viewport._request_render()
-                    self.log(f"Texture rendering auto-enabled ({len(lib.textures):,} textures indexed)",
-                             'success')
-        except Exception:
-            pass
+                self.log("Texture cache: GameLibrary wired (slow path)", 'info')
+
+            # Auto-enable textured rendering when textures are available.
+            # has_textures() checks TexturePacks ERFs; also accept any ready
+            # ResourceManager (textures may come from BIF even with no ERFs).
+            renderer = self.viewport._renderer
+            mgr_ready = (mgr is not None and mgr.is_ready())
+            has_textures = mgr_ready and mgr.has_textures(game_tag)
+            # Broaden: if mgr is ready at all, BIF-backed textures are available
+            has_any_tex = has_textures or mgr_ready
+            lib_tex_count = len(lib.textures) if lib else 0
+            if not renderer.show_texture and (has_any_tex or lib_tex_count > 0):
+                renderer.show_texture = True
+                try:
+                    self.viewport._btn_tex.configure(bg="#224422")
+                except Exception:
+                    pass
+                self.viewport._request_render()
+                self.log(f"Texture rendering auto-enabled", 'success')
+            # Re-run prewarm so textures from the newly wired backend get loaded.
+            # This handles the case where the backend was wired AFTER the initial
+            # model load (e.g. scan completes while model is already displayed).
+            try:
+                if renderer.model:
+                    self.viewport._prewarm_textures(renderer.model)
+            except Exception:
+                pass
+        except Exception as _e:
+            log.debug(f"_refresh_resource_panels texture wire: {_e}")
+
 
     def _apply_ttk_theme(self):
         style = ttk.Style(self)
@@ -5658,17 +6388,39 @@ class KotorModToolsApp(tk.Tk):
         style.configure('TLabelframe.Label', background=C['panel2'],
                         foreground=C['gold'], font=("Segoe UI Semibold",9))
         style.configure('Treeview', background=C['bg'], foreground=C['text'],
-                        fieldbackground=C['bg'], rowheight=18)
-        style.map('Treeview', background=[('selected', C['selected'])])
-        style.configure('TScrollbar', background=C['panel'], troughcolor=C['bg'])
-        style.configure('TNotebook', background=C['bg'])
+                        fieldbackground=C['bg'], rowheight=20)
+        style.map('Treeview', background=[('selected', C['selected'])],
+                  foreground=[('selected', 'white')])
+        # Treeview headings: gold on dark panel
+        style.configure('Treeview.Heading', background=C['panel'],
+                        foreground=C['gold'], font=("Segoe UI Semibold", 8),
+                        relief='flat')
+        style.map('Treeview.Heading', background=[('active', C['hover'])])
+        # Slim, dark scrollbars
+        style.configure('TScrollbar', background=C['panel'], troughcolor=C['bg'],
+                        arrowcolor=C['text2'], bordercolor=C['border'],
+                        width=10, relief='flat')
+        style.map('TScrollbar', background=[('active', C['hover'])])
+        # Notebook
+        style.configure('TNotebook', background=C['bg'], borderwidth=0)
         style.configure('TNotebook.Tab', background=C['panel2'],
-                        foreground=C['text2'], padding=[8,4])
+                        foreground=C['text2'], padding=[10, 5], font=("Segoe UI", 8))
         style.map('TNotebook.Tab',
-                  background=[('selected', C['bg'])],
-                  foreground=[('selected', C['gold'])])
+                  background=[('selected', C['bg']), ('active', C['hover'])],
+                  foreground=[('selected', C['gold']), ('active', C['text'])])
+        # Combobox
         style.configure('TCombobox', fieldbackground=C['bg2'],
-                        background=C['panel2'], foreground=C['text'])
+                        background=C['panel2'], foreground=C['text'],
+                        arrowcolor=C['text2'], bordercolor=C['border'])
+        style.map('TCombobox',
+                  fieldbackground=[('readonly', C['bg2'])],
+                  selectbackground=[('readonly', C['selected'])],
+                  selectforeground=[('readonly', 'white')])
+        # Scale / seek slider
+        style.configure('TScale', background=C['panel2'],
+                        troughcolor=C['bg'], sliderlength=14,
+                        sliderrelief='flat')
+        style.map('TScale', background=[('active', C['accent'])])
 
     # ── Menu bar ──────────────────────────────────────────────────────────
 
@@ -5682,40 +6434,61 @@ class KotorModToolsApp(tk.Tk):
         fm = tk.Menu(mb, tearoff=False, bg=C['panel'], fg=C['text'],
                      activebackground=C['hover'], activeforeground='white')
         mb.add_cascade(label="File", menu=fm)
-        fm.add_command(label="Open MDL (binary)…",      command=self._open_mdl_binary)
-        fm.add_command(label="Open MDL (ASCII text)…",  command=self._open_mdl_ascii)
+        fm.add_command(label="Open MDL (binary)…",          accelerator="Ctrl+O",
+                       command=self._open_mdl_binary)
+        fm.add_command(label="Open MDL (ASCII text)…",      accelerator="Ctrl+Shift+O",
+                       command=self._open_mdl_ascii)
+        fm.add_command(label="Clear Model",                  accelerator="Ctrl+W",
+                       command=self._clear_model)
         fm.add_separator()
-        fm.add_command(label="Import OBJ…",       command=self._import_obj)
-        fm.add_command(label="Import FBX…",       command=self._import_fbx)
-        fm.add_command(label="Import GLB/GLTF…",  command=self._import_gltf)
+        fm.add_command(label="Import OBJ…",                  accelerator="Ctrl+I",
+                       command=self._import_obj)
+        fm.add_command(label="Import FBX…",                  command=self._import_fbx)
+        fm.add_command(label="Import GLB/GLTF…",             command=self._import_gltf)
         fm.add_separator()
-        fm.add_command(label="Save ASCII MDL…",   command=self._save_ascii_mdl)
-        fm.add_command(label="Export OBJ…",        command=self._export_obj)
-        fm.add_command(label="Export FBX…",        command=self._export_fbx)
-        fm.add_command(label="Export GLB…",        command=self._export_gltf)
+        fm.add_command(label="Save ASCII MDL…",               accelerator="Ctrl+S",
+                       command=self._save_ascii_mdl)
+        fm.add_command(label="Export OBJ…",                   accelerator="Ctrl+E",
+                       command=self._export_obj)
+        fm.add_command(label="Export FBX…",                   command=self._export_fbx)
+        fm.add_command(label="Export GLB/GLTF…",              accelerator="Ctrl+G",
+                       command=self._export_gltf)
         fm.add_separator()
-        fm.add_command(label="Set Texture Directory…", command=self._set_texture_dir)
+        fm.add_command(label="Set Texture Directory…",        command=self._set_texture_dir)
         fm.add_separator()
-        fm.add_command(label="Settings…",     command=self._open_settings)
+        fm.add_command(label="Settings…",                     accelerator="F2",
+                       command=self._open_settings)
         fm.add_separator()
-        fm.add_command(label="Exit",          command=self.quit)
+        fm.add_command(label="Exit",                          accelerator="Alt+F4",
+                       command=self.quit)
 
         # Model
         mm = tk.Menu(mb, tearoff=False, bg=C['panel'], fg=C['text'],
                      activebackground=C['hover'], activeforeground='white')
         mb.add_cascade(label="Model", menu=mm)
-        mm.add_command(label="Auto-Rig Current Model", command=self._quick_autorig)
+        mm.add_command(label="Auto-Rig Current Model", accelerator="Ctrl+R",
+                       command=self._quick_autorig)
         mm.add_command(label="Remove Rigging",         command=self._remove_rig)
         mm.add_separator()
-        mm.add_command(label="Frame All (F)",     command=lambda: self.viewport.frame_all())
-        mm.add_command(label="Toggle Wireframe",  command=lambda: self.viewport.toggle_wireframe())
-        mm.add_command(label="Toggle Bones",      command=lambda: self.viewport.toggle_bones())
-        mm.add_command(label="Toggle Texture",    command=lambda: self.viewport.toggle_texture())
+        mm.add_command(label="Frame All",         accelerator="F",
+                       command=lambda: self.viewport.frame_all())
+        mm.add_command(label="Reset Camera",      accelerator="R (in viewport)",
+                       command=lambda: self.viewport.reset_camera())
+        mm.add_separator()
+        mm.add_command(label="Toggle Wireframe",  accelerator="W",
+                       command=lambda: self.viewport.toggle_wireframe())
+        mm.add_command(label="Toggle Bones",      accelerator="B",
+                       command=lambda: self.viewport.toggle_bones())
+        mm.add_command(label="Toggle Texture",    accelerator="T",
+                       command=lambda: self.viewport.toggle_texture())
         mm.add_separator()
         mm.add_command(label="Open UV Viewer…",   command=lambda: self.viewport.open_uv_viewer())
         mm.add_separator()
-        mm.add_command(label="Run Diagnostics",       command=lambda: self.diag_panel.run_diagnostics())
+        mm.add_command(label="Run Diagnostics",       accelerator="Ctrl+D",
+                       command=lambda: self._switch_tab_right("diag"))
         mm.add_command(label="Model Info…",       command=self._show_model_info)
+        mm.add_command(label="Refresh All",       accelerator="F5",
+                       command=self._refresh_all)
 
         # MDLOps
         om = tk.Menu(mb, tearoff=False, bg=C['panel'], fg=C['text'],
@@ -5800,52 +6573,138 @@ class KotorModToolsApp(tk.Tk):
 
     def _build_ui(self):
         # ── Header ──
-        hdr = tk.Frame(self, bg=C['bg2'], height=48)
+        hdr = tk.Frame(self, bg=C['bg2'], height=46)
         hdr.pack(fill='x')
         hdr.pack_propagate(False)
 
-        tk.Label(hdr, text="👻  GhostRigger-K1-K2",
-                 font=("Segoe UI", 16, "bold"),
-                 bg=C['bg2'], fg=C['gold']).pack(side='left', padx=14)
-        tk.Label(hdr, text="Odyssey Engine Pipeline  │  K1 & K2 TSL",
-                 font=("Segoe UI", 9), bg=C['bg2'], fg=C['text2']).pack(side='left')
-        tk.Label(hdr, text=f"v{self.APP_VERSION}",
-                 font=("Segoe UI",8), bg=C['bg2'], fg=C['text2']).pack(side='right', padx=14)
+        # Left: App icon + title
+        tk.Label(hdr, text="👻",
+                 font=("Segoe UI", 18),
+                 bg=C['bg2'], fg=C['gold']).pack(side='left', padx=(14, 4))
+        title_frame = tk.Frame(hdr, bg=C['bg2'])
+        title_frame.pack(side='left')
+        tk.Label(title_frame, text="GhostRigger-K1-K2",
+                 font=("Segoe UI", 13, "bold"),
+                 bg=C['bg2'], fg=C['gold']).pack(anchor='w')
+        tk.Label(title_frame, text="Odyssey Engine Pipeline  │  KotOR 1 & 2 TSL",
+                 font=("Segoe UI", 8), bg=C['bg2'], fg=C['text2']).pack(anchor='w')
 
-        # IPC status indicator (right side of header)
+        # Right side cluster: version + IPC badge
+        right_cluster = tk.Frame(hdr, bg=C['bg2'])
+        right_cluster.pack(side='right', padx=12)
+        tk.Label(right_cluster, text=f"v{self.APP_VERSION}",
+                 font=("Segoe UI Semibold", 8),
+                 bg=C['bg2'], fg=C['text2']).pack(anchor='e')
+
+        # IPC status indicator (clickable badge)
         self._ipc_status_var = tk.StringVar(value="IPC: starting…")
         self._ipc_status_lbl = tk.Label(
-            hdr, textvariable=self._ipc_status_var,
+            right_cluster, textvariable=self._ipc_status_var,
             font=("Segoe UI", 7), bg=C['bg2'], fg=C['text2'],
             cursor="hand2",
         )
-        self._ipc_status_lbl.pack(side='right', padx=8)
+        self._ipc_status_lbl.pack(anchor='e')
         self._ipc_status_lbl.bind("<Button-1>", lambda e: self._ipc_status_click())
+        _tooltip(self._ipc_status_lbl,
+                 "GhostRigger IPC (port 7001)\nClick for IPC status details")
 
         # ── Toolbar ──
-        tb = tk.Frame(self, bg=C['panel'], height=36)
+        tb = tk.Frame(self, bg=C['panel'], height=34)
         tb.pack(fill='x')
         tb.pack_propagate(False)
 
-        for text, cmd, acc in [
-            ("📂 Open MDL",      self._open_mdl_binary,  False),
-            ("⬆ Import OBJ",    self._import_obj,        False),
-            ("⬆ Import FBX",    self._import_fbx,        False),
-            ("⬆ Import GLB",    self._import_gltf,       False),
-            ("⬇ Export OBJ",    self._export_obj,        False),
-            ("⬇ Export FBX",    self._export_fbx,        False),
-            ("⬇ Export GLB",    self._export_gltf,       False),
-            ("🦴 Auto-Rig",     self._quick_autorig,     True ),
-            ("🧥 Cloth Rig",    lambda: self._switch_tab("cloth"), False),
-            ("🖼 Set Tex Dir",  self._set_texture_dir,   False),
-            ("⚙ Compile MDL",  self._compile_mdlops,    True ),
-        ]:
-            _btn(tb, text, cmd, accent=acc).pack(side='left', padx=3, pady=3)
+        # Primary actions (always visible) with keyboard-shortcut hints
+        b_open = _btn(tb, "📂 Open  Ctrl+O", self._open_mdl_binary)
+        b_open.pack(side='left', padx=2, pady=2)
+        _tooltip(b_open, "Open MDL binary file  (Ctrl+O)")
 
+        b_rig = _btn(tb, "🦴 Auto-Rig  R", self._quick_autorig, accent=True)
+        b_rig.pack(side='left', padx=2, pady=2)
+        _tooltip(b_rig, "Auto-rig the current model  (R)")
+
+        b_cloth = _btn(tb, "🧥 Cloth", lambda: self._switch_tab("cloth"))
+        b_cloth.pack(side='left', padx=2, pady=2)
+        _tooltip(b_cloth, "Open Cloth Rigging panel")
+
+        b_tex = _btn(tb, "🖼 Tex Dir", self._set_texture_dir)
+        b_tex.pack(side='left', padx=2, pady=2)
+        _tooltip(b_tex, "Set texture search directory")
+
+        # Separator
+        _sep(tb).pack(side='left', fill='y', padx=5, pady=4)
+
+        # Import dropdown (replaces 3 separate import buttons)
+        imp_btn = _btn(tb, "⬆ Import ▾", None)
+        imp_btn.pack(side='left', padx=2, pady=2)
+        imp_menu = tk.Menu(imp_btn, tearoff=False, bg=C['panel'], fg=C['text'],
+                           activebackground=C['hover'], activeforeground='white',
+                           font=("Segoe UI", 9))
+        imp_menu.add_command(label="Import OBJ…        Ctrl+I",  command=self._import_obj)
+        imp_menu.add_command(label="Import FBX…",                command=self._import_fbx)
+        imp_menu.add_command(label="Import GLB/GLTF…",           command=self._import_gltf)
+        imp_menu.add_separator()
+        imp_menu.add_command(label="Open MDL (ASCII)…  Ctrl+Shift+O", command=self._open_mdl_ascii)
+        def _show_imp_menu():
+            try:
+                imp_menu.tk_popup(imp_btn.winfo_rootx(),
+                                  imp_btn.winfo_rooty() + imp_btn.winfo_height())
+            finally:
+                imp_menu.grab_release()
+        imp_btn.configure(command=_show_imp_menu)
+        _tooltip(imp_btn, "Import model from external format")
+
+        # Export dropdown (replaces 3 separate export buttons)
+        exp_btn = _btn(tb, "⬇ Export ▾", None)
+        exp_btn.pack(side='left', padx=2, pady=2)
+        exp_menu = tk.Menu(exp_btn, tearoff=False, bg=C['panel'], fg=C['text'],
+                           activebackground=C['hover'], activeforeground='white',
+                           font=("Segoe UI", 9))
+        exp_menu.add_command(label="Export OBJ…        Ctrl+E",  command=self._export_obj)
+        exp_menu.add_command(label="Export FBX…",                command=self._export_fbx)
+        exp_menu.add_command(label="Export GLB/GLTF…   Ctrl+G",  command=self._export_gltf)
+        exp_menu.add_separator()
+        exp_menu.add_command(label="Save ASCII MDL…    Ctrl+S",  command=self._save_ascii_mdl)
+        exp_menu.add_command(label="Compile MDL…",               command=self._compile_mdlops)
+        def _show_exp_menu():
+            try:
+                exp_menu.tk_popup(exp_btn.winfo_rootx(),
+                                  exp_btn.winfo_rooty() + exp_btn.winfo_height())
+            finally:
+                exp_menu.grab_release()
+        exp_btn.configure(command=_show_exp_menu)
+        _tooltip(exp_btn, "Export model to external format")
+
+        # Separator
+        _sep(tb).pack(side='left', fill='y', padx=5, pady=4)
+
+        # Model name pill – shows currently loaded model + game tag
         self._model_name_var = tk.StringVar(value="No model loaded")
-        tk.Label(tb, textvariable=self._model_name_var,
-                 font=("Segoe UI Semibold",9),
-                 bg=C['panel'], fg=C['gold']).pack(side='left', padx=12)
+        pill = tk.Label(tb, textvariable=self._model_name_var,
+                        font=("Segoe UI Semibold", 9),
+                        bg=C['bg2'], fg=C['gold'],
+                        padx=10, pady=3,
+                        relief='flat', cursor='hand2')
+        pill.pack(side='left', padx=4, pady=4)
+        _tooltip(pill, "Currently loaded model  (Ctrl+W to clear / click for info)")
+        pill.bind("<Button-1>", lambda e: self._show_model_info()
+                  if self._model else None)
+
+        # Right side: quick actions toolbar
+        b_diag = _btn(tb, "🔍 Diag  Ctrl+D",
+                      lambda: self._switch_tab_right("diag"), small=True)
+        b_diag.pack(side='right', padx=2, pady=2)
+        _tooltip(b_diag, "Run model diagnostics  (Ctrl+D)")
+
+        b_anim = _btn(tb, "🎬 Anims  Ctrl+A",
+                      lambda: self._switch_tab_right("anim"), small=True)
+        b_anim.pack(side='right', padx=2, pady=2)
+        _tooltip(b_anim, "Open Animations panel  (Ctrl+A)")
+
+        _sep(tb).pack(side='right', fill='y', padx=3, pady=4)
+
+        b_settings = _btn(tb, "⚙ Settings  F2", self._open_settings, small=True)
+        b_settings.pack(side='right', padx=2, pady=2)
+        _tooltip(b_settings, "Open settings dialog  (F2)")
 
         # ── Main pane ──
         main = tk.PanedWindow(self, orient='horizontal', bg=C['bg'],
@@ -5975,10 +6834,41 @@ class KotorModToolsApp(tk.Tk):
         self.log_panel = LogPanel(self)
         self.log_panel.pack(fill='x', side='bottom')
 
-        # Key bindings
-        self.bind("f", lambda e: self.viewport.frame_all())
-        self.bind("F", lambda e: self.viewport.frame_all())
-        self.bind("<F5>", lambda e: self._refresh_all())
+        # ── Status bar (above log, below modular) ─────────────────────────
+        status_bar = tk.Frame(self, bg=C['bg2'], height=20)
+        status_bar.pack(fill='x', side='bottom')
+        status_bar.pack_propagate(False)
+        self._status_var = tk.StringVar(
+            value="Ready  │  Ctrl+O: Open  │  F: Frame  │  W/B/T: Wire/Bones/Tex  │  F5: Refresh  │  F1: About")
+        tk.Label(status_bar, textvariable=self._status_var,
+                 font=("Segoe UI", 7), bg=C['bg2'], fg=C['text2'],
+                 anchor='w').pack(fill='x', padx=8)
+
+        # ── Global keyboard shortcuts ─────────────────────────────────────
+        self.bind("f",              lambda e: self.viewport.frame_all())
+        self.bind("F",              lambda e: self.viewport.frame_all())
+        self.bind("<F5>",           lambda e: self._refresh_all())
+        self.bind("<Control-o>",    lambda e: self._open_mdl_binary())
+        self.bind("<Control-O>",    lambda e: self._open_mdl_ascii())
+        self.bind("<Control-i>",    lambda e: self._import_obj())
+        self.bind("<Control-e>",    lambda e: self._export_obj())
+        self.bind("<Control-g>",    lambda e: self._export_gltf())
+        self.bind("<Control-s>",    lambda e: self._save_ascii_mdl())
+        self.bind("<Control-w>",    lambda e: self._clear_model())
+        self.bind("<Control-r>",    lambda e: self._quick_autorig())
+        self.bind("<Control-f>",    lambda e: self._focus_search())
+        self.bind("r",              lambda e: self._quick_autorig()
+                  if not isinstance(self.focus_get(),
+                                     (tk.Entry, tk.Text)) else None)
+        self.bind("<Control-d>",    lambda e: self._switch_tab_right("diag"))
+        self.bind("<Control-a>",    lambda e: self._switch_tab_right("anim"))
+        self.bind("<Control-p>",    lambda e: self._switch_tab_right("props"))
+        self.bind("<Control-l>",    lambda e: self._focus_library_search())
+        self.bind("<F1>",           lambda e: self._about())
+        self.bind("<F2>",           lambda e: self._open_settings())
+        self.bind("<F3>",           lambda e: self._show_model_info()
+                  if self._model else None)
+        self.bind("<Escape>",       lambda e: self._on_escape())
 
     # ── Logger setup ──────────────────────────────────────────────────────
 
@@ -6062,8 +6952,14 @@ class KotorModToolsApp(tk.Tk):
         if not self._model: return
         model = self._model  # capture reference for deferred lambdas
 
+        game_tag = 'K1' if model.game_version == GameVersion.K1 else 'K2'
+        n_mesh = len(model.mesh_nodes())
+        n_anim = len(model.animations)
+        n_nodes = model.node_count()
         self._model_name_var.set(
-            f"{'K1' if model.game_version==GameVersion.K1 else 'K2'}  │  {model.name}")
+            f"[{game_tag}]  {model.name}  │  {n_mesh} mesh  {n_nodes} nodes  {n_anim} anims")
+        # Update status bar with model summary + quick shortcuts
+        self._update_status_bar()
 
         # ── Phase 1: Build texture search dirs (fast filesystem checks) ──
         tex_dirs = []
@@ -6101,17 +6997,62 @@ class KotorModToolsApp(tk.Tk):
         # Push dirs to texture cache (smart: only clears if dirs actually changed)
         self.viewport._renderer.tex_cache.set_search_dirs(tex_dirs)
 
-        # Update texture cache game_tag to match the loaded model's game version.
-        # This ensures that when both K1 and K2 are installed, textures from
-        # K1 creatures (c_bantha, c_brith) are resolved from K1 archives and
-        # K2 creatures are resolved from K2 archives.
+        # Update texture cache to match the loaded model's game version.
+        # Prefer ResourceManager (new unified backend) → KotorInstallation → GameLibrary.
+        # FALLBACK: if library scan hasn't finished yet, create a ResourceManager
+        # on-the-fly from the stored settings k1_dir/k2_dir so that textures are
+        # available immediately without waiting for the full scan thread.
         try:
-            lib = getattr(self.lib_panel, 'library', None)
-            if lib and hasattr(self, 'viewport'):
+            lib_panel = getattr(self, 'lib_panel', None)
+            if lib_panel and hasattr(self, 'viewport'):
                 model_gv_tag = "K1" if model.game_version == GameVersion.K1 else "K2"
-                # Always use set_game_library to ensure game_tag is updated
-                # (it now also clears cache when only the tag changes)
-                self.viewport.set_game_library(lib, model_gv_tag)
+                # ── New: ResourceManager (single source of truth) ──────────
+                mgr = getattr(lib_panel, '_resource_manager', None)
+                if mgr is not None and mgr.is_ready():
+                    self.viewport.set_resource_manager(mgr, model_gv_tag)
+                else:
+                    # ── Fallback: create ResourceManager from settings dirs ──
+                    # This fires when the background scan hasn't completed yet
+                    # (e.g. user loads a file immediately after startup).
+                    k1_dir = self.settings.get('k1_dir', '') or ''
+                    k2_dir = self.settings.get('k2_dir', '') or ''
+                    if k1_dir or k2_dir:
+                        try:
+                            from ..core.resource_manager import ResourceManager as _RM
+                        except ImportError:
+                            try:
+                                from core.resource_manager import ResourceManager as _RM  # type: ignore
+                            except ImportError:
+                                _RM = None
+                        if _RM is not None:
+                            try:
+                                _quick_mgr = _RM()
+                                _wired = False
+                                if k1_dir and os.path.isdir(k1_dir):
+                                    _wired = _quick_mgr.set_k1_dir(k1_dir) or _wired
+                                if k2_dir and os.path.isdir(k2_dir):
+                                    _wired = _quick_mgr.set_k2_dir(k2_dir) or _wired
+                                if _quick_mgr.is_ready():
+                                    self.viewport.set_resource_manager(_quick_mgr, model_gv_tag)
+                                    # Also store on lib_panel so future loads reuse it
+                                    if lib_panel and not getattr(lib_panel, '_resource_manager', None):
+                                        lib_panel._resource_manager = _quick_mgr
+                                    log.info(f"_refresh_all: created on-the-fly ResourceManager ({model_gv_tag})")
+                            except Exception as _qe:
+                                log.debug(f"_refresh_all: on-the-fly ResourceManager failed: {_qe}")
+                    # ── Legacy: KotorInstallation fallback ────────────────
+                    if not (mgr is not None and mgr.is_ready()):
+                        k1_inst = getattr(lib_panel, '_k1_install', None)
+                        k2_inst = getattr(lib_panel, '_k2_install', None)
+                        inst = k1_inst if model_gv_tag == "K1" else k2_inst
+                        if inst is None:
+                            inst = k1_inst or k2_inst
+                        if inst is not None:
+                            self.viewport.set_installation(inst, model_gv_tag)
+                        else:
+                            lib = getattr(lib_panel, 'library', None)
+                            if lib:
+                                self.viewport.set_game_library(lib, model_gv_tag)
         except Exception:
             pass
 
@@ -6124,6 +7065,37 @@ class KotorModToolsApp(tk.Tk):
         except Exception as _vp_err:
             log.error(f"viewport.load_model failed for '{model.name}': {_vp_err}",
                       exc_info=True)
+
+        # Auto-enable textured rendering when any texture source is wired up.
+        # Check ResourceManager, legacy installs, AND whether the viewport's
+        # tex_cache itself already has a resource_manager or installation attached
+        # (set by the on-the-fly path above, or by a previous scan).
+        try:
+            renderer = self.viewport._renderer
+            lib_panel = getattr(self, 'lib_panel', None)
+            has_resource_mgr = (lib_panel and
+                                getattr(lib_panel, '_resource_manager', None) is not None and
+                                getattr(lib_panel, '_resource_manager').is_ready())
+            has_install = (lib_panel and
+                           (getattr(lib_panel, '_k1_install', None) is not None or
+                            getattr(lib_panel, '_k2_install', None) is not None))
+            # Also check if the tex_cache already has a wired backend
+            tc = renderer.tex_cache
+            has_cache_backend = (
+                tc._resource_manager is not None or
+                tc._installation is not None or
+                tc._game_library is not None or
+                bool(tc._search_dirs)
+            )
+            model_has_textures = bool(model.texture_list()) if model else False
+            if not renderer.show_texture and model_has_textures and (has_resource_mgr or has_install or has_cache_backend):
+                renderer.show_texture = True
+                try:
+                    self.viewport._btn_tex.configure(bg="#224422")
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
         # Update rig-panel search dirs (no I/O, just list building)
         model_dirs = [d for d in tex_dirs if os.path.isdir(d)]
@@ -6292,14 +7264,29 @@ class KotorModToolsApp(tk.Tk):
             # Update texture cache game_tag to match the loaded model's game version.
             # This is critical when both K1 and K2 are installed: textures from
             # K1 creatures (c_bantha) must be looked up in K1 archives, not K2.
-            # _refresh_all (called below via _set_model_internal) already handles
-            # this via set_game_library, but we also update it here immediately
-            # so the prewarm thread spawned by load_model uses the right tag.
+            # _refresh_all (called above via _set_model_internal) already handles this,
+            # but we also update here immediately so the prewarm thread uses the right tag.
             try:
-                lib = getattr(self.lib_panel, 'library', None)
-                if lib and hasattr(self, 'viewport'):
-                    tag = entry.game  # "K1" or "K2" – from the library entry
-                    self.viewport.set_game_library(lib, tag)
+                lib_panel = getattr(self, 'lib_panel', None)
+                if lib_panel and hasattr(self, 'viewport'):
+                    tag = entry.game  # "K1" or "K2"
+                    # Prefer ResourceManager (new unified backend)
+                    mgr = getattr(lib_panel, '_resource_manager', None)
+                    if mgr is not None and mgr.is_ready():
+                        self.viewport.set_resource_manager(mgr, tag)
+                    else:
+                        # Legacy fallback: KotorInstallation → GameLibrary
+                        k1_inst = getattr(lib_panel, '_k1_install', None)
+                        k2_inst = getattr(lib_panel, '_k2_install', None)
+                        inst = k1_inst if tag == "K1" else k2_inst
+                        if inst is None:
+                            inst = k1_inst or k2_inst
+                        if inst is not None:
+                            self.viewport.set_installation(inst, tag)
+                        else:
+                            lib = getattr(lib_panel, 'library', None)
+                            if lib:
+                                self.viewport.set_game_library(lib, tag)
             except Exception:
                 pass
 
@@ -6315,12 +7302,33 @@ class KotorModToolsApp(tk.Tk):
 
             # Auto-enable texture mode when:
             #   1. model has texture references, AND
-            #   2. game library has textures available (>0 textures scanned)
+            #   2. ResourceManager OR KotorInstallation OR game library has textures
             # This gives the user immediate textured view without manual toggle.
+            # has_textures() now checks both TexturePacks ERFs AND BIF key_map entries
+            # so this also fires for vanilla installs with no TexturePack ERFs.
             tex_list = model.texture_list()
-            lib = getattr(self.lib_panel, 'library', None)
+            lib_panel_ref = getattr(self, 'lib_panel', None)
+            mgr_ref = getattr(lib_panel_ref, '_resource_manager', None) if lib_panel_ref else None
+            # Use is_ready() as primary check: if the ResourceManager is indexed it
+            # has texture data (either TexturePacks ERFs or BIF).  has_textures() is
+            # the authoritative sub-check now that it covers BIF key_map entries.
+            has_mgr_textures = (mgr_ref is not None and
+                                (mgr_ref.is_ready() if not hasattr(mgr_ref, 'has_textures')
+                                 else mgr_ref.has_textures(entry.game)))
+            has_install = (lib_panel_ref and
+                           (getattr(lib_panel_ref, '_k1_install', None) is not None or
+                            getattr(lib_panel_ref, '_k2_install', None) is not None))
+            lib = getattr(lib_panel_ref, 'library', None) if lib_panel_ref else None
             has_lib_textures = lib is not None and len(getattr(lib, 'textures', [])) > 0
-            if tex_list and has_lib_textures:
+            # Also check tex_cache backend (may have been set by on-the-fly ResourceManager)
+            tc = self.viewport._renderer.tex_cache if hasattr(self, 'viewport') else None
+            has_cache_backend = tc is not None and (
+                tc._resource_manager is not None or
+                tc._installation is not None or
+                tc._game_library is not None or
+                bool(tc._search_dirs)
+            )
+            if tex_list and (has_mgr_textures or has_install or has_lib_textures or has_cache_backend):
                 try:
                     if not self.viewport._renderer.show_texture:
                         self.viewport.toggle_texture()
@@ -6427,6 +7435,8 @@ class KotorModToolsApp(tk.Tk):
                 self._set_model_internal(model)
                 self.log(f"Opened binary MDL: {Path(path).name}", 'success')
             self.settings['last_import'] = path
+            # ── Auto co-load walkmesh (WOK/PWK/DWK) if present alongside MDL ──
+            self._try_coload_walkmesh(Path(path))
         except Exception as e:
             log_crash_report(
                 context="_open_mdl_binary",
@@ -6437,6 +7447,33 @@ class KotorModToolsApp(tk.Tk):
                 extra={"path": str(path) if 'path' in dir() else "?"})
             self.log(f"Open MDL error: {e}", 'error')
             messagebox.showerror("Error", str(e))
+
+    def _try_coload_walkmesh(self, mdl_path: Path):
+        """
+        Auto co-load walkmesh when a WOK/PWK/DWK exists alongside the MDL.
+
+        KotorBlender co-import pattern: when opening <resref>.mdl, also look for
+        <resref>.wok, <resref>.pwk, <resref>.dwk in the same directory and load
+        the first one found as the walkmesh overlay.
+
+        Silently skipped if no walkmesh file is found (not every MDL has one).
+        """
+        try:
+            stem = mdl_path.stem
+            folder = mdl_path.parent
+            for ext in ('.wok', '.pwk', '.dwk', '.bwm'):
+                wok_path = folder / (stem + ext)
+                if wok_path.exists():
+                    try:
+                        self.viewport._renderer.load_walkmesh(str(wok_path))
+                        self.viewport._renderer.show_walkmesh = True
+                        self.viewport._request_render()
+                        self.log(f"Walkmesh co-loaded: {wok_path.name}", 'success')
+                    except Exception as e:
+                        log.debug(f"Walkmesh co-load failed ({wok_path}): {e}")
+                    return
+        except Exception as e:
+            log.debug(f"_try_coload_walkmesh: {e}")
 
     def _open_mdl_ascii(self):
         path = filedialog.askopenfilename(
@@ -6513,6 +7550,13 @@ class KotorModToolsApp(tk.Tk):
         except Exception as e:
             self.log(f"Save error: {e}", 'error')
 
+    def _get_tex_cache_for_export(self):
+        """Return the active texture cache (for copying textures alongside exports)."""
+        try:
+            return self.viewport._renderer.tex_cache
+        except Exception:
+            return None
+
     def _export_obj(self):
         if not self._model:
             messagebox.showwarning("No Model","Load a model first."); return
@@ -6522,7 +7566,8 @@ class KotorModToolsApp(tk.Tk):
             filetypes=[("OBJ files","*.obj")])
         if not path: return
         try:
-            OBJExporter().export(self._model, path)
+            OBJExporter().export(self._model, path,
+                                 tex_cache=self._get_tex_cache_for_export())
             self.log(f"Exported OBJ → {Path(path).name}", 'success')
             self.settings['last_export'] = path
         except Exception as e:
@@ -6537,7 +7582,8 @@ class KotorModToolsApp(tk.Tk):
             filetypes=[("FBX files","*.fbx"),("OBJ files","*.obj")])
         if not path: return
         try:
-            ok = FBXExporter().export(self._model, path)
+            ok = FBXExporter().export(self._model, path,
+                                      tex_cache=self._get_tex_cache_for_export())
             if ok: self.log(f"Exported FBX → {Path(path).name}", 'success')
             else:  self.log(f"FBX export fell back to OBJ (pyassimp not installed)", 'warning')
         except Exception as e:
@@ -6601,7 +7647,8 @@ class KotorModToolsApp(tk.Tk):
             return
         try:
             binary = path.lower().endswith('.glb')
-            ok = GLTFExporter().export(self._model, path, binary=binary)
+            ok = GLTFExporter().export(self._model, path, binary=binary,
+                                       tex_cache=self._get_tex_cache_for_export())
             if ok:
                 self.log(f"Exported {'GLB' if binary else 'GLTF'} → {Path(path).name}", 'success')
             else:
@@ -6690,6 +7737,10 @@ class KotorModToolsApp(tk.Tk):
 
     def _switch_tab(self, tab_name: str):
         """Switch the right panel notebook to the named tab."""
+        self._switch_tab_right(tab_name)
+
+    def _switch_tab_right(self, tab_name: str):
+        """Switch the right panel notebook to the named tab (keyboard-shortcut friendly)."""
         # First try the tab_names dict (exact match by key)
         try:
             idx = self._tab_names.get(tab_name.lower())
@@ -6705,6 +7756,70 @@ class KotorModToolsApp(tk.Tk):
                 if tab_name.lower() in nb.tab(tab_id, "text").lower():
                     nb.select(i)
                     return
+        except Exception:
+            pass
+
+    def _clear_model(self):
+        """Clear the currently loaded model (Ctrl+W)."""
+        self._set_model_internal(None)
+        self._model_path = ""
+        self._model_name_var.set("No model loaded")
+        self._update_status_bar()
+        self.log("Model cleared.", "info")
+
+    def _focus_search(self):
+        """Ctrl+F – focus the skeleton panel search."""
+        try:
+            self.skel_panel._search_var.set("")
+            # find the entry widget inside skel_panel and focus it
+            for child in self.skel_panel.winfo_children():
+                if isinstance(child, tk.Frame):
+                    for sub in child.winfo_children():
+                        if isinstance(sub, tk.Entry):
+                            sub.focus_set()
+                            return
+        except Exception:
+            pass
+
+    def _focus_library_search(self):
+        """Ctrl+L – focus the library panel search entry."""
+        try:
+            # Switch to library tab on the left notebook
+            self._left_nb.select(0)
+            # Find and focus the search entry inside lib_panel
+            for child in self.lib_panel.winfo_children():
+                if isinstance(child, tk.Frame):
+                    for sub in child.winfo_children():
+                        if isinstance(sub, tk.Entry):
+                            sub.focus_set()
+                            return
+        except Exception:
+            pass
+
+    def _update_status_bar(self, msg: str = ""):
+        """Update the status bar text."""
+        try:
+            if not msg:
+                if self._model:
+                    n = self._model.name or "?"
+                    nc = self._model.node_count()
+                    ma = len(self._model.mesh_nodes())
+                    anims = len(getattr(self._model, 'animations', []))
+                    msg = (f"Model: {n}  │  {nc} nodes  {ma} mesh  {anims} anims"
+                           f"  │  Ctrl+D: Diag  │  Ctrl+A: Anims  │  F: Frame All")
+                else:
+                    msg = ("Ready  │  Ctrl+O: Open  │  F: Frame  │  "
+                           "W/B/T: Wire/Bones/Tex  │  F5: Refresh  │  F1: About")
+            self._status_var.set(msg)
+        except Exception:
+            pass
+
+    def _on_escape(self):
+        """Escape key: deselect node in viewport."""
+        try:
+            self.viewport._renderer._selected_node = None
+            self.viewport._request_render()
+            self.props_panel.show_model(self._model) if self._model else None
         except Exception:
             pass
 
@@ -6922,9 +8037,48 @@ class KotorModToolsApp(tk.Tk):
         self.lift(); self.focus_force()
 
     def _try_load_from_library(self, resref: str):
-        """Try to find a model by resref in the game library and load it."""
+        """Try to find a model by resref in the game library and load it.
+
+        Fast path: tries KotorInstallation first (<20 ms per resource).
+        Slow path: falls back to GameLibrary.get_model_data().
+        """
         import time as _t
         _t0 = _t.perf_counter()
+        resref_lower = resref.lower()
+
+        # ── Fast path: KotorInstallation (direct BIF/ERF seek) ──────────────
+        lib_panel = getattr(self, 'lib_panel', None)
+        k1_inst = getattr(lib_panel, '_k1_install', None) if lib_panel else None
+        k2_inst = getattr(lib_panel, '_k2_install', None) if lib_panel else None
+
+        for inst, game_tag in [(k1_inst, "K1"), (k2_inst, "K2")]:
+            if inst is None:
+                continue
+            try:
+                mdl_bytes = inst.get_mdl(resref_lower)
+                if mdl_bytes:
+                    mdx_bytes = inst.get_mdx(resref_lower) or b''
+                    from ..core.diagnostics import (
+                        validate_mdl_preconditions, load_timer)
+                    pre_err = validate_mdl_preconditions(resref_lower, mdl_bytes)
+                    if pre_err:
+                        log.warning(f"_try_load_from_library fast: {pre_err}")
+                    log_mdl_header(resref_lower, mdl_bytes, mdx_bytes)
+                    with load_timer(resref_lower, "fast_parse"):
+                        parser = MDLBinaryParser(mdl_bytes, mdx_bytes)
+                        model  = parser.parse()
+                    model.game_version = (GameVersion.K1 if game_tag == "K1"
+                                          else GameVersion.K2)
+                    log_model_summary(model, source=f"KotorInstallation({game_tag})")
+                    self._set_model_internal(model)
+                    _ms = (_t.perf_counter() - _t0) * 1000.0
+                    self.log(f"Loaded '{resref}' via fast install ({game_tag}, {_ms:.0f} ms)",
+                             "success")
+                    return
+            except Exception as _fe:
+                log.debug(f"_try_load_from_library fast path ({game_tag}): {_fe}")
+
+        # ── Slow path: GameLibrary (legacy BIF/ERF reader) ───────────────────
         try:
             lib = self.lib_panel.library
             entries = lib.search(resref, "All")
@@ -6932,18 +8086,15 @@ class KotorModToolsApp(tk.Tk):
                 entry = entries[0]
                 mdl_bytes, mdx_bytes = lib.get_model_data(entry)
                 if mdl_bytes:
-                    # Pre-condition validation
                     from ..core.diagnostics import (
                         validate_mdl_preconditions, load_timer)
                     pre_err = validate_mdl_preconditions(resref, mdl_bytes)
                     if pre_err:
                         log.warning(f"IPC _try_load_from_library: {pre_err}")
                     log_mdl_header(resref, mdl_bytes, mdx_bytes or b'')
-                    from ..core.mdl_parser import MDLBinaryParser
                     with load_timer(resref, "ipc_parse"):
                         parser = MDLBinaryParser(mdl_bytes, mdx_bytes or b'')
                         model  = parser.parse()
-                    # ModelLibraryEntry.game is "K1"/"K2", not game_version
                     model.game_version = (GameVersion.K1 if entry.game == "K1"
                                           else GameVersion.K2)
                     log_model_summary(model, source=str(entry.source))
