@@ -46,12 +46,19 @@ try:
     from ..core.model_data import (KotorModel, ModelNode, NodeFlags, _quat_rotate, _quat_conjugate,
                                    KOTOR_BASE_SKELETONS)
     from ..core.animation_engine import DanglySimulator
+    from ..core.walkmesh_renderer import WalkmeshOverlay, WalkmeshLoader, build_draw_list
 except ImportError:
     from core.model_data import (  # type: ignore[no-redef]  # tests add src/ to sys.path
         KotorModel, ModelNode, NodeFlags, _quat_rotate, _quat_conjugate,
         KOTOR_BASE_SKELETONS
     )
     from core.animation_engine import DanglySimulator  # type: ignore[no-redef]
+    try:
+        from core.walkmesh_renderer import WalkmeshOverlay, WalkmeshLoader, build_draw_list
+    except ImportError:
+        WalkmeshOverlay = None  # type: ignore
+        WalkmeshLoader  = None  # type: ignore
+        build_draw_list = None  # type: ignore
 
 log = logging.getLogger(__name__)
 
@@ -152,7 +159,35 @@ def _clamp(v, lo, hi):
 # torso).  Any triangle that references one of these vertices cannot be textured
 # sensibly.  Triangles with any UV component whose absolute value exceeds this
 # threshold are silently skipped during rasterisation.
-_UV_SENTINEL = 20.0
+#
+# Phase 18 fix: raised from 20.0 to 100.0.
+# Legitimate tiled UVs can exceed 20 (e.g. mRobe2_g: U=[-13.58, 13.58]).
+# Genuine sentinel/placeholder UVs from KotOR seam-split vertices are always
+# far outside the legitimate range (observed values: -22, 127, etc.).
+# The gap between "large-but-legitimate" (<20) and "placeholder" (>100) is
+# sufficient; raising to 100 avoids incorrectly filtering unusual tiled meshes.
+_UV_SENTINEL = 100.0
+
+# ── Inner-geometry node name substrings ─────────────────────────────────────
+# KotOR head models contain eye, eyelid, teeth, tongue, gum, and jaw meshes
+# that sit geometrically INSIDE the face mesh.  With a painter's-algorithm
+# (centroid-depth) sort these would sometimes be drawn before the opaque face
+# mesh and then overwritten by it.  We promote them to render tier 1 (drawn
+# after all tier-0 opaque geometry) so that the face mesh's eye-socket and
+# mouth-gap openings correctly expose the underlying inner geometry.
+#
+# Criteria for promotion:
+#   • Non-skin node (skin nodes are primary visible geometry — never promoted)
+#   • Node name contains any of the substrings below (case-insensitive)
+#   • transparency_hint == 0  (already-transparent nodes are already tier 1)
+#
+# Covers standard K1/K2 PC head naming (eyeRA, eyeLA, eyeRlid, eyeLlid,
+# teethU, teethL, teethUa, teethLa, tongue) and NPC face-node naming
+# (f_rlweye_g excluded by null-texture/no-UV filter in _is_deformation_helper).
+_INNER_GEO_SUBSTRINGS: tuple = (
+    'eye', 'lid', 'teeth', 'tooth', 'gum', 'jaw',
+    'tongue', 'teethu', 'teethl',
+)
 
 def _lerp(a, b, t):
     return a + (b - a) * t
@@ -451,7 +486,8 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
     cubemap slicing, and TXI extraction correctly across K1 and K2 content.
     Falls back to the legacy software decompressor if pykotor is unavailable.
 
-    Returns a PIL RGBA Image (top-down orientation) or None on failure.
+    Returns a PIL RGBA Image (bottom-up orientation, ready for the renderer's
+    V-flip formula) or None on failure.
 
     FIX-TXI-ATTR: The returned image always has '_txi_str' set (may be empty
     string if no TXI is present).  This allows _apply_txi_from_textures_to_model()
@@ -484,19 +520,28 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
             raise ValueError("pykotor returned None image")
         if img.mode != 'RGBA':
             img = img.convert('RGBA')
-        # FIX-VFLIP: pykotor returns:
-        #   - Uncompressed (RGBA/RGB/Grey): bottom-up (OpenGL convention).
-        #     Must flip to top-down for CPU rasterizer and correct GPU upload.
-        #   - DXT1/DXT3/DXT5: top-down (standard block ordering).
-        #     No flip needed.
-        # The GPU path's _GlTexCache._upload always does FLIP_TOP_BOTTOM before
-        # uploading, then the shader does `1-uv.y`.  For this to give correct results:
-        #   - DXT (top-down): flip in upload → bottom-up in GL → shader flip → correct
-        #   - Uncompressed (bottom-up): we flip here → top-down → flip in upload →
-        #     bottom-up in GL → shader flip → correct
-        # The CPU path needs top-down images for PIL row operations.
-        if not _is_compressed:
+        # FIX-VFLIP v2 (UV-convention fix):
+        # KotOR MDL UV coordinates use V=0=TOP convention (same as Direct3D / PNG),
+        # NOT the OpenGL V=0=BOTTOM convention that our CPU rasterizer assumes.
+        # The CPU rasterizer applies V-flip (1-v)*h at render time, which converts
+        # from OpenGL-space (V=0=bottom) to PIL row space (row 0=top).
+        # For this render-time flip to produce correct results, the stored image
+        # must be in BOTTOM-UP (OpenGL) orientation so that:
+        #   V=0 (near-top in KotOR MDL) -> render flip -> PIL row near bottom -> correct texture bottom.
+        #
+        # PyKotor returns:
+        #   - Uncompressed (RGBA/RGB/Grey): BOTTOM-UP (OpenGL convention). No extra flip needed.
+        #   - DXT1/DXT3/DXT5: TOP-DOWN (DirectX DXT block order).
+        #     Must flip to bottom-up so the renderer's (1-v) formula works correctly.
+        #
+        # Without this fix: DXT tail tip (V=0.015) -> (1-0.015)*H=504 -> pink mouth area (WRONG)
+        # With this fix:    DXT flip -> V=0.015 -> (1-0.015)*H=504 -> original row H-504 -> dark brown (CORRECT)
+        if _is_compressed:
+            # DXT textures are top-down: flip to bottom-up for the renderer's V-flip
             img = img.transpose(Image.FLIP_TOP_BOTTOM)
+        else:
+            # Uncompressed textures are already bottom-up: no extra flip needed
+            pass
         # FIX-TXI-ATTR: Attach TXI string so GPU renderer can apply blending modes
         img._txi_str = _txi  # type: ignore[attr-defined]
         # Also store raw data so legacy _extract_txi path works as fallback
@@ -578,236 +623,184 @@ def _load_tpc_bytes_legacy_inner(data: bytes) -> Optional['Image.Image']:
     Load a KotOR TPC image from raw bytes. Returns PIL RGBA Image or None.
     (Called exclusively by _load_tpc_bytes_legacy which attaches TXI attrs.)
 
+    Rewritten to exactly mirror PyKotor's TPCBinaryReader logic so the two
+    paths always produce identical output regardless of which is invoked.
+
     KotOR TPC header layout (BioWare / Aurora engine format):
-      [0-3]   uint32  data_sz   – first-mip pixel data size (0 = use mip chain)
+      [0-3]   uint32  data_sz   – first-mip pixel data size
+                                  0 = uncompressed  (PyKotor: compressed = data_sz != 0)
       [4-7]   float   alpha_test
       [8-9]   uint16  width
       [10-11] uint16  height
-      [12]    uint8   encoding  – 0=auto(data_sz), 1=grey, 2=RGB or DXT1,
-                                   4=RGBA or DXT5, 10=DXT1, 12=DXT1, 13=DXT3, 14=DXT5
+      [12]    uint8   pixel_type – 1=Grey, 2=RGB/DXT1, 4=RGBA/DXT5, 12=BGRA
       [13]    uint8   mip_count
-      [14-127] reserved zeros  (always zero in genuine TPC files)
+      [14-127] reserved zeros
 
-    IMPORTANT: The Aurora engine stores encoding at byte[12], NOT byte[14].
-    Stock KotOR BIF textures have encoding=2 (DXT1) or encoding=4 (DXT5).
-    Bytes[14-127] are always zero.
+    FORMAT MAP (mirrors PyKotor TPCBinaryReader + stock KotOR BIF handling):
+      data_sz != 0 → always compressed (PyKotor convention)
+      data_sz == 0, pixel_type=2: compressed if pixel_data < sz3 (DXT1), else uncompressed RGB
+      data_sz == 0, pixel_type=4: compressed if pixel_data < sz4 (DXT5), else uncompressed RGBA
+      data_sz == 0, pixel_type=1  → Greyscale  → as-is (already bottom-up, OpenGL)
+      data_sz == 0, pixel_type=12 → BGRA       → swap B/R → as-is
 
-    enc=0 (auto-encoding): resolves to DXT1 or DXT5 by matching data_sz
-      against the DXT1/DXT5 block sizes for the given width/height.
+      (compressed=True,  pixel_type=2)  → DXT1   → decompress → flip (top-down→bottom-up)
+      (compressed=True,  pixel_type=4)  → DXT5   → decompress → flip
+      (compressed=False, pixel_type=1)  → Grey   → as-is
+      (compressed=False, pixel_type=2)  → RGB    → as-is
+      (compressed=False, pixel_type=4)  → RGBA   → as-is
+      (compressed=False, pixel_type=12) → BGRA   → swap B/R → as-is
 
-    BOTTOM-UP vs TOP-DOWN:
-    - KotOR uncompressed TPC textures (enc=1,2,4) are stored BOTTOM-UP (OpenGL).
-      After loading with Image.frombytes() (which reads top-down), we MUST flip
-      vertically so that the image matches the DXT convention used in our UV
-      sampling code.  Our sample() and _paste_textured_triangle() already apply a
-      V-flip (treating V=0 as image row h-1), so all loaded images must be in
-      top-down (PIL-standard) orientation.
-    - DXT-compressed textures (enc=0,10,12,13,14) are stored TOP-DOWN (DirectX/DXT
-      convention), so no flip is needed.
-    - When enc=2 or enc=4 resolves to DXT (compressed), no flip.
-    - When enc=2 or enc=4 resolves to raw (uncompressed), flip vertically.
+    Explicit DXT encodings (10=DXT1, 13=DXT3, 14=DXT5) are always compressed
+    (top-down) and are always flipped to bottom-up.
 
-    CUBEMAP SUPPORT (KotorBlender-compatible):
-    - Cubemap TPC files have height == 6 * width (6 square faces stacked).
-    - We detect this and return only the first face (top face) for preview use.
+    ORIENTATION RULE (matches _load_tpc_bytes / PyKotor pipeline):
+    - DXT-compressed output is TOP-DOWN (DirectX convention).  Must flip to
+      BOTTOM-UP so the renderer's V-flip formula (tv = (1-v)*h) is correct.
+    - Uncompressed output is already BOTTOM-UP (OpenGL convention).  No flip.
 
-    TXI METADATA (PyKotor/KotorBlender-compatible):
-    - After all mipmap pixel data, TPC files may contain a UTF-8 TXI string.
+    STOCK KotOR BIF NOTE:
+    - KotOR BIF archives store DXT-compressed textures with data_sz=0.
+    - PyKotor's read_tpc() raises OSError on these files (seeks past EOF).
+    - This legacy decoder handles them by comparing pixel_data length against
+      uncompressed size: if too small → DXT-compressed.
+
+    CUBEMAP SUPPORT:
+    - height == 6 * width → cubemap; return first face only.
     """
     if not _PIL or len(data) < 128:
         return None
-    data_sz       = struct.unpack_from('<I', data, 0)[0]
-    _tpc_alpha_at = struct.unpack_from('<f', data, 4)[0]  # FIX-ALPHATEST: TPC header alpha_test
-    width         = struct.unpack_from('<H', data, 8)[0]
-    height        = struct.unpack_from('<H', data, 10)[0]
-    encoding      = data[12]   # ENCODING at offset 12 (Aurora engine format)
-    mip_cnt       = data[13]   # mip count at offset 13
-    # NOTE: data[14] is ALWAYS 0 in genuine KotOR TPC files (reserved)
+    data_sz    = struct.unpack_from('<I', data, 0)[0]
+    width      = struct.unpack_from('<H', data, 8)[0]
+    height     = struct.unpack_from('<H', data, 10)[0]
+    pixel_type = data[12]
     if width == 0 or height == 0:
         return None
 
-    # ── Cubemap detection (KotorBlender method) ───────────────────────────────
-    # Cubemaps store 6 square faces stacked vertically → height = 6 * width.
-    # We render only the first (top) face for preview; skip the other 5.
-    _is_cubemap = (height > 0 and width > 0 and height // width == 6
-                   and height % width == 0)
-    if _is_cubemap:
+    # ── Cubemap detection ─────────────────────────────────────────────────────
+    if height > 0 and width > 0 and height // width == 6 and height % width == 0:
         log.debug(f"TPC: cubemap detected {width}x{height} → rendering face 0 only")
-        height = width  # treat as single square face
+        height = width
 
     pixel_data = data[128:]
     bx = max(1, (width  + 3) // 4)
     by = max(1, (height + 3) // 4)
     dxt1_sz = bx * by * 8
     dxt5_sz = bx * by * 16
+    sz1 = width * height
+    sz3 = width * height * 3
+    sz4 = width * height * 4
 
-    # ── enc=0 (auto-encoding): infer DXT format from data_sz ─────────────────
-    # Stock KotOR BIF-extracted textures use encoding=2 or encoding=4.
-    # enc=0 is used when encoding cannot be determined from the header alone;
-    # in that case we infer the format by matching data_sz against DXT block sizes.
-    if encoding == 0:
-        if data_sz == dxt1_sz or (data_sz == 0 and len(pixel_data) >= dxt1_sz):
-            encoding = 10   # treat as DXT1
-        elif data_sz == dxt5_sz or (data_sz == 0 and len(pixel_data) >= dxt5_sz):
-            encoding = 14   # treat as DXT5
-        elif len(pixel_data) >= dxt5_sz:
-            encoding = 14
-        elif len(pixel_data) >= dxt1_sz:
-            encoding = 10
-        else:
-            log.debug(f"TPC enc=0 fallback: {width}x{height} data_sz={data_sz} pixdata={len(pixel_data)}")
+    # ── Compression detection ─────────────────────────────────────────────────
+    # PyKotor's rule (compressed = data_sz != 0) only covers files written by
+    # PyKotor.  Stock KotOR BIF textures store DXT-compressed data with data_sz=0
+    # and rely on pixel_type (2=DXT1, 4=DXT5) to signal compression.
+    #
+    # Strategy:
+    #   data_sz != 0 → always compressed (PyKotor convention)
+    #   data_sz == 0 + pixel_type in (2, 4):
+    #       Use actual pixel_data length to discriminate:
+    #       - if len(pixel_data) < sz3 (for enc=2) or < sz4 (for enc=4), the
+    #         data is too small for uncompressed → must be DXT-compressed.
+    #       - if len(pixel_data) >= uncompressed size → uncompressed.
+    #   data_sz == 0 + pixel_type in (1, 12) → always uncompressed.
+    if data_sz != 0:
+        compressed = True
+    elif pixel_type == 2:
+        # enc=2: DXT1 block data is smaller than uncompressed RGB (sz3)
+        compressed = (len(pixel_data) < sz3)
+    elif pixel_type == 4:
+        # enc=4: DXT5 block data is smaller than uncompressed RGBA (sz4)
+        compressed = (len(pixel_data) < sz4)
+    else:
+        # enc=1 (Grey), enc=12 (BGRA), enc=10/13/14 handled below → uncompressed
+        compressed = False
 
     def _flip(img):
-        """Flip image vertically: convert bottom-up raw to top-down PIL standard."""
+        """Flip vertically: DXT top-down → bottom-up for the renderer's (1-v)*h."""
         try:
             return img.transpose(Image.FLIP_TOP_BOTTOM)
         except Exception:
-            return img  # If transpose fails, return as-is
+            return img
 
     try:
-        sz3 = width * height * 3
-        sz4 = width * height * 4
+        # ── Explicit DXT encodings (always compressed, always top-down → flip) ──
+        # enc=10: explicit DXT1
+        # enc=12 with data_sz≠0: Aurora DXT1 variant
+        # enc=13: DXT3 (uses DXT5-sized blocks)
+        # enc=14: DXT5
+        if pixel_type == 10 or (pixel_type == 12 and data_sz != 0):
+            if len(pixel_data) >= dxt1_sz:
+                return _flip(Image.frombytes('RGBA', (width, height),
+                                             bytes(_decompress_dxt1_bytes(pixel_data, width, height))))
+        if pixel_type == 13:
+            if len(pixel_data) >= dxt5_sz:
+                return _flip(Image.frombytes('RGBA', (width, height),
+                                             bytes(_decompress_dxt5_bytes(pixel_data, width, height))))
+        if pixel_type == 14:
+            if len(pixel_data) >= dxt5_sz:
+                return _flip(Image.frombytes('RGBA', (width, height),
+                                             bytes(_decompress_dxt5_bytes(pixel_data, width, height))))
 
-        # ── Greyscale (encoding 1) — bottom-up, must flip ──────────────
-        if encoding == 1:
-            sz = width * height
-            if len(pixel_data) >= sz:
-                return _flip(Image.frombytes('L', (width, height),
-                                             pixel_data[:sz]).convert('RGBA'))
-
-        # ── Encoding 2: RGB (uncompressed bottom-up) OR DXT1 (top-down) ──
-        # Priority (from KAurora/KotorBlender):
-        #   1. data_sz == sz3 → definitely uncompressed RGB (bottom-up → flip)
-        #   2. data_sz == dxt1_sz OR (data_sz == 0 AND pixel_data fits DXT1) → DXT1
-        #   3. data_sz == 0 AND pixel_data fits raw RGB → uncompressed RGB (fallback)
-        #   4. last resort: try DXT1 if enough bytes, else raw RGB
-        # Rationale: KAurora enc=2 is always DXT1 in the binary MDL viewer; only
-        # vanilla TGA-format TPC files (written by tools) use uncompressed enc=2.
-        if encoding == 2:
-            if data_sz == sz3 and len(pixel_data) >= sz3:
-                # data_sz explicitly matches uncompressed RGB → bottom-up raw
-                return _flip(Image.frombytes('RGB', (width, height),
-                                             pixel_data[:sz3]).convert('RGBA'))
-            # data_sz matches DXT1 block size → DXT1 compressed (top-down, no flip)
-            if data_sz == dxt1_sz and len(pixel_data) >= dxt1_sz:
-                raw = _decompress_dxt1_bytes(pixel_data, width, height)
-                return Image.frombytes('RGBA', (width, height), bytes(raw))
-            # data_sz == 0: check which format fits better
-            if data_sz == 0:
-                # If pixel_data length is closer to DXT1 size, try DXT1 first
-                if len(pixel_data) >= dxt1_sz and (dxt1_sz < sz3 or len(pixel_data) < sz3):
-                    raw = _decompress_dxt1_bytes(pixel_data, width, height)
-                    return Image.frombytes('RGBA', (width, height), bytes(raw))
-                # Otherwise try uncompressed RGB
-                if len(pixel_data) >= sz3:
-                    return _flip(Image.frombytes('RGB', (width, height),
-                                                 pixel_data[:sz3]).convert('RGBA'))
-                # If pixel_data still fits DXT1, try that
+        # ── Main format dispatch: (compressed, pixel_type) ───────────────────
+        if compressed:
+            # DXT format (top-down storage → flip to bottom-up for renderer)
+            if pixel_type == 2:
+                # DXT1
                 if len(pixel_data) >= dxt1_sz:
-                    raw = _decompress_dxt1_bytes(pixel_data, width, height)
-                    return Image.frombytes('RGBA', (width, height), bytes(raw))
-            # Any other data_sz: try DXT1 first (most common in KotOR), then raw RGB
-            if len(pixel_data) >= dxt1_sz:
-                raw = _decompress_dxt1_bytes(pixel_data, width, height)
-                return Image.frombytes('RGBA', (width, height), bytes(raw))
-            if len(pixel_data) >= sz3:
-                return _flip(Image.frombytes('RGB', (width, height),
-                                             pixel_data[:sz3]).convert('RGBA'))
-
-        # ── Encoding 4: RGBA (uncompressed bottom-up) OR DXT5 (top-down) ─
-        # Same priority logic as enc=2, applied to RGBA/DXT5.
-        if encoding == 4:
-            if data_sz == sz4 and len(pixel_data) >= sz4:
-                # data_sz explicitly matches uncompressed RGBA → bottom-up raw
-                return _flip(Image.frombytes('RGBA', (width, height),
-                                             pixel_data[:sz4]))
-            # data_sz matches DXT5 block size → DXT5 compressed (top-down, no flip)
-            if data_sz == dxt5_sz and len(pixel_data) >= dxt5_sz:
-                raw = _decompress_dxt5_bytes(pixel_data, width, height)
-                return Image.frombytes('RGBA', (width, height), bytes(raw))
-            # data_sz == 0: check which format fits better
-            if data_sz == 0:
-                if len(pixel_data) >= dxt5_sz and (dxt5_sz < sz4 or len(pixel_data) < sz4):
-                    raw = _decompress_dxt5_bytes(pixel_data, width, height)
-                    return Image.frombytes('RGBA', (width, height), bytes(raw))
-                if len(pixel_data) >= sz4:
                     return _flip(Image.frombytes('RGBA', (width, height),
-                                                 pixel_data[:sz4]))
+                                                 bytes(_decompress_dxt1_bytes(pixel_data, width, height))))
+            elif pixel_type == 4:
+                # DXT5
                 if len(pixel_data) >= dxt5_sz:
-                    raw = _decompress_dxt5_bytes(pixel_data, width, height)
-                    return Image.frombytes('RGBA', (width, height), bytes(raw))
-            # Any other data_sz: try DXT5 first, then raw RGBA
+                    return _flip(Image.frombytes('RGBA', (width, height),
+                                                 bytes(_decompress_dxt5_bytes(pixel_data, width, height))))
+            # Fallback: try DXT5 first (larger → more likely), then DXT1
             if len(pixel_data) >= dxt5_sz:
-                raw = _decompress_dxt5_bytes(pixel_data, width, height)
-                return Image.frombytes('RGBA', (width, height), bytes(raw))
-            if len(pixel_data) >= sz4:
                 return _flip(Image.frombytes('RGBA', (width, height),
-                                             pixel_data[:sz4]))
-
-        # ── BGRA uncompressed (encoding 12, data_sz == 0) — bottom-up, flip ─
-        # Per PyKotor TPCBinaryReader: (compressed=False, pixel_type=12) → BGRA.
-        # compressed = (data_sz != 0), so BGRA always has data_sz == 0.
-        # BGRA stores bytes as [B,G,R,A]; PIL needs [R,G,B,A].
-        # We swap B↔R (convert mode 'RGBA' from bytes arranged as BGRA).
-        if encoding == 12 and data_sz == 0:
+                                             bytes(_decompress_dxt5_bytes(pixel_data, width, height))))
+            if len(pixel_data) >= dxt1_sz:
+                return _flip(Image.frombytes('RGBA', (width, height),
+                                             bytes(_decompress_dxt1_bytes(pixel_data, width, height))))
+        else:
+            # Uncompressed (already bottom-up, OpenGL convention — NO flip)
+            if pixel_type == 1:
+                # Greyscale
+                if len(pixel_data) >= sz1:
+                    return Image.frombytes('L', (width, height),
+                                           pixel_data[:sz1]).convert('RGBA')
+            elif pixel_type == 2:
+                # RGB (uncompressed, data_sz=0, pixel_data >= sz3)
+                if len(pixel_data) >= sz3:
+                    return Image.frombytes('RGB', (width, height),
+                                           pixel_data[:sz3]).convert('RGBA')
+            elif pixel_type == 4:
+                # RGBA (uncompressed, data_sz=0, pixel_data >= sz4)
+                if len(pixel_data) >= sz4:
+                    return Image.frombytes('RGBA', (width, height), pixel_data[:sz4])
+            elif pixel_type == 12:
+                # BGRA → swap B and R channels, no flip
+                if len(pixel_data) >= sz4:
+                    try:
+                        bgra_img = Image.frombytes('RGBA', (width, height), pixel_data[:sz4])
+                        r, g, b, a = bgra_img.split()
+                        return Image.merge('RGBA', (b, g, r, a))
+                    except Exception as e:
+                        log.debug(f"TPC BGRA swap error: {e}")
+            # Uncompressed fallback: try RGBA, then RGB, then Grey
             if len(pixel_data) >= sz4:
-                # Convert BGRA → RGBA by swapping B and R channels
-                try:
-                    bgra_img = Image.frombytes('RGBA', (width, height), pixel_data[:sz4])
-                    r, g, b, a = bgra_img.split()
-                    rgba_img = Image.merge('RGBA', (b, g, r, a))
-                    return _flip(rgba_img)
-                except Exception as e:
-                    log.debug(f"TPC BGRA swap error: {e}")
+                return Image.frombytes('RGBA', (width, height), pixel_data[:sz4])
+            if len(pixel_data) >= sz3:
+                return Image.frombytes('RGB', (width, height),
+                                       pixel_data[:sz3]).convert('RGBA')
+            if len(pixel_data) >= sz1:
+                return Image.frombytes('L', (width, height),
+                                       pixel_data[:sz1]).convert('RGBA')
 
-        # ── DXT1 (encoding 10 or 12 with data_sz≠0) — top-down, no flip ──────
-        # enc=12 with data_sz≠0 is treated as DXT1 (Aurora engine variant).
-        # enc=10 is the explicit DXT1 encoding byte.
-        if encoding == 10 or (encoding == 12 and data_sz != 0):
-            if len(pixel_data) >= dxt1_sz:
-                raw = _decompress_dxt1_bytes(pixel_data, width, height)
-                return Image.frombytes('RGBA', (width, height), bytes(raw))
-
-        # ── DXT3 (encoding 13) — top-down, no flip ─────────────────────
-        if encoding == 13:
-            if len(pixel_data) >= dxt5_sz:
-                raw = _decompress_dxt5_bytes(pixel_data, width, height)
-                return Image.frombytes('RGBA', (width, height), bytes(raw))
-
-        # ── DXT5 (encoding 14) — top-down, no flip ─────────────────────
-        if encoding == 14:
-            if len(pixel_data) >= dxt5_sz:
-                raw = _decompress_dxt5_bytes(pixel_data, width, height)
-                return Image.frombytes('RGBA', (width, height), bytes(raw))
-
-        # ── Universal fallback: infer from data_sz ─────────────────────
-        if data_sz > 0 and len(pixel_data) >= data_sz:
-            if data_sz == dxt5_sz:
-                raw = _decompress_dxt5_bytes(pixel_data, width, height)
-                return Image.frombytes('RGBA', (width, height), bytes(raw))
-            if data_sz == dxt1_sz:
-                raw = _decompress_dxt1_bytes(pixel_data, width, height)
-                return Image.frombytes('RGBA', (width, height), bytes(raw))
-            if data_sz == sz4:
-                # Uncompressed RGBA in fallback → flip
-                return _flip(Image.frombytes('RGBA', (width, height), pixel_data[:sz4]))
-            if data_sz == sz3:
-                # Uncompressed RGB in fallback → flip
-                return _flip(Image.frombytes('RGB', (width, height),
-                                             pixel_data[:sz3]).convert('RGBA'))
-            if data_sz == width * height:
-                # Greyscale → flip
-                return _flip(Image.frombytes('L', (width, height),
-                                             pixel_data[:data_sz]).convert('RGBA'))
-            # data_sz is a mip chain: decode first mip as DXT1 (top-down, no flip)
-            if len(pixel_data) >= dxt1_sz:
-                raw = _decompress_dxt1_bytes(pixel_data, width, height)
-                return Image.frombytes('RGBA', (width, height), bytes(raw))
-
-        log.debug(f"TPC: unhandled format enc={encoding} data_sz={data_sz} {width}x{height} pixdata={len(pixel_data)}")
+        log.debug(f"TPC legacy: unhandled format pixel_type={pixel_type} "
+                  f"compressed={compressed} {width}x{height} pixdata={len(pixel_data)}")
         return None
     except Exception as e:
-        log.debug(f"TPC decode error enc={encoding} {width}x{height}: {e}")
+        log.debug(f"TPC legacy decode error pixel_type={pixel_type} {width}x{height}: {e}")
         return None
 
 
@@ -1566,6 +1559,8 @@ class TextureCache:
         self._search_dirs: List[str] = []
         self._game_library = None   # Optional GameLibrary for BIF-backed loading
         self._game_tag: str = "K1"
+        self._installation = None  # Optional KotorInstallation (fast path, legacy)
+        self._resource_manager = None  # Optional ResourceManager (new unified path)
         self._lock = threading.Lock()  # thread-safe access (render + prewarm threads)
         # Per-name load lock dict: prevents two threads loading the SAME texture simultaneously
         # while not blocking threads loading DIFFERENT textures (vs. a single global lock).
@@ -1613,6 +1608,51 @@ class TextureCache:
                 with self._load_locks_lock:
                     self._load_locks.clear()
                 log.debug(f"TextureCache: game tag updated to {game_tag} (cache cleared)")
+
+    def set_installation(self, installation, game_tag: str = "K1"):
+        """
+        Attach a KotorInstallation (fast lazy BIF/ERF reader) for texture loading.
+        This supersedes the slower GameLibrary path for texture lookups.
+        Clears the cache when the installation reference changes.
+        """
+        with self._lock:
+            if installation is not self._installation:
+                self._installation = installation
+                self._game_tag = game_tag
+                self._cache.clear()
+                self._txi_cache.clear()
+                with self._load_locks_lock:
+                    self._load_locks.clear()
+                log.info(f"TextureCache: KotorInstallation set ({game_tag})")
+
+    def set_resource_manager(self, manager, game_tag: str = "K1"):
+        """
+        Attach the new unified ResourceManager as the primary texture backend.
+
+        This is the preferred method — it supersedes both set_installation() and
+        set_game_library() by routing all archive lookups through the single
+        ResourceManager which handles KEY/BIF, TexturePacks ERFs, module ERFs,
+        and Override/ in the correct priority order.
+
+        Clears all caches when the manager reference or game tag changes.
+        """
+        with self._lock:
+            changed = (manager is not self._resource_manager or
+                       game_tag != self._game_tag)
+            if changed:
+                self._resource_manager = manager
+                self._game_tag = game_tag
+                # Also keep _installation in sync for legacy code paths
+                if manager is not None:
+                    inst = manager.get_k1() if game_tag == "K1" else manager.get_k2()
+                    # _installation is used by legacy get_txi() / get_raw_header()
+                    # We don't set it here to avoid the old path running — the new
+                    # _resource_manager path takes priority in _load().
+                self._cache.clear()
+                self._txi_cache.clear()
+                with self._load_locks_lock:
+                    self._load_locks.clear()
+                log.info(f"TextureCache: ResourceManager set ({game_tag})")
 
     def get_txi(self, name: str) -> str:
         """
@@ -1818,6 +1858,8 @@ class TextureCache:
             search_dirs = list(self._search_dirs)
             game_library = self._game_library
             game_tag = self._game_tag
+            installation = self._installation
+            resource_manager = self._resource_manager
 
         # ── 1. Search on-disk directories first (override folder wins) ──────
         for search_dir in search_dirs:
@@ -1851,7 +1893,55 @@ class TextureCache:
                     return None
                 except Exception as e:
                     log.debug(f"Texture load error {path}: {e}")
-        # ── 2. Fallback: load from BIF/KEY/ERF archives via GameLibrary ──────
+        # ── 2. ResourceManager (unified BIF/ERF/Override, <2ms) ─────────────
+        # New primary archive backend — replaces the split installation/game_library path.
+        # Checks: Override > module ERFs > TexturePacks ERFs > BIF in correct priority.
+        if resource_manager is not None:
+            try:
+                raw = resource_manager.get_texture(name, game_tag)
+                if raw:
+                    img = self._load_bytes(raw)
+                    if img is not None:
+                        img = self._resize_if_needed(img, name)
+                        try:
+                            txi_s = getattr(img, '_txi_str', None)
+                            if not txi_s:
+                                txi_s = resource_manager.get_txi(name, game_tag)
+                            txi_m = _parse_txi_string(txi_s) if txi_s else _parse_txi_string('')
+                            img = self._apply_kotor_alpha(raw, img, txi_m)
+                        except Exception:
+                            pass
+                        log.debug(f"Texture '{name}' loaded from ResourceManager ({game_tag})")
+                        return img
+            except MemoryError:
+                log.warning(f"Texture '{name}': out of memory from ResourceManager — skipping")
+                return None
+            except Exception as e:
+                log.debug(f"Texture ResourceManager error '{name}': {e}")
+        # ── 3. Legacy: KotorInstallation (lazy BIF/ERF seek, <5ms) ──────────
+        if installation is not None:
+            try:
+                raw = installation.get_texture(name)
+                if raw:
+                    img = self._load_bytes(raw)
+                    if img is not None:
+                        img = self._resize_if_needed(img, name)
+                        try:
+                            txi_s = getattr(img, '_txi_str', None)
+                            if not txi_s:
+                                txi_s = installation.get_txi(name)
+                            txi_m = _parse_txi_string(txi_s) if txi_s else _parse_txi_string('')
+                            img = self._apply_kotor_alpha(raw, img, txi_m)
+                        except Exception:
+                            pass
+                        log.debug(f"Texture '{name}' loaded from KotorInstallation")
+                        return img
+            except MemoryError:
+                log.warning(f"Texture '{name}': out of memory from installation — skipping")
+                return None
+            except Exception as e:
+                log.debug(f"Texture installation load error '{name}': {e}")
+        # ── 4. Fallback: load from BIF/KEY/ERF archives via GameLibrary ──────
         if game_library is not None:
             try:
                 raw = game_library.get_texture_data(name, game_tag)
@@ -1983,12 +2073,13 @@ class TextureCache:
     def _load_bytes(self, raw: bytes) -> Optional['Image.Image']:
         """Load a texture from raw bytes (TPC or TGA/PNG).
 
-        All returned images are in top-down orientation (row 0 = top of image)
-        so that _paste_textured_triangle's V-flip (tv = (1-v)*h) works correctly.
-        - TPC files: _load_tpc_bytes() already returns top-down images.
-        - Standard TGA files (bottom-up origin): PIL loads them bottom-up,
-          so we flip vertically to convert to top-down.
-        - PNG/other: PIL loads top-down by default.
+        All returned images are in BOTTOM-UP orientation so that the renderer's
+        V-flip formula (tv = (1-v)*h) produces correct UV mapping.
+        KotOR MDL UV V=0 means TOP of texture (Direct3D/top-down convention).
+        The render-time flip converts from KotOR UV-space to PIL row-space.
+        - TPC files: _load_tpc_bytes() returns bottom-up (flips DXT and uncompressed).
+        - Standard TGA files (bottom-up origin): PIL loads bottom-up correctly.
+        - PNG/other: PIL loads top-down, must flip to bottom-up.
         """
         if not _PIL:
             return None
@@ -1997,16 +2088,21 @@ class TextureCache:
         try:
             import io
             img = Image.open(io.BytesIO(raw)).convert('RGBA')
-            # Standard TGA files are bottom-up; flip to top-down to match TPC convention.
+            # TGA files: bottom-up origin (origin bit=0) is already correct.
+            # Top-origin TGA (bit 5 of descriptor = 1) must be flipped to bottom-up.
+            # PNG/other images are top-down and must also be flipped to bottom-up.
             # Check TGA image descriptor byte (offset 17) for origin bit:
-            #   bit 5 (0x20) = 1 → top-origin (already top-down, no flip needed)
-            #   bit 5 (0x20) = 0 → bottom-origin (needs flip)
-            # datatype byte is at offset 2: TGA types 1/2/3/9/10/11 are TGA files.
+            #   bit 5 (0x20) = 1 → top-origin (needs flip to bottom-up)
+            #   bit 5 (0x20) = 0 → bottom-origin (already correct)
             _is_tga = (len(raw) >= 18 and raw[2] in (0,1,2,3,9,10,11))
             if _is_tga:
                 origin_top = bool(raw[17] & 0x20)
-                if not origin_top:
+                if origin_top:
+                    # top-origin TGA → flip to bottom-up
                     img = img.transpose(Image.FLIP_TOP_BOTTOM)
+            else:
+                # PNG and other formats are top-down → flip to bottom-up
+                img = img.transpose(Image.FLIP_TOP_BOTTOM)
             return img
         except Exception:
             return None
@@ -2017,10 +2113,11 @@ class TextureCache:
         KotOR stores TPC data in files named .tga – we detect this by checking
         the data_sz / width / height fields in the first 128 bytes.
 
-        All returned images are in top-down orientation so that the V-flip
-        applied in _paste_textured_triangle (tv = (1-v)*h) works correctly:
-        - TPC files: already top-down from _load_tpc_bytes().
-        - Standard bottom-origin TGA: flipped to top-down.
+        All returned images are in bottom-up orientation so that the render-time
+        V-flip (tv = (1-v)*h) produces correct UV mapping.
+        KotOR MDL UV V=0 = top of texture (Direct3D convention).
+        - TPC files: bottom-up from _load_tpc_bytes() (flips DXT and uncompressed).
+        - Standard bottom-origin TGA: already bottom-up, no flip needed.
         - Top-origin TGA / PNG: already top-down.
         """
         try:
@@ -2038,12 +2135,20 @@ class TextureCache:
             try:
                 import io
                 img = Image.open(io.BytesIO(raw)).convert('RGBA')
-                # Flip bottom-origin TGA to top-down (match TPC convention)
+                # All images must be bottom-up so the renderer's (1-v)*h V-flip works.
+                # TGA with bottom-origin (bit 5=0): already bottom-up, no flip needed.
+                # TGA with top-origin (bit 5=1): top-down, must flip to bottom-up.
+                # PNG/DDS/other: top-down by default, must flip to bottom-up.
                 _is_tga = (len(raw) >= 18 and raw[2] in (0,1,2,3,9,10,11))
                 if _is_tga:
                     origin_top = bool(raw[17] & 0x20)
-                    if not origin_top:
+                    if origin_top:
+                        # top-origin TGA → flip to bottom-up
                         img = img.transpose(Image.FLIP_TOP_BOTTOM)
+                    # bottom-origin TGA is already bottom-up, no flip needed
+                else:
+                    # PNG/DDS/other: top-down → flip to bottom-up
+                    img = img.transpose(Image.FLIP_TOP_BOTTOM)
                 return img
             except Exception:
                 pass
@@ -2505,6 +2610,7 @@ def _paste_textured_triangle(
     # For non-tiled: tv = (1 - v) * th  (same as current formula)
     _vflip_tiles  = None   # set after tiling section
     _vflip_src_h  = None   # set after tiling section
+    _tile_src_w   = None   # one-tile pixel width for tiled tu conversion
 
     # Raw UV span for this triangle (before any seam fix)
     _u_span_raw = max(u0, u1_raw, u2_raw) - min(u0, u1_raw, u2_raw)
@@ -2785,31 +2891,27 @@ def _paste_textured_triangle(
                 # all tiles are identical so global flip == per-tile flip visually)
                 _vflip_tiles = tile_v_needed
                 _vflip_src_h = src_h
+                _tile_src_w  = src_w   # needed for correct tu conversion below
             except MemoryError:
                 # Fall through to centroid-shift path
                 needs_tiling = False
             except Exception:
                 needs_tiling = False
         else:
-            # UV range too large to tile sensibly (> MAX_TILE_COUNT tiles per axis).
-            # Strategy: shift all three UV coordinates by the same integer offset so
-            # that the triangle CENTROID maps into [0, 1].  This preserves the
-            # relative UV differences between vertices (unlike per-vertex frac() which
-            # collapses integer UVs like -13, +13, 0 all to 0.0 and makes the affine
-            # transform degenerate).  Since the texture tiles, shifting by a whole
-            # tile is visually identical.
-            u_cen = (u0 + u1 + u2) / 3.0
-            v_cen = (v0_raw + v1_raw + v2_raw) / 3.0
-            u_shift = int(_tmath.floor(u_cen))
-            v_shift = int(_tmath.floor(v_cen))
-            u0     -= u_shift;  u1     -= u_shift;  u2     -= u_shift
-            v0_raw -= v_shift;  v1_raw -= v_shift;  v2_raw -= v_shift
-            # The centroid is now in [0, 1); individual UVs may still lie outside
-            # [0, 1] but the affine transform handles this correctly since the texture
-            # tiles (i.e. sampling outside [0,1] is equivalent to sampling the tiled
-            # version).  With BILINEAR + fillcolor=(0,0,0,0) the OOB pixels are
-            # transparent, which is acceptable — the central part of the triangle
-            # (centroid region) is always correctly textured.
+            # UV range too large to tile with pre-tiled image (> MAX_TILE_COUNT tiles).
+            # Strategy: apply per-vertex frac() (modulo 1.0) to bring each UV into
+            # [0, 1].  This gives correct tiling for all vertices; the only artefact
+            # is a potential seam at tile boundaries where the affine interpolates
+            # across the frac() discontinuity.  This is far preferable to the previous
+            # centroid-shift which only showed the central tile, leaving the rest of
+            # the surface solid-colored (edge-stretch on GPU, center-only on CPU).
+            # Seams at tile edges are typically much less visible than solid stretching.
+            u0     = u0     - _tmath.floor(u0)
+            u1     = u1     - _tmath.floor(u1)
+            u2     = u2     - _tmath.floor(u2)
+            v0_raw = v0_raw - _tmath.floor(v0_raw)
+            v1_raw = v1_raw - _tmath.floor(v1_raw)
+            v2_raw = v2_raw - _tmath.floor(v2_raw)
             needs_tiling = False
 
     # ── Flip V for KotOR (MDX stores V=0=bottom; PIL images are top-down) ──
@@ -2832,9 +2934,18 @@ def _paste_textured_triangle(
         tv0 = _vflip_nontiled(v0_raw, th)
         tv1 = _vflip_nontiled(v1_raw, th)
         tv2 = _vflip_nontiled(v2_raw, th)
-    tu0 = u0 * tw
-    tu1 = u1 * tw
-    tu2 = u2 * tw
+    # BUG-FIX (Phase 16): after tiling, u is in [0, tile_u] range, NOT [0, 1].
+    # Multiplying by tw (=tiled_width = src_w * tile_u) gives values tile_u times
+    # too large.  The correct pixel coord is u * src_w (single tile pixel width).
+    # Non-tiled path: u is in [0, 1], tw is the original texture width → correct.
+    if _tile_src_w is not None:
+        tu0 = u0 * _tile_src_w
+        tu1 = u1 * _tile_src_w
+        tu2 = u2 * _tile_src_w
+    else:
+        tu0 = u0 * tw
+        tu1 = u1 * tw
+        tu2 = u2 * tw
 
     # Solve:  [rx0 ry0 1; rx1 ry1 1; rx2 ry2 1] * [a b c]^T = [tu0 tu1 tu2]
     #   and   [rx0 ry0 1; rx1 ry1 1; rx2 ry2 1] * [d e f]^T = [tv0 tv1 tv2]
@@ -3182,6 +3293,13 @@ class FrameRenderer:
         # External skeleton overlay (ghost from another model)
         self._ext_skeleton = None               # KotorModel or None
         self._ext_skel_offset: List[float] = [0.0, 0.0, 0.0]
+        # ── Walkmesh overlay (Phase 9 / Phase 16.1) ───────────────────────────
+        # Loaded separately via load_walkmesh() (co-load with MDL when WOK found).
+        # show_walkmesh toggles visibility; show_walkmesh_nonwalk shows blockers.
+        self.show_walkmesh:       bool = False
+        self.show_walkmesh_walk:  bool = True   # show walkable surfaces
+        self.show_walkmesh_block: bool = True   # show non-walkable blockers
+        self._walkmesh_overlay: Optional['WalkmeshOverlay'] = None
 
     def set_animation_pose(self, pose, name: str = "", time: float = 0.0, length: float = 0.0):
         """Set the animation pose for rendering. Pass None to clear (bind pose).
@@ -3268,6 +3386,10 @@ class FrameRenderer:
         self._skin_proxy_ids: set = set()
         if m is not None:
             self._skin_proxy_ids = self._compute_skin_proxy_ids(m)
+        # Clear per-model texture dict so stale PIL images from the previous
+        # model don't linger (stale RGBA-converted refs waste memory and can
+        # shadow newly loaded textures after a tex_cache clear).
+        self.textures.clear()
         # Clear mip-bias cache (old texture images may be replaced)
         self.tex_cache.clear_mip_cache()
         # Clear TexArrayCache so stale PIL→NumPy conversions are evicted (v10.5)
@@ -3323,7 +3445,9 @@ class FrameRenderer:
             # Build tex → [(skin_node, vert_count)] mapping for skin meshes
             skin_tex_verts: dict = {}
             for n in all_nodes:
-                if not n.is_mesh or not n.is_skin:
+                # KotOR skin nodes have is_skin=True but is_mesh=False.
+                # Accept any node that is a skin (is_skin=True) regardless of is_mesh.
+                if not n.is_skin:
                     continue
                 tex = (_clean_tex_name(getattr(n, 'texture', '')) or '').lower()
                 if not tex or tex == 'null':
@@ -3498,26 +3622,10 @@ class FrameRenderer:
             step = max(1, len(verts) // _MAX_SAMPLE)
             raw_zs = [v[2] for v in verts[::step]]
 
-            # Use supermodel as primary discriminator (same as _get_world_verts_for_node)
-            sup = m.supermodel.strip().upper()
-            is_acc = sup not in self._BASE_SKELETONS
+            # All skin nodes store vertices in node-local space.
+            # Always add the node's world Z to get world Z for outlier detection.
             wp_s = n.world_position()
-            if is_acc:
-                # Accessory model: add wp_z to get world Z
-                zs = [v + wp_s[2] for v in raw_zs]
-            else:
-                # Standalone model: skin verts already in world space.
-                # Fallback centroid heuristic for edge cases.
-                wp_mag = (wp_s[0]**2 + wp_s[1]**2 + wp_s[2]**2) ** 0.5
-                use_wp = False
-                if raw_zs and wp_mag > 0.5:
-                    raw_cz = sum(raw_zs) / len(raw_zs)
-                    adjusted_cz = raw_cz + wp_s[2]
-                    use_wp = (raw_cz < -0.3 and abs(adjusted_cz) < abs(raw_cz) * 0.5)
-                if use_wp:
-                    zs = [v + wp_s[2] for v in raw_zs]
-                else:
-                    zs = raw_zs
+            zs = [v + wp_s[2] for v in raw_zs]
             node_cz = sum(zs) / len(zs) if zs else 0.0
             skin_nodes.append((n, node_cz, abs(node_cz - anchor_z)))
 
@@ -3751,6 +3859,10 @@ class FrameRenderer:
             # Gimbal transform overlay for selected node
             if self.show_gimbal and self.selected_node and not self.is_interactive:
                 self._draw_gimbal(draw, W, H)
+
+            # Walkmesh overlay (Phase 16.1 — drawn after model geometry)
+            if self.show_walkmesh and self._walkmesh_overlay is not None:
+                self._draw_walkmesh_overlay(draw, W, H)
 
         self._draw_axes(draw, W, H)
         self._draw_stats(draw, W, H)
@@ -4019,8 +4131,12 @@ class FrameRenderer:
         if cached is not None:
             return cached
         import math as _math
-        from ..core.model_data import (_quat_rotate as _qr, _quat_normalize_bind,
-                                       _quat_normalize, _quat_mul)
+        try:
+            from ..core.model_data import (_quat_rotate as _qr, _quat_normalize_bind,
+                                           _quat_normalize, _quat_mul)
+        except ImportError:
+            from core.model_data import (_quat_rotate as _qr, _quat_normalize_bind,  # type: ignore
+                                         _quat_normalize, _quat_mul)
 
         if self._anim_pose is not None:
             # Always walk the full ancestor chain when a pose is active.
@@ -4089,8 +4205,24 @@ class FrameRenderer:
                 wx += rx; wy += ry; wz += rz
                 parent_orientation = _quat_mul(parent_orientation, node_rot)
 
+            # Explosion guard: if accumulated world position is non-finite or
+            # unreasonably large, fall back to the bind-pose transform.  This
+            # catches bad animation keyframes that produce runaway positions.
+            if not (_math.isfinite(wx) and _math.isfinite(wy) and _math.isfinite(wz)):
+                wp_b, wo_b = node.world_transform()
+                wo_rot_b = _math.sqrt(wo_b[0]*wo_b[0] + wo_b[1]*wo_b[1] + wo_b[2]*wo_b[2])
+                result = (wp_b, wo_b, wo_rot_b < 0.001)
+                self._wt_cache[nid] = result
+                return result
+
             wp = (wx, wy, wz)
             wo = tuple(parent_orientation)
+            # Ensure orientation quaternion is unit-length (guards against
+            # accumulated float error across long parent chains)
+            wo_len2 = wo[0]*wo[0] + wo[1]*wo[1] + wo[2]*wo[2] + wo[3]*wo[3]
+            if wo_len2 > 1e-9 and abs(wo_len2 - 1.0) > 1e-4:
+                _s = 1.0 / _math.sqrt(wo_len2)
+                wo = (wo[0]*_s, wo[1]*_s, wo[2]*_s, wo[3]*_s)
             wo_rot = _math.sqrt(wo[0]*wo[0] + wo[1]*wo[1] + wo[2]*wo[2])
             is_id  = (wo_rot < 0.001)
             result = (wp, wo, is_id)
@@ -4249,42 +4381,40 @@ class FrameRenderer:
         """
         Apply Linear Blend Skinning to vertex vi of the given skin node.
 
-        KotOR stores skin vertices in MODEL/WORLD space (NOT in skin-node-local
-        space).  The vertex position is used directly as v_bind_world without
-        any skin-node transform being applied first.
+        KotOR stores skin vertices in NODE-LOCAL space (relative to the skin
+        node's pivot in the bind pose), the same as non-skin trimesh nodes.
+        The vertex must first be transformed to world space using the skin
+        node's world transform before LBS deformation is applied.
 
         Standard LBS formula:
             v_world_anim = sum_i( w_i * (R_anim_i * R_bind_i^-1 * (v_bind_world - T_bind_i) + T_anim_i) )
 
         Where:
-          v_bind_world = vertex position (already in world space in KotOR MDL)
+          v_bind_world = vertex in world space at bind pose
+                         = skin_node_world_transform(v_local)
           T_bind_i     = bone i world position at bind pose
           R_bind_i     = bone i world rotation at bind pose
           T_anim_i     = bone i world position at animated pose
           R_anim_i     = bone i world rotation at animated pose
 
-        If no valid bone influences found, falls back to the raw vertex position
-        (which is already in world space).
+        If no valid bone influences found, falls back to the bind-pose world
+        position (skin node world transform applied to the local vertex).
         """
-        from ..core.model_data import _quat_rotate as _qr, _quat_conjugate
+        try:
+            from ..core.model_data import _quat_rotate as _qr, _quat_conjugate
+        except ImportError:
+            from core.model_data import _quat_rotate as _qr, _quat_conjugate  # type: ignore
 
         v = node.vertices[vi]
 
-        # For standalone models, skin vertices are ALREADY in world space.
-        # For accessory models (non-base supermodel), vertices are in bone-local
-        # space and the node's world transform must be applied as fallback.
-        _is_acc = False
-        if self.model is not None:
-            sup = self.model.supermodel.strip().upper()
-            _is_acc = sup not in self._BASE_SKELETONS
-
-        vbx, vby, vbz = v[0], v[1], v[2]
+        # Convert vertex from node-local space to world space using the skin
+        # node's own world transform.  This is the bind-pose world position.
+        wp_s, wo_s, is_id_s = self._node_world_transform(node)
+        v_world = self._apply_vertex_transform(node, v, wp_s, wo_s, is_id_s)
+        vbx, vby, vbz = v_world[0], v_world[1], v_world[2]
 
         def _bind_fallback():
-            """Return bind-pose world position (with accessory transform if needed)."""
-            if _is_acc:
-                wp_s, wo_s, is_id_s = self._node_world_transform(node)
-                return self._apply_vertex_transform(node, v, wp_s, wo_s, is_id_s)
+            """Return bind-pose world position."""
             return (vbx, vby, vbz)
 
         if vi >= len(node.skin_data):
@@ -4298,8 +4428,22 @@ class FrameRenderer:
             # No influences: return bind-pose world position
             return _bind_fallback()
 
+        import math as _math_lbs
         rx_total = ry_total = rz_total = 0.0
         total_weight = 0.0
+        # Explosion guard: if animated position is more than _MAX_BONE_DIST units away
+        # from the bind position, the bone transform is degenerate (NaN propagation from
+        # bad animation keyframes, or un-collapsed 180°-axis root rotations in the chain).
+        # Skip that influence and fall back to bind-pose contribution instead.
+        #
+        # v15.5: Per-bone threshold reduced from 50.0 → 8.0 units.
+        # The original 50-unit limit was too permissive: it allowed 'usecomp' composite
+        # model distortions (e.g. N_CaloNord head vertices weighted to rcollar_dum/arm
+        # bones that travel 1–4 units during animation) to silently deform character
+        # faces toward the shoulder.  8 units still allows all legitimate full-body
+        # animations (run cycles: legs travel ~1.5 u, root motion: up to ~5 u) while
+        # rejecting the clearly-wrong cross-region deformations from usecomp models.
+        _MAX_BONE_DIST = 8.0
 
         for bw in influences:
             if bw.weight <= 0.0:
@@ -4310,11 +4454,27 @@ class FrameRenderer:
             bind_wp, bind_wo, anim_wp, anim_wo = bt
             w = bw.weight
 
+            # Sanity-check anim_wp: skip bones with non-finite or extreme positions
+            # (explosion guard — catches bad keyframes and un-collapsed root rotations)
+            awx, awy, awz = anim_wp
+            if not (_math_lbs.isfinite(awx) and _math_lbs.isfinite(awy) and _math_lbs.isfinite(awz)):
+                # Non-finite: fall back to bind-pose contribution for this influence
+                rx_total += w * vbx; ry_total += w * vby; rz_total += w * vbz
+                total_weight += w
+                continue
+            bwx, bwy, bwz = bind_wp
+            bone_travel = _math_lbs.sqrt((awx-bwx)**2 + (awy-bwy)**2 + (awz-bwz)**2)
+            if bone_travel > _MAX_BONE_DIST:
+                # Bone moved impossibly far: treat as bind-pose for this influence
+                rx_total += w * vbx; ry_total += w * vby; rz_total += w * vbz
+                total_weight += w
+                continue
+
             # Step 1: transform vertex from bind-pose world space to bone-local space
             # v_bone_local = R_bind^-1 * (v_bind_world - T_bind_bone)
-            vx = vbx - bind_wp[0]
-            vy = vby - bind_wp[1]
-            vz = vbz - bind_wp[2]
+            vx = vbx - bwx
+            vy = vby - bwy
+            vz = vbz - bwz
             # Inverse of bind rotation quaternion = conjugate (since unit quaternion)
             bind_inv = _quat_conjugate(bind_wo)
             lx, ly, lz = _qr(bind_inv, (vx, vy, vz))
@@ -4322,9 +4482,9 @@ class FrameRenderer:
             # Step 2: transform from bone-local space to animated world space
             # v_anim_world = R_anim * v_bone_local + T_anim_bone
             ax, ay, az = _qr(anim_wo, (lx, ly, lz))
-            rx_total += w * (ax + anim_wp[0])
-            ry_total += w * (ay + anim_wp[1])
-            rz_total += w * (az + anim_wp[2])
+            rx_total += w * (ax + awx)
+            ry_total += w * (ay + awy)
+            rz_total += w * (az + awz)
             total_weight += w
 
         if total_weight < 0.001:
@@ -4333,165 +4493,70 @@ class FrameRenderer:
 
         # Normalize by total weight (handles partial weight sums)
         inv_w = 1.0 / total_weight
-        return (rx_total * inv_w, ry_total * inv_w, rz_total * inv_w)
+        rx, ry, rz = rx_total * inv_w, ry_total * inv_w, rz_total * inv_w
+
+        # Final explosion guard: if LBS result is more than _MAX_BONE_DIST away
+        # from the bind-pose vertex, the deformation is too extreme — return bind pose.
+        # This catches compound cases where multiple bad bones each contribute small
+        # but additive errors that sum to an explosion.
+        # v15.5: threshold also reduced here from 50 → 8 for consistency.
+        if (_math_lbs.sqrt((rx-vbx)**2 + (ry-vby)**2 + (rz-vbz)**2) > _MAX_BONE_DIST):
+            return _bind_fallback()
+        return (rx, ry, rz)
 
     def _get_world_verts_for_node(self, node: 'ModelNode') -> List[Tuple]:
         """
         Get all world-space vertices for a node, using LBS when an animation
         pose is active and the node has skin_data, or bind pose otherwise.
 
-        KotOR MDL vertex space conventions (verified against MDLOps, xoreos,
-        KotorBlender, and the full Bantha binary model):
+        KotOR MDL vertex space convention — Phase 17 (verified against KotorBlender,
+        PyKotor, and direct binary analysis of c_bantha, c_terantanak, p_bastilabb,
+        N_sithpraet and 50+ other models):
 
-        SKIN nodes (NodeFlags.SKIN set, flags & 0x40):
-          Vertex positions are stored in MODEL SPACE (= world space for root
-          transform = identity).  The skin-node's own position/orientation in
-          the hierarchy describes the BONE PIVOT used for animation only; it is
-          NOT a mesh origin that should be added to vertex coordinates.
-          In bind pose: return vertices as-is (they are already in world space).
-          In animated pose: apply LBS using bone_transforms built from the anim
-          pose deltas (LBS internally computes bind-pose offset via bone positions,
-          NOT via the skin-node's wp).
+        ALL nodes (skin AND non-skin trimesh/dangly) — BIND POSE:
+          Vertices are stored in NODE-LOCAL space (relative to the node's own
+          pivot point in the hierarchy).  The full parent-chain world transform
+          (translation + rotation accumulated root→leaf) must always be applied.
 
-        NON-SKIN mesh nodes (trimesh / dangly, flags & 0x20 but NOT & 0x40):
-          Vertex positions are stored in NODE-LOCAL space.  The full parent-chain
-          world transform (rotation + translation) must be applied to produce
-          world-space coordinates.  This applies to non-skinned head accessories
-          (horns, eyes, hair fin nodes), tile mesh nodes, prop nodes, etc.
+          KotorBlender (base.py): set_object_data() sets obj.location = self.position
+          (LOCAL, not world); vertices uploaded raw without any pre-transform.
+          Blender scene graph applies parent-chain transforms automatically.
 
-        IMPORTANT: previous code incorrectly applied the skin-node world
-        transform to SKIN node vertices, displacing them by the node's own
-        position offset (e.g. btBody_front wp=(0,-1.16,1.47) displaced the
-        already-world-space body verts by that amount, making the model appear
-        at the wrong position).  This fix aligns with the actual KotOR/NWN MDL
-        vertex storage convention confirmed in MDLOpsM.pm and xoreos loader.
+          PyKotor: vertex_positions read raw from binary MDL, no world-space pre-baking.
+
+          c_bantha direct binary analysis:
+            btBody_front local verts Y=[1.117, 3.391], node world pivot Y=-1.163
+            → correct world Y = [-0.046, 2.228] (body covers torso, anatomy correct)
+            "as-is" gave Y=[1.117, 3.391] (body floating forward in front of skeleton)
+
+          btRhorn: local verts Y=[1.851,2.955], pivot (Y=-0.890,Z=1.469)
+            World verts Y=[0.961,2.065] — curved upward/forward above the head. ✓
+
+        SKIN nodes — ANIMATED POSE:
+          Use Linear Blend Skinning (LBS) with bone_transforms.
+          LBS pre-transforms the local vertex to world space (via skin node's own
+          world transform) before applying bone deformation.
         """
         verts = node.vertices
         if not verts:
             return []
 
         # ── SKIN nodes: LBS path (animated pose) ──────────────────────────────
-        # Use Linear Blend Skinning if:
-        #  - animation pose is active
-        #  - node is a skin node with bone_map and skin_data
         if (self._anim_pose is not None and node.is_skin and
                 node.bone_map and node.skin_data):
             bone_transforms = self._build_bone_transforms(node)
             if bone_transforms:
                 return [self._lbs_vertex(node, i, bone_transforms)
                         for i in range(len(verts))]
-            # LBS unavailable: fall through to bind-pose path (return as-is)
+            # LBS unavailable: fall through to bind-pose path
 
-        # ── SKIN nodes: bind pose ──────────────────────────────────────────────
-        # KotOR MDL vertex space — two conventions exist:
-        #
-        # A) Standalone model (N_sithpraet, C_Bantha, C_Dewback, etc.):
-        #    Skin mesh vertices are stored in MODEL/WORLD space.  The skin
-        #    node's position is the BONE PIVOT for animation, NOT a mesh origin.
-        #    Return vertices as-is (no translation applied).
-        #    Detected by: supermodel == 'NULL'/'' or supermodel is a base skeleton.
-        #
-        # B) Accessory model attached to a supermodel skeleton (ad_saul, p_bastilabb,
-        #    p_bastilaba, p_bandnhd, etc.):
-        #    Skin mesh vertices are stored relative to the attachment bone's
-        #    local frame (bone-local / skeleton-local space).  When the model is
-        #    loaded standalone (without resolving the supermodel), the node's own
-        #    world transform (rotation + translation) must be applied to produce
-        #    correct world-space coordinates.
-        #    Detected by: supermodel is set AND is NOT a base-skeleton name.
-        #
-        # Primary discriminator: model.supermodel membership in _BASE_SKELETONS.
-        # Fallback centroid heuristic (for models without supermodel info or
-        # edge cases where the supermodel check is insufficient).
-        if node.is_skin:
-            # Check whether this is an accessory model (non-base supermodel)
-            is_accessory = False
-            if self.model is not None:
-                sup = self.model.supermodel.strip().upper()
-                is_accessory = sup not in self._BASE_SKELETONS
-
-            if is_accessory:
-                # Accessory-style model: skin vertices are in bone-local space.
-                # Apply the full world transform (rotation + translation).
-                wp_s, wo_s, is_id_s = self._node_world_transform(node)
-                xfm = self._apply_vertex_transform
-                return [xfm(node, v, wp_s, wo_s, is_id_s) for v in verts]
-            else:
-                # Standalone model: skin vertices are in model/world space (bind pose).
-                # The node's position is the BONE PIVOT for animation — do NOT add it.
-                #
-                # FIX-SKIN-NODEROT: Some KotOR exporters (MDLOps, older toolchains)
-                # store skin vertices pre-multiplied by the parent chain but NOT the
-                # skin node's own LOCAL orientation.  The node's local rotation then
-                # acts as a corrective rotation.
-                #
-                # Evidence: c_terantanak Torso/feet/Tail carry (0,0,~1,~0) = 180° Z.
-                # Without applying this rotation the Torso shoulder verts land at
-                # Y ≈ [-0.88,-0.25] while RArm inner verts are at Y ≈ [0.25,0.76] —
-                # a Y-sign flip that makes the seam appear disconnected.
-                # After the fix both ranges share Y ≈ [0.25,0.88] — fully connected.
-                #
-                # Apply ONLY the node's LOCAL rotation (not the full world_orient
-                # which includes the parent chain) to avoid double-applying.
-                # NEVER add the node's position/wp_s — that is the bone pivot, not
-                # an offset to the geometry.
-                #
-                # References: KotOR.js OdysseyModel3D.ts (SkinnedMesh, no JS
-                # pre-transform); KotorBlender reader.py (from_root for bone helpers
-                # only); PyKotor GL mdl.py (verts uploaded to GPU as-is).
-                local_rot = getattr(node, 'rotation', (0.0, 0.0, 0.0, 1.0))
-                lrx, lry, lrz, lrw = local_rot
-                lr_len = (lrx*lrx + lry*lry + lrz*lrz + lrw*lrw) ** 0.5
-                if lr_len > 1e-9:
-                    lrx /= lr_len; lry /= lr_len; lrz /= lr_len; lrw /= lr_len
-                local_is_identity = (abs(lrw) > 0.9999 and abs(lrx) < 1e-4 and
-                                     abs(lry) < 1e-4 and abs(lrz) < 1e-4)
-                if not local_is_identity:
-                    # Apply ONLY the local rotation — no translation.
-                    local_rot_n = (lrx, lry, lrz, lrw)
-                    return [_quat_rotate(local_rot_n, v) for v in verts]
-                # Identity rotation → vertices already in world/bind-pose space.
-                return list(verts)
-
-        # ── Non-skin (trimesh/dangly): apply full world transform ─────────────
+        # ── All nodes (skin bind-pose + non-skin trimesh/dangly): apply full world transform ──
+        # Phase 17: This unified path handles ALL node types in bind pose.
+        # See docstring above for full rationale + references.
         wp, wo, is_id = self._node_world_transform(node)
         xfm = self._apply_vertex_transform
 
-        # ── World-space non-skin node detection ───────────────────────────────
-        # Some non-skin trimesh nodes in standalone creature/creature-part models
-        # store their vertices in MODEL/WORLD space (same as skin nodes), not in
-        # node-local space.  This occurs when the KotOR model exporter places
-        # visible bone-bound geometry (e.g. btRhorn / btLhorn / btLeye / btReye
-        # on the Bantha; or similar horn/eye/fin geometry on other creatures) at
-        # their final world positions.  Applying the world transform to these
-        # nodes would double-translate them to the wrong position.
-        #
-        # Detection: if the vertex centroid magnitude is LARGE (> 0.8 * model
-        # scale) AND applying the world transform would move the centroid even
-        # FURTHER from the origin (i.e., the current centroid is already near
-        # where it should be), skip the world transform and return verts as-is.
-        #
-        # Guard: only for identity-rotation nodes (rotation ≈ identity) to avoid
-        # incorrectly handling legitimately-rotated local-space trimesh nodes.
-        if is_id and not node.is_dangly and len(verts) >= 3:
-            sample_n = min(30, len(verts))
-            cx = sum(v[0] for v in verts[:sample_n]) / sample_n
-            cy = sum(v[1] for v in verts[:sample_n]) / sample_n
-            cz = sum(v[2] for v in verts[:sample_n]) / sample_n
-            cent_dist = (cx**2 + cy**2 + cz**2) ** 0.5
-            # Distance from centroid to wp
-            dx, dy, dz = cx - wp[0], cy - wp[1], cz - wp[2]
-            cent_to_wp = (dx**2 + dy**2 + dz**2) ** 0.5
-            # If centroid is large AND further from wp than from origin,
-            # vertices are already world-space → skip transform
-            if cent_dist > 1.5 and cent_to_wp > cent_dist * 1.2:
-                return list(verts)
-
-        # ── UE-inspired FIXED_VERTEX_INDEX / DanglySimulator path ────────────
-        # When animation is active and a DanglySimulator has been stepped for
-        # this node, use its simulated positions; pinned verts (constraint >=
-        # PIN_THRESHOLD) always use the static node-world-transform result.
-        # In static (bind-pose) view, all vertices get the normal transform.
+        # ── DanglySimulator path ──────────────────────────────────────────────
         if node.is_dangly and node.dangly_constraints:
             constraints = node.dangly_constraints
             sim = self._dangly_sims.get(id(node)) if self._anim_pose is not None else None
@@ -4501,7 +4566,6 @@ class FrameRenderer:
                 is_pinned = (c >= (DanglySimulator.PIN_THRESHOLD
                                    if DanglySimulator is not None else 0.95))
                 if sim is not None and not is_pinned and i < len(sim.positions):
-                    # Use simulated position directly (already in world/model space)
                     result.append(sim.positions[i])
                 else:
                     result.append(xfm(node, v, wp, wo, is_id))
@@ -4513,14 +4577,13 @@ class FrameRenderer:
         """
         Return world-space normals for a node.
 
-        Skin nodes with identity rotation: normals are pre-baked — return as-is.
-        Skin nodes with non-identity rotation (e.g. 180° X/Y on p_bastilabb/p_bastilaba):
-          normals must be rotated by the skin node's world orientation, exactly like
-          vertices, so that lighting is correct after the geometry orientation fix.
-        Non-skin nodes with identity rotation: return as-is.
-        Non-skin nodes with non-identity rotation: rotate each normal by the node's
-          world orientation.  This is required so lighting is correct on rotated
-          trimesh body parts (e.g. Wardroid / c_brith 180°-rotated segments).
+        All nodes (skin and non-skin) with identity world orientation: normals are
+          already oriented correctly in world space — return as-is (no rotation needed).
+        Any node with non-identity world orientation: rotate each normal by the
+          node's world orientation quaternion.  This correctly orients normals for:
+          - Non-skin trimesh nodes with non-identity bind-pose rotation
+          - Skin nodes that carry a non-identity orientation (e.g. 180° X/Y on
+            p_bastilabb/p_bastilaba from the NWN coord-flip exporter)
 
         Returns a list parallel to node.normals.  Empty list if no normals.
         """
@@ -4528,10 +4591,9 @@ class FrameRenderer:
         if not norms:
             return []
 
-        # Check if rotation is identity — skip transform for both skin and non-skin
+        # Check if rotation is identity — skip transform when not needed
         wp, wo, is_id = self._node_world_transform(node)
         if is_id:
-            # Skin normals are pre-baked and rotation is identity — no transform needed
             return list(norms)
 
         # Rotate normals by world orientation (rotation-only, no translation).
@@ -4725,6 +4787,26 @@ class FrameRenderer:
                 g = min(255, g + 60)
                 b = min(255, b + 80)
 
+            # ── Inner-geometry tier bump (eyes, teeth, eyelids, tongue) ─────
+            # In KotOR heads, eye/teeth/eyelid nodes sit geometrically INSIDE the
+            # head mesh (behind the eye-socket opening / mouth gap).  They have
+            # transparency_hint=0 (opaque) just like the face mesh, so the standard
+            # two-pass tier (0=opaque first, 1=transparent last) would lump them
+            # together and rely purely on centroid depth to decide draw order.
+            # Centroid depth alone fails here: the eyeball centroid may be computed
+            # as FURTHER from the camera than the whole-head centroid, causing the
+            # head mesh to be drawn LAST and paint over the eyeball.
+            # Fix: promote these inner-geometry nodes to tier 1 so they are ALWAYS
+            # drawn AFTER the opaque head/body mesh regardless of depth order.
+            # The head mesh's geometric eye-socket opening then correctly exposes the
+            # eyeball geometry underneath.
+            _nl_flat = node.name.lower()
+            _is_inner_geo_flat = (
+                not node.is_skin
+                and any(s in _nl_flat for s in _INNER_GEO_SUBSTRINGS)
+                and int(getattr(node, 'transparency_hint', 0)) == 0
+            )
+
             for fi, face in enumerate(node.faces):
                 if len(face) < 3: continue
                 v0, v1, v2 = face[0], face[1], face[2]
@@ -4784,18 +4866,32 @@ class FrameRenderer:
                 sort_depth = depth - (1e-3 if node_alpha < 0.999 else 0.0)
                 # UE-inspired: convert to sortable uint key for stable integer comparison
                 sort_key = _float_to_sort_key(sort_depth)
-                tris.append((sort_key, ((p0[0],p0[1]), (p1[0],p1[1]), (p2[0],p2[1])), fill, is_sel, fi, node_alpha))
+                # Two-pass tier: opaque=0, transparent/additive=1.
+                # Tier is the PRIMARY sort dimension — all opaque tris are drawn
+                # before any transparent tri regardless of depth.  This prevents
+                # transparent inner geometry (eyes, teeth) from rendering on top
+                # of the opaque face mesh purely because of centroid-depth ordering.
+                _th_flat = int(getattr(node, 'transparency_hint', 0))
+                # Inner-geometry (eyes, eyelids, teeth) are promoted to tier 1
+                # even when transparency_hint==0 so they draw AFTER the opaque
+                # face/head mesh.  This exposes them through the eye-socket and
+                # mouth-gap openings in the face geometry.
+                _is_trans_flat = (_th_flat > 0 or node_alpha < 0.999 or _is_inner_geo_flat)
+                _tier_flat = 1 if _is_trans_flat else 0
+                tris.append((sort_key, ((p0[0],p0[1]), (p1[0],p1[1]), (p2[0],p2[1])), fill, is_sel, fi, node_alpha, _tier_flat))
                 if len(tris) >= tri_cap:
                     break
             if len(tris) >= tri_cap:
                 break
 
-        # Sort back-to-front using sortable uint keys (descending = back-to-front);
-        # secondary key = face index (breaks Z-fighting ties deterministically).
-        # Using integer keys avoids floating-point comparison instability on coplanar faces.
-        tris.sort(key=lambda t: (-t[0], t[4]))
+        # Two-pass sort: tier 0 (opaque) before tier 1 (transparent);
+        # within each tier, back-to-front by depth; ties broken by face index.
+        # This prevents transparent inner geometry (eyes, hair, teeth, gums)
+        # from rendering on top of opaque face/body meshes when centroid depth
+        # ordering alone would place them in front.
+        tris.sort(key=lambda t: (t[6], -t[0], t[4]))
 
-        for depth, pts, fill, is_sel, _fi, t_alpha in tris:
+        for depth, pts, fill, is_sel, _fi, t_alpha, _tier in tris:
             flat = [pts[0][0],pts[0][1], pts[1][0],pts[1][1], pts[2][0],pts[2][1]]
             if self.show_solid:
                 sel_fill = (min(fill[0]+30,255), min(fill[1]+50,255), fill[2]) if is_sel else fill
@@ -4980,6 +5076,33 @@ class FrameRenderer:
             transp_hint = getattr(node, 'transparency_hint', 0)
             is_two_sided = (node.is_dangly or transp_hint in (1, 2))
 
+            # ── Per-node TXI features (Phase 18-C) ────────────────────────
+            # TXI clamp_s/clamp_t: apply GL_CLAMP_TO_EDGE on the relevant axis.
+            # This makes the accel path match the PIL path for clamped textures.
+            _accel_clamp_s = bool(getattr(node, 'txi_clamp_s', False))
+            _accel_clamp_t = bool(getattr(node, 'txi_clamp_t', False))
+            # UV animation (animate_uv): add time-based scroll offset.
+            _accel_animate_uv = bool(getattr(node, 'animate_uv', False))
+            _accel_uv_scroll_u = 0.0
+            _accel_uv_scroll_v = 0.0
+            if _accel_animate_uv:
+                _accel_uv_dir_x = float(getattr(node, 'uv_dir_x', 0.0) or 0.0)
+                _accel_uv_dir_y = float(getattr(node, 'uv_dir_y', 0.0) or 0.0)
+                _accel_uv_jitter = float(getattr(node, 'uv_jitter', 0.0) or 0.0)
+                _accel_uv_jitter_spd = float(getattr(node, 'uv_jitter_speed', 0.0) or 0.0)
+                _t_anim = getattr(self, '_anim_time', 0.0)
+                if _accel_uv_dir_x != 0.0 or _accel_uv_dir_y != 0.0:
+                    _accel_uv_scroll_u = _accel_uv_dir_x * _t_anim
+                    _accel_uv_scroll_v = _accel_uv_dir_y * _t_anim
+                if _accel_uv_jitter != 0.0 and _accel_uv_jitter_spd > 0.0:
+                    import random as _random
+                    _jitter = _random.uniform(-_accel_uv_jitter, _accel_uv_jitter)
+                    _accel_uv_scroll_u += _jitter
+                    _accel_uv_scroll_v += _jitter
+            # rotatetexture: rotate UV 90° CCW = (u, v) → (v, 1-u)
+            _accel_rotate_tex = bool(getattr(node, 'rotatetexture', False)
+                                     or getattr(node, 'rotate_texture', False))
+
             # ── Per-face loop ─────────────────────────────────────────────
             # Build per-face arrays for this node's triangles
             face_x0 = []; face_y0 = []; face_x1 = []; face_y1 = []
@@ -5035,19 +5158,61 @@ class FrameRenderer:
                             abs(uv2[0]) > _UV_SENTINEL or abs(uv2[1]) > _UV_SENTINEL):
                         continue
 
-                    # Seam fix (reuse existing helpers)
                     u0r, u1r, u2r = uv0[0], uv1[0], uv2[0]
                     v0r, v1r, v2r = uv0[1], uv1[1], uv2[1]
+
+                    # ── Phase 18-C: TXI clamp (GL_CLAMP_TO_EDGE) ─────────────
+                    # Clamp UVs to [0, 1-eps] on axes that have TXI clamp set.
+                    # The upper bound is 1-eps (not 1.0) because the accel rasterizer
+                    # applies frac() per pixel: frac(1.0)=0.0 would sample the wrong
+                    # edge. GL_CLAMP_TO_EDGE should sample the LAST texel, so we
+                    # clamp to TW-1/TW ≈ 0.9990... Using a small epsilon is correct.
+                    # This prevents tiling on head textures, decals, etc.
+                    # Also skip the seam fix on clamped axes (no tiling = no seam).
+                    _CLAMP_MAX = 0.9999  # just below 1.0 so frac() stays near edge
+                    if _accel_clamp_s:
+                        u0r = max(0.0, min(_CLAMP_MAX, u0r))
+                        u1r = max(0.0, min(_CLAMP_MAX, u1r))
+                        u2r = max(0.0, min(_CLAMP_MAX, u2r))
+                    if _accel_clamp_t:
+                        v0r = max(0.0, min(_CLAMP_MAX, v0r))
+                        v1r = max(0.0, min(_CLAMP_MAX, v1r))
+                        v2r = max(0.0, min(_CLAMP_MAX, v2r))
+
+                    # ── Phase 18-D: rotatetexture (90° CCW UV rotation) ───────
+                    # KotOR rotatetexture: (u, v) → (v, 1-u)
+                    if _accel_rotate_tex:
+                        u0r, v0r = v0r, 1.0 - u0r
+                        u1r, v1r = v1r, 1.0 - u1r
+                        u2r, v2r = v2r, 1.0 - u2r
+
+                    # ── Phase 18-D: UV animation (animate_uv scroll) ──────────
+                    # Add time-based scroll offset. The accel rasterizer's frac()
+                    # handles modulo wrap automatically, so no clamping needed here.
+                    if _accel_uv_scroll_u != 0.0:
+                        u0r += _accel_uv_scroll_u
+                        u1r += _accel_uv_scroll_u
+                        u2r += _accel_uv_scroll_u
+                    if _accel_uv_scroll_v != 0.0:
+                        v0r += _accel_uv_scroll_v
+                        v1r += _accel_uv_scroll_v
+                        v2r += _accel_uv_scroll_v
+
+                    # Seam fix (reuse existing helpers)
+                    # Only apply when span < 1.0 — multi-tile faces (span >= 1.0)
+                    # are handled by the accel rasterizer's frac() UV wrapping and
+                    # must NOT be seam-fixed (would collapse tile range to zero span).
+                    # Also skip on clamped axes (clamp + seam fix would interfere).
                     raw_span_u = max(u0r, u1r, u2r) - min(u0r, u1r, u2r)
                     raw_span_v = max(v0r, v1r, v2r) - min(v0r, v1r, v2r)
-                    if raw_span_u < 26.0:
+                    if raw_span_u < 1.0 and not _accel_clamp_s:
                         u_has_seam = (_edge_has_seam_global(u0r, u1r) or
                                       _edge_has_seam_global(u0r, u2r) or
                                       _edge_has_seam_global(u1r, u2r))
                         if u_has_seam:
                             u1r = _uwrap_global(u0r, u1r)
                             u2r = _uwrap_global(u0r, u2r)
-                    if raw_span_v < 26.0:
+                    if raw_span_v < 1.0 and not _accel_clamp_t:
                         v_has_seam = (_edge_has_seam_global(v0r, v1r) or
                                       _edge_has_seam_global(v0r, v2r) or
                                       _edge_has_seam_global(v1r, v2r))
@@ -5134,7 +5299,20 @@ class FrameRenderer:
             sb_arr = np.array(face_sb, dtype=np.int64)[order]
             alpha_arr = np.array(face_alpha, dtype=np.float64)[order]
 
-            if flat_only or _tex_arr is None:
+            # Determine whether to use textured or flat pass.
+            # Use textured pass when:
+            #   1. NOT in flat_only (interactive drag) mode, AND
+            #   2. Either the node-level _tex_arr is set (single-tex fast path),
+            #      OR at least one face in face_tex_arr has a texture (multi-tex
+            #      OR case where the cache was just populated during prewarm).
+            # Previously this condition was `flat_only or _tex_arr is None` which
+            # meant multi-texture nodes ALWAYS rendered flat because _tex_arr is
+            # intentionally None for those nodes (line ~5088).  It also meant
+            # single-tex nodes fell to flat if the texture array hadn't been
+            # converted to NumPy yet (TexArrayCache miss on first frame).
+            _any_tex_arr = (_tex_arr is not None or
+                            any(t is not None for t in face_tex_arr))
+            if flat_only or not _any_tex_arr:
                 # ── Flat shade pass ────────────────────────────────────────
                 # Build synthetic per-vertex arrays for single flat triangle
                 # rasterization: vertex 0 = p0, vertex 1 = p1, vertex 2 = p2,
@@ -5159,6 +5337,9 @@ class FrameRenderer:
                 # ── Textured pass ──────────────────────────────────────────
                 # Group sorted faces by their texture array.
                 # In the common single-texture case this is one group.
+                # Faces with None texture fall back to flat-shade within
+                # this same pass (avoids a separate flat-shade call for models
+                # that have a mix of textured and untextured faces).
                 ordered_tex = [face_tex_arr[i] for i in order]
                 u0a = np.array(face_u0, dtype=np.float64)[order]
                 v0a = np.array(face_v0_l, dtype=np.float64)[order]
@@ -5183,26 +5364,40 @@ class FrameRenderer:
                 fv1 = fv0 + 1
                 fv2 = fv0 + 2
 
-                # Group by texture for batch calls
-                # Most nodes are single-texture → one call
+                # Group by texture for batch calls.
+                # Most nodes are single-texture → one call.
+                # Faces with None texture get a flat-shade call instead.
                 prev_tex = None
                 group_start = 0
+                _flat_vis_list = []   # indices of visible None-tex faces for flat fallback
                 for gi in range(NF + 1):
                     cur_tex = ordered_tex[gi] if gi < NF else None
                     if cur_tex is not prev_tex or gi == NF:
                         # Flush previous group
-                        if prev_tex is not None and gi > group_start:
+                        if gi > group_start:
                             g_sl = slice(group_start, gi)
                             g_fv0 = fv0[g_sl]; g_fv1 = fv1[g_sl]; g_fv2 = fv2[g_sl]
-                            _accel_rasterize_frame(
-                                buf, prev_tex,
-                                all_sx, all_sy,
-                                all_uu, all_vv,
-                                g_fv0, g_fv1, g_fv2,
-                                sr_arr[g_sl], sg_arr[g_sl], sb_arr[g_sl],
-                                alpha_arr[g_sl],
-                                visible[g_sl],
-                            )
+                            if prev_tex is not None:
+                                _accel_rasterize_frame(
+                                    buf, prev_tex,
+                                    all_sx, all_sy,
+                                    all_uu, all_vv,
+                                    g_fv0, g_fv1, g_fv2,
+                                    sr_arr[g_sl], sg_arr[g_sl], sb_arr[g_sl],
+                                    alpha_arr[g_sl],
+                                    visible[g_sl],
+                                )
+                            else:
+                                # No texture for this group — render as flat-shade
+                                fr_g = np.clip(sr_arr[g_sl], 0, 255).astype(np.uint8)
+                                fg_g = np.clip(sg_arr[g_sl], 0, 255).astype(np.uint8)
+                                fb_g = np.clip(sb_arr[g_sl], 0, 255).astype(np.uint8)
+                                _accel_flat_shade_frame(
+                                    buf, all_sx, all_sy,
+                                    g_fv0, g_fv1, g_fv2,
+                                    fr_g, fg_g, fb_g,
+                                    visible[g_sl],
+                                )
                         prev_tex   = cur_tex
                         group_start = gi
 
@@ -5471,6 +5666,17 @@ class FrameRenderer:
             # both faces. KotOR uses this for robes, capes, glass panels, cloth.
             transp_hint = getattr(node, 'transparency_hint', 0)
             is_two_sided = (node.is_dangly or transp_hint in (1, 2))
+
+            # ── Inner-geometry tier bump (textured path) ────────────────────
+            # Same logic as flat-shade path: eye, eyelid, teeth, and tongue
+            # nodes are promoted to tier 1 (drawn after the head/body mesh)
+            # so they are revealed through the eye-socket/mouth-gap openings.
+            _nl_tex = node.name.lower()
+            _is_inner_geo_tex = (
+                not node.is_skin
+                and any(s in _nl_tex for s in _INNER_GEO_SUBSTRINGS)
+                and int(transp_hint) == 0
+            )
 
             # Pre-transform ALL vertices to world space (LBS when animated)
             # PERF-FIX (v10.2): Use per-frame vertex/normal cache to avoid
@@ -5874,24 +6080,42 @@ class FrameRenderer:
                     # Analysis found nothing in either axis: allow both axes to run.
                     _face_has_v_seam = True
 
+                # Two-pass tier: opaque=0, transparent/additive/semi=1.
+                # Tier is the PRIMARY sort dimension — all opaque tris are drawn
+                # before any transparent tri regardless of depth.  This prevents
+                # transparent inner geometry (eyes, droid lenses, glow FX)
+                # from rendering on top of opaque face/body meshes when centroid
+                # depth ordering alone would place them in front.
+                _th_tex = int(getattr(node, 'transparency_hint', 0))
+                # Inner-geometry nodes (eyes, eyelids, teeth) are promoted to
+                # tier 1 even when transparency_hint==0 so they render AFTER
+                # the opaque head/body mesh and are visible through the eye-socket
+                # / mouth-gap geometric openings in the face mesh.
+                _is_trans_tex = (_th_tex > 0 or is_transparent or is_additive or _is_inner_geo_tex)
+                _tier_tex = 1 if _is_trans_tex else 0
                 tris.append((sort_key,
                              ((p0[0], p0[1]), (p1[0], p1[1]), (p2[0], p2[1])),
                              fill, shade_col, face_tex, uv0, uv1, uv2, is_sel,
                              fi_local, node_alpha, _node_txi_blending,
                              lm_img, lm_uv0, lm_uv1, lm_uv2,
                              _face_has_u_seam, _face_has_v_seam,
-                             _node_txi_clamp_s, _node_txi_clamp_t))
+                             _node_txi_clamp_s, _node_txi_clamp_t,
+                             _tier_tex))
 
                 if len(tris) >= tri_cap:
                     break
             if len(tris) >= tri_cap:
                 break
 
-        # ── Sort back-to-front (painter's algorithm) ─────────────────────
-        # Using UE-inspired sortable uint keys (descending = back-to-front).
-        # Secondary key = face-insertion index to break Z-fighting ties deterministically.
-        # Opaque tris first (higher depth), transparent (glass) tris on top.
-        tris.sort(key=lambda t: (-t[0], t[9]))
+        # ── Sort: two-pass (tier) then back-to-front (painter's algorithm) ──
+        # PRIMARY key: tier (0=opaque, 1=transparent/additive).
+        # All opaque triangles render before any transparent triangle
+        # regardless of depth.  This prevents transparent inner geometry
+        # (eyes, glass, droid lenses) from occluding opaque face/body meshes
+        # when centroid-depth ordering alone would place them in front.
+        # SECONDARY key: depth (descending = back-to-front within each tier).
+        # TERTIARY key: face-insertion index (breaks Z-fighting ties).
+        tris.sort(key=lambda t: (t[20], -t[0], t[9]))
 
         # ── Draw triangles (two-pass: solid first, then wireframe/outlines) ──
         # Pass 1: all solid/texture fills (paste operations modify img in-place)
@@ -5901,7 +6125,7 @@ class FrameRenderer:
             (depth, pts, fill, shade_col, tex_img, uv0, uv1, uv2, is_sel,
              _fi2, t_alpha, txi_blend, tri_lm_img, lm_uv0, lm_uv1, lm_uv2,
              _tri_face_has_u_seam, _tri_face_has_v_seam,
-             _tri_clamp_s, _tri_clamp_t) = entry
+             _tri_clamp_s, _tri_clamp_t, _tier_draw) = entry
             sp0, sp1, sp2 = pts
             flat = [sp0[0], sp0[1], sp1[0], sp1[1], sp2[0], sp2[1]]
 
@@ -6132,11 +6356,19 @@ class FrameRenderer:
         return best_node
 
     def _iter_mesh_nodes(self):
-        """Yield all mesh nodes in the model (depth-first).
+        """Yield all mesh and skin nodes in the model (depth-first).
 
         Added visited-set cycle guard.  Cyclic or corrupt MDL
         node hierarchies (e.g. shared-child sub-graphs) could cause an infinite
         loop here before this fix, stalling the render thread indefinitely.
+
+        Phase 16 FIX: Yield nodes with is_mesh OR is_skin.  KotOR MDL skin
+        nodes (flag 0x0040) have is_mesh=False but contain renderable geometry
+        (UV-mapped, textured body meshes).  Previously, skin nodes like
+        btBody_front / btBodyback / bthair were silently excluded from the
+        render loop, causing the creature body to be completely invisible
+        (only the bone-proxy helper geometry was rendered, which the
+        deformation-helper filter then removed, leaving an empty frame).
         """
         if not self.model or not self.model.root_node:
             return
@@ -6148,7 +6380,7 @@ class FrameRenderer:
             if nid in visited:
                 continue
             visited.add(nid)
-            if n.is_mesh:
+            if n.is_mesh or n.is_skin:
                 yield n
             stack.extend(reversed(n.children))
 
@@ -6551,6 +6783,92 @@ class FrameRenderer:
                 if id(c) not in _ext_visited:
                     _ext_stack.append(c)
 
+    # ── Walkmesh overlay (Phase 16.1) ─────────────────────────────────
+
+    def _draw_walkmesh_overlay(self, draw: 'ImageDraw.Draw', W: int, H: int):
+        """
+        Draw the loaded walkmesh overlay as semi-transparent colored triangles.
+        Surface types are color-coded (green=walkable, red=blocked, blue=water, etc.).
+        Called after mesh/bone rendering so it appears on top.
+        """
+        overlay = self._walkmesh_overlay
+        if overlay is None or not WalkmeshOverlay:
+            return
+        try:
+            faces = overlay.faces_for_render(
+                show_walkable=self.show_walkmesh_walk,
+                show_non_walkable=self.show_walkmesh_block)
+        except Exception:
+            return
+        if not faces:
+            return
+
+        _BG_R, _BG_G, _BG_B = _BG[0], _BG[1], _BG[2]
+
+        for face in faces:
+            try:
+                p0 = self._proj(face.v0[0], face.v0[1], face.v0[2], W, H)
+                p1 = self._proj(face.v1[0], face.v1[1], face.v1[2], W, H)
+                p2 = self._proj(face.v2[0], face.v2[1], face.v2[2], W, H)
+            except Exception:
+                continue
+            if not (p0 and p1 and p2):
+                continue
+
+            # face.color is (R,G,B,A) with components in [0.0, 1.0]
+            # Blend fill color with background for semi-transparency
+            cr, cg, cb, ca = face.color
+            # ca is already 0.0-1.0; scale RGB channels to 0-255 for blending
+            cr8 = int(cr * 255); cg8 = int(cg * 255); cb8 = int(cb * 255)
+            alpha = ca  # 0.0-1.0
+            fr = int(cr8 * alpha + _BG_R * (1.0 - alpha))
+            fg = int(cg8 * alpha + _BG_G * (1.0 - alpha))
+            fb = int(cb8 * alpha + _BG_B * (1.0 - alpha))
+            pts = [p0[0], p0[1], p1[0], p1[1], p2[0], p2[1]]
+            try:
+                draw.polygon(pts, fill=(fr, fg, fb), outline=(cr8, cg8, cb8))
+            except Exception:
+                pass
+
+    def load_walkmesh(self, wok_data_or_path, world_offset=(0.0, 0.0, 0.0)):
+        """
+        Load a walkmesh overlay from a WOKData object or file path.
+        Stores it in self._walkmesh_overlay; toggled with show_walkmesh.
+
+        Parameters
+        ----------
+        wok_data_or_path : WOKData instance, file path string, or None to clear.
+        world_offset     : (x, y, z) offset to apply to all vertices.
+        """
+        if not WalkmeshOverlay or not WalkmeshLoader:
+            log.debug("walkmesh_renderer not available – walkmesh overlay skipped")
+            self._walkmesh_overlay = None
+            return
+        if wok_data_or_path is None:
+            self._walkmesh_overlay = None
+            return
+        try:
+            if isinstance(wok_data_or_path, str):
+                loader = WalkmeshLoader()
+                overlay = loader.from_file(wok_data_or_path, world_offset)
+            else:
+                loader = WalkmeshLoader()
+                overlay = loader.from_wok_data(wok_data_or_path, world_offset)
+            self._walkmesh_overlay = overlay
+            log.info(f"Walkmesh loaded: {overlay.summary() if overlay else 'none'}")
+        except Exception as e:
+            log.warning(f"Walkmesh load failed: {e}")
+            self._walkmesh_overlay = None
+
+    def clear_walkmesh(self):
+        """Remove the walkmesh overlay."""
+        self._walkmesh_overlay = None
+
+    def toggle_walkmesh(self):
+        """Toggle walkmesh overlay visibility."""
+        self.show_walkmesh = not self.show_walkmesh
+        self._request_render()
+
     # ── Axes gizmo ────────────────────────────────────────────────────
 
     def _draw_axes(self, draw: 'ImageDraw.Draw', W: int, H: int):
@@ -6614,7 +6932,10 @@ class FrameRenderer:
                    " [FLAT]"
         uv_mesh  = sum(1 for n in visible_nodes if n.vertices)
         # Game version string
-        from ..core.model_data import GameVersion
+        try:
+            from ..core.model_data import GameVersion
+        except ImportError:
+            from core.model_data import GameVersion  # type: ignore
         gv_str = "K1" if self.model.game_version == GameVersion.K1 else "K2"
         txt = (f"{self.model.name}  [{gv_str}]  |  V:{vc:,}  F:{fc:,}  "
                f"Bones:{bc}  Skin:{skin_nodes}  "
@@ -6629,6 +6950,30 @@ class FrameRenderer:
             # Context-aware "no geometry" message:
             # Check if ALL mesh nodes have render=False (intentional invisible model)
             # vs. model truly has no geometry at all
+            #
+            # FIX Phase 16.2: Detect reference-only models (NodeFlags.REFERENCE = 0x0010).
+            # These are compound models that delegate geometry to external MDL files.
+            # Show an informative "⊕ References external model(s):" message instead of
+            # the generic "No renderable geometry" warning.
+            try:
+                _ref_names = [
+                    n.emitter_params.get('ref_model', n.name)
+                    for n in self.model.all_nodes()
+                    if getattr(n, 'is_reference', False)
+                ]
+            except Exception:
+                _ref_names = []
+            if _ref_names:
+                ref_list = ', '.join(_ref_names[:3])
+                if len(_ref_names) > 3:
+                    ref_list += f' (+{len(_ref_names)-3} more)'
+                draw.text((W//2 - 200, H//2 - 16),
+                          "⊕ Reference model – geometry loaded at runtime",
+                          fill=(120, 200, 255))
+                draw.text((W//2 - 200, H//2),
+                          f"  References: {ref_list}",
+                          fill=(100, 170, 220))
+                return
             all_mesh = list(self._iter_mesh_nodes())
             has_any_verts = any(getattr(n,'vertices',None) for n in all_mesh)
             all_render_false = has_any_verts and all(
@@ -6719,10 +7064,18 @@ class FrameRenderer:
         if self._anim_pose is not None and self._anim_name:
             anim_txt = f"\u25b6 {self._anim_name}"
             if self._anim_length > 0:
-                anim_txt += f"  {self._anim_time:.2f}/{self._anim_length:.2f}s"
+                pct = int(100 * self._anim_time / self._anim_length)
+                anim_txt += f"  {self._anim_time:.3f}/{self._anim_length:.3f}s  [{pct}%]"
             # Estimate text width (~6px per char at 8pt font) and right-align
             txt_w = len(anim_txt) * 6
-            draw.text((max(8, W - txt_w - 8), H - 18), anim_txt, fill=(100, 220, 100))
+            draw.text((max(8, W - txt_w - 8), H - 24), anim_txt, fill=(100, 220, 100))
+            # Draw a progress bar at the very bottom of the frame
+            bar_h = 4
+            bar_y = H - bar_h
+            draw.rectangle([0, bar_y, W, H], fill=(20, 30, 40))
+            if self._anim_length > 0:
+                bar_w = int(W * min(1.0, self._anim_time / self._anim_length))
+                draw.rectangle([0, bar_y, bar_w, H], fill=(60, 200, 100))
         elif not self._anim_pose:
             # Show "Bind Pose" indicator when in rest position
             draw.text((W - 72, H - 18), "Bind Pose", fill=(80, 80, 120))
@@ -7437,68 +7790,129 @@ class ViewportWidget(tk.Frame):
         self._build_canvas()
 
     def _build_toolbar(self):
-        tb = tk.Frame(self, bg="#111122", height=30)
+        tb = tk.Frame(self, bg="#0e0e20", height=30)
         tb.pack(fill='x', side='top')
         tb.pack_propagate(False)
 
-        btn = dict(bg="#1e1e3a", fg="#ccccff", relief='flat',
+        # Base button style
+        btn = dict(bg="#1a1a3a", fg="#ccccff", relief='flat',
                    activebackground="#3333aa", activeforeground="white",
-                   padx=5, pady=2, font=("Segoe UI", 8), cursor="hand2",
+                   padx=6, pady=2, font=("Segoe UI", 8), cursor="hand2",
                    bd=0, highlightthickness=0)
 
+        def _vp_sep():
+            """Thin separator for viewport toolbar."""
+            return tk.Frame(tb, bg="#252550", width=1)
+
+        def _vp_tip(widget, text):
+            """Attach tooltip to a viewport toolbar widget."""
+            tip_win = None
+            def show(e):
+                nonlocal tip_win
+                if tip_win: return
+                x = widget.winfo_rootx() + 4
+                y = widget.winfo_rooty() + widget.winfo_height() + 4
+                tip_win = tk.Toplevel(widget)
+                tip_win.wm_overrideredirect(True)
+                tip_win.wm_geometry(f"+{x}+{y}")
+                tk.Label(tip_win, text=text, bg="#1a1a4a", fg="#ccccff",
+                         font=("Segoe UI", 7), relief='flat',
+                         padx=5, pady=2).pack()
+            def hide(e):
+                nonlocal tip_win
+                if tip_win:
+                    try: tip_win.destroy()
+                    except Exception: pass
+                    tip_win = None
+            widget.bind("<Enter>", show, add='+')
+            widget.bind("<Leave>", hide, add='+')
+            widget.bind("<ButtonPress>", hide, add='+')
+
+        # ── Display group ────────────────────────────────────────────────
         self._btn_wire = tk.Button(
-            tb, text="⬚ Wire", command=self._toggle_wireframe, **btn)
+            tb, text="⬚ Wire  W", command=self._toggle_wireframe, **btn)
         self._btn_wire.pack(side='left', padx=2, pady=2)
+        _vp_tip(self._btn_wire, "Toggle wireframe overlay  (W)")
 
         self._btn_bones = tk.Button(
-            tb, text="🦴 Bones", command=self._toggle_bones, **btn)
-        self._btn_bones.configure(bg="#333322")
+            tb, text="🦴 Bones  B", command=self._toggle_bones, **btn)
+        self._btn_bones.configure(bg="#333322")   # on by default
         self._btn_bones.pack(side='left', padx=2, pady=2)
+        _vp_tip(self._btn_bones, "Toggle skeleton/bone overlay  (B)")
 
         self._btn_tex = tk.Button(
-            tb, text="🖼 Texture", command=self._toggle_texture, **btn)
+            tb, text="🖼 Texture  T", command=self._toggle_texture, **btn)
         self._btn_tex.pack(side='left', padx=2, pady=2)
+        _vp_tip(self._btn_tex, "Toggle texture rendering  (T)")
 
-        # Fast-drag toggle: when ON, drops to flat-shading during mouse drag
-        # (faster but textures disappear).  When OFF, keeps textured quality
-        # during drag at the cost of lower frame rate.
-        # FIX (v10.4): Explicitly set to False here AND in _drag_pan/_drag_lmb
-        # so both code-paths agree.  Old _drag_pan used getattr(..., True) which
-        # contradicted this False default and could briefly enable LOD on init.
-        self._fast_drag_enabled: bool = False  # default: fast drag OFF – keeps textures during drag
-        self._btn_fast_drag = tk.Button(
-            tb, text="⚡ Fast Drag", command=self._toggle_fast_drag, **btn)
-        self._btn_fast_drag.configure(bg="#1e1e3a")  # dark = inactive (fast drag off by default)
-        self._btn_fast_drag.pack(side='left', padx=2, pady=2)
+        # Shade radio group (compact, no label)
+        self._shade_var = tk.StringVar(value="Solid")
+        shade_frame = tk.Frame(tb, bg="#0e0e20")
+        shade_frame.pack(side='left', padx=2)
+        for shade in ("Solid", "Wire", "Both"):
+            display = shade if shade != "Wire" else "Wires"
+            val     = shade if shade != "Wire" else "Wireframe"
+            tk.Radiobutton(
+                shade_frame, text=shade, variable=self._shade_var, value=val,
+                bg="#0e0e20", fg="#9999cc", selectcolor="#1e2244",
+                activebackground="#0e0e20", font=("Segoe UI", 8),
+                command=self._on_shade_change
+            ).pack(side='left', padx=1)
 
-        self._btn_uv = tk.Button(
-            tb, text="🗺 UV View", command=self._open_uv_viewer, **btn)
-        self._btn_uv.pack(side='left', padx=2, pady=2)
+        _vp_sep().pack(side='left', fill='y', padx=4, pady=4)
 
+        # ── Navigation group ─────────────────────────────────────────────
+        b_frame_all = tk.Button(tb, text="⊞ Frame  F",
+                                command=self.frame_all, **btn)
+        b_frame_all.pack(side='left', padx=2, pady=2)
+        _vp_tip(b_frame_all, "Frame all geometry in view  (F)")
+
+        self._btn_wok = tk.Button(
+            tb, text="🗺 WalkMesh", command=self._toggle_walkmesh_btn, **btn)
+        self._btn_wok.pack(side='left', padx=2, pady=2)
+        _vp_tip(self._btn_wok, "Toggle walkmesh overlay")
+
+        _vp_sep().pack(side='left', fill='y', padx=4, pady=4)
+
+        # ── Transform/Gimbal group ──────────────────────────────────────
         self._btn_gimbal = tk.Button(
-            tb, text="✛ Gimbal", command=self._toggle_gimbal, **btn)
+            tb, text="✛ Gimbal  G", command=self._toggle_gimbal, **btn)
         self._btn_gimbal.configure(bg="#334422")   # on by default
         self._btn_gimbal.pack(side='left', padx=2, pady=2)
+        _vp_tip(self._btn_gimbal, "Toggle gimbal (node transform handle)  (G)")
 
         self._btn_gimbal_mode = tk.Button(
-            tb, text="Gimbal [T]", command=self._cycle_gimbal_mode, **btn)
+            tb, text="[Translate]", command=self._cycle_gimbal_mode, **btn)
         self._btn_gimbal_mode.configure(bg="#223344")
         self._btn_gimbal_mode.pack(side='left', padx=2, pady=2)
+        _vp_tip(self._btn_gimbal_mode, "Cycle gimbal mode: Translate → Rotate  (Tab)")
 
-        tk.Button(tb, text="⊞ Frame All",
-                  command=self.frame_all, **btn).pack(side='left', padx=2, pady=2)
+        _vp_sep().pack(side='left', fill='y', padx=4, pady=4)
 
-        self._shade_var = tk.StringVar(value="Solid")
-        for shade in ("Solid", "Wireframe", "Both"):
-            tk.Radiobutton(
-                tb, text=shade, variable=self._shade_var, value=shade,
-                bg="#111122", fg="#aaaacc", selectcolor="#222244",
-                activebackground="#111122", font=("Segoe UI", 8),
-                command=self._on_shade_change
-            ).pack(side='left', padx=3)
+        # ── Utility group ─────────────────────────────────────────────
+        self._btn_uv = tk.Button(
+            tb, text="UV View", command=self._open_uv_viewer, **btn)
+        self._btn_uv.pack(side='left', padx=2, pady=2)
+        _vp_tip(self._btn_uv, "Open UV editor window")
 
-        tk.Button(tb, text="🔄 Reset Cam",
-                  command=self.reset_camera, **btn).pack(side='right', padx=4)
+        # Fast-drag toggle (for low-power machines)
+        self._fast_drag_enabled: bool = False  # default: fast drag OFF
+        self._btn_fast_drag = tk.Button(
+            tb, text="⚡ Fast", command=self._toggle_fast_drag, **btn)
+        self._btn_fast_drag.configure(bg="#1a1a3a")  # dark = inactive
+        self._btn_fast_drag.pack(side='left', padx=2, pady=2)
+        _vp_tip(self._btn_fast_drag,
+                "Fast-drag mode: drops to flat-shading during orbit\n"
+                "(faster on slow machines, textures hidden during drag)")
+
+        # Reset camera (far right)
+        b_reset = tk.Button(tb, text="↺ Camera",
+                            command=self.reset_camera, **btn)
+        b_reset.pack(side='right', padx=4, pady=2)
+        _vp_tip(b_reset, "Reset camera to default view")
+
+        # Canvas keyboard bindings (added after canvas is built)
+        self._vp_toolbar_built = True
 
     def _build_canvas(self):
         self.canvas = tk.Canvas(self, bg="#111128",
@@ -7519,8 +7933,19 @@ class ViewportWidget(tk.Frame):
         self.canvas.bind("<Button-4>",       lambda e: self._zoom_in())
         self.canvas.bind("<Button-5>",       lambda e: self._zoom_out())
         self.canvas.bind("<Configure>",      self._on_resize)
+        # Keyboard shortcuts for viewport (canvas must have focus)
         self.canvas.bind("<f>",              lambda e: self.frame_all())
         self.canvas.bind("<F>",              lambda e: self.frame_all())
+        self.canvas.bind("<w>",              lambda e: self._toggle_wireframe())
+        self.canvas.bind("<b>",              lambda e: self._toggle_bones())
+        self.canvas.bind("<t>",              lambda e: self._toggle_texture())
+        self.canvas.bind("<g>",              lambda e: self._toggle_gimbal())
+        self.canvas.bind("<Tab>",            lambda e: self._cycle_gimbal_mode())
+        self.canvas.bind("<r>",              lambda e: self.reset_camera())
+        self.canvas.bind("<plus>",           lambda e: self._zoom_in())
+        self.canvas.bind("<minus>",          lambda e: self._zoom_out())
+        self.canvas.bind("<equal>",          lambda e: self._zoom_in())
+        self.canvas.bind("<ButtonPress-1>",  lambda e: self.canvas.focus_set(), add='+')
 
         self._schedule_render()
 
@@ -7567,6 +7992,24 @@ class ViewportWidget(tk.Frame):
         self._renderer.tex_cache.set_game_library(library, game_tag)
         log.debug(f"ViewportWidget: game library set ({game_tag})")
 
+    def set_installation(self, installation, game_tag: str = "K1"):
+        """
+        Wire a KotorInstallation (fast lazy BIF/ERF reader) into the texture
+        cache.  This is the preferred fast path — supersedes GameLibrary for
+        texture resolution.  Call this once after KotorInstallation is created.
+        """
+        self._renderer.tex_cache.set_installation(installation, game_tag)
+        log.info(f"ViewportWidget: KotorInstallation set ({game_tag})")
+
+    def set_resource_manager(self, manager, game_tag: str = "K1"):
+        """
+        Wire the unified ResourceManager into the texture cache.
+        This is the new preferred method — supersedes both set_installation()
+        and set_game_library() with a single unified resource backend.
+        """
+        self._renderer.tex_cache.set_resource_manager(manager, game_tag)
+        log.info(f"ViewportWidget: ResourceManager set ({game_tag})")
+
     def _prewarm_textures(self, model: KotorModel):
         """Pre-load all model textures in a background thread to eliminate
         lag when the user first toggles textured rendering.
@@ -7586,13 +8029,25 @@ class ViewportWidget(tk.Frame):
             return
         renderer = self._renderer
         import threading
+        _viewport_ref = self  # keep a weak ref pattern via closure
         def _load():
+            any_loaded = False
             for name in tex_names:
                 try:
-                    renderer.tex_cache.get(name)
+                    img = renderer.tex_cache.get(name)
+                    if img is not None:
+                        any_loaded = True
                 except MemoryError:
                     log.warning(f"Prewarm: out of memory loading '{name}' — stopping prewarm")
                     break  # stop prewarm to avoid cascading OOM
+                except Exception:
+                    pass
+            # After prewarm finishes, request a re-render on the main thread
+            # so the newly loaded textures are displayed.  Without this the
+            # first render may be flat grey because it ran before textures loaded.
+            if any_loaded:
+                try:
+                    _viewport_ref.after(0, _viewport_ref._request_render)
                 except Exception:
                     pass
         threading.Thread(target=_load, daemon=True, name="tex_prewarm").start()
@@ -7716,6 +8171,13 @@ class ViewportWidget(tk.Frame):
 
     def open_uv_viewer(self):
         self._open_uv_viewer()
+
+    def _toggle_walkmesh_btn(self):
+        """Toggle walkmesh overlay from toolbar button."""
+        self._renderer.show_walkmesh = not self._renderer.show_walkmesh
+        on = self._renderer.show_walkmesh
+        self._btn_wok.configure(bg="#225533" if on else "#1e1e3a")
+        self._request_render()
 
     # ── Mouse handlers ────────────────────────────────────────────────
 
@@ -7933,19 +8395,19 @@ class ViewportWidget(tk.Frame):
         """Toggle between Translate [T] and Rotate [R] gimbal modes."""
         current = self._renderer.gimbal_mode
         self._renderer.gimbal_mode = 2 if current == 1 else 1
-        mode_lbl = "T" if self._renderer.gimbal_mode == 1 else "R"
+        mode_lbl = "Translate" if self._renderer.gimbal_mode == 1 else "Rotate"
         self._btn_gimbal_mode.configure(
-            text=f"Gimbal [{mode_lbl}]",
+            text=f"[{mode_lbl}]",
             bg="#223344" if self._renderer.gimbal_mode == 1 else "#332244")
         self._request_render()
 
     def set_gimbal_mode(self, mode: int):
         """Set gimbal mode externally: 1=Translate, 2=Rotate."""
         self._renderer.gimbal_mode = mode
-        mode_lbl = "T" if mode == 1 else "R"
+        mode_lbl = "Translate" if mode == 1 else "Rotate"
         if hasattr(self, '_btn_gimbal_mode'):
             self._btn_gimbal_mode.configure(
-                text=f"Gimbal [{mode_lbl}]",
+                text=f"[{mode_lbl}]",
                 bg="#223344" if mode == 1 else "#332244")
 
     def load_ext_skeleton(self, model, offset=(0.0, 0.0, 0.0)):
@@ -8157,10 +8619,34 @@ class ViewportWidget(tk.Frame):
                         self._photo = photo   # keep reference – must be kept alive
                         self.canvas.delete("all")
                         self.canvas.create_image(0, 0, anchor='nw', image=photo)
+                        # ── HUD overlay ──────────────────────────────────────
+                        # Top-right: FPS + render time
                         fps_txt = f"{self._fps_display:.0f} fps  {render_ms:.0f}ms"
                         self.canvas.create_text(
                             W - 4, 4, text=fps_txt,
-                            anchor='ne', fill="#556677", font=("Consolas", 7))
+                            anchor='ne', fill="#445566", font=("Consolas", 7))
+                        # Bottom-left: model name + triangle hint (when model loaded)
+                        _mdl = getattr(self, 'model', None)
+                        if _mdl:
+                            _nm = getattr(_mdl, 'name', '') or ''
+                            _gv = getattr(_mdl, 'game_version', None)
+                            _gv_str = ''
+                            try:
+                                from src.core.model_data import GameVersion as _GVH
+                                _gv_str = 'K1' if _gv == _GVH.K1 else 'K2'
+                            except Exception:
+                                pass
+                            _n_mesh = len(_mdl.mesh_nodes()) if hasattr(_mdl, 'mesh_nodes') else 0
+                            _hud_line = f"[{_gv_str}] {_nm}  ·  {_n_mesh} mesh"
+                            self.canvas.create_text(
+                                6, H - 6, text=_hud_line,
+                                anchor='sw', fill="#445566", font=("Consolas", 7))
+                            # Shade mode badge (top-left)
+                            _shade = self._shade_var.get() if hasattr(self, '_shade_var') else ''
+                            if _shade and _shade != 'Solid':
+                                self.canvas.create_text(
+                                    6, 4, text=_shade.upper(),
+                                    anchor='nw', fill="#886644", font=("Consolas", 7))
                     except Exception as _e:
                         log.debug(f"Viewport canvas update error: {_e}")
                 # ── Progressive two-pass: after LQ frame, queue HQ frame ──────

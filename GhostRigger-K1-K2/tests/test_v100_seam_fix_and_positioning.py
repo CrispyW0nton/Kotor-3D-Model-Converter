@@ -270,12 +270,24 @@ def _make_model(name='test', supermodel='NULL', skin_wp=(0, 0, 0),
 
 
 class TestSupermodelSkinDiscriminator:
-    """Tests for the supermodel-based skin vertex world-space discriminator."""
+    """Tests for the universal skin vertex world-transform pipeline.
 
-    def test_null_supermodel_verts_returned_as_is(self):
+    Phase 16 (universal transform): ALL MDL vertices — both skin and non-skin —
+    are stored in NODE-LOCAL space.  The full parent-chain world transform
+    (translate + rotate) must always be applied, regardless of supermodel type.
+
+    The old 'standalone/accessory' distinction has been removed.  All nodes
+    use the same universal path: world_vert = local_vert + node_world_position
+    (plus rotation if orientation is non-identity).
+
+    Reference: PyKotor GL renderer read_mdl.py, KotorBlender base.py.
+    """
+
+    def test_null_supermodel_world_transform_applied(self):
         """
-        Standalone model (supermodel=NULL): skin verts are already in world space.
-        _get_world_verts_for_node should return them unchanged.
+        Phase 16: ALL skin nodes get full world transform applied.
+        supermodel=NULL does NOT mean verts are returned as-is.
+        Vert (0.1, 0.2, -0.3), node wp=(0,0,1.5) → world = (0.1, 0.2, 1.2)
         """
         m = _make_model(supermodel='NULL', skin_wp=(0, 0, 1.5),
                         vertex=(0.1, 0.2, -0.3))
@@ -287,15 +299,16 @@ class TestSupermodelSkinDiscriminator:
         wverts = fr._get_world_verts_for_node(skin_node)
         assert len(wverts) == 1
         wv = wverts[0]
-        # Standalone: verts returned as-is, NO wp addition
+        # Universal: full world transform applied to ALL nodes (Phase 16)
+        # identity rotation → world = v + wp = (0.1, 0.2, -0.3 + 1.5) = (0.1, 0.2, 1.2)
         assert abs(wv[0] - 0.1) < 1e-4, f"X: expected 0.1 got {wv[0]}"
         assert abs(wv[1] - 0.2) < 1e-4, f"Y: expected 0.2 got {wv[1]}"
-        assert abs(wv[2] - (-0.3)) < 1e-4, f"Z: expected -0.3 got {wv[2]}"
+        assert abs(wv[2] - 1.2) < 1e-4, f"Z: expected 1.2 got {wv[2]}"
 
     def test_accessory_supermodel_wp_applied(self):
         """
-        Accessory model (supermodel=N_AdmrlSaulKar): verts in bone-local space.
-        _get_world_verts_for_node should apply the world transform (wp+rotation).
+        Accessory model (supermodel=N_AdmrlSaulKar): same universal transform.
+        _get_world_verts_for_node applies the world transform (wp+rotation).
         """
         m = _make_model(supermodel='N_AdmrlSaulKar', skin_wp=(0, 0, 1.5),
                         vertex=(0.1, 0.2, -0.3))
@@ -307,16 +320,16 @@ class TestSupermodelSkinDiscriminator:
         wverts = fr._get_world_verts_for_node(skin_node)
         assert len(wverts) == 1
         wv = wverts[0]
-        # Accessory: verts in bone-local space, wp=(0,0,1.5) applied
-        # identity rotation → world = v + wp = (0.1, 0.2, -0.3 + 1.5) = (0.1, 0.2, 1.2)
+        # Universal: identity rotation → world = v + wp = (0.1, 0.2, -0.3 + 1.5) = (0.1, 0.2, 1.2)
         assert abs(wv[0] - 0.1) < 1e-4, f"X: expected 0.1 got {wv[0]}"
         assert abs(wv[1] - 0.2) < 1e-4, f"Y: expected 0.2 got {wv[1]}"
         assert abs(wv[2] - 1.2) < 1e-4, f"Z: expected 1.2 got {wv[2]}"
 
-    def test_base_skeleton_name_treated_as_standalone(self):
+    def test_base_skeleton_world_transform_applied(self):
         """
-        S_Female03 is a base skeleton → standalone treatment.
-        The test model's skin vert should NOT have wp added.
+        Phase 16: S_Female03 (base skeleton) also gets full world transform.
+        The standalone/base-skeleton distinction is gone — universal transform.
+        Vert (0.5, 0.0, 0.5), node wp=(0,0,2.0) → world Z = 2.5
         """
         m = _make_model(supermodel='S_Female03', skin_wp=(0, 0, 2.0),
                         vertex=(0.5, 0.0, 0.5))
@@ -327,13 +340,16 @@ class TestSupermodelSkinDiscriminator:
         skin_node = m.root_node.children[0]
         wverts = fr._get_world_verts_for_node(skin_node)
         wv = wverts[0]
-        # S_Female03 is in _BASE_SKELETONS → return as-is
-        assert abs(wv[2] - 0.5) < 1e-4, (
-            f"S_Female03 is a base skeleton → vert Z should be 0.5, got {wv[2]}"
+        # Universal: world Z = vert Z + wp Z = 0.5 + 2.0 = 2.5
+        assert abs(wv[2] - 2.5) < 1e-4, (
+            f"Universal transform → vert Z should be 2.5 (0.5+2.0), got {wv[2]}"
         )
 
     def test_null_supermodel_is_case_insensitive(self):
-        """supermodel = 'null' (lower case) should also be treated as standalone."""
+        """Universal path applies regardless of supermodel case.
+        supermodel='null' → same universal world transform as NULL.
+        Vert (0.3, 0.3, 0.3), node wp=(0,0,1.0) → world Z = 1.3
+        """
         m = _make_model(supermodel='null', skin_wp=(0, 0, 1.0),
                         vertex=(0.3, 0.3, 0.3))
         cam = ArcBallCamera()
@@ -343,8 +359,9 @@ class TestSupermodelSkinDiscriminator:
         skin_node = m.root_node.children[0]
         wverts = fr._get_world_verts_for_node(skin_node)
         wv = wverts[0]
-        assert abs(wv[2] - 0.3) < 1e-4, (
-            f"'null' supermodel: vert Z should be 0.3 (no wp), got {wv[2]}"
+        # Universal: world Z = 0.3 + 1.0 = 1.3
+        assert abs(wv[2] - 1.3) < 1e-4, (
+            f"'null' supermodel: universal transform → vert Z should be 1.3, got {wv[2]}"
         )
 
 
@@ -353,25 +370,29 @@ class TestSupermodelSkinDiscriminator:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestComputeBoundsSupermodel:
-    """Tests for the supermodel-based compute_bounds skin vertex handling."""
+    """Tests for the universal compute_bounds skin vertex handling.
 
-    def test_standalone_compute_bounds_no_wp_added(self):
+    Phase 16: compute_bounds applies the full world transform to ALL vertices
+    regardless of supermodel type.  The standalone/accessory distinction is gone.
+    """
+
+    def test_standalone_compute_bounds_wp_applied(self):
         """
-        Standalone model: compute_bounds should NOT add wp to skin verts.
-        Vert (0.1, 0.2, -0.3), wp=(0,0,0.5) → bounds Z should be near -0.3.
+        Phase 16: compute_bounds ALWAYS adds wp to skin verts (universal transform).
+        Vert (0.1, 0.2, -0.3), wp=(0,0,0.5) → world Z = -0.3 + 0.5 = 0.2
         """
         m = _make_model(supermodel='NULL', skin_wp=(0, 0, 0.5),
                         vertex=(0.1, 0.2, -0.3))
         m.compute_bounds()
         z_max = m.bb_max[2] if m.bb_max else None
         assert z_max is not None, "compute_bounds did not set bb_max"
-        assert abs(z_max - (-0.3)) < 0.1, (
-            f"Standalone: bb_max Z expected ≈ -0.3 (vert Z), got {z_max}"
+        assert abs(z_max - 0.2) < 0.1, (
+            f"Universal: bb_max Z expected ≈ 0.2 (vert Z + wp Z = -0.3+0.5), got {z_max}"
         )
 
     def test_accessory_compute_bounds_wp_added(self):
         """
-        Accessory model: compute_bounds should add wp to skin verts.
+        Phase 16: Accessory model also uses universal transform.
         Vert (0.1, 0.2, -0.3), wp=(0,0,1.5) → world Z = 1.2.
         """
         m = _make_model(supermodel='N_AdmrlSaulKar', skin_wp=(0, 0, 1.5),
@@ -380,5 +401,5 @@ class TestComputeBoundsSupermodel:
         z_max = m.bb_max[2] if m.bb_max else None
         assert z_max is not None, "compute_bounds did not set bb_max"
         assert abs(z_max - 1.2) < 0.1, (
-            f"Accessory: bb_max Z expected ≈ 1.2 (vert Z + wp Z), got {z_max}"
+            f"Universal: bb_max Z expected ≈ 1.2 (vert Z + wp Z), got {z_max}"
         )

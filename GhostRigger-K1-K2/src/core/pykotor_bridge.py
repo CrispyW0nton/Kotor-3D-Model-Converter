@@ -179,10 +179,19 @@ def pykotor_tpc_to_pil(data: bytes) -> Optional['Image.Image']:
         if img.mode != 'RGBA':
             img = img.convert('RGBA')
 
-        # V-flip: uncompressed textures are bottom-up (OpenGL convention);
-        # DXT-compressed textures are already top-down.
-        if not is_compressed:
+        # V-flip (UV-convention fix):
+        # KotOR MDL UV coordinates use V=0=TOP convention (Direct3D / top-down),
+        # NOT the OpenGL V=0=BOTTOM convention.  Our CPU rasterizer applies a
+        # render-time V-flip of (1-v)*h, which assumes images are stored BOTTOM-UP.
+        # To make that formula correct, ALL textures must be in BOTTOM-UP orientation:
+        #   - Uncompressed: already bottom-up (OpenGL convention) → no flip needed.
+        #   - DXT1/DXT3/DXT5: stored TOP-DOWN by PyKotor → flip to bottom-up.
+        # Without this fix: tail UV V=0.015 → row 504 → pink flesh (wrong).
+        # With this fix:    flip → V=0.015 → row 504 → original row 7 → dark brown (correct).
+        if is_compressed:
+            # DXT textures are top-down from PyKotor: flip to bottom-up
             img = img.transpose(Image.FLIP_TOP_BOTTOM)
+        # Uncompressed textures are already bottom-up: no flip needed
 
         _attach_txi_metadata(img, tpc, data)
         return img

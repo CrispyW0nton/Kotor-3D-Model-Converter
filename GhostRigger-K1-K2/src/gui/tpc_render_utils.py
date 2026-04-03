@@ -47,7 +47,7 @@ except Exception:
     except Exception:
         pass
 
-_UV_SENTINEL = 20.0
+_UV_SENTINEL = 100.0  # Phase 18: raised from 20.0; legitimate tiled UVs can exceed 20
 
 # ── Math helpers ─────────────────────────────────────────────────────────────
 def _normalize(v):
@@ -487,6 +487,7 @@ def _paste_textured_triangle(
     # V-flip scale factors (set after tiling section)
     _vflip_tiles = None
     _vflip_src_h = None
+    _tile_src_w  = None   # one-tile pixel width for tiled tu conversion
 
     # Raw UV span (before any seam fix)
     _u_span_raw = max(u0, u1_raw, u2_raw) - min(u0, u1_raw, u2_raw)
@@ -651,17 +652,23 @@ def _paste_textured_triangle(
                 u0 -= u_floor;  u1 -= u_floor;  u2 -= u_floor
                 v0r -= v_floor;  v1r -= v_floor;  v2r -= v_floor
                 _vflip_tiles = tile_v;  _vflip_src_h = src_h
+                _tile_src_w  = src_w   # needed for correct tu conversion below
             except MemoryError:
                 needs_tiling = False
             except Exception:
                 needs_tiling = False
         else:
-            # UV range too large to tile: centroid-shift to bring centroid into [0,1]
-            u_cen = (u0 + u1 + u2) / 3.0
-            v_cen = (v0r + v1r + v2r) / 3.0
-            u_shift = int(math.floor(u_cen));  v_shift = int(math.floor(v_cen))
-            u0 -= u_shift;  u1 -= u_shift;  u2 -= u_shift
-            v0r -= v_shift;  v1r -= v_shift;  v2r -= v_shift
+            # UV range too large to tile with pre-tiled image (> MAX_TILE_COUNT).
+            # Apply per-vertex frac() (modulo 1.0) so each UV maps into [0,1].
+            # Correct tiling result; seams may appear at tile boundaries where
+            # affine interpolates across the frac() discontinuity, but this is
+            # far better than centroid-shift which showed only the central tile.
+            u0  = u0  - math.floor(u0)
+            u1  = u1  - math.floor(u1)
+            u2  = u2  - math.floor(u2)
+            v0r = v0r - math.floor(v0r)
+            v1r = v1r - math.floor(v1r)
+            v2r = v2r - math.floor(v2r)
             needs_tiling = False
 
     if _vflip_tiles is not None:
@@ -673,7 +680,16 @@ def _paste_textured_triangle(
         tv1=_vflip_nontiled(v1r,th)
         tv2=_vflip_nontiled(v2r,th)
 
-    tu0=u0*tw; tu1=u1*tw; tu2=u2*tw
+    # BUG-FIX (Phase 16): after tiling, u is in [0, tile_u] range, NOT [0, 1].
+    # Multiplying by tw (=tiled_width = src_w * tile_u) gives values tile_u times
+    # too large.  The correct pixel coord is u * src_w (single tile pixel width).
+    # Non-tiled path: u is in [0, 1], tw is the original texture width → correct.
+    if _tile_src_w is not None:
+        tu0 = u0 * _tile_src_w
+        tu1 = u1 * _tile_src_w
+        tu2 = u2 * _tile_src_w
+    else:
+        tu0=u0*tw; tu1=u1*tw; tu2=u2*tw
 
     # ── Solve affine transform ─────────────────────────────────────────────
     denom=rx0*(ry1-ry2)+rx1*(ry2-ry0)+rx2*(ry0-ry1)

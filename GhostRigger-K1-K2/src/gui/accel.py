@@ -247,7 +247,12 @@ def _rasterize_triangle_numpy(
     v_raw = w0[inside] * v0 + w1[inside] * v1 + w2[inside] * v2
     v = 1.0 - v_raw
 
-    # Sample texture (nearest-neighbor, with clamp)
+    # GL_REPEAT tiling: frac() wrap so large UVs tile correctly
+    # (e.g. pelvis_g UV range [-12.86, +12.86] wraps to [0, 1])
+    u = u - np.floor(u)
+    v = v - np.floor(v)
+
+    # Sample texture (nearest-neighbor, with clamp-to-valid-index)
     pu = np.clip((u * TW).astype(np.int32), 0, TW - 1)
     pv = np.clip((v * TH).astype(np.int32), 0, TH - 1)
 
@@ -330,6 +335,9 @@ if ACCEL_TIER == 1:
                     continue
                 u = w0 * u0 + w1 * u1 + w2 * u2
                 v = 1.0 - (w0 * v0 + w1 * v1 + w2 * v2)  # V-flip
+                # GL_REPEAT tiling: frac() wrap so large UVs tile correctly
+                u = u - math.floor(u)
+                v = v - math.floor(v)
                 pu = min(TW - 1, max(0, int(u * TW)))
                 pv = min(TH - 1, max(0, int(v * TH)))
                 ta = int(tex[pv, pu, 3])
@@ -408,6 +416,9 @@ if ACCEL_TIER == 1:
                         continue
                     u = w0 * u0 + w1 * u1 + w2 * u2
                     v = 1.0 - (w0 * v0 + w1 * v1 + w2 * v2)
+                    # GL_REPEAT tiling: frac() wrap so large UVs tile correctly
+                    u = u - math.floor(u)
+                    v = v - math.floor(v)
                     pu = min(TW - 1, max(0, int(u * TW)))
                     pv = min(TH - 1, max(0, int(v * TH)))
                     ta = int(tex[pv, pu, 3])

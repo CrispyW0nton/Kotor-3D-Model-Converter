@@ -811,19 +811,17 @@ class TestMeshPositioning:
     """Test mesh node world-space vertex positioning."""
 
     def test_skin_node_world_verts_translate(self):
-        """Skin node at (1,2,3): vertices are in MODEL/WORLD space — wp NOT added.
+        """Skin node at (1,2,3): Phase 17 — world transform IS applied to skin verts.
 
-        KotOR skin mesh vertices are stored in MODEL SPACE (world space), NOT in
-        skin-node-local space.  The skin node's world position (wp) is the bone
-        PIVOT for animation — it must NOT be added to the already-world-space
-        vertices in bind pose.  This is the authoritative KotOR MDL convention
-        confirmed against MDLOpsM.pm, xoreos, KotorBlender, and the live Bantha
-        binary model (btBody_front wp=(0,-1.16,1.47) — adding that to the already-
-        positioned body verts would incorrectly shift the entire body mesh).
+        Phase 17: All KotOR MDL vertices (skin AND non-skin) are stored in NODE-LOCAL
+        space. The full world transform must be applied.
 
-        v12.14 FIX: Updated test to reflect the correct behaviour.  The old test
-        (and implementation) incorrectly added wp to skin verts, causing displaced
-        body geometry on all creatures/characters.
+        Skin node at pos=(1,2,3) with identity rotation:
+          vert (0,0,0) -> world (1,2,3)
+          vert (1,0,0) -> world (2,2,3)
+          vert (0,1,0) -> world (1,3,3)
+
+        Verified by: KotorBlender (base.py) and PyKotor binary analysis of c_bantha.
         """
         from src.gui.viewport import FrameRenderer, ArcBallCamera
         model = _make_model()
@@ -837,12 +835,12 @@ class TestMeshPositioning:
         r = FrameRenderer(cam)
         r.set_model(model)
         verts = r._get_world_verts_for_node(skin)
-        # Skin verts are in MODEL space — returned as-is (wp is bone pivot, not mesh origin)
-        assert abs(verts[0][0] - 0.0) < 1e-6, f"Skin vert[0] x: expected 0.0 (model-space, no wp added), got {verts[0][0]}"
-        assert abs(verts[0][1] - 0.0) < 1e-6, f"Skin vert[0] y: expected 0.0 (model-space, no wp added), got {verts[0][1]}"
-        assert abs(verts[0][2] - 0.0) < 1e-6, f"Skin vert[0] z: expected 0.0 (model-space, no wp added), got {verts[0][2]}"
-        assert abs(verts[1][0] - 1.0) < 1e-6  # vertex (1,0,0) returned as-is
-        assert abs(verts[2][1] - 1.0) < 1e-6  # vertex (0,1,0) returned as-is
+        # Phase 17: skin verts in node-local space, wp (1,2,3) IS added
+        assert abs(verts[0][0] - 1.0) < 1e-6, f"Skin vert[0] x: expected 1.0 (local 0 + wp_x 1), got {verts[0][0]}"
+        assert abs(verts[0][1] - 2.0) < 1e-6, f"Skin vert[0] y: expected 2.0 (local 0 + wp_y 2), got {verts[0][1]}"
+        assert abs(verts[0][2] - 3.0) < 1e-6, f"Skin vert[0] z: expected 3.0 (local 0 + wp_z 3), got {verts[0][2]}"
+        assert abs(verts[1][0] - 2.0) < 1e-6, f"Skin vert[1] x: expected 2.0 (local 1 + wp_x 1), got {verts[1][0]}"
+        assert abs(verts[2][1] - 3.0) < 1e-6, f"Skin vert[2] y: expected 3.0 (local 1 + wp_y 2), got {verts[2][1]}"
 
     def test_mesh_node_identity_translate(self):
         """Non-skin node at (5,0,0) with identity: all vertices shifted by (5,0,0)."""

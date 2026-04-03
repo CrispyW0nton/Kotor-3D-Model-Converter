@@ -1230,7 +1230,7 @@ class MDLBinaryParser:
         # +84  transparency_hint (4)
         # +88  texture name (32)
         # +120 lightmap name (32)
-        # +152 unknown × 6 (24 bytes)
+        # +152 bitmap3 name (12) + bitmap4 name (12) = 24 bytes total (tertiary/quaternary textures)
         # +176 vertex_indices_count array (4+4+4=12)
         # +188 vertex_offsets array (4+4+4=12)
         # +200 inv_counter array (4+4+4=12)
@@ -1800,9 +1800,13 @@ class MDLBinaryParser:
                 p = fa + i * 32
                 if p + 32 > len(d): break
                 mat = struct.unpack_from('<I', d, p + 16)[0]
-                # Clamp to valid texture slot range immediately at parse time
-                mat = int(mat) & 0x7FFFFFFF  # strip sign-extended garbage
-                mat = min(mat, _max_slot)
+                # Extract material (lower 5 bits) per PyKotor mdl_data.py convention.
+                # The upper bits of the packed material_id are the smoothgroup (used in ASCII
+                # MDL but irrelevant for rendering).  Stripping them with & 0x1F correctly
+                # extracts the 0-based texture slot index for faces in multi-texture meshes.
+                # Reference: PyKotor/resource/formats/mdl/io_mdl.py face.material = packed & 0x1F
+                mat = int(mat) & 0x1F  # lower 5 bits = texture slot index (0..31)
+                mat = min(mat, _max_slot)  # clamp to valid range
                 v1, v2, v3 = struct.unpack_from('<HHH', d, p + 26)
                 node.faces.append((v1, v2, v3))
                 node.face_mats.append(mat)

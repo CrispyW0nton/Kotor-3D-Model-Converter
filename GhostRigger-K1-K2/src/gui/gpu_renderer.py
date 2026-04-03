@@ -555,15 +555,20 @@ class _GlTexCache:
             data = rgba.tobytes()
             tex = self._ctx.texture((w, h), 4, data)
             tex.filter = (moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR)
-            # FIX-EDGEBLEED: Use GL_CLAMP_TO_EDGE instead of GL_REPEAT to prevent
-            # mipmap bleeding of texture border pixels onto adjacent UV regions.
-            # KotOR character mesh UVs stay within [0,1] so clamping doesn't
-            # affect them; area tile meshes with UV>1 use a separate texture anyway.
-            # This fixes the yellow artifact on bantha horn tips caused by the
-            # bright yellow test pixels at the texture's top-right corner (V≈1.0)
-            # bleeding into the horn mesh UVs (V≈0.984) through mipmap averaging.
-            tex.repeat_x = False
-            tex.repeat_y = False
+            # FIX-TEXWRAP: Default to GL_REPEAT for all uploaded textures.
+            # KotOR area geometry uses UV coordinates well outside [0,1] (e.g.
+            # N_sithpraet pelvis U=[-13,+13]) and relies on the texture wrapping
+            # to repeat correctly.  GL_CLAMP_TO_EDGE causes the edge texel to be
+            # stretched across the entire surface for any UV outside [0,1], which
+            # makes tiled geometry look solid-colored or edge-stretched.
+            # Per-node clamp mode (TXI 'clamp' command → txi_clamp_s/txi_clamp_t)
+            # is applied in _draw_node by setting repeat_x/repeat_y before each
+            # draw call — this allows head/decal textures to use CLAMP_TO_EDGE
+            # while body/area textures use GL_REPEAT.
+            # The yellow-pixel artifact is handled by scrubbing marker pixels before
+            # upload (above), so GL_REPEAT is safe.
+            tex.repeat_x = True
+            tex.repeat_y = True
             # FIX-MIPALIGN: Clamp mip chain at level 6 (coarsest = 8×8 for 512px)
             # to prevent single corner pixel colors from dominating lower LODs.
             # max_level=6 keeps 512→256→128→64→32→16→8 (7 levels, idx 0-6).
@@ -1832,6 +1837,16 @@ class GpuRenderer:
                 gl_diff = self._tex_cache.get(diff_img) if diff_img else None
 
                 if gl_diff:
+                    # FIX-TEXWRAP: Apply per-node TXI clamp mode (GL_CLAMP_TO_EDGE)
+                    # vs. default GL_REPEAT before each draw call.
+                    # txi_clamp_s=True → GL_CLAMP_TO_EDGE on U axis (no horizontal tile)
+                    # txi_clamp_t=True → GL_CLAMP_TO_EDGE on V axis (no vertical tile)
+                    # Default repeat_x=True/repeat_y=True set in _upload; we override
+                    # here for nodes that require clamping (head decals, UI overlays).
+                    _node_clamp_s = bool(getattr(node, 'txi_clamp_s', False))
+                    _node_clamp_t = bool(getattr(node, 'txi_clamp_t', False))
+                    gl_diff.repeat_x = not _node_clamp_s
+                    gl_diff.repeat_y = not _node_clamp_t
                     gl_diff.use(location=0)
                     prog['u_tex'].value = 0
                     prog['u_has_tex'].value = 1

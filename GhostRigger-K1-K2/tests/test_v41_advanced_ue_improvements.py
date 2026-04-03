@@ -53,6 +53,21 @@ from unittest.mock import MagicMock, patch
 # ─────────────────────────────────────────────────────────────────────
 
 def _stub_tkinter():
+    # If real tkinter is importable, ensure it is registered in sys.modules
+    # and return early – we never want to shadow a functional tkinter with
+    # our lightweight stub, as that breaks test isolation for other test
+    # files that do `from tkinter import filedialog` etc.
+    try:
+        import tkinter as _real_tk  # noqa: F401
+        import tkinter.ttk  # noqa: F401
+        import tkinter.font  # noqa: F401
+        import tkinter.filedialog  # noqa: F401
+        import tkinter.messagebox  # noqa: F401
+        import tkinter.simpledialog  # noqa: F401
+        return  # Real tkinter available – nothing to stub
+    except Exception:
+        pass  # Real tkinter unusable – fall through to create the stub
+
     tk = types.ModuleType("tkinter")
     tk.Frame = object
     tk.Canvas = object
@@ -63,6 +78,7 @@ def _stub_tkinter():
     tk.Scrollbar = object
     tk.Listbox = object
     tk.Menu = object
+    tk.Text = object
     tk.StringVar = lambda *a, **k: MagicMock()
     tk.IntVar = lambda *a, **k: MagicMock()
     tk.BooleanVar = lambda *a, **k: MagicMock()
@@ -80,9 +96,28 @@ def _stub_tkinter():
     ttk.Treeview = object
     ttk.Scrollbar = object
     tk.ttk = ttk
+    # Stub sub-modules needed by main_window.py: filedialog, messagebox, simpledialog
+    filedialog_mod = types.ModuleType("tkinter.filedialog")
+    filedialog_mod.askopenfilename = lambda *a, **k: ""
+    filedialog_mod.askdirectory = lambda *a, **k: ""
+    filedialog_mod.asksaveasfilename = lambda *a, **k: ""
+    tk.filedialog = filedialog_mod
+    messagebox_mod = types.ModuleType("tkinter.messagebox")
+    messagebox_mod.showinfo = lambda *a, **k: None
+    messagebox_mod.showwarning = lambda *a, **k: None
+    messagebox_mod.showerror = lambda *a, **k: None
+    messagebox_mod.askyesno = lambda *a, **k: False
+    tk.messagebox = messagebox_mod
+    simpledialog_mod = types.ModuleType("tkinter.simpledialog")
+    simpledialog_mod.askstring = lambda *a, **k: ""
+    simpledialog_mod.askinteger = lambda *a, **k: 0
+    tk.simpledialog = simpledialog_mod
     sys.modules.setdefault("tkinter", tk)
     sys.modules.setdefault("tkinter.ttk", ttk)
     sys.modules.setdefault("tkinter.font", tk.font)
+    sys.modules.setdefault("tkinter.filedialog", filedialog_mod)
+    sys.modules.setdefault("tkinter.messagebox", messagebox_mod)
+    sys.modules.setdefault("tkinter.simpledialog", simpledialog_mod)
 
 
 def _stub_pil():

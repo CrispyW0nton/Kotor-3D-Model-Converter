@@ -1,10 +1,59 @@
 # GhostRigger-K1-K2 — Development Roadmap
 
-> **Last updated:** 2026-03-24 (Phase 13.1 — Texture-Loading Overhaul; 67 new tests; full suite 3427 passed 0 failures)
+> **Last updated:** 2026-04-03 (Phase 15.1 — Transparency, Eye/Teeth Rendering & LBS Explosion Guard; full suite 3985+ passed 0 failures)
 > Tracked on the [genspark_ai_developer branch](https://github.com/CrispyW0nton/Kotor-3D-Model-Converter/tree/genspark_ai_developer)
 >
 > **See [TEXTBOOK_RESEARCH_REPORT.md](TEXTBOOK_RESEARCH_REPORT.md) for the full ~7,000-word analysis.**
 > **See [CONTEXT_SNAPSHOT.md](CONTEXT_SNAPSHOT.md) for the compressed session knowledge document.**
+
+---
+
+## Phase 15.1 — Transparency Depth Fix, Inner-Geometry Rendering, LBS Guards ✅
+
+**Completed 2026-04-03**
+
+### Overview
+
+Addressed depth/transparency rendering issues (visible teeth/gums through face, missing eyeballs), tightened the LBS geometry-explosion guard, and investigated the N_CaloNord `usecomp` animation geometry issue.
+
+### Bugs Fixed
+
+| Bug ID | File | Description |
+|--------|------|-------------|
+| `BUG-INNER-GEO-1` | `src/gui/viewport.py` | Eye, eyelid, and teeth nodes had `transparency_hint=0` (opaque), so painter's sort placed them in the same tier as the head mesh. Centroid depth ties caused them to be painted over by the face, making eyeballs invisible. Fix: promote inner-geometry nodes (`*eye*`, `*lid*`, `*teeth*`, `*tooth*`, `*gum*`, `*tongue*`) to tier 1 (drawn after opaque head mesh) in both the flat-shade and textured render paths. |
+| `BUG-INNER-GEO-2` | `src/gui/viewport.py` | Same issue in textured render path. Fixed with `_is_inner_geo_tex` flag. |
+| `BUG-LBS-GUARD-1` | `src/gui/viewport.py` | Per-bone explosion guard was `_MAX_BONE_DIST = 50.0` units — too permissive. `usecomp` composite models (e.g. N_CaloNord) have face vertices weighted to collar/shoulder bones; during arm animation those bones travel 1–4 units, dragging the face geometry sideways. Tightened to 8.0 units — still allows full run-cycle deformations (legs travel ≤1.5 u, root motion ≤5 u) but rejects cross-region usecomp distortions. |
+
+### N_CaloNord `usecomp` Analysis
+
+Deep investigation of N_CaloNord's `usecomp` animation geometry issues:
+
+- **Root cause**: N_CaloNord uses Aurora's composite-model system. Its `head` and `torso` skin meshes have scrambled `bone_map` arrays referencing cross-body bones (`rcollar_dum`, `f_lns_g`, `lshin_g` etc.). During arm animation, the collar bone (`rcollar_dum`) rotates, which drags vertices of the `head` skin mesh sideways.
+- **Tightened explosion guard** (8.0 u) catches the worst cross-region distortions.
+- **Lower-body geometry**: The `_g`-suffixed deformation helper nodes (`lthigh_g`, `rthigh_g` etc.) are already correctly filtered by `_is_deformation_helper`. The skin nodes (`LArm`, `torso`, `RArm`, `head`) are the only visible geometry; the `_compute_outlier_skin_nodes` early-return for `N_` prefix models ensures all are rendered.
+- **Remaining limitation**: Full usecomp fidelity requires implementing the Aurora composite-model attachment protocol. Documented as a known limitation.
+
+### Changes
+
+| File | Change |
+|------|--------|
+| `src/gui/viewport.py` | Inner-geometry tier bump (flat-shade path): `_INNER_GEO_SUBSTRINGS` detection + tier 1 promotion |
+| `src/gui/viewport.py` | Inner-geometry tier bump (textured path): `_is_inner_geo_tex` detection + tier 1 promotion |
+| `src/gui/viewport.py` | LBS explosion guard: `_MAX_BONE_DIST` 50.0 → 8.0 (both per-bone and final-vertex guards) |
+| `README.md` | Updated roadmap — v5.5 entry with new fixes |
+| `ROADMAP.md` | Added Phase 15.1 entry |
+| `tests/test_v55_inner_geo_lbs_fixes.py` | New tests: inner-geo tier promotion, LBS explosion guard at 8 u threshold |
+| `tests/test_v54_transparency_anim_fixes.py` | Two-pass sort, LBS guards, world-transform guards, transparency tier assignment |
+| `tests/test_v55_usecomp_transparency_analysis.py` | Sort-key convention verified; corrected comment on far/near sort ordering |
+
+### Tests
+
+```
+tests/test_v54_transparency_anim_fixes.py   28 tests, all passing
+tests/test_v55_inner_geo_lbs_fixes.py       35 tests, all passing
+tests/test_v55_usecomp_transparency_analysis.py  37 tests, all passing
+Total suite: 3985+ passed, 0 failures
+```
 
 ---
 

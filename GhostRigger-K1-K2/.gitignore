@@ -55,6 +55,19 @@ KotorModTools/
 screenshots/
 portfolio_post.md
 
+# ── Research / reference sources (large external repos) ──────────────────────
+research_sources/
+# External libraries checked out alongside the project
+../PyKotor/
+../render_check/
+
+# ── Demo / capture artefacts ──────────────────────────────────────────────────
+*.mp4
+capture_demo_video.py
+
+# ── Log files ─────────────────────────────────────────────────────────────────
+Logs/
+
 # ── OS noise ──────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
@@ -64,3 +77,7 @@ Thumbs.db
 # But keep PNGs inside research_sources and assets
 !research_sources/**/*.png
 !assets/**/*.png
+
+# ── PyKotor embedded checkout (checked in to /home/user/webapp/PyKotor) ───────
+PyKotor/
+render_check/

@@ -80,6 +80,46 @@ def _is_finite_vec(v) -> bool:
     return all(math.isfinite(x) for x in v)
 
 
+def _ensure_quat_sign_consistency(values: List[List[float]]) -> List[List[float]]:
+    """
+    Ensure that consecutive quaternion keyframes are in the same hemisphere
+    (dot product >= 0) so that SLERP always takes the shortest arc.
+
+    Background: KotOR stores some quaternion sequences where the exporter
+    flips the sign of individual keyframes (q and -q represent the same
+    rotation but SLERP between them traces the long way around).  The
+    _slerp() function's inner "if dot < 0: negate q2" guard handles
+    two-keyframe cases, but for multi-keyframe sequences it only looks at
+    adjacent pairs; if the base keyframe is already wrong the guard has no
+    earlier reference to flip against.
+
+    This pre-pass walks the keyframe sequence once (O(n)) and ensures each
+    keyframe is in the same hemisphere as the PREVIOUS one.  The result is
+    equivalent to picking the canonical sign for each quaternion based on
+    the running reference direction — consistent with how xoreos normalises
+    orientation tracks in animation.cpp.
+
+    Only applied to quaternion channels (len(values[0]) == 4).
+    Returns a new list; the original is not mutated.
+    """
+    if not values or len(values[0]) != 4:
+        return values
+
+    out: List[List[float]] = [list(values[0])]
+    px, py, pz, pw = values[0]
+
+    for v in values[1:]:
+        x, y, z, w = v
+        # dot with previous (sign-consistent) keyframe
+        if (px*x + py*y + pz*z + pw*w) < 0.0:
+            # Flip to the nearer hemisphere
+            x, y, z, w = -x, -y, -z, -w
+        out.append([x, y, z, w])
+        px, py, pz, pw = x, y, z, w
+
+    return out
+
+
 def _interp_channel(times: List[float], values: List[List[float]],
                     t: float) -> Optional[List[float]]:
     """
@@ -88,9 +128,22 @@ def _interp_channel(times: List[float], values: List[List[float]],
 
     NaN/Inf safety: skips keyframe pairs that contain non-finite values
     so that corrupt data in bezier-spline tail regions does not propagate.
+
+    Quaternion sign-consistency: before interpolating a quaternion channel
+    (4-component values) the keyframe sequence is pre-normalised so that
+    every consecutive pair has a non-negative dot product.  This ensures
+    SLERP always takes the shortest arc even when the exporter stored
+    antipodal keyframes (q and -q are the same rotation but SLERP between
+    them would spin 360° without this fix).
+    See _ensure_quat_sign_consistency() for full rationale.
     """
     if not times or not values:
         return None
+
+    # Pre-normalise quaternion channels for sign consistency
+    # (only for 4-component channels; 3-component position channels unchanged)
+    if values and len(values[0]) == 4:
+        values = _ensure_quat_sign_consistency(values)
 
     # Find last valid keyframe at or before t
     # Walk forward/backward to skip NaN-contaminated entries
@@ -620,16 +673,46 @@ class AnimationEngine:
         return result
 
     def get_animation_fps_estimate(self, anim: Animation) -> float:
-        """Estimate FPS from keyframe density."""
+        """
+        Estimate the original bake FPS from keyframe density.
+
+        Strategy:
+          1. Compute raw_fps = max_keys_in_any_channel / anim.length.
+          2. Snap to the nearest standard KotOR FPS tier: 15, 24, 25, 30, 60.
+             KotOR NWN exporters bake at these rates almost exclusively.
+          3. Fall back to 30 if the animation has no keys or zero length.
+
+        This prevents the ``~29 fps`` / ``~31 fps`` drift caused by integer
+        rounding of float division and gives cleaner values to the FPS selector
+        in the animations panel.
+        """
         if not anim.nodes or anim.length <= 0:
             return 30.0
         max_keys = 0
         for n in anim.nodes:
             for c in n.controllers:
-                max_keys = max(max_keys, len(c['times']))
+                if c['times']:
+                    max_keys = max(max_keys, len(c['times']))
         if max_keys <= 1:
             return 30.0
-        return round(max_keys / anim.length)
+        raw = max_keys / anim.length
+        # Snap to nearest standard tier
+        _TIERS = (15.0, 24.0, 25.0, 30.0, 60.0)
+        best   = min(_TIERS, key=lambda t: abs(t - raw))
+        # Only snap if within 20 % of the tier; otherwise return rounded raw value
+        if abs(best - raw) / best <= 0.20:
+            return best
+        return float(round(raw))
+
+    def get_recommended_playback_fps(self, anim: Animation) -> int:
+        """
+        Return the recommended integer UI FPS setting for this animation.
+        Clamps the estimated FPS into the combobox values [15, 24, 25, 30, 60].
+        """
+        fps = self.get_animation_fps_estimate(anim)
+        _VALID = [15, 24, 25, 30, 60]
+        # Pick the closest valid tier
+        return min(_VALID, key=lambda v: abs(v - fps))
 
     # ── Export ───────────────────────────────────────────────────────────────
 

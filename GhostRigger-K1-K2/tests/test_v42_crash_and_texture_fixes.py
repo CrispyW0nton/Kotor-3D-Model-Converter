@@ -442,12 +442,15 @@ class TestTPCTextureOrientation:
         block = struct.pack('<HHI', c0, c1, lk)
 
         dxt1_data = block * (bw * bh)
-        hdr = self._make_tpc_header(w, h, encoding=10)
+        # data_sz must be non-zero so PyKotor recognises this as DXT-compressed
+        hdr = self._make_tpc_header(w, h, encoding=10, data_sz=dxt1_sz)
         tpc_data = hdr + dxt1_data
 
         img = _load_tpc_bytes(tpc_data)
-        if img is None:
-            pytest.skip("DXT1 decode unavailable")
+        assert img is not None, (
+            f"DXT1 TPC (enc=10, data_sz={dxt1_sz}) failed to decode; "
+            "check _load_tpc_bytes and TPC header layout"
+        )
         # All pixels should be RED (color0 used for all texels)
         for row in range(h):
             for col in range(w):
@@ -455,16 +458,33 @@ class TestTPCTextureOrientation:
                 assert px[0] > 200, f"Expected RED pixel at ({col},{row}), got {px}"
 
     def test_tpc_rgba_flip(self):
-        """TPC RGBA (enc=4, uncompressed) must be flipped."""
+        """TPC RGBA (enc=4, uncompressed, data_sz=0) is already bottom-up — no flip.
+
+        KotOR uncompressed textures are stored bottom-up (OpenGL convention).
+        The renderer's (1-v)*h formula handles the V-inversion at render time.
+        data_sz=0 signals uncompressed; the pixel_type byte (12) determines RGBA format.
+
+        NOTE: The old version of this test used data_sz=sz4 (non-zero), which is
+        incorrect — non-zero data_sz signals DXT-compressed in the PyKotor/KotOR
+        convention.  Only DXT-compressed textures get flipped; uncompressed stay as-is.
+        """
         try:
             from PIL import Image
         except ImportError:
             pytest.skip("Pillow not installed")
         from src.gui.viewport import _load_tpc_bytes
+        import struct as _struct
         w, h = 4, 4
         sz4 = w * h * 4
-        hdr = self._make_tpc_header(w, h, encoding=4, data_sz=sz4)
-        # Row 0 (bottom) = RED, Row h-1 (top) = GREEN
+        # Correct TPC header: data_sz=0 (uncompressed), encoding at byte 12
+        hdr = bytearray(128)
+        _struct.pack_into('<I', hdr, 0, 0)       # data_sz = 0 → uncompressed
+        _struct.pack_into('<f', hdr, 4, 1.0)     # alpha_test
+        _struct.pack_into('<H', hdr, 8, w)
+        _struct.pack_into('<H', hdr, 10, h)
+        hdr[12] = 4                               # pixel_type = 4 (RGBA)
+        hdr[13] = 1                               # mip_count
+        # Row 0 (file-order bottom, OpenGL V=0) = RED, Row h-1 (top, OpenGL V=1) = GREEN
         pixels = bytearray(sz4)
         for row in range(h):
             col_r = 255 if row == 0 else 0
@@ -475,16 +495,18 @@ class TestTPCTextureOrientation:
                 pixels[idx + 1] = col_g  # G
                 pixels[idx + 2] = 0      # B
                 pixels[idx + 3] = 255    # A
-        tpc_data = hdr + bytes(pixels)
+        tpc_data = bytes(hdr) + bytes(pixels)
         img = _load_tpc_bytes(tpc_data)
         if img is None:
             pytest.skip("RGBA decode unavailable")
 
-        # After flip: PIL row 0 = original row h-1 (GREEN top)
+        # Uncompressed textures are NOT flipped (already bottom-up).
+        # PIL row 0 = file row 0 = RED (OpenGL bottom / V=0).
+        # PIL row h-1 = file row h-1 = GREEN (OpenGL top / V=1).
         top_px = img.getpixel((0, 0))[:3]
         bot_px = img.getpixel((0, h - 1))[:3]
-        assert top_px[1] > 200, f"Top pixel should be GREEN, got {top_px}"
-        assert bot_px[0] > 200, f"Bottom pixel should be RED, got {bot_px}"
+        assert top_px[0] > 200, f"PIL row 0 should be RED (uncompressed, no flip), got {top_px}"
+        assert bot_px[1] > 200, f"PIL row h-1 should be GREEN (uncompressed, no flip), got {bot_px}"
 
 
 # ─────────────────────────────────────────────────────────────────────────

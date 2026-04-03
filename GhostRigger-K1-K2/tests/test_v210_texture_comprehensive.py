@@ -99,19 +99,23 @@ def _make_tpc_dxt5(w: int = 8, h: int = 8,
 def _make_tpc_rgba(w: int = 4, h: int = 4,
                    r: int = 255, g: int = 0, b: int = 0,
                    alpha: int = 255) -> bytes:
-    """Build an uncompressed RGBA TPC (data_sz = w*h*4)."""
+    """Build an uncompressed RGBA TPC.
+
+    PyKotor convention: uncompressed = data_sz == 0.
+    """
     pixel_data = bytes([r, g, b, alpha] * (w * h))
-    data_sz = len(pixel_data)
-    header = _make_tpc_header(w, h, 4, 1, data_sz)
+    header = _make_tpc_header(w, h, 4, 1, 0)  # data_sz=0 → uncompressed (pykotor)
     return header + pixel_data
 
 
 def _make_tpc_rgb(w: int = 4, h: int = 4,
                   r: int = 255, g: int = 0, b: int = 0) -> bytes:
-    """Build an uncompressed RGB TPC (data_sz = w*h*3)."""
+    """Build an uncompressed RGB TPC.
+
+    PyKotor convention: uncompressed = data_sz == 0.
+    """
     pixel_data = bytes([r, g, b] * (w * h))
-    data_sz = len(pixel_data)
-    header = _make_tpc_header(w, h, 2, 1, data_sz)
+    header = _make_tpc_header(w, h, 2, 1, 0)  # data_sz=0 → uncompressed (pykotor)
     return header + pixel_data
 
 
@@ -305,10 +309,20 @@ class TestTpcLoading:
         assert img.size == (4, 4)
 
     def test_rgba_uncompressed_orientation_correct(self):
-        """Uncompressed RGBA is bottom-up in storage; after load must be top-down."""
+        """Uncompressed RGBA (data_sz=0) is stored bottom-up; returned as-is (no flip).
+
+        PyKotor rule: compressed = (data_sz != 0).
+        For uncompressed RGBA (data_sz=0) KotOR stores rows bottom-up (OpenGL
+        convention).  _load_tpc_bytes must preserve that order so the renderer's
+        (1-v)*h formula maps UV coordinates correctly:
+
+          storage row 0 = GL bottom = red  → PIL row 0 = red   (bottom-up preserved)
+          storage row 3 = GL top    = blue → PIL row 3 = blue
+
+        The renderer then maps UV V=0 (KotOR top) → (1-0)*h = h → PIL row h = bottom
+        → correct texture-top colour (blue).  No extra flip is applied.
+        """
         w, h = 4, 4
-        # Row 0 in storage = GL bottom → RED (last row visually = TOP in top-down)
-        # Row 3 in storage = GL top → BLUE (first row visually = BOTTOM in top-down)
         pixels = bytearray()
         colors = [
             (255, 0, 0, 255),   # row 0 storage = GL bottom = red
@@ -319,17 +333,16 @@ class TestTpcLoading:
         for color in colors:
             for _ in range(w):
                 pixels.extend(color)
-        data_sz = w * h * 4
-        header = _make_tpc_header(w, h, 4, 1, data_sz)
+        # data_sz=0 → pykotor treats as uncompressed → no flip
+        header = _make_tpc_header(w, h, 4, 1, 0)
         raw = bytes(header) + bytes(pixels)
         img = _load_tpc_bytes(raw)
         assert img is not None
-        # After V-flip: PIL row 0 (top) = was GL top = BLUE
-        # PIL row 3 (bottom) = was GL bottom = RED
+        # No flip for uncompressed: PIL row 0 = first stored row = red (GL bottom)
         row0_px = img.getpixel((0, 0))
         row3_px = img.getpixel((0, 3))
-        assert row0_px[:3] == (0, 0, 255), f"Top row (PIL row 0) should be blue, got {row0_px}"
-        assert row3_px[:3] == (255, 0, 0), f"Bottom row (PIL row 3) should be red, got {row3_px}"
+        assert row0_px[:3] == (255, 0, 0), f"PIL row 0 should be red (first stored row, no flip), got {row0_px}"
+        assert row3_px[:3] == (0, 0, 255), f"PIL row 3 should be blue (last stored row, no flip), got {row3_px}"
 
     # ── RGB uncompressed ──
 
@@ -397,11 +410,25 @@ class TestTpcLoading:
         assert px[2] == 0,   f"BGRA red→RGBA: B should be 0, got {px}"
 
     def test_bgra_orientation_correct(self):
-        """BGRA is bottom-up; after loading PIL row 0 should be last stored row."""
+        """BGRA is bottom-up; after loading PIL row 0 should be the first stored row.
+
+        Convention (UV-fix v2): ALL loaded TPC images are returned in bottom-up
+        orientation (PIL row 0 = OpenGL V=0 = texture bottom).  BGRA is stored
+        bottom-up (like all uncompressed TPC formats), so NO vertical flip is
+        applied.  The BGRA→RGBA channel swap happens but the row order is preserved:
+
+          storage row 0 = GL bottom → PIL row 0 = blue  (first stored BGRA row)
+          storage row 3 = GL top   → PIL row 3 = red   (last stored BGRA row)
+
+        The renderer's (1-v)*h formula then maps OpenGL V coordinates to PIL rows:
+          V=0 (GL bottom) → PIL row h-1 (last row = GL bottom stored at row 3 after
+          all-same-color blocks) or correct texture-bottom colour.
+        """
         w, h = 4, 4
         # First stored row (GL bottom) = blue, last stored row (GL top) = red
         pixels = bytearray()
-        # Row 0 storage = BGRA blue
+        # Row 0 storage = BGRA blue:  B=255, G=0, R=0, A=255
+        # Rows 1-3 storage           B=0,   G=0, R=255, A=255  → red after BGRA→RGBA swap
         for row in range(h):
             color = (255, 0, 0, 255) if row == 0 else (0, 0, 255, 255)  # B,G,R,A
             for _ in range(w):
@@ -410,12 +437,13 @@ class TestTpcLoading:
         raw = bytes(header) + bytes(pixels)
         img = _load_tpc_bytes(raw)
         assert img is not None
-        # Row 0 storage = BGRA (255,0,0,255) → RGBA = (0,0,255,255) = blue
-        # After V-flip: PIL row 0 = last stored row = BGRA (0,0,255,255) → RGBA = (255,0,0,255) = red
+        # No V-flip for BGRA (already bottom-up).  Channel swap only:
+        #   storage row 0  BGRA (255,0,0,255) → RGBA (0,0,255,255) = blue  → PIL row 0
+        #   storage row 3  BGRA (0,0,255,255) → RGBA (255,0,0,255) = red   → PIL row 3
         top_px = img.getpixel((0, 0))
         bottom_px = img.getpixel((0, h - 1))
-        assert top_px[:3] == (255, 0, 0), f"PIL top row should be red (BGRA→flip), got {top_px}"
-        assert bottom_px[:3] == (0, 0, 255), f"PIL bottom row should be blue, got {bottom_px}"
+        assert top_px[:3] == (0, 0, 255), f"PIL row 0 should be blue (first stored BGRA row, no flip), got {top_px}"
+        assert bottom_px[:3] == (255, 0, 0), f"PIL bottom row should be red (last stored BGRA row), got {bottom_px}"
 
     # ── Mipmap chain ──
 
@@ -722,8 +750,13 @@ class TestTpcOrientation:
         px = img.getpixel((0, 0))
         assert px[0] > 220, f"DXT1 top-left should be red, got {px}"
 
-    def test_rgba_uncompressed_flipped_to_top_down(self):
-        """RGBA uncompressed is bottom-up; loading must flip to top-down."""
+    def test_rgba_uncompressed_no_flip_bottom_up_preserved(self):
+        """RGBA uncompressed (data_sz=0) is returned as-is in bottom-up order.
+
+        PyKotor rule: data_sz=0 → uncompressed → no flip.  The first stored
+        row is GL bottom and remains PIL row 0 after loading.  The renderer's
+        V-flip at render-time handles the coordinate conversion.
+        """
         w, h = 4, 4
         # storage row 0 = GL bottom = blue; row 3 = GL top = red
         pixels = bytearray()
@@ -731,14 +764,14 @@ class TestTpcOrientation:
             color = (0, 0, 255, 255) if row == 0 else (255, 0, 0, 255)
             for _ in range(w):
                 pixels.extend(color)
-        data_sz = w * h * 4
-        header = _make_tpc_header(w, h, 4, 1, data_sz)
+        # data_sz=0 → uncompressed, no flip
+        header = _make_tpc_header(w, h, 4, 1, 0)
         raw = bytes(header) + bytes(pixels)
         img = _load_tpc_bytes(raw)
         assert img is not None
         top = img.getpixel((0, 0))
-        # After flip: PIL row 0 = was storage row 3 = red
-        assert top[:3] == (255, 0, 0), f"Top-down: PIL row 0 should be red, got {top}"
+        # No flip: PIL row 0 = first stored row = blue (GL bottom)
+        assert top[:3] == (0, 0, 255), f"Bottom-up preserved: PIL row 0 should be blue, got {top}"
 
 
 # ── Edge Cases ────────────────────────────────────────────────────────────────

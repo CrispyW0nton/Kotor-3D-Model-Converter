@@ -321,6 +321,130 @@ class TestGLTFRoundTrip:
             except Exception: pass
 
 
+# ── GLTF Skin Weight (JOINTS_0 / WEIGHTS_0) tests ────────────────────────────
+
+class TestGLTFSkinWeights:
+    """Verify GLTF skin weight JOINTS_0 remapping (Phase 15.3 fix).
+
+    GLTF 2.0 §3.7.2: JOINTS_0 values are indices into skin.joints[], NOT
+    global gltf.nodes[] indices.  The exporter must remap KotOR bone_map
+    indices → skin joint-list positions.
+    """
+
+    @staticmethod
+    def _make_skin_model() -> KotorModel:
+        """Build a minimal skinned KotorModel: root dummy + one bone + one skin mesh."""
+        from core.model_data import BoneWeight, VertexSkinData
+        model = KotorModel(name="skin_test", supermodel="NULL",
+                           game_version=GameVersion.K1)
+        root = ModelNode(name="root", flags=int(NodeFlags.HEADER))
+        model.root_node = root
+
+        bone = ModelNode(name="Bone01", flags=int(NodeFlags.HEADER), parent=root)
+        root.children.append(bone)
+
+        skin = ModelNode(name="body",
+                         flags=int(NodeFlags.HEADER | NodeFlags.SKIN),
+                         parent=root)
+        skin.vertices = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
+        skin.normals  = [(0.0, 0.0, 1.0)] * 3
+        skin.uvs      = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]
+        skin.faces    = [(0, 1, 2)]
+        skin.texture  = "skin_tex"
+        skin.render   = True
+        # bone_map: index 0 → "root", index 1 → "Bone01"
+        skin.bone_map = ["root", "Bone01"]
+        # All 3 vertices weighted 100 % to Bone01 (bone_map index 1)
+        skin.skin_data = [
+            VertexSkinData(influences=[BoneWeight(bone_index=1, weight=1.0)]),
+            VertexSkinData(influences=[BoneWeight(bone_index=1, weight=1.0)]),
+            VertexSkinData(influences=[BoneWeight(bone_index=1, weight=1.0)]),
+        ]
+        skin.compute_bounds()
+        root.children.append(skin)
+        model.compute_bounds()
+        return model
+
+    def test_joints0_in_skin_range(self):
+        """JOINTS_0 values must be < len(skin.joints) for every vertex."""
+        try:
+            import pygltflib, struct as st, tempfile, os
+        except ImportError:
+            pytest.skip("pygltflib not installed")
+
+        model = self._make_skin_model()
+        with tempfile.NamedTemporaryFile(suffix='.glb', delete=False) as f:
+            path = f.name
+        try:
+            ok = GLTFExporter().export(model, path, binary=True)
+            assert ok, "GLTFExporter returned False for skin model"
+            gltf = pygltflib.GLTF2().load(path)
+            # Find the JOINTS_0 accessor
+            joints_acc = None
+            for prim in [p for m in gltf.meshes for p in m.primitives]:
+                if prim.attributes.JOINTS_0 is not None:
+                    joints_acc = gltf.accessors[prim.attributes.JOINTS_0]
+                    # Also get the skin the node uses to determine joint count
+                    break
+            if joints_acc is None:
+                pytest.skip("Model has no JOINTS_0 — skin export skipped (no skin data)")
+
+            # Determine the number of joints in the first skin
+            assert gltf.skins, "GLTF has no skin despite having JOINTS_0 accessor"
+            n_joints = len(gltf.skins[0].joints)
+            assert n_joints > 0, "Skin has zero joints"
+
+            # Read raw JOINTS_0 bytes and verify every joint index < n_joints
+            bv = gltf.bufferViews[joints_acc.bufferView]
+            buf_data = gltf.binary_blob()
+            start = bv.byteOffset + (joints_acc.byteOffset or 0)
+            n_verts = joints_acc.count
+            for vi in range(n_verts):
+                j0, j1, j2, j3 = st.unpack_from('<BBBB', buf_data, start + vi * 4)
+                assert j0 < n_joints, \
+                    f"Vertex {vi} JOINTS_0.x={j0} >= n_joints={n_joints} (remapping bug)"
+                # j1/j2/j3 may be 0 (unused slots), which is always valid
+                assert j1 < n_joints, \
+                    f"Vertex {vi} JOINTS_0.y={j1} >= n_joints={n_joints}"
+        finally:
+            try: os.unlink(path)
+            except Exception: pass
+
+    def test_weights0_sum_to_one(self):
+        """WEIGHTS_0 for each vertex must sum to ≈ 1.0."""
+        try:
+            import pygltflib, struct as st, tempfile, os
+        except ImportError:
+            pytest.skip("pygltflib not installed")
+
+        model = self._make_skin_model()
+        with tempfile.NamedTemporaryFile(suffix='.glb', delete=False) as f:
+            path = f.name
+        try:
+            ok = GLTFExporter().export(model, path, binary=True)
+            assert ok
+            gltf = pygltflib.GLTF2().load(path)
+            weights_acc = None
+            for prim in [p for m in gltf.meshes for p in m.primitives]:
+                if prim.attributes.WEIGHTS_0 is not None:
+                    weights_acc = gltf.accessors[prim.attributes.WEIGHTS_0]
+                    break
+            if weights_acc is None:
+                pytest.skip("No WEIGHTS_0 in exported GLTF")
+            bv = gltf.bufferViews[weights_acc.bufferView]
+            buf_data = gltf.binary_blob()
+            start = bv.byteOffset + (weights_acc.byteOffset or 0)
+            n_verts = weights_acc.count
+            for vi in range(n_verts):
+                w0, w1, w2, w3 = st.unpack_from('<ffff', buf_data, start + vi * 16)
+                total = w0 + w1 + w2 + w3
+                assert abs(total - 1.0) < 1e-4, \
+                    f"Vertex {vi} weights sum = {total:.6f}, expected ≈ 1.0"
+        finally:
+            try: os.unlink(path)
+            except Exception: pass
+
+
 # ── GPU renderer structure tests ──────────────────────────────────────────────
 
 class TestGpuRendererAlphaKill:

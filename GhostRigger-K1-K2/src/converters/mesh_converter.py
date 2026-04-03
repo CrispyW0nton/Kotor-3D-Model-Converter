@@ -475,11 +475,23 @@ class OBJExporter:
         else:
             return [_quat_rotate(wo, n) for n in normals]
 
-    def export(self, model: KotorModel, obj_path: str):
+    def export(self, model: KotorModel, obj_path: str, tex_cache=None):
+        """
+        Export model to OBJ + MTL.
+
+        Parameters
+        ----------
+        model     : KotorModel to export.
+        obj_path  : Output .obj file path.
+        tex_cache : Optional TextureCache object.  When provided, textures are
+                    looked up and saved as TGA files next to the OBJ so that the
+                    MTL map_Kd references resolve correctly in Blender/Maya.
+        """
         p = Path(obj_path); mp = p.with_suffix('.mtl')
         obj_lines = [f"# GhostRigger-K1-K2 export – {model.name}", f"mtllib {mp.name}", ""]
         mtl_lines = ["# GhostRigger-K1-K2 materials", ""]
         seen_mats: set = set()
+        out_dir = p.parent
 
         # Count skipped nodes for the header comment
         all_mesh  = list(model.mesh_nodes())
@@ -591,6 +603,42 @@ class OBJExporter:
         log.info(f"Exported OBJ → {obj_path}  "
                  f"({vo} verts, {len(renderable)}/{len(all_mesh)} mesh nodes exported)")
 
+        # Copy/save texture files alongside the OBJ when tex_cache is available
+        if tex_cache is not None:
+            self._export_textures_to_dir(model, out_dir, tex_cache)
+
+    @staticmethod
+    def _export_textures_to_dir(model: KotorModel, out_dir: Path, tex_cache) -> int:
+        """
+        Save all textures referenced by *model* as TGA files into *out_dir*.
+        Returns the count of textures saved.  Non-fatal: logs warnings on failure.
+        """
+        saved = 0
+        seen: set = set()
+        for node in model.mesh_nodes():
+            raw = getattr(node, 'texture_clean', '') or getattr(node, 'texture', '') or ''
+            tex_name = raw.strip()
+            if not tex_name or tex_name.upper() in ('NULL', 'BLACK', ''):
+                continue
+            if tex_name.lower() in seen:
+                continue
+            seen.add(tex_name.lower())
+            try:
+                img = tex_cache.get(tex_name)
+                if img is None:
+                    continue
+                out_path = out_dir / f"{tex_name}.tga"
+                if not out_path.exists():
+                    img_rgb = img.convert('RGB') if img.mode not in ('RGB', 'RGBA') else img
+                    img_rgb.save(str(out_path))
+                    log.debug(f"Saved texture: {out_path.name}")
+                    saved += 1
+            except Exception as e:
+                log.debug(f"Could not save texture '{tex_name}': {e}")
+        if saved:
+            log.info(f"Saved {saved} texture(s) alongside export in {out_dir}")
+        return saved
+
 
 def _renderable_mesh_nodes(model: KotorModel):
     """
@@ -598,8 +646,20 @@ def _renderable_mesh_nodes(model: KotorModel):
     This is the same filter used by OBJExporter and the viewport's
     _iter_visible_mesh_nodes().  Shared by OBJExporter and FBXExporter so both
     produce identical output meshes.
+
+    Phase 15.3 FIX: Also include skin nodes (NodeFlags.SKIN = 0x0040).
+    KotorModel.mesh_nodes() only returns nodes where is_mesh=True (flag 0x0020),
+    silently skipping skin mesh nodes (flag 0x0040) that contain the creature's
+    actual visible geometry (btBody_front, btBodyback, bthair, etc.).
+    We call all_nodes() and check is_mesh OR is_skin to match the viewport's
+    _iter_mesh_nodes() behaviour (Phase 16 fix).
     """
-    return [n for n in model.mesh_nodes() if OBJExporter._is_renderable(n)]
+    nodes = []
+    for n in model.all_nodes():
+        if n.is_mesh or n.is_skin:
+            if OBJExporter._is_renderable(n):
+                nodes.append(n)
+    return nodes
 
 
 # Alias used by GLTFExporter (consistent naming across the exporter family)
@@ -623,31 +683,48 @@ class FBXExporter:
          skin cluster deformers), and the bone hierarchy as null/joint nodes.
     """
 
-    def export(self, model: KotorModel, fbx_path: str) -> bool:
+    def export(self, model: KotorModel, fbx_path: str, tex_cache=None) -> bool:
+        """
+        Export model to FBX.
+
+        Parameters
+        ----------
+        model     : KotorModel to export.
+        fbx_path  : Output .fbx file path.
+        tex_cache : Optional TextureCache.  When provided, textures are saved as
+                    TGA files in the same directory as the FBX.
+        """
         # Try fbx module (Autodesk FBX Python SDK)
         try:
             import fbx as _fbx
-            return self._export_fbx_sdk(model, fbx_path, _fbx)
+            ok = self._export_fbx_sdk(model, fbx_path, _fbx)
         except ImportError:
-            pass
+            ok = None
 
-        # Try pyassimp
-        try:
-            import pyassimp
-            return self._export_assimp(model, fbx_path, pyassimp)
-        except ImportError:
-            pass
+        if ok is None:
+            # Try pyassimp
+            try:
+                import pyassimp
+                ok = self._export_assimp(model, fbx_path, pyassimp)
+            except ImportError:
+                ok = None
 
-        # Fallback: FBX ASCII 7.4
-        try:
-            return self._export_fbx_ascii(model, fbx_path)
-        except Exception as e:
-            log.error(f"FBX ASCII export failed: {e}")
-            # Last resort: OBJ
-            obj_path = str(Path(fbx_path).with_suffix('.obj'))
-            log.warning(f"Falling back to OBJ export: {obj_path}")
-            OBJExporter().export(model, obj_path)
-            return False
+        if ok is None:
+            # Fallback: FBX ASCII 7.4
+            try:
+                ok = self._export_fbx_ascii(model, fbx_path)
+            except Exception as e:
+                log.error(f"FBX ASCII export failed: {e}")
+                # Last resort: OBJ
+                obj_path = str(Path(fbx_path).with_suffix('.obj'))
+                log.warning(f"Falling back to OBJ export: {obj_path}")
+                OBJExporter().export(model, obj_path, tex_cache=tex_cache)
+                return False
+
+        # Copy textures alongside the FBX
+        if ok and tex_cache is not None:
+            OBJExporter._export_textures_to_dir(model, Path(fbx_path).parent, tex_cache)
+        return bool(ok)
 
     # ── FBX SDK (Autodesk Python SDK) ─────────────────────────────────
 
@@ -1087,6 +1164,129 @@ class FBXExporter:
             w(f'\t\t}}')
         w('\t}')  # end Pose
 
+        # ── Animation objects (AnimStack / AnimLayer / AnimCurve) ──────────────
+        # Build animation data before closing Connections; we need to know all IDs
+        # to emit proper OO/OP connection records.
+        #
+        # FBX time unit: 1 second = 46186158000 ticks (standard FBX 7.4 rate)
+        FBX_TICKS_PER_SEC = 46186158000
+
+        # anim_connections accumulates Connection lines emitted AFTER the
+        # per-animation Objects are written; they are flushed into Connections{}.
+        anim_connections: List[str] = []
+
+        if model.animations:
+            CTRL_POSITION    = 8
+            CTRL_ORIENTATION = 20
+
+            anim_stack_layer: List[tuple] = []  # (stack_id, layer_id) per anim
+
+            for anim in model.animations:
+                if not anim.nodes:
+                    continue
+                stack_id = new_id()
+                layer_id = new_id()
+                anim_stack_layer.append((anim, stack_id, layer_id))
+
+                # AnimStack
+                anim_length_ticks = int(anim.length * FBX_TICKS_PER_SEC)
+                w(f'\tAnimationStack: {stack_id}, "{anim.name}", "" {{')
+                w(f'\t\tProperties70:  {{')
+                w(f'\t\t\tP: "LocalStart", "KTime", "Time", "",0')
+                w(f'\t\t\tP: "LocalStop", "KTime", "Time", "",{anim_length_ticks}')
+                w(f'\t\t\tP: "ReferenceStart", "KTime", "Time", "",0')
+                w(f'\t\t\tP: "ReferenceStop", "KTime", "Time", "",{anim_length_ticks}')
+                w(f'\t\t}}')
+                w(f'\t}}')  # end AnimationStack
+
+                # AnimationLayer
+                w(f'\tAnimationLayer: {layer_id}, "{anim.name}_Layer", "" {{')
+                w(f'\t}}')  # end AnimationLayer
+
+                base_node_map = {n.name.lower(): n for n in model.all_nodes()}
+                anim_conn = anim_connections  # shortcut
+
+                for anim_node in anim.nodes:
+                    base = base_node_map.get(anim_node.name.lower())
+                    nid  = node_ids.get(anim_node.name)
+                    if nid is None:
+                        continue
+
+                    # Collect controllers
+                    pos_times = pos_vals = None
+                    rot_times = rot_vals = None
+                    for ctrl in anim_node.controllers:
+                        ct = ctrl['type']
+                        if ct == CTRL_POSITION:
+                            pos_times, pos_vals = ctrl['times'], ctrl['values']
+                        elif ct == CTRL_ORIENTATION:
+                            rot_times, rot_vals = ctrl['times'], ctrl['values']
+
+                    def _write_curve_node_and_curve(axis_label, axis_i, default_val,
+                                                    ktimes, kvals, prop_name):
+                        """Helper: emit CurveNode + Curve objects and queue connections."""
+                        cn_id = new_id()
+                        cv_id = new_id()
+                        ax_letter = axis_label[-1]  # X, Y, or Z
+                        w(f'\tAnimationCurveNode: {cn_id}, "{axis_label}", "" {{')
+                        w(f'\t\tProperties70:  {{')
+                        w(f'\t\t\tP: "d|{ax_letter}", "Number", "", "A",{default_val:.6f}')
+                        w(f'\t\t}}')
+                        w(f'\t}}')
+                        nt = len(ktimes)
+                        ticks = [int(t * FBX_TICKS_PER_SEC) for t in ktimes]
+                        w(f'\tAnimationCurve: {cv_id}, "", "" {{')
+                        w(f'\t\tDefault: {default_val:.6f}')
+                        w(f'\t\tKeyVer: 4008')
+                        w(f'\t\tKeyTime: *{nt} {{')
+                        w('\t\t\ta: ' + ','.join(str(t) for t in ticks))
+                        w(f'\t\t}}')
+                        w(f'\t\tKeyValueFloat: *{nt} {{')
+                        w('\t\t\ta: ' + ','.join(f'{v:.6f}' for v in kvals))
+                        w(f'\t\t}}')
+                        w(f'\t\tKeyAttrFlags: *{nt} {{')
+                        w('\t\t\ta: ' + ','.join(['24776'] * nt))  # cubic + auto
+                        w(f'\t\t}}')
+                        w(f'\t\tKeyAttrRefCount: *1 {{')
+                        w(f'\t\t\ta: {nt}')
+                        w(f'\t\t}}')
+                        w(f'\t}}')  # end AnimationCurve
+                        # Queue connections (emitted later in Connections{})
+                        anim_conn.append(f'\tC: "OP",{cv_id},{cn_id},"d|{ax_letter}"')
+                        anim_conn.append(f'\tC: "OO",{cn_id},{layer_id}')
+                        anim_conn.append(f'\tC: "OP",{cn_id},{nid},"{prop_name}"')
+
+                    # Translation curves (KotOR delta + bind pos → absolute)
+                    if pos_times and pos_vals:
+                        bind_pos = list(base.position) if base else [0.0, 0.0, 0.0]
+                        for axis_i, axis_label in enumerate(('T|X', 'T|Y', 'T|Z')):
+                            default_val = bind_pos[axis_i]
+                            kvals = [(v[axis_i] if len(v) > axis_i else 0.0) + bind_pos[axis_i]
+                                     for v in pos_vals]
+                            _write_curve_node_and_curve(
+                                axis_label, axis_i, default_val,
+                                pos_times, kvals, 'Lcl Translation')
+
+                    # Rotation curves (absolute quaternion → Euler XYZ degrees)
+                    if rot_times and rot_vals:
+                        # Pre-compute euler angles list
+                        euler_list = []
+                        for qv in rot_vals:
+                            if len(qv) >= 4:
+                                ex, ey, ez = _quat_to_euler_deg(qv[0], qv[1], qv[2], qv[3])
+                                euler_list.append((ex, ey, ez))
+                            else:
+                                euler_list.append((0.0, 0.0, 0.0))
+                        for axis_i, axis_label in enumerate(('R|X', 'R|Y', 'R|Z')):
+                            kvals = [e[axis_i] for e in euler_list]
+                            _write_curve_node_and_curve(
+                                axis_label, axis_i, kvals[0] if kvals else 0.0,
+                                rot_times, kvals, 'Lcl Rotation')
+
+            # AnimStack → AnimLayer connections (added to anim_connections)
+            for anim, stack_id, layer_id in anim_stack_layer:
+                anim_connections.append(f'\tC: "OO",{layer_id},{stack_id}')
+
         w('}')  # end Objects
 
         # ── Connections section ────────────────────────────────────────
@@ -1121,6 +1321,10 @@ class FBXExporter:
                 if bname in node_ids:
                     w(f'\tC: "OO",{node_ids[bname]},{cid}')
 
+        # Animation curve connections (built above in Objects section loop)
+        for conn_line in anim_connections:
+            w(conn_line)
+
         w('}')  # end Connections
 
         # Write to file
@@ -1131,6 +1335,7 @@ class FBXExporter:
         log.info(f"FBX ASCII export: {fbx_path} "
                  f"({len(mesh_nodes_list)} meshes, "
                  f"{len(model.all_nodes())} nodes, "
+                 f"{len(model.animations)} anims, "
                  f"{len(content)} bytes)")
         return True
 
@@ -1580,24 +1785,55 @@ class GLTFExporter:
     """
 
     def export(self, model: KotorModel, path: str,
-               binary: bool = True) -> bool:
+               binary: bool = True, tex_cache=None) -> bool:
         """
         Export model to GLB (binary=True) or GLTF JSON (binary=False).
+
+        Parameters
+        ----------
+        model     : KotorModel to export.
+        path      : Output file path (.glb or .gltf).
+        binary    : True → GLB container; False → GLTF JSON + .bin.
+        tex_cache : Optional TextureCache.  When provided, textures are embedded
+                    as base64 data URIs in the GLTF material definitions, so the
+                    exported file is self-contained and opens correctly in Blender.
         Returns True on success.
         """
         try:
-            return self._export_pygltflib(model, path, binary)
+            return self._export_pygltflib(model, path, binary, tex_cache=tex_cache)
         except ImportError:
             pass
         try:
-            return self._export_manual(model, path, binary)
+            return self._export_manual(model, path, binary, tex_cache=tex_cache)
         except Exception as e:
             log.error(f"GLTF export failed: {e}")
             return False
 
     # ── pygltflib path ────────────────────────────────────────────────
 
-    def _export_pygltflib(self, model: KotorModel, path: str, binary: bool) -> bool:
+    @staticmethod
+    def _tex_to_base64_uri(tex_cache, tex_name: str) -> Optional[str]:
+        """
+        Convert a texture from the cache to a data URI (PNG base64).
+        Returns None if the texture cannot be found or converted.
+        Used to embed textures in GLTF materials for self-contained exports.
+        """
+        if tex_cache is None or not tex_name:
+            return None
+        try:
+            import io, base64
+            img = tex_cache.get(tex_name)
+            if img is None:
+                return None
+            buf = io.BytesIO()
+            img.convert('RGBA').save(buf, format='PNG')
+            b64 = base64.b64encode(buf.getvalue()).decode('ascii')
+            return f"data:image/png;base64,{b64}"
+        except Exception:
+            return None
+
+    def _export_pygltflib(self, model: KotorModel, path: str, binary: bool,
+                          tex_cache=None) -> bool:
         import pygltflib
         import struct as st
         import base64
@@ -1640,6 +1876,51 @@ class GLTFExporter:
             acc_idx = len(gltf.accessors)
             gltf.accessors.append(acc)
             return acc_idx
+
+        # ── Build skeleton node map (all model nodes as GLTF nodes) ──────────
+        # GLTF 2.0 §3.8: skin references a list of joint nodes.
+        # We add ALL model nodes (dummy + mesh) to gltf.nodes so that
+        # the skeleton hierarchy is intact, then add a skin referencing joints.
+        all_model_nodes = list(model.all_nodes()) if model.root_node else []
+        gltf_node_idx: Dict[str, int] = {}   # model-node-name → gltf node index
+
+        for mn in all_model_nodes:
+            pos_ = list(mn.position) if hasattr(mn, 'position') else [0.0, 0.0, 0.0]
+            rot_ = list(mn.rotation) if hasattr(mn, 'rotation') else [0.0, 0.0, 0.0, 1.0]
+            skel_node = pygltflib.Node(
+                name=mn.name,
+                translation=pos_,
+                rotation=rot_,
+            )
+            idx_ = len(gltf.nodes)
+            gltf.nodes.append(skel_node)
+            gltf_node_idx[mn.name] = idx_
+            # Also register lowercase for case-insensitive bone_map lookups
+            gltf_node_idx[mn.name.lower()] = idx_
+
+        # Wire parent→child relationships in the GLTF node hierarchy
+        for mn in all_model_nodes:
+            if mn.parent and mn.parent.name in gltf_node_idx:
+                parent_gltf_idx = gltf_node_idx[mn.parent.name]
+                child_gltf_idx  = gltf_node_idx[mn.name]
+                parent_gltf_node = gltf.nodes[parent_gltf_idx]
+                if parent_gltf_node.children is None:
+                    parent_gltf_node.children = []
+                parent_gltf_node.children.append(child_gltf_idx)
+            elif mn.parent is None and mn.name in gltf_node_idx:
+                # Root node → add to scene
+                scene.nodes.append(gltf_node_idx[mn.name])
+
+        # Build a single skin encompassing all dummy-node joints
+        joint_indices = [gltf_node_idx[mn.name]
+                         for mn in all_model_nodes
+                         if mn.name in gltf_node_idx]
+        gltf_skin = None
+        if joint_indices:
+            gltf_skin_obj = pygltflib.Skin(name=model.name + "_skin", joints=joint_indices)
+            skin_idx = len(gltf.skins)
+            gltf.skins.append(gltf_skin_obj)
+            gltf_skin = skin_idx
 
         nodes = _iter_visible_mesh_nodes(model)
         for node in nodes:
@@ -1691,17 +1972,93 @@ class GLTFExporter:
             if uv_acc is not None:
                 prim_attrs.TEXCOORD_0 = uv_acc
 
-            # Material
+            # Skin weights (JOINTS_0 + WEIGHTS_0) for skin nodes
+            # GLTF 2.0 §3.7.2: up to 4 influences per vertex as UNSIGNED_BYTE (5121)
+            # joints and FLOAT (5126) weights.
+            #
+            # IMPORTANT: JOINTS_0 values must be indices into skin.joints[], NOT
+            # global gltf.nodes[] indices.  KotOR bone_map[bone_index] gives the
+            # bone name; we look that name up in gltf_node_idx to get the GLTF
+            # node index, then find its position inside joint_indices (the skin's
+            # joint list).  Build a local lookup: bone_map_index → joint_list_pos.
+            joints_acc = weights_acc = None
+            if getattr(node, 'is_skin', False):
+                skin_data = getattr(node, 'skin_data', None) or []
+                bone_map  = getattr(node, 'bone_map', []) or []
+                if skin_data and len(skin_data) == n_v and joint_indices:
+                    # Build bone_map_idx → joint_list_position lookup
+                    # joint_indices[i] = gltf_node_index for joint i
+                    _gltf_node_to_joint_pos = {gni: jpos
+                                               for jpos, gni in enumerate(joint_indices)}
+                    _bmap_to_joint: Dict[int, int] = {}
+                    for bi, bname in enumerate(bone_map):
+                        bname_l = bname.lower() if bname else ''
+                        # Find the gltf node index for this bone
+                        gni = gltf_node_idx.get(bname_l) or gltf_node_idx.get(bname)
+                        if gni is not None:
+                            _bmap_to_joint[bi] = _gltf_node_to_joint_pos.get(gni, 0)
+                        else:
+                            _bmap_to_joint[bi] = 0  # fallback: root joint
+
+                    joints_buf  = bytearray()
+                    weights_buf = bytearray()
+                    for sd in skin_data:
+                        infl = sd.influences if hasattr(sd, 'influences') else []
+                        # Gather up to 4 influences, sorted by weight descending
+                        infl_sorted = sorted(infl, key=lambda x: x.weight, reverse=True)[:4]
+                        js = [0, 0, 0, 0]
+                        ws = [0.0, 0.0, 0.0, 0.0]
+                        for ci, inf in enumerate(infl_sorted):
+                            # Remap from bone_map index → skin.joints[] position
+                            js[ci] = _bmap_to_joint.get(int(inf.bone_index), 0)
+                            ws[ci] = float(inf.weight)
+                        # Normalize weights to sum=1 (avoid precision drift)
+                        w_sum = sum(ws)
+                        if w_sum > 1e-6:
+                            ws = [x / w_sum for x in ws]
+                        joints_buf  += st.pack('<BBBB', *js)
+                        weights_buf += st.pack('<ffff', *ws)
+                    joints_acc  = _add_accessor(bytes(joints_buf),  n_v, "VEC4", 5121)
+                    weights_acc = _add_accessor(bytes(weights_buf), n_v, "VEC4", 5126)
+            if joints_acc is not None:
+                prim_attrs.JOINTS_0  = joints_acc
+            if weights_acc is not None:
+                prim_attrs.WEIGHTS_0 = weights_acc
+
+            # Material (with optional embedded texture)
             mat_idx = None
-            tex_name = str(getattr(node, 'texture', '') or '').strip()
-            if tex_name and tex_name.upper() not in ('NULL', ''):
+            tex_name = str(getattr(node, 'texture_clean', '') or
+                           getattr(node, 'texture', '') or '').strip()
+            if tex_name and tex_name.upper() not in ('NULL', 'BLACK', ''):
                 mat = pygltflib.Material(name=tex_name, doubleSided=False)
                 diff = getattr(node, 'diffuse', (1.0, 1.0, 1.0))
-                mat.pbrMetallicRoughness = pygltflib.PbrMetallicRoughness(
-                    baseColorFactor=[float(diff[0]), float(diff[1]), float(diff[2]), 1.0],
+                alpha_val = float(getattr(node, 'alpha', 1.0))
+                pbr = pygltflib.PbrMetallicRoughness(
+                    baseColorFactor=[float(diff[0]), float(diff[1]),
+                                     float(diff[2]), alpha_val],
                     metallicFactor=0.0,
                     roughnessFactor=0.8,
                 )
+                # Embed texture as base64 PNG data URI if tex_cache available
+                uri = self._tex_to_base64_uri(tex_cache, tex_name)
+                if uri is not None:
+                    img_obj = pygltflib.Image(uri=uri, name=tex_name)
+                    img_idx = len(gltf.images)
+                    gltf.images.append(img_obj)
+                    sampler = pygltflib.Sampler(
+                        magFilter=9729, minFilter=9987,  # LINEAR, LINEAR_MIPMAP_LINEAR
+                        wrapS=10497, wrapT=10497,        # REPEAT
+                    )
+                    samp_idx = len(gltf.samplers)
+                    gltf.samplers.append(sampler)
+                    tex_obj = pygltflib.Texture(source=img_idx, sampler=samp_idx,
+                                                name=tex_name)
+                    tex_idx = len(gltf.textures)
+                    gltf.textures.append(tex_obj)
+                    pbr.baseColorTexture = pygltflib.TextureInfo(index=tex_idx)
+                mat.pbrMetallicRoughness = pbr
+                if alpha_val < 0.999:
+                    mat.alphaMode = "BLEND"
                 mat_idx = len(gltf.materials)
                 gltf.materials.append(mat)
 
@@ -1714,17 +2071,27 @@ class GLTFExporter:
             mesh_idx = len(gltf.meshes)
             gltf.meshes.append(gmesh)
 
-            pos = node.position or (0.0, 0.0, 0.0)
-            rot = node.rotation or (0.0, 0.0, 0.0, 1.0)
-            gnode = pygltflib.Node(
-                name=node.name,
-                mesh=mesh_idx,
-                translation=list(pos),
-                rotation=list(rot),  # GLTF: [x, y, z, w]
-            )
-            node_idx = len(gltf.nodes)
-            gltf.nodes.append(gnode)
-            scene.nodes.append(node_idx)
+            # Attach mesh to the pre-built skeleton node if it exists,
+            # otherwise create a standalone mesh node
+            if node.name in gltf_node_idx:
+                existing_gnode = gltf.nodes[gltf_node_idx[node.name]]
+                existing_gnode.mesh = mesh_idx
+                # Assign skin for skinned meshes
+                if joints_acc is not None and gltf_skin is not None:
+                    existing_gnode.skin = gltf_skin
+            else:
+                pos = node.position or (0.0, 0.0, 0.0)
+                rot = node.rotation or (0.0, 0.0, 0.0, 1.0)
+                gnode = pygltflib.Node(
+                    name=node.name,
+                    mesh=mesh_idx,
+                    translation=list(pos),
+                    rotation=list(rot),  # GLTF: [x, y, z, w]
+                    skin=gltf_skin if (joints_acc is not None) else None,
+                )
+                node_idx = len(gltf.nodes)
+                gltf.nodes.append(gnode)
+                scene.nodes.append(node_idx)
 
         # Finalize buffer
         gltf.buffers.append(pygltflib.Buffer(byteLength=len(bin_data)))
@@ -1740,10 +2107,12 @@ class GLTFExporter:
 
     # ── Manual GLTF JSON+BIN path (no external deps) ─────────────────
 
-    def _export_manual(self, model: KotorModel, path: str, binary: bool) -> bool:
+    def _export_manual(self, model: KotorModel, path: str, binary: bool,
+                       tex_cache=None) -> bool:
         """
         Write a minimal GLTF 2.0 file without external dependencies.
         Outputs .gltf + embedded base64 buffer or .glb binary container.
+        When tex_cache is supplied, textures are embedded as PNG base64 data URIs.
         """
         import json, struct as st, base64
 
@@ -1813,18 +2182,21 @@ class GLTFExporter:
             if ua is not None: attrs["TEXCOORD_0"] = ua
 
             mat_i = None
-            tex   = str(getattr(node, 'texture', '') or '').strip()
-            if tex and tex.upper() not in ('NULL', ''):
-                diff = getattr(node, 'diffuse', (1.0, 1.0, 1.0))
+            tex   = str(getattr(node, 'texture_clean', '') or
+                        getattr(node, 'texture', '') or '').strip()
+            if tex and tex.upper() not in ('NULL', 'BLACK', ''):
+                diff      = getattr(node, 'diffuse', (1.0, 1.0, 1.0))
+                alpha_val = float(getattr(node, 'alpha', 1.0))
+                pbr_dict  = {
+                    "baseColorFactor": [float(diff[0]), float(diff[1]),
+                                        float(diff[2]), alpha_val],
+                    "metallicFactor": 0.0, "roughnessFactor": 0.8
+                }
+                mat_obj: dict = {"name": tex, "pbrMetallicRoughness": pbr_dict}
+                if alpha_val < 0.999:
+                    mat_obj["alphaMode"] = "BLEND"
                 mat_i = len(materials)
-                materials.append({
-                    "name": tex,
-                    "pbrMetallicRoughness": {
-                        "baseColorFactor": [float(diff[0]), float(diff[1]),
-                                            float(diff[2]), 1.0],
-                        "metallicFactor": 0.0, "roughnessFactor": 0.8
-                    }
-                })
+                materials.append(mat_obj)
 
             prim = {"attributes": attrs, "indices": ia}
             if mat_i is not None: prim["material"] = mat_i
@@ -1840,6 +2212,37 @@ class GLTFExporter:
 
         buf_b64 = base64.b64encode(bytes(buffers_bytes)).decode('ascii')
 
+        # ── Embed textures as PNG data URIs ──────────────────────────────────
+        # Build images / samplers / textures arrays for any material that has a
+        # known texture name, then patch the material's baseColorTexture reference.
+        gltf_images:   List[dict] = []
+        gltf_samplers: List[dict] = []
+        gltf_textures: List[dict] = []
+        _tex_name_to_idx: Dict[str, int] = {}  # tex_name → gltf_textures index
+
+        if tex_cache is not None and materials:
+            for mat in materials:
+                tex_n = mat.get("name", "")
+                if not tex_n or tex_n in _tex_name_to_idx:
+                    if tex_n in _tex_name_to_idx:
+                        # Patch this material too
+                        mat["pbrMetallicRoughness"]["baseColorTexture"] = {
+                            "index": _tex_name_to_idx[tex_n]}
+                    continue
+                uri = self._tex_to_base64_uri(tex_cache, tex_n)
+                if uri is None:
+                    continue
+                img_idx  = len(gltf_images)
+                samp_idx = len(gltf_samplers)
+                tex_idx  = len(gltf_textures)
+                gltf_images.append({"uri": uri, "name": tex_n})
+                gltf_samplers.append({"magFilter": 9729, "minFilter": 9987,
+                                      "wrapS": 10497, "wrapT": 10497})
+                gltf_textures.append({"source": img_idx, "sampler": samp_idx,
+                                      "name": tex_n})
+                _tex_name_to_idx[tex_n] = tex_idx
+                mat["pbrMetallicRoughness"]["baseColorTexture"] = {"index": tex_idx}
+
         gltf_json = {
             "asset": {"version": "2.0", "generator": "GhostRigger-K1-K2"},
             "scene": 0,
@@ -1853,6 +2256,10 @@ class GLTFExporter:
         }
         if materials:
             gltf_json["materials"] = materials
+        if gltf_images:
+            gltf_json["images"]   = gltf_images
+            gltf_json["samplers"] = gltf_samplers
+            gltf_json["textures"] = gltf_textures
 
         out_path = path
         if binary or path.endswith('.glb'):
