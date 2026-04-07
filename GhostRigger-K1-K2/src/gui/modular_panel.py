@@ -27,8 +27,10 @@ log = logging.getLogger(__name__)
 #  Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _btn(master, text, command, accent=False, **kw):
+def _btn(master, text, command, accent=False, small=False, **kw):
     style = 'Accent.TButton' if accent else 'TButton'
+    if small:
+        kw.setdefault('padding', (4, 1))
     try:
         b = ttk.Button(master, text=text, command=command, style=style, **kw)
     except Exception:
@@ -76,6 +78,48 @@ class _ScrollText(tk.Frame):
 #  Modular Mode Panel
 # ─────────────────────────────────────────────────────────────────────────────
 
+class _RoomEditDialog(tk.Toplevel):
+    """Modal dialog for adding or editing an LYT room entry."""
+
+    def __init__(self, master, title="Room", initial=None):
+        super().__init__(master)
+        self.title(title)
+        self.resizable(False, False)
+        self.result = None
+
+        init = initial or {}
+        ttk.Label(self, text="Model name (resref):").grid(row=0, column=0, sticky='w', padx=8, pady=4)
+        self._model_var = tk.StringVar(value=init.get('model', ''))
+        ttk.Entry(self, textvariable=self._model_var, width=24).grid(row=0, column=1, padx=4, pady=4)
+
+        for i, (label, attr, default) in enumerate(
+                [("X:", 'x', 0.0), ("Y:", 'y', 0.0), ("Z:", 'z', 0.0)], start=1):
+            ttk.Label(self, text=label).grid(row=i, column=0, sticky='w', padx=8, pady=2)
+            var = tk.DoubleVar(value=float(init.get(attr, default)))
+            ttk.Entry(self, textvariable=var, width=12).grid(row=i, column=1, padx=4, pady=2)
+            setattr(self, f'_var_{attr}', var)
+
+        btn_row = ttk.Frame(self); btn_row.grid(row=4, column=0, columnspan=2, pady=8)
+        ttk.Button(btn_row, text="OK",     command=self._ok).pack(side='left', padx=6)
+        ttk.Button(btn_row, text="Cancel", command=self.destroy).pack(side='left')
+
+        self.transient(master)
+        self.grab_set()
+
+    def _ok(self):
+        try:
+            self.result = {
+                'model': self._model_var.get().strip(),
+                'x': float(self._var_x.get()),
+                'y': float(self._var_y.get()),
+                'z': float(self._var_z.get()),
+            }
+        except (ValueError, tk.TclError):
+            messagebox.showerror("Invalid Input", "X/Y/Z must be numbers.", parent=self)
+            return
+        self.destroy()
+
+
 class ModularModePanel(tk.Frame):
     """
     Master panel for all module editing capabilities.
@@ -94,6 +138,18 @@ class ModularModePanel(tk.Frame):
         self._get_model   = get_model   or (lambda: None)
         self._module      = None   # currently loaded KotorModule
         self._wok_data    = None   # currently displayed WOKData
+        self._modified_wok = None  # WOKData after edits
+        # Paint brush state
+        self._paint_mode  = False  # True = paint mode active
+        self._selected_face_idx: int = -1   # last clicked face
+        # WOK canvas viewport state  (zoom/pan for 2-D paint canvas)
+        self._wok_canvas_scale: float = 1.0
+        self._wok_canvas_offset: List = [0.0, 0.0]
+        self._wok_canvas_drag_start: tuple = (0, 0)
+        self._wok_canvas_dragging: bool = False
+        # LYT grid snap state
+        self._lyt_snap_var: Optional[tk.BooleanVar] = None
+        self._lyt_grid_var: Optional[tk.DoubleVar] = None
         self._build_ui()
 
     # ── UI Construction ──────────────────────────────────────────────────────
@@ -182,6 +238,13 @@ class ModularModePanel(tk.Frame):
 
         paned.add(right, minsize=300)
 
+        # LYT editing buttons below room tree
+        lyt_btn_row = tk.Frame(right); lyt_btn_row.pack(fill='x', pady=2)
+        _btn(lyt_btn_row, "+ Add Room",    self._lyt_add_room,    small=True).pack(side='left', padx=2)
+        _btn(lyt_btn_row, "- Remove Room", self._lyt_remove_room, small=True).pack(side='left', padx=2)
+        _btn(lyt_btn_row, "✏ Edit Room",   self._lyt_edit_room,   small=True).pack(side='left', padx=2)
+        _btn(lyt_btn_row, "💾 Save LYT",   self._lyt_save,        small=True).pack(side='left', padx=8)
+
         # GIT summary below
         bot_frame = tk.LabelFrame(parent, text=" Game Instances (GIT) ")
         bot_frame.pack(fill='x', padx=6, pady=4)
@@ -196,6 +259,86 @@ class ModularModePanel(tk.Frame):
         git_sb.pack(side='right', fill='y')
         git_tv.pack(fill='both', expand=True)
         self._git_tree = git_tv
+
+    # ── LYT Editing helpers ──────────────────────────────────────────────────
+
+    def _lyt_add_room(self):
+        """Add a new room entry to the LYT layout."""
+        if not self._module or not self._module.lyt:
+            messagebox.showwarning("No LYT", "Load a module with a .lyt file first.")
+            return
+        dlg = _RoomEditDialog(self, title="Add Room")
+        self.wait_window(dlg)
+        if dlg.result:
+            from .module_format import LYTRoom
+            room = LYTRoom(**dlg.result)
+            self._module.lyt.rooms.append(room)
+            self._refresh_room_tree()
+
+    def _lyt_remove_room(self):
+        """Remove the selected room from the LYT layout."""
+        if not self._module or not self._module.lyt:
+            messagebox.showwarning("No LYT", "Load a module with a .lyt file first.")
+            return
+        sel = self._room_tree.selection()
+        if not sel:
+            messagebox.showinfo("Select Room", "Select a room to remove first.")
+            return
+        idx = self._room_tree.index(sel[0])
+        rooms = self._module.lyt.rooms
+        if 0 <= idx < len(rooms):
+            removed = rooms.pop(idx)
+            self._refresh_room_tree()
+            self._mod_info_text.append(f"Removed room: {removed.model}\n")
+
+    def _lyt_edit_room(self):
+        """Edit the selected room's model name and position."""
+        if not self._module or not self._module.lyt:
+            messagebox.showwarning("No LYT", "Load a module with a .lyt file first.")
+            return
+        sel = self._room_tree.selection()
+        if not sel:
+            messagebox.showinfo("Select Room", "Select a room to edit first.")
+            return
+        idx = self._room_tree.index(sel[0])
+        rooms = self._module.lyt.rooms
+        if 0 <= idx < len(rooms):
+            r = rooms[idx]
+            dlg = _RoomEditDialog(self, title="Edit Room",
+                                   initial=dict(model=r.model, x=r.x, y=r.y, z=r.z))
+            self.wait_window(dlg)
+            if dlg.result:
+                from .module_format import LYTRoom
+                rooms[idx] = LYTRoom(**dlg.result)
+                self._refresh_room_tree()
+
+    def _lyt_save(self):
+        """Save the current LYT layout to a file."""
+        if not self._module or not self._module.lyt:
+            messagebox.showwarning("No LYT", "No LYT data to save.")
+            return
+        p = filedialog.asksaveasfilename(
+            title="Save LYT file",
+            defaultextension=".lyt",
+            filetypes=[("LYT Layout", "*.lyt"), ("All", "*.*")])
+        if not p:
+            return
+        try:
+            self._module.lyt.write(p)
+            messagebox.showinfo("Saved", f"LYT saved to:\n{p}")
+            self._mod_info_text.append(f"LYT saved: {p}\n")
+        except Exception as e:
+            messagebox.showerror("Save Error", str(e))
+
+    def _refresh_room_tree(self):
+        """Reload the room treeview from the current LYT data."""
+        for row in self._room_tree.get_children():
+            self._room_tree.delete(row)
+        if self._module and self._module.lyt:
+            for r in self._module.lyt.rooms:
+                self._room_tree.insert('', 'end', values=(
+                    r.model, f"{r.x:.2f}", f"{r.y:.2f}", f"{r.z:.2f}"
+                ))
 
     def _browse_module_dir(self):
         d = filedialog.askdirectory(title="Select Module Directory")
@@ -340,8 +483,180 @@ class ModularModePanel(tk.Frame):
         _btn(btn_row, "💾 Save WOK (ASCII)", self._save_wok_ascii).pack(
             side='left', padx=4)
 
+        # ── Face Material Editor ──────────────────────────────────────────
+        face_edit_frame = tk.LabelFrame(parent,
+                                         text=" Face Material Editor (select face → assign material) ")
+        face_edit_frame.pack(fill='x', padx=6, pady=4)
+
+        face_top = tk.Frame(face_edit_frame); face_top.pack(fill='x', padx=4, pady=2)
+        _label(face_top, "Face index:").pack(side='left')
+        self._face_idx_var = tk.StringVar(value="0")
+        ttk.Entry(face_top, textvariable=self._face_idx_var, width=8).pack(side='left', padx=4)
+        _label(face_top, "Material:").pack(side='left', padx=(8, 0))
+        self._face_mat_var = tk.StringVar(value="WALK")
+        face_mat_cb = ttk.Combobox(face_top, textvariable=self._face_mat_var, width=22,
+                                    state='readonly')
+        face_mat_cb['values'] = list(self._WOK_MATERIAL_NAMES.values()) if hasattr(
+            self, '_WOK_MATERIAL_NAMES') else [
+            "WALK","NON_WALK","DIRT","OBSCURING","GRASS","STONE","WOOD","WATER",
+            "NON_WALK_GRASS","TRIGGER","PUDDLES","SWAMP","MUD","LEAVES","LAVA",
+            "BOTTOMLESS_PIT","DEEP_WATER","DOOR","NON_WALK_TRIGGER"]
+        face_mat_cb.pack(side='left', padx=4)
+        _btn(face_top, "Assign", self._assign_face_material, small=True).pack(side='left', padx=4)
+        _btn(face_top, "Show Face", self._show_face_info, small=True).pack(side='left')
+
+        # Bulk operations
+        bulk_row = tk.Frame(face_edit_frame); bulk_row.pack(fill='x', padx=4, pady=(0, 4))
+        _label(bulk_row, "Bulk: faces with material").pack(side='left')
+        self._bulk_src_var = tk.StringVar(value="NON_WALK")
+        ttk.Combobox(bulk_row, textvariable=self._bulk_src_var, width=18, state='readonly',
+                     values=face_mat_cb['values']).pack(side='left', padx=2)
+        _label(bulk_row, "→").pack(side='left', padx=2)
+        self._bulk_dst_var = tk.StringVar(value="WALK")
+        ttk.Combobox(bulk_row, textvariable=self._bulk_dst_var, width=18, state='readonly',
+                     values=face_mat_cb['values']).pack(side='left', padx=2)
+        _btn(bulk_row, "Replace All", self._bulk_replace_material, small=True).pack(side='left', padx=4)
+
+        # ── Save WOK buttons ─────────────────────────────────────────────────
+        save_row = tk.Frame(face_edit_frame); save_row.pack(fill='x', padx=4, pady=(0, 4))
+        _btn(save_row, "💾 Save Binary WOK", self._save_wok_binary, accent=True, small=True).pack(side='left', padx=4)
+        _btn(save_row, "💾 Save ASCII WOK",  self._save_wok_ascii,  small=True).pack(side='left')
+
+        # ── 2-D paint canvas ─────────────────────────────────────────────────
+        paint_frame = tk.LabelFrame(parent, text=" Walkmesh Paint Brush (top-down view) ")
+        paint_frame.pack(fill='both', expand=True, padx=6, pady=4)
+
+        paint_ctrl = tk.Frame(paint_frame); paint_ctrl.pack(fill='x', padx=4, pady=2)
+        self._paint_mode_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(paint_ctrl, text="🖌 Paint Mode",
+                        variable=self._paint_mode_var,
+                        command=self._toggle_paint_mode).pack(side='left')
+        _label(paint_ctrl, "  Paint material:").pack(side='left', padx=(8, 0))
+        self._paint_mat_var = tk.StringVar(value="NON_WALK")
+        paint_mat_vals = list(self._WOK_MATERIAL_NAMES.values()) if hasattr(
+            self, '_WOK_MATERIAL_NAMES') else ["WALK", "NON_WALK"]
+        ttk.Combobox(paint_ctrl, textvariable=self._paint_mat_var, width=18,
+                     state='readonly', values=paint_mat_vals).pack(side='left', padx=4)
+        _btn(paint_ctrl, "🔄 Redraw", self._redraw_wok_canvas, small=True).pack(side='left', padx=4)
+        _label(paint_ctrl, "  Scroll=zoom  RMB-drag=pan").pack(side='left', padx=4)
+
+        # Canvas for 2-D walkmesh view
+        self._wok_canvas = tk.Canvas(paint_frame, bg='#1a1a2e', height=260,
+                                      highlightthickness=1, highlightbackground='#333355')
+        self._wok_canvas.pack(fill='both', expand=True, padx=4, pady=(0, 4))
+        self._wok_canvas.bind('<Button-1>',        self._wok_canvas_click)
+        self._wok_canvas.bind('<B1-Motion>',       self._wok_canvas_drag_paint)
+        self._wok_canvas.bind('<ButtonPress-3>',   self._wok_canvas_pan_start)
+        self._wok_canvas.bind('<B3-Motion>',       self._wok_canvas_pan_move)
+        self._wok_canvas.bind('<ButtonRelease-3>', self._wok_canvas_pan_end)
+        self._wok_canvas.bind('<Button-4>',        lambda e: self._wok_canvas_zoom(1.25))
+        self._wok_canvas.bind('<Button-5>',        lambda e: self._wok_canvas_zoom(0.80))
+        self._wok_canvas.bind('<Configure>',       lambda e: self._redraw_wok_canvas())
+
         self._wok_log = _ScrollText(parent)
-        self._wok_log.pack(fill='both', expand=True, padx=6, pady=4)
+        self._wok_log.pack(fill='x', padx=6, pady=4)
+
+    # Surface name ↔ ID lookups (KotOR WOK surface IDs)
+    _WOK_MATERIAL_NAMES: Dict[int, str] = {
+        0:  "WALK",           1:  "NON_WALK",      2:  "OBSCURING",
+        3:  "DIRT",           4:  "GRASS",         5:  "STONE",
+        6:  "WOOD",           7:  "WATER",         8:  "NON_WALK_GRASS",
+        9:  "TRIGGER",       10:  "PUDDLES",       11:  "SWAMP",
+        12: "MUD",           13:  "LEAVES",        14:  "LAVA",
+        15: "BOTTOMLESS_PIT",16:  "DEEP_WATER",   32:  "DOOR",
+        64: "NON_WALK_TRIGGER",
+    }
+    _WOK_NAME_TO_ID: Dict[str, int] = {}  # filled lazily
+
+    def _mat_name_to_id(self, name: str) -> int:
+        if not self._WOK_NAME_TO_ID:
+            ModularModePanel._WOK_NAME_TO_ID = {v: k for k, v in self._WOK_MATERIAL_NAMES.items()}
+        return self._WOK_NAME_TO_ID.get(name.upper(), 1)  # default NON_WALK
+
+    def _assign_face_material(self):
+        wok = getattr(self, '_modified_wok', None) or self._wok_data
+        if not wok:
+            messagebox.showwarning("No WOK", "Load a WOK file first.")
+            return
+        try:
+            idx = int(self._face_idx_var.get())
+        except ValueError:
+            messagebox.showerror("Invalid Index", "Face index must be an integer.")
+            return
+        if idx < 0 or idx >= len(wok.faces):
+            messagebox.showerror("Out of Range",
+                                  f"Face index {idx} out of range (0–{len(wok.faces)-1}).")
+            return
+        mat_name = self._face_mat_var.get()
+        new_id = self._mat_name_to_id(mat_name)
+        old_id = wok.faces[idx].surface
+        wok.faces[idx] = wok.faces[idx].__class__(
+            wok.faces[idx].v1, wok.faces[idx].v2, wok.faces[idx].v3,
+            new_id,
+            wok.faces[idx].adj1, wok.faces[idx].adj2, wok.faces[idx].adj3
+        )
+        self._modified_wok = wok
+        old_name = self._WOK_MATERIAL_NAMES.get(old_id, f"ID_{old_id}")
+        self._wok_log.append(f"Face {idx}: {old_name} (id={old_id}) → {mat_name} (id={new_id})\n")
+        self._update_wok_display(wok)
+
+    def _show_face_info(self):
+        wok = getattr(self, '_modified_wok', None) or self._wok_data
+        if not wok:
+            messagebox.showwarning("No WOK", "Load a WOK file first.")
+            return
+        try:
+            idx = int(self._face_idx_var.get())
+        except ValueError:
+            messagebox.showerror("Invalid Index", "Face index must be an integer.")
+            return
+        if idx < 0 or idx >= len(wok.faces):
+            messagebox.showerror("Out of Range",
+                                  f"Face index {idx} out of range (0–{len(wok.faces)-1}).")
+            return
+        f = wok.faces[idx]
+        verts = wok.verts
+        mat_name = self._WOK_MATERIAL_NAMES.get(f.surface, f"ID_{f.surface}")
+
+        def _vstr(vi):
+            if 0 <= vi < len(verts):
+                x,y,z = verts[vi]
+                return f"v{vi}({x:.3f},{y:.3f},{z:.3f})"
+            return f"v{vi}(?)"
+
+        info = (
+            f"Face {idx}:\n"
+            f"  Vertices:  {_vstr(f.v1)}, {_vstr(f.v2)}, {_vstr(f.v3)}\n"
+            f"  Material:  {mat_name} (id={f.surface})\n"
+            f"  Adjacency: adj1={f.adj1}, adj2={f.adj2}, adj3={f.adj3}\n"
+        )
+        self._wok_log.set_text(info)
+
+    def _bulk_replace_material(self):
+        wok = getattr(self, '_modified_wok', None) or self._wok_data
+        if not wok:
+            messagebox.showwarning("No WOK", "Load a WOK file first.")
+            return
+        src_name = self._bulk_src_var.get()
+        dst_name = self._bulk_dst_var.get()
+        src_id = self._mat_name_to_id(src_name)
+        dst_id = self._mat_name_to_id(dst_name)
+        count = 0
+        FaceCls = wok.faces[0].__class__ if wok.faces else None
+        if FaceCls is None:
+            return
+        new_faces = []
+        for f in wok.faces:
+            if f.surface == src_id:
+                new_faces.append(FaceCls(f.v1, f.v2, f.v3, dst_id, f.adj1, f.adj2, f.adj3))
+                count += 1
+            else:
+                new_faces.append(f)
+        wok.faces = new_faces
+        self._modified_wok = wok
+        self._wok_log.append(
+            f"Bulk replace: {count} faces changed from {src_name} → {dst_name}\n")
+        self._update_wok_display(wok)
 
     def _browse_wok(self):
         p = filedialog.askopenfilename(
@@ -390,6 +705,12 @@ class ModularModePanel(tk.Frame):
             f"Non-walk: {wok.non_walk_face_count()} | "
             f"Boundary edges: {len(boundary)}\n"
         )
+
+        # Reset canvas viewport so the new WOK auto-fits
+        self._wok_canvas_offset[0] = 0.0
+        self._wok_canvas_offset[1] = 0.0
+        self._selected_face_idx = -1
+        self.after(50, self._redraw_wok_canvas)
 
     def _preview_boundary_edges(self):
         if not self._wok_data:
@@ -471,6 +792,209 @@ class ModularModePanel(tk.Frame):
             messagebox.showinfo("Saved", f"ASCII WOK saved to:\n{p}")
         except Exception as e:
             messagebox.showerror("Save Error", str(e))
+
+    def _save_wok_binary(self):
+        """Save the current (possibly modified) WOK as a binary .wok file."""
+        wok = getattr(self, '_modified_wok', None) or self._wok_data
+        if not wok:
+            messagebox.showwarning("No WOK", "Generate or load a WOK first.")
+            return
+        p = filedialog.asksaveasfilename(
+            title="Save Binary WOK",
+            defaultextension=".wok",
+            filetypes=[("Aurora Walkmesh", "*.wok"), ("All", "*.*")])
+        if not p:
+            return
+        try:
+            wok.write_binary(p)
+            messagebox.showinfo("Saved",
+                                f"Binary WOK saved to:\n{p}\n"
+                                f"({len(wok.verts)} verts, {len(wok.faces)} faces)")
+            self._wok_log.append(f"Binary WOK saved: {p}\n")
+        except Exception as e:
+            messagebox.showerror("Save Error", str(e))
+
+    # ── WOK 2-D paint canvas ──────────────────────────────────────────────────
+
+    def _toggle_paint_mode(self):
+        self._paint_mode = self._paint_mode_var.get()
+        cursor = 'crosshair' if self._paint_mode else 'arrow'
+        self._wok_canvas.config(cursor=cursor)
+        mode_txt = "ON" if self._paint_mode else "OFF"
+        self._wok_log.append(f"Paint mode {mode_txt}\n")
+
+    def _wok_world_to_canvas(self, wx: float, wy: float) -> tuple:
+        """Convert WOK world XY → canvas pixel (cx, cy)."""
+        cx = wx * self._wok_canvas_scale + self._wok_canvas_offset[0]
+        cy = -wy * self._wok_canvas_scale + self._wok_canvas_offset[1]
+        return (cx, cy)
+
+    def _wok_canvas_to_world(self, cx: float, cy: float) -> tuple:
+        """Convert canvas pixel → WOK world XY."""
+        wx = (cx - self._wok_canvas_offset[0]) / max(self._wok_canvas_scale, 1e-6)
+        wy = -(cy - self._wok_canvas_offset[1]) / max(self._wok_canvas_scale, 1e-6)
+        return (wx, wy)
+
+    def _wok_surface_color(self, surface_id: int) -> str:
+        """Return a hex colour string for a WOK surface material ID."""
+        _COLORS = {
+            0:  '#2a7a2a',   # WALK            green
+            1:  '#aa2222',   # NON_WALK        red
+            2:  '#664466',   # OBSCURING       purple
+            3:  '#8b6914',   # DIRT            brown
+            4:  '#44aa44',   # GRASS           light green
+            5:  '#888888',   # STONE           grey
+            6:  '#a05010',   # WOOD            orange-brown
+            7:  '#2244aa',   # WATER           blue
+            8:  '#885522',   # NON_WALK_GRASS  dark red-brown
+            9:  '#22aaaa',   # TRIGGER         cyan
+            10: '#4488aa',   # PUDDLES         blue-grey
+            14: '#cc4400',   # LAVA            orange-red
+            15: '#110022',   # BOTTOMLESS_PIT  near black
+            32: '#ddcc00',   # DOOR            yellow
+        }
+        return _COLORS.get(surface_id, '#555555')
+
+    def _fit_wok_canvas(self):
+        """Auto-fit the WOK to the canvas viewport."""
+        wok = getattr(self, '_modified_wok', None) or self._wok_data
+        if not wok or not wok.verts:
+            return
+        W = self._wok_canvas.winfo_width()  or 400
+        H = self._wok_canvas.winfo_height() or 260
+        xs = [v[0] for v in wok.verts]
+        ys = [v[1] for v in wok.verts]
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+        extent_x = max_x - min_x or 1.0
+        extent_y = max_y - min_y or 1.0
+        margin = 0.85
+        self._wok_canvas_scale = min(W / extent_x, H / extent_y) * margin
+        # Centre
+        cx_world = (min_x + max_x) / 2.0
+        cy_world = (min_y + max_y) / 2.0
+        self._wok_canvas_offset[0] = W / 2.0 - cx_world * self._wok_canvas_scale
+        self._wok_canvas_offset[1] = H / 2.0 + cy_world * self._wok_canvas_scale
+
+    def _redraw_wok_canvas(self):
+        """Redraw the 2-D WOK top-down view on _wok_canvas."""
+        c = self._wok_canvas
+        c.delete('all')
+        wok = getattr(self, '_modified_wok', None) or self._wok_data
+        if not wok or not wok.verts:
+            c.create_text(200, 130, text="No WOK loaded", fill='#666688',
+                          font=('Segoe UI', 11))
+            return
+
+        # Auto-fit on first draw (offset stays 0,0 until explicitly set)
+        if self._wok_canvas_offset[0] == 0.0 and self._wok_canvas_offset[1] == 0.0:
+            self._fit_wok_canvas()
+
+        for fi, face in enumerate(wok.faces):
+            if (face.v1 >= len(wok.verts) or face.v2 >= len(wok.verts) or
+                    face.v3 >= len(wok.verts)):
+                continue
+            ax, ay = self._wok_world_to_canvas(wok.verts[face.v1][0], wok.verts[face.v1][1])
+            bx, by = self._wok_world_to_canvas(wok.verts[face.v2][0], wok.verts[face.v2][1])
+            cx2, cy2 = self._wok_world_to_canvas(wok.verts[face.v3][0], wok.verts[face.v3][1])
+
+            fill = self._wok_surface_color(face.surface)
+            outline = '#ffff00' if fi == self._selected_face_idx else '#223322'
+            width   = 2         if fi == self._selected_face_idx else 1
+            c.create_polygon(ax, ay, bx, by, cx2, cy2,
+                             fill=fill, outline=outline, width=width,
+                             tags=(f'face_{fi}',))
+
+        # Legend (top-left)
+        legend_items = [
+            ('#2a7a2a', 'WALK'), ('#aa2222', 'NON_WALK'), ('#ddcc00', 'DOOR'),
+            ('#22aaaa', 'TRIGGER'), ('#2244aa', 'WATER'),
+        ]
+        for i, (col, name) in enumerate(legend_items):
+            c.create_rectangle(6, 6 + i*16, 18, 18 + i*16, fill=col, outline='')
+            c.create_text(22, 12 + i*16, text=name, fill='#cccccc',
+                          font=('Consolas', 7), anchor='w')
+
+        # Selected face info
+        if 0 <= self._selected_face_idx < len(wok.faces):
+            f = wok.faces[self._selected_face_idx]
+            mat = self._WOK_MATERIAL_NAMES.get(f.surface, f"ID_{f.surface}")
+            W = c.winfo_width() or 400
+            c.create_text(W - 4, 10, text=f"Face {self._selected_face_idx}: {mat}",
+                          fill='#ffff88', font=('Consolas', 8), anchor='ne')
+
+    def _wok_canvas_click(self, e):
+        """Click on canvas: select face and optionally paint it."""
+        wok = getattr(self, '_modified_wok', None) or self._wok_data
+        if not wok:
+            return
+        wx, wy = self._wok_canvas_to_world(e.x, e.y)
+        fi = wok.face_at_point(wx, wy)
+        self._selected_face_idx = fi
+        if fi >= 0:
+            f = wok.faces[fi]
+            mat = self._WOK_MATERIAL_NAMES.get(f.surface, f"ID_{f.surface}")
+            self._face_idx_var.set(str(fi))
+            self._face_mat_var.set(mat)
+            if self._paint_mode:
+                self._apply_paint(wok, fi)
+        self._redraw_wok_canvas()
+
+    def _wok_canvas_drag_paint(self, e):
+        """Drag in paint mode: continuously paint faces under cursor."""
+        if not self._paint_mode:
+            return
+        wok = getattr(self, '_modified_wok', None) or self._wok_data
+        if not wok:
+            return
+        wx, wy = self._wok_canvas_to_world(e.x, e.y)
+        fi = wok.face_at_point(wx, wy)
+        if fi >= 0 and fi != self._selected_face_idx:
+            self._selected_face_idx = fi
+            self._apply_paint(wok, fi)
+            self._redraw_wok_canvas()
+
+    def _apply_paint(self, wok, face_idx: int):
+        """Apply the current paint material to face_idx."""
+        mat_name = self._paint_mat_var.get()
+        new_id   = self._mat_name_to_id(mat_name)
+        old_id   = wok.faces[face_idx].surface
+        if old_id != new_id:
+            wok.set_face_surface(face_idx, new_id)
+            self._modified_wok = wok
+            old_name = self._WOK_MATERIAL_NAMES.get(old_id, f"ID_{old_id}")
+            self._wok_log.append(
+                f"Painted face {face_idx}: {old_name} → {mat_name}\n")
+
+    def _wok_canvas_pan_start(self, e):
+        self._wok_canvas_drag_start = (e.x, e.y)
+        self._wok_canvas_dragging = True
+
+    def _wok_canvas_pan_move(self, e):
+        if not self._wok_canvas_dragging:
+            return
+        dx = e.x - self._wok_canvas_drag_start[0]
+        dy = e.y - self._wok_canvas_drag_start[1]
+        self._wok_canvas_offset[0] += dx
+        self._wok_canvas_offset[1] += dy
+        self._wok_canvas_drag_start = (e.x, e.y)
+        self._redraw_wok_canvas()
+
+    def _wok_canvas_pan_end(self, e):
+        self._wok_canvas_dragging = False
+
+    def _wok_canvas_zoom(self, factor: float):
+        """Zoom the WOK canvas view, keeping the centre fixed."""
+        c = self._wok_canvas
+        W = c.winfo_width()  or 400
+        H = c.winfo_height() or 260
+        # Zoom around canvas centre
+        cx, cy = W / 2, H / 2
+        wx, wy = self._wok_canvas_to_world(cx, cy)
+        self._wok_canvas_scale = max(0.5, min(self._wok_canvas_scale * factor, 2000.0))
+        self._wok_canvas_offset[0] = cx - wx * self._wok_canvas_scale
+        self._wok_canvas_offset[1] = cy + wy * self._wok_canvas_scale
+        self._redraw_wok_canvas()
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Tab 3: K1↔K2 Porter

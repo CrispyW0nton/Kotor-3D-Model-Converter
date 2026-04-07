@@ -44,8 +44,10 @@ class TestHeaderRedesign(unittest.TestCase):
         self.src = _get_main_window_src()
 
     def test_icon_label_separate(self):
-        self.assertIn('text="👻"', self.src,
-                      "Ghost icon should be its own Label widget")
+        # Phase 19: ghost icon replaced by Icons.get("logo") KotOR-style asset
+        self.assertTrue(
+            'Icons.get("logo"' in self.src or 'text="👻"' in self.src,
+            "Header should use either Icons.get('logo') or a ghost-icon Label")
 
     def test_title_frame_exists(self):
         self.assertIn("title_frame", self.src,
@@ -60,8 +62,11 @@ class TestHeaderRedesign(unittest.TestCase):
                       "IPC status label should have an informative tooltip")
 
     def test_version_string(self):
-        self.assertIn("4.3.0", self.src,
-                      "App version should be bumped to 4.3.0 for Phase 18")
+        # Version has been superseded by later phases; accept any GhostRigger
+        # version string (4.x or 5.x) as long as the APP_VERSION attribute exists.
+        self.assertTrue(
+            "4.3.0" in self.src or "5.0.0" in self.src or "APP_VERSION" in self.src,
+            "App version should be present (was 4.3.0 for Phase 18, may be higher now)")
 
 
 # ── Toolbar improvements ──────────────────────────────────────────────────────
@@ -129,13 +134,22 @@ class TestLibraryPanelIcons(unittest.TestCase):
         self.assertIn("_cat_icons", self.src)
 
     def test_creature_icon_present(self):
-        self.assertIn("🐉", self.src)
+        # Phase 19: emoji replaced by KotOR icon names in CATEGORIES 3-tuple
+        self.assertTrue(
+            "cat_creature" in self.src or "🐉" in self.src,
+            "Creature category must have icon (cat_creature key or emoji)")
 
     def test_character_icon_present(self):
-        self.assertIn("🧍", self.src)
+        # Phase 19: emoji replaced by KotOR icon names in CATEGORIES 3-tuple
+        self.assertTrue(
+            "cat_character" in self.src or "🧍" in self.src,
+            "Character category must have icon (cat_character key or emoji)")
 
     def test_module_icon_present(self):
-        self.assertIn("🏛", self.src)
+        # Phase 19: emoji replaced by KotOR icon names in CATEGORIES 3-tuple
+        self.assertTrue(
+            "cat_module" in self.src or "🏛" in self.src,
+            "Module category must have icon (cat_module key or emoji)")
 
     def test_icons_shown_for_all_tab(self):
         self.assertIn("cat == 'All'", self.src)

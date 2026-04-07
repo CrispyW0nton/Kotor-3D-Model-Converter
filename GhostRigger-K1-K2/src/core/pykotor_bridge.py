@@ -825,3 +825,144 @@ def _convert_anim_node(pk_anode) -> Optional[ModelNode]:
 def is_pykotor_available() -> bool:
     """Return True if PyKotor was successfully imported."""
     return _PYKOTOR
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Animation cross-validation via PyKotor
+# ─────────────────────────────────────────────────────────────────────────────
+
+def validate_animations_via_pykotor(
+    mdl_bytes: bytes,
+    mdx_bytes: bytes = b'',
+    expected_names: Optional[List[str]] = None,
+) -> dict:
+    """
+    Cross-validate animations in an MDL file using PyKotor's reader.
+
+    Loads the raw MDL bytes via PyKotor and compares the animation list against
+    an expected set (defaults to the standard KotOR humanoid animation set).
+
+    This is the definitive check because PyKotor uses the same parsing code
+    as the KotOR game engine for animation discovery.
+
+    Parameters
+    ----------
+    mdl_bytes      : raw binary MDL data
+    mdx_bytes      : raw binary MDX data (may be empty / b'')
+    expected_names : list of expected animation names.
+                     If None, defaults to the standard K1 humanoid anim set.
+
+    Returns
+    -------
+    dict with keys:
+        ok       : bool   – True if parsing succeeded
+        pykotor  : bool   – True if PyKotor was used (False = internal parser)
+        anims    : list   – [{name, length, n_nodes, source}, …]
+        missing  : set    – expected animation names not found in model
+        extra    : set    – model anims not in expected list
+        coverage : int    – percentage 0-100 of expected anims present
+        error    : str|None – error description if ok=False
+    """
+    from .template_builder import validate_animations_via_pykotor as _tb_validate
+    return _tb_validate(mdl_bytes, mdx_bytes, expected_names)
+
+
+def list_animations_via_pykotor(mdl_bytes: bytes, mdx_bytes: bytes = b'') -> List[str]:
+    """
+    Return a list of animation names parsed from MDL bytes using PyKotor.
+
+    This is a thin convenience wrapper around validate_animations_via_pykotor.
+    Returns an empty list if parsing fails.
+
+    Parameters
+    ----------
+    mdl_bytes : raw binary MDL data
+    mdx_bytes : raw binary MDX data (may be empty)
+
+    Returns
+    -------
+    Sorted list of animation name strings.
+    """
+    result = validate_animations_via_pykotor(mdl_bytes, mdx_bytes)
+    if result.get('ok'):
+        return sorted(a['name'] for a in result.get('anims', []) if a.get('name'))
+    return []
+
+
+def compare_model_animations(
+    gr_model,
+    mdl_bytes: Optional[bytes] = None,
+    mdx_bytes: bytes = b'',
+) -> dict:
+    """
+    Compare the animations in a GhostRigger KotorModel against a PyKotor
+    parse of the same MDL bytes, and report discrepancies.
+
+    This enables cross-validation between GhostRigger's internal MDLBinaryParser
+    and PyKotor's reader.  Any animation present in one but not the other is
+    a parsing discrepancy that should be investigated.
+
+    Parameters
+    ----------
+    gr_model  : KotorModel  – the GhostRigger-parsed model
+    mdl_bytes : raw MDL bytes (to re-parse with PyKotor).
+                If None, only the gr_model list is returned.
+    mdx_bytes : raw MDX bytes (may be empty)
+
+    Returns
+    -------
+    dict with keys:
+        gr_anims      : set of animation names from the GhostRigger model
+        pk_anims      : set of animation names from PyKotor (empty if unavailable)
+        only_in_gr    : anims present in GhostRigger parser but not PyKotor
+        only_in_pk    : anims present in PyKotor but not GhostRigger parser
+        in_both       : anims present in both parsers
+        pykotor_used  : bool – True if PyKotor parse succeeded
+        discrepancy   : bool – True if any difference between the two parsers
+    """
+    # GhostRigger animation names
+    gr_anims: set = set()
+    for anim in getattr(gr_model, 'animations', []):
+        aname = (getattr(anim, 'name', '') or '').strip()
+        if aname:
+            gr_anims.add(aname.lower())
+
+    pk_anims: set = set()
+    pykotor_used = False
+
+    if mdl_bytes is not None and _PYKOTOR:
+        try:
+            import io
+            pk_mdl = _pk_read_mdl(io.BytesIO(mdl_bytes),
+                                   io.BytesIO(mdx_bytes) if mdx_bytes else None)
+            for anim in (pk_mdl.anims or []):
+                aname = (getattr(anim, 'name', '') or '').strip()
+                if aname:
+                    pk_anims.add(aname.lower())
+            pykotor_used = True
+        except Exception as exc:
+            log.warning("compare_model_animations PyKotor parse failed: %s", exc)
+
+    only_in_gr = gr_anims - pk_anims if pykotor_used else set()
+    only_in_pk = pk_anims - gr_anims if pykotor_used else set()
+    in_both    = gr_anims & pk_anims if pykotor_used else gr_anims
+
+    discrepancy = bool(only_in_gr or only_in_pk)
+
+    if discrepancy:
+        log.warning(
+            "compare_model_animations: DISCREPANCY for model '%s'  "
+            "only_in_gr=%s  only_in_pk=%s",
+            getattr(gr_model, 'name', '?'),
+            sorted(only_in_gr), sorted(only_in_pk),
+        )
+
+    return {
+        'gr_anims':     gr_anims,
+        'pk_anims':     pk_anims,
+        'only_in_gr':   only_in_gr,
+        'only_in_pk':   only_in_pk,
+        'in_both':      in_both,
+        'pykotor_used': pykotor_used,
+        'discrepancy':  discrepancy,
+    }

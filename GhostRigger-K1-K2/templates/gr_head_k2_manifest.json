@@ -1,0 +1,373 @@
+{
+  "name": "gr_head_k2",
+  "source_model": "PFHC01",
+  "game_version": "K2",
+  "part": "head",
+  "supermodel": "S_Female03",
+  "classification": "character",
+  "description": "K2 Female Human Head 01 \u2014 real K2 pfhc01 skeleton, stripped to dummies",
+  "node_count": 36,
+  "nodes": [
+    {
+      "name": "gr_head_k2",
+      "type": "dummy",
+      "parent": "NULL",
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "cutscenedummy",
+      "type": "dummy",
+      "parent": "gr_head_k2",
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "rootdummy",
+      "type": "dummy",
+      "parent": "cutscenedummy",
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "torso_g",
+      "type": "dummy",
+      "parent": "rootdummy",
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "torsoUpr_g",
+      "type": "dummy",
+      "parent": "torso_g",
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "bangs",
+      "type": "dummy",
+      "parent": "torsoUpr_g",
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "eyeLA",
+      "type": "dummy",
+      "parent": "bangs",
+      "pos": [
+        0.00013383099576458335,
+        -0.029998300597071648,
+        -0.009292449802160263
+      ]
+    },
+    {
+      "name": "eyeRA",
+      "type": "dummy",
+      "parent": "eyeLA",
+      "pos": [
+        0.0002746050013229251,
+        -0.011089599691331387,
+        0.0714678019285202
+      ]
+    },
+    {
+      "name": "eyeRlid",
+      "type": "dummy",
+      "parent": "eyeRA",
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "teethupper",
+      "type": "dummy",
+      "parent": "eyeRlid",
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "eyeLlid",
+      "type": "dummy",
+      "parent": "teethupper",
+      "pos": [
+        -0.0003425489994697273,
+        0.1217930018901825,
+        0.020948300138115883
+      ]
+    },
+    {
+      "name": "head",
+      "type": "dummy",
+      "parent": "teethupper",
+      "pos": [
+        -0.02325429953634739,
+        0.10480800271034241,
+        0.011946000158786774
+      ]
+    },
+    {
+      "name": "f_rmc_g",
+      "type": "dummy",
+      "parent": "teethupper",
+      "pos": [
+        0.02500380016863346,
+        0.10480800271034241,
+        0.011611400172114372
+      ]
+    },
+    {
+      "name": "f_jaw_g",
+      "type": "dummy",
+      "parent": "teethupper",
+      "pos": [
+        -0.00034256200888194144,
+        0.03319590166211128,
+        0.04390890151262283
+      ]
+    },
+    {
+      "name": "f_Rlm_g",
+      "type": "dummy",
+      "parent": "f_jaw_g",
+      "pos": [
+        0.011284600012004375,
+        0.0917166993021965,
+        -0.04729029908776283
+      ]
+    },
+    {
+      "name": "f_Llm_g",
+      "type": "dummy",
+      "parent": "f_jaw_g",
+      "pos": [
+        -0.009724630042910576,
+        0.09171660244464874,
+        -0.04729029908776283
+      ]
+    },
+    {
+      "name": "f_tonguetip_g",
+      "type": "dummy",
+      "parent": "f_jaw_g",
+      "pos": [
+        -0.00011164200259372592,
+        0.03750640153884888,
+        -0.03421059995889664
+      ]
+    },
+    {
+      "name": "teethlower",
+      "type": "dummy",
+      "parent": "f_jaw_g",
+      "pos": [
+        -6.590510020032525e-05,
+        0.07602620124816895,
+        -0.029815400019288063
+      ]
+    },
+    {
+      "name": "tongue",
+      "type": "dummy",
+      "parent": "f_jaw_g",
+      "pos": [
+        -6.590210250578821e-05,
+        0.06346239894628525,
+        -0.02772659994661808
+      ]
+    },
+    {
+      "name": "f_mdbrw_g",
+      "type": "dummy",
+      "parent": "eyeRlid",
+      "pos": [
+        -0.00026136799715459347,
+        0.11649099737405777,
+        0.09544269740581512
+      ]
+    },
+    {
+      "name": "f_lbrw_g",
+      "type": "dummy",
+      "parent": "eyeRlid",
+      "pos": [
+        -0.03994790092110634,
+        0.11381500214338303,
+        0.09616269916296005
+      ]
+    },
+    {
+      "name": "f_rbrw_g",
+      "type": "dummy",
+      "parent": "eyeRlid",
+      "pos": [
+        0.039127200841903687,
+        0.11381600052118301,
+        0.09616269916296005
+      ]
+    },
+    {
+      "name": "MaskHook",
+      "type": "dummy",
+      "parent": "eyeRlid",
+      "pos": [
+        0.00030501000583171844,
+        0.12570500373840332,
+        0.02764200046658516
+      ]
+    },
+    {
+      "name": "GoggleHook",
+      "type": "dummy",
+      "parent": "eyeRlid",
+      "pos": [
+        0.0003050059895031154,
+        0.12164899706840515,
+        0.07483100146055222
+      ]
+    },
+    {
+      "name": "f_rlweye_g",
+      "type": "dummy",
+      "parent": "eyeRlid",
+      "pos": [
+        0.02860110066831112,
+        0.10414600372314453,
+        0.05973590165376663
+      ]
+    },
+    {
+      "name": "f_llweye_g",
+      "type": "dummy",
+      "parent": "eyeRlid",
+      "pos": [
+        -0.029903199523687363,
+        0.10414600372314453,
+        0.05973590165376663
+      ]
+    },
+    {
+      "name": "f_lns_g",
+      "type": "dummy",
+      "parent": "eyeRlid",
+      "pos": [
+        -0.04565899819135666,
+        0.10921099781990051,
+        0.05434750020503998
+      ]
+    },
+    {
+      "name": "f_rns_g",
+      "type": "dummy",
+      "parent": "eyeRlid",
+      "pos": [
+        0.04635009914636612,
+        0.10921099781990051,
+        0.0544624999165535
+      ]
+    },
+    {
+      "name": "ponytail",
+      "type": "dummy",
+      "parent": "eyeRlid",
+      "pos": [
+        0.0003551729896571487,
+        -0.11988399922847748,
+        -0.05742520093917847
+      ]
+    },
+    {
+      "name": "bangs",
+      "type": "dummy",
+      "parent": "eyeRlid",
+      "pos": [
+        0.0014581299619749188,
+        0.06098410114645958,
+        0.0787815973162651
+      ]
+    },
+    {
+      "name": "eyeLA",
+      "type": "dummy",
+      "parent": "eyeRlid",
+      "pos": [
+        -0.026850499212741852,
+        0.09107650071382523,
+        0.07631219923496246
+      ]
+    },
+    {
+      "name": "eyeRA",
+      "type": "dummy",
+      "parent": "eyeRlid",
+      "pos": [
+        0.026031600311398506,
+        0.09107650071382523,
+        0.07631219923496246
+      ]
+    },
+    {
+      "name": "eyeRlid",
+      "type": "dummy",
+      "parent": "eyeRlid",
+      "pos": [
+        0.026031600311398506,
+        0.09107650071382523,
+        0.07631219923496246
+      ]
+    },
+    {
+      "name": "teethupper",
+      "type": "dummy",
+      "parent": "eyeRlid",
+      "pos": [
+        -0.00040843200986273587,
+        0.11492999643087387,
+        0.027934499084949493
+      ]
+    },
+    {
+      "name": "eyeLlid",
+      "type": "dummy",
+      "parent": "eyeRlid",
+      "pos": [
+        -0.026850499212741852,
+        0.09107650071382523,
+        0.07631219923496246
+      ]
+    },
+    {
+      "name": "head",
+      "type": "dummy",
+      "parent": "gr_head_k2",
+      "pos": [
+        0.0,
+        0.0,
+        0.11999999731779099
+      ]
+    }
+  ],
+  "note": "Skeleton-only template derived from a real KotOR game model. All geometry stripped; only dummy nodes remain for easy rigging."
+}

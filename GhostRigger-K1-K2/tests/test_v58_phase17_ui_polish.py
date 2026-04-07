@@ -284,7 +284,7 @@ class TestPykotorGFFPreview(unittest.TestCase):
     def _build_minimal_utc(self) -> bytes:
         """Build a minimal GFF (UTC) binary blob using pykotor."""
         try:
-            import sys as _sys
+            import sys as _sys, tempfile, os
             _pk_path = '/home/user/webapp/PyKotor/Libraries/PyKotor/src'
             if _pk_path not in _sys.path:
                 _sys.path.insert(0, _pk_path)
@@ -293,10 +293,18 @@ class TestPykotorGFFPreview(unittest.TestCase):
             gff = GFF(GFFContent.UTC)
             gff.root.set_string("FirstName", "TestCreature")
             gff.root.set_uint8("Race", 6)
-            import io
-            buf = io.BytesIO()
-            write_gff(gff, buf)
-            return buf.getvalue()
+            # write_gff requires a file path, bytes object, or BinaryWriter —
+            # not an io.BytesIO. Write to a temp file then read back.
+            with tempfile.NamedTemporaryFile(suffix='.gff', delete=False) as tf:
+                tmp_path = tf.name
+            try:
+                write_gff(gff, tmp_path)
+                return open(tmp_path, 'rb').read()
+            finally:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
         except Exception:
             return b""
 

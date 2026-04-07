@@ -1,0 +1,530 @@
+# Exported by KotorModTools v1.0
+newmodel gr_head_k1
+setsupermodel gr_head_k1 S_Female03
+classification character
+setanimationscale 1.000000
+setfog 0
+
+node dummy gr_head_k1
+  parent NULL
+  position 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+node dummy cutscenedummy
+  parent gr_head_k1
+  position 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  positionkey 1
+    0.000000 0.000000 0.000000 0.000000
+  orientationkey 1
+    0.000000 0.000000 0.000000 0.000000 1.000000
+node dummy rootdummy
+  parent cutscenedummy
+  position 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  positionkey 1
+    0.000000 0.000000 0.000000 0.000000
+  orientationkey 1
+    0.000000 0.000000 0.000000 0.000000 1.000000
+node dummy torso_g
+  parent rootdummy
+  position 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  positionkey 1
+    0.000000 0.000000 0.000000 0.000000
+  orientationkey 1
+    0.000000 0.000000 0.000000 0.000000 1.000000
+node dummy torsoUpr_g
+  parent torso_g
+  position 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  positionkey 1
+    0.000000 0.000000 0.000000 0.000000
+  orientationkey 1
+    0.000000 0.000000 0.000000 0.000000 1.000000
+node dummy necklwr_g
+  parent torsoUpr_g
+  position 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  positionkey 1
+    0.000000 0.000000 0.000000 0.000000
+  orientationkey 1
+    0.000000 0.000000 0.000000 0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+node dummy neck_g
+  parent necklwr_g
+  position 0.000134 -0.029998 -0.009292
+  orientation -0.087156 -0.000000 0.000000 0.996195
+  positionkey 1
+    0.000000 0.000134 -0.029998 -0.009292
+  orientationkey 1
+    0.000000 -0.087156 -0.000000 0.000000 0.996195
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+node dummy Hturn_g
+  parent neck_g
+  position 0.000275 -0.011090 0.071468
+  orientation 0.087156 0.000000 -0.000000 0.996195
+  positionkey 1
+    0.000000 0.000275 -0.011090 0.071468
+  orientationkey 1
+    0.000000 0.087156 0.000000 -0.000000 0.996195
+node dummy head_g
+  parent Hturn_g
+  position 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  positionkey 1
+    0.000000 0.000000 0.000000 0.000000
+  orientationkey 1
+    0.000000 0.000000 0.000000 0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+node dummy talkdummy
+  parent head_g
+  position 0.000000 0.000000 0.000000
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 0.000000 0.000000 0.000000
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+node dummy f_um_g
+  parent talkdummy
+  position -0.000343 0.121793 0.020948
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 -0.000343 0.121793 0.020948
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy f_lmc_g
+  parent talkdummy
+  position -0.023254 0.104808 0.011946
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 -0.023254 0.104808 0.011946
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy f_rmc_g
+  parent talkdummy
+  position 0.025004 0.104808 0.011611
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 0.025004 0.104808 0.011611
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy f_jaw_g
+  parent talkdummy
+  position -0.000343 0.033196 0.043909
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 -0.000343 0.033196 0.043909
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+node dummy f_Rlm_g
+  parent f_jaw_g
+  position 0.011285 0.091717 -0.047290
+  orientation 0.000000 0.000000 0.000000 1.000000
+  positionkey 1
+    0.000000 0.011285 0.091717 -0.047290
+  orientationkey 1
+    0.000000 0.000000 0.000000 0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy f_Llm_g
+  parent f_jaw_g
+  position -0.009725 0.091717 -0.047290
+  orientation 0.000000 0.000000 0.000000 1.000000
+  positionkey 1
+    0.000000 -0.009725 0.091717 -0.047290
+  orientationkey 1
+    0.000000 0.000000 0.000000 0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy f_tonguetip_g
+  parent f_jaw_g
+  position -0.000112 0.037506 -0.034211
+  orientation -0.021807 -0.000002 -0.000003 0.999762
+  positionkey 1
+    0.000000 -0.000112 0.037506 -0.034211
+  orientationkey 1
+    0.000000 -0.021807 -0.000002 -0.000003 0.999762
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy teethlower
+  parent f_jaw_g
+  position -0.000066 0.076088 -0.029658
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 -0.000066 0.076088 -0.029658
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+endnode
+
+endnode
+
+node dummy teethupper
+  parent head_g
+  position -0.000408 0.114930 0.027934
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 -0.000408 0.114930 0.027934
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy f_mdbrw_g
+  parent head_g
+  position -0.000261 0.116491 0.095443
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 -0.000261 0.116491 0.095443
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy f_lbrw_g
+  parent head_g
+  position -0.039948 0.113815 0.096163
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 -0.039948 0.113815 0.096163
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy f_rbrw_g
+  parent head_g
+  position 0.039127 0.113816 0.096163
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 0.039127 0.113816 0.096163
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy MaskHook
+  parent head_g
+  position 0.000305 0.127427 0.027235
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 0.000305 0.127427 0.027235
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+endnode
+
+node dummy GoggleHook
+  parent head_g
+  position 0.000305 0.121687 0.074462
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 0.000305 0.121687 0.074462
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+endnode
+
+node dummy f_rlweye_g
+  parent head_g
+  position 0.028601 0.104146 0.059736
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 0.028601 0.104146 0.059736
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy f_llweye_g
+  parent head_g
+  position -0.029903 0.104146 0.059736
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 -0.029903 0.104146 0.059736
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy f_lns_g
+  parent head_g
+  position -0.045659 0.109211 0.054348
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 -0.045659 0.109211 0.054348
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy f_rns_g
+  parent head_g
+  position 0.046350 0.109211 0.054462
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 0.046350 0.109211 0.054462
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy eyeLlid
+  parent head_g
+  position -0.026850 0.091077 0.076312
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 -0.026850 0.091077 0.076312
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy eyeLA
+  parent head_g
+  position -0.026850 0.091077 0.076312
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 -0.026850 0.091077 0.076312
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy hairalpha
+  parent head_g
+  position -0.004545 0.043848 -0.061999
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 -0.004545 0.043848 -0.061999
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy eyeRlid
+  parent head_g
+  position 0.026032 0.091077 0.076312
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 0.026032 0.091077 0.076312
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy eyeRA
+  parent head_g
+  position 0.026032 0.091077 0.076312
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 0.026032 0.091077 0.076312
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy Object01
+  parent head_g
+  position -0.004545 0.043848 -0.061999
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 -0.004545 0.043848 -0.061999
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+node dummy Object02
+  parent head_g
+  position -0.004545 0.043848 -0.061999
+  orientation -0.000000 -0.000000 -0.000000 1.000000
+  positionkey 1
+    0.000000 -0.004545 0.043848 -0.061999
+  orientationkey 1
+    0.000000 -0.000000 -0.000000 -0.000000 1.000000
+  alphakey 1
+    0.000000 1.000000
+  scalekey 1
+    0.000000 1.000000
+  selfillumcolorkey 1
+    0.000000 0.000000 0.000000 0.000000
+endnode
+
+endnode
+
+endnode
+
+endnode
+
+endnode
+
+endnode
+
+endnode
+
+endnode
+
+endnode
+
+node dummy tongue
+  parent gr_head_k1
+  position 0.000000 0.068206 0.079329
+  orientation 0.000000 0.000000 0.000000 1.000000
+  positionkey 1
+    0.000000 0.000000 0.068206 0.079329
+  orientationkey 1
+    0.000000 0.000000 0.000000 0.000000 1.000000
+endnode
+
+node dummy head
+  parent gr_head_k1
+  position 0.000000 0.045339 0.001017
+  orientation 0.000000 0.000000 0.000000 1.000000
+  positionkey 1
+    0.000000 0.000000 0.045339 0.001017
+  orientationkey 1
+    0.000000 0.000000 0.000000 0.000000 1.000000
+endnode
+
+endnode
+
+donemodel gr_head_k1

@@ -48,7 +48,7 @@ import struct
 import logging
 import threading
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 log = logging.getLogger(__name__)
 
@@ -713,14 +713,41 @@ class _GameInstall:
 
 # ── Texture decoding helper ──────────────────────────────────────────────────
 
+# Cache the PyKotor bridge import to avoid repeated ImportError overhead
+_pykotor_tpc_to_pil = None
+_pykotor_bridge_checked = False
+
+
+def _get_pykotor_tpc_fn():
+    """Lazily import pykotor_tpc_to_pil; returns None if unavailable."""
+    global _pykotor_tpc_to_pil, _pykotor_bridge_checked
+    if _pykotor_bridge_checked:
+        return _pykotor_tpc_to_pil
+    _pykotor_bridge_checked = True
+    try:
+        from .pykotor_bridge import pykotor_tpc_to_pil as _fn
+        _pykotor_tpc_to_pil = _fn
+    except Exception:
+        _pykotor_tpc_to_pil = None
+    return _pykotor_tpc_to_pil
+
+
 def _decode_texture(raw: bytes) -> Optional[object]:
     """
     Decode raw texture bytes (TPC or TGA) to a PIL RGBA Image.
-    Returns None if PIL is unavailable or decoding fails.
 
-    TPC detection: first 4 bytes are data_size uint32; if > 0 it's compressed DXT.
-    If first bytes look like a TGA header instead (id_len + color_map_type ≤ 1,
-    image_type in {2,3,10,11}), use PIL direct decode.
+    Routing (priority order):
+      1. PyKotor bridge  — handles DXT1/DXT3/DXT5, cubemaps, TXI extraction,
+                           V-flip correction.  Used whenever PyKotor is
+                           available AND the data looks like a TPC file.
+      2. _decode_tpc     — legacy pure-Python software decoder (fallback when
+                           PyKotor is unavailable or the bridge call fails).
+      3. PIL direct      — TGA / PNG / DDS passthrough (for non-TPC textures).
+
+    PyKotor migration status: ~100% migrated for TPC files.  The legacy
+    _decode_tpc path is kept as a safety net but is no longer the primary route.
+
+    Returns None if PIL is unavailable or all decoders fail.
     """
     try:
         from PIL import Image
@@ -731,16 +758,29 @@ def _decode_texture(raw: bytes) -> Optional[object]:
     if not raw:
         return None
 
-    # Attempt TPC decode first (KotOR native format)
+    # ── Primary: PyKotor bridge (handles all TPC variants, V-flip, TXI) ──
     if _is_tpc(raw):
+        pk_fn = _get_pykotor_tpc_fn()
+        if pk_fn is not None:
+            try:
+                img = pk_fn(raw)
+                if img is not None:
+                    if img.mode != 'RGBA':
+                        img = img.convert('RGBA')
+                    return img
+            except Exception as _bridge_err:
+                log.debug("_decode_texture: PyKotor bridge failed (%s), falling back", _bridge_err)
+
+        # ── Secondary: legacy pure-Python decoder ─────────────────────────
+        # Only reached when PyKotor is unavailable or threw an unexpected error.
         try:
             img = _decode_tpc(raw)
             if img is not None:
                 return img
-        except Exception:
-            pass
+        except Exception as _legacy_err:
+            log.debug("_decode_texture: legacy _decode_tpc failed (%s)", _legacy_err)
 
-    # Fallback: PIL direct (TGA, PNG, DDS, etc.)
+    # ── Tertiary: PIL direct (TGA, PNG, DDS, BMP, etc.) ───────────────────
     try:
         img = Image.open(_io.BytesIO(raw)).convert('RGBA')
         return img
@@ -748,22 +788,95 @@ def _decode_texture(raw: bytes) -> Optional[object]:
         return None
 
 
+def tpc_info(raw: bytes) -> Optional[Dict[str, Any]]:
+    """Return a dict of TPC header fields, or None if *raw* is not a TPC file.
+
+    Useful for diagnostics and migration testing.  Fields returned:
+      ``data_size``, ``alpha_test``, ``width``, ``height``,
+      ``encoding``, ``num_mips``, ``is_compressed``,
+      ``format`` (human-readable string: 'DXT1', 'DXT5', 'Grey', 'RGB', 'RGBA').
+    """
+    if not _is_tpc(raw):
+        return None
+    data_size = struct.unpack_from('<I', raw, 0)[0]
+    alpha_test = struct.unpack_from('<f', raw, 4)[0]
+    width  = struct.unpack_from('<H', raw, 8)[0]
+    height = struct.unpack_from('<H', raw, 10)[0]
+    encoding = raw[12]
+    num_mips = raw[13]
+    compressed = data_size > 0
+    fmt_map = {1: 'Grey', 2: ('DXT1' if compressed else 'RGB'),
+               4: ('DXT5' if compressed else 'RGBA'), 12: 'RGBA'}
+    return {
+        'data_size':   data_size,
+        'alpha_test':  alpha_test,
+        'width':       width,
+        'height':      height,
+        'encoding':    encoding,
+        'num_mips':    num_mips,
+        'is_compressed': compressed,
+        'format':      fmt_map.get(encoding, f'unknown({encoding})'),
+    }
+
+
 def _is_tpc(raw: bytes) -> bool:
-    """Heuristic: is this a KotOR TPC file?"""
+    """Heuristic: is this a KotOR TPC file?
+
+    Checks the 128-byte TPC header for valid encoding ID, non-zero power-of-two
+    dimensions, and consistent data_size / encoding pairing.  Also rejects data
+    that starts with PNG/JPEG/BMP/DDS magic bytes since those cannot be TPC.
+    """
     if len(raw) < 128:
         return False
-    # TPC header: data_size[4] alpha_test[4] width[2] height[2] encoding[1] num_mips[1]
+
+    # Fast-reject: known non-TPC magic bytes
+    # PNG: 0x89 50 4E 47 | JPEG: FF D8 FF | BMP: 42 4D | DDS: 44 44 53 20
+    if raw[:4] in (b'\x89PNG', b'\xff\xd8\xff\xe0', b'\xff\xd8\xff\xe1',
+                   b'DDS ', b'BM\x00\x00'):
+        return False
+
+    # TPC header layout (all little-endian):
+    #   offset 0  : uint32 data_size   — 0 for uncompressed, >0 for DXT
+    #   offset 4  : float  alpha_test
+    #   offset 8  : uint16 width
+    #   offset 10 : uint16 height
+    #   offset 12 : uint8  encoding   (1=Grey, 2=RGB/DXT1, 4=RGBA/DXT5, 12=RGBA)
+    #   offset 13 : uint8  num_mips
     data_size = struct.unpack_from('<I', raw, 0)[0]
     width     = struct.unpack_from('<H', raw, 8)[0]
     height    = struct.unpack_from('<H', raw, 10)[0]
-    encoding  = raw[12] if len(raw) > 12 else 0
-    # Valid if: encoding in {1,2,4,12} and dimensions are powers of 2 ≤ 4096
+    encoding  = raw[12]
+    num_mips  = raw[13]
+
+    # Valid encoding IDs
     if encoding not in (1, 2, 4, 12):
         return False
+
+    # Dimensions must be non-zero and power-of-two ≤ 4096
     if width == 0 or height == 0 or width > 4096 or height > 4096:
         return False
+    if (width & (width - 1)) != 0 or (height & (height - 1)) != 0:
+        return False
+
+    # For compressed formats (data_size > 0) only encoding 2 (DXT1) or 4 (DXT5)
+    # are valid.  Encoding 1 (Grey) or 12 (RGBA) are always uncompressed.
     if data_size > 0 and encoding not in (2, 4):
         return False
+
+    # Sanity: num_mips should be between 1 and 13 (log2(4096)+1)
+    if num_mips == 0 or num_mips > 13:
+        return False
+
+    # Total file size lower-bound check
+    if data_size > 0:
+        if len(raw) < 128 + data_size:
+            return False
+    else:
+        min_pixels = width * height
+        bytes_per_px = {1: 1, 2: 3, 4: 4, 12: 4}.get(encoding, 4)
+        if len(raw) < 128 + min_pixels * bytes_per_px:
+            return False
+
     return True
 
 

@@ -945,6 +945,97 @@ class ClothRigPanel:
                   bg=C['bg2'], fg=C['red'], font=("Segoe UI", 7),
                   relief='flat', padx=4, pady=2, cursor="hand2").pack(side='left', padx=2)
 
+        # ── Live Simulation Preview ───────────────────────────────────────
+        sim_frame = tk.LabelFrame(self.frame, text="Live Simulation Preview",
+                                   bg=C['bg'], fg=C['gold'],
+                                   font=("Segoe UI", 8, "bold"),
+                                   bd=1, relief='solid')
+        sim_frame.pack(fill='x', padx=6, pady=4)
+
+        tk.Label(sim_frame,
+                 text="Run Verlet cloth simulation live in the viewport",
+                 bg=C['bg'], fg=C['text2'],
+                 font=("Segoe UI", 7)).pack(anchor='w', padx=6, pady=(4,2))
+
+        # Wind direction
+        wind_row = tk.Frame(sim_frame, bg=C['bg']); wind_row.pack(fill='x', padx=6, pady=2)
+        tk.Label(wind_row, text="Wind:", bg=C['bg'], fg=C['text'],
+                 font=("Segoe UI", 7)).pack(side='left')
+        self._wind_x_var = tk.DoubleVar(value=0.0)
+        self._wind_y_var = tk.DoubleVar(value=1.0)
+        self._wind_z_var = tk.DoubleVar(value=0.0)
+        for lbl, var in (("X", self._wind_x_var), ("Y", self._wind_y_var), ("Z", self._wind_z_var)):
+            tk.Label(wind_row, text=f" {lbl}:", bg=C['bg'], fg=C['text2'],
+                     font=("Segoe UI", 7)).pack(side='left')
+            tk.Spinbox(wind_row, from_=-10.0, to=10.0, increment=0.5,
+                       textvariable=var, width=5,
+                       font=("Segoe UI", 7), bg=C['bg2'], fg=C['text'],
+                       relief='flat', buttonbackground=C['bg2']).pack(side='left')
+
+        # Turbulent wind toggle
+        turb_row = tk.Frame(sim_frame, bg=C['bg']); turb_row.pack(fill='x', padx=6, pady=2)
+        self._turbulent_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(turb_row, text="Turbulent wind",
+                       variable=self._turbulent_var,
+                       bg=C['bg'], fg=C['text'], selectcolor=C['bg2'],
+                       activebackground=C['bg'], activeforeground=C['text'],
+                       font=("Segoe UI", 7)).pack(side='left')
+
+        # Collision floor
+        floor_row = tk.Frame(sim_frame, bg=C['bg']); floor_row.pack(fill='x', padx=6, pady=2)
+        self._floor_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(floor_row, text="Floor collision  Z:",
+                       variable=self._floor_var,
+                       bg=C['bg'], fg=C['text'], selectcolor=C['bg2'],
+                       activebackground=C['bg'], activeforeground=C['text'],
+                       font=("Segoe UI", 7)).pack(side='left')
+        self._floor_z_var = tk.DoubleVar(value=0.0)
+        tk.Spinbox(floor_row, from_=-50.0, to=50.0, increment=0.1,
+                   textvariable=self._floor_z_var, width=6,
+                   font=("Segoe UI", 7), bg=C['bg2'], fg=C['text'],
+                   relief='flat', buttonbackground=C['bg2']).pack(side='left', padx=2)
+
+        # Energy stats label
+        self._energy_var = tk.StringVar(value="")
+        tk.Label(sim_frame, textvariable=self._energy_var,
+                 bg=C['bg'], fg=C['green'],
+                 font=("Segoe UI", 7)).pack(fill='x', padx=6, pady=(0, 2))
+
+        sim_btn_row = tk.Frame(sim_frame, bg=C['bg']); sim_btn_row.pack(fill='x', padx=6, pady=4)
+        self._sim_play_btn = tk.Button(
+            sim_btn_row, text="▶ Play",
+            command=self._sim_play,
+            bg=C['accent'], fg="white",
+            font=("Segoe UI", 8, "bold"), relief='flat',
+            padx=8, pady=3, cursor="hand2")
+        self._sim_play_btn.pack(side='left', padx=2)
+
+        self._sim_pause_btn = tk.Button(
+            sim_btn_row, text="⏸ Pause",
+            command=self._sim_pause,
+            bg=C['bg2'], fg=C['gold'],
+            font=("Segoe UI", 8), relief='flat',
+            padx=6, pady=3, cursor="hand2")
+        self._sim_pause_btn.pack(side='left', padx=2)
+
+        tk.Button(sim_btn_row, text="⏹ Stop",
+                  command=self._sim_stop,
+                  bg=C['bg2'], fg=C['text2'],
+                  font=("Segoe UI", 8), relief='flat',
+                  padx=6, pady=3, cursor="hand2").pack(side='left', padx=2)
+
+        tk.Button(sim_btn_row, text="↺ Reset",
+                  command=self._sim_reset,
+                  bg=C['bg2'], fg=C['text2'],
+                  font=("Segoe UI", 8), relief='flat',
+                  padx=6, pady=3, cursor="hand2").pack(side='left', padx=2)
+
+        self._sim_running = False
+        self._sim_paused  = False
+        self._sim_objects: dict = {}   # node_id → (node, ClothRigSimulator)
+        self._sim_after_id = None
+        self._sim_tick_count = 0
+
         # ── Status label ──────────────────────────────────────────────────
         self._status_var = tk.StringVar(value="Ready — load a model to begin")
         tk.Label(self.frame, textvariable=self._status_var,
@@ -1145,6 +1236,149 @@ class ClothRigPanel:
         """Called after a model load to refresh the node list."""
         self._refresh_list()
 
+    # ── Live simulation controls ──────────────────────────────────────────────
+
+    def _sim_play(self):
+        """Start (or resume) the live cloth simulation preview."""
+        # Resume from pause
+        if self._sim_paused and self._sim_objects:
+            self._sim_paused  = False
+            self._sim_running = True
+            self._sim_play_btn.configure(text="⏸ Running…", state='disabled')
+            self._set_status(f"▶ Resumed {len(self._sim_objects)} cloth node(s)…")
+            self._sim_tick()
+            return
+
+        model = self._get_model()
+        if not model:
+            self._set_status("Load a model first.")
+            return
+        candidates = self._rigger.find_cloth_candidates(model)
+        if not candidates:
+            self._set_status("No cloth nodes found. Apply cloth rig first.")
+            return
+        self._sim_running = True
+        self._sim_paused  = False
+        self._sim_tick_count = 0
+        self._sim_objects = {}
+        for node in candidates:
+            try:
+                sim = ClothRigSimulator(node)
+                self._sim_objects[id(node)] = (node, sim)
+            except Exception as e:
+                log.warning(f"ClothRigPanel._sim_play: failed for '{node.name}': {e}")
+
+        self._sim_play_btn.configure(text="⏸ Running…", state='disabled')
+        self._set_status(f"▶ Simulating {len(self._sim_objects)} cloth node(s)…")
+        self._sim_tick()
+
+    def _sim_pause(self):
+        """Pause the simulation (preserves current positions)."""
+        if not self._sim_running:
+            return
+        self._sim_running = False
+        self._sim_paused  = True
+        if self._sim_after_id is not None:
+            try:
+                self.frame.after_cancel(self._sim_after_id)
+            except Exception:
+                pass
+            self._sim_after_id = None
+        self._sim_play_btn.configure(text="▶ Resume", state='normal')
+        self._set_status("⏸ Simulation paused — press Play to resume.")
+
+    def _sim_tick(self):
+        """One simulation tick — advance all simulators and push deformed verts to model."""
+        if not self._sim_running:
+            return
+        import math as _math, random as _random
+        self._sim_tick_count += 1
+
+        wind_base = (self._wind_x_var.get(), self._wind_y_var.get(), self._wind_z_var.get())
+        turbulent = self._turbulent_var.get()
+        floor_on  = self._floor_var.get()
+        floor_z   = self._floor_z_var.get() if floor_on else None
+
+        total_ke = 0.0
+        for node, sim in list(self._sim_objects.values()):
+            try:
+                # Apply turbulent wind (randomised per-tick perturbation)
+                if turbulent:
+                    t = self._sim_tick_count * 0.05
+                    wx = wind_base[0] + _math.sin(t * 2.3 + 0.1) * 0.8 + (_random.random() - 0.5) * 0.4
+                    wy = wind_base[1] + _math.cos(t * 1.7 + 0.9) * 0.6 + (_random.random() - 0.5) * 0.3
+                    wz = wind_base[2] + _math.sin(t * 3.1 + 1.3) * 0.5 + (_random.random() - 0.5) * 0.2
+                    wind = (wx, wy, wz)
+                else:
+                    wind = wind_base
+
+                sim.apply_wind(direction=wind, strength=2.0)
+                sim.step()
+
+                # Collision floor: push vertices above floor_z
+                if floor_z is not None:
+                    for i, pos in enumerate(sim.positions):
+                        if pos[2] < floor_z:
+                            pos[2] = floor_z
+                            sim._prev_pos[i][2] = floor_z  # kill downward velocity
+
+                # Accumulate kinetic energy for stats display
+                total_ke += sim.kinetic_energy()
+
+                # Push deformed positions back to model node for viewport preview
+                node.vertices = [tuple(p) for p in sim.positions]
+            except Exception as e:
+                log.debug(f"ClothRigPanel._sim_tick: {e}")
+
+        # Update energy stats label
+        try:
+            self._energy_var.set(f"KE: {total_ke:.4f}  tick: {self._sim_tick_count}")
+        except Exception:
+            pass
+
+        # Request viewport refresh
+        try:
+            on_upd = self._on_updated
+            if callable(on_upd):
+                on_upd()
+        except Exception:
+            pass
+        # Schedule next tick at ~30 fps
+        self._sim_after_id = self.frame.after(33, self._sim_tick)
+
+    def _sim_stop(self):
+        """Stop the live simulation."""
+        self._sim_running = False
+        self._sim_paused  = False
+        if self._sim_after_id is not None:
+            try:
+                self.frame.after_cancel(self._sim_after_id)
+            except Exception:
+                pass
+            self._sim_after_id = None
+        self._sim_play_btn.configure(text="▶ Play", state='normal')
+        self._energy_var.set("")
+        self._set_status("⏹ Simulation stopped.")
+
+    def _sim_reset(self):
+        """Stop simulation and restore all cloth nodes to bind-pose vertices."""
+        self._sim_stop()
+        for node, sim in list(self._sim_objects.values()):
+            try:
+                sim.reset()
+                node.vertices = [tuple(p) for p in sim.positions]
+            except Exception:
+                pass
+        self._sim_objects = {}
+        self._sim_tick_count = 0
+        try:
+            on_upd = self._on_updated
+            if callable(on_upd):
+                on_upd()
+        except Exception:
+            pass
+        self._set_status("↺ Simulation reset to bind pose.")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  ClothRigSimulator — lightweight position-based dynamics (PBD) preview
@@ -1315,6 +1549,35 @@ class ClothRigSimulator:
         """Reset simulation to bind-pose rest positions."""
         self.positions  = [list(v) for v in self._rest_pos]
         self._prev_pos  = [list(v) for v in self._rest_pos]
+
+    def kinetic_energy(self) -> float:
+        """Estimate total kinetic energy of all free vertices.
+
+        Uses the Verlet velocity estimate: v ≈ (pos - prev_pos) / dt.
+        Returns the sum of 0.5 * |v|^2 over all non-pinned vertices.
+        Useful as a convergence / settling indicator for the UI.
+        """
+        dt = self._dt if self._dt > 1e-9 else (1.0 / 30.0)
+        ke = 0.0
+        for i, (pos, prev) in enumerate(zip(self.positions, self._prev_pos)):
+            if self._constraints[i] >= 0.999:
+                continue
+            vx = (pos[0] - prev[0]) / dt
+            vy = (pos[1] - prev[1]) / dt
+            vz = (pos[2] - prev[2]) / dt
+            ke += 0.5 * (vx*vx + vy*vy + vz*vz)
+        return ke
+
+    def total_displacement(self) -> float:
+        """Return the total Euclidean displacement of all vertices from rest pose."""
+        import math as _m
+        total = 0.0
+        for pos, rest in zip(self.positions, self._rest_pos):
+            dx = pos[0] - rest[0]
+            dy = pos[1] - rest[1]
+            dz = pos[2] - rest[2]
+            total += _m.sqrt(dx*dx + dy*dy + dz*dz)
+        return total
 
     def apply_wind(self, direction: tuple = (0.0, 1.0, 0.0), strength: float = 2.0):
         """Apply a wind impulse (one-shot velocity delta to free vertices)."""

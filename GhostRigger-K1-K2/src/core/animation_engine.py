@@ -649,7 +649,125 @@ class AnimationEngine:
         for a in self.model.animations:
             if a.name.lower() == nl:
                 return a
+        # Fuzzy fall-back: 'usecomp' is sometimes stored as 'use_comp' or vice-versa
+        if nl in ('usecomp', 'use_comp', 'use comp'):
+            for a in self.model.animations:
+                al = a.name.lower()
+                if al in ('usecomp', 'use_comp', 'use comp'):
+                    return a
         return None
+
+    # ── Usecomp / composite animation helpers ───────────────────────────────
+
+    def is_usecomp_model(self) -> bool:
+        """Return True if this model has a 'usecomp' animation (composite geometry model).
+
+        KotOR composite models (e.g. N_CaloNord) use a single 'usecomp' animation
+        that drives skeletal pose for all composite body-part meshes simultaneously.
+        The model itself acts as the skeleton root; body parts are attached via hooks.
+        """
+        return any(a.name.lower() in ('usecomp', 'use_comp', 'use comp')
+                   for a in self.model.animations)
+
+    def get_usecomp_bone_names(self) -> List[str]:
+        """Return sorted list of bone names animated by the 'usecomp' animation."""
+        anim = self._find_anim('usecomp')
+        if anim is None:
+            return []
+        return sorted(n.name for n in anim.nodes)
+
+    def merge_usecomp_from(self, parent_engine: 'AnimationEngine') -> int:
+        """Merge the 'usecomp' animation from a *parent_engine* into this engine's model.
+
+        Used when a body-part (head, arm segment, etc.) needs to inherit the composite
+        skeleton pose from the master composite model.  Copies only nodes whose names
+        exist in this engine's model so we don't inject irrelevant bones.
+
+        Returns the number of nodes merged.
+        """
+        src_anim = parent_engine._find_anim('usecomp')
+        if src_anim is None:
+            return 0
+
+        local_names = {n.name.lower() for n in self.model.all_nodes()}
+        filtered_nodes = [n for n in src_anim.nodes
+                          if n.name.lower() in local_names]
+        if not filtered_nodes:
+            return 0
+
+        import copy
+        new_anim = copy.deepcopy(src_anim)
+        new_anim.nodes = filtered_nodes
+
+        # Replace if already present
+        for i, a in enumerate(self.model.animations):
+            if a.name.lower() in ('usecomp', 'use_comp', 'use comp'):
+                self.model.animations[i] = new_anim
+                log.info("merge_usecomp_from: replaced usecomp in '%s' (%d nodes)",
+                         self.model.name, len(filtered_nodes))
+                return len(filtered_nodes)
+
+        self.model.animations.append(new_anim)
+        log.info("merge_usecomp_from: added usecomp to '%s' (%d nodes)",
+                 self.model.name, len(filtered_nodes))
+        return len(filtered_nodes)
+
+    def build_bone_remap(self, target_model: KotorModel,
+                         fuzzy: bool = True) -> Dict[str, str]:
+        """Build a bone-name remap from this engine's model to *target_model*.
+
+        Convenience wrapper around the module-level :func:`build_bone_remap`.
+
+        Returns:
+            ``dict[src_bone_name, tgt_bone_name]``
+        """
+        return build_bone_remap(self.model, target_model, fuzzy=fuzzy)
+
+    def retarget_usecomp(self,
+                         target_model: KotorModel,
+                         bone_remap: Optional[Dict[str, str]] = None,
+                         *,
+                         inject: bool = True) -> Optional['Animation']:
+        """Retarget this model's 'usecomp' animation onto *target_model*'s skeleton.
+
+        Finds the 'usecomp' animation in this engine's model, builds (or uses the
+        supplied) *bone_remap*, retargets the animation, and optionally injects the
+        result directly into *target_model*.
+
+        Args:
+            target_model: The model to receive the retargeted animation.
+            bone_remap:   Pre-built remap dict; if None, :meth:`build_bone_remap`
+                          is called automatically.
+            inject:       If True (default), append/replace the animation in
+                          *target_model.animations*.
+
+        Returns:
+            The retargeted :class:`Animation`, or None if no usecomp found.
+        """
+        src_anim = self._find_anim('usecomp')
+        if src_anim is None:
+            log.debug("retarget_usecomp: no usecomp animation in '%s'", self.model.name)
+            return None
+
+        if bone_remap is None:
+            bone_remap = build_bone_remap(self.model, target_model)
+
+        out_anim = retarget_usecomp(src_anim, target_model, bone_remap)
+
+        if inject and out_anim.nodes:
+            tgt_eng = AnimationEngine(target_model)
+            # Replace if already present, else append
+            for i, a in enumerate(target_model.animations):
+                if a.name.lower() in ('usecomp', 'use_comp', 'use comp'):
+                    target_model.animations[i] = out_anim
+                    log.info("retarget_usecomp: replaced usecomp in '%s' (%d nodes)",
+                             target_model.name, len(out_anim.nodes))
+                    return out_anim
+            target_model.animations.append(out_anim)
+            log.info("retarget_usecomp: injected usecomp into '%s' (%d nodes)",
+                     target_model.name, len(out_anim.nodes))
+
+        return out_anim
 
     def list_animations(self) -> List[Dict[str, Any]]:
         """Return list of animation info dicts."""
@@ -1036,6 +1154,185 @@ class AnimationEngine:
                     self._playing = False
                 return True
         return False
+
+
+# ─────────────────────────────────────────────────────────────────
+#  Module-level usecomp helper
+# ─────────────────────────────────────────────────────────────────
+
+def merge_usecomp_animations(child_model: KotorModel,
+                              parent_model: KotorModel) -> int:
+    """Merge the 'usecomp' animation from *parent_model* into *child_model*.
+
+    Convenience wrapper around :meth:`AnimationEngine.merge_usecomp_from`.
+    Useful when assembling creature head/body parts that inherit composite
+    bone poses from a master skeleton model (e.g. N_CaloNord body parts).
+
+    Returns the number of animation nodes merged (0 = nothing to merge).
+    """
+    parent_eng = AnimationEngine(parent_model)
+    child_eng  = AnimationEngine(child_model)
+    return child_eng.merge_usecomp_from(parent_eng)
+
+
+# ─────────────────────────────────────────────────────────────────
+#  Bone-remap table helpers (usecomp / composite model retargeting)
+# ─────────────────────────────────────────────────────────────────
+
+def build_bone_remap(
+    source_model: KotorModel,
+    target_model: KotorModel,
+    *,
+    fuzzy: bool = True,
+) -> Dict[str, str]:
+    """Build a bone-name remap dictionary from *source_model* to *target_model*.
+
+    The remap maps ``source_bone_name → target_bone_name`` for every bone that
+    can be matched between the two skeletons.
+
+    Matching strategy (in priority order):
+      1. **Exact** match (case-insensitive).
+      2. **Prefix strip** — KotOR composite models often prefix part bones with
+         the model name (e.g. ``NordHead_jaw`` → ``jaw``).  We try stripping the
+         source model name prefix.
+      3. **Suffix normalisation** — compare the last *N* characters when full
+         name differs only by a numeric suffix (e.g. ``spine01`` ↔ ``spine1``).
+      4. **Common KotOR bone aliases** (CaloNord ↔ generic humanoid skeleton).
+
+    Args:
+        source_model: The model whose bone names are the keys.
+        target_model: The model whose bone names are the values.
+        fuzzy: If False, only exact (case-insensitive) matches are used.
+
+    Returns:
+        ``dict[source_bone_name, target_bone_name]`` – may be empty.
+    """
+    _KOTOR_ALIASES: Dict[str, str] = {
+        # NWN / KotOR common composite skeleton aliases
+        'rhand':     'rhand',
+        'lhand':     'lhand',
+        'rforearm':  'rforearm',
+        'lforearm':  'lforearm',
+        'ruparm':    'ruparm',
+        'luparm':    'luparm',
+        'rshldr':    'rshldr',
+        'lshldr':    'lshldr',
+        'neck':      'neck',
+        'head':      'head',
+        'chest':     'chest',
+        'spine':     'spine',
+        'rthigh':    'rthigh',
+        'lthigh':    'lthigh',
+        'rshin':     'rshin',
+        'lshin':     'lshin',
+        'rfoot':     'rfoot',
+        'lfoot':     'lfoot',
+        'pelvis':    'pelvis',
+        # NordHead / CaloNord specific aliases
+        'nordhead_jaw':        'jaw',
+        'nordhead_neck':       'neck',
+        'nordhead_lbrow':      'lbrow',
+        'nordhead_rbrow':      'rbrow',
+        'nordhead_lorbital':   'lorbital',
+        'nordhead_rorbital':   'rorbital',
+    }
+
+    src_names: Dict[str, str] = {}
+    for node in source_model.all_nodes():
+        if node.name:
+            src_names[node.name.lower()] = node.name
+
+    tgt_names: Dict[str, str] = {}
+    for node in target_model.all_nodes():
+        if node.name:
+            tgt_names[node.name.lower()] = node.name
+
+    remap: Dict[str, str] = {}
+    src_prefix = (source_model.name or '').lower().rstrip('_ ')
+
+    for src_lo, src_orig in src_names.items():
+        # 1. Exact match
+        if src_lo in tgt_names:
+            remap[src_orig] = tgt_names[src_lo]
+            continue
+
+        if not fuzzy:
+            continue
+
+        # 2. Strip source-model prefix
+        stripped = src_lo
+        if src_prefix and src_lo.startswith(src_prefix):
+            stripped = src_lo[len(src_prefix):].lstrip('_')
+        if stripped and stripped in tgt_names:
+            remap[src_orig] = tgt_names[stripped]
+            continue
+
+        # 3. Known alias table
+        alias = _KOTOR_ALIASES.get(src_lo) or _KOTOR_ALIASES.get(stripped)
+        if alias and alias.lower() in tgt_names:
+            remap[src_orig] = tgt_names[alias.lower()]
+            continue
+
+        # 4. Suffix-normalised match: drop trailing digits and compare
+        src_base = src_lo.rstrip('0123456789')
+        if src_base:
+            candidates = [tl for tl in tgt_names if tl.rstrip('0123456789') == src_base]
+            if len(candidates) == 1:
+                remap[src_orig] = tgt_names[candidates[0]]
+
+    return remap
+
+
+def retarget_usecomp(
+    source_anim: 'Animation',
+    target_model: KotorModel,
+    bone_remap: Optional[Dict[str, str]] = None,
+    *,
+    copy: bool = True,
+) -> 'Animation':
+    """Retarget a *usecomp* (or any) animation onto *target_model*'s skeleton.
+
+    Filters and renames animation nodes to match bones present in *target_model*,
+    optionally using a pre-built *bone_remap* dictionary.  If *bone_remap* is
+    None, only exact-name matching is performed.
+
+    Args:
+        source_anim:  The animation to retarget (e.g. the 'usecomp' animation
+                      from a master composite model).
+        target_model: The model whose skeleton will receive the retargeted anim.
+        bone_remap:   Optional ``{src_name → tgt_name}`` dict (from
+                      :func:`build_bone_remap`).  When provided, nodes are
+                      renamed as well as filtered.
+        copy:         If True (default), deep-copy the animation before modifying;
+                      if False, modify in place (faster, but destructive).
+
+    Returns:
+        The retargeted :class:`Animation` (a deep copy when *copy* is True).
+    """
+    import copy as _copy
+
+    out_anim = _copy.deepcopy(source_anim) if copy else source_anim
+
+    tgt_names_lo: set = {n.name.lower() for n in target_model.all_nodes() if n.name}
+
+    kept_nodes = []
+    for node in out_anim.nodes:
+        # Apply remap rename first
+        new_name = (bone_remap or {}).get(node.name, node.name)
+        node.name = new_name
+        # Keep only nodes whose (possibly renamed) bone exists in target
+        if new_name.lower() in tgt_names_lo:
+            kept_nodes.append(node)
+
+    out_anim.nodes = kept_nodes
+    log.debug(
+        "retarget_usecomp: '%s' → '%s': kept %d/%d nodes",
+        source_anim.name,
+        target_model.name,
+        len(kept_nodes),
+        len(source_anim.nodes),
+    )
+    return out_anim
 
 
 # ─────────────────────────────────────────────────────────────────

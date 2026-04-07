@@ -907,6 +907,9 @@ class KotorModel:
         """
         def _is_render_helper(n):
             """Mirror of FrameRenderer._is_deformation_helper() in viewport.py."""
+            # OBJ / FBX imported nodes: always renderable — skip all heuristics
+            if getattr(n, '_imported', False):
+                return False
             raw = n.texture or ''
             t = raw.strip()
             for ext in ('.tga', '.tpc', '.dds', '.png'):
@@ -977,7 +980,9 @@ class KotorModel:
                 continue
             if _is_render_helper(n):
                 continue
-            if not n.uvs:
+            # Skip UV-less non-skin nodes UNLESS they are explicitly imported
+            # (OBJ/FBX imports may have no UVs but are still renderable geometry).
+            if not n.uvs and not getattr(n, '_imported', False):
                 continue
 
             wv = _node_world_verts(n)

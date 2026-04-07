@@ -609,6 +609,122 @@ class WOKData:
                 f"{self.walkable_face_count()} walkable, "
                 f"{self.non_walk_face_count()} non-walk")
 
+    # ── Editing helpers ───────────────────────────────────────────────────────
+
+    def set_face_surface(self, face_idx: int, surface_id: int) -> bool:
+        """Change the surface material of a single face.  Returns True on success."""
+        if face_idx < 0 or face_idx >= len(self.faces):
+            return False
+        f = self.faces[face_idx]
+        self.faces[face_idx] = WOKFace(f.v1, f.v2, f.v3, surface_id, f.adj1, f.adj2, f.adj3)
+        return True
+
+    def bulk_replace_surface(self, src_id: int, dst_id: int) -> int:
+        """Replace all faces with surface_id==src_id with dst_id.  Returns count changed."""
+        count = 0
+        for i, f in enumerate(self.faces):
+            if f.surface == src_id:
+                self.faces[i] = WOKFace(f.v1, f.v2, f.v3, dst_id, f.adj1, f.adj2, f.adj3)
+                count += 1
+        return count
+
+    def surface_distribution(self) -> Dict[int, int]:
+        """Return {surface_id: face_count} mapping."""
+        dist: Dict[int, int] = {}
+        for f in self.faces:
+            dist[f.surface] = dist.get(f.surface, 0) + 1
+        return dist
+
+    def face_at_point(self, px: float, py: float) -> int:
+        """
+        Return index of the first face whose 2-D (XY) projection contains
+        the point (px, py), or -1 if none found.  Used by the walkmesh paint brush.
+        """
+        for fi, face in enumerate(self.faces):
+            if face.v1 >= len(self.verts) or face.v2 >= len(self.verts) or face.v3 >= len(self.verts):
+                continue
+            ax, ay = self.verts[face.v1][0], self.verts[face.v1][1]
+            bx, by = self.verts[face.v2][0], self.verts[face.v2][1]
+            cx, cy = self.verts[face.v3][0], self.verts[face.v3][1]
+            # Sign-of-cross-product test (point-in-triangle 2D)
+            def _sign(x1, y1, x2, y2, x3, y3):
+                return (x1 - x3) * (y2 - y3) - (x2 - x3) * (y1 - y3)
+            d1 = _sign(px, py, ax, ay, bx, by)
+            d2 = _sign(px, py, bx, by, cx, cy)
+            d3 = _sign(px, py, cx, cy, ax, ay)
+            has_neg = (d1 < 0) or (d2 < 0) or (d3 < 0)
+            has_pos = (d1 > 0) or (d2 > 0) or (d3 > 0)
+            if not (has_neg and has_pos):
+                return fi
+        return -1
+
+    # ── Binary serialisation ──────────────────────────────────────────────────
+
+    def to_bytes(self) -> bytes:
+        """
+        Serialise the WOKData back to a valid Aurora BWM binary blob.
+
+        Header layout (136 bytes):
+          0x00  sig     "BWM " (4)
+          0x04  ver     "V1.0" (4)
+          0x08  wok_type  uint32  (1 = room walkmesh)
+          0x0C  reserved  bytes [52]   (zeros)
+          0x38  vert_count  uint32
+          0x3C  vert_offset uint32
+          0x40  face_count  uint32
+          0x44  face_offset uint32   (vert_idx array, 3 × uint16 per face)
+          0x48  mat_offset  uint32   (material-ID array, 1 × uint32 per face)
+          0x4C  adj_offset  uint32   (adjacency array,   3 × int32 per face)
+          0x50  [remaining header zeros up to 0x88]
+        Data sections immediately follow the 136-byte header in the order:
+          verts  → faces  → materials  → adjacencies
+        """
+        nv = len(self.verts)
+        nf = len(self.faces)
+
+        vert_section_size = nv * 12          # 3 floats × 4 bytes
+        face_section_size = nf * 6           # 3 uint16 × 2 bytes
+        mat_section_size  = nf * 4           # 1 uint32 × 4 bytes
+        adj_section_size  = nf * 12          # 3 int32  × 4 bytes
+
+        header_size = 136
+        vert_off = header_size
+        face_off = vert_off + vert_section_size
+        mat_off  = face_off + face_section_size
+        adj_off  = mat_off  + mat_section_size
+
+        buf = bytearray(adj_off + adj_section_size)
+
+        # Signature + version
+        buf[0:4]  = b'BWM '
+        buf[4:8]  = b'V1.0'
+        # wok_type = 1 (room walkmesh)
+        struct.pack_into('<I', buf, 8, 1)
+        # Counts and offsets
+        struct.pack_into('<I', buf, 56, nv)
+        struct.pack_into('<I', buf, 60, vert_off)
+        struct.pack_into('<I', buf, 64, nf)
+        struct.pack_into('<I', buf, 68, face_off)
+        struct.pack_into('<I', buf, 72, mat_off)
+        struct.pack_into('<I', buf, 76, adj_off)
+
+        # Vertices
+        for i, (x, y, z) in enumerate(self.verts):
+            struct.pack_into('<fff', buf, vert_off + i * 12, x, y, z)
+
+        # Faces (vertex indices), materials, adjacencies
+        for i, face in enumerate(self.faces):
+            struct.pack_into('<HHH', buf, face_off + i * 6, face.v1, face.v2, face.v3)
+            struct.pack_into('<I',   buf, mat_off  + i * 4, face.surface)
+            struct.pack_into('<iii', buf, adj_off  + i * 12, face.adj1, face.adj2, face.adj3)
+
+        return bytes(buf)
+
+    def write_binary(self, path: str):
+        """Write the WOKData to a binary .wok file at *path*."""
+        Path(path).write_bytes(self.to_bytes())
+        log.info("WOKData.write_binary → %s  (%d verts, %d faces)", path, len(self.verts), len(self.faces))
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Walkmesh Wall Auto-Generator
