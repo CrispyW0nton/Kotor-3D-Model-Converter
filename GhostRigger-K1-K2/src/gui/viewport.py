@@ -183,10 +183,18 @@ _UV_SENTINEL = 100.0
 #
 # Covers standard K1/K2 PC head naming (eyeRA, eyeLA, eyeRlid, eyeLlid,
 # teethU, teethL, teethUa, teethLa, tongue) and NPC face-node naming
-# (f_rlweye_g excluded by null-texture/no-UV filter in _is_deformation_helper).
+# (f_rlweye_g, f_llweye_g: NPC eyeball nodes that end in _g but are REAL
+# renderable geometry — they must NOT be excluded by _is_deformation_helper).
 _INNER_GEO_SUBSTRINGS: tuple = (
     'eye', 'lid', 'teeth', 'tooth', 'gum', 'jaw',
     'tongue', 'teethu', 'teethl',
+)
+
+# Head/face node substrings — these nodes render the outer face surface and
+# must be treated as two-sided so that inner geometry (eyes, teeth visible
+# through the mouth gap / eye socket) does not show reversed winding.
+_FACE_MESH_SUBSTRINGS: tuple = (
+    'face', 'head', 'skull', 'fhead', 'fchead',
 )
 
 def _lerp(a, b, t):
@@ -3232,6 +3240,13 @@ class FrameRenderer:
         # Bone screen positions for click/hover selection
         self._bone_screen_positions: List[Tuple] = []  # [(sx,sy,depth,node), ...]
         self._hovered_bone: Optional[ModelNode] = None
+        # ── Rig-edit mode (Phase 22) ─────────────────────────────────────────
+        # When True the renderer draws an orange "Rig Edit Mode" banner and
+        # colours adjustable bone joints orange so the user knows they're live.
+        self.rig_edit_mode: bool = False
+        # Callback invoked after a bone joint is dragged in rig-edit mode:
+        #   on_bone_moved(node_name: str, new_pos: tuple)
+        self.on_bone_moved = None
         self._outlier_skin_nodes: set = set()   # node ids to skip (accessory model proxies)
         self._outlier_model_id: int = -1            # id() of model for which outliers were computed
 
@@ -3379,6 +3394,9 @@ class FrameRenderer:
         # FIX (v10.4): Reset _lq_tex_mode on model change so a stale LQ flag
         # from a previous drag cannot survive into the new model's first render.
         self._lq_tex_mode = False
+        # v20: Reset model-scale bounding diagonal (used by LBS explosion guard).
+        # Must be cleared on model change so the new model's size is recomputed.
+        self._lbs_model_diag = None
         # Compute skin-proxy node id set for deformation-helper detection.
         # Non-skin nodes whose texture has an exclusive skin-mesh counterpart
         # (exactly 1 skin mesh uses that texture in the whole model) are deformation
@@ -3469,6 +3487,17 @@ class FrameRenderer:
                 if not getattr(n, 'uvs', []):
                     continue  # already handled by no-UVs check
                 nv = len(getattr(n, 'vertices', []))
+
+                # BUG FIX v26: NEVER mark inner-geometry nodes (eyes, eyelids,
+                # teeth, tongue, jaw, gum) as skin proxies.  These are real
+                # renderable meshes; even when they share a texture with a skin
+                # mesh they must be drawn independently so the eyeball / teeth
+                # appear inside the head socket.  Without this exemption, models
+                # like n_brejikh whose eye nodes share c_bantha01 (or equivalent)
+                # with exactly one skin mesh would have their eyes silenced.
+                _n_lower = n.name.lower()
+                if any(s in _n_lower for s in _INNER_GEO_SUBSTRINGS):
+                    continue
 
                 skin_matches = skin_tex_verts.get(tex, [])
                 # Condition 4: exactly ONE skin mesh uses this texture
@@ -3765,6 +3794,9 @@ class FrameRenderer:
     def _render_inner(self, W: int, H: int) -> Optional['Image.Image']:
         if not _PIL:
             return None
+        # Track last rendered dimensions for hit-testing (AcuRig guide drag etc.)
+        self._last_W = W
+        self._last_H = H
         # Only clear the world-transform cache when the model or animation
         # pose actually changes — NOT every frame.  Clearing every frame forced
         # a full O(n_bones²) parent-chain walk on every render tick, making the
@@ -3864,8 +3896,15 @@ class FrameRenderer:
             if self.show_walkmesh and self._walkmesh_overlay is not None:
                 self._draw_walkmesh_overlay(draw, W, H)
 
+            # AcuRig guide overlay — drawn last so it's always visible
+            if getattr(self, '_acurig_guides_overlay', None):
+                self._draw_acurig_guides(draw, W, H)
+
         self._draw_axes(draw, W, H)
         self._draw_stats(draw, W, H)
+        # ── Rig-edit mode banner (Phase 22) ──────────────────────────────────
+        if self.rig_edit_mode:
+            self._draw_rig_edit_banner(draw, W, H)
         return img
 
     # ── projection ────────────────────────────────────────────────────
@@ -4436,14 +4475,32 @@ class FrameRenderer:
         # bad animation keyframes, or un-collapsed 180°-axis root rotations in the chain).
         # Skip that influence and fall back to bind-pose contribution instead.
         #
-        # v15.5: Per-bone threshold reduced from 50.0 → 8.0 units.
-        # The original 50-unit limit was too permissive: it allowed 'usecomp' composite
-        # model distortions (e.g. N_CaloNord head vertices weighted to rcollar_dum/arm
-        # bones that travel 1–4 units during animation) to silently deform character
-        # faces toward the shoulder.  8 units still allows all legitimate full-body
-        # animations (run cycles: legs travel ~1.5 u, root motion: up to ~5 u) while
-        # rejecting the clearly-wrong cross-region deformations from usecomp models.
-        _MAX_BONE_DIST = 8.0
+        # v20.0 FIX: Threshold scaled by model bounding-box size to handle large creatures.
+        # Previous hard-coded 8.0 unit limit was too small for creatures like c_brith
+        # (Drexl) whose wings span ~30 units and travel 15+ units during flight animations,
+        # causing clipped/missing wing geometry during animation playback.
+        #
+        # Strategy: scale by max(model_bbox_diagonal * 0.6, 8.0) to:
+        #   - Keep the 8-unit floor for human-scale characters (prevents usecomp distortions)
+        #   - Allow large creature wings/limbs to deform correctly (c_brith, c_bosdrexl, etc.)
+        # The 0.6 factor means a bone can travel up to 60% of the model's bounding diagonal
+        # before being treated as degenerate.  For c_brith (~55-unit diagonal): 33 units.
+        # For S_Female02 human scale (~4.0-unit diagonal): floor 8.0 applies.
+        _model_diag = getattr(self, '_lbs_model_diag', None)
+        if _model_diag is None:
+            # Compute bounding diagonal once per model and cache it
+            m = self.model
+            if m is not None:
+                try:
+                    bmin, bmax = m.bounding_box()
+                    dx = bmax[0]-bmin[0]; dy = bmax[1]-bmin[1]; dz = bmax[2]-bmin[2]
+                    _model_diag = _math_lbs.sqrt(dx*dx + dy*dy + dz*dz)
+                except Exception:
+                    _model_diag = 10.0
+            else:
+                _model_diag = 10.0
+            self._lbs_model_diag = _model_diag
+        _MAX_BONE_DIST = max(8.0, _model_diag * 0.6)
 
         for bw in influences:
             if bw.weight <= 0.0:
@@ -4495,12 +4552,12 @@ class FrameRenderer:
         inv_w = 1.0 / total_weight
         rx, ry, rz = rx_total * inv_w, ry_total * inv_w, rz_total * inv_w
 
-        # Final explosion guard: if LBS result is more than _MAX_BONE_DIST away
+        # Final explosion guard: if LBS result is more than _MAX_BONE_DIST*2 away
         # from the bind-pose vertex, the deformation is too extreme — return bind pose.
-        # This catches compound cases where multiple bad bones each contribute small
-        # but additive errors that sum to an explosion.
-        # v15.5: threshold also reduced here from 50 → 8 for consistency.
-        if (_math_lbs.sqrt((rx-vbx)**2 + (ry-vby)**2 + (rz-vbz)**2) > _MAX_BONE_DIST):
+        # Multiplied by 2 here (vs per-bone check) because compound deformations from
+        # multiple valid bones can legitimately sum to larger displacements than any
+        # single bone travel (e.g. c_brith wingtip = root travel + wing-fold travel).
+        if (_math_lbs.sqrt((rx-vbx)**2 + (ry-vby)**2 + (rz-vbz)**2) > _MAX_BONE_DIST * 2.0):
             return _bind_fallback()
         return (rx, ry, rz)
 
@@ -4779,8 +4836,27 @@ class FrameRenderer:
             # Dangly (cloth) nodes get a distinctive teal colour overlay so
             # modders can immediately see which geometry has cloth simulation.
             is_cloth = node.is_dangly
-            # Two-sided: cloth/dangly + transparent materials skip backface cull
-            is_two_sided_flat = (is_cloth or getattr(node, "transparency_hint", 0) in (1, 2))
+            # Two-sided: cloth/dangly + transparent materials skip backface cull.
+            # Also make face/head mesh nodes two-sided: KotOR head models have
+            # inner-geometry (eyes, teeth, tongue) sitting INSIDE the face mesh.
+            # Backface culling on the face can make interior geometry visible
+            # from directions where the face mesh winding appears reversed (e.g.
+            # looking upward through the mouth gap, or in some model orientations).
+            # Rendering the face as two-sided prevents the "see-through" effect
+            # without changing the depth-sort ordering.
+            _nl_flat2 = node.name.lower()
+            _is_face_mesh_flat = any(s in _nl_flat2 for s in _FACE_MESH_SUBSTRINGS)
+            # BUG FIX v26: inner-geometry nodes (eyes, eyelids, teeth, tongue) sit
+            # INSIDE the face mesh.  Without two-sided rendering their triangles are
+            # back-face culled when viewed from outside the head (the eye normals
+            # typically point inward/outward inconsistently).  Force two-sided so
+            # they always contribute pixels after the tier-1 promotion draws them
+            # over the opaque head mesh.
+            _is_inner_geo_flat2 = any(s in _nl_flat2 for s in _INNER_GEO_SUBSTRINGS)
+            is_two_sided_flat = (is_cloth
+                                 or getattr(node, "transparency_hint", 0) in (1, 2)
+                                 or _is_face_mesh_flat
+                                 or _is_inner_geo_flat2)
             if is_cloth:
                 # Teal shift: boost green+blue, reduce red
                 r = max(20, r - 40)
@@ -4801,8 +4877,19 @@ class FrameRenderer:
             # The head mesh's geometric eye-socket opening then correctly exposes the
             # eyeball geometry underneath.
             _nl_flat = node.name.lower()
+            # Inner-geometry tier bump: promote eye/teeth/tongue nodes to draw tier 1
+            # (after opaque face mesh) so they show through socket/mouth openings.
+            # BUG FIX v20: removed 'not node.is_skin' gate — in some K2 head models
+            # (child_f, comm_a_m, p_carth, etc.) eyeball nodes ARE declared as skin
+            # meshes (MESH|SKIN flags) rather than trimesh.  The old check prevented
+            # these skin-type eyeballs from being promoted, causing them to be painter-
+            # sorted behind the opaque face mesh and become invisible.  Now we check
+            # ALL nodes (skin or not) for inner-geo naming, as long as they have a
+            # non-null texture (deformation helpers with null textures won't match).
+            _clean_tex_flat = _clean_tex_name(getattr(node, 'texture', '') or '')
+            _has_tex_flat = bool(_clean_tex_flat and _clean_tex_flat.upper() not in ('NULL', ''))
             _is_inner_geo_flat = (
-                not node.is_skin
+                _has_tex_flat
                 and any(s in _nl_flat for s in _INNER_GEO_SUBSTRINGS)
                 and int(getattr(node, 'transparency_hint', 0)) == 0
             )
@@ -5074,7 +5161,14 @@ class FrameRenderer:
                 _tex_arr = None
 
             transp_hint = getattr(node, 'transparency_hint', 0)
-            is_two_sided = (node.is_dangly or transp_hint in (1, 2))
+            _nl_accel = node.name.lower()
+            _is_face_accel = any(s in _nl_accel for s in _FACE_MESH_SUBSTRINGS)
+            # BUG FIX v26: inner-geo nodes two-sided in accel path too
+            _is_inner_geo_accel = any(s in _nl_accel for s in _INNER_GEO_SUBSTRINGS)
+            is_two_sided = (node.is_dangly
+                            or transp_hint in (1, 2)
+                            or _is_face_accel
+                            or _is_inner_geo_accel)
 
             # ── Per-node TXI features (Phase 18-C) ────────────────────────
             # TXI clamp_s/clamp_t: apply GL_CLAMP_TO_EDGE on the relevant axis.
@@ -5664,16 +5758,31 @@ class FrameRenderer:
 
             # Two-sided flag: dangly/cloth nodes and transparency_hint in (1,2) render
             # both faces. KotOR uses this for robes, capes, glass panels, cloth.
+            # Also make face/head mesh nodes two-sided to prevent see-through
+            # artifacts caused by inner-geometry (eyes, teeth) winding issues.
             transp_hint = getattr(node, 'transparency_hint', 0)
-            is_two_sided = (node.is_dangly or transp_hint in (1, 2))
+            _nl_tex2 = node.name.lower()
+            _is_face_mesh_tex = any(s in _nl_tex2 for s in _FACE_MESH_SUBSTRINGS)
+            # BUG FIX v26: same as flat path – inner-geo (eyes, eyelids, teeth)
+            # must be two-sided so they aren't back-face culled from outside the head.
+            _is_inner_geo_tex2 = any(s in _nl_tex2 for s in _INNER_GEO_SUBSTRINGS)
+            is_two_sided = (node.is_dangly
+                            or transp_hint in (1, 2)
+                            or _is_face_mesh_tex
+                            or _is_inner_geo_tex2)
 
             # ── Inner-geometry tier bump (textured path) ────────────────────
             # Same logic as flat-shade path: eye, eyelid, teeth, and tongue
             # nodes are promoted to tier 1 (drawn after the head/body mesh)
             # so they are revealed through the eye-socket/mouth-gap openings.
             _nl_tex = node.name.lower()
+            # BUG FIX v20: same as flat path — removed 'not node.is_skin' gate.
+            # Eyeball nodes in K2 head models can be skin nodes; must still promote
+            # them to draw tier 1 so they render after the opaque face mesh.
+            _clean_tex_ign = _clean_tex_name(getattr(node, 'texture', '') or '')
+            _has_tex_ign = bool(_clean_tex_ign and _clean_tex_ign.upper() not in ('NULL', ''))
             _is_inner_geo_tex = (
-                not node.is_skin
+                _has_tex_ign
                 and any(s in _nl_tex for s in _INNER_GEO_SUBSTRINGS)
                 and int(transp_hint) == 0
             )
@@ -6203,8 +6312,12 @@ class FrameRenderer:
         Detect KotOR deformation-helper mesh nodes that should NOT be rendered
         as visible geometry.
 
-        In KotOR's Odyssey engine, character models contain hidden "deformation
-        helper" trimeshes (usually ending in _g, _G, or matching bone names like
+        OBJ / FBX imported nodes are tagged with node._imported = True by
+        OBJImporter and FBXImporter.  These are never deformation helpers —
+        they are real geometry the user explicitly loaded.
+
+        In KotOR's Odyssey engine, character models contain hidden deformation
+        helper trimeshes (usually ending in _g, _G, or matching bone names like
         lbicep_g, rthigh_g, pelvis_g, head_g, jaw2, etc.).  These are used by
         the engine's SkinMesh deformation pipeline and are never rendered directly.
         They have:
@@ -6228,8 +6341,31 @@ class FrameRenderer:
         exclusive texture with exactly one skin mesh that has more vertices
         (e.g. 'head_Hair' on c_bantha is a 61-vert proxy for 'bthair' with 320 verts).
         """
+        # ── OBJ / FBX imported nodes: always renderable ───────────────────────
+        # Nodes tagged with _imported=True were explicitly loaded by the user from
+        # an OBJ or FBX file.  They are never KotOR deformation helpers — skip all
+        # KotOR-specific heuristics and render them unconditionally.
+        if getattr(node, '_imported', False):
+            return False
+
         tex = _clean_tex_name(node.texture)
         is_null_tex = (not tex or tex.upper() == 'NULL')
+
+        # ── BUG FIX v26: Inner-geometry nodes (eyes, eyelids, teeth, tongue, ─
+        # jaw, gum) are ALWAYS renderable when they have a real texture and
+        # valid UVs — regardless of is_skin status, name suffix, or proxy rules.
+        # These nodes sit inside the face mesh and form the visible eye/mouth
+        # content.  Treating them as deformation helpers (for any reason) causes
+        # them to be silently dropped from the render list and the character
+        # appears eyeless.  This explicit early-return short-circuits ALL later
+        # helper checks, including the _skin_proxy_ids check.
+        _name_lower_check = node.name.lower()
+        if any(s in _name_lower_check for s in _INNER_GEO_SUBSTRINGS):
+            if not is_null_tex and node.uvs:
+                _uvs_ok = not any(abs(u) > 3.0 or abs(v) > 3.0
+                                  for u, v in node.uvs[:20])
+                if _uvs_ok:
+                    return False  # always render inner-geo nodes
 
         # ── Skin node with a real texture and valid UVs → always visible ──────
         # Never treat it as a deformation helper regardless of name.
@@ -6247,16 +6383,24 @@ class FrameRenderer:
             if has_extreme_uvs:
                 return True
 
-        # ── Non-skin _g / _G or _dum nodes are ALWAYS deform helpers ─────────
-        # Regardless of whether they carry a texture name or not.
-        # The _g suffix is the universal KotOR marker for SkinMesh deformation
-        # proxy meshes.  The _dum suffix marks dummy attachment/collar helpers.
-        # Non-skin _g/_dum nodes are never visible geometry.
-        # (Skin + real_tex + valid_uvs is already allowed above.)
+        # ── Non-skin _g / _G or _dum nodes are deform helpers — UNLESS they ───
+        # are inner-geometry (eye, eyelid, teeth, tongue) nodes with a real
+        # texture.  NPC head models use naming like f_rlweye_g / f_llweye_g for
+        # actual eyeball trimesh nodes that end in _g but ARE visible geometry.
+        # Without this exception those eyeballs are incorrectly hidden.
         name_lower = node.name.lower()
+        _name_is_inner_geo = any(s in name_lower for s in _INNER_GEO_SUBSTRINGS)
         if not node.is_skin and (name_lower.endswith('_g')
                                   or name_lower.endswith('_g0')
                                   or name_lower.endswith('_dum')):
+            # EXCEPTION: inner-geometry nodes with a real texture and valid
+            # (non-extreme) UVs are ALWAYS renderable — they are real eyeball /
+            # teeth / tongue meshes, not deformation proxies.
+            if _name_is_inner_geo and not is_null_tex and node.uvs:
+                _uvs_ok = not any(abs(u) > 3.0 or abs(v) > 3.0
+                                  for u, v in node.uvs[:20])
+                if _uvs_ok:
+                    return False  # render this inner-geo node
             return True
 
         # ── Null-texture, non-skin nodes → always deform helpers ─────────────
@@ -6269,7 +6413,7 @@ class FrameRenderer:
                                    for u, v in node.uvs[:5])):
             return True
 
-        # ── Non-skin nodes with NO UVs → always deform helpers ───────────────
+        # ── Non-skin nodes with NO UVs → deform helpers UNLESS body-part ──────
         # KotOR creature/character models contain skeleton-bone helper nodes
         # (e.g. BTHips, BTSpine1, BTHead, BTShoulders on the bantha; or similar
         # bone-proxy trimeshes on other creatures) that:
@@ -6280,6 +6424,11 @@ class FrameRenderer:
         # collision/deformation but never renders directly.  Without UVs they
         # cannot be textured, and rendering them as flat-shaded produces ugly
         # opaque bone-shaped blobs that obscure the real skin mesh.
+        #
+        # HOWEVER: some character models (e.g. c_jawa) have body-part trimeshes
+        # that legitimately have no UV coords because the region is covered by
+        # other mesh layers (robes).  We NEVER want to render them flat-shaded
+        # either, so the existing rule is kept:
         # Fix: treat any non-skin node with no UV data as a deformation helper.
         if not node.is_skin and not node.uvs:
             return True
@@ -6376,13 +6525,15 @@ class FrameRenderer:
         visited: set = set()
         while stack:
             n = stack.pop()
+            if n is None:
+                continue
             nid = id(n)
             if nid in visited:
                 continue
             visited.add(nid)
             if n.is_mesh or n.is_skin:
                 yield n
-            stack.extend(reversed(n.children))
+            stack.extend(c for c in reversed(n.children) if c is not None)
 
     # ── Bones ─────────────────────────────────────────────────────────
 
@@ -6407,11 +6558,14 @@ class FrameRenderer:
         if not self.model or not self.model.root_node:
             return
 
-        _BONE_COL   = _BONE[:3]           # gold  (255,170,0) – dummy joints
-        _BONE_DEFORM= (60, 200, 80)        # green – deform-helper trimesh joints
-        _BONE_LEAF  = (180, 100,   0)      # amber for leaf joints
-        _BONE_LINE  = (200, 140,  20)      # bone connection lines
-        _DEFORM_LINE= (50, 160, 70)        # deform-helper connection lines
+        # In rig-edit mode all adjustable joints are orange so the user can
+        # immediately see which bones they can drag with the gizmo.
+        _rig_edit = getattr(self, 'rig_edit_mode', False)
+        _BONE_COL   = (255, 140,  20) if _rig_edit else _BONE[:3]  # orange or gold
+        _BONE_DEFORM= (255, 100,  10) if _rig_edit else (60, 200, 80)
+        _BONE_LEAF  = (200,  80,   0) if _rig_edit else (180, 100, 0)
+        _BONE_LINE  = (220, 120,  20) if _rig_edit else (200, 140, 20)
+        _DEFORM_LINE= (200,  90,  10) if _rig_edit else (50, 160, 70)
         _SEL_COL    = _SEL[:3]            # teal  (0,255,170)
         _EFF_COL    = ( 50, 120, 180)      # dim blue for effect nodes
 
@@ -6592,6 +6746,117 @@ class FrameRenderer:
 
 
 
+
+    # ── AcuRig guide overlay ─────────────────────────────────────────────────
+
+    def set_acurig_guides(self, guides: dict):
+        """Register an AcuRig guide dict for viewport overlay rendering.
+
+        Parameters
+        ----------
+        guides : dict
+            Mapping of guide_name → RigGuide (or any object with .position tuple).
+            Pass None or {} to clear the overlay.
+        """
+        self._acurig_guides_overlay = guides or {}
+        self._acurig_selected_guide: str = ''
+        self.redraw()
+
+    def _draw_acurig_guides(self, draw: 'ImageDraw.Draw', W: int, H: int):
+        """Draw AcuRig guide handles as coloured circles with name labels.
+
+        Guides are rendered as:
+          • Normal guides     – teal circle (r=7) with white name label
+          • Selected guide    – bright yellow circle (r=9) with bold label
+          • Left-side (l_*)   – left-colour (cornflower blue)
+          • Right-side (r_*)  – right-colour (hot pink)
+          • Centre (c_*/mid)  – green
+
+        The overlay is drawn on top of the bone skeleton so modders can
+        clearly see guide positions relative to the rig.
+        """
+        guides = getattr(self, '_acurig_guides_overlay', None)
+        if not guides:
+            return
+
+        selected = getattr(self, '_acurig_selected_guide', '')
+
+        _TEAL   = (0, 220, 180)
+        _YELLOW = (255, 220, 0)
+        _BLUE   = (100, 160, 255)
+        _PINK   = (255, 80, 160)
+        _GREEN  = (80, 220, 80)
+
+        for name, guide in guides.items():
+            pos = getattr(guide, 'position', None)
+            if pos is None:
+                continue
+            if len(pos) < 3:
+                continue
+
+            sp = self._proj(pos[0], pos[1], pos[2], W, H)
+            if sp is None:
+                continue
+            sx, sy, _ = sp
+
+            nl = name.lower()
+            if nl.startswith('l_') or nl.endswith('_l'):
+                col = _BLUE
+            elif nl.startswith('r_') or nl.endswith('_r'):
+                col = _PINK
+            elif nl.startswith('c_') or 'mid' in nl or 'center' in nl or 'centre' in nl:
+                col = _GREEN
+            else:
+                col = _TEAL
+
+            is_sel = (name == selected)
+            r = 9 if is_sel else 7
+            outline = _YELLOW if is_sel else col
+            fill    = tuple(max(0, c - 80) for c in col)
+
+            draw.ellipse([sx-r, sy-r, sx+r, sy+r], fill=fill, outline=outline, width=2)
+
+            # Diamond crosshair for selected guide
+            if is_sel:
+                d = 14
+                draw.line([sx-d, sy, sx+d, sy], fill=_YELLOW, width=1)
+                draw.line([sx, sy-d, sx, sy+d], fill=_YELLOW, width=1)
+
+            # Name label
+            try:
+                label_col = _YELLOW if is_sel else (200, 230, 255)
+                draw.text((sx + r + 3, sy - 6), name, fill=label_col)
+            except Exception:
+                pass
+
+    def hit_test_acurig_guide(self, mx: int, my: int, radius: int = 14) -> str:
+        """
+        Return the name of the AcuRig guide whose projected screen circle
+        contains the pixel (mx, my), or '' if none.
+
+        We store projected positions during _draw_acurig_guides in a lightweight
+        parallel list so this test runs in O(n) without re-projecting.
+        """
+        guides = getattr(self, '_acurig_guides_overlay', None)
+        if not guides:
+            return ''
+        W = self._last_W if hasattr(self, '_last_W') else 800
+        H = self._last_H if hasattr(self, '_last_H') else 600
+        best_name = ''
+        best_dist2 = radius * radius + 1
+        for name, guide in guides.items():
+            pos = getattr(guide, 'position', None)
+            if pos is None or len(pos) < 3:
+                continue
+            sp = self._proj(pos[0], pos[1], pos[2], W, H)
+            if sp is None:
+                continue
+            sx, sy, _ = sp
+            d2 = (mx - sx) ** 2 + (my - sy) ** 2
+            if d2 < best_dist2:
+                best_dist2 = d2
+                best_name = name
+        return best_name
 
     def _draw_gimbal(self, draw, W: int, H: int):
         """
@@ -6869,6 +7134,25 @@ class FrameRenderer:
         self.show_walkmesh = not self.show_walkmesh
         self._request_render()
 
+    # ── Rig-edit mode banner (Phase 22) ──────────────────────────────
+
+    def _draw_rig_edit_banner(self, draw: 'ImageDraw.Draw', W: int, H: int):
+        """
+        Draw a prominent orange banner at the top of the viewport when in
+        rig-edit mode, reminding the user to drag bones and confirm.
+        """
+        try:
+            bh = 26
+            # Semi-transparent orange strip
+            draw.rectangle([0, 0, W, bh], fill=(180, 80, 0))
+            msg = (
+                "  ✦ RIG EDIT MODE  –  Drag bone joints to adjust  ·  "
+                "Click 'Confirm Rig' in the Retarget panel when done"
+            )
+            draw.text((6, 5), msg, fill=(255, 230, 140))
+        except Exception:
+            pass
+
     # ── Axes gizmo ────────────────────────────────────────────────────
 
     def _draw_axes(self, draw: 'ImageDraw.Draw', W: int, H: int):
@@ -6919,13 +7203,15 @@ class FrameRenderer:
         _bc_visited: set = set()
         while stack:
             n = stack.pop()
+            if n is None:
+                continue
             nid = id(n)
             if nid in _bc_visited:
                 continue
             _bc_visited.add(nid)
             if not n.is_mesh:
                 bc += 1
-            stack.extend(n.children)
+            stack.extend(c for c in n.children if c is not None)
         skin_nodes = sum(1 for n in visible_nodes if n.is_skin)
         mode_str = " [TEX+PHONG]" if (self.show_texture and not self.is_interactive) else \
                    " [FLAT(drag)]" if (self.show_texture and self.is_interactive) else \
@@ -7779,6 +8065,13 @@ class ViewportWidget(tk.Frame):
         self._gimbal_drag_start: tuple = (0, 0)
         self._gimbal_node_start_pos: tuple = (0.0, 0.0, 0.0)
 
+        # ── AcuRig guide drag state ────────────────────────────────────
+        self._acurig_guide_dragging: bool = False
+        self._acurig_drag_guide_name: str = ''
+        self._acurig_drag_start: tuple = (0, 0)
+        # Callback: (guide_name, new_world_pos) when a guide is moved
+        self.on_acurig_guide_moved = None
+
         # Thread-safe render result queue: render thread posts (img, render_ms)
         # here; _schedule_render drains it on the main thread.  This avoids
         # calling self.after() from a background thread, which raises
@@ -7886,6 +8179,16 @@ class ViewportWidget(tk.Frame):
         self._btn_gimbal_mode.configure(bg="#223344")
         self._btn_gimbal_mode.pack(side='left', padx=2, pady=2)
         _vp_tip(self._btn_gimbal_mode, "Cycle gimbal mode: Translate → Rotate  (Tab)")
+
+        # ── Rig-Edit toggle (Phase 22) ──────────────────────────────────
+        self._btn_rig_edit = tk.Button(
+            tb, text="✦ Rig Edit", command=self._toggle_rig_edit_mode, **btn)
+        self._btn_rig_edit.configure(bg="#1e1e3a")   # inactive = dark
+        self._btn_rig_edit.pack(side='left', padx=2, pady=2)
+        _vp_tip(self._btn_rig_edit,
+                "Toggle Rig-Edit Mode: drag bone joints to adjust positions.\n"
+                "Click again or press 'Confirm Rig' in the Retarget panel "
+                "to bake and finish.")
 
         _vp_sep().pack(side='left', fill='y', padx=4, pady=4)
 
@@ -8173,7 +8476,39 @@ class ViewportWidget(tk.Frame):
         self._open_uv_viewer()
 
     def _toggle_walkmesh_btn(self):
-        """Toggle walkmesh overlay from toolbar button."""
+        """Toggle walkmesh overlay from toolbar button.
+
+        If no walkmesh has been co-loaded alongside the current model, attempt
+        an on-demand discovery search (game directory, Override/, modules/ archives)
+        via the main window's _try_coload_walkmesh().  If that also finds nothing,
+        flash the button red and show an informational log message.
+        """
+        if self._renderer._walkmesh_overlay is None:
+            # Attempt on-demand walkmesh discovery via the main window
+            parent = self.winfo_toplevel()
+            _coload = getattr(parent, '_try_coload_walkmesh', None)
+            if _coload is not None:
+                # Build a Path for the current model (if any)
+                model_path_str = getattr(parent, '_model_path', '') or ''
+                if model_path_str:
+                    from pathlib import Path as _Path
+                    try:
+                        _coload(_Path(model_path_str))
+                    except Exception:
+                        pass
+            # Check again after the discovery attempt
+            if self._renderer._walkmesh_overlay is None:
+                # Still nothing — inform the user
+                self._btn_wok.configure(bg="#552222")   # brief red flash
+                self.after(400, lambda: self._btn_wok.configure(bg="#1e1e3a"))
+                _log_fn = getattr(parent, 'log', None) or getattr(self, '_log', None)
+                if _log_fn:
+                    _log_fn("No walkmesh found — place a .wok/.pwk/.dwk file "
+                            "alongside the MDL, or set the game directory so the "
+                            "module archive can be searched automatically.", 'warn')
+                return
+            # Discovery succeeded — button is already set green by _do_coload_walkmesh
+            return
         self._renderer.show_walkmesh = not self._renderer.show_walkmesh
         on = self._renderer.show_walkmesh
         self._btn_wok.configure(bg="#225533" if on else "#1e1e3a")
@@ -8182,11 +8517,23 @@ class ViewportWidget(tk.Frame):
     # ── Mouse handlers ────────────────────────────────────────────────
 
     def _press_lmb(self, e):
-        """LMB press: check gimbal first, then bone, else orbit."""
+        """LMB press: check AcuRig guide → gimbal → bone, else orbit."""
         self._mx, self._my = e.x, e.y
         self._press_x, self._press_y = e.x, e.y
         self._is_dragging = False
         self._gimbal_dragging = False
+        self._acurig_guide_dragging = False
+
+        # AcuRig guide drag — highest priority when guides are visible
+        if getattr(self._renderer, '_acurig_guides_overlay', None):
+            guide_name = self._renderer.hit_test_acurig_guide(e.x, e.y)
+            if guide_name:
+                self._acurig_guide_dragging = True
+                self._acurig_drag_guide_name = guide_name
+                self._acurig_drag_start = (e.x, e.y)
+                self._renderer._acurig_selected_guide = guide_name
+                self._request_render()
+                return  # consumed
 
         # Gimbal handle hit-test has priority over everything else
         if (self._renderer.show_gimbal and self._renderer.selected_node
@@ -8210,7 +8557,13 @@ class ViewportWidget(tk.Frame):
                 self._request_render()
 
     def _drag_lmb(self, e):
-        """LMB drag: gimbal move if active, else orbit camera."""
+        """LMB drag: AcuRig guide → gimbal → orbit camera."""
+        # AcuRig guide drag
+        if self._acurig_guide_dragging and self._acurig_drag_guide_name:
+            self._apply_acurig_guide_drag(e.x, e.y)
+            self._request_render(fast=True)
+            return
+
         # Gimbal drag takes priority
         if self._gimbal_dragging and self._renderer.selected_node:
             self._apply_gimbal_drag(e.x, e.y)
@@ -8237,15 +8590,40 @@ class ViewportWidget(tk.Frame):
             self._request_render(fast=True)
 
     def _release_lmb(self, e):
-        """LMB release: finish gimbal drag or check for bone/node click."""
+        """LMB release: finish AcuRig guide / gimbal drag or check bone/node click."""
+        # Finish AcuRig guide drag
+        if self._acurig_guide_dragging:
+            self._acurig_guide_dragging = False
+            guide_name = self._acurig_drag_guide_name
+            self._acurig_drag_guide_name = ''
+            if self.on_acurig_guide_moved and guide_name:
+                guides = getattr(self._renderer, '_acurig_guides_overlay', {})
+                guide = guides.get(guide_name)
+                if guide and hasattr(guide, 'position'):
+                    try:
+                        self.on_acurig_guide_moved(guide_name, tuple(guide.position))
+                    except Exception:
+                        pass
+            self._request_render()
+            return
+
         # Finish gimbal drag
         if self._gimbal_dragging:
             self._gimbal_dragging = False
             self._renderer.gimbal_active_axis = None
             self._renderer.is_interactive = False
             self._renderer._wt_cache.clear()  # re-propagate moved bone to children
-            if self.on_node_moved and self._renderer.selected_node:
-                self.on_node_moved(self._renderer.selected_node)
+            node = self._renderer.selected_node
+            if node:
+                # Generic node-moved callback
+                if self.on_node_moved:
+                    self.on_node_moved(node)
+                # Rig-edit mode: forward bone move to the RetargetEngine
+                if self._renderer.rig_edit_mode and self._renderer.on_bone_moved:
+                    try:
+                        self._renderer.on_bone_moved(node.name, node.position)
+                    except Exception:
+                        pass
             self._request_render()
             return
 
@@ -8281,6 +8659,55 @@ class ViewportWidget(tk.Frame):
         if self.on_bone_selected:
             self.on_bone_selected(None)
         self._request_render()
+
+    # ── AcuRig guide drag helpers ─────────────────────────────────────
+
+    def _apply_acurig_guide_drag(self, mx: int, my: int):
+        """
+        Move the currently-dragged AcuRig guide by mapping mouse delta to
+        world-space XY displacement (guides live in the model's bind plane).
+
+        The drag maps screen pixels to world units using the same
+        world_per_px estimate as the gimbal translate helper, projecting only
+        in the camera's right/up plane (ignoring depth).
+        """
+        import math as _gm
+        guide_name = self._acurig_drag_guide_name
+        guides = getattr(self._renderer, '_acurig_guides_overlay', {})
+        guide = guides.get(guide_name)
+        if guide is None or not hasattr(guide, 'position'):
+            return
+
+        sx0, sy0 = self._acurig_drag_start
+        dx_screen = mx - sx0
+        dy_screen = my - sy0
+
+        W = self.canvas.winfo_width()  or 800
+        H = self.canvas.winfo_height() or 600
+
+        # Approximate world_per_pixel from camera distance to guide position
+        pos = guide.position
+        sp = self._renderer._proj(pos[0], pos[1], pos[2], W, H)
+        dist = sp[2] if sp else 5.0
+        dist = max(0.5, dist)
+        fov_rad = _gm.radians(self.camera.fov)
+        world_per_px = (2.0 * dist * _gm.tan(fov_rad * 0.5)) / max(H, 1)
+
+        right, up, _fwd, _eye = self.camera._view_matrix()
+
+        # Δ world = screen_dx × right_dir + (-screen_dy) × up_dir
+        dx_world = (dx_screen * right[0] + (-dy_screen) * up[0]) * world_per_px
+        dy_world = (dx_screen * right[1] + (-dy_screen) * up[1]) * world_per_px
+        dz_world = (dx_screen * right[2] + (-dy_screen) * up[2]) * world_per_px
+
+        old_pos = list(pos)
+        new_pos = [old_pos[0] + dx_world,
+                   old_pos[1] + dy_world,
+                   old_pos[2] + dz_world]
+        guide.position = new_pos
+
+        # Update drag start so deltas are relative each frame
+        self._acurig_drag_start = (mx, my)
 
     # ── Gimbal helpers ────────────────────────────────────────────────
 
@@ -8410,6 +8837,75 @@ class ViewportWidget(tk.Frame):
                 text=f"[{mode_lbl}]",
                 bg="#223344" if mode == 1 else "#332244")
 
+    # ── Rig-Edit mode public API (Phase 22) ──────────────────────────────
+
+    def enter_rig_edit_mode(self, on_bone_moved=None):
+        """
+        Enter Rig Edit Mode.
+
+        In this mode:
+        • Bone joints are drawn in orange instead of gold to signal edit mode.
+        • An orange banner is drawn at the top of the viewport.
+        • Every time the user drags a bone joint via the gimbal, the optional
+          *on_bone_moved(name, new_pos)* callback is invoked.
+        • Bones are automatically shown and gimbal is enabled.
+
+        Call exit_rig_edit_mode() or confirm_rig_edit() to leave.
+        """
+        self._renderer.rig_edit_mode = True
+        self._renderer.on_bone_moved  = on_bone_moved
+        # Ensure bones and gimbal are visible
+        self._renderer.show_bones  = True
+        self._renderer.show_gimbal = True
+        if hasattr(self, '_btn_bones'):
+            self._btn_bones.configure(bg="#cc5500")   # orange tint
+        if hasattr(self, '_btn_rig_edit'):
+            self._btn_rig_edit.configure(bg="#cc5500", text="✦ Rig Edit ON")
+        self._request_render()
+
+    def exit_rig_edit_mode(self):
+        """
+        Leave Rig Edit Mode without baking.  Bone positions stay where the
+        user left them but the auto-skin weights are NOT recalculated.
+        """
+        self._renderer.rig_edit_mode = False
+        self._renderer.on_bone_moved  = None
+        if hasattr(self, '_btn_bones'):
+            self._btn_bones.configure(bg="#333322")   # restore normal colour
+        if hasattr(self, '_btn_rig_edit'):
+            self._btn_rig_edit.configure(bg="#1e1e3a", text="✦ Rig Edit")
+        self._request_render()
+
+    def confirm_rig_edit(self, retarget_engine=None):
+        """
+        Confirm Rig Edit: exit rig-edit mode and (optionally) bake the
+        adjusted bone positions into fresh skin weights.
+
+        If *retarget_engine* is a RetargetEngine instance, bake_rig_edit()
+        is called on the current model to re-skin all mesh nodes from the
+        updated bone positions.
+
+        Returns the number of re-skinned mesh nodes (0 if no engine given).
+        """
+        self.exit_rig_edit_mode()
+        count = 0
+        if retarget_engine is not None and self.model is not None:
+            try:
+                count = retarget_engine.bake_rig_edit(self.model)
+            except Exception as _e:
+                import logging as _log
+                _log.getLogger(__name__).warning(
+                    f"confirm_rig_edit bake failed: {_e}")
+        # Invalidate world-transform cache so the re-skinned model renders fresh
+        self._renderer._wt_cache.clear()
+        self._renderer._lbs_model_diag = None
+        self._request_render()
+        return count
+
+    def is_rig_edit_active(self) -> bool:
+        """Return True if rig-edit mode is currently active."""
+        return self._renderer.rig_edit_mode
+
     def load_ext_skeleton(self, model, offset=(0.0, 0.0, 0.0)):
         """
         Load an external skeleton (KotorModel) as a purple ghost overlay.
@@ -8425,6 +8921,13 @@ class ViewportWidget(tk.Frame):
         self._renderer._ext_skel_offset = [x, y, z]
         self._renderer._wt_cache.clear()
         self._request_render()
+
+    def _toggle_rig_edit_mode(self):
+        """Toggle Rig-Edit Mode on/off from the toolbar button."""
+        if self._renderer.rig_edit_mode:
+            self.exit_rig_edit_mode()
+        else:
+            self.enter_rig_edit_mode()
 
     def _press_orbit(self, e):
         self._mx, self._my = e.x, e.y

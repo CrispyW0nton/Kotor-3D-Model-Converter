@@ -1,12 +1,11 @@
 """
-Main Application Window - GhostRigger-K1-K2
-A complete pipeline tool for KotOR 1 & 2 modding:
-  - Game Resource Browser (K1/K2)
-  - 3D Viewport with skeleton overlay
-  - Export to OBJ/FBX
-  - Import OBJ/FBX → Auto-Rig → KotOR ASCII MDL
-  - Texture (TGA↔TPC) converter
-  - MDL compile/decompile via MDLOps bridge
+Main Application Window - GhostRigger-K1-K2  v5.1.0
+Five-pillar KotOR modding pipeline:
+  1. Model Viewer  – load K1/K2 models from game directory with textures
+  2. Animation     – browse, play, seek, and export all model animations
+  3. Character Builder – K1/K2 templates, skeleton rigging, head/body assembly
+  4. Module Editor – walkmesh editing, K1↔K2 porter, module builder
+  5. Resource Browser – 2DA browser, game resource browser, MDL compile/decompile
 """
 
 import os, sys, json, shutil, subprocess, threading, logging, tkinter as tk, time as _time
@@ -25,6 +24,11 @@ from ..core.resource_manager import ResourceManager, get_manager
 from ..converters.mesh_converter import (OBJImporter, FBXImporter, OBJExporter, FBXExporter,
                                         GLTFImporter, GLTFExporter, tga_to_tpc, tpc_to_tga)
 from ..autorig.auto_rigger import AutoRigger, build_skeleton, HUMANOID_BONES
+from ..autorig.retarget_engine import (
+    RetargetEngine, RetargetState, RetargetStage, ScaleMode,
+    ScaleSolver, MeshScaler, AnimationRetargeter,
+    OrientationMode, ModelOrientFixer,
+)
 from ..autorig.accurig import (
     AcuRig, RigGuide, BoneMask, SymmetryEnforcer, ProfileDetector,
     PROFILE_HUMANOID, PROFILE_QUADRUPED, PROFILE_DROID, PROFILE_PROP,
@@ -48,6 +52,7 @@ from ..core.diagnostics import (
     log_mdl_header, log_model_summary, log_model_anomalies,
     log_crash_report, run_model_diagnostics,
 )
+from . import icon_manager as Icons
 
 log = logging.getLogger(__name__)
 
@@ -74,13 +79,24 @@ C = {
 
 
 def _btn(master, text, command, accent=False, small=False, **kw):
+    """Create a styled flat button. Automatically attaches a KotOR-style
+    icon if one can be resolved from the button label text."""
     bg = C['accent'] if accent else C['panel']
     fg = "white"
     f  = ("Segoe UI", 8 if small else 9)
+    # ── Icon lookup ────────────────────────────────────────────────────
+    icon_size = 16
+    img = Icons.icon_for_label(text, icon_size)
+    extra: dict = {}
+    if img is not None:
+        extra = {"image": img, "compound": "left"}
     b  = tk.Button(master, text=text, command=command,
                    bg=bg, fg=fg, relief='flat', cursor='hand2',
                    activebackground=C['accent2'], activeforeground='white',
-                   padx=8, pady=3, font=f, **kw)
+                   padx=6, pady=3, font=f, **extra, **kw)
+    if img is not None:
+        # Keep a strong reference so the image is not garbage-collected
+        b._icon_img = img  # type: ignore[attr-defined]
     b.bind("<Enter>", lambda e: b.configure(bg=C['accent2'] if accent else C['hover']))
     b.bind("<Leave>", lambda e: b.configure(bg=bg))
     return b
@@ -142,8 +158,10 @@ def _label(master, text, style="normal", **kw):
         "small":   C['text2'],
         "mono":    C['green'],
     }
+    # Allow callers to override fg via kw; otherwise use the style colour
+    _fg = kw.pop('fg', colors.get(style, C['text']))
     return tk.Label(master, text=text, bg=kw.pop('bg', C['panel']),
-                    fg=colors.get(style, C['text']),
+                    fg=_fg,
                     font=fonts.get(style, ("Segoe UI",9)), **kw)
 
 
@@ -197,9 +215,10 @@ class Settings:
 # ──────────────────────────────────────────────────────────────────────
 
 class SkeletonPanel(tk.Frame):
-    def __init__(self, master, on_select=None, **kw):
+    def __init__(self, master, on_select=None, on_multi_select=None, **kw):
         super().__init__(master, bg=C['panel2'], **kw)
         self._on_select = on_select
+        self._on_multi_select = on_multi_select   # callback(list[ModelNode])
         self._build()
 
     def _build(self):
@@ -215,7 +234,7 @@ class SkeletonPanel(tk.Frame):
         sf = tk.Frame(self, bg=C['panel2']); sf.pack(fill='x', padx=4, pady=2)
         self._search_var = tk.StringVar()
         self._search_var.trace_add('write', self._filter)
-        tk.Label(sf, text="🔍", bg=C['panel2'], fg=C['text2'],
+        tk.Label(sf, text="", bg=C['panel2'], fg=C['text2'],
                  font=("Segoe UI", 9)).pack(side='left', padx=(2,0))
         tk.Entry(sf, textvariable=self._search_var, bg=C['bg2'], fg=C['text'],
                  insertbackground=C['text'], relief='flat',
@@ -225,10 +244,21 @@ class SkeletonPanel(tk.Frame):
                   font=("Segoe UI", 7), padx=2, pady=0,
                   cursor="hand2").pack(side='right', padx=1)
 
-        # Tree
+        # Selection action bar: Select All Bones + Clear
+        ab = tk.Frame(self, bg=C['panel2']); ab.pack(fill='x', padx=4, pady=(0,2))
+        _btn(ab, "Select All Bones", self.select_all_nodes, small=True
+             ).pack(side='left', padx=2)
+        _btn(ab, "Clear", self.clear_selection, small=True
+             ).pack(side='left', padx=2)
+        self._sel_count_var = tk.StringVar(value="")
+        tk.Label(ab, textvariable=self._sel_count_var,
+                 bg=C['panel2'], fg=C['gold'],
+                 font=("Segoe UI", 7)).pack(side='right', padx=4)
+
+        # Tree — extended mode for multi-select (Ctrl+click, Shift+click)
         cols = ("Type", "Verts", "Faces")
         self.tree = ttk.Treeview(self, columns=cols, show='tree headings',
-                                  selectmode='browse', height=20)
+                                  selectmode='extended', height=20)
         self.tree.heading('#0', text='Name', anchor='w')
         self.tree.column('#0', width=120, minwidth=80)
         for c, w in zip(cols, (55, 48, 48)):
@@ -341,9 +371,20 @@ class SkeletonPanel(tk.Frame):
 
     def _on_select_event(self, e):
         sel = self.tree.selection()
-        if sel and self._on_select:
+        # Update selection count label
+        self._sel_count_var.set(f"{len(sel)} selected" if len(sel) > 1 else "")
+        if not sel:
+            return
+        # Single-node callback (first selected)
+        if self._on_select:
             node = self._all_items.get(sel[0])
-            self._on_select(node)
+            if node is not None:
+                self._on_select(node)
+        # Multi-select callback
+        if self._on_multi_select and len(sel) > 1:
+            nodes = [self._all_items[iid] for iid in sel
+                     if iid in self._all_items]
+            self._on_multi_select(nodes)
 
     def _filter(self, *a):
         q = self._search_var.get().lower()
@@ -354,13 +395,37 @@ class SkeletonPanel(tk.Frame):
                 self.tree.see(iid)
                 break
 
+    def select_all_nodes(self):
+        """Select ALL nodes in the tree (Ctrl+A equivalent)."""
+        all_iids = list(self._all_items.keys())
+        if not all_iids:
+            self._sel_count_var.set("(no model)")
+            return
+        self.tree.selection_set(all_iids)
+        self._sel_count_var.set(f"{len(all_iids)} selected")
+        # Fire multi-select callback
+        if self._on_multi_select:
+            nodes = list(self._all_items.values())
+            self._on_multi_select(nodes)
+        log.debug("SkeletonPanel.select_all_nodes: %d nodes", len(all_iids))
+
+    def clear_selection(self):
+        """Deselect all nodes."""
+        self.tree.selection_remove(self.tree.selection())
+        self._sel_count_var.set("")
+
     def select_node(self, node: ModelNode):
-        """Programmatically select a node in the tree (e.g. from viewport click)."""
+        """Programmatically select a single node in the tree (e.g. from viewport click)."""
         for iid, n in self._all_items.items():
             if n is node:
                 self.tree.selection_set(iid)
                 self.tree.see(iid)
                 break
+
+    def get_selected_nodes(self) -> list:
+        """Return list of currently selected ModelNode objects."""
+        sel = self.tree.selection()
+        return [self._all_items[iid] for iid in sel if iid in self._all_items]
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -697,6 +762,93 @@ _ITEM_PREFIXES = (
 )
 
 
+def _read_wok_from_archive(archive_path: str, resref: str) -> bytes:
+    """
+    Read a WOK (or PWK/DWK) resource from a KotOR RIM/MOD/ERF archive.
+
+    Parameters
+    ----------
+    archive_path : path to the .rim / .mod / .erf file.
+    resref       : lower-case resref to look up (e.g. 'danm13').
+
+    Returns raw WOK bytes, or b'' if not found.
+
+    The function tries multiple resource type codes for the three walkmesh
+    variants:
+      RES_WOK = 3003   (.wok — room/area walkmesh)
+      PWK     = 3005   (.pwk — placeable walkmesh, same numeric as LYT in some tools)
+      DWK     = 3006   (.dwk — door walkmesh, same numeric as VIS in some tools)
+
+    The numeric codes used in KotOR archives:
+        .wok  = 0x0BBB  (3003)
+        .pwk  = 0x0BBD  (3005)  ← same type slot as LYT in resource_manager
+        .dwk  = 0x0BBE  (3006)  ← same type slot as VIS in resource_manager
+
+    Reference: https://nwn.wiki/display/NWN1/ERF+file+format
+    """
+    # KotOR RIM and ERF both use the same 160-byte key header structure.
+    # RIM: magic "RIM V1.0", ERF: magic "ERF V1.0" / "MOD V1.0".
+    # We use the same _ErfIndex class from resource_manager if available,
+    # otherwise fall back to a minimal inline reader.
+    WALKMESH_TYPES = (
+        3003,   # RES_WOK  .wok
+        3005,   # RES_LYT/PWK  .pwk  (PWK uses the LYT slot in KotOR resource tables)
+        3006,   # RES_VIS/DWK  .dwk
+    )
+    try:
+        from ..core.resource_manager import _ErfIndex
+    except ImportError:
+        try:
+            import sys, os
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+            from src.core.resource_manager import _ErfIndex  # type: ignore
+        except ImportError:
+            _ErfIndex = None  # type: ignore
+
+    if _ErfIndex is not None:
+        try:
+            idx = _ErfIndex(archive_path)
+            for rtype in WALKMESH_TYPES:
+                data = idx.read(resref.lower(), rtype)
+                if data:
+                    return data
+            return b''
+        except Exception:
+            pass
+
+    # Minimal fallback: read archive header manually (ERF V1 format —
+    # used by ERF, MOD, RIM, HAK, SAV — all share the same key layout).
+    # Header offsets (matches _ErfIndex in resource_manager.py):
+    #   [16] entry_count uint32
+    #   [24] off_keys    uint32   → key list: entry_count × 24 bytes
+    #   [28] off_res     uint32   → res list: entry_count × 8 bytes
+    # Key entry (24 bytes): resref[16] + resID[4] + resType[2] + unused[2]
+    # Res entry (8 bytes):  offset[4] + size[4]
+    try:
+        import struct
+        with open(archive_path, 'rb') as fh:
+            raw = fh.read()
+        magic = raw[:8]
+        if magic not in (b'RIM V1.0', b'ERF V1.0', b'MOD V1.0',
+                         b'HAK V1.0', b'SAV V1.0'):
+            return b''
+        entry_count   = struct.unpack_from('<I', raw, 16)[0]
+        off_keys      = struct.unpack_from('<I', raw, 24)[0]
+        off_resources = struct.unpack_from('<I', raw, 28)[0]
+        target = resref.lower()
+        for i in range(min(entry_count, 65535)):
+            kb = off_keys + i * 24
+            name  = raw[kb:kb+16].split(b'\x00', 1)[0].decode('ascii', 'replace').lower()
+            rtype = struct.unpack_from('<H', raw, kb + 20)[0]
+            if name == target and rtype in WALKMESH_TYPES:
+                rb = off_resources + i * 8
+                data_off, data_size = struct.unpack_from('<II', raw, rb)
+                return raw[data_off: data_off + data_size]
+    except Exception:
+        pass
+    return b''
+
+
 def _is_module_resref(r: str) -> bool:
     """Return True if resref 'r' (lower-case) looks like a KotOR module model.
 
@@ -749,9 +901,14 @@ def _infer_model_category(resref: str, model_class: str = "") -> str:
     """
     Infer the display category for a model based on its resref name and
     optional model_class metadata.
-    Returns one of: 'Creature', 'Character', 'Item/Armor/Weapons', 'Module', 'Other'
+    Returns one of: 'Creature', 'Character', 'Item/Armor/Weapons', 'Module',
+                    'Template', 'Other'
     """
     r = resref.lower()
+
+    # GhostRigger template models (gr_ prefix) always go in the Template tab
+    if r.startswith('gr_'):
+        return 'Template'
 
     # Explicit classification from MDL header (highest priority)
     if model_class == 'tile':
@@ -809,14 +966,15 @@ class LibraryPanel(tk.Frame):
     KotOR 1 and KotOR 2 map/level area codes for easy navigation.
     """
 
-    # Category definitions: (display_name, internal_key)
+    # Category definitions: (display_name, internal_key, icon_name)
     CATEGORIES = [
-        ("All",              "All"),
-        ("🐉 Creature",      "Creature"),
-        ("🧍 Character",     "Character"),
-        ("⚔ Item/Armor",   "Item/Armor/Weapons"),
-        ("🏛 Module",        "Module"),
-        ("📦 Other",         "Other"),
+        ("All",              "All",                 "library"),
+        ("Creature",         "Creature",             "cat_creature"),
+        ("Character",        "Character",            "cat_character"),
+        ("Item/Armor",       "Item/Armor/Weapons",   "cat_item"),
+        ("Module",           "Module",               "cat_module"),
+        ("Other",            "Other",                "cat_other"),
+        ("Template",         "Template",             "skeleton"),
     ]
 
     def __init__(self, master, on_load=None, on_dir_set=None, **kw):
@@ -832,6 +990,10 @@ class LibraryPanel(tk.Frame):
         self._category_var = tk.StringVar(value="All")
         self._module_area_var = tk.StringVar(value="All Areas")
         self._build()
+        # Inject template entries immediately so Template tab is populated
+        # even before a game directory is configured.
+        self.after(50, self._inject_template_entries)
+        self.after(60, self._apply_filter)
 
     def _build(self):
         _label(self, "Game Library", "heading", bg=C['panel2']).pack(
@@ -841,9 +1003,9 @@ class LibraryPanel(tk.Frame):
         gf = tk.Frame(self, bg=C['panel2']); gf.pack(fill='x', padx=4, pady=2)
         _btn(gf, "Set K1 Dir", self._set_k1, small=True).pack(side='left', padx=2)
         _btn(gf, "Set K2 Dir", self._set_k2, small=True).pack(side='left', padx=2)
-        _btn(gf, "🔍 Auto", self._auto_detect_dirs, small=True).pack(side='left', padx=2)
-        _btn(gf, "⟳ Scan", self._scan, accent=True, small=True).pack(side='right', padx=2)
-        _btn(gf, "⟳ Deep", self._scan_deep, small=True).pack(side='right', padx=2)
+        _btn(gf, " Auto-detect", self._auto_detect_dirs, small=True).pack(side='left', padx=2)
+        _btn(gf, " Scan", self._scan, accent=True, small=True).pack(side='right', padx=2)
+        _btn(gf, " Deep Scan", self._scan_deep, small=True).pack(side='right', padx=2)
 
         # Game filter (K1 / K2 / All)
         ff = tk.Frame(self, bg=C['panel2']); ff.pack(fill='x', padx=4, pady=1)
@@ -865,9 +1027,9 @@ class LibraryPanel(tk.Frame):
         self._cat_nb = cat_nb
 
         # One invisible frame per category (we switch via _on_cat_changed)
-        for label, key in self.CATEGORIES:
+        for label, key, icon_name in self.CATEGORIES:
             f = tk.Frame(cat_nb, bg=C['panel2'], height=0)
-            cat_nb.add(f, text=label)
+            cat_nb.add(f, **Icons.tab_kwargs(icon_name, f" {label}", 16))
         cat_nb.bind('<<NotebookTabChanged>>', self._on_cat_changed)
 
         # ── Module area filter row (only visible in Module tab) ─────────────
@@ -898,7 +1060,7 @@ class LibraryPanel(tk.Frame):
 
         # Search bar with placeholder
         sf = tk.Frame(self, bg=C['panel2']); sf.pack(fill='x', padx=4, pady=1)
-        _label(sf, "🔍", bg=C['panel2']).pack(side='left', padx=(2, 0))
+        _label(sf, "", bg=C['panel2']).pack(side='left', padx=(2, 0))
         self._search_var = tk.StringVar()
         self._search_var.trace_add('write', self._apply_filter)
         _search_entry = tk.Entry(sf, textvariable=self._search_var,
@@ -957,18 +1119,18 @@ class LibraryPanel(tk.Frame):
                textvariable=self._status_var).pack(padx=4, pady=1)
 
         bf = tk.Frame(self, bg=C['panel2']); bf.pack(fill='x', padx=4, pady=4)
-        b_load = _btn(bf, "⬇ Load Model  ↵", self._load_selected, accent=True)
+        b_load = _btn(bf, " Load Model  ↵", self._load_selected, accent=True)
         b_load.pack(side='left', fill='x', expand=True, padx=2)
         _tooltip(b_load, "Load selected model into viewport  (Enter / double-click)")
-        b_extract = _btn(bf, "📂 Extract", self._extract_selected)
+        b_extract = _btn(bf, " Extract", self._extract_selected)
         b_extract.pack(side='right', padx=2)
         _tooltip(b_extract, "Extract selected MDL/MDX to a folder")
 
         # Batch export row
         bf2 = tk.Frame(self, bg=C['panel2']); bf2.pack(fill='x', padx=4, pady=(0,4))
-        _btn(bf2, "📦 Batch OBJ",    self._batch_export_obj,   small=True).pack(side='left', padx=2)
-        _btn(bf2, "📝 Batch ASCII",  self._batch_export_ascii, small=True).pack(side='left', padx=2)
-        _btn(bf2, "🖼 Batch TGA",   self._batch_extract_tex,  small=True).pack(side='left', padx=2)
+        _btn(bf2, " Batch OBJ",   self._batch_export_obj,   small=True).pack(side='left', padx=2)
+        _btn(bf2, " Batch ASCII", self._batch_export_ascii, small=True).pack(side='left', padx=2)
+        _btn(bf2, " Batch TGA",   self._batch_extract_tex,  small=True).pack(side='left', padx=2)
 
         self._displayed_entries: List[ModelLibraryEntry] = []
         self._renders_dir = Path(__file__).parent.parent.parent / \
@@ -977,7 +1139,7 @@ class LibraryPanel(tk.Frame):
     def _on_cat_changed(self, event=None):
         idx = self._cat_nb.index('current')
         if 0 <= idx < len(self.CATEGORIES):
-            self._category_var.set(self.CATEGORIES[idx][1])
+            self._category_var.set(self.CATEGORIES[idx][1])  # [1] = internal_key
         # Show/hide module area filter and rebuild area choices
         cat = self._category_var.get()
         if cat == 'Module':
@@ -1470,6 +1632,9 @@ class LibraryPanel(tk.Frame):
                 self.library.scan(progress_cb=_safe_progress)
                 self._all_entries = list(self.library.models)
 
+                # Inject built-in GhostRigger template entries
+                self._inject_template_entries()
+
                 def _post_scan():
                     self._apply_filter()
                     if self._category_var.get() == 'Module':
@@ -1485,6 +1650,112 @@ class LibraryPanel(tk.Frame):
                 except Exception:
                     pass
         threading.Thread(target=run, daemon=True, name="lib_scan").start()
+
+    def _inject_template_entries(self):
+        """
+        Inject built-in GhostRigger template model entries into _all_entries.
+
+        These entries are procedurally generated (not from game files) so they
+        appear in the Template tab even when no game directory is set.
+
+        GhostRigger ships two canonical humanoid templates:
+          gr_humanoid_k1  – KotOR 1 biped (S_Male02/S_Female02 skeleton)
+          gr_humanoid_k2  – KotOR 2 biped (best humanoid rig based on
+                             c_female02, the K2 female commoner supermodel
+                             which has the cleanest bone hierarchy)
+
+        When a game directory IS set, we also look for the real S_Male02 /
+        S_Female02 / c_female models and surface them prominently so modders
+        can use the actual in-game skeleton as their starting point.
+        """
+        from ..resources.game_library import ModelLibraryEntry  # type: ignore
+
+        # Remove any stale template entries from a prior inject call
+        self._all_entries = [
+            e for e in self._all_entries
+            if not e.resref.lower().startswith('gr_')
+        ]
+
+        # ── Built-in procedural templates (always present) ─────────────────
+        # Import bone/anim counts from template_builder so descriptions stay
+        # in sync with the actual generated model.
+        try:
+            from ..core.template_builder import (  # type: ignore
+                _HUMANOID_BONES_K1, _HUMANOID_BONES_K2,
+                _ANIM_SLOTS, _ANIM_SLOTS_K2_EXTRA,
+            )
+            _k1_bones = len(_HUMANOID_BONES_K1)
+            _k2_bones = len(_HUMANOID_BONES_K2)
+            _k1_anims = len(_ANIM_SLOTS)
+            _k2_anims = len(_ANIM_SLOTS) + len(_ANIM_SLOTS_K2_EXTRA)
+        except Exception:
+            _k1_bones = 64;  _k2_bones = 72
+            _k1_anims = 56;  _k2_anims = 76
+
+        _TEMPLATES = [
+            ("gr_humanoid_k1", "K1",
+             f"GhostRigger Universal Humanoid (K1)  –  {_k1_bones} bones, "
+             f"{_k1_anims} anim slots  "
+             "Full S_Male02/S_Female02 skeleton with all standard animations.  "
+             "Best starting point for KotOR 1 character modding.",
+             _k1_bones, _k1_anims),
+            ("gr_humanoid_k2", "K2",
+             f"GhostRigger Universal Humanoid (K2)  –  {_k2_bones} bones, "
+             f"{_k2_anims} anim slots  "
+             "Based on K2 c_female02 / S_Female02 skeleton with clavicle bones "
+             "and K2-exclusive animations (lookr/l, victory2/3, attack4/5, etc.).  "
+             "Recommended for KotOR 2 / TSL character modding.",
+             _k2_bones, _k2_anims),
+        ]
+        for resref, game, desc, n_bones, n_anims in _TEMPLATES:
+            entry = ModelLibraryEntry(
+                resref=resref, game=game, source="[GhostRigger Built-in]",
+                has_mdx=False, has_texture=False,
+                model_class='character',
+                description=desc,
+                mesh_count=1, node_count=n_bones, has_skin=False,
+            )
+            self._all_entries.append(entry)
+
+        # ── Real supermodel entries from game directory ─────────────────────
+        # Surface K1/K2 supermodels (S_Male02, S_Female02, S_Male01, etc.)
+        # so modders can load them directly as high-quality skeleton references.
+        _SUPER_REFS = [
+            ("s_male02",   "K1", "K1 Male Supermodel (S_Male02) – base humanoid skeleton"),
+            ("s_female02", "K1", "K1 Female Supermodel (S_Female02) – base humanoid skeleton"),
+            ("s_male01",   "K1", "K1 Male Supermodel alt (S_Male01)"),
+            ("s_female01", "K1", "K1 Female Supermodel alt (S_Female01)"),
+            ("s_male02",   "K2", "K2 Male Supermodel (S_Male02) – full K2 animation set"),
+            ("s_female02", "K2", "K2 Female Supermodel (S_Female02) – full K2 animation set"),
+            ("c_female02", "K2", "K2 Female Commoner (c_female02) – cleanest K2 biped rig"),
+        ]
+        _existing_keys = {
+            (e.resref.lower(), e.game) for e in self._all_entries
+            if not e.resref.lower().startswith('gr_')
+        }
+        mgr = getattr(self, '_resource_manager', None)
+        for resref, game, desc in _SUPER_REFS:
+            key = (resref.lower(), game)
+            if key in _existing_keys:
+                continue  # already found via game directory scan
+            # Only add if we can actually load this model
+            if mgr is not None and mgr.is_ready():
+                try:
+                    raw = mgr.get_mdl(resref, game)
+                    if raw is None:
+                        continue
+                except Exception:
+                    continue
+            else:
+                continue  # no game dir, skip real-file entries
+            entry = ModelLibraryEntry(
+                resref=resref, game=game, source="[Supermodel]",
+                has_mdx=True, has_texture=True,
+                model_class='character', description=desc,
+                mesh_count=0, node_count=0, has_skin=True,
+            )
+            self._all_entries.append(entry)
+            _existing_keys.add(key)
 
     def _wire_resource_manager_to_viewport(self):
         """Wire the ResourceManager into the viewport texture cache (main-thread safe).
@@ -1617,11 +1888,11 @@ class LibraryPanel(tk.Frame):
         is_module_tab = (cat == 'Module')
         # Category icons for list entries
         _cat_icons = {
-            'Creature':          '🐉',
-            'Character':         '🧍',
-            'Item/Armor/Weapons':'⚔',
-            'Module':            '🏛',
-            'Other':             '📦',
+            'Creature':          '[Cre]',
+            'Character':         '[Chr]',
+            'Item/Armor/Weapons':'[Itm]',
+            'Module':            '[Mod]',
+            'Other':             '[Oth]',
         }
         for i, e in enumerate(filtered):
             if is_module_tab and hasattr(e, 'display_label_rich'):
@@ -1652,7 +1923,7 @@ class LibraryPanel(tk.Frame):
                 'Item/Armor/Weapons': 'Itm', 'Module': 'Mod', 'Other': 'Oth',
             }
             parts = [f"All:{len(self._all_entries)}"]
-            for _, key in self.CATEGORIES[1:]:
+            for _lbl, key, _ico in self.CATEGORIES[1:]:
                 if key in counts:
                     parts.append(f"{_SHORT.get(key, key[:3])}:{counts[key]}")
             self._cat_count_var.set("  ".join(parts))
@@ -1675,6 +1946,34 @@ class LibraryPanel(tk.Frame):
         if not sel or not self._on_load: return
         entry = self._displayed_entries[sel[0]]
         self._status_var.set(f"Loading {entry.resref}…")
+
+        # ── GhostRigger built-in template: generate procedurally ──────────
+        if entry.resref.lower().startswith('gr_humanoid'):
+            def _load_template():
+                try:
+                    from ..core.template_builder import build_humanoid_template
+                    gv = 'K2' if entry.game == 'K2' else 'K1'
+                    tmpl_model = build_humanoid_template(
+                        game_version=gv, name=entry.resref)
+                    # Fire callback with model directly (no raw bytes needed)
+                    self.listbox.after(0, lambda: self._on_load(
+                        entry, None, None, _model_override=tmpl_model))
+                    self.listbox.after(0, lambda: self._status_var.set(
+                        f"Template loaded: {entry.resref}"))
+                except Exception as _te:
+                    msg = str(_te)
+                    log.error(f"Template load failed for '{entry.resref}': {_te}",
+                              exc_info=True)
+                    try:
+                        self.listbox.after(0, lambda: self._status_var.set(
+                            f"Template error: {msg}"))
+                    except Exception:
+                        pass
+            import threading as _thr
+            _thr.Thread(target=_load_template, daemon=True,
+                        name=f"load_{entry.resref}").start()
+            return
+
         def run():
             try:
                 mdl, mdx = None, None
@@ -1764,15 +2063,24 @@ class LibraryPanel(tk.Frame):
                 )
             else:
                 # No pre-rendered thumb — show category icon as placeholder
-                _cat_icons2 = {
-                    'Creature':'🐉', 'Character':'🧍',
-                    'Item/Armor/Weapons':'⚔', 'Module':'🏛', 'Other':'📦',
+                _icon_map = {
+                    'Creature': 'cat_creature',
+                    'Character': 'cat_character',
+                    'Item/Armor/Weapons': 'cat_item',
+                    'Module': 'cat_module',
+                    'Other': 'cat_other',
                 }
                 entry_cat = _infer_model_category(entry.resref, entry.model_class)
-                icon = _cat_icons2.get(entry_cat, '📦')
-                self._thumb_label.config(image='', text=icon, width=4, height=2,
-                                         fg=C.get('gold', '#ffcc44'),
-                                         font=("Segoe UI", 20))
+                _cat_img = Icons.get(_icon_map.get(entry_cat, 'library'), 24)
+                if _cat_img is not None:
+                    self._thumb_label.config(image=_cat_img, text='', width=24, height=24)
+                    self._thumb_label._icon_img = _cat_img  # keep reference
+                else:
+                    _fallback_text = _icon_map.get(entry_cat, '[?]')[:3].upper()
+                    self._thumb_label.config(image='', text=f'[{_fallback_text}]',
+                                             width=4, height=2,
+                                             fg=C.get('gold', '#ffcc44'),
+                                             font=("Segoe UI", 14))
                 self._thumb_photo = None
                 cls_str = f"  {entry.model_class}" if entry.model_class else ""
                 self._thumb_info_var.set(
@@ -2024,11 +2332,11 @@ class RigPanel(tk.Frame):
         self._tab_manual  = tk.Frame(nb, bg=C['panel2'])
         self._tab_accurig = tk.Frame(nb, bg=C['panel2'])
 
-        nb.add(self._tab_auto,    text=" ⚡ Auto ")
-        nb.add(self._tab_lib,     text=" 📦 Library ")
-        nb.add(self._tab_grig,    text=" 🦴 GRig ")
-        nb.add(self._tab_manual,  text=" ✏ Manual ")
-        nb.add(self._tab_accurig, text=" 🎯 AcuRig ")
+        nb.add(self._tab_auto,    **Icons.tab_kwargs("autorig",   " Auto",   16))
+        nb.add(self._tab_lib,     **Icons.tab_kwargs("library",   " Library",16))
+        nb.add(self._tab_grig,    **Icons.tab_kwargs("skeleton",  " GRig",   16))
+        nb.add(self._tab_manual,  **Icons.tab_kwargs("skeleton",  " Manual", 16))
+        nb.add(self._tab_accurig, **Icons.tab_kwargs("rig",       " AcuRig", 16))
 
         self._build_auto_tab()
         self._build_library_tab()
@@ -2075,17 +2383,17 @@ class RigPanel(tk.Frame):
                  bg=C['panel2'], fg=C['text'], troughcolor=C['bg'],
                  highlightthickness=0).pack(fill='x')
 
-        _btn(f, "🦴 Auto-Rig Model", self._auto_rig, accent=True).pack(
+        _btn(f, " Auto-Rig Model", self._auto_rig, accent=True).pack(
             fill='x', padx=6, pady=6)
-        _btn(f, "🔗 Map FBX Bones → KotOR", self._remap_bones).pack(
+        _btn(f, " Map FBX Bones", self._remap_bones).pack(
             fill='x', padx=6, pady=2)
-        _btn(f, "🎨 Weight Preview", self._weight_preview).pack(
+        _btn(f, " Weight Preview", self._weight_preview).pack(
             fill='x', padx=6, pady=2)
-        _btn(f, "📊 Weight Stats",   self._weight_stats).pack(
+        _btn(f, " Weight Stats",   self._weight_stats).pack(
             fill='x', padx=6, pady=2)
-        _btn(f, "🔄 Remove Rigging", self._remove_rig).pack(
+        _btn(f, " Remove Rigging", self._remove_rig).pack(
             fill='x', padx=6, pady=2)
-        _btn(f, "🧹 Clear Skeleton (Remove Bones)", self._clear_skeleton).pack(
+        _btn(f, " Clear Skeleton", self._clear_skeleton).pack(
             fill='x', padx=6, pady=2)
 
         _label(f, "Supermodel:", "small", bg=C['panel2']).pack(padx=6, anchor='w')
@@ -2152,7 +2460,7 @@ class RigPanel(tk.Frame):
                       ).pack(fill='x', pady=1)
 
         bf = tk.Frame(f, bg=C['panel2']); bf.pack(fill='x', padx=6, pady=4)
-        _btn(bf, "📥 Load Template", self._load_lib_template, accent=False).pack(
+        _btn(bf, " Load Template", self._load_lib_template, accent=False).pack(
             side='left', fill='x', expand=True, padx=(0,2))
         _btn(bf, "▶ Apply to Model", self._apply_lib_template, accent=True).pack(
             side='right')
@@ -2186,9 +2494,9 @@ class RigPanel(tk.Frame):
                "small", bg=C['panel2']).pack(anchor='w')
 
         ext_row = tk.Frame(fext, bg=C['panel2']); ext_row.pack(fill='x', pady=2)
-        _btn(ext_row, "📂 Load Ext. Skeleton",
+        _btn(ext_row, " Load Ext. Skeleton",
              self._load_ext_skeleton, small=True).pack(side='left', padx=2)
-        _btn(ext_row, "✕ Clear Overlay",
+        _btn(ext_row, " Clear Overlay",
              self._clear_ext_skeleton, small=True).pack(side='left', padx=2)
 
         # Offset controls
@@ -2459,7 +2767,7 @@ class RigPanel(tk.Frame):
         # ── Header ───────────────────────────────────────────────────
         hdr = tk.Frame(inner, bg=C['accent'], pady=4)
         hdr.pack(**pad)
-        _label(hdr, "🦴  GRig  –  Interactive Rigging",
+        _label(hdr, "GRig  –  Interactive Rigging",
                "heading", bg=C['accent']).pack()
         _label(hdr, "AcuRig + MeshyAI style drag-and-drop bone placement",
                "small", bg=C['accent']).pack()
@@ -2476,14 +2784,14 @@ class RigPanel(tk.Frame):
                            bg=C['panel2'], fg=C['text'], selectcolor=C['bg'],
                            activebackground=C['panel2'],
                            font=("Segoe UI",8)).pack(side='left', padx=3)
-        _btn(fp, "🔍 Auto-Detect Profile", self._grig_detect_profile, small=True
+        _btn(fp, " Auto-Detect Profile", self._grig_detect_profile, small=True
              ).pack(fill='x', pady=2)
 
         # ── ② Bone Pins ───────────────────────────────────────────────
         fpins = tk.LabelFrame(inner, text="② Bone Pins  (place & drag)",
                               bg=C['panel2'], fg=C['gold'], padx=6, pady=4)
         fpins.pack(**pad)
-        _btn(fpins, "📍 Auto-Place Pins from Profile",
+        _btn(fpins, " Auto-Place Pins",
              self._grig_auto_place).pack(fill='x', pady=2)
 
         # Manual pin addition
@@ -2509,7 +2817,7 @@ class RigPanel(tk.Frame):
                      font=("Consolas",8), width=6).pack(side='left', padx=2)
 
         row2 = tk.Frame(fpins, bg=C['panel2']); row2.pack(fill='x', pady=2)
-        _btn(row2, "🔗 Parent:", self._grig_set_parent, small=True).pack(side='left', padx=2)
+        _btn(row2, " Parent:", self._grig_set_parent, small=True).pack(side='left', padx=2)
         self._grig_parent_var = tk.StringVar(value="(none)")
         self._grig_parent_combo = ttk.Combobox(
             row2, textvariable=self._grig_parent_var,
@@ -2556,11 +2864,11 @@ class RigPanel(tk.Frame):
 
         # Pin action buttons
         pbf = tk.Frame(fl, bg=C['panel2']); pbf.pack(fill='x', pady=2)
-        _btn(pbf, "🔒 Lock",    self._grig_lock_pin,   small=True).pack(side='left', padx=1)
-        _btn(pbf, "🔓 Unlock",  self._grig_unlock_pin, small=True).pack(side='left', padx=1)
-        _btn(pbf, "📍 Snap→Mesh",self._grig_snap_pin,  small=True).pack(side='left', padx=1)
-        _btn(pbf, "✕ Delete",   self._grig_delete_pin, small=True).pack(side='left', padx=1)
-        _btn(fl, "🔄 Refresh List", self._grig_refresh_pin_list).pack(
+        _btn(pbf, " Lock",    self._grig_lock_pin,   small=True).pack(side='left', padx=1)
+        _btn(pbf, " Unlock",  self._grig_unlock_pin, small=True).pack(side='left', padx=1)
+        _btn(pbf, " Snap",self._grig_snap_pin,  small=True).pack(side='left', padx=1)
+        _btn(pbf, " Delete",   self._grig_delete_pin, small=True).pack(side='left', padx=1)
+        _btn(fl, " Refresh List", self._grig_refresh_pin_list).pack(
             fill='x', pady=2)
         _btn(fl, "↩ Undo",  self._grig_undo, small=True).pack(fill='x', pady=1)
 
@@ -2582,9 +2890,9 @@ class RigPanel(tk.Frame):
                        bg=C['panel2'], fg=C['text'], selectcolor=C['bg'],
                        activebackground=C['panel2'],
                        font=("Segoe UI",8)).pack(side='left', padx=4)
-        _btn(fch, "🔗 Build Chain from Selected Pins",
+        _btn(fch, " Build Chain",
              self._grig_build_chain).pack(fill='x', pady=2)
-        _btn(fch, "➕ Insert Bone Between Selected",
+        _btn(fch, " Insert Bone",
              self._grig_insert_bone, small=True).pack(fill='x', pady=1)
         # Chain list display
         self._grig_chain_label = tk.StringVar(value="Chains: none")
@@ -2612,12 +2920,12 @@ class RigPanel(tk.Frame):
         _btn(sym_btns, "↔ Mirror R→L",
              lambda: self._grig_mirror_pins('r_to_l'), small=True
              ).pack(side='left', padx=2)
-        _btn(sym_btns, "⚖ Mirror Weights L→R",
+        _btn(sym_btns, " Mirror Weights L→R",
              lambda: self._grig_mirror_weights('l_to_r'), small=True
              ).pack(side='left', padx=2)
 
         sym_btns2 = tk.Frame(fsym, bg=C['panel2']); sym_btns2.pack(fill='x', pady=1)
-        _btn(sym_btns2, "⚖ Mirror Weights R→L",
+        _btn(sym_btns2, " Mirror Weights R→L",
              lambda: self._grig_mirror_weights('r_to_l'), small=True
              ).pack(side='left', padx=2)
 
@@ -2645,7 +2953,7 @@ class RigPanel(tk.Frame):
             wp_mesh, textvariable=self._grig_wp_mesh,
             state='readonly', font=("Segoe UI",8), width=14)
         self._grig_wp_mesh_combo.pack(side='left', padx=4)
-        _btn(wp_mesh, "🔄", self._grig_refresh_wp_targets, small=True).pack(side='left')
+        _btn(wp_mesh, "", self._grig_refresh_wp_targets, small=True).pack(side='left')
 
         wp_bone = tk.Frame(fwp, bg=C['panel2']); wp_bone.pack(fill='x', pady=2)
         _label(wp_bone, "Bone:", "small", bg=C['panel2']).pack(side='left')
@@ -2684,19 +2992,19 @@ class RigPanel(tk.Frame):
                  bg=C['panel2'], fg=C['text'], troughcolor=C['bg'],
                  highlightthickness=0, length=80).pack(side='left')
 
-        _btn(fwp, "🎨 Paint / Apply Brush", self._grig_paint).pack(
+        _btn(fwp, " Paint / Apply Brush", self._grig_paint).pack(
             fill='x', pady=2)
         wp_row2 = tk.Frame(fwp, bg=C['panel2']); wp_row2.pack(fill='x', pady=1)
-        _btn(wp_row2, "🌊 Flood Mesh→Bone",
+        _btn(wp_row2, " Flood Fill",
              self._grig_flood_mesh, small=True).pack(side='left', padx=2)
-        _btn(wp_row2, "🔆 Heat-Map All",
+        _btn(wp_row2, " Heat-Map All",
              self._grig_heatmap_all, small=True).pack(side='left', padx=2)
-        _btn(wp_row2, "✨ Normalize",
+        _btn(wp_row2, " Normalize",
              self._grig_normalize_weights, small=True).pack(side='left', padx=2)
         wp_row3 = tk.Frame(fwp, bg=C['panel2']); wp_row3.pack(fill='x', pady=1)
-        _btn(wp_row3, "✂ Prune<0.01",
+        _btn(wp_row3, " Prune",
              self._grig_prune_weights, small=True).pack(side='left', padx=2)
-        _btn(wp_row3, "🗑 Clear Mesh",
+        _btn(wp_row3, " Clear Mesh",
              self._grig_clear_mesh_weights, small=True).pack(side='left', padx=2)
 
         # ── ⑦ Influence Inspector ─────────────────────────────────────
@@ -2712,7 +3020,7 @@ class RigPanel(tk.Frame):
         tk.Spinbox(insp_row, from_=0, to=99999, textvariable=self._grig_insp_vi,
                    bg=C['bg2'], fg=C['text'], insertbackground=C['text'],
                    font=("Consolas",8), width=7).pack(side='left', padx=4)
-        _btn(insp_row, "🔎 Inspect", self._grig_inspect_vertex, small=True
+        _btn(insp_row, " Inspect", self._grig_inspect_vertex, small=True
              ).pack(side='left')
 
         # Weight display
@@ -2738,12 +3046,12 @@ class RigPanel(tk.Frame):
         fsk = tk.LabelFrame(inner, text="⑧ Skeleton & Bind Pose",
                             bg=C['panel2'], fg=C['gold'], padx=6, pady=4)
         fsk.pack(**pad)
-        _btn(fsk, "🦴 Generate Skeleton from Pins",
+        _btn(fsk, " Generate Skeleton",
              self._grig_generate_skeleton).pack(fill='x', pady=2)
         pose_row = tk.Frame(fsk, bg=C['panel2']); pose_row.pack(fill='x', pady=1)
-        _btn(pose_row, "👕 T-Pose",
+        _btn(pose_row, " T-Pose",
              self._grig_set_tpose, small=True).pack(side='left', padx=2)
-        _btn(pose_row, "🅰 A-Pose",
+        _btn(pose_row, " A-Pose",
              self._grig_set_apose, small=True).pack(side='left', padx=2)
         # Bone mask
         _label(fsk, "Exclude bones:", "small", bg=C['panel2']).pack(anchor='w')
@@ -2761,7 +3069,7 @@ class RigPanel(tk.Frame):
                textvariable=self._grig_mask_label).pack(anchor='w', padx=2)
 
         # Full pipeline button
-        _btn(fsk, "⚡ Full GRig  (detect→place→rig→skin)",
+        _btn(fsk, " Full GRig",
              self._grig_full_rig, accent=True).pack(fill='x', pady=3)
 
         # ── ⑨ Template I/O ───────────────────────────────────────────
@@ -2769,18 +3077,18 @@ class RigPanel(tk.Frame):
                               bg=C['panel2'], fg=C['gold'], padx=6, pady=4)
         ftmpl.pack(**pad)
         tmpl_row = tk.Frame(ftmpl, bg=C['panel2']); tmpl_row.pack(fill='x', pady=2)
-        _btn(tmpl_row, "💾 Save Template",
+        _btn(tmpl_row, " Save Template",
              self._grig_save_template, small=True).pack(side='left', padx=2)
-        _btn(tmpl_row, "📂 Load Template",
+        _btn(tmpl_row, " Load Template",
              self._grig_load_template, small=True).pack(side='left', padx=2)
-        _btn(tmpl_row, "🔄 Reset GRig",
+        _btn(tmpl_row, " Reset GRig",
              self._grig_reset, small=True).pack(side='left', padx=2)
 
         # ── ⑩ Weight Stats ────────────────────────────────────────────
         fstat = tk.LabelFrame(inner, text="⑩ Weight Statistics",
                               bg=C['panel2'], fg=C['gold'], padx=6, pady=4)
         fstat.pack(**pad)
-        _btn(fstat, "📊 Compute Weight Stats", self._grig_weight_stats,
+        _btn(fstat, " Compute Stats", self._grig_weight_stats,
              small=True).pack(fill='x', pady=2)
         self._grig_stats_text = tk.StringVar(value="(not computed)")
         _label(fstat, "", "mono", bg=C['panel2'],
@@ -3287,7 +3595,7 @@ class RigPanel(tk.Frame):
                                              state='readonly', font=("Segoe UI",8), width=18)
         self._man_bone_combo.pack(side='left', padx=4, fill='x', expand=True)
 
-        _btn(f, "🔄 Refresh Node Lists", self._man_refresh_lists).pack(
+        _btn(f, " Refresh Lists", self._man_refresh_lists).pack(
             fill='x', padx=6, pady=4)
 
         # Paint sphere settings
@@ -3323,7 +3631,7 @@ class RigPanel(tk.Frame):
                  bg=C['panel2'], fg=C['text'], troughcolor=C['bg'],
                  highlightthickness=0, length=150).pack(side='left', fill='x', expand=True)
 
-        _btn(fsp, "🎨 Paint Sphere", self._man_paint_sphere).pack(fill='x', pady=2)
+        _btn(fsp, " Paint Sphere", self._man_paint_sphere).pack(fill='x', pady=2)
 
         # Assign actions
         fa = tk.LabelFrame(f, text="Assign Actions", bg=C['panel2'],
@@ -3459,15 +3767,15 @@ class RigPanel(tk.Frame):
                            value=pname, bg=C['panel2'], fg=C['text'],
                            selectcolor=C['bg'], activebackground=C['panel2'],
                            font=("Segoe UI", 8)).pack(side='left', padx=4)
-        _btn(fp, "🔍 Auto-Detect", self._acurig_detect_profile, small=True).pack(
+        _btn(fp, " Auto-Detect", self._acurig_detect_profile, small=True).pack(
             side='right', padx=4)
 
         # Step 2: Guide placement
         fg_ = tk.LabelFrame(f, text="② Place Guides", bg=C['panel2'],
                             fg=C['gold'], padx=6, pady=4)
         fg_.pack(fill='x', padx=6, pady=3)
-        _btn(fg_, "📍 Auto-Place Guides", self._acurig_place_guides).pack(fill='x', pady=2)
-        _btn(fg_, "🔗 Snap to Existing Bones", self._acurig_snap_guides, small=True).pack(
+        _btn(fg_, " Auto-Place Guides", self._acurig_place_guides).pack(fill='x', pady=2)
+        _btn(fg_, " Snap to Bones", self._acurig_snap_guides, small=True).pack(
             fill='x', pady=1)
 
         # Step 3: Guide list + lock/unlock
@@ -3500,8 +3808,8 @@ class RigPanel(tk.Frame):
         self._acurig_guide_list.bind('<<ListboxSelect>>', self._acurig_on_guide_select)
 
         fgb = tk.Frame(fl, bg=C['panel2']); fgb.pack(fill='x')
-        _btn(fgb, "🔒 Lock", self._acurig_lock_guide, small=True).pack(side='left', padx=2)
-        _btn(fgb, "🔓 Unlock", self._acurig_unlock_guide, small=True).pack(side='left', padx=2)
+        _btn(fgb, " Lock", self._acurig_lock_guide, small=True).pack(side='left', padx=2)
+        _btn(fgb, " Unlock", self._acurig_unlock_guide, small=True).pack(side='left', padx=2)
         _btn(fgb, "↔ Mirror L→R", self._acurig_enforce_symmetry, small=True).pack(
             side='left', padx=2)
 
@@ -3541,11 +3849,11 @@ class RigPanel(tk.Frame):
                    bg=C['bg2'], fg=C['text'], insertbackground=C['text'],
                    font=("Consolas", 8), width=4).pack(side='left', padx=4)
 
-        _btn(fa, "🦴 Generate Skeleton from Guides", self._acurig_generate_rig).pack(
+        _btn(fa, " Generate Skeleton", self._acurig_generate_rig).pack(
             fill='x', pady=2)
-        _btn(fa, "🎨 Auto-Skin with Heat Map", self._acurig_auto_skin).pack(
+        _btn(fa, " Auto-Skin", self._acurig_auto_skin).pack(
             fill='x', pady=2)
-        _btn(fa, "⚡ Full AcuRig (All Steps)", self._acurig_full_rig,
+        _btn(fa, " Full AcuRig", self._acurig_full_rig,
              accent=True).pack(fill='x', pady=3)
 
         # Step 6: Template I/O
@@ -3553,11 +3861,11 @@ class RigPanel(tk.Frame):
                            fg=C['gold'], padx=6, pady=4)
         ft.pack(fill='x', padx=6, pady=3)
         ftb = tk.Frame(ft, bg=C['panel2']); ftb.pack(fill='x')
-        _btn(ftb, "💾 Save Template", self._acurig_save_template, small=True).pack(
+        _btn(ftb, " Save Template", self._acurig_save_template, small=True).pack(
             side='left', padx=2)
-        _btn(ftb, "📂 Load Template", self._acurig_load_template, small=True).pack(
+        _btn(ftb, " Load Template", self._acurig_load_template, small=True).pack(
             side='left', padx=2)
-        _btn(ftb, "🔄 Reset", self._acurig_reset, small=True).pack(side='left', padx=2)
+        _btn(ftb, " Reset", self._acurig_reset, small=True).pack(side='left', padx=2)
 
     # ── AcuRig actions ────────────────────────────────────────────────
 
@@ -3581,6 +3889,7 @@ class RigPanel(tk.Frame):
         guides  = self._acurig.place_guides(model, profile, snap_to_bones=True)
         self._acurig_guides = guides
         self._acurig_refresh_guide_list()
+        self._acurig_push_guides_to_viewport()
         self._status.set(f"✓ Placed {len(guides)} guides ({profile})")
 
     def _acurig_snap_guides(self):
@@ -3593,6 +3902,7 @@ class RigPanel(tk.Frame):
             if not g.locked and self._acurig.placer.snap_to_bone(g, model, 0.5):
                 snapped += 1
         self._acurig_refresh_guide_list()
+        self._acurig_push_guides_to_viewport()
         self._status.set(f"✓ Snapped {snapped} guides to existing bones")
 
     def _acurig_refresh_guide_list(self):
@@ -3605,7 +3915,7 @@ class RigPanel(tk.Frame):
                 f"{lock_sym} {name:15s}  ({x:+.3f}, {y:+.3f}, {z:+.3f})")
 
     def _acurig_on_guide_select(self, _event=None):
-        """When user clicks a guide, populate the XYZ fields."""
+        """When user clicks a guide, populate the XYZ fields and highlight in viewport."""
         sel = self._acurig_guide_list.curselection()
         if not sel: return
         idx  = sel[0]
@@ -3617,6 +3927,7 @@ class RigPanel(tk.Frame):
             self._acurig_gx.set(round(g.position[0], 4))
             self._acurig_gy.set(round(g.position[1], 4))
             self._acurig_gz.set(round(g.position[2], 4))
+            self._acurig_push_guides_to_viewport(selected=gname)
 
     def _acurig_set_guide_pos(self):
         """Set the selected guide's position from the XYZ fields."""
@@ -3631,7 +3942,24 @@ class RigPanel(tk.Frame):
         self._acurig.move_guide(gname, pos, auto_mirror=True)
         self._acurig_guides = self._acurig.get_all_guides()
         self._acurig_refresh_guide_list()
+        self._acurig_push_guides_to_viewport(selected=gname)
         self._status.set(f"✓ Guide '{gname}' → ({pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f})")
+
+    def _acurig_push_guides_to_viewport(self, selected: str = ''):
+        """Push current AcuRig guides to the viewport renderer for overlay display."""
+        try:
+            vp = self._get_viewport()
+            if vp is None:
+                return
+            renderer = getattr(vp, 'renderer', None)
+            if renderer is None:
+                renderer = vp  # viewport IS the renderer in some layouts
+            if hasattr(renderer, 'set_acurig_guides'):
+                renderer.set_acurig_guides(self._acurig_guides)
+                if selected and hasattr(renderer, '_acurig_selected_guide'):
+                    renderer._acurig_selected_guide = selected
+        except Exception as e:
+            log.debug(f"_acurig_push_guides_to_viewport: {e}")
 
     def _acurig_lock_guide(self):
         sel = self._acurig_guide_list.curselection()
@@ -3949,6 +4277,8 @@ class RigPanel(tk.Frame):
 
 
 # ──────────────────────────────────────────────────────────────────────
+#  ANIMATIONS PANEL
+# ──────────────────────────────────────────────────────────────────────
 #  Diagnostics Panel
 # ──────────────────────────────────────────────────────────────────────
 
@@ -3978,7 +4308,7 @@ class DiagnosticsPanel(tk.Frame):
         _label(hf, "Model Diagnostics", "heading", bg=C['panel2']).pack(side='left')
         _btn(hf, "▶ Run", self.run_diagnostics, accent=True, small=True).pack(
             side='right', padx=2)
-        _btn(hf, "📋 Copy", self._copy_report, small=True).pack(side='right', padx=2)
+        _btn(hf, " Copy", self._copy_report, small=True).pack(side='right', padx=2)
 
         self.text = tk.Text(self, bg=C['bg'], fg=C['text'],
                             font=("Consolas", 8), relief='flat',
@@ -4563,12 +4893,91 @@ class DiagnosticsPanel(tk.Frame):
             w(f"  {msg}\n", tag)
         w("\n")
 
+        # ── Animation coverage check ──────────────────────────────────
+        # Compare the model's animation list against the standard KotOR
+        # humanoid animation set.  Missing animations are flagged as warnings
+        # so modders know which slots need to be filled for full in-game
+        # compatibility.  This mirrors what PyKotor checks in its animation
+        # validator (pykotor/tools/model.py AnimationValidator).
+        w("── Animation Coverage ────────────────────────\n", 'header')
+        # Standard humanoid animation names (KotOR 1 / KotOR 2 shared set)
+        _STANDARD_ANIMS = {
+            # Idle / breathing
+            'cpause1', 'cpause2', 'pause1', 'pause2', 'pausesh',
+            # Locomotion
+            'walk', 'run', 'walkbk', 'runbk', 'dodge',
+            # Combat
+            'attack1', 'attack2', 'attack3', 'attackl', 'attackr',
+            'cstrike', 'cstrikea', 'cstrikeb', 'cstrikec', 'cdodge',
+            'damage1', 'dodge1',
+            # Dying / KO
+            'dead1', 'dead2', 'deads', 'deadforward',
+            # Interaction / Emotes
+            'interact', 'interactlp', 'salute', 'victory1', 'taunt',
+            'talk', 'talklp', 'spuse1',
+            # Talking (facial)
+            'tlkang1', 'tlkfear1', 'tlkhappy1', 'tlknorm1', 'tlksad1',
+            'tlkworry1', 'tlkplead1', 'tlklaugh1',
+            # Kneel / crouch
+            'kneel', 'kneeldmg', 'kneelrm', 'kneelgrd',
+            # Force powers
+            'conjure1', 'conjure2', 'meditate', 'medlow',
+            # Sitting
+            'sit', 'sitlp',
+            # Misc
+            'sleep', 'prone', 'drunk', 'listen',
+        }
+        # Creature-only animation names (c_ prefix models) – different standard
+        _CREATURE_ANIMS = {
+            'cpause1', 'cpause2', 'crun', 'cwalk', 'creadyr',
+            'chturnl', 'chturnr', 'cwalkinj', 'ckdbck',
+        }
+        model_anim_names = {
+            getattr(a, 'name', '').lower()
+            for a in getattr(model, 'animations', [])
+            if getattr(a, 'name', '')
+        }
+        _model_is_creature = model.name.lower().startswith('c_')
+        expected = _CREATURE_ANIMS if _model_is_creature else _STANDARD_ANIMS
+        present  = expected & model_anim_names
+        missing  = expected - model_anim_names
+        extra    = model_anim_names - expected  # extra anims (not a problem)
+
+        pct = int(100 * len(present) / len(expected)) if expected else 100
+        _anim_tag = 'ok' if pct >= 90 else ('warn' if pct >= 50 else 'error')
+        w(f"  Coverage: {len(present)}/{len(expected)} standard anims "
+          f"({pct}%)\n", _anim_tag)
+        w(f"  Total animations (incl. non-standard): {len(model_anim_names)}\n",
+          'info')
+        if missing:
+            _miss_sorted = sorted(missing)
+            # Show up to 20 missing names, then ellipsis
+            _miss_show = _miss_sorted[:20]
+            w("  Missing: " + ', '.join(_miss_show)
+              + (f" … +{len(missing)-20} more" if len(missing) > 20 else '')
+              + "\n", 'warn')
+        else:
+            w("  ✓ All standard animations present\n", 'ok')
+        if extra:
+            w(f"  Extra (non-standard) anims: {len(extra)}\n", 'info')
+        # Tip: if coverage is low and the model has a supermodel, animations
+        # should be inherited from the supermodel at load time.
+        if pct < 90 and model.supermodel not in ('NULL', '', None, 'none'):
+            w(f"  ℹ Tip: load supermodel '{model.supermodel}' first so its "
+              "animations are merged in automatically.\n", 'info')
+        elif pct < 90 and _model_is_creature:
+            w("  ℹ Tip: creature models typically inherit animations from "
+              "their supermodel (set supermodel in MDL header).\n", 'info')
+        w("\n")
+
         # ── Summary ───────────────────────────────────────────────────
         w("── Summary ───────────────────────────────────\n", 'header')
         errors   = sum(1 for n in meshes for _ in [None]
                        if not n.vertices or (n.faces and n.vertices and
                            any(max(f) >= len(n.vertices) for f in n.faces)))
         warnings_count = len([c for c in checks if c[1] == 'warn'])
+        if pct < 50:
+            warnings_count += 1  # count low animation coverage as a warning
         if errors:
             w(f"  ✗ {errors} ERRORS found – must fix before export\n", 'error')
         elif warnings_count:
@@ -4603,9 +5012,9 @@ class LogPanel(tk.Frame):
             bd=0, highlightthickness=0)
         self._toggle_btn.pack(side='left')
 
-        _btn(hf, "✕ Clear",  self._clear,             small=True).pack(side='right', padx=2, pady=1)
-        _btn(hf, "📋 Copy",  self._copy_to_clipboard,  small=True).pack(side='right', padx=2, pady=1)
-        _btn(hf, "💾 Save",  self._save_log,            small=True).pack(side='right', padx=2, pady=1)
+        _btn(hf, " Clear",  self._clear,             small=True).pack(side='right', padx=2, pady=1)
+        _btn(hf, " Copy",  self._copy_to_clipboard,  small=True).pack(side='right', padx=2, pady=1)
+        _btn(hf, " Save",  self._save_log,            small=True).pack(side='right', padx=2, pady=1)
 
         # Level filter checkboxes
         self._show_info    = tk.BooleanVar(value=True)
@@ -4775,7 +5184,7 @@ class NormalMapPanel(tk.Frame):
                        activebackground=C['panel2'],
                        font=("Segoe UI",8)).pack(anchor='w')
 
-        _btn(self, "🔥 Bake Normal Map", self._bake, accent=True).pack(
+        _btn(self, " Bake Normal Map", self._bake, accent=True).pack(
             fill='x', padx=6, pady=6)
 
         self._prog_var = tk.IntVar(value=0)
@@ -4871,8 +5280,6 @@ class NormalMapPanel(tk.Frame):
 
 
 # ──────────────────────────────────────────────────────────────────────
-#  ANIMATIONS PANEL
-# ──────────────────────────────────────────────────────────────────────
 
 class AnimationsPanel(tk.Frame):
     """
@@ -4902,7 +5309,7 @@ class AnimationsPanel(tk.Frame):
     # ── Build UI ────────────────────────────────────────────────────────────
 
     def _build_ui(self):
-        _label(self, "🎬 Animations", "heading", bg=C['panel2']).pack(
+        _label(self, "Animations", "heading", bg=C['panel2']).pack(
             pady=(8,4), padx=8, anchor='w')
 
         # Animation list
@@ -5019,7 +5426,7 @@ class AnimationsPanel(tk.Frame):
         exp_frame = tk.Frame(self, bg=C['panel2'])
         exp_frame.pack(fill='x', padx=6, pady=(0,4))
 
-        exp_btn_anim = _btn(exp_frame, "💾 Export ▾", None, small=True)
+        exp_btn_anim = _btn(exp_frame, " Export", None, small=True)
         exp_btn_anim.pack(side='left', padx=2)
         exp_menu_anim = tk.Menu(exp_btn_anim, tearoff=False, bg=C['panel'],
                                 fg=C['text'], activebackground=C['hover'],
@@ -5038,7 +5445,7 @@ class AnimationsPanel(tk.Frame):
         exp_btn_anim.configure(command=_show_exp_anim_menu)
         _tooltip(exp_btn_anim, "Export selected or all animations")
 
-        _btn(exp_frame, "📂 Import JSON", self._import_json, small=True, accent=True).pack(
+        _btn(exp_frame, " Import JSON", self._import_json, small=True, accent=True).pack(
             side='left', padx=2)
 
     # ── Model loading ───────────────────────────────────────────────────────
@@ -5895,7 +6302,7 @@ class ResourceBrowserPanel(tk.Frame):
 
         # Text preview tab
         text_tab = tk.Frame(self._preview_nb, bg=C['bg'])
-        self._preview_nb.add(text_tab, text=" 📄 Preview ")
+        self._preview_nb.add(text_tab, **Icons.tab_kwargs("props", " Preview", 16))
 
         text_scroll = tk.Scrollbar(text_tab, orient='vertical')
         text_scroll.pack(side='right', fill='y')
@@ -5908,7 +6315,7 @@ class ResourceBrowserPanel(tk.Frame):
 
         # Hex view tab
         hex_tab = tk.Frame(self._preview_nb, bg=C['bg'])
-        self._preview_nb.add(hex_tab, text=" 0x Hex ")
+        self._preview_nb.add(hex_tab, **Icons.tab_kwargs("twoda", " 0x Hex", 16))
 
         hex_scroll = tk.Scrollbar(hex_tab, orient='vertical')
         hex_scroll.pack(side='right', fill='y')
@@ -6136,12 +6543,1223 @@ class ResourceBrowserPanel(tk.Frame):
 
 
 # ──────────────────────────────────────────────────────────────────────
+#  CHARACTER BUILDER PANEL  (Phase 31)
+#  Consolidates: HeadSnapPanel + RetargetPanel + Template tools
+# ──────────────────────────────────────────────────────────────────────
+
+class CharacterBuilderPanel(tk.Frame):
+    """
+    Unified Character Builder panel for KotOR 1 & 2.
+
+    Workflow:
+      1. Template Model  – pick from game library dropdown (searchable) or
+                           import a .mdl file directly from disk.
+      2. Skeleton Node Selection – select all / by group from the loaded template.
+      3. Import Mesh     – bring in OBJ / FBX / GLB/GLTF as the new skin.
+      4. Transform Mesh  – auto-fit to template bounds; manual rotate (90° snap
+                           or fine) and scale (snap or fine), Unreal-style.
+      5. Apply Rig       – transfer template skeleton onto the imported mesh.
+      6. Head↔Body Assembly – headhook B1 export.
+      7. Export          – ASCII MDL or merged preview.
+    """
+
+    _K1_SUPERMODEL_INFO = "K1 supermodels: S_Female02 (♂ default), S_Female03 (♀)"
+    _K2_SUPERMODEL_INFO = "K2 supermodels: S_Female02, S_Female03, c_female02 (alt)"
+
+    # Rotation snap step (degrees) and scale snap step
+    _ROT_SNAP_DEG  = 90.0
+    _SCALE_SNAP    = 0.25
+
+    def __init__(self, master,
+                 get_model=None, set_model=None,
+                 refresh_cb=None,
+                 get_viewport=None,
+                 get_resource_mgr=None,
+                 get_library=None,
+                 **kw):
+        super().__init__(master, bg=C['panel2'], **kw)
+        self._get_model        = get_model        or (lambda: None)
+        self._set_model        = set_model        or (lambda m: None)
+        self._refresh_cb       = refresh_cb       or (lambda: None)
+        self._get_viewport     = get_viewport     or (lambda: None)
+        self._get_resource_mgr = get_resource_mgr or (lambda: None)
+        self._get_library      = get_library      or (lambda: None)
+
+        self._template_model = None   # loaded template (from library or disk)
+        self._body_model     = None   # head-body assembly: body slot
+        self._head_model     = None   # head-body assembly: head slot
+        self._mesh_model     = None   # imported OBJ/FBX/GLB mesh (no rig)
+        self._assembly       = None   # last CreatureAssembly
+        self._preview_model  = None   # last merged viewport model
+        self._game_var       = tk.StringVar(value="K1")
+
+        # transform state
+        self._rot_snap_var   = tk.BooleanVar(value=True)   # True=90° snap, False=fine
+        self._scale_snap_var = tk.BooleanVar(value=True)   # True=snap, False=fine
+        self._fine_rot_var   = tk.StringVar(value="5")     # degrees for fine rotation
+        self._fine_scale_var = tk.StringVar(value="0.05")  # step for fine scale
+        self._mesh_rot_deg   = 0.0    # cumulative rotation applied (degrees)
+        self._mesh_scale     = 1.0    # cumulative uniform scale applied
+
+        # searchable library list – populated lazily
+        self._lib_resrefs: list = []  # [(resref, game_tag), …]
+
+        self._build_ui()
+        # Populate library list after UI exists (deferred so Tk can set up widgets)
+        try:
+            self.after(100, self._refresh_lib_list)
+        except Exception:
+            pass  # headless / test environment
+
+    # ── UI construction ────────────────────────────────────────────────
+
+    def _build_ui(self):
+        # ── Title bar ────────────────────────────────────────────────
+        title_f = tk.Frame(self, bg=C['bg2'])
+        title_f.pack(fill='x')
+        _label(title_f, "  ⚔  Character Builder", "heading",
+               bg=C['bg2'], fg=C['gold']).pack(side='left', padx=6, pady=6)
+
+        # Game selector pills
+        gf = tk.Frame(title_f, bg=C['bg2']); gf.pack(side='right', padx=8)
+        _label(gf, "Game:", "small", bg=C['bg2']).pack(side='left')
+        for gv in ("K1", "K2"):
+            b = tk.Radiobutton(
+                gf, text=gv, variable=self._game_var, value=gv,
+                command=self._on_game_changed,
+                bg=C['bg2'], fg=C['gold'], selectcolor=C['accent'],
+                activebackground=C['accent2'], activeforeground='white',
+                font=("Segoe UI Semibold", 9), indicatoron=False,
+                relief='flat', padx=8, pady=2, cursor='hand2',
+            )
+            b.pack(side='left', padx=1)
+
+        # Supermodel info label
+        self._sm_info_var = tk.StringVar(value=self._K1_SUPERMODEL_INFO)
+        _label(self, "", "small", bg=C['panel2'],
+               textvariable=self._sm_info_var, fg=C['text2']
+               ).pack(fill='x', padx=8, pady=(2,0))
+
+        # ── Section 1: Template Model ───────────────────────────────
+        f_tmpl = tk.LabelFrame(self, text="1 · Template Model",
+                                bg=C['panel2'], fg=C['gold'], padx=6, pady=4)
+        f_tmpl.pack(fill='x', padx=6, pady=4)
+
+        _label(f_tmpl,
+               "Choose a rigged model from the game library or import your own .mdl.",
+               "small", bg=C['panel2']).pack(anchor='w')
+
+        # ── searchable library dropdown ──────────────────────────
+        lib_row = tk.Frame(f_tmpl, bg=C['panel2']); lib_row.pack(fill='x', pady=(4,2))
+        _label(lib_row, "Library:", "small", bg=C['panel2']).pack(side='left', padx=(0,4))
+
+        self._lib_search_var = tk.StringVar()
+        self._lib_search_var.trace_add("write", self._on_lib_search_changed)
+        self._lib_combo = ttk.Combobox(
+            lib_row, textvariable=self._lib_search_var,
+            width=26, font=("Segoe UI", 8),
+        )
+        self._lib_combo.pack(side='left', padx=2)
+        self._lib_combo.bind("<<ComboboxSelected>>", self._on_lib_model_selected)
+        self._lib_combo.bind("<Return>",             self._on_lib_model_selected)
+
+        _btn(lib_row, "Load from Library", self._on_lib_model_selected,
+             small=True, accent=True).pack(side='left', padx=4)
+        _btn(lib_row, "Refresh List", self._refresh_lib_list,
+             small=True).pack(side='left', padx=2)
+
+        # ── import from disk ──────────────────────────────────────
+        imp_row = tk.Frame(f_tmpl, bg=C['panel2']); imp_row.pack(fill='x', pady=2)
+        _label(imp_row, "  or:", "small", bg=C['panel2']).pack(side='left')
+        _btn(imp_row, "Import .mdl…",  self._import_template_mdl, small=True
+             ).pack(side='left', padx=4)
+        _btn(imp_row, "Use Loaded Model", self._use_loaded_as_template, small=True
+             ).pack(side='left', padx=2)
+
+        self._tmpl_status = tk.StringVar(value="No template loaded")
+        _label(f_tmpl, "", "small", bg=C['panel2'],
+               textvariable=self._tmpl_status, fg=C['text2']).pack(anchor='w', pady=(2,0))
+
+        # ── Section 2: Skeleton Node Selection ────────────────────
+        f_sel = tk.LabelFrame(self, text="2 · Skeleton Node Selection",
+                              bg=C['panel2'], fg=C['gold'], padx=6, pady=4)
+        f_sel.pack(fill='x', padx=6, pady=4)
+
+        _label(f_sel,
+               "Select bones for repositioning. Use Ctrl+Click / Shift+Click for multi-select.",
+               "small", bg=C['panel2']).pack(anchor='w')
+
+        sel_row1 = tk.Frame(f_sel, bg=C['panel2']); sel_row1.pack(fill='x', pady=(3,1))
+        _btn(sel_row1, "Select All Bones", self._select_all_bones, small=True
+             ).pack(side='left', padx=2)
+        _btn(sel_row1, "Clear", self._clear_bone_sel, small=True
+             ).pack(side='left', padx=2)
+
+        # Group select buttons
+        sel_row2 = tk.Frame(f_sel, bg=C['panel2']); sel_row2.pack(fill='x', pady=1)
+        _label(sel_row2, "Group:", "small", bg=C['panel2']).pack(side='left', padx=(0,4))
+        for grp in ("spine", "left_arm", "right_arm", "left_leg", "right_leg",
+                    "head", "attachment"):
+            _btn(sel_row2, grp.replace("_"," ").title(),
+                 lambda g=grp: self._select_bone_group(g),
+                 small=True).pack(side='left', padx=1)
+
+        self._sel_info_var = tk.StringVar(value="")
+        _label(f_sel, "", "small", bg=C['panel2'],
+               textvariable=self._sel_info_var, fg=C['gold']).pack(anchor='w')
+
+        # ── Section 3: Import Mesh (OBJ / FBX / GLTF) ─────────────
+        f_imp = tk.LabelFrame(self, text="3 · Import Mesh (OBJ / FBX / GLTF/GLB)",
+                              bg=C['panel2'], fg=C['gold'], padx=6, pady=4)
+        f_imp.pack(fill='x', padx=6, pady=4)
+
+        _label(f_imp, "Import your custom mesh — it will be auto-fitted to the template.",
+               "small", bg=C['panel2']).pack(anchor='w')
+
+        imp_row2 = tk.Frame(f_imp, bg=C['panel2']); imp_row2.pack(fill='x', pady=3)
+        _btn(imp_row2, "Import OBJ…",      self._import_obj,           small=True).pack(side='left', padx=2)
+        _btn(imp_row2, "Import FBX…",      self._import_fbx,           small=True).pack(side='left', padx=2)
+        _btn(imp_row2, "Import GLTF/GLB…", self._import_gltf,          small=True).pack(side='left', padx=2)
+        _btn(imp_row2, "Use Loaded",       self._use_loaded_as_mesh,   small=True).pack(side='left', padx=2)
+
+        self._mesh_info_var = tk.StringVar(value="No mesh imported")
+        _label(f_imp, "", "small", bg=C['panel2'],
+               textvariable=self._mesh_info_var, fg=C['text2']).pack(anchor='w')
+
+        # ── Section 4: Transform Mesh ─────────────────────────────
+        f_xform = tk.LabelFrame(self, text="4 · Transform Mesh",
+                                bg=C['panel2'], fg=C['gold'], padx=6, pady=4)
+        f_xform.pack(fill='x', padx=6, pady=4)
+
+        _label(f_xform,
+               "Auto-fit to template, then fine-tune rotation and scale.",
+               "small", bg=C['panel2']).pack(anchor='w')
+
+        # Auto-fit row
+        fit_row = tk.Frame(f_xform, bg=C['panel2']); fit_row.pack(fill='x', pady=(4,2))
+        _btn(fit_row, "⟳ Auto-Fit to Template", self._auto_fit_to_template,
+             accent=True, small=True).pack(side='left', padx=2)
+        _btn(fit_row, "Reset Transform", self._reset_transform,
+             small=True).pack(side='left', padx=4)
+
+        # ── Rotation row ──────────────────────────────────────────
+        rot_outer = tk.Frame(f_xform, bg=C['panel2']); rot_outer.pack(fill='x', pady=2)
+        _label(rot_outer, "Rotation:", "small", bg=C['panel2'],
+               fg=C['text']).pack(side='left', padx=(0,4))
+
+        _btn(rot_outer, "↺ CCW", lambda: self._rotate_mesh(-1),
+             small=True).pack(side='left', padx=2)
+        _btn(rot_outer, "↻ CW",  lambda: self._rotate_mesh(+1),
+             small=True).pack(side='left', padx=2)
+
+        # snap/fine toggle (checkbox)
+        tk.Checkbutton(
+            rot_outer, text="90° Snap",
+            variable=self._rot_snap_var,
+            bg=C['panel2'], fg=C['text2'], selectcolor=C['bg2'],
+            activebackground=C['panel2'], font=("Segoe UI", 8),
+            command=self._on_rot_snap_changed,
+        ).pack(side='left', padx=6)
+
+        # fine-rotation step entry (shown when snap is off)
+        self._fine_rot_frame = tk.Frame(rot_outer, bg=C['panel2'])
+        self._fine_rot_frame.pack(side='left')
+        _label(self._fine_rot_frame, "Step°:", "small", bg=C['panel2']).pack(side='left')
+        tk.Entry(self._fine_rot_frame, textvariable=self._fine_rot_var,
+                 width=4, bg=C['bg2'], fg=C['text'],
+                 font=("Segoe UI", 8), relief='flat').pack(side='left', padx=2)
+
+        # rotation display
+        self._rot_disp_var = tk.StringVar(value="0°")
+        _label(rot_outer, "", "small", bg=C['panel2'],
+               textvariable=self._rot_disp_var, fg=C['gold']).pack(side='left', padx=6)
+
+        # ── Scale row ────────────────────────────────────────────
+        sc_outer = tk.Frame(f_xform, bg=C['panel2']); sc_outer.pack(fill='x', pady=2)
+        _label(sc_outer, "Scale:", "small", bg=C['panel2'],
+               fg=C['text']).pack(side='left', padx=(0,4))
+
+        _btn(sc_outer, "−", lambda: self._scale_mesh(-1),
+             small=True).pack(side='left', padx=2)
+        _btn(sc_outer, "+", lambda: self._scale_mesh(+1),
+             small=True).pack(side='left', padx=2)
+
+        tk.Checkbutton(
+            sc_outer, text="Snap",
+            variable=self._scale_snap_var,
+            bg=C['panel2'], fg=C['text2'], selectcolor=C['bg2'],
+            activebackground=C['panel2'], font=("Segoe UI", 8),
+            command=self._on_scale_snap_changed,
+        ).pack(side='left', padx=6)
+
+        self._fine_scale_frame = tk.Frame(sc_outer, bg=C['panel2'])
+        self._fine_scale_frame.pack(side='left')
+        _label(self._fine_scale_frame, "Step:", "small", bg=C['panel2']).pack(side='left')
+        tk.Entry(self._fine_scale_frame, textvariable=self._fine_scale_var,
+                 width=5, bg=C['bg2'], fg=C['text'],
+                 font=("Segoe UI", 8), relief='flat').pack(side='left', padx=2)
+
+        self._scale_disp_var = tk.StringVar(value="×1.00")
+        _label(sc_outer, "", "small", bg=C['panel2'],
+               textvariable=self._scale_disp_var, fg=C['gold']).pack(side='left', padx=6)
+
+        self._xform_status_var = tk.StringVar(value="")
+        _label(f_xform, "", "small", bg=C['panel2'],
+               textvariable=self._xform_status_var, fg=C['text2']).pack(anchor='w')
+
+        # update snap visibility on first draw
+        self._on_rot_snap_changed()
+        self._on_scale_snap_changed()
+
+        # ── Section 5: Apply Template Rig ─────────────────────────
+        f_rig = tk.LabelFrame(self, text="5 · Apply Template Rig",
+                              bg=C['panel2'], fg=C['gold'], padx=6, pady=4)
+        f_rig.pack(fill='x', padx=6, pady=4)
+
+        _label(f_rig,
+               "Transfer the template skeleton onto your imported mesh.",
+               "small", bg=C['panel2']).pack(anchor='w')
+
+        rig_row = tk.Frame(f_rig, bg=C['panel2']); rig_row.pack(fill='x', pady=2)
+        _btn(rig_row, "Apply Template Rig", self._apply_template_rig,
+             accent=True).pack(side='left', padx=2)
+        _btn(rig_row, "Preview in Viewport", self._preview_rig,
+             small=True).pack(side='left', padx=2)
+
+        self._rig_status_var = tk.StringVar(value="")
+        _label(f_rig, "", "small", bg=C['panel2'],
+               textvariable=self._rig_status_var, fg=C['text2']).pack(anchor='w')
+
+        # ── Section 6: Head-Body Assembly (B1) ─────────────────────
+        f_hb = tk.LabelFrame(self, text="6 · Head ↔ Body Assembly (Option B1)",
+                              bg=C['panel2'], fg=C['gold'], padx=6, pady=4)
+        f_hb.pack(fill='x', padx=6, pady=4)
+
+        _label(f_hb, "Attach head to body via the 'headhook' node (authentic Aurora engine system).",
+               "small", bg=C['panel2']).pack(anchor='w')
+
+        # Body slot
+        bf = tk.Frame(f_hb, bg=C['panel2']); bf.pack(fill='x', pady=2)
+        _label(bf, "Body:", "small", bg=C['panel2']).pack(side='left', padx=(0,4))
+        self._body_label_var = tk.StringVar(value="(none)")
+        tk.Label(bf, textvariable=self._body_label_var,
+                 bg=C['bg2'], fg=C['text2'],
+                 font=("Segoe UI", 8), width=18, anchor='w').pack(side='left')
+        _btn(bf, "Use Loaded", self._use_loaded_as_body, small=True).pack(side='left', padx=2)
+        _btn(bf, "Browse…",   self._browse_body,         small=True).pack(side='left', padx=2)
+
+        # Head slot
+        hf2 = tk.Frame(f_hb, bg=C['panel2']); hf2.pack(fill='x', pady=2)
+        _label(hf2, "Head:", "small", bg=C['panel2']).pack(side='left', padx=(0,4))
+        self._head_label_var = tk.StringVar(value="(none)")
+        tk.Label(hf2, textvariable=self._head_label_var,
+                 bg=C['bg2'], fg=C['text2'],
+                 font=("Segoe UI", 8), width=18, anchor='w').pack(side='left')
+        _btn(hf2, "Use Loaded", self._use_loaded_as_head, small=True).pack(side='left', padx=2)
+        _btn(hf2, "Browse…",   self._browse_head,         small=True).pack(side='left', padx=2)
+
+        # Quick-pick grids (body + head)
+        qb_lf = tk.LabelFrame(f_hb, text="Quick-Pick Bodies",
+                               bg=C['panel2'], fg=C['text2'], padx=4, pady=3)
+        qb_lf.pack(fill='x', pady=(4,0))
+        self._qb_frame = qb_lf
+
+        qh_lf = tk.LabelFrame(f_hb, text="Quick-Pick Heads",
+                               bg=C['panel2'], fg=C['text2'], padx=4, pady=3)
+        qh_lf.pack(fill='x', pady=(4,0))
+        self._qh_frame = qh_lf
+
+        self._build_quick_picks()   # populate grids for current game
+
+        # Validation status
+        self._val_var = tk.StringVar(value="Load body + head to validate")
+        _label(f_hb, "", "small", bg=C['panel2'],
+               textvariable=self._val_var, fg=C['text2']).pack(anchor='w', pady=2)
+
+        # Assembly buttons
+        asm_row = tk.Frame(f_hb, bg=C['panel2']); asm_row.pack(fill='x', pady=3)
+        _btn(asm_row, "Preview in Viewport", self._preview_assembly,
+             accent=True).pack(side='left', padx=2)
+        _btn(asm_row, "Export Separate .mdl Files (B1)", self._export_b1,
+             ).pack(side='left', padx=2)
+
+        self._asm_status_var = tk.StringVar(value="")
+        _label(f_hb, "", "small", bg=C['panel2'],
+               textvariable=self._asm_status_var, fg=C['text2']).pack(anchor='w')
+
+        # ── Section 7: Export ──────────────────────────────────────
+        f_exp = tk.LabelFrame(self, text="7 · Export",
+                              bg=C['panel2'], fg=C['gold'], padx=6, pady=4)
+        f_exp.pack(fill='x', padx=6, pady=4)
+
+        exp_row = tk.Frame(f_exp, bg=C['panel2']); exp_row.pack(fill='x', pady=3)
+        _btn(exp_row, "Export ASCII MDL…", self._export_ascii,
+             accent=True).pack(side='left', padx=2)
+        _btn(exp_row, "Export Merged Preview…", self._export_merged,
+             small=True).pack(side='left', padx=2)
+
+        self._exp_status_var = tk.StringVar(value="")
+        _label(f_exp, "", "small", bg=C['panel2'],
+               textvariable=self._exp_status_var, fg=C['text2']).pack(anchor='w')
+
+    # ── Quick-pick grid builder ────────────────────────────────────────
+
+    # _QUICK_HEADS / _QUICK_BODIES kept for the Head↔Body assembly section
+    _QUICK_HEADS_K1 = [
+        ("pfhc1", "F Human 1"),  ("pfhc2", "F Human 2"),
+        ("pmhc1", "M Human 1"),  ("pmhc2", "M Human 2"),
+        ("pfha1", "F Asian 1"),  ("pmha1", "M Asian 1"),
+    ]
+    _QUICK_HEADS_K2 = [
+        ("pfhc1",  "F Human 1"),  ("pmhc1",  "M Human 1"),
+        ("pfhc2",  "F Human 2"),  ("pmhc2",  "M Human 2"),
+        ("p_bastila", "Bastila"),  ("p_carth", "Carth"),
+    ]
+    _QUICK_BODIES_K1 = [
+        ("pfbc1", "F Clothes"),  ("pmbc1", "M Clothes"),
+        ("pfba1", "F Armor"),    ("pmba1", "M Armor"),
+        ("pfbj1", "F Jedi"),     ("pmbj1", "M Jedi"),
+    ]
+    _QUICK_BODIES_K2 = [
+        ("pfbc1", "F Clothes"),  ("pmbc1", "M Clothes"),
+        ("pfba1", "F Armor"),    ("pmba1", "M Armor"),
+        ("pfbj1", "F Jedi"),     ("pmbj1", "M Jedi"),
+    ]
+
+    def _build_quick_picks(self):
+        """Populate quick-pick body & head grids based on selected game."""
+        game = self._game_var.get()
+        bodies = self._QUICK_BODIES_K1 if game == "K1" else self._QUICK_BODIES_K2
+        heads  = self._QUICK_HEADS_K1  if game == "K1" else self._QUICK_HEADS_K2
+
+        for w in list(self._qb_frame.winfo_children()):
+            w.destroy()
+        for w in list(self._qh_frame.winfo_children()):
+            w.destroy()
+
+        # Body grid (2 columns)
+        for i, (resref, label) in enumerate(bodies):
+            r, c = divmod(i, 3)
+            b = tk.Button(
+                self._qb_frame, text=label, width=10,
+                command=lambda rr=resref: self._quick_pick_body(rr),
+                bg=C['bg2'], fg=C['text2'], relief='flat', font=("Segoe UI", 7),
+                cursor='hand2', padx=3, pady=2,
+            )
+            b.grid(row=r, column=c, padx=1, pady=1, sticky='ew')
+            b.bind("<Enter>", lambda e, b=b: b.config(bg=C['hover']))
+            b.bind("<Leave>", lambda e, b=b: b.config(bg=C['bg2']))
+
+        # Head grid
+        for i, (resref, label) in enumerate(heads):
+            r, c = divmod(i, 3)
+            b = tk.Button(
+                self._qh_frame, text=label, width=10,
+                command=lambda rr=resref: self._quick_pick_head(rr),
+                bg=C['bg2'], fg=C['text2'], relief='flat', font=("Segoe UI", 7),
+                cursor='hand2', padx=3, pady=2,
+            )
+            b.grid(row=r, column=c, padx=1, pady=1, sticky='ew')
+            b.bind("<Enter>", lambda e, b=b: b.config(bg=C['hover']))
+            b.bind("<Leave>", lambda e, b=b: b.config(bg=C['bg2']))
+
+    def _on_game_changed(self):
+        game = self._game_var.get()
+        self._sm_info_var.set(
+            self._K1_SUPERMODEL_INFO if game == "K1" else self._K2_SUPERMODEL_INFO)
+        self._build_quick_picks()
+        self._refresh_lib_list()
+        log.debug("CharacterBuilderPanel: game changed to %s", game)
+
+    # ── Library list (searchable dropdown) ────────────────────────────
+
+    def _refresh_lib_list(self, *_):
+        """Populate the library dropdown from ResourceManager + on-disk models."""
+        game = self._game_var.get()
+        resrefs: list = []
+
+        # 1) ResourceManager (BIF/ERF archives)
+        rm = self._get_resource_mgr()
+        if rm is not None:
+            try:
+                for rr, gtag in rm.list_models(game):
+                    resrefs.append(rr)
+            except Exception as exc:
+                log.debug("CharacterBuilderPanel: rm.list_models failed: %s", exc)
+
+        # 2) Local test_assets / game_data scan (fallback)
+        if not resrefs:
+            import struct, pathlib
+            for root_dir in (
+                pathlib.Path("game_data/k1_extracted"),
+                pathlib.Path("test_assets/k1_extracted"),
+                pathlib.Path("test_assets/c_bantha"),
+            ):
+                key = root_dir / "chitin.key"
+                if key.is_file():
+                    try:
+                        with open(key, "rb") as f:
+                            raw = f.read(24)
+                        _, _, off_keys = struct.unpack_from('<III', raw, 12)
+                        key_count = struct.unpack_from('<I', raw, 12)[0]
+                        # re-read properly
+                        bif_count, key_count2, off_bifs2, off_keys2 = struct.unpack_from('<4I', raw, 8)
+                        with open(key, "rb") as f:
+                            f.seek(off_keys2)
+                            for _ in range(key_count2):
+                                entry = f.read(22)
+                                if len(entry) < 22: break
+                                rr = entry[:16].rstrip(b'\x00').decode('ascii', errors='replace')
+                                restype = struct.unpack_from('<H', entry, 16)[0]
+                                if restype == 2002:  # MDL
+                                    resrefs.append(rr)
+                    except Exception as exc2:
+                        log.debug("CharacterBuilderPanel: chitin.key scan failed: %s", exc2)
+                # Also scan loose model files
+                mdir = root_dir / "models"
+                if mdir.is_dir():
+                    for f in mdir.iterdir():
+                        if f.suffix.lower() == ".mdl":
+                            rr = f.stem
+                            if rr not in resrefs:
+                                resrefs.append(rr)
+
+        resrefs = sorted(set(resrefs))
+        self._lib_resrefs = [(r, game) for r in resrefs]
+        self._lib_combo['values'] = resrefs
+        log.debug("CharacterBuilderPanel: library list %d models for %s", len(resrefs), game)
+
+    def _on_lib_search_changed(self, *_):
+        """Filter dropdown values as user types."""
+        query = self._lib_search_var.get().lower().strip()
+        if not query:
+            self._lib_combo['values'] = [r for r, _ in self._lib_resrefs]
+            return
+        filtered = [r for r, _ in self._lib_resrefs if query in r.lower()]
+        self._lib_combo['values'] = filtered
+
+    def _on_lib_model_selected(self, *_):
+        """Load the model currently shown in the library combo."""
+        resref = self._lib_search_var.get().strip()
+        if not resref:
+            self._tmpl_status.set("Type or select a model name first.")
+            return
+        game = self._game_var.get()
+        rm   = self._get_resource_mgr()
+        lib  = self._get_library()
+        model = self._load_resref_binary(resref, rm, lib, game)
+        if model is None:
+            # Try loose .mdl files in known directories
+            import pathlib
+            for root_dir in (
+                pathlib.Path("game_data/k1_extracted"),
+                pathlib.Path("test_assets/k1_extracted"),
+                pathlib.Path("test_assets/c_bantha"),
+            ):
+                for candidate in (
+                    root_dir / "models" / f"{resref}.mdl",
+                    root_dir / f"{resref}.mdl",
+                ):
+                    if candidate.is_file():
+                        model = self._parse_mdl(str(candidate))
+                        if model:
+                            break
+                if model:
+                    break
+        if model is None:
+            self._tmpl_status.set(f"Model not found: {resref!r}")
+            return
+        self._set_template_model(model)
+
+    def _set_template_model(self, model):
+        """Common handler: store as template, send to viewport, update status."""
+        self._template_model = model
+        self._set_model(model)
+        self._refresh_cb()
+        n  = model.node_count() if hasattr(model, 'node_count') else len(getattr(model, 'nodes', {}))
+        na = len(getattr(model, 'animations', []))
+        self._tmpl_status.set(
+            f"Template: {model.name}  |  {n} nodes  |  {na} anims")
+        # reset transform state whenever a new template is loaded
+        self._mesh_rot_deg = 0.0
+        self._mesh_scale   = 1.0
+        self._rot_disp_var.set("0°")
+        self._scale_disp_var.set("×1.00")
+        log.info("CharacterBuilderPanel: template set → %s", model.name)
+
+    def _import_template_mdl(self):
+        """Import a .mdl file from disk as the template model.
+
+        Auto-detects binary vs ASCII format.  Shows a clear status message
+        if parsing succeeds but yields 0 nodes (e.g. wrong file picked).
+        """
+        from tkinter.filedialog import askopenfilename
+        import os
+        path = askopenfilename(
+            title="Open Template MDL",
+            filetypes=[("MDL files", "*.mdl"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        model = self._parse_mdl(path)
+        if not model:
+            self._tmpl_status.set(
+                f"Failed to parse: {os.path.basename(path)}")
+            return
+        nc = model.node_count() if hasattr(model, 'node_count') else 0
+        if nc == 0:
+            self._tmpl_status.set(
+                f"⚠ {os.path.basename(path)} parsed but has 0 nodes "
+                f"(may be ASCII parser on a binary file or a corrupt file).")
+            return
+        self._set_template_model(model)
+
+    def _use_loaded_as_template(self):
+        """Promote whatever is currently in the viewport as the template."""
+        model = self._get_model()
+        if model:
+            self._set_template_model(model)
+        else:
+            self._tmpl_status.set("No model loaded in viewport.")
+
+    def _load_resref_binary(self, resref, resource_mgr, library, game):
+        """Load a model by resource reference, trying binary then ASCII parsers."""
+        try:
+            if resource_mgr is not None:
+                # Binary MDL
+                data_mdl = resource_mgr.get_resource(resref, "mdl")
+                data_mdx = resource_mgr.get_resource(resref, "mdx") or b""
+                if data_mdl:
+                    try:
+                        from src.core.mdl_binary_parser import MDLBinaryParser as _BinP
+                        m = _BinP().parse(data_mdl, data_mdx)
+                        if m:
+                            return m
+                    except Exception:
+                        pass
+                    # Fallback: ASCII parse
+                    try:
+                        lines = data_mdl.decode("utf-8", errors="replace").splitlines(True)
+                        m = MDLAsciiParser().parse(lines)
+                        if m:
+                            return m
+                    except Exception:
+                        pass
+            if library is not None:
+                for entry in (library.entries if hasattr(library, 'entries') else []):
+                    if getattr(entry, 'resref', '') == resref:
+                        m = entry.load_model()
+                        if m:
+                            return m
+        except Exception as exc:
+            log.debug("CharacterBuilderPanel._load_resref_binary '%s': %s", resref, exc)
+        return None
+
+    # ── Skeleton selection ────────────────────────────────────────────
+
+    def _select_all_bones(self):
+        model = self._get_model()
+        if not model:
+            self._sel_info_var.set("No model loaded")
+            return
+        from src.core.character_builder import SkeletonSelector
+        sel = SkeletonSelector(model)
+        names = sel.select_all()
+        # Propagate to viewport if possible
+        vp = self._get_viewport()
+        if vp and hasattr(vp, 'select_all_nodes'):
+            try:
+                vp.select_all_nodes()
+            except Exception:
+                pass
+        self._sel_info_var.set(f"All {len(names)} nodes selected")
+        log.debug("CharacterBuilderPanel: select_all_bones → %d nodes", len(names))
+
+    def _clear_bone_sel(self):
+        self._sel_info_var.set("")
+        vp = self._get_viewport()
+        if vp and hasattr(vp, 'clear_selection'):
+            try:
+                vp.clear_selection()
+            except Exception:
+                pass
+
+    def _select_bone_group(self, group: str):
+        model = self._get_model()
+        if not model:
+            self._sel_info_var.set("No model loaded")
+            return
+        from src.core.character_builder import SkeletonSelector
+        sel = SkeletonSelector(model)
+        names = sel.select_group(group)
+        self._sel_info_var.set(
+            f"Selected {len(names)} bones in group '{group}'" if names
+            else f"No '{group}' bones found in this model")
+
+    # ── Mesh import ──────────────────────────────────────────────────
+
+    # ── Mesh import ──────────────────────────────────────────────────
+
+    def _import_obj(self):
+        from tkinter.filedialog import askopenfilename
+        path = askopenfilename(
+            title="Import OBJ Mesh",
+            filetypes=[("OBJ files", "*.obj"), ("All files", "*.*")],
+        )
+        if not path: return
+        try:
+            from src.converters.mesh_converter import OBJImporter
+            model = OBJImporter().import_model(path)
+            if model:
+                self._set_mesh_model(model, f"OBJ: {model.name}")
+        except Exception as exc:
+            self._mesh_info_var.set(f"OBJ import failed: {exc}")
+
+    def _import_fbx(self):
+        from tkinter.filedialog import askopenfilename
+        path = askopenfilename(
+            title="Import FBX Mesh",
+            filetypes=[("FBX files", "*.fbx"), ("All files", "*.*")],
+        )
+        if not path: return
+        try:
+            from src.converters.mesh_converter import FBXImporter
+            model = FBXImporter().import_model(path)
+            if model:
+                self._set_mesh_model(model, f"FBX: {model.name}")
+        except Exception as exc:
+            self._mesh_info_var.set(f"FBX import failed: {exc}")
+
+    def _import_gltf(self):
+        from tkinter.filedialog import askopenfilename
+        path = askopenfilename(
+            title="Import GLTF/GLB Mesh",
+            filetypes=[
+                ("GLTF/GLB files", "*.gltf *.glb"),
+                ("GLTF", "*.gltf"), ("GLB", "*.glb"),
+                ("All files", "*.*"),
+            ],
+        )
+        if not path: return
+        try:
+            from src.converters.mesh_converter import GLTFImporter
+            model = GLTFImporter().import_model(path)
+            if model:
+                self._set_mesh_model(model, f"GLTF: {model.name}")
+        except Exception as exc:
+            self._mesh_info_var.set(f"GLTF import failed: {exc}")
+
+    def _use_loaded_as_mesh(self):
+        model = self._get_model()
+        if model:
+            self._set_mesh_model(model, f"Using: {model.name}")
+        else:
+            self._mesh_info_var.set("No model loaded in viewport.")
+
+    def _set_mesh_model(self, model, label: str):
+        """Store imported mesh, reset per-mesh transform counters, update viewport."""
+        nc = model.node_count() if hasattr(model, 'node_count') else len(getattr(model, 'nodes', {}))
+        self._mesh_model   = model
+        self._mesh_rot_deg = 0.0
+        self._mesh_scale   = 1.0
+        self._rot_disp_var.set("0°")
+        self._scale_disp_var.set("×1.00")
+        self._xform_status_var.set("")
+        self._mesh_info_var.set(f"{label}  |  {nc} nodes")
+        self._set_model(model)
+        self._refresh_cb()
+
+    # ── Transform: snap/fine toggle helpers ─────────────────────────
+
+    def _on_rot_snap_changed(self, *_):
+        """Show/hide fine-rotation step entry based on snap mode."""
+        if self._rot_snap_var.get():
+            self._fine_rot_frame.pack_forget()
+        else:
+            self._fine_rot_frame.pack(side='left')
+
+    def _on_scale_snap_changed(self, *_):
+        """Show/hide fine-scale step entry based on snap mode."""
+        if self._scale_snap_var.get():
+            self._fine_scale_frame.pack_forget()
+        else:
+            self._fine_scale_frame.pack(side='left')
+
+    # ── Transform: rotate ────────────────────────────────────────────
+
+    def _rotate_mesh(self, direction: int):
+        """Rotate the imported mesh CW (+1) or CCW (−1).
+
+        In snap mode: 90° steps.
+        In fine mode: uses the fine-rotation step entry (default 5°).
+        Rotates all node positions around Z so the mesh faces the game's
+        +Y forward direction (Aurora engine convention).
+        """
+        import math
+        model = self._mesh_model or self._get_model()
+        if not model:
+            self._xform_status_var.set("No mesh to rotate — import a mesh first.")
+            return
+
+        if self._rot_snap_var.get():
+            step_deg = self._ROT_SNAP_DEG
+        else:
+            try:
+                step_deg = float(self._fine_rot_var.get())
+            except ValueError:
+                step_deg = 5.0
+
+        angle = math.radians(step_deg * direction)
+        cos_a, sin_a = math.cos(angle), math.sin(angle)
+        nodes = list(model.nodes.values()) if hasattr(model.nodes, 'values') else []
+        for node in nodes:
+            x, y, z = node.position
+            node.position = (
+                cos_a * x - sin_a * y,
+                sin_a * x + cos_a * y,
+                z,
+            )
+        self._mesh_rot_deg = (self._mesh_rot_deg + step_deg * direction) % 360.0
+        self._rot_disp_var.set(f"{self._mesh_rot_deg:.1f}°")
+        snap_tag = f" (snap {'on' if self._rot_snap_var.get() else 'off'})"
+        self._xform_status_var.set(
+            f"Rotated {'CW' if direction > 0 else 'CCW'} {step_deg:.0f}°{snap_tag}")
+        self._refresh_viewport_mesh(model)
+
+    # ── Transform: scale ─────────────────────────────────────────────
+
+    def _scale_mesh(self, direction: int):
+        """Scale the imported mesh up (+1) or down (−1).
+
+        In snap mode: steps of _SCALE_SNAP (0.25).
+        In fine mode: uses fine-scale step entry (default 0.05).
+        Scales all node positions uniformly.
+        """
+        model = self._mesh_model or self._get_model()
+        if not model:
+            self._xform_status_var.set("No mesh to scale — import a mesh first.")
+            return
+
+        if self._scale_snap_var.get():
+            step = self._SCALE_SNAP
+        else:
+            try:
+                step = float(self._fine_scale_var.get())
+            except ValueError:
+                step = 0.05
+
+        factor = 1.0 + step * direction
+        nodes = list(model.nodes.values()) if hasattr(model.nodes, 'values') else []
+        for node in nodes:
+            x, y, z = node.position
+            node.position = (x * factor, y * factor, z * factor)
+            # Also scale mesh vertices if accessible
+            if hasattr(node, 'verts') and node.verts:
+                node.verts = [(vx * factor, vy * factor, vz * factor)
+                              for vx, vy, vz in node.verts]
+        self._mesh_scale *= factor
+        self._scale_disp_var.set(f"×{self._mesh_scale:.2f}")
+        snap_tag = f" (snap {'on' if self._scale_snap_var.get() else 'off'})"
+        self._xform_status_var.set(
+            f"Scaled {'up' if direction > 0 else 'down'} ×{factor:.3f}{snap_tag}")
+        self._refresh_viewport_mesh(model)
+
+    # ── Transform: auto-fit ──────────────────────────────────────────
+
+    def _auto_fit_to_template(self):
+        """Scale and center the imported mesh to match the template model's bounding box."""
+        tmpl  = self._template_model
+        mesh  = self._mesh_model or self._get_model()
+        if not tmpl:
+            self._xform_status_var.set("Load a template model first (Section 1).")
+            return
+        if not mesh:
+            self._xform_status_var.set("Import a mesh first (Section 3).")
+            return
+        if tmpl is mesh:
+            self._xform_status_var.set("Template and mesh are the same model.")
+            return
+
+        def _bbox(m):
+            """Return (min_pos, max_pos) over all node positions."""
+            pts = []
+            nodes = list(m.nodes.values()) if hasattr(m.nodes, 'values') else []
+            for n in nodes:
+                pts.append(n.position)
+                if hasattr(n, 'verts') and n.verts:
+                    pts.extend(n.verts)
+            if not pts:
+                return (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
+            xs = [p[0] for p in pts]; ys = [p[1] for p in pts]; zs = [p[2] for p in pts]
+            return (min(xs), min(ys), min(zs)), (max(xs), max(ys), max(zs))
+
+        t_min, t_max = _bbox(tmpl)
+        m_min, m_max = _bbox(mesh)
+
+        t_ext = max(t_max[i] - t_min[i] for i in range(3)) or 1.0
+        m_ext = max(m_max[i] - m_min[i] for i in range(3)) or 1.0
+        scale_factor = t_ext / m_ext
+
+        # Centre offsets
+        t_cen = tuple((t_min[i] + t_max[i]) / 2.0 for i in range(3))
+        m_cen = tuple((m_min[i] + m_max[i]) / 2.0 for i in range(3))
+
+        nodes = list(mesh.nodes.values()) if hasattr(mesh.nodes, 'values') else []
+        for node in nodes:
+            x, y, z = node.position
+            # scale around mesh centre, then translate to template centre
+            nx = (x - m_cen[0]) * scale_factor + t_cen[0]
+            ny = (y - m_cen[1]) * scale_factor + t_cen[1]
+            nz = (z - m_cen[2]) * scale_factor + t_cen[2]
+            node.position = (nx, ny, nz)
+            if hasattr(node, 'verts') and node.verts:
+                node.verts = [
+                    ((vx - m_cen[0]) * scale_factor + t_cen[0],
+                     (vy - m_cen[1]) * scale_factor + t_cen[1],
+                     (vz - m_cen[2]) * scale_factor + t_cen[2])
+                    for vx, vy, vz in node.verts
+                ]
+        self._mesh_scale *= scale_factor
+        self._scale_disp_var.set(f"×{self._mesh_scale:.2f}")
+        self._xform_status_var.set(
+            f"Auto-fit: scaled ×{scale_factor:.3f} and centred on template.")
+        self._refresh_viewport_mesh(mesh)
+
+    def _reset_transform(self):
+        """Warn user that reset re-imports the mesh (we don't keep the original)."""
+        self._xform_status_var.set(
+            "Re-import your mesh to start fresh — transforms are applied in-place.")
+
+    def _refresh_viewport_mesh(self, model):
+        """Push the (modified) mesh into the viewport."""
+        vp = self._get_viewport()
+        if vp:
+            try:
+                if hasattr(vp, 'set_model'):
+                    vp.set_model(model)
+                elif hasattr(vp, 'load_model'):
+                    vp.load_model(model)
+            except Exception:
+                pass
+
+    # Backward-compat alias (used by RetargetEngine test wiring, Phase 26)
+    def _rotate_90(self, direction: int = 1):
+        """Backward-compat shim → delegates to _rotate_mesh (snap mode)."""
+        snap_was = self._rot_snap_var.get()
+        self._rot_snap_var.set(True)   # force 90° snap
+        self._rotate_mesh(direction)
+        self._rot_snap_var.set(snap_was)
+
+    # ── Apply template rig ───────────────────────────────────────────
+
+    def _apply_template_rig(self):
+        game   = self._game_var.get()
+        mesh   = self._mesh_model or self._get_model()
+        if not mesh:
+            self._rig_status_var.set("No mesh to rig. Import a mesh (Section 3) first.")
+            return
+
+        # Prefer the explicitly loaded template over the built-in files
+        tmpl = self._template_model
+        if not tmpl:
+            from src.core.character_builder import load_template
+            tmpl = load_template(game, "body")
+        if not tmpl:
+            self._rig_status_var.set(
+                f"No template loaded. Load one from the library (Section 1).")
+            return
+
+        from src.core.character_builder import apply_template_rig
+        result = apply_template_rig(mesh, tmpl, game=game,
+                                    scale_mode="auto",
+                                    scale_factor=self._mesh_scale)
+        if result["ok"]:
+            self._set_model(result["model"])
+            self._refresh_cb()
+            self._rig_status_var.set(result["message"])
+        else:
+            self._rig_status_var.set(f"Failed: {result['message']}")
+        for w in result.get("warnings", []):
+            log.warning("CharacterBuilderPanel apply_rig: %s", w)
+
+    def _preview_rig(self):
+        model = self._get_model()
+        if model:
+            vp = self._get_viewport()
+            if vp and hasattr(vp, 'set_model'):
+                try:
+                    vp.set_model(model)
+                    self._rig_status_var.set(f"Preview: {model.name}")
+                except Exception as exc:
+                    self._rig_status_var.set(f"Preview failed: {exc}")
+
+    # ── Head-body assembly ───────────────────────────────────────────
+
+    def _use_loaded_as_body(self):
+        model = self._get_model()
+        if model:
+            self._body_model = model
+            self._body_label_var.set(model.name)
+            self._validate()
+
+    def _use_loaded_as_head(self):
+        model = self._get_model()
+        if model:
+            self._head_model = model
+            self._head_label_var.set(model.name)
+            self._validate()
+
+    def _browse_body(self):
+        from tkinter.filedialog import askopenfilename
+        path = askopenfilename(
+            title="Open Body MDL",
+            filetypes=[("MDL files", "*.mdl"), ("All files", "*.*")],
+        )
+        if not path: return
+        self._load_mdl_as_body(path)
+
+    def _browse_head(self):
+        from tkinter.filedialog import askopenfilename
+        path = askopenfilename(
+            title="Open Head MDL",
+            filetypes=[("MDL files", "*.mdl"), ("All files", "*.*")],
+        )
+        if not path: return
+        self._load_mdl_as_head(path)
+
+    def _load_mdl_as_body(self, path: str):
+        model = self._parse_mdl(path)
+        if model:
+            self._body_model = model
+            self._body_label_var.set(model.name)
+            self._validate()
+
+    def _load_mdl_as_head(self, path: str):
+        model = self._parse_mdl(path)
+        if model:
+            self._head_model = model
+            self._head_label_var.set(model.name)
+            self._validate()
+
+    def _parse_mdl(self, path: str):
+        """Parse a .mdl file from disk, auto-detecting binary vs ASCII format.
+
+        Binary MDL files start with 4 null bytes (the function-pointer offset
+        field is always 0 in the on-disk format).  ASCII MDL files start with
+        printable text such as 'newmodel' or '#'.
+        """
+        try:
+            with open(path, "rb") as fh:
+                magic = fh.read(4)
+
+            is_binary = (magic == b'\x00\x00\x00\x00') or (magic[0] == 0)
+
+            if is_binary:
+                # Try binary parser first (handles real game files)
+                try:
+                    from src.core.mdl_parser import MDLBinaryParser as _BinP
+                    mdx_path = path[:-4] + ".mdx" if path.lower().endswith(".mdl") else ""
+                    m = _BinP.parse_files(path, mdx_path)
+                    if m and (m.node_count() > 0 or m.name not in ("", "unnamed")):
+                        log.debug("_parse_mdl: binary parse OK for %s (%d nodes)",
+                                  path, m.node_count())
+                        return m
+                except Exception as bin_exc:
+                    log.debug("_parse_mdl: binary parse failed for %s: %s", path, bin_exc)
+
+            # ASCII path (MDLOps-exported or already confirmed text)
+            with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                lines = fh.readlines()
+            m = MDLAsciiParser().parse(lines)
+            if m and m.node_count() > 0:
+                return m
+
+            # Last resort: if ASCII gave 0 nodes, try binary anyway
+            if not is_binary:
+                try:
+                    from src.core.mdl_parser import MDLBinaryParser as _BinP
+                    mdx_path = path[:-4] + ".mdx" if path.lower().endswith(".mdl") else ""
+                    m2 = _BinP.parse_files(path, mdx_path)
+                    if m2 and m2.node_count() > 0:
+                        return m2
+                except Exception:
+                    pass
+
+            return m  # return whatever we got (may be empty)
+        except Exception as exc:
+            log.error("CharacterBuilderPanel._parse_mdl: %s", exc)
+            return None
+
+    def _quick_pick_body(self, resref: str):
+        rm = self._get_resource_mgr()
+        lib = self._get_library()
+        game = self._game_var.get()
+        model = self._load_resref(resref, rm, lib, game)
+        if model:
+            self._body_model = model
+            self._body_label_var.set(model.name)
+            self._validate()
+
+    def _quick_pick_head(self, resref: str):
+        rm = self._get_resource_mgr()
+        lib = self._get_library()
+        game = self._game_var.get()
+        model = self._load_resref(resref, rm, lib, game)
+        if model:
+            self._head_model = model
+            self._head_label_var.set(model.name)
+            self._validate()
+
+    def _load_resref(self, resref, resource_mgr, library, game):
+        """Load a model by resource reference (used by head/body quick-picks)."""
+        return self._load_resref_binary(resref, resource_mgr, library, game)
+
+    def _validate(self):
+        """Validate the current body+head pair."""
+        if not self._body_model and not self._head_model:
+            self._val_var.set("Load body + head to validate")
+            return
+        if not self._body_model:
+            self._val_var.set("⚠ No body loaded")
+            return
+        if not self._head_model:
+            self._val_var.set("⚠ No head loaded")
+            return
+
+        try:
+            from src.core.creature_appearance import CreatureAssembly
+            game = self._game_var.get()
+            asm = CreatureAssembly.from_models(
+                self._body_model, self._head_model, game=game)
+            self._assembly = asm
+            if asm.ok:
+                hook_pos = asm.headhook_world_pos
+                pos_str = (f"  hook@({hook_pos[0]:.2f},{hook_pos[1]:.2f},{hook_pos[2]:.2f})"
+                           if hook_pos else "")
+                sm_match = (f"  SM: {getattr(self._body_model,'supermodel','?')}")
+                self._val_var.set(f"✓ Valid assembly{pos_str}{sm_match}")
+            else:
+                self._val_var.set(
+                    f"⚠ {asm.warnings[0] if asm.warnings else 'Assembly invalid'}")
+        except Exception as exc:
+            self._val_var.set(f"Validation error: {exc}")
+
+    def _preview_assembly(self):
+        if not self._body_model or not self._head_model:
+            self._asm_status_var.set("Load both body and head before previewing.")
+            return
+        try:
+            from src.core.creature_appearance import assemble_creature
+            game = self._game_var.get()
+            result = assemble_creature(self._body_model, self._head_model,
+                                       game=game, mode="preview")
+            if result.get("ok"):
+                preview = result.get("model")
+                self._preview_model = preview
+                vp = self._get_viewport()
+                if vp and preview:
+                    try:
+                        vp.set_model(preview)
+                    except Exception as exc:
+                        log.debug("CharacterBuilderPanel preview: viewport set_model: %s", exc)
+                self._asm_status_var.set("Preview loaded in viewport.")
+            else:
+                self._asm_status_var.set(f"Preview failed: {result.get('message','?')}")
+        except Exception as exc:
+            self._asm_status_var.set(f"Preview error: {exc}")
+
+    def _export_b1(self):
+        if not self._body_model or not self._head_model:
+            self._asm_status_var.set("Load both body and head before exporting.")
+            return
+        from tkinter.filedialog import askdirectory
+        out_dir = askdirectory(title="Select output directory for B1 export")
+        if not out_dir: return
+
+        game = self._game_var.get()
+        try:
+            from src.core.character_builder import export_character_b1
+            result = export_character_b1(
+                self._body_model, self._head_model, out_dir, game=game)
+            if result.get("ok"):
+                body_p = result.get("body_path", "")
+                head_p = result.get("head_path", "")
+                self._asm_status_var.set(
+                    f"B1 exported:\n  {os.path.basename(body_p or '')}\n  "
+                    f"{os.path.basename(head_p or '')}")
+            else:
+                self._asm_status_var.set(f"Export failed: {result.get('message','?')}")
+        except Exception as exc:
+            self._asm_status_var.set(f"Export error: {exc}")
+            log.error("CharacterBuilderPanel B1 export: %s", exc)
+
+    def _export_ascii(self):
+        model = self._get_model()
+        if not model:
+            self._exp_status_var.set("No model to export.")
+            return
+        from tkinter.filedialog import asksaveasfilename
+        path = asksaveasfilename(
+            title="Export ASCII MDL",
+            defaultextension=".mdl",
+            filetypes=[("MDL files", "*.mdl"), ("All files", "*.*")],
+            initialfile=f"{model.name}.mdl",
+        )
+        if not path: return
+        try:
+            MDLAsciiWriter().write(model, path)
+            self._exp_status_var.set(f"Exported: {os.path.basename(path)}")
+        except Exception as exc:
+            self._exp_status_var.set(f"Export failed: {exc}")
+
+    def _export_merged(self):
+        model = self._preview_model or self._get_model()
+        if not model:
+            self._exp_status_var.set("No preview/model to export.")
+            return
+        from tkinter.filedialog import asksaveasfilename
+        path = asksaveasfilename(
+            title="Export Merged Preview MDL",
+            defaultextension=".mdl",
+            filetypes=[("MDL files", "*.mdl"), ("All files", "*.*")],
+            initialfile=f"{model.name}_merged.mdl",
+        )
+        if not path: return
+        try:
+            MDLAsciiWriter().write(model, path)
+            self._exp_status_var.set(f"Merged exported: {os.path.basename(path)}")
+        except Exception as exc:
+            self._exp_status_var.set(f"Export failed: {exc}")
+
+    # ── Notification / model loaded ───────────────────────────────────
+
+    def notify_model_loaded(self, model):
+        """Called by the main app when a model is loaded into the viewport."""
+        if not model:
+            return
+        name = (model.name or "").lower()
+        is_head = any(k in name for k in ("head", "fhead", "fchead", "pfh", "pmh"))
+        if is_head:
+            self._head_model = model
+            self._head_label_var.set(model.name)
+            n_mesh = len(model.mesh_nodes())
+            n_skin = sum(1 for n in model.all_nodes()
+                         if getattr(n, 'is_skin', False))
+            self._asm_status_var.set(
+                f"Head: {model.name}  ({n_mesh} mesh, {n_skin} skin nodes)")
+        else:
+            self._body_model = model
+            self._body_label_var.set(model.name)
+        self._validate()
+
+
+# ──────────────────────────────────────────────────────────────────────
 #  MAIN APPLICATION
 # ──────────────────────────────────────────────────────────────────────
 
 class KotorModToolsApp(tk.Tk):
-    APP_TITLE   = "GhostRigger-K1-K2  ▸  Odyssey Engine Pipeline"
-    APP_VERSION = "4.3.0"  # v4.3: Phase 18 — full UI polish pass, keyboard shortcuts, PyKotor preview
+    APP_TITLE   = "GhostRigger-K1-K2  ▸  Character Builder · Odyssey Engine Pipeline"
+    APP_VERSION = "5.1.0"  # v5.1: Phase 32 — streamlined UI, Module Editor promoted, dead code removed
     WIN_SIZE    = "1600x950"
 
     def __init__(self):
@@ -6150,6 +7768,11 @@ class KotorModToolsApp(tk.Tk):
         self.geometry(self.WIN_SIZE)
         self.configure(bg=C['bg'])
         self.minsize(1100, 700)
+
+        # Initialise KotOR-style icon manager (must happen after Tk root exists)
+        Icons.init(self)
+        # Keep strong refs to all tab icons so Tk doesn't GC them
+        self._tab_icons: list = []
 
         # Load config
         cfg_path = os.path.join(os.path.dirname(__file__),
@@ -6448,6 +8071,8 @@ class KotorModToolsApp(tk.Tk):
         fm.add_separator()
         fm.add_command(label="Save ASCII MDL…",               accelerator="Ctrl+S",
                        command=self._save_ascii_mdl)
+        fm.add_command(label="Export Binary MDL…",            accelerator="Ctrl+M",
+                       command=self._export_mdl_binary)
         fm.add_command(label="Export OBJ…",                   accelerator="Ctrl+E",
                        command=self._export_obj)
         fm.add_command(label="Export FBX…",                   command=self._export_fbx)
@@ -6505,35 +8130,25 @@ class KotorModToolsApp(tk.Tk):
         hm.add_command(label="About",           command=self._about)
         hm.add_command(label="KotOR MDL Format Reference", command=self._show_format_ref)
 
-        # Bake
-        bm = tk.Menu(mb, tearoff=False, bg=C['panel'], fg=C['text'],
-                     activebackground=C['hover'], activeforeground='white')
-        mb.add_cascade(label="Bake", menu=bm)
-        bm.add_command(label="ZBrush → Normal Map → TPC…",
-                       command=lambda: self._switch_tab("normalmap"))
-
-        # Modular Mode
+        # Module Editor
         modm = tk.Menu(mb, tearoff=False, bg=C['panel'], fg=C['text'],
                        activebackground=C['hover'], activeforeground='white')
-        mb.add_cascade(label="🏗 Modular", menu=modm)
-        modm.add_command(label="Toggle Modular Mode Panel",
+        mb.add_cascade(label="Modules", menu=modm)
+        modm.add_command(label="Open Module Editor",
                          command=self._toggle_modular_panel)
         modm.add_separator()
-        modm.add_command(label="Port Current Model (K1↔K2)…",
-                         command=lambda: (self._toggle_modular_panel()
-                                         if not self._modular_visible.get() else None,
-                                         self.after(100, lambda: None)))
+        modm.add_command(label="Port Current Model (K1/K2)…",
+                         command=self._toggle_modular_panel)
         modm.add_command(label="Generate Module Files…",
-                         command=lambda: self._toggle_modular_panel()
-                         if not self._modular_visible.get() else None)
+                         command=self._toggle_modular_panel)
         modm.add_separator()
-        modm.add_command(label="What is Modular Mode?",
+        modm.add_command(label="About Module Editor",
                          command=self._about_modular)
 
         # ── IPC menu (Ghostworks Pipeline) ─────────────────────────────────
         ipcm = tk.Menu(mb, tearoff=False, bg=C['panel'], fg=C['text'],
                        activebackground=C['hover'], activeforeground='white')
-        mb.add_cascade(label="🔗 IPC", menu=ipcm)
+        mb.add_cascade(label="IPC", menu=ipcm)
         ipcm.add_command(label=f"GhostRigger Server (port {PORT_GHOSTRIGGER}) — This Program",
                          state='disabled')
         ipcm.add_separator()
@@ -6550,25 +8165,6 @@ class KotorModToolsApp(tk.Tk):
         ipcm.add_command(label="IPC Protocol Info",
                          command=self._show_ipc_info)
 
-        # ── Cloth Rigging menu ──────────────────────────────────────────────
-        clothm = tk.Menu(mb, tearoff=False, bg=C['panel'], fg=C['text'],
-                         activebackground=C['hover'], activeforeground='white')
-        mb.add_cascade(label="🧥 Cloth", menu=clothm)
-        clothm.add_command(label="Open Cloth Rigging Panel",
-                           command=lambda: self._switch_tab("cloth"))
-        clothm.add_separator()
-        clothm.add_command(label="Apply Robe (Loose) to All Candidates",
-                           command=lambda: self._quick_cloth("Robe (Loose / K2 default)"))
-        clothm.add_command(label="Apply Robe (Stiff) to All Candidates",
-                           command=lambda: self._quick_cloth("Robe (Stiff / formal)"))
-        clothm.add_command(label="Apply Cape to All Candidates",
-                           command=lambda: self._quick_cloth("Cape (Light)"))
-        clothm.add_separator()
-        clothm.add_command(label="Remove All Cloth Rigging",
-                           command=self._remove_all_cloth)
-        clothm.add_command(label="Cloth Rigging Info",
-                           command=self._show_cloth_info)
-
     # ── Main UI layout ────────────────────────────────────────────────────
 
     def _build_ui(self):
@@ -6578,9 +8174,14 @@ class KotorModToolsApp(tk.Tk):
         hdr.pack_propagate(False)
 
         # Left: App icon + title
-        tk.Label(hdr, text="👻",
-                 font=("Segoe UI", 18),
-                 bg=C['bg2'], fg=C['gold']).pack(side='left', padx=(14, 4))
+        _logo_img = Icons.get("logo", 24)
+        _logo_lbl = tk.Label(hdr, image=_logo_img if _logo_img else None,
+                             text="" if _logo_img else "GR",
+                             font=("Segoe UI", 18),
+                             bg=C['bg2'], fg=C['gold'])
+        if _logo_img:
+            _logo_lbl._icon_img = _logo_img  # prevent GC
+        _logo_lbl.pack(side='left', padx=(14, 4))
         title_frame = tk.Frame(hdr, bg=C['bg2'])
         title_frame.pack(side='left')
         tk.Label(title_frame, text="GhostRigger-K1-K2",
@@ -6614,19 +8215,24 @@ class KotorModToolsApp(tk.Tk):
         tb.pack_propagate(False)
 
         # Primary actions (always visible) with keyboard-shortcut hints
-        b_open = _btn(tb, "📂 Open  Ctrl+O", self._open_mdl_binary)
+        b_open = _btn(tb, " Open  Ctrl+O", self._open_mdl_binary)
         b_open.pack(side='left', padx=2, pady=2)
         _tooltip(b_open, "Open MDL binary file  (Ctrl+O)")
 
-        b_rig = _btn(tb, "🦴 Auto-Rig  R", self._quick_autorig, accent=True)
+        b_rig = _btn(tb, " Auto-Rig  R", self._quick_autorig, accent=True)
         b_rig.pack(side='left', padx=2, pady=2)
         _tooltip(b_rig, "Auto-rig the current model  (R)")
 
-        b_cloth = _btn(tb, "🧥 Cloth", lambda: self._switch_tab("cloth"))
-        b_cloth.pack(side='left', padx=2, pady=2)
-        _tooltip(b_cloth, "Open Cloth Rigging panel")
+        b_cb = _btn(tb, " Character Builder", lambda: self._switch_tab("charbuilder"),
+                    accent=True)
+        b_cb.pack(side='left', padx=2, pady=2)
+        _tooltip(b_cb, "Open Character Builder  (templates, skeleton selection, head/body assembly)")
 
-        b_tex = _btn(tb, "🖼 Tex Dir", self._set_texture_dir)
+        b_modules = _btn(tb, " Modules", self._toggle_modular_panel)
+        b_modules.pack(side='left', padx=2, pady=2)
+        _tooltip(b_modules, "Open Module Editor (walkmesh, K1\u2194K2 porter, module builder)")
+
+        b_tex = _btn(tb, " Tex Dir", self._set_texture_dir)
         b_tex.pack(side='left', padx=2, pady=2)
         _tooltip(b_tex, "Set texture search directory")
 
@@ -6659,12 +8265,15 @@ class KotorModToolsApp(tk.Tk):
         exp_menu = tk.Menu(exp_btn, tearoff=False, bg=C['panel'], fg=C['text'],
                            activebackground=C['hover'], activeforeground='white',
                            font=("Segoe UI", 9))
+        exp_menu.add_command(label="Export Binary MDL…  Ctrl+M",  command=self._export_mdl_binary)
         exp_menu.add_command(label="Export OBJ…        Ctrl+E",  command=self._export_obj)
         exp_menu.add_command(label="Export FBX…",                command=self._export_fbx)
         exp_menu.add_command(label="Export GLB/GLTF…   Ctrl+G",  command=self._export_gltf)
         exp_menu.add_separator()
         exp_menu.add_command(label="Save ASCII MDL…    Ctrl+S",  command=self._save_ascii_mdl)
         exp_menu.add_command(label="Compile MDL…",               command=self._compile_mdlops)
+        exp_menu.add_separator()
+        exp_menu.add_command(label="Export Humanoid Template…",  command=self._export_humanoid_template)
         def _show_exp_menu():
             try:
                 exp_menu.tk_popup(exp_btn.winfo_rootx(),
@@ -6690,19 +8299,19 @@ class KotorModToolsApp(tk.Tk):
                   if self._model else None)
 
         # Right side: quick actions toolbar
-        b_diag = _btn(tb, "🔍 Diag  Ctrl+D",
+        b_diag = _btn(tb, " Diag  Ctrl+D",
                       lambda: self._switch_tab_right("diag"), small=True)
         b_diag.pack(side='right', padx=2, pady=2)
         _tooltip(b_diag, "Run model diagnostics  (Ctrl+D)")
 
-        b_anim = _btn(tb, "🎬 Anims  Ctrl+A",
+        b_anim = _btn(tb, " Anims  Ctrl+A",
                       lambda: self._switch_tab_right("anim"), small=True)
         b_anim.pack(side='right', padx=2, pady=2)
         _tooltip(b_anim, "Open Animations panel  (Ctrl+A)")
 
         _sep(tb).pack(side='right', fill='y', padx=3, pady=4)
 
-        b_settings = _btn(tb, "⚙ Settings  F2", self._open_settings, small=True)
+        b_settings = _btn(tb, " Settings  F2", self._open_settings, small=True)
         b_settings.pack(side='right', padx=2, pady=2)
         _tooltip(b_settings, "Open settings dialog  (F2)")
 
@@ -6720,22 +8329,30 @@ class KotorModToolsApp(tk.Tk):
 
         self.lib_panel = LibraryPanel(left_nb, on_load=self._on_library_load,
                                        on_dir_set=self._on_game_dir_set)
-        left_nb.add(self.lib_panel, text=" 📚 Library ")
+        left_nb.add(self.lib_panel,
+                    **Icons.tab_kwargs("library", " Library", 16))
 
-        self.skel_panel = SkeletonPanel(left_nb, on_select=self._on_node_select)
-        left_nb.add(self.skel_panel, text=" 🦴 Nodes ")
+        self.skel_panel = SkeletonPanel(
+            left_nb,
+            on_select=self._on_node_select,
+            on_multi_select=self._on_multi_node_select,
+        )
+        left_nb.add(self.skel_panel,
+                    **Icons.tab_kwargs("skeleton", " Nodes", 16))
 
         # 2DA Browser tab
         self.twoda_panel = TwoDaBrowserPanel(
             left_nb,
             get_library=lambda: self.lib_panel.library)
-        left_nb.add(self.twoda_panel, text=" 📊 2DAs ")
+        left_nb.add(self.twoda_panel,
+                    **Icons.tab_kwargs("twoda", " 2DAs", 16))
 
         # Full Resource Browser tab
         self.res_browser = ResourceBrowserPanel(
             left_nb,
             get_library=lambda: self.lib_panel.library)
-        left_nb.add(self.res_browser, text=" 🗃 Resources ")
+        left_nb.add(self.res_browser,
+                    **Icons.tab_kwargs("resources", " Resources", 16))
 
         self._left_nb = left_nb
         left_nb.bind('<<NotebookTabChanged>>', self._on_left_tab_changed)
@@ -6751,84 +8368,121 @@ class KotorModToolsApp(tk.Tk):
         # Gimbal node-moved callback: refresh properties panel
         self.viewport.on_node_moved = self._on_viewport_node_moved
 
-        # Right panel (tabs: Properties, Rig, Cloth, Texture, NormMap, Diag, Anims)
-        right = tk.Frame(main, bg=C['panel2'], width=260)
-        main.add(right, minsize=220)
+        # Right panel — 4 focused tabs: Props | Anims | Character Builder | Textures
+        right = tk.Frame(main, bg=C['panel2'], width=280)
+        main.add(right, minsize=240)
 
         right_nb = ttk.Notebook(right)
         right_nb.pack(fill='both', expand=True)
 
-        self.props_panel = PropertiesPanel(right_nb)
-        right_nb.add(self.props_panel, text=" 📋 Props ")
+        self._tab_names = {}  # tag → notebook tab index
 
-        self.rig_panel = RigPanel(
+        # 1. Properties – node info / model metadata
+        self.props_panel = PropertiesPanel(right_nb)
+        right_nb.add(self.props_panel,
+                     **Icons.tab_kwargs("props", " Props", 16))
+        self._tab_names['props'] = right_nb.index('end') - 1
+
+        # 2. Animations – list, play, seek, export
+        self.anim_panel = AnimationsPanel(
             right_nb,
+            get_model    = lambda: self._model,
+            get_viewport = lambda: self.viewport)
+        right_nb.add(self.anim_panel,
+                     **Icons.tab_kwargs("anims", " Anims", 16))
+        self._tab_names['anims'] = right_nb.index('end') - 1
+
+        # 3. Character Builder – templates, skeleton, head/body assembly, export
+        _cb_outer  = tk.Frame(right_nb, bg=C['panel2'])
+        _cb_canvas = tk.Canvas(_cb_outer, bg=C['panel2'],
+                               highlightthickness=0)
+        _cb_sb = ttk.Scrollbar(_cb_outer, orient='vertical',
+                                command=_cb_canvas.yview)
+        _cb_canvas.configure(yscrollcommand=_cb_sb.set)
+        _cb_sb.pack(side='right', fill='y')
+        _cb_canvas.pack(side='left', fill='both', expand=True)
+
+        self.char_builder_panel = CharacterBuilderPanel(
+            _cb_canvas,
+            get_model        = lambda: self._model,
+            set_model        = self._set_model_internal,
+            refresh_cb       = self._refresh_all,
+            get_viewport     = lambda: self.viewport,
+            get_resource_mgr = lambda: self._resource_manager,
+            get_library      = lambda: getattr(self.lib_panel, 'library', None),
+        )
+        _cb_win = _cb_canvas.create_window(
+            (0, 0), window=self.char_builder_panel, anchor='nw')
+
+        def _cb_panel_configure(event):
+            _cb_canvas.configure(scrollregion=_cb_canvas.bbox('all'))
+        def _cb_canvas_configure(event):
+            _cb_canvas.itemconfig(_cb_win, width=event.width)
+        self.char_builder_panel.bind('<Configure>', _cb_panel_configure)
+        _cb_canvas.bind('<Configure>', _cb_canvas_configure)
+        def _cb_mousewheel(event):
+            _cb_canvas.yview_scroll(int(-1 * (event.delta / 120)), 'units')
+        _cb_canvas.bind('<MouseWheel>', _cb_mousewheel)
+
+        right_nb.add(_cb_outer,
+                     **Icons.tab_kwargs("charbuilder", " Char Builder", 16))
+        self._tab_names['charbuilder'] = right_nb.index('end') - 1
+        self._tab_names['retarget']    = self._tab_names['charbuilder']
+        self._tab_names['headsnap']    = self._tab_names['charbuilder']
+
+        # 4. Textures – texture list + reload
+        self.tex_panel = TexturePanel(right_nb)
+        right_nb.add(self.tex_panel,
+                     **Icons.tab_kwargs("texture", " Textures", 16))
+        self._tab_names['texture'] = right_nb.index('end') - 1
+
+        # Rig panel – hidden (used by menu/keyboard shortcuts only, not a tab)
+        _rig_hidden = tk.Frame(self, bg=C['panel2'])   # off-screen parent
+        self.rig_panel = RigPanel(
+            _rig_hidden,
             get_model=lambda: self._model,
             set_model=self._set_model_internal,
             refresh_cb=self._refresh_all)
-        right_nb.add(self.rig_panel, text=" 🦴 Rig ")
         # Wire ext-skeleton viewport callbacks into rig panel
         self.rig_panel.set_viewport_callbacks(
             load_ext_cb=self.viewport.load_ext_skeleton,
             set_offset_cb=self.viewport.set_ext_skeleton_offset)
 
-        # ── Cloth Rigging panel (K1/K2 cloth simulation) ─────────────────
-        cloth_container = tk.Frame(right_nb, bg=C['panel2'])
+        # Diagnostics panel – hidden; triggered via menu / Ctrl+D only
+        _diag_hidden = tk.Frame(self, bg=C['panel2'])
+        self.diag_panel = DiagnosticsPanel(
+            _diag_hidden, get_model=lambda: self._model)
+        # Register diag in tab_names so Ctrl+D still works via _switch_tab_right
+        self._tab_names['diag'] = None  # handled separately in _switch_tab_right
+
+        # Cloth panel – hidden; accessible via Model menu only
+        _cloth_hidden = tk.Frame(self, bg=C['panel2'])
         self.cloth_panel = ClothRigPanel(
-            cloth_container,
+            _cloth_hidden,
             get_model=lambda: self._model,
             on_updated=self._on_cloth_updated,
         )
         self.cloth_panel.pack(fill='both', expand=True)
-        right_nb.add(cloth_container, text=" 🧥 Cloth ")
-        self._tab_names = {}  # tag → notebook tab index
-        self._tab_names['cloth'] = right_nb.index('end') - 1
+        self._tab_names['cloth'] = None  # no right-panel tab
 
-        self.tex_panel = TexturePanel(right_nb)
-        right_nb.add(self.tex_panel, text=" 🎨 Textures ")
+        # Backward compat aliases
+        self.retarget_panel  = self.char_builder_panel
+        self.head_snap_panel = self.char_builder_panel
 
-        self.normalmap_panel = NormalMapPanel(
-            right_nb, get_model=lambda: self._model)
-        right_nb.add(self.normalmap_panel, text=" 🗺 NormMap ")
-        self._tab_names['normalmap'] = right_nb.index('end') - 1
-
-        self.diag_panel = DiagnosticsPanel(
-            right_nb, get_model=lambda: self._model)
-        right_nb.add(self.diag_panel, text=" 🔍 Diag ")
-
-        self.anim_panel = AnimationsPanel(
-            right_nb,
-            get_model    = lambda: self._model,
-            get_viewport = lambda: self.viewport)
-        right_nb.add(self.anim_panel, text=" 🎬 Anims ")
         self._right_nb = right_nb
 
-        # ── Modular Mode – full-width bottom panel (collapsible) ──────────
-        self._modular_visible = tk.BooleanVar(value=False)
-        mod_toggle_bar = tk.Frame(self, bg='#1a2a1a', height=28)
-        mod_toggle_bar.pack(fill='x', side='bottom')
-        mod_toggle_bar.pack_propagate(False)
-        tk.Button(mod_toggle_bar,
-                  text="🏗  Modular Mode  ▲",
-                  font=("Segoe UI", 9, "bold"),
-                  bg='#1a2a1a', fg='#88ff88',
-                  relief='flat', bd=0,
-                  command=self._toggle_modular_panel).pack(
-                      side='left', padx=10, pady=2)
-        tk.Label(mod_toggle_bar,
-                 text="Module editing │ Walkmesh walls │ K1↔K2 porter │ Module builder",
-                 font=("Segoe UI", 8), bg='#1a2a1a', fg='#668866').pack(
-                     side='left', padx=4)
-
-        self._modular_frame = tk.Frame(self, bg='#111111', height=0)
-        self._modular_frame.pack(fill='x', side='bottom')
-        self._modular_frame.pack_propagate(False)
-
+        # ── Module Editor – integrated into left panel (full-width pane) ──
+        # Accessed via left notebook tab for easy discoverability.
         self.modular_panel = ModularModePanel(
-            self._modular_frame,
+            left_nb,
             get_library = lambda: getattr(self.lib_panel, 'library', None),
             get_model   = lambda: self._model)
-        self.modular_panel.pack(fill='both', expand=True)
+        left_nb.add(self.modular_panel,
+                    **Icons.tab_kwargs("resources", " Modules", 16))
+        self._tab_names['modular'] = 'left_modules'
+
+        # Keep backward-compat toggle method (no-op now)
+        self._modular_visible = tk.BooleanVar(value=True)
 
         # Bottom log
         self.log_panel = LogPanel(self)
@@ -6852,6 +8506,7 @@ class KotorModToolsApp(tk.Tk):
         self.bind("<Control-O>",    lambda e: self._open_mdl_ascii())
         self.bind("<Control-i>",    lambda e: self._import_obj())
         self.bind("<Control-e>",    lambda e: self._export_obj())
+        self.bind("<Control-m>",    lambda e: self._export_mdl_binary())
         self.bind("<Control-g>",    lambda e: self._export_gltf())
         self.bind("<Control-s>",    lambda e: self._save_ascii_mdl())
         self.bind("<Control-w>",    lambda e: self._clear_model())
@@ -7129,6 +8784,54 @@ class KotorModToolsApp(tk.Tk):
         _tex_dirs_count = len(tex_dirs)  # snapshot for log message
 
         def _phase3():
+            # ── Supermodel animation inheritance (full chain walk) ────────
+            # KotOR models inherit animations from their supermodel chain.
+            # Head and body part models reference a base skeleton (e.g.
+            # S_Female02 → S_Female01 → NULL) that holds all locomotion,
+            # combat, idle, talking, and facial expression animations.
+            # We walk the full chain so every level's unique animations are
+            # merged into the child model — matching the engine's behaviour.
+            try:
+                from ..core.creature_appearance import (
+                    merge_supermodel_animations as _msa)
+                _mgr = self._get_resource_mgr()
+                _gv_tag = ('K2' if getattr(model, 'game_version', None)
+                                   and model.game_version.name == 'K2'
+                           else 'K1')
+                _visited: set = set()   # prevent infinite loops in corrupt chains
+                _current = model
+                _chain_depth = 0
+                while _mgr is not None and _chain_depth < 8:
+                    _super_name = (getattr(_current, 'supermodel', '') or '').strip()
+                    _super_upper = _super_name.upper()
+                    if _super_upper in ('', 'NULL', 'NONE'):
+                        break
+                    if _super_upper in _visited:
+                        break          # circular reference guard
+                    _visited.add(_super_upper)
+                    _smodel = None
+                    for _gt in (_gv_tag, 'K1', 'K2'):
+                        try:
+                            _sm = _mgr.load_model(_super_name.lower(), _gt)
+                            if _sm is not None:
+                                _smodel = _sm
+                                break
+                        except Exception:
+                            pass
+                    if _smodel is None:
+                        break
+                    _before = len(model.animations)
+                    _msa(model, _smodel)
+                    _after  = len(model.animations)
+                    _chain_depth += 1
+                    self.log(
+                        f"Supermodel chain [{_chain_depth}] '{_super_name}': "
+                        f"+{_after - _before} anims → {_after} total", 'info')
+                    # Walk up the chain
+                    _current = _smodel
+            except Exception as _se:
+                log.debug(f"Supermodel anim chain walk skipped: {_se}")
+
             # Animations panel
             try:
                 self.anim_panel.load_model(model)
@@ -7138,6 +8841,22 @@ class KotorModToolsApp(tk.Tk):
             # Diagnostics panel (build report items then single-batch write)
             try:
                 self.diag_panel.run_diagnostics(model)
+            except Exception:
+                pass
+
+            # Retarget panel – notify about newly loaded model
+            try:
+                if hasattr(self, 'retarget_panel'):
+                    self.retarget_panel.on_model_loaded(model)
+            except Exception:
+                pass
+
+            # Character Builder panel – auto-fill body/head slot on model load
+            try:
+                if hasattr(self, 'char_builder_panel'):
+                    self.char_builder_panel.notify_model_loaded(model)
+                elif hasattr(self, 'head_snap_panel'):
+                    self.head_snap_panel.notify_model_loaded(model)
             except Exception:
                 pass
 
@@ -7190,6 +8909,23 @@ class KotorModToolsApp(tk.Tk):
             except Exception:
                 pass
 
+    def _on_multi_node_select(self, nodes: list):
+        """Called when multiple nodes are selected in the Skeleton panel.
+        Highlights all selected nodes in the viewport for repositioning.
+        """
+        try:
+            if nodes:
+                # Highlight first node in properties
+                self.props_panel.show_node(nodes[0])
+                # Highlight all selected nodes in viewport
+                if hasattr(self.viewport, 'set_selected_nodes'):
+                    self.viewport.set_selected_nodes(nodes)
+                elif hasattr(self.viewport, 'set_selected_node'):
+                    self.viewport.set_selected_node(nodes[0])
+                self.log(f"Selected {len(nodes)} bones", 'info')
+        except Exception as exc:
+            log.debug("_on_multi_node_select: %s", exc)
+
     def _on_viewport_bone_selected(self, node: Optional[ModelNode]):
         """Called when user clicks a bone in the 3D viewport."""
         if node:
@@ -7225,9 +8961,18 @@ class KotorModToolsApp(tk.Tk):
 
     def _on_library_load(self, entry: ModelLibraryEntry,
                           mdl_data: Optional[bytes],
-                          mdx_data: Optional[bytes]):
+                          mdx_data: Optional[bytes],
+                          _model_override=None):
         import time as _t
         _t0 = _t.perf_counter()
+
+        # ── GhostRigger template: model was built procedurally ────────────
+        if _model_override is not None:
+            self.log(f"Template loaded: {entry.resref} "
+                     f"({len(list(_model_override.all_nodes()))} nodes, "
+                     f"{len(_model_override.animations)} anims)", 'info')
+            self._set_model_internal(_model_override)
+            return
 
         if not mdl_data:
             self.log(f"Could not load {entry.resref} – no MDL data", 'error')
@@ -7450,30 +9195,245 @@ class KotorModToolsApp(tk.Tk):
 
     def _try_coload_walkmesh(self, mdl_path: Path):
         """
-        Auto co-load walkmesh when a WOK/PWK/DWK exists alongside the MDL.
+        Auto co-load walkmesh for any loaded MDL / module model.
 
-        KotorBlender co-import pattern: when opening <resref>.mdl, also look for
-        <resref>.wok, <resref>.pwk, <resref>.dwk in the same directory and load
-        the first one found as the walkmesh overlay.
+        Search order (first hit wins):
+          1. Same directory as the MDL file — <resref>.wok/.pwk/.dwk/.bwm
+             (also tries derived area-base resrefs, e.g. 'm12aa' from 'm12aa_01a')
+          2. ResourceManager lookup — covers BIF archives, module ERFs, Override/
+          3. Game Override/ directory — loose <resref>.wok/.pwk/.dwk files
+          4. Game modules/ directory — scan .rim/.mod/.erf archives; uses a
+             smart heuristic that matches archives by area-key prefix rather than
+             a strict 3-char prefix comparison, so all KotOR K1/K2 modules are
+             found reliably.
+          5. Game data root — loose <resref>.wok/.pwk/.dwk/.bwm files at the
+             top level of the game directory (uncommon, but needed for some mods).
+
+        For module-model resrefs the function also probes derived stems:
+          • Strip trailing '_XXX' variant suffix  (m12aa_01a → m12aa)
+          • Strip trailing digit+letter suffix    (101per_01a → 101per)
+        This ensures the area walkmesh is found even when the MDL's resref
+        differs from the WOK filename stored in the archive.
 
         Silently skipped if no walkmesh file is found (not every MDL has one).
         """
         try:
-            stem = mdl_path.stem
-            folder = mdl_path.parent
-            for ext in ('.wok', '.pwk', '.dwk', '.bwm'):
-                wok_path = folder / (stem + ext)
-                if wok_path.exists():
-                    try:
-                        self.viewport._renderer.load_walkmesh(str(wok_path))
-                        self.viewport._renderer.show_walkmesh = True
-                        self.viewport._request_render()
-                        self.log(f"Walkmesh co-loaded: {wok_path.name}", 'success')
-                    except Exception as e:
-                        log.debug(f"Walkmesh co-load failed ({wok_path}): {e}")
-                    return
+            self._do_coload_walkmesh(mdl_path)
         except Exception as e:
-            log.debug(f"_try_coload_walkmesh: {e}")
+            log.debug(f"_try_coload_walkmesh outer: {e}")
+
+    @staticmethod
+    def _derive_wok_resrefs(stem: str) -> list:
+        """
+        Return a list of resref candidates to try for a walkmesh lookup.
+
+        KotOR module rooms follow naming patterns:
+          K1: m12aa_01a  → try [m12aa_01a, m12aa]
+          K2: 101per_01a → try [101per_01a, 101per, 101]
+          K1: danm13     → try [danm13]  (no suffix)
+
+        Always starts with the exact stem so same-stem lookup wins first.
+        """
+        import re
+        candidates = [stem]
+        # Strip '_XXXa' or '_XXX' room-variant suffix (e.g. _01a, _02b, _s, _s2)
+        m = re.match(r'^(.+?)_[0-9a-z]+$', stem)
+        if m:
+            base = m.group(1)
+            if base and base != stem:
+                candidates.append(base)
+                # For K2 numeric modules: also try just the 3-digit area code
+                if base[:3].isdigit() and len(base) > 3:
+                    candidates.append(base[:3])
+        return candidates
+
+    def _do_coload_walkmesh(self, mdl_path: Path):
+        """Internal implementation of walkmesh discovery (see _try_coload_walkmesh)."""
+        import re
+
+        stem   = mdl_path.stem.lower()
+        folder = mdl_path.parent
+
+        # Build a list of resref candidates to probe (exact stem first,
+        # then any derived area-base variants).
+        wok_stems = self._derive_wok_resrefs(stem)
+
+        # ── Helper: load a WOK bytes blob into the viewport ──────────
+        def _load_wok_bytes(wok_bytes: bytes, label: str) -> bool:
+            try:
+                import tempfile, os
+                suffix = '.wok'
+                with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tf:
+                    tf.write(wok_bytes)
+                    tmp_path = tf.name
+                try:
+                    self.viewport._renderer.load_walkmesh(tmp_path)
+                finally:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
+                self.viewport._renderer.show_walkmesh = True
+                self.viewport._request_render()
+                self.log(f"Walkmesh loaded: {label}", 'success')
+                # Update button colour to reflect active state
+                try:
+                    btn = self.viewport._renderer._btn_wok
+                    btn.configure(bg='#225533')
+                except Exception:
+                    pass
+                return True
+            except Exception as e:
+                log.debug(f"_load_wok_bytes({label}): {e}")
+                return False
+
+        def _load_wok_file(wok_path: Path) -> bool:
+            try:
+                self.viewport._renderer.load_walkmesh(str(wok_path))
+                self.viewport._renderer.show_walkmesh = True
+                self.viewport._request_render()
+                self.log(f"Walkmesh co-loaded: {wok_path.name}", 'success')
+                try:
+                    btn = self.viewport._renderer._btn_wok
+                    btn.configure(bg='#225533')
+                except Exception:
+                    pass
+                return True
+            except Exception as e:
+                log.debug(f"_load_wok_file({wok_path}): {e}")
+                return False
+
+        # ── 1. Same directory as the MDL ──────────────────────────────
+        # Try all WOK stem candidates (exact and derived) with all extensions.
+        for ws in wok_stems:
+            for ext in ('.wok', '.pwk', '.dwk', '.bwm'):
+                wok_path = folder / (ws + ext)
+                if wok_path.exists():
+                    if _load_wok_file(wok_path):
+                        return
+
+        # ── Determine game dirs (K1 / K2) ─────────────────────────────
+        k1_dir = self.settings.get('k1_dir', '') or ''
+        k2_dir = self.settings.get('k2_dir', '') or ''
+
+        # Prefer the game version that matches the loaded model
+        model = getattr(self, '_model', None)
+        game_dirs = []
+        if model is not None:
+            try:
+                from ..core.model_data import GameVersion as _GV
+                if model.game_version == _GV.K2 and k2_dir:
+                    game_dirs = [k2_dir, k1_dir]
+                elif k1_dir:
+                    game_dirs = [k1_dir, k2_dir]
+                else:
+                    game_dirs = [k2_dir]
+            except Exception:
+                pass
+        if not game_dirs:
+            game_dirs = [d for d in (k1_dir, k2_dir) if d]
+
+        # ── 2. ResourceManager lookup (BIF / module ERFs / Override) ─
+        try:
+            lib_panel = getattr(self, 'lib_panel', None)
+            mgr = getattr(lib_panel, '_resource_manager', None) if lib_panel else None
+            if mgr is not None and mgr.is_ready():
+                from ..core.resource_manager import RES_WOK
+                # Try each resref candidate in both K1 and K2 installations
+                for ws in wok_stems:
+                    for g_tag in ('K1', 'K2'):
+                        wok_bytes = mgr.get(ws, RES_WOK, g_tag)
+                        if wok_bytes:
+                            lbl = f"{ws}.wok [{g_tag} resource manager]"
+                            if _load_wok_bytes(wok_bytes, lbl):
+                                return
+        except Exception as e:
+            log.debug(f"_do_coload_walkmesh resource_manager lookup: {e}")
+
+        # ── 3. Game directory tree search ──────────────────────────────
+        for gdir in game_dirs:
+            if not gdir:
+                continue
+            gdir_path = Path(gdir)
+
+            # 3a. Override/ directory (loose files)
+            for ovr_dir_name in ('Override', 'override'):
+                ovr_dir = gdir_path / ovr_dir_name
+                if ovr_dir.is_dir():
+                    for ws in wok_stems:
+                        for ext in ('.wok', '.pwk', '.dwk', '.bwm'):
+                            wf = ovr_dir / (ws + ext)
+                            if wf.exists():
+                                if _load_wok_file(wf):
+                                    return
+
+            # 3b. modules/ directory — search inside .rim/.mod/.erf archives
+            for mod_dir_name in ('modules', 'Modules'):
+                mod_dir = gdir_path / mod_dir_name
+                if not mod_dir.is_dir():
+                    continue
+                try:
+                    archive_files = sorted(mod_dir.iterdir())
+                except OSError:
+                    continue
+
+                for archive_path in archive_files:
+                    aname = archive_path.name.lower()
+                    if not aname.endswith(('.rim', '.mod', '.erf')):
+                        continue
+                    archive_stem = archive_path.stem.lower()
+                    # Smart matching: accept an archive if its stem shares the
+                    # area-key prefix with ANY of our WOK resref candidates.
+                    # This handles all KotOR naming patterns:
+                    #   K1: m12aa_01a → candidates ['m12aa_01a', 'm12aa']
+                    #       archives: m12aa.rim, m12aa_s.rim  → both match 'm12aa'
+                    #   K2: 101per_01a → candidates ['101per_01a', '101per', '101']
+                    #       archives: 101per.rim, 101per_s.rim → match '101per'
+                    #   Vanilla: danm13 → candidate ['danm13']
+                    #       archives: danm13.rim, danm13_s.rim → match 'danm13'
+                    def _archive_matches(arch_stem: str, candidates: list) -> bool:
+                        for cand in candidates:
+                            # Exact match or archive starts with candidate prefix
+                            if arch_stem == cand:
+                                return True
+                            if arch_stem.startswith(cand):
+                                return True
+                            # Archive name contains candidate (e.g. 'tar_m17ac_s')
+                            if cand in arch_stem:
+                                return True
+                            # Candidate starts with archive stem (prefix overlap)
+                            if cand.startswith(arch_stem.rstrip('_s1234567890')):
+                                ar_base = arch_stem.rstrip('_s1234567890')
+                                if ar_base and len(ar_base) >= 3 and cand.startswith(ar_base):
+                                    return True
+                        return False
+
+                    if not _archive_matches(archive_stem, wok_stems):
+                        continue
+
+                    # Search this archive for each WOK resref candidate
+                    for ws in wok_stems:
+                        try:
+                            wok_bytes = _read_wok_from_archive(
+                                str(archive_path), ws)
+                            if wok_bytes:
+                                label = f"{ws}.wok [{archive_path.name}]"
+                                if _load_wok_bytes(wok_bytes, label):
+                                    return
+                        except Exception as e:
+                            log.debug(f"archive search {archive_path.name} [{ws}]: {e}")
+
+            # 3c. Game data root — loose .wok files at the top level
+            for ws in wok_stems:
+                for ext in ('.wok', '.pwk', '.dwk', '.bwm'):
+                    wf = gdir_path / (ws + ext)
+                    if wf.exists():
+                        if _load_wok_file(wf):
+                            return
+
+        # No walkmesh found — silently skip (not every model has one)
+        log.debug(f"_do_coload_walkmesh: no walkmesh found for '{stem}' "
+                  f"(tried: {wok_stems})")
 
     def _open_mdl_ascii(self):
         path = filedialog.askopenfilename(
@@ -7536,19 +9496,127 @@ class KotorModToolsApp(tk.Tk):
         except Exception as e:
             self.log(f"FBX import error: {e}", 'error')
 
+    # ── Game-version picker (shared by ASCII + Binary export) ─────────────────
+
+    def _pick_export_game_version(self) -> str:
+        """
+        Show a small modal dialog asking the user to choose K1 or K2 export
+        target.  Returns 'K1', 'K2', or '' if cancelled.
+
+        Pre-selects the game version that matches the currently loaded model
+        so the most common case (re-exporting the same game's model) is a
+        single click.
+        """
+        current_gv = 'K1'
+        if self._model and hasattr(self._model, 'game_version'):
+            from ..core.model_data import GameVersion as _GV
+            current_gv = 'K2' if self._model.game_version == _GV.K2 else 'K1'
+
+        dlg = tk.Toplevel(self)
+        dlg.title("Export Target Game")
+        dlg.configure(bg=C['bg'])
+        dlg.resizable(False, False)
+        dlg.grab_set()
+        dlg.transient(self)
+
+        _label(dlg, "Choose export compatibility:", "small",
+               bg=C['bg']).pack(padx=16, pady=(12, 4))
+
+        gv_var = tk.StringVar(value=current_gv)
+        btn_frame = tk.Frame(dlg, bg=C['bg'])
+        btn_frame.pack(padx=16, pady=4)
+        for gv, label in [('K1', 'KotOR 1  (K1)'), ('K2', 'KotOR 2 TSL  (K2)')]:
+            tk.Radiobutton(
+                btn_frame, text=label, variable=gv_var, value=gv,
+                bg=C['bg'], fg=C['text'], selectcolor=C['bg2'],
+                activebackground=C['bg'],
+                font=("Segoe UI", 9),
+            ).pack(anchor='w', pady=2)
+
+        result: list = []  # mutable container for closure
+
+        def _ok():
+            result.append(gv_var.get())
+            dlg.destroy()
+
+        def _cancel():
+            dlg.destroy()
+
+        btns = tk.Frame(dlg, bg=C['bg'])
+        btns.pack(padx=16, pady=(4, 12))
+        _btn(btns, "Export", _ok, accent=True).pack(side='left', padx=4)
+        _btn(btns, "Cancel", _cancel).pack(side='left', padx=4)
+
+        dlg.bind("<Return>", lambda e: _ok())
+        dlg.bind("<Escape>", lambda e: _cancel())
+
+        # Centre on parent
+        self.update_idletasks()
+        px, py = self.winfo_rootx(), self.winfo_rooty()
+        pw, ph = self.winfo_width(), self.winfo_height()
+        dlg.update_idletasks()
+        dw, dh = dlg.winfo_width(), dlg.winfo_height()
+        dlg.geometry(f"+{px + (pw - dw)//2}+{py + (ph - dh)//2}")
+
+        self.wait_window(dlg)
+        return result[0] if result else ''
+
     def _save_ascii_mdl(self):
         if not self._model:
             messagebox.showwarning("No Model","Load or import a model first."); return
+
+        # Ask K1 / K2 target
+        chosen_gv = self._pick_export_game_version()
+        if not chosen_gv:
+            return  # cancelled
+
         path = filedialog.asksaveasfilename(
             initialfile=self._model.name + '.mdl',
             defaultextension='.mdl',
             filetypes=[("MDL files","*.mdl")])
         if not path: return
         try:
-            MDLAsciiWriter().write(self._model, path)
-            self.log(f"Saved ASCII MDL → {Path(path).name}", 'success')
+            from ..core.model_data import GameVersion as _GV
+            import copy as _copy
+            mdl = _copy.deepcopy(self._model)
+            mdl.game_version = _GV.K1 if chosen_gv == 'K1' else _GV.K2
+            MDLAsciiWriter().write(mdl, path)
+            self.log(f"Saved ASCII MDL ({chosen_gv}) → {Path(path).name}", 'success')
         except Exception as e:
             self.log(f"Save error: {e}", 'error')
+
+    def _export_mdl_binary(self):
+        """Export the currently loaded model as a binary .mdl + .mdx pair  (Ctrl+M)."""
+        if not self._model:
+            messagebox.showwarning("No Model", "Load or import a model first.")
+            return
+
+        # Ask K1 / K2 target before opening save dialog
+        chosen_gv = self._pick_export_game_version()
+        if not chosen_gv:
+            return  # cancelled
+
+        path = filedialog.asksaveasfilename(
+            initialfile=self._model.name + '.mdl',
+            defaultextension='.mdl',
+            filetypes=[("MDL files", "*.mdl")])
+        if not path:
+            return
+        try:
+            from ..core.mdl_porter import MDLBinaryWriter as _MBW
+            from ..core.model_data import GameVersion as _GV
+            import copy as _copy
+            mdl = _copy.deepcopy(self._model)
+            mdl.game_version = _GV.K1 if chosen_gv == 'K1' else _GV.K2
+            writer   = _MBW()
+            mdx_path = str(Path(path).with_suffix('.mdx'))
+            writer.write(mdl, path, mdx_path)
+            self.log(
+                f"Exported binary MDL ({chosen_gv}) → {Path(path).name}  "
+                f"(+ {Path(mdx_path).name})", 'success')
+        except Exception as exc:
+            self.log(f"Binary MDL export error: {exc}", 'error')
+            messagebox.showerror("Export Error", str(exc))
 
     def _get_tex_cache_for_export(self):
         """Return the active texture cache (for copying textures alongside exports)."""
@@ -7567,8 +9635,16 @@ class KotorModToolsApp(tk.Tk):
         if not path: return
         try:
             OBJExporter().export(self._model, path,
-                                 tex_cache=self._get_tex_cache_for_export())
+                                 tex_cache=self._get_tex_cache_for_export(),
+                                 export_rigging=True)
             self.log(f"Exported OBJ → {Path(path).name}", 'success')
+            # Inform user about rigging subfolder when model has bones/animations
+            _has_rig = (any(n.is_skin and getattr(n, 'bone_map', None)
+                            for n in self._model.all_nodes()) or
+                        bool(self._model.animations))
+            if _has_rig:
+                self.log(f"  Rigging + animations → rigging/ subfolder "
+                         f"(next to {Path(path).name})", 'info')
             self.settings['last_export'] = path
         except Exception as e:
             self.log(f"Export error: {e}", 'error')
@@ -7583,11 +9659,88 @@ class KotorModToolsApp(tk.Tk):
         if not path: return
         try:
             ok = FBXExporter().export(self._model, path,
-                                      tex_cache=self._get_tex_cache_for_export())
-            if ok: self.log(f"Exported FBX → {Path(path).name}", 'success')
-            else:  self.log(f"FBX export fell back to OBJ (pyassimp not installed)", 'warning')
+                                      tex_cache=self._get_tex_cache_for_export(),
+                                      export_rigging=True)
+            if ok:
+                self.log(f"Exported FBX → {Path(path).name}", 'success')
+                # Inform user about rigging subfolder
+                _has_rig = (any(n.is_skin and getattr(n, 'bone_map', None)
+                                for n in self._model.all_nodes()) or
+                            bool(self._model.animations))
+                if _has_rig:
+                    self.log(f"  Rigging + animations → rigging/ subfolder", 'info')
+            else:
+                self.log(f"FBX export fell back to OBJ (pyassimp not installed)", 'warning')
         except Exception as e:
             self.log(f"Export error: {e}", 'error')
+
+    # ── Universal Humanoid Template export ────────────────────────────────────
+
+    def _export_humanoid_template(self):
+        """
+        Export the GhostRigger Universal Humanoid Template as a binary MDL + MDX
+        pair plus a JSON manifest.
+
+        The template contains:
+          • Full KotOR biped skeleton (Mesh_Root → Pelvis → Spine → Arms/Legs)
+          • All standard humanoid animation slots as empty placeholder clips
+            (cpause1, walk, run, attack1 … tlkang1 … sit, sleep, etc.)
+          • A minimal T-pose body stub so the template renders in the viewer
+
+        Modders can import this template, bind their mesh to the skeleton, fill
+        in the animation keyframes, and export as a game-ready MDL.
+        """
+        # Ask K1 or K2
+        chosen_gv = self._pick_export_game_version()
+        if not chosen_gv:
+            return  # cancelled
+
+        path = filedialog.asksaveasfilename(
+            title="Export Universal Humanoid Template",
+            initialfile=f"gr_humanoid_template_{chosen_gv.lower()}.mdl",
+            defaultextension='.mdl',
+            filetypes=[("MDL files", "*.mdl"), ("All files", "*.*")])
+        if not path:
+            return
+
+        try:
+            from ..core.template_builder import (
+                build_humanoid_template, save_template_manifest)
+            from ..core.mdl_porter import MDLBinaryWriter as _MBW
+            import os as _os
+
+            # Build the template model
+            model = build_humanoid_template(game_version=chosen_gv,
+                                            name=Path(path).stem)
+
+            # Write binary MDL + MDX
+            mdx_path = str(Path(path).with_suffix('.mdx'))
+            _MBW().write(model, path, mdx_path)
+
+            # Write JSON manifest alongside
+            out_dir = str(Path(path).parent)
+            manifest_path = save_template_manifest(model, out_dir)
+
+            self.log(
+                f"Exported Humanoid Template ({chosen_gv})  "
+                f"→ {Path(path).name}  "
+                f"[{len(model.animations)} anims, "
+                f"{sum(1 for _ in model.all_nodes())} bones]",
+                'success')
+            self.log(
+                f"  Manifest → {Path(manifest_path).name}",
+                'info')
+
+            # Offer to load the template into the viewer
+            if messagebox.askyesno(
+                    "Template exported",
+                    f"Template saved to {Path(path).name}.\n\n"
+                    "Load it into the viewer now?"):
+                self._set_model_internal(model)
+
+        except Exception as exc:
+            self.log(f"Template export error: {exc}", 'error')
+            messagebox.showerror("Export Error", str(exc))
 
     def _import_gltf(self):
         """Import GLB / GLTF 2.0 into the current model slot."""
@@ -7648,9 +9801,17 @@ class KotorModToolsApp(tk.Tk):
         try:
             binary = path.lower().endswith('.glb')
             ok = GLTFExporter().export(self._model, path, binary=binary,
-                                       tex_cache=self._get_tex_cache_for_export())
+                                       tex_cache=self._get_tex_cache_for_export(),
+                                       export_rigging=True)
             if ok:
-                self.log(f"Exported {'GLB' if binary else 'GLTF'} → {Path(path).name}", 'success')
+                self.log(f"Exported {'GLB' if binary else 'GLTF'} → {Path(path).name}",
+                         'success')
+                # Inform user about rigging subfolder
+                _has_rig = (any(n.is_skin and getattr(n, 'bone_map', None)
+                                for n in self._model.all_nodes()) or
+                            bool(self._model.animations))
+                if _has_rig:
+                    self.log(f"  Rigging + animations → rigging/ subfolder", 'info')
             else:
                 self.log("GLTF export failed – install 'pygltflib'", 'error')
         except Exception as e:
@@ -7741,10 +9902,18 @@ class KotorModToolsApp(tk.Tk):
 
     def _switch_tab_right(self, tab_name: str):
         """Switch the right panel notebook to the named tab (keyboard-shortcut friendly)."""
+        # Normalise aliases
+        aliases = {'anim': 'anims', 'retarget': 'charbuilder', 'headsnap': 'charbuilder',
+                   'normalmap': 'charbuilder', 'rig': 'charbuilder'}
+        key = aliases.get(tab_name.lower(), tab_name.lower())
+        # Special case: Diag is menu/popup-only (no right-panel tab)
+        if key == 'diag':
+            self._run_diagnostics_popup()
+            return
         # First try the tab_names dict (exact match by key)
         try:
-            idx = self._tab_names.get(tab_name.lower())
-            if idx is not None:
+            idx = self._tab_names.get(key)
+            if idx is not None and isinstance(idx, int):
                 self._right_nb.select(idx)
                 return
         except Exception:
@@ -7753,7 +9922,7 @@ class KotorModToolsApp(tk.Tk):
         try:
             nb = self._right_nb
             for i, tab_id in enumerate(nb.tabs()):
-                if tab_name.lower() in nb.tab(tab_id, "text").lower():
+                if key in nb.tab(tab_id, "text").lower():
                     nb.select(i)
                     return
         except Exception:
@@ -8201,16 +10370,49 @@ class KotorModToolsApp(tk.Tk):
         )
         messagebox.showinfo("Model Info", info)
 
+    def _run_diagnostics_popup(self):
+        """Run diagnostics and show results in a popup window (Ctrl+D / menu)."""
+        model = self._model
+        try:
+            self.diag_panel.run_diagnostics(model)
+        except Exception:
+            pass
+        # Collect the text from the diag panel's text widget and show in a Toplevel
+        try:
+            tw = tk.Toplevel(self)
+            tw.title("Diagnostics")
+            tw.geometry("640x480")
+            tw.configure(bg=C['panel'])
+            txt = tk.Text(tw, bg=C['panel2'], fg=C['text'], font=("Consolas", 9),
+                          relief='flat', wrap='word')
+            sb = ttk.Scrollbar(tw, command=txt.yview)
+            txt.configure(yscrollcommand=sb.set)
+            sb.pack(side='right', fill='y')
+            txt.pack(fill='both', expand=True, padx=4, pady=4)
+            # Pull content from diag_panel
+            try:
+                content = self.diag_panel._text.get('1.0', 'end')
+                txt.insert('1.0', content)
+            except Exception:
+                txt.insert('1.0', "(No diagnostics available – load a model first.)")
+            txt.configure(state='disabled')
+            tk.Button(tw, text="Close", command=tw.destroy,
+                      bg=C['btn'], fg=C['text'], relief='flat',
+                      padx=12, pady=4).pack(pady=6)
+        except Exception:
+            pass
+
     def _toggle_modular_panel(self):
-        """Show/hide the Modular Mode panel at the bottom of the window."""
-        if self._modular_visible.get():
-            # Hide it
-            self._modular_frame.configure(height=0)
-            self._modular_visible.set(False)
-        else:
-            # Show it – 380px tall
-            self._modular_frame.configure(height=380)
-            self._modular_visible.set(True)
+        """Switch to the Module Editor tab in the left panel."""
+        try:
+            # Find the Modules tab index in the left notebook
+            nb = self._left_nb
+            for idx in range(nb.index('end')):
+                if 'Modules' in nb.tab(idx, 'text'):
+                    nb.select(idx)
+                    return
+        except Exception:
+            pass
 
     def _about_modular(self):
         messagebox.showinfo("Modular Mode",

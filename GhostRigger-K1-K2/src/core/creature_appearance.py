@@ -952,3 +952,766 @@ def load_utc_into_viewport(
     except Exception as exc:
         log.warning("load_utc_into_viewport '%s': %s", utc_resref, exc)
         return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Character Builder — Authentic KotOR Head-Body Assembly  (Phase 30)
+#
+#  How the Aurora engine (KotOR 1 & 2) actually attaches heads to bodies
+#  -----------------------------------------------------------------------
+#  Source: xoreos/src/engines/kotor/creature.cpp + model.cpp
+#
+#  1.  The engine loads the body MDL as a complete Model object.
+#  2.  The engine loads the head MDL as a separate, independent Model object.
+#  3.  It calls  body->attachModel("headhook", headModel)
+#      which stores the head model as a pointer on the body's "headhook" node.
+#      NO geometry merging, NO vertex translation, NO animation copying.
+#  4.  During rendering the headhook node's world-space transform is used as
+#      the parent matrix for the head model's render pass.
+#  5.  Animations stay in sync because BOTH models set the SAME supermodel
+#      in their MDL header (e.g. S_Female02 for K1, S_Female02/c_female02 for K2).
+#      The engine walks the supermodel chain independently for each model.
+#  6.  The "headhook" node name is EXACT — no aliases exist in real game files.
+#
+#  Standard KotOR supermodel chains
+#  ---------------------------------
+#  K1 male   : Body → S_Female02 → S_Female01 → S_Male02 → S_Male01
+#  K1 female : Body → S_Female03 → S_Female02 → S_Female01 → S_Male02 → S_Male01
+#  K2 male   : Body → S_Female02 → S_Female01 → S_Male02 → S_Male01
+#  K2 female : Body → S_Female03 → S_Female02 → (same chain)
+#  K2 alt    : c_female02 (cleanest K2 biped rig, used by GhostRigger templates)
+#
+#  GhostRigger Character Builder modes
+#  -------------------------------------
+#  CreatureAssembly (preview)  – keeps body + head as separate model objects
+#      joined at the headhook node, matching the runtime engine exactly.
+#      Use this for viewport preview.
+#
+#  snap_head_onto_body (viewport merge)  – physically grafts the head's root
+#      node as a child of the headhook node (no vertex movement, no scaling,
+#      no animation merging).  For a fast single-model viewport representation.
+#
+#  export_creature_separate (Option B1)  – validates the pair and returns both
+#      MDL objects ready to write as TWO separate files, exactly as the game
+#      expects.  Checks / fixes the supermodel reference on both models.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Supermodel chains (K1 & K2) ──────────────────────────────────────────────
+# These are the only valid supermodel references for player-character / NPC
+# humanoid rigs.  Both body AND head must reference the same entry.
+_K1_SUPERMODELS = {
+    'male':    's_female02',   # K1 male bodies/heads both use S_Female02 as root
+    'female':  's_female03',   # K1 female bodies reference S_Female03 (lowest in chain)
+    'default': 's_female02',   # safe default for unknown gender
+}
+_K2_SUPERMODELS = {
+    'male':    's_female02',   # K2 male — same chain as K1
+    'female':  's_female03',   # K2 female
+    'default': 's_female02',   # safe default
+    'alt':     'c_female02',   # K2 alternative clean rig
+}
+
+# The ONE real headhook node name used by the Aurora engine (exact, case-sensitive
+# in binary MDL; we compare lower-case for robustness).
+_HEADHOOK_NODE_NAME = 'headhook'
+
+# Fallback names (non-standard / custom models only — always log a warning).
+# Ordered by specificity: more specific attachment-point names come first.
+# NOTE: generic skeleton bones like 'Neck' are intentionally excluded — a
+# standard KotOR skeleton always has a Neck *bone*, but the headhook is a
+# dedicated dummy/helper node placed at the top of that bone.  Matching 'neck'
+# would cause false positives on every body model.
+_HEADHOOK_FALLBACKS = (
+    'head_hook',   # common modder alias
+    'headpoint',   # used by some custom rigs
+    'head_point',
+    'headnode',
+    'head_node',
+    'neckjoint',   # explicit joint marker (not a generic skeleton bone)
+)
+
+
+def _find_headhook_node(model, strict: bool = False):
+    """
+    Locate the 'headhook' attachment node in a body model.
+
+    Search strategy
+    ---------------
+    1. First pass: exact match for 'headhook' (case-insensitive).
+    2. If strict=True, stop here — return None if not found.
+    3. Second pass: iterate fallback names in priority order; for each
+       fallback name, scan ALL nodes looking for an exact match.  This
+       ensures the more-specific fallbacks (e.g. 'headpoint') are tested
+       before less-specific ones, regardless of the node iteration order
+       in the model's flat list.
+
+    Parameters
+    ----------
+    model  : KotorModel
+    strict : if True, only accept the exact name 'headhook' (no fallbacks)
+
+    Returns
+    -------
+    (node, used_fallback: bool)  –  node is None if not found
+    """
+    try:
+        all_nodes = list(model.all_nodes())
+
+        # ── Pass 1: exact 'headhook' ──────────────────────────────────────
+        for node in all_nodes:
+            if node.name.lower() == _HEADHOOK_NODE_NAME:
+                return node, False
+
+        if strict:
+            return None, False
+
+        # ── Pass 2: fallbacks, highest-priority first ─────────────────────
+        # Build a lower-case name → node map for O(1) lookup per fallback.
+        node_by_name = {}
+        for node in all_nodes:
+            nl = node.name.lower()
+            if nl not in node_by_name:          # keep first occurrence
+                node_by_name[nl] = node
+
+        for fb in _HEADHOOK_FALLBACKS:
+            match = node_by_name.get(fb)
+            if match is not None:
+                log.warning(
+                    "_find_headhook_node: body '%s' uses non-standard "
+                    "headhook name '%s' — real game uses 'headhook'",
+                    model.name, match.name,
+                )
+                return match, True
+
+    except Exception:
+        pass
+    return None, False
+
+
+def _world_pos_of_node(node) -> tuple:
+    """Accumulate world-space position by walking parent chain."""
+    pos = list(getattr(node, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
+    p = getattr(node, 'parent', None)
+    visited = set()
+    while p is not None and id(p) not in visited:
+        visited.add(id(p))
+        pp = getattr(p, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
+        pos[0] += pp[0]; pos[1] += pp[1]; pos[2] += pp[2]
+        p = getattr(p, 'parent', None)
+    return tuple(pos)
+
+
+def _infer_supermodel(model_name: str, game: str = 'K1') -> str:
+    """
+    Infer the correct supermodel for a model name based on KotOR naming conventions.
+
+    K1/K2 body naming:  pf* = female,  pm* = male
+    Head  naming:       pfh* = female head,  pmh* = male head
+    """
+    name_lo = (model_name or '').lower()
+    lut = _K2_SUPERMODELS if game == 'K2' else _K1_SUPERMODELS
+    if name_lo.startswith('pf'):
+        return lut['female']
+    if name_lo.startswith('pm'):
+        return lut['male']
+    return lut['default']
+
+
+def _validate_supermodel_pair(body_model, head_model, game: str = 'K1') -> list:
+    """
+    Check that both models have the same supermodel reference.
+
+    Returns a list of warning strings (empty = all good).
+    """
+    warnings = []
+    body_sm = (getattr(body_model, 'supermodel', None) or '').strip().lower()
+    head_sm = (getattr(head_model,  'supermodel', None) or '').strip().lower()
+
+    # Filter out null/none/empty
+    body_sm_eff = body_sm if body_sm not in ('', 'null', 'none') else None
+    head_sm_eff = head_sm if head_sm not in ('', 'null', 'none') else None
+
+    if body_sm_eff and head_sm_eff and body_sm_eff != head_sm_eff:
+        warnings.append(
+            f"Supermodel mismatch: body='{body_sm_eff}' head='{head_sm_eff}'. "
+            f"Both must reference the same supermodel for animations to stay in sync. "
+            f"Set both to '{_infer_supermodel(body_model.name, game)}' "
+            f"(or whichever rig this character uses)."
+        )
+    elif not body_sm_eff:
+        expected = _infer_supermodel(body_model.name, game)
+        warnings.append(
+            f"Body model '{body_model.name}' has no supermodel set. "
+            f"Expected '{expected}' for {game} — animations may not play."
+        )
+    elif not head_sm_eff:
+        expected = _infer_supermodel(head_model.name, game)
+        warnings.append(
+            f"Head model '{head_model.name}' has no supermodel set. "
+            f"Expected '{expected}' for {game} — animations may not play."
+        )
+    return warnings
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  CreatureAssembly — authentic dual-model engine simulation
+# ─────────────────────────────────────────────────────────────────────────────
+
+class CreatureAssembly:
+    """
+    Authentic KotOR engine simulation: keeps body and head as two separate
+    model objects joined at the 'headhook' node — exactly replicating
+    Aurora engine's Model::attachModel("headhook", headModel) call.
+
+    This is the correct architecture for GhostRigger's viewport preview and
+    for Option B1 export (two separate MDL files).
+
+    Usage (preview)
+    ---------------
+        assembly = CreatureAssembly.from_models(body_model, head_model, game='K1')
+        if assembly.ok:
+            # Both models animate independently from the same supermodel
+            # The headhook node's world transform parents the head for rendering
+            hook_pos = assembly.headhook_world_pos
+
+    Usage (export — Option B1)
+    --------------------------
+        result = assembly.export_separate()
+        # result['body_model'] and result['head_model'] are ready to write as
+        # two separate ASCII MDL files, supermodels validated/fixed
+    """
+
+    def __init__(self):
+        self.body_model = None
+        self.head_model = None
+        self.game: str = 'K1'
+        self.ok: bool = False
+        self.message: str = ''
+        self.warnings: list = []
+        self.headhook_node = None          # node object in body_model
+        self.headhook_world_pos = None     # (x,y,z) world-space position
+        self._used_fallback_hook: bool = False
+
+    @classmethod
+    def from_models(
+        cls,
+        body_model,
+        head_model,
+        game: str = 'K1',
+    ) -> 'CreatureAssembly':
+        """
+        Build a CreatureAssembly from two already-loaded KotorModel objects.
+
+        Parameters
+        ----------
+        body_model : KotorModel  – the body / outfit MDL
+        head_model : KotorModel  – the head MDL
+        game       : 'K1' or 'K2'
+
+        Returns
+        -------
+        CreatureAssembly with .ok=True on success
+        """
+        asm = cls()
+        asm.game = game
+
+        if body_model is None:
+            asm.message = "No body model supplied."
+            return asm
+        if head_model is None:
+            asm.message = "No head model supplied."
+            return asm
+
+        asm.body_model = body_model
+        asm.head_model = head_model
+
+        # Locate headhook node in body
+        hook_node, used_fallback = _find_headhook_node(body_model, strict=False)
+        if hook_node is None:
+            asm.message = (
+                f"Body model '{body_model.name}' has no 'headhook' node. "
+                "KotOR body models always have a dummy node named exactly "
+                "'headhook' at the neck socket. Select a different body model "
+                "or add a 'headhook' dummy to this model."
+            )
+            return asm
+
+        asm.headhook_node = hook_node
+        asm.headhook_world_pos = _world_pos_of_node(hook_node)
+        asm._used_fallback_hook = used_fallback
+
+        # Supermodel validation
+        asm.warnings = _validate_supermodel_pair(body_model, head_model, game)
+        if used_fallback:
+            asm.warnings.insert(0,
+                f"Body '{body_model.name}' uses non-standard hook node "
+                f"'{hook_node.name}' — real KotOR bodies use 'headhook'."
+            )
+
+        asm.ok = True
+        asm.message = (
+            f"Assembly ready: body='{body_model.name}' + head='{head_model.name}' "
+            f"via '{hook_node.name}' @ {asm.headhook_world_pos}  [{game}]"
+        )
+        log.info("CreatureAssembly.from_models: %s", asm.message)
+        if asm.warnings:
+            for w in asm.warnings:
+                log.warning("CreatureAssembly warning: %s", w)
+        return asm
+
+    @classmethod
+    def from_resrefs(
+        cls,
+        body_resref: str,
+        head_resref: str,
+        resource_manager,
+        game: str = 'K1',
+    ) -> 'CreatureAssembly':
+        """
+        Build a CreatureAssembly by loading both models from a ResourceManager.
+
+        Parameters
+        ----------
+        body_resref       : e.g. 'pmbc1' (male clothing body)
+        head_resref       : e.g. 'pmhc1' (male head 1)
+        resource_manager  : has get_mdl(resref, game) and get_mdx(resref, game)
+        game              : 'K1' or 'K2'
+
+        Returns
+        -------
+        CreatureAssembly with .ok=True on success
+        """
+        asm = cls()
+        asm.game = game
+
+        def _load(resref):
+            try:
+                mdl_bytes = resource_manager.get_mdl(resref.lower(), game)
+                if mdl_bytes is None:
+                    # Try the other game version as fallback
+                    other = 'K2' if game == 'K1' else 'K1'
+                    mdl_bytes = resource_manager.get_mdl(resref.lower(), other)
+                if mdl_bytes is None:
+                    return None, f"Model '{resref}' not found in {game} library."
+                mdx_bytes = resource_manager.get_mdx(resref.lower(), game) or b''
+                from .mdl_parser import MDLBinaryParser
+                parser = MDLBinaryParser(mdl_bytes, mdx_bytes)
+                model = parser.parse()
+                if model is None:
+                    return None, f"Could not parse model '{resref}'."
+                return model, None
+            except Exception as exc:
+                return None, f"Error loading '{resref}': {exc}"
+
+        body_model, err = _load(body_resref)
+        if body_model is None:
+            asm.message = err or f"Could not load body '{body_resref}'."
+            return asm
+
+        head_model, err = _load(head_resref)
+        if head_model is None:
+            asm.message = err or f"Could not load head '{head_resref}'."
+            return asm
+
+        return cls.from_models(body_model, head_model, game=game)
+
+    def export_separate(self) -> dict:
+        """
+        Option B1 — Export as two separate MDL files, exactly how KotOR stores
+        character models.  Validates and (optionally) fixes the supermodel
+        references so both models use the same supermodel.
+
+        Returns
+        -------
+        dict:
+            ok           : bool
+            body_model   : KotorModel (clone, supermodel fixed if needed)
+            head_model   : KotorModel (clone, supermodel fixed if needed)
+            body_name    : suggested filename for body (e.g. 'pmbc1')
+            head_name    : suggested filename for head  (e.g. 'pmhc1')
+            supermodel   : the shared supermodel name applied to both
+            warnings     : list[str]  – any issues found (non-fatal)
+            message      : str        – human-readable summary
+        """
+        import copy as _copy
+
+        if not self.ok:
+            return {'ok': False, 'body_model': None, 'head_model': None,
+                    'body_name': '', 'head_name': '', 'supermodel': '',
+                    'warnings': [], 'message': self.message}
+
+        body_out = _copy.deepcopy(self.body_model)
+        head_out = _copy.deepcopy(self.head_model)
+        warnings = list(self.warnings)
+
+        # Determine the correct shared supermodel
+        body_sm = (getattr(body_out, 'supermodel', None) or '').strip().lower()
+        head_sm = (getattr(head_out,  'supermodel', None) or '').strip().lower()
+        body_sm_eff = body_sm if body_sm not in ('', 'null', 'none') else None
+        head_sm_eff = head_sm if head_sm not in ('', 'null', 'none') else None
+
+        # Choose the canonical supermodel to apply to both
+        if body_sm_eff and body_sm_eff == head_sm_eff:
+            # Both already agree — perfect
+            shared_sm = body_sm_eff
+        elif body_sm_eff and not head_sm_eff:
+            # Body has supermodel, head doesn't — copy body's to head
+            shared_sm = body_sm_eff
+            head_out.supermodel = shared_sm
+            warnings.append(
+                f"Head '{head_out.name}' had no supermodel — set to "
+                f"'{shared_sm}' (matching body)."
+            )
+        elif head_sm_eff and not body_sm_eff:
+            # Head has supermodel, body doesn't — copy head's to body
+            shared_sm = head_sm_eff
+            body_out.supermodel = shared_sm
+            warnings.append(
+                f"Body '{body_out.name}' had no supermodel — set to "
+                f"'{shared_sm}' (matching head)."
+            )
+        elif body_sm_eff and head_sm_eff and body_sm_eff != head_sm_eff:
+            # Mismatch — use the inferred canonical supermodel
+            shared_sm = _infer_supermodel(body_out.name, self.game)
+            body_out.supermodel = shared_sm
+            head_out.supermodel = shared_sm
+            warnings.append(
+                f"Supermodel mismatch fixed: body was '{body_sm_eff}', "
+                f"head was '{head_sm_eff}' → both set to '{shared_sm}'."
+            )
+        else:
+            # Neither has one — infer from body name
+            shared_sm = _infer_supermodel(body_out.name, self.game)
+            body_out.supermodel = shared_sm
+            head_out.supermodel = shared_sm
+            warnings.append(
+                f"No supermodel found on either model — both set to "
+                f"'{shared_sm}' (inferred for {self.game})."
+            )
+
+        # Verify headhook node is present in body export
+        hook, _ = _find_headhook_node(body_out, strict=True)
+        if hook is None:
+            # Try with fallbacks
+            hook, used_fb = _find_headhook_node(body_out, strict=False)
+            if hook is not None and used_fb:
+                warnings.append(
+                    f"Body '{body_out.name}': headhook node is named "
+                    f"'{hook.name}' — KotOR expects exactly 'headhook'. "
+                    "Rename it before exporting for the game."
+                )
+
+        body_name = (body_out.name or 'body').lower()
+        head_name = (head_out.name or 'head').lower()
+
+        msg = (
+            f"B1 export ready: '{body_name}.mdl' + '{head_name}.mdl'  "
+            f"supermodel='{shared_sm}'  [{self.game}]"
+        )
+        if warnings:
+            msg += f"  ({len(warnings)} warning(s))"
+
+        log.info("CreatureAssembly.export_separate: %s", msg)
+        return {
+            'ok': True,
+            'body_model': body_out,
+            'head_model': head_out,
+            'body_name': body_name,
+            'head_name': head_name,
+            'supermodel': shared_sm,
+            'warnings': warnings,
+            'message': msg,
+        }
+
+    def get_viewport_preview_model(self):
+        """
+        Return the body model with the head model attached at the headhook node
+        for viewport preview.  This is the snap_head_onto_body merge path —
+        produces a single KotorModel where the head's root node is a child of
+        the headhook bone.  No vertex movement, no scaling, no anim merging.
+
+        Returns
+        -------
+        dict  (same schema as snap_head_onto_body return value)
+        """
+        if not self.ok:
+            return {'ok': False, 'model': None, 'message': self.message,
+                    'headhook_pos': None, 'warnings': self.warnings}
+        return snap_head_onto_body(
+            self.body_model,
+            self.head_model,
+            scale_head=False,       # No scaling — heads are authored at correct scale
+            merge_animations=False, # No merging — supermodel handles sync
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  snap_head_onto_body  —  corrected viewport-merge implementation
+#  (single combined model for the viewport; NOT the export format)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def snap_head_onto_body(
+    body_model,
+    head_model,
+    scale_head: bool = False,
+    merge_animations: bool = False,
+) -> dict:
+    """
+    Attach a KotOR head model onto a body model for viewport display.
+
+    This replicates Aurora engine's  body->attachModel("headhook", head)  call:
+      • The head's root node is attached as a direct child of the 'headhook' bone.
+      • No vertices are moved or scaled (heads are already authored at game scale).
+      • No animations are merged (both models share the same supermodel).
+      • The head's internal hierarchy (skull, jaw, eyeballs) is preserved intact.
+
+    This produces a single KotorModel for the viewport.  For two-file export
+    (the authentic game format) use  CreatureAssembly.export_separate()  instead.
+
+    Parameters
+    ----------
+    body_model       : KotorModel  – body / outfit model (will be cloned)
+    head_model       : KotorModel  – head model to attach (will be cloned)
+    scale_head       : bool  – legacy option; default False (not authentic)
+    merge_animations : bool  – legacy option; default False (not authentic)
+
+    Returns
+    -------
+    dict:
+        ok           : bool
+        model        : KotorModel or None  – combined model
+        message      : str
+        headhook_pos : tuple(x,y,z) or None
+        warnings     : list[str]
+    """
+    import copy as _copy
+
+    if body_model is None:
+        return {'ok': False, 'model': None, 'message': "No body model supplied.",
+                'headhook_pos': None, 'warnings': []}
+    if head_model is None:
+        return {'ok': False, 'model': None, 'message': "No head model supplied.",
+                'headhook_pos': None, 'warnings': []}
+
+    try:
+        combined  = _copy.deepcopy(body_model)
+        head_copy = _copy.deepcopy(head_model)
+
+        # ── 1. Find headhook node (strict first, then fallbacks) ─────────────
+        hook_node, used_fallback = _find_headhook_node(combined, strict=False)
+        if hook_node is None:
+            return {
+                'ok': False, 'model': None,
+                'message': (
+                    f"Body model '{body_model.name}' has no 'headhook' node. "
+                    "KotOR body models must have a dummy node named 'headhook' "
+                    "at the neck socket."
+                ),
+                'headhook_pos': None,
+                'warnings': [],
+            }
+
+        hook_world = _world_pos_of_node(hook_node)
+        warnings = []
+        if used_fallback:
+            warnings.append(
+                f"Non-standard hook node '{hook_node.name}' used "
+                "(real KotOR bodies use 'headhook')."
+            )
+
+        # ── 2. Find head model's root node ───────────────────────────────────
+        # The head root is the top-level node of the head model's hierarchy.
+        # We attach it directly as a child of headhook — preserving the entire
+        # head skeleton (jaw, eyeball bones, etc.) intact beneath it.
+        head_root = getattr(head_copy, 'root_node', None)
+        if head_root is None:
+            # Fallback: first node with no parent
+            for node in head_copy.all_nodes():
+                if getattr(node, 'parent', None) is None:
+                    head_root = node
+                    break
+
+        if head_root is None:
+            return {
+                'ok': False, 'model': None,
+                'message': f"Head model '{head_model.name}' has no root node.",
+                'headhook_pos': hook_world,
+                'warnings': warnings,
+            }
+
+        # ── 3. Optional legacy scaling (non-authentic; off by default) ───────
+        scale_factor = 1.0
+        if scale_head:
+            try:
+                head_copy.compute_bounds()
+                combined.compute_bounds()
+                body_h = max(0.001,
+                    getattr(combined, 'bb_max', (0,0,1.8))[2]
+                    - getattr(combined, 'bb_min', (0,0,0.0))[2])
+                head_dz = max(0.001,
+                    getattr(head_copy, 'bb_max', (0,0,1.0))[2]
+                    - getattr(head_copy, 'bb_min', (0,0,0.0))[2])
+                scale_factor = max(0.5, min(2.0, (body_h / 7.0) / head_dz))
+            except Exception:
+                scale_factor = 1.0
+
+        # ── 4. Attach head root as child of headhook ─────────────────────────
+        # This is the CORRECT operation: the head's entire subtree (skull, jaw,
+        # eyes) becomes a child of the headhook bone.  No vertex manipulation.
+        if not hasattr(hook_node, 'children') or hook_node.children is None:
+            hook_node.children = []
+        head_root.parent = hook_node
+        hook_node.children.append(head_root)
+
+        # ── 5. Legacy scaling (vertices only, non-authentic) ─────────────────
+        if scale_head and scale_factor != 1.0:
+            def _scale_verts(node, s, visited=None):
+                if visited is None:
+                    visited = set()
+                if id(node) in visited:
+                    return
+                visited.add(id(node))
+                if getattr(node, 'is_mesh', False) or getattr(node, 'is_skin', False):
+                    verts = getattr(node, 'vertices', None)
+                    if verts:
+                        # Scale around the hook world position
+                        cx, cy, cz = hook_world
+                        node.vertices = [
+                            ((v[0]-cx)*s+cx, (v[1]-cy)*s+cy, (v[2]-cz)*s+cz)
+                            for v in verts
+                        ]
+                for child in getattr(node, 'children', []):
+                    _scale_verts(child, s, visited)
+            _scale_verts(head_root, scale_factor)
+
+        # ── 6. Optional legacy animation merge (non-authentic; off by default) 
+        if merge_animations:
+            try:
+                merge_supermodel_animations(combined, head_copy)
+            except Exception:
+                pass
+
+        combined.compute_bounds()
+        log.info(
+            "snap_head_onto_body: '%s' head → '%s' body  hook='%s'  scale=%.3f",
+            head_model.name, body_model.name, hook_node.name, scale_factor,
+        )
+        return {
+            'ok': True,
+            'model': combined,
+            'message': (
+                f"Head '{head_model.name}' → body '{body_model.name}' "
+                f"via '{hook_node.name}'"
+                + (f"  scale={scale_factor:.3f}" if scale_head else "")
+            ),
+            'headhook_pos': hook_world,
+            'warnings': warnings,
+        }
+
+    except Exception as exc:
+        log.error("snap_head_onto_body error: %s", exc, exc_info=True)
+        return {
+            'ok': False, 'model': None,
+            'message': f"Head-snap failed: {exc}",
+            'headhook_pos': None,
+            'warnings': [],
+        }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Convenience wrapper: assemble_creature()
+# ─────────────────────────────────────────────────────────────────────────────
+
+def assemble_creature(
+    body_model,
+    head_model,
+    game: str = 'K1',
+    mode: str = 'preview',
+) -> dict:
+    """
+    High-level character-builder entry point.
+
+    Parameters
+    ----------
+    body_model : KotorModel
+    head_model : KotorModel
+    game       : 'K1' or 'K2'
+    mode       : 'preview'         → single merged model for viewport
+                 'export_separate' → Option B1: two separate models (authentic)
+
+    Returns
+    -------
+    For mode='preview'         → dict from snap_head_onto_body
+    For mode='export_separate' → dict from CreatureAssembly.export_separate
+    Both dicts always contain 'ok', 'message', 'warnings'.
+    """
+    asm = CreatureAssembly.from_models(body_model, head_model, game=game)
+    if not asm.ok:
+        return {'ok': False, 'message': asm.message, 'warnings': asm.warnings}
+
+    if mode == 'export_separate':
+        return asm.export_separate()
+    else:
+        result = asm.get_viewport_preview_model()
+        if 'warnings' not in result:
+            result['warnings'] = asm.warnings
+        else:
+            result['warnings'] = asm.warnings + result['warnings']
+        return result
+
+
+def list_head_models(library, game: str = 'K1') -> list:
+    """
+    Return a list of head model resrefs available in the game library.
+
+    Filters to models whose resref matches KotOR head naming conventions:
+      K1: pfhXX (female heads), pmhXX (male heads), n_*head* (NPC heads)
+      K2: same prefixes + c_*head* (creature heads)
+
+    Returns a sorted list of resref strings.
+    """
+    try:
+        entries = library.list_models_by_class('character', game=game)
+        head_prefixes = ('pfh', 'pmh', 'n_', 'p_')
+        head_keywords = ('head', 'fhead', 'fchead')
+        result = []
+        for entry in entries:
+            r = entry.resref.lower()
+            is_head = (
+                any(r.startswith(pfx) for pfx in head_prefixes)
+                and any(kw in r for kw in ('head', 'fhd', 'mhd'))
+            ) or any(kw in r for kw in head_keywords)
+            if is_head:
+                result.append(entry.resref)
+        return sorted(set(result))
+    except Exception as exc:
+        log.debug("list_head_models: %s", exc)
+        return []
+
+
+def list_body_models(library, game: str = 'K1') -> list:
+    """
+    Return a list of body model resrefs available in the game library.
+
+    Filters to models whose resref matches KotOR body naming conventions:
+      K1/K2: pfbXX (female bodies), pmbXX (male bodies), n_*body* (NPC bodies)
+
+    Returns a sorted list of resref strings.
+    """
+    try:
+        entries = library.list_models_by_class('character', game=game)
+        body_prefixes = ('pfb', 'pmb', 'pmc', 'pfc')
+        body_keywords = ('body', 'bod', '_b_', '_body')
+        result = []
+        for entry in entries:
+            r = entry.resref.lower()
+            is_body = (
+                any(r.startswith(pfx) for pfx in body_prefixes)
+            ) or any(kw in r for kw in body_keywords)
+            if is_body:
+                result.append(entry.resref)
+        return sorted(set(result))
+    except Exception as exc:
+        log.debug("list_body_models: %s", exc)
+        return []

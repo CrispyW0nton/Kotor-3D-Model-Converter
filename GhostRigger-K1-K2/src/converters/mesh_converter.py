@@ -123,6 +123,10 @@ class OBJImporter:
         node.texture = mat.get('diff_map', g['mat'])[:32] if g['mat'] else ""
         node.diffuse = mat.get('diffuse', (0.8,0.8,0.8))
         node.ambient = mat.get('ambient', (0.2,0.2,0.2))
+        # Mark as explicitly imported (not parsed from MDL) so the viewport
+        # renderer does not misclassify it as a KotOR deformation-helper.
+        node.render    = True
+        node._imported = True
 
         idx_map: Dict[Tuple,int] = {}
         ov: List[Tuple[float,float,float]] = []
@@ -294,6 +298,9 @@ class FBXImporter:
                         wt[vi][sc[vi]] = BoneWeight(bi, w.weight); sc[vi]+=1
             node.skin_data = [VertexSkinData(influences=[b for b in row if b.weight>0]) for row in wt]
 
+        # Mark as imported so the viewport renderer skips deformation-helper filtering
+        node.render    = True
+        node._imported = True
         node.compute_bounds()
         return node
 
@@ -312,6 +319,9 @@ class FBXImporter:
                 n.normals = [tuple(x) for x in mesh.vertex_normals.tolist()]
             if hasattr(mesh,'visual') and hasattr(mesh.visual,'uv') and mesh.visual.uv is not None:
                 n.uvs = [(float(u),1.0-float(v)) for u,v in mesh.visual.uv.tolist()]
+            # Mark as imported so the viewport renderer skips deformation-helper filtering
+            n.render    = True
+            n._imported = True
             n.compute_bounds()
             root.children.append(n)
         model.compute_bounds()
@@ -475,17 +485,25 @@ class OBJExporter:
         else:
             return [_quat_rotate(wo, n) for n in normals]
 
-    def export(self, model: KotorModel, obj_path: str, tex_cache=None):
+    def export(self, model: KotorModel, obj_path: str, tex_cache=None,
+               export_rigging: bool = True):
         """
         Export model to OBJ + MTL.
 
         Parameters
         ----------
-        model     : KotorModel to export.
-        obj_path  : Output .obj file path.
-        tex_cache : Optional TextureCache object.  When provided, textures are
-                    looked up and saved as TGA files next to the OBJ so that the
-                    MTL map_Kd references resolve correctly in Blender/Maya.
+        model          : KotorModel to export.
+        obj_path       : Output .obj file path.
+        tex_cache      : Optional TextureCache object.  When provided, textures are
+                         looked up and saved as TGA files next to the OBJ so that the
+                         MTL map_Kd references resolve correctly in Blender/Maya.
+        export_rigging : When True (default) a 'rigging/' subdirectory is created
+                         next to the OBJ file and receives:
+                           rigging/<model>.skeleton.json  – full bone hierarchy
+                           rigging/<model>.<anim>.json    – one file per animation
+                           rigging/<model>.weights.json   – per-vertex skin weights
+                         This data is needed by tools (e.g. Maya scripts) to
+                         re-attach rigging after import.
         """
         p = Path(obj_path); mp = p.with_suffix('.mtl')
         obj_lines = [f"# GhostRigger-K1-K2 export – {model.name}", f"mtllib {mp.name}", ""]
@@ -566,25 +584,49 @@ class OBJExporter:
             # Snapshot current global offsets to avoid closure capture issues
             _vo, _vto, _vno = vo, vto, vno
 
-            for v1, v2, v3 in node.faces:
+            # KotOR ASCII MDL models use SEPARATE UV indices (tvert indices) stored
+            # in node.face_uvs, which differ from the vertex position indices.
+            # Binary MDL models have per-vertex UVs where UV index == vertex index.
+            # BUG FIX v20 (ebon_01 K2 Maya texture fix):
+            #   Previously, face UV indices were always taken from the vertex position
+            #   index (v1/v2/v3), which is WRONG for ASCII-format models.  This caused
+            #   completely scrambled UV mapping in Maya / Blender for any ASCII-sourced
+            #   model, manifesting as stripe-pattern distortions across the hull.
+            # Fix: when face_uvs is present, use the per-face tvert index tuple instead.
+            face_uvs_data = getattr(node, 'face_uvs', []) or []
+            _has_face_uvs = bool(face_uvs_data) and len(face_uvs_data) == len(node.faces)
+
+            for fi, (v1, v2, v3) in enumerate(node.faces):
                 if max(v1, v2, v3) >= nv:
                     continue   # skip degenerate faces with out-of-range indices
 
+                # Determine UV indices: use face_uvs tvert indices when present,
+                # otherwise fall back to vertex indices (binary MDL convention).
+                if _has_face_uvs:
+                    fu = face_uvs_data[fi]
+                    ui1 = min(fu[0], nuv-1) if nuv > 0 else 0
+                    ui2 = min(fu[1], nuv-1) if nuv > 0 else 0
+                    ui3 = min(fu[2], nuv-1) if nuv > 0 else 0
+                else:
+                    ui1 = min(v1, nuv-1) if nuv > 0 else 0
+                    ui2 = min(v2, nuv-1) if nuv > 0 else 0
+                    ui3 = min(v3, nuv-1) if nuv > 0 else 0
+
+                ni1 = min(v1, nno-1) if nno > 0 else 0
+                ni2 = min(v2, nno-1) if nno > 0 else 0
+                ni3 = min(v3, nno-1) if nno > 0 else 0
+
                 if huv and hn:
-                    ui1 = min(v1, nuv-1); ui2 = min(v2, nuv-1); ui3 = min(v3, nuv-1)
-                    ni1 = min(v1, nno-1); ni2 = min(v2, nno-1); ni3 = min(v3, nno-1)
                     obj_lines.append(
                         f"f {v1+1+_vo}/{ui1+1+_vto}/{ni1+1+_vno} "
                         f"{v2+1+_vo}/{ui2+1+_vto}/{ni2+1+_vno} "
                         f"{v3+1+_vo}/{ui3+1+_vto}/{ni3+1+_vno}")
                 elif huv:
-                    ui1 = min(v1, nuv-1); ui2 = min(v2, nuv-1); ui3 = min(v3, nuv-1)
                     obj_lines.append(
                         f"f {v1+1+_vo}/{ui1+1+_vto} "
                         f"{v2+1+_vo}/{ui2+1+_vto} "
                         f"{v3+1+_vo}/{ui3+1+_vto}")
                 elif hn:
-                    ni1 = min(v1, nno-1); ni2 = min(v2, nno-1); ni3 = min(v3, nno-1)
                     obj_lines.append(
                         f"f {v1+1+_vo}//{ni1+1+_vno} "
                         f"{v2+1+_vo}//{ni2+1+_vno} "
@@ -606,6 +648,12 @@ class OBJExporter:
         # Copy/save texture files alongside the OBJ when tex_cache is available
         if tex_cache is not None:
             self._export_textures_to_dir(model, out_dir, tex_cache)
+
+        # Export rigging + animations into a dedicated subfolder
+        if export_rigging:
+            rig_count = _export_rigging_data(model, out_dir)
+            if rig_count > 0:
+                log.info(f"Rigging data exported: {rig_count} file(s) → {out_dir / 'rigging'}")
 
     @staticmethod
     def _export_textures_to_dir(model: KotorModel, out_dir: Path, tex_cache) -> int:
@@ -667,6 +715,182 @@ _iter_visible_mesh_nodes = _renderable_mesh_nodes
 
 
 # ──────────────────────────────────────────────────────────────────────
+#  Rigging / Animation Sidecar Export
+# ──────────────────────────────────────────────────────────────────────
+
+def _export_rigging_data(model: KotorModel, out_dir: Path) -> int:
+    """
+    Export rigging and animation data as JSON sidecar files into
+    ``out_dir/rigging/``.
+
+    Files written
+    -------------
+    rigging/<model>.skeleton.json
+        Complete bone hierarchy: name, parent, position (bind pose),
+        orientation (quaternion), flags.
+
+    rigging/<model>.weights.json
+        Per-vertex skin weights for every skin mesh node.
+        Format: {mesh_name: {vertex_index: [[bone_name, weight], ...]}}
+
+    rigging/<model>.<anim_name>.anim.json  (one per animation)
+        Animation keyframe data: length, transition_time, events,
+        and per-node position + orientation curves.
+
+    Returns the count of files successfully written (0 if model has
+    no skeleton or animations).  Non-fatal: logs warnings on failure.
+
+    The JSON sidecar format is intentionally human-readable and easy to
+    consume by external scripts (e.g. Maya Python, Blender Python, Unity).
+    """
+    import json
+
+    has_skin     = any(n.is_skin and n.bone_map
+                       for n in model.all_nodes())
+    has_anims    = bool(model.animations)
+    # Write skeleton JSON only when the model has a meaningful rig.
+    # A pure-mesh prop (root node + one non-skin mesh) has no rig data
+    # worth exporting — the skeleton file would only contain the root and
+    # the mesh node with no useful bone hierarchy.
+    # Condition: at least one skin mesh OR at least one animation must exist.
+    has_skeleton = (model.root_node is not None and (has_skin or has_anims))
+
+    if not (has_skeleton or has_skin or has_anims):
+        return 0
+
+    rig_dir = out_dir / 'rigging'
+    try:
+        rig_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        log.warning(f"_export_rigging_data: cannot create {rig_dir}: {e}")
+        return 0
+
+    written = 0
+    model_stem = model.name or 'model'
+
+    # ── 1. Skeleton hierarchy ────────────────────────────────────────
+    if has_skeleton:
+        bones_list = []
+        for n in model.all_nodes():
+            bone_entry = {
+                'name':        n.name,
+                'parent':      n.parent.name if n.parent else None,
+                'position':    list(n.position),
+                'rotation':    list(n.rotation),  # (x,y,z,w) quaternion
+                'flags':       int(n.flags),
+                'is_skin':     bool(n.is_skin),
+                'is_mesh':     bool(n.is_mesh),
+            }
+            bones_list.append(bone_entry)
+
+        skel_data = {
+            'model':       model_stem,
+            'game':        str(getattr(model.game_version, 'name',
+                                       model.game_version)),  # 'K1' or 'K2'
+            'supermodel':  model.supermodel,
+            'bone_count':  len(bones_list),
+            'bones':       bones_list,
+        }
+        skel_path = rig_dir / f"{model_stem}.skeleton.json"
+        try:
+            skel_path.write_text(
+                json.dumps(skel_data, indent=2, ensure_ascii=False),
+                encoding='utf-8')
+            written += 1
+            log.debug(f"Skeleton JSON: {skel_path.name} ({len(bones_list)} bones)")
+        except OSError as e:
+            log.warning(f"_export_rigging_data: skeleton write failed: {e}")
+
+    # ── 2. Skin weights ──────────────────────────────────────────────
+    if has_skin:
+        weights_data: dict = {}
+        for n in model.all_nodes():
+            if not (n.is_skin and n.bone_map and n.skin_data):
+                continue
+            mesh_weights: dict = {}
+            for vi, sd in enumerate(n.skin_data):
+                if not sd.influences:
+                    continue
+                inf_list = []
+                for bw in sd.influences:
+                    if bw.weight <= 0.0:
+                        continue
+                    # bone_index → bone name via bone_map
+                    bi = bw.bone_index
+                    bname = (n.bone_map[bi]
+                             if 0 <= bi < len(n.bone_map) else f'bone_{bi}')
+                    inf_list.append([bname, round(bw.weight, 6)])
+                if inf_list:
+                    mesh_weights[str(vi)] = inf_list
+            if mesh_weights:
+                weights_data[n.name] = mesh_weights
+
+        if weights_data:
+            wt_path = rig_dir / f"{model_stem}.weights.json"
+            try:
+                wt_path.write_text(
+                    json.dumps(weights_data, indent=2, ensure_ascii=False),
+                    encoding='utf-8')
+                written += 1
+                log.debug(f"Weights JSON: {wt_path.name} "
+                          f"({len(weights_data)} mesh(es))")
+            except OSError as e:
+                log.warning(f"_export_rigging_data: weights write failed: {e}")
+
+    # ── 3. Animations ────────────────────────────────────────────────
+    for anim in model.animations:
+        anim_nodes_data = []
+        for an in anim.nodes:
+            node_entry: dict = {
+                'name':        an.name,
+                'controllers': [],
+            }
+            for ctrl in an.controllers:
+                ct = ctrl.get('type')
+                times  = ctrl.get('times',  [])
+                values = ctrl.get('values', [])
+                node_entry['controllers'].append({
+                    'type':   ct,
+                    'times':  list(times),
+                    'values': [list(v) if hasattr(v, '__iter__') else v
+                               for v in values],
+                })
+            anim_nodes_data.append(node_entry)
+
+        events_data = [{'time': ev.time, 'name': ev.name}
+                       for ev in anim.events]
+
+        anim_data = {
+            'model':           model_stem,
+            'name':            anim.name,
+            'length':          anim.length,
+            'transition_time': anim.transition_time,
+            'anim_root':       anim.anim_root,
+            'events':          events_data,
+            'node_count':      len(anim_nodes_data),
+            'nodes':           anim_nodes_data,
+        }
+
+        # Sanitise anim name for use as filename
+        safe_name = ''.join(c if c.isalnum() or c in '_-' else '_'
+                            for c in anim.name)[:64]
+        anim_path = rig_dir / f"{model_stem}.{safe_name}.anim.json"
+        try:
+            anim_path.write_text(
+                json.dumps(anim_data, indent=2, ensure_ascii=False),
+                encoding='utf-8')
+            written += 1
+            log.debug(f"Anim JSON: {anim_path.name}  "
+                      f"length={anim.length:.3f}s  "
+                      f"{len(anim_nodes_data)} nodes")
+        except OSError as e:
+            log.warning(f"_export_rigging_data: anim write failed "
+                        f"({anim.name}): {e}")
+
+    return written
+
+
+# ──────────────────────────────────────────────────────────────────────
 #  FBX Exporter (via pyassimp or fbx SDK)
 # ──────────────────────────────────────────────────────────────────────
 
@@ -683,16 +907,22 @@ class FBXExporter:
          skin cluster deformers), and the bone hierarchy as null/joint nodes.
     """
 
-    def export(self, model: KotorModel, fbx_path: str, tex_cache=None) -> bool:
+    def export(self, model: KotorModel, fbx_path: str, tex_cache=None,
+               export_rigging: bool = True) -> bool:
         """
         Export model to FBX.
 
         Parameters
         ----------
-        model     : KotorModel to export.
-        fbx_path  : Output .fbx file path.
-        tex_cache : Optional TextureCache.  When provided, textures are saved as
-                    TGA files in the same directory as the FBX.
+        model          : KotorModel to export.
+        fbx_path       : Output .fbx file path.
+        tex_cache      : Optional TextureCache.  When provided, textures are saved as
+                         TGA files in the same directory as the FBX.
+        export_rigging : When True (default) a 'rigging/' subdirectory is created
+                         next to the FBX file.  The FBX already embeds the skeleton
+                         hierarchy + skin deformers + animations, so the rigging/
+                         folder provides the same data as portable JSON files for
+                         scripts that cannot read FBX directly.
         """
         # Try fbx module (Autodesk FBX Python SDK)
         try:
@@ -718,12 +948,21 @@ class FBXExporter:
                 # Last resort: OBJ
                 obj_path = str(Path(fbx_path).with_suffix('.obj'))
                 log.warning(f"Falling back to OBJ export: {obj_path}")
-                OBJExporter().export(model, obj_path, tex_cache=tex_cache)
+                OBJExporter().export(model, obj_path, tex_cache=tex_cache,
+                                     export_rigging=export_rigging)
                 return False
 
         # Copy textures alongside the FBX
+        out_dir = Path(fbx_path).parent
         if ok and tex_cache is not None:
-            OBJExporter._export_textures_to_dir(model, Path(fbx_path).parent, tex_cache)
+            OBJExporter._export_textures_to_dir(model, out_dir, tex_cache)
+
+        # Export rigging + animations into a dedicated subfolder
+        if ok and export_rigging:
+            rig_count = _export_rigging_data(model, out_dir)
+            if rig_count > 0:
+                log.info(f"Rigging data exported: {rig_count} file(s) → "
+                         f"{out_dir / 'rigging'}")
         return bool(ok)
 
     # ── FBX SDK (Autodesk Python SDK) ─────────────────────────────────
@@ -1123,7 +1362,7 @@ class FBXExporter:
                             wt_list.append(inf.weight)
                 if not vi_list: continue
 
-                w(f'\tDeformer: {cid}, "{bname}", "Cluster" {{')
+                w(f'\tSubDeformer: {cid}, "{bname}", "Cluster" {{')
                 w('\t\tVersion: 100')
                 w(f'\t\tIndexes: *{len(vi_list)} {{')
                 w('\t\t\ta: ' + ','.join(str(i) for i in vi_list))
@@ -1731,16 +1970,151 @@ class GLTFImporter:
                         mesh_node.faces = [(int(idx_data[i]), int(idx_data[i+1]), int(idx_data[i+2]))
                                            for i in range(0, len(idx_data), 3)]
 
-                    # Material name
+                    # ── Skin weights (JOINTS_0 / WEIGHTS_0) ──────────────────
+                    joints_data  = _get_accessor_data(getattr(attrs, 'JOINTS_0',  None))
+                    weights_data = _get_accessor_data(getattr(attrs, 'WEIGHTS_0', None))
+                    if joints_data and weights_data and len(joints_data) == len(weights_data):
+                        from core.model_data import VertexSkinData, BoneWeight
+                        mesh_node.flags = int(NodeFlags.HEADER | NodeFlags.SKIN)
+                        skin_data_list = []
+                        # Build bone_map from skin joints (resolved later if skin index present)
+                        bone_map: List[str] = []
+                        skin_idx = gnode.skin
+                        if skin_idx is not None and gltf.skins:
+                            skin = gltf.skins[skin_idx]
+                            for ji in (skin.joints or []):
+                                jnode = gltf.nodes[ji]
+                                bone_map.append(jnode.name or f"bone_{ji}")
+                        mesh_node.bone_map = bone_map
+
+                        for jrow, wrow in zip(joints_data, weights_data):
+                            sd = VertexSkinData()
+                            sd.influences = []
+                            for k in range(4):
+                                j_idx = int(jrow[k]) if k < len(jrow) else 0
+                                w_val = float(wrow[k]) if k < len(wrow) else 0.0
+                                if w_val > 1e-6:
+                                    sd.influences.append(BoneWeight(
+                                        bone_index=j_idx, weight=w_val))
+                            # Normalize weights to sum to 1.0
+                            total_w = sum(bw.weight for bw in sd.influences)
+                            if total_w > 1e-6:
+                                for bw in sd.influences:
+                                    bw.weight /= total_w
+                            skin_data_list.append(sd)
+                        mesh_node.skin_data = skin_data_list
+
+                    # ── Material name + PBR textures ──────────────────────────
                     if prim.material is not None and gltf.materials:
                         mat = gltf.materials[prim.material]
                         if mat.name:
                             mesh_node.texture = mat.name[:32]
+                        # Try to get base colour texture name
+                        try:
+                            pbr = mat.pbrMetallicRoughness
+                            if pbr and pbr.baseColorTexture:
+                                ti = pbr.baseColorTexture.index
+                                tex = gltf.textures[ti]
+                                src = gltf.images[tex.source] if tex.source is not None else None
+                                if src and src.name:
+                                    mesh_node.texture = src.name[:32]
+                                elif src and src.uri:
+                                    # Strip path + extension to get resref
+                                    mesh_node.texture = Path(src.uri).stem[:32]
+                        except (AttributeError, TypeError, IndexError):
+                            pass
 
                     mesh_node.render = True
                     mesh_node.has_shadow = True
                     mesh_node.compute_bounds()
                     mnode.children.append(mesh_node)
+
+        # ── Import skeleton / dummy nodes (no mesh) ───────────────────────────
+        for i, gnode in enumerate(gltf.nodes or []):
+            if gnode.mesh is None and gnode.skin is None:
+                # Treat as skeleton/dummy bone
+                nm = (gnode.name or f"bone_{i}")[:32]
+                # Check if already added as mesh-parent
+                existing = next((c for c in root.children if c.name == nm), None)
+                if existing is None:
+                    tx, ty, tz = 0.0, 0.0, 0.0
+                    if gnode.translation:
+                        tx, ty, tz = (float(gnode.translation[0]),
+                                      float(gnode.translation[1]),
+                                      float(gnode.translation[2]))
+                    qx, qy, qz, qw = 0.0, 0.0, 0.0, 1.0
+                    if gnode.rotation:
+                        qx, qy, qz, qw = (float(gnode.rotation[0]),
+                                           float(gnode.rotation[1]),
+                                           float(gnode.rotation[2]),
+                                           float(gnode.rotation[3]))
+                    bone_node = ModelNode(
+                        name=nm, flags=int(NodeFlags.HEADER),
+                        position=(tx, ty, tz), rotation=(qx, qy, qz, qw),
+                        parent=root)
+                    root.children.append(bone_node)
+
+        # ── Import animations ─────────────────────────────────────────────────
+        for ganim in (gltf.animations or []):
+            try:
+                from core.model_data import Animation
+                anim_name = (ganim.name or 'anim')[:32]
+                anim_length = 0.0
+                anim_nodes_map: Dict[str, ModelNode] = {}
+
+                # Group channels by target node
+                from collections import defaultdict
+                node_channels: dict = defaultdict(list)
+                for ch in (ganim.channels or []):
+                    node_channels[ch.target.node].append(ch)
+
+                for target_node_idx, channels in node_channels.items():
+                    if target_node_idx is None:
+                        continue
+                    tnode = gltf.nodes[target_node_idx]
+                    tname = (tnode.name or f"node_{target_node_idx}")[:32]
+                    anim_mn = ModelNode(name=tname, flags=int(NodeFlags.HEADER))
+
+                    for ch in channels:
+                        samp = ganim.samplers[ch.sampler]
+                        times_raw = _get_accessor_data(samp.input)
+                        values_raw = _get_accessor_data(samp.output)
+                        if not times_raw or not values_raw:
+                            continue
+                        times = [float(t) for t in times_raw]
+                        anim_length = max(anim_length, max(times))
+                        path = ch.target.path  # 'translation' / 'rotation' / 'scale'
+                        if path == 'translation':
+                            ctrl_type = 8   # CTRL_POSITION
+                            # GLTF position is absolute; KotOR uses delta-from-bind
+                            # Store as absolute for now; delta conversion done at play time
+                            values = [tuple(float(v) for v in row[:3]) for row in values_raw]
+                        elif path == 'rotation':
+                            ctrl_type = 20  # CTRL_ORIENTATION
+                            values = [tuple(float(v) for v in row[:4]) for row in values_raw]
+                        elif path == 'scale':
+                            ctrl_type = 36  # CTRL_SCALE
+                            values = [(float(row[0]),) for row in values_raw]  # uniform scale
+                        else:
+                            continue
+                        anim_mn.controllers.append({
+                            'type': ctrl_type,
+                            'times': times,
+                            'values': values,
+                        })
+
+                    if anim_mn.controllers:
+                        anim_nodes_map[tname] = anim_mn
+
+                if anim_nodes_map:
+                    anim = Animation()
+                    anim.name = anim_name
+                    anim.length = anim_length if anim_length > 0 else 1.0
+                    anim.nodes  = list(anim_nodes_map.values())
+                    model.animations.append(anim)
+            except Exception as e:
+                anim_name_str = getattr(ganim, "name", "?")
+                log.warning(f"GLTFImporter: failed to import animation '{anim_name_str}': {e}")
 
         model.compute_bounds()
         return model
@@ -1785,29 +2159,43 @@ class GLTFExporter:
     """
 
     def export(self, model: KotorModel, path: str,
-               binary: bool = True, tex_cache=None) -> bool:
+               binary: bool = True, tex_cache=None,
+               export_rigging: bool = True) -> bool:
         """
         Export model to GLB (binary=True) or GLTF JSON (binary=False).
 
         Parameters
         ----------
-        model     : KotorModel to export.
-        path      : Output file path (.glb or .gltf).
-        binary    : True → GLB container; False → GLTF JSON + .bin.
-        tex_cache : Optional TextureCache.  When provided, textures are embedded
-                    as base64 data URIs in the GLTF material definitions, so the
-                    exported file is self-contained and opens correctly in Blender.
+        model          : KotorModel to export.
+        path           : Output file path (.glb or .gltf).
+        binary         : True → GLB container; False → GLTF JSON + .bin.
+        tex_cache      : Optional TextureCache.  When provided, textures are embedded
+                         as base64 data URIs in the GLTF material definitions, so the
+                         exported file is self-contained and opens correctly in Blender.
+        export_rigging : When True (default) a 'rigging/' subdirectory is created
+                         next to the GLB/GLTF file with JSON rigging + animation data
+                         in addition to the embedded skeleton in the GLTF.
         Returns True on success.
         """
+        out_dir = Path(path).parent
+        ok = False
         try:
-            return self._export_pygltflib(model, path, binary, tex_cache=tex_cache)
+            ok = self._export_pygltflib(model, path, binary, tex_cache=tex_cache)
         except ImportError:
             pass
-        try:
-            return self._export_manual(model, path, binary, tex_cache=tex_cache)
-        except Exception as e:
-            log.error(f"GLTF export failed: {e}")
-            return False
+        if not ok:
+            try:
+                ok = self._export_manual(model, path, binary, tex_cache=tex_cache)
+            except Exception as e:
+                log.error(f"GLTF export failed: {e}")
+                return False
+
+        if ok and export_rigging:
+            rig_count = _export_rigging_data(model, out_dir)
+            if rig_count > 0:
+                log.info(f"Rigging data exported: {rig_count} file(s) → "
+                         f"{out_dir / 'rigging'}")
+        return ok
 
     # ── pygltflib path ────────────────────────────────────────────────
 
@@ -2093,6 +2481,83 @@ class GLTFExporter:
                 gltf.nodes.append(gnode)
                 scene.nodes.append(node_idx)
 
+        # ── Export animations ─────────────────────────────────────────────────
+        for anim in (model.animations or []):
+            try:
+                ganim = pygltflib.Animation(name=anim.name)
+                ganim.channels = []
+                ganim.samplers = []
+                sampler_idx = 0
+
+                for anim_node in (anim.nodes or []):
+                    tgt_node_idx = gltf_node_idx.get(anim_node.name) or \
+                                   gltf_node_idx.get(anim_node.name.lower())
+                    if tgt_node_idx is None:
+                        continue
+
+                    for ctrl in (anim_node.controllers or []):
+                        ctype  = ctrl.get('type')
+                        times  = ctrl.get('times', [])
+                        values = ctrl.get('values', [])
+                        if not times or not values:
+                            continue
+
+                        # Map controller type → GLTF path + type string
+                        if ctype == 8:    # CTRL_POSITION → translation
+                            path_str = 'translation'
+                            val_type = 'VEC3'
+                            val_fmt  = '<fff'
+                            val_size = 12
+                            def _pack_v(v):
+                                return st.pack('<fff', float(v[0]), float(v[1]), float(v[2]))
+                        elif ctype == 20: # CTRL_ORIENTATION → rotation
+                            path_str = 'rotation'
+                            val_type = 'VEC4'
+                            val_fmt  = '<ffff'
+                            val_size = 16
+                            def _pack_v(v):
+                                return st.pack('<ffff', float(v[0]), float(v[1]),
+                                               float(v[2]), float(v[3]))
+                        elif ctype == 36: # CTRL_SCALE → scale
+                            path_str = 'scale'
+                            val_type = 'VEC3'
+                            val_fmt  = '<fff'
+                            val_size = 12
+                            def _pack_v(v):
+                                sv = float(v[0]) if hasattr(v, '__len__') else float(v)
+                                return st.pack('<fff', sv, sv, sv)
+                        else:
+                            continue
+
+                        # Time accessor
+                        t_buf = bytearray()
+                        for t in times:
+                            t_buf += st.pack('<f', float(t))
+                        t_acc = _add_accessor(bytes(t_buf), len(times), 'SCALAR', 5126,
+                                              [min(times)], [max(times)])
+
+                        # Value accessor
+                        v_buf = bytearray()
+                        for v in values:
+                            v_buf += _pack_v(v)
+                        v_acc = _add_accessor(bytes(v_buf), len(values), val_type, 5126)
+
+                        samp = pygltflib.AnimationSampler(input=t_acc, output=v_acc,
+                                                          interpolation='LINEAR')
+                        ganim.samplers.append(samp)
+                        ch = pygltflib.AnimationChannel(
+                            sampler=sampler_idx,
+                            target=pygltflib.AnimationChannelTarget(
+                                node=tgt_node_idx, path=path_str)
+                        )
+                        ganim.channels.append(ch)
+                        sampler_idx += 1
+
+                if ganim.channels:
+                    gltf.animations.append(ganim)
+            except Exception as e:
+                log.warning(f"GLTF export: failed to export animation '{anim.name}': {e}")
+
         # Finalize buffer
         gltf.buffers.append(pygltflib.Buffer(byteLength=len(bin_data)))
         gltf.set_binary_blob(bytes(bin_data))
@@ -2243,6 +2708,68 @@ class GLTFExporter:
                 _tex_name_to_idx[tex_n] = tex_idx
                 mat["pbrMetallicRoughness"]["baseColorTexture"] = {"index": tex_idx}
 
+        # ── Build node index for animation channel targeting ──────────────────
+        node_name_to_idx: Dict[str, int] = {
+            n.get("name", ""): i for i, n in enumerate(nodes_list)
+        }
+
+        # ── Export animations (manual path) ───────────────────────────────────
+        gltf_animations: List[dict] = []
+        for anim in (model.animations or []):
+            try:
+                anim_samplers: List[dict] = []
+                anim_channels: List[dict] = []
+                samp_i = 0
+                for anim_node in (anim.nodes or []):
+                    tgt_idx = node_name_to_idx.get(anim_node.name)
+                    if tgt_idx is None:
+                        tgt_idx = node_name_to_idx.get(anim_node.name.lower())
+                    if tgt_idx is None:
+                        continue
+                    for ctrl in (anim_node.controllers or []):
+                        ctype  = ctrl.get('type')
+                        times  = ctrl.get('times', [])
+                        values = ctrl.get('values', [])
+                        if not times or not values:
+                            continue
+                        if ctype == 8:
+                            path_str, val_type = 'translation', 'VEC3'
+                            def _pv(v): return st.pack('<fff', float(v[0]), float(v[1]), float(v[2]))
+                        elif ctype == 20:
+                            path_str, val_type = 'rotation', 'VEC4'
+                            def _pv(v): return st.pack('<ffff', float(v[0]), float(v[1]),
+                                                       float(v[2]), float(v[3]))
+                        elif ctype == 36:
+                            path_str, val_type = 'scale', 'VEC3'
+                            def _pv(v):
+                                sv = float(v[0]) if hasattr(v, '__len__') else float(v)
+                                return st.pack('<fff', sv, sv, sv)
+                        else:
+                            continue
+                        t_b = bytearray()
+                        for t in times: t_b += st.pack('<f', float(t))
+                        v_b = bytearray()
+                        for v in values: v_b += _pv(v)
+                        t_acc = _add_acc(bytes(t_b), len(times), 'SCALAR', 5126,
+                                         [min(times)], [max(times)])
+                        v_acc = _add_acc(bytes(v_b), len(values), val_type, 5126)
+                        anim_samplers.append({
+                            "input": t_acc, "output": v_acc, "interpolation": "LINEAR"})
+                        anim_channels.append({
+                            "sampler": samp_i,
+                            "target": {"node": tgt_idx, "path": path_str}})
+                        samp_i += 1
+                if anim_channels:
+                    gltf_animations.append({
+                        "name": anim.name,
+                        "samplers": anim_samplers,
+                        "channels": anim_channels,
+                    })
+            except Exception as e:
+                log.warning(f"GLTF manual export: anim '{getattr(anim,'name','?')}': {e}")
+
+        buf_b64 = base64.b64encode(bytes(buffers_bytes)).decode('ascii')
+
         gltf_json = {
             "asset": {"version": "2.0", "generator": "GhostRigger-K1-K2"},
             "scene": 0,
@@ -2260,6 +2787,8 @@ class GLTFExporter:
             gltf_json["images"]   = gltf_images
             gltf_json["samplers"] = gltf_samplers
             gltf_json["textures"] = gltf_textures
+        if gltf_animations:
+            gltf_json["animations"] = gltf_animations
 
         out_path = path
         if binary or path.endswith('.glb'):
@@ -2290,3 +2819,173 @@ class GLTFExporter:
 
         log.info(f"GLTF manual export → {Path(out_path).name}")
         return True
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  glTF Round-Trip Verification Helpers
+# ──────────────────────────────────────────────────────────────────────
+
+class GltfRoundTripResult:
+    """Result object returned by :func:`gltf_round_trip_verify`.
+
+    Attributes:
+        ok (bool): True if the round-trip passed all checks.
+        mesh_count_match (bool): Export and import mesh counts agree.
+        vertex_count_delta (dict): {mesh_name: (export_count, import_count)}.
+        face_count_delta (dict):   {mesh_name: (export_count, import_count)}.
+        node_names_missing (list): Bone/node names present in original but lost.
+        node_names_extra (list):   Extra nodes introduced by the round-trip.
+        animation_names_ok (bool): All animation names survived.
+        animation_names_missing (list): Animation names lost in round-trip.
+        uv_max_delta (float): Maximum UV coordinate difference (0.0 = perfect).
+        errors (list[str]): List of error/warning messages.
+    """
+
+    def __init__(self):
+        self.ok = False
+        self.mesh_count_match = False
+        self.vertex_count_delta: Dict[str, tuple] = {}
+        self.face_count_delta:   Dict[str, tuple] = {}
+        self.node_names_missing: List[str] = []
+        self.node_names_extra:   List[str] = []
+        self.animation_names_ok  = False
+        self.animation_names_missing: List[str] = []
+        self.uv_max_delta = 0.0
+        self.errors: List[str] = []
+
+    def summary(self) -> str:
+        lines = [f"Round-trip OK={self.ok}"]
+        lines.append(f"  mesh_count_match={self.mesh_count_match}")
+        for name, (exp, imp) in self.vertex_count_delta.items():
+            lines.append(f"  vertex {name}: export={exp} import={imp} delta={imp-exp:+d}")
+        for name, (exp, imp) in self.face_count_delta.items():
+            lines.append(f"  faces  {name}: export={exp} import={imp} delta={imp-exp:+d}")
+        if self.node_names_missing:
+            lines.append(f"  nodes missing: {self.node_names_missing}")
+        if self.node_names_extra:
+            lines.append(f"  nodes extra:   {self.node_names_extra}")
+        lines.append(f"  anim_names_ok={self.animation_names_ok}")
+        if self.animation_names_missing:
+            lines.append(f"  anims missing: {self.animation_names_missing}")
+        lines.append(f"  uv_max_delta={self.uv_max_delta:.6f}")
+        if self.errors:
+            lines.append(f"  errors: {self.errors}")
+        return "\n".join(lines)
+
+
+def gltf_round_trip_verify(
+    model: 'KotorModel',
+    *,
+    binary: bool = True,
+    tmp_dir: Optional[str] = None,
+    uv_tolerance: float = 1e-4,
+) -> 'GltfRoundTripResult':
+    """Export *model* to a temporary glTF file and immediately re-import it.
+
+    Compares the original and re-imported models for:
+      - Mesh count agreement
+      - Per-mesh vertex and face count agreement (± rounding from triangulation)
+      - Node/bone name preservation
+      - Animation name preservation
+      - UV coordinate round-trip accuracy
+
+    Args:
+        model:         The source :class:`KotorModel` to test.
+        binary:        If True, write GLB; if False, write GLTF+BIN.
+        tmp_dir:       Directory for temp files (``None`` → :mod:`tempfile` default).
+        uv_tolerance:  Maximum acceptable UV delta before the UV check is flagged.
+
+    Returns:
+        :class:`GltfRoundTripResult` with detailed pass/fail information.
+    """
+    import tempfile, os as _os
+
+    result = GltfRoundTripResult()
+    ext    = '.glb' if binary else '.gltf'
+    exporter = GLTFExporter()
+    importer = GLTFImporter()
+
+    with tempfile.TemporaryDirectory(dir=tmp_dir) as td:
+        out_path = _os.path.join(td, f"rtrip_verify{ext}")
+
+        # ── Export ────────────────────────────────────────────────────────
+        try:
+            ok = exporter.export(model, out_path, binary=binary)
+            if not ok:
+                result.errors.append("GLTFExporter.export() returned False")
+                return result
+        except Exception as exc:
+            result.errors.append(f"Export failed: {exc}")
+            return result
+
+        # ── Import ────────────────────────────────────────────────────────
+        try:
+            rt_model = importer.import_file(out_path)
+            if rt_model is None:
+                result.errors.append("GLTFImporter.import_file() returned None")
+                return result
+        except Exception as exc:
+            result.errors.append(f"Import failed: {exc}")
+            return result
+
+    # ── Compare mesh nodes ────────────────────────────────────────────────
+    orig_mesh_nodes = [n for n in model.all_nodes() if n.vertices]
+    rt_mesh_nodes   = [n for n in rt_model.all_nodes() if n.vertices]
+    result.mesh_count_match = len(orig_mesh_nodes) == len(rt_mesh_nodes)
+    if not result.mesh_count_match:
+        result.errors.append(
+            f"Mesh count mismatch: export={len(orig_mesh_nodes)} import={len(rt_mesh_nodes)}")
+
+    # Per-mesh vertex / face comparison (by name, best-effort)
+    rt_by_name: Dict[str, 'ModelNode'] = {n.name.lower(): n for n in rt_mesh_nodes}
+    for on in orig_mesh_nodes:
+        rt_n = rt_by_name.get(on.name.lower())
+        if rt_n is None:
+            result.errors.append(f"Mesh '{on.name}' lost in import")
+            result.vertex_count_delta[on.name] = (len(on.vertices), 0)
+            result.face_count_delta[on.name]   = (len(on.faces), 0)
+            continue
+        result.vertex_count_delta[on.name] = (len(on.vertices), len(rt_n.vertices))
+        result.face_count_delta[on.name]   = (len(on.faces), len(rt_n.faces))
+
+        # UV delta check (compare first min(N,100) UVs)
+        if on.uvs and rt_n.uvs:
+            n_check = min(len(on.uvs), len(rt_n.uvs), 100)
+            for i in range(n_check):
+                ou, ov = on.uvs[i]
+                ru, rv = rt_n.uvs[i]
+                # GLTF V-flip: export flips v = 1-v, import should flip back
+                delta = max(abs(ou - ru), abs(ov - rv))
+                if delta > result.uv_max_delta:
+                    result.uv_max_delta = delta
+
+    if result.uv_max_delta > uv_tolerance:
+        result.errors.append(
+            f"UV round-trip delta {result.uv_max_delta:.6f} exceeds tolerance {uv_tolerance}")
+
+    # ── Compare node names ────────────────────────────────────────────────
+    orig_names = {n.name.lower() for n in model.all_nodes() if n.name}
+    rt_names   = {n.name.lower() for n in rt_model.all_nodes() if n.name}
+    result.node_names_missing = sorted(orig_names - rt_names)
+    result.node_names_extra   = sorted(rt_names   - orig_names)
+    # Non-mesh helper nodes (e.g. root 'Scene') commonly appear in imports
+    if result.node_names_missing:
+        result.errors.append(f"Nodes lost: {result.node_names_missing[:10]}")
+
+    # ── Compare animation names ───────────────────────────────────────────
+    orig_anims = {a.name.lower() for a in model.animations}
+    rt_anims   = {a.name.lower() for a in rt_model.animations}
+    result.animation_names_missing = sorted(orig_anims - rt_anims)
+    result.animation_names_ok = (not result.animation_names_missing)
+    if result.animation_names_missing:
+        result.errors.append(f"Animations lost: {result.animation_names_missing[:10]}")
+
+    # ── Overall pass/fail ─────────────────────────────────────────────────
+    result.ok = (
+        result.mesh_count_match
+        and result.uv_max_delta <= uv_tolerance
+        and not result.node_names_missing
+        and result.animation_names_ok
+        and not result.errors
+    )
+    return result

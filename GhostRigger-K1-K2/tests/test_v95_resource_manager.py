@@ -184,7 +184,14 @@ def _make_chitin_key(bif_names: list, key_entries: list) -> bytes:
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-K1_DIR = REPO_ROOT / 'tests' / 'k1_extracted'
+# Prefer tests/k1_extracted; fall back to game_data/k1_extracted if chitin.key
+# is present there (the real K1 install lives under game_data/ in this repo).
+_K1_CANDIDATES = [
+    REPO_ROOT / 'tests' / 'k1_extracted',
+    REPO_ROOT / 'game_data' / 'k1_extracted',
+]
+K1_DIR = next((p for p in _K1_CANDIDATES if (p / 'chitin.key').exists()),
+               REPO_ROOT / 'tests' / 'k1_extracted')
 HAS_K1 = (K1_DIR / 'chitin.key').exists()
 
 
