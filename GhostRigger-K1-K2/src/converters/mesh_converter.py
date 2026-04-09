@@ -1362,7 +1362,7 @@ class FBXExporter:
                             wt_list.append(inf.weight)
                 if not vi_list: continue
 
-                w(f'\tDeformer: {cid}, "{bname}", "Cluster" {{')
+                w(f'\tSubDeformer: {cid}, "{bname}", "Cluster" {{')
                 w('\t\tVersion: 100')
                 w(f'\t\tIndexes: *{len(vi_list)} {{')
                 w('\t\t\ta: ' + ','.join(str(i) for i in vi_list))
