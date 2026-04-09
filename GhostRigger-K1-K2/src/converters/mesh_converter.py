@@ -1085,14 +1085,21 @@ class FBXExporter:
     def _export_fbx_ascii(self, model: KotorModel, fbx_path: str) -> bool:
         """
         Write FBX ASCII 7.4 file.  No external dependencies required.
-        Supported by Blender 2.79+, Maya 2016+, 3ds Max 2016+.
+        Supported by Blender 2.79+, Maya 2016+, 3ds Max 2016+, Unreal Engine 5.
 
         Exports:
-          - Geometry (vertices, normals, UVs, polygon indices)
+          - Geometry (vertices, normals, UVs per polygon vertex, polygon indices)
           - Material (diffuse/specular colour + texture reference)
-          - Skeleton (null-joint node hierarchy)
-          - Skin deformers with weights (if skin nodes exist)
-          - Bind pose
+          - Skeleton: ALL dummy/bone nodes exported as LimbNode (flags=0 or flags=HEADER)
+          - Skin deformers with SubDeformer clusters per bone
+          - Bind pose with correct column-major world matrices
+          - Animations: position deltas * animscale + bind_pos, quaternion→Euler XYZ
+
+        KotorBlender-verified:
+          - Position keyframes are DELTAS from rest position, scaled by model.anim_scale
+          - Orientation keyframes are absolute quaternions [x,y,z,w]
+          - Bone nodes have flags=0 (type_label='dummy'), root has flags=HEADER=0x01
+          - Only nodes with type_label=='dummy' are skeleton joints (not renderable meshes)
         """
         from datetime import datetime
 
@@ -1187,33 +1194,47 @@ class FBXExporter:
             w('\t\t\ta: ' + ','.join(str(i) for i in poly_idx))
             w('\t\t}')
 
-            # Normals layer
+            # Normals layer (ByPolygonVertex for per-face-corner normals)
             if n.normals:
-                nrm_flat = [c for nrm in n.normals for c in nrm]
+                # Expand normals to per-polygon-vertex order
+                nrm_poly = []
+                for face in n.faces:
+                    for vi in face:
+                        if vi < len(n.normals):
+                            nrm_poly.extend(n.normals[vi])
+                        else:
+                            nrm_poly.extend([0.0, 0.0, 1.0])
                 w('\t\tLayerElementNormal: 0 {')
                 w('\t\t\tVersion: 101')
                 w('\t\t\tName: ""')
-                w('\t\t\tMappingInformationType: "ByControlPoint"')
+                w('\t\t\tMappingInformationType: "ByPolygonVertex"')
                 w('\t\t\tReferenceInformationType: "Direct"')
-                w(f'\t\t\tNormals: *{len(nrm_flat)} {{')
-                w('\t\t\t\ta: ' + ','.join(f'{x:.6f}' for x in nrm_flat))
+                w(f'\t\t\tNormals: *{len(nrm_poly)} {{')
+                w('\t\t\t\ta: ' + ','.join(f'{x:.6f}' for x in nrm_poly))
                 w('\t\t\t}')
                 w('\t\t}')
 
             # UV layer
+            # KotORBlender insight: use ByPolygonVertex + IndexToDirect so that
+            # UV seams (shared vertices with different UVs) are preserved correctly.
+            # UE5 FBX importer requires this for proper texture projection.
             if n.uvs:
                 uv_flat = [c for uv in n.uvs for c in uv]
-                # Build UV index array (one per polygon vertex)
+                # UV index: one UV index per polygon vertex (face corner)
                 uv_idx = []
                 for face in n.faces:
-                    uv_idx.extend(face)
+                    for vi in face:
+                        uv_idx.append(vi)
                 w('\t\tLayerElementUV: 0 {')
                 w('\t\t\tVersion: 101')
                 w('\t\t\tName: "UVMap"')
-                w('\t\t\tMappingInformationType: "ByControlPoint"')
-                w('\t\t\tReferenceInformationType: "Direct"')
+                w('\t\t\tMappingInformationType: "ByPolygonVertex"')
+                w('\t\t\tReferenceInformationType: "IndexToDirect"')
                 w(f'\t\t\tUV: *{len(uv_flat)} {{')
                 w('\t\t\t\ta: ' + ','.join(f'{x:.6f}' for x in uv_flat))
+                w('\t\t\t}')
+                w(f'\t\t\tUVIndex: *{len(uv_idx)} {{')
+                w('\t\t\t\ta: ' + ','.join(str(i) for i in uv_idx))
                 w('\t\t\t}')
                 w('\t\t}')
 
@@ -1272,11 +1293,17 @@ class FBXExporter:
         import math as _m
 
         def _quat_to_euler_deg(qx, qy, qz, qw):
-            """Convert xyzw quaternion to Euler XYZ degrees for FBX."""
+            """
+            Convert xyzw quaternion to Euler XYZ degrees for FBX.
+            FBX/UE5 use Euler XYZ rotation order by default (applied Z, then Y, then X).
+            This matches the standard intrinsic XYZ decomposition.
+            KotorBlender stores orientation as [x, y, z, w] — same order we use here.
+            """
             # Normalize
             mag = _m.sqrt(qx*qx + qy*qy + qz*qz + qw*qw)
             if mag > 1e-9:
                 qx /= mag; qy /= mag; qz /= mag; qw /= mag
+            # Intrinsic XYZ Euler decomposition
             sinr = 2*(qw*qx + qy*qz)
             cosr = 1 - 2*(qx*qx + qy*qy)
             ex = _m.degrees(_m.atan2(sinr, cosr))
@@ -1287,36 +1314,62 @@ class FBXExporter:
             ez = _m.degrees(_m.atan2(siny, cosy))
             return ex, ey, ez
 
-        def _world_matrix_row_major(node) -> str:
-            """Return 16 floats (row-major 4x4) for this node's world transform bind pose."""
+        def _world_matrix_col_major(node) -> str:
+            """
+            Return 16 floats in COLUMN-MAJOR order for FBX BindPose/TransformLink.
+
+            FBX 7.4 stores matrices in column-major order:
+              [m00, m10, m20, m30,   <- column 0
+               m01, m11, m21, m31,   <- column 1
+               m02, m12, m22, m32,   <- column 2
+               m03, m13, m23, m33]   <- column 3
+            where the rotation part occupies the upper-left 3x3 and the
+            translation is in the LAST ROW (m30, m31, m32, m33=1).
+
+            KotorBlender's world_transform() returns (world_pos, world_quat).
+            The quaternion is [x, y, z, w].
+            """
             try:
                 wp, wq = node.world_transform()
                 qx, qy, qz, qw = wq
-                # Build rotation matrix from quaternion
-                xx = 1 - 2*(qy*qy + qz*qz)
-                xy = 2*(qx*qy - qz*qw)
-                xz = 2*(qx*qz + qy*qw)
-                yx = 2*(qx*qy + qz*qw)
-                yy = 1 - 2*(qx*qx + qz*qz)
-                yz = 2*(qy*qz - qx*qw)
-                zx = 2*(qx*qz - qy*qw)
-                zy = 2*(qy*qz + qx*qw)
-                zz = 1 - 2*(qx*qx + qy*qy)
+                # Build 3x3 rotation matrix columns from quaternion
+                # Column 0 (right/X axis)
+                r00 = 1 - 2*(qy*qy + qz*qz)  # m00
+                r10 = 2*(qx*qy + qz*qw)        # m10
+                r20 = 2*(qx*qz - qy*qw)        # m20
+                # Column 1 (up/Y axis)
+                r01 = 2*(qx*qy - qz*qw)        # m01
+                r11 = 1 - 2*(qx*qx + qz*qz)   # m11
+                r21 = 2*(qy*qz + qx*qw)        # m21
+                # Column 2 (forward/Z axis)
+                r02 = 2*(qx*qz + qy*qw)        # m02
+                r12 = 2*(qy*qz - qx*qw)        # m12
+                r22 = 1 - 2*(qx*qx + qy*qy)   # m22
                 tx, ty, tz = wp
-                # Row-major order (FBX convention)
-                mat = [xx, xy, xz, 0,
-                       yx, yy, yz, 0,
-                       zx, zy, zz, 0,
-                       tx, ty, tz, 1]
+                # FBX column-major layout (translation in last row)
+                mat = [r00, r10, r20, 0.0,   # col 0
+                       r01, r11, r21, 0.0,   # col 1
+                       r02, r12, r22, 0.0,   # col 2
+                       tx,  ty,  tz,  1.0]   # col 3 (translation)
                 return ','.join(f'{v:.6f}' for v in mat)
             except Exception:
                 return '1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1'
 
-        # Skeleton/joint model nodes (all dummy nodes)
-        for n in model.all_nodes():
-            if not n.is_dummy: continue
+        # ── Determine which nodes are skeleton joints ──────────────────────
+        # KotOR character models have three kinds of non-renderable nodes:
+        #   flags=0x01 (HEADER)   → model root dummy node  → export as "Null"
+        #   flags=0x00 (no flags) → pure bone/joint nodes  → export as "LimbNode"
+        # Both have type_label=='dummy'. All others (MESH, SKIN, etc.) are rendered geometry.
+        # Previously only is_dummy (flags==0x01) was exported as LimbNode, so bone
+        # nodes (flags==0) were silently skipped — UE5 would receive no skeleton joints.
+        skeleton_nodes = [n for n in model.all_nodes() if n.type_label == 'dummy']
+
+        # Skeleton/joint model nodes (root + all bone nodes)
+        for n in skeleton_nodes:
             nid = node_ids[n.name]
-            w(f'\tModel: {nid}, "{n.name}", "LimbNode" {{')
+            # Root node (flags=HEADER) → "Null"; child joint nodes → "LimbNode"
+            fbx_node_type = 'Null' if n.is_dummy else 'LimbNode'
+            w(f'\tModel: {nid}, "{n.name}", "{fbx_node_type}" {{')
             w('\t\tVersion: 232')
             w('\t\tProperties70:  {')
             px, py, pz = n.position
@@ -1324,6 +1377,8 @@ class FBXExporter:
             qx, qy, qz, qw = n.rotation
             ex, ey, ez = _quat_to_euler_deg(qx, qy, qz, qw)
             w(f'\t\t\tP: "Lcl Rotation","Lcl Rotation","","A",{ex:.4f},{ey:.4f},{ez:.4f}')
+            # Explicit rotation order (FBX default 0 = XYZ — same as KotOR/UE5 convention)
+            w(f'\t\t\tP: "RotationOrder","enum","","",0')
             w('\t\t}')
             w('\t}')  # end Model (skeleton node)
 
@@ -1348,6 +1403,10 @@ class FBXExporter:
             w('\t}')
 
             # Sub-deformers (clusters per bone)
+            # TransformLink = bone world-space bind matrix in COLUMN-MAJOR order
+            # Transform = identity (UE5 assumes geometry is already in bind pose space
+            #   for KotOR models where vertices are stored in world/node-local space)
+            identity_m = '1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1'
             for bi, bname in enumerate(n.bone_map):
                 if bname not in cluster_ids.get(n.name, {}):
                     continue
@@ -1370,12 +1429,10 @@ class FBXExporter:
                 w(f'\t\tWeights: *{len(wt_list)} {{')
                 w('\t\t\ta: ' + ','.join(f'{x:.6f}' for x in wt_list))
                 w('\t\t}')
-                # Transform = mesh world matrix (identity for skinned meshes)
-                identity_m = '1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1'
-                # TransformLink = bone world-space bind matrix
+                # TransformLink = bone world-space bind matrix (column-major for FBX)
                 bone_node = model.find_node(bname)
                 if bone_node:
-                    link_m = _world_matrix_row_major(bone_node)
+                    link_m = _world_matrix_col_major(bone_node)
                 else:
                     link_m = identity_m
                 w(f'\t\tTransform: *16 {{')
@@ -1386,15 +1443,17 @@ class FBXExporter:
                 w('\t\t}')
                 w('\t}')  # end Cluster deformer
 
-        # Bind pose
-        all_pose_nodes = (list(model.all_nodes()))
+        # Bind pose — include skeleton nodes + mesh nodes that have a world transform.
+        # FBX spec: BindPose lists all nodes involved in skinning with their world matrices.
+        # Using column-major matrix layout as required by FBX 7.4 / UE5 importer.
+        pose_nodes = skeleton_nodes + mesh_nodes_list
         w(f'\tPose: {pose_id}, "BIND_POSES", "BindPose" {{')
         w(f'\t\tType: "BindPose"')
         w(f'\t\tVersion: 100')
-        w(f'\t\tNbPoseNodes: {len(all_pose_nodes)}')
-        for n in all_pose_nodes:
+        w(f'\t\tNbPoseNodes: {len(pose_nodes)}')
+        for n in pose_nodes:
             nid = node_ids[n.name]
-            world_mat = _world_matrix_row_major(n)
+            world_mat = _world_matrix_col_major(n)
             w(f'\t\tPoseNode:  {{')
             w(f'\t\t\tNode: {nid}')
             w(f'\t\t\tMatrix: *16 {{')
@@ -1495,13 +1554,21 @@ class FBXExporter:
                         anim_conn.append(f'\tC: "OO",{cn_id},{layer_id}')
                         anim_conn.append(f'\tC: "OP",{cn_id},{nid},"{prop_name}"')
 
-                    # Translation curves (KotOR delta + bind pos → absolute)
+                    # Translation curves:
+                    # KotOR position keyframes are DELTAS from the node's rest/bind position,
+                    # scaled by model.anim_scale (verified from KotorBlender animnode.py:
+                    #   bl_location = restloc + animscale * mdl_position_delta)
+                    # Absolute FBX position = bind_pos + anim_scale * keyframe_delta
+                    anim_scale = getattr(model, 'anim_scale', 1.0) or 1.0
                     if pos_times and pos_vals:
                         bind_pos = list(base.position) if base else [0.0, 0.0, 0.0]
                         for axis_i, axis_label in enumerate(('T|X', 'T|Y', 'T|Z')):
                             default_val = bind_pos[axis_i]
-                            kvals = [(v[axis_i] if len(v) > axis_i else 0.0) + bind_pos[axis_i]
-                                     for v in pos_vals]
+                            kvals = [
+                                (v[axis_i] if len(v) > axis_i else 0.0) * anim_scale
+                                + bind_pos[axis_i]
+                                for v in pos_vals
+                            ]
                             _write_curve_node_and_curve(
                                 axis_label, axis_i, default_val,
                                 pos_times, kvals, 'Lcl Translation')
