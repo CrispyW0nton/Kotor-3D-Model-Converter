@@ -115,44 +115,27 @@ Key capabilities:
 
 ---
 
-## Download
+## Quick-start
 
-### Pre-built Windows EXE (recommended)
-
-👉 **[Download the latest GhostRigger-K1-K2.exe from the Releases page](https://github.com/CrispyW0nton/Kotor-3D-Model-Converter/releases/latest)**
-
-No installation required — just download and run.
-
-> **SmartScreen warning:** Windows may flag the exe as unrecognized on first launch.
-> Click **"More info" → "Run anyway"** to proceed. The exe is built directly from this
-> source via [GitHub Actions](.github/workflows/build-exe.yml) with no modification.
-
-**Requirements:** Windows 10+ (64-bit). A KotOR 1 or 2 installation (or extracted game data).
-
----
-
-## Quick-start (run from source)
-
-```bash
-# Clone the repo
-git clone https://github.com/CrispyW0nton/Kotor-3D-Model-Converter.git
-cd Kotor-3D-Model-Converter
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Launch GUI
-python main.py
-```
-
-**Requirements:** Python 3.10+, Pillow, NumPy, Tkinter (bundled with most Python installs).
-
-### Build the EXE yourself (Windows only)
+### Windows
 
 ```bat
-REM Double-click build.bat, or run in a terminal:
-build.bat
-REM The exe will appear at dist\GhostRigger-K1-K2.exe
+git clone https://github.com/CrispyW0nton/Kotor-3D-Model-Converter.git
+cd Kotor-3D-Model-Converter
+```
+
+Then double-click **`build.bat`** — it installs all dependencies and builds
+`dist\GhostRigger-K1-K2.exe` automatically. Double-click the exe to launch.
+
+**Requirements:** Python 3.10+ (tick "Add Python to PATH" during install), Windows 10+.
+
+### Run from source (any OS)
+
+```bash
+git clone https://github.com/CrispyW0nton/Kotor-3D-Model-Converter.git
+cd Kotor-3D-Model-Converter
+pip install -r requirements.txt
+python main.py
 ```
 
 ---
@@ -218,8 +201,6 @@ src/
     └── client.py             # IPC client (GModular / GhostScripter)
 
 tests/                        # 5 007 tests across 66 files
-render_check/                 # UI mockup renders
-audit_output/                 # Batch render / diagnostic output
 ```
 
 ---

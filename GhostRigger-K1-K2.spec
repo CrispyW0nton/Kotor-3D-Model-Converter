@@ -3,6 +3,8 @@
 # Generated: 2026-03-18
 # Build:  python -m PyInstaller GhostRigger-K1-K2.spec --clean --noconfirm
 
+import os
+import sys
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 # ── Hidden imports ────────────────────────────────────────────────────────
@@ -32,6 +34,28 @@ try:
 except ImportError:
     pass
 
+# ── Assimp DLL bundling ───────────────────────────────────────────────────
+# pyassimp searches its own package folder for any file whose name contains
+# 'assimp', so we bundle the DLL as a binary alongside pyassimp's package.
+# build.bat downloads the DLL and places it there before running this spec.
+binaries = []
+try:
+    import pyassimp as _pa
+    _pa_dir = os.path.dirname(_pa.__file__)
+    for _fname in os.listdir(_pa_dir):
+        if 'assimp' in _fname.lower() and _fname.lower().endswith('.dll'):
+            _dll_path = os.path.join(_pa_dir, _fname)
+            # Destination is the pyassimp package subfolder inside the exe so
+            # pyassimp's search_library() finds it at runtime.
+            binaries.append((_dll_path, 'pyassimp'))
+            print(f'[spec] Bundling Assimp DLL: {_dll_path}')
+            break
+    else:
+        print('[spec] WARNING: No assimp*.dll found in pyassimp folder — '
+              'FBX import will be unavailable at runtime.')
+except ImportError:
+    print('[spec] pyassimp not installed — FBX import will be unavailable.')
+
 # ── Data files ────────────────────────────────────────────────────────────
 datas = [
     # Bundle the entire assets folder (icons, etc.)
@@ -42,7 +66,7 @@ datas = [
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
