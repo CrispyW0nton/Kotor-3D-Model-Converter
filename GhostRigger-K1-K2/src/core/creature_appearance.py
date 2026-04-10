@@ -1715,3 +1715,427 @@ def list_body_models(library, game: str = 'K1') -> list:
     except Exception as exc:
         log.debug("list_body_models: %s", exc)
         return []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Full-Character FBX Export Pipeline
+#  Phase 99 — One-shot export: body + head (eyes/teeth/tongue) + all animations
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _load_model_from_resource_manager(resref: str, resource_manager) -> Any:
+    """
+    Load a KotorModel by resref from a ResourceManager.
+
+    Returns the parsed KotorModel on success, or None on failure.
+    Used internally by export_full_character_fbx to auto-load the base skeleton.
+    """
+    if resource_manager is None or not resref or resref.upper() == 'NULL':
+        return None
+    try:
+        # ResourceManager.get() returns bytes or None
+        mdl_bytes = resource_manager.get(resref.lower(), 3)   # ResType.MDL = 3
+        mdx_bytes = resource_manager.get(resref.lower(), 4)   # ResType.MDX = 4
+        if not mdl_bytes:
+            return None
+        try:
+            from core.pykotor_bridge import MDLBinaryParser
+        except ImportError:
+            from src.core.pykotor_bridge import MDLBinaryParser  # type: ignore
+        parser = MDLBinaryParser()
+        return parser.parse(mdl_bytes, mdx_bytes or b'')
+    except Exception as exc:
+        log.warning("_load_model_from_resource_manager('%s'): %s", resref, exc)
+        return None
+
+
+def export_full_character_fbx(
+    body_model,
+    head_model=None,
+    fbx_path: str = '',
+    base_skeleton_model=None,
+    game: str = 'K1',
+    tex_cache=None,
+    export_rigging: bool = True,
+    resource_manager=None,
+) -> dict:
+    """
+    Export a complete KotOR character — body + head (including eyes, teeth,
+    tongue) + ALL available animations — as a single FBX file ready for
+    Unreal Engine.
+
+    Pipeline
+    --------
+    1.  Deep-copy body and head models so originals are untouched.
+    2.  Auto-load the base skeleton (e.g. S_MALE02 / S_FEMALE02) from the
+        resource manager if ``base_skeleton_model`` was not supplied.  The
+        base skeleton name is taken from body_model.supermodel.
+    3.  Merge supermodel animations (walk, run, attack, talk, etc.) from both
+        the head model and the base skeleton into the combined model so every
+        clip is embedded as a separate FBX AnimStack / Take entry.
+    4.  Merge the base skeleton's bone hierarchy into the combined model so
+        the FBX skeleton is complete (some body MDLs omit bones present only
+        in the supermodel MDL).
+    5.  Attach the head's full node tree under the body's 'headhook' bone,
+        preserving skull → jaw → eyeball → teeth → tongue hierarchy.
+    6.  Force render=True on all facial geometry nodes (eyes, eyelids, teeth,
+        tongue, gums, jaw) — some binary MDLs incorrectly store render=0.
+    7.  Export the combined model as FBX ASCII 7.4 via FBXExporter, passing
+        base_skeleton_model so synthetic supermodel bone stubs receive correct
+        bind-pose world matrices instead of identity transforms.
+
+    Unreal Engine Import Workflow
+    -----------------------------
+    Import the exported FBX into Unreal Engine 5 with:
+      • "Import Animations" checked
+      • Skeleton: Create New Skeleton (first character) or Use Existing Skeleton
+      • Each KotOR animation clip arrives as a separate AnimSequence asset.
+
+    Eyes / teeth / tongue are guaranteed to be included because:
+      • _is_facial_geometry() whitelists them by name prefix AND substring.
+      • _is_renderable() bypasses the render=False gate for facial nodes.
+      • _is_deformation_helper() never classifies them as helpers.
+
+    Parameters
+    ----------
+    body_model           : KotorModel — body / outfit MDL (required)
+    head_model           : KotorModel — head MDL (optional but strongly recommended)
+    fbx_path             : str — output .fbx file path
+    base_skeleton_model  : KotorModel or None — the shared supermodel skeleton
+                           (e.g. S_MALE02).  When None and resource_manager is
+                           supplied, the base skeleton is auto-loaded from
+                           body_model.supermodel.
+    game                 : 'K1' or 'K2'
+    tex_cache            : optional TextureCache — textures saved as TGA alongside FBX
+    export_rigging       : bool — also write rigging/ JSON sidecar files (default True)
+    resource_manager     : optional ResourceManager — used to auto-load the base
+                           skeleton when base_skeleton_model is not supplied.
+
+    Returns
+    -------
+    dict:
+        ok             : bool
+        fbx_path       : str
+        anim_count     : int  — number of animation clips embedded
+        node_count     : int  — total skeleton nodes in combined model
+        mesh_count     : int  — renderable mesh nodes exported
+        facial_nodes   : list[str] — facial geometry node names found & exported
+        base_skeleton  : str  — name of the base skeleton used (or '' if none)
+        warnings       : list[str]
+        message        : str
+    """
+    import copy as _copy
+
+    warnings: list = []
+    facial_nodes_found: list = []
+    base_skel_name: str = ''
+
+    # ── 1. Validate inputs ────────────────────────────────────────────────────
+    if body_model is None:
+        return {'ok': False, 'fbx_path': fbx_path, 'anim_count': 0,
+                'node_count': 0, 'mesh_count': 0, 'facial_nodes': [],
+                'base_skeleton': '', 'warnings': [],
+                'message': "No body model supplied."}
+    if head_model is None:
+        # head_model is optional — export body-only with animations if none supplied
+        warnings.append("No head model supplied — exporting body geometry only.")
+
+    try:
+        # ── 2. Deep-copy so originals are untouched ───────────────────────────
+        combined  = _copy.deepcopy(body_model)
+        head_copy = _copy.deepcopy(head_model) if head_model is not None else None
+
+        # ── 3. Auto-load base skeleton if not provided ────────────────────────
+        #
+        # KotOR architecture: animations live in the BASE SKELETON MDL file
+        # (e.g. S_MALE02.mdl, S_FEMALE02.mdl).  Character body/head models
+        # only store their own accessory nodes; the full ~70-bone skeleton plus
+        # ALL animation clips (walk, run, attack, talk, force, etc.) are in the
+        # supermodel.  Without importing the supermodel, the FBX will have at
+        # best a partial skeleton and ZERO animations.
+        #
+        # We resolve the supermodel name from body_model.supermodel and load it
+        # via the ResourceManager when a base_skeleton_model wasn't supplied.
+        if base_skeleton_model is None and resource_manager is not None:
+            sm_name = getattr(body_model, 'supermodel', 'NULL') or 'NULL'
+            if sm_name.upper() not in ('NULL', '', 'NONE'):
+                log.info(
+                    "export_full_character_fbx: auto-loading base skeleton '%s'",
+                    sm_name)
+                base_skeleton_model = _load_model_from_resource_manager(
+                    sm_name, resource_manager)
+                if base_skeleton_model is not None:
+                    base_skel_name = base_skeleton_model.name
+                    log.info(
+                        "export_full_character_fbx: loaded base skeleton '%s' "
+                        "(%d animations, %d nodes)",
+                        base_skel_name,
+                        len(getattr(base_skeleton_model, 'animations', []) or []),
+                        sum(1 for _ in base_skeleton_model.all_nodes()),
+                    )
+                else:
+                    warnings.append(
+                        f"Could not load base skeleton '{sm_name}' from resource "
+                        "manager — animations may be missing or incomplete.")
+            elif sm_name.upper() == 'NULL':
+                log.debug(
+                    "export_full_character_fbx: body model '%s' has no supermodel "
+                    "(supermodel=NULL) — assuming self-contained skeleton",
+                    body_model.name)
+        elif base_skeleton_model is not None:
+            base_skel_name = getattr(base_skeleton_model, 'name', '')
+
+        # ── 4. Merge bone hierarchy from base skeleton ────────────────────────
+        #
+        # The body model may only contain its own mesh nodes; the full skeleton
+        # (all 70+ bones: pelvis, spine, clavicles, arms, legs) lives in the
+        # supermodel MDL.  merge_supermodel() injects any missing bones from the
+        # base skeleton into the combined model's hierarchy so the FBX exporter
+        # can emit a complete skeleton and correct bind-pose matrices.
+        if base_skeleton_model is not None:
+            try:
+                combined = merge_supermodel(combined, base_skeleton_model)
+                log.info(
+                    "export_full_character_fbx: merged skeleton bones from '%s'",
+                    base_skel_name or base_skeleton_model.name)
+            except Exception as _merge_exc:
+                warnings.append(
+                    f"Skeleton merge from '{getattr(base_skeleton_model, 'name', '?')}' "
+                    f"failed: {_merge_exc}")
+                log.warning(
+                    "export_full_character_fbx: merge_supermodel failed: %s",
+                    _merge_exc, exc_info=True)
+
+        # ── 5. Inherit ALL supermodel animations into the combined model ──────
+        #
+        # Priority (highest first):
+        #   a) Animations already on body_model (body-specific overrides)
+        #   b) Animations from head_model (head-specific: jaw, blink, etc.)
+        #   c) Animations from base_skeleton_model (the full game animation set)
+        #
+        # merge_supermodel_animations() only adds clips NOT already present,
+        # so earlier sources win and there is no duplication.
+
+        # Merge head animations (facial: jaw open, blink, eyemove, etc.)
+        if head_copy is not None and getattr(head_copy, 'animations', None):
+            combined = merge_supermodel_animations(combined, head_copy)
+            log.debug(
+                "export_full_character_fbx: merged %d head animation(s) from '%s'",
+                len(head_copy.animations), head_copy.name)
+
+        # Merge base skeleton animations (the full walk/run/attack/talk set)
+        if base_skeleton_model is not None:
+            base_anims = getattr(base_skeleton_model, 'animations', None) or []
+            if base_anims:
+                n_before = len(combined.animations)
+                combined = merge_supermodel_animations(combined, base_skeleton_model)
+                n_added = len(combined.animations) - n_before
+                log.info(
+                    "export_full_character_fbx: merged %d base-skeleton animation(s) "
+                    "from '%s' (total now: %d)",
+                    n_added, base_skel_name or base_skeleton_model.name,
+                    len(combined.animations))
+                if n_added == 0 and not combined.animations:
+                    warnings.append(
+                        f"No animations found in base skeleton "
+                        f"'{getattr(base_skeleton_model, 'name', '?')}'. "
+                        "The exported FBX will have no animation data.")
+            else:
+                warnings.append(
+                    f"Base skeleton '{getattr(base_skeleton_model, 'name', '?')}' "
+                    "contains no animations.")
+        elif not combined.animations:
+            warnings.append(
+                "No base skeleton available and body model has no animations. "
+                "Export will have no animation data. "
+                "Supply a resource_manager or base_skeleton_model to fix this.")
+
+        anim_count = len(combined.animations)
+
+        # ── 6. Attach head onto body at the headhook node ────────────────────
+        if head_copy is not None:
+            hook_node, used_fallback = _find_headhook_node(combined, strict=False)
+            if hook_node is None:
+                warnings.append(
+                    f"Body model '{body_model.name}' has no headhook node. "
+                    "Head geometry will be attached at the model root.")
+                # Fall back: attach at root
+                hook_node = combined.root_node
+
+            if used_fallback and hook_node is not None:
+                warnings.append(
+                    f"Non-standard headhook node '{hook_node.name}' used "
+                    "(expected 'headhook').")
+
+            head_root = getattr(head_copy, 'root_node', None)
+            if head_root is None:
+                for n in head_copy.all_nodes():
+                    if getattr(n, 'parent', None) is None:
+                        head_root = n
+                        break
+
+            if head_root is None:
+                warnings.append(
+                    f"Head model '{head_model.name}' has no root node — "
+                    "head geometry omitted from export.")
+            elif hook_node is not None:
+                if not hasattr(hook_node, 'children') or hook_node.children is None:
+                    hook_node.children = []
+                head_root.parent = hook_node
+                hook_node.children.append(head_root)
+                log.info(
+                    "export_full_character_fbx: head '%s' attached at '%s'",
+                    head_model.name, hook_node.name)
+
+        # ── 7. Audit and force-enable facial geometry nodes ───────────────────
+        # Walk the entire combined node tree (body + head subtree) and:
+        #  a) record facial geometry nodes (eyes, teeth, tongue) that were found
+        #  b) force render=True on any that have render=0 set in the binary MDL
+        #     (some NPC head variants incorrectly store render=0 on these nodes)
+        try:
+            from converters.mesh_converter import OBJExporter, _renderable_mesh_nodes
+        except ImportError:
+            from src.converters.mesh_converter import OBJExporter, _renderable_mesh_nodes  # type: ignore
+
+        for node in combined.all_nodes():
+            if OBJExporter._is_facial_geometry(node):
+                if getattr(node, 'vertices', None):
+                    facial_nodes_found.append(node.name)
+                    # Force render=True so the FBX exporter's _is_renderable()
+                    # check does not discard these nodes.
+                    if not getattr(node, 'render', True):
+                        node.render = True
+                        log.debug(
+                            "export_full_character_fbx: forced render=True "
+                            "on facial node '%s'", node.name)
+
+        if head_copy is not None and not facial_nodes_found:
+            warnings.append(
+                "No facial geometry nodes found in the head model "
+                "(eyes/teeth/tongue). The head MDL may not contain separate "
+                "eye/teeth/tongue meshes (they may be baked into the main "
+                "face skin mesh), or the node names use an unrecognised pattern.")
+
+        # ── 8. Export combined model as FBX ──────────────────────────────────
+        try:
+            from converters.mesh_converter import FBXExporter
+        except ImportError:
+            from src.converters.mesh_converter import FBXExporter  # type: ignore
+
+        exporter = FBXExporter()
+        ok = exporter.export(
+            combined, fbx_path,
+            tex_cache=tex_cache,
+            export_rigging=export_rigging,
+            base_skeleton_model=base_skeleton_model,
+        )
+
+        if not ok:
+            return {
+                'ok': False, 'fbx_path': fbx_path,
+                'anim_count': anim_count,
+                'node_count': len(list(combined.all_nodes())),
+                'mesh_count': 0,
+                'facial_nodes': facial_nodes_found,
+                'base_skeleton': base_skel_name,
+                'warnings': warnings,
+                'message': "FBX export failed (see log for details).",
+            }
+
+        # Count what was actually exported
+        mesh_nodes = _renderable_mesh_nodes(combined)
+        node_count  = len(list(combined.all_nodes()))
+        mesh_count  = len(mesh_nodes)
+
+        # ── 9. Export textures as TGA files alongside the FBX ────────────────
+        # UE5 automatically picks up textures named <texture_name>.tga if they
+        # reside in the same directory as the FBX.  We attempt to write them from
+        # the tex_cache (PIL images) or from the resource_manager (raw TPC bytes).
+        if tex_cache is not None or resource_manager is not None:
+            import os as _os
+            fbx_dir = _os.path.dirname(_os.path.abspath(fbx_path))
+            _exported_textures: set = set()
+            for node in mesh_nodes:
+                for tname in [node.texture_clean, getattr(node, 'lightmap', '')]:
+                    if not tname or tname.upper() in ('NULL', 'BLACK', ''):
+                        continue
+                    if tname in _exported_textures:
+                        continue
+                    _exported_textures.add(tname)
+                    tga_path = _os.path.join(fbx_dir, f"{tname}.tga")
+                    if _os.path.exists(tga_path):
+                        continue  # already present
+                    # Try tex_cache first (PIL Image)
+                    _written = False
+                    if tex_cache is not None:
+                        try:
+                            img = None
+                            if hasattr(tex_cache, 'get'):
+                                img = tex_cache.get(tname) or tex_cache.get(tname.lower())
+                            elif hasattr(tex_cache, '__getitem__'):
+                                try:
+                                    img = tex_cache[tname]
+                                except (KeyError, TypeError):
+                                    pass
+                            if img is not None:
+                                if hasattr(img, 'save'):
+                                    img.save(tga_path)
+                                    _written = True
+                                    log.debug("export_full_character_fbx: wrote texture %s", tga_path)
+                        except Exception as _tex_exc:
+                            log.debug("export_full_character_fbx: tex_cache write failed for '%s': %s",
+                                      tname, _tex_exc)
+                    # Try resource_manager (raw TPC bytes → TGA)
+                    if not _written and resource_manager is not None:
+                        try:
+                            from src.core.pykotor_bridge import pykotor_tpc_to_pil as _tpc2pil
+                            tpc_bytes = None
+                            if hasattr(resource_manager, 'get_resource'):
+                                tpc_bytes = (resource_manager.get_resource(tname, 'tpc') or
+                                             resource_manager.get_resource(tname, 'tga'))
+                            if tpc_bytes:
+                                img = _tpc2pil(tpc_bytes)
+                                if img is not None:
+                                    img.save(tga_path)
+                                    _written = True
+                                    log.debug("export_full_character_fbx: wrote TPC→TGA %s", tga_path)
+                        except Exception as _tpc_exc:
+                            log.debug("export_full_character_fbx: TPC→TGA failed for '%s': %s",
+                                      tname, _tpc_exc)
+            if _exported_textures:
+                log.info("export_full_character_fbx: attempted texture export for %d textures",
+                         len(_exported_textures))
+
+        head_name = getattr(head_model, 'name', 'none') if head_model else 'none'
+        msg = (
+            f"Full character FBX exported: '{fbx_path}'  "
+            f"body='{body_model.name}' + head='{head_name}'  "
+            f"base_skeleton='{base_skel_name}'  "
+            f"animations={anim_count}  meshes={mesh_count}  "
+            f"facial_nodes={facial_nodes_found}"
+        )
+        if warnings:
+            msg += f"  ({len(warnings)} warning(s))"
+        log.info("export_full_character_fbx: %s", msg)
+
+        return {
+            'ok': True,
+            'fbx_path': fbx_path,
+            'anim_count': anim_count,
+            'node_count': node_count,
+            'mesh_count': mesh_count,
+            'facial_nodes': facial_nodes_found,
+            'base_skeleton': base_skel_name,
+            'warnings': warnings,
+            'message': msg,
+        }
+
+    except Exception as exc:
+        log.error("export_full_character_fbx: %s", exc, exc_info=True)
+        return {
+            'ok': False, 'fbx_path': fbx_path,
+            'anim_count': 0, 'node_count': 0, 'mesh_count': 0,
+            'facial_nodes': facial_nodes_found,
+            'base_skeleton': base_skel_name,
+            'warnings': warnings,
+            'message': f"Export failed: {exc}",
+        }

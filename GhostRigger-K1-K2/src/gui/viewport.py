@@ -4739,7 +4739,13 @@ class FrameRenderer:
 
             # Skip nodes explicitly marked non-renderable (render=False).
             # Respect the KotOR MDL render flag; only bypass for selected node.
-            if not getattr(node, 'render', True) and not is_sel:
+            # EXCEPTION: inner-geometry nodes (eyes, eyelids, teeth, tongue, jaw,
+            # gum) are ALWAYS rendered even if render=0.  Some KotOR NPC head MDLs
+            # incorrectly store render=0 on these nodes; skipping them causes the
+            # character to appear eyeless / toothless in the viewport.
+            _nl_flat = node.name.lower()
+            _is_inner_geo_flat = any(s in _nl_flat for s in _INNER_GEO_SUBSTRINGS)
+            if not getattr(node, 'render', True) and not is_sel and not _is_inner_geo_flat:
                 continue
 
             # Skip deformation-helper nodes entirely in flat mode (unless selected).
@@ -6473,7 +6479,12 @@ class FrameRenderer:
             # The render flag is set to False for collision boxes, occluders, and
             # internal engine helpers.  Always respect it regardless of other flags.
             # Exception: selected node is always shown for editing purposes.
-            if not getattr(n, 'render', True) and n is not self.selected_node:
+            # EXCEPTION: inner-geometry nodes (eyes, eyelids, teeth, tongue) are
+            # always rendered even if render=0 — some KotOR NPC head MDLs store
+            # render=0 on eyeball/teeth nodes which would make the face appear empty.
+            _nl_tex = n.name.lower()
+            _is_inner_geo_tex = any(s in _nl_tex for s in _INNER_GEO_SUBSTRINGS)
+            if not getattr(n, 'render', True) and n is not self.selected_node and not _is_inner_geo_tex:
                 continue
             # Skip SABER nodes — lightsaber blade is procedurally generated
             # at runtime.  The node only provides anchor/extent information; rendering

@@ -810,7 +810,16 @@ class KotorModel:
         return [n for n in self.all_nodes() if n.is_mesh]
 
     def bone_nodes(self) -> List[ModelNode]:
-        return [n for n in self.all_nodes() if n.is_dummy and not n.is_mesh]
+        """Return all skeleton/joint nodes (non-mesh dummy nodes).
+
+        Captures BOTH kinds of non-mesh nodes:
+          - flags=HEADER (0x01) — model root and PyKotor-loaded dummy nodes
+          - flags=0x00          — pure bone joints in binary-parsed models
+
+        Previously this only returned nodes where is_dummy=True (flags==HEADER),
+        silently omitting all flags=0 bone nodes from the skeleton list.
+        """
+        return [n for n in self.all_nodes() if n.type_label == 'dummy']
 
     def find_node(self, name: str) -> Optional[ModelNode]:
         nl = name.lower()

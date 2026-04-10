@@ -358,13 +358,90 @@ class OBJExporter:
         cleaned = ''.join(c for c in name if 32 <= ord(c) < 127)
         return cleaned.strip()
 
+    # ── Facial geometry node names (always renderable regardless of flags) ──
+    # KotOR head MDLs contain eye, eyelid, teeth, tongue, gum and jaw meshes
+    # as visible geometry.  Some models store render=0 or extreme/absent UVs on
+    # these nodes, which would cause the generic helper-filter to incorrectly
+    # discard them.  We match them by SUBSTRING (not prefix only) to cover both
+    # standard PC head naming (eyeRA, eyeLA, teethlower, teethupper, tongue) and
+    # NPC naming conventions (f_rlweye_g, f_llweye_g, f_teetha_g, etc.).
+    #
+    # Mirrors _INNER_GEO_SUBSTRINGS in viewport.py::FrameRenderer.
+    _FACIAL_MESH_PREFIXES: tuple = (
+        # Eyeballs (left/right, regular + specular layer)
+        'lseyeball', 'rseyeball', 'lssupeyeball', 'rssupeyeball',
+        # Teeth and tongue — prefix matches cover most names
+        'teethlower', 'teethupper', 'teeth',
+        'tongue',
+        # Eyelids (some models have separate eyelid meshes)
+        'eyelidl', 'eyelidr', 'eyelid_l', 'eyelid_r',
+        # Eye whites / cornea layers
+        'eyewhite', 'eyecornea',
+    )
+
+    # Substring set that mirrors viewport._INNER_GEO_SUBSTRINGS.
+    # A node whose name CONTAINS any of these strings is treated as facial
+    # geometry regardless of prefix, suffix, or render flag.
+    _FACIAL_MESH_SUBSTRINGS: tuple = (
+        'eye', 'lid', 'teeth', 'tooth', 'gum', 'jaw',
+        'tongue', 'teethu', 'teethl',
+    )
+
+    @classmethod
+    def _is_facial_geometry(cls, node) -> bool:
+        """
+        Return True if this node is KotOR facial geometry (eyes, teeth, tongue,
+        eyelids, gums, jaw) that must be included in exports regardless of its
+        render flag or UV coordinates.
+
+        Matching strategy (mirrors viewport._is_deformation_helper v26 logic):
+          1. Prefix match against _FACIAL_MESH_PREFIXES  (fast, covers standard PC names)
+          2. Substring match against _FACIAL_MESH_SUBSTRINGS  (covers NPC names such as
+             f_rlweye_g, f_llweye_g, f_teetha_g, jawbone_g, etc.)
+
+        A real texture AND valid (non-extreme) UVs are additionally required so
+        that bare bone-helper dummies accidentally named 'jaw_g' are NOT promoted.
+        The vertex-count guard in _is_renderable acts as a final safety net.
+        """
+        name_lower = getattr(node, 'name', '').lower()
+        # Fast path: exact prefix match (standard K1/K2 PC head node names)
+        if any(name_lower.startswith(p) for p in cls._FACIAL_MESH_PREFIXES):
+            return True
+        # Substring match: covers NPC head nodes like f_rlweye_g, f_llweye_g,
+        # f_teetha_g, jawskin, gumskin, tonguemesh, etc.
+        if any(s in name_lower for s in cls._FACIAL_MESH_SUBSTRINGS):
+            # Require a real texture + valid UVs so skeletal bone-helpers
+            # that happen to contain 'jaw' or 'gum' in their names are not promoted.
+            tex = cls._clean_tex(getattr(node, 'texture', '') or '')
+            if tex and tex.upper() != 'NULL':
+                uvs = getattr(node, 'uvs', []) or []
+                if uvs and not any(abs(u) > 3.0 or abs(v) > 3.0
+                                   for u, v in uvs[:20]):
+                    return True
+            # Even without a texture: if the node has vertices and is explicitly
+            # named with a strong facial keyword, treat it as facial geometry.
+            # This handles nodes like 'teethUpper' that carry UVs but whose
+            # texture name resolves at runtime from the head's multi-texture.
+            if any(name_lower.startswith(p)
+                   for p in ('teeth', 'tongue', 'eyelid', 'eyeball')):
+                return True
+        return False
+
     @classmethod
     def _is_deformation_helper(cls, node) -> bool:
         """
         Return True if this mesh node is a hidden deformation-helper that
-        should NOT appear in the exported OBJ.  Mirrors the logic in
+        should NOT appear in the exported geometry.  Mirrors the logic in
         viewport.py::FrameRenderer._is_deformation_helper.
+
+        Facial geometry nodes (eyes, teeth, tongue, gums, jaw) are NEVER helpers
+        even if they carry extreme UVs or a null texture — some NPC head variants
+        store these with render=0 or broken UV coordinates in the binary MDL.
         """
+        # Facial geometry is always visible — never classify as a helper
+        if cls._is_facial_geometry(node):
+            return False
+
         tex = cls._clean_tex(getattr(node, 'texture', '') or '')
         is_null_tex = (not tex or tex.upper() == 'NULL')
         is_skin = getattr(node, 'is_skin', False)
@@ -375,15 +452,25 @@ class OBJExporter:
             if not any(abs(u) > 3.0 or abs(v) > 3.0 for u, v in uvs[:20]):
                 return False
 
-        # Extreme UV coordinates → always a deform helper
+        # Extreme UV coordinates → deform helper (unless facial, already handled)
         if uvs and any(abs(u) > 3.0 or abs(v) > 3.0 for u, v in uvs[:20]):
             return True
 
         # Non-skin _g / _G / _dum nodes → always helpers
+        # EXCEPTION: inner-geometry nodes whose names CONTAIN facial substrings
+        # and carry a real texture ARE renderable (e.g. f_rlweye_g NPC eyeballs).
         name_lower = getattr(node, 'name', '').lower()
+        _name_is_inner_geo = any(s in name_lower for s in cls._FACIAL_MESH_SUBSTRINGS)
         if not is_skin and (name_lower.endswith('_g')
                             or name_lower.endswith('_g0')
                             or name_lower.endswith('_dum')):
+            # Inner-geo NPC eyeball/teeth nodes (e.g. f_rlweye_g) with a real
+            # texture and valid UVs are renderable despite the _g suffix.
+            if _name_is_inner_geo and not is_null_tex and uvs:
+                _uvs_ok = not any(abs(u) > 3.0 or abs(v) > 3.0
+                                  for u, v in uvs[:20])
+                if _uvs_ok:
+                    return False
             return True
 
         # Null-texture non-skin nodes → helpers
@@ -400,17 +487,21 @@ class OBJExporter:
     @classmethod
     def _is_renderable(cls, node) -> bool:
         """
-        Return True if the node should be included in the OBJ export.
+        Return True if the node should be included in the exported geometry.
 
-        Criteria (must ALL pass):
+        Criteria:
           1. Has vertices.
-          2. render flag is not explicitly False.
+          2. render flag is not explicitly False — UNLESS the node is known
+             facial geometry (eyes/teeth/tongue/jaw/gum/eyelids), which some
+             KotOR NPC heads incorrectly store with render=0 in the binary MDL.
           3. Not a deformation helper.
-          4. Not an emitter or light node (no visible geometry).
+          4. Not an emitter or light node.
         """
         if not getattr(node, 'vertices', None):
             return False
-        if not getattr(node, 'render', True):
+        # Facial geometry nodes bypass the render=False gate entirely
+        is_facial = cls._is_facial_geometry(node)
+        if not is_facial and not getattr(node, 'render', True):
             return False
         if getattr(node, 'is_emitter', False) or getattr(node, 'is_light', False):
             return False
@@ -908,21 +999,29 @@ class FBXExporter:
     """
 
     def export(self, model: KotorModel, fbx_path: str, tex_cache=None,
-               export_rigging: bool = True) -> bool:
+               export_rigging: bool = True,
+               base_skeleton_model: 'Optional[KotorModel]' = None) -> bool:
         """
         Export model to FBX.
 
         Parameters
         ----------
-        model          : KotorModel to export.
-        fbx_path       : Output .fbx file path.
-        tex_cache      : Optional TextureCache.  When provided, textures are saved as
-                         TGA files in the same directory as the FBX.
-        export_rigging : When True (default) a 'rigging/' subdirectory is created
-                         next to the FBX file.  The FBX already embeds the skeleton
-                         hierarchy + skin deformers + animations, so the rigging/
-                         folder provides the same data as portable JSON files for
-                         scripts that cannot read FBX directly.
+        model               : KotorModel to export.
+        fbx_path            : Output .fbx file path.
+        tex_cache           : Optional TextureCache.  When provided, textures are saved as
+                              TGA files in the same directory as the FBX.
+        export_rigging      : When True (default) a 'rigging/' subdirectory is created
+                              next to the FBX file.  The FBX already embeds the skeleton
+                              hierarchy + skin deformers + animations, so the rigging/
+                              folder provides the same data as portable JSON files for
+                              scripts that cannot read FBX directly.
+        base_skeleton_model : Optional KotorModel containing the supermodel skeleton
+                              (e.g. S_MALE02, S_FEMALE02).  When provided, synthetic
+                              placeholder bones for cross-referenced supermodel bones
+                              receive correct bind-pose transforms from this model
+                              instead of identity matrices.  This is required for
+                              accessory meshes (heads, bodies, hands) to deform
+                              correctly in Unreal Engine.
         """
         # Try fbx module (Autodesk FBX Python SDK)
         try:
@@ -932,19 +1031,27 @@ class FBXExporter:
             ok = None
 
         if ok is None:
-            # Try pyassimp
+            # Try pyassimp (treated as a hint only – fall through on any failure)
             try:
-                import pyassimp
-                ok = self._export_assimp(model, fbx_path, pyassimp)
+                import pyassimp  # noqa: F401
+                _assimp_ok = self._export_assimp(model, fbx_path, pyassimp,
+                                                 base_skeleton_model=base_skeleton_model)
+                # _export_assimp now delegates to _export_fbx_ascii internally;
+                # if it succeeds we are done, otherwise fall through.
+                if _assimp_ok:
+                    ok = True
+                # If False, keep ok=None so the ASCII path runs below.
             except ImportError:
-                ok = None
+                pass  # pyassimp not installed – go straight to ASCII
 
         if ok is None:
-            # Fallback: FBX ASCII 7.4
+            # Primary export path: FBX ASCII 7.4 (zero-dependency, full feature set)
+            import traceback as _tb
             try:
-                ok = self._export_fbx_ascii(model, fbx_path)
+                ok = self._export_fbx_ascii(model, fbx_path,
+                                            base_skeleton_model=base_skeleton_model)
             except Exception as e:
-                log.error(f"FBX ASCII export failed: {e}")
+                log.error(f"FBX ASCII export failed: {e}\n{_tb.format_exc()}")
                 # Last resort: OBJ
                 obj_path = str(Path(fbx_path).with_suffix('.obj'))
                 log.warning(f"Falling back to OBJ export: {obj_path}")
@@ -1070,19 +1177,22 @@ class FBXExporter:
 
     # ── pyassimp path ─────────────────────────────────────────────────
 
-    def _export_assimp(self, model: KotorModel, fbx_path: str, pyassimp) -> bool:
+    def _export_assimp(self, model: KotorModel, fbx_path: str, pyassimp,
+                       base_skeleton_model: 'Optional[KotorModel]' = None) -> bool:
         """Export via pyassimp (limited skeleton support)."""
         try:
             # pyassimp export is immature; fall through to ASCII
             log.info("pyassimp FBX export attempted but not reliable – using ASCII FBX")
-            return self._export_fbx_ascii(model, fbx_path)
+            return self._export_fbx_ascii(model, fbx_path,
+                                          base_skeleton_model=base_skeleton_model)
         except Exception as e:
             log.error(f"pyassimp export error: {e}")
             return False
 
     # ── FBX ASCII 7.4 (zero-dependency fallback) ──────────────────────
 
-    def _export_fbx_ascii(self, model: KotorModel, fbx_path: str) -> bool:
+    def _export_fbx_ascii(self, model: KotorModel, fbx_path: str,
+                          base_skeleton_model: 'Optional[KotorModel]' = None) -> bool:
         """
         Write FBX ASCII 7.4 file.  No external dependencies required.
         Supported by Blender 2.79+, Maya 2016+, 3ds Max 2016+, Unreal Engine 5.
@@ -1094,13 +1204,29 @@ class FBXExporter:
           - Skin deformers with SubDeformer clusters per bone
           - Bind pose with correct column-major world matrices
           - Animations: position deltas * animscale + bind_pos, quaternion→Euler XYZ
+          - Takes section for Blender / MotionBuilder compatibility
 
         KotorBlender-verified:
           - Position keyframes are DELTAS from rest position, scaled by model.anim_scale
           - Orientation keyframes are absolute quaternions [x,y,z,w]
           - Bone nodes have flags=0 (type_label='dummy'), root has flags=HEADER=0x01
           - Only nodes with type_label=='dummy' are skeleton joints (not renderable meshes)
+
+        Parameters
+        ----------
+        base_skeleton_model : Optional KotorModel for the supermodel (e.g. S_MALE02).
+            When provided, synthesised placeholder bones for cross-referenced
+            supermodel joints receive correct bind-pose world matrices instead of
+            identity matrices, fixing skin deformation in Unreal Engine.
         """
+        # Build a fast name→node lookup for the base skeleton (supermodel) so that
+        # synthetic bones created for cross-referenced joints get correct transforms.
+        _base_skel_node_by_name: Dict[str, 'ModelNode'] = {}
+        if base_skeleton_model is not None:
+            for _bsn in base_skeleton_model.all_nodes():
+                _base_skel_node_by_name[_bsn.name.lower()] = _bsn
+            log.debug(f"FBX export: base_skeleton_model '{base_skeleton_model.name}' "
+                      f"loaded with {len(_base_skel_node_by_name)} nodes")
         from datetime import datetime
 
         lines: List[str] = []
@@ -1134,14 +1260,34 @@ class FBXExporter:
         w('GlobalSettings:  {')
         w('\tVersion: 1000')
         w('\tProperties70:  {')
-        # Z-up right-handed (KotOR coordinate system)
+        # Z-up right-handed (KotOR coordinate system, same as UE5 import axis)
+        # UE5 FbxMainImport.cpp ConvertScene() expects: Z-up, eParityOdd (neg Y front), RightHanded
+        # When source axis matches UE5 import axis, no conversion matrix is applied → clean import.
         w('\t\tP: "UpAxis", "int", "Integer", "",2')
         w('\t\tP: "UpAxisSign", "int", "Integer", "",1')
+        # Front axis: 1 = Y axis, FrontAxisSign=-1 means -Y forward (matches UE5 eParityOdd negation)
         w('\t\tP: "FrontAxis", "int", "Integer", "",1')
-        w('\t\tP: "FrontAxisSign", "int", "Integer", "",1')
+        w('\t\tP: "FrontAxisSign", "int", "Integer", "",-1')
+        # Coord (right) axis: 0 = X axis, sign=1 → +X right
         w('\t\tP: "CoordAxis", "int", "Integer", "",0')
         w('\t\tP: "CoordAxisSign", "int", "Integer", "",1')
-        w('\t\tP: "UnitScaleFactor", "double", "Number", "",100')
+        # OriginalUpAxis: UE5 uses this to detect if an axis-flip was already baked in.
+        # Value 2 = Z was the original up axis (same as UpAxis so no extra flip needed).
+        w('\t\tP: "OriginalUpAxis", "int", "Integer", "",2')
+        w('\t\tP: "OriginalUpAxisSign", "int", "Integer", "",1')
+        # Unit scale: KotOR uses centimeters (1 unit = 1 cm), matching UE5 default.
+        w('\t\tP: "UnitScaleFactor", "double", "Number", "",1')
+        w('\t\tP: "OriginalUnitScaleFactor", "double", "Number", "",1')
+        # Time / frame-rate settings (FBX 7.4 standard: TimeMode 6 = 30fps)
+        # UE5 FbxMainImport.cpp reads GetTimeMode() to determine frame rate.
+        # TimeMode 6 = eFBXTimeMode30 (30 fps) — standard for game animations.
+        w('\t\tP: "TimeMode", "enum", "", "",6')
+        w('\t\tP: "TimeProtocol", "enum", "", "",2')
+        w('\t\tP: "SnapOnFrames", "bool", "", "",0')
+        w('\t\tP: "ReferenceTimeIndex", "int", "Integer", "",-1')
+        w('\t\tP: "TimelineInterpolateMode", "enum", "", "",1')
+        w('\t\tP: "CustomFrameRate", "double", "Number", "",30')
+        w('\t\tP: "CustomTimeMode", "enum", "", "",0')
         w('\t}')
         w('}')
         w('')
@@ -1162,6 +1308,43 @@ class FBXExporter:
 
         for n in model.all_nodes():
             node_ids[n.name] = new_id()
+
+        # RIGGING FIX: Some models (especially accessories / heads / equipment) rely
+        # on bones provided by their supermodel skeleton (e.g. S_MALE02, S_FEMALE02).
+        # Those bone nodes do NOT appear in this model's node tree, so they would be
+        # silently skipped when building animation curves and skin clusters.
+        #
+        # Solution: scan all animation nodes AND all bone_map entries for names that
+        # are referenced but missing from node_ids, and synthesise placeholder FBX
+        # nodes for them.  This gives UE5 a complete skeleton reference even when
+        # the supermodel bones are absent from the accessory model file.
+        _extra_bone_nodes: Dict[str, ModelNode] = {}   # name \u2192 synthetic ModelNode
+        _all_referenced_bones: set = set()
+        # Collect from bone_map (skin cluster references)
+        for mesh_n in mesh_nodes_list:
+            if mesh_n.is_skin:
+                for bname in (mesh_n.bone_map or []):
+                    if bname and bname not in node_ids:
+                        _all_referenced_bones.add(bname)
+        # Collect from animation node names
+        for anim in model.animations:
+            for an in anim.nodes:
+                if an.name and an.name not in node_ids:
+                    _all_referenced_bones.add(an.name)
+        # Synthesise placeholder skeleton nodes for missing bones
+        for bname in sorted(_all_referenced_bones):
+            synth = ModelNode(name=bname, flags=0, position=(0.0, 0.0, 0.0),
+                              rotation=(0.0, 0.0, 0.0, 1.0))
+            # Find the root skeleton node to parent synthetic bones under
+            root_sk = next((n for n in model.all_nodes()
+                            if n.parent is None and n.type_label == 'dummy'), None)
+            if root_sk:
+                synth.parent = root_sk
+            _extra_bone_nodes[bname] = synth
+            node_ids[bname] = new_id()
+            log.debug(f"FBX export: synthesised missing bone node '{bname}' "
+                      f"(supermodel reference)")
+
         for n in mesh_nodes_list:
             mesh_ids[n.name] = new_id()
             mat_ids[n.name]  = new_id()
@@ -1214,17 +1397,72 @@ class FBXExporter:
                 w('\t\t\t}')
                 w('\t\t}')
 
+            # Tangents layer (ByPolygonVertex, Direct) — UE5 uses these for normal maps.
+            # KotOR binary MDL stores per-vertex tangents in the MDX stream when bump maps
+            # are used. We export them when available; UE5 recomputes them otherwise.
+            _tangents_src = getattr(n, 'tangents', []) or []
+            if _tangents_src and len(_tangents_src) > 0:
+                tan_poly = []
+                for face in n.faces:
+                    for vi in face:
+                        if vi < len(_tangents_src):
+                            tan_poly.extend(_tangents_src[vi][:3])
+                        else:
+                            tan_poly.extend([1.0, 0.0, 0.0])
+                # Binormal (bitangent) computed from normal × tangent per vertex
+                bin_poly = []
+                for face in n.faces:
+                    for vi in face:
+                        if vi < len(n.normals) and vi < len(_tangents_src):
+                            nx, ny, nz = n.normals[vi][:3]
+                            tx, ty, tz = _tangents_src[vi][:3]
+                            # binormal = cross(normal, tangent)
+                            bx = ny*tz - nz*ty
+                            by = nz*tx - nx*tz
+                            bz = nx*ty - ny*tx
+                            bin_poly.extend([bx, by, bz])
+                        else:
+                            bin_poly.extend([0.0, 1.0, 0.0])
+                w('\t\tLayerElementTangent: 0 {')
+                w('\t\t\tVersion: 101')
+                w('\t\t\tName: ""')
+                w('\t\t\tMappingInformationType: "ByPolygonVertex"')
+                w('\t\t\tReferenceInformationType: "Direct"')
+                w(f'\t\t\tTangents: *{len(tan_poly)} {{')
+                w('\t\t\t\ta: ' + ','.join(f'{x:.6f}' for x in tan_poly))
+                w('\t\t\t}')
+                w('\t\t}')
+                w('\t\tLayerElementBinormal: 0 {')
+                w('\t\t\tVersion: 101')
+                w('\t\t\tName: ""')
+                w('\t\t\tMappingInformationType: "ByPolygonVertex"')
+                w('\t\t\tReferenceInformationType: "Direct"')
+                w(f'\t\t\tBinormals: *{len(bin_poly)} {{')
+                w('\t\t\t\ta: ' + ','.join(f'{x:.6f}' for x in bin_poly))
+                w('\t\t\t}')
+                w('\t\t}')
+
             # UV layer
             # KotORBlender insight: use ByPolygonVertex + IndexToDirect so that
             # UV seams (shared vertices with different UVs) are preserved correctly.
             # UE5 FBX importer requires this for proper texture projection.
+            # FIX (face_uvs): KotOR ASCII MDL and some binary models have separate
+            # tvert (texture vertex) indices in node.face_uvs that differ from the
+            # vertex position indices.  Use them when present to avoid scrambled UVs.
             if n.uvs:
                 uv_flat = [c for uv in n.uvs for c in uv]
-                # UV index: one UV index per polygon vertex (face corner)
+                _fuvs_fbx = getattr(n, 'face_uvs', []) or []
+                _has_fuvs_fbx = bool(_fuvs_fbx) and len(_fuvs_fbx) == len(n.faces)
+                _nuv_fbx = len(n.uvs)
                 uv_idx = []
-                for face in n.faces:
-                    for vi in face:
-                        uv_idx.append(vi)
+                for _fi_fbx, _face_fbx in enumerate(n.faces):
+                    if _has_fuvs_fbx:
+                        _fu = _fuvs_fbx[_fi_fbx]
+                        for _k in range(3):
+                            uv_idx.append(min(int(_fu[_k]), _nuv_fbx - 1) if _nuv_fbx > 0 else 0)
+                    else:
+                        for _vi in _face_fbx:
+                            uv_idx.append(min(_vi, _nuv_fbx - 1) if _nuv_fbx > 0 else 0)
                 w('\t\tLayerElementUV: 0 {')
                 w('\t\t\tVersion: 101')
                 w('\t\t\tName: "UVMap"')
@@ -1235,6 +1473,29 @@ class FBXExporter:
                 w('\t\t\t}')
                 w(f'\t\t\tUVIndex: *{len(uv_idx)} {{')
                 w('\t\t\t\ta: ' + ','.join(str(i) for i in uv_idx))
+                w('\t\t\t}')
+                w('\t\t}')
+
+            # Secondary UV layer (lightmap / UVMap_Lightmap)
+            # Exported for area meshes and any node with a second UV set.
+            _uvs_lm_n = getattr(n, 'uvs_lm', []) or getattr(n, 'uvs2', []) or []
+            if _uvs_lm_n:
+                _uv2_flat = [c for uv in _uvs_lm_n for c in uv]
+                _nuv2 = len(_uvs_lm_n)
+                _uv2_idx = []
+                for _face2 in n.faces:
+                    for _vi2 in _face2:
+                        _uv2_idx.append(min(_vi2, _nuv2 - 1) if _nuv2 > 0 else 0)
+                w('\t\tLayerElementUV: 1 {')
+                w('\t\t\tVersion: 101')
+                w('\t\t\tName: "UVMap_Lightmap"')
+                w('\t\t\tMappingInformationType: "ByPolygonVertex"')
+                w('\t\t\tReferenceInformationType: "IndexToDirect"')
+                w(f'\t\t\tUV: *{len(_uv2_flat)} {{')
+                w('\t\t\t\ta: ' + ','.join(f'{x:.6f}' for x in _uv2_flat))
+                w('\t\t\t}')
+                w(f'\t\t\tUVIndex: *{len(_uv2_idx)} {{')
+                w('\t\t\t\ta: ' + ','.join(str(i) for i in _uv2_idx))
                 w('\t\t\t}')
                 w('\t\t}')
 
@@ -1249,14 +1510,23 @@ class FBXExporter:
             w('\t\t\t}')
             w('\t\t}')
 
-            # Layer definition
-            has_nrm = 'Normal' if n.normals else ''
-            has_uv  = 'UV' if n.uvs else ''
+            # Layer definition (layer 0 — primary geometry data)
+            _uvs_lm_for_layer = getattr(n, 'uvs_lm', []) or getattr(n, 'uvs2', []) or []
+            _tangents_for_layer = getattr(n, 'tangents', []) or []
             w('\t\tLayer: 0 {')
             w('\t\t\tVersion: 100')
             if n.normals:
                 w('\t\t\tLayerElement:  {')
                 w('\t\t\t\tType: "LayerElementNormal"')
+                w('\t\t\t\tTypedIndex: 0')
+                w('\t\t\t}')
+            if _tangents_for_layer:
+                w('\t\t\tLayerElement:  {')
+                w('\t\t\t\tType: "LayerElementTangent"')
+                w('\t\t\t\tTypedIndex: 0')
+                w('\t\t\t}')
+                w('\t\t\tLayerElement:  {')
+                w('\t\t\t\tType: "LayerElementBinormal"')
                 w('\t\t\t\tTypedIndex: 0')
                 w('\t\t\t}')
             if n.uvs:
@@ -1269,8 +1539,56 @@ class FBXExporter:
             w('\t\t\t\tTypedIndex: 0')
             w('\t\t\t}')
             w('\t\t}')
+            # Layer 1: lightmap UV channel (when present)
+            if _uvs_lm_for_layer:
+                w('\t\tLayer: 1 {')
+                w('\t\t\tVersion: 100')
+                w('\t\t\tLayerElement:  {')
+                w('\t\t\t\tType: "LayerElementUV"')
+                w('\t\t\t\tTypedIndex: 1')
+                w('\t\t\t}')
+                w('\t\t}')
 
             w('\t}')  # end Geometry
+
+        # Texture + Video objects (one per unique texture name)
+        # FBX requires explicit Texture + Video objects to resolve material texture maps.
+        # Without these, UE5 imports the geometry but leaves materials untextured.
+        _tex_obj_ids: Dict[str, int] = {}   # tex_name → Texture object ID
+        _tex_vid_ids: Dict[str, int] = {}   # tex_name → Video object ID
+        _seen_tex_names: set = set()
+        for n in mesh_nodes_list:
+            tname_tex = (n.texture_clean or '').strip()
+            if tname_tex and tname_tex.upper() not in ('NULL', 'BLACK', '') \
+                    and tname_tex not in _seen_tex_names:
+                _seen_tex_names.add(tname_tex)
+                tex_obj_id = new_id()
+                vid_id     = new_id()
+                _tex_obj_ids[tname_tex] = tex_obj_id
+                _tex_vid_ids[tname_tex] = vid_id
+                # Video (file reference)
+                w(f'\tVideo: {vid_id}, "{tname_tex}", "Clip" {{')
+                w(f'\t\tType: "Clip"')
+                w(f'\t\tProperties70:  {{')
+                w(f'\t\t\tP: "Path","KString","XRefUrl","","{tname_tex}.tga"')
+                w(f'\t\t}}')
+                w(f'\t\tUseMipMap: 0')
+                w(f'\t\tFilename: "{tname_tex}.tga"')
+                w(f'\t\tRelativeFilename: "{tname_tex}.tga"')
+                w(f'\t}}')
+                # Texture object
+                w(f'\tTexture: {tex_obj_id}, "{tname_tex}", "" {{')
+                w(f'\t\tType: "TextureVideoClip"')
+                w(f'\t\tVersion: 202')
+                w(f'\t\tTextureName: "{tname_tex}"')
+                w(f'\t\tProperties70:  {{')
+                w(f'\t\t\tP: "UVSet","KString","","","UVMap"')
+                w(f'\t\t\tP: "UseMaterial","bool","","",1')
+                w(f'\t\t}}')
+                w(f'\t\tMedia: "{tname_tex}"')
+                w(f'\t\tFileName: "{tname_tex}.tga"')
+                w(f'\t\tRelativeFilename: "{tname_tex}.tga"')
+                w(f'\t}}')
 
         # Material objects
         for n in mesh_nodes_list:
@@ -1382,6 +1700,30 @@ class FBXExporter:
             w('\t\t}')
             w('\t}')  # end Model (skeleton node)
 
+        # Synthetic (supermodel) bone nodes — emit as LimbNode stubs
+        # These are referenced by skin clusters / animations but not in the model tree.
+        # When base_skeleton_model is supplied we use the real bind-pose local transform
+        # from that skeleton so that skin deformation is correct in Unreal Engine.
+        for bname, synth_n in _extra_bone_nodes.items():
+            nid = node_ids[bname]
+            # Try to get real local transform from base skeleton
+            _bskel_node = _base_skel_node_by_name.get(bname.lower())
+            if _bskel_node is not None:
+                _spx, _spy, _spz = _bskel_node.position
+                _sqx, _sqy, _sqz, _sqw = _bskel_node.rotation
+                _sex, _sey, _sez = _quat_to_euler_deg(_sqx, _sqy, _sqz, _sqw)
+            else:
+                _spx = _spy = _spz = 0.0
+                _sex = _sey = _sez = 0.0
+            w(f'\tModel: {nid}, "{bname}", "LimbNode" {{')
+            w('\t\tVersion: 232')
+            w('\t\tProperties70:  {')
+            w(f'\t\t\tP: "Lcl Translation","Lcl Translation","","A",{_spx:.6f},{_spy:.6f},{_spz:.6f}')
+            w(f'\t\t\tP: "Lcl Rotation","Lcl Rotation","","A",{_sex:.4f},{_sey:.4f},{_sez:.4f}')
+            w(f'\t\t\tP: "RotationOrder","enum","","",0')
+            w('\t\t}')
+            w('\t}')  # end Model (synthetic bone stub)
+
         # Mesh model nodes (non-dummy mesh nodes)
         for n in mesh_nodes_list:
             nid = node_ids[n.name]
@@ -1407,6 +1749,23 @@ class FBXExporter:
             # Transform = identity (UE5 assumes geometry is already in bind pose space
             #   for KotOR models where vertices are stored in world/node-local space)
             identity_m = '1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1'
+
+            # Normalise skin_data: must be a list of VertexSkinData objects.
+            # The MDL parser always populates it correctly, but models assembled
+            # from scratch (e.g. in tests or by the character builder) may leave
+            # skin_data as True/None or as a plain list of BoneWeight objects.
+            raw_sd = getattr(n, 'skin_data', None)
+            if not isinstance(raw_sd, (list, tuple)) or not raw_sd:
+                raw_sd = []  # no per-vertex skin data – clusters will be empty
+            else:
+                # If elements are BoneWeight (not VertexSkinData), wrap them.
+                # This handles the case where the caller stored a flat list.
+                if raw_sd and hasattr(raw_sd[0], 'bone_index'):
+                    # flat BoneWeight list → one influence per vertex
+                    raw_sd = [VertexSkinData(influences=[bw]) for bw in raw_sd]
+                elif raw_sd and not hasattr(raw_sd[0], 'influences'):
+                    raw_sd = []  # unknown format – skip safely
+
             for bi, bname in enumerate(n.bone_map):
                 if bname not in cluster_ids.get(n.name, {}):
                     continue
@@ -1414,8 +1773,8 @@ class FBXExporter:
                 # Gather vertex indices + weights for this bone
                 vi_list = []
                 wt_list = []
-                for vi, sd in enumerate(n.skin_data):
-                    for inf in sd.influences:
+                for vi, sd in enumerate(raw_sd):
+                    for inf in (sd.influences or []):
                         if inf.bone_index == bi and inf.weight > 0:
                             vi_list.append(vi)
                             wt_list.append(inf.weight)
@@ -1430,9 +1789,15 @@ class FBXExporter:
                 w('\t\t\ta: ' + ','.join(f'{x:.6f}' for x in wt_list))
                 w('\t\t}')
                 # TransformLink = bone world-space bind matrix (column-major for FBX)
+                # Priority: (1) this model's own node, (2) base_skeleton_model node,
+                # (3) identity fallback.  Without a real base-skeleton transform the
+                # accessory mesh will deform incorrectly in Unreal Engine.
                 bone_node = model.find_node(bname)
                 if bone_node:
                     link_m = _world_matrix_col_major(bone_node)
+                elif bname.lower() in _base_skel_node_by_name:
+                    link_m = _world_matrix_col_major(
+                        _base_skel_node_by_name[bname.lower()])
                 else:
                     link_m = identity_m
                 w(f'\t\tTransform: *16 {{')
@@ -1446,11 +1811,14 @@ class FBXExporter:
         # Bind pose — include skeleton nodes + mesh nodes that have a world transform.
         # FBX spec: BindPose lists all nodes involved in skinning with their world matrices.
         # Using column-major matrix layout as required by FBX 7.4 / UE5 importer.
+        # Include skeleton nodes, synthetic supermodel bone stubs, and mesh nodes.
+        identity_bind = '1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1'
         pose_nodes = skeleton_nodes + mesh_nodes_list
+        n_pose = len(pose_nodes) + len(_extra_bone_nodes)
         w(f'\tPose: {pose_id}, "BIND_POSES", "BindPose" {{')
         w(f'\t\tType: "BindPose"')
         w(f'\t\tVersion: 100')
-        w(f'\t\tNbPoseNodes: {len(pose_nodes)}')
+        w(f'\t\tNbPoseNodes: {n_pose}')
         for n in pose_nodes:
             nid = node_ids[n.name]
             world_mat = _world_matrix_col_major(n)
@@ -1458,6 +1826,18 @@ class FBXExporter:
             w(f'\t\t\tNode: {nid}')
             w(f'\t\t\tMatrix: *16 {{')
             w(f'\t\t\t\ta: {world_mat}')
+            w(f'\t\t\t}}')
+            w(f'\t\t}}')
+        # Synthetic supermodel bones: use real world matrix from base skeleton when
+        # available; otherwise fall back to identity (position/orientation unknown).
+        for bname, _synth in _extra_bone_nodes.items():
+            nid = node_ids[bname]
+            _bsn2 = _base_skel_node_by_name.get(bname.lower())
+            synth_mat = _world_matrix_col_major(_bsn2) if _bsn2 else identity_bind
+            w(f'\t\tPoseNode:  {{')
+            w(f'\t\t\tNode: {nid}')
+            w(f'\t\t\tMatrix: *16 {{')
+            w(f'\t\t\t\ta: {synth_mat}')
             w(f'\t\t\t}}')
             w(f'\t\t}}')
         w('\t}')  # end Pose
@@ -1473,22 +1853,27 @@ class FBXExporter:
         # per-animation Objects are written; they are flushed into Connections{}.
         anim_connections: List[str] = []
 
+        # Build model-level node name→node lookup ONCE (outside animation loop)
+        _base_node_map = {n.name.lower(): n for n in model.all_nodes()}
+
         if model.animations:
             CTRL_POSITION    = 8
             CTRL_ORIENTATION = 20
 
-            anim_stack_layer: List[tuple] = []  # (stack_id, layer_id) per anim
+            anim_stack_layer: List[tuple] = []  # (anim, stack_id, layer_id)
 
             for anim in model.animations:
-                if not anim.nodes:
-                    continue
+                # Include animations even when anim.nodes is empty – the AnimStack
+                # and Takes entries must still be written so UE5 sees all clip names.
                 stack_id = new_id()
                 layer_id = new_id()
                 anim_stack_layer.append((anim, stack_id, layer_id))
 
-                # AnimStack
+                # AnimStack – UE5 FBX importer requires the "|<name>" naming convention
+                # to recognise individual animation clips from an FBX with multiple stacks.
                 anim_length_ticks = int(anim.length * FBX_TICKS_PER_SEC)
-                w(f'\tAnimationStack: {stack_id}, "{anim.name}", "" {{')
+                ue5_stack_name = f"|{anim.name}"  # FBX 7.4 UE5-compatible name
+                w(f'\tAnimationStack: {stack_id}, "{ue5_stack_name}", "" {{')
                 w(f'\t\tProperties70:  {{')
                 w(f'\t\t\tP: "LocalStart", "KTime", "Time", "",0')
                 w(f'\t\t\tP: "LocalStop", "KTime", "Time", "",{anim_length_ticks}')
@@ -1501,19 +1886,29 @@ class FBXExporter:
                 w(f'\tAnimationLayer: {layer_id}, "{anim.name}_Layer", "" {{')
                 w(f'\t}}')  # end AnimationLayer
 
-                base_node_map = {n.name.lower(): n for n in model.all_nodes()}
+                if not anim.nodes:
+                    continue  # no keyframe data – stack is valid but empty
+
                 anim_conn = anim_connections  # shortcut
 
                 for anim_node in anim.nodes:
-                    base = base_node_map.get(anim_node.name.lower())
+                    base = _base_node_map.get(anim_node.name.lower())
                     nid  = node_ids.get(anim_node.name)
                     if nid is None:
                         continue
 
                     # Collect controllers
+                    # Controllers may be stored as a list of dicts {'type','times','values'}
+                    # (MDL parser format) OR as a dict keyed by type int (legacy format).
                     pos_times = pos_vals = None
                     rot_times = rot_vals = None
-                    for ctrl in anim_node.controllers:
+                    _ctrl_src = anim_node.controllers
+                    if isinstance(_ctrl_src, dict):
+                        # Legacy dict format: {8: {'times':..,'values':..}, 20: ...}
+                        _ctrl_iter = [{'type': k, **v} for k, v in _ctrl_src.items()]
+                    else:
+                        _ctrl_iter = list(_ctrl_src or [])
+                    for ctrl in _ctrl_iter:
                         ct = ctrl['type']
                         if ct == CTRL_POSITION:
                             pos_times, pos_vals = ctrl['times'], ctrl['values']
@@ -1595,11 +1990,33 @@ class FBXExporter:
 
         w('}')  # end Objects
 
+        # ── Takes section (legacy Blender / MotionBuilder / UE4 compatibility) ─────
+        # FBX 7.4 readers such as Blender's FBX importer, MotionBuilder, and UE4 use
+        # the Takes block to enumerate animation clips.  UE5 uses AnimStack directly
+        # but emitting Takes keeps compatibility with the full DCC pipeline.
+        # All animations (even those without keyframe nodes) must be listed here so
+        # that UE5 sees the complete animation library from the KotOR base skeleton.
+        w('')
+        w('Takes:  {')
+        if model.animations:
+            first_anim = model.animations[0]
+            w(f'\tCurrent: "{first_anim.name}"')
+            for anim in model.animations:
+                anim_length_ticks_t = int(anim.length * FBX_TICKS_PER_SEC)
+                w(f'\tTake: "{anim.name}" {{')
+                w(f'\t\tFileName: "{anim.name}.tak"')
+                w(f'\t\tLocalTime: 0,{anim_length_ticks_t}')
+                w(f'\t\tReferenceTime: 0,{anim_length_ticks_t}')
+                w(f'\t}}')
+        else:
+            w('\tCurrent: ""')
+        w('}')
+
         # ── Connections section ────────────────────────────────────────
         w('')
         w('Connections:  {')
 
-        # Node → parent hierarchy
+        # Node → parent hierarchy (model nodes)
         for n in model.all_nodes():
             nid = node_ids[n.name]
             if n.parent and n.parent.name in node_ids:
@@ -1607,6 +2024,15 @@ class FBXExporter:
                 w(f'\tC: "OO",{nid},{pid}')
             else:
                 w(f'\tC: "OO",{nid},0')
+
+        # Synthetic supermodel bone stubs → parent under root node (or scene root 0)
+        _root_nid = 0
+        _root_n = next((n for n in model.all_nodes() if n.parent is None), None)
+        if _root_n and _root_n.name in node_ids:
+            _root_nid = node_ids[_root_n.name]
+        for bname in _extra_bone_nodes:
+            nid = node_ids[bname]
+            w(f'\tC: "OO",{nid},{_root_nid}')
 
         # Geometry → mesh model node
         for n in mesh_nodes_list:
@@ -1626,6 +2052,20 @@ class FBXExporter:
                 # Cluster → bone joint node
                 if bname in node_ids:
                     w(f'\tC: "OO",{node_ids[bname]},{cid}')
+
+        # Texture → material connections
+        # Links each Texture object to its Material via the "DiffuseColor" property slot.
+        for n in mesh_nodes_list:
+            tname = (n.texture_clean or '').strip()
+            if tname and tname in _tex_obj_ids and n.name in mat_ids:
+                tex_oid = _tex_obj_ids[tname]
+                mid_conn = mat_ids[n.name]
+                w(f'\tC: "OP",{tex_oid},{mid_conn},"DiffuseColor"')
+        # Video → Texture connections
+        for tname, tex_oid in _tex_obj_ids.items():
+            vid_id = _tex_vid_ids.get(tname)
+            if vid_id:
+                w(f'\tC: "OO",{vid_id},{tex_oid}')
 
         # Animation curve connections (built above in Objects section loop)
         for conn_line in anim_connections:

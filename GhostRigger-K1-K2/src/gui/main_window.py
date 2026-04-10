@@ -6640,6 +6640,28 @@ class CharacterBuilderPanel(tk.Frame):
                textvariable=self._sm_info_var, fg=C['text2']
                ).pack(fill='x', padx=8, pady=(2,0))
 
+        # ── Workflow progress bar (7 steps) ──────────────────────────
+        # Step indicators: each section lights up once its prerequisite is met.
+        # This gives the user an at-a-glance view of where they are in the pipeline.
+        self._step_labels: list = []
+        prog_f = tk.Frame(self, bg=C['bg2'])
+        prog_f.pack(fill='x', padx=6, pady=(4, 2))
+        _label(prog_f, "Progress:", "small", bg=C['bg2'], fg=C['text2']
+               ).pack(side='left', padx=(0, 4))
+        _STEP_NAMES = ["1·Template", "2·Skeleton", "3·Mesh",
+                       "4·Transform", "5·Rig", "6·Head+Body", "7·Export"]
+        for step_name in _STEP_NAMES:
+            lbl = tk.Label(
+                prog_f, text=step_name, font=("Segoe UI", 7),
+                bg=C['bg2'], fg=C['text2'],
+                relief='flat', padx=4, pady=2,
+                cursor='arrow',
+            )
+            lbl.pack(side='left', padx=1)
+            self._step_labels.append(lbl)
+        # Initialise all steps as pending (grey)
+        self._update_progress()
+
         # ── Section 1: Template Model ───────────────────────────────
         f_tmpl = tk.LabelFrame(self, text="1 · Template Model",
                                 bg=C['panel2'], fg=C['gold'], padx=6, pady=4)
@@ -6883,6 +6905,14 @@ class CharacterBuilderPanel(tk.Frame):
         _btn(asm_row, "Export Separate .mdl Files (B1)", self._export_b1,
              ).pack(side='left', padx=2)
 
+        # Full character FBX export for Unreal Engine
+        asm_row2 = tk.Frame(f_hb, bg=C['panel2']); asm_row2.pack(fill='x', pady=2)
+        _btn(asm_row2,
+             "Export Full Character FBX (Unreal Engine)",
+             self._export_full_character_fbx,
+             accent=True,
+             ).pack(side='left', padx=2)
+
         self._asm_status_var = tk.StringVar(value="")
         _label(f_hb, "", "small", bg=C['panel2'],
                textvariable=self._asm_status_var, fg=C['text2']).pack(anchor='w')
@@ -7071,6 +7101,49 @@ class CharacterBuilderPanel(tk.Frame):
             return
         self._set_template_model(model)
 
+    def _update_progress(self):
+        """Refresh the 7-step progress indicator colours.
+
+        Steps light up (gold) when their prerequisite state is satisfied:
+          1 Template   – template_model loaded
+          2 Skeleton   – template loaded (node selection is optional but available)
+          3 Mesh       – mesh_model imported
+          4 Transform  – mesh imported (transform is always available once mesh exists)
+          5 Rig        – template + mesh both loaded
+          6 Head+Body  – body_model loaded
+          7 Export     – body_model loaded (head optional)
+        """
+        if not hasattr(self, '_step_labels') or not self._step_labels:
+            return
+        try:
+            has_tmpl  = self._template_model is not None
+            has_mesh  = self._mesh_model is not None
+            has_body  = self._body_model  is not None
+            has_head  = self._head_model  is not None
+            has_rig   = has_tmpl and has_mesh    # rig requires both
+
+            step_done = [
+                has_tmpl,               # 1 Template
+                has_tmpl,               # 2 Skeleton (available when template loaded)
+                has_mesh,               # 3 Mesh
+                has_mesh,               # 4 Transform
+                has_rig,                # 5 Rig
+                has_body,               # 6 Head+Body
+                has_body,               # 7 Export
+            ]
+            _DONE_BG  = C.get('accent', '#3d6b6b')
+            _DONE_FG  = C.get('gold', '#d4af37')
+            _PEND_BG  = C.get('bg2', '#1e2a2a')
+            _PEND_FG  = C.get('text2', '#888')
+
+            for lbl, done in zip(self._step_labels, step_done):
+                lbl.configure(
+                    bg=_DONE_BG if done else _PEND_BG,
+                    fg=_DONE_FG if done else _PEND_FG,
+                )
+        except Exception:
+            pass   # Never crash the UI from a progress update
+
     def _set_template_model(self, model):
         """Common handler: store as template, send to viewport, update status."""
         self._template_model = model
@@ -7078,13 +7151,21 @@ class CharacterBuilderPanel(tk.Frame):
         self._refresh_cb()
         n  = model.node_count() if hasattr(model, 'node_count') else len(getattr(model, 'nodes', {}))
         na = len(getattr(model, 'animations', []))
+        # Count bone nodes and skin nodes for informative status
+        bone_count = sum(1 for nd in getattr(model, 'all_nodes', lambda: [])()
+                         if nd.type_label == 'dummy') if hasattr(model, 'all_nodes') else 0
+        sm = getattr(model, 'supermodel', '') or ''
+        sm_str = f"  SM: {sm}" if sm and sm.upper() not in ('', 'NULL') else ''
         self._tmpl_status.set(
-            f"Template: {model.name}  |  {n} nodes  |  {na} anims")
+            f"✓ Template: {model.name}  |  {n} nodes  |  {na} anims"
+            + (f"  |  {bone_count} bones" if bone_count else "")
+            + sm_str)
         # reset transform state whenever a new template is loaded
         self._mesh_rot_deg = 0.0
         self._mesh_scale   = 1.0
         self._rot_disp_var.set("0°")
         self._scale_disp_var.set("×1.00")
+        self._update_progress()
         log.info("CharacterBuilderPanel: template set → %s", model.name)
 
     def _import_template_mdl(self):
@@ -7258,16 +7339,24 @@ class CharacterBuilderPanel(tk.Frame):
 
     def _set_mesh_model(self, model, label: str):
         """Store imported mesh, reset per-mesh transform counters, update viewport."""
-        nc = model.node_count() if hasattr(model, 'node_count') else len(getattr(model, 'nodes', {}))
+        nc    = model.node_count() if hasattr(model, 'node_count') else len(getattr(model, 'nodes', {}))
+        n_verts = sum(len(getattr(nd, 'vertices', [])) for nd in
+                      (model.all_nodes() if hasattr(model, 'all_nodes') else []))
+        n_faces = sum(len(getattr(nd, 'faces', [])) for nd in
+                      (model.all_nodes() if hasattr(model, 'all_nodes') else []))
         self._mesh_model   = model
         self._mesh_rot_deg = 0.0
         self._mesh_scale   = 1.0
         self._rot_disp_var.set("0°")
         self._scale_disp_var.set("×1.00")
         self._xform_status_var.set("")
-        self._mesh_info_var.set(f"{label}  |  {nc} nodes")
+        detail = ""
+        if n_verts or n_faces:
+            detail = f"  |  {n_verts} verts  {n_faces} faces"
+        self._mesh_info_var.set(f"✓ {label}  |  {nc} nodes{detail}")
         self._set_model(model)
         self._refresh_cb()
+        self._update_progress()
 
     # ── Transform: snap/fine toggle helpers ─────────────────────────
 
@@ -7470,17 +7559,20 @@ class CharacterBuilderPanel(tk.Frame):
             return
 
         from src.core.character_builder import apply_template_rig
+        self._rig_status_var.set("Applying rig…")
+        self.update_idletasks()
         result = apply_template_rig(mesh, tmpl, game=game,
                                     scale_mode="auto",
                                     scale_factor=self._mesh_scale)
         if result["ok"]:
             self._set_model(result["model"])
             self._refresh_cb()
-            self._rig_status_var.set(result["message"])
+            self._rig_status_var.set(f"✓ {result['message']}")
         else:
-            self._rig_status_var.set(f"Failed: {result['message']}")
+            self._rig_status_var.set(f"⚠ Failed: {result['message']}")
         for w in result.get("warnings", []):
             log.warning("CharacterBuilderPanel apply_rig: %s", w)
+        self._update_progress()
 
     def _preview_rig(self):
         model = self._get_model()
@@ -7501,6 +7593,9 @@ class CharacterBuilderPanel(tk.Frame):
             self._body_model = model
             self._body_label_var.set(model.name)
             self._validate()
+            self._update_progress()
+        else:
+            self._val_var.set("⚠ No model loaded in viewport — load a model first.")
 
     def _use_loaded_as_head(self):
         model = self._get_model()
@@ -7508,6 +7603,9 @@ class CharacterBuilderPanel(tk.Frame):
             self._head_model = model
             self._head_label_var.set(model.name)
             self._validate()
+            self._update_progress()
+        else:
+            self._val_var.set("⚠ No model loaded in viewport — load a model first.")
 
     def _browse_body(self):
         from tkinter.filedialog import askopenfilename
@@ -7533,6 +7631,10 @@ class CharacterBuilderPanel(tk.Frame):
             self._body_model = model
             self._body_label_var.set(model.name)
             self._validate()
+            self._update_progress()
+        else:
+            import os
+            self._val_var.set(f"⚠ Could not parse: {os.path.basename(path)}")
 
     def _load_mdl_as_head(self, path: str):
         model = self._parse_mdl(path)
@@ -7540,6 +7642,10 @@ class CharacterBuilderPanel(tk.Frame):
             self._head_model = model
             self._head_label_var.set(model.name)
             self._validate()
+            self._update_progress()
+        else:
+            import os
+            self._val_var.set(f"⚠ Could not parse: {os.path.basename(path)}")
 
     def _parse_mdl(self, path: str):
         """Parse a .mdl file from disk, auto-detecting binary vs ASCII format.
@@ -7594,36 +7700,64 @@ class CharacterBuilderPanel(tk.Frame):
         rm = self._get_resource_mgr()
         lib = self._get_library()
         game = self._game_var.get()
+        self._val_var.set(f"Loading body: {resref}…")
+        self.update_idletasks()
         model = self._load_resref(resref, rm, lib, game)
         if model:
             self._body_model = model
             self._body_label_var.set(model.name)
             self._validate()
+            self._update_progress()
+        else:
+            self._val_var.set(f"⚠ Body model not found: {resref!r}  (no game data loaded?)")
 
     def _quick_pick_head(self, resref: str):
         rm = self._get_resource_mgr()
         lib = self._get_library()
         game = self._game_var.get()
+        self._val_var.set(f"Loading head: {resref}…")
+        self.update_idletasks()
         model = self._load_resref(resref, rm, lib, game)
         if model:
             self._head_model = model
             self._head_label_var.set(model.name)
             self._validate()
+            self._update_progress()
+        else:
+            self._val_var.set(f"⚠ Head model not found: {resref!r}  (no game data loaded?)")
 
     def _load_resref(self, resref, resource_mgr, library, game):
         """Load a model by resource reference (used by head/body quick-picks)."""
         return self._load_resref_binary(resref, resource_mgr, library, game)
 
     def _validate(self):
-        """Validate the current body+head pair."""
+        """Validate the current body+head pair with detailed feedback."""
         if not self._body_model and not self._head_model:
             self._val_var.set("Load body + head to validate")
             return
         if not self._body_model:
-            self._val_var.set("⚠ No body loaded")
+            self._val_var.set("⚠ No body loaded — pick one from Quick-Pick Bodies above.")
             return
+
+        # Body-only mode: check for headhook and report skeleton info
         if not self._head_model:
-            self._val_var.set("⚠ No head loaded")
+            # Check if body has a headhook bone
+            body_nodes = list(self._body_model.all_nodes()) if hasattr(self._body_model, 'all_nodes') else []
+            hook_node = next((n for n in body_nodes
+                              if 'headhook' in n.name.lower()), None)
+            sm = getattr(self._body_model, 'supermodel', '') or ''
+            n_anims = len(getattr(self._body_model, 'animations', []))
+            n_nodes = len(body_nodes)
+            if hook_node:
+                hp = hook_node.position
+                self._val_var.set(
+                    f"Body ready (no head)  |  {n_nodes} nodes  {n_anims} anims"
+                    f"  |  headhook @ ({hp[0]:.2f}, {hp[1]:.2f}, {hp[2]:.2f})"
+                    + (f"  SM: {sm}" if sm and sm.upper() not in ('', 'NULL') else ""))
+            else:
+                self._val_var.set(
+                    f"Body ready (no head)  |  {n_nodes} nodes  {n_anims} anims"
+                    f"  — ⚠ no 'headhook' bone found (body-only FBX export will still work)")
             return
 
         try:
@@ -7637,10 +7771,21 @@ class CharacterBuilderPanel(tk.Frame):
                 pos_str = (f"  hook@({hook_pos[0]:.2f},{hook_pos[1]:.2f},{hook_pos[2]:.2f})"
                            if hook_pos else "")
                 sm_match = (f"  SM: {getattr(self._body_model,'supermodel','?')}")
-                self._val_var.set(f"✓ Valid assembly{pos_str}{sm_match}")
-            else:
+                # Count facial nodes on head
+                head_nodes = list(self._head_model.all_nodes()) if hasattr(self._head_model, 'all_nodes') else []
+                facial_keywords = ('eye', 'teeth', 'tongue', 'jaw', 'gum', 'lid', 'cornea', 'face')
+                n_facial = sum(1 for n in head_nodes
+                               if any(kw in n.name.lower() for kw in facial_keywords)
+                               and hasattr(n, 'vertices') and n.vertices)
+                n_head_anims = len(getattr(self._head_model, 'animations', []))
+                facial_str = f"  |  {n_facial} facial meshes" if n_facial else ""
+                head_anim_str = f"  |  {n_head_anims} head anims" if n_head_anims else ""
                 self._val_var.set(
-                    f"⚠ {asm.warnings[0] if asm.warnings else 'Assembly invalid'}")
+                    f"✓ Valid assembly{pos_str}{sm_match}{facial_str}{head_anim_str}")
+            else:
+                warnings = asm.warnings if hasattr(asm, 'warnings') else []
+                self._val_var.set(
+                    f"⚠ {warnings[0] if warnings else 'Assembly invalid — check headhook bone'}")
         except Exception as exc:
             self._val_var.set(f"Validation error: {exc}")
 
@@ -7692,6 +7837,102 @@ class CharacterBuilderPanel(tk.Frame):
         except Exception as exc:
             self._asm_status_var.set(f"Export error: {exc}")
             log.error("CharacterBuilderPanel B1 export: %s", exc)
+
+    def _export_full_character_fbx(self):
+        """
+        Export body + head as a single FBX for Unreal Engine.
+
+        Automatically:
+          • Attaches the head model (eyes, teeth, tongue) under the body's headhook bone
+          • Loads the base skeleton (S_MALE02 / S_FEMALE02 / creature root) from the
+            ResourceManager and merges it so the FBX has all 70+ bones
+          • Merges ALL available animations from the base skeleton into the FBX so each
+            clip (walk, run, attack, talk, etc.) arrives as a separate AnimSequence in UE5
+          • Exports textures alongside the FBX as TGA files
+        """
+        if not self._body_model:
+            self._asm_status_var.set("Load a body model first.")
+            return
+
+        from tkinter.filedialog import asksaveasfilename
+        char_name = getattr(self._body_model, 'name', 'character')
+        path = asksaveasfilename(
+            title="Export Full Character FBX (Unreal Engine)",
+            defaultextension=".fbx",
+            filetypes=[("FBX files", "*.fbx"), ("All files", "*.*")],
+            initialfile=f"{char_name}_unreal.fbx",
+        )
+        if not path:
+            return
+
+        self._asm_status_var.set("Exporting FBX… (this may take a moment)")
+        self.update_idletasks()
+
+        try:
+            try:
+                from core.creature_appearance import export_full_character_fbx
+            except ImportError:
+                from src.core.creature_appearance import export_full_character_fbx  # type: ignore
+
+            # Gather the texture cache and resource manager from the app
+            app = self.winfo_toplevel()
+            tex_cache = None
+            resource_manager = None
+            try:
+                tex_cache = app.viewport._renderer.tex_cache
+            except Exception:
+                pass
+            try:
+                resource_manager = getattr(app, '_resource_manager', None)
+            except Exception:
+                pass
+
+            result = export_full_character_fbx(
+                body_model=self._body_model,
+                head_model=self._head_model,     # may be None — body-only export
+                fbx_path=path,
+                base_skeleton_model=None,        # auto-loaded via resource_manager
+                game=self._game_var.get(),
+                tex_cache=tex_cache,
+                export_rigging=True,
+                resource_manager=resource_manager,
+            )
+
+            if result['ok']:
+                bskel    = result.get('base_skeleton', '')
+                facial   = result.get('facial_nodes', [])
+                n_anim   = result['anim_count']
+                n_mesh   = result['mesh_count']
+                n_nodes  = result.get('node_count', 0)
+                warnings = result.get('warnings', [])
+                warn_str = f"\n  ⚠ {len(warnings)} warning(s)" if warnings else ""
+                # Build a UE5 import hint
+                ue5_hint = (
+                    "\n  → In UE5: Content Browser → Import → enable "
+                    "'Import Animations' + select/create Skeleton asset"
+                )
+                status = (
+                    f"✓ FBX exported: {os.path.basename(path)}\n"
+                    f"  Skeleton: {bskel or '(body only)'}  "
+                    f"Anims: {n_anim}  Meshes: {n_mesh}  Nodes: {n_nodes}\n"
+                    f"  Facial nodes: {', '.join(facial[:4]) or 'none'}"
+                    + (f" (+{len(facial)-4} more)" if len(facial) > 4 else "")
+                    + warn_str
+                    + ue5_hint
+                )
+                self._asm_status_var.set(status)
+                for w in warnings:
+                    log.warning("export_full_character_fbx: %s", w)
+            else:
+                self._asm_status_var.set(
+                    f"⚠ FBX export failed: {result.get('message', '?')}")
+                for w in result.get('warnings', []):
+                    log.warning("export_full_character_fbx: %s", w)
+
+        except Exception as exc:
+            self._asm_status_var.set(f"⚠ FBX export error: {exc}")
+            log.error("CharacterBuilderPanel._export_full_character_fbx: %s",
+                      exc, exc_info=True)
 
     def _export_ascii(self):
         model = self._get_model()
@@ -9650,27 +9891,120 @@ class KotorModToolsApp(tk.Tk):
             self.log(f"Export error: {e}", 'error')
 
     def _export_fbx(self):
+        """
+        Export the current model as FBX.
+
+        If both a body model AND a head model are loaded (i.e. the viewport is
+        showing a character assembly), offers a full-character export that:
+          • Combines body + head into one FBX (eyes, teeth, tongue included)
+          • Merges ALL supermodel animations into the FBX
+          • Passes the base skeleton so bind-pose matrices are correct
+
+        If only a single model is loaded, falls back to the simple single-model
+        FBX export.
+        """
         if not self._model:
-            messagebox.showwarning("No Model","Load a model first."); return
+            messagebox.showwarning("No Model", "Load a model first.")
+            return
+
+        # ── Detect if we have a head model loaded alongside the body ─────────
+        # The head model is stored in self._head_model when set via the
+        # character builder panel or the head-select dropdown.
+        head_model = getattr(self, '_head_model', None)
+        base_skel  = getattr(self, '_base_skeleton_model', None)
+
+        use_full_export = (head_model is not None)
+
+        # If head is loaded, ask the user which mode they want
+        if use_full_export:
+            from tkinter import messagebox as _mb
+            choice = _mb.askyesnocancel(
+                "Full Character Export",
+                f"A head model ('{getattr(head_model, 'name', '?')}') is loaded.\n\n"
+                "YES  → Full character FBX: body + head + eyes/teeth/tongue + "
+                "all animations (recommended for Unreal Engine)\n\n"
+                "NO   → Single model FBX: body only (current model as shown)\n\n"
+                "CANCEL → Abort export",
+            )
+            if choice is None:   # Cancel
+                return
+            use_full_export = bool(choice)  # True=Yes, False=No
+
         path = filedialog.asksaveasfilename(
             initialfile=self._model.name + '.fbx',
             defaultextension='.fbx',
-            filetypes=[("FBX files","*.fbx"),("OBJ files","*.obj")])
-        if not path: return
+            filetypes=[("FBX files", "*.fbx"), ("OBJ files", "*.obj")])
+        if not path:
+            return
+
         try:
-            ok = FBXExporter().export(self._model, path,
-                                      tex_cache=self._get_tex_cache_for_export(),
-                                      export_rigging=True)
-            if ok:
-                self.log(f"Exported FBX → {Path(path).name}", 'success')
-                # Inform user about rigging subfolder
-                _has_rig = (any(n.is_skin and getattr(n, 'bone_map', None)
-                                for n in self._model.all_nodes()) or
-                            bool(self._model.animations))
-                if _has_rig:
-                    self.log(f"  Rigging + animations → rigging/ subfolder", 'info')
+            if use_full_export and head_model is not None:
+                # ── Full character export (body + head + all animations) ───
+                try:
+                    from ..core.creature_appearance import export_full_character_fbx
+                except ImportError:
+                    from core.creature_appearance import export_full_character_fbx  # type: ignore
+
+                # resource_manager enables auto-loading the base skeleton
+                # (e.g. S_MALE02) when base_skel is not explicitly set.
+                _rm = getattr(self, '_resource_manager', None)
+
+                result = export_full_character_fbx(
+                    body_model=self._model,
+                    head_model=head_model,
+                    fbx_path=path,
+                    base_skeleton_model=base_skel,
+                    game=getattr(self._model, 'game_version', 'K1'),
+                    tex_cache=self._get_tex_cache_for_export(),
+                    export_rigging=True,
+                    resource_manager=_rm,
+                )
+                if result['ok']:
+                    self.log(f"Full character FBX → {Path(path).name}", 'success')
+                    _bskel = result.get('base_skeleton', '')
+                    self.log(
+                        f"  Base skeleton: {_bskel or '(none)'}  "
+                        f"Animations: {result['anim_count']}  "
+                        f"Meshes: {result['mesh_count']}  "
+                        f"Facial nodes: {result['facial_nodes']}", 'info')
+                    if result['warnings']:
+                        for w in result['warnings']:
+                            self.log(f"  ⚠ {w}", 'warning')
+                    self.log(
+                        "  Unreal import: Content Browser → Import → "
+                        "select FBX → Import Animations ✓ → Import All",
+                        'info')
+                    self.log(
+                        "  Each KotOR animation clip is a separate AnimSequence "
+                        "asset in Unreal Engine.",
+                        'info')
+                else:
+                    self.log(
+                        f"Full character FBX failed: {result['message']}", 'error')
+                    for w in result.get('warnings', []):
+                        self.log(f"  {w}", 'warning')
             else:
-                self.log(f"FBX export fell back to OBJ (pyassimp not installed)", 'warning')
+                # ── Single model export (existing behaviour) ──────────────
+                ok = FBXExporter().export(
+                    self._model, path,
+                    tex_cache=self._get_tex_cache_for_export(),
+                    export_rigging=True,
+                    base_skeleton_model=base_skel,
+                )
+                if ok:
+                    self.log(f"Exported FBX → {Path(path).name}", 'success')
+                    _has_rig = (
+                        any(n.is_skin and getattr(n, 'bone_map', None)
+                            for n in self._model.all_nodes())
+                        or bool(self._model.animations))
+                    if _has_rig:
+                        self.log(
+                            f"  Animations: {len(self._model.animations)}  "
+                            "Rigging → rigging/ subfolder", 'info')
+                else:
+                    self.log(
+                        "FBX export fell back to OBJ (pyassimp not installed)",
+                        'warning')
         except Exception as e:
             self.log(f"Export error: {e}", 'error')
 

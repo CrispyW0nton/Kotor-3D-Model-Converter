@@ -81,3 +81,4 @@ Thumbs.db
 # ── PyKotor embedded checkout (checked in to /home/user/webapp/PyKotor) ───────
 PyKotor/
 render_check/
+kotorblender_src

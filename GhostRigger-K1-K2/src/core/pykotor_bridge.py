@@ -9,11 +9,13 @@ This module provides:
   - load_model_from_bytes_via_pykotor(...): Load MDL bytes → KotorModel
   - is_pykotor_available()               : Returns True if PyKotor is importable
 
-Correct bone-weight indexing (Phase 14.2 fix):
-  MDLSkin.bone_indices[slot] → node_id in all_nodes()
-  MDLSkin.vertex_bones[vi].vertex_indices → bonemap slots (as float)
-  BoneWeight.bone_index = bonemap slot (matches viewport.py bone_transforms key)
-  KotorModel.node.bone_map[slot] = bone node name ('' = unused slot)
+Correct bone-weight indexing (Phase 14.2 fix — verified vs PyKotor MDLBoneVertex):
+  MDLSkin.bonemap[local_idx]              → MDLNode.node_id (stored as float32)
+  MDLSkin.vertex_bones[vi].vertex_indices → local_idx into bonemap (stored as float)
+  BoneWeight.bone_index = local_idx  (direct index into gr.bone_map)
+  gr.bone_map[local_idx] = bone node name ('' = unused/unknown slot)
+  _build_bone_transforms keys bone_transforms[local_idx] = (bind_wp, bind_wo, anim_wp, anim_wo)
+  _lbs_vertex accesses bone_transforms[bw.bone_index]  ← bw.bone_index == local_idx
 """
 
 import logging
@@ -65,21 +67,29 @@ _CTRL_ALPHA       = 132  # MDLControllerType.ALPHA  (was 128 in older versions)
 _CTRL_SELFILLUM   = 100  # MDLControllerType.SELFILLUMCOLOR / VERTICALDISPLACEMENT / DRAG
 
 # NodeType → NodeFlags mapping
+# NOTE: MDLNodeType.DUMMY maps to NodeFlags.HEADER (0x01) for the MODEL ROOT ONLY.
+# Child bone/joint nodes in KotOR binary MDL use flags=0x00 (no flags set).
+# When loading via PyKotor all dummy nodes come in as DUMMY type, so we CANNOT
+# distinguish root vs bone just from the type.  Instead, _convert_single_node()
+# uses parent=None to detect the root and sets flags=HEADER only for the root;
+# all other DUMMY-type nodes get flags=0 so they behave as pure bone nodes.
+# See _convert_single_node() for the actual flag assignment logic.
 _NODETYPE_TO_FLAGS: Dict[int, int] = {}
 if _PYKOTOR:
     _NODETYPE_TO_FLAGS = {
-        int(_MDLNodeType.DUMMY):      int(NodeFlags.HEADER),
+        # DUMMY → flags handled per-node in _convert_single_node (root vs bone)
+        int(_MDLNodeType.DUMMY):      0,              # default=bone; root overridden below
         int(_MDLNodeType.TRIMESH):    int(NodeFlags.MESH),
         int(_MDLNodeType.DANGLYMESH): int(NodeFlags.MESH) | int(NodeFlags.DANGLY),
         int(_MDLNodeType.LIGHT):      int(NodeFlags.LIGHT),
         int(_MDLNodeType.EMITTER):    int(NodeFlags.EMITTER),
         int(_MDLNodeType.REFERENCE):  int(NodeFlags.REFERENCE),
         int(_MDLNodeType.AABB):       int(NodeFlags.AABB),
-        int(_MDLNodeType.SKIN):       int(NodeFlags.SKIN),
-        int(_MDLNodeType.SABER):      int(NodeFlags.SABER),
-        int(_MDLNodeType.CAMERA):     int(NodeFlags.HEADER),
+        int(_MDLNodeType.SKIN):       int(NodeFlags.SKIN) | int(NodeFlags.MESH),
+        int(_MDLNodeType.SABER):      int(NodeFlags.SABER) | int(NodeFlags.MESH),
+        int(_MDLNodeType.CAMERA):     0,              # treat camera as bone/dummy
         int(_MDLNodeType.PATCH):      int(NodeFlags.MESH),
-        int(_MDLNodeType.BINARY):     int(NodeFlags.HEADER),
+        int(_MDLNodeType.BINARY):     0,              # treat binary nodes as bone/dummy
     }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -407,8 +417,18 @@ def _convert_single_node(
         gr.rotation = (0.0, 0.0, 0.0, 1.0)
 
     # Node flags
+    # For DUMMY-type nodes: the model ROOT has no parent → flags=HEADER (0x01).
+    # Child DUMMY nodes are pure bone joints → flags=0x00.
+    # This matches the binary MDL flag encoding and allows the FBX exporter to
+    # correctly emit the root as a "Null" node and bones as "LimbNode" nodes.
     node_type_val = int(getattr(pk_node, 'node_type', 1))
-    gr.flags = _NODETYPE_TO_FLAGS.get(node_type_val, int(NodeFlags.HEADER))
+    base_flags = _NODETYPE_TO_FLAGS.get(node_type_val, 0)
+    if _PYKOTOR and node_type_val == int(_MDLNodeType.DUMMY):
+        # Root node: parent_gr is None → mark as HEADER
+        # Child bone nodes: parent_gr is set → leave flags=0
+        gr.flags = int(NodeFlags.HEADER) if parent_gr is None else 0
+    else:
+        gr.flags = base_flags
 
     # Base-pose controllers (bind pose)
     try:
@@ -505,14 +525,14 @@ def _overlay_skin_texture(pk_skin, gr: ModelNode) -> None:
         tex1 = str(getattr(pk_skin, 'texture_1', '') or '').strip()
         tex2 = str(getattr(pk_skin, 'texture_2', '') or '').strip()
         if tex1:
-            gr.texture   = tex1
-            gr.textures  = [tex1]
-            gr.tex_count = 1
+            gr.texture        = tex1
+            gr.texture_names  = [tex1]   # texture_names[0] = primary texture
+            gr.tex_count      = 1
         if tex2:
             gr.lightmap  = tex2
-            if tex2 not in gr.textures:
-                gr.textures.append(tex2)
-            gr.tex_count = len(gr.textures)
+            if tex2 not in gr.texture_names:
+                gr.texture_names.append(tex2)   # texture_names[1] = lightmap
+            gr.tex_count = len(gr.texture_names)
     except Exception:
         pass
     try:
@@ -525,30 +545,30 @@ def _overlay_skin_texture(pk_skin, gr: ModelNode) -> None:
     except Exception:
         pass
     try:
-        gr.render        = bool(getattr(pk_skin, 'render', True))
-        gr.shadow        = bool(getattr(pk_skin, 'shadow', True))
-        gr.beaming       = bool(getattr(pk_skin, 'beaming', False))
-        gr.bg_geometry   = bool(getattr(pk_skin, 'background_geometry', False))
-        gr.transparency_hint = int(getattr(pk_skin, 'transparency_hint', 0))
+        gr.render             = bool(getattr(pk_skin, 'render', True))
+        gr.has_shadow         = bool(getattr(pk_skin, 'shadow', True))
+        gr.beaming            = bool(getattr(pk_skin, 'beaming', False))
+        gr.background_geometry = bool(getattr(pk_skin, 'background_geometry', False))
+        gr.transparency_hint  = int(getattr(pk_skin, 'transparency_hint', 0))
     except Exception:
         pass
 
 
 def _fill_mesh_data(pk_node, mesh_obj, gr: ModelNode) -> None:
     """Fill GhostRigger mesh data from a PyKotor MDLMesh/MDLSkin object."""
-    # Texture names
+    # Texture names — use correct ModelNode field names: texture, texture_names, lightmap
     try:
         tex1 = str(getattr(mesh_obj, 'texture_1', '') or '').strip()
         tex2 = str(getattr(mesh_obj, 'texture_2', '') or '').strip()
         if tex1:
-            gr.texture   = tex1
-            gr.textures  = [tex1]
-            gr.tex_count = 1
+            gr.texture        = tex1
+            gr.texture_names  = [tex1]   # texture_names[0] = primary texture
+            gr.tex_count      = 1
         if tex2:
             gr.lightmap  = tex2
-            if tex2 not in gr.textures:
-                gr.textures.append(tex2)
-            gr.tex_count = len(gr.textures)
+            if tex2 not in gr.texture_names:
+                gr.texture_names.append(tex2)   # texture_names[1] = lightmap
+            gr.tex_count = len(gr.texture_names)
     except Exception:
         pass
 
@@ -563,13 +583,15 @@ def _fill_mesh_data(pk_node, mesh_obj, gr: ModelNode) -> None:
     except Exception:
         pass
 
-    # Render flags
+    # Render flags — use correct ModelNode field names
     try:
-        gr.render        = bool(getattr(mesh_obj, 'render', True))
-        gr.shadow        = bool(getattr(mesh_obj, 'shadow', True))
-        gr.beaming       = bool(getattr(mesh_obj, 'beaming', False))
-        gr.bg_geometry   = bool(getattr(mesh_obj, 'background_geometry', False))
-        gr.transparency_hint = int(getattr(mesh_obj, 'transparency_hint', 0))
+        gr.render              = bool(getattr(mesh_obj, 'render', True))
+        gr.has_shadow          = bool(getattr(mesh_obj, 'shadow', False))
+        gr.beaming             = bool(getattr(mesh_obj, 'beaming', False))
+        gr.background_geometry = bool(getattr(mesh_obj, 'background_geometry', False))
+        gr.transparency_hint   = int(getattr(mesh_obj, 'transparency_hint', 0))
+        gr.rotate_texture      = bool(getattr(mesh_obj, 'rotate_texture', False))
+        gr.has_lightmap        = bool(getattr(mesh_obj, 'has_lightmap', False))
     except Exception:
         pass
 
@@ -597,23 +619,43 @@ def _fill_mesh_data(pk_node, mesh_obj, gr: ModelNode) -> None:
     except Exception:
         gr.normals = []
 
-    # UV coordinates — primary (vertex_uv)
+    # Vertex tangents — stored in the MDX stream when bump maps are used.
+    # PyKotor exposes them as 'vertex_tangents' (or 'tangents') on the mesh object.
+    # When present we export them in the FBX tangent layer for UE5 normal-map support.
     try:
-        uv_list = list(mesh_obj.vertex_uv or [])
+        vt = (getattr(mesh_obj, 'vertex_tangents', None) or
+              getattr(mesh_obj, 'tangents', None) or [])
+        gr.tangents = [(float(t.x), float(t.y), float(t.z)) for t in (vt or [])]
+    except Exception:
+        gr.tangents = []
+
+    # UV coordinates — primary (vertex_uv1 / vertex_uv)
+    # In PyKotor MDLMesh:
+    #   vertex_uv  (property) = vertex_uv1  ← primary texture UVs
+    #   vertex_uv1 (field)                  ← same as vertex_uv
+    #   vertex_uv2 (field)                  ← secondary / lightmap UVs
+    try:
+        uv_list = list(getattr(mesh_obj, 'vertex_uv1', None) or [])
         if not uv_list:
-            # Try vertex_uvs (KotOR 2 multi-channel)
-            uvs_raw = getattr(mesh_obj, 'vertex_uvs', None) or []
-            uv_list = list(uvs_raw[0]) if uvs_raw else []
+            # Try the property alias
+            try:
+                uv_list = list(mesh_obj.vertex_uv or [])
+            except Exception:
+                uv_list = []
         gr.uvs = [(float(uv.x), float(uv.y)) for uv in uv_list]
     except Exception:
         gr.uvs = []
 
-    # Secondary (lightmap) UVs — vertex_uv1
+    # Secondary (lightmap) UVs — vertex_uv2
+    # Store in BOTH uvs_2 (general second UV set, ModelNode.uvs_2) AND uvs_lm
+    # so all downstream consumers (viewport, FBX exporter, glTF exporter) work.
     try:
-        uv2 = list(getattr(mesh_obj, 'vertex_uv1', None) or [])
-        gr.uvs2 = [(float(uv.x), float(uv.y)) for uv in uv2]
+        uv2 = list(getattr(mesh_obj, 'vertex_uv2', None) or [])
+        gr.uvs_2  = [(float(uv.x), float(uv.y)) for uv in uv2]
+        gr.uvs_lm = list(gr.uvs_2)  # copy: same data, lightmap UV consumer field
     except Exception:
-        gr.uvs2 = []
+        gr.uvs_2  = []
+        gr.uvs_lm = []
 
     # Faces + face UVs
     # KotOR MDL faces have t1=t2=t3=-1 for all stock models, meaning UV index
@@ -651,50 +693,101 @@ def _fill_skin_data(
 ) -> None:
     """Fill GhostRigger skin/bone data from a PyKotor MDLSkin object.
 
-    Bone index mapping (Phase 14.2 fix):
-      pk_skin.bone_indices[bonemap_slot] → PyKotor node_id
-      pk_skin.vertex_bones[vi].vertex_indices → bonemap_slot (as float)
-      BoneWeight.bone_index = bonemap_slot  (key for bone_transforms in viewport.py)
-      gr.bone_map[bonemap_slot] = bone node name ('' for unused slots/-1)
+    ── Bone index mapping (Phase 14.2 — verified against PyKotor io_mdl.py and
+       MDLBoneVertex docstring) ──
 
-    The viewport's _build_bone_transforms() enumerates gr.bone_map with enumerate()
-    and keys bone_transforms[slot] = transforms.  _lbs_vertex then accesses
-    bone_transforms[bw.bone_index].  So bone_index must be the bonemap slot.
+    KotOR binary MDL skin data structures
+    ──────────────────────────────────────
+    bonemap : list[int]  — variable-length float32 array in the MDL file.
+                           bonemap[local_idx] = PyKotor node_id (== MDLNode.node_id).
+                           local_idx is a compact local numbering for this mesh's bones.
+
+    vertex_indices[j] : float stored in the MDX file, cast to int.
+                        = local_idx into bonemap (NOT a global node_id).
+                        Unused slots are -1.0.
+
+    vertex_weights[j] : float, normalised weight for influence j.
+
+    GhostRigger bone_map design
+    ──────────────────────────
+      gr.bone_map[local_idx] = bone node name  ('' for unused/unknown slots)
+      BoneWeight.bone_index  = local_idx  (direct index into gr.bone_map)
+      _build_bone_transforms enumerates gr.bone_map with enumerate():
+          bone_transforms[local_idx] = (bind_wp, bind_wo, anim_wp, anim_wo)
+      _lbs_vertex accesses bone_transforms[bw.bone_index]
+
+    Algorithm
+    ─────────
+      1. Build gr.bone_map from bonemap:
+             gr.bone_map[local_idx] = pk_nodes_by_id[bonemap[local_idx]].name
+      2. For each vertex, build VertexSkinData:
+             local_idx = int(vertex_indices[j])   ← direct bonemap slot
+             BoneWeight(bone_index=local_idx, weight=vertex_weights[j])
+      3. Normalise per-vertex weights so they sum to 1.0.
     """
-    # Build gr.bone_map: bonemap_slot → bone node name
-    raw_bonemap = list(pk_skin.bonemap or [])
-    # pk_skin.bone_indices maps bonemap_slot → PyKotor node_id
-    raw_bone_indices = list(pk_skin.bone_indices or [])
+    # ── Step 1: Build gr.bone_map from bonemap ──────────────────────────────
+    # bonemap[local_idx] = node_id (stored as float32, cast to int on read)
+    # '' for invalid/unused slots (node_id < 0, == 0xFFFF, or not found)
+    raw_bonemap: List = list(pk_skin.bonemap or [])
 
     gr.bone_map = []
-    for slot_idx, node_id in enumerate(raw_bone_indices):
-        nid = int(node_id)
-        if nid < 0:
+    for local_idx, raw_node_id in enumerate(raw_bonemap):
+        try:
+            nid = int(raw_node_id)
+        except (TypeError, ValueError):
             gr.bone_map.append('')
-        else:
-            pk_n = pk_nodes_by_id.get(nid)
-            gr.bone_map.append(pk_n.name if pk_n else '')
+            continue
+        # 0xFFFF (65535) = unused slot in the MDL format (from prepare_bone_lookups)
+        if nid < 0 or nid == 0xFFFF:
+            gr.bone_map.append('')
+            continue
+        pk_n = pk_nodes_by_id.get(nid)
+        gr.bone_map.append(pk_n.name if pk_n else '')
 
-    # Pad bone_map to cover all bonemap entries if needed
-    while len(gr.bone_map) < len(raw_bonemap):
-        gr.bone_map.append('')
-
-    # Build per-vertex skin data
-    # vertex_bones[vi].vertex_indices → bonemap slot (as float, -1 = unused)
-    # vertex_bones[vi].vertex_weights → weight for that slot
+    # ── Step 2: Build per-vertex skin data ──────────────────────────────────
+    # vertex_indices[j] = local_idx into bonemap  (stored as float, -1.0 = unused)
+    # vertex_weights[j] = blend weight for that influence
     gr.skin_data = []
-    vertex_bones = list(pk_skin.vertex_bones or [])
-    for bv in vertex_bones:
+    vertex_bones_list = list(pk_skin.vertex_bones or [])
+    bonemap_len = len(gr.bone_map)
+
+    for bv in vertex_bones_list:
         vsd = VertexSkinData()
-        vis  = bv.vertex_indices   # tuple of 4 bonemap slots (float)
-        wts  = bv.vertex_weights   # tuple of 4 weights
-        for i in range(4):
-            slot = int(vis[i]) if vis[i] is not None else -1
-            w    = float(wts[i]) if wts[i] is not None else 0.0
-            if slot < 0 or w <= 1e-6 or not math.isfinite(w):
+        vis = bv.vertex_indices   # tuple of 4 floats (local bonemap indices)
+        wts = bv.vertex_weights   # tuple of 4 floats (blend weights)
+
+        for j in range(4):
+            raw_idx = vis[j]
+            raw_w   = wts[j]
+            if raw_idx is None or raw_w is None:
                 continue
-            vsd.influences.append(BoneWeight(bone_index=slot, weight=w))
+            local_idx = int(float(raw_idx))
+            w         = float(raw_w)
+            # Skip unused slots (-1) and zero/negligible/non-finite weights
+            if local_idx < 0 or w <= 1e-6 or not math.isfinite(w):
+                continue
+            # Skip out-of-range local indices (corrupt data guard)
+            if local_idx >= bonemap_len:
+                continue
+            vsd.influences.append(BoneWeight(bone_index=local_idx, weight=w))
+
+        # Normalise weights so they sum to exactly 1.0.
+        # KotOR stores pre-normalised weights, but floating-point rounding and
+        # partial sums (after skipping invalid influences) can shift the total.
+        if vsd.influences:
+            wsum = sum(bw.weight for bw in vsd.influences)
+            if wsum > 1e-5 and abs(wsum - 1.0) > 1e-4:
+                inv = 1.0 / wsum
+                for bw in vsd.influences:
+                    bw.weight *= inv
+
         gr.skin_data.append(vsd)
+
+    log.debug(
+        f"_fill_skin_data '{gr.name}': {len(gr.bone_map)} bone_map slots, "
+        f"{len(gr.skin_data)} vertices, bonemap_len={len(raw_bonemap)}, "
+        f"named_slots={sum(1 for b in gr.bone_map if b)}"
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
