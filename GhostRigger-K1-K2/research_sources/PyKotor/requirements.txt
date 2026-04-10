@@ -1,5 +1,0 @@
-# Root workspace requirements
-# This file matches pyproject.toml and includes all libraries and tools
-
-# Include library requirements
--r Libraries/PyKotor/requirements.txt

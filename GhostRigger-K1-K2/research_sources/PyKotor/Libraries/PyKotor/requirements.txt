@@ -1,2 +1,0 @@
-ply>=3.11,<4
-pycryptodome>=3.19.0
