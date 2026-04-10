@@ -1,1239 +1,315 @@
-# GhostRigger-K1-K2
+# GhostRigger – KotOR 1 & 2 Model Pipeline
 
-**A KotOR modding pipeline tool for Star Wars: Knights of the Old Republic 1 & 2 (TSL)**
+> **Odyssey Engine Toolkit** — A focused 3D model viewer, rigging tool, and modding
+> pipeline for *Star Wars: Knights of the Old Republic* (K1) and *The Sith Lords* (K2/TSL).
 
-GhostRigger is an open-source Python tool for working with KotOR's Odyssey Engine model format (MDL/MDX). It can parse, visualise, modify, and cross-port 3D models between KotOR 1 and KotOR 2, run integrity audits, render multi-angle previews, and expose all of its capabilities as a Model Context Protocol (MCP) server for use with AI assistants — entirely in Python, with no game installation required for the core library.
+![GhostRigger v5.1 UI](assets/icons/ghostrigger_1024x1024.png)
 
-It also integrates with **AgentDecompile** — an AI-powered Ghidra reverse-engineering backend that hosts the fully-analysed KotOR Odyssey Engine binaries (`swkotor.exe`, `swkotor2.exe`) on a shared server. This lets an AI assistant decompile any engine function, search symbols, trace data flow, and inspect memory — all without a local Ghidra install.
-
-> **See [ROADMAP.md](ROADMAP.md) for a full breakdown of completed phases, in-progress work, known bugs, and future plans.**
-> **Latest: v4.4 (2026-03-20) — Deep multi-repo research pass; ROADMAP rewritten with concrete implementation references for all 18 planned features.**
-
----
-
-## What's New (v4.4 — 2026-03-20)
-
-### Deep Multi-Repo Research Pass — 10 Reference Repos Audited
-
-This release is a **deep research pass** across every KotOR modding repository.
-No new features were added, but the ROADMAP has been completely rewritten with
-concrete implementation references for every planned feature.
-
-**Repos audited:**
-
-| Repository | Key Finding |
-|-----------|-------------|
-| [xoreos](https://github.com/xoreos/xoreos) | Definitive saber blade algorithm (16 quads from 8 verts), emitter struct layout (224 bytes) |
-| [KotOR.js](https://github.com/KobaltBlu/KotOR.js) | Full particle system (1,276 lines), walkmesh GL rendering (1,020 lines), area assembly (1,096 lines) |
-| [PyKotor/io_mdl.py](https://github.com/OldRepublicDevs/PyKotor) | 4,783-line binary MDL reader+**writer** — primary reference for Phase 7 (binary write) |
-| [PyKotor/frustum.py](https://github.com/OldRepublicDevs/PyKotor) | Gribb/Hartmann frustum culling with VP-hash cache — Phase 5 scene culling |
-| [PyKotor/InbuiltNCSCompiler](https://github.com/OldRepublicDevs/PyKotor) | Pure-Python NSS→NCS compiler, no external deps — Phase 12.6 script panel |
-| [Kotor.NET/MDLBinaryWriter.cs](https://github.com/nicholasgasior/Kotor.NET) | 575-line binary writer (C#) — secondary reference, K1/K2 function pointers confirmed |
-| [Kotor.NET/BWM.CalculateAABBs()](https://github.com/nicholasgasior/Kotor.NET) | Median-split AABB tree builder — Phase 9.3 (walkmesh write) |
-| [kotorblender](https://github.com/OldRepublicDevs/kotorblender) | WOK co-import with room MDL, LYT/PTH Blender support |
-| [HoloPatcher](https://github.com/OldRepublicDevs/PyKotor) | TSLPatcher `changes.ini` format — Phase 12.5 mod packager |
-| [bioware-kaitai-formats](https://github.com/OldRepublicDevs/bioware-kaitai-formats) | Formal KSY grammars for all formats; multi-language code generation |
-
-**ROADMAP now includes:**
-- Concrete line-level references for every planned feature (e.g., "Phase 7 → PyKotor `io_mdl.py:4783 lines`")
-- Surface material color table for walkmesh visualization (20 materials)
-- Full emitter struct field list (224 bytes confirmed by xoreos + PyKotor)
-- Area assembly flow (LYT→ARE→GIT, from `ForgeArea.ts`)
-- Frustum culling algorithm (Gribb/Hartmann, VP-hash, from `PyKotor/frustum.py`)
-- Mod packager design (TSLPatcher `changes.ini` format, from HoloPatcher)
-- NWScript compile panel design (pure-Python, from `InbuiltNCSCompiler`)
+*Dark theme · Library panel with game-installed models · 3-D viewport with skeleton overlay
+· Node tree · Module Editor · status bar.*
 
 ---
 
-## What's New (v4.3 — 2026-03-19)
+## Latest Release — v5.1.0 (2026-04-05) · Streamlined Five-Pillar UI
 
-### Bug Fixes
+The codebase has been **audited and trimmed** to focus on five core capabilities.
+~2 400 lines of legacy dead code were removed; the right panel was reduced from eight
+tabs to four, and the Module Editor was promoted to a first-class left-panel tab.
 
-| Fix | Details |
-|-----|---------|
-| **`flask` added to requirements.txt** | The IPC/Ghostworks server was always disabled on a fresh install because `flask` was listed nowhere. Now `flask>=2.3.0` is in `requirements.txt`. |
-| **`APP_VERSION` corrected** | Code said `2.7.0`; now correctly reports `4.2.0`. |
-| **`KotorModel.nodes` property added** | `model.nodes` now works as an alias for `model.all_nodes()`. Previously only `all_nodes()` existed, breaking code that used the natural `model.nodes` pattern. |
-| **Source audit + ROADMAP rewrite** | Complete source audit: every module tested end-to-end. ROADMAP now accurately describes what works vs. what's planned. |
-
-### Honest Current-State Assessment
-
-Here is what actually works if you download the tool today:
-
-**✅ Works reliably:**
-- Parse any KotOR 1 or 2 binary MDL/MDX (100% success rate on all 5,764 game models)
-- View models in the 3D viewport with full textures, skinning, and lighting
-- Browse and search the full game library (auto-detected or manually set)
-- Export models to OBJ, GLTF/GLB, FBX (ASCII)
-- Import models from OBJ or FBX (via pyassimp)
-- Play all animations (80+ controller types)
-- Edit creature/placeable/door blueprints (UTC/UTP/UTD)
-- Compile ASCII MDL → binary via MDLOps (requires separate MDLOps installation)
-- Normal map baking, cloth rigging, auto-rigger
-
-**⚠️ Works but requires extra setup:**
-- IPC server (Ghostworks pipeline) — needs `pip install flask`
-- KotorMCP AI server — needs `pip install mcp uvicorn`
-- FBX import — needs system `libassimp` (`sudo apt install libassimp-dev` / `brew install assimp`)
-- MDLOps compile/decompile — needs separate [MDLOps](https://github.com/Torlack/MDLOps) installation
-
-**❌ Not yet implemented:**
-- Write binary MDL (only ASCII MDL + MDLOps compile; full binary writer is Phase 7)
-- Import GLTF (export only; Phase 8)
-- Full module scene viewer (room assembly from LYT; Phase 5)
-- Particle/emitter visualization (parsed but shown as sphere; Phase 6)
-- Walkmesh overlay (parsed but not drawn; Phase 9)
+| Area | What changed |
+|------|-------------|
+| **Test suite** | **5 007 tests passing**, 11 skipped, 0 failures |
+| **Right panel** | Reduced from 8 tabs → 4 focused tabs: Props · Anims · Char Builder · Textures |
+| **Diagnostics** | Moved from tab to popup window (Ctrl+D / Model menu) — less clutter |
+| **Cloth rigging** | Panel still available via Model menu; no longer occupies a permanent tab |
+| **Module Editor** | Promoted to a first-class left-panel tab (was a hidden bottom toggle) |
+| **Legacy panels** | Removed `RetargetPanel` and `HeadSnapPanel` (~2 400 lines); functionality merged into `CharacterBuilderPanel` |
+| **Toolbar** | Cleaned — Open · Auto-Rig · Character Builder · Modules · Tex Dir · Import ▾ · Export ▾ |
 
 ---
 
-## What's New (v4.2 — 2026-03-19)
+## Five Core Pillars
 
-### Full Visual Audit: All 5,426 Renders Verified — Zero Bugs
+### 1. Model Viewer — load K1/K2 models from the game directory
 
-A pixel-level analysis of every rendered model confirmed **zero genuine rendering artifacts**
-across all 5,426 front-view renders:
+- **Auto-detection** of K1 and K2 installation paths (Windows · Linux/Steam · macOS · GOG)
+- Category tabs: All · 🐲 Creature · 👤 Character · 🗡 Item/Armor · 🏛 Module · Other
+- Live search with `Ctrl+F` · Game filter All / K1 / K2
+- CPU-based PIL renderer with two-pass depth sorting and LBS linear-blend skinning
+- Bone skeleton overlay · wireframe / solid / textured display modes
+- WalkMesh triangle overlay (`.wok`) with walkable / blocked colour coding
+- Gimbal manipulator (Translate / Rotate / Scale) · UV editor panel
 
-| Category | Count | Notes |
-|----------|-------|-------|
-| ✅ OK renders (textured, correct) | **4,444** | Clean |
-| ⬜ Expected flat/invisible | 981 | Skyboxes, waypoints, GUI objects, trigger volumes |
-| 🟡 Intentional glow | 1 | `i_drdrepeqp_003` — amber hologram console (correct) |
-| 🔴 **Genuine bugs** | **0** | **Zero** |
+### 2. Animation — browse, play, seek, and export all model animations
 
-All "flat" renders are confirmed module skybox tiles, VFX placeholders, or invisible
-utility meshes. Self-illuminated models (`i_drdrepeqp_003` amber hologram,
-`901malf` Malachor V yellow-green beams) are **working exactly as intended**.
+- Full animation list with name · length · key count · node count · event count
+- Play / Stop / Pause / Loop controls with real-time viewport playback
+- Seek bar and FPS selector (15, 24, 25, 30, 60)
+- Export animations as **JSON** or **BVH** · Import JSON animations
+- SuperModel animation chain resolution (K1 `S_Female02`, K2 `S_Female03`)
+- Keyboard: `Ctrl+A` opens Animations panel · Space to play/pause
 
-Report: `audit_output/batch_render/visual_audit.json`
+### 3. Character Builder — K1/K2 templates, skeleton rigging, head/body assembly
 
-### Automatic Game Directory Detection
+- **Auto-Rig** (`R`): Aurora-compatible skeleton generation for humanoid / creature / prop
+- **Library Rig**: copy any model's rig directly onto the current mesh
+- **GRig**: manual bone assignment with brush-mode weight painting
+- **AcuRig**: guide-based biped rig with symmetry enforcement
+- **Head/Body Assembly**: snap separate head and body models via the `headhook` node
+  - Quick-pick tables for common K1/K2 heads and bodies
+  - K1/K2 supermodel defaults (`S_Female02` / `S_Female03`)
+- **Export**: write separate `.mdl` + `.mdx` files for head and body
+- Toolbar button: **Character Builder** · Keyboard: `Ctrl+B`
 
-GhostRigger now **automatically finds and loads your KotOR installation on startup**
-with no configuration required.
+### 4. Module Editor — walkmesh editing and community tools
 
-#### How It Works
+Accessible as the **Modules tab** in the left panel (or toolbar button).
 
-On first launch, a background thread runs `detect_kotor_dirs()` from `src/resources/game_detector.py`:
+| Tool | Description |
+|------|-------------|
+| **Module Info** | Load & inspect `.lyt` / `.vis` / `.are` / `.git` / `.ifo` |
+| **Walkmesh Editor** | View `.wok` stats · auto-generate `NON_WALK` walls for custom modules |
+| **K1 ↔ K2 Porter** | One-step binary port; no MDLOps / ASCII round-trip needed |
+| **Module Builder** | Scaffold new custom module starter files (LYT + VIS + ARE + GIT + IFO templates) |
+| **Quick Export** | Batch-export room models + textures for Blender import |
 
-1. Check `~/.ghostrigger/config.json` (saved from previous session)
-2. Check `KOTOR1_DIR` / `KOTOR2_DIR` environment variables
-3. Scan **Steam** — reads `libraryfolders.vdf`, parses `.acf` manifests
-4. Scan **GOG Galaxy** — Windows registry + common GOG paths
-5. Check **default install paths** — `Program Files/LucasArts`, macOS App Support, Linux `/opt`/Lutris
-6. Check **Wine/Proton prefixes** — `~/.wine`, Proton `compatdata`
-7. Fall back to project `game_data/` (developer convenience)
+Key capabilities:
+- Auto-generate walkmesh walls (fixes camera clipping in Quanon-style modules)
+- Supermodel name auto-remapping (`S_Female02 ↔ S_Female03`)
+- Direct binary K1 ↔ K2 porter with no external tools
 
-When directories are found, the library **auto-scans and loads models immediately**
-— no manual "Set K1/K2 Dir" or "Scan" button clicks needed.
+### 5. Resource Browser — 2DA viewer, game resource browser, MDL compile/decompile
 
-#### Supported Platforms
-- **Windows**: Steam + GOG Galaxy (registry) + Program Files on all drive letters
-- **Linux**: Native Steam + Proton compatdata + Lutris + `/mnt/` external drives
-- **Steam Deck**: `/home/deck/.steam/steam` + Proton
-- **macOS**: `~/Library/Application Support/Steam` + `/Applications`
-- **WINE**: `~/.wine/drive_c/Program Files*/LucasArts/SWKotOR[2]`
-
-#### On Subsequent Launches
-Saved directories are loaded from `settings.json` and the library scan runs automatically
-at startup — models are ready to browse within ~2 seconds.
-
-### Corrected Statistics (v4.2)
-
-PC model count corrected from 115 → **239** (previous summary used stale categorization).
-`tools/merge_results.py` now always re-computes categories from resref prefix, ignoring
-any stale `"category"` field stored in older JSON.
-
-| Category | Total | Rendered | Triangles |
-|----------|-------|----------|-----------|
-| Modules/Areas | 3,296 | 3,296 (100%) | 8,541,506 |
-| Placeables | 634 | 584 (92%) | 242,786 |
-| Other/VFX | 448 | 397 (89%) | 414,838 |
-| VFX effects | 274 | 59 (22%) | 87,353 |
-| NPCs | 250 | 249 (99.6%) | 534,791 |
-| **PC models** | **239** | **239 (100%)** | **538,183** |
-| Weapons | 177 | 158 (89%) | 24,136 |
-| Doors | 165 | 165 (100%) | 73,850 |
-| Creatures | 145 | 144 (99.3%) | 336,206 |
-| Items | 126 | 125 (99.2%) | 16,183 |
-| Supermodels | 10 | 10 (100%) | 14,409 |
-| **TOTAL** | **5,764** | **5,426 (94.1%)** | **10,823,245** |
-
-### New Files
-- `src/resources/game_detector.py` — cross-platform KotOR install detection
-- `tools/run_full_batch.py` — full game batch render runner
-- `tools/run_module_batches.sh` — shell script for module batch rendering
-- `audit_output/batch_render/visual_audit.json` — pixel-level render quality report
+- **2DA Browser** (left panel): PyKotor `read_2da` primary · sort · row-search · TSV/CSV export
+- **Resource Browser** (left panel): `.rim` / `.erf` / `.mod` / `.bif` container browsing
+  - GFF struct / field tree viewer with recursion-depth guard
+- **MDLOps Bridge**: Compile ASCII MDL → Binary · Decompile Binary MDL → ASCII
+- Menu: *MDLOps → Set MDLOps Path · Compile · Decompile*
 
 ---
 
-## What's New (v4.1 — 2026-03-19)
+## UI Layout
 
-### Module Viewer Tab + Area Filter
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Toolbar: Open  Auto-Rig  Character Builder  Modules  Tex Dir       │
+│           ⬆ Import ▾   ⬇ Export ▾   [model name]  Anims  Diag  ⚙  │
+├──────────────┬──────────────────────────────────┬───────────────────┤
+│ LEFT PANEL   │         3-D VIEWPORT             │  RIGHT PANEL      │
+│ ┌──────────┐ │  (orbit / pan / zoom)            │ ┌───────────────┐ │
+│ │ Library  │ │  skeleton overlay                │ │ Props         │ │
+│ │ Nodes    │ │  walkmesh overlay                │ │ Anims         │ │
+│ │ 2DAs     │ │  gimbal manipulator              │ │ Char Builder  │ │
+│ │ Resources│ │  HUD: model badge, FPS, gizmo    │ │ Textures      │ │
+│ │ Modules  │ │                                  │ └───────────────┘ │
+│ └──────────┘ │                                  │                   │
+├──────────────┴──────────────────────────────────┴───────────────────┤
+│  Log panel (collapsible)                                            │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-The Library panel now has a **Module** category tab with:
-- Area filter dropdown (≈100 unique areas across K1+K2)
-- Thumbnail preview strip (128×128 PNGs)
-- Rich display labels with area names and model counts
-
-### OOM-Safe Batch Renderer
-
-Memory-safe two-phase batch rendering:
-- **Phase 1**: Orchestrator scans library (~514 MB RSS), writes TODO file, exits via `os.execv`
-- **Phase 2**: Lightweight coordinator (~15 MB) launches isolated `batch_modules_slice` subprocesses (~330 MB each)
-- OOM-retry logic: splits batch on kill (SIGKILL), automatically retries with smaller batches
+**Left panel tabs:** Library · Nodes · 2DAs · Resources · Modules  
+**Right panel tabs (4 only):** Props · Anims · Char Builder · Textures  
+**Hidden (menu/keyboard access):** Diagnostics (Ctrl+D popup) · Cloth (Model menu)  
+**Menus:** File · Model · MDLOps · Bake · Modular · IPC · Help
 
 ---
 
-## What's New (v4.0 — 2026-03-19)
+## Download
 
-### Full-Game Batch Render & Audit: All 5,764 KotOR Models
+### Pre-built Windows EXE (recommended)
 
-This is a major milestone: **every single model** in both KotOR 1 and KotOR 2 has been
-individually audited for parse integrity, UV correctness, and visual rendering quality.
+👉 **[Download the latest GhostRigger-K1-K2.exe from the Releases page](https://github.com/CrispyW0nton/Kotor-3D-Model-Converter/releases/latest)**
 
-#### Key Results
+No installation required — just download and run.
 
-| Metric | K1 | K2 | Combined |
-|--------|----|----|---------|
-| Total models | ~2,900 | ~2,864 | **5,764** |
-| Parse failures | 0 | 0 | **0 (100% parse rate)** |
-| Structural issues | ~140 | ~136 | ~276 |
-| UV artifacts (false positives filtered) | ~1,500 | ~1,037 | ~2,537 |
-| Yellow render artifacts | 0 | 0 | **0** |
-| Pink render artifacts | 0 | 0 | **0** |
-| Empty renders | 0 | 0 | **0** |
+> **SmartScreen warning:** Windows may flag the exe as unrecognized on first launch.
+> Click **"More info" → "Run anyway"** to proceed. The exe is built directly from this
+> source via [GitHub Actions](.github/workflows/build-exe.yml) with no modification.
 
-**100% parse rate. Zero yellow artifacts. Zero pink artifacts. Zero empty renders.**
+**Requirements:** Windows 10+ (64-bit). A KotOR 1 or 2 installation (or extracted game data).
 
-#### Batch Render Tool
+---
 
-The new `tools/batch_render_all.py` script renders every model in both games with
-front and back views, building contact sheets and a full JSON report:
+## Quick-start (run from source)
 
 ```bash
-# Render all 5,764 models (takes ~90 minutes)
-python3 tools/batch_render_all.py
+# Clone the repo
+git clone https://github.com/CrispyW0nton/Kotor-3D-Model-Converter.git
+cd Kotor-3D-Model-Converter
 
-# Creatures only, with progress ETA
-python3 tools/batch_render_all.py --category creatures
+# Install dependencies
+pip install -r requirements.txt
 
-# Quick structural audit (no renders, ~60 seconds)
-python3 tools/batch_render_all.py --no-render
-
-# Single model (debug / verify fix)
-python3 tools/batch_render_all.py --filter c_bantha
-```
-
-Output: `audit_output/batch_render/renders/` (PNG thumbnails),  
-`audit_output/batch_render/sheets/` (contact sheets per category),  
-`audit_output/batch_render/summary.txt`, `results_full.json`
-
-#### UV Issue Classification (v2.0 — Smart Filtering)
-
-| Type | Count | Meaning |
-|------|-------|---------|
-| `WARN_ATLAS` | ~1,543 | UV > 20 — atlas tiling or multi-segment skins (expected) |
-| `ERROR_UV` | ~502 | UV > 100 — almost all are walkmesh/AABB helper nodes |
-| `CORRUPT_UV` | ~334 | NaN/INF — 3ds Max object-ID artifacts in area geometry |
-
-All UV issues are in non-renderable area/walkmesh nodes. Character, NPC, weapon, item,
-door, and placeable models are all visually clean.
-
-#### v3.9.1 Rendering Fixes (Bantha Milestone)
-
-Two critical rendering bugs were fixed that affected all models:
-
-1. **UV V-flip double-application** — `_build_vbo_data` was flipping V coordinates AND the vertex shader was also flipping them, causing atlas-tiled meshes (especially creature horn geometry) to render inverted. Fix: VBO builder no longer flips; shader is the sole flip source.
-
-2. **World-space vertex threshold too aggressive** — the centroid heuristic to detect world-space meshes used 0.5 units, which incorrectly triggered on small local-space meshes near the origin. Raised to 2.0 units.
-
-Both fixes validated via **bantha visual render**: zero yellow artifacts, horn pixels 3,782 (front) / 1,192 (back), 99% coverage, no pink teeth on tail.
-
-#### Test Suite
-
-**2,727 passing, 163 skipped, 0 failed** as of 2026-03-19.
-
----
-
-## What's New (v3.7 — 2026-03-18)
-
-### Phase 3.7: K2 Dirt/Hologram Fields + Mesh Average Point
-
-Deep reading of **Kotor.NET** `MDLBinaryStructure.cs` and **xoreos** `modelnode.cpp` revealed
-two long-standing parsing gaps:
-
-#### FIX-K2DIRT — K2 dirt and hologram mesh fields now stored
-
-Kotor.NET's `TrimeshHeader.TSLUnknown1/2` comment precisely documents the 8-byte K2
-extension block (bytes 0–7 after the flag sequence in K2/TSL trimesh headers):
-
-| Byte offset | Field | Type | Description |
-|------------|-------|------|-------------|
-| +0 | `dirt_enabled` | uint8 | 1 = dirt decal overlay active |
-| +1 | padding | uint8 | — |
-| +2–3 | `dirt_texture` | uint16 | dirt texture slot index |
-| +4–5 | `dirt_coord_space` | uint16 | dirt UV coordinate space |
-| +6 | `hide_in_holograms` | uint8 | 1 = do NOT render in hologram mode |
-| +7 | padding | uint8 | — |
-
-**Old behaviour:** `o += 8` — all 4 K2-specific values were silently discarded.  
-**Fix:** Parser reads and stores all 4 values as new `ModelNode` fields. K1 models default to False/0.
-
-#### FIX-AVGPOINT — Mesh AveragePoint (centroid) stored and used for depth sorting
-
-Kotor.NET `TrimeshHeader.AveragePoint` (confirmed by xoreos `_averagePoint`) is the
-engine-computed centroid of all face vertices in the mesh. The old parser discarded it
-with `o += 12`. This caused transparent-surface depth sorting to use the node origin
-(bounding-box midpoint) instead of the actual mesh centroid.
-
-**Old behaviour:** `o += 12` — mesh centroid discarded; GPU renderer sorted by node origin.  
-**Fix:** Parser reads `avg_px/y/z` and stores as `node.mesh_average_point`. GPU renderer's
-`_node_sort_depth()` now transforms this mesh-local centroid to world space and uses it
-for accurate back-to-front ordering of transparent surfaces. Particularly noticeable for
-large meshes offset from their node origin (Mandalorian robes, big glass windows).
-
-| Source | Confirmation |
-|--------|-------------|
-| Kotor.NET `MDLBinaryStructure.cs` | `TrimeshHeader.TSLUnknown1/2` — exact K2 field layout |
-| Kotor.NET `TrimeshHeader.AveragePoint` | Parsed and stored in C# reader |
-| xoreos `modelnode.cpp` | `_averagePoint` used for depth-sort render order |
-| PyKotor `gl/models/mesh.py` | `_vertex_blob_cache` — performance design pattern |
-| PyKotor `gl/scene/scene.py` | Frustum culling with bounding spheres (future Phase 5 reference) |
-
-**New fields on `ModelNode`:** `hide_in_holograms`, `dirt_enabled`, `dirt_texture`,
-`dirt_coord_space`, `mesh_average_point`.
-
-**47 new tests** in `tests/test_v250_phase37_k2_fields_avgpoint.py` — all passing.
-
----
-
-## What's New (v3.6 — 2026-03-18)
-
-### Phase 3.6: Per-Node Alpha-Test Threshold (FIX-ALPHATEST)
-
-Cross-repo research (**Kotor.NET**, **PyKotor**, **xoreos**) revealed that the GPU renderer
-was using a global hardcoded `u_alpha_test=0.5` for **all** punchthrough surfaces.
-KotOR stores a per-texture discard threshold as a `float` at TPC header bytes `[4-7]`:
-
-| Source | Confirmation |
-|--------|-------------|
-| Kotor.NET `KotorModelLoader.cs:47` | Reads `TransparencyHint` from mesh header; skips Diffuse/Ambient (commented out) |
-| Kotor.NET `TPC.cs` | `TPCTextureFormat` enum; no `alpha_test` field = it comes from raw header bytes |
-| PyKotor `gl/shader/texture.py` | `Texture.alpha_cutoff: float = 0.0` — same concept as our fix |
-| xoreos `tpc.cpp` | `alpha_test_threshold` float at header offset 4, 0.0 = "no test" |
-
-**Fixes applied:**
-- `_extract_alpha_test_from_tpc(raw_bytes)` — reads float at TPC `[4:7]`, defaults to 0.5 when zero
-- `ModelNode.txi_alpha_test: float = 0.5` — new per-node field
-- `_apply_txi_to_node(node, txi_str, alpha_test=)` — stores threshold from TPC header
-- `TextureCache.get_raw_header(name)` — returns first 128 TPC bytes for threshold extraction
-- `_load_txi_metadata_for_model()` — calls `get_raw_header()` per texture
-- GPU renderer — sets `u_alpha_test` from `node.txi_alpha_test` when `u_blend_mode==2`
-
-**Result:** Hair, foliage, grates, and glass now use their correct per-surface alpha
-discard threshold instead of a one-size-fits-all 0.5.
-
-**40 new tests** in `tests/test_v240_phase36_alpha_txi.py` — all passing.
-
-### Qt/UI Layer Assessment
-
-A suggestion was made to adopt `qtpy` + Qt Designer to abstract away PyQt5/Qt6.
-**GhostRigger uses Tkinter, not Qt.** The suggestion is technically sound for Qt projects
-but is not applicable here — GhostRigger deliberately uses Tkinter for its
-zero-dependency, headless-friendly design. See [ROADMAP.md §3.6](ROADMAP.md) for details.
-
----
-
-## What's New (v3.5 — 2026-03-18)
-
-### Rendering Fixes — Environment Map & Texture Transparency
-
-Three critical rendering bugs uncovered by deep-auditing **Kotor.NET**, **KotOR.js**,
-**xoreos**, and **PyKotor**:
-
-| Fix | Description | Reference |
-|-----|-------------|-----------|
-| **FIX-1 `bumpyshinytexture` alias** | `bumpyshinytexture` in TXI files is an alias for `envmaptexture`, not a bump map. The previous code routed it to `specbumpmap`, causing missing reflections on HK-47, T3-M4, and many metallic surfaces. | xoreos `txi.cpp:96`; KotOR.js `TXI.ts:161` |
-| **FIX-2 Env-map BlendedOver** | KotOR uses `renderGeometryEnvMappedOver` (diffuse first, env blended over with `GL_ONE_MINUS_DST_ALPHA, GL_ONE`). The previous shader used a simple `mix()` (BlendedUnder). Single-pass equivalent: `lit_color += env_col * (1.0 - diffuse.a)`. | xoreos `modelnode.cpp:renderGeometryEnvMappedOver()` |
-| **FIX-3 Final alpha for env surfaces** | Env-mapped surfaces must be opaque (diffuse alpha consumed by env blend weight, not exposed as transparency). | KotOR.js `ShaderOdysseyModel.ts` |
-
-### Supermodel Skeleton Merge Fix
-
-| Fix | Description |
-|-----|-------------|
-| **FIX-4 Recursive bone injection** | `merge_supermodel()` previously used a shallow-copy + flat injection: it only injected the **direct children** of the parent root, silently discarding the full bone sub-hierarchy (`pelvis → spine → chest → ...`). The fix replaces this with `_deep_copy_subtree()`, a recursive helper that walks the parent tree depth-first and injects bones at the correct level while still deduplicating against the child's existing nodes. |
-
-### Test Suite
-
-- **428 tests** passing across Phases 1–3.7 (0 failures).
-- 47 new tests for Phase 3.7 K2/avg-point fixes (`test_v250_phase37_k2_fields_avgpoint.py`).
-- 40 new tests for Phase 3.6 alpha-test fixes (`test_v240_phase36_alpha_txi.py`).
-- 75 new tests for Phase 3.5 env-map/TXI fixes (`test_v230_envmap_txi_rendering.py`).
-
----
-
-## Feature Status
-
-| Feature | Status |
-|---|---|
-| Binary MDL/MDX parser (K1 + K2/TSL) | ✅ Complete |
-| ASCII MDL parser + writer | ✅ Complete |
-| Binary MDL writer (K1 ↔ K2 round-trip) | ✅ Complete |
-| K1 ↔ K2 cross-game porter | ✅ Complete |
-| Animation engine (keyframe interpolation, SLERP) | ✅ Complete |
-| UV pipeline (seam-fix, tiling, multi-layer UVs) | ✅ Complete |
-| LBS skinning (linear blend skinning, bone weights) | ✅ Complete |
-| TPC/TPA/TPB texture loading with ERF priority | ✅ Complete |
-| TXI: embedded TPC trailer + standalone `.txi` file | ✅ Complete |
-| TXI: `bumpyshinytexture` → `envmaptexture` alias | ✅ Complete (v3.5) |
-| TXI: `blending`, `cube`, `proceduretype`, `wateralpha` | ✅ Complete |
-| TXI: per-node alpha-test threshold from TPC `[4:7]` | ✅ Complete (v3.6) |
-| K2/TSL: `hide_in_holograms`, `dirt_enabled/texture/coord_space` stored | ✅ Complete (v3.7) |
-| Mesh `AveragePoint` centroid stored + used for transparent depth sort | ✅ Complete (v3.7) |
-| Environment map BlendedOver rendering | ✅ Complete (v3.5) |
-| Sphere-map UV projection (matcap) for env maps | ✅ Complete |
-| TPC cube-map face extraction | ✅ Complete |
-| `_apply_kotor_alpha` DXT5 rules (5 cases) | ✅ Complete |
-| 3D viewport (hybrid GPU/CPU renderer, textures, bones) | ✅ Complete |
-| GPU renderer (ModernGL/EGL fast-path + PIL CPU fallback) | ✅ Complete |
-| Cloth/PBD physics simulation for dangly nodes | ✅ Complete |
-| Game library browser (KEY/BIF/ERF/RIM archives) | ✅ Complete |
-| OBJ / GLTF 2.0 import & export | ✅ Complete |
-| Auto-rigger (humanoid & creature skeletons) | ✅ Complete |
-| GFF reader/writer (UTC, UTI, UTD, DLG, JRL, etc.) | ✅ Complete |
-| 2DA reader/writer | ✅ Complete |
-| MDX multi-UV channel support (UV1–UV4 + tangent space) | ✅ Complete |
-| UTC → appearance.2da → body+head creature pipeline | ✅ Complete (Phase 3.3) |
-| Supermodel skeleton merge (recursive hierarchy) | ✅ Complete (v3.5) |
-| Supermodel animation inheritance | ✅ Complete (Phase 3.4) |
-| MDL controller table (80+ IDs, all KotOR.js IDs) | ✅ Complete |
-| Embedded MCP server (43 tools, stdio / HTTP / SSE) | ✅ Complete |
-| PyKotor integration (installation discovery, resource lookup) | ✅ Complete |
-| Ports & Adapters architecture (Khononov coupling principles) | ✅ Complete |
-| AgentDecompile / Ghidra bridge (11 engine RE tools) | ✅ Complete |
-
-## Quick Start
-
-### Requirements
-
-```
-Python 3.10+
-pip install Pillow numpy
-pip install pykotor>=2.3.3     # KotOR resource library (optional but recommended)
-pip install moderngl            # GPU renderer fast-path (optional, falls back to CPU)
-pip install flask               # IPC server for GUI ↔ MCP bridge (optional)
-pip install mcp                 # MCP SDK for Claude Desktop integration (optional)
-```
-
-For the AgentDecompile bridge, the remote server at `http://170.9.241.140:8080/mcp/` is used directly — no local Ghidra or PyGhidra install needed.
-
-### Run the GUI
-
-```bash
+# Launch GUI
 python main.py
 ```
 
-### Point to your game directories
+**Requirements:** Python 3.10+, Pillow, NumPy, Tkinter (bundled with most Python installs).
 
-In the **Library** panel click **Set K1 Dir** / **Set K2 Dir**, or use environment variables:
+### Build the EXE yourself (Windows only)
 
-```bash
-export K1_PATH=/path/to/swkotor
-export K2_PATH=/path/to/swkotor2
-```
-
-Accepted aliases: `KOTOR_PATH`, `KOTOR1_PATH` (K1); `TSL_PATH`, `KOTOR2_PATH` (K2).
-
-### Use the core library (no GUI)
-
-```python
-from src.core.mdl_parser import MDLBinaryParser
-from src.core.mdl_porter import CrossGamePorter, MDLBinaryWriter
-
-model = MDLBinaryParser.parse_files('c_bantha.mdl', 'c_bantha.mdx')
-print(f"{model.name}: {len(list(model.all_nodes()))} nodes")
-
-k2_model = CrossGamePorter().port(model, target_game='K2')
-MDLBinaryWriter().write(k2_model, 'c_bantha_k2.mdl', 'c_bantha_k2.mdx')
-```
-
-### Use the MCP server
-
-```bash
-python -m src.kotormcp                        # stdio (Claude Desktop default)
-python -m src.kotormcp --mode http --port 7001 # HTTP
-python -m src.kotormcp --mode sse  --port 7001 # SSE (requires uvicorn)
-```
-
-Claude Desktop config (`claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "ghostrigger-kotor": {
-      "command": "python",
-      "args": ["-m", "src.kotormcp"],
-      "cwd": "/path/to/GhostRigger-K1-K2",
-      "env": {
-        "K1_PATH": "/path/to/swkotor",
-        "K2_PATH": "/path/to/swkotor2",
-        "AGENTDECOMPILE_MCP_SERVER_URL": "http://170.9.241.140:8080/mcp/",
-        "AGENTDECOMPILE_HTTP_GHIDRA_SERVER_HOST": "170.9.241.140",
-        "AGENTDECOMPILE_HTTP_GHIDRA_SERVER_PORT": "13100",
-        "AGENTDECOMPILE_HTTP_GHIDRA_SERVER_REPOSITORY": "Odyssey",
-        "AGENTDECOMPILE_GHIDRA_USERNAME": "OpenKotOR",
-        "AGENTDECOMPILE_GHIDRA_PASSWORD": "idekanymore"
-      }
-    },
-    "agdec-proxy": {
-      "type": "stdio",
-      "command": "uvx",
-      "args": [
-        "--refresh", "--from",
-        "git+https://github.com/bolabaden/AgentDecompile",
-        "agentdecompile-proxy",
-        "--mcp-server-url", "http://170.9.241.140:8080/mcp/"
-      ],
-      "env": {
-        "AGENTDECOMPILE_PROJECT_PATH": "/projects/agentdecompile_projects/",
-        "AGENTDECOMPILE_PROJECT_NAME": "Odyssey.gpr",
-        "AGENTDECOMPILE_HTTP_GHIDRA_SERVER_HOST": "170.9.241.140",
-        "AGENTDECOMPILE_HTTP_GHIDRA_SERVER_PORT": "13100",
-        "AGENTDECOMPILE_HTTP_GHIDRA_SERVER_REPOSITORY": "Odyssey",
-        "AGENTDECOMPILE_GHIDRA_USERNAME": "OpenKotOR",
-        "AGENTDECOMPILE_GHIDRA_PASSWORD": "idekanymore"
-      }
-    }
-  }
-}
+```bat
+REM Double-click build.bat, or run in a terminal:
+build.bat
+REM The exe will appear at dist\GhostRigger-K1-K2.exe
 ```
 
 ---
 
-## Systems Architecture
+## Keyboard Shortcuts
 
-The diagram below shows every major component, how they are layered, and all significant data flows between them.
-
-```
-╔══════════════════════════════════════════════════════════════════════════════════╗
-║                         EXTERNAL CONSUMERS                                       ║
-║                                                                                  ║
-║   ┌──────────────────────┐    ┌─────────────────────────────────────────────┐   ║
-║   │   Human User (GUI)   │    │         AI Assistant (Claude Desktop)        │   ║
-║   │   python main.py     │    │   ghostrigger-kotor  │  agdec-proxy (stdio) │   ║
-║   └──────────┬───────────┘    └──────────────┬────────────────┬─────────────┘   ║
-╚══════════════╪══════════════════════════════╪════════════════╪═════════════════╝
-               │ Tkinter events               │ MCP (stdio)    │ MCP (stdio→HTTP)
-               │                              │                │
-╔══════════════╪══════════════════════════════╪════════════════╪═════════════════╗
-║              │     PRESENTATION LAYER       │                │                  ║
-║   ┌──────────▼───────────────────────────┐  │                │                  ║
-║   │              src/gui/                │  │                │                  ║
-║   │  main_window.py  — Tkinter app shell │  │                │                  ║
-║   │  viewport.py     — 3D rasteriser     │  │                │                  ║
-║   │  gpu_renderer.py — ModernGL/PIL      │  │                │                  ║
-║   │  blueprint_editor.py — UV editor     │  │                │                  ║
-║   │  tex_atlas.py    — texture atlas     │  │                │                  ║
-║   │  tpc_render_utils.py — TPC decode    │  │                │                  ║
-║   │  accel.py        — fast rasterise    │  │                │                  ║
-║   │  modular_panel.py— dockable panels   │  │                │                  ║
-║   └──────────────────┬───────────────────┘  │                │                  ║
-║                      │ IPC (HTTP :7001)      │                │                  ║
-╚══════════════════════╪══════════════════════╪════════════════╪═════════════════╝
-                       │                      │                │
-╔══════════════════════╪══════════════════════╪════════════════╪═════════════════╗
-║                      │    MCP LAYER         │                │                  ║
-║            ┌─────────▼──────────────────────▼──────┐        │                  ║
-║            │           src/kotormcp/                │        │                  ║
-║            │                                        │        │                  ║
-║            │  server.py ← MCP entry point           │        │                  ║
-║            │    stdio / HTTP / SSE transports        │        │                  ║
-║            │                                        │        │                  ║
-║            │  tools/__init__.py                     │        │                  ║
-║            │    Tool registry & dispatcher          │        │                  ║
-║            │    43 tools across 10 groups:          │        │                  ║
-║            │                                        │        │                  ║
-║            │  ┌──────────────────────────────────┐  │        │                  ║
-║            │  │  installation.py  (3 tools)       │  │        │                  ║
-║            │  │  discovery.py     (4 tools)       │  │        │                  ║
-║            │  │  gamedata.py      (3 tools)       │  │        │                  ║
-║            │  │  ghostrigger.py   (5 tools)  ─────┼──┼──────►IPC client        ║
-║            │  │  modules.py       (3 tools)       │  │        │  src/ipc/       ║
-║            │  │  gffdata.py       (3 tools)       │  │        │  client.py      ║
-║            │  │  decompile.py    (11 tools)  ─────┼──┼──────►HTTP :8080        ║
-║            │  │  resource.py      (1 tool)        │  │        │                  ║
-║            │  │  quest.py         (1 tool)        │  │        │                  ║
-║            │  │  refs.py          (6 tools)       │  │        │                  ║
-║            │  │  walkmesh.py      (1 tool)        │  │        │                  ║
-║            │  │  archives.py      (2 tools)       │  │        │                  ║
-║            │  └──────────────────────────────────┘  │        │                  ║
-║            │                                        │        │                  ║
-║            │  ports.py          ← abstract contracts│        │                  ║
-║            │  adapters.py       ← pykotor knowledge │        │                  ║
-║            │  adapters_decompile.py ← HTTP client   │        │                  ║
-║            │  state.py          ← compat bridge     │        │                  ║
-║            │  mcp_resources.py  ← kotor:// URIs     │        │                  ║
-║            │  schemas/          ← input validation  │        │                  ║
-║            │  utils/            ← json helpers      │        │                  ║
-║            └──────────────┬─────────────────────────┘        │                  ║
-╚═══════════════════════════╪══════════════════════════════════╪═════════════════╝
-                            │ Python API calls                  │ uvx proxy
-                            │                                   │ (native 39 tools)
-╔═══════════════════════════╪═══════════════════════════════════╪═════════════════╗
-║                           │    CORE PIPELINE LAYER            │                  ║
-║   ┌───────────────────────▼─────────────────────────────┐     │                  ║
-║   │                     src/core/                        │     │                  ║
-║   │  mdl_parser.py    — binary + ASCII MDL/MDX parser    │     │                  ║
-║   │  mdl_porter.py    — binary writer + K1↔K2 porter     │     │                  ║
-║   │  model_data.py    — KotorModel / ModelNode dataclass │     │                  ║
-║   │  animation_engine.py — keyframe interp + SLERP       │     │                  ║
-║   │  game_library_ext.py — KEY/BIF/ERF/RIM reader        │     │                  ║
-║   │  twoda.py         — 2DA format reader/writer         │     │                  ║
-║   │  module_format.py — LYT/VIS/GFF module support       │     │                  ║
-║   │  diagnostics.py   — model diagnostics + reporting    │     │                  ║
-║   └─────────────────────────────────────────────────────┘     │                  ║
-║                                                                 │                  ║
-║   ┌─────────────────────────────────────────────────────┐     │                  ║
-║   │               src/formats/                           │     │                  ║
-║   │  gff_reader.py  — GFF binary format reader          │     │                  ║
-║   │  gff_writer.py  — GFF binary format writer          │     │                  ║
-║   │  gff_types.py   — GFF field type definitions        │     │                  ║
-║   └─────────────────────────────────────────────────────┘     │                  ║
-║                                                                 │                  ║
-║   ┌─────────────────────────────────────────────────────┐     │                  ║
-║   │               src/autorig/                           │     │                  ║
-║   │  auto_rigger.py  — bone weight assignment            │     │                  ║
-║   │  cloth_rig.py    — cloth/PBD physics simulation      │     │                  ║
-║   │  accurig.py      — AccuRIG integration               │     │                  ║
-║   │  grig.py         — geometry-based rig utilities      │     │                  ║
-║   └─────────────────────────────────────────────────────┘     │                  ║
-║                                                                 │                  ║
-║   ┌─────────────────────────────────────────────────────┐     │                  ║
-║   │               src/converters/                        │     │                  ║
-║   │  mesh_converter.py — OBJ / GLTF 2.0 import/export   │     │                  ║
-║   │  normal_map.py     — normal map generation           │     │                  ║
-║   └─────────────────────────────────────────────────────┘     │                  ║
-║                                                                 │                  ║
-║   ┌─────────────────────────────────────────────────────┐     │                  ║
-║   │               src/resources/                         │     │                  ║
-║   │  game_library.py — archive/resource browser API     │     │                  ║
-║   └─────────────────────────────────────────────────────┘     │                  ║
-║                                                                 │                  ║
-║   ┌─────────────────────────────────────────────────────┐     │                  ║
-║   │               src/ipc/                               │     │                  ║
-║   │  server.py — Flask IPC server (:7001)  ◄────────────┼─────┘ GUI bridge      ║
-║   │  client.py — IPC client (:7002, :7003)              │                        ║
-║   └─────────────────────────────────────────────────────┘                        ║
-╚═════════════════════════════════════════════════════════════════════════════════╝
-                            │
-╔═══════════════════════════╪═════════════════════════════════════════════════════╗
-║                           │    EXTERNAL DATA LAYER                               ║
-║   ┌───────────────────────▼─────────────────────────────┐                       ║
-║   │           KotOR Game Installation (local)            │                       ║
-║   │  KEY/BIF — core game resources                       │                       ║
-║   │  ERF/RIM — module archives                           │                       ║
-║   │  TGA/TPC — textures                                  │                       ║
-║   │  MDL/MDX — 3D models                                 │                       ║
-║   │  2DA/TLK/GFF — game data tables                      │                       ║
-║   │  (via pykotor >= 2.3.3)                              │                       ║
-║   └─────────────────────────────────────────────────────┘                       ║
-║                                                                                  ║
-║   ┌─────────────────────────────────────────────────────┐                       ║
-║   │     AgentDecompile Remote Server  :8080  (HTTP)      │                       ║
-║   │  AgentDecompile v1.1.0 — MCP HTTP endpoint           │                       ║
-║   │  39 native Ghidra tools (decompile, search, graph…)  │                       ║
-║   │       │                                               │                       ║
-║   │       ▼                                               │                       ║
-║   │  Ghidra Shared Repository  :13100  (RMI)             │                       ║
-║   │  "Odyssey" repo:                                      │                       ║
-║   │    /K1/k1_win_gog_swkotor.exe  (K1, ~24 000 fns)    │                       ║
-║   │    /K2/swkotor2.exe            (K2/TSL)              │                       ║
-║   └─────────────────────────────────────────────────────┘                       ║
-╚═════════════════════════════════════════════════════════════════════════════════╝
-```
-
-### Component Responsibilities
-
-| Component | Responsibility |
-|---|---|
-| `src/gui/` | Tkinter application window, 3D viewport, GPU/CPU renderer, UV editor, texture utilities |
-| `src/core/` | MDL/MDX binary + ASCII parser, binary writer, K1↔K2 porter, animation engine, KEY/BIF/ERF reader, 2DA/GFF/module format support |
-| `src/formats/` | Low-level GFF binary reader/writer and type definitions |
-| `src/autorig/` | Automatic bone weight assignment, cloth PBD physics simulation, AccuRIG integration |
-| `src/converters/` | OBJ / GLTF 2.0 import and export, normal map generation |
-| `src/resources/` | High-level archive/resource browser API |
-| `src/ipc/` | Flask IPC server (:7001) bridging MCP tool calls to the live GUI viewport |
-| `src/kotormcp/` | Embedded MCP server: 43 tools, Ports & Adapters architecture, AgentDecompile HTTP client |
-| AgentDecompile :8080 | Remote Ghidra MCP backend; exposes 39 tools against analysed KotOR binaries |
-
-### Data Flow — Model Render Request (MCP tool → PNG)
-
-```
-AI calls ghostrigger_render_model {resref, azimuth, elevation}
-  │
-  ▼
-tools/ghostrigger.py  handle_render_model()
-  │  resolves resref via CompositeModelLocator (filesystem → installation)
-  │
-  ▼
-src/core/mdl_parser.py  MDLBinaryParser.parse_files()
-  │  reads .mdl + .mdx bytes → KotorModel dataclass
-  │
-  ▼
-src/gui/gpu_renderer.py  GpuRenderer  (force_cpu=True by default)
-  │  ArcBallCamera.frame_bounds(bb_min, bb_max) → auto-framed camera
-  │  ModernGL/EGL fast-path  OR  PIL FrameRenderer CPU fallback
-  │
-  ▼
-audit_output/mcp_render_<resref>_<az>az_<el>el.png
-  + JSON response {output_path, backend:"cpu"|"gpu"}
-```
-
-### Data Flow — Engine Function Decompile (MCP tool → C pseudocode)
-
-```
-AI calls kotor_decompile_function {game:"k1", function:"CResMan::LoadResourceMDL"}
-  │
-  ▼
-tools/decompile.py  handle_decompile_function()
-  │  resolves "k1" → "/K1/k1_win_gog_swkotor.exe" via KNOWN_PROGRAMS
-  │
-  ▼
-adapters_decompile.py  AgentDecompileClient.decompile_function()
-  │  MCP session init (JSON-RPC initialize)
-  │  Ghidra credential headers injected (X-Ghidra-Server-*, Authorization)
-  │  POST http://170.9.241.140:8080/mcp/  tools/call decompile-function
-  │
-  ▼
-AgentDecompile server → Ghidra PyGhidra runtime
-  │  checks out binary from shared repo
-  │  runs Ghidra decompiler on named function
-  │
-  ▼
-JSON response {decompilation: "void CResMan::LoadResourceMDL(...) {...}"}
-```
-
-### Ports & Adapters Coupling Diagram (KotorMCP internals)
-
-```
-  ┌────────────────────────────────────────────────────────────────────┐
-  │                      tools/  (handlers)                            │
-  │  installation  discovery  gamedata  ghostrigger  modules  gffdata  │
-  │  decompile                                                         │
-  └──────────┬─────────────────────────────────────────┬──────────────┘
-             │ Contract Coupling                        │ Contract Coupling
-             │ (port interfaces only)                   │ (client API only)
-             ▼                                          ▼
-  ┌──────────────────────┐              ┌───────────────────────────────┐
-  │      ports.py        │              │    adapters_decompile.py      │
-  │  InstallationPort    │              │    AgentDecompileClient       │
-  │  ModelLocatorPort    │              │    (HTTP + MCP session)       │
-  │  ModelParserPort     │              └───────────────┬───────────────┘
-  │  InstallationRegistry│                              │ HTTP POST
-  │  Port                │                              ▼
-  │  ResourceEntry       │              ┌───────────────────────────────┐
-  │  ModelInfo           │              │  AgentDecompile :8080         │
-  │  AuditResult         │              │  (remote Ghidra server)       │
-  └──────────┬───────────┘              └───────────────────────────────┘
-             │ implements
-             ▼
-  ┌──────────────────────┐
-  │     adapters.py      │
-  │  InstallationAdapter │
-  │  PyKotorRegistry     │
-  │  Adapter             │
-  │  FileSystemModel     │
-  │  Locator             │
-  │  InstallationModel   │
-  │  Locator             │
-  │  CompositeModel      │
-  │  Locator             │
-  │  MDLBinaryParser     │
-  │  Adapter             │
-  │  ModelAnalyzer       │
-  └──────────┬───────────┘
-             │ calls
-             ▼
-  ┌──────────────────────┐
-  │   pykotor >= 2.3.3   │
-  │   (volatile external │
-  │    dependency —      │
-  │    isolated here)    │
-  └──────────────────────┘
-```
-
----
-
-## KotorMCP Tool Reference
-
-**43 tools** registered across 10 groups. All accessible via stdio, HTTP, or SSE.
-
-### Installation (3 tools)
-
-| Tool | Description |
-|---|---|
-| `detectInstallations` | Auto-discover K1/K2 install paths from env vars and platform defaults |
-| `loadInstallation` | Activate a KotOR installation for subsequent tool calls |
-| `kotor_installation_info` | Return path, game, module count, override resource count |
-
-### Resource Discovery (4 tools)
-
-| Tool | Description |
-|---|---|
-| `listResources` | Browse resources across override/core/modules/chitin with pagination |
-| `describeResource` | Describe a specific resource (GFF summary, 2DA headers, etc.) |
-| `kotor_find_resource` | Full-text search for a resource by name or pattern |
-| `kotor_search_resources` | Regex-filtered resource listing across all locations |
-
-### Game Data (3 tools)
-
-| Tool | Description |
-|---|---|
-| `journalOverview` | Summarise all plot categories and quests from `global.jrl` |
-| `kotor_lookup_2da` | Query any 2DA table by row, column, or value search |
-| `kotor_lookup_tlk` | Resolve a TLK string reference number to display text |
-
-### Modules (3 tools)
-
-| Tool | Description |
-|---|---|
-| `kotor_list_modules` | List all `.rim` / `.erf` modules in an installation |
-| `kotor_describe_module` | Describe a module: area name, layout, GIT summary |
-| `kotor_module_resources` | List all resources inside a specific module |
-
-### Deep Read (3 tools)
-
-| Tool | Description |
-|---|---|
-| `kotor_read_gff` | Read any GFF (UTC, UTP, UTD, DLG, ARE, IFO…) as structured JSON |
-| `kotor_read_2da` | Read a 2DA table as row slices with optional column filter |
-| `kotor_read_tlk` | Read a range of TLK string refs with optional text search |
-
-### GhostRigger Model (5 tools)
-
-| Tool | Description |
-|---|---|
-| `ghostrigger_open_model` | Open an MDL in the live viewport via IPC |
-| `ghostrigger_render_model` | Render an MDL to PNG at any azimuth/elevation |
-| `ghostrigger_model_info` | Node count, mesh stats, bones, bbox, classification |
-| `ghostrigger_list_game_models` | Enumerate all MDL resources in an installation |
-| `ghostrigger_audit` | Integrity check: UV/normal mismatches, empty faces, bbox |
-
-### AgentDecompile / Ghidra Engine Analysis (11 tools)
-
-Backed by remote Ghidra server at `http://170.9.241.140:8080/mcp/`. No local Ghidra needed.
-
-| Tool | Description |
-|---|---|
-| `kotor_binary_ping` | Health-check the AgentDecompile backend |
-| `kotor_binary_info` | Binary metadata: language, compiler, function count |
-| `kotor_list_engine_funcs` | Page through 24 000+ functions in `swkotor.exe` / `swkotor2.exe` |
-| `kotor_decompile_function` | Decompile a named or addressed engine function to C pseudocode |
-| `kotor_search_symbols` | Search functions, globals, and labels by name substring |
-| `kotor_search_engine_strings` | Search hardcoded string literals in the binary |
-| `kotor_get_references` | Find all callers (`to`) or callees (`from`) of a function |
-| `kotor_call_graph` | Call graph around a function at configurable depth |
-| `kotor_data_flow` | Trace P-code data flow backward/forward from an address |
-| `kotor_inspect_memory` | Inspect memory layout, raw bytes, or typed data at an address |
-| `kotor_engine_script` | Execute arbitrary Python/PyGhidra against the loaded binary |
-
-### Composite / High-Level (2 tools)
-
-| Tool | Description |
-|---|---|
-| `get_resource` | Universal resource accessor: returns decoded content (GFF JSON, 2DA rows, TLK entries, MDL summary, NSS source, NCS stub, or base64) for any (game, resref, restype) triple |
-| `get_quest` | Composite quest inspector: single Markdown doc with JRL resource, plot number, all journal states (TLK-resolved), referenced scripts, and DLG node excerpts |
-
-### References & Plot (6 tools)
-
-| Tool | Description |
-|---|---|
-| `kotor_list_references` | List outbound references (scripts, conversations, tags, template resrefs) from any GFF resource |
-| `kotor_find_referrers` | Find all resources that reference a given script resref, tag, conversation, or resref |
-| `kotor_find_strref_referrers` | Find all resources that use a given TLK string reference ID |
-| `kotor_describe_dlg` | DLG structure summary: entry/reply counts, script refs, conversation refs |
-| `kotor_describe_jrl` | JRL (journal) summary: category count, entry count |
-| `kotor_describe_resource_refs` | Generic GFF reference summary for any resource type |
-
-### Walkmesh (1 tool)
-
-| Tool | Description |
-|---|---|
-| `kotor_walkmesh_validation_diagram` | Plain-text validation diagram for a BWM/WOK walkmesh: perimeter, transitions, outer boundary |
-
-### Archives (2 tools)
-
-| Tool | Description |
-|---|---|
-| `kotor_list_archive` | List contents of a KEY/BIF/RIM/ERF/MOD archive with pagination |
-| `kotor_extract_resource` | Extract a resolved resource to a validated disk path *(writes to disk)* |
-
----
-
-## Example MCP Session
-
-```python
-# 1. Load K1 installation
-await handle_tool('loadInstallation', {'game': 'k1', 'path': '/games/swkotor'})
-
-# 2. Find Sith models
-await handle_tool('ghostrigger_list_game_models', {'game': 'k1', 'filter': 'sith', 'limit': 20})
-# → l_sithoff_f, l_sithoff_m, n_sithpraet, n_sithcomm ...
-
-# 3. Inspect model
-await handle_tool('ghostrigger_model_info', {'resref': 'n_sithpraet'})
-# → 82 nodes, 63 mesh nodes, 6,083 vertices, supermodel S_Female02
-
-# 4. Audit integrity
-await handle_tool('ghostrigger_audit', {'resref': 'n_sithpraet'})
-# → 26 UV-count mismatches on skin/helper nodes
-
-# 5. Render multi-angle preview
-await handle_tool('ghostrigger_render_model', {'resref': 'n_sithpraet', 'azimuth': 45, 'elevation': 25})
-# → audit_output/mcp_render_n_sithpraet_45az_25el.png  (CPU backend)
-
-# 6. Cross-reference with 2DA and GFF
-await handle_tool('kotor_lookup_2da', {'game': 'k1', 'table_name': 'appearance',
-                                        'column': 'label', 'value_search': 'sith'})
-await handle_tool('kotor_read_gff', {'game': 'k1', 'resref': 'n_sithpraet', 'restype': 'utc'})
-
-# 7. Check engine binary analysis backend
-await handle_tool('kotor_binary_ping', {})
-# → {"status": "ok", "server_url": "http://170.9.241.140:8080/mcp", ...}
-
-# 8. Find MDL loader in binary
-await handle_tool('kotor_search_symbols', {'game': 'k1', 'query': 'MDL'})
-# → CResMan::LoadResourceMDL, CMDLObject::Load, CMDLMesh::Render, ...
-
-# 9. Decompile it
-await handle_tool('kotor_decompile_function',
-    {'game': 'k1', 'function': 'CResMan::LoadResourceMDL'})
-# → Full Ghidra C pseudocode: struct header parsing, node-offset resolution, ...
-
-# 10. Trace callers
-await handle_tool('kotor_get_references',
-    {'game': 'k1', 'address_or_symbol': 'CResMan::LoadResourceMDL', 'direction': 'to'})
-# → CMDLObject::Load, CScene::AddRenderable, CAreaLoader::LoadArea, ...
-```
+| Key | Action |
+|-----|--------|
+| `Ctrl+O` | Open MDL (binary) |
+| `Ctrl+Shift+O` | Open MDL (ASCII) |
+| `Ctrl+I` | Import OBJ |
+| `Ctrl+E` | Export OBJ |
+| `Ctrl+G` | Export glTF |
+| `Ctrl+M` | Export Binary MDL |
+| `Ctrl+S` | Save ASCII MDL |
+| `Ctrl+W` | Clear model |
+| `R` | Auto-rig current model |
+| `Ctrl+D` | Run diagnostics (popup) |
+| `Ctrl+A` | Animations panel |
+| `Ctrl+P` | Properties panel |
+| `Ctrl+F` | Focus skeleton search |
+| `Ctrl+L` | Focus library panel |
+| `F` | Frame all |
+| `F1` | About |
+| `F2` | Settings |
+| `F3` | Model info |
+| `F5` | Refresh all |
+| `B` | Toggle bones |
+| `T` | Toggle texture |
+| `W` | Wireframe |
+| `G` | Gimbal |
+| `Tab` | Cycle gimbal mode (T/R/S) |
+| `Esc` | Deselect |
 
 ---
 
 ## Project Structure
 
 ```
-GhostRigger-K1-K2/
-│
-├── main.py                         — GUI entry point
-├── claude_desktop_config.json      — Ready-to-use Claude Desktop MCP config
-├── AGENTDECOMPILE_INTEGRATION.md   — AgentDecompile usage plan (6 workflows)
-├── build.bat                       — Windows EXE build script
-│
-├── src/
-│   ├── core/                       — MDL/MDX pipeline (parser, porter, animation)
-│   │   ├── mdl_parser.py           MDLBinaryParser, MDLASCIIParser
-│   │   ├── mdl_porter.py           CrossGamePorter, MDLBinaryWriter
-│   │   ├── model_data.py           KotorModel, ModelNode, SkinMesh, etc.
-│   │   ├── animation_engine.py     AnimController, SLERP interpolation
-│   │   ├── game_library_ext.py     KEY/BIF/ERF/RIM archive reader
-│   │   ├── twoda.py                TwoDA reader/writer
-│   │   ├── module_format.py        LYT/VIS/GFF module support
-│   │   └── diagnostics.py          Model diagnostics + reporting
-│   │
-│   ├── gui/                        — Tkinter application + renderers
-│   │   ├── main_window.py          Application shell, Library panel, menus
-│   │   ├── viewport.py             3D software rasteriser (FrameRenderer)
-│   │   ├── gpu_renderer.py         GpuRenderer (ModernGL/EGL + PIL fallback)
-│   │   ├── blueprint_editor.py     UV / blueprint editor panel
-│   │   ├── tex_atlas.py            Texture atlas builder
-│   │   ├── tpc_render_utils.py     TPC/TXI texture decode utilities
-│   │   ├── accel.py                Accelerated triangle rasterisation
-│   │   └── modular_panel.py        Dockable panel system
-│   │
-│   ├── autorig/                    — Rigging and physics
-│   │   ├── auto_rigger.py          Automatic bone weight assignment
-│   │   ├── cloth_rig.py            Cloth/PBD physics simulation
-│   │   ├── accurig.py              AccuRIG integration
-│   │   └── grig.py                 Geometry-based rig utilities
-│   │
-│   ├── converters/                 — Import / export
-│   │   ├── mesh_converter.py       OBJ / GLTF 2.0 import + export
-│   │   └── normal_map.py           Normal map generation
-│   │
-│   ├── formats/                    — Binary format codecs
-│   │   ├── gff_reader.py           GFF binary reader
-│   │   ├── gff_writer.py           GFF binary writer
-│   │   └── gff_types.py            GFF field type definitions
-│   │
-│   ├── ipc/                        — GUI ↔ MCP bridge
-│   │   ├── server.py               Flask IPC server (port 7001)
-│   │   └── client.py               IPC client (ports 7002, 7003)
-│   │
-│   ├── resources/                  — Archive browser
-│   │   └── game_library.py         High-level resource browser API
-│   │
-│   └── kotormcp/                   — Embedded MCP server (v3.4)
-│       ├── __main__.py             python -m src.kotormcp entry point
-│       ├── server.py               MCP server (stdio / HTTP / SSE)
-│       ├── ports.py                Abstract port contracts (4 ports, 3 DTOs)
-│       ├── adapters.py             Concrete implementations + pykotor isolation
-│       ├── adapters_decompile.py   AgentDecompileClient HTTP adapter
-│       ├── state.py                Backward-compatible bridge layer
-│       ├── mcp_resources.py        kotor:// URI templates + resource readers
-│       ├── schemas/                Input validation models (Pydantic / fallback)
-│       ├── utils/                  json_content helper, output formatting
-│       └── tools/                  32 tool handlers across 7 modules
-│           ├── __init__.py         Tool registry & dispatcher
-│           ├── installation.py     3 tools: detect / load / info
-│           ├── discovery.py        4 tools: list / describe / find / search
-│           ├── gamedata.py         3 tools: journal / 2da / tlk
-│           ├── ghostrigger.py      5 tools: open / render / info / list / audit
-│           ├── modules.py          3 tools: list / describe / resources
-│           ├── gffdata.py          3 tools: read_gff / read_2da / read_tlk
-│           └── decompile.py       11 tools: AgentDecompile / Ghidra bridge
-│
-├── tests/                          — 2,443+ tests across 58 files, 0 failures
-│   │
-│   ├── — Core MCP & Architecture —
-│   ├── test_agentdecompile_bridge.py     53  AgentDecompile client + handlers
-│   ├── test_kotormcp_integration.py      39  Full MCP stack, tools, URI parsing
-│   ├── test_kotormcp_architecture.py     39  Ports, adapters, ModelAnalyzer
-│   ├── test_gff_roundtrip.py             42  GFF binary read/write round-trips
-│   ├── test_gimbal_viewport.py           19  3D gimbal math, skeleton ops
-│   ├── test_mdl_parser.py                23  Binary MDL parsing + cloth rig
-│   ├── test_rendering_fixes.py           46  UV wrapping, normals, cloth sim
-│   ├── test_tpc_tpa_texture_loading.py   27  ERF TPA > TPB > TPC priority
-│   ├── test_ipc_server.py                14  (skipped: requires Flask + :7001)
-│   │
-│   ├── — Versioned Regression Suite (v13 → v200) —
-│   ├── test_v33_comprehensive.py        138
-│   ├── test_v31_animation.py            105
-│   ├── test_v70_texture_txi_uv_improvements.py  99
-│   ├── test_v31_animation_engine.py      94
-│   ├── test_v29_rigging_rendering.py     89
-│   ├── test_v160_deep_audit.py           89
-│   ├── test_v51_regression.py            86
-│   ├── test_v45_mdl_crash_fixes.py       81
-│   ├── test_v100_gpu_renderer.py         72
-│   ├── test_v30_pipeline_fixes.py        70
-│   ├── test_v90_anim_uv_material_fixes.py 69
-│   ├── test_v130_uv_texture_pipeline.py  67
-│   ├── test_v28_fixes.py                 63
-│   ├── test_v105_perf_improvements.py    61
-│   ├── test_v14_deep_audit_unknowns.py   56
-│   ├── test_v46_full_crash_audit.py      55
-│   ├── test_v150_binary_mdl_harness.py   51
-│   ├── test_v29_cloth_rigging.py         50
-│   ├── ... (32 additional versioned files)
-│   └── conftest.py / render_quality_test.py
-│
-├── test_assets/                    — Sample MDL/MDX/TGA (N_sithpraet, etc.)
-├── game_data/                      — Extracted K1 BIF/RIM/ERF (not committed)
-└── audit_output/                   — PNG renders from ghostrigger_render_model
+src/
+├── core/
+│   ├── mdl_parser.py         # Binary MDL reader (Aurora engine format)
+│   ├── mdl_writer.py         # Binary MDL writer
+│   ├── model_data.py         # In-memory model graph
+│   ├── animation_engine.py   # Animation curve interpolation & playback
+│   ├── pykotor_bridge.py     # PyKotor MDL/TPC/Anim adapter
+│   ├── diagnostics.py        # Per-node model diagnostics
+│   └── resource_manager.py   # Unified K1/K2 resource lookup
+├── gui/
+│   ├── main_window.py        # Main window: five-pillar pipeline UI (~10 000 lines)
+│   ├── viewport.py           # CPU PIL renderer + GPU renderer (~9 000 lines)
+│   └── modular_panel.py      # Module Editor panel (~1 200 lines)
+├── autorig/
+│   ├── auto_rigger.py        # Aurora skeleton auto-rigging
+│   ├── cloth_rig.py          # Danglymesh cloth rigging
+│   ├── accurig.py            # AcuRig guide-based bigging
+│   └── grig.py               # GRig manual bone assignment
+├── converters/
+│   ├── mesh_converter.py     # OBJ/FBX/glTF import & export
+│   └── normal_map.py         # ZBrush → TPC normal-map bake
+└── ipc/
+    ├── server.py             # GhostRigger JSON-RPC IPC server
+    └── client.py             # IPC client (GModular / GhostScripter)
+
+tests/                        # 5 007 tests across 66 files
+render_check/                 # UI mockup renders
+audit_output/                 # Batch render / diagnostic output
 ```
 
 ---
 
-## GPU Renderer Notes
-
-The `GpuRenderer` (`src/gui/gpu_renderer.py`) provides a **hybrid render path**:
-
-- **GPU fast-path**: ModernGL + EGL headless context. ~1 ms/frame for typical 10k-tri models. Requires `pip install moderngl`. Not available in CI without a display.
-- **CPU fallback**: PIL-based triangle rasteriser (`FrameRenderer`). Always available. ~300 ms/frame. Used automatically when ModernGL is absent, EGL fails, or `force_cpu=True`.
-
-The MCP `ghostrigger_render_model` tool uses `force_cpu=True` by default (headless-safe). The camera is auto-framed from the model bounding box via `ArcBallCamera.frame_bounds()`. The response includes `"backend": "cpu"` or `"backend": "gpu"`.
-
----
-
-## MDL/MDX Format Notes
-
-GhostRigger implements a from-scratch binary MDL/MDX parser based on research from [xoreos](https://github.com/xoreos/xoreos), [KotorBlender](https://github.com/seedhartha/kotorblender), [PyKotor](https://github.com/NickHugi/PyKotor), [MDLOps](https://github.com/ndixUR/mdlops), and [DeadlyStream](https://deadlystream.com).
-
-### MDX Bitmap Flags
-
-| Bit | Flag | Bytes |
-|-----|------|-------|
-| 0x0001 | VERTEX | 12 — XYZ positions |
-| 0x0002 | UV1 | 8 — Texture0 UV |
-| 0x0004 | UV2 | 8 — Texture1/lightmap UV |
-| 0x0008 | UV3 | 8 — Texture2 UV (rare) |
-| 0x0010 | UV4 | 8 — Texture3 UV (rare) |
-| 0x0020 | NORMAL | 12 — Vertex normals |
-| 0x0040 | COLOR | 4 — Vertex RGBA |
-| 0x0080 | TANGENT1 | 36 — Tangent-space Tex0 |
-| 0x0100 | TANGENT2 | 36 — Tangent-space Tex1 |
-| 0x0200 | TANGENT3 | 36 — Tangent-space Tex2 |
-| 0x0400 | TANGENT4 | 36 — Tangent-space Tex3 |
-
----
-
-## Running Tests
+## Tests
 
 ```bash
-pip install pytest
-pytest tests/
-# 2,623+ tests collected — 0 failures
-```
+# Run all tests
+pytest
 
-Tests run without any game files. Installation-dependent tests skip automatically unless `K1_PATH` / `K2_PATH` are set. IPC tests skip without Flask on port 7001. All AgentDecompile bridge tests are fully offline (network calls are mocked).
+# Run with verbose output
+pytest -v
 
-**Fast CI (excludes slow model-asset tests):**
+# Run specific suites
+pytest tests/test_v47_thread_safety.py       # thread safety & render queue
+pytest tests/test_v58_phase17_ui_polish.py   # UI polish
+pytest tests/test_v340_character_builder_phase31.py  # character builder
 
-```bash
-pytest tests/ \
-  --ignore=tests/test_v46_full_crash_audit.py \
-  --ignore=tests/test_v200_pykotor_gltf_alpha.py -q
-# ~2,400 tests, ~45s
-```
-
-**Key rendering test suites:**
-
-```bash
-pytest tests/test_v210_phase2_rendering.py     # 68 tests  — Phase 2 env-map, supermodel
-pytest tests/test_v220_phase3_creature_anim.py # 61 tests  — Phase 3 creature + animation
-pytest tests/test_v230_envmap_txi_rendering.py # 56 tests  — Phase 3.5 TXI / env-map
-pytest tests/test_v240_phase36_alpha_txi.py    # 40 tests  — Phase 3.6 alpha-test
-pytest tests/test_v250_phase37_k2_fields_avgpoint.py  # 47 tests  — Phase 3.7 K2 fields + avg point
-```
-
-**Other key suites:**
-
-```bash
-pytest tests/test_agentdecompile_bridge.py   # 53 tests — AgentDecompile bridge
-pytest tests/test_kotormcp_integration.py    # 39 tests — MCP tools + URIs
-pytest tests/test_kotormcp_architecture.py   # 39 tests — ports / adapters
-pytest tests/test_gff_roundtrip.py           # 42 tests — GFF read/write
-pytest tests/test_mdl_parser.py              # 23 tests — binary MDL parsing
-pytest tests/test_rendering_fixes.py         # 46 tests — renderer/UV/cloth
-pytest tests/test_tpc_tpa_texture_loading.py # 27 tests — texture priority
+# Current results (Python 3.12)
+# 5 007 passed, 11 skipped, 0 failures  (~120 s)
 ```
 
 ---
 
-## Changelog
+## Roadmap
 
-### v3.6 — Phase 3.6 Per-Node Alpha-Test Threshold (2026-03-18)
+### In Progress
 
-- **FIX-ALPHATEST**: GPU renderer now uses per-node alpha-test threshold from TPC header [4-7]
-  instead of hardcoded 0.5. New functions: `_extract_alpha_test_from_tpc()`,
-  `TextureCache.get_raw_header()`. New field: `ModelNode.txi_alpha_test`.
-- **UI assessment**: Evaluated Qt/qtpy migration suggestion — declined (project uses Tkinter).
-- **Research**: Confirmed Kotor.NET `KotorModelLoader.cs` mesh layout, PyKotor `gl/shader/texture.py`
-  `Texture.alpha_cutoff` field, xoreos TPC header structure.
-- **Tests**: +40 tests in `test_v240_phase36_alpha_txi.py`. Total: 2,623 passing.
+| Issue | Status |
+|-------|--------|
+| **CaloNord `usecomp` animation** — LBS guard clamps cross-region pull < 8 units; full fix needs Aurora `bone_remap` table generation | Partially mitigated |
+| **PyKotor pipeline consolidation** — texture decode and normal-map pipeline dual paths; consolidating to `pykotor.resource.formats.tpc` | ~70% migrated |
 
-**v3.7 (2026-03-18):**
-- **K2 Dirt/Hologram fields**: `hide_in_holograms`, `dirt_enabled`, `dirt_texture`, `dirt_coord_space` now parsed and stored from K2/TSL mesh headers.
-- **Mesh AveragePoint**: `mesh_average_point` stored from TrimeshHeader; GPU renderer uses it for accurate transparent-surface depth sorting.
-- **Tests**: +47 tests in `test_v250_phase37_k2_fields_avgpoint.py`. Total: 2,670 passing.
+### Near-term (v5.2 – v6.0)
 
-### v3.5 — Recursive Supermodel + Env-Map Fixes (2026-03-18)
+#### Walkmesh Editing (Module Editor enhancement)
+- In-viewport click-select of individual `.wok` triangles
+- Surface-type paint brush (`WALK` / `NONWALK` / `GRASS` / `STONE` / etc.)
+- Drag walkmesh vertices to reshape terrain elevation
+- Write modified walkmesh back to a valid Aurora `.wok` binary file
 
-- **FIX-4 Recursive bone injection**: `_deep_copy_subtree()` replaces flat copy.
-- **FIX-1/2/3**: bumpyshinytexture alias, BlendedOver formula, final alpha for env surfaces.
-- **Tests**: +75 tests (TXI/env-map) + 2 (supermodel). Total: 185 passing.
+#### Module / Room Editing
+- `.lyt` scene graph: parse and display full room-instance list
+- Drag-and-drop room MDL instances with snap-to-grid
+- Door / trigger / waypoint editing with GIT export
 
-- **`walkmesh.py`** — Pass raw bytes directly to `read_bwm()` (its actual type signature, not `BytesIO` wrapper); strip both `.wok` **and** `.bwm` suffixes from resref; prepend `# stats: N faces, M walkable, P perimeter edges` header to give LLMs quick numeric context.
-- **`refs.py`** — All error paths now use `_err(msg)` helper that calls `json.dumps({"error": msg})`, making error responses JSON-safe even when exception messages contain `"` or `\` characters (previous f-string interpolation pattern was fragile).  Added `case_sensitive` parameter to `kotor_find_referrers` (PyKotor's `find_referrers()` has supported it).  Changed `file_type` derivation to use `restype.name.upper()` instead of `restype.extension.upper()` for consistency.
-- **`schemas/__init__.py`** — `FindReferrersInput` gains `case_sensitive: bool = False` field.
-- **`tests/test_v34_refs_walkmesh_archives.py`** — 16 new tests in `TestWalkmeshToolModule` and `TestV341Improvements` class: extension stripping, JSON safety, schema fields, `_err` helper contract.  **160 total tests passing** (was 151 in v3.4).
+#### AcuRig Improvements
+- Draggable joint handles overlaid on mesh (hip, spine, shoulders, elbows, knees)
+- Geodesic / heat-diffuse LBS weight initialisation
+- Interactive weight-painting brush with smooth mode
 
-### v3.4 — Full Upstream Parity + Monorepo Audit
+### Long-term
 
-- **`src/kotormcp/tools/refs.py`** — 6 new reference tools ported from upstream `OldRepublicDevs/KotorMCP`: `kotor_list_references`, `kotor_find_referrers`, `kotor_find_strref_referrers`, `kotor_describe_dlg`, `kotor_describe_jrl`, `kotor_describe_resource_refs`. Adapted to GhostRigger's port-contract layer (no common-coupling to global state).
-- **`src/kotormcp/tools/walkmesh.py`** — 1 new tool ported from upstream: `kotor_walkmesh_validation_diagram`. Returns text validation diagram (perimeter, transitions, outer boundary) for any BWM/WOK resource.
-- **`src/kotormcp/tools/archives.py`** — 2 new tools ported from upstream: `kotor_list_archive` (KEY/BIF/RIM/ERF/MOD listing with pagination), `kotor_extract_resource` (first write-capable tool — extracts resource to validated disk path).
-- **`src/kotormcp/utils/formatting.py`** — Fixed circular import (`utils/__init__.py` ↔ `utils/formatting.py`): implementation now lives in `formatting.py`, `__init__.py` re-exports.
-- **`tests/test_v34_refs_walkmesh_archives.py`** — 40 offline tests covering tool definitions, handler error paths, result format compliance, and registry dispatch for all 9 new tools.
-- Registry expanded to **43 tools** (was 34): full upstream KotorMCP parity plus GhostRigger-exclusive tools (3D model pipeline, AgentDecompile bridge, composite tools).
-- **Monorepo alignment**: All 25 upstream KotorMCP tools now present in GhostRigger's embedded KotorMCP. GhostScripter-K1-K2 and GModular confirmed as submodules in `Tools/` of the `OldRepublicDevs/PyKotor` monorepo.
-
-### v3.3 — Composite Tools + System Design (Constantine / Khononov)
-
-- **`src/kotormcp/tools/resource.py`** — `get_resource`: universal context-free resource accessor. Accepts (game, resref, restype) and returns decoded content — GFF JSON tree, 2DA rows, TLK entries, MDL structural summary, NCS hex stub, NSS source, or base64 binary. Nine decoders registered at module load; adding a new format requires only one new function (open/closed principle).
-- **`src/kotormcp/tools/quest.py`** — `get_quest`: composite quest inspector. Accepts (game, tag) and returns a single Markdown document containing the JRL resource, quest plot number, all journal states with TLK-resolved text, referenced scripts (NSS source or NCS stub), and DLG node excerpts referencing the quest tag. Structured as a textbook Constantine Chapter 9 transform hierarchy.
-- **`tests/test_v33_composite_tools.py`** — 33 offline tests covering schema validation (context-free naming, required fields), registry integration (no duplicates), handler error paths, and the `_extract_path` helper.
-- **`SYSTEM_DESIGN.md`** — Comprehensive systems design document: IPC architecture diagram, gap analysis, coupling/cohesion profile table, Constantine transform analysis for `get_quest`, recommended canonical tool naming convention (verb_noun, no app prefix), 5 proposed next tools (get_character, get_item, patch_resource, compile_script, get_module_summary), IPC protocol fixes, and a context analysis table showing how the same tools serve Discord, VS Code, CI/CD, and modder contexts without modification.
-- Registry expanded to 34 tools (was 32).
-- Fixed `asyncio.get_event_loop()` → `asyncio.run()` in `test_kotormcp_integration.py` and `test_kotormcp_architecture.py` for Python 3.12 compatibility.
-
-### v3.2 — AgentDecompile / Ghidra Engine Bridge
-
-- **`src/kotormcp/adapters_decompile.py`** — `AgentDecompileClient` HTTP adapter: MCP session management, Ghidra credential headers, per-method high-level API
-- **`src/kotormcp/tools/decompile.py`** — 11 tool handlers for engine binary analysis
-- **`tests/test_agentdecompile_bridge.py`** — 53 fully-offline tests; fixed missing `_patch_client()` helper (was causing 28 `NameError` failures)
-- **`claude_desktop_config.json`** — Both `ghostrigger-kotor` and `agdec-proxy` server entries
-- **`AGENTDECOMPILE_INTEGRATION.md`** — 6 engine research workflows
-- Registry expanded to 34 tools; both `AGENTDECOMPILE_*` and `AGENT_DECOMPILE_*` env prefixes supported
-
-### v3.1 — Deep Audit & Tool Hardening
-
-- `ghostrigger_render_model`: fixed import (`CPURenderer` → `GpuRenderer`), `sys.path` bootstrap, auto-framed camera, `force_cpu=True`, output path sanitisation, `backend` field in response
-- `gamedata.py` port-contract compliance: `talktable_string()`, `get_resource()` helpers, `get_cell()` with exception handling, optional `path` arg
-
-### v3.0 — Ports & Adapters Architecture
-
-- `ports.py` — 4 abstract contracts + 3 stable data DTOs
-- `adapters.py` — pykotor/filesystem knowledge isolated; `PyKotorRegistryAdapter`, `ModelAnalyzer`, `CompositeModelLocator`
-- 6 new tools: `kotor_list_modules`, `kotor_describe_module`, `kotor_module_resources`, `kotor_read_gff`, `kotor_read_2da`, `kotor_read_tlk`
-
-### v2.9 — KotorMCP Integration
-
-- Embedded MCP server with 15 initial tools; stdio / HTTP / SSE transports
-- PyKotor 2.3.3 integration; Flask IPC bridge on port 7001
-
-### v2.8 — Rendering & Audit Fixes
-
-- Envmap alpha channel fix; skin mesh normal correction; deformation helper filter
-
-### v2.7 — PyKotor Integration & GLTF Export (public release)
-
-- PyKotor archive reading; GLTF 2.0 round-trip; alpha-kill readback
-
-### Earlier (v1.x – v2.6)
-
-Binary MDL/MDX parser, ASCII round-trip, K1↔K2 porter, 3D viewport, GPU renderer, cloth PBD simulation, texture priority pipeline, GFF/2DA read/write, auto-rigger
-
----
-
-## Known Limitations
-
-| Limitation | Notes |
-|---|---|
-| GPU renderer requires EGL | Falls back to CPU/PIL automatically; `force_cpu=True` always works |
-| IPC tests skipped in CI | Requires Flask + live port 7001 |
-| `ghostrigger_list_game_models` slow on large installs | Enumerates all chitin BIF resources; use `kotor_search_resources` with a filter |
-| `kotor_lookup_2da` first call ~10 s | Pykotor BIF key parsing uncached between calls; subsequent calls on same installation are faster |
-| Character models render untextured | Textures live in the supermodel (e.g. `S_Female02`); supermodel texture loading is a planned enhancement |
-| TLK `talktable_string` parse errors on some entries | Pykotor returns raw error string rather than crashing |
-| Ghidra RMI credentials (`OpenKotOR`) | Port 13100 rejects the shared credentials; `kotor_binary_*` tools work via the HTTP :8080 backend; `checkout-program` from the shared repo is not currently available |
+| Feature | Description |
+|---------|-------------|
+| **Shape keys / morph targets** | Preview Aurora MDL morph animations (face expressions) |
+| **GPU renderer** | Full migration from CPU PIL to ModernGL: PBR lighting, shadow maps |
+| **Full glTF round-trip** | Import as well as export — materials, skin, animations |
+| **Particle / emitter preview** | Render Aurora `emitter` nodes (billboards, beams) |
+| **Multi-room scene assembly** | Load multiple room MDLs; compose a full module area |
+| **Python scripting console** | In-app Python REPL with access to model graph and viewport |
+| **Undo / redo stack** | Command-history undo for transforms, rigging, and node edits |
 
 ---
 
 ## Contributing
 
-Issues, PRs, and format research are welcome.
-
-When contributing to `src/kotormcp/`:
-- Tool handlers in `tools/` must only import from `ports.py`, `state.py`, `utils/`, `schemas/`, and the relevant `adapters*.py`
-- All pykotor API calls belong in `adapters.py`
-- All HTTP/external API calls belong in `adapters_*.py`
-- Every new handler needs an entry in `tools/__init__.py` (`get_all_tools` + `handle_tool`)
-- AgentDecompile bridge tests must be fully offline (`MockClient`, no live network)
-
----
-
-## Windows EXE Build
-
-```
-double-click build.bat
+```bash
+git clone https://github.com/CrispyW0nton/Kotor-3D-Model-Converter.git
+cd Kotor-3D-Model-Converter
+pip install -e ".[dev]"
+pytest                   # all tests must pass before submitting
+git checkout -b my-feature
+# … make your changes …
+pytest                   # verify again
+git push origin my-feature
+# open a PR to main
 ```
 
-Produces `dist/GhostRigger-K1-K2.exe` (portable, no Python install needed).
+Please run `pytest` before submitting. Aim for **zero new test failures**.  
+Code style: PEP 8, 4-space indents, type hints where practical.  
+PR title format: `feat(scope): short description` or `fix(scope): short description`.
 
 ---
 
 ## License
 
-MIT License — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
 
-Star Wars: Knights of the Old Republic and The Sith Lords are property of LucasArts / Lucasfilm / Disney / Aspyr / Obsidian Entertainment. Game data files are not included in this repository.
+---
+
+*GhostRigger is not affiliated with LucasArts, BioWare, Obsidian Entertainment, or Disney.*  
+*KotOR and The Sith Lords are trademarks of their respective owners.*

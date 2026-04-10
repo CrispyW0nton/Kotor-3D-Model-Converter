@@ -1,0 +1,92 @@
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+build/
+*.whl
+.Python
+venv/
+.venv/
+env/
+
+# ── Jupyter / IDE ─────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+.vscode/
+.idea/
+*.swp
+*~
+
+# ── Game data (large extracted game files – not distributed) ──────────────────
+game_data/
+*.erf
+*.mod
+*.rim
+*.bif
+*.key
+*.mdx
+
+# ── Audit / render output (generated artefacts) ───────────────────────────────
+audit_output/
+logs/
+Logs/
+
+# ── One-off debug / prototype render PNGs at repo root ────────────────────────
+audit_c_*.png
+audit_n_*.png
+audit_p_*.png
+bantha_*.png
+c_*.png
+phk47_*.png
+ckrayt*.png
+chssiss*.png
+screenshot*.png
+
+# ── Temp / scratch directories ────────────────────────────────────────────────
+lava_exercise/
+KotorModTools/
+screenshots/
+portfolio_post.md
+render_check/
+render_test_output/
+render_test_output_quality/
+
+# ── Research / reference sources (large external repos) ──────────────────────
+research_sources/
+PyKotor/
+kotorblender_src/
+
+# ── Demo / capture artefacts ──────────────────────────────────────────────────
+*.mp4
+capture_demo_video.py
+
+# ── OS noise ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Random PNG dumps in repo root ─────────────────────────────────────────────
+*.png
+# Keep PNGs inside assets folder
+!assets/**/*.png
+!src/gui/icons/*.png
+
+# ── Internal dev scripts (not for end users) ──────────────────────────────────
+devlog/
+tools/
+scripts/
+audit_deep.py
+audit_exhaustive.py
+_patch_viewport.py
+render_phase19_ui.py
+generate_kotor_icons.py
+claude_desktop_config.json
+
+# ── Internal markdown files ───────────────────────────────────────────────────
+AGENTDECOMPILE_INTEGRATION.md
+CONTEXT_SNAPSHOT.md
+RESEARCH_FINDINGS.md
+SYSTEM_DESIGN.md
+TEXTBOOK_RESEARCH_REPORT.md
