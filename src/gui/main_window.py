@@ -5428,9 +5428,39 @@ class AnimationsPanel(tk.Frame):
         exp_menu_anim = tk.Menu(exp_btn_anim, tearoff=False, bg=C['panel'],
                                 fg=C['text'], activebackground=C['hover'],
                                 activeforeground='white', font=("Segoe UI", 8))
+        # ── Single animation FBX (baked, recommended) ──
+        exp_menu_anim.add_command(
+            label="Export FBX – Baked (KotOR skeleton)…",
+            command=lambda: self._export_fbx(None, bake=True))
+        exp_menu_anim.add_command(
+            label="Export FBX – Baked (Mixamo skeleton)…",
+            command=lambda: self._export_fbx("MIXAMO", bake=True))
+        exp_menu_anim.add_command(
+            label="Export FBX – Baked (UE5 Mannequin)…",
+            command=lambda: self._export_fbx("UE5", bake=True))
+        exp_menu_anim.add_command(
+            label="Export FBX – Baked (Custom remap)…",
+            command=lambda: self._export_fbx("CUSTOM", bake=True))
+        exp_menu_anim.add_separator()
+        # ── Single animation FBX (sparse, smaller files) ──
+        exp_menu_anim.add_command(
+            label="Export FBX – Sparse keyframes (KotOR)…",
+            command=lambda: self._export_fbx(None, bake=False))
+        exp_menu_anim.add_command(
+            label="Export FBX – Sparse keyframes (Mixamo)…",
+            command=lambda: self._export_fbx("MIXAMO", bake=False))
+        exp_menu_anim.add_separator()
+        # ── Other formats ──
         exp_menu_anim.add_command(label="Export JSON…",     command=self._export_json)
         exp_menu_anim.add_command(label="Export BVH…",      command=self._export_bvh)
         exp_menu_anim.add_separator()
+        # ── Batch / all animations ──
+        exp_menu_anim.add_command(
+            label="Export ALL → one FBX (multi-stack)…",
+            command=lambda: self._export_all_fbx(multi_stack=True))
+        exp_menu_anim.add_command(
+            label="Export ALL → separate FBX files…",
+            command=lambda: self._export_all_fbx(multi_stack=False))
         exp_menu_anim.add_command(label="Export All (JSON)…", command=self._export_all)
         def _show_exp_anim_menu():
             try:
@@ -5756,6 +5786,187 @@ class AnimationsPanel(tk.Frame):
         messagebox.showinfo(
             "Export All",
             f"Exported {len(paths)} animations to:\n{out_dir}")
+
+    # ── FBX Export (uses FBXAnimationExporter from animation_library) ───────
+
+    _REMAP_OPTIONS = {
+        None:     "KotOR Native",
+        "MIXAMO": "Mixamo",
+        "UE5":    "UE5 Mannequin",
+        "CUSTOM": "Custom JSON",
+    }
+
+    def _resolve_bone_remap(self, remap_key: Optional[str]) -> Optional[dict]:
+        """Resolve a bone remap dict from a key string (None/MIXAMO/UE5/CUSTOM)."""
+        if remap_key is None:
+            return None
+        try:
+            from src.core.animation_library import AnimationRetargeter
+        except ImportError:
+            from core.animation_library import AnimationRetargeter  # type: ignore
+        if remap_key == "MIXAMO":
+            return AnimationRetargeter.build_map(AnimationRetargeter.KOTOR_TO_MIXAMO)
+        if remap_key == "UE5":
+            return AnimationRetargeter.build_map(AnimationRetargeter.KOTOR_TO_UE5)
+        if remap_key == "CUSTOM":
+            path = filedialog.askopenfilename(
+                title="Load custom bone remap JSON",
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")])
+            if not path:
+                return None
+            try:
+                return AnimationRetargeter.from_json(path)
+            except Exception as exc:
+                messagebox.showerror("Bone Remap", f"Failed to load remap:\n{exc}")
+                return None
+        return None
+
+    def _export_fbx(self, remap_key: Optional[str] = None, bake: bool = True):
+        """Export the selected animation as FBX with optional skeleton retargeting.
+
+        Parameters
+        ----------
+        remap_key : None (KotOR native), "MIXAMO", "UE5", or "CUSTOM"
+        bake      : If True (default) uses engine.evaluate() for smooth SLERP curves.
+                    If False writes raw KotOR sparse keyframes.
+        """
+        if not self._engine:
+            messagebox.showwarning("Export FBX", "No model loaded."); return
+        name = self._get_selected_anim_name()
+        if not name:
+            messagebox.showinfo("Export FBX", "Select an animation first."); return
+
+        bone_remap = self._resolve_bone_remap(remap_key)
+        skel_label = self._REMAP_OPTIONS.get(remap_key, remap_key or "KotOR Native")
+        fps = float(self._fps_var.get() or 30)
+        quality_label = f"Baked @ {fps:.0f} fps" if bake else "Sparse keyframes"
+
+        path = filedialog.asksaveasfilename(
+            title=f"Export '{name}' as FBX [{skel_label}] [{quality_label}]",
+            defaultextension=".fbx",
+            initialfile=f"{name}.fbx",
+            filetypes=[("FBX File", "*.fbx"), ("All Files", "*.*")])
+        if not path:
+            return
+
+        try:
+            from src.core.animation_library import FBXAnimationExporter
+            exp = FBXAnimationExporter()
+            ok = exp.export(self._engine, name, path,
+                            fps=fps, bone_remap=bone_remap, bake=bake)
+            if ok:
+                messagebox.showinfo(
+                    "Export FBX",
+                    f"Exported '{name}' as FBX\n"
+                    f"Skeleton: {skel_label}\n"
+                    f"Quality:  {quality_label}\n\n"
+                    f"→ {Path(path).name}\n\n"
+                    f"HOW TO USE:\n"
+                    f"• Blender: File > Import > FBX  (check 'Import Animations')\n"
+                    f"  Then in the Action Editor select the animation clip.\n"
+                    f"  To apply to your model: use NLA Editor or Copy Pose.\n\n"
+                    f"• UE5: Drag FBX into Content Browser > select 'Animation'\n"
+                    f"  in the import dialog.  Set skeleton to your character rig.\n\n"
+                    f"• Maya: File > Import.  The animation auto-loads into Timeline.\n"
+                    f"  Use 'Transfer Attribute Values' to retarget to your rig.")
+            else:
+                messagebox.showerror("Export FBX", "Export failed — check log for details.")
+        except Exception as exc:
+            messagebox.showerror("Export FBX Error", str(exc))
+            log.error("AnimationsPanel._export_fbx: %s", exc, exc_info=True)
+
+    def _export_all_fbx(self, multi_stack: bool = False):
+        """
+        Batch-export all animations from the current model as FBX.
+
+        Parameters
+        ----------
+        multi_stack : If True, write all animations into ONE FBX file with
+                      multiple AnimationStacks (one per animation).
+                      If False (default), write one FBX per animation.
+        """
+        if not self._engine:
+            messagebox.showwarning("Export All FBX", "No model loaded."); return
+        model = self._get_model()
+        if not model or not model.animations:
+            messagebox.showinfo("Export All FBX", "No animations to export."); return
+
+        n_anims = len(model.animations)
+        fps     = float(self._fps_var.get() or 30)
+
+        # Ask for skeleton target
+        choice = messagebox.askquestion(
+            "Skeleton Target",
+            f"Export {n_anims} animations as FBX (baked @ {fps:.0f} fps).\n\n"
+            "Use Mixamo skeleton remapping? (Yes=Mixamo, No=KotOR native)\n\n"
+            "For UE5 Mannequin or custom remap, use the Animation Library tab.")
+        remap_key  = "MIXAMO" if choice == 'yes' else None
+        bone_remap = self._resolve_bone_remap(remap_key)
+        skel_label = self._REMAP_OPTIONS.get(remap_key, "KotOR Native")
+
+        try:
+            from src.core.animation_library import FBXAnimationExporter
+            exp = FBXAnimationExporter()
+
+            if multi_stack:
+                # All animations → single FBX with multiple AnimStacks
+                model_name = model.name or "animation"
+                out_path = filedialog.asksaveasfilename(
+                    title=f"Save all {n_anims} animations as single FBX",
+                    defaultextension=".fbx",
+                    initialfile=f"{model_name}_all_animations.fbx",
+                    filetypes=[("FBX File", "*.fbx"), ("All Files", "*.*")])
+                if not out_path:
+                    return
+                ok = exp.export_all_baked(self._engine, out_path,
+                                          fps=fps, bone_remap=bone_remap)
+                if ok:
+                    messagebox.showinfo(
+                        "Export All FBX",
+                        f"Exported {n_anims} animations into one FBX\n"
+                        f"Skeleton: {skel_label}\n"
+                        f"Quality:  Baked @ {fps:.0f} fps\n\n"
+                        f"→ {Path(out_path).name}\n\n"
+                        f"HOW TO USE:\n"
+                        f"• Blender: File > Import > FBX\n"
+                        f"  Each animation appears as a separate Action in the\n"
+                        f"  Action Editor / NLA Editor.\n\n"
+                        f"• UE5: Content Browser > Import > FBX\n"
+                        f"  Select 'Import Animations', choose your Skeleton asset.\n"
+                        f"  Each AnimStack becomes a separate Animation asset.\n\n"
+                        f"• Maya: File > Import.  All clips load into Timeline.\n"
+                        f"  Use Time Editor or Trax Editor to manage them.")
+                else:
+                    messagebox.showerror("Export All FBX",
+                                         "Export failed — check log for details.")
+            else:
+                # One FBX per animation
+                out_dir = filedialog.askdirectory(
+                    title=f"Select output directory for {n_anims} FBX files")
+                if not out_dir:
+                    return
+                exported = []
+                for anim in model.animations:
+                    safe = "".join(c for c in anim.name if c.isalnum() or c in "-_") or "anim"
+                    out_path = str(Path(out_dir) / f"{safe}.fbx")
+                    ok = exp.export_baked(self._engine, anim.name, out_path,
+                                          fps=fps, bone_remap=bone_remap)
+                    if ok:
+                        exported.append(out_path)
+                messagebox.showinfo(
+                    "Export All FBX",
+                    f"Exported {len(exported)}/{n_anims} animations as FBX\n"
+                    f"Skeleton: {skel_label}\n"
+                    f"Quality:  Baked @ {fps:.0f} fps\n\n"
+                    f"→ {out_dir}\n\n"
+                    f"HOW TO USE:\n"
+                    f"• Blender: File > Import > FBX for each file.\n"
+                    f"• UE5: Drag all FBX files into Content Browser,\n"
+                    f"  choose 'Import as Animation' and select your Skeleton.\n"
+                    f"• Maya: File > Import each file individually.")
+        except Exception as exc:
+            messagebox.showerror("Export All FBX Error", str(exc))
+            log.error("AnimationsPanel._export_all_fbx: %s", exc, exc_info=True)
 
     def _import_json(self):
         if not self._engine:
@@ -6162,8 +6373,9 @@ class AnimationLibraryPanel(tk.Frame):
             ok = False
             if fmt == "fbx":
                 exp = FBXAnimationExporter()
-                ok = exp.export(engine, entry.anim_name, path,
-                                bone_remap=bone_remap)
+                # Always use baked mode from library panel (smooth SLERP curves)
+                ok = exp.export_baked(engine, entry.anim_name, path,
+                                      bone_remap=bone_remap)
             elif fmt == "bvh":
                 ok = engine.export_animation_bvh(entry.anim_name, path)
             elif fmt == "json":
@@ -6174,11 +6386,23 @@ class AnimationLibraryPanel(tk.Frame):
                                if fmt == "fbx" and remap_key else "")
                 self._status_var.set(
                     f"✓ Exported {entry.display_name}{remap_label}")
+                fbx_note = (
+                    "\n\nHOW TO USE IN BLENDER:\n"
+                    "1. File > Import > FBX  (check 'Import Animations')\n"
+                    "2. The animation appears in Action Editor\n"
+                    "3. To apply to your FBX model: import your model first,\n"
+                    "   then use 'Push Down' in NLA Editor to link the action\n\n"
+                    "HOW TO USE IN UE5:\n"
+                    "1. Drag FBX into Content Browser\n"
+                    "2. Select 'Import Animations' + choose your Skeleton asset\n\n"
+                    "HOW TO USE IN MAYA:\n"
+                    "1. File > Import (the animation loads into Timeline)"
+                ) if fmt == "fbx" else ""
                 messagebox.showinfo(
                     "Export Complete",
-                    f"Exported '{entry.anim_name}' as {fmt.upper()}{remap_label}\n\n"
-                    f"→ {Path(path).name}\n\n"
-                    f"{'Import this FBX into Blender/UE5/Maya and apply to your rigged model.' if fmt == 'fbx' else ''}")
+                    f"Exported '{entry.anim_name}' as {fmt.upper()}{remap_label}\n"
+                    f"Quality: Baked curves (SLERP-quality)\n\n"
+                    f"→ {Path(path).name}{fbx_note}")
             else:
                 self._status_var.set("Export failed")
                 messagebox.showerror("Export", "Export failed — see log for details.")
@@ -6215,6 +6439,7 @@ class AnimationLibraryPanel(tk.Frame):
             "Batch Export",
             f"Export {len(entries)} animations as FBX\n"
             f"Skeleton: {self._remap_var.get()}\n"
+            f"Quality:  Baked curves (SLERP-quality, 30 fps)\n"
             f"Output:   {out_dir}\n\n"
             f"This may take a few minutes. Continue?")
         if not confirmed:
@@ -6232,7 +6457,9 @@ class AnimationLibraryPanel(tk.Frame):
                 query=query,
                 game=game,
                 fmt="fbx",
+                fps=30.0,
                 bone_remap=bone_remap,
+                bake=True,          # always baked for library exports
                 on_progress=lambda d, t, f: self.after(
                     0, self._status_var.set,
                     f"Exporting {d}/{t}: {Path(f).name if f else ''}"))
@@ -6243,11 +6470,22 @@ class AnimationLibraryPanel(tk.Frame):
     def _batch_done(self, count: int, out_dir: str):
         self._btn_scan.configure(state='normal')
         self._status_var.set(f"✓ Batch exported {count} FBX files")
-        messagebox.showinfo("Batch Export Complete",
-                            f"Exported {count} animation FBX files\n\n"
-                            f"→ {out_dir}\n\n"
-                            f"Each FBX contains one animation clip ready to\n"
-                            f"import into Blender, UE5, or Maya.")
+        messagebox.showinfo(
+            "Batch Export Complete",
+            f"Exported {count} animation FBX files\n"
+            f"Quality: Baked curves (SLERP-quality)\n\n"
+            f"→ {out_dir}\n\n"
+            f"HOW TO USE:\n"
+            f"• Blender: File > Import > FBX for each file\n"
+            f"  (each file contains one animation action)\n\n"
+            f"• UE5: Drag all FBX into Content Browser,\n"
+            f"  choose 'Import as Animation' + select your Skeleton\n\n"
+            f"• Maya: File > Import each file individually\n\n"
+            f"To apply an animation to your own FBX model:\n"
+            f"  1. Import your rigged FBX model into Blender/UE5/Maya\n"
+            f"  2. Import the animation FBX (keep 'Import Animations' checked)\n"
+            f"  3. Retarget: use the bone_remap skeleton option that matches\n"
+            f"     your model's rig (Mixamo, UE5, or custom JSON remap)")
 
 
 # ──────────────────────────────────────────────────────────────────────
