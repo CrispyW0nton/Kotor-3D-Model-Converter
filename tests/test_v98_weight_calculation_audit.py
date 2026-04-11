@@ -121,25 +121,32 @@ class TestFillSkinDataBonemap:
         assert 42 not in indices, "bone_index should be local_idx (0), not global node_id (42)"
         assert 57 not in indices, "bone_index should be local_idx (1), not global node_id (57)"
 
-    def test_bone_indices_not_used_for_vertex_lookup(self):
-        """bone_indices (16-element header array) is NOT used for vertex_indices lookup."""
-        # bone_indices has different values than bonemap
-        # bone_indices[0] = 99 (wrong node)
-        # bonemap[0] = 10 → 'pelvis' (correct node)
-        # vertex_indices[0] = 0 → should resolve to bonemap[0]=10 → 'pelvis'
+    def test_bone_indices_used_for_vertex_lookup(self):
+        """bone_indices (uint16[16] header array) IS used for vertex_indices lookup.
+
+        Verified against PyKotor io_mdl.py: bone_indices (stored as uint16[16] in
+        the skin header) is separate from bonemap (float32 array at offset_to_bonemap).
+        MDX per-vertex data stores float indices into bone_indices, not bonemap.
+
+        When bone_indices has a valid entry (node_id=99→'wrongbone') at slot 0,
+        bone_map[0] must be 'wrongbone' — not 'pelvis' from bonemap.
+        """
+        # bone_indices[0] = 99 → 'wrongbone'  ← this is what MDX vertex_indices index into
+        # bonemap[0] = 10 → 'pelvis'          ← separate structure; NOT used for vertex lookup
+        # vertex_indices[0] = 0 → bone_indices[0]=99 → 'wrongbone'  (CORRECT)
         pk_nodes = self._make_pk_nodes([(10, 'pelvis'), (99, 'wrongbone')])
         skin = MockMDLSkin(
-            bonemap=[10],          # local_idx 0 → node 10 → 'pelvis'
+            bonemap=[10],          # separate structure, not used when bone_indices is valid
             vertex_bones=[
                 MockMDLBoneVertex((0.0, -1.0, -1.0, -1.0), (1.0, 0.0, 0.0, 0.0)),
             ],
-            bone_indices=(99,) + (-1,) * 15,  # bone_indices[0]=99 (different from bonemap!)
+            bone_indices=(99,) + (-1,) * 15,  # bone_indices[0]=99 → 'wrongbone'
         )
         gr = ModelNode(name='body')
         _fill_skin_data(skin, gr, pk_nodes)
 
-        assert gr.bone_map[0] == 'pelvis', (
-            f"Should use bonemap, not bone_indices. Got: {gr.bone_map[0]}"
+        assert gr.bone_map[0] == 'wrongbone', (
+            f"Should use bone_indices[0]=99→'wrongbone', not bonemap. Got: {gr.bone_map[0]}"
         )
 
     def test_unused_slot_negative_node_id(self):
@@ -374,7 +381,20 @@ class TestFillSkinDataBonemap:
 # ──────────────────────────────────────────────────────────────────
 
 class TestAnimScalePositionDelta:
-    """Tests verifying anim_scale is applied to position keyframe deltas."""
+    """Tests verifying anim_scale behaviour for position keyframe deltas.
+
+    KotOR Engine (xoreos): anim_scale is an import-time coordinate-space
+    factor stored in the MDL header.  It is NOT a runtime playback multiplier.
+    xoreos does not scale position keyframes during playback.  GhostRigger
+    follows the same rule: position deltas are added directly to the bind
+    position without being scaled by anim_scale.
+
+    References:
+      - xoreos model_kotor.cpp: position frames are relative (delta-added)
+        but never multiplied by anim_scale during playback.
+      - Commit 90914d8: removed the anim_scale multiplier that was incorrectly
+        shrinking bone movements and causing facial misalignment.
+    """
 
     def _make_model_with_bone(self, bind_pos, anim_scale=1.0):
         """Create a minimal KotorModel with one bone node and one animation."""
@@ -427,8 +447,12 @@ class TestAnimScalePositionDelta:
             f"anim_scale=1.0: expected z={expected[2]}, got {np.position[2]}"
         )
 
-    def test_anim_scale_2_doubles_position_delta(self):
-        """With anim_scale=2.0, position delta is multiplied by 2 before adding."""
+    def test_anim_scale_2_no_effect_on_position_delta(self):
+        """anim_scale=2.0 does NOT scale position deltas (it is an import-time factor only).
+
+        xoreos never applies anim_scale during playback. The correct formula is:
+            animated_pos = bind_pos + raw_delta   (no anim_scale multiplication)
+        """
         bind_pos = (0.0, 0.0, 1.0)
         model = self._make_model_with_bone(bind_pos, anim_scale=2.0)
         engine = AnimationEngine(model)
@@ -438,14 +462,18 @@ class TestAnimScalePositionDelta:
         np = pose.nodes.get('pelvis')
         assert np is not None
         # At t=0.5, interpolated delta = 0.5 (from values [0.2, 0.5, 0.2])
-        # With anim_scale=2.0: pos_z = 1.0 + 2.0 * 0.5 = 2.0
-        expected_z = 1.0 + 2.0 * 0.5
+        # anim_scale=2.0 has NO effect: pos_z = 1.0 + 0.5 = 1.5 (NOT 1.0 + 2.0*0.5)
+        expected_z = 1.0 + 0.5   # raw delta only — anim_scale ignored
         assert abs(np.position[2] - expected_z) < 0.02, (
-            f"anim_scale=2.0: expected z≈{expected_z:.3f}, got {np.position[2]:.3f}"
+            f"anim_scale=2.0 should be ignored: expected z≈{expected_z:.3f}, got {np.position[2]:.3f}"
         )
 
-    def test_anim_scale_0_5_halves_position_delta(self):
-        """With anim_scale=0.5, position delta is halved."""
+    def test_anim_scale_0_5_no_effect_on_position_delta(self):
+        """anim_scale=0.5 does NOT halve position deltas (it is an import-time factor only).
+
+        xoreos never applies anim_scale during playback. The correct formula is:
+            animated_pos = bind_pos + raw_delta   (no anim_scale multiplication)
+        """
         bind_pos = (0.0, 0.0, 1.0)
         model = self._make_model_with_bone(bind_pos, anim_scale=0.5)
         engine = AnimationEngine(model)
@@ -454,14 +482,18 @@ class TestAnimScalePositionDelta:
         pose = engine.evaluate(0.5)
         np = pose.nodes.get('pelvis')
         assert np is not None
-        # With anim_scale=0.5: pos_z = 1.0 + 0.5 * 0.5 = 1.25
-        expected_z = 1.0 + 0.5 * 0.5
+        # At t=0.5, interpolated delta = 0.5 (from values [0.2, 0.5, 0.2])
+        # anim_scale=0.5 has NO effect: pos_z = 1.0 + 0.5 = 1.5 (NOT 1.0 + 0.5*0.5)
+        expected_z = 1.0 + 0.5   # raw delta only — anim_scale ignored
         assert abs(np.position[2] - expected_z) < 0.02, (
-            f"anim_scale=0.5: expected z≈{expected_z:.3f}, got {np.position[2]:.3f}"
+            f"anim_scale=0.5 should be ignored: expected z≈{expected_z:.3f}, got {np.position[2]:.3f}"
         )
 
-    def test_anim_scale_at_keyframe_t0(self):
-        """At t=0, delta is [0,0,0.2]. With anim_scale=2: z = bind_z + 2*0.2."""
+    def test_anim_scale_at_keyframe_t0_no_scale(self):
+        """At t=0, delta is [0,0,0.2]. anim_scale=2 has NO effect: z = bind_z + 0.2.
+
+        anim_scale is an import-time coordinate-space factor, not a playback multiplier.
+        """
         bind_pos = (0.0, 0.0, 1.0)
         model = self._make_model_with_bone(bind_pos, anim_scale=2.0)
         engine = AnimationEngine(model)
@@ -470,9 +502,10 @@ class TestAnimScalePositionDelta:
         pose = engine.evaluate(0.0)
         np = pose.nodes.get('pelvis')
         assert np is not None
-        expected_z = 1.0 + 2.0 * 0.2
+        # Raw delta at t=0 is 0.2. anim_scale=2.0 is ignored: z = 1.0 + 0.2 = 1.2
+        expected_z = 1.0 + 0.2   # NOT 1.0 + 2.0*0.2
         assert abs(np.position[2] - expected_z) < 1e-4, (
-            f"At t=0: expected z={expected_z:.4f}, got {np.position[2]:.4f}"
+            f"At t=0: expected z={expected_z:.4f} (no anim_scale), got {np.position[2]:.4f}"
         )
 
     def test_default_anim_scale_is_1(self):
@@ -481,7 +514,7 @@ class TestAnimScalePositionDelta:
         assert model.anim_scale == 1.0, f"Default anim_scale should be 1.0, got {model.anim_scale}"
 
     def test_anim_scale_does_not_affect_orientation(self):
-        """anim_scale only affects CTRL_POSITION (type 8), not CTRL_ORIENTATION (type 20)."""
+        """anim_scale does not affect CTRL_ORIENTATION (type 20) \u2014 rotations use raw keyframes."""
         root = ModelNode(name='root', flags=int(NodeFlags.HEADER))
         root.position = (0.0, 0.0, 0.0)
         root.rotation = (0.0, 0.0, 0.0, 1.0)

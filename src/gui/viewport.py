@@ -3372,7 +3372,15 @@ class FrameRenderer:
         # Request a redraw so every animation frame is actually rendered.
         # Without this the viewport only redraws on the next idle 33 ms tick,
         # causing animation to appear frozen or heavily frame-dropped.
-        self._request_render(fast=True)
+        # Use getattr for safe call — FrameRenderer may be instantiated standalone
+        # (e.g. in unit tests) without the ModelViewport parent widget that owns
+        # _request_render().  In that case silently skip the redraw request.
+        _req = getattr(self, '_request_render', None)
+        if _req is not None:
+            try:
+                _req(fast=True)
+            except Exception:
+                pass
 
     # ── Base skeleton names (supermodels that ARE the main skeleton) ──────
     # Use the shared KOTOR_BASE_SKELETONS constant from model_data to ensure
@@ -3467,7 +3475,7 @@ class FrameRenderer:
             # Build tex → [(skin_node, vert_count)] mapping for skin meshes
             skin_tex_verts: dict = {}
             for n in all_nodes:
-                # KotOR skin nodes have is_skin=True but is_mesh=False.
+                # KotOR skin nodes have both is_skin=True and is_mesh=True (flags 0x61).
                 # Accept any node that is a skin (is_skin=True) regardless of is_mesh.
                 if not n.is_skin:
                     continue

@@ -683,6 +683,103 @@ class ModelNode:
 
         self.tangents = result
 
+    def compute_tangents(self) -> None:
+        """
+        Compute per-vertex tangent vectors using the Lengyel (2001) Gram-Schmidt
+        method and populate ``self.tangents``.
+
+        References:
+          - Lengyel, *Mathematics for 3D Game Programming* §7.8.3
+          - Lengyel, *FGED Vol.2: Rendering* §7
+          - Eric Lengyel, "Computing Tangent Space Basis Vectors for an Arbitrary
+            Mesh", Terathon Software, 2001.
+
+        Algorithm:
+          For each triangle, compute edge vectors in position and UV space, derive
+          the tangent direction, accumulate into per-vertex sums, then
+          Gram-Schmidt orthogonalize against the vertex normal.
+
+        Notes:
+          - Bitangent is NOT stored separately; recompute at render time via
+            ``cross(normal, tangent)``.
+          - Degenerate UVs (zero-area UV triangle) fall back to (1,0,0).
+          - Respects ``face_uvs`` ASCII-MDL indexing when present.
+          - Skips non-mesh nodes gracefully.
+        """
+        nv = len(self.vertices)
+        if nv == 0 or not self.faces:
+            self.tangents = []
+            return
+
+        # Accumulate raw tangent sums per vertex
+        tan_sum: List[List[float]] = [[0.0, 0.0, 0.0] for _ in range(nv)]
+
+        for fi, face in enumerate(self.faces):
+            if len(face) < 3:
+                continue
+            i0, i1, i2 = face[0], face[1], face[2]
+            if i0 >= nv or i1 >= nv or i2 >= nv:
+                continue
+
+            # Positions
+            p0 = self.vertices[i0]; p1 = self.vertices[i1]; p2 = self.vertices[i2]
+            e1x = p1[0]-p0[0]; e1y = p1[1]-p0[1]; e1z = p1[2]-p0[2]
+            e2x = p2[0]-p0[0]; e2y = p2[1]-p0[1]; e2z = p2[2]-p0[2]
+
+            # UV coordinates — respect face_uvs if present
+            if self.face_uvs and fi < len(self.face_uvs):
+                ti0, ti1, ti2 = self.face_uvs[fi]
+            else:
+                ti0, ti1, ti2 = i0, i1, i2
+
+            def _get_uv(ti):
+                if self.uvs and ti < len(self.uvs):
+                    return self.uvs[ti]
+                return (0.0, 0.0)
+
+            uv0 = _get_uv(ti0); uv1 = _get_uv(ti1); uv2 = _get_uv(ti2)
+            du1 = uv1[0]-uv0[0]; dv1 = uv1[1]-uv0[1]
+            du2 = uv2[0]-uv0[0]; dv2 = uv2[1]-uv0[1]
+
+            denom = du1*dv2 - du2*dv1
+            if abs(denom) < 1e-9:
+                # Degenerate UV triangle — use default tangent direction
+                tx, ty, tz = 1.0, 0.0, 0.0
+            else:
+                r = 1.0 / denom
+                tx = (dv2*e1x - dv1*e2x) * r
+                ty = (dv2*e1y - dv1*e2y) * r
+                tz = (dv2*e1z - dv1*e2z) * r
+
+            for vi in (i0, i1, i2):
+                tan_sum[vi][0] += tx
+                tan_sum[vi][1] += ty
+                tan_sum[vi][2] += tz
+
+        # Gram-Schmidt orthogonalization against vertex normal
+        result: List[Tuple[float, float, float]] = []
+        for vi in range(nv):
+            if self.normals and vi < len(self.normals):
+                nx, ny, nz = self.normals[vi]
+            else:
+                nx, ny, nz = 0.0, 0.0, 1.0
+
+            tx, ty, tz = tan_sum[vi]
+
+            # Gram-Schmidt: t' = normalize(t - (n·t)*n)
+            dot = nx*tx + ny*ty + nz*tz
+            ox = tx - dot*nx
+            oy = ty - dot*ny
+            oz = tz - dot*nz
+
+            mag = math.sqrt(ox*ox + oy*oy + oz*oz)
+            if mag > 1e-9:
+                result.append((ox/mag, oy/mag, oz/mag))
+            else:
+                result.append((1.0, 0.0, 0.0))   # degenerate fallback
+
+        self.tangents = result
+
     def clone_shallow(self) -> 'ModelNode':
         n = ModelNode(name=self.name, flags=self.flags, index=self.index)
         n.position = self.position
