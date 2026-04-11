@@ -3369,6 +3369,10 @@ class FrameRenderer:
         self._bone_transforms_pose_id = -1
         # Ensure next frame renders at full quality (not LOD/interactive mode)
         self.is_interactive = False
+        # Request a redraw so every animation frame is actually rendered.
+        # Without this the viewport only redraws on the next idle 33 ms tick,
+        # causing animation to appear frozen or heavily frame-dropped.
+        self._request_render(fast=True)
 
     # ── Base skeleton names (supermodels that ARE the main skeleton) ──────
     # Use the shared KOTOR_BASE_SKELETONS constant from model_data to ensure
