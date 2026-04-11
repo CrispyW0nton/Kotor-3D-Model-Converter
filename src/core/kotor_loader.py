@@ -58,13 +58,12 @@ from .model_data import (
 #   DUMMY  → NodeFlags.HEADER (0x01) for ALL dummy nodes (root AND children).
 #            Old bridge always assigned HEADER to dummies; giving child dummies
 #            flags=0 broke is_dummy checks throughout the pipeline.
-#   SKIN   → NodeFlags.SKIN only (0x40), NOT NodeFlags.HEADER|SKIN|MESH.
-#            Old bridge did not include MESH or HEADER for skin nodes.
-#            Adding HEADER (0x01) made skin nodes satisfy is_dummy (flags==0x01
-#            only when flags is exactly HEADER, but HEADER|SKIN|MESH = 0x61
-#            which is not 0x01, so is_dummy stays False — however it broke the
-#            _build_bone_transforms "prefer non-skin over skin" logic and caused
-#            confusion in type_label / viewport rendering paths).
+#   SKIN   → NodeFlags.HEADER|MESH|SKIN (0x61), matching the KotOR binary MDL
+#            format (confirmed via c_bantha raw binary scan).  Skin nodes
+#            contain vertex data like trimesh nodes and must have MESH set so
+#            that LBS and texture-pipeline code can locate them via is_mesh.
+#            is_dummy stays False because HEADER|MESH|SKIN (0x61) ≠ 0x01.
+#            Viewport code uses 'if n.is_skin: skip' paths separately.
 #   TRIMESH→ NodeFlags.MESH only (0x20), matching the old bridge.
 _TYPE_FLAGS: Dict[int, int] = {
     int(MDLNodeType.DUMMY):      int(NodeFlags.HEADER),
@@ -74,7 +73,7 @@ _TYPE_FLAGS: Dict[int, int] = {
     int(MDLNodeType.EMITTER):    int(NodeFlags.EMITTER),
     int(MDLNodeType.REFERENCE):  int(NodeFlags.REFERENCE),
     int(MDLNodeType.AABB):       int(NodeFlags.AABB),
-    int(MDLNodeType.SKIN):       int(NodeFlags.SKIN),
+    int(MDLNodeType.SKIN):       int(NodeFlags.HEADER) | int(NodeFlags.MESH) | int(NodeFlags.SKIN),
     int(MDLNodeType.SABER):      int(NodeFlags.SABER) | int(NodeFlags.MESH),
     int(MDLNodeType.CAMERA):     int(NodeFlags.HEADER),
     int(MDLNodeType.PATCH):      int(NodeFlags.MESH),
@@ -595,19 +594,22 @@ def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
     """Read bone-map and per-vertex weights directly from PyKotor MDLSkin.
 
     PyKotor MDLSkin exposes two related arrays:
-      skin.bone_indices  — compact list of node_id values for each active bone
-                           slot (len = number of unique bones used, e.g. 16)
-      skin.bonemap       — sparse map, bonemap[i] = node_id or -1 (len = total
-                           model node count, e.g. 46)
+      skin.bone_indices  — compact uint16[16] header array of active node_ids.
+                           Vertex MDX data stores float32 indices into THIS array
+                           (offset_to_mdx_bones in the skin header).
+      skin.bonemap       — separate float32 array at offset_to_bonemap, length =
+                           bonemap_count (up to total node count, e.g. 46).
+                           This is a DIFFERENT structure from bone_indices.
 
-    MDLBoneVertex.vertex_indices[j] is an index into bone_indices (the compact
-    list), NOT into bonemap (the sparse array).  This matches the old
-    pykotor_bridge._fill_skin_data which used bone_indices to build bone_map
-    so that vertex_indices[j] → bone_map[j] → bone node name is correct.
+    MDLBoneVertex.vertex_indices[j] indexes into bone_indices (compact uint16[16]),
+    NOT into bonemap.  This is confirmed by PyKotor io_mdl.py: bone_indices is read
+    as uint16[16] from the skin header (self.bones), while bonemap is read separately
+    as float32 values from offset_to_bonemap.  They are independent structures.
 
-    Verified against raw MDL binary: the MDX per-vertex bone-index field stores
-    a slot number that indexes into the compact bonemap stored in the MDL's skin
-    block (i.e. bone_indices), NOT into the full node-count sparse array.
+    Fallback strategy:
+      1. Use bone_indices (uint16[16]) — correct for real MDL files.
+      2. If bone_indices produces an all-empty map (all entries -1/0xFFFF/invalid),
+         fall back to bonemap — handles synthetic/mock skins and edge cases.
     """
     # Step 1: bone_map — compact slot → bone node name
     # Use skin.bone_indices (compact list of active node_ids) so that
@@ -626,9 +628,14 @@ def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
         pk_n = id_to_pknode.get(nid)
         gr.bone_map.append(pk_n.name if pk_n else '')
 
-    # Fallback: if bone_indices is not available, fall back to bonemap (sparse)
-    # This is less accurate but avoids a complete failure.
-    if not gr.bone_map:
+    # Fallback: if bone_indices produced no valid entries (all were -1/0xFFFF/invalid
+    # or the array was empty), use bonemap instead.  This handles:
+    #   - Synthetic mock skins (unit tests with MockMDLSkin(bone_indices=all_invalid))
+    #   - Models where bone_indices is genuinely absent
+    # Note: We check whether ANY non-empty name was produced, not just array length.
+    _has_valid_bi = any(name for name in gr.bone_map)
+    if not _has_valid_bi:
+        gr.bone_map = []
         for raw in (getattr(skin, 'bonemap', None) or []):
             try:
                 nid = int(raw)

@@ -5785,6 +5785,472 @@ class AnimationsPanel(tk.Frame):
 
 
 # ──────────────────────────────────────────────────────────────────────
+#  ANIMATION LIBRARY PANEL
+# ──────────────────────────────────────────────────────────────────────
+
+class AnimationLibraryPanel(tk.Frame):
+    """
+    Animation Library tab.
+
+    Scans all game models and lists every animation across K1 and K2.
+    Supports:
+      • Search / filter by name, model, game, class, length
+      • Click-to-preview (loads model + plays animation in viewport)
+      • Export selected animation as FBX, BVH, or JSON
+      • Export All (batch) with optional bone retargeting
+      • Bone remap: KotOR native / Mixamo / UE5 Mannequin / custom JSON
+    """
+
+    REMAP_OPTIONS = {
+        "KotOR Native":    None,
+        "Mixamo":          "MIXAMO",
+        "UE5 Mannequin":   "UE5",
+        "Custom JSON…":    "CUSTOM",
+    }
+
+    def __init__(self, master, get_library=None, get_viewport=None,
+                 set_model=None, **kw):
+        super().__init__(master, bg=C['panel2'], **kw)
+        self._get_library  = get_library  or (lambda: None)
+        self._get_viewport = get_viewport or (lambda: None)
+        self._set_model    = set_model    or (lambda m: None)
+        self._anim_lib     = None
+        self._entries      = []       # currently displayed AnimationEntry list
+        self._custom_remap_path: Optional[str] = None
+        self._scan_job     = None
+        self._build_ui()
+
+    # ── UI construction ──────────────────────────────────────────────
+
+    def _build_ui(self):
+        top = tk.Frame(self, bg=C['panel2'])
+        top.pack(fill='x', padx=6, pady=(6, 2))
+
+        _label(top, "🎬 Animation Library", "heading", bg=C['panel2']).pack(
+            side='left', anchor='w')
+
+        self._status_var = tk.StringVar(value="Not scanned")
+        tk.Label(top, textvariable=self._status_var,
+                 bg=C['panel2'], fg=C['text2'],
+                 font=("Segoe UI", 7)).pack(side='right', padx=4)
+
+        # Scan button
+        scan_row = tk.Frame(self, bg=C['panel2'])
+        scan_row.pack(fill='x', padx=6, pady=2)
+        self._btn_scan = _btn(scan_row, "⟳ Scan Game Library",
+                              self._on_scan, accent=True, small=True)
+        self._btn_scan.pack(side='left')
+        self._prog_var = tk.StringVar(value="")
+        tk.Label(scan_row, textvariable=self._prog_var,
+                 bg=C['panel2'], fg=C['text2'],
+                 font=("Consolas", 7)).pack(side='left', padx=6)
+
+        # Filter row
+        filt = tk.Frame(self, bg=C['panel2'])
+        filt.pack(fill='x', padx=6, pady=2)
+        tk.Label(filt, text="Filter:", bg=C['panel2'], fg=C['text2'],
+                 font=("Segoe UI", 8)).pack(side='left')
+        self._search_var = tk.StringVar()
+        self._search_var.trace_add('write', lambda *_: self._apply_filter())
+        tk.Entry(filt, textvariable=self._search_var,
+                 bg=C['bg2'], fg=C['text'],
+                 insertbackground=C['text'],
+                 font=("Consolas", 8), width=18).pack(side='left', padx=4)
+
+        tk.Label(filt, text="Game:", bg=C['panel2'], fg=C['text2'],
+                 font=("Segoe UI", 8)).pack(side='left')
+        self._game_var = tk.StringVar(value="All")
+        ttk.Combobox(filt, textvariable=self._game_var,
+                     values=["All", "K1", "K2"],
+                     width=5, state='readonly').pack(side='left', padx=2)
+        self._game_var.trace_add('write', lambda *_: self._apply_filter())
+
+        tk.Label(filt, text="Class:", bg=C['panel2'], fg=C['text2'],
+                 font=("Segoe UI", 8)).pack(side='left')
+        self._cls_var = tk.StringVar(value="All")
+        self._cls_combo = ttk.Combobox(filt, textvariable=self._cls_var,
+                                        values=["All"], width=9,
+                                        state='readonly')
+        self._cls_combo.pack(side='left', padx=2)
+        self._cls_var.trace_add('write', lambda *_: self._apply_filter())
+
+        # Results tree
+        tree_frame = tk.Frame(self, bg=C['panel2'])
+        tree_frame.pack(fill='both', expand=True, padx=6, pady=2)
+
+        cols = ('model', 'anim', 'game', 'length', 'keys')
+        self._tree = ttk.Treeview(tree_frame, columns=cols,
+                                   show='headings', height=12,
+                                   selectmode='browse')
+        self._tree.heading('model',  text='Model',      anchor='w')
+        self._tree.heading('anim',   text='Animation',  anchor='w')
+        self._tree.heading('game',   text='Game',       anchor='center')
+        self._tree.heading('length', text='Len(s)',     anchor='center')
+        self._tree.heading('keys',   text='Keys',       anchor='center')
+        self._tree.column('model',  width=90,  stretch=True)
+        self._tree.column('anim',   width=100, stretch=True)
+        self._tree.column('game',   width=38,  stretch=False)
+        self._tree.column('length', width=46,  stretch=False)
+        self._tree.column('keys',   width=46,  stretch=False)
+
+        style = ttk.Style()
+        style.configure("AnimLib.Treeview",
+                         background=C['bg2'], foreground=C['text'],
+                         fieldbackground=C['bg2'], rowheight=18,
+                         font=("Consolas", 8))
+        style.configure("AnimLib.Treeview.Heading",
+                         background=C['panel'], foreground=C['gold'],
+                         font=("Segoe UI Semibold", 8))
+        style.map("AnimLib.Treeview",
+                  background=[('selected', C['selected'])],
+                  foreground=[('selected', 'white')])
+        self._tree.configure(style="AnimLib.Treeview")
+
+        vsb = ttk.Scrollbar(tree_frame, orient='vertical',
+                             command=self._tree.yview)
+        self._tree.configure(yscrollcommand=vsb.set)
+        self._tree.pack(side='left', fill='both', expand=True)
+        vsb.pack(side='right', fill='y')
+        self._tree.bind("<<TreeviewSelect>>", self._on_select)
+        self._tree.bind("<Double-1>",         self._on_preview)
+        self._tree.bind("<Return>",           lambda e: self._on_preview())
+
+        # Count label
+        self._count_var = tk.StringVar(value="0 animations")
+        tk.Label(self, textvariable=self._count_var,
+                 bg=C['panel2'], fg=C['text2'],
+                 font=("Segoe UI", 7)).pack(anchor='e', padx=6)
+
+        # Bottom action row
+        act = tk.Frame(self, bg=C['panel2'])
+        act.pack(fill='x', padx=6, pady=(2, 6))
+
+        _btn(act, "▶ Preview", self._on_preview, small=True, accent=True
+             ).pack(side='left', padx=2)
+
+        # Export button (dropdown menu)
+        exp_btn = _btn(act, "⬇ Export…", None, small=True)
+        exp_btn.pack(side='left', padx=2)
+        exp_menu = tk.Menu(exp_btn, tearoff=False, bg=C['panel'],
+                           fg=C['text'], activebackground=C['hover'],
+                           activeforeground='white', font=("Segoe UI", 8))
+        exp_menu.add_command(label="Export FBX (KotOR skeleton)…",
+                             command=lambda: self._export_selected("fbx", None))
+        exp_menu.add_command(label="Export FBX (Mixamo skeleton)…",
+                             command=lambda: self._export_selected("fbx", "MIXAMO"))
+        exp_menu.add_command(label="Export FBX (UE5 Mannequin)…",
+                             command=lambda: self._export_selected("fbx", "UE5"))
+        exp_menu.add_command(label="Export FBX (Custom remap)…",
+                             command=lambda: self._export_selected("fbx", "CUSTOM"))
+        exp_menu.add_separator()
+        exp_menu.add_command(label="Export BVH…",
+                             command=lambda: self._export_selected("bvh", None))
+        exp_menu.add_command(label="Export JSON…",
+                             command=lambda: self._export_selected("json", None))
+        exp_menu.add_separator()
+        exp_menu.add_command(label="Export ALL (batch FBX)…",
+                             command=self._export_all_batch)
+
+        def _show_exp_menu():
+            try:
+                exp_menu.tk_popup(
+                    exp_btn.winfo_rootx(),
+                    exp_btn.winfo_rooty() + exp_btn.winfo_height())
+            finally:
+                exp_menu.grab_release()
+        exp_btn.configure(command=_show_exp_menu)
+        _tooltip(exp_btn, "Export selected animation as FBX, BVH, or JSON")
+
+        _btn(act, "All→FBX", self._export_all_batch, small=True
+             ).pack(side='left', padx=2)
+
+        # Remap selector
+        tk.Label(act, text="Skel:", bg=C['panel2'], fg=C['text2'],
+                 font=("Segoe UI", 7)).pack(side='right')
+        self._remap_var = tk.StringVar(value="KotOR Native")
+        ttk.Combobox(act, textvariable=self._remap_var,
+                     values=list(self.REMAP_OPTIONS.keys()),
+                     width=12, state='readonly').pack(side='right', padx=2)
+        _tooltip(act, "Target skeleton for FBX export")
+
+    # ── Scanning ─────────────────────────────────────────────────────
+
+    def _on_scan(self):
+        """Start background scan of the game library."""
+        from src.core.animation_library import AnimationLibrary
+        lib = self._get_library()
+        if lib is None or not lib.models:
+            messagebox.showwarning("Animation Library",
+                                   "No game library loaded.\n\n"
+                                   "Set your K1/K2 game directory in the "
+                                   "Library tab first, then click Scan.")
+            return
+
+        self._anim_lib = AnimationLibrary()
+        self._btn_scan.configure(state='disabled')
+        self._status_var.set("Scanning…")
+        self._tree.delete(*self._tree.get_children())
+        self._entries = []
+
+        def _progress(msg, done, total):
+            pct = int(100 * done / max(1, total))
+            self._prog_var.set(f"{pct}%  {done}/{total}")
+            self.update_idletasks()
+
+        def _complete(total_anims):
+            self._btn_scan.configure(state='normal')
+            self._prog_var.set("")
+            self._status_var.set(
+                f"{total_anims} animations from "
+                f"{len(self._anim_lib.get_all_model_names())} models")
+            # Populate class filter
+            classes = sorted({e.model_class for e in self._anim_lib.entries
+                               if e.model_class})
+            self._cls_combo.configure(values=["All"] + classes)
+            self._apply_filter()
+
+        self._anim_lib.scan(lib,
+                             on_progress=lambda m, d, t: self.after(0, _progress, m, d, t),
+                             on_complete=lambda n: self.after(0, _complete, n),
+                             background=True)
+
+    # ── Filter / display ─────────────────────────────────────────────
+
+    def _apply_filter(self):
+        """Re-filter and repopulate the tree."""
+        if self._anim_lib is None:
+            return
+        query = self._search_var.get().strip()
+        game  = self._game_var.get()
+        cls   = self._cls_var.get()
+        if cls == "All":
+            cls = ""
+        entries = self._anim_lib.search(
+            query=query, game=game,
+            model_class=cls if cls else "All")
+        self._entries = entries
+
+        self._tree.delete(*self._tree.get_children())
+        for ae in entries[:2000]:   # cap display at 2000 for performance
+            self._tree.insert('', 'end', values=(
+                ae.model_name,
+                ae.anim_name,
+                ae.game,
+                f"{ae.length:.2f}",
+                str(ae.key_count),
+            ))
+        shown = min(len(entries), 2000)
+        total = len(entries)
+        self._count_var.set(
+            f"{shown}/{total} animations shown" if shown < total
+            else f"{total} animations")
+
+    # ── Selection / preview ──────────────────────────────────────────
+
+    def _selected_entry(self) -> Optional['AnimationEntry']:
+        sel = self._tree.selection()
+        if not sel:
+            return None
+        idx = self._tree.index(sel[0])
+        if idx < len(self._entries):
+            return self._entries[idx]
+        return None
+
+    def _on_select(self, event=None):
+        entry = self._selected_entry()
+        if entry:
+            self._status_var.set(
+                f"{entry.display_name}  {entry.length:.2f}s  "
+                f"{entry.fps_estimate:.0f}fps  {entry.node_count} bones")
+
+    def _on_preview(self, event=None):
+        """Load the model and play the selected animation in the viewport."""
+        entry = self._selected_entry()
+        if entry is None:
+            return
+        if self._anim_lib is None:
+            return
+
+        self._status_var.set(f"Loading {entry.model_name}…")
+        self.update_idletasks()
+
+        try:
+            engine = self._anim_lib.get_engine(entry)
+            if engine is None:
+                self._status_var.set("Failed to load model")
+                return
+
+            model = engine.model
+            self._set_model(model)
+
+            # Trigger animation playback via viewport
+            vp = self._get_viewport()
+            if vp:
+                try:
+                    vp.set_animation(entry.anim_name, loop=True)
+                except Exception:
+                    pass
+
+            self._status_var.set(
+                f"▶ {entry.display_name}  {entry.length:.2f}s")
+        except Exception as exc:
+            self._status_var.set(f"Error: {exc}")
+            log.error("AnimationLibraryPanel preview: %s", exc, exc_info=True)
+
+    # ── Export ───────────────────────────────────────────────────────
+
+    def _get_bone_remap(self, remap_key: Optional[str]) -> Optional[Dict]:
+        """Resolve the bone remap dict from a key string."""
+        if remap_key is None:
+            return None
+        from src.core.animation_library import AnimationRetargeter
+        if remap_key == "MIXAMO":
+            return AnimationRetargeter.build_map(AnimationRetargeter.KOTOR_TO_MIXAMO)
+        if remap_key == "UE5":
+            return AnimationRetargeter.build_map(AnimationRetargeter.KOTOR_TO_UE5)
+        if remap_key == "CUSTOM":
+            path = filedialog.askopenfilename(
+                title="Load custom bone remap JSON",
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")])
+            if not path:
+                return None
+            try:
+                from src.core.animation_library import AnimationRetargeter
+                remap = AnimationRetargeter.from_json(path)
+                self._custom_remap_path = path
+                return remap
+            except Exception as exc:
+                messagebox.showerror("Bone Remap", f"Failed to load remap:\n{exc}")
+                return None
+        return None
+
+    def _export_selected(self, fmt: str, remap_key: Optional[str]):
+        """Export the selected animation."""
+        entry = self._selected_entry()
+        if entry is None:
+            messagebox.showinfo("Export", "Select an animation first.")
+            return
+
+        # Use UI remap selector if remap_key not explicitly set
+        if remap_key is None:
+            ui_remap = self.REMAP_OPTIONS.get(self._remap_var.get())
+            remap_key = ui_remap
+
+        bone_remap = self._get_bone_remap(remap_key)
+
+        ext_map = {"fbx": "*.fbx", "bvh": "*.bvh", "json": "*.json"}
+        ft_map  = {"fbx": "FBX file", "bvh": "BVH Motion Capture", "json": "JSON"}
+
+        path = filedialog.asksaveasfilename(
+            title=f"Export '{entry.anim_name}' as {fmt.upper()}",
+            defaultextension=f".{fmt}",
+            initialfile=f"{entry.model_name}_{entry.anim_name}.{fmt}",
+            filetypes=[(ft_map[fmt], ext_map[fmt]), ("All Files", "*.*")])
+        if not path:
+            return
+
+        self._status_var.set(f"Exporting {entry.display_name}…")
+        self.update_idletasks()
+
+        try:
+            from src.core.animation_library import FBXAnimationExporter
+            engine = self._anim_lib.get_engine(entry)
+            if engine is None:
+                messagebox.showerror("Export", "Could not load model for export.")
+                return
+
+            ok = False
+            if fmt == "fbx":
+                exp = FBXAnimationExporter()
+                ok = exp.export(engine, entry.anim_name, path,
+                                bone_remap=bone_remap)
+            elif fmt == "bvh":
+                ok = engine.export_animation_bvh(entry.anim_name, path)
+            elif fmt == "json":
+                ok = engine.export_animation_json(entry.anim_name, path)
+
+            if ok:
+                remap_label = (f" [{self._remap_var.get()}]"
+                               if fmt == "fbx" and remap_key else "")
+                self._status_var.set(
+                    f"✓ Exported {entry.display_name}{remap_label}")
+                messagebox.showinfo(
+                    "Export Complete",
+                    f"Exported '{entry.anim_name}' as {fmt.upper()}{remap_label}\n\n"
+                    f"→ {Path(path).name}\n\n"
+                    f"{'Import this FBX into Blender/UE5/Maya and apply to your rigged model.' if fmt == 'fbx' else ''}")
+            else:
+                self._status_var.set("Export failed")
+                messagebox.showerror("Export", "Export failed — see log for details.")
+        except Exception as exc:
+            self._status_var.set(f"Export error: {exc}")
+            messagebox.showerror("Export Error", str(exc))
+            log.error("AnimationLibraryPanel export: %s", exc, exc_info=True)
+
+    def _export_all_batch(self):
+        """Batch-export all filtered animations to a directory."""
+        if self._anim_lib is None or not self._anim_lib.entries:
+            messagebox.showinfo("Batch Export",
+                                "Scan the game library first.")
+            return
+
+        out_dir = filedialog.askdirectory(title="Select output directory for batch FBX export")
+        if not out_dir:
+            return
+
+        # Resolve remap
+        ui_remap = self.REMAP_OPTIONS.get(self._remap_var.get())
+        bone_remap = self._get_bone_remap(ui_remap)
+
+        # Get current filter
+        query = self._search_var.get().strip()
+        game  = self._game_var.get()
+
+        entries = self._anim_lib.search(query=query, game=game)
+        if not entries:
+            messagebox.showinfo("Batch Export", "No animations match current filter.")
+            return
+
+        confirmed = messagebox.askyesno(
+            "Batch Export",
+            f"Export {len(entries)} animations as FBX\n"
+            f"Skeleton: {self._remap_var.get()}\n"
+            f"Output:   {out_dir}\n\n"
+            f"This may take a few minutes. Continue?")
+        if not confirmed:
+            return
+
+        self._btn_scan.configure(state='disabled')
+        self._status_var.set("Batch exporting…")
+        self.update_idletasks()
+
+        def _do_batch():
+            from src.core.animation_library import batch_export_animations
+            exported = batch_export_animations(
+                self._anim_lib,
+                out_dir,
+                query=query,
+                game=game,
+                fmt="fbx",
+                bone_remap=bone_remap,
+                on_progress=lambda d, t, f: self.after(
+                    0, self._status_var.set,
+                    f"Exporting {d}/{t}: {Path(f).name if f else ''}"))
+            self.after(0, self._batch_done, len(exported), out_dir)
+
+        threading.Thread(target=_do_batch, daemon=True, name="batch-export").start()
+
+    def _batch_done(self, count: int, out_dir: str):
+        self._btn_scan.configure(state='normal')
+        self._status_var.set(f"✓ Batch exported {count} FBX files")
+        messagebox.showinfo("Batch Export Complete",
+                            f"Exported {count} animation FBX files\n\n"
+                            f"→ {out_dir}\n\n"
+                            f"Each FBX contains one animation clip ready to\n"
+                            f"import into Blender, UE5, or Maya.")
+
+
+# ──────────────────────────────────────────────────────────────────────
 #  2DA BROWSER PANEL
 # ──────────────────────────────────────────────────────────────────────
 
@@ -7637,6 +8103,9 @@ class CharacterBuilderPanel(tk.Frame):
         Binary MDL files start with 4 null bytes (the function-pointer offset
         field is always 0 in the on-disk format).  ASCII MDL files start with
         printable text such as 'newmodel' or '#'.
+
+        Binary files are parsed via MDLBinaryParser (PyKotor-backed).
+        ASCII files are parsed via MDLAsciiParser which preserves all nodes.
         """
         try:
             with open(path, "rb") as fh:
@@ -7645,22 +8114,34 @@ class CharacterBuilderPanel(tk.Frame):
             is_binary = (magic == b'\x00\x00\x00\x00') or (magic[0] == 0)
 
             if is_binary:
-                # Try PyKotor binary parse first (handles real game files)
+                # Binary MDL: use MDLBinaryParser (backed by PyKotor)
                 try:
-                    from src.core.kotor_loader import load_model_from_file as _lmf
-                    m = _lmf(path)
+                    from src.core.mdl_parser import MDLBinaryParser
+                    m = MDLBinaryParser.parse_files(path)
                     if m and (m.node_count() > 0 or m.name not in ("", "unnamed")):
-                        log.debug("_parse_mdl: PyKotor parse OK for %s (%d nodes)",
+                        log.debug("_parse_mdl: MDLBinaryParser OK for %s (%d nodes)",
                                   path, m.node_count())
                         return m
                 except Exception as bin_exc:
-                    log.debug("_parse_mdl: PyKotor parse failed for %s: %s", path, bin_exc)
+                    log.debug("_parse_mdl: MDLBinaryParser failed for %s: %s", path, bin_exc)
+                    # Fallback to kotor_loader
+                    try:
+                        from src.core.kotor_loader import load_model_from_file as _lmf
+                        m = _lmf(path)
+                        if m and m.node_count() > 0:
+                            return m
+                    except Exception:
+                        pass
 
-            # ASCII / unknown path: route through PyKotor (handles both)
+            # ASCII / unknown path: use ASCII parser (preserves all nodes including duplicates)
             try:
-                from src.core.kotor_loader import load_model_from_file as _lmf2
-                m = _lmf2(path)
-                if m:
+                from src.core.mdl_parser import MDLAsciiParser
+                with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                    lines = fh.readlines()
+                m = MDLAsciiParser().parse(lines)
+                if m and m.node_count() > 0:
+                    log.debug("_parse_mdl: MDLAsciiParser OK for %s (%d nodes)",
+                              path, m.node_count())
                     return m
             except Exception as ascii_exc:
                 log.debug("_parse_mdl: ASCII/fallback parse failed for %s: %s", path, ascii_exc)
@@ -8606,6 +9087,17 @@ class KotorModToolsApp(tk.Tk):
         right_nb.add(self.anim_panel,
                      **Icons.tab_kwargs("anims", " Anims", 16))
         self._tab_names['anims'] = right_nb.index('end') - 1
+
+        # 2b. Animation Library – searchable catalog of all game animations
+        self.anim_lib_panel = AnimationLibraryPanel(
+            right_nb,
+            get_library  = lambda: getattr(self.lib_panel, 'library', None),
+            get_viewport = lambda: self.viewport,
+            set_model    = self._set_model_internal,
+        )
+        right_nb.add(self.anim_lib_panel,
+                     **Icons.tab_kwargs("anims", " Anim Lib", 16))
+        self._tab_names['animlib'] = right_nb.index('end') - 1
 
         # 3. Character Builder – templates, skeleton, head/body assembly, export
         _cb_outer  = tk.Frame(right_nb, bg=C['panel2'])

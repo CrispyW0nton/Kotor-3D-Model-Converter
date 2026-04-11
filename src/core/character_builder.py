@@ -150,6 +150,10 @@ def load_template(game: str = "K1", part: str = "body") -> Optional["KotorModel"
     """
     Load a GhostRigger template MDL (body or head) for the given game.
 
+    Template files are ASCII MDL files exported by MDLAsciiWriter.  They are
+    loaded via MDLAsciiParser (not PyKotor's binary reader) so that all nodes,
+    including duplicate-named helper nodes, are preserved faithfully.
+
     Returns a KotorModel ready to use as a rig source, or None on failure.
     """
     path = get_template_path(game, part)
@@ -158,12 +162,29 @@ def load_template(game: str = "K1", part: str = "body") -> Optional["KotorModel"
         return None
 
     try:
-        try:
-            from core.kotor_loader import load_model_from_file  # type: ignore
-        except ImportError:
-            from src.core.kotor_loader import load_model_from_file  # type: ignore
+        # Detect whether the file is ASCII (templates are always ASCII, but be safe)
+        with open(path, "rb") as _fh:
+            _magic = _fh.read(4)
+        is_ascii = _magic[0:1] not in (b'\x00',)
 
-        model = load_model_from_file(path)
+        if is_ascii:
+            # Templates are ASCII MDL — use the GhostRigger ASCII parser which
+            # faithfully preserves all 76 nodes (including duplicates).
+            try:
+                from core.mdl_parser import MDLAsciiParser  # type: ignore
+            except ImportError:
+                from src.core.mdl_parser import MDLAsciiParser  # type: ignore
+
+            with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                lines = fh.readlines()
+            model = MDLAsciiParser().parse(lines)
+        else:
+            try:
+                from core.kotor_loader import load_model_from_file  # type: ignore
+            except ImportError:
+                from src.core.kotor_loader import load_model_from_file  # type: ignore
+            model = load_model_from_file(path)
+
         if model is None:
             log.error("character_builder.load_template: parser returned None for %s", path)
             return None

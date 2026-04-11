@@ -69,7 +69,7 @@
       ]
     },
     {
-      "name": "pelvis_g",
+      "name": "Impact",
       "type": "dummy",
       "parent": "Torso",
       "pos": [
@@ -79,9 +79,9 @@
       ]
     },
     {
-      "name": "lthigh_g",
+      "name": "LightsaberHook",
       "type": "dummy",
-      "parent": "pelvis_g",
+      "parent": "Impact",
       "pos": [
         -0.10710900276899338,
         0.007662769872695208,
@@ -89,9 +89,9 @@
       ]
     },
     {
-      "name": "lshin_g",
+      "name": "DeflectHook",
       "type": "dummy",
-      "parent": "lthigh_g",
+      "parent": "LightsaberHook",
       "pos": [
         -0.0038908501155674458,
         -0.020680800080299377,
@@ -99,9 +99,9 @@
       ]
     },
     {
-      "name": "lfoot_g",
+      "name": "headconjure",
       "type": "dummy",
-      "parent": "lshin_g",
+      "parent": "DeflectHook",
       "pos": [
         -0.0013076099567115307,
         -0.019360600039362907,
@@ -109,9 +109,9 @@
       ]
     },
     {
-      "name": "lfootT_g",
+      "name": "FreeLookHook",
       "type": "dummy",
-      "parent": "lfoot_g",
+      "parent": "headconjure",
       "pos": [
         0.0,
         0.0846853032708168,
@@ -119,9 +119,9 @@
       ]
     },
     {
-      "name": "rthigh_g",
+      "name": "camerahook",
       "type": "dummy",
-      "parent": "pelvis_g",
+      "parent": "Impact",
       "pos": [
         0.10067500174045563,
         0.007662760093808174,
@@ -129,9 +129,9 @@
       ]
     },
     {
-      "name": "rshin_g",
+      "name": "handconjure",
       "type": "dummy",
-      "parent": "rthigh_g",
+      "parent": "camerahook",
       "pos": [
         0.002027289941906929,
         -0.02284640073776245,
@@ -139,9 +139,9 @@
       ]
     },
     {
-      "name": "rfoot_g",
+      "name": "impact_bolt",
       "type": "dummy",
-      "parent": "rshin_g",
+      "parent": "handconjure",
       "pos": [
         0.0026668300852179527,
         -0.02003690041601658,
@@ -151,7 +151,7 @@
     {
       "name": "rfootT_g",
       "type": "dummy",
-      "parent": "rfoot_g",
+      "parent": "impact_bolt",
       "pos": [
         -0.00021700300567317754,
         0.08640529960393906,
@@ -279,7 +279,7 @@
       ]
     },
     {
-      "name": "rcollar_dum",
+      "name": "torso_g",
       "type": "dummy",
       "parent": "lfootT_g",
       "pos": [
@@ -289,9 +289,9 @@
       ]
     },
     {
-      "name": "rcollar_g",
+      "name": "torsoUpr_g",
       "type": "dummy",
-      "parent": "rcollar_dum",
+      "parent": "torso_g",
       "pos": [
         -0.009420829825103283,
         2.199510049649689e-07,
@@ -299,7 +299,7 @@
       ]
     },
     {
-      "name": "rbicep_g",
+      "name": "rcollar_dum",
       "type": "dummy",
       "parent": "lfootT_g",
       "pos": [
@@ -309,9 +309,9 @@
       ]
     },
     {
-      "name": "rbicepL_g",
+      "name": "rcollar_g",
       "type": "dummy",
-      "parent": "rbicep_g",
+      "parent": "rcollar_dum",
       "pos": [
         -0.0014317999593913555,
         -0.001151000033132732,
@@ -319,7 +319,7 @@
       ]
     },
     {
-      "name": "torso_g",
+      "name": "rbicep_g",
       "type": "dummy",
       "parent": "lfootT_g",
       "pos": [
@@ -329,9 +329,9 @@
       ]
     },
     {
-      "name": "torsoUpr_g",
+      "name": "rbicepL_g",
       "type": "dummy",
-      "parent": "torso_g",
+      "parent": "rbicep_g",
       "pos": [
         3.28267014992889e-05,
         -1.019669980450999e-05,
@@ -349,7 +349,7 @@
       ]
     },
     {
-      "name": "LdFngrB_g",
+      "name": "RdFngrB_g",
       "type": "dummy",
       "parent": "cutscenedummy",
       "pos": [
@@ -359,9 +359,9 @@
       ]
     },
     {
-      "name": "LdFngrT_g",
+      "name": "RdFngrT_g",
       "type": "dummy",
-      "parent": "LdFngrB_g",
+      "parent": "RdFngrB_g",
       "pos": [
         -0.07259079813957214,
         -0.05824340134859085,
@@ -369,9 +369,9 @@
       ]
     },
     {
-      "name": "LThumbB_g",
+      "name": "RcFngrB_g",
       "type": "dummy",
-      "parent": "LdFngrT_g",
+      "parent": "RdFngrT_g",
       "pos": [
         0.01684669964015484,
         0.01447870023548603,
@@ -379,9 +379,9 @@
       ]
     },
     {
-      "name": "LThumbT_g",
+      "name": "RcFngrT_g",
       "type": "dummy",
-      "parent": "LThumbB_g",
+      "parent": "RcFngrB_g",
       "pos": [
         0.005611480213701725,
         -0.012957500293850899,
@@ -389,9 +389,9 @@
       ]
     },
     {
-      "name": "lhand",
+      "name": "RbFngrB_g",
       "type": "dummy",
-      "parent": "LThumbT_g",
+      "parent": "RcFngrT_g",
       "pos": [
         -0.003167449962347746,
         0.007191990036517382,
@@ -399,9 +399,9 @@
       ]
     },
     {
-      "name": "lhand",
+      "name": "RbFngrT_g",
       "type": "dummy",
-      "parent": "lhand",
+      "parent": "RbFngrB_g",
       "pos": [
         -0.038091398775577545,
         0.03580690175294876,
@@ -409,9 +409,9 @@
       ]
     },
     {
-      "name": "lforearm",
+      "name": "RaFngrB_g",
       "type": "dummy",
-      "parent": "lhand",
+      "parent": "RbFngrT_g",
       "pos": [
         0.002204929944127798,
         0.04239159822463989,
@@ -419,9 +419,9 @@
       ]
     },
     {
-      "name": "breastbone",
+      "name": "RaFngrT_g",
       "type": "dummy",
-      "parent": "lforearm",
+      "parent": "RaFngrB_g",
       "pos": [
         0.001923940028063953,
         -0.0007451230194419622,
@@ -429,9 +429,9 @@
       ]
     },
     {
-      "name": "breastbone",
+      "name": "RaFngrT_g",
       "type": "dummy",
-      "parent": "lforearm",
+      "parent": "RaFngrB_g",
       "pos": [
         0.001990139950066805,
         -0.0007707399781793356,
@@ -439,9 +439,9 @@
       ]
     },
     {
-      "name": "headhook",
+      "name": "RThumbB_g",
       "type": "dummy",
-      "parent": "lhand",
+      "parent": "RbFngrT_g",
       "pos": [
         -0.002214869949966669,
         0.02108209952712059,
@@ -449,9 +449,9 @@
       ]
     },
     {
-      "name": "necklwr_g",
+      "name": "RThumbT_g",
       "type": "dummy",
-      "parent": "headhook",
+      "parent": "RThumbB_g",
       "pos": [
         -0.002893890021368861,
         -9.327260340796784e-05,
@@ -459,9 +459,9 @@
       ]
     },
     {
-      "name": "necklwr_g",
+      "name": "RThumbT_g",
       "type": "dummy",
-      "parent": "headhook",
+      "parent": "RThumbB_g",
       "pos": [
         -0.002993430010974407,
         -9.649690036894754e-05,
@@ -469,9 +469,9 @@
       ]
     },
     {
-      "name": "neck_g",
+      "name": "rhand",
       "type": "dummy",
-      "parent": "lhand",
+      "parent": "RbFngrT_g",
       "pos": [
         -0.004190220031887293,
         0.002347080036997795,
@@ -479,9 +479,9 @@
       ]
     },
     {
-      "name": "Impact",
+      "name": "lcollar_dum",
       "type": "dummy",
-      "parent": "neck_g",
+      "parent": "rhand",
       "pos": [
         0.004366990178823471,
         -0.00499304011464119,
@@ -489,9 +489,9 @@
       ]
     },
     {
-      "name": "Impact",
+      "name": "lcollar_dum",
       "type": "dummy",
-      "parent": "neck_g",
+      "parent": "rhand",
       "pos": [
         0.004517159890383482,
         -0.005164819769561291,
@@ -499,9 +499,9 @@
       ]
     },
     {
-      "name": "LightsaberHook",
+      "name": "lcollar_g",
       "type": "dummy",
-      "parent": "lhand",
+      "parent": "RbFngrT_g",
       "pos": [
         -0.0013033299474045634,
         -0.023435499519109726,
@@ -509,9 +509,9 @@
       ]
     },
     {
-      "name": "DeflectHook",
+      "name": "lbicep_g",
       "type": "dummy",
-      "parent": "LightsaberHook",
+      "parent": "lcollar_g",
       "pos": [
         -0.002246839925646782,
         0.001869390020146966,
@@ -519,9 +519,9 @@
       ]
     },
     {
-      "name": "DeflectHook",
+      "name": "lbicep_g",
       "type": "dummy",
-      "parent": "LightsaberHook",
+      "parent": "lcollar_g",
       "pos": [
         -0.002324099885299802,
         0.0019336900440976024,
@@ -529,9 +529,9 @@
       ]
     },
     {
-      "name": "headconjure",
+      "name": "lbicepL_g",
       "type": "dummy",
-      "parent": "lhand",
+      "parent": "RbFngrT_g",
       "pos": [
         0.013581500388681889,
         0.011838099919259548,
@@ -539,9 +539,9 @@
       ]
     },
     {
-      "name": "FreeLookHook",
+      "name": "lforearm_g",
       "type": "dummy",
-      "parent": "headconjure",
+      "parent": "lbicepL_g",
       "pos": [
         0.003303010016679764,
         0.005148869939148426,
@@ -549,9 +549,9 @@
       ]
     },
     {
-      "name": "FreeLookHook",
+      "name": "lforearm_g",
       "type": "dummy",
-      "parent": "headconjure",
+      "parent": "lbicepL_g",
       "pos": [
         0.003416619962081313,
         0.005326029844582081,
@@ -561,7 +561,7 @@
     {
       "name": "lhand_g",
       "type": "dummy",
-      "parent": "lhand",
+      "parent": "RbFngrT_g",
       "pos": [
         -0.0275541003793478,
         0.008318210020661354,
@@ -569,9 +569,9 @@
       ]
     },
     {
-      "name": "lforearm",
+      "name": "RaFngrB_g",
       "type": "dummy",
-      "parent": "lhand",
+      "parent": "RbFngrT_g",
       "pos": [
         0.002280839951708913,
         0.04384990036487579,
@@ -579,9 +579,9 @@
       ]
     },
     {
-      "name": "headhook",
+      "name": "RThumbB_g",
       "type": "dummy",
-      "parent": "lhand",
+      "parent": "RbFngrT_g",
       "pos": [
         -0.002291030017659068,
         0.021807299926877022,
@@ -589,9 +589,9 @@
       ]
     },
     {
-      "name": "neck_g",
+      "name": "rhand",
       "type": "dummy",
-      "parent": "lhand",
+      "parent": "RbFngrT_g",
       "pos": [
         -0.004334319848567247,
         0.002427829895168543,
@@ -599,9 +599,9 @@
       ]
     },
     {
-      "name": "LightsaberHook",
+      "name": "lcollar_g",
       "type": "dummy",
-      "parent": "lhand",
+      "parent": "RbFngrT_g",
       "pos": [
         -0.001348139951005578,
         -0.024241700768470764,
@@ -609,9 +609,9 @@
       ]
     },
     {
-      "name": "headconjure",
+      "name": "lbicepL_g",
       "type": "dummy",
-      "parent": "lhand",
+      "parent": "RbFngrT_g",
       "pos": [
         0.014048700220882893,
         0.012245300225913525,
@@ -619,9 +619,9 @@
       ]
     },
     {
-      "name": "camerahook",
+      "name": "lhand_g",
       "type": "dummy",
-      "parent": "lhand",
+      "parent": "RbFngrT_g",
       "pos": [
         0.027171500027179718,
         -0.006486230064183474,
@@ -629,9 +629,9 @@
       ]
     },
     {
-      "name": "camerahook",
+      "name": "lhand_g",
       "type": "dummy",
-      "parent": "lhand",
+      "parent": "RbFngrT_g",
       "pos": [
         0.02626819908618927,
         -0.006270559970289469,
@@ -639,9 +639,9 @@
       ]
     },
     {
-      "name": "handconjure",
+      "name": "LaFngrB_g",
       "type": "dummy",
-      "parent": "lhand",
+      "parent": "RbFngrB_g",
       "pos": [
         -0.013021999970078468,
         0.0021058099810034037,
@@ -659,7 +659,7 @@
       ]
     },
     {
-      "name": "RbFngrB_g",
+      "name": "LaFngrT_g",
       "type": "dummy",
       "parent": "cutscenedummy",
       "pos": [
@@ -671,7 +671,7 @@
     {
       "name": "necklwr_g",
       "type": "dummy",
-      "parent": "RbFngrB_g",
+      "parent": "LaFngrT_g",
       "pos": [
         -1.941069967870135e-06,
         0.0,
