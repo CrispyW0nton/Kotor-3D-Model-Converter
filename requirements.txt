@@ -16,7 +16,8 @@ pykotor>=2.3.1
 # ── 3D mesh import/export ───────────────────────────────────────────────────
 trimesh[easy]>=3.15.0           # OBJ/DAE import + fallback GLTF reader
 pygltflib>=1.15.0               # GLTF 2.0 / GLB import+export (pure Python)
-pyassimp>=5.2.0                 # FBX importer — requires libassimp system library
+pyassimp>=5.2.0                 # FBX importer — requires the Assimp native DLL
+                                # build.bat installs it automatically on Windows
                                 # Ubuntu/Debian: sudo apt install libassimp-dev
                                 # macOS:         brew install assimp
 
