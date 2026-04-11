@@ -18,18 +18,24 @@ hiddenimports = [
     'PIL._tkinter_finder',
 ]
 
-# Collect every sub-module under src/ so dynamic imports work.
-# kotormcp sub-modules may not be importable on all machines; skip gracefully.
-try:
-    hiddenimports += collect_submodules('src')
-except Exception as _e:
-    print(f'[spec] WARNING: collect_submodules(src) partial failure: {_e}')
-    # Fall back to collecting only the sub-packages that are known safe
-    for _pkg in ['src.core', 'src.gui', 'src.ipc', 'src.converters']:
-        try:
-            hiddenimports += collect_submodules(_pkg)
-        except Exception:
-            pass
+# Collect every sub-module under src/ individually so a single broken
+# sub-package (e.g. src.kotormcp.utils which imports bare 'kotormcp')
+# doesn't abort the entire collection.
+for _pkg in [
+    'src',
+    'src.core',
+    'src.gui',
+    'src.ipc',
+    'src.converters',
+    'src.autorig',
+    'src.formats',
+    'src.resources',
+    'src.kotormcp',
+]:
+    try:
+        hiddenimports += collect_submodules(_pkg)
+    except Exception as _e:
+        print(f'[spec] WARNING: collect_submodules({_pkg!r}) skipped: {_e}')
 
 # Optional GPU path — include if present, silently skip if not installed
 try:
