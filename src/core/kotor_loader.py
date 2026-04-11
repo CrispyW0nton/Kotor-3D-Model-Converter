@@ -51,19 +51,34 @@ from .model_data import (
 )
 
 # ── MDLNodeType → NodeFlags ───────────────────────────────────────────────────
+# These flag values must match what the old pykotor_bridge.py produced, since
+# the rest of the codebase (viewport.py, model_data.py) was built against them.
+#
+# Key differences vs a naive mapping:
+#   DUMMY  → NodeFlags.HEADER (0x01) for ALL dummy nodes (root AND children).
+#            Old bridge always assigned HEADER to dummies; giving child dummies
+#            flags=0 broke is_dummy checks throughout the pipeline.
+#   SKIN   → NodeFlags.SKIN only (0x40), NOT NodeFlags.HEADER|SKIN|MESH.
+#            Old bridge did not include MESH or HEADER for skin nodes.
+#            Adding HEADER (0x01) made skin nodes satisfy is_dummy (flags==0x01
+#            only when flags is exactly HEADER, but HEADER|SKIN|MESH = 0x61
+#            which is not 0x01, so is_dummy stays False — however it broke the
+#            _build_bone_transforms "prefer non-skin over skin" logic and caused
+#            confusion in type_label / viewport rendering paths).
+#   TRIMESH→ NodeFlags.MESH only (0x20), matching the old bridge.
 _TYPE_FLAGS: Dict[int, int] = {
-    int(MDLNodeType.DUMMY):      0,
+    int(MDLNodeType.DUMMY):      int(NodeFlags.HEADER),
     int(MDLNodeType.TRIMESH):    int(NodeFlags.MESH),
     int(MDLNodeType.DANGLYMESH): int(NodeFlags.MESH) | int(NodeFlags.DANGLY),
     int(MDLNodeType.LIGHT):      int(NodeFlags.LIGHT),
     int(MDLNodeType.EMITTER):    int(NodeFlags.EMITTER),
     int(MDLNodeType.REFERENCE):  int(NodeFlags.REFERENCE),
     int(MDLNodeType.AABB):       int(NodeFlags.AABB),
-    int(MDLNodeType.SKIN):       int(NodeFlags.HEADER) | int(NodeFlags.SKIN) | int(NodeFlags.MESH),
+    int(MDLNodeType.SKIN):       int(NodeFlags.SKIN),
     int(MDLNodeType.SABER):      int(NodeFlags.SABER) | int(NodeFlags.MESH),
-    int(MDLNodeType.CAMERA):     0,
+    int(MDLNodeType.CAMERA):     int(NodeFlags.HEADER),
     int(MDLNodeType.PATCH):      int(NodeFlags.MESH),
-    int(MDLNodeType.BINARY):     0,
+    int(MDLNodeType.BINARY):     int(NodeFlags.HEADER),
 }
 
 # ── Controller type ints (from MDLControllerType enum) ───────────────────────
@@ -396,12 +411,14 @@ def _convert_node(pk_node, parent: Optional[ModelNode],
     except Exception:
         gr.rotation = (0.0, 0.0, 0.0, 1.0)
 
-    # Flags: DUMMY root → HEADER; child DUMMY → pure bone (0)
+    # Flags: use _TYPE_FLAGS for ALL node types including DUMMY.
+    # _TYPE_FLAGS maps DUMMY → NodeFlags.HEADER (0x01) for both root AND child
+    # dummy nodes.  The old code gave child dummies flags=0, breaking is_dummy
+    # checks throughout the pipeline (auto_rigger, retarget_engine, main_window,
+    # viewport skeleton rendering).  The old pykotor_bridge._NODETYPE_TO_FLAGS
+    # always assigned NodeFlags.HEADER to ALL dummy nodes — this matches that.
     ntype = int(getattr(pk_node, 'node_type', int(MDLNodeType.DUMMY)))
-    if ntype == int(MDLNodeType.DUMMY):
-        gr.flags = int(NodeFlags.HEADER) if parent is None else 0
-    else:
-        gr.flags = _TYPE_FLAGS.get(ntype, 0)
+    gr.flags = _TYPE_FLAGS.get(ntype, 0)
 
     # Controllers (bind-pose keyframes)
     _read_controllers(pk_node, gr)
@@ -577,15 +594,29 @@ def _read_skin_textures(skin, gr: ModelNode) -> None:
 def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
     """Read bone-map and per-vertex weights directly from PyKotor MDLSkin.
 
-    MDLSkin.bonemap[local_idx]              = node_id  (float32)
-    MDLBoneVertex.vertex_indices[j]         = local_idx into bonemap
-    MDLBoneVertex.vertex_weights[j]         = blend weight
+    PyKotor MDLSkin exposes two related arrays:
+      skin.bone_indices  — compact list of node_id values for each active bone
+                           slot (len = number of unique bones used, e.g. 16)
+      skin.bonemap       — sparse map, bonemap[i] = node_id or -1 (len = total
+                           model node count, e.g. 46)
+
+    MDLBoneVertex.vertex_indices[j] is an index into bone_indices (the compact
+    list), NOT into bonemap (the sparse array).  This matches the old
+    pykotor_bridge._fill_skin_data which used bone_indices to build bone_map
+    so that vertex_indices[j] → bone_map[j] → bone node name is correct.
+
+    Verified against raw MDL binary: the MDX per-vertex bone-index field stores
+    a slot number that indexes into the compact bonemap stored in the MDL's skin
+    block (i.e. bone_indices), NOT into the full node-count sparse array.
     """
-    # Step 1: bone_map — local_idx → bone node name
+    # Step 1: bone_map — compact slot → bone node name
+    # Use skin.bone_indices (compact list of active node_ids) so that
+    # vertex_indices[j] maps correctly to the right bone name.
     gr.bone_map = []
-    for raw in (skin.bonemap or []):
+    raw_bone_indices = list(getattr(skin, 'bone_indices', None) or [])
+    for nid_raw in raw_bone_indices:
         try:
-            nid = int(raw)
+            nid = int(nid_raw)
         except (TypeError, ValueError):
             gr.bone_map.append('')
             continue
@@ -595,11 +626,26 @@ def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
         pk_n = id_to_pknode.get(nid)
         gr.bone_map.append(pk_n.name if pk_n else '')
 
+    # Fallback: if bone_indices is not available, fall back to bonemap (sparse)
+    # This is less accurate but avoids a complete failure.
+    if not gr.bone_map:
+        for raw in (getattr(skin, 'bonemap', None) or []):
+            try:
+                nid = int(raw)
+            except (TypeError, ValueError):
+                gr.bone_map.append('')
+                continue
+            if nid < 0 or nid == 0xFFFF:
+                gr.bone_map.append('')
+                continue
+            pk_n = id_to_pknode.get(nid)
+            gr.bone_map.append(pk_n.name if pk_n else '')
+
     n_bones = len(gr.bone_map)
 
     # Step 2: per-vertex skin data
     gr.skin_data = []
-    for bv in (skin.vertex_bones or []):
+    for bv in (getattr(skin, 'vertex_bones', None) or []):
         vsd = VertexSkinData()
         for j in range(4):
             local_idx = int(float(bv.vertex_indices[j]))

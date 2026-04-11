@@ -577,14 +577,28 @@ class ModelAnalyzer:
 
     @staticmethod
     def _mesh_nodes(model: Any, all_nodes: list) -> list:
+        # Include both mesh nodes (trimesh/dangly/saber) and skin nodes since
+        # both hold renderable geometry.  KotOR skin nodes have is_skin=True but
+        # is_mesh=False, yet they have vertex data identical to a trimesh.
         if callable(getattr(model, "mesh_nodes", None)):
-            return list(model.mesh_nodes())
-        if hasattr(model, "mesh_nodes"):
-            return list(model.mesh_nodes)
-        return [
-            n for n in all_nodes
-            if hasattr(n, "vertices") and n.vertices is not None and len(n.vertices) > 0
-        ]
+            mesh = list(model.mesh_nodes())
+        elif hasattr(model, "mesh_nodes"):
+            mesh = list(model.mesh_nodes)
+        else:
+            mesh = []
+        # Add skin nodes not already in mesh list
+        mesh_set = {id(n) for n in mesh}
+        for n in all_nodes:
+            if id(n) not in mesh_set and getattr(n, "is_skin", False):
+                mesh.append(n)
+                mesh_set.add(id(n))
+        if not mesh:
+            # Final fallback: any node with vertices
+            return [
+                n for n in all_nodes
+                if hasattr(n, "vertices") and n.vertices is not None and len(n.vertices) > 0
+            ]
+        return mesh
 
     @staticmethod
     def _bone_nodes(model: Any) -> list:

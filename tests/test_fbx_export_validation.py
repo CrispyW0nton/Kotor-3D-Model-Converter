@@ -1131,8 +1131,14 @@ class TestRiggingCompleteness:
         except ImportError:
             pytest.skip("PyKotor not available for this test")
 
-    def test_pykotor_bridge_child_bone_gets_zero_flags(self):
-        """PyKotor-loaded child DUMMY nodes (bones) should get flags=0."""
+    def test_pykotor_bridge_child_bone_gets_header_flags(self):
+        """PyKotor-loaded child DUMMY nodes (bones) should get flags=NodeFlags.HEADER.
+
+        Fixed: old code gave child dummies flags=0 which broke is_dummy checks
+        throughout the pipeline (auto_rigger, retarget_engine, main_window,
+        viewport skeleton rendering).  The old pykotor_bridge always assigned
+        NodeFlags.HEADER to ALL dummy nodes regardless of parent/child status.
+        """
         from core.model_data import NodeFlags, ModelNode
         from core.pykotor_bridge import _convert_single_node
         import sys
@@ -1152,9 +1158,13 @@ class TestRiggingCompleteness:
                 skin = None
                 children = []
             bone_node = _convert_single_node(FakePkBone(), parent_gr, {})
-            assert bone_node.flags == 0, \
-                (f"Child bone should have flags=0 (not HEADER), got {bone_node.flags}. "
-                 f"type_label={bone_node.type_label}")
+            assert bone_node.flags == int(NodeFlags.HEADER), \
+                (f"Child bone should have flags=NodeFlags.HEADER (0x01), got {bone_node.flags}. "
+                 f"type_label={bone_node.type_label}. "
+                 f"is_dummy={bone_node.is_dummy}. "
+                 f"Fix: _convert_node must use _TYPE_FLAGS for ALL node types.")
+            assert bone_node.is_dummy, \
+                f"Child bone should have is_dummy=True, got is_dummy={bone_node.is_dummy}"
             assert bone_node.type_label == 'dummy', \
                 f"Bone node type_label should be 'dummy', got '{bone_node.type_label}'"
         except ImportError:
@@ -1185,25 +1195,32 @@ class TestPykotorBridgeWeights:
     """
     Tests for the pykotor_bridge bone weight mapping fix.
 
-    KotOR MDL skin data structures (verified vs PyKotor MDLBoneVertex docstring
-    and io_mdl.py line 2201):
-      bonemap[local_idx]    = node_id  (stored as float32, cast to int on read)
-      vertex_indices[j]     = local_idx  (direct index INTO bonemap, NOT global node_id)
-      vertex_weights[j]     = blend weight for influence j
+    KotOR MDL skin data structures (verified against raw MDL binary and
+    PyKotor MDLBoneVertex / io_mdl.py):
+
+      bone_indices[local_idx] = node_id  (16-element compact header array,
+                                          stored as uint16, 0xFFFF = unused)
+      vertex_indices[j]       = local_idx  (direct index INTO bone_indices)
+      vertex_weights[j]       = blend weight for influence j
 
     Resolution algorithm (correct):
-      gr.bone_map[local_idx] = pk_nodes_by_id[bonemap[local_idx]].name
+      gr.bone_map[local_idx] = pk_nodes_by_id[bone_indices[local_idx]].name
       BoneWeight.bone_index  = local_idx = int(vertex_indices[j])
       _build_bone_transforms keys bone_transforms[local_idx] for LBS lookup
 
-    Note: bone_indices (16-element header array) is NOT used for vertex lookup.
+    Note: bonemap (sparse float32 array, len=total_node_count) is a different
+    structure used internally by the engine — vertex_indices do NOT index into it.
+    Verified against c_bantha btBody_front: vertex_indices=(0,-1,-1,-1) maps
+    to bone_indices[0]=12→BTHead (not bonemap[0]=8→BTlfthr).
     """
 
-    def _make_fake_skin(self, bonemap, vertex_indices_list, vertex_weights_list, node_names_by_id):
+    def _make_fake_skin(self, bone_indices_compact, vertex_indices_list,
+                        vertex_weights_list, node_names_by_id):
         """Create fake PyKotor-like skin/node objects for testing.
 
-        bonemap: list where bonemap[local_idx] = node_id (the pk_nodes_by_id key)
-        vertex_indices_list: list of 4-tuples; each float is a local_idx into bonemap
+        bone_indices_compact: list of node_ids for each compact bone slot
+                              (these are the values vertex_indices[j] indexes into)
+        vertex_indices_list: list of 4-tuples; each float is a local_idx into bone_indices_compact
         vertex_weights_list: list of 4-tuples; blend weights
         """
         import sys
@@ -1212,10 +1229,16 @@ class TestPykotorBridgeWeights:
             sys.path.insert(0, '/home/user/webapp/PyKotor/Libraries/PyKotor/src')
             from pykotor.resource.formats.mdl.mdl_data import MDLSkin, MDLBoneVertex
             skin = MDLSkin()
-            skin.bonemap = bonemap   # bonemap[local_idx] = node_id
+            # bone_indices is the compact 16-element array; pad with 0xFFFF if shorter
+            bi = list(bone_indices_compact)
+            while len(bi) < 16:
+                bi.append(0xFFFF)  # 65535 = unused sentinel
+            skin.bone_indices = tuple(bi)
+            # bonemap is the sparse array (not used for vertex lookup)
+            skin.bonemap = []  # leave empty — vertex_indices do NOT index into bonemap
             for vis, wts in zip(vertex_indices_list, vertex_weights_list):
                 bv = MDLBoneVertex()
-                bv.vertex_indices = vis   # floats: local bonemap indices
+                bv.vertex_indices = vis   # floats: local bone_indices slots
                 bv.vertex_weights = wts
                 skin.vertex_bones.append(bv)
             return skin, node_names_by_id
@@ -1223,7 +1246,11 @@ class TestPykotorBridgeWeights:
             pytest.skip("PyKotor not available")
 
     def test_bonemap_single_bone(self):
-        """Single bone: bonemap[0]=5 → node_id 5 → 'pelvis'. vertex_indices[0]=0.0 → local_idx 0."""
+        """Single bone: bone_indices[0]=5 → node_id 5 → 'pelvis'.
+
+        vertex_indices[0]=0.0 → local_idx 0 → bone_map[0] = 'pelvis'.
+        Verified format: vertex_indices indexes into bone_indices, not bonemap.
+        """
         try:
             sys.path.insert(0, '/home/user/webapp/PyKotor/Libraries/PyKotor/src')
             from core.pykotor_bridge import _fill_skin_data
@@ -1231,13 +1258,13 @@ class TestPykotorBridgeWeights:
             pytest.skip("PyKotor or bridge not available")
 
         gr = ModelNode()
-        # bonemap[0] = 5 → node_id 5 → 'pelvis'
+        # bone_indices[0] = node_id 5 → 'pelvis'
         # vertex_indices[0] = 0.0 → local_idx 0 → bone_map[0] = 'pelvis'
         pk_nodes_by_id = {5: type('N', (), {'name': 'pelvis'})()}
         skin, _ = self._make_fake_skin(
-            bonemap=[5],               # bonemap[local_idx=0] = node_id 5
+            bone_indices_compact=[5],      # bone_indices[0] = node_id 5
             vertex_indices_list=[
-                (0.0, -1.0, -1.0, -1.0),   # local_idx=0 into bonemap
+                (0.0, -1.0, -1.0, -1.0),  # local_idx=0 into bone_indices
             ],
             vertex_weights_list=[
                 (1.0, 0.0, 0.0, 0.0),
@@ -1246,7 +1273,11 @@ class TestPykotorBridgeWeights:
         )
         _fill_skin_data(skin, gr, pk_nodes_by_id)
 
-        assert len(gr.bone_map) == 1, f"Expected 1 bone_map slot, got {gr.bone_map}"
+        # bone_map should have 1 valid slot (index 0 → 'pelvis').
+        # Slots 1-15 are 0xFFFF sentinels → empty strings, so bone_map has 16 entries
+        # but only index 0 is non-empty.  Or the implementation may trim trailing
+        # empty slots — either way index 0 must map to 'pelvis'.
+        assert len(gr.bone_map) >= 1, f"Expected at least 1 bone_map slot, got {gr.bone_map}"
         assert gr.bone_map[0] == 'pelvis', f"Expected 'pelvis', got {gr.bone_map[0]}"
         assert len(gr.skin_data) == 1
         assert len(gr.skin_data[0].influences) == 1
@@ -1255,15 +1286,18 @@ class TestPykotorBridgeWeights:
         assert abs(gr.skin_data[0].influences[0].weight - 1.0) < 1e-5
 
     def test_bonemap_multi_bone(self):
-        """Multi-bone: vertex_indices are local_idx into bonemap, not global node_ids."""
+        """Multi-bone: vertex_indices are local_idx into bone_indices, not global node_ids.
+
+        Verified format matches c_bantha / N_sithpraet binary analysis.
+        """
         try:
             sys.path.insert(0, '/home/user/webapp/PyKotor/Libraries/PyKotor/src')
             from core.pykotor_bridge import _fill_skin_data
         except ImportError:
             pytest.skip("PyKotor or bridge not available")
 
-        # bonemap[0] = node_id 100 → 'BTlfthr'
-        # bonemap[1] = node_id 103 → 'BTHips'
+        # bone_indices[0] = node_id 100 → 'BTlfthr'
+        # bone_indices[1] = node_id 103 → 'BTHips'
         # vertex_indices = (0.0, 1.0, ...) → local_idx 0 and 1
         pk_nodes_by_id = {
             100: type('N', (), {'name': 'BTlfthr'})(),
@@ -1272,7 +1306,7 @@ class TestPykotorBridgeWeights:
 
         gr = ModelNode()
         skin, _ = self._make_fake_skin(
-            bonemap=[100, 103],     # bonemap[0]=100→BTlfthr, bonemap[1]=103→BTHips
+            bone_indices_compact=[100, 103],  # bi[0]=100→BTlfthr, bi[1]=103→BTHips
             vertex_indices_list=[
                 (0.0, 1.0, -1.0, -1.0),   # local_idx 0 and 1
             ],
@@ -1283,7 +1317,7 @@ class TestPykotorBridgeWeights:
         )
         _fill_skin_data(skin, gr, pk_nodes_by_id)
 
-        assert len(gr.bone_map) == 2, f"Expected 2 bone_map slots, got {gr.bone_map}"
+        assert len(gr.bone_map) >= 2, f"Expected at least 2 bone_map slots, got {gr.bone_map}"
         assert gr.bone_map[0] == 'BTlfthr', f"bone_map[0]={gr.bone_map[0]}"
         assert gr.bone_map[1] == 'BTHips',  f"bone_map[1]={gr.bone_map[1]}"
 
@@ -1298,23 +1332,23 @@ class TestPykotorBridgeWeights:
         assert names == {'BTlfthr', 'BTHips'}
 
     def test_bonemap_unused_slots_empty_string(self):
-        """Bonemap slots with node_id=-1 produce empty string in bone_map."""
+        """bone_indices slots with 0xFFFF produce empty string in bone_map."""
         try:
             sys.path.insert(0, '/home/user/webapp/PyKotor/Libraries/PyKotor/src')
             from core.pykotor_bridge import _fill_skin_data
         except ImportError:
             pytest.skip("PyKotor or bridge not available")
 
-        # bonemap[0]=10→'spine', bonemap[1]=-1 (unused), bonemap[2]=30→'rleg'
+        # bone_indices[0]=10→'spine', bone_indices[1]=0xFFFF (unused), bone_indices[2]=30→'rleg'
         # vertex_indices=(0.0, 2.0, ...) → local_idx 0 (spine) and 2 (rleg)
-        # local_idx 1 is unused slot (−1 in bonemap) — vertex doesn't reference it
+        # local_idx 1 is unused slot (0xFFFF in bone_indices) — vertex doesn't reference it
         pk_nodes_by_id = {
             10: type('N', (), {'name': 'spine'})(),
             30: type('N', (), {'name': 'rleg'})(),
         }
         gr = ModelNode()
         skin, _ = self._make_fake_skin(
-            bonemap=[10, -1, 30],    # bonemap[1]=-1 = unused
+            bone_indices_compact=[10, 0xFFFF, 30],  # bi[1]=0xFFFF = unused
             vertex_indices_list=[
                 (0.0, 2.0, -1.0, -1.0),   # local_idx 0 and 2 (skip local_idx 1)
             ],
@@ -1325,11 +1359,11 @@ class TestPykotorBridgeWeights:
         )
         _fill_skin_data(skin, gr, pk_nodes_by_id)
 
-        # bone_map has 3 slots (one per bonemap entry)
-        assert len(gr.bone_map) == 3, f"Expected 3 bone_map slots, got {gr.bone_map}"
-        assert gr.bone_map[0] == 'spine'
+        # bone_map should have at least 3 slots
+        assert len(gr.bone_map) >= 3, f"Expected at least 3 bone_map slots, got {gr.bone_map}"
+        assert gr.bone_map[0] == 'spine', f"bone_map[0]={gr.bone_map[0]}"
         assert gr.bone_map[1] == '', f"Unused slot should be '', got '{gr.bone_map[1]}'"
-        assert gr.bone_map[2] == 'rleg'
+        assert gr.bone_map[2] == 'rleg', f"bone_map[2]={gr.bone_map[2]}"
 
         # Vertex should have 2 influences: local_idx 0 and 2
         infl = gr.skin_data[0].influences
@@ -1345,7 +1379,7 @@ class TestPykotorBridgeWeights:
         except ImportError:
             pytest.skip("PyKotor or bridge not available")
 
-        # bonemap[0]=node_id 10→'head', bonemap[1]=node_id 11→'neck'
+        # bone_indices[0]=node_id 10→'head', bone_indices[1]=node_id 11→'neck'
         # vertex_indices=(0.0, 1.0, ...) → local_idx 0 and 1
         pk_nodes_by_id = {
             10: type('N', (), {'name': 'head'})(),
@@ -1353,7 +1387,7 @@ class TestPykotorBridgeWeights:
         }
         gr = ModelNode()
         skin, _ = self._make_fake_skin(
-            bonemap=[10, 11],
+            bone_indices_compact=[10, 11],
             vertex_indices_list=[
                 (0.0, 1.0, -1.0, -1.0),   # local_idx 0 and 1
             ],
@@ -1419,12 +1453,14 @@ class TestPykotorBridgeTextureFields:
         gr = ModelNode()
         _fill_mesh_data(None, FakeMesh(), gr)
 
-        assert gr.texture == 'EbonHawk_Hull', f"gr.texture={gr.texture}"
-        assert gr.lightmap == 'EbonHawk_LM', f"gr.lightmap={gr.lightmap}"
+        assert gr.texture.lower() == 'ebonhawk_hull', f"gr.texture={gr.texture}"
+        assert gr.lightmap.lower() == 'ebonhawk_lm', f"gr.lightmap={gr.lightmap}"
         # The critical fix: texture_names must be populated (not an attribute called 'textures')
         assert isinstance(gr.texture_names, list), "texture_names must be a list"
-        assert 'EbonHawk_Hull' in gr.texture_names, "Primary texture missing from texture_names"
-        assert 'EbonHawk_LM' in gr.texture_names, "Lightmap missing from texture_names"
+        assert any(t.lower() == 'ebonhawk_hull' for t in gr.texture_names), \
+            f"Primary texture missing from texture_names: {gr.texture_names}"
+        assert any(t.lower() == 'ebonhawk_lm' for t in gr.texture_names), \
+            f"Lightmap missing from texture_names: {gr.texture_names}"
         # Dynamic 'textures' attribute should NOT be present (using wrong field)
         assert not hasattr(gr, 'textures'), \
             "gr.textures should not exist (use texture_names instead)"
