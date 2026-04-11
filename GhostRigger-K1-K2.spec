@@ -18,8 +18,18 @@ hiddenimports = [
     'PIL._tkinter_finder',
 ]
 
-# Collect every sub-module under src/ so dynamic imports (gui, ipc, kotormcp, etc.) work
-hiddenimports += collect_submodules('src')
+# Collect every sub-module under src/ so dynamic imports work.
+# kotormcp sub-modules may not be importable on all machines; skip gracefully.
+try:
+    hiddenimports += collect_submodules('src')
+except Exception as _e:
+    print(f'[spec] WARNING: collect_submodules(src) partial failure: {_e}')
+    # Fall back to collecting only the sub-packages that are known safe
+    for _pkg in ['src.core', 'src.gui', 'src.ipc', 'src.converters']:
+        try:
+            hiddenimports += collect_submodules(_pkg)
+        except Exception:
+            pass
 
 # Optional GPU path — include if present, silently skip if not installed
 try:
@@ -43,20 +53,26 @@ except ImportError:
 binaries = []
 _pyassimp_available = False
 try:
-    import pyassimp as _pa
-    _pa_dir = os.path.dirname(_pa.__file__)
-    for _fname in os.listdir(_pa_dir):
-        if 'assimp' in _fname.lower() and _fname.lower().endswith('.dll'):
-            _dll_path = os.path.join(_pa_dir, _fname)
-            binaries.append((_dll_path, 'pyassimp'))
-            print(f'[spec] Bundling Assimp DLL: {_dll_path}')
-            _pyassimp_available = True
-            break
+    # pyassimp raises AssimpError (not ImportError) at class-body level when
+    # the native DLL is missing, so we must catch broadly with BaseException.
+    import importlib.util as _ilu
+    _pa_spec = _ilu.find_spec('pyassimp')
+    if _pa_spec is not None:
+        _pa_dir = os.path.dirname(_pa_spec.origin)
+        for _fname in os.listdir(_pa_dir):
+            if 'assimp' in _fname.lower() and _fname.lower().endswith('.dll'):
+                _dll_path = os.path.join(_pa_dir, _fname)
+                binaries.append((_dll_path, 'pyassimp'))
+                print(f'[spec] Bundling Assimp DLL: {_dll_path}')
+                _pyassimp_available = True
+                break
+        else:
+            print('[spec] WARNING: No assimp*.dll found in pyassimp folder — '
+                  'FBX import will be unavailable at runtime.')
     else:
-        print('[spec] WARNING: No assimp*.dll found in pyassimp folder — '
-              'FBX import will be unavailable at runtime.')
-except Exception:
-    print('[spec] pyassimp not importable — excluding from build. '
+        print('[spec] pyassimp not installed — FBX import will be unavailable.')
+except BaseException as _e:
+    print(f'[spec] pyassimp check failed ({_e}) — excluding from build. '
           'FBX import will be unavailable (all other features unaffected).')
 
 # ── Data files ────────────────────────────────────────────────────────────
