@@ -18,14 +18,14 @@ cd /d "%~dp0"
 
 REM ── Check Python is installed ───────────────────────────────────────
 echo [Step 1/6] Checking Python... >> "%LOG%"
-python --version >> "%LOG%" 2>&1
-python --version >nul 2>&1
+py -3.12 --version >> "%LOG%" 2>&1
+py -3.12 --version >nul 2>&1
 if errorlevel 1 (
     echo.
     echo ============================================================
     echo  ERROR: Python not found!
     echo.
-    echo  Install Python 3.10+ from https://python.org
+    echo  Install Python 3.12 from https://python.org/downloads/release/python-31210/
     echo  IMPORTANT: tick "Add Python to PATH" during install.
     echo ============================================================
     echo ERROR: Python not found >> "%LOG%"
@@ -34,14 +34,14 @@ if errorlevel 1 (
 )
 
 echo Python found:
-python --version
-python --version >> "%LOG%" 2>&1
+py -3.12 --version
+py -3.12 --version >> "%LOG%" 2>&1
 echo.
 
 REM ── Upgrade pip ─────────────────────────────────────────────────────
 echo [Step 2/6] Upgrading pip...
 echo [Step 2/6] Upgrading pip... >> "%LOG%"
-python -m pip install --upgrade pip >> "%LOG%" 2>&1
+py -3.12 -m pip install --upgrade pip >> "%LOG%" 2>&1
 if errorlevel 1 (
     echo  [WARN] pip upgrade failed - continuing anyway.
     echo  [WARN] pip upgrade failed >> "%LOG%"
@@ -53,50 +53,50 @@ echo [Step 3/6] Installing core dependencies...
 echo [Step 3/6] Installing core dependencies... >> "%LOG%"
 
 echo  Installing Pillow...
-python -m pip install "Pillow>=9.0.0" >> "%LOG%" 2>&1
+py -3.12 -m pip install "Pillow>=9.0.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] Pillow install failed - check build_log.txt )
 
 echo  Installing numpy...
-python -m pip install "numpy>=1.21.0" >> "%LOG%" 2>&1
+py -3.12 -m pip install "numpy>=1.21.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] numpy install failed - check build_log.txt )
 
 echo  Installing PyOpenGL...
-python -m pip install "PyOpenGL>=3.1.0" "PyOpenGL_accelerate>=3.1.0" >> "%LOG%" 2>&1
+py -3.12 -m pip install "PyOpenGL>=3.1.0" "PyOpenGL_accelerate>=3.1.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] PyOpenGL install failed - check build_log.txt )
 
 echo  Installing trimesh...
-python -m pip install "trimesh[easy]>=3.15.0" >> "%LOG%" 2>&1
+py -3.12 -m pip install "trimesh[easy]>=3.15.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] trimesh install failed - check build_log.txt )
 
 echo  Installing pygltflib...
-python -m pip install "pygltflib>=1.15.0" >> "%LOG%" 2>&1
+py -3.12 -m pip install "pygltflib>=1.15.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] pygltflib install failed - check build_log.txt )
 
 echo  Installing flask + requests...
-python -m pip install "flask>=2.3.0" "requests>=2.28.0" >> "%LOG%" 2>&1
+py -3.12 -m pip install "flask>=2.3.0" "requests>=2.28.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] flask/requests install failed - check build_log.txt )
 
 echo  Installing mcp + pydantic + uvicorn...
-python -m pip install "mcp>=1.0.0" "pydantic>=2.0.0" "uvicorn[standard]>=0.20.0" >> "%LOG%" 2>&1
+py -3.12 -m pip install "mcp>=1.0.0" "pydantic>=2.0.0" "uvicorn[standard]>=0.20.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] mcp/pydantic/uvicorn install failed - check build_log.txt )
 
 REM  pyassimp may not support Python 3.14 yet — fully optional
 echo  Installing pyassimp (optional - needed for binary FBX import)...
-python -m pip install "pyassimp>=5.2.0" >> "%LOG%" 2>&1
+py -3.12 -m pip install "pyassimp>=5.2.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] pyassimp install failed ^(optional^) - FBX import unavailable )
 
 REM  pykotor can fail on Python 3.14 — mark as optional
 echo  Installing pykotor (optional)...
-python -m pip install "pykotor>=2.3.1" >> "%LOG%" 2>&1
+py -3.12 -m pip install "pykotor>=2.3.1" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] pykotor install failed ^(optional^) - check build_log.txt )
 
 REM  moderngl can fail on Python 3.14 — mark as optional
 echo  Installing moderngl (optional)...
-python -m pip install "moderngl>=5.8.0" >> "%LOG%" 2>&1
+py -3.12 -m pip install "moderngl>=5.8.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] moderngl install failed ^(optional^) - check build_log.txt )
 
 echo  Installing PyInstaller...
-python -m pip install "pyinstaller>=5.0" pyinstaller-hooks-contrib >> "%LOG%" 2>&1
+py -3.12 -m pip install "pyinstaller>=5.0" pyinstaller-hooks-contrib >> "%LOG%" 2>&1
 if errorlevel 1 (
     echo.
     echo ============================================================
@@ -116,7 +116,7 @@ echo [Step 4/6] Checking for Assimp DLL (optional)...
 echo [Step 4/6] Checking for Assimp DLL... >> "%LOG%"
 
 REM Try to import pyassimp — may fail on Python 3.14, that is OK
-for /f "delims=" %%P in ('python -c "import pyassimp, os; print(os.path.dirname(pyassimp.__file__))" 2^>nul') do set PYASSIMP_DIR=%%P
+for /f "delims=" %%P in ('py -3.12 -c "import pyassimp, os; print(os.path.dirname(pyassimp.__file__))" 2^>nul') do set PYASSIMP_DIR=%%P
 
 if "!PYASSIMP_DIR!"=="" (
     echo  [INFO] pyassimp not importable on this Python version - skipping DLL step.
@@ -177,7 +177,7 @@ if exist "assets\icons\ghostrigger.ico" (
     echo  [OK] Icon found.
 ) else (
     echo  [INFO] Icon not found - generating placeholder...
-    python -c "from PIL import Image; import os; os.makedirs('assets/icons', exist_ok=True); Image.new('RGBA',(256,256),(30,30,60,255)).save('assets/icons/ghostrigger.ico')" >> "%LOG%" 2>&1
+    py -3.12 -c "from PIL import Image; import os; os.makedirs('assets/icons', exist_ok=True); Image.new('RGBA',(256,256),(30,30,60,255)).save('assets/icons/ghostrigger.ico')" >> "%LOG%" 2>&1
 )
 
 echo.
@@ -185,7 +185,7 @@ echo.
 REM ── Build the exe ────────────────────────────────────────────────────
 echo [Step 6/6] Building GhostRigger-K1-K2.exe - this takes a few minutes...
 echo [Step 6/6] Running PyInstaller... >> "%LOG%"
-python -m PyInstaller GhostRigger-K1-K2.spec --clean --noconfirm >> "%LOG%" 2>&1
+py -3.12 -m PyInstaller GhostRigger-K1-K2.spec --clean --noconfirm >> "%LOG%" 2>&1
 
 if errorlevel 1 (
     echo.
