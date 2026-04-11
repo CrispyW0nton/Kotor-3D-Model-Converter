@@ -34,27 +34,30 @@ try:
 except ImportError:
     pass
 
-# ── Assimp DLL bundling ───────────────────────────────────────────────────
+# ── Assimp DLL bundling (optional) ───────────────────────────────────────
 # pyassimp searches its own package folder for any file whose name contains
 # 'assimp', so we bundle the DLL as a binary alongside pyassimp's package.
 # build.bat downloads the DLL and places it there before running this spec.
+# If pyassimp is not importable (e.g. Python 3.14 C-extension not yet built),
+# we skip it entirely and add it to excludes so PyInstaller doesn't crash.
 binaries = []
+_pyassimp_available = False
 try:
     import pyassimp as _pa
     _pa_dir = os.path.dirname(_pa.__file__)
     for _fname in os.listdir(_pa_dir):
         if 'assimp' in _fname.lower() and _fname.lower().endswith('.dll'):
             _dll_path = os.path.join(_pa_dir, _fname)
-            # Destination is the pyassimp package subfolder inside the exe so
-            # pyassimp's search_library() finds it at runtime.
             binaries.append((_dll_path, 'pyassimp'))
             print(f'[spec] Bundling Assimp DLL: {_dll_path}')
+            _pyassimp_available = True
             break
     else:
         print('[spec] WARNING: No assimp*.dll found in pyassimp folder — '
               'FBX import will be unavailable at runtime.')
-except ImportError:
-    print('[spec] pyassimp not installed — FBX import will be unavailable.')
+except Exception:
+    print('[spec] pyassimp not importable — excluding from build. '
+          'FBX import will be unavailable (all other features unaffected).')
 
 # ── Data files ────────────────────────────────────────────────────────────
 datas = [
@@ -78,6 +81,9 @@ a = Analysis(
         'unittest',
         'pydantic',
         'mcp',
+        # Exclude pyassimp if it couldn't be imported (e.g. Python 3.14)
+        # so PyInstaller doesn't crash trying to analyse it
+        *( [] if _pyassimp_available else ['pyassimp'] ),
     ],
     noarchive=False,
     optimize=0,
