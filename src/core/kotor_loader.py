@@ -27,12 +27,7 @@ from typing import Dict, List, Optional
 
 log = logging.getLogger(__name__)
 
-# ── Add PyKotor to sys.path once ─────────────────────────────────────────────
-_PK_SRC = '/home/user/webapp/PyKotor/Libraries/PyKotor/src'
-if _PK_SRC not in sys.path:
-    sys.path.insert(0, _PK_SRC)
-
-# ── PyKotor imports (hard dependency — no fallback) ───────────────────────────
+# ── PyKotor imports (installed via pip install pykotor) ──────────────────────
 from pykotor.resource.formats.mdl.mdl_auto import read_mdl as pk_read_mdl
 from pykotor.resource.formats.mdl.mdl_data import (
     MDLNodeType,
