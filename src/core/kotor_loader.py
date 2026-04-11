@@ -855,9 +855,16 @@ def _apply_bind_pose(model: KotorModel) -> None:
                 if node.position == _ZERO_POS:
                     node.position = tuple(v0[:3])
             elif ct == _CT_ORI and len(v0) >= 4:
-                # ctype == 20: orientation — only override when identity
-                if node.rotation == _IDENT_ROT:
-                    node.rotation = tuple(v0[:4])
+                # ctype == 20: orientation — the controller IS the authoritative
+                # bind-pose source in binary MDL; the header rotation is often left
+                # at identity/zero as a placeholder (verified against old mdl_parser.py
+                # _apply_bind_pose_controllers which always applied the controller value).
+                # Normalize and apply as long as the quaternion has non-zero magnitude.
+                import math as _math
+                cx, cy, cz, cw = float(v0[0]), float(v0[1]), float(v0[2]), float(v0[3])
+                mag = _math.sqrt(cx*cx + cy*cy + cz*cz + cw*cw)
+                if mag > 1e-9:
+                    node.rotation = (cx/mag, cy/mag, cz/mag, cw/mag)
             elif ct == 100 and len(v0) >= 3:
                 # ctype == 100: selfillum_color (CTRL_MESH_SELFILLUMCOLOR)
                 node.selfillum = tuple(v0[:3])

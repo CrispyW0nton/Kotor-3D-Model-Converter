@@ -580,14 +580,17 @@ class AnimationEngine:
                 # KotOR position keyframes are DELTA OFFSETS added to bind-pose
                 # local position (NOT absolute positions).  Verified against xoreos
                 # (arePositionFramesRelative()=true) and KotorBlender (animnode.py).
-                # KotorBlender formula: p1 = restloc + animscale * val
-                # anim_scale is stored in the MDL header (model.anim_scale); default 1.0.
+                # NOTE: model.anim_scale (typically 0.971 from the MDL header) is a
+                # NWN→KotOR coordinate-space import factor used by Blender importers,
+                # NOT a runtime playback multiplier.  xoreos does not scale position
+                # keyframes during playback.  Applying 0.971 here shrinks every bone
+                # delta slightly, causing facial geometry (eyes, teeth) to misalign
+                # with the head mesh and breaking talking/blinking animations.
                 # Validate: reject non-finite position delta values
                 if all(math.isfinite(v) for v in val[:3]):
-                    asc = float(getattr(self.model, 'anim_scale', 1.0) or 1.0)
-                    pos = [pos[0] + asc * val[0],
-                           pos[1] + asc * val[1],
-                           pos[2] + asc * val[2]]
+                    pos = [pos[0] + val[0],
+                           pos[1] + val[1],
+                           pos[2] + val[2]]
             elif ctype == self.CTRL_ORIENTATION and len(val) >= 4:
                 # KotOR orientation keyframes are ABSOLUTE quaternions (replace bind rot).
                 # Validate and normalize animated rotation.
