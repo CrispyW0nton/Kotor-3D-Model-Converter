@@ -80,9 +80,10 @@ echo  Installing mcp + pydantic + uvicorn...
 python -m pip install "mcp>=1.0.0" "pydantic>=2.0.0" "uvicorn[standard]>=0.20.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] mcp/pydantic/uvicorn install failed - check build_log.txt )
 
-echo  Installing pyassimp...
+REM  pyassimp may not support Python 3.14 yet — fully optional
+echo  Installing pyassimp (optional - needed for binary FBX import)...
 python -m pip install "pyassimp>=5.2.0" >> "%LOG%" 2>&1
-if errorlevel 1 ( echo  [WARN] pyassimp install failed - check build_log.txt )
+if errorlevel 1 ( echo  [WARN] pyassimp install failed ^(optional^) - FBX import unavailable )
 
 REM  pykotor can fail on Python 3.14 — mark as optional
 echo  Installing pykotor (optional)...
@@ -110,15 +111,17 @@ if errorlevel 1 (
 echo  [OK] Dependencies installed.
 echo.
 
-REM ── Ensure Assimp DLL is present (required by pyassimp) ────────────
-echo [Step 4/6] Checking for Assimp DLL...
+REM ── Ensure Assimp DLL is present (optional — only if pyassimp imported OK) ──
+echo [Step 4/6] Checking for Assimp DLL (optional)...
 echo [Step 4/6] Checking for Assimp DLL... >> "%LOG%"
 
+REM Try to import pyassimp — may fail on Python 3.14, that is OK
 for /f "delims=" %%P in ('python -c "import pyassimp, os; print(os.path.dirname(pyassimp.__file__))" 2^>nul') do set PYASSIMP_DIR=%%P
 
 if "!PYASSIMP_DIR!"=="" (
-    echo  [WARN] Could not locate pyassimp folder - skipping DLL install.
-    echo  [WARN] pyassimp folder not found >> "%LOG%"
+    echo  [INFO] pyassimp not importable on this Python version - skipping DLL step.
+    echo  [INFO] FBX import will be unavailable, all other features unaffected.
+    echo  [INFO] pyassimp not importable - skipping >> "%LOG%"
     goto :after_assimp
 )
 
