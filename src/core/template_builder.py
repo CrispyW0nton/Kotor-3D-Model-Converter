@@ -570,12 +570,8 @@ def validate_animations_via_pykotor(
         'pykotor':  False,
     }
 
-    # Try PyKotor first
+    # Try PyKotor first (installed via pip install pykotor)
     try:
-        import sys as _sys
-        _pk_path = '/home/user/webapp/PyKotor/Libraries/PyKotor/src'
-        if _pk_path not in _sys.path:
-            _sys.path.insert(0, _pk_path)
         from pykotor.resource.formats.mdl.mdl_auto import read_mdl as _pk_read_mdl
         result['pykotor'] = True
 

@@ -5982,10 +5982,6 @@ class TwoDaBrowserPanel(tk.Frame):
         self._tda_name = name
         # Try pykotor for richer display; fall back to internal TwoDA
         try:
-            import sys as _sys
-            _pk_path = '/home/user/webapp/PyKotor/Libraries/PyKotor/src'
-            if _pk_path not in _sys.path:
-                _sys.path.insert(0, _pk_path)
             from pykotor.resource.formats.twoda import read_2da as _pk_read_2da
             raw = lib._get_2da_raw(name, game)  # internal raw-bytes accessor
             if raw:
@@ -6431,11 +6427,7 @@ class ResourceBrowserPanel(tk.Frame):
     def _preview_2da_pykotor(raw: bytes, resref: str) -> str:
         """Use pykotor read_2da to parse and format a 2DA resource."""
         try:
-            import sys as _sys
             import io as _io
-            _pk_path = '/home/user/webapp/PyKotor/Libraries/PyKotor/src'
-            if _pk_path not in _sys.path:
-                _sys.path.insert(0, _pk_path)
             from pykotor.resource.formats.twoda import read_2da as _pk_read_2da
         except ImportError:
             raise  # Let caller fall back to legacy path
@@ -6462,10 +6454,6 @@ class ResourceBrowserPanel(tk.Frame):
     def _preview_gff_pykotor(raw: bytes, resref: str) -> str:
         """Use pykotor read_gff to parse and format a GFF resource as readable text."""
         try:
-            import sys as _sys
-            _pk_path = '/home/user/webapp/PyKotor/Libraries/PyKotor/src'
-            if _pk_path not in _sys.path:
-                _sys.path.insert(0, _pk_path)
             from pykotor.resource.formats.gff import read_gff as _pk_read_gff
         except ImportError:
             raise  # Let caller handle
