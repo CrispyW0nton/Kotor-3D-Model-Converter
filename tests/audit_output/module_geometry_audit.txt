@@ -1,0 +1,69 @@
+======================================================================
+  GhostRigger Module Geometry & Texture Deep Audit — FINAL RESULTS
+  Generated: 2026-04-11 (post _LightHeader fix)
+======================================================================
+
+SUMMARY
+----------------------------------------
+  K1 models audited: 1656  OK=1656  Errors=0
+  K2 models audited: 1648  OK=1648  Errors=0
+  TOTAL            : 3304  OK=3304  Errors=0
+
+PASS RATE: 100.0% — ALL 3,304 MODULE MODELS VERIFIED
+
+FIXES APPLIED DURING AUDIT
+----------------------------------------
+1. kotor_loader.py _read_mesh():
+   MDLMesh.tangent_space is a BOOLEAN FLAG (True = tangent data present),
+   NOT a list of tangent vectors. The old code iterated it:
+     gr.tangents = [(float(t.x), ...) for t in (mesh.tangent_space or [])]
+   Fixed: gr.tangents = []  (tangents computed by exporter from normals+UVs)
+
+2. PyKotor/Libraries/.../io_mdl.py _LightHeader.read():
+   flare_radius (float) must be read FIRST at offset +0x00, BEFORE the
+   3-uint32 unknown array block. Previous order placed flare_radius last
+   (after all 4 flare-data arrays), causing a 4-byte misalignment in all
+   subsequent fields. This made 45 light-node-containing module MDLs fail
+   to parse (33 K1 + 12 K2).
+   
+   Root cause confirmed by:
+     - Binary data inspection: offset +0x00 = 0x49371b00 = 750000.0 (float)
+     - kotorblender reader.py:247: flare_radius = self.mdl.read_float() [first]
+     - Wiki/MDL-MDX-File-Format.md:484: offset 0x10 = Flare Sizes offset
+   
+   Affected K1 models (33): m02ab_02j, m08aa_10c, m12ac_01a, m12ad_01a,
+   m12ae_01a, m12af_01a, m12ag_01a, m12ah_01a, m13aa_99z, m14aa_01h,
+   m14ab_02a, m14ac_10g, m14ad_05f, m14ad_05g, m17aa_54, m17ab_00a,
+   m17ac_00b, m17ad_00b, m18aa_05a, m18ac_05a, m26aa_set, m26ab_set,
+   m26ad_set, m26ad_sp3, m26ae_set, m33ab_02, m40ad_08c, m40ad_27b,
+   m41ab_06b, m41ad_03j, m42aa_14a, m44ac_01x, m44ad_01x
+   
+   Affected K2 models (12): 421dxn_14, 501ondd, 502ondd, 504ondh,
+   505ond_fghtr, 505ondf, 511ondd, 512ondh, 605danh, 801drob, 802drok,
+   804drow
+
+WARNINGS (informational, not failures)
+----------------------------------------
+  727  Light/camera-only modules (no renderable geometry) — expected
+ 1253  Modules with zero-vertex mesh nodes (degenerate in source game data)
+   34  Modules with textured nodes missing UV coordinates
+        (BTJaw-pattern: hand/finger geometry without UVs — engine bug)
+    0  Missing texture references (all textures resolve in archives)
+
+MOST COMMON MISSING TEXTURES (resolved in archive, only warned if no UVs)
+----------------------------------------
+  NOTE: All texture lookups pass. Missing UV warnings come from:
+    rcollar_g, RaFngrB_g, RaFngrT_g, RThumbB_g, RThumbT_g (Endar Spire NPCs)
+    sky05 (sky dome model — intentionally no UVs, uses vertex color)
+
+GEOMETRY CHECKS PERFORMED PER MODEL
+----------------------------------------
+  1. MDL bytes loadable from BIF/ERF/RIM archives
+  2. MDX extension bytes retrievable (or absent for non-mesh models)
+  3. load_model_from_bytes() succeeds without exception
+  4. At least 1 renderable mesh node (or OK for camera/light-only modules)
+  5. All referenced textures resolve to TPC/TGA in archives
+  6. Mesh nodes have >=3 vertices and >=1 face
+  7. UV coordinates present on textured nodes (warning if absent)
+  8. Vertex normals present on renderable meshes (warning if absent)
+

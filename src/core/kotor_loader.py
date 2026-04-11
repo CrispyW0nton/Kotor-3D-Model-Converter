@@ -492,33 +492,59 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
     gr.uv_jitter       = float(getattr(mesh, 'uv_jitter',        0.0) or 0.0)
     gr.uv_jitter_speed = float(getattr(mesh, 'uv_jitter_speed',  0.0) or 0.0)
 
+    # ── Safe attribute helper for mesh data lists ────────────────────────────
+    # PyKotor returns:
+    #   • list[VectorN]  — good, use directly
+    #   • bool (True/False) — tangent_space is a FLAG, not a data list
+    #   • None            — attribute absent
+    #   • str             — default-arg sentinel ('NO_ATTR' etc.)
+    #   • method/callable — some attrs are methods; skip those too
+    # We accept ONLY plain lists (or list-like containers that are NOT bool/str).
+    def _safe_vec3_list(attr_val):
+        """Return attr_val as a list of 3-vectors, or [] if not a valid list."""
+        if attr_val is None or isinstance(attr_val, (bool, str, bytes)):
+            return []
+        if callable(attr_val):
+            return []
+        return list(attr_val) if hasattr(attr_val, '__iter__') else []
+
+    def _safe_vec2_list(attr_val):
+        """Return attr_val as a list of 2-vectors, or [] if not a valid list."""
+        if attr_val is None or isinstance(attr_val, (bool, str, bytes)):
+            return []
+        if callable(attr_val):
+            return []
+        return list(attr_val) if hasattr(attr_val, '__iter__') else []
+
     # ── Vertex positions ─────────────────────────────────────────────────────
     # PyKotor: MDLMesh.vertex_positions → list[Vector3]
-    vp = mesh.vertex_positions
-    gr.vertices = [(float(v.x), float(v.y), float(v.z)) for v in (vp or [])]
+    vp = _safe_vec3_list(mesh.vertex_positions)
+    gr.vertices = [(float(v.x), float(v.y), float(v.z)) for v in vp]
 
     # ── Vertex normals ────────────────────────────────────────────────────────
     # PyKotor: MDLMesh.vertex_normals → list[Vector3]
-    vn = mesh.vertex_normals
-    gr.normals = [(float(n.x), float(n.y), float(n.z)) for n in (vn or [])]
+    vn = _safe_vec3_list(mesh.vertex_normals)
+    gr.normals = [(float(n.x), float(n.y), float(n.z)) for n in vn]
 
     # ── Tangents (MDX bump-map stream) ───────────────────────────────────────
-    # PyKotor: MDLMesh.tangent_space → list[Vector3] (when present)
-    # Also check 'vertex_tangents' / 'tangents' for older PyKotor builds.
-    vt = (getattr(mesh, 'tangent_space',    None) or
-          getattr(mesh, 'vertex_tangents',  None) or
-          getattr(mesh, 'tangents',         None) or [])
-    gr.tangents = [(float(t.x), float(t.y), float(t.z)) for t in (vt or [])]
+    # NOTE: MDLMesh.tangent_space is a BOOLEAN FLAG in PyKotor (True = has
+    # tangent data), NOT the tangent vector list.  Do NOT iterate it.
+    # PyKotor does not expose pre-computed tangent vectors in this version;
+    # tangents are computed on-demand in the exporter from normals+UVs.
+    gr.tangents = []  # filled by exporter when needed
 
     # ── Primary UVs ──────────────────────────────────────────────────────────
     # PyKotor: MDLMesh.vertex_uv1  (= .vertex_uv property alias)
     # Use explicit None checks so that an empty-list attribute ([]) doesn't
     # fall through to a method-object lookup (which is not iterable).
     _uv1_attr = getattr(mesh, 'vertex_uv1', None)
-    if _uv1_attr is None:
+    if _uv1_attr is None or isinstance(_uv1_attr, bool):
         _uv1_raw = getattr(mesh, 'vertex_uv', None)
         # If the fallback is callable (a method), call it; otherwise use as-is
-        uv1 = _uv1_raw() if callable(_uv1_raw) else (_uv1_raw or [])
+        if callable(_uv1_raw):
+            uv1 = _uv1_raw()
+        else:
+            uv1 = _safe_vec2_list(_uv1_raw)
     else:
         uv1 = _uv1_attr
     gr.uvs = [(float(u.x), float(u.y)) for u in (uv1 or [])]
@@ -526,7 +552,7 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
     # ── Secondary / lightmap UVs ─────────────────────────────────────────────
     # PyKotor: MDLMesh.vertex_uv2
     _uv2_attr = getattr(mesh, 'vertex_uv2', None)
-    uv2 = _uv2_attr if _uv2_attr is not None else []
+    uv2 = _safe_vec2_list(_uv2_attr)
     gr.uvs_2  = [(float(u.x), float(u.y)) for u in uv2]
     gr.uvs_lm = list(gr.uvs_2)   # same data — lightmap consumer alias
 

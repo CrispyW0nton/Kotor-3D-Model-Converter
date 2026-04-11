@@ -792,51 +792,74 @@ class FBXAnimationExporter:
                     bind = _base_nodes.get(n.name.lower())
                     bind_pos = list(bind.position) if bind else [0.0, 0.0, 0.0]
 
-                    def _write_curve(axis_label: str,
-                                     axis_i: int,
-                                     default_val: float,
-                                     ktimes: list,
-                                     kvals: list,
-                                     prop_name: str):
-                        cn_id = new_id()
-                        cv_id = new_id()
-                        ax = axis_label[-1]
-                        w(f"\t\tAnimationCurveNode: {cn_id}, \"{axis_label}\", \"\" {{")
-                        w(f"\t\t\tProperties70:  {{")
-                        w(f"\t\t\t\tP: \"d|{ax}\", \"Number\", \"\", \"A\",{default_val:.6f}")
-                        w(f"\t\t\t}}")
-                        w(f"\t\t}}")
+                    def _write_single_curve(cv_id: int, default_val: float,
+                                           ktimes: list, kvals: list,
+                                           cn_id: int, ax_letter: str):
+                        """Write one AnimationCurve + queue its OP connection."""
                         nt = len(ktimes)
                         ticks = [int(t * FBX_TICKS) for t in ktimes]
-                        w(f"\t\tAnimationCurve: {cv_id}, \"\", \"\" {{")
-                        w(f"\t\t\tDefault: {default_val:.6f}")
-                        w(f"\t\t\tKeyVer: 4008")
-                        w(f"\t\t\tKeyTime: *{nt} {{")
-                        w("\t\t\t\ta: " + ",".join(str(t) for t in ticks))
-                        w(f"\t\t\t}}")
-                        w(f"\t\t\tKeyValueFloat: *{nt} {{")
-                        w("\t\t\t\ta: " + ",".join(f"{v:.6f}" for v in kvals))
-                        w(f"\t\t\t}}")
-                        w(f"\t\t\tKeyAttrFlags: *{nt} {{")
-                        w("\t\t\t\ta: " + ",".join(["24776"] * nt))
-                        w(f"\t\t\t}}")
-                        w(f"\t\t\tKeyAttrRefCount: *1 {{")
-                        w(f"\t\t\t\ta: {nt}")
-                        w(f"\t\t\t}}")
+                        w(f"\tAnimationCurve: {cv_id}, \"\", \"\" {{")
+                        w(f"\t\tDefault: {default_val:.6f}")
+                        w(f"\t\tKeyVer: 4008")
+                        w(f"\t\tKeyTime: *{nt} {{")
+                        w("\t\t\ta: " + ",".join(str(t) for t in ticks))
                         w(f"\t\t}}")
-                        anim_connections.append(f"\t\tC: \"OP\",{cv_id},{cn_id},\"d|{ax}\"")
-                        anim_connections.append(f"\t\tC: \"OO\",{cn_id},{layer_id}")
-                        anim_connections.append(f"\t\tC: \"OP\",{cn_id},{nid},\"{prop_name}\"")
+                        w(f"\t\tKeyValueFloat: *{nt} {{")
+                        w("\t\t\ta: " + ",".join(f"{v:.6f}" for v in kvals))
+                        w(f"\t\t}}")
+                        # KeyAttrFlags: *1 (single shared flag) required by Blender
+                        w(f"\t\tKeyAttrFlags: *1 {{")
+                        w("\t\t\ta: 24776")
+                        w(f"\t\t}}")
+                        # KeyAttrDataFloat: tangent data (4 floats) for cubic mode
+                        w(f"\t\tKeyAttrDataFloat: *4 {{")
+                        w("\t\t\ta: 0,0,0,0")
+                        w(f"\t\t}}")
+                        w(f"\t\tKeyAttrRefCount: *1 {{")
+                        w(f"\t\t\ta: {nt}")
+                        w(f"\t\t}}")
+                        w(f"\t}}")
+                        anim_connections.append(f"\tC: \"OP\",{cv_id},{cn_id},\"d|{ax_letter}\"")
+
+                    def _write_curve(prop_channel: str,
+                                     kvals_xyz: list,
+                                     ktimes: list,
+                                     def_vals: tuple,
+                                     prop_name: str):
+                        """Write ONE AnimationCurveNode (T or R) + 3 AnimationCurves.
+
+                        Blender io_scene_fbx expects one CurveNode per channel (T/R),
+                        named 'T' or 'R' (not 'T|X'), with d|X d|Y d|Z in Properties70.
+                        """
+                        cn_id = new_id()
+                        cx_id = new_id()
+                        cy_id = new_id()
+                        cz_id = new_id()
+                        dx, dy, dz = def_vals
+                        w(f"\tAnimationCurveNode: {cn_id}, \"{prop_channel}\", \"\" {{")
+                        w(f"\t\tProperties70:  {{")
+                        w(f"\t\t\tP: \"d|X\", \"Number\", \"\", \"A\",{dx:.6f}")
+                        w(f"\t\t\tP: \"d|Y\", \"Number\", \"\", \"A\",{dy:.6f}")
+                        w(f"\t\t\tP: \"d|Z\", \"Number\", \"\", \"A\",{dz:.6f}")
+                        w(f"\t\t}}")
+                        w(f"\t}}")
+                        _write_single_curve(cx_id, dx, ktimes, kvals_xyz[0], cn_id, 'X')
+                        _write_single_curve(cy_id, dy, ktimes, kvals_xyz[1], cn_id, 'Y')
+                        _write_single_curve(cz_id, dz, ktimes, kvals_xyz[2], cn_id, 'Z')
+                        anim_connections.append(f"\tC: \"OO\",{cn_id},{layer_id}")
+                        anim_connections.append(f"\tC: \"OP\",{cn_id},{nid},\"{prop_name}\"")
 
                     # Translation: delta + bind_pos, scaled by anim_scale
                     if pos_times and pos_vals:
-                        for axis_i, label in enumerate(('T|X', 'T|Y', 'T|Z')):
-                            kvals_abs = [
+                        kvals_t = []
+                        for axis_i in range(3):
+                            kvals_t.append([
                                 bind_pos[axis_i] + (v[axis_i] if len(v) > axis_i else 0.0) * anim_scale
                                 for v in pos_vals
-                            ]
-                            _write_curve(label, axis_i, bind_pos[axis_i],
-                                         pos_times, kvals_abs, 'Lcl Translation')
+                            ])
+                        _write_curve('T', kvals_t, pos_times,
+                                     (bind_pos[0], bind_pos[1], bind_pos[2]),
+                                     'Lcl Translation')
 
                     # Rotation: absolute quaternion → Euler XYZ degrees
                     if rot_times and rot_vals:
@@ -846,11 +869,14 @@ class FBXAnimationExporter:
                                 euler_list.append(_quat_to_euler_xyz(qv[0], qv[1], qv[2], qv[3]))
                             else:
                                 euler_list.append((0.0, 0.0, 0.0))
-                        for axis_i, label in enumerate(('R|X', 'R|Y', 'R|Z')):
-                            kvals_rot = [e[axis_i] for e in euler_list]
-                            default_r = kvals_rot[0] if kvals_rot else 0.0
-                            _write_curve(label, axis_i, default_r,
-                                         rot_times, kvals_rot, 'Lcl Rotation')
+                        kvals_r = [
+                            [e[axis_i] for e in euler_list]
+                            for axis_i in range(3)
+                        ]
+                        def_r = (kvals_r[0][0] if kvals_r[0] else 0.0,
+                                 kvals_r[1][0] if kvals_r[1] else 0.0,
+                                 kvals_r[2][0] if kvals_r[2] else 0.0)
+                        _write_curve('R', kvals_r, rot_times, def_r, 'Lcl Rotation')
 
             w("}")  # end Objects
 
@@ -1142,42 +1168,57 @@ class FBXAnimationExporter:
                 # Build FBX time array (uniform)
                 frame_times_ticks = [int((fi / fps) * FBX_TICKS) for fi in range(n_frames)]
 
-                def _write_baked_curve(axis_label: str,
-                                       axis_i: int,
-                                       default_val: float,
-                                       kvals: List[float],
+                def _write_single_baked_curve(cv_id: int, default_val: float,
+                                              kvals: List[float],
+                                              cn_id: int, ax_letter: str):
+                    """Write one baked AnimationCurve + queue OP connection."""
+                    nt = len(kvals)
+                    w(f"\tAnimationCurve: {cv_id}, \"\", \"\" {{")
+                    w(f"\t\tDefault: {default_val:.6f}")
+                    w(f"\t\tKeyVer: 4008")
+                    w(f"\t\tKeyTime: *{nt} {{")
+                    w("\t\t\ta: " + ",".join(str(t) for t in frame_times_ticks))
+                    w(f"\t\t}}")
+                    w(f"\t\tKeyValueFloat: *{nt} {{")
+                    w("\t\t\ta: " + ",".join(f"{v:.6f}" for v in kvals))
+                    w(f"\t\t}}")
+                    # KeyAttrFlags: *1 (single flag, linear=8 is faithful to source data)
+                    w(f"\t\tKeyAttrFlags: *1 {{")
+                    w("\t\t\ta: 8")    # 8 = linear interpolation (faithful to game data)
+                    w(f"\t\t}}")
+                    # KeyAttrDataFloat: required for Blender
+                    w(f"\t\tKeyAttrDataFloat: *4 {{")
+                    w("\t\t\ta: 0,0,0,0")
+                    w(f"\t\t}}")
+                    w(f"\t\tKeyAttrRefCount: *1 {{")
+                    w(f"\t\t\ta: {nt}")
+                    w(f"\t\t}}")
+                    w(f"\t}}")
+                    anim_connections.append(f"\tC: \"OP\",{cv_id},{cn_id},\"d|{ax_letter}\"")
+
+                def _write_baked_curve(prop_channel: str,
+                                       kvals_xyz: list,
+                                       def_vals: tuple,
                                        prop_name: str,
                                        nid: int):
+                    """Write ONE baked AnimationCurveNode (T or R) + 3 curves."""
                     cn_id = new_id()
-                    cv_id = new_id()
-                    ax    = axis_label[-1]
-                    nt    = len(kvals)
-                    w(f"\t\tAnimationCurveNode: {cn_id}, \"{axis_label}\", \"\" {{")
-                    w(f"\t\t\tProperties70:  {{")
-                    w(f"\t\t\t\tP: \"d|{ax}\", \"Number\", \"\", \"A\",{default_val:.6f}")
-                    w(f"\t\t\t}}")
+                    cx_id = new_id()
+                    cy_id = new_id()
+                    cz_id = new_id()
+                    dx, dy, dz = def_vals
+                    w(f"\tAnimationCurveNode: {cn_id}, \"{prop_channel}\", \"\" {{")
+                    w(f"\t\tProperties70:  {{")
+                    w(f"\t\t\tP: \"d|X\", \"Number\", \"\", \"A\",{dx:.6f}")
+                    w(f"\t\t\tP: \"d|Y\", \"Number\", \"\", \"A\",{dy:.6f}")
+                    w(f"\t\t\tP: \"d|Z\", \"Number\", \"\", \"A\",{dz:.6f}")
                     w(f"\t\t}}")
-                    w(f"\t\tAnimationCurve: {cv_id}, \"\", \"\" {{")
-                    w(f"\t\t\tDefault: {default_val:.6f}")
-                    w(f"\t\t\tKeyVer: 4008")
-                    w(f"\t\t\tKeyTime: *{nt} {{")
-                    w("\t\t\t\ta: " + ",".join(str(t) for t in frame_times_ticks))
-                    w(f"\t\t\t}}")
-                    w(f"\t\t\tKeyValueFloat: *{nt} {{")
-                    w("\t\t\t\ta: " + ",".join(f"{v:.6f}" for v in kvals))
-                    w(f"\t\t\t}}")
-                    # KeyAttrFlags: 24776 = cubic interpolation tangents-auto
-                    # Use 8 for linear interpolation (more faithful to sparse data)
-                    w(f"\t\t\tKeyAttrFlags: *{nt} {{")
-                    w("\t\t\t\ta: " + ",".join(["8"] * nt))
-                    w(f"\t\t\t}}")
-                    w(f"\t\t\tKeyAttrRefCount: *1 {{")
-                    w(f"\t\t\t\ta: {nt}")
-                    w(f"\t\t\t}}")
-                    w(f"\t\t}}")
-                    anim_connections.append(f"\t\tC: \"OP\",{cv_id},{cn_id},\"d|{ax}\"")
-                    anim_connections.append(f"\t\tC: \"OO\",{cn_id},{layer_id}")
-                    anim_connections.append(f"\t\tC: \"OP\",{cn_id},{nid},\"{prop_name}\"")
+                    w(f"\t}}")
+                    _write_single_baked_curve(cx_id, dx, kvals_xyz[0], cn_id, 'X')
+                    _write_single_baked_curve(cy_id, dy, kvals_xyz[1], cn_id, 'Y')
+                    _write_single_baked_curve(cz_id, dz, kvals_xyz[2], cn_id, 'Z')
+                    anim_connections.append(f"\tC: \"OO\",{cn_id},{layer_id}")
+                    anim_connections.append(f"\tC: \"OP\",{cn_id},{nid},\"{prop_name}\"")
 
                 # Write per-bone curves
                 anim_node_names = {an.name.lower() for an in anim.nodes}
@@ -1211,19 +1252,18 @@ class FBXAnimationExporter:
                             ex, ey, ez = _quat_to_euler_xyz(br[0], br[1], br[2], br[3])
                             rx_vals.append(ex); ry_vals.append(ey); rz_vals.append(ez)
 
-                    # Write translation curves
-                    for axis_i, (label, kvals) in enumerate(zip(
-                            ('T|X', 'T|Y', 'T|Z'),
-                            (px_vals, py_vals, pz_vals))):
-                        _write_baked_curve(label, axis_i, kvals[0] if kvals else 0.0,
-                                           kvals, 'Lcl Translation', nid)
+                    # Write grouped translation + rotation curves (Blender-compatible)
+                    def_t = (px_vals[0] if px_vals else 0.0,
+                             py_vals[0] if py_vals else 0.0,
+                             pz_vals[0] if pz_vals else 0.0)
+                    _write_baked_curve('T', [px_vals, py_vals, pz_vals],
+                                       def_t, 'Lcl Translation', nid)
 
-                    # Write rotation curves
-                    for axis_i, (label, kvals) in enumerate(zip(
-                            ('R|X', 'R|Y', 'R|Z'),
-                            (rx_vals, ry_vals, rz_vals))):
-                        _write_baked_curve(label, axis_i, kvals[0] if kvals else 0.0,
-                                           kvals, 'Lcl Rotation', nid)
+                    def_r = (rx_vals[0] if rx_vals else 0.0,
+                             ry_vals[0] if ry_vals else 0.0,
+                             rz_vals[0] if rz_vals else 0.0)
+                    _write_baked_curve('R', [rx_vals, ry_vals, rz_vals],
+                                       def_r, 'Lcl Rotation', nid)
 
             w("}")  # end Objects
 
