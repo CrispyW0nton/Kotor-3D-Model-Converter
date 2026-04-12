@@ -762,6 +762,21 @@ def _decode_texture(raw: bytes) -> Optional[object]:
                     return img
             except Exception as _err:
                 log.debug("_decode_texture: load_tpc_as_pil failed (%s)", _err)
+        # FIX-TPC-FALLBACK: load_tpc_as_pil may fail on malformed TXI trailers
+        # (e.g. "Invalid TXI command: 'd'" from txi_data.py) even when the pixel
+        # data itself is valid.  Fall back to the internal _decode_tpc() decoder
+        # which skips TXI parsing and handles uncompressed RGB/RGBA/Grey directly.
+        try:
+            img = _decode_tpc(raw)
+            if img is not None:
+                if img.mode != 'RGBA':
+                    img = img.convert('RGBA')
+                return img
+        except Exception as _err2:
+            log.debug("_decode_texture: _decode_tpc fallback failed (%s)", _err2)
+        # TPC file that we cannot decode — do NOT pass to PIL (it will fail or
+        # produce garbage since the raw bytes are not a PIL-recognised format).
+        return None
 
     # ── PIL direct: TGA, PNG, DDS, BMP, etc. ─────────────────────────────
     try:

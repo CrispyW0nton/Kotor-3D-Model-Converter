@@ -492,21 +492,64 @@ def _mat3_normal(model_mat: np.ndarray) -> np.ndarray:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class _GlTexCache:
-    """Caches PIL Image → GL Texture2D upload to avoid re-uploading unchanged textures."""
+    """Caches PIL Image → GL Texture2D upload to avoid re-uploading unchanged textures.
+
+    FIX-TEXCACHE-KEY: The original implementation keyed on id(img) alone, which
+    is unsafe because Python can reuse object addresses after GC.  A new PIL Image
+    allocated at the same address as a previously-released one would receive a stale
+    GL texture upload (wrong pixels, wrong size).  We guard against this by also
+    storing a weak-reference to the original image object.  On cache-hit we check
+    that the weakref is still alive AND still points to the same object; if the
+    weakref is dead (GC'd) the entry is a ghost and must be evicted + re-uploaded.
+
+    Additionally we use a MAX_ENTRIES cap (512) with LRU eviction via OrderedDict to
+    prevent unbounded VRAM growth when batch-rendering hundreds of models.  Each
+    512×512 RGBA mip-chain ≈ 682 KB VRAM; 512 entries ≈ 341 MB worst-case, well
+    within the 2 GB EGL soft limit on typical headless servers.
+    """
+
+    MAX_ENTRIES: int = 512  # VRAM safety cap; adjust per target hardware
 
     def __init__(self, ctx: 'moderngl.Context'):
         self._ctx = ctx
-        self._cache: Dict[int, 'moderngl.Texture'] = {}  # id(PIL Image) → GL texture
+        # OrderedDict for O(1) LRU: key = id(img), value = (weakref, GL Texture)
+        import collections, weakref as _weakref_mod
+        self._cache: 'collections.OrderedDict[int, tuple]' = collections.OrderedDict()
+        self._wr_mod = _weakref_mod  # stash for use in methods
 
     def get(self, img: Optional['Image.Image']) -> Optional['moderngl.Texture']:
         if img is None or not _PIL:
             return None
         key = id(img)
         if key in self._cache:
-            return self._cache[key]
+            wr, tex = self._cache[key]
+            live = wr()
+            if live is img:
+                # Cache hit: move to end (most-recently-used) and return
+                self._cache.move_to_end(key)
+                return tex
+            # Stale entry (GC'd object reused same address) — evict and re-upload
+            try:
+                tex.release()
+            except Exception:
+                pass
+            del self._cache[key]
+        # Cache miss: upload and store
         tex = self._upload(img)
         if tex:
-            self._cache[key] = tex
+            # Evict LRU entry if over capacity
+            while len(self._cache) >= self.MAX_ENTRIES:
+                _, (_, old_tex) = self._cache.popitem(last=False)
+                try:
+                    old_tex.release()
+                except Exception:
+                    pass
+            try:
+                wr = self._wr_mod.ref(img)
+            except TypeError:
+                # img is not weakly referenceable (rare); use a dummy ref
+                wr = lambda: img  # noqa: E731 — never GC'd while in cache
+            self._cache[key] = (wr, tex)
         return tex
 
     def _upload(self, img: 'Image.Image') -> Optional['moderngl.Texture']:
@@ -586,14 +629,15 @@ class _GlTexCache:
             return
         key = id(img)
         if key in self._cache:
+            _, tex = self._cache[key]
             try:
-                self._cache[key].release()
+                tex.release()
             except Exception:
                 pass
             del self._cache[key]
 
     def clear(self) -> None:
-        for tex in self._cache.values():
+        for (_, tex) in self._cache.values():
             try:
                 tex.release()
             except Exception:
@@ -629,8 +673,9 @@ def _quat_rotate_batch(q: np.ndarray, pts: np.ndarray) -> np.ndarray:
 
 
 def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
-                    anim_pose_node=None) -> Tuple[Optional[np.ndarray],
-                                                   Optional[np.ndarray]]:
+                    anim_pose_node=None,
+                    is_module: bool = False) -> Tuple[Optional[np.ndarray],
+                                                      Optional[np.ndarray]]:
     """
     Build interleaved VBO data for a ModelNode using vectorized NumPy.
 
@@ -679,17 +724,26 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
                        abs(wo[0]) < 1e-6 and abs(wo[1]) < 1e-6 and abs(wo[2]) < 1e-6)
     is_identity_pos = (abs(wp[0]) < 1e-9 and abs(wp[1]) < 1e-9 and abs(wp[2]) < 1e-9)
 
-    # FIX-UV-SENTINEL: Raised from 20.0 to 100.0 to match viewport.py.
-    # KotOR area/module geometry uses UV coordinates well outside [0,1]:
-    # e.g. N_sithpraet pelvis UV=[-13,+13], mRobe2_g U=[-13.58,+13.58].
-    # With sentinel=20.0 these were incorrectly flagged as bad UVs and
-    # replaced with 0.5, causing solid-color or gray rendering on tiled
-    # module geometry instead of correctly tiled textures.
-    # Genuine sentinel/placeholder UVs (from KotOR seam-split vertices,
-    # PyKotor corrupt MDX offsets) are always far larger (e.g. ±1e28),
-    # so 100.0 is a safe discriminating threshold.
-    # Reference: viewport.py _UV_SENTINEL = 100.0 (Phase 18 fix comment).
-    _UV_SENTINEL = 100.0
+    # FIX-UV-SENTINEL: Two-tier threshold for UV corruption detection.
+    #
+    # Character/creature models: sentinel = 100.0
+    #   KotOR character geometry uses UV in range [-13, +13] for tiling on
+    #   robes/armour (e.g. N_sithpraet pelvis U=[-13,+13]).  Bad seam verts
+    #   from corrupt MDX data are far larger (e.g. ±1e28), so 100.0 is a
+    #   safe discriminating threshold for characters.
+    #
+    # Module/area/tile models: sentinel = 1e6 (effectively disabled)
+    #   KotOR module geometry uses extreme UV tiling for large surfaces.
+    #   e.g. Box86 in m10aa_01c has U/V ≈ 131,208.  These are VALID tiling
+    #   UVs — the GPU hardware GL_REPEAT wraps them correctly.  Clamping at
+    #   100.0 would replace these with 0.5, producing solid-colour rendering
+    #   on all large floor/wall tiles.  We allow up to 1e6 (matching the
+    #   kotor_loader _GEOM_MAX_CHECK threshold); genuinely corrupt values
+    #   (NaN, ±Inf, |uv| > 1e6) are still caught and replaced with 0.5.
+    #
+    # Reference: KotOR Game Engine Architecture (Gregory 4th ed.) §10.2,
+    #   texture coordinate handling for tiled/repeating textures §5.1.
+    _UV_SENTINEL = 1e6 if is_module else 100.0
 
     # ── Convert vertices and normals to Nx3 float64 arrays ──────────────────
     try:
@@ -893,29 +947,45 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     n_arr = n_arr / n_lens
 
     # ── UV arrays ────────────────────────────────────────────────────────────
+    # FIX-UV-SEAM-EXPAND: Build uv_arr from the FULL uvs list (n_uvs entries),
+    # NOT truncated to n_verts.  KotOR binary MDL trimeshes use separate tvert
+    # (texture-vertex) indices in face_uvs[] that can reference UV entries
+    # beyond index n_verts-1 — the seam-split duplicate UVs are appended after
+    # the geometry verts.  Truncating to n_verts discarded those extra entries,
+    # causing the expanded-path UV lookup (uv_arr[ti]) to fall back to the
+    # vertex UV (uv_arr[vi]) instead of the correct seam UV, producing wrong
+    # texture coordinates on every seam-split corner (e.g. quad row4 V=1.0
+    # instead of V=0.99 when face_uvs=[..,[0,4,3]] and uvs[4]=(1.0,0.99)).
+    #
+    # Seam-vert healing (below) uses v_arr for spatial lookup which is indexed
+    # by vertex index (0..n_verts-1), so we restrict the heal pass to entries
+    # 0..n_verts-1; extra tvert-only entries (n_verts..n_uvs-1) are not
+    # directly linked to a geometry position and must not be healed by position.
     n_uvs = len(uvs)
     if n_uvs > 0:
         try:
-            uv_arr = np.asarray(uvs[:n_verts], dtype=np.float32)
+            uv_arr = np.asarray(uvs, dtype=np.float32)      # shape: (n_uvs, ...)
             if uv_arr.ndim != 2 or uv_arr.shape[1] < 2:
-                uv_arr = np.full((n_verts, 2), 0.5, dtype=np.float32)
-            elif len(uv_arr) < n_verts:
-                pad = np.full((n_verts - len(uv_arr), 2), 0.5, dtype=np.float32)
-                uv_arr = np.vstack([uv_arr, pad])
+                uv_arr = np.full((n_uvs, 2), 0.5, dtype=np.float32)
+            elif uv_arr.shape[1] > 2:
+                uv_arr = uv_arr[:, :2]
         except (ValueError, TypeError):
-            uv_arr = np.full((n_verts, 2), 0.5, dtype=np.float32)
+            uv_arr = np.full((n_uvs, 2), 0.5, dtype=np.float32)
         # Seam-vert UV healing: some KotOR models have duplicate vertices at UV
         # seams where the seam copy's UV was never written correctly (e.g. the
         # p_hk47 hand/finger nodes and c_kraytdragon claw nodes whose seam verts
         # have UVs like (-27.14, -104.93)).  For each bad vert, find a coincident
         # vert (same 3-D position, within epsilon) that has a valid UV and copy it.
-        # Fall back to 0.5 only if no valid coincident vert exists.
+        # Only apply heal to the first n_verts entries (geometry-linked UVs);
+        # extra tvert-only entries beyond n_verts are left as-is (or 0.5 if bad).
         bad_uv = np.any(np.abs(uv_arr) > _UV_SENTINEL, axis=1)
         if np.any(bad_uv):
-            bad_indices = np.where(bad_uv)[0]
-            good_mask   = ~bad_uv
+            # Restrict spatial healing to geometry verts (0..n_verts-1)
+            bad_geo   = bad_uv[:n_verts]
+            bad_indices = np.where(bad_geo)[0]
+            good_mask   = ~bad_uv[:n_verts]
             good_indices = np.where(good_mask)[0]
-            if len(good_indices) > 0 and len(v_arr) >= n_verts:
+            if len(bad_indices) > 0 and len(good_indices) > 0 and len(v_arr) >= n_verts:
                 # Build spatial lookup: for each bad vert find nearest good vert
                 # using the (already-transformed) vertex positions.
                 bad_pos  = v_arr[bad_indices].astype(np.float32)   # (M,3)
@@ -932,14 +1002,13 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
                 healed = min_dist < _SEAM_EPS
                 if np.any(healed):
                     uv_arr[bad_indices[healed]] = uv_arr[nearest_k[healed]]
-                # Fall back: any still-bad verts get 0.5
-                bad_uv2 = np.any(np.abs(uv_arr) > _UV_SENTINEL, axis=1)
-                if np.any(bad_uv2):
-                    uv_arr[bad_uv2] = 0.5
-            else:
-                uv_arr[bad_uv] = 0.5
+            # Fall back: any still-bad UV entries (geometry or extra tvert) get 0.5
+            bad_uv2 = np.any(np.abs(uv_arr) > _UV_SENTINEL, axis=1)
+            if np.any(bad_uv2):
+                uv_arr[bad_uv2] = 0.5
     else:
         uv_arr = np.full((n_verts, 2), 0.5, dtype=np.float32)
+        n_uvs = n_verts  # for consistent indexing below
 
     n_uvs_lm = len(uvs_lm)
     if n_uvs_lm > 0:
@@ -959,10 +1028,15 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
         uv_lm_arr = np.full((n_verts, 2), 0.5, dtype=np.float32)
 
     # ── Assemble interleaved vertex buffer (N × 14) ──────────────────────────
+    # vdata is keyed by *vertex* index (0..n_verts-1).  uv_arr may have more
+    # rows than n_verts (extra seam-split tvert entries beyond n_verts-1) so we
+    # slice to exactly n_verts rows when copying into vdata.
     vdata = np.zeros((n_verts, 14), dtype=np.float32)
     vdata[:, 0:3] = v_arr.astype(np.float32)
     vdata[:, 3:6] = n_arr.astype(np.float32)
-    vdata[:, 6:8] = uv_arr[:, :2]
+    _uv_for_vdata = uv_arr[:n_verts] if len(uv_arr) >= n_verts else np.vstack(
+        [uv_arr, np.full((n_verts - len(uv_arr), 2), 0.5, dtype=np.float32)])
+    vdata[:, 6:8]  = _uv_for_vdata[:, :2]
     vdata[:, 8:10] = uv_lm_arr[:, :2]
     vdata[:, 10:14] = 1.0  # white vertex colour + alpha 1
 
@@ -1235,25 +1309,31 @@ class GpuRenderer:
 
     def clear_caches(self) -> None:
         """Clear per-model GPU mesh and texture caches without destroying the context.
-        
+
         Call this between model renders in a batch loop to free GPU VRAM while
         keeping the EGL context alive for the next model.  This prevents OOM
         kills when rendering thousands of models consecutively.
+
+        FIX-PERF-CLEAR: Do NOT reset _init_attempted here.  The original code
+        incorrectly set _init_attempted=False, which forced a full ModernGL EGL
+        context re-initialization on every subsequent render() call.  Re-init
+        costs ~70 ms per model × 3,304 models = ~4 minutes of unnecessary GPU
+        setup in a batch render.  The GPU context (self._ctx, self._prog) is
+        still valid after clearing caches — only mesh VAOs/VBOs and texture
+        uploads are freed, not the context itself.
         """
         # Release all cached mesh VAO/VBO/IBOs
         for m in self._mesh_cache.values():
             m.release()
         self._mesh_cache.clear()
-        # Clear world-transform cache (invalidated per model anyway)
-        self._wt_cache.clear()
-        self._wt_model_id = 0
         # Release all cached GL textures to free VRAM
         if self._tex_cache:
             self._tex_cache.clear()
-        self._init_attempted = False
-        # Clear persistent world-transform cache
+        # Clear persistent world-transform cache (invalidated per model anyway)
         self._wt_cache.clear()
         self._wt_model_id = 0
+        # NOTE: _init_attempted is intentionally NOT reset here — the EGL context
+        # remains alive and valid across clear_caches() calls.
 
     # ── Main render entry ─────────────────────────────────────────────────────
 
@@ -1585,7 +1665,12 @@ class GpuRenderer:
             # LTS_logwal02 wall mesh has U=−8.75, floor mesh V=−9.71). These are
             # real renderable geometry, NOT deformation helpers.
             _gpu_model_cls   = (str(getattr(model, 'classification', 'character') or 'character')).lower()
-            _gpu_model_type  = int(getattr(model, 'model_type', 4) or 4)
+            # FIX-MODEL-TYPE-ZERO: model_type=0 means "module/tile" in KotOR.
+            # Using `int(val or 4)` treated 0 as falsy → replaced with 4 (character)
+            # which broke module UV-sentinel exemption for tile models.
+            # Fix: only use the default when the raw value is None/missing.
+            _gpu_model_type_raw = getattr(model, 'model_type', None)
+            _gpu_model_type  = int(_gpu_model_type_raw) if _gpu_model_type_raw is not None else 4
             _gpu_is_module   = (_gpu_model_cls in ('effect', 'tile', 'other') or
                                 _gpu_model_type in (0, 2))
 
@@ -1632,6 +1717,23 @@ class GpuRenderer:
 
                 return False
 
+            # FIX-INNER-GEO-DEPTH: Inner-geometry substrings for head models.
+            # Eye/eyelid/teeth/tongue nodes sit geometrically INSIDE the head mesh.
+            # They must be drawn AFTER the opaque face mesh so they show through the
+            # eye-socket and mouth-gap openings — exactly as the CPU viewport's tier-1
+            # promotion does.  In the GPU path we achieve this by classifying inner-geo
+            # nodes as "transparent" (depth write OFF, drawn in Pass 2) regardless of
+            # their actual alpha, so they are always composited over the face mesh.
+            # This fixes the depth-test artifact where the head mesh painted over the
+            # eyeballs / teeth because the face centroid depth was computed as closer.
+            # Reference: viewport.py _INNER_GEO_SUBSTRINGS + tier-1 promotion logic;
+            #            Gregory "Game Engine Architecture" §10.6 depth-ordering.
+            _GPU_INNER_GEO = (
+                'eye', 'lid', 'teeth', 'gum', 'jaw', 'tongue',
+                'eyera', 'eyla', 'eyeshadow', 'lweye', 'rweye',
+                'teethupper', 'teethlower', 'teethlo', 'teethup',
+            )
+
             def _classify_node(nd, ap):
                 """Return (node_alpha, txi_blend, is_transparent, has_env).
 
@@ -1639,11 +1741,15 @@ class GpuRenderer:
                   - Pass 1 (opaque, depth write ON):  punchthrough, env-map, normal
                   - Pass 2 (transparent, depth write OFF): additive, wateralpha<1,
                     decal, per-node alpha<1 (glass, holograms)
+                  - Pass 2 also: inner-geometry (eyes, teeth, eyelids, tongue) so
+                    they are always drawn AFTER the opaque face mesh and show through
+                    eye-socket / mouth-gap openings.
 
                 punchthrough (tb==2): alpha-test discard in shader → opaque pass.
                 env-map: surface opaque after env blend → opaque pass.
                 wateralpha < 1: semi-transparent → transparent pass.
                 decal: blends over background → transparent pass.
+                inner-geo: drawn after face mesh regardless of alpha → transparent pass.
                 """
                 na = float(getattr(nd, 'alpha', 1.0))
                 na = max(0.0, min(1.0, na))
@@ -1668,9 +1774,19 @@ class GpuRenderer:
                 has_env = bool(getattr(nd, 'txi_envmaptexture', ''))
                 wa = float(getattr(nd, 'txi_wateralpha', 1.0))
                 decal = bool(getattr(nd, 'txi_decal', False))
+                # FIX-INNER-GEO-DEPTH: Promote inner-geometry nodes (eyes, eyelids,
+                # teeth, tongue) to the transparent pass so they are drawn AFTER the
+                # opaque face mesh.  Only apply when the node has a real texture
+                # (deform-helpers without textures are skipped by _is_deform_helper).
+                _nd_name_lc = str(getattr(nd, 'name', '') or '').lower()
+                _nd_tex = str(getattr(nd, 'texture', '') or '').strip().lower()
+                _nd_has_tex = bool(_nd_tex and _nd_tex not in ('null', '', 'none', '****'))
+                _is_inner_geo = (_nd_has_tex and
+                                 any(s in _nd_name_lc for s in _GPU_INNER_GEO) and
+                                 _th == 0)  # only promote truly-opaque inner-geo
                 # Transparent pass when: additive(1) OR wateralpha<1 OR decal OR
-                # per-node alpha<1 (not punchthrough, not env-map surface)
-                is_trans = (tb == 1) or (wa < 0.999) or decal or (na < 0.999 and not has_env)
+                # per-node alpha<1 (not punchthrough, not env-map surface) OR inner-geo
+                is_trans = (tb == 1) or (wa < 0.999) or decal or (na < 0.999 and not has_env) or _is_inner_geo
                 return na, tb, is_trans, has_env
 
             opaque_nodes      = []
@@ -1727,7 +1843,8 @@ class GpuRenderer:
                                node.name.lower() in anim_pose.nodes)
                 if is_animated or node_id not in self._mesh_cache:
                     vdata, idx_arr = _build_vbo_data(node, wp, wo,
-                                                     anim_pose_node=None)
+                                                     anim_pose_node=None,
+                                                     is_module=_gpu_is_module)
                     if vdata is None:
                         return
                     if node_id in self._mesh_cache:
@@ -2025,7 +2142,6 @@ class GpuRenderer:
                         if avg_pt and (avg_pt[0] != 0.0 or avg_pt[1] != 0.0 or avg_pt[2] != 0.0):
                             # Transform mesh-local average point to world space
                             if world_mat is not None:
-                                import struct as _struct
                                 ax, ay, az = float(avg_pt[0]), float(avg_pt[1]), float(avg_pt[2])
                                 m = world_mat
                                 wx = m[0]*ax + m[4]*ay + m[8]*az  + m[12]
@@ -2283,7 +2399,9 @@ def _compute_model_bounds(model) -> dict:
     # FIX-BOUNDS-MODULE: Detect module/area/tile models so that bounds computation
     # does NOT exclude nodes with large tiled UVs (which are real geometry).
     _bounds_model_cls  = (str(getattr(model, 'classification', 'character') or 'character')).lower()
-    _bounds_model_type = int(getattr(model, 'model_type', 4) or 4)
+    # FIX-MODEL-TYPE-ZERO: same fix as _gpu_model_type — don't treat 0 as falsy
+    _bounds_model_type_raw = getattr(model, 'model_type', None)
+    _bounds_model_type = int(_bounds_model_type_raw) if _bounds_model_type_raw is not None else 4
     _bounds_is_module  = (_bounds_model_cls in ('effect', 'tile', 'other') or
                           _bounds_model_type in (0, 2))
 

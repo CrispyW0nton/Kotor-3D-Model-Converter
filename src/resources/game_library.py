@@ -629,21 +629,27 @@ class ModelLibraryEntry:
         # K1 module: m + 2-digit area code
         if r.startswith('m') and len(r) >= 3 and r[1:3].isdigit():
             area_key = r[1:3]
+            # FIX-K1-AREA-LABEL: Corrected KotOR I m## area code mappings.
+            # m01 = Endar Spire (end_m01aa Command Module, end_m01ab Starboard)
+            # m02 = Taris Upper City (tar_m02aa–af), NOT Endar Spire.
+            #   Previously both '01' and '02' were labeled 'Endar Spire' — wrong.
+            #   The Endar Spire has only 2 modules (m01aa/m01ab) which both use
+            #   the 'm01' prefix.  m02aa through m02af are all Taris Upper City.
+            # Source: DeadlyStream KotOR I Warp Code List + community module maps.
             _K1_SHORT = {
-                '01':'Endar Spire','02':'Endar Spire','03':'Taris','04':'Taris',
-                '05':'Taris Sewers','08':'Davik Estate','09':'Sith Base',
-                '10':'Vulkar Base','11':'Hidden Bek','12':'Ebon Hawk',
-                '13':'Jedi Enclave','14':'Dantooine','15':'Dantooine Ruins',
-                '16':'Sandral Estate','17':'Anchorhead','18':'Dune Sea',
-                '19':'Tatooine Temple','20':'Sand People Enclave',
+                '01':'Endar Spire','02':'Taris Upper City','03':'Taris Lower City',
+                '04':'Taris Undercity','05':'Taris Sewers','08':'Davik Estate',
+                '09':'Sith Base','10':'Vulkar Base','11':'Hidden Bek',
+                '12':'Ebon Hawk','13':'Jedi Enclave','14':'Dantooine',
+                '15':'Dantooine Ruins','16':'Sandral Estate','17':'Anchorhead',
+                '18':'Dune Sea','19':'Tatooine Temple','20':'Sand People Enclave',
                 '22':'Czerka Port','23':'Rwookrrorro','24':'Upper Shadowlands',
-                '25':'Lower Shadowlands','26':'Ahto City','27':'Sith Base',
+                '25':'Lower Shadowlands','26':'Ahto City','27':'Manaan Sith Base',
                 '28':'Hrakert Station','33':'Dreshdae','34':'Shyrack Caves',
                 '35':'Sith Academy','36':'Valley Dark Lords',
                 '37':'Tomb Ajunta Pall','38':'Tombs Marka/Tulak','39':'Tomb Naga Sadow',
-                '40':'Lev Prison Block','41':'Lev Command Deck/Unknown World',
-                '42':'Unknown World','43':'Rakatan Temple',
-                '44':'Star Forge/Ebon Hawk','45':'Yavin Station',
+                '40':'Leviathan','41':'Unknown World','42':'Unknown World',
+                '43':'Rakatan Temple','44':'Star Forge','45':'Yavin Station',
                 '47':'Cutscene/Stunt',
             }
             area_name = _K1_SHORT.get(area_key, f'K1-m{area_key}')
