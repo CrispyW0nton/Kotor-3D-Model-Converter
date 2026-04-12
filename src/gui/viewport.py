@@ -6400,11 +6400,25 @@ class FrameRenderer:
                 return False
 
         # ── Extreme UV coordinates → always a deform helper ───────────────────
+        # EXCEPTION: Module/area/tile models (classification 'effect'=0 or
+        # 'tile'=2) legitimately use UV coordinates far outside [−3, +3] for
+        # tiled wall/floor textures (e.g. U=−8.75 for LTS_logwal02, or
+        # V=−9.71 for wall geometry in Dantooine/Taris modules).  These are
+        # real renderable geometry, not deformation helpers.  Skip the extreme-UV
+        # helper check for module classifications.
+        # Reference: KotOR MDL mesh header — area/tile models tile textures
+        # over large surfaces using UV coordinates that match the surface scale
+        # in game units (e.g. a 9-unit wall maps to U≈9.0 with a 1-unit texture).
         if node.uvs:
-            has_extreme_uvs = any(abs(u) > 3.0 or abs(v) > 3.0
-                                  for u, v in node.uvs[:20])
-            if has_extreme_uvs:
-                return True
+            _model_cls_str = getattr(self.model, 'classification', 'character') if self.model else 'character'
+            _model_type_int = getattr(self.model, 'model_type', 4) if self.model else 4
+            _is_module_model = (_model_cls_str in ('effect', 'tile', 'other') or
+                                _model_type_int in (0, 2))
+            if not _is_module_model:
+                has_extreme_uvs = any(abs(u) > 3.0 or abs(v) > 3.0
+                                      for u, v in node.uvs[:20])
+                if has_extreme_uvs:
+                    return True
 
         # ── Non-skin _g / _G or _dum nodes are deform helpers — UNLESS they ───
         # are inner-geometry (eye, eyelid, teeth, tongue) nodes with a real

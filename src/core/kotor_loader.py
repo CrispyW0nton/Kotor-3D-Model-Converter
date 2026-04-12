@@ -141,6 +141,15 @@ def load_model_from_bytes(
         if raw_cls_byte is not None:
             model.classification = _CLS_MAP_BYTES.get(raw_cls_byte, 'character')
             model.model_type     = raw_cls_byte
+
+        # FIX-MDX-CORRUPT-POSITIONS: When MDX vertex data is incomplete/truncated
+        # (e.g. skin/tangent nodes in room models where the MDX block is shorter
+        # than vertex_count * stride), PyKotor reads garbage positions from MDX.
+        # The MDL vertex array always has the full correct positions.
+        # Repair by re-parsing MDL-only and replacing garbage position entries.
+        if mdx_bytes:
+            _repair_mdx_corrupt_positions(model, patched_bytes)
+
         log.debug("load_model_from_bytes: '%s'  nodes=%d  anims=%d",
                   model.name, len(model.all_nodes()), len(model.animations))
         return model
@@ -194,12 +203,119 @@ def load_model_from_file(
             model.model_type     = raw_cls_byte_f
         model.mdl_path = str(p)
         model.mdx_path = str(mdx_p) if mdx_p else ''
+
+        # FIX-MDX-CORRUPT-POSITIONS: Apply same fallback repair as load_model_from_bytes.
+        # Re-parse MDL-only to get clean vertex positions for nodes with corrupt MDX data.
+        if mdx_p is not None:
+            _repair_mdx_corrupt_positions(model, mdl_bytes_raw, patched_bytes=None)
+
         log.debug("load_model_from_file: '%s'  nodes=%d  anims=%d",
                   model.name, len(model.all_nodes()), len(model.animations))
         return model
     except Exception as exc:
         log.error("load_model_from_file: '%s' — %s", mdl_path, exc, exc_info=True)
         return None
+
+
+def _repair_mdx_corrupt_positions(
+    model: 'KotorModel',
+    mdl_bytes: bytes,
+    patched_bytes: Optional[bytes] = None,
+) -> None:
+    """Repair nodes whose vertex positions are corrupt from MDX truncation.
+
+    When the MDX file has incomplete data for a node (common in room models with
+    skin-style stride=76 nodes), PyKotor reads garbage positions beyond the valid
+    region.  The MDL vertex array always contains the complete correct positions.
+
+    This function:
+    1. Detects nodes with any corrupt vertex positions.
+    2. Re-parses the MDL-only (no MDX) to get clean positions from the vertex array.
+    3. Replaces corrupt position entries with the clean fallback values.
+    4. Pads/sanitizes normals and UVs so the node can render.
+
+    Called after _mdl_to_kotormodel() by both load_model_from_bytes and
+    load_model_from_file when MDX data was provided (and thus may be corrupt).
+    """
+    _GEOM_MAX_CHECK = 1e6
+    _corrupt_node_names: set = set()
+    for _n in model.all_nodes():
+        _verts = getattr(_n, 'vertices', [])
+        if not _verts:
+            continue
+        _bad = sum(1 for _vx, _vy, _vz in _verts
+                   if not (math.isfinite(_vx) and math.isfinite(_vy) and math.isfinite(_vz))
+                   or max(abs(_vx), abs(_vy), abs(_vz)) > _GEOM_MAX_CHECK)
+        if _bad > 0:
+            _corrupt_node_names.add(_n.name)
+
+    if not _corrupt_node_names:
+        return
+
+    log.debug("_repair_mdx_corrupt_positions: %d nodes have corrupt MDX positions, "
+              "re-parsing MDL-only for fallback", len(_corrupt_node_names))
+
+    src_bytes = patched_bytes if patched_bytes is not None else mdl_bytes
+    try:
+        pk_mdl_fallback = pk_read_mdl(src_bytes, source_ext=None)
+        _mdl_fallback_map: Dict[str, list] = {}
+        for _fbnode in pk_mdl_fallback.all_nodes():
+            _fbmesh = getattr(_fbnode, 'mesh', None)
+            if _fbmesh is None:
+                continue
+            _fbverts = getattr(_fbmesh, 'vertex_positions', None) or []
+            if _fbverts:
+                _mdl_fallback_map[_fbnode.name] = _fbverts
+
+        _patched = 0
+        for _n in model.all_nodes():
+            if _n.name not in _corrupt_node_names:
+                continue
+            _fb = _mdl_fallback_map.get(_n.name)
+            _cur_verts = getattr(_n, 'vertices', [])
+            if not _fb or len(_fb) != len(_cur_verts):
+                continue
+            # Replace corrupt positions with MDL-fallback values
+            _new_verts = []
+            _fixed = 0
+            for _fv, (_vx, _vy, _vz) in zip(_fb, _cur_verts):
+                _fx, _fy, _fz = float(_fv.x), float(_fv.y), float(_fv.z)
+                _is_orig_bad = (
+                    not (math.isfinite(_vx) and math.isfinite(_vy) and math.isfinite(_vz))
+                    or max(abs(_vx), abs(_vy), abs(_vz)) > _GEOM_MAX_CHECK
+                )
+                if _is_orig_bad:
+                    _new_verts.append((_fx, _fy, _fz))
+                    _fixed += 1
+                else:
+                    _new_verts.append((_vx, _vy, _vz))
+            _n.vertices = _new_verts
+
+            # Ensure normals length matches vertices
+            _norms = getattr(_n, 'normals', [])
+            if len(_norms) < len(_new_verts):
+                _n.normals = list(_norms) + [(0.0, 0.0, 1.0)] * (len(_new_verts) - len(_norms))
+
+            # Ensure UVs length matches vertices (corrupt UV verts get 0.5)
+            _uvs = getattr(_n, 'uvs', [])
+            if len(_uvs) < len(_new_verts):
+                _n.uvs = list(_uvs) + [(0.5, 0.5)] * (len(_new_verts) - len(_uvs))
+
+            # Sanitize any remaining extreme UV values (from partially-corrupt MDX UV data)
+            _UV_MAX_REPAIR = 1e6
+            _n.uvs = [
+                (u if math.isfinite(u) and abs(u) <= _UV_MAX_REPAIR else 0.5,
+                 v if math.isfinite(v) and abs(v) <= _UV_MAX_REPAIR else 0.5)
+                for (u, v) in (_n.uvs or [])
+            ]
+
+            log.debug("_repair_mdx_corrupt_positions: '%s' — %d/%d verts repaired from MDL",
+                      _n.name, _fixed, len(_new_verts))
+            _patched += 1
+
+        log.debug("_repair_mdx_corrupt_positions: repaired %d nodes total", _patched)
+    except Exception as _fb_exc:
+        log.debug("_repair_mdx_corrupt_positions: MDL-fallback parse failed — %s", _fb_exc)
 
 
 def patch_tpc_header(data: bytes) -> bytes:
@@ -516,15 +632,82 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
             return []
         return list(attr_val) if hasattr(attr_val, '__iter__') else []
 
+    # ── UV/Vertex sanity threshold ─────────────────────────────────────────────
+    # KotOR module geometry uses legitimately large tiled UVs (e.g. N_sithpraet
+    # pelvis U=[-13,+13]).  However, PyKotor can return astronomically large or
+    # non-finite values when the MDX binary contains a corrupt or misaligned
+    # data_offset (observed in generated test files: U≈1e28, V≈1e-38, etc.).
+    # These corrupt values come from reading the wrong byte region of the MDX file.
+    #
+    # Strategy:
+    #   • Values that are NaN, ±Inf, or |x| > _GEOM_MAX are corrupt → clamp/discard.
+    #   • Legitimate tiled UVs stay intact (viewport.py _UV_SENTINEL = 100.0).
+    #   • Vertex positions with |x|>10000 are also corrupt (KotOR worlds fit in ~500 units).
+    #
+    # If MORE than 50% of vertices are corrupt, the whole mesh has a bad MDX offset;
+    # we clear all UVs so the renderer shows the mesh as flat-shaded rather than
+    # invisibly broken.  This is preferable to the user seeing garbage geometry.
+    _GEOM_MAX = 1e6   # anything beyond ±1,000,000 is definitely corrupt
+    _UV_MAX   = 100.0 # matches viewport.py _UV_SENTINEL; preserves large-but-valid tiling
+
+    def _safe_float(x: float, fallback: float = 0.0) -> float:
+        """Return x if finite and within range, else fallback."""
+        if not math.isfinite(x) or abs(x) > _GEOM_MAX:
+            return fallback
+        return x
+
+    def _safe_uv(x: float, y: float) -> tuple:
+        """Return clamped UV pair; replace corrupt component with 0.5."""
+        xu = x if math.isfinite(x) and abs(x) <= _GEOM_MAX else 0.5
+        yu = y if math.isfinite(y) and abs(y) <= _GEOM_MAX else 0.5
+        return (xu, yu)
+
     # ── Vertex positions ─────────────────────────────────────────────────────
     # PyKotor: MDLMesh.vertex_positions → list[Vector3]
     vp = _safe_vec3_list(mesh.vertex_positions)
-    gr.vertices = [(float(v.x), float(v.y), float(v.z)) for v in vp]
+    raw_verts = []
+    corrupt_vert_count = 0
+    for v in vp:
+        vx, vy, vz = float(v.x), float(v.y), float(v.z)
+        if not (math.isfinite(vx) and math.isfinite(vy) and math.isfinite(vz)) or \
+                max(abs(vx), abs(vy), abs(vz)) > _GEOM_MAX:
+            corrupt_vert_count += 1
+            raw_verts.append((_safe_float(vx), _safe_float(vy), _safe_float(vz)))
+        else:
+            raw_verts.append((vx, vy, vz))
+    gr.vertices = raw_verts
+
+    # Detect mesh with corrupt MDX data: ANY corrupt vert → MDX positions are wrong.
+    # DO NOT clear geometry here — the outer load_model_from_bytes() will repair positions
+    # by re-parsing MDL-only and copying clean positions from the MDL vertex array.
+    # We set _mesh_is_mdx_corrupt to suppress UV loading for very-corrupt meshes
+    # (>50% corrupt) where UVs are also garbage. For partially-corrupt meshes, UVs
+    # are loaded and per-vert repair is done by the outer pass.
+    #
+    # IMPORTANT: Keep gr.vertices populated (even with some garbage values) so that
+    # the outer fallback repair can check len(gr.vertices) == len(fallback_verts).
+    # The outer pass replaces individual garbage entries with MDL fallback values.
+    _has_any_corrupt = corrupt_vert_count > 0
+    _mesh_is_mdx_corrupt = (len(raw_verts) > 0 and
+                            corrupt_vert_count > len(raw_verts) // 2)
+    if _has_any_corrupt:
+        log.debug("_read_mesh '%s': %d/%d verts have corrupt MDX positions (will repair)",
+                  gr.name, corrupt_vert_count, len(raw_verts))
+    if _mesh_is_mdx_corrupt:
+        # For severely-corrupt meshes (>50% bad), normals are also garbage — clear them.
+        # Vertices are kept for the outer fallback repair.
+        # Faces are loaded below (they reference MDL vertex indices, not MDX).
+        # UVs are skipped for >50% corrupt meshes (they're from MDX and also garbage).
+        gr.normals = []
 
     # ── Vertex normals ────────────────────────────────────────────────────────
     # PyKotor: MDLMesh.vertex_normals → list[Vector3]
-    vn = _safe_vec3_list(mesh.vertex_normals)
-    gr.normals = [(float(n.x), float(n.y), float(n.z)) for n in vn]
+    # Skip for severely-corrupt meshes (>50% bad verts — normals are also garbage).
+    # For partially-corrupt meshes (<50% bad), normals are loaded and used.
+    if not _mesh_is_mdx_corrupt:
+        vn = _safe_vec3_list(mesh.vertex_normals)
+        gr.normals = [(_safe_float(float(n.x)), _safe_float(float(n.y)), _safe_float(float(n.z), 1.0))
+                      for n in vn]
 
     # ── Tangents (MDX bump-map stream) ───────────────────────────────────────
     # NOTE: MDLMesh.tangent_space is a BOOLEAN FLAG in PyKotor (True = has
@@ -537,32 +720,41 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
     # PyKotor: MDLMesh.vertex_uv1  (= .vertex_uv property alias)
     # Use explicit None checks so that an empty-list attribute ([]) doesn't
     # fall through to a method-object lookup (which is not iterable).
-    _uv1_attr = getattr(mesh, 'vertex_uv1', None)
-    if _uv1_attr is None or isinstance(_uv1_attr, bool):
-        _uv1_raw = getattr(mesh, 'vertex_uv', None)
-        # If the fallback is callable (a method), call it; otherwise use as-is
-        if callable(_uv1_raw):
-            uv1 = _uv1_raw()
+    # FIX-UV-CORRUPT: If >50% of verts are corrupt, skip UV loading — UVs are
+    # also garbage. The outer load_model_from_bytes() will later patch the vertices
+    # from the MDL fallback and fill UVs with 0.5 (flat-shaded but visible geometry).
+    if not _mesh_is_mdx_corrupt:
+        _uv1_attr = getattr(mesh, 'vertex_uv1', None)
+        if _uv1_attr is None or isinstance(_uv1_attr, bool):
+            _uv1_raw = getattr(mesh, 'vertex_uv', None)
+            # If the fallback is callable (a method), call it; otherwise use as-is
+            if callable(_uv1_raw):
+                uv1 = _uv1_raw()
+            else:
+                uv1 = _safe_vec2_list(_uv1_raw)
         else:
-            uv1 = _safe_vec2_list(_uv1_raw)
-    else:
-        uv1 = _uv1_attr
-    gr.uvs = [(float(u.x), float(u.y)) for u in (uv1 or [])]
+            uv1 = _uv1_attr
+        # Sanitize: replace NaN/Inf/extreme UV components with 0.5.
+        # Legitimate tiled UVs (e.g. ±13) are kept intact.
+        gr.uvs = [_safe_uv(float(u.x), float(u.y)) for u in (uv1 or [])]
 
-    # ── Secondary / lightmap UVs ─────────────────────────────────────────────
-    # PyKotor: MDLMesh.vertex_uv2
-    _uv2_attr = getattr(mesh, 'vertex_uv2', None)
-    uv2 = _safe_vec2_list(_uv2_attr)
-    gr.uvs_2  = [(float(u.x), float(u.y)) for u in uv2]
-    gr.uvs_lm = list(gr.uvs_2)   # same data — lightmap consumer alias
+        # ── Secondary / lightmap UVs ─────────────────────────────────────────────
+        # PyKotor: MDLMesh.vertex_uv2
+        _uv2_attr = getattr(mesh, 'vertex_uv2', None)
+        uv2 = _safe_vec2_list(_uv2_attr)
+        gr.uvs_2  = [_safe_uv(float(u.x), float(u.y)) for u in uv2]
+        gr.uvs_lm = list(gr.uvs_2)   # same data — lightmap consumer alias
 
     # ── Faces + per-face UV indices + face materials ──────────────────────────
     # PyKotor: MDLFace fields — v1/v2/v3 (vertex idx), t1/t2/t3 (UV idx, -1=same as vertex)
     # MDLFace.material: lower 5 bits = material slot (& 0x1F strips upper garbage bits)
+    # Always load faces — they reference MDL vertex indices which are correct regardless
+    # of MDX corruption. The outer repair will fix positions for individual bad verts.
     gr.faces     = []
     gr.face_uvs  = []
     gr.face_mats = []
-    for f in (mesh.faces or []):
+    _face_iter = mesh.faces or []
+    for f in _face_iter:
         v1, v2, v3 = int(f.v1), int(f.v2), int(f.v3)
         gr.faces.append((v1, v2, v3))
         t1 = int(f.t1) if getattr(f, 't1', None) is not None and f.t1 >= 0 else v1
@@ -681,7 +873,13 @@ def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
     for bv in (getattr(skin, 'vertex_bones', None) or []):
         vsd = VertexSkinData()
         for j in range(4):
-            local_idx = int(float(bv.vertex_indices[j]))
+            try:
+                _raw_idx = float(bv.vertex_indices[j])
+                if not math.isfinite(_raw_idx):
+                    continue
+                local_idx = int(_raw_idx)
+            except (TypeError, ValueError, IndexError):
+                continue
             w         = float(bv.vertex_weights[j])
             if local_idx < 0 or local_idx >= n_bones:
                 continue
