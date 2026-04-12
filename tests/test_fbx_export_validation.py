@@ -2225,8 +2225,14 @@ class TestFBXUnrealPipeline:
 
     def test_rotation_curves_exported_as_euler(self):
         """
-        Unreal imports rotation from FBX as Euler XYZ degrees, not quaternions.
-        Lcl Rotation property connections and R|X/Y/Z curve nodes must be present.
+        Unreal/Blender import rotation from FBX as Euler XYZ degrees, not quaternions.
+        Lcl Rotation property connection, a combined 'R' AnimationCurveNode (FBX 7.4
+        standard: one node per channel with d|X, d|Y, d|Z sub-properties) and three
+        separate AnimationCurve objects connected via d|X/d|Y/d|Z must be present.
+
+        Note: per-axis naming like 'R|X' is the old pre-fix format.  The corrected
+        FBX 7.4-compliant format uses a single 'R' CurveNode with Properties70 entries
+        for d|X, d|Y, d|Z, and three AnimationCurve objects connected to each axis.
         """
         import math
         from core.model_data import Animation
@@ -2259,11 +2265,19 @@ class TestFBXUnrealPipeline:
 
         ok, content = self._export_and_read(model)
         assert ok
+        # Lcl Rotation connection must be present (rotation converted to Euler)
         assert '"Lcl Rotation"' in content, \
             "Lcl Rotation property missing — rotation not converted to Euler"
-        assert 'R|X' in content, "R|X curve node missing"
-        assert 'R|Y' in content, "R|Y curve node missing"
-        assert 'R|Z' in content, "R|Z curve node missing"
+        # FBX 7.4 standard: combined 'R' AnimationCurveNode (not per-axis 'R|X' style)
+        assert '"R",' in content, \
+            "Combined 'R' AnimationCurveNode missing — exporter must use FBX 7.4 format"
+        # The 'R' CurveNode must have d|X, d|Y, d|Z sub-properties in Properties70
+        assert '"d|X"' in content, "d|X axis property missing in rotation CurveNode"
+        assert '"d|Y"' in content, "d|Y axis property missing in rotation CurveNode"
+        assert '"d|Z"' in content, "d|Z axis property missing in rotation CurveNode"
+        # Three separate AnimationCurve objects connected via d|X/d|Y/d|Z
+        assert content.count('AnimationCurve:') >= 3, \
+            "Expected at least 3 AnimationCurve entries (one per axis)"
 
 
 if __name__ == "__main__":

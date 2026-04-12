@@ -622,138 +622,173 @@ class PropertiesPanel(tk.Frame):
 
 # ── Category helpers ──────────────────────────────────────────────────────
 
-# KotOR K1 module/area model alpha-prefixes
+# KotOR K1 module/area model alpha-prefixes (warp-code prefix patterns)
+# Based on the canonical KotOR I warp code list from DeadlyStream
 _MODULE_PREFIXES = (
-    'lev_', 'man_', 'kas_', 'dan_', 'tat_', 'kor_', 'bek_', 'sth_',
+    # K1 location prefixes (end_=Endar Spire, tar_=Taris, danm=Dantooine, tat_=Tatooine)
+    'end_', 'tar_', 'danm', 'tat_', 'kas_', 'manm', 'korr_', 'lev_',
+    'unk_', 'sta_', 'ebo_', 'liv_',
+    # Legacy/variant prefixes still present in some builds
+    'lev_', 'man_', 'kas_', 'dan_', 'kor_', 'bek_', 'sth_',
     'fsh_', 'und_', 'endar', 'taris', 'manaan', 'kashyyyk', 'korriban',
     'tatooine', 'leviathan', 'starforge', 'unknownworld', 'dantooine',
-    'ebk', 'pol_', 'per_',
+    'ebk', 'pol_', 'per_', 'stunt_',
 )
 
-# ── K2 Module area-code → display name mapping ────────────────────────────
-# Format: 3-digit area code prefix → (location_abbreviation, display_name)
+# ── K2 (TSL) Module area-code → display name mapping ─────────────────────
+# Warp codes sourced from DeadlyStream TSL Warp Code List
+# Format: 3-digit area code prefix → display_name
 _K2_AREA_NAMES: Dict[str, str] = {
     '000': 'Test Area',
-    '001': 'Ebon Hawk (Intro)',
-    '002': 'Ebon Hawk (Fly)',
-    '003': 'Ebon Hawk',
-    '101': 'Peragus II',
-    '102': 'Peragus (Administration)',
-    '103': 'Peragus (Fuel Depot)',
-    '104': 'Peragus (Dormitories)',
-    '105': 'Peragus (Asteroid Exterior)',
-    '106': 'Peragus (Mining Tunnels)',
-    '107': 'Peragus (Hangar Bay)',
-    '151': 'Harbinger',
-    '152': 'Harbinger (Command Deck)',
-    '153': 'Harbinger (Crew Quarters)',
-    '201': 'Telos (Citadel Station)',
-    '202': 'Telos (Entertainment Module)',
-    '203': 'Telos (Residential East)',
-    '204': 'Telos (Residential West)',
-    '207': 'Telos (Dock Module)',
-    '208': 'Telos (Military Base)',
-    '209': 'Telos (Restoration Zone)',
-    '211': 'Telos (Surface)',
-    '220': 'Telos (Polar Plateau)',
-    '221': 'Telos (Polar Academy)',
-    '222': 'Telos (Polar Exterior)',
-    '231': 'Telos (Underground Base)',
-    '232': 'Telos (Restoration Zone 2)',
-    '233': 'Telos (Communication)',
-    '261': 'Telos (HK Factory Entrance)',
-    '262': 'Telos (HK Factory)',
-    '298': 'Telos (Atris Academy)',
-    '299': 'Telos (Atris Academy 2)',
-    '301': 'Nar Shaddaa (Docking)',
-    '302': 'Nar Shaddaa (Refugee Sector)',
-    '303': 'Nar Shaddaa (Entertainment)',
-    '304': 'Nar Shaddaa (Goto Yacht)',
-    '305': 'Nar Shaddaa (Refugee Landing)',
-    '306': 'Nar Shaddaa (Hangar)',
-    '351': 'Nar Shaddaa (Goto\'s Yacht)',
-    '352': 'Nar Shaddaa (Yacht Interior)',
-    '371': 'Nar Shaddaa (Bonus Area)',
-    '400': 'Dxun (Jungle)',
-    '401': 'Dxun (Mandalorian Ruins)',
-    '402': 'Dxun (Jungle Camp)',
-    '403': 'Dxun (Mandalorian Cache)',
-    '410': 'Dxun (Jungle Clearing)',
-    '411': 'Dxun (Sith Tomb)',
-    '421': 'Onderon (Palace District)',
-    '501': 'Onderon (Merchant District)',
-    '502': 'Onderon (Cantina)',
-    '503': 'Onderon (Sky Ramp)',
-    '504': 'Onderon (Beast Rider Enclave)',
-    '505': 'Onderon (Royal Palace)',
-    '506': 'Onderon (Palace Interior)',
-    '510': 'Onderon (City)',
-    '511': 'Onderon (Spaceport)',
-    '512': 'Onderon (Iziz Cantina)',
-    '601': 'Dantooine (Enclave Ruins)',
-    '602': 'Dantooine (Khoonda Plains)',
-    '604': 'Dantooine (Crystal Cave)',
-    '605': 'Dantooine (Jedi Enclave)',
-    '610': 'Dantooine (Khoonda)',
-    '650': 'Dantooine (Sublevel)',
-    '701': 'Korriban (Valley of the Dark Lords)',
-    '702': 'Korriban (Sith Academy)',
-    '710': 'Korriban (Tomb of Naga Sadow)',
-    '711': 'Korriban (Tomb of Ludo Kressh)',
-    '801': 'Malachor (Surface)',
-    '802': 'Malachor (Depths)',
-    '803': 'Malachor (Trayus Academy Entrance)',
-    '804': 'Malachor (Trayus Academy)',
-    '805': 'Malachor (Trayus Crescent)',
-    '806': 'Malachor (Trayus Core)',
-    '807': 'Malachor (Trayus Proving Grounds)',
-    '851': 'Nihilus Ship (Ravager)',
-    '852': 'Ravager (Bridge)',
+    '001': 'Ebon Hawk – Prologue Interior (001EBO)',
+    '002': 'Ebon Hawk – Prologue Exterior Hull (002EBO)',
+    '003': 'Ebon Hawk – Interior (003EBO)',
+    '004': 'Ebon Hawk – Red Eclipse Invasion (004EBO)',
+    '005': 'Ebon Hawk – Escape from Peragus (005EBO)',
+    '006': 'Ebon Hawk – Interior Cutscene (006EBO)',
+    '007': 'Ebon Hawk – Interior Cutscene 2 (007EBO)',
+    '012': 'Ebon Hawk – Red Eclipse Boarding (012EBO/TSLRCM)',
+    '020': 'Ebon Hawk – Extended Enclave (020EBO)',
+    '101': 'Peragus – Administration Level (101PER)',
+    '102': 'Peragus – Mining Tunnels (102PER)',
+    '103': 'Peragus – Fuel Depot (103PER)',
+    '104': 'Peragus – Asteroid Exterior (104PER)',
+    '105': 'Peragus – Dormitories (105PER)',
+    '106': 'Peragus – Hangar Bay (106PER)',
+    '107': 'Peragus – Turret Minigame (107PER)',
+    '151': 'Harbinger – Command Deck (151HAR)',
+    '152': 'Harbinger – Crew Quarters (152HAR)',
+    '153': 'Harbinger – Engine Deck (153HAR)',
+    '154': 'Harbinger – Command Deck Cutscene (154HAR)',
+    '201': 'Citadel Station – Dock Module (201TEL)',
+    '202': 'Citadel Station – Entertainment (202TEL)',
+    '203': 'Citadel Station – Residential 082 East (203TEL)',
+    '204': 'Citadel Station – Residential 082 West (204TEL)',
+    '205': 'Citadel Station – Carth Onasi Cutscene (205TEL)',
+    '207': 'Citadel Station – Cantina (207TEL)',
+    '208': 'Citadel Station – Bumani Exchange (208TEL)',
+    '209': 'Citadel Station – Czerka Offices (209TEL)',
+    '211': 'Citadel Station – Swoop Track (211TEL)',
+    '220': 'Citadel Station – Suburban (220TEL)',
+    '221': 'Citadel Station – Suburban (221TEL)',
+    '222': 'Citadel Station – Entertainment Module 081 (222TEL)',
+    '231': 'Telos – Restoration Zone (231TEL)',
+    '232': 'Telos – Underground Base (232TEL)',
+    '233': 'Telos – Czerka Site (233TEL)',
+    '235': 'Telos – Orbital Shuttle (235TEL/TSLRCM)',
+    '261': 'Telos – Polar Plateau (261TEL)',
+    '262': 'Telos – Secret Atris Academy (262TEL)',
+    '298': 'Telos – Military Base Sub-Level / HK Factory (298TEL/TSLRCM)',
+    '299': 'Telos – HK Manufacturing Plant (299TEL/TSLRCM)',
+    '301': 'Nar Shaddaa – Refugee Landing Pad (301NAR)',
+    '302': 'Nar Shaddaa – Refugee Quad (302NAR)',
+    '303': 'Nar Shaddaa – Docks (303NAR)',
+    '304': 'Nar Shaddaa – Jekk\'Jekk Tarr (304NAR)',
+    '305': 'Nar Shaddaa – Jekk\'Jekk Tarr Tunnels (305NAR)',
+    '306': 'Nar Shaddaa – Entertainment Promenade (306NAR)',
+    '307': 'Nar Shaddaa – Promenade Zhug Brothers (307NAR/TSLRCM)',
+    '350': 'Nar Shaddaa – Refugee Landing Pad Battle (350NAR/TSLRCM)',
+    '351': 'Nar Shaddaa – Goto\'s Yacht (351NAR)',
+    '352': 'Nar Shaddaa – Goto Cutscene (352NAR)',
+    '371': 'Nar Shaddaa – Swoop Track (371NAR)',
+    '401': 'Dxun – Jungle Landing (401DXN)',
+    '402': 'Dxun – Jungle (402DXN)',
+    '403': 'Dxun – Mandalorian Ruins (403DXN)',
+    '404': 'Dxun – Mandalorian Cache (404DXN)',
+    '410': 'Dxun – Jungle Tomb (410DXN)',
+    '411': 'Dxun – Sith Tomb (411DXN)',
+    '421': 'Dxun – Turret Minigame (421DXN)',
+    '501': 'Onderon – Iziz Spaceport (501OND)',
+    '502': 'Onderon – Iziz Merchant Quarter (502OND)',
+    '503': 'Onderon – Iziz Cantina (503OND)',
+    '504': 'Onderon – Sky Ramp (504OND)',
+    '505': 'Onderon – Turret Minigame (505OND)',
+    '506': 'Onderon – Royal Palace (506OND)',
+    '510': 'Onderon – Swoop Track (510OND)',
+    '511': 'Onderon – Merchant Quarter Invasion (511OND)',
+    '512': 'Onderon – Iziz Western Square (512OND)',
+    '601': 'Dantooine – Khoonda Plains (601DAN)',
+    '602': 'Dantooine – Khoonda (602DAN)',
+    '603': 'Dantooine – Khoonda Plains Cutscenes (603DAN)',
+    '604': 'Dantooine – Crystal Cave (604DAN)',
+    '605': 'Dantooine – Enclave Courtyard (605DAN)',
+    '610': 'Dantooine – Enclave Sublevel (610DAN)',
+    '650': 'Dantooine – Rebuilt Jedi Enclave (650DAN)',
+    '701': 'Korriban – Valley of the Dark Lords (701KOR)',
+    '702': 'Korriban – Sith Academy (702KOR)',
+    '710': 'Korriban – Shyrack Cave (710KOR)',
+    '711': 'Korriban – Secret Tomb (711KOR)',
+    '851': 'Ravager – Command Deck (851NIH)',
+    '852': 'Ravager – Bridge (852NIH)',
+    '853': 'Ravager – Nihilus/Visas Cutscene (853NIH)',
+    '901': 'Malachor V – Surface (901MAL)',
+    '902': 'Malachor V – Depths (902MAL)',
+    '903': 'Malachor V – Trayus Academy (903MAL)',
+    '904': 'Malachor V – Trayus Core (904MAL)',
+    '905': 'Malachor V – Trayus Crescent (905MAL)',
+    '906': 'Malachor V – Trayus Proving Grounds (906MAL)',
+    '907': 'Malachor V – Kreia/Sion Cutscene (907MAL)',
+    '908': 'Malachor V – Trayus Academy (908MAL/TSLRCM)',
+    '909': 'Malachor V – Trayus Academy 2 (909MAL/TSLRCM)',
+    '950': 'Ebon Hawk – Escape From Telos Cutscene (950COR)',
+    '952': 'Coruscant – Jedi Temple (952COR)',
+    '953': 'Coruscant – Jedi Temple Council (953COR)',
+    '954': 'Coruscant – Jedi Temple Landing Pad (954COR)',
 }
 
-# ── K1 Module area-code → display name mapping ────────────────────────────
-# Format: 'm' + 2-digit code prefix → display_name
+# ── K1 (KotOR I) Module area-code → display name mapping ─────────────────
+# Warp codes sourced from DeadlyStream KotOR I Warp Code List
+# Format: 'm' + 2-digit code prefix → display_name  (warp code in parentheses)
 _K1_AREA_NAMES: Dict[str, str] = {
-    'm01': 'Endar Spire (Command Module)',
-    'm02': 'Endar Spire (Starboard Section)',
-    'm03': 'Taris (Apartments/Streets)',
-    'm04': 'Taris (Undercity Entrance)',
-    'm05': 'Taris (Lower City)',
-    'm08': 'Taris (Undercity)',
-    'm09': 'Taris (Sewers)',
-    'm10': 'Taris (Sith Base)',
-    'm11': 'Taris (Hidden Bek Base)',
-    'm12': 'Dantooine (Enclave)',
-    'm13': 'Dantooine (Courtyard)',
-    'm14': 'Dantooine (Grove/Ruins)',
-    'm15': 'Dantooine (Plains)',
-    'm16': 'Tatooine (Anchorhead)',
-    'm17': 'Tatooine (Dune Sea)',
-    'm18': 'Tatooine (Sand People Enclave)',
-    'm19': 'Tatooine (Krayt Dragon Cave)',
-    'm20': 'Kashyyyk (Czerka Port)',
-    'm21': 'Kashyyyk (The Great Walkway)',
-    'm22': 'Kashyyyk (Village of Rwookrrorro)',
-    'm23': 'Kashyyyk (Upper Shadowlands)',
-    'm24': 'Kashyyyk (Lower Shadowlands)',
-    'm25': 'Manaan (Ahto City West)',
-    'm26': 'Manaan (Ahto City East/Sith Base)',
-    'm27': 'Manaan (Underwater)',
-    'm28': 'Korriban (Dreshdae/Sith Academy)',
-    'm31': 'Leviathan (Prison Block)',
-    'm33': 'Leviathan (Command Deck)',
-    'm34': 'Leviathan (Bridge)',
-    'm35': 'Leviathan (Hangar)',
-    'm36': 'Unknown World (Beach)',
-    'm37': 'Unknown World (Temple Exterior)',
-    'm38': 'Unknown World (Temple Interior)',
-    'm39': 'Unknown World (Temple Summit)',
-    'm40': 'Star Forge (Deck 1)',
-    'm41': 'Star Forge (Deck 2)',
-    'm42': 'Star Forge (Deck 3)',
-    'm43': 'Star Forge (Command Module)',
-    'm44': 'Ebon Hawk',
-    'm45': 'Yavin Space Station',
+    # Endar Spire
+    'm01': 'Endar Spire – Command Module (end_m01aa)',
+    'm02': 'Endar Spire – Starboard Section (end_m01ab)',
+    # Taris
+    'm03': 'Taris – Upper City / Apartments (tar_m02aa–af)',
+    'm04': 'Taris – Undercity (tar_m04aa)',
+    'm05': 'Taris – Lower Sewers (tar_m05aa/ab)',
+    'm08': 'Taris – Davik\'s Estate (tar_m08aa)',
+    'm09': 'Taris – Sith Base (tar_m09aa/ab)',
+    'm10': 'Taris – Black Vulkar Base (tar_m10aa–ac)',
+    'm11': 'Taris – Hidden Bek Base (tar_m11aa/ab)',
+    # Dantooine
+    'm12': 'Dantooine – Ebon Hawk (ebo_m12aa/ab)',
+    'm13': 'Dantooine – Jedi Enclave (danm13)',
+    'm14': 'Dantooine – Courtyard / Grounds (danm14aa–ae)',
+    'm15': 'Dantooine – Ruins (danm15)',
+    'm16': 'Dantooine – Sandral Estate (danm16)',
+    # Tatooine
+    'm17': 'Tatooine – Anchorhead (tat_m17aa–ag)',
+    'm18': 'Tatooine – Dune Sea / Sand People (tat_m18aa–ac)',
+    'm19': 'Tatooine – Temple (m19aa – lost module)',
+    'm20': 'Tatooine – Sand People Enclave (tat_m20aa)',
+    # Kashyyyk
+    'm22': 'Kashyyyk – Czerka Port / Great Walkway (kas_m22aa/ab)',
+    'm23': 'Kashyyyk – Village of Rwookrrorro (kas_m23aa–ad)',
+    'm24': 'Kashyyyk – Upper Shadowlands (kas_m24aa)',
+    'm25': 'Kashyyyk – Lower Shadowlands (kas_m25aa)',
+    # Manaan
+    'm26': 'Manaan – Ahto City (manm26aa–ae)',
+    'm27': 'Manaan – Sith Base (manm27aa)',
+    'm28': 'Manaan – Hrakert Station / Sea Floor (manm28aa–ad)',
+    # Korriban
+    'm33': 'Korriban – Dreshdae / Sith Academy Entrance (korr_m33aa/ab)',
+    'm34': 'Korriban – Shyrack Caves (korr_m34aa)',
+    'm35': 'Korriban – Sith Academy (korr_m35aa)',
+    'm36': 'Korriban – Valley of Dark Lords (korr_m36aa)',
+    'm37': 'Korriban – Tomb of Ajunta Pall (korr_m37aa)',
+    'm38': 'Korriban – Tombs of Marka Ragnos / Tulak Hord (korr_m38aa/ab)',
+    'm39': 'Korriban – Tomb of Naga Sadow (korr_m39aa)',
+    # Leviathan
+    'm40': 'Leviathan – Prison Block (lev_m40aa)',
+    'm41': 'Leviathan – Command Deck (lev_m40ab) / Unknown World (unk_m41)',
+    'm42': 'Unknown World – Elder / Rakatan Settlement (unk_m42aa/unk_m43aa)',
+    'm43': 'Unknown World – Rakatan Temple (unk_m44aa/ab)',
+    # Star Forge
+    'm44': 'Star Forge – Decks 1–4 (sta_m45aa–ad) / Ebon Hawk (ebo_m40ad)',
+    'm45': 'Yavin Space Station (liv_m99aa)',
+    # Stunt / cutscene modules
+    'm47': 'Cutscene / Stunt Module (stunt_)',
 }
 
 # KotOR item/placeable/weapon/armor prefixes
@@ -761,6 +796,255 @@ _ITEM_PREFIXES = (
     'i_', 'plc_', 'placeables', 'w_', 'a_', 'g_',
     'upcryst', 'upcasing', 'swoop',
 )
+
+# ── K1 module resref → precise warp-code name mapping ─────────────────────
+# Used for tooltip display in the library panel.  Maps the full resref prefix
+# to the canonical warp-code area name so users can identify each model file.
+# Based on the DeadlyStream KotOR I Warp Code List.
+_K1_WARP_CODES = {
+    # Endar Spire
+    'end_m01aa': 'Command Module',
+    'end_m01ab': 'Starboard Section',
+    # Taris
+    'tar_m02aa': 'Upper City – South Apartments',
+    'tar_m02ab': 'Upper City North',
+    'tar_m02ac': 'Upper City South',
+    'tar_m02ad': 'North Apartments',
+    'tar_m02ae': 'Upper City Cantina',
+    'tar_m02af': 'Hideout',
+    'tar_m03aa': 'Lower City',
+    'tar_m03ab': 'Lower City Apartments',
+    'tar_m03ad': 'Lower City Apartments (alt)',
+    'tar_m03ae': "Javyar's Cantina",
+    'tar_m03af': 'Swoop Platform',
+    'tar_m03mg': 'Taris Swoop Minigame',
+    'tar_m04aa': 'Undercity',
+    'tar_m05aa': 'Lower Sewers',
+    'tar_m05ab': 'Upper Sewers',
+    'tar_m08aa': "Davik's Estate",
+    'tar_m09aa': 'Sith Base',
+    'tar_m09ab': 'Sith Base (upper)',
+    'tar_m10aa': 'Black Vulkar Base',
+    'tar_m10ab': 'Black Vulkar Base (unused)',
+    'tar_m10ac': 'Black Vulkar Base (garage)',
+    'tar_m11aa': 'Hidden Bek Base',
+    'tar_m11ab': 'Hidden Bek Base (alt)',
+    # Dantooine
+    'danm13': 'Jedi Enclave',
+    'danm14aa': 'Courtyard',
+    'danm14ab': 'Matale Grounds',
+    'danm14ac': 'Grove',
+    'danm14ad': 'Sandral Grounds',
+    'danm14ae': 'Crystal Caves',
+    'danm15': 'Ruins',
+    'danm16': 'Sandral Estate',
+    # Tatooine
+    'tat_m17aa': 'Anchorhead',
+    'tat_m17ab': 'Anchorhead – Docking Bay',
+    'tat_m17ac': 'Anchorhead – Droid Shop',
+    'tat_m17ad': 'Anchorhead – Hunting Lodge',
+    'tat_m17ae': 'Anchorhead – Swoop Registration',
+    'tat_m17af': 'Anchorhead – Cantina',
+    'tat_m17ag': 'Anchorhead – Czerka Office',
+    'tat_m17mg': 'Tatooine Swoop Minigame',
+    'tat_m18aa': 'Dune Sea',
+    'tat_m18ab': 'Sand People Territory',
+    'tat_m18ac': 'Eastern Dune Sea',
+    'tat_m20aa': 'Sand People Enclave',
+    # Kashyyyk
+    'kas_m22aa': 'Czerka Landing Port',
+    'kas_m22ab': 'The Great Walkway',
+    'kas_m23aa': 'Village of Rwookrrorro',
+    'kas_m23ab': "Worrwill's Home",
+    'kas_m23ac': "Worrroznor's Home",
+    'kas_m23ad': "Chieftain's Hall",
+    'kas_m24aa': 'Upper Shadowlands',
+    'kas_m25aa': 'Lower Shadowlands',
+    # Manaan
+    'manm26aa': 'Ahto West',
+    'manm26ab': 'Ahto East',
+    'manm26ac': 'West Central',
+    'manm26ad': 'Docking Bay',
+    'manm26ae': 'East Central',
+    'manm26mg': 'Manaan Swoop Minigame',
+    'manm27aa': 'Sith Base',
+    'manm28aa': 'Hrakert Station',
+    'manm28ab': 'Sea Floor',
+    'manm28ac': 'Kolto Control',
+    'manm28ad': 'Hrakert Rift',
+    # Korriban
+    'korr_m33aa': 'Dreshdae',
+    'korr_m33ab': 'Sith Academy Entrance',
+    'korr_m34aa': 'Shyrack Caves',
+    'korr_m35aa': 'Sith Academy',
+    'korr_m36aa': 'Valley of Dark Lords',
+    'korr_m37aa': 'Tomb of Ajunta Pall',
+    'korr_m38aa': 'Tomb of Marka Ragnos',
+    'korr_m38ab': 'Tomb of Tulak Hord',
+    'korr_m39aa': 'Tomb of Naga Sadow',
+    # Leviathan
+    'lev_m40aa': 'Prison Block',
+    'lev_m40ab': 'Command Deck',
+    'lev_m40ac': 'Hangar',
+    'lev_m40ad': 'Bridge',
+    # Yavin Station
+    'liv_m99aa': 'Yavin Station',
+    # Ebon Hawk
+    'ebo_m12aa': 'Ebon Hawk – Bridge',
+    'ebo_m12ab': 'Ebon Hawk – Turret Minigame',
+    'ebo_m40ad': 'Ebon Hawk – Post-Leviathan',
+    'ebo_m41aa': 'Ebon Hawk – Post-Lehon Crash',
+    # Unknown World
+    'unk_m41aa': 'Unknown World – Central Beach',
+    'unk_m41ab': 'Unknown World – South Beach',
+    'unk_m41ac': 'Unknown World – North Beach',
+    'unk_m41ad': 'Unknown World – Temple Exterior',
+    'unk_m42aa': 'Unknown World – Elder Settlement',
+    'unk_m43aa': 'Unknown World – Rakatan Settlement',
+    'unk_m44aa': 'Unknown World – Temple Main Floor',
+    'unk_m44ab': 'Unknown World – Temple Catacombs',
+    # Star Forge
+    'sta_m45aa': 'Star Forge – Deck 1',
+    'sta_m45ab': 'Star Forge – Deck 2',
+    'sta_m45ac': 'Star Forge – Deck 3',
+    'sta_m45ad': 'Star Forge – Deck 4',
+}
+
+
+# ── K2 (TSL) module resref → precise area name mapping ───────────────────────
+# Maps the full module resref (as it appears in modules/ directory or BIF key)
+# to a human-readable area name.  Format: 3-digit area code + planet abbreviation
+# + optional variant suffix (e.g., '101per_01a' → 'Peragus – Administration Level').
+# Source: DeadlyStream TSL Warp Code List and community documentation.
+# Used by _get_module_area_display() for tooltip display in the library panel.
+_K2_WARP_CODES: dict = {
+    # Ebon Hawk (000–012, 020)
+    '001ebo': 'Ebon Hawk – Prologue Interior',
+    '002ebo': 'Ebon Hawk – Prologue Exterior Hull',
+    '003ebo': 'Ebon Hawk – Interior',
+    '004ebo': 'Ebon Hawk – Red Eclipse Invasion',
+    '005ebo': 'Ebon Hawk – Escape from Peragus',
+    '006ebo': 'Ebon Hawk – Interior Cutscene',
+    '007ebo': 'Ebon Hawk – Interior Cutscene 2',
+    '012ebo': 'Ebon Hawk – Red Eclipse Boarding (TSLRCM)',
+    '020ebo': 'Ebon Hawk – Extended Enclave (TSLRCM)',
+    # Peragus (101–107)
+    '101per': 'Peragus – Administration Level',
+    '102per': 'Peragus – Mining Tunnels',
+    '103per': 'Peragus – Fuel Depot',
+    '104per': 'Peragus – Asteroid Exterior',
+    '105per': 'Peragus – Dormitories',
+    '106per': 'Peragus – Hangar Bay',
+    '107per': 'Peragus – Turret Minigame',
+    # Harbinger (151–154)
+    '151har': 'Harbinger – Command Deck',
+    '152har': 'Harbinger – Crew Quarters',
+    '153har': 'Harbinger – Engine Deck',
+    '154har': 'Harbinger – Command Deck Cutscene',
+    # Telos / Citadel Station (201–235, 261–299)
+    '201tel': 'Citadel Station – Dock Module',
+    '202tel': 'Citadel Station – Entertainment',
+    '203tel': 'Citadel Station – Residential 082 East',
+    '204tel': 'Citadel Station – Residential 082 West',
+    '205tel': 'Citadel Station – Carth Onasi Cutscene',
+    '207tel': 'Citadel Station – Cantina',
+    '208tel': 'Citadel Station – Bumani Exchange',
+    '209tel': 'Citadel Station – Czerka Offices',
+    '211tel': 'Citadel Station – Swoop Track',
+    '220tel': 'Citadel Station – Suburban (220)',
+    '221tel': 'Citadel Station – Suburban (221)',
+    '222tel': 'Citadel Station – Entertainment Module 081',
+    '231tel': 'Telos – Restoration Zone',
+    '232tel': 'Telos – Underground Base',
+    '233tel': 'Telos – Czerka Site',
+    '235tel': 'Telos – Orbital Shuttle (TSLRCM)',
+    '261tel': 'Telos – Polar Plateau',
+    '262tel': 'Telos – Secret Atris Academy',
+    '298tel': 'Telos – Military Base Sub-Level / HK Factory (TSLRCM)',
+    '299tel': 'Telos – HK Manufacturing Plant (TSLRCM)',
+    # Nar Shaddaa (301–371)
+    '301nar': 'Nar Shaddaa – Refugee Landing Pad',
+    '302nar': 'Nar Shaddaa – Refugee Quad',
+    '303nar': 'Nar Shaddaa – Docks',
+    '304nar': "Nar Shaddaa – Jekk'Jekk Tarr",
+    '305nar': "Nar Shaddaa – Jekk'Jekk Tarr Tunnels",
+    '306nar': 'Nar Shaddaa – Entertainment Promenade',
+    '307nar': 'Nar Shaddaa – Promenade Zhug Brothers (TSLRCM)',
+    '350nar': 'Nar Shaddaa – Refugee Landing Pad Battle (TSLRCM)',
+    '351nar': "Nar Shaddaa – Goto's Yacht",
+    '352nar': 'Nar Shaddaa – Goto Cutscene',
+    '371nar': 'Nar Shaddaa – Swoop Track',
+    # Dxun (401–421)
+    '401dxn': 'Dxun – Jungle Landing',
+    '402dxn': 'Dxun – Jungle',
+    '403dxn': 'Dxun – Mandalorian Ruins',
+    '404dxn': 'Dxun – Mandalorian Cache',
+    '410dxn': 'Dxun – Jungle Tomb',
+    '411dxn': 'Dxun – Sith Tomb',
+    '421dxn': 'Dxun – Turret Minigame',
+    # Onderon (501–512)
+    '501ond': 'Onderon – Iziz Spaceport',
+    '502ond': 'Onderon – Iziz Merchant Quarter',
+    '503ond': 'Onderon – Iziz Cantina',
+    '504ond': 'Onderon – Sky Ramp',
+    '505ond': 'Onderon – Turret Minigame',
+    '506ond': 'Onderon – Royal Palace',
+    '510ond': 'Onderon – Swoop Track',
+    '511ond': 'Onderon – Merchant Quarter Invasion',
+    '512ond': 'Onderon – Iziz Western Square',
+    # Dantooine (601–650)
+    '601dan': 'Dantooine – Khoonda Plains',
+    '602dan': 'Dantooine – Khoonda',
+    '603dan': 'Dantooine – Khoonda Plains Cutscenes',
+    '604dan': 'Dantooine – Crystal Cave',
+    '605dan': 'Dantooine – Enclave Courtyard',
+    '610dan': 'Dantooine – Enclave Sublevel',
+    '650dan': 'Dantooine – Rebuilt Jedi Enclave',
+    # Korriban (701–711)
+    '701kor': 'Korriban – Valley of the Dark Lords',
+    '702kor': 'Korriban – Sith Academy',
+    '710kor': 'Korriban – Shyrack Cave',
+    '711kor': 'Korriban – Secret Tomb',
+    # Ravager / Nihilus (851–853)
+    '851nih': 'Ravager – Command Deck',
+    '852nih': 'Ravager – Bridge',
+    '853nih': 'Ravager – Nihilus/Visas Cutscene',
+    # Malachor V (901–909)
+    '901mal': 'Malachor V – Surface',
+    '902mal': 'Malachor V – Depths',
+    '903mal': 'Malachor V – Trayus Academy',
+    '904mal': 'Malachor V – Trayus Core',
+    '905mal': 'Malachor V – Trayus Crescent',
+    '906mal': 'Malachor V – Trayus Proving Grounds',
+    '907mal': 'Malachor V – Kreia/Sion Cutscene',
+    '908mal': 'Malachor V – Trayus Academy (TSLRCM)',
+    '909mal': 'Malachor V – Trayus Academy 2 (TSLRCM)',
+    # Coruscant cut content / TSLRCM (950–954)
+    '950cor': 'Ebon Hawk – Escape From Telos Cutscene',
+    '952cor': 'Coruscant – Jedi Temple',
+    '953cor': 'Coruscant – Jedi Temple Council',
+    '954cor': 'Coruscant – Jedi Temple Landing Pad',
+}
+
+
+# K1 warp-code area prefixes (location_mNN style warp codes from DeadlyStream)
+# Maps a prefix pattern → human-readable location name for the area filter dropdown.
+# Must be a plain dict (no type annotation) so it can be exec'd in tests.
+_K1_WARP_PREFIX_LOCATION = {
+    'end_': 'Endar Spire',
+    'tar_': 'Taris',
+    'danm': 'Dantooine',
+    'tat_': 'Tatooine',
+    'kas_': 'Kashyyyk',
+    'manm': 'Manaan',
+    'korr_': 'Korriban',
+    'lev_': 'Leviathan',
+    'unk_': 'Unknown World',
+    'sta_': 'Star Forge',
+    'ebo_': 'Ebon Hawk',
+    'liv_': 'Yavin Station',
+    'stunt_': 'Stunt/Cutscene',
+}
 
 
 def _read_wok_from_archive(archive_path: str, resref: str) -> bytes:
@@ -854,17 +1138,24 @@ def _is_module_resref(r: str) -> bool:
     """Return True if resref 'r' (lower-case) looks like a KotOR module model.
 
     Handles both naming conventions:
-      K1: m + 2-digit area code  →  m12aa_01a, m26mg_03b, m03mg …
-      K2: 3-digit area code + location abbreviation  →  101per_01a, 211tela, 003ebo …
-      K1 alternative area-code prefixes  →  lev_, kas_, dan_, tat_, kor_ …
+      K1 warp-code style: end_m01aa, tar_m02aa, danm13, tat_m17aa, kas_m22aa,
+                          manm26aa, korr_m33aa, lev_m40aa, unk_m41aa, sta_m45aa,
+                          ebo_m12aa, liv_m99aa, stunt_00 …
+      K1 m-prefix:        m12aa_01a, m26mg_03b, m03mg …
+      K2 numeric:         101per_01a, 211tela, 003ebo …
+      K1 alternative prefixes: lev_, kas_, dan_, tat_, kor_ …
     """
+    # K1 warp-code style: location_mNN pattern (e.g. end_m01aa, tar_m02aa)
+    for pfx in _K1_WARP_PREFIX_LOCATION:
+        if r.startswith(pfx):
+            return True
     # K1 m-prefix modules: m followed by exactly 2 digits
     if r.startswith('m') and len(r) >= 3 and r[1:3].isdigit():
         return True
     # K2 numeric modules: 3 leading digits then at least 2 alpha chars
     if len(r) >= 5 and r[:3].isdigit() and r[3:5].isalpha():
         return True
-    # K1 area-code alpha prefixes
+    # Legacy K1 area-code alpha prefixes
     for pfx in _MODULE_PREFIXES:
         if r.startswith(pfx):
             return True
@@ -872,12 +1163,22 @@ def _is_module_resref(r: str) -> bool:
 
 
 def _get_module_area_key(resref: str) -> str:
-    """Return the area key for a module resref (e.g. '101' for K2 or 'm12' for K1).
-    Returns '' if not a module resref."""
+    """Return the area key for a module resref.
+
+    Returns:
+      - K2 3-digit numeric prefix (e.g. '101' for 101per_01a)
+      - K1 location prefix (e.g. 'tar_' for tar_m03aa, 'danm' for danm13)
+      - K1 m## prefix (e.g. 'm12' for m12aa_01a)
+      - '' if not a module resref
+    """
     r = resref.lower()
     # K2: 3-digit numeric prefix
     if len(r) >= 5 and r[:3].isdigit() and r[3:5].isalpha():
         return r[:3]
+    # K1 warp-code style: location prefix
+    for pfx in _K1_WARP_PREFIX_LOCATION:
+        if r.startswith(pfx):
+            return pfx
     # K1: 'm' + 2-digit area code
     if r.startswith('m') and len(r) >= 3 and r[1:3].isdigit():
         return r[:3]
@@ -890,11 +1191,25 @@ def _get_module_area_display(resref: str) -> str:
     if not key:
         return ''
     r = resref.lower()
+    # K1 warp-code style: check _K1_WARP_PREFIX_LOCATION first
+    if key in _K1_WARP_PREFIX_LOCATION:
+        # Try exact warp code match first for most specific name
+        warp_name = _K1_WARP_CODES.get(r, '')
+        if warp_name:
+            loc = _K1_WARP_PREFIX_LOCATION[key]
+            return f'{loc} – {warp_name}'
+        return _K1_WARP_PREFIX_LOCATION.get(key, f'K1 Area {key}')
     if r[:1] == 'm' and not r[:3].isdigit():
-        # K1
+        # K1 m## style
         return _K1_AREA_NAMES.get(key, f'K1 Area {key[1:]}')
     else:
-        # K2
+        # K2: try per-resref lookup first (e.g., '101per' → 'Peragus – Administration Level')
+        # The resref may have a variant suffix like '101per_01a'; strip to 6-char base.
+        k2_base = r[:6] if len(r) >= 6 else r
+        warp_name = _K2_WARP_CODES.get(k2_base, '')
+        if warp_name:
+            return warp_name
+        # Fall back to area-code-level name from _K2_AREA_NAMES
         return _K2_AREA_NAMES.get(key, f'K2 Area {key}')
 
 
@@ -1169,11 +1484,16 @@ class LibraryPanel(tk.Frame):
         k1_areas = []
         k2_areas = []
         for key, cnt in sorted(area_counts.items()):
-            r_sample = key  # key is '101' or 'm12'
-            if r_sample.startswith('m') and not r_sample[:3].isdigit():
+            # K1 warp-code style prefix (e.g. 'tar_', 'danm', 'end_')
+            if key in _K1_WARP_PREFIX_LOCATION:
+                name = _K1_WARP_PREFIX_LOCATION[key]
+                k1_areas.append((f'K1 [{key}] {name} ({cnt})', key))
+            elif key.startswith('m') and not key[:3].isdigit():
+                # K1 m## prefix
                 name = _K1_AREA_NAMES.get(key, f'K1 Area {key[1:]}')
                 k1_areas.append((f'K1 {key}: {name} ({cnt})', key))
             else:
+                # K2 numeric prefix
                 name = _K2_AREA_NAMES.get(key, f'K2 Area {key}')
                 k2_areas.append((f'K2 {key}: {name} ({cnt})', key))
 
@@ -1931,8 +2251,12 @@ class LibraryPanel(tk.Frame):
             # Show filter result count (include area name if module area filter active)
             if len(filtered) < len(self._all_entries):
                 if area_key_filter and cat == 'Module':
-                    area_name = _K2_AREA_NAMES.get(area_key_filter,
-                                _K1_AREA_NAMES.get(area_key_filter, area_key_filter))
+                    # Use our unified display helper for consistent naming
+                    if area_key_filter in _K1_WARP_PREFIX_LOCATION:
+                        area_name = _K1_WARP_PREFIX_LOCATION[area_key_filter]
+                    else:
+                        area_name = _K2_AREA_NAMES.get(area_key_filter,
+                                    _K1_AREA_NAMES.get(area_key_filter, area_key_filter))
                     self._filter_count_var.set(f"{len(filtered)} in {area_name}")
                 else:
                     self._filter_count_var.set(f"Showing {len(filtered)}")

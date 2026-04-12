@@ -1554,8 +1554,37 @@ def snap_head_onto_body(
         # ── 4. Attach head root as child of headhook ─────────────────────────
         # This is the CORRECT operation: the head's entire subtree (skull, jaw,
         # eyes) becomes a child of the headhook bone.  No vertex manipulation.
+        #
+        # CRITICAL FIX: Some KotOR NPC head models (e.g. darthband_h, pfh heads)
+        # were authored as standalone models and store their root at a large negative
+        # Z offset equal to the expected headhook world Z (typically ~ -1.55).
+        # This allows them to display correctly when viewed in isolation (Z=0 appears
+        # at body-origin height), but when parented to the headhook the negative offset
+        # cancels the hook's positive Z, placing the head at world Z≈0 (body level).
+        #
+        # DETECTION: if |head_root.position.z + hook_world.z| < 0.15, the head root
+        # was likely authored with this negative-offset convention.  In that case,
+        # zero out the head root's Z offset so parenting to the headhook works correctly.
+        # The threshold 0.15 avoids false positives on heads with small intentional offsets.
         if not hasattr(hook_node, 'children') or hook_node.children is None:
             hook_node.children = []
+        head_root_pos = getattr(head_root, 'position', (0.0, 0.0, 0.0))
+        hook_wz = hook_world[2] if hook_world else 0.0
+        # Check if root Z roughly cancels hook Z (the standalone-origin convention)
+        _combined_z = hook_wz + head_root_pos[2]
+        if abs(_combined_z) < 0.25 and abs(head_root_pos[2]) > 0.5:
+            # Head root has large negative Z offset designed to cancel hook Z.
+            # Zero it out so the head attaches at the hook's actual height.
+            head_root.position = (head_root_pos[0], head_root_pos[1], 0.0)
+            warnings.append(
+                f"Head root '{head_root.name}' had negative Z offset {head_root_pos[2]:.3f} "
+                f"(standalone convention) — corrected to 0 for body attachment."
+            )
+            log.debug(
+                "snap_head_onto_body: corrected head root '%s' Z offset %.3f→0 "
+                "(hook_wz=%.3f, combined=%.3f)",
+                head_root.name, head_root_pos[2], hook_wz, _combined_z
+            )
         head_root.parent = hook_node
         hook_node.children.append(head_root)
 

@@ -1915,17 +1915,15 @@ class FBXExporter:
                         elif ct == CTRL_ORIENTATION:
                             rot_times, rot_vals = ctrl['times'], ctrl['values']
 
-                    def _write_curve_node_and_curve(axis_label, axis_i, default_val,
-                                                    ktimes, kvals, prop_name):
-                        """Helper: emit CurveNode + Curve objects and queue connections."""
-                        cn_id = new_id()
-                        cv_id = new_id()
-                        ax_letter = axis_label[-1]  # X, Y, or Z
-                        w(f'\tAnimationCurveNode: {cn_id}, "{axis_label}", "" {{')
-                        w(f'\t\tProperties70:  {{')
-                        w(f'\t\t\tP: "d|{ax_letter}", "Number", "", "A",{default_val:.6f}')
-                        w(f'\t\t}}')
-                        w(f'\t}}')
+                    def _write_anim_curve(cv_id, default_val, ktimes, kvals,
+                                          cn_id, ax_letter):
+                        """Write a single AnimationCurve object (Blender/UE5-compatible).
+
+                        FBX 7.4 spec (verified against Blender io_scene_fbx source):
+                          - KeyAttrFlags:    *1  {a: 24776}   one flag for entire curve
+                          - KeyAttrDataFloat: *4 {a:0,0,0,0}  tangent data (cubic)
+                          - KeyAttrRefCount:  *1 {a: N}       N = number of keys
+                        """
                         nt = len(ktimes)
                         ticks = [int(t * FBX_TICKS_PER_SEC) for t in ktimes]
                         w(f'\tAnimationCurve: {cv_id}, "", "" {{')
@@ -1937,8 +1935,13 @@ class FBXExporter:
                         w(f'\t\tKeyValueFloat: *{nt} {{')
                         w('\t\t\ta: ' + ','.join(f'{v:.6f}' for v in kvals))
                         w(f'\t\t}}')
-                        w(f'\t\tKeyAttrFlags: *{nt} {{')
-                        w('\t\t\ta: ' + ','.join(['24776'] * nt))  # cubic + auto
+                        # KeyAttrFlags: *1 (one entry covers all keys) — required by Blender
+                        w(f'\t\tKeyAttrFlags: *1 {{')
+                        w('\t\t\ta: 24776')   # cubic + auto tangents
+                        w(f'\t\t}}')
+                        # KeyAttrDataFloat: tangent data (4 floats — required for cubic mode)
+                        w(f'\t\tKeyAttrDataFloat: *4 {{')
+                        w('\t\t\ta: 0,0,0,0')
                         w(f'\t\t}}')
                         w(f'\t\tKeyAttrRefCount: *1 {{')
                         w(f'\t\t\ta: {nt}')
@@ -1946,7 +1949,37 @@ class FBXExporter:
                         w(f'\t}}')  # end AnimationCurve
                         # Queue connections (emitted later in Connections{})
                         anim_conn.append(f'\tC: "OP",{cv_id},{cn_id},"d|{ax_letter}"')
+
+                    def _write_grouped_curves(prop_channel, kvals_xyz,
+                                              ktimes, def_vals, prop_name):
+                        """Write one AnimationCurveNode (T or R) with 3 AnimationCurves.
+
+                        Blender's FBX importer (io_scene_fbx/import_fbx.py) expects:
+                          - ONE AnimationCurveNode per transform channel (T, R, S)
+                          - The CurveNode name must be the channel letter only: 'T' or 'R'
+                          - Properties70 must contain d|X, d|Y, d|Z defaults
+                          - Three separate AnimationCurve objects, each linked via OP connection
+                        """
+                        cn_id = new_id()
+                        cx_id = new_id()
+                        cy_id = new_id()
+                        cz_id = new_id()
+                        dx, dy, dz = def_vals
+                        # One CurveNode for all 3 axes
+                        w(f'\tAnimationCurveNode: {cn_id}, "{prop_channel}", "" {{')
+                        w(f'\t\tProperties70:  {{')
+                        w(f'\t\t\tP: "d|X", "Number", "", "A",{dx:.6f}')
+                        w(f'\t\t\tP: "d|Y", "Number", "", "A",{dy:.6f}')
+                        w(f'\t\t\tP: "d|Z", "Number", "", "A",{dz:.6f}')
+                        w(f'\t\t}}')
+                        w(f'\t}}')
+                        # Three AnimationCurve objects
+                        _write_anim_curve(cx_id, dx, ktimes, kvals_xyz[0], cn_id, 'X')
+                        _write_anim_curve(cy_id, dy, ktimes, kvals_xyz[1], cn_id, 'Y')
+                        _write_anim_curve(cz_id, dz, ktimes, kvals_xyz[2], cn_id, 'Z')
+                        # CurveNode → AnimLayer connection
                         anim_conn.append(f'\tC: "OO",{cn_id},{layer_id}')
+                        # CurveNode → bone model-node property
                         anim_conn.append(f'\tC: "OP",{cn_id},{nid},"{prop_name}"')
 
                     # Translation curves:
@@ -1957,16 +1990,16 @@ class FBXExporter:
                     anim_scale = getattr(model, 'anim_scale', 1.0) or 1.0
                     if pos_times and pos_vals:
                         bind_pos = list(base.position) if base else [0.0, 0.0, 0.0]
-                        for axis_i, axis_label in enumerate(('T|X', 'T|Y', 'T|Z')):
-                            default_val = bind_pos[axis_i]
-                            kvals = [
+                        kvals_t = []
+                        for axis_i in range(3):
+                            kvals_t.append([
                                 (v[axis_i] if len(v) > axis_i else 0.0) * anim_scale
                                 + bind_pos[axis_i]
                                 for v in pos_vals
-                            ]
-                            _write_curve_node_and_curve(
-                                axis_label, axis_i, default_val,
-                                pos_times, kvals, 'Lcl Translation')
+                            ])
+                        _write_grouped_curves('T', kvals_t, pos_times,
+                                              (bind_pos[0], bind_pos[1], bind_pos[2]),
+                                              'Lcl Translation')
 
                     # Rotation curves (absolute quaternion → Euler XYZ degrees)
                     if rot_times and rot_vals:
@@ -1978,11 +2011,15 @@ class FBXExporter:
                                 euler_list.append((ex, ey, ez))
                             else:
                                 euler_list.append((0.0, 0.0, 0.0))
-                        for axis_i, axis_label in enumerate(('R|X', 'R|Y', 'R|Z')):
-                            kvals = [e[axis_i] for e in euler_list]
-                            _write_curve_node_and_curve(
-                                axis_label, axis_i, kvals[0] if kvals else 0.0,
-                                rot_times, kvals, 'Lcl Rotation')
+                        kvals_r = [
+                            [e[axis_i] for e in euler_list]
+                            for axis_i in range(3)
+                        ]
+                        def_r = (kvals_r[0][0] if kvals_r[0] else 0.0,
+                                 kvals_r[1][0] if kvals_r[1] else 0.0,
+                                 kvals_r[2][0] if kvals_r[2] else 0.0)
+                        _write_grouped_curves('R', kvals_r, rot_times, def_r,
+                                              'Lcl Rotation')
 
             # AnimStack → AnimLayer connections (added to anim_connections)
             for anim, stack_id, layer_id in anim_stack_layer:

@@ -185,9 +185,14 @@ _UV_SENTINEL = 100.0
 # teethU, teethL, teethUa, teethLa, tongue) and NPC face-node naming
 # (f_rlweye_g, f_llweye_g: NPC eyeball nodes that end in _g but are REAL
 # renderable geometry — they must NOT be excluded by _is_deformation_helper).
+# Also includes darthband_h / general NPC head model substrings for eyeball,
+# gumskin, tonguemesh, eyelid_mesh, jawskin which appear in KotOR NPC heads.
 _INNER_GEO_SUBSTRINGS: tuple = (
     'eye', 'lid', 'teeth', 'tooth', 'gum', 'jaw',
     'tongue', 'teethu', 'teethl',
+    'eyeball', 'cornea', 'iris', 'pupil',   # explicit eyeball naming
+    'gumskin', 'tonguemesh', 'jawskin',      # NPC sub-mesh names
+    'eyelid', 'teetha', 'teethb',            # additional NPC variant names
 )
 
 # Head/face node substrings — these nodes render the outer face surface and
@@ -6431,7 +6436,7 @@ class FrameRenderer:
                                    for u, v in node.uvs[:5])):
             return True
 
-        # ── Non-skin nodes with NO UVs → deform helpers UNLESS body-part ──────
+        # ── Non-skin nodes with NO UVs → deform helpers UNLESS module/area model ──
         # KotOR creature/character models contain skeleton-bone helper nodes
         # (e.g. BTHips, BTSpine1, BTHead, BTShoulders on the bantha; or similar
         # bone-proxy trimeshes on other creatures) that:
@@ -6443,12 +6448,20 @@ class FrameRenderer:
         # cannot be textured, and rendering them as flat-shaded produces ugly
         # opaque bone-shaped blobs that obscure the real skin mesh.
         #
-        # HOWEVER: some character models (e.g. c_jawa) have body-part trimeshes
-        # that legitimately have no UV coords because the region is covered by
-        # other mesh layers (robes).  We NEVER want to render them flat-shaded
-        # either, so the existing rule is kept:
-        # Fix: treat any non-skin node with no UV data as a deformation helper.
+        # EXCEPTION: Module/area models (classification 'effect'=0 or 'tile'=2)
+        # store ALL vertex data (including UVs) in the companion .mdx file.
+        # When the MDX is not available or not yet loaded, UV arrays are empty but
+        # the geometry IS real renderable geometry.  We must NOT discard it.
+        # For these models, render even without UVs (flat-shaded fallback).
+        # Also: AABB nodes in room models are always real geometry (walkmesh).
         if not node.is_skin and not node.uvs:
+            model_cls = getattr(self.model, 'classification', 'character') if self.model else 'character'
+            model_type = getattr(self.model, 'model_type', 4) if self.model else 4
+            # Module/area/effect models: render all non-_g trimeshes even without UVs
+            if model_cls in ('effect', 'tile', 'other') or model_type in (0, 2):
+                # Still skip obvious _g deformation proxies
+                if not (name_lower.endswith('_g') or name_lower.endswith('_g0') or name_lower.endswith('_dum')):
+                    return False  # render as flat-shaded geometry
             return True
 
         # ── v12.14: Skin-proxy detection (non-skin node with exclusive-texture ──

@@ -570,56 +570,81 @@ class ModelLibraryEntry:
 
     @property
     def display_label_rich(self) -> str:
-        """Extended label that includes area name for module models."""
+        """Extended label that includes area name for module models.
+
+        Supports K1 warp-code style (end_m01aa, tar_m02aa, danm13, etc.),
+        K1 m## style (m12aa_01a), and K2 numeric style (101per_01a).
+        """
         r = self.resref.lower()
-        # K2 module: 3-digit area code
+        # K2 module: 3-digit numeric area code prefix
         if len(r) >= 5 and r[:3].isdigit() and r[3:5].isalpha():
             area_key = r[:3]
-            # Inline minimal K2 area lookup (avoids circular import)
             _K2_SHORT = {
+                '001':'Ebon Hawk','002':'Ebon Hawk','003':'Ebon Hawk',
+                '004':'Ebon Hawk','005':'Ebon Hawk',
                 '101':'Peragus','102':'Peragus','103':'Peragus','104':'Peragus',
                 '105':'Peragus','106':'Peragus','107':'Peragus',
-                '151':'Harbinger','152':'Harbinger','153':'Harbinger',
+                '151':'Harbinger','152':'Harbinger','153':'Harbinger','154':'Harbinger',
                 '201':'Telos CS','202':'Telos CS','203':'Telos CS','204':'Telos CS',
-                '207':'Telos CS','208':'Telos MB','209':'Telos RZ',
-                '211':'Telos Surf','220':'Telos Pol','221':'Telos Pol',
-                '222':'Telos Pol','231':'Telos UG','232':'Telos RZ',
-                '261':'HK Factory','262':'HK Factory',
-                '298':'Atris Acad','299':'Atris Acad',
+                '205':'Telos CS','207':'Telos CS','208':'Telos MB','209':'Telos CZ',
+                '211':'Telos Swoop','220':'Telos Suburban','221':'Telos Suburban',
+                '222':'Telos Entmt','231':'Telos RZ','232':'Telos UG',
+                '233':'Telos Czerka','235':'Telos Shuttle',
+                '261':'Polar Plateau','262':'Atris Academy',
+                '298':'HK Factory','299':'HK Plant',
                 '301':'Nar Shadd','302':'Nar Shadd','303':'Nar Shadd',
-                '304':'Goto Yacht','305':'Nar Shadd','306':'Nar Shadd',
-                '351':'Goto Yacht','352':'Goto Yacht','371':'Nar Shadd',
-                '401':'Dxun','402':'Dxun','403':'Dxun',
-                '410':'Dxun','411':'Dxun Tomb',
-                '421':'Onderon','501':'Onderon','502':'Onderon',
-                '503':'Onderon','504':'Onderon','505':'Onderon',
-                '506':'Onderon','510':'Onderon','511':'Onderon',
-                '601':'Dantooine','602':'Dantooine','604':'Dantooine',
-                '605':'Dantooine','610':'Khoonda','650':'Dantooine',
-                '701':'Korriban','702':'Korriban','710':'Korriban','711':'Korriban',
-                '801':'Malachor','802':'Malachor','803':'Trayus',
-                '804':'Trayus','805':'Trayus','806':'Trayus','807':'Trayus',
-                '851':'Ravager','852':'Ravager',
+                '304':'Jekk Jekk Tarr','305':'Nar Shadd Tunnels','306':'Nar Shadd',
+                '307':'Nar Shadd','350':'Nar Shadd',
+                '351':'Goto Yacht','352':'Goto Cutscene','371':'Nar Swoop',
+                '401':'Dxun Landing','402':'Dxun Jungle','403':'Dxun Ruins',
+                '404':'Dxun Cache','410':'Dxun Tomb','411':'Sith Tomb','421':'Dxun Turret',
+                '501':'Onderon Port','502':'Onderon Merchant','503':'Onderon Cantina',
+                '504':'Sky Ramp','505':'Onderon Turret','506':'Royal Palace',
+                '510':'Onderon Swoop','511':'Onderon Invasion','512':'Onderon West',
+                '601':'Dantooine Plains','602':'Khoonda','603':'Dantooine Cuts',
+                '604':'Crystal Cave','605':'Enclave Courtyard','610':'Enclave Sublevel',
+                '650':'Jedi Enclave',
+                '701':'Valley Dark Lords','702':'Sith Academy',
+                '710':'Shyrack Cave','711':'Secret Tomb',
+                '851':'Ravager','852':'Ravager Bridge','853':'Ravager Cuts',
+                '901':'Malachor Surf','902':'Malachor Depths',
+                '903':'Trayus Academy','904':'Trayus Core',
+                '905':'Trayus Crescent','906':'Trayus Proving','907':'Kreia Cuts',
+                '950':'Coruscant Cuts','952':'Coruscant JT','953':'Coruscant JTC',
+                '954':'Coruscant Landing',
             }
             area_name = _K2_SHORT.get(area_key, f'K2-{area_key}')
             return f"{self.resref}  [{area_name}]"
+        # K1 warp-code style: location_mNN (end_m01aa, tar_m02aa, danm13, etc.)
+        _K1_WARP_PREFIXES = {
+            'end_': 'Endar Spire', 'tar_': 'Taris', 'danm': 'Dantooine',
+            'tat_': 'Tatooine', 'kas_': 'Kashyyyk', 'manm': 'Manaan',
+            'korr_': 'Korriban', 'lev_': 'Leviathan', 'unk_': 'Unknown World',
+            'sta_': 'Star Forge', 'ebo_': 'Ebon Hawk', 'liv_': 'Yavin Station',
+            'stunt_': 'Stunt/Cutscene',
+        }
+        for pfx, loc_name in _K1_WARP_PREFIXES.items():
+            if r.startswith(pfx):
+                return f"{self.resref}  [{loc_name}]"
         # K1 module: m + 2-digit area code
         if r.startswith('m') and len(r) >= 3 and r[1:3].isdigit():
             area_key = r[1:3]
             _K1_SHORT = {
-                '01':'Endar Spire','02':'Endar Spire','03':'Taris',
-                '04':'Taris','05':'Taris','08':'Undercity','09':'Sewers',
-                '10':'Sith Base','11':'Hidden Bek','12':'Dantooine',
-                '13':'Dantooine','14':'Dantooine','15':'Dantooine',
-                '16':'Tatooine','17':'Dune Sea','18':'Sand People',
-                '19':'Krayt Cave','20':'Kashyyyk','21':'Kashyyyk',
-                '22':'Kashyyyk','23':'Shadowlands','24':'Shadowlands',
-                '25':'Manaan','26':'Manaan','27':'Manaan Ocean',
-                '28':'Korriban','31':'Leviathan','33':'Leviathan',
-                '34':'Leviathan','35':'Leviathan','36':'Unknown World',
-                '37':'Unknown World','38':'Temple','39':'Temple',
-                '40':'Star Forge','41':'Star Forge','42':'Star Forge',
-                '43':'Star Forge','44':'Ebon Hawk','45':'Yavin',
+                '01':'Endar Spire','02':'Endar Spire','03':'Taris','04':'Taris',
+                '05':'Taris Sewers','08':'Davik Estate','09':'Sith Base',
+                '10':'Vulkar Base','11':'Hidden Bek','12':'Ebon Hawk',
+                '13':'Jedi Enclave','14':'Dantooine','15':'Dantooine Ruins',
+                '16':'Sandral Estate','17':'Anchorhead','18':'Dune Sea',
+                '19':'Tatooine Temple','20':'Sand People Enclave',
+                '22':'Czerka Port','23':'Rwookrrorro','24':'Upper Shadowlands',
+                '25':'Lower Shadowlands','26':'Ahto City','27':'Sith Base',
+                '28':'Hrakert Station','33':'Dreshdae','34':'Shyrack Caves',
+                '35':'Sith Academy','36':'Valley Dark Lords',
+                '37':'Tomb Ajunta Pall','38':'Tombs Marka/Tulak','39':'Tomb Naga Sadow',
+                '40':'Lev Prison Block','41':'Lev Command Deck/Unknown World',
+                '42':'Unknown World','43':'Rakatan Temple',
+                '44':'Star Forge/Ebon Hawk','45':'Yavin Station',
+                '47':'Cutscene/Stunt',
             }
             area_name = _K1_SHORT.get(area_key, f'K1-m{area_key}')
             return f"{self.resref}  [{area_name}]"
