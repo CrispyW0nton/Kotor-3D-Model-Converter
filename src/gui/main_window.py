@@ -741,18 +741,23 @@ _K2_AREA_NAMES: Dict[str, str] = {
 # Format: 'm' + 2-digit code prefix → display_name  (warp code in parentheses)
 _K1_AREA_NAMES: Dict[str, str] = {
     # Endar Spire
-    'm01': 'Endar Spire – Command Module (end_m01aa)',
-    'm02': 'Endar Spire – Starboard Section (end_m01ab)',
+    # FIX-K1-AREA-LABEL: m01 = Endar Spire (both end_m01aa and end_m01ab).
+    # m02 = Taris Upper City (tar_m02aa through tar_m02af), NOT Endar Spire.
+    # Previously m02 was labeled 'Endar Spire – Starboard Section' which was
+    # wrong — end_m01ab IS m01 (the 'ab' sub-area of m01), not m02.
+    # The m02 prefix maps to tar_m02xx = Taris Upper City modules.
+    'm01': 'Endar Spire (end_m01aa / end_m01ab)',
     # Taris
-    'm03': 'Taris – Upper City / Apartments (tar_m02aa–af)',
+    'm02': 'Taris – Upper City (tar_m02aa–af)',
+    'm03': 'Taris – Lower City / Apartments (tar_m03aa–af)',
     'm04': 'Taris – Undercity (tar_m04aa)',
-    'm05': 'Taris – Lower Sewers (tar_m05aa/ab)',
+    'm05': 'Taris – Sewers (tar_m05aa/ab)',
     'm08': 'Taris – Davik\'s Estate (tar_m08aa)',
     'm09': 'Taris – Sith Base (tar_m09aa/ab)',
     'm10': 'Taris – Black Vulkar Base (tar_m10aa–ac)',
     'm11': 'Taris – Hidden Bek Base (tar_m11aa/ab)',
-    # Dantooine
-    'm12': 'Dantooine – Ebon Hawk (ebo_m12aa/ab)',
+    # Dantooine / Ebon Hawk
+    'm12': 'Ebon Hawk (ebo_m12aa/ab)',
     'm13': 'Dantooine – Jedi Enclave (danm13)',
     'm14': 'Dantooine – Courtyard / Grounds (danm14aa–ae)',
     'm15': 'Dantooine – Ruins (danm15)',

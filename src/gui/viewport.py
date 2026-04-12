@@ -5092,6 +5092,18 @@ class FrameRenderer:
         total_tris = 0
         wire_tris  = []  # [(flat_pts, wire_col), ...]
 
+        # FIX-ACCEL-MODULE-UV: Detect module/area/tile model so the accel path
+        # uses a permissive UV sentinel (1e6) instead of 100.0.  Module geometry
+        # legitimately has UV coordinates up to ~200,000 (e.g. m10aa_01c Box86
+        # U/V ≈ 131,209).  Without this fix every face on large tiled surfaces
+        # was skipped by the per-face sentinel check → solid grey/black tiles.
+        # FIX-MODEL-TYPE-ZERO: read model_type raw to avoid treating 0 as falsy.
+        _accel_model_cls = (str(getattr(self.model, 'classification', 'character') or 'character')).lower() if self.model else 'character'
+        _accel_mtype_raw = getattr(self.model, 'model_type', None) if self.model else None
+        _accel_mtype = int(_accel_mtype_raw) if _accel_mtype_raw is not None else 4
+        _accel_is_module = (_accel_model_cls in ('effect', 'tile', 'other') or _accel_mtype in (0, 2))
+        _accel_uv_sentinel = 1e6 if _accel_is_module else _UV_SENTINEL
+
         for node in self._iter_visible_mesh_nodes():
             if not node.vertices or not node.faces:
                 continue
@@ -5269,10 +5281,13 @@ class FrameRenderer:
                     uv1 = uvs[ti1] if ti1 < n_uvs else (0.5, 0.5)
                     uv2 = uvs[ti2] if ti2 < n_uvs else (0.5, 0.5)
 
-                    # UV sentinel guard (vectorized check per-face)
-                    if (abs(uv0[0]) > _UV_SENTINEL or abs(uv0[1]) > _UV_SENTINEL or
-                            abs(uv1[0]) > _UV_SENTINEL or abs(uv1[1]) > _UV_SENTINEL or
-                            abs(uv2[0]) > _UV_SENTINEL or abs(uv2[1]) > _UV_SENTINEL):
+                    # UV sentinel guard (vectorized check per-face).
+                    # FIX-ACCEL-MODULE-UV: use _accel_uv_sentinel (1e6 for module
+                    # models) instead of _UV_SENTINEL (100) so tiled floor/wall
+                    # faces with UVs like ±131209 are NOT skipped as degenerate.
+                    if (abs(uv0[0]) > _accel_uv_sentinel or abs(uv0[1]) > _accel_uv_sentinel or
+                            abs(uv1[0]) > _accel_uv_sentinel or abs(uv1[1]) > _accel_uv_sentinel or
+                            abs(uv2[0]) > _accel_uv_sentinel or abs(uv2[1]) > _accel_uv_sentinel):
                         continue
 
                     u0r, u1r, u2r = uv0[0], uv1[0], uv2[0]
@@ -5847,6 +5862,20 @@ class FrameRenderer:
             # out entire faces with |uv| > _UV_SENTINEL in one vectorized pass.
             # This avoids the per-face 6-component sentinel check inside the loop
             # (220× speedup vs Python loop for 2k-face nodes).
+            #
+            # FIX-MODULE-UV: Module/area/tile models use extreme UV tiling
+            # (e.g. |uv| > 100,000) that is valid geometry — GL_REPEAT handles
+            # it correctly.  Use a much higher sentinel (1e6) for module models
+            # so these faces are NOT filtered out.  Only NaN/Inf and values
+            # beyond 1e6 (from corrupt MDX data) are considered degenerate.
+            _model_cls_str = getattr(self.model, 'classification', 'character') if self.model else 'character'
+            # FIX-MODEL-TYPE-ZERO: model_type=0 means module/tile. int(val or 4)
+            # treats 0 as falsy -> 4.  Read raw then fall back only when None.
+            _model_type_raw_vp = (getattr(self.model, 'model_type', None) if self.model else None)
+            _model_type_int = int(_model_type_raw_vp) if _model_type_raw_vp is not None else 4
+            _vp_is_module = (_model_cls_str in ('effect', 'tile', 'other') or
+                             _model_type_int in (0, 2))
+            _node_uv_sentinel = 1e6 if _vp_is_module else _UV_SENTINEL
             _sentinel_mask: Optional[np.ndarray] = None
             if _NUMPY and has_uvs and n_uvs > 0 and node.faces and not _node_is_multitex:
                 try:
@@ -5864,7 +5893,7 @@ class FrameRenderer:
                             _ti = [_mface[0], _mface[1], _mface[2]]
                         for _k, _idx in enumerate(_ti):
                             _uvs_arr[_mfi, _k] = uvs[_idx] if _idx < n_uvs else (0.5, 0.5)
-                    _sentinel_mask = _accel_sentinel_filter(_uvs_arr, _UV_SENTINEL)
+                    _sentinel_mask = _accel_sentinel_filter(_uvs_arr, _node_uv_sentinel)
                 except Exception:
                     _sentinel_mask = None  # fall back to per-face check
 
@@ -6007,9 +6036,9 @@ class FrameRenderer:
                     if _sentinel_mask is not None:
                         if not _sentinel_mask[_fi]:
                             continue
-                    elif (abs(uv0[0]) > _UV_SENTINEL or abs(uv0[1]) > _UV_SENTINEL or
-                            abs(uv1[0]) > _UV_SENTINEL or abs(uv1[1]) > _UV_SENTINEL or
-                            abs(uv2[0]) > _UV_SENTINEL or abs(uv2[1]) > _UV_SENTINEL):
+                    elif (abs(uv0[0]) > _node_uv_sentinel or abs(uv0[1]) > _node_uv_sentinel or
+                            abs(uv1[0]) > _node_uv_sentinel or abs(uv1[1]) > _node_uv_sentinel or
+                            abs(uv2[0]) > _node_uv_sentinel or abs(uv2[1]) > _node_uv_sentinel):
                         continue
                     # rotate_texture: (u,v) → (v, 1-u)  [90° CCW rotation]
                     # Used by KotOR for certain prop nodes (floor decals, lightmapped tiles).
@@ -6411,7 +6440,9 @@ class FrameRenderer:
         # in game units (e.g. a 9-unit wall maps to U≈9.0 with a 1-unit texture).
         if node.uvs:
             _model_cls_str = getattr(self.model, 'classification', 'character') if self.model else 'character'
-            _model_type_int = getattr(self.model, 'model_type', 4) if self.model else 4
+            # FIX-MODEL-TYPE-ZERO: don't treat model_type=0 as falsy
+            _model_type_raw2 = (getattr(self.model, 'model_type', None) if self.model else None)
+            _model_type_int = int(_model_type_raw2) if _model_type_raw2 is not None else 4
             _is_module_model = (_model_cls_str in ('effect', 'tile', 'other') or
                                 _model_type_int in (0, 2))
             if not _is_module_model:

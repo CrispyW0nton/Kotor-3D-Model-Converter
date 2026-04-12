@@ -1,6 +1,6 @@
 ========================================================================
   GhostRigger Module Geometry & Texture Deep Audit
-  Generated: 2026-04-12 06:05:50 UTC
+  Generated: 2026-04-12 16:55:17 UTC
 ========================================================================
 
 SUMMARY
@@ -19,7 +19,7 @@ WARNING CATEGORIES (non-fatal)
 ----------------------------------------
   Missing textures    : 24 models
   No mesh nodes       : 727 models
-  UV-less textured    : 34 models
+  UV-less textured    : 43 models
   Missing normals     : 0 models
 
 MISSING TEXTURE SUMMARY (top 50 most common)

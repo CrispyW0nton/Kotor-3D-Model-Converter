@@ -801,16 +801,29 @@ class TestEdgeCases(unittest.TestCase):
         self.assertIsNotNone(img)
 
     def test_uv_large_negative_values(self):
-        """Negative/large UVs (> UV_SENTINEL) should be clamped to 0.5."""
+        """Character sentinel is 100.0.  A vertex whose UV pair has ANY component
+        > sentinel is flagged as bad and replaced (the whole (U,V) pair, not just
+        the offending axis).  A vertex whose both U and V are within ±100 passes through.
+
+        Behavior (is_module=False, sentinel=100.0):
+          vertex 0: U=-99 (OK), V=127 (> 100) → entire pair flagged bad → 0.5
+          vertex 1: U=-22 (OK), V=0.5  (OK)   → passes through unchanged
+          vertex 2: U=0,  V=0            (OK)   → passes through unchanged
+        """
         from src.gui.gpu_renderer import _build_vbo_data
         node = _make_node(n_verts=3, n_tris=1)
+        # vertex 0: V=127 > sentinel → entire UV pair replaced with 0.5
+        # vertex 1: U=-22, V=0.5 both within 100 → pass through
         node.uvs = [(-99.0, 127.0), (-22.0, 0.5), (0.0, 0.0)]
         node.faces = [[0, 1, 2]]
         vd, idx = _build_vbo_data(node, (0, 0, 0), (0, 0, 0, 1))
         self.assertIsNotNone(vd)
-        # Sentinel UV clamped to 0.5
-        self.assertAlmostEqual(float(vd[0, 6]), 0.5, places=4)
-        self.assertAlmostEqual(float(vd[1, 6]), 0.5, places=4)
+        # vertex 0: V=127 > 100.0 sentinel → entire (U,V) pair → 0.5
+        self.assertAlmostEqual(float(vd[0, 6]), 0.5, places=2)   # U clamped too
+        self.assertAlmostEqual(float(vd[0, 7]), 0.5, places=2)   # V clamped
+        # vertex 1: both within ±100 → pass through
+        self.assertAlmostEqual(float(vd[1, 6]), -22.0, places=2)
+        self.assertAlmostEqual(float(vd[1, 7]),   0.5, places=2)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1010,13 +1023,30 @@ class TestLargeUvWrapping(unittest.TestCase):
         self.assertAlmostEqual(float(vd[0, 6]), -5.0, places=4)
 
     def test_sentinel_uv_clamped_in_vbo(self):
-        """UVs > UV_SENTINEL=20 must be replaced with 0.5."""
+        """UVs beyond the 100.0 character sentinel are replaced with 0.5.
+        UVs within ±100 pass through (character tiling range).
+
+        The sentinel was raised from 20.0 → 100.0 to allow KotOR character
+        tiling UVs like sithpraet robe (U≈±13).  Only genuinely corrupt values
+        (e.g. MDX placeholder ≈ ±1e28) are clamped to 0.5.
+        UV=25.0 is within the 100.0 sentinel → passes through as 25.0.
+        UV=101.0 would be clamped; UV=200.0 would also be clamped.
+        """
         from src.gui.gpu_renderer import _build_vbo_data
         node = _make_node(n_verts=3, n_tris=1)
+        # 25.0 < 100.0 sentinel → passes through (not clamped)
         node.uvs = [(25.0, -30.0), (0.5, 0.5), (0.5, 0.5)]
         node.faces = [[0, 1, 2]]
         vd, idx = _build_vbo_data(node, (0, 0, 0), (0, 0, 0, 1))
-        self.assertAlmostEqual(float(vd[0, 6]), 0.5, places=4)
+        # 25.0 is within the 100.0 character sentinel — NOT clamped
+        self.assertAlmostEqual(float(vd[0, 6]), 25.0, places=4)
+        # Truly corrupt UV (> 100.0 sentinel) should be clamped
+        node2 = _make_node(n_verts=3, n_tris=1)
+        node2.uvs = [(150.0, 0.5), (0.5, 0.5), (0.5, 0.5)]
+        node2.faces = [[0, 1, 2]]
+        vd2, _ = _build_vbo_data(node2, (0, 0, 0), (0, 0, 0, 1))
+        # 150.0 > 100.0 sentinel: seam-heal finds no neighbor → fallback 0.5
+        self.assertAlmostEqual(float(vd2[0, 6]), 0.5, places=4)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
