@@ -1,69 +1,448 @@
-======================================================================
-  GhostRigger Module Geometry & Texture Deep Audit — FINAL RESULTS
-  Generated: 2026-04-11 (post _LightHeader fix)
-======================================================================
+========================================================================
+  GhostRigger Module Geometry & Texture Deep Audit
+  Generated: 2026-04-12 06:05:50 UTC
+========================================================================
 
 SUMMARY
 ----------------------------------------
-  K1 models audited: 1656  OK=1656  Errors=0
-  K2 models audited: 1648  OK=1648  Errors=0
-  TOTAL            : 3304  OK=3304  Errors=0
+  K1 models audited : 1656  OK=1656  Errors=0  Warnings-only=436
+  K2 models audited : 1650  OK=1650  Errors=0  Warnings-only=1650
+  TOTAL             : 3306  OK=3306  Errors=0  Warnings-only=2086
 
-PASS RATE: 100.0% — ALL 3,304 MODULE MODELS VERIFIED
-
-FIXES APPLIED DURING AUDIT
+ERROR CATEGORIES
 ----------------------------------------
-1. kotor_loader.py _read_mesh():
-   MDLMesh.tangent_space is a BOOLEAN FLAG (True = tangent data present),
-   NOT a list of tangent vectors. The old code iterated it:
-     gr.tangents = [(float(t.x), ...) for t in (mesh.tangent_space or [])]
-   Fixed: gr.tangents = []  (tangents computed by exporter from normals+UVs)
+  MDL not found in archive : 0
+  get_mdl() exception      : 0
+  Parse / load failure     : 0
 
-2. PyKotor/Libraries/.../io_mdl.py _LightHeader.read():
-   flare_radius (float) must be read FIRST at offset +0x00, BEFORE the
-   3-uint32 unknown array block. Previous order placed flare_radius last
-   (after all 4 flare-data arrays), causing a 4-byte misalignment in all
-   subsequent fields. This made 45 light-node-containing module MDLs fail
-   to parse (33 K1 + 12 K2).
-   
-   Root cause confirmed by:
-     - Binary data inspection: offset +0x00 = 0x49371b00 = 750000.0 (float)
-     - kotorblender reader.py:247: flare_radius = self.mdl.read_float() [first]
-     - Wiki/MDL-MDX-File-Format.md:484: offset 0x10 = Flare Sizes offset
-   
-   Affected K1 models (33): m02ab_02j, m08aa_10c, m12ac_01a, m12ad_01a,
-   m12ae_01a, m12af_01a, m12ag_01a, m12ah_01a, m13aa_99z, m14aa_01h,
-   m14ab_02a, m14ac_10g, m14ad_05f, m14ad_05g, m17aa_54, m17ab_00a,
-   m17ac_00b, m17ad_00b, m18aa_05a, m18ac_05a, m26aa_set, m26ab_set,
-   m26ad_set, m26ad_sp3, m26ae_set, m33ab_02, m40ad_08c, m40ad_27b,
-   m41ab_06b, m41ad_03j, m42aa_14a, m44ac_01x, m44ad_01x
-   
-   Affected K2 models (12): 421dxn_14, 501ondd, 502ondd, 504ondh,
-   505ond_fghtr, 505ondf, 511ondd, 512ondh, 605danh, 801drob, 802drok,
-   804drow
-
-WARNINGS (informational, not failures)
+WARNING CATEGORIES (non-fatal)
 ----------------------------------------
-  727  Light/camera-only modules (no renderable geometry) — expected
- 1253  Modules with zero-vertex mesh nodes (degenerate in source game data)
-   34  Modules with textured nodes missing UV coordinates
-        (BTJaw-pattern: hand/finger geometry without UVs — engine bug)
-    0  Missing texture references (all textures resolve in archives)
+  Missing textures    : 24 models
+  No mesh nodes       : 727 models
+  UV-less textured    : 34 models
+  Missing normals     : 0 models
 
-MOST COMMON MISSING TEXTURES (resolved in archive, only warned if no UVs)
+MISSING TEXTURE SUMMARY (top 50 most common)
 ----------------------------------------
-  NOTE: All texture lookups pass. Missing UV warnings come from:
-    rcollar_g, RaFngrB_g, RaFngrT_g, RThumbB_g, RThumbT_g (Endar Spire NPCs)
-    sky05 (sky dome model — intentionally no UVs, uses vertex color)
+  pheyea                                   referenced by 10 model(s)
+  fx_sun01                                 referenced by 6 model(s)
+  h_f_lo01headtest                         referenced by 5 model(s)
+  p_bastillah01                            referenced by 4 model(s)
+  cscreen                                  referenced by 1 model(s)
+  w_vbroswrd01                             referenced by 1 model(s)
+  lda_lbeam                                referenced by 1 model(s)
+  p_zaalbar01                              referenced by 1 model(s)
+  m17ab_01c_a0001l                         referenced by 1 model(s)
+  m17ab_01c_a0001m                         referenced by 1 model(s)
+  m17ab_01c_a0001n                         referenced by 1 model(s)
+  m17ab_01c_a0001o                         referenced by 1 model(s)
+  m17ab_01c_a0001p                         referenced by 1 model(s)
 
-GEOMETRY CHECKS PERFORMED PER MODEL
+K1 MODELS WITH WARNINGS
 ----------------------------------------
-  1. MDL bytes loadable from BIF/ERF/RIM archives
-  2. MDX extension bytes retrievable (or absent for non-mesh models)
-  3. load_model_from_bytes() succeeds without exception
-  4. At least 1 renderable mesh node (or OK for camera/light-only modules)
-  5. All referenced textures resolve to TPC/TGA in archives
-  6. Mesh nodes have >=3 vertices and >=1 face
-  7. UV coordinates present on textured nodes (warning if absent)
-  8. Vertex normals present on renderable meshes (warning if absent)
+  m01aa_03a                       meshes=  68  tex=  67  miss_tex=  0
+      WARN: 1 zero-vertex mesh node(s): Object2624
+  m01aa_08d                       meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m01aa_c01_cam                   meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m01aa_c01_char02                meshes=  68  tex=  14  miss_tex=  0
+      WARN: 5 textured node(s) have no UVs: rcollar_g, RaFngrB_g, RaFngrT_g, RThumbB_g, RThumbT_g
+  m01aa_c02_cam                   meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m01aa_c02_char02                meshes=  65  tex=  13  miss_tex=  0
+      WARN: 5 textured node(s) have no UVs: rcollar_g, RaFngrB_g, RaFngrT_g, RThumbB_g, RThumbT_g
+  m01aa_c03_cam                   meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m01aa_c03_char03                meshes=  68  tex=  14  miss_tex=  0
+      WARN: 5 textured node(s) have no UVs: rcollar_g, RaFngrB_g, RaFngrT_g, RThumbB_g, RThumbT_g
+  m01aa_c04_cam                   meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m01aa_c04_char02                meshes=  68  tex=  14  miss_tex=  0
+      WARN: 5 textured node(s) have no UVs: rcollar_g, RaFngrB_g, RaFngrT_g, RThumbB_g, RThumbT_g
+  m01aa_c04_char04                meshes=  68  tex=  14  miss_tex=  0
+      WARN: 5 textured node(s) have no UVs: rcollar_g, RaFngrB_g, RaFngrT_g, RThumbB_g, RThumbT_g
+  m01aa_c05_cam                   meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m01aa_c05_char03                meshes=  67  tex=  13  miss_tex=  0
+      WARN: 5 textured node(s) have no UVs: rcollar_g, RaFngrB_g, RaFngrT_g, RThumbB_g, RThumbT_g
+  m01aa_c05_char05                meshes=  67  tex=  13  miss_tex=  0
+      WARN: 5 textured node(s) have no UVs: rcollar_g, RaFngrB_g, RaFngrT_g, RThumbB_g, RThumbT_g
+  m02aa_sky                       meshes=   6  tex=   6  miss_tex=  0
+      WARN: 1 textured node(s) have no UVs: sky05
+  m02ab_01b                       meshes=  52  tex=  52  miss_tex=  0
+      WARN: 1 node(s) with extreme UV coords (>50): drdSt014
+  m02ab_sky                       meshes=   6  tex=   6  miss_tex=  0
+      WARN: 1 textured node(s) have no UVs: sky05
+  m02ac_02g                       meshes=  53  tex=  53  miss_tex=  0
+      WARN: 1 node(s) with extreme UV coords (>50): g_74
+  m02ac_02q                       meshes= 268  tex= 264  miss_tex=  0
+      WARN: 1 zero-vertex mesh node(s): Hbuild510
+  m02ad_sky                       meshes=   6  tex=   6  miss_tex=  0
+      WARN: 1 textured node(s) have no UVs: sky05
+  m02ae_10a                       meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m02ae_11a                       meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m02ae_12a                       meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m02af_c10_cam                   meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03aa_13a                       meshes=  25  tex=  25  miss_tex=  0
+      WARN: 1 node(s) with extreme UV coords (>50): Landing496
+  m03ae_10a                       meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03ae_11a                       meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03ae_12a                       meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03af_01a                       meshes= 130  tex= 130  miss_tex=  0
+      WARN: 1 node(s) with extreme UV coords (>50): Landing387
+  m03af_02a                       meshes=  53  tex=  53  miss_tex=  0
+      WARN: 2 node(s) with extreme UV coords (>50): Object1044, Object1043
+  m03af_04a                       meshes=  38  tex=  37  miss_tex=  0
+      WARN: 5 node(s) with extreme UV coords (>50): Object1038, Mesh130, Mesh246, Object27, Object33
+  m03mg_01a                       meshes= 840  tex= 839  miss_tex=  0
+      WARN: 51 node(s) with extreme UV coords (>50): Box104, Object50, Object51, Object53, Mesh239
+  m03mg_01b                       meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_camera                    meshes=  79  tex=  79  miss_tex=  0
+      WARN: 64 node(s) with extreme UV coords (>50): MilSecondsOne_1, MilSecondsOne_2, MilSecondsOne_3, MilSecondsOne_4, MilSecondsOne_5
+  m03mg_mgt02                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt03                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt04                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt05                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt06                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt07                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt08                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt09                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt10                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt11                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt12                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt13                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt14                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt15                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt16                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt17                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt18                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt19                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt20                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt21                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt22                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt23                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt24                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt25                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt26                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt27                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt28                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt29                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt30                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_mgt31                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m03mg_tr01                      meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m05aa_08a                       meshes=  18  tex=  18  miss_tex=  0
+      WARN: 1 node(s) with extreme UV coords (>50): Plane04
+  m05aa_set                       meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m05ab_set                       meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m08aa_16b                       meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m08aa_16c                       meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m08aa_16d                       meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m08aa_16e                       meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m09zz_01c                       meshes=   4  tex=   4  miss_tex=  1
+      WARN: 1 texture(s) not found in archive: cscreen
+  m10ac_32a                       meshes= 101  tex= 101  miss_tex=  0
+      WARN: 1 node(s) with extreme UV coords (>50): Object76
+  m10ac_33a                       meshes= 101  tex= 101  miss_tex=  0
+      WARN: 1 node(s) with extreme UV coords (>50): Object5009
+  m11aa_02a                       meshes=  30  tex=  30  miss_tex=  0
+      WARN: 1 node(s) with extreme UV coords (>50): Object2526
+  m12aa_01e                       meshes= 119  tex= 119  miss_tex=  0
+      WARN: 2 textured node(s) have no UVs: swoop_17, swoop_20
+  m12aa_c01_cam                   meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m12aa_c02_cam                   meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m12aa_c02_char01                meshes=  65  tex=   6  miss_tex=  2
+      WARN: 2 texture(s) not found in archive: h_f_lo01headtest, p_bastillah01
+  m12aa_c02_char02                meshes=  66  tex=   8  miss_tex=  1
+      WARN: 1 texture(s) not found in archive: pheyea
+  m12aa_c03_cam                   meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m12aa_c03_char02                meshes=  68  tex=  14  miss_tex=  0
+      WARN: 5 textured node(s) have no UVs: rcollar_g, RaFngrB_g, RaFngrT_g, RThumbB_g, RThumbT_g
+  m12aa_c04_cam                   meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m12aa_c04_char01                meshes=  67  tex=   9  miss_tex=  1
+      WARN: 1 texture(s) not found in archive: pheyea
+  m12aa_c05_cam                   meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m12aa_c05_char01                meshes=  66  tex=   8  miss_tex=  1
+      WARN: 1 texture(s) not found in archive: pheyea
+  m12aa_c06_cam                   meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m12aa_c06_char04                meshes=  65  tex=   6  miss_tex=  2
+      WARN: 2 texture(s) not found in archive: h_f_lo01headtest, p_bastillah01
+  m12aa_c07_cam                   meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m12ab_camera                    meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m12ab_mgo01                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m12ab_mgt01                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m12ab_mgt02                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m12ab_mgt03                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m12ab_mgt04                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m12ab_mgt05                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m12ab_mgt06                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m12ab_mgt07                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  m12ab_mgt08                     meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  ... and 336 more (see JSON for full list)
+
+K2 MODELS WITH WARNINGS
+----------------------------------------
+  000test                         meshes=   2  tex=   0  miss_tex=  0
+      WARN: 2 zero-vertex mesh node(s): Object01, Box01
+  000trl                          meshes=   4  tex=   0  miss_tex=  0
+      WARN: 4 zero-vertex mesh node(s): Plane01, Plane02, Plane03, floor_01
+  001ebo1                         meshes=  19  tex=   0  miss_tex=  0
+      WARN: 19 zero-vertex mesh node(s): Mesh115, Mesh114, AniScr3, AniScr2, AniScr1
+  001ebo10                        meshes=  21  tex=   0  miss_tex=  0
+      WARN: 21 zero-vertex mesh node(s): CG2_Bustedlight_Ani, Object03, Object02, Object01, CG2_Underpanels
+  001ebo11                        meshes=  25  tex=   0  miss_tex=  0
+      WARN: 25 zero-vertex mesh node(s): Object08, nwb04, nlg06, Line39, engpanlight
+  001ebo12                        meshes=  14  tex=   0  miss_tex=  0
+      WARN: 14 zero-vertex mesh node(s): H2_Thing4, H2_Thing3, H2_Thing2, H2_Thing1, H2_Pipes1
+  001ebo13                        meshes=  12  tex=   0  miss_tex=  0
+      WARN: 12 zero-vertex mesh node(s): H3_Walls1, H3_Pipes, H3_Panel, H3_Lights, H3_Junk2
+  001ebo14                        meshes=  12  tex=   0  miss_tex=  0
+      WARN: 12 zero-vertex mesh node(s): H4_Walls1, H4_Pipes, H4_Lights, H4_Junk2, H4_Junk1
+  001ebo15                        meshes=  24  tex=   0  miss_tex=  0
+      WARN: 24 zero-vertex mesh node(s): B1_Windows, Object04, Mesh113, Object06, Mesh110
+  001ebo16                        meshes=  13  tex=   0  miss_tex=  0
+      WARN: 13 zero-vertex mesh node(s): Object09, Object08, Object07, Object06, Object02
+  001ebo17                        meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  001ebo18                        meshes=   1  tex=   0  miss_tex=  0
+      WARN: 1 zero-vertex mesh node(s): Object11x
+  001ebo2                         meshes=  13  tex=   0  miss_tex=  0
+      WARN: 13 zero-vertex mesh node(s): Object183, Object182, XS_Walls, XS_Pipes, XS_Panel2
+  001ebo3                         meshes=  14  tex=   0  miss_tex=  0
+      WARN: 14 zero-vertex mesh node(s): H5_Pipes, H5_Panel, H5_Lights3, H5_Lights2, H5_Lights1
+  001ebo4                         meshes=  19  tex=   0  miss_tex=  0
+      WARN: 19 zero-vertex mesh node(s): CG_Wall2, CG_Wall1, CG_Thing, CG_Postlights, CG_Pipes
+  001ebo5                         meshes=  39  tex=   0  miss_tex=  0
+      WARN: 39 zero-vertex mesh node(s): Object189, Object181, Object180, Object179, Object178
+  001ebo6                         meshes=  15  tex=   0  miss_tex=  0
+      WARN: 15 zero-vertex mesh node(s): Mesh121, Mesh120, Mesh119, MR_Walls2, MR_Walls1
+  001ebo7                         meshes=  21  tex=   0  miss_tex=  0
+      WARN: 21 zero-vertex mesh node(s): H1_Thing4, H1_Thing3, H1_Thing2, H1_Thing1, H1_Pipes1
+  001ebo8                         meshes=  14  tex=   0  miss_tex=  0
+      WARN: 14 zero-vertex mesh node(s): D2_Walls2, D2_Walls1, D2_Pipes, D2_Panels, D2_Lights2
+  001ebo9                         meshes=  16  tex=   0  miss_tex=  0
+      WARN: 16 zero-vertex mesh node(s): D1_Walls2, D1_Walls1, D1_Tubes, D1_Pipes, D1_Panels
+  001ebocam                       meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  002ebo                          meshes=  27  tex=   0  miss_tex=  0
+      WARN: 27 zero-vertex mesh node(s): bstdE2, Plane01, Object05, Line01, e2_tubes2
+  002ebo2                         meshes=  13  tex=   0  miss_tex=  0
+      WARN: 13 zero-vertex mesh node(s): Object02, Object08, Object07, Object06, Object09
+  002ebocam                       meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  003ebob                         meshes=  51  tex=   0  miss_tex=  0
+      WARN: 51 zero-vertex mesh node(s): nlig1, nlg2, nscr2, navicirc1, navi_chair03
+  003eboc                         meshes=  37  tex=   0  miss_tex=  0
+      WARN: 37 zero-vertex mesh node(s): mrpan1, gall_pipeA, gall_pipeA02, gall_pipeA03, Object116
+  003ebocam                       meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  003ebod                         meshes=  86  tex=   0  miss_tex=  0
+      WARN: 86 zero-vertex mesh node(s): ramp_slope, rampgrille, ChamferBox04, ChamferBox01, ChamferBox02
+  003eboe                         meshes=  54  tex=   0  miss_tex=  0
+      WARN: 54 zero-vertex mesh node(s): cargolight, Loft04, Object143, Object146, Object147
+  003ebof                         meshes= 152  tex=   0  miss_tex=  0
+      WARN: 152 zero-vertex mesh node(s): mroomroof, mroom_pipeC01, mroom_topholo, mroom_stlight02, mroom_pipeA
+  003ebog                         meshes=  30  tex=   0  miss_tex=  0
+      WARN: 30 zero-vertex mesh node(s): medbaypipe02, mediscr1, medbay_table, medbay_console, medbaytop
+  003eboh                         meshes=  83  tex=   0  miss_tex=  0
+      WARN: 83 zero-vertex mesh node(s): Box11, Line38, Mesh10, NGon09, Line36
+  003eboi                         meshes=  46  tex=   0  miss_tex=  0
+      WARN: 46 zero-vertex mesh node(s): Line52, Object39, Cylinder47, lcrew_pipe11, lcrew_pipe12
+  003eboj                         meshes=  55  tex=   0  miss_tex=  0
+      WARN: 55 zero-vertex mesh node(s): Mesh04, Cylinder10, lcrew_pipe02, lcrew_pipe03, Cylinder11
+  003ebok                         meshes=  63  tex=   0  miss_tex=  0
+      WARN: 63 zero-vertex mesh node(s): port_cargo_floor, Plane08, Plane09, Plane07, Box46
+  003ebol                         meshes=  34  tex=   0  miss_tex=  0
+      WARN: 34 zero-vertex mesh node(s): engineroom01, engines, engpan3, Box09, Box53
+  003ebom                         meshes=  59  tex=   0  miss_tex=  0
+      WARN: 59 zero-vertex mesh node(s): Line45, Object28, NGon12, Mesh13, Line44
+  003ebon                         meshes=  61  tex=   0  miss_tex=  0
+      WARN: 61 zero-vertex mesh node(s): breakerpanel02, NGon23, Cylinder27, Mesh25, breakergrill02
+  003eboo                         meshes=  65  tex=   0  miss_tex=  0
+      WARN: 65 zero-vertex mesh node(s): Object54, Cylinder60, Mesh32, breakergrill04, Cylinder61
+  003ebop                         meshes=  25  tex=   0  miss_tex=  0
+      WARN: 25 zero-vertex mesh node(s): Line46, cockpitmai, Mesh74, Mesh73, Object172
+  003eboq                         meshes=  16  tex=   0  miss_tex=  0
+      WARN: 16 zero-vertex mesh node(s): Box18, skybox_701KOR, skybox_201TEL, sphere, skybox_262TEL
+  101per2a                        meshes=  42  tex=   0  miss_tex=  0
+      WARN: 42 zero-vertex mesh node(s): dyn_kolto_glass, mesh650, mesh643, mesh642, mesh645
+  101per2b                        meshes=  28  tex=   0  miss_tex=  0
+      WARN: 28 zero-vertex mesh node(s): medmon13, medmon12, medmon11, medmon01, medmon10
+  101perab                        meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh146, mesh145, mesh144
+  101perac                        meshes=  24  tex=   0  miss_tex=  0
+      WARN: 24 zero-vertex mesh node(s): mesh567, mesh539, mesh472, mesh09, mesh08
+  101perad                        meshes=   9  tex=   0  miss_tex=  0
+      WARN: 9 zero-vertex mesh node(s): mesh235, mesh234, mesh233, mesh232, mesh231
+  101perae                        meshes=  10  tex=   0  miss_tex=  0
+      WARN: 10 zero-vertex mesh node(s): mesh301, mesh300, mesh299, mesh298, mesh297
+  101peraf                        meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh140, mesh139, mesh570
+  101perag                        meshes=   4  tex=   0  miss_tex=  0
+      WARN: 4 zero-vertex mesh node(s): mesh344, mesh343, mesh342, mesh341
+  101perah                        meshes=   9  tex=   0  miss_tex=  0
+      WARN: 9 zero-vertex mesh node(s): mesh281, mesh280, mesh279, mesh278, mesh277
+  101perai                        meshes=  32  tex=   0  miss_tex=  0
+      WARN: 32 zero-vertex mesh node(s): mesh566, mesh547, mesh471, mesh26, mesh25
+  101peraj                        meshes=   9  tex=   0  miss_tex=  0
+      WARN: 9 zero-vertex mesh node(s): mesh254, mesh253, mesh252, mesh251, mesh250
+  101perak                        meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh182, mesh181, mesh180
+  101peral                        meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh132, mesh131, mesh130
+  101peram                        meshes=  18  tex=   0  miss_tex=  0
+      WARN: 18 zero-vertex mesh node(s): mesh628, mesh627, mesh626, mesh528, mesh402
+  101peran                        meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh135, mesh134, mesh133
+  101perao                        meshes=   9  tex=   0  miss_tex=  0
+      WARN: 9 zero-vertex mesh node(s): mesh272, mesh271, mesh270, mesh269, mesh268
+  101perap                        meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh149, mesh148, mesh147
+  101peraq                        meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh123, mesh122, mesh121
+  101perar                        meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh158, mesh157, mesh156
+  101peras                        meshes=  34  tex=   0  miss_tex=  0
+      WARN: 34 zero-vertex mesh node(s): mesh640, mesh639, mesh568, monitors, mesh503
+  101perat                        meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh126, mesh125, mesh124
+  101perau                        meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh129, mesh128, mesh127
+  101perav                        meshes=  24  tex=   0  miss_tex=  0
+      WARN: 24 zero-vertex mesh node(s): mesh638, mesh637, mesh636, mesh635, mesh634
+  101peraw                        meshes=  10  tex=   0  miss_tex=  0
+      WARN: 10 zero-vertex mesh node(s): mesh320, mesh319, mesh318, mesh317, mesh316
+  101perax                        meshes=   9  tex=   0  miss_tex=  0
+      WARN: 9 zero-vertex mesh node(s): mesh226, mesh225, mesh224, mesh223, mesh222
+  101peray                        meshes=   9  tex=   0  miss_tex=  0
+      WARN: 9 zero-vertex mesh node(s): mesh464, mesh199, mesh198, mesh197, mesh196
+  101peraz                        meshes=  19  tex=   0  miss_tex=  0
+      WARN: 19 zero-vertex mesh node(s): mesh587, mesh586, mesh421, mesh422, mesh423
+  101perb                         meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh152, mesh151, mesh150
+  101perba                        meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh161, mesh160, mesh159
+  101perbb                        meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh167, mesh166, mesh165
+  101perbc                        meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh120, mesh119, mesh118
+  101perbe                        meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh191, mesh190, mesh189
+  101perbg                        meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh164, mesh163, mesh162
+  101perbh                        meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh188, mesh187, mesh186
+  101perbi                        meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh173, mesh171, mesh172
+  101perbj                        meshes=  11  tex=   0  miss_tex=  0
+      WARN: 11 zero-vertex mesh node(s): mesh340, mesh339, mesh338, mesh337, mesh336
+  101perbk                        meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh179, mesh178, mesh177
+  101perbl                        meshes=  11  tex=   0  miss_tex=  0
+      WARN: 11 zero-vertex mesh node(s): Space, PeragusPlanet, mesh717, mesh716, mesh715
+  101perbm                        meshes=   9  tex=   0  miss_tex=  0
+      WARN: 9 zero-vertex mesh node(s): mesh411, mesh410, mesh409, mesh408, mesh407
+  101perc                         meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh155, mesh154, mesh153
+  101percam                       meshes=   0  tex=?     miss_tex=?  
+      WARN: No mesh nodes found — possible dummy/empty model
+  101perd                         meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh143, mesh142, mesh141
+  101pere                         meshes=   4  tex=   0  miss_tex=  0
+      WARN: 4 zero-vertex mesh node(s): mesh352, mesh351, mesh350, mesh349
+  101perf                         meshes=   9  tex=   0  miss_tex=  0
+      WARN: 9 zero-vertex mesh node(s): mesh420, mesh419, mesh418, mesh417, mesh416
+  101perg                         meshes=   9  tex=   0  miss_tex=  0
+      WARN: 9 zero-vertex mesh node(s): mesh217, mesh216, mesh215, mesh214, mesh213
+  101perh                         meshes=  30  tex=   0  miss_tex=  0
+      WARN: 30 zero-vertex mesh node(s): mesh616, mesh541, mesh536, mesh535, mesh468
+  101peri                         meshes= 114  tex=   0  miss_tex=  0
+      WARN: 114 zero-vertex mesh node(s): mesh730, mesh728, mesh729, mesh372, mesh371
+  101perj                         meshes=   9  tex=   0  miss_tex=  0
+      WARN: 9 zero-vertex mesh node(s): mesh245, mesh244, mesh243, mesh242, mesh241
+  101perk                         meshes=  19  tex=   0  miss_tex=  0
+      WARN: 19 zero-vertex mesh node(s): mesh619, mesh618, mesh617, mesh612, mesh449
+  101perl                         meshes=   9  tex=   0  miss_tex=  0
+      WARN: 9 zero-vertex mesh node(s): mesh208, mesh207, mesh206, mesh205, mesh204
+  101perm                         meshes=  10  tex=   0  miss_tex=  0
+      WARN: 10 zero-vertex mesh node(s): mesh329, mesh328, mesh327, mesh326, mesh325
+  101pern                         meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh170, mesh169, mesh168
+  101pero                         meshes=  23  tex=   0  miss_tex=  0
+      WARN: 23 zero-vertex mesh node(s): mesh552, mesh542, mesh47, mesh44, mesh43
+  101perp                         meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh138, mesh137, mesh136
+  101perq                         meshes=   3  tex=   0  miss_tex=  0
+      WARN: 3 zero-vertex mesh node(s): mesh176, mesh175, mesh174
+  101perr                         meshes=   9  tex=   0  miss_tex=  0
+      WARN: 9 zero-vertex mesh node(s): mesh55, mesh54, mesh53, mesh52, mesh50
+  101pers                         meshes=   4  tex=   0  miss_tex=  0
+      WARN: 4 zero-vertex mesh node(s): mesh348, mesh347, mesh346, mesh345
+  101pert                         meshes=  27  tex=   0  miss_tex=  0
+      WARN: 27 zero-vertex mesh node(s): Box15, mesh460, Object11, Object22, mesh452
+  101peru                         meshes=  10  tex=   0  miss_tex=  0
+      WARN: 10 zero-vertex mesh node(s): mesh291, mesh290, mesh289, mesh288, mesh287
+  ... and 1550 more (see JSON for full list)
 

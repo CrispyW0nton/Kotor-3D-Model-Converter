@@ -679,7 +679,17 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
                        abs(wo[0]) < 1e-6 and abs(wo[1]) < 1e-6 and abs(wo[2]) < 1e-6)
     is_identity_pos = (abs(wp[0]) < 1e-9 and abs(wp[1]) < 1e-9 and abs(wp[2]) < 1e-9)
 
-    _UV_SENTINEL = 20.0
+    # FIX-UV-SENTINEL: Raised from 20.0 to 100.0 to match viewport.py.
+    # KotOR area/module geometry uses UV coordinates well outside [0,1]:
+    # e.g. N_sithpraet pelvis UV=[-13,+13], mRobe2_g U=[-13.58,+13.58].
+    # With sentinel=20.0 these were incorrectly flagged as bad UVs and
+    # replaced with 0.5, causing solid-color or gray rendering on tiled
+    # module geometry instead of correctly tiled textures.
+    # Genuine sentinel/placeholder UVs (from KotOR seam-split vertices,
+    # PyKotor corrupt MDX offsets) are always far larger (e.g. ±1e28),
+    # so 100.0 is a safe discriminating threshold.
+    # Reference: viewport.py _UV_SENTINEL = 100.0 (Phase 18 fix comment).
+    _UV_SENTINEL = 100.0
 
     # ── Convert vertices and normals to Nx3 float64 arrays ──────────────────
     try:
@@ -974,6 +984,21 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     #            PyKotor read_mdl.py gl_load_stitched_model (expands per-face).
     _has_face_uvs = (len(face_uvs) == n_faces)
 
+    # FIX-FACEUVOPT: When face_uvs has the same length as faces but all tvert
+    # indices equal the corresponding vertex indices (the t=-1→use_vert case
+    # from binary MDL trimeshes), treat it as "no per-face UV" so we can use
+    # the fast IBO path.  This avoids unnecessarily expanding a triangle-list
+    # for module/area models whose binary trimeshes always have t==-1.
+    # Skip this check for skin nodes (always need expansion) and for large
+    # meshes (>2000 faces) where the check itself would be slow.
+    if _has_face_uvs and not is_skin and n_faces <= 2000:
+        _all_tvert_eq_vert = all(
+            fuvs[0] == faces[fi][0] and fuvs[1] == faces[fi][1] and fuvs[2] == faces[fi][2]
+            for fi, fuvs in enumerate(face_uvs)
+        )
+        if _all_tvert_eq_vert:
+            _has_face_uvs = False
+
     # Fast path: no per-face UV indices AND not a skin node → use IBO
     if not _has_face_uvs and not is_skin:
         try:
@@ -1004,7 +1029,18 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     # Expanded path: per-face UV indices OR skin mesh → expand to triangle list
     # Each triangle corner is a (position, normal, uv) triple taken from the
     # correct vertex/tvert index pair.  No IBO needed.
+    #
+    # FIX-EXPANDUV: Use sanitized uv_arr (already seam-healed and sentinel-
+    # checked) as the UV source, NOT the raw uvs[] list.  This ensures that
+    # the seam-healing pass (which corrects duplicate-vertex UVs at seams like
+    # p_hk47 fingers and c_kraytdragon claws) is applied to the final vertices.
+    # Previously the expanded path re-read raw uvs[ti], bypassing seam healing.
+    # Now it reads uv_arr[ti] which is the sanitized version.
+    # Exception: when ti != vi (genuine per-face UV index differs from vertex
+    # index), we must use the correct tvert UV from uv_arr[ti].  This is the
+    # KotOR ProcessSkinSeams() case.
     expanded_rows = []
+    n_uv_arr = len(uv_arr)   # sanitized UV array (already seam-healed)
     for fi, face in enumerate(faces):
         if len(face) < 3:
             continue
@@ -1019,12 +1055,16 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
             ti0, ti1, ti2 = vi0, vi1, vi2
         for vi, ti in ((vi0, ti0), (vi1, ti1), (vi2, ti2)):
             row = vdata[vi].copy()
-            if 0 <= ti < n_uvs:
-                uv = uvs[ti]
-                if abs(uv[0]) < _UV_SENTINEL and abs(uv[1]) < _UV_SENTINEL:
-                    row[6] = float(uv[0]); row[7] = float(uv[1])
-                else:
-                    row[6] = row[7] = 0.5
+            # FIX-EXPANDUV: Use sanitized uv_arr[ti] instead of raw uvs[ti].
+            # uv_arr is already sentinel-checked and seam-healed.
+            if 0 <= ti < n_uv_arr:
+                row[6] = uv_arr[ti, 0]
+                row[7] = uv_arr[ti, 1]
+            elif 0 <= vi < n_uv_arr:
+                # tvert index out of range → fall back to vertex UV
+                row[6] = uv_arr[vi, 0]
+                row[7] = uv_arr[vi, 1]
+            # else: keep row's UV from vdata[vi] (already set from uv_arr[vi])
             expanded_rows.append(row)
 
     if not expanded_rows:
@@ -1531,14 +1571,23 @@ class GpuRenderer:
             # KotOR MDL models contain internal bone-proxy / skeleton-helper mesh nodes
             # that must NOT be rendered as geometry.  Detection rules (same logic as
             # viewport._is_deformation_helper, inlined here for GPU-path independence):
-            #   1. Non-skin nodes with no UVs → helper
+            #   1. Non-skin nodes with no UVs → helper (UNLESS module/area model)
             #   2. Non-skin nodes whose names end with '_g', '_g0', or '_dum' → helper
             #   3. Nodes with extreme UV coordinates (|u|>3 or |v|>3) → helper
+            #      EXCEPTION: module/area/tile models legitimately use large tiled UVs
             #   4. Nodes with null/empty texture AND no UVs → helper
             #   5. Skin nodes with a real texture and valid UVs → ALWAYS render
             # Reference: viewport._is_deformation_helper, PyKotor geometry_utils.py,
             #            KotOR engine ProcessSkinSeams().
             _UV_EXTREME = 3.0
+            # Detect module/area model classification so we can exempt large tiled UVs.
+            # KotOR module/area geometry tiles textures over large surfaces (e.g.
+            # LTS_logwal02 wall mesh has U=−8.75, floor mesh V=−9.71). These are
+            # real renderable geometry, NOT deformation helpers.
+            _gpu_model_cls   = (str(getattr(model, 'classification', 'character') or 'character')).lower()
+            _gpu_model_type  = int(getattr(model, 'model_type', 4) or 4)
+            _gpu_is_module   = (_gpu_model_cls in ('effect', 'tile', 'other') or
+                                _gpu_model_type in (0, 2))
 
             def _is_deform_helper(nd) -> bool:
                 """Return True if nd is a bone-proxy/deformation-helper that must not render."""
@@ -1557,8 +1606,11 @@ class GpuRenderer:
                 if is_skin and not has_tex and not has_uvs:
                     return True
 
-                # Non-skin: no UVs → helper
+                # Non-skin: no UVs → helper (module/area models exempt: MDX-sourced UVs
+                # may be empty if MDX wasn't loaded, but mesh is still real geometry)
                 if not is_skin and not has_uvs:
+                    if _gpu_is_module:
+                        return False  # module geometry: render flat-shaded without UVs
                     return True
 
                 # Name-based helper detection for non-skin nodes
@@ -1568,7 +1620,9 @@ class GpuRenderer:
                         return True
 
                 # Extreme UV check (applies to both skin and non-skin)
-                if has_uvs:
+                # EXCEPTION: skip for module/area/tile models which legitimately use
+                # large tiled UV coordinates (|u|>3, |v|>9 etc.) for wall/floor textures.
+                if has_uvs and not _gpu_is_module:
                     try:
                         for uv in uvs[:min(len(uvs), 32)]:  # sample first 32 UVs
                             if abs(uv[0]) > _UV_EXTREME or abs(uv[1]) > _UV_EXTREME:
@@ -2226,6 +2280,13 @@ def _compute_model_bounds(model) -> dict:
     # their correct world position).
     _is_accessory = (_parent_supermodel not in _BASE_SKELS)
 
+    # FIX-BOUNDS-MODULE: Detect module/area/tile models so that bounds computation
+    # does NOT exclude nodes with large tiled UVs (which are real geometry).
+    _bounds_model_cls  = (str(getattr(model, 'classification', 'character') or 'character')).lower()
+    _bounds_model_type = int(getattr(model, 'model_type', 4) or 4)
+    _bounds_is_module  = (_bounds_model_cls in ('effect', 'tile', 'other') or
+                          _bounds_model_type in (0, 2))
+
     all_pts = []
 
     _all_nodes_fn = getattr(model, 'all_nodes', None)
@@ -2239,17 +2300,20 @@ def _compute_model_bounds(model) -> dict:
         has_uvs = bool(uvs)
 
         # Skip deformation-helper nodes (same rules as _is_deform_helper)
-        if not has_uvs:
+        # Module/area models: skip the no-UV check (MDX-sourced UVs may be absent)
+        if not has_uvs and not _bounds_is_module:
             continue
         if node.name.lower().endswith(('_g', '_g0', '_dum')):
             continue
-        extreme = False
-        for uv in uvs[:32]:
-            if abs(uv[0]) > _UV_EXTREME or abs(uv[1]) > _UV_EXTREME:
-                extreme = True
-                break
-        if extreme:
-            continue
+        # Extreme UV check: skip for module/area models (legitimately large tiling UVs)
+        if not _bounds_is_module:
+            extreme = False
+            for uv in uvs[:32]:
+                if abs(uv[0]) > _UV_EXTREME or abs(uv[1]) > _UV_EXTREME:
+                    extreme = True
+                    break
+            if extreme:
+                continue
 
         try:
             import numpy as _np
