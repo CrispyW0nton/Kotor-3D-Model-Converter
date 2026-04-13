@@ -51,16 +51,16 @@ except ImportError:
     pass
 
 # ── Assimp DLL bundling (optional) ───────────────────────────────────────
-# pyassimp searches its own package folder for any file whose name contains
-# 'assimp', so we bundle the DLL as a binary alongside pyassimp's package.
-# build.bat downloads the DLL and places it there before running this spec.
-# If pyassimp is not importable (e.g. Python 3.14 C-extension not yet built),
-# we skip it entirely and add it to excludes so PyInstaller doesn't crash.
+# Priority 1: pyassimp + native DLL → full bone/skin FBX import
+# Priority 2: assimp_py (bundles native lib in wheel) → geometry-only FBX import
+# build.bat downloads the DLL and places it in pyassimp's folder before this spec.
+# If neither is importable, we exclude them so PyInstaller doesn't crash.
 binaries = []
 _pyassimp_available = False
+_assimp_py_available = False
+
+# Check pyassimp + its DLL
 try:
-    # pyassimp raises AssimpError (not ImportError) at class-body level when
-    # the native DLL is missing, so we must catch broadly with BaseException.
     import importlib.util as _ilu
     _pa_spec = _ilu.find_spec('pyassimp')
     if _pa_spec is not None:
@@ -74,12 +74,39 @@ try:
                 break
         else:
             print('[spec] WARNING: No assimp*.dll found in pyassimp folder — '
-                  'FBX import will be unavailable at runtime.')
+                  'pyassimp bone import unavailable.')
     else:
-        print('[spec] pyassimp not installed — FBX import will be unavailable.')
+        print('[spec] pyassimp not installed.')
 except BaseException as _e:
-    print(f'[spec] pyassimp check failed ({_e}) — excluding from build. '
-          'FBX import will be unavailable (all other features unaffected).')
+    print(f'[spec] pyassimp check failed ({_e}) — excluding from build.')
+
+# Check assimp_py (geometry-only fallback, bundles its own native lib)
+try:
+    _ap_spec = _ilu.find_spec('assimp_py')
+    if _ap_spec is not None:
+        _assimp_py_available = True
+        # assimp_py bundles the native lib inside its wheel — collect its binaries
+        _ap_origin = _ap_spec.origin
+        if _ap_origin:
+            _ap_dir = os.path.dirname(_ap_origin)
+            for _fname in os.listdir(_ap_dir):
+                _fl = _fname.lower()
+                if ('assimp' in _fl) and (_fl.endswith('.dll') or _fl.endswith('.so') or _fl.endswith('.pyd')):
+                    _dll_path = os.path.join(_ap_dir, _fname)
+                    binaries.append((_dll_path, 'assimp_py'))
+                    print(f'[spec] Bundling assimp_py binary: {_dll_path}')
+        print('[spec] assimp_py available (geometry-only FBX fallback).')
+    else:
+        print('[spec] assimp_py not installed.')
+except BaseException as _e:
+    print(f'[spec] assimp_py check failed ({_e}).')
+
+if _pyassimp_available:
+    print('[spec] FBX import: FULL (pyassimp with bone/skin data)')
+elif _assimp_py_available:
+    print('[spec] FBX import: GEOMETRY ONLY (assimp_py, no bone data)')
+else:
+    print('[spec] FBX import: DISABLED (neither pyassimp nor assimp_py available)')
 
 # ── Data files ────────────────────────────────────────────────────────────
 datas = [
@@ -103,9 +130,9 @@ a = Analysis(
         'unittest',
         'pydantic',
         'mcp',
-        # Exclude pyassimp if it couldn't be imported (e.g. Python 3.14)
-        # so PyInstaller doesn't crash trying to analyse it
+        # Exclude assimp libs if not importable so PyInstaller doesn't crash
         *( [] if _pyassimp_available else ['pyassimp'] ),
+        *( [] if _assimp_py_available else ['assimp_py'] ),
     ],
     noarchive=False,
     optimize=0,

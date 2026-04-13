@@ -189,7 +189,12 @@ class OBJImporter:
 
 
 # ──────────────────────────────────────────────────────────────────────
-#  FBX Importer (via pyassimp or trimesh)
+#  FBX Importer (via pyassimp / assimp_py / trimesh)
+# ──────────────────────────────────────────────────────────────────────
+# Import priority:
+#   1. pyassimp  – full bone/skin support, requires native Assimp DLL/so
+#   2. assimp_py – bundled native lib, no bone data (geometry-only fallback)
+#   3. trimesh   – pure Python, handles FBX ASCII + OBJ/GLB
 # ──────────────────────────────────────────────────────────────────────
 
 class FBXImporter:
@@ -199,13 +204,24 @@ class FBXImporter:
                     supermodel: str = "NULL",
                     classification: str = "character") -> Optional[KotorModel]:
         if not model_name: model_name = Path(path).stem[:32]
-        # Try pyassimp first (handles binary FBX), then trimesh (handles FBX ASCII + other)
+        # 1) pyassimp (full bone/skin support, needs native DLL)
         try:
             return self._load_assimp(path, model_name, game_version, supermodel, classification)
         except ImportError:
-            log.debug("pyassimp not available for FBX import — trying trimesh")
+            log.debug("pyassimp not available for FBX import — trying assimp_py")
         except Exception as e:
-            log.debug(f"pyassimp FBX load failed: {e} — trying trimesh")
+            log.debug(f"pyassimp FBX load failed: {e} — trying assimp_py")
+        # 2) assimp_py (bundled native lib, geometry only — no bones)
+        try:
+            result = self._load_assimp_py(path, model_name, game_version, supermodel, classification)
+            if result is not None:
+                log.info("FBX imported via assimp_py (geometry only — no bone/skin data)")
+                return result
+        except ImportError:
+            log.debug("assimp_py not available — trying trimesh")
+        except Exception as e:
+            log.debug(f"assimp_py FBX load failed: {e} — trying trimesh")
+        # 3) trimesh (pure Python fallback)
         try:
             return self._load_trimesh(path, model_name, game_version, supermodel, classification)
         except ImportError:
@@ -213,10 +229,11 @@ class FBXImporter:
         except Exception as e:
             log.debug(f"trimesh FBX load failed: {e}")
         log.error(
-            "FBX import: pyassimp is required for binary FBX files.\n"
-            "  Install: pip install pyassimp\n"
-            "  Also requires the Assimp shared library (libassimp).\n"
-            "  Alternatively, export your model as OBJ or GLB for import."
+            "FBX import failed — no suitable library found.\n"
+            "  Option A: pip install pyassimp  (+ Assimp DLL for bone/skin data)\n"
+            "  Option B: pip install assimp-py (bundled DLL, geometry only)\n"
+            "  Option C: pip install trimesh   (pure Python, limited FBX support)\n"
+            "  Or export your model as OBJ or GLB for import."
         )
         return None
 
@@ -236,6 +253,97 @@ class FBXImporter:
         pyassimp.release(scene)
         model.compute_bounds()
         return model
+
+    # ── assimp_py fallback (bundled native lib, no bone data) ─────────
+    def _load_assimp_py(self, path, model_name, gv, sm, cl) -> KotorModel:
+        """Import via assimp_py — geometry, normals, UVs, materials.
+        Does NOT import bone/skin data (assimp_py doesn't expose it)."""
+        import assimp_py
+        flags = (assimp_py.Process_Triangulate |
+                 assimp_py.Process_GenSmoothNormals |
+                 assimp_py.Process_JoinIdenticalVertices |
+                 assimp_py.Process_CalcTangentSpace)
+        scene = assimp_py.import_file(str(path), flags)
+        model = KotorModel(name=model_name, supermodel=sm, game_version=gv, classification=cl)
+        root  = ModelNode(name=model_name, flags=int(NodeFlags.HEADER))
+        model.root_node = root
+
+        # Walk node tree
+        self._walk_assimp_py_nodes(scene.root_node, root, scene)
+
+        model.compute_bounds()
+        return model
+
+    def _walk_assimp_py_nodes(self, ai_node, parent_node, scene):
+        """Recursively mirror assimp_py scene graph into KotorModel nodes."""
+        mat = ai_node.transformation  # 4x4 row-major flat or nested
+        # assimp_py returns transformation as a 4x4 list-of-lists
+        if isinstance(mat, (list, tuple)) and len(mat) == 4:
+            tx, ty, tz = float(mat[0][3]), float(mat[1][3]), float(mat[2][3])
+        else:
+            tx = ty = tz = 0.0
+
+        node = ModelNode(name=(ai_node.name or "node")[:32],
+                         flags=int(NodeFlags.HEADER),
+                         position=(tx, ty, tz),
+                         parent=parent_node)
+        parent_node.children.append(node)
+
+        # Meshes attached to this node
+        for mesh_idx in (ai_node.mesh_indices or []):
+            if mesh_idx < len(scene.meshes):
+                mesh = scene.meshes[mesh_idx]
+                mesh_node = self._assimp_py_mesh(mesh, scene)
+                mesh_node.parent = node
+                node.children.append(mesh_node)
+
+        for child in (ai_node.children or []):
+            self._walk_assimp_py_nodes(child, node, scene)
+
+    def _assimp_py_mesh(self, ai_mesh, scene) -> ModelNode:
+        """Convert an assimp_py Mesh to a ModelNode (geometry only)."""
+        flags = int(NodeFlags.HEADER | NodeFlags.MESH)
+        node = ModelNode(name=(ai_mesh.name or "mesh")[:32], flags=flags)
+
+        # Vertices (flat list of floats, stride 3)
+        verts = ai_mesh.vertices
+        node.vertices = [(verts[i], verts[i+1], verts[i+2])
+                         for i in range(0, len(verts), 3)]
+
+        # Normals
+        norms = ai_mesh.normals
+        if norms:
+            node.normals = [(norms[i], norms[i+1], norms[i+2])
+                            for i in range(0, len(norms), 3)]
+
+        # UVs — first channel (texcoords is list of channels, each flat)
+        if ai_mesh.texcoords and len(ai_mesh.texcoords) > 0:
+            uv_ch = ai_mesh.texcoords[0]
+            n_comp = ai_mesh.num_uv_components[0] if ai_mesh.num_uv_components else 2
+            node.uvs = [(uv_ch[i], 1.0 - uv_ch[i+1])
+                        for i in range(0, len(uv_ch), n_comp)]
+
+        # Faces (flat index list, all triangulated)
+        idx = ai_mesh.indices
+        node.faces = [(idx[i], idx[i+1], idx[i+2])
+                      for i in range(0, len(idx), 3)]
+
+        # Material — extract diffuse texture name
+        if scene.materials and ai_mesh.material_index < len(scene.materials):
+            mat = scene.materials[ai_mesh.material_index]
+            # assimp_py materials: dict of (key, semantic, index) -> value
+            if isinstance(mat, dict):
+                for k, v in mat.items():
+                    if isinstance(k, tuple) and len(k) >= 2:
+                        if k[1] == 1 and k[0] == '$tex.file':  # diffuse texture
+                            node.texture = Path(str(v)).stem[:32]
+                        elif k[0] == '$clr.diffuse' and isinstance(v, (list, tuple)):
+                            node.diffuse = (float(v[0]), float(v[1]), float(v[2]))
+
+        node.render    = True
+        node._imported = True
+        node.compute_bounds()
+        return node
 
     def _walk_assimp_nodes(self, ai_node, parent_node, scene):
         """Recursively mirror the assimp scene graph into KotorModel nodes"""
