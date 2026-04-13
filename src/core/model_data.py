@@ -1427,3 +1427,278 @@ class CharacterScene:
             parts.append(f"{label}={entry.resref or '?'}")
         return (f"CharacterScene({self.game_version}) "
                 + (", ".join(parts) if parts else "(empty)"))
+
+    # ── JSON persistence (Phase 2) ────────────────────────────────────────────
+
+    # File format version written into every .ghostrig.json.
+    # Increment when the schema changes in a breaking way.
+    SCENE_FORMAT_VERSION: int = 1
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialise the scene to a plain JSON-compatible dictionary.
+
+        The dict can be round-tripped with ``CharacterScene.from_dict()``.
+        Loaded KotorModel objects are *not* serialised (they can be re-loaded
+        from ``source_path`` / resref).  Only the slot *metadata* is saved.
+
+        Schema
+        ------
+        ::
+
+            {
+              "ghostrig_version": 1,
+              "scene_id": "<uuid>",
+              "game_version": "K1",
+              "character_name": "Revan",
+              "supermodel": "S_Female02",
+              "metadata": { ... },
+              "slots": [
+                {
+                  "slot": "head_shell",
+                  "resref": "pfhc01",
+                  "asset_id": "gr:PFHC01:K1",
+                  "game_version": "K1",
+                  "source_path": "/abs/path/pfhc01.mdl"
+                },
+                ...
+              ]
+            }
+        """
+        import datetime as _dt
+        slot_list = []
+        for slot, entry in self.slots.items():
+            slot_list.append({
+                "slot":         slot.value,
+                "resref":       entry.resref,
+                "asset_id":     entry.asset_id,
+                "game_version": entry.game_version,
+                "source_path":  entry.source_path,
+            })
+        return {
+            "ghostrig_version": self.SCENE_FORMAT_VERSION,
+            "scene_id":         self.scene_id,
+            "game_version":     self.game_version,
+            "character_name":   self.character_name,
+            "supermodel":       self.supermodel,
+            "saved_at":         _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+            "metadata":         dict(self.metadata),
+            "slots":            slot_list,
+        }
+
+    @classmethod
+    def from_dict(
+        cls,
+        data: Dict[str, Any],
+        *,
+        load_models: bool = False,
+    ) -> "CharacterScene":
+        """Reconstruct a CharacterScene from a dict produced by ``to_dict()``.
+
+        Parameters
+        ----------
+        data        : Dict previously returned by ``to_dict()`` (or loaded from
+                      a ``.ghostrig.json`` file).
+        load_models : When True, attempt to load each slot's model from
+                      ``source_path`` using the standard file loader.  Slots
+                      whose source_path does not exist are kept with
+                      ``model=None`` and a warning is logged.
+                      When False (default), all slots are created with
+                      ``model=None``; the caller is responsible for loading.
+
+        Returns
+        -------
+        CharacterScene with slots populated (models optionally loaded).
+
+        Raises
+        ------
+        ValueError  : If ``data`` is missing required keys or has an
+                      unsupported ``ghostrig_version``.
+        """
+        ver = data.get("ghostrig_version", 0)
+        if ver > cls.SCENE_FORMAT_VERSION:
+            raise ValueError(
+                f"CharacterScene.from_dict: file version {ver} is newer than "
+                f"this build supports ({cls.SCENE_FORMAT_VERSION}). "
+                "Please update GhostRigger."
+            )
+
+        scene = cls(
+            game_version   = data.get("game_version", "K1"),
+            character_name = data.get("character_name", ""),
+            supermodel     = data.get("supermodel", ""),
+            metadata       = dict(data.get("metadata", {})),
+        )
+        # Preserve the original scene_id so references stay stable
+        saved_id = data.get("scene_id", "")
+        if saved_id:
+            scene.scene_id = saved_id
+
+        for slot_data in data.get("slots", []):
+            slot_value = slot_data.get("slot", "")
+            try:
+                slot = PartSlot(slot_value)
+            except ValueError:
+                log.warning("CharacterScene.from_dict: unknown slot '%s', skipping",
+                            slot_value)
+                continue
+
+            resref       = slot_data.get("resref", "")
+            asset_id     = slot_data.get("asset_id", "")
+            game_version = slot_data.get("game_version", scene.game_version)
+            source_path  = slot_data.get("source_path", "")
+
+            model = None
+            if load_models and source_path:
+                try:
+                    from .kotor_loader import load_model_from_file
+                    if _uuid.uuid4 and __import__("os").path.isfile(source_path):
+                        model = load_model_from_file(source_path)
+                        log.info("CharacterScene.from_dict: loaded %s from %s",
+                                 resref, source_path)
+                    else:
+                        log.warning(
+                            "CharacterScene.from_dict: source_path not found "
+                            "for slot %s: %s", slot_value, source_path)
+                except Exception as exc:
+                    log.warning("CharacterScene.from_dict: failed to load %s: %s",
+                                source_path, exc)
+
+            entry = SceneSlot(
+                slot         = slot,
+                model        = model,
+                resref       = resref,
+                asset_id     = asset_id or _make_asset_id(resref, game_version),
+                game_version = game_version,
+                source_path  = source_path,
+                dirty        = False,
+            )
+            scene.slots[slot] = entry
+
+        scene.dirty = False
+        return scene
+
+    def to_json(self, indent: int = 2) -> str:
+        """Return a JSON string representation of the scene."""
+        import json as _json
+        return _json.dumps(self.to_dict(), indent=indent, ensure_ascii=False)
+
+    @classmethod
+    def from_json(cls, text: str, *, load_models: bool = False) -> "CharacterScene":
+        """Parse a JSON string (as produced by ``to_json()``)."""
+        import json as _json
+        return cls.from_dict(_json.loads(text), load_models=load_models)
+
+
+# ──────────────────────────────────────────────────────────────
+#  SceneIO — save / load .ghostrig.json files
+# ──────────────────────────────────────────────────────────────
+
+class SceneIO:
+    """Utility class for reading and writing ``.ghostrig.json`` scene files.
+
+    A ``.ghostrig.json`` file is a UTF-8 JSON document that captures all
+    slot metadata of a CharacterScene.  It is designed to sit next to the
+    exported model files (e.g. ``pfhc01.mdl`` + ``pfhc01.ghostrig.json``).
+
+    Usage
+    -----
+    ::
+
+        # Save
+        SceneIO.save(scene, "/path/to/revan.ghostrig.json")
+
+        # Load (metadata only — models not re-loaded automatically)
+        scene = SceneIO.load("/path/to/revan.ghostrig.json")
+
+        # Load and attempt to re-open model files from their source_path
+        scene = SceneIO.load("/path/to/revan.ghostrig.json", load_models=True)
+
+        # Write side-car next to an exported model
+        SceneIO.write_sidecar(scene, "/path/to/export/pfhc01.mdl")
+    """
+
+    EXTENSION = ".ghostrig.json"
+
+    @staticmethod
+    def save(scene: "CharacterScene", path: str) -> None:
+        """Write the scene to *path* as a ``.ghostrig.json`` file.
+
+        The parent directory is created if it does not exist.
+
+        Parameters
+        ----------
+        scene : CharacterScene to serialise.
+        path  : Destination file path (should end with ``.ghostrig.json``
+                but any extension is accepted).
+
+        Raises
+        ------
+        OSError : If the file cannot be written.
+        """
+        import json as _json
+        import os as _os
+        _os.makedirs(_os.path.dirname(_os.path.abspath(path)), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            _json.dump(scene.to_dict(), fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+        scene.mark_clean()
+        log.info("SceneIO.save: wrote %s (%d slot(s))", path, len(scene.slots))
+
+    @staticmethod
+    def load(path: str, *, load_models: bool = False) -> "CharacterScene":
+        """Load a scene from a ``.ghostrig.json`` file.
+
+        Parameters
+        ----------
+        path        : Path to the ``.ghostrig.json`` file.
+        load_models : When True, attempt to re-open each slot's model from
+                      its recorded ``source_path``.
+
+        Returns
+        -------
+        CharacterScene (possibly with model=None slots if load_models=False
+        or if source files are unavailable).
+
+        Raises
+        ------
+        FileNotFoundError : If *path* does not exist.
+        ValueError        : If the file format version is unsupported.
+        json.JSONDecodeError : If the file is not valid JSON.
+        """
+        import json as _json
+        with open(path, "r", encoding="utf-8") as fh:
+            data = _json.load(fh)
+        scene = CharacterScene.from_dict(data, load_models=load_models)
+        log.info("SceneIO.load: read %s (%d slot(s))", path, len(scene.slots))
+        return scene
+
+    @staticmethod
+    def write_sidecar(scene: "CharacterScene", model_path: str) -> str:
+        """Write a side-car ``.ghostrig.json`` next to *model_path*.
+
+        The sidecar filename is derived by replacing the model file's
+        extension with ``.ghostrig.json``.
+
+        Parameters
+        ----------
+        scene      : CharacterScene to serialise.
+        model_path : Path to the primary exported model file
+                     (e.g. ``/out/pfhc01.mdl`` or ``/out/revan.fbx``).
+
+        Returns
+        -------
+        Absolute path of the written sidecar file.
+        """
+        import os as _os
+        base = _os.path.splitext(model_path)[0]
+        sidecar_path = base + SceneIO.EXTENSION
+        SceneIO.save(scene, sidecar_path)
+        return _os.path.abspath(sidecar_path)
+
+    @staticmethod
+    def find_sidecar(model_path: str) -> Optional[str]:
+        """Return the sidecar path for *model_path* if it exists, else None."""
+        import os as _os
+        base = _os.path.splitext(model_path)[0]
+        candidate = base + SceneIO.EXTENSION
+        return candidate if _os.path.isfile(candidate) else None

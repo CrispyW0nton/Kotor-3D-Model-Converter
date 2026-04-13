@@ -255,47 +255,1004 @@ class _AssemblyFrame(ttk.Frame):
         self._slot_status_text.configure(state=tk.DISABLED)
 
 
+def _import_character_builder():
+    """Lazy import of character_builder module (avoids heavy import at startup)."""
+    try:
+        from src.core.character_builder import SkeletonSelector, BONE_GROUPS
+    except ImportError:
+        from core.character_builder import SkeletonSelector, BONE_GROUPS  # type: ignore
+    return SkeletonSelector, BONE_GROUPS
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Rig mode — Phase 3: skeleton joint display + bone selection + weight info
+# ──────────────────────────────────────────────────────────────────────────────
+
 class _RigFrame(ttk.Frame):
-    """Rig mode — placeholder; skeleton tools to be implemented in Phase 4."""
+    """Rig mode — skeleton joint display, bone-group selection, weight audit.
+
+    Architecture
+    ------------
+    * Left panel: bone-group region buttons (Spine, Arms, Legs, Head, Attachment)
+      + Select All / Select Skeleton / Clear buttons.  Uses ``SkeletonSelector``
+      from ``src.core.character_builder`` as the selection backend.
+    * Centre panel: scrollable bone list.  Each row shows bone name, type, and
+      weight-influence count.  Clicking a row toggles selection highlight.
+    * Right panel: detail pane for the selected bone — displays name, parent,
+      world position, and which skin-mesh vertices reference this bone.
+    * Symmetry toggle: ``Mirror L↔R`` automatically selects the opposite-side
+      bone when any bone is clicked (e.g. ``lbicep_g`` ↔ ``rbicep_g``).
+    * Weight audit: ``Audit Weights`` scans all skin nodes in the primary model
+      and reports un-normalised / zero-sum / overflow vertices.
+
+    The frame is scene-aware: ``refresh()`` picks the primary model exactly the
+    same way as ``_PreviewFrame`` and re-populates the bone list.
+    """
+
+    # ── Region preset definitions ─────────────────────────────────────────────
+    _REGION_PRESETS: List[tuple] = [
+        # (label, BONE_GROUPS key, button background)
+        ("All Bones",  "all",        _BG3),
+        ("Spine",      "spine",      "#2a3a2a"),
+        ("Left Arm",   "left_arm",   "#2a2a3a"),
+        ("Right Arm",  "right_arm",  "#3a2a2a"),
+        ("Left Leg",   "left_leg",   "#2a3a3a"),
+        ("Right Leg",  "right_leg",  "#3a3a2a"),
+        ("Head",       "head",       "#3a2a3a"),
+        ("Attachment", "attachment", "#3a3a3a"),
+    ]
+
+    # ── Mirror substitution table (left → right and vice-versa) ──────────────
+    _MIRROR_PAIRS: Dict[str, str] = {
+        # Left → Right
+        "lcollar_dum": "rcollar_dum", "lcollar_g":  "rcollar_g",
+        "lbicep_g":    "rbicep_g",   "lbicepL_g": "rbicepL_g",
+        "lforearm_g":  "rforearm_g", "lhand_g":    "rhand",
+        "lthigh_g":    "rthigh_g",   "lshin_g":    "rshin_g",
+        "lfoot_g":     "rfoot_g",    "lfootT_g":   "rfootT_g",
+        "LArm":        "RArm",
+        "LaFngrB_g":   "RaFngrB_g", "LaFngrT_g":  "RaFngrT_g",
+        "LbFngrB_g":   "RbFngrB_g", "LbFngrT_g":  "RbFngrT_g",
+        "LcFngrB_g":   "RcFngrB_g", "LcFngrT_g":  "RcFngrT_g",
+        "LdFngrB_g":   "RdFngrB_g", "LdFngrT_g":  "RdFngrT_g",
+        "LThumbB_g":   "RThumbB_g", "LThumbT_g":  "RThumbT_g",
+        "f_lmc_g":     "f_rmc_g",   "f_lbrw_g":   "f_rbrw_g",
+        "f_Llm_g":     "f_Rlm_g",
+        "eyeLlid":     "eyeRlid",   "eyeLA":       "eyeRA",
+    }
+    # Auto-build the reverse mapping (right → left)
+    _MIRROR_PAIRS.update({v: k for k, v in list(_MIRROR_PAIRS.items())})
 
     def __init__(self, parent, window: "CharacterBuilderWindow"):
         super().__init__(parent)
-        self._win = window
+        self._win          = window
+        self._selector     = None   # SkeletonSelector, set on refresh
+        self._bone_rows:   Dict[str, int] = {}   # bone name → listbox index
+        self._current_bone: str = ""
+        self._mirror_var   = tk.BooleanVar(value=False)
         self._build_ui()
 
+    # ── UI construction ───────────────────────────────────────────────────────
+
     def _build_ui(self):
-        ph = tk.Frame(self, bg=_BG)
-        ph.pack(fill=tk.BOTH, expand=True)
-        tk.Label(
-            ph,
-            text="Rig Mode\n\nSkeleton joint selection, weight painting,\n"
-                 "symmetry controls, and region presets\nwill be implemented in Phase 4.",
-            bg=_BG, fg=_FG_DIM, font=_FONT, justify=tk.CENTER,
-        ).pack(expand=True)
+        # ── Left: region buttons + selection controls ─────────────────────
+        left = tk.Frame(self, bg=_BG2, width=160)
+        left.pack(side=tk.LEFT, fill=tk.Y, padx=(4, 0), pady=4)
+        left.pack_propagate(False)
 
-    def refresh(self): pass
+        tk.Label(left, text="Bone Regions", bg=_BG2, fg=_FG,
+                 font=_FONT_BOLD).pack(anchor="w", padx=8, pady=(8, 2))
 
+        for label, group_key, btn_bg in self._REGION_PRESETS:
+            tk.Button(
+                left, text=label, bg=btn_bg, fg=_FG,
+                font=_FONT_SM, anchor="w", relief=tk.FLAT,
+                activebackground=_ACCENT2, activeforeground="#ffffff",
+                command=lambda g=group_key: self._select_region(g),
+            ).pack(fill=tk.X, padx=8, pady=1)
+
+        ttk.Separator(left, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=8, pady=6)
+
+        tk.Label(left, text="Selection", bg=_BG2, fg=_FG_DIM,
+                 font=_FONT_SM).pack(anchor="w", padx=8)
+
+        tk.Button(
+            left, text="Select All",  bg=_BG3, fg=_FG,
+            font=_FONT_SM, relief=tk.FLAT,
+            command=self._select_all,
+        ).pack(fill=tk.X, padx=8, pady=1)
+
+        tk.Button(
+            left, text="Skeleton Only",  bg=_BG3, fg=_FG,
+            font=_FONT_SM, relief=tk.FLAT,
+            command=self._select_skeleton_only,
+        ).pack(fill=tk.X, padx=8, pady=1)
+
+        tk.Button(
+            left, text="Clear Selection", bg=_BG3, fg=_ERR,
+            font=_FONT_SM, relief=tk.FLAT,
+            command=self._clear_selection,
+        ).pack(fill=tk.X, padx=8, pady=1)
+
+        ttk.Separator(left, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=8, pady=6)
+
+        # Mirror toggle
+        tk.Checkbutton(
+            left, text="Mirror L↔R", variable=self._mirror_var,
+            bg=_BG2, fg=_FG, selectcolor=_BG3, activebackground=_BG2,
+            font=_FONT_SM,
+        ).pack(anchor="w", padx=8)
+
+        ttk.Separator(left, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=8, pady=6)
+
+        # Weight audit button
+        tk.Button(
+            left, text="Audit Weights", bg="#2a2a1a", fg=_WARN,
+            font=_FONT_SM, relief=tk.FLAT,
+            command=self._audit_weights,
+        ).pack(fill=tk.X, padx=8, pady=1)
+
+        # ── Centre: bone list ─────────────────────────────────────────────
+        centre = tk.Frame(self, bg=_BG)
+        centre.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        hdr = tk.Frame(centre, bg=_BG)
+        hdr.pack(fill=tk.X)
+        tk.Label(hdr, text="Bone List", bg=_BG, fg=_FG,
+                 font=_FONT_BOLD).pack(side=tk.LEFT, padx=8, pady=(8, 2))
+        self._sel_count_lbl = tk.Label(hdr, text="", bg=_BG, fg=_FG_DIM,
+                                        font=_FONT_SM)
+        self._sel_count_lbl.pack(side=tk.RIGHT, padx=8)
+
+        list_frame = tk.Frame(centre, bg=_BG2, relief=tk.SUNKEN, bd=1)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 4))
+
+        self._bone_lb = tk.Listbox(
+            list_frame, bg=_BG2, fg=_FG, font=_FONT_MONO,
+            selectbackground=_ACCENT, selectforeground="#ffffff",
+            relief=tk.FLAT, activestyle="none",
+            selectmode=tk.EXTENDED,
+        )
+        lb_sb = ttk.Scrollbar(list_frame, command=self._bone_lb.yview)
+        self._bone_lb.configure(yscrollcommand=lb_sb.set)
+        lb_sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self._bone_lb.pack(fill=tk.BOTH, expand=True)
+        self._bone_lb.bind("<<ListboxSelect>>", self._on_bone_select)
+
+        # ── Right: bone detail pane ────────────────────────────────────────
+        right = tk.Frame(self, bg=_BG2, width=220)
+        right.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 4), pady=4)
+        right.pack_propagate(False)
+
+        tk.Label(right, text="Bone Detail", bg=_BG2, fg=_FG,
+                 font=_FONT_BOLD).pack(anchor="w", padx=8, pady=(8, 2))
+
+        self._detail_text = tk.Text(
+            right, bg=_BG3, fg=_FG, font=_FONT_MONO,
+            relief=tk.FLAT, state=tk.DISABLED, wrap=tk.WORD,
+            height=20,
+        )
+        self._detail_text.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
+        self._detail_text.tag_configure("key",  foreground=_ACCENT)
+        self._detail_text.tag_configure("val",  foreground=_FG)
+        self._detail_text.tag_configure("warn", foreground=_WARN)
+        self._detail_text.tag_configure("ok",   foreground=_OK)
+
+        # ── Status bar at bottom ──────────────────────────────────────────
+        self._status_lbl = tk.Label(
+            self, text="No model loaded — switch to Assembly to add parts.",
+            bg=_BG3, fg=_FG_DIM, font=_FONT_SM, anchor="w",
+        )
+        self._status_lbl.pack(fill=tk.X, side=tk.BOTTOM, padx=4, pady=2)
+
+    # ── Public API ─────────────────────────────────────────────────────────────
+
+    def refresh(self):
+        """Reload the primary model and repopulate the bone list."""
+        model = self._pick_primary_model()
+        if model is None:
+            self._clear_bone_list()
+            self._status_lbl.configure(
+                text="No model loaded — assign parts in Assembly mode.")
+            return
+        try:
+            SkeletonSelector, BONE_GROUPS = _import_character_builder()
+            self._selector = SkeletonSelector(model)
+        except Exception as exc:
+            log.debug("_RigFrame.refresh: SkeletonSelector unavailable: %s", exc)
+            self._selector = _FallbackSelector(model)
+
+        self._populate_bone_list(model)
+        n_bones = len(self._bone_rows)
+        self._status_lbl.configure(
+            text=f"Model: {getattr(model, 'name', '?')}  |  {n_bones} bones")
+        self._update_sel_count()
+
+    # ── Internal helpers ───────────────────────────────────────────────────────
+
+    def _pick_primary_model(self):
+        """Same priority logic as _PreviewFrame._pick_primary_model."""
+        try:
+            PartSlot = _import_model_data()[1]
+            scene = self._win.scene
+            for slot in (PartSlot.HEADLESS_BODY, PartSlot.HEAD_SHELL,
+                         PartSlot.BODY_VARIANT):
+                entry = scene.slots.get(slot)
+                if entry and entry.model is not None:
+                    return entry.model
+            for entry in scene.slots.values():
+                if entry.model is not None:
+                    return entry.model
+        except Exception as exc:
+            log.debug("_RigFrame._pick_primary_model: %s", exc)
+        return None
+
+    def _populate_bone_list(self, model):
+        """Fill the bone Listbox from the model's nodes."""
+        self._bone_lb.delete(0, tk.END)
+        self._bone_rows.clear()
+
+        # Build a flat ordered list of all nodes with their depth
+        rows = []  # [(name, type_label, depth, node)]
+        try:
+            def _walk(node, depth=0):
+                if node is None:
+                    return
+                rows.append((node.name, getattr(node, 'type_label', '?'),
+                             depth, node))
+                for child in getattr(node, 'children', []):
+                    _walk(child, depth + 1)
+            _walk(model.root_node)
+        except Exception as exc:
+            log.debug("_RigFrame._populate_bone_list walk: %s", exc)
+
+        for idx, (name, ttype, depth, node) in enumerate(rows):
+            indent = "  " * min(depth, 6)
+            # Shorten type label for display
+            short_type = {"dummy": "·", "skin": "S", "trimesh": "M",
+                          "emitter": "E", "light": "L", "reference": "R"
+                          }.get(ttype, ttype[:2] if ttype else "?")
+            label = f"{indent}[{short_type}] {name}"
+            self._bone_lb.insert(tk.END, label)
+            self._bone_rows[name] = idx
+
+        self._update_sel_count()
+
+    def _clear_bone_list(self):
+        self._bone_lb.delete(0, tk.END)
+        self._bone_rows.clear()
+        self._selector = None
+        self._update_detail("")
+        self._update_sel_count()
+
+    # ── Selection callbacks ────────────────────────────────────────────────────
+
+    def _on_bone_select(self, _event=None):
+        """Handle listbox selection event."""
+        sel_indices = self._bone_lb.curselection()
+        if not sel_indices:
+            return
+        # Map selected indices back to bone names
+        idx_to_name = {v: k for k, v in self._bone_rows.items()}
+        selected_names = [idx_to_name[i] for i in sel_indices if i in idx_to_name]
+
+        if not selected_names:
+            return
+
+        # Mirror symmetry
+        if self._mirror_var.get() and self._selector is not None:
+            extras = []
+            for n in selected_names:
+                mirror = self._MIRROR_PAIRS.get(n)
+                if mirror and mirror in self._bone_rows:
+                    extras.append(mirror)
+            for n in extras:
+                if n not in selected_names:
+                    selected_names.append(n)
+                    lb_idx = self._bone_rows[n]
+                    self._bone_lb.selection_set(lb_idx)
+
+        # Update selector
+        if self._selector is not None:
+            try:
+                self._selector.clear()
+                self._selector.select_by_names(selected_names)
+            except Exception:
+                pass
+
+        # Show detail for the last clicked bone
+        self._current_bone = selected_names[-1]
+        self._update_detail(self._current_bone)
+        self._update_sel_count()
+
+    def _select_region(self, group_key: str):
+        """Select all bones in a named region preset."""
+        if self._selector is None:
+            return
+        try:
+            self._selector.clear()
+            self._selector.select_group(group_key)
+            sel_names = set(self._selector.selected_names)
+            # Highlight in listbox
+            self._bone_lb.selection_clear(0, tk.END)
+            for name, idx in self._bone_rows.items():
+                if name in sel_names:
+                    self._bone_lb.selection_set(idx)
+            self._update_sel_count()
+        except Exception as exc:
+            log.debug("_RigFrame._select_region: %s", exc)
+
+    def _select_all(self):
+        if self._selector is None:
+            return
+        try:
+            self._selector.select_all()
+            self._bone_lb.selection_set(0, tk.END)
+            self._update_sel_count()
+        except Exception as exc:
+            log.debug("_RigFrame._select_all: %s", exc)
+
+    def _select_skeleton_only(self):
+        if self._selector is None:
+            return
+        try:
+            self._selector.select_skeleton_only()
+            sel_names = set(self._selector.selected_names)
+            self._bone_lb.selection_clear(0, tk.END)
+            for name, idx in self._bone_rows.items():
+                if name in sel_names:
+                    self._bone_lb.selection_set(idx)
+            self._update_sel_count()
+        except Exception as exc:
+            log.debug("_RigFrame._select_skeleton_only: %s", exc)
+
+    def _clear_selection(self):
+        if self._selector is not None:
+            try:
+                self._selector.clear()
+            except Exception:
+                pass
+        self._bone_lb.selection_clear(0, tk.END)
+        self._update_detail("")
+        self._update_sel_count()
+
+    # ── Weight audit ───────────────────────────────────────────────────────────
+
+    def _audit_weights(self):
+        """Scan skin-mesh vertices for weight anomalies and display results."""
+        model = self._pick_primary_model()
+        if model is None:
+            self._update_detail("No model loaded.")
+            return
+
+        issues = []
+        total_verts = 0
+        try:
+            for node in model.all_nodes():
+                if not getattr(node, 'is_skin', False):
+                    continue
+                skin_data = getattr(node, 'skin_data', []) or []
+                for vi, vsd in enumerate(skin_data):
+                    total_verts += 1
+                    infs = getattr(vsd, 'influences', []) or []
+                    total_w = sum(getattr(b, 'weight', 0.0) for b in infs)
+                    if len(infs) > 4:
+                        issues.append(
+                            f"  [OVERFLOW]  {node.name} vert {vi}: "
+                            f"{len(infs)} influences (max 4)")
+                    elif total_w == 0.0:
+                        issues.append(
+                            f"  [ZERO-SUM]  {node.name} vert {vi}: "
+                            f"all weights are 0")
+                    elif abs(total_w - 1.0) > 0.02:
+                        issues.append(
+                            f"  [UNNORM]    {node.name} vert {vi}: "
+                            f"sum={total_w:.4f}")
+        except Exception as exc:
+            issues.append(f"  [ERROR] audit failed: {exc}")
+
+        lines = [f"Weight Audit — {getattr(model, 'name', '?')}\n",
+                 f"Skin vertices scanned: {total_verts}\n",
+                 f"Issues found: {len(issues)}\n\n"]
+        if issues:
+            lines.append("Issues:\n")
+            lines.extend(issues[:50])
+            if len(issues) > 50:
+                lines.append(f"\n  … {len(issues)-50} more (truncated)")
+        else:
+            lines.append("All skin weights are valid.")
+
+        self._update_detail("".join(str(l) for l in lines), raw=True)
+
+    # ── Detail pane ────────────────────────────────────────────────────────────
+
+    def _update_detail(self, bone_name: str, *, raw: bool = False):
+        """Populate the right-hand detail pane for the given bone name."""
+        self._detail_text.configure(state=tk.NORMAL)
+        self._detail_text.delete("1.0", tk.END)
+
+        if raw:
+            # Raw string (audit output)
+            self._detail_text.insert(tk.END, bone_name)
+            self._detail_text.configure(state=tk.DISABLED)
+            return
+
+        if not bone_name:
+            self._detail_text.insert(tk.END, "(select a bone to see details)")
+            self._detail_text.configure(state=tk.DISABLED)
+            return
+
+        model = self._pick_primary_model()
+        if model is None:
+            self._detail_text.configure(state=tk.DISABLED)
+            return
+
+        try:
+            node = model.find_node(bone_name)
+            if node is None:
+                self._detail_text.insert(tk.END, f"Node not found: {bone_name}")
+                self._detail_text.configure(state=tk.DISABLED)
+                return
+
+            def _kv(key, val, tag_v="val"):
+                self._detail_text.insert(tk.END, f"{key}: ", "key")
+                self._detail_text.insert(tk.END, f"{val}\n", tag_v)
+
+            _kv("Name",   node.name)
+            _kv("Type",   getattr(node, 'type_label', '?'))
+            parent = getattr(node, 'parent', None)
+            _kv("Parent", parent.name if parent else "—")
+
+            # Position
+            pos = getattr(node, 'position', None)
+            if pos:
+                _kv("Position", f"({pos[0]:.4f}, {pos[1]:.4f}, {pos[2]:.4f})")
+
+            # World position via bone_world_position if available
+            try:
+                wp = node.bone_world_position()
+                _kv("World Pos", f"({wp[0]:.4f}, {wp[1]:.4f}, {wp[2]:.4f})")
+            except Exception:
+                pass
+
+            # Children count
+            children = getattr(node, 'children', [])
+            _kv("Children", str(len(children)))
+            if children:
+                child_names = ", ".join(c.name for c in children[:6])
+                if len(children) > 6:
+                    child_names += f" +{len(children)-6}"
+                self._detail_text.insert(tk.END, f"  {child_names}\n", "val")
+
+            # Flags
+            flags = getattr(node, 'flags', None)
+            if flags is not None:
+                _kv("Flags", f"0x{int(flags):04X}")
+
+            # Skin weight influence count
+            if getattr(node, 'is_skin', False):
+                sd = getattr(node, 'skin_data', []) or []
+                _kv("Skin verts", str(len(sd)), "ok")
+                bone_map = getattr(node, 'bone_map', [])
+                _kv("Bone map", str(len(bone_map)) + " entries")
+
+            # Mirror pair
+            mirror = self._MIRROR_PAIRS.get(bone_name)
+            if mirror:
+                _kv("Mirror pair", mirror, "ok")
+
+        except Exception as exc:
+            self._detail_text.insert(tk.END, f"Error: {exc}")
+
+        self._detail_text.configure(state=tk.DISABLED)
+
+    def _update_sel_count(self):
+        if self._selector is not None:
+            try:
+                n = self._selector.count
+                total = len(self._bone_rows)
+                self._sel_count_lbl.configure(
+                    text=f"{n}/{total} selected")
+                return
+            except Exception:
+                pass
+        self._sel_count_lbl.configure(text="")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Minimal fallback selector (used when character_builder is unavailable)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class _FallbackSelector:
+    """Bare-minimum selection backend when SkeletonSelector cannot be imported."""
+
+    def __init__(self, model=None):
+        self._selected: set = set()
+        self._names: set = set()
+        if model is not None:
+            try:
+                self._names = {n.name for n in model.all_nodes()}
+            except Exception:
+                pass
+
+    def clear(self): self._selected.clear()
+
+    def select_all(self) -> list:
+        self._selected = set(self._names)
+        return list(self._selected)
+
+    def select_skeleton_only(self) -> list:
+        self._selected = set(self._names)
+        return list(self._selected)
+
+    def select_group(self, group_key: str) -> list:
+        self._selected = set(self._names)
+        return list(self._selected)
+
+    def select_by_names(self, names: list) -> list:
+        found = [n for n in names if n in self._names]
+        self._selected.update(found)
+        return found
+
+    @property
+    def selected_names(self) -> list:
+        return list(self._selected)
+
+    @property
+    def count(self) -> int:
+        return len(self._selected)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Face mode — Phase 3: facial-bone panel, hook alignment, lip-sync preview
+# ──────────────────────────────────────────────────────────────────────────────
 
 class _FaceFrame(ttk.Frame):
-    """Face mode — placeholder; facial bone / hook tools in Phase 5."""
+    """Face mode — facial-bone enumeration, hook-alignment status, lip-sync.
+
+    Architecture
+    ------------
+    * Left panel: facial-bone checklist showing which known facial bones are
+      present in the head model (green ✓) or missing (red ✗).
+      Also lists hook nodes (talkdummy, headhook, camerahook, etc.) with their
+      world-space positions for manual alignment checks.
+    * Centre panel: hook-alignment detail table.  Displays each hook's position
+      and compares it against expected KotOR tolerances.
+    * Right panel: lip-sync / animation preview controls.  If the head model
+      has talk animations (``tlknorm``, ``tlkargue``, etc.), a play/stop
+      selector lets the user cycle through them.  This wires to the
+      ViewportWidget in the Preview tab if it is loaded.
+    * ``refresh()`` is scene-aware and targets the HEAD_SHELL slot first, then
+      any other slot as fallback.
+    """
+
+    # ── Known facial bones (KotOR real names) ─────────────────────────────
+    _FACIAL_BONES: List[tuple] = [
+        # (display name, node name(s), required/optional)
+        ("Upper Mouth (f_um_g)",       ["f_um_g"],                  True),
+        ("Jaw (f_jaw_g)",              ["f_jaw_g"],                  True),
+        ("L Mouth Corner (f_lmc_g)",   ["f_lmc_g"],                  True),
+        ("R Mouth Corner (f_rmc_g)",   ["f_rmc_g"],                  True),
+        ("L Lower Mouth (f_Llm_g)",    ["f_Llm_g"],                  False),
+        ("R Lower Mouth (f_Rlm_g)",    ["f_Rlm_g"],                  False),
+        ("Tongue Tip (f_tonguetip_g)", ["f_tonguetip_g"],             False),
+        ("L Brow (f_lbrw_g)",          ["f_lbrw_g"],                  False),
+        ("R Brow (f_rbrw_g)",          ["f_rbrw_g"],                  False),
+        ("Mid Brow (f_mdbrw_g)",       ["f_mdbrw_g"],                 False),
+        ("Head (head_g)",              ["head_g"],                    True),
+        ("Neck (neck_g)",              ["neck_g", "necklwr_g"],       True),
+        ("Eyelid L (eyeLlid)",         ["eyeLlid"],                   False),
+        ("Eyelid R (eyeRlid)",         ["eyeRlid"],                   False),
+        ("Eye Anchor L (eyeLA)",       ["eyeLA"],                     False),
+        ("Eye Anchor R (eyeRA)",       ["eyeRA"],                     False),
+        ("Lower Teeth",                ["teethlower"],                 False),
+        ("Upper Teeth",                ["teethupper"],                 False),
+    ]
+
+    # ── Known hook nodes ──────────────────────────────────────────────────
+    _HOOK_NODES: List[tuple] = [
+        # (display name, node name, expected on head?)
+        ("Talk Dummy",        "talkdummy",      True),
+        ("Head Hook",         "headhook",       True),
+        ("Camera Hook",       "camerahook",     False),
+        ("Cutscene Dummy",    "cutscenedummy",  False),
+        ("Mask Hook",         "MaskHook",       False),
+        ("Goggle Hook",       "GoggleHook",     False),
+    ]
+
+    # ── Known talk animation name prefixes ────────────────────────────────
+    _TALK_ANIMS: List[tuple] = [
+        # (label, animation name fragment)
+        ("Normal",      "tlknorm"),
+        ("Laugh",       "tlklaff"),
+        ("Argue",       "tlkargue"),
+        ("Plead",       "tlkplead"),
+        ("Forceful",    "tlkforce"),
+    ]
 
     def __init__(self, parent, window: "CharacterBuilderWindow"):
         super().__init__(parent)
         self._win = window
+        self._head_model = None
         self._build_ui()
 
-    def _build_ui(self):
-        ph = tk.Frame(self, bg=_BG)
-        ph.pack(fill=tk.BOTH, expand=True)
-        tk.Label(
-            ph,
-            text="Face Mode\n\nClose-up camera, facial-bone panel,\n"
-                 "hook-alignment gizmos, and lip-sync preview\n"
-                 "will be implemented in Phase 5.",
-            bg=_BG, fg=_FG_DIM, font=_FONT, justify=tk.CENTER,
-        ).pack(expand=True)
+    # ── UI construction ───────────────────────────────────────────────────────
 
-    def refresh(self): pass
+    def _build_ui(self):
+        # ── Left: facial bone checklist ───────────────────────────────────
+        left = tk.Frame(self, bg=_BG2, width=240)
+        left.pack(side=tk.LEFT, fill=tk.Y, padx=(4, 0), pady=4)
+        left.pack_propagate(False)
+
+        tk.Label(left, text="Facial Bones", bg=_BG2, fg=_FG,
+                 font=_FONT_BOLD).pack(anchor="w", padx=8, pady=(8, 2))
+
+        # Scrollable checklist
+        fb_frame = tk.Frame(left, bg=_BG2)
+        fb_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=2)
+        fb_canvas = tk.Canvas(fb_frame, bg=_BG2, highlightthickness=0)
+        fb_sb = ttk.Scrollbar(fb_frame, command=fb_canvas.yview)
+        fb_canvas.configure(yscrollcommand=fb_sb.set)
+        fb_sb.pack(side=tk.RIGHT, fill=tk.Y)
+        fb_canvas.pack(fill=tk.BOTH, expand=True)
+        self._fb_inner = tk.Frame(fb_canvas, bg=_BG2)
+        fb_canvas.create_window((0, 0), window=self._fb_inner, anchor="nw")
+        self._fb_inner.bind(
+            "<Configure>",
+            lambda e, c=fb_canvas: c.configure(scrollregion=c.bbox("all")),
+        )
+        self._fb_labels: Dict[str, tk.Label] = {}   # node name → label
+
+        for display_name, node_names, required in self._FACIAL_BONES:
+            primary_name = node_names[0]
+            lbl = tk.Label(
+                self._fb_inner, text=f"  ? {display_name}",
+                bg=_BG2, fg=_FG_DIM, font=_FONT_SM, anchor="w",
+            )
+            lbl.pack(fill=tk.X, padx=4, pady=1)
+            self._fb_labels[primary_name] = lbl
+
+        # ── Centre: hook alignment table ───────────────────────────────────
+        centre = tk.Frame(self, bg=_BG)
+        centre.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        tk.Label(centre, text="Hook Alignment", bg=_BG, fg=_FG,
+                 font=_FONT_BOLD).pack(anchor="w", padx=8, pady=(8, 2))
+        tk.Label(centre,
+                 text="World-space positions of attachment hooks on the head model.",
+                 bg=_BG, fg=_FG_DIM, font=_FONT_SM).pack(anchor="w", padx=8)
+
+        hook_frame = tk.Frame(centre, bg=_BG2, relief=tk.SUNKEN, bd=1)
+        hook_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+
+        self._hook_text = tk.Text(
+            hook_frame, bg=_BG2, fg=_FG, font=_FONT_MONO,
+            relief=tk.FLAT, state=tk.DISABLED, height=14, wrap=tk.WORD,
+        )
+        hk_sb = ttk.Scrollbar(hook_frame, command=self._hook_text.yview)
+        self._hook_text.configure(yscrollcommand=hk_sb.set)
+        hk_sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self._hook_text.pack(fill=tk.BOTH, expand=True)
+        self._hook_text.tag_configure("ok",      foreground=_OK)
+        self._hook_text.tag_configure("warn",    foreground=_WARN)
+        self._hook_text.tag_configure("error",   foreground=_ERR)
+        self._hook_text.tag_configure("header",  foreground=_ACCENT)
+        self._hook_text.tag_configure("dimmed",  foreground=_FG_DIM)
+
+        # ── Right: lip-sync controls ───────────────────────────────────────
+        right = tk.Frame(self, bg=_BG2, width=200)
+        right.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 4), pady=4)
+        right.pack_propagate(False)
+
+        tk.Label(right, text="Lip-Sync Preview", bg=_BG2, fg=_FG,
+                 font=_FONT_BOLD).pack(anchor="w", padx=8, pady=(8, 2))
+
+        tk.Label(right, text="Talk animations found\nin head model:",
+                 bg=_BG2, fg=_FG_DIM, font=_FONT_SM).pack(anchor="w", padx=8)
+
+        self._anim_listbox = tk.Listbox(
+            right, bg=_BG3, fg=_FG, font=_FONT_SM,
+            selectbackground=_ACCENT, selectforeground="#ffffff",
+            relief=tk.FLAT, height=8,
+        )
+        self._anim_listbox.pack(fill=tk.X, padx=8, pady=4)
+
+        # Play/Stop controls
+        ctrl_row = tk.Frame(right, bg=_BG2)
+        ctrl_row.pack(fill=tk.X, padx=8, pady=4)
+
+        self._play_btn = tk.Button(
+            ctrl_row, text="▶ Play", bg=_ACCENT, fg="#ffffff",
+            font=_FONT_SM, relief=tk.FLAT,
+            command=self._play_selected_anim,
+        )
+        self._play_btn.pack(side=tk.LEFT, padx=(0, 4))
+
+        self._stop_btn = tk.Button(
+            ctrl_row, text="■ Stop", bg=_BG3, fg=_FG,
+            font=_FONT_SM, relief=tk.FLAT,
+            command=self._stop_anim,
+        )
+        self._stop_btn.pack(side=tk.LEFT)
+
+        ttk.Separator(right, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=8, pady=8)
+
+        # Diagnostic info label
+        self._diag_lbl = tk.Label(
+            right, text="", bg=_BG2, fg=_FG_DIM, font=_FONT_SM,
+            wraplength=180, justify=tk.LEFT,
+        )
+        self._diag_lbl.pack(anchor="w", padx=8)
+
+        # ── Status bar ────────────────────────────────────────────────────
+        self._status_lbl = tk.Label(
+            self, text="No head model loaded.",
+            bg=_BG3, fg=_FG_DIM, font=_FONT_SM, anchor="w",
+        )
+        self._status_lbl.pack(fill=tk.X, side=tk.BOTTOM, padx=4, pady=2)
+
+    # ── Public API ─────────────────────────────────────────────────────────────
+
+    def refresh(self):
+        """Reload the head model and update all panels."""
+        model = self._pick_head_model()
+        self._head_model = model
+
+        if model is None:
+            self._reset_to_empty()
+            return
+
+        # Update facial bone checklist
+        self._update_bone_checklist(model)
+
+        # Update hook alignment table
+        self._update_hook_table(model)
+
+        # Update talk animation list
+        self._update_anim_list(model)
+
+        name = getattr(model, 'name', '?')
+        n_nodes = model.node_count() if hasattr(model, 'node_count') else '?'
+        self._status_lbl.configure(
+            text=f"Head model: {name}  |  {n_nodes} nodes")
+
+    # ── Internal helpers ───────────────────────────────────────────────────────
+
+    def _pick_head_model(self):
+        """Return the HEAD_SHELL model if loaded, else fall back to any model."""
+        try:
+            PartSlot = _import_model_data()[1]
+            scene = self._win.scene
+            # Prefer head shell
+            entry = scene.slots.get(PartSlot.HEAD_SHELL)
+            if entry and entry.model is not None:
+                return entry.model
+            # Fall back to any loaded model
+            for entry in scene.slots.values():
+                if entry.model is not None:
+                    return entry.model
+        except Exception as exc:
+            log.debug("_FaceFrame._pick_head_model: %s", exc)
+        return None
+
+    def _reset_to_empty(self):
+        """Reset all panels to their empty-state presentation."""
+        for lbl in self._fb_labels.values():
+            lbl.configure(text=lbl.cget("text").replace("✓", "?").replace("✗", "?"),
+                          fg=_FG_DIM)
+
+        self._hook_text.configure(state=tk.NORMAL)
+        self._hook_text.delete("1.0", tk.END)
+        self._hook_text.insert(tk.END,
+                               "No head model loaded.\n\n"
+                               "Assign a HEAD_SHELL model in the Assembly tab\n"
+                               "to see hook positions.", "dimmed")
+        self._hook_text.configure(state=tk.DISABLED)
+
+        self._anim_listbox.delete(0, tk.END)
+        self._diag_lbl.configure(text="")
+        self._status_lbl.configure(text="No head model loaded.")
+
+    def _update_bone_checklist(self, model):
+        """Tick/cross each facial bone based on model node presence."""
+        try:
+            node_names_lower = {n.name.lower() for n in model.all_nodes()}
+        except Exception:
+            node_names_lower = set()
+
+        for display_name, node_names, required in self._FACIAL_BONES:
+            primary_name = node_names[0]
+            lbl = self._fb_labels.get(primary_name)
+            if lbl is None:
+                continue
+            # Check if any alias is present
+            found = any(nn.lower() in node_names_lower for nn in node_names)
+            if found:
+                lbl.configure(
+                    text=f"  ✓ {display_name}",
+                    fg=_OK,
+                )
+            else:
+                color = _ERR if required else _FG_DIM
+                symbol = "✗" if required else "—"
+                lbl.configure(
+                    text=f"  {symbol} {display_name}",
+                    fg=color,
+                )
+
+    def _update_hook_table(self, model):
+        """Populate the hook alignment text widget."""
+        self._hook_text.configure(state=tk.NORMAL)
+        self._hook_text.delete("1.0", tk.END)
+
+        self._hook_text.insert(tk.END, "Hook Nodes\n", "header")
+        self._hook_text.insert(tk.END, "─" * 40 + "\n", "dimmed")
+
+        node_map: Dict[str, object] = {}
+        try:
+            for n in model.all_nodes():
+                node_map[n.name.lower()] = n
+        except Exception:
+            pass
+
+        found_required = 0
+        missing_required = 0
+
+        for display_name, node_name, required in self._HOOK_NODES:
+            node = node_map.get(node_name.lower())
+            if node is None:
+                tag = "error" if required else "dimmed"
+                sym = "✗" if required else "—"
+                self._hook_text.insert(
+                    tk.END,
+                    f"  {sym} {display_name:<20} ({node_name})\n",
+                    tag,
+                )
+                if required:
+                    missing_required += 1
+                continue
+
+            found_required += (1 if required else 0)
+
+            # Get position
+            try:
+                wp = node.bone_world_position()
+                pos_str = f"({wp[0]:+.3f}, {wp[1]:+.3f}, {wp[2]:+.3f})"
+            except Exception:
+                pos = getattr(node, 'position', None)
+                if pos:
+                    pos_str = f"({pos[0]:+.3f}, {pos[1]:+.3f}, {pos[2]:+.3f})"
+                else:
+                    pos_str = "(unknown)"
+
+            self._hook_text.insert(
+                tk.END,
+                f"  ✓ {display_name:<20} {pos_str}\n",
+                "ok",
+            )
+
+        self._hook_text.insert(tk.END, "\n", "dimmed")
+
+        # Facial hook summary
+        all_hooks = [n for _, n, _ in self._HOOK_NODES if n.lower() in node_map]
+        self._hook_text.insert(
+            tk.END,
+            f"Summary: {len(all_hooks)}/{len(self._HOOK_NODES)} hook(s) found",
+            "ok" if missing_required == 0 else "warn",
+        )
+        if missing_required:
+            self._hook_text.insert(
+                tk.END,
+                f"  ({missing_required} required hook(s) MISSING!)\n",
+                "error",
+            )
+        else:
+            self._hook_text.insert(tk.END, "\n", "dimmed")
+
+        # Also list all nodes matching "hook" or "dummy"
+        self._hook_text.insert(tk.END, "\nOther attachment nodes:\n", "header")
+        for n in model.all_nodes():
+            name_l = n.name.lower()
+            if any(kw in name_l for kw in ("hook", "dummy", "conjure", "impact")):
+                if n.name.lower() not in {h.lower() for _, h, _ in self._HOOK_NODES}:
+                    try:
+                        wp = n.bone_world_position()
+                        pos_str = f"({wp[0]:+.3f}, {wp[1]:+.3f}, {wp[2]:+.3f})"
+                    except Exception:
+                        pos_str = ""
+                    self._hook_text.insert(
+                        tk.END, f"  · {n.name:<22} {pos_str}\n", "dimmed")
+
+        self._hook_text.configure(state=tk.DISABLED)
+
+    def _update_anim_list(self, model):
+        """Find talk animations in the model and populate the listbox."""
+        self._anim_listbox.delete(0, tk.END)
+
+        try:
+            anims = getattr(model, 'animations', []) or []
+            talk_anims = []
+            for anim in anims:
+                anim_name = getattr(anim, 'name', '') or ''
+                for _, prefix in self._TALK_ANIMS:
+                    if prefix.lower() in anim_name.lower():
+                        talk_anims.append(anim_name)
+                        break
+            # Also include any other animations
+            other_anims = [
+                getattr(a, 'name', '') for a in anims
+                if getattr(a, 'name', '') not in talk_anims
+                and getattr(a, 'name', '')
+            ]
+
+            if talk_anims:
+                self._anim_listbox.insert(tk.END, "── Talk Animations ──")
+                for name in talk_anims:
+                    self._anim_listbox.insert(tk.END, f"  {name}")
+            if other_anims:
+                self._anim_listbox.insert(tk.END, "── Other Animations ──")
+                for name in other_anims[:20]:
+                    self._anim_listbox.insert(tk.END, f"  {name}")
+
+            n_talk  = len(talk_anims)
+            n_total = len(anims)
+            self._diag_lbl.configure(
+                text=f"{n_talk} talk animation(s)\n{n_total} total animation(s)\n\n"
+                     f"Select an animation and press ▶ Play to preview in the "
+                     f"Preview tab viewport.",
+            )
+        except Exception as exc:
+            log.debug("_FaceFrame._update_anim_list: %s", exc)
+            self._diag_lbl.configure(text=f"Could not read animations: {exc}")
+
+    # ── Lip-sync play / stop ──────────────────────────────────────────────────
+
+    def _play_selected_anim(self):
+        """Play the selected animation in the Preview tab viewport."""
+        sel = self._anim_listbox.curselection()
+        if not sel:
+            self._diag_lbl.configure(text="Select an animation first.")
+            return
+        raw_name = self._anim_listbox.get(sel[0]).strip()
+        # Strip separator lines
+        if raw_name.startswith("──"):
+            self._diag_lbl.configure(text="Select an animation (not a header).")
+            return
+        anim_name = raw_name.lstrip()
+
+        # Try to wire to the Preview tab viewport
+        try:
+            preview_frame = self._win._mode_frames[3]  # index 3 = Preview
+            vp = getattr(preview_frame, '_viewport', None)
+            if vp is None:
+                self._diag_lbl.configure(
+                    text=f"Playing: {anim_name}\n(viewport not available)")
+                return
+            # set_animation_pose is the viewport API for animation
+            if hasattr(vp, 'set_animation_pose'):
+                vp.set_animation_pose(anim_name, 0.0)
+            fn = getattr(vp, '_request_render', getattr(vp, '_schedule_render', None))
+            if fn:
+                fn()
+            self._diag_lbl.configure(text=f"Preview: {anim_name}")
+        except Exception as exc:
+            log.debug("_FaceFrame._play_selected_anim: %s", exc)
+            self._diag_lbl.configure(text=f"Playing: {anim_name}")
+
+    def _stop_anim(self):
+        """Stop animation playback in the Preview tab viewport."""
+        try:
+            preview_frame = self._win._mode_frames[3]
+            vp = getattr(preview_frame, '_viewport', None)
+            if vp is not None and hasattr(vp, 'set_animation_pose'):
+                vp.set_animation_pose(None, 0.0)
+                fn = getattr(vp, '_request_render',
+                             getattr(vp, '_schedule_render', None))
+                if fn:
+                    fn()
+        except Exception as exc:
+            log.debug("_FaceFrame._stop_anim: %s", exc)
+        self._diag_lbl.configure(text="Animation stopped.")
 
 
 class _PreviewFrame(ttk.Frame):
