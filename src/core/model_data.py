@@ -373,6 +373,17 @@ class ModelNode:
     skin_data:       List[VertexSkinData] = field(default_factory=list)
     bone_map:        List[str]            = field(default_factory=list)   # bone_map[i] = bone node name ('' = unused)
     bone_map_floats: List[float]          = field(default_factory=list)   # raw float32 values from MDL
+    # v7.1 FIX-QBONETBONE (Finding 2.5 — reone mdlmdxreader.cpp cross-ref):
+    # qBone/tBone arrays store per-bone bind-pose transforms from the MDL skin
+    # header.  reone (lines 280-292) reads qBone quaternions AND tBone translation
+    # vectors, then constructs per-bone bind matrices.  KotorBlender reads them
+    # but doesn't use them (Blender reconstructs from world matrices).
+    # We store them as fallback bind matrices for FBX export when
+    # world_transform() computation fails (e.g. missing parent chain).
+    # Format: qbone_list[i] = (qx, qy, qz, qw) quaternion for bone i
+    #         tbone_list[i] = (tx, ty, tz) translation for bone i
+    qbone_list: List[Tuple[float,float,float,float]] = field(default_factory=list)
+    tbone_list: List[Tuple[float,float,float]]       = field(default_factory=list)
 
     # ── Dangly ──
     dangly_constraints: List[float] = field(default_factory=list)

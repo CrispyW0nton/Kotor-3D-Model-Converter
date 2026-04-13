@@ -861,3 +861,91 @@ layout(std430, binding = 0) readonly buffer BonePalette {
     mat4 u_bones[128];
 };
 """
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  v7.2 TBN Validation (Finding 5.9 — reone v_model.glsl cross-ref)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def validate_tbn(tbn_result: TBNResult) -> Dict[str, Any]:
+    """Validate TBN vectors against reone reference implementation.
+
+    Checks:
+    1. All tangents are unit-length (within tolerance)
+    2. All normals are unit-length
+    3. T·N ≈ 0 (orthogonality after Gram-Schmidt)
+    4. Handedness is ±1 (sign(dot(cross(N,T), B)))
+    5. B = cross(N,T) × handedness (reconstructed bitangent matches)
+
+    Reference: reone v_model.glsl lines 76-80; Lengyel §7.8 orthogonality.
+
+    Returns
+    -------
+    dict with keys:
+        'valid': bool — True if all checks pass
+        'vertex_count': int — number of vertices
+        'unit_tangent_errors': int — tangents not unit-length
+        'unit_normal_errors': int — normals not unit-length
+        'orthogonality_errors': int — T·N not near zero
+        'handedness_errors': int — handedness not ±1
+        'bitangent_errors': int — reconstructed B doesn't match
+    """
+    result = {
+        'valid': True,
+        'vertex_count': tbn_result.vertex_count,
+        'unit_tangent_errors': 0,
+        'unit_normal_errors': 0,
+        'orthogonality_errors': 0,
+        'handedness_errors': 0,
+        'bitangent_errors': 0,
+    }
+
+    UNIT_TOL = 0.01       # tolerance for unit-length check
+    ORTHO_TOL = 0.05      # tolerance for orthogonality (T·N ≈ 0)
+    BITAN_TOL = 0.1       # tolerance for bitangent reconstruction
+
+    for i in range(tbn_result.vertex_count):
+        tx, ty, tz, tw = tbn_result.tangents[i]
+        bx, by, bz = tbn_result.bitangents[i]
+        nx, ny, nz = tbn_result.normals[i]
+
+        # Check tangent unit length
+        t_len = math.sqrt(tx*tx + ty*ty + tz*tz)
+        if abs(t_len - 1.0) > UNIT_TOL:
+            result['unit_tangent_errors'] += 1
+
+        # Check normal unit length
+        n_len = math.sqrt(nx*nx + ny*ny + nz*nz)
+        if abs(n_len - 1.0) > UNIT_TOL:
+            result['unit_normal_errors'] += 1
+
+        # Check orthogonality: T·N should be ~0 after Gram-Schmidt
+        dot_tn = tx*nx + ty*ny + tz*nz
+        if abs(dot_tn) > ORTHO_TOL:
+            result['orthogonality_errors'] += 1
+
+        # Check handedness is ±1
+        if abs(abs(tw) - 1.0) > UNIT_TOL:
+            result['handedness_errors'] += 1
+
+        # Check bitangent reconstruction: B should ≈ cross(N,T) * handedness
+        # reone v_model.glsl: v_bitangent = cross(N_out, T_out) * in_tangent.w
+        rb_x = (ny*tz - nz*ty) * tw
+        rb_y = (nz*tx - nx*tz) * tw
+        rb_z = (nx*ty - ny*tx) * tw
+        diff_b = math.sqrt((bx-rb_x)**2 + (by-rb_y)**2 + (bz-rb_z)**2)
+        if diff_b > BITAN_TOL:
+            result['bitangent_errors'] += 1
+
+    total_errors = sum(v for k, v in result.items() if k.endswith('_errors'))
+    result['valid'] = (total_errors == 0)
+
+    if total_errors > 0:
+        log.warning(f"validate_tbn: {total_errors} errors in {tbn_result.vertex_count} vertices "
+                    f"(tangent={result['unit_tangent_errors']}, normal={result['unit_normal_errors']}, "
+                    f"ortho={result['orthogonality_errors']}, hand={result['handedness_errors']}, "
+                    f"bitan={result['bitangent_errors']})")
+    else:
+        log.debug(f"validate_tbn: {tbn_result.vertex_count} vertices — all checks pass ✓")
+
+    return result

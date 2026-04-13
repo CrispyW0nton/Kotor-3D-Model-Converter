@@ -43,10 +43,25 @@ class LYTRoom:
 
 @dataclass
 class LYTDoorHook:
+    """Door hook placement from LYT file.
+
+    v7.2 FIX-DOORHOOK (Finding 4.2 — KotorBlender lyt.py cross-ref):
+    KotorBlender lyt.py exports door hooks with 7-value format:
+        parent_name door_name x y z qx qy qz qw
+    The quaternion (qx,qy,qz,qw) specifies the door's orientation.
+    GhostRigger previously only parsed position (x,y,z) and ignored rotation.
+    Now we store the full quaternion for correct door placement in module export.
+    Reference: KotorBlender lyt.py lines 64-108; KotOR.js ForgeArea.ts door loading.
+    """
     name:  str
     x: float = 0.0
     y: float = 0.0
     z: float = 0.0
+    # v7.2: Door orientation quaternion (Finding 4.2)
+    qx: float = 0.0
+    qy: float = 0.0
+    qz: float = 0.0
+    qw: float = 1.0   # identity rotation by default
 
 @dataclass
 class LYTLayout:
@@ -102,10 +117,19 @@ class LYTLayout:
                 continue
 
             # Parse doorhook entry
+            # v7.2 FIX-DOORHOOK (Finding 4.2): Parse optional quaternion (qx,qy,qz,qw)
+            # KotorBlender format: parent_name door_name x y z qx qy qz qw
+            # Minimal format: name x y z
             if state == 'doorhookcount':
                 try:
                     dx, dy, dz = float(tokens[1]), float(tokens[2]), float(tokens[3])
-                    lyt.doorhooks.append(LYTDoorHook(tokens[0].lower(), dx, dy, dz))
+                    # Parse optional quaternion rotation (tokens 4-7)
+                    qx = float(tokens[4]) if len(tokens) > 4 else 0.0
+                    qy = float(tokens[5]) if len(tokens) > 5 else 0.0
+                    qz = float(tokens[6]) if len(tokens) > 6 else 0.0
+                    qw = float(tokens[7]) if len(tokens) > 7 else 1.0
+                    lyt.doorhooks.append(LYTDoorHook(
+                        tokens[0].lower(), dx, dy, dz, qx, qy, qz, qw))
                 except (IndexError, ValueError):
                     pass
                 idx += 1
@@ -130,7 +154,12 @@ class LYTLayout:
         if self.doorhooks:
             lines.append(f"doorhookcount {len(self.doorhooks)}")
             for d in self.doorhooks:
-                lines.append(f"  {d.name}  {d.x:.6f}  {d.y:.6f}  {d.z:.6f}")
+                # v7.2: Write quaternion if non-identity (Finding 4.2)
+                if abs(d.qx) > 1e-6 or abs(d.qy) > 1e-6 or abs(d.qz) > 1e-6 or abs(d.qw - 1.0) > 1e-6:
+                    lines.append(f"  {d.name}  {d.x:.6f}  {d.y:.6f}  {d.z:.6f}  "
+                                 f"{d.qx:.6f}  {d.qy:.6f}  {d.qz:.6f}  {d.qw:.6f}")
+                else:
+                    lines.append(f"  {d.name}  {d.x:.6f}  {d.y:.6f}  {d.z:.6f}")
         else:
             lines.append("doorhookcount 0")
         lines.append("donelayout")

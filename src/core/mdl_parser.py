@@ -655,6 +655,67 @@ _ASCII_CTRL_CMDS = {
     'selfillumcolorkey':  (100, 3),   # CTRL_MESH_SELFILLUMCOLOR = 100
 }
 
+# ── v7.2 Emitter Controller ID Table (Finding 1.7 — xoreos vs KotorBlender) ──
+# KotOR 1 binary MDL uses KotorBlender's numbering (verified against actual binary).
+# xoreos uses DIFFERENT controller IDs for the same emitter parameters — those
+# appear to be for a different engine variant or NWN2.
+# This table is the AUTHORITATIVE KotOR 1 mapping.
+# Reference: KotorBlender types.py lines 150-196 (seedhartha/kotorblender)
+#            xoreos model_kotor.cpp lines 77-117 (DIVERGENT — DO NOT USE for K1)
+EMITTER_CTRL_IDS = {
+    # KotorBlender ID: (xoreos ID, description)
+    # These are the KotOR 1 binary MDL controller type IDs for emitters.
+    200: 'ALPHAEND',
+    204: 'ALPHASTART',
+    208: 'BIRTHRATE',
+    212: 'BOUNCECO',        # bounce coefficient
+    216: 'ALPHAMID',        # xoreos uses 464 — WRONG for K1
+    220: 'COMBINETIME',
+    224: 'DRAG',
+    228: 'FPS',             # frames per second
+    232: 'FRAMEEND',
+    236: 'FRAMESTART',
+    240: 'GRAV',            # gravity
+    244: 'LIFEEXP',         # life expectancy
+    248: 'MASS',
+    252: 'P2P_BEZIER2',
+    256: 'P2P_BEZIER3',
+    260: 'PARTICLEROT',
+    264: 'RANDVEL',         # random velocity
+    268: 'SIZESTART',
+    272: 'SIZEEND',
+    276: 'SIZESTART_Y',
+    280: 'SIZEEND_Y',
+    284: 'COLORMID',        # xoreos uses 468 — WRONG for K1
+    288: 'COLOREND',
+    292: 'COLORSTART',
+    296: 'SPREAD',
+    300: 'THRESHOLD',
+    304: 'VELOCITY',
+    308: 'XSIZE',
+    312: 'YSIZE',
+    316: 'BLURLENGTH',
+    320: 'LIGHTNINGDELAY',
+    324: 'LIGHTNINGRADIUS',
+    328: 'LIGHTNINGSCALE',
+    332: 'LIGHTNINGSUBDIV',
+    336: 'DETONATE',
+    340: 'SIZEMID',
+    344: 'SIZEMID_Y',
+}
+
+def verify_emitter_ctrl_id(ctrl_id: int) -> Optional[str]:
+    """Verify a binary MDL emitter controller ID against the KotOR 1 table.
+
+    v7.2 (Finding 1.7 — xoreos/KotorBlender controller ID discrepancy):
+    xoreos uses different IDs for some emitter controllers (e.g. AlphaMid=464
+    instead of KotorBlender's 216). KotOR 1 binary MDL files use KotorBlender's
+    numbering (confirmed by hex inspection of vanilla MDL files).
+
+    Returns the controller name if valid, or None if unrecognized.
+    """
+    return EMITTER_CTRL_IDS.get(ctrl_id, None)
+
 
 # ─────────────────────────────  ASCII Writer  ──────────────────────────────
 

@@ -867,6 +867,39 @@ def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
 
     n_bones = len(gr.bone_map)
 
+    # v7.1 FIX-QBONETBONE (Finding 2.5 — reone mdlmdxreader.cpp cross-ref):
+    # Read qBone (quaternion) and tBone (translation) arrays from PyKotor skin object.
+    # These provide per-bone bind-pose transforms that serve as fallback matrices
+    # when world_transform() fails during FBX export.
+    # PyKotor stores: skin.qbones = list[Vector4], skin.tbones = list[Vector3]
+    gr.qbone_list = []
+    gr.tbone_list = []
+    try:
+        _qbones_raw = getattr(skin, 'qbones', None) or []
+        _tbones_raw = getattr(skin, 'tbones', None) or []
+        for _qb in _qbones_raw:
+            try:
+                _qx = float(getattr(_qb, 'x', _qb[0]) if hasattr(_qb, 'x') else _qb[0])
+                _qy = float(getattr(_qb, 'y', _qb[1]) if hasattr(_qb, 'y') else _qb[1])
+                _qz = float(getattr(_qb, 'z', _qb[2]) if hasattr(_qb, 'z') else _qb[2])
+                _qw = float(getattr(_qb, 'w', _qb[3]) if hasattr(_qb, 'w') else _qb[3])
+                gr.qbone_list.append((_qx, _qy, _qz, _qw))
+            except (TypeError, IndexError, ValueError):
+                gr.qbone_list.append((0.0, 0.0, 0.0, 1.0))
+        for _tb in _tbones_raw:
+            try:
+                _tx = float(getattr(_tb, 'x', _tb[0]) if hasattr(_tb, 'x') else _tb[0])
+                _ty = float(getattr(_tb, 'y', _tb[1]) if hasattr(_tb, 'y') else _tb[1])
+                _tz = float(getattr(_tb, 'z', _tb[2]) if hasattr(_tb, 'z') else _tb[2])
+                gr.tbone_list.append((_tx, _ty, _tz))
+            except (TypeError, IndexError, ValueError):
+                gr.tbone_list.append((0.0, 0.0, 0.0))
+        if gr.qbone_list:
+            log.debug("_read_skin_weights '%s': read %d qBone + %d tBone bind-pose entries",
+                      gr.name, len(gr.qbone_list), len(gr.tbone_list))
+    except Exception as _e:
+        log.debug("_read_skin_weights '%s': qBone/tBone read skipped: %s", gr.name, _e)
+
     # Step 2: per-vertex skin data
     gr.skin_data = []
     for bv in (getattr(skin, 'vertex_bones', None) or []):
