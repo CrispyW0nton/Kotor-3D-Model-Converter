@@ -9333,14 +9333,53 @@ class ViewportWidget(tk.Frame):
                     # Build {name: PIL.Image} dict from TextureCache for GpuRenderer.
                     # TextureCache stores loaded PIL images in ._cache (dict);
                     # GpuRenderer.render() expects textures={str: PIL.Image}.
+                    #
+                    # FIX-GPU-TEXPRELOAD: Ensure all model textures are loaded
+                    # before passing to the GPU renderer.  TextureCache lazily
+                    # loads textures on first .get() call; when switching to GPU
+                    # mode without a prior CPU render, _cache is empty and the
+                    # GPU renderer gets no textures (white/untextured geometry).
+                    # Walk all mesh nodes and trigger a .get() for each texture
+                    # name so the cache is populated before we read _cache.items().
                     _tc = getattr(renderer, 'tex_cache', None)
+                    if _tc is not None:
+                        try:
+                            _all_fn = getattr(self.model, 'all_nodes', None)
+                            _mnodes = list(_all_fn()) if _all_fn else []
+                            for _mn in _mnodes:
+                                if not getattr(_mn, 'is_mesh', False):
+                                    continue
+                                _mtex = str(getattr(_mn, 'texture', '') or '').strip()
+                                if _mtex and _mtex.upper() not in ('NULL', '', 'NONE'):
+                                    _tc.get(_mtex)  # triggers lazy load
+                                # Also load lightmap texture
+                                _lmtex = str(getattr(_mn, 'lightmap', '') or '').strip()
+                                if _lmtex and _lmtex.upper() not in ('NULL', '', 'NONE'):
+                                    _tc.get(_lmtex)
+                                # Also load env map texture
+                                _envtex = str(getattr(_mn, 'txi_envmaptexture', '') or '').strip()
+                                if _envtex and _envtex.upper() not in ('NULL', '', 'NONE'):
+                                    _tc.get(_envtex)
+                        except Exception:
+                            pass
                     if _tc is not None and hasattr(_tc, '_cache'):
                         _tex_dict = {k: v for k, v in _tc._cache.items()
                                      if v is not None}
                     else:
                         _tex_dict = {}
+                    # FIX-GPU-ANIM: Pass animation pose and time to GPU renderer.
+                    # Previously these were omitted, causing:
+                    #   1. Animations not playing in GPU mode (anim_pose=None)
+                    #   2. UV scroll/flipbook animations frozen (anim_time=0.0)
+                    #   3. Material animations (alpha, selfillum) not applied
+                    # The FrameRenderer stores the current animation state in
+                    # _anim_pose (AnimPose object) and _anim_time (float seconds).
+                    _gpu_anim_pose = getattr(renderer, '_anim_pose', None)
+                    _gpu_anim_time = float(getattr(renderer, '_anim_time', 0.0))
                     img = _gpu_r.render(self.model, self.camera, W, H,
-                                        textures=_tex_dict)
+                                        textures=_tex_dict,
+                                        anim_pose=_gpu_anim_pose,
+                                        anim_time=_gpu_anim_time)
                 else:
                     img = renderer.render(W, H)
             except MemoryError:
