@@ -195,6 +195,103 @@ except ImportError:
     _MODERNGL = False
     log.info("gpu_renderer: moderngl not installed – using CPU fallback")
 
+from dataclasses import dataclass, field as _field
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  ModuleDrawItem — per-node render record for debug inspection
+# ─────────────────────────────────────────────────────────────────────────────
+
+@dataclass
+class ModuleDrawItem:
+    """Render record capturing per-node material/texture state for debugging.
+
+    One ModuleDrawItem is created per draw call (per material slot for
+    multi-texture nodes).  The collection can be printed as a table to
+    verify that every visible surface uses the correct bitmap and material.
+
+    Fields:
+        node_name     : ModelNode.name
+        node_type     : 'trimesh', 'skin', 'dangly', etc.
+        bitmap        : Primary diffuse texture name used for this draw call
+        lightmap      : Lightmap texture name ('' if none)
+        envmap        : Environment-map texture name ('' if none)
+        txi_blending  : TXI blend mode (0=none, 1=additive, 2=punchthrough)
+        txi_decal     : Whether this is a decal surface
+        txi_wateralpha: Water alpha multiplier
+        txi_alpha_test: Punchthrough alpha threshold
+        tri_count     : Number of triangles in this draw call
+        mat_slot      : Material slot index (0 for single-tex; 0..N-1 for multi)
+        transform     : (world_pos, world_orient) tuple
+        pass_name     : 'opaque', 'cutout', or 'transparent'
+    """
+    node_name:      str   = ''
+    node_type:      str   = ''
+    bitmap:         str   = ''
+    lightmap:       str   = ''
+    envmap:         str   = ''
+    txi_blending:   int   = 0
+    txi_decal:      bool  = False
+    txi_wateralpha: float = 1.0
+    txi_alpha_test: float = 0.5
+    tri_count:      int   = 0
+    mat_slot:       int   = 0
+    transform:      tuple = ()
+    pass_name:      str   = 'opaque'
+
+
+def debug_draw_table(model, textures: dict = None) -> str:
+    """Return a human-readable table of per-node material/texture assignments.
+
+    This is a diagnostic tool: call it with a loaded KotorModel to inspect
+    the bitmap→node ownership before rendering.  Useful for verifying that
+    module surfaces have correct texture assignments.
+
+    Returns a multi-line string suitable for logging or UI display.
+    """
+    lines = []
+    lines.append(f"{'Node':<30s} {'Type':<12s} {'Bitmap':<25s} {'Lightmap':<20s} "
+                 f"{'EnvMap':<20s} {'Blend':>5s} {'Decal':>5s} {'WAlpha':>6s} "
+                 f"{'ATest':>5s} {'Tris':>6s} {'Slots':>5s}")
+    lines.append('-' * 160)
+
+    all_fn = getattr(model, 'all_nodes', None)
+    nodes = list(all_fn()) if all_fn else getattr(model, 'nodes', [])
+
+    total_tris = 0
+    for node in nodes:
+        if not getattr(node, 'is_mesh', False):
+            continue
+        n_name = str(getattr(node, 'name', '?'))[:29]
+        n_type = str(getattr(node, 'type_label', '?'))[:11]
+        bitmap = str(getattr(node, 'texture', '') or '').strip()[:24]
+        lm = str(getattr(node, 'lightmap', '') or '').strip()[:19]
+        env = str(getattr(node, 'txi_envmaptexture', '') or '').strip()[:19]
+        blend = int(getattr(node, 'txi_blending', 0))
+        decal = bool(getattr(node, 'txi_decal', False))
+        walpha = float(getattr(node, 'txi_wateralpha', 1.0))
+        atest = float(getattr(node, 'txi_alpha_test', 0.5))
+        n_faces = len(getattr(node, 'faces', []))
+        tc = int(getattr(node, 'tex_count', 1))
+        total_tris += n_faces
+
+        lines.append(f"{n_name:<30s} {n_type:<12s} {bitmap:<25s} {lm:<20s} "
+                     f"{env:<20s} {blend:>5d} {'Y' if decal else 'N':>5s} "
+                     f"{walpha:>6.2f} {atest:>5.2f} {n_faces:>6d} {tc:>5d}")
+
+        # Show multi-texture slot details
+        tex_names = getattr(node, 'texture_names', [])
+        if tc > 1 and tex_names:
+            for si, tn in enumerate(tex_names):
+                _tn = str(tn or '').strip()[:24]
+                _in_dict = '✓' if (textures and _tn.lower() in textures) else '?'
+                lines.append(f"  └─ slot {si}: {_tn} [{_in_dict}]")
+
+    lines.append('-' * 160)
+    lines.append(f"Total mesh nodes: {sum(1 for n in nodes if getattr(n, 'is_mesh', False))}, "
+                 f"Total triangles: {total_tris}")
+    return '\n'.join(lines)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Shader sources
@@ -248,6 +345,11 @@ void main() {
     // BUG-UV FIX: KotOR MDX stores UV with V=0 at top (Direct3D convention).
     // OpenGL textures have V=0 at bottom.  Flip V axis here to match OpenGL.
     // This is the canonical fix used by KotorBlender reader.py and KotOR.js.
+    //
+    // Texture data is uploaded in bottom-up orientation (GL convention):
+    //   GL V=0 → bottom of image, GL V=1 → top of image.
+    // KotOR UV V=0 → top of image → shader maps to GL V=1.0 (correct).
+    // KotOR UV V=1 → bottom of image → shader maps to GL V=0.0 (correct).
     vec2 flipped_uv = vec2(in_uv.x, 1.0 - in_uv.y);
 
     // UV scroll (animate_uv): offset primary UVs by time-based scroll amount
@@ -688,42 +790,47 @@ class _GlTexCache:
     def _upload(self, img: 'Image.Image') -> Optional['moderngl.Texture']:
         try:
             rgba = img.convert('RGBA')
-            # FIX-VFLIP: The ONLY vertical flip in the entire texture pipeline.
+            # FIX-VFLIP-REMOVED: NO flip here.  All images arriving at the GPU
+            # texture cache are ALREADY in bottom-up (OpenGL) orientation.
             #
-            # PyKotor source (read_tpc → TPC.convert → TPCMipmap.to_pil_image)
-            # always produces top-down RGBA data for every format — DXT1/3/5,
-            # RGB, RGBA, Greyscale, TGA, DDS.  No format-conditional flips.
+            # TextureCache._load_tpc_bytes (viewport.py) flips DXT textures from
+            # top-down (DirectX DXT block order) to bottom-up, and uncompressed
+            # textures from PyKotor are already bottom-up.  The MCP/ghostrigger
+            # path also uses _load_tpc_bytes which returns bottom-up images.
             #
-            # moderngl uploads PIL bytes with row 0 → GL texture row 0 (V=0).
-            # OpenGL V=0 is the bottom of the texture, but PIL row 0 is the top.
-            # Without this flip the image is upside-down in GL.
+            # Previously this method applied FLIP_TOP_BOTTOM unconditionally,
+            # assuming images were top-down (fresh from PyKotor's to_pil_image).
+            # That caused a double-flip for DXT textures (TextureCache flipped
+            # once, _upload flipped again → back to top-down → upside-down in GL)
+            # and an unwanted flip for uncompressed textures (already bottom-up
+            # → flipped to top-down → also upside-down in GL).
             #
-            # The vertex shader does `1.0 - in_uv.y` to convert D3D UVs (V=0 at
-            # top) to GL UVs (V=0 at bottom).  For the shader flip to map D3D V=0
-            # to the top of the texture, GL row-order must match GL convention:
-            #   PIL top-down image  → FLIP_TOP_BOTTOM → bottom-up GL data
-            #   D3D V=0 (top)       → shader → GL V=1 → samples last GL row = top
+            # With bottom-up images uploaded directly:
+            #   PIL row 0 = bottom of image → GL texture row 0 (V=0) = bottom ✓
+            #   Vertex shader: gl_v = 1.0 - kotor_v
+            #     KotOR V=0 (top) → GL V=1.0 → samples last row = top of image ✓
+            #     KotOR V=1 (bottom) → GL V=0.0 → samples first row = bottom ✓
             #
-            # Cross-ref: pykotor.gl.shader.texture.Texture.from_tpc uses
-            # glTexImage2D (GL convention) and never flips textures either.
-            rgba = rgba.transpose(Image.FLIP_TOP_BOTTOM)
+            # Cross-ref: viewport._load_tpc_bytes (DXT flip to bottom-up);
+            #            viewport.TextureCache._load_bytes (bottom-up contract);
+            #            kotor_loader.load_tpc_as_pil (top-down — NOT used by
+            #            viewport; only used by resource_manager._decode_texture).
+            #
             # FIX-YELLOWPIXEL: KotOR TPC textures (e.g. c_bantha01) sometimes have
             # bright saturated test/marker pixels in the top-right corner of the
-            # original image.  After FLIP_TOP_BOTTOM these end up at the GL V≈1.0
-            # edge (top row of the uploaded data).  Any UV with KotOR V near 0
-            # (shader flips to GL V near 1) samples these yellow pixels, producing
-            # a visible yellow disc artifact on creature midriff/belly.
-            # Fix: scan the top 2 pixel rows (GL V≈1.0) of the flipped image for
-            # any pixel that is significantly more saturated yellow/green than its
-            # left neighbor.  Replace such pixels with the average of surrounding
-            # non-saturated neighbors.  This preserves valid edge pixels while
-            # neutralizing accidental test/marker pixels.
+            # original image (D3D V≈0, KotOR texture top).  In bottom-up PIL data,
+            # the "top of texture" is the LAST rows of the array (highest row index).
+            # These rows map to GL V≈1.0.  The shader maps KotOR V≈0 → GL V≈1.0,
+            # so those yellow pixels are sampled on creature bellies (KotOR V near 0).
+            # Fix: scan the last 2 pixel rows of the bottom-up PIL image (= top of
+            # texture = GL V≈1.0) for yellow/green marker pixels and neutralize them.
             if _NUMPY:
                 import numpy as _np
                 _arr = _np.array(rgba, dtype=_np.uint8)  # (H, W, 4)
                 _H, _W = _arr.shape[:2]
-                # Inspect top 2 rows (which are GL V≈1 after the flip)
-                for _row in range(min(2, _H)):
+                # Inspect last 2 rows (= top of texture in bottom-up layout = GL V≈1)
+                for _row_offset in range(min(2, _H)):
+                    _row = _H - 1 - _row_offset
                     for _col in range(_W):
                         r, g, b, a = int(_arr[_row, _col, 0]), int(_arr[_row, _col, 1]), int(_arr[_row, _col, 2]), int(_arr[_row, _col, 3])
                         # Detect bright saturated yellow-green: R and G both high, B low
@@ -1281,7 +1388,14 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
 # ─────────────────────────────────────────────────────────────────────────────
 
 class _GpuMesh:
-    """Holds the VBO / VAO / IBO for one ModelNode."""
+    """Holds the VBO / VAO / IBO for one ModelNode.
+
+    FIX-MULTITEX-SPLIT: For multi-material nodes (tex_count > 1 with per-face
+    material slots), mat_slot_ibos stores per-material-slot IBOs so that each
+    face group can be drawn with the correct texture without overdrawing the
+    entire mesh.  mat_slot_vaos stores the corresponding VAOs.
+    Format: {slot_idx: (vao, ibo, tri_count)}
+    """
 
     def __init__(self):
         self.vao: Optional['moderngl.VertexArray'] = None
@@ -1289,6 +1403,8 @@ class _GpuMesh:
         self.ibo: Optional['moderngl.Buffer'] = None
         self.tri_count: int = 0
         self.indexed: bool = False
+        # Per-material-slot draw groups for multi-texture nodes
+        self.mat_slots: Dict[int, tuple] = {}  # {slot: (vao, ibo, tri_count)}
 
     def release(self):
         if self.vao:
@@ -1303,6 +1419,16 @@ class _GpuMesh:
             try: self.ibo.release()
             except Exception: pass
             self.ibo = None
+        # Release per-material-slot VAOs and IBOs
+        for slot_data in self.mat_slots.values():
+            try:
+                if slot_data[0]:  # vao
+                    slot_data[0].release()
+                if slot_data[1]:  # ibo
+                    slot_data[1].release()
+            except Exception:
+                pass
+        self.mat_slots.clear()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2100,8 +2226,15 @@ class GpuRenderer:
                 else:
                     opaque_nodes.append(node)
 
-            def _draw_node(node, tex_name_override: str = ''):
-                """Draw a single node.  tex_name_override enables multi-tex batching."""
+            def _draw_node(node, tex_name_override: str = '',
+                           override_vao=None, override_tri_count: int = 0):
+                """Draw a single node.
+
+                tex_name_override: override the diffuse texture name (for multi-tex).
+                override_vao: when set, use this VAO instead of the cached gm.vao
+                    (for per-material-slot sub-mesh drawing).
+                override_tri_count: triangle count for the override VAO.
+                """
                 nonlocal total_tris
                 # Use world-space transform (full parent-chain walk) for correct
                 # positioning of all mesh nodes, not just local node.position.
@@ -2162,12 +2295,49 @@ class GpuRenderer:
                         gm.vao = ctx.vertex_array(prog, [(gm.vbo, fmt, *attrs)])
                         gm.tri_count = len(vdata) // 3
                         gm.indexed = False
+                    # FIX-MULTITEX-SPLIT: Build per-material-slot IBOs for
+                    # multi-texture nodes so _draw_node_multitex can draw
+                    # each face group with the correct texture.
+                    _nd_tc = int(getattr(node, 'tex_count', 1))
+                    _nd_fm = getattr(node, 'face_mats', [])
+                    _nd_lm = bool(getattr(node, 'has_lightmap', False))
+                    if (_nd_tc > 1 and _nd_fm and not _nd_lm
+                            and gm.indexed and idx_arr is not None):
+                        _faces_arr = getattr(node, 'faces', [])
+                        _n_faces = len(_faces_arr)
+                        if len(_nd_fm) == _n_faces and _n_faces > 0:
+                            # Group face indices by material slot
+                            _slot_faces: Dict[int, list] = {}
+                            for _fi in range(_n_faces):
+                                _s = _nd_fm[_fi] if _fi < len(_nd_fm) else 0
+                                _s = max(0, min(_s, _nd_tc - 1))
+                                if _s not in _slot_faces:
+                                    _slot_faces[_s] = []
+                                _f = _faces_arr[_fi]
+                                if len(_f) >= 3:
+                                    _slot_faces[_s].extend([int(_f[0]), int(_f[1]), int(_f[2])])
+                            for _s, _idxs in _slot_faces.items():
+                                if not _idxs:
+                                    continue
+                                try:
+                                    _s_idx = np.array(_idxs, dtype=np.uint32)
+                                    _s_ibo = ctx.buffer(_s_idx.tobytes())
+                                    _s_vao = ctx.vertex_array(
+                                        prog, [(gm.vbo, fmt, *attrs)], _s_ibo)
+                                    gm.mat_slots[_s] = (_s_vao, _s_ibo, len(_idxs) // 3)
+                                except Exception:
+                                    pass
+
                     if not is_animated:
                         self._mesh_cache[node_id] = gm
                 else:
                     gm = self._mesh_cache[node_id]
 
-                if gm.vao is None or gm.tri_count == 0:
+                # Use override VAO/tri_count if provided (per-material-slot draw)
+                _use_vao = override_vao if override_vao is not None else gm.vao
+                _use_tris = override_tri_count if override_vao is not None else gm.tri_count
+
+                if _use_vao is None or _use_tris == 0:
                     return
 
                 diff = getattr(node, 'diffuse', (1.0, 1.0, 1.0))
@@ -2464,20 +2634,72 @@ class GpuRenderer:
                 if txi_blend == 1:      _feat_mask |= (1 << 13)  # FEAT_ADDITIVE
                 prog['u_features'].value = _feat_mask
 
-                gm.vao.render(moderngl.TRIANGLES)
-                total_tris += gm.tri_count
+                _use_vao.render(moderngl.TRIANGLES)
+                total_tris += _use_tris
 
             # Helper: draw a node with multi-texture support.
             def _draw_node_multitex(node):
+                """Draw a node, handling multi-texture material slots correctly.
+
+                FIX-MULTITEX-SPLIT: For nodes with tex_count > 1, we must NOT
+                redraw the entire mesh for each texture slot.  The correct
+                approach depends on how tex_count > 1 is used in KotOR:
+
+                  A) has_lightmap=True: slot 0 = diffuse, slot 1 = lightmap.
+                     The lightmap is already handled by _draw_node via u_lm_tex
+                     + in_uv_lm.  Draw once with the primary texture only.
+
+                  B) True multi-material (has_lightmap=False, tex_count > 1):
+                     face_mats[i] selects which texture each face uses.
+                     Split into per-material draw groups using separate IBOs.
+                     Each group is drawn with its own texture binding.
+
+                Reference: xoreos model_kotor.cpp — each face's material index
+                selects the texture; KotorBlender material.py — per-face
+                material assignment; KotOR.js — face material lookup.
+                """
                 tex_names = getattr(node, 'texture_names', [])
                 tex_count = int(getattr(node, 'tex_count', 1))
-                if tex_count > 1 and len(tex_names) >= tex_count:
+
+                if tex_count <= 1 or len(tex_names) < tex_count:
+                    # Single-texture node — standard path
+                    _draw_node(node)
+                    return
+
+                # Case A: Lightmap is slot 1 — lightmap is handled separately
+                # by _draw_node (u_lm_tex binding).  Just draw once with diffuse.
+                _has_lm = bool(getattr(node, 'has_lightmap', False))
+                if _has_lm:
+                    # Draw with primary diffuse texture only; lightmap handled
+                    # via the u_lm_tex/u_has_lm uniforms inside _draw_node.
+                    _draw_node(node)
+                    return
+
+                # Case B: True multi-material — need per-slot face groups
+                face_mats = getattr(node, 'face_mats', [])
+                if not face_mats:
+                    # No face_mats data — fall back to primary texture
+                    _draw_node(node)
+                    return
+
+                # Check if we have per-material-slot draw groups in the mesh cache
+                node_id = id(node)
+                gm = self._mesh_cache.get(node_id)
+                if gm is not None and gm.mat_slots:
+                    # Draw each material slot with its own texture
                     for slot_idx in range(tex_count):
+                        slot_data = gm.mat_slots.get(slot_idx)
+                        if slot_data is None or slot_data[2] == 0:
+                            continue
                         slot_name = str(tex_names[slot_idx]).strip().lower()
                         if slot_name in ('null', '', 'none'):
                             slot_name = ''
-                        _draw_node(node, tex_name_override=slot_name)
+                        _draw_node(node, tex_name_override=slot_name,
+                                   override_vao=slot_data[0],
+                                   override_tri_count=slot_data[2])
                 else:
+                    # No split IBOs available — fall back to primary texture
+                    # (better than drawing incorrectly with each slot)
                     _draw_node(node)
 
             # ── Pass 1: Opaque geometry (depth write ON, no blending) ─────────────
@@ -2994,25 +3216,54 @@ def _apply_txi_from_textures_to_model(model, textures: dict) -> None:
     # Apply TXI and alpha_test to each mesh node.
     # NOTE: We apply even when _txi_cache is empty — nodes still need txi_alpha_test
     # set from the TPC header for correct punchthrough threshold on hair/fur meshes.
+    #
+    # FIX-MULTITEX-TXI: Also apply TXI for ALL texture_names entries, not just
+    # the primary node.texture.  Multi-texture nodes (tex_count > 1) may have
+    # secondary textures with TXI metadata (punchthrough, env-map, etc.) that
+    # must be applied to the node for correct rendering of each material slot.
     try:
         all_nodes_fn = getattr(model, 'all_nodes', None)
         nodes = list(all_nodes_fn()) if all_nodes_fn else getattr(model, 'nodes', [])
         for node in nodes:
             if not getattr(node, 'is_mesh', False):
                 continue
+            # Collect all texture names used by this node
+            _all_tex_names = set()
             tex_name = str(getattr(node, 'texture', '') or '').strip().lower()
-            if not tex_name or tex_name in ('null', '', 'none'):
+            if tex_name and tex_name not in ('null', '', 'none'):
+                _all_tex_names.add(tex_name)
+            # Also include all entries from texture_names[]
+            for _tn in getattr(node, 'texture_names', []):
+                _tn_clean = str(_tn or '').strip().lower()
+                if _tn_clean and _tn_clean not in ('null', '', 'none'):
+                    _all_tex_names.add(_tn_clean)
+
+            if not _all_tex_names:
                 continue
-            txi_str = _txi_cache.get(tex_name, '')
-            _alpha_test = _at_cache.get(tex_name,
-                                        float(getattr(node, 'txi_alpha_test', 0.5)))
-            # Always call _apply_txi_to_node when there is TXI or a non-default threshold
-            # (needed for punchthrough threshold on hair/fur meshes even without TXI text).
-            if txi_str or _alpha_test != 0.5:
+
+            # Apply TXI from primary texture first (most important)
+            _primary_txi = _txi_cache.get(tex_name, '') if tex_name else ''
+            _primary_at = _at_cache.get(tex_name,
+                                         float(getattr(node, 'txi_alpha_test', 0.5)))
+            if _primary_txi or _primary_at != 0.5:
                 try:
-                    _apply_txi_to_node(node, txi_str, _alpha_test)
+                    _apply_txi_to_node(node, _primary_txi, _primary_at)
                 except Exception:
                     pass
+
+            # Apply TXI from secondary textures (env-map, bump, specular, etc.)
+            # These may set txi_envmaptexture, txi_bumpmaptexture, etc.
+            for _sec_name in _all_tex_names:
+                if _sec_name == tex_name:
+                    continue  # already applied above
+                _sec_txi = _txi_cache.get(_sec_name, '')
+                if _sec_txi:
+                    try:
+                        # Apply secondary TXI but keep the primary alpha_test
+                        _apply_txi_to_node(node, _sec_txi,
+                                           float(getattr(node, 'txi_alpha_test', 0.5)))
+                    except Exception:
+                        pass
     except Exception as e:
         log.debug(f'_apply_txi_from_textures_to_model error: {e}')
 

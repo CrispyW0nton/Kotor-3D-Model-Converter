@@ -2107,21 +2107,19 @@ class TextureCache:
         try:
             import io
             img = Image.open(io.BytesIO(raw)).convert('RGBA')
-            # TGA files: bottom-up origin (origin bit=0) is already correct.
-            # Top-origin TGA (bit 5 of descriptor = 1) must be flipped to bottom-up.
-            # PNG/other images are top-down and must also be flipped to bottom-up.
-            # Check TGA image descriptor byte (offset 17) for origin bit:
-            #   bit 5 (0x20) = 1 → top-origin (needs flip to bottom-up)
-            #   bit 5 (0x20) = 0 → bottom-origin (already correct)
-            _is_tga = (len(raw) >= 18 and raw[2] in (0,1,2,3,9,10,11))
-            if _is_tga:
-                origin_top = bool(raw[17] & 0x20)
-                if origin_top:
-                    # top-origin TGA → flip to bottom-up
-                    img = img.transpose(Image.FLIP_TOP_BOTTOM)
-            else:
-                # PNG and other formats are top-down → flip to bottom-up
-                img = img.transpose(Image.FLIP_TOP_BOTTOM)
+            # FIX-TGA-ORIENT: PIL always returns top-down images (row 0 = top)
+            # regardless of TGA origin bit.  PIL internally flips bottom-origin
+            # TGA data to top-down during Image.open().  ALL images from PIL are
+            # therefore top-down.  We must flip ALL of them to bottom-up so the
+            # renderer's V-flip formula (tv = (1-v)*h) maps KotOR D3D UVs
+            # (V=0=top) correctly:
+            #   V=0 (top) → (1-0)*h = h → last row → top of bottom-up image ✓
+            #   V=1 (bottom) → (1-1)*h = 0 → row 0 → bottom of bottom-up image ✓
+            #
+            # Previously, bottom-origin TGA files were NOT flipped (assumed PIL
+            # preserved the bottom-up layout), causing them to remain top-down
+            # and render upside-down.
+            img = img.transpose(Image.FLIP_TOP_BOTTOM)
             return img
         except Exception:
             return None
@@ -2136,8 +2134,8 @@ class TextureCache:
         V-flip (tv = (1-v)*h) produces correct UV mapping.
         KotOR MDL UV V=0 = top of texture (Direct3D convention).
         - TPC files: bottom-up from _load_tpc_bytes() (flips DXT and uncompressed).
-        - Standard bottom-origin TGA: already bottom-up, no flip needed.
-        - Top-origin TGA / PNG: already top-down.
+        - All PIL-opened images (TGA, PNG, DDS): PIL always returns top-down
+          → flip to bottom-up for consistency.
         """
         try:
             with open(path, 'rb') as f:
@@ -2154,20 +2152,11 @@ class TextureCache:
             try:
                 import io
                 img = Image.open(io.BytesIO(raw)).convert('RGBA')
-                # All images must be bottom-up so the renderer's (1-v)*h V-flip works.
-                # TGA with bottom-origin (bit 5=0): already bottom-up, no flip needed.
-                # TGA with top-origin (bit 5=1): top-down, must flip to bottom-up.
-                # PNG/DDS/other: top-down by default, must flip to bottom-up.
-                _is_tga = (len(raw) >= 18 and raw[2] in (0,1,2,3,9,10,11))
-                if _is_tga:
-                    origin_top = bool(raw[17] & 0x20)
-                    if origin_top:
-                        # top-origin TGA → flip to bottom-up
-                        img = img.transpose(Image.FLIP_TOP_BOTTOM)
-                    # bottom-origin TGA is already bottom-up, no flip needed
-                else:
-                    # PNG/DDS/other: top-down → flip to bottom-up
-                    img = img.transpose(Image.FLIP_TOP_BOTTOM)
+                # FIX-TGA-ORIENT: PIL always returns top-down images (row 0 = top)
+                # regardless of TGA origin bit.  PIL internally normalises all
+                # TGA variants to top-down during Image.open().  Flip ALL images
+                # to bottom-up so the renderer's V-flip formula works correctly.
+                img = img.transpose(Image.FLIP_TOP_BOTTOM)
                 return img
             except Exception:
                 pass
@@ -2229,8 +2218,9 @@ class TextureCache:
                clamp_s: bool = False, clamp_t: bool = False) -> Tuple[int,int,int]:
         """Sample texture at UV (tiled/wrapped). Returns (r, g, b).
 
-        KotOR MDX UVs follow OpenGL convention: V=0 = texture BOTTOM.
-        Our PIL Images are top-down (row 0 = top).  Flip: tex_row = (1-v_tiled)*h.
+        KotOR MDX UVs follow Direct3D convention: V=0 = texture TOP.
+        Our PIL Images are bottom-up (row 0 = bottom of texture).
+        Flip: tex_row = (1-v_tiled)*h → V=0 maps to last row (top), V=1 to row 0 (bottom).
 
         Tiling: values outside [0, 1] are wrapped via % 1.0.  Values *inside*
         [0, 1] – including the boundary v=1.0 – are kept as-is so that
@@ -2275,9 +2265,10 @@ class TextureCache:
         """
         Bilinear-filtered texture sample. Returns (r, g, b, a) for correct alpha blending.
 
-        Uses the same V-flip as sample(): v=0 (OpenGL bottom) → row h-1;
-        v=1 (OpenGL top) → row 0.  V tiling only applied outside [0,1] so
-        that v=1.0 stays at the top row rather than collapsing to v=0.0.
+        Uses the same V-flip as sample(): v=0 (D3D top) → row h-1 (top of
+        bottom-up image); v=1 (D3D bottom) → row 0 (bottom of bottom-up image).
+        V tiling only applied outside [0,1] so that v=1.0 stays at row 0
+        rather than collapsing to v=0.0.
 
         clamp_s / clamp_t: GL_CLAMP_TO_EDGE on U/V axis respectively.
         When set, the UV is clamped to [0,1] before sampling instead of
@@ -2548,11 +2539,13 @@ def _paste_textured_triangle(
 
     # ── UV coordinate preparation (KotOR-accurate wrapping) ──────────────
     #
-    # KotOR MDX stores UVs in OpenGL convention: V=0 is the BOTTOM of the texture.
-    # PIL images are top-down: row 0 is the TOP.  All loaded textures (TPC raw and
-    # DXT, TGA) are stored top-down in our PIL Image objects (TPC raw is flipped at
-    # load time in _load_tpc_bytes).  Therefore to sample correctly we must flip V:
+    # KotOR MDX stores UVs in Direct3D convention: V=0 is the TOP of the texture.
+    # PIL images are bottom-up (row 0 = bottom of texture).  All loaded textures
+    # (TPC, TGA, PNG) are flipped to bottom-up orientation by TextureCache.
+    # To sample correctly we flip V:
     #   tex_row = (1.0 - v_mdx) * height
+    # This maps V=0 (top) → last row (top of bottom-up image)
+    #       and V=1 (bottom) → row 0 (bottom of bottom-up image).
     # This flip is applied below as: tv = (1.0 - v_raw) * th
     #
     # Seam crossing fix (applies ONLY when the tri's own UV span ≤ 1 tile):
@@ -2935,10 +2928,10 @@ def _paste_textured_triangle(
             v2_raw = v2_raw - _tmath.floor(v2_raw)
             needs_tiling = False
 
-    # ── Flip V for KotOR (MDX stores V=0=bottom; PIL images are top-down) ──
-    # All texture images in our system are top-down (row 0 = top).
-    # MDX UVs follow OpenGL convention: V=0 = texture bottom = PIL row (h-1).
-    # Non-tiled: tex_row = (1 - v) * h  → v=0 maps to row h (bottom), v=1 to row 0 (top).
+    # ── Flip V for KotOR (MDX stores V=0=top; PIL images are bottom-up) ────
+    # All texture images in our system are bottom-up (row 0 = bottom of texture).
+    # MDX UVs follow D3D convention: V=0 = texture top.
+    # Non-tiled: tex_row = (1 - v) * h  → v=0 maps to row h-1 (top), v=1 to row 0 (bottom).
     # Tiled:     tex_row = (tile_v_needed - v_shifted) * src_h
     #            — a linear global flip over the full tiled V range.  Since all tiles
     #              are identical this produces the same visual result as per-tile flip.
@@ -9360,6 +9353,24 @@ class ViewportWidget(tk.Frame):
                                 _envtex = str(getattr(_mn, 'txi_envmaptexture', '') or '').strip()
                                 if _envtex and _envtex.upper() not in ('NULL', '', 'NONE'):
                                     _tc.get(_envtex)
+                                # FIX-MULTITEX-PRELOAD: Also load ALL texture_names[]
+                                # entries.  Multi-texture nodes (tex_count > 1) may
+                                # reference textures not in .texture or .lightmap.
+                                for _tn in getattr(_mn, 'texture_names', []):
+                                    _tn_clean = str(_tn or '').strip()
+                                    if (_tn_clean
+                                            and _tn_clean.upper() not in ('NULL', '', 'NONE')
+                                            and _tn_clean != _mtex
+                                            and _tn_clean != _lmtex):
+                                        _tc.get(_tn_clean)
+                                # Also load specular colour map texture
+                                _spectex = str(getattr(_mn, 'txi_specularcolour', '') or '').strip()
+                                if _spectex and _spectex.upper() not in ('NULL', '', 'NONE'):
+                                    _tc.get(_spectex)
+                                # Also load bump map texture
+                                _bumptex = str(getattr(_mn, 'txi_bumpmaptexture', '') or '').strip()
+                                if _bumptex and _bumptex.upper() not in ('NULL', '', 'NONE'):
+                                    _tc.get(_bumptex)
                         except Exception:
                             pass
                     if _tc is not None and hasattr(_tc, '_cache'):
