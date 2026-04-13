@@ -100,6 +100,16 @@ Phase 3.8 rendering correctness fixes (deep audit vs Kotor.NET / KotOR.js / xore
                  _apply_txi_to_node() applies all three from TXI metadata.
   FIX-ENVOPAQUE: After env-map blend, diffuse.a is set to 1.0 — prevents the already-
                  consumed alpha from accidentally making env-map surfaces transparent.
+  FIX-LMSHADE:  For module/area geometry with baked lightmaps, skip the Phong
+                 directional lighting pass entirely.  The lightmap IS the lighting
+                 — applying Phong shade on top double-darkens the scene because
+                 lightmaps have a mean intensity of ~0.25 (×2 overbright → ~0.5)
+                 and the Phong shade multiplier (~0.65) further reduces to ~0.35.
+                 New formula: lit_color = diffuse_tex * lightmap * 2.0  (no Phong).
+                 Character models with lightmaps (rare) still use Phong + lightmap.
+                 Source: KotOR.js ShaderOdysseyModel.ts USE_LIGHTMAP path (lines
+                 359-365): completely replaces directDiffuse with lightmap-only
+                 indirectDiffuse, omitting the Phong direct lighting component.
 
 Phase 3.8 new features
   FIX-SPECMAP:  TXI 'specularcolour' texture is now bound to sampler unit 3 and
@@ -718,6 +728,7 @@ uniform vec3  u_light_dir2;     // secondary (fill) light direction
 uniform float u_ambient;        // ambient intensity
 uniform float u_specular;       // specular intensity scalar (used when u_has_spec==0)
 uniform float u_shininess;      // Phong shininess exponent (overridden per-node)
+uniform int   u_lm_shade;       // FIX-LMSHADE: 1 = lightmap-only shading (skip Phong)
 
 // Blend / material flags
 uniform int   u_blend_mode;     // 0=normal, 1=additive, 2=punchthrough
@@ -790,65 +801,108 @@ void main() {
     // -- Per-vertex colour modulation
     diffuse_samp.rgb *= v_color.rgb;
 
-    // -- Phong lighting
+    // -- Lighting
     vec3 N = normalize(v_world_norm);
-    float ndotl  = max(dot(N, u_light_dir),  0.0);
-    float ndotl2 = max(dot(N, u_light_dir2), 0.0);
     vec3 V = normalize(u_cam_pos - v_world_pos);
-    vec3 R = reflect(-u_light_dir, N);
-    // FIX-SPECMAP: sample per-texel specular intensity from specularcolour map when bound.
-    // KotOR specular maps store per-channel gloss in RGB; use luminance as scalar.
-    // When no spec map, fall back to the global u_specular float (unchanged behaviour).
-    float spec_intensity;
-    if (u_has_spec == 1) {
-        vec3 spec_col = texture(u_spec_tex, v_uv).rgb;
-        spec_intensity = dot(spec_col, vec3(0.299, 0.587, 0.114)); // luminance
-    } else {
-        spec_intensity = u_specular;
-    }
-    float eff_shininess = max(u_shininess, 1.0);  // FIX-SHININESS: clamp to avoid pow(0,0)
-    float spec = pow(max(dot(V, R), 0.0), eff_shininess) * spec_intensity;
-    float shade = u_ambient + ndotl * (1.0 - u_ambient) * 0.85
-                            + ndotl2 * (1.0 - u_ambient) * 0.15
-                            + spec;
-    shade = clamp(shade, 0.0, 1.5);
-    vec3 lit_color = diffuse_samp.rgb * shade;
+    vec3 lit_color;
 
-    // -- Environment map compositing (TXI envmaptexture / bumpyshinytexture)
-    // KotOR Odyssey engine algorithm (xoreos renderGeometryEnvMappedOver +
-    // KotOR.js ShaderOdysseyModel):
-    //   The env map is drawn OVER diffuse using GL blend (ONE_MINUS_DST_ALPHA, ONE):
-    //     env_contrib = env_color * (1 - diffuse_alpha)
-    //   Single-pass equivalent:
-    //     env_weight = 1.0 - diffuse_samp.a
-    //     out_rgb = mix(lit_color, env_color, env_weight)
-    //   Transparent areas (low alpha) => more env map visible.
-    //   Opaque areas (high alpha)     => mostly diffuse visible.
-    // Env UV: sphere-map (matcap) from view-space reflected normal.
-    // Sources: xoreos modelnode.cpp renderGeometryEnvMappedOver()
-    //          KotOR.js ShaderOdysseyModel.ts (1.0 - diffuseColor.a) blend factor
-    if (u_has_env == 1) {
-        vec3 R2 = reflect(-V, N);
-        float m = 2.0 * sqrt(R2.x*R2.x + R2.y*R2.y + (R2.z+1.0)*(R2.z+1.0));
-        vec2 env_uv = vec2(R2.x / m + 0.5, R2.y / m + 0.5);
-        vec3 env_col = texture(u_env_tex, env_uv).rgb;
-        // CORRECT: env shows through where diffuse is transparent (low alpha)
-        float env_weight = 1.0 - diffuse_samp.a;
-        lit_color = mix(lit_color, env_col, env_weight);
-        // Diffuse alpha consumed by env blend - mark surface as opaque
-        diffuse_samp.a = 1.0;
-    }
+    // FIX-LMSHADE: KotOR module geometry with baked lightmaps uses the
+    // lightmap as the sole lighting source.  The Phong directional shade
+    // must be SKIPPED for these nodes — otherwise the already-dim lightmap
+    // (mean intensity ~0.25) is further darkened by the Phong multiplier,
+    // producing an unrealistically dark scene.
+    //
+    // Reference: KotOR.js ShaderOdysseyModel.ts lines 359-365:
+    //   #ifdef USE_LIGHTMAP
+    //     reflectedLight.indirectDiffuse = vec3(0.0);
+    //     reflectedLight.indirectDiffuse += PI * texture2D(lightMap, vUv2).xyz * lightMapIntensity;
+    //     reflectedLight.indirectDiffuse *= BRDF_Lambert(diffuseColor.rgb);
+    //     vec3 outgoingLight = reflectedLight.indirectDiffuse + ...;
+    //   The directDiffuse (Phong shade) is NOT included in the lightmapped path.
+    //
+    // Our simplified single-pass equivalent:
+    //   lit_color = diffuse_tex.rgb * lightmap.rgb * 2.0
+    // The ×2.0 overbright factor matches the KotOR engine convention.
 
-    // -- Self-illumination (additive glow)
-    // v7.1 (Finding 5.6 — reone context.cpp GL_MAX blend equation):
-    // Self-illumination uses additive compositing. For surfaces with
-    // selfillum > 0, clamp so glow doesn't over-brighten dark areas.
-    lit_color += u_selfillum;
-
-    // -- Lightmap compositing: final = diffuse * lightmap * 2 (overbright)
-    if (u_has_lm == 1) {
+    if (u_lm_shade == 1 && u_has_lm == 1) {
+        // ── Lightmap-only path (module/area geometry) ─────────────────
         vec4 lm_samp = texture(u_lm_tex, v_uv_lm);
-        lit_color *= lm_samp.rgb * 2.0;
+        lit_color = diffuse_samp.rgb * lm_samp.rgb * 2.0;
+
+        // Self-illumination still applies additively
+        lit_color += u_selfillum;
+
+        // Environment map compositing (rare for modules but handle it)
+        if (u_has_env == 1) {
+            vec3 R2 = reflect(-V, N);
+            float m = 2.0 * sqrt(R2.x*R2.x + R2.y*R2.y + (R2.z+1.0)*(R2.z+1.0));
+            vec2 env_uv = vec2(R2.x / m + 0.5, R2.y / m + 0.5);
+            vec3 env_col = texture(u_env_tex, env_uv).rgb;
+            float env_weight = 1.0 - diffuse_samp.a;
+            lit_color = mix(lit_color, env_col, env_weight);
+            diffuse_samp.a = 1.0;
+        }
+    } else {
+        // ── Standard Phong path (characters, items, non-lightmapped) ─
+        float ndotl  = max(dot(N, u_light_dir),  0.0);
+        float ndotl2 = max(dot(N, u_light_dir2), 0.0);
+        vec3 R = reflect(-u_light_dir, N);
+        // FIX-SPECMAP: sample per-texel specular intensity from specularcolour map when bound.
+        // KotOR specular maps store per-channel gloss in RGB; use luminance as scalar.
+        // When no spec map, fall back to the global u_specular float (unchanged behaviour).
+        float spec_intensity;
+        if (u_has_spec == 1) {
+            vec3 spec_col = texture(u_spec_tex, v_uv).rgb;
+            spec_intensity = dot(spec_col, vec3(0.299, 0.587, 0.114)); // luminance
+        } else {
+            spec_intensity = u_specular;
+        }
+        float eff_shininess = max(u_shininess, 1.0);  // FIX-SHININESS: clamp to avoid pow(0,0)
+        float spec = pow(max(dot(V, R), 0.0), eff_shininess) * spec_intensity;
+        float shade = u_ambient + ndotl * (1.0 - u_ambient) * 0.85
+                                + ndotl2 * (1.0 - u_ambient) * 0.15
+                                + spec;
+        shade = clamp(shade, 0.0, 1.5);
+        lit_color = diffuse_samp.rgb * shade;
+
+        // -- Environment map compositing (TXI envmaptexture / bumpyshinytexture)
+        // KotOR Odyssey engine algorithm (xoreos renderGeometryEnvMappedOver +
+        // KotOR.js ShaderOdysseyModel):
+        //   The env map is drawn OVER diffuse using GL blend (ONE_MINUS_DST_ALPHA, ONE):
+        //     env_contrib = env_color * (1 - diffuse_alpha)
+        //   Single-pass equivalent:
+        //     env_weight = 1.0 - diffuse_samp.a
+        //     out_rgb = mix(lit_color, env_color, env_weight)
+        //   Transparent areas (low alpha) => more env map visible.
+        //   Opaque areas (high alpha)     => mostly diffuse visible.
+        // Env UV: sphere-map (matcap) from view-space reflected normal.
+        // Sources: xoreos modelnode.cpp renderGeometryEnvMappedOver()
+        //          KotOR.js ShaderOdysseyModel.ts (1.0 - diffuseColor.a) blend factor
+        if (u_has_env == 1) {
+            vec3 R2 = reflect(-V, N);
+            float m = 2.0 * sqrt(R2.x*R2.x + R2.y*R2.y + (R2.z+1.0)*(R2.z+1.0));
+            vec2 env_uv = vec2(R2.x / m + 0.5, R2.y / m + 0.5);
+            vec3 env_col = texture(u_env_tex, env_uv).rgb;
+            // CORRECT: env shows through where diffuse is transparent (low alpha)
+            float env_weight = 1.0 - diffuse_samp.a;
+            lit_color = mix(lit_color, env_col, env_weight);
+            // Diffuse alpha consumed by env blend - mark surface as opaque
+            diffuse_samp.a = 1.0;
+        }
+
+        // -- Self-illumination (additive glow)
+        // v7.1 (Finding 5.6 — reone context.cpp GL_MAX blend equation):
+        // Self-illumination uses additive compositing. For surfaces with
+        // selfillum > 0, clamp so glow doesn't over-brighten dark areas.
+        lit_color += u_selfillum;
+
+        // -- Lightmap compositing for non-lm_shade path (fallback):
+        // This handles lightmapped nodes that somehow reach this path
+        // (e.g. character models with lightmap textures).
+        if (u_has_lm == 1) {
+            vec4 lm_samp = texture(u_lm_tex, v_uv_lm);
+            lit_color *= lm_samp.rgb * 2.0;
+        }
     }
 
     lit_color = clamp(lit_color, 0.0, 1.0);
@@ -2050,6 +2104,7 @@ class GpuRenderer:
             prog['u_blend_mode'].value = 0       # normal blend (not additive/punchthrough)
             prog['u_has_tex'].value    = 0       # no diffuse tex until first node draw
             prog['u_has_lm'].value     = 0       # no lightmap
+            prog['u_lm_shade'].value   = 0       # FIX-LMSHADE: 0=Phong, 1=lightmap-only
             prog['u_has_env'].value    = 0       # no env map
             prog['u_diffuse'].value    = (1.0, 1.0, 1.0)   # white diffuse
             prog['u_selfillum'].value  = (0.0, 0.0, 0.0)   # no self-illumination
@@ -2855,8 +2910,15 @@ class GpuRenderer:
                     gl_lm.use(location=1)
                     prog['u_lm_tex'].value = 1
                     prog['u_has_lm'].value = 1
+                    # FIX-LMSHADE: For module/area geometry with lightmaps,
+                    # skip Phong directional lighting and use lightmap as
+                    # the sole lighting source.  Character models with
+                    # lightmaps (rare) still use Phong + lightmap multiply.
+                    # Reference: KotOR.js ShaderOdysseyModel.ts USE_LIGHTMAP path
+                    prog['u_lm_shade'].value = 1 if _gpu_is_module else 0
                 else:
                     prog['u_has_lm'].value = 0
+                    prog['u_lm_shade'].value = 0
 
                 # BUG-ENVMAP FIX: Bind environment map texture to unit 2.
                 # The TXI 'envmaptexture' field names the environment map texture.
