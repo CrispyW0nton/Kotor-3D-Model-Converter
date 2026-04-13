@@ -711,35 +711,34 @@ class _GameInstall:
 
 # ── Texture decoding helper ──────────────────────────────────────────────────
 
-# Load load_tpc_as_pil from kotor_loader (always available via PyKotor)
-_pykotor_tpc_to_pil = None
-
-
-def _get_pykotor_tpc_fn():
-    """Return load_tpc_as_pil from kotor_loader (PyKotor-backed)."""
-    global _pykotor_tpc_to_pil
-    if _pykotor_tpc_to_pil is not None:
-        return _pykotor_tpc_to_pil
-    try:
-        from .kotor_loader import load_tpc_as_pil as _fn
-        _pykotor_tpc_to_pil = _fn
-    except Exception as exc:
-        log.warning("resource_manager: could not import load_tpc_as_pil: %s", exc)
-        _pykotor_tpc_to_pil = None
-    return _pykotor_tpc_to_pil
-
 
 def _decode_texture(raw: bytes) -> Optional[object]:
-    """
-    Decode raw texture bytes (TPC or TGA) to a PIL RGBA Image.
+    """Decode raw texture bytes to a PIL RGBA Image.
 
-    Routing:
-      1. PyKotor (load_tpc_as_pil) — handles DXT1/DXT3/DXT5, cubemaps,
-                                      TXI extraction, V-flip correction.
-                                      Used for all TPC files.
-      2. PIL direct                — TGA / PNG / DDS passthrough (non-TPC).
+    Primary decoder: **PyKotor** (pykotor.resource.formats.tpc).
+    PyKotor's ``read_tpc()`` auto-detects the format (TPC / TGA / DDS)
+    and handles every KotOR texture encoding:
 
-    Returns None if PIL is unavailable or decoding fails.
+      • TPC binary — DXT1, DXT3, DXT5, RGB, RGBA, Greyscale, BGRA
+      • TGA        — uncompressed, RLE, colour-mapped, true-colour
+      • DDS        — S3TC / DXT compression
+
+    Decoding pipeline (all from pykotor source):
+      ``read_tpc(raw)``  →  ``TPC.convert(RGBA)``  →  ``TPCMipmap.to_pil_image()``
+
+    Cross-references:
+      • pykotor.resource.formats.tpc.tpc_auto.read_tpc
+      • pykotor.resource.formats.tpc.tpc_data.TPC.convert
+      • pykotor.resource.formats.tpc.tpc_data.TPCMipmap.to_pil_image
+      • pykotor.gl.shader.texture.Texture.from_tpc  (PyKotor GL upload)
+
+    The returned image is always **top-down** (row 0 = top of texture).
+    The single V-flip is applied in gpu_renderer._upload().
+
+    Only falls back to PIL.Image.open for non-KotOR formats (PNG, BMP)
+    that PyKotor does not handle.
+
+    Returns None if decoding fails entirely.
     """
     try:
         from PIL import Image
@@ -750,35 +749,42 @@ def _decode_texture(raw: bytes) -> Optional[object]:
     if not raw:
         return None
 
-    # ── PyKotor path: all TPC files ──────────────────────────────────────
-    if _is_tpc(raw):
-        pk_fn = _get_pykotor_tpc_fn()
-        if pk_fn is not None:
-            try:
-                img = pk_fn(raw)
-                if img is not None:
-                    if img.mode != 'RGBA':
-                        img = img.convert('RGBA')
-                    return img
-            except Exception as _err:
-                log.debug("_decode_texture: load_tpc_as_pil failed (%s)", _err)
-        # FIX-TPC-FALLBACK: load_tpc_as_pil may fail on malformed TXI trailers
-        # (e.g. "Invalid TXI command: 'd'" from txi_data.py) even when the pixel
-        # data itself is valid.  Fall back to the internal _decode_tpc() decoder
-        # which skips TXI parsing and handles uncompressed RGB/RGBA/Grey directly.
-        try:
-            img = _decode_tpc(raw)
-            if img is not None:
-                if img.mode != 'RGBA':
-                    img = img.convert('RGBA')
-                return img
-        except Exception as _err2:
-            log.debug("_decode_texture: _decode_tpc fallback failed (%s)", _err2)
-        # TPC file that we cannot decode — do NOT pass to PIL (it will fail or
-        # produce garbage since the raw bytes are not a PIL-recognised format).
-        return None
+    # ── Primary: PyKotor read_tpc (handles TPC, TGA, DDS) ───────────────
+    # Apply header patch first (stock KotOR DXT files have data_size=0).
+    try:
+        from .kotor_loader import patch_tpc_header
+        patched = patch_tpc_header(raw)
+    except ImportError:
+        patched = raw
 
-    # ── PIL direct: TGA, PNG, DDS, BMP, etc. ─────────────────────────────
+    try:
+        from pykotor.resource.formats.tpc.tpc_auto import read_tpc as _pk_read
+        from pykotor.resource.formats.tpc.tpc_data import TPCTextureFormat as _Fmt
+
+        tpc = _pk_read(patched)
+        tpc.convert(_Fmt.RGBA)
+        img = tpc.get(0, 0).to_pil_image()
+        if img is not None:
+            if img.mode != 'RGBA':
+                img = img.convert('RGBA')
+            # Attach TXI metadata from the TPC object
+            txi = ''
+            try:
+                txi = (tpc.txi or '').strip() if isinstance(getattr(tpc, 'txi', None), str) else ''
+            except Exception:
+                pass
+            img._txi_str = txi                        # type: ignore[attr-defined]
+            img._tpc_raw = raw                         # type: ignore[attr-defined]
+            try:
+                at = struct.unpack_from('<f', raw, 4)[0]
+                img._txi_alpha_test = at if 0.0 < at <= 1.0 else None  # type: ignore[attr-defined]
+            except Exception:
+                img._txi_alpha_test = None             # type: ignore[attr-defined]
+            return img
+    except Exception as _pk_err:
+        log.debug("_decode_texture: PyKotor read_tpc failed (%s)", _pk_err)
+
+    # ── PIL direct: PNG, BMP, etc. (non-KotOR formats only) ──────────────
     try:
         img = Image.open(_io.BytesIO(raw)).convert('RGBA')
         return img
@@ -878,177 +884,7 @@ def _is_tpc(raw: bytes) -> bool:
     return True
 
 
-def _decode_tpc(raw: bytes) -> Optional[object]:
-    """
-    Decode a KotOR TPC file to a PIL RGBA Image.
-    Supports: DXT1 (enc=2), DXT5 (enc=4), uncompressed Grey/RGB/RGBA (enc=1/2/4 with data_size=0).
-    """
-    try:
-        from PIL import Image
-        import io as _io
-    except ImportError:
-        return None
 
-    data_size = struct.unpack_from('<I', raw, 0)[0]
-    width     = struct.unpack_from('<H', raw, 8)[0]
-    height    = struct.unpack_from('<H', raw, 10)[0]
-    encoding  = raw[12]
-    num_mips  = raw[13]
-
-    compressed = (data_size > 0)
-    pixel_data = raw[128:]
-
-    if compressed:
-        # DXT1 (RGB, no alpha) = enc 2, DXT5 (RGBA) = enc 4
-        dxt_type = 'DXT1' if encoding == 2 else 'DXT5'
-        try:
-            img = Image.frombytes('RGBA', (width, height), pixel_data[:data_size],
-                                  'bcn', (1 if dxt_type == 'DXT1' else 3))
-            return img.convert('RGBA')
-        except Exception:
-            pass
-        # Fallback: try imageio or squish
-        try:
-            import struct as _struct
-            # Build a minimal DDS file and let PIL decode it
-            dds = _build_dds(width, height, data_size, dxt_type, pixel_data)
-            img = Image.open(_io.BytesIO(dds))
-            return img.convert('RGBA')
-        except Exception:
-            pass
-        # Last resort: use our own software DXT decoder
-        try:
-            pixels = _dxt_decode(pixel_data, width, height, encoding == 4)
-            img = Image.frombytes('RGBA', (width, height), bytes(pixels))
-            return img
-        except Exception:
-            return None
-    else:
-        # Uncompressed
-        if encoding == 1:  # Greyscale
-            n = width * height
-            rgba = bytearray(n * 4)
-            for i in range(n):
-                v = pixel_data[i]
-                rgba[i*4:i*4+4] = bytes([v, v, v, 255])
-            return Image.frombytes('RGBA', (width, height), bytes(rgba))
-        elif encoding == 2:  # RGB
-            n = width * height
-            if len(pixel_data) < n * 3:
-                return None
-            rgba = bytearray(n * 4)
-            for i in range(n):
-                rgba[i*4]   = pixel_data[i*3]
-                rgba[i*4+1] = pixel_data[i*3+1]
-                rgba[i*4+2] = pixel_data[i*3+2]
-                rgba[i*4+3] = 255
-            return Image.frombytes('RGBA', (width, height), bytes(rgba))
-        elif encoding in (4, 12):  # RGBA
-            n = width * height
-            if len(pixel_data) < n * 4:
-                return None
-            return Image.frombytes('RGBA', (width, height), pixel_data[:n*4])
-        return None
-
-
-def _build_dds(width: int, height: int, data_size: int,
-               dxt_type: str, pixel_data: bytes) -> bytes:
-    """Build a minimal DDS file header + data for PIL to decode."""
-    fourcc = b'DXT1' if dxt_type == 'DXT1' else b'DXT5'
-    # DDS header (128 bytes)
-    header = bytearray(128)
-    header[0:4]   = b'DDS '
-    struct.pack_into('<I', header, 4,  124)    # header size
-    struct.pack_into('<I', header, 8,  0x1007) # DDSD_CAPS|DDSD_HEIGHT|DDSD_WIDTH|DDSD_PIXELFORMAT
-    struct.pack_into('<I', header, 12, height)
-    struct.pack_into('<I', header, 16, width)
-    struct.pack_into('<I', header, 20, data_size)  # pitch or linear size
-    struct.pack_into('<I', header, 76, 32)     # pixel format size
-    struct.pack_into('<I', header, 80, 4)      # DDPF_FOURCC
-    header[84:88] = fourcc
-    struct.pack_into('<I', header, 108, 0x1000) # DDSCAPS_TEXTURE
-    return bytes(header) + pixel_data[:data_size]
-
-
-def _dxt_decode(data: bytes, width: int, height: int, has_alpha: bool) -> bytearray:
-    """
-    Pure Python DXT1/DXT5 decoder.
-    Ported from KotorBlender's tpc/reader.py decompress_dxt15_block.
-    Returns flat RGBA bytearray of width*height*4 bytes.
-    """
-    out = bytearray(width * height * 4)
-    block_size = 16 if has_alpha else 8
-    num_bx = (width + 3) // 4
-    num_by = (height + 3) // 4
-    data_idx = 0
-
-    for by in range(num_by):
-        for bx in range(num_bx):
-            blk = data[data_idx: data_idx + block_size]
-            data_idx += block_size
-
-            if has_alpha:
-                # DXT5: 8 bytes alpha + 8 bytes color
-                a0, a1 = blk[0], blk[1]
-                ac = struct.unpack_from('<Q', blk, 2)[0]
-                c0, c1 = struct.unpack_from('<HH', blk, 8)
-                cc = struct.unpack_from('<I', blk, 12)[0]
-            else:
-                # DXT1: 8 bytes color only
-                a0 = a1 = 255
-                ac = 0
-                c0, c1 = struct.unpack_from('<HH', blk, 0)
-                cc = struct.unpack_from('<I', blk, 4)[0]
-
-            # Expand 565 colors
-            r0 = ((c0 >> 11) * 255 + 16) // 32
-            g0 = (((c0 >> 5) & 63) * 255 + 32) // 64
-            b0 = ((c0 & 31) * 255 + 16) // 32
-            r1 = ((c1 >> 11) * 255 + 16) // 32
-            g1 = (((c1 >> 5) & 63) * 255 + 32) // 64
-            b1 = ((c1 & 31) * 255 + 16) // 32
-
-            for py in range(4):
-                for px in range(4):
-                    pixel_x = bx * 4 + px
-                    pixel_y = by * 4 + py
-                    if pixel_x >= width or pixel_y >= height:
-                        continue
-
-                    # Color
-                    ci = (cc >> (2 * (py * 4 + px))) & 3
-                    if has_alpha or c0 > c1:
-                        if   ci == 0: r, g, b = r0, g0, b0
-                        elif ci == 1: r, g, b = r1, g1, b1
-                        elif ci == 2: r, g, b = (2*r0+r1)//3, (2*g0+g1)//3, (2*b0+b1)//3
-                        else:         r, g, b = (r0+2*r1)//3, (g0+2*g1)//3, (b0+2*b1)//3
-                    else:
-                        if   ci == 0: r, g, b = r0, g0, b0
-                        elif ci == 1: r, g, b = r1, g1, b1
-                        elif ci == 2: r, g, b = (r0+r1)//2, (g0+g1)//2, (b0+b1)//2
-                        else:         r, g, b = 0, 0, 0
-
-                    # Alpha
-                    if has_alpha:
-                        ai = (ac >> (3 * (py * 4 + px))) & 7
-                        if   ai == 0: a = a0
-                        elif ai == 1: a = a1
-                        elif a0 > a1:
-                            a = ((8 - ai) * a0 + (ai - 1) * a1) // 7
-                        elif ai == 6: a = 0
-                        elif ai == 7: a = 255
-                        else:
-                            a = ((6 - ai) * a0 + (ai - 1) * a1) // 5
-                    else:
-                        a = 255
-
-                    off = (pixel_y * width + pixel_x) * 4
-                    out[off]   = r
-                    out[off+1] = g
-                    out[off+2] = b
-                    out[off+3] = a
-
-    return out
 
 
 # ── Module-level singleton ───────────────────────────────────────────────────

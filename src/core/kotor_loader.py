@@ -352,9 +352,39 @@ def patch_tpc_header(data: bytes) -> bytes:
 
 
 def load_tpc_as_pil(data: bytes):
-    """Decode KotOR TPC bytes to a PIL RGBA Image using PyKotor.
+    """Decode KotOR TPC/TGA/DDS bytes to a PIL RGBA Image using PyKotor.
 
-    Returns None if PIL is unavailable or data is invalid.
+    Uses pykotor.resource.formats.tpc directly — the same code that the
+    PyKotor OpenGL renderer (pykotor.gl.shader.texture.Texture.from_tpc)
+    uses to read every KotOR texture format:
+      • TPC binary (DXT1 / DXT3 / DXT5 / RGB / RGBA / Grey / BGRA)
+      • TGA (uncompressed and RLE, colour-mapped and true-colour)
+      • DDS (with DXT compression)
+
+    PyKotor's ``read_tpc()`` auto-detects the format, ``TPC.convert()``
+    decompresses DXT using pykotor's pure-Python DXT1/3/5 decoders, and
+    ``TPCMipmap.to_pil_image()`` wraps the result in a PIL Image.
+
+    The returned image is **always top-down** (PIL convention: row 0 = top
+    of the texture atlas).  The GPU renderer's ``_upload()`` applies a
+    single ``FLIP_TOP_BOTTOM`` to convert to OpenGL's bottom-up row order,
+    and the vertex shader's ``1.0 - in_uv.y`` converts D3D UV convention
+    (V=0 at top) to GL convention (V=0 at bottom).  This gives one
+    consistent flip for **all** texture formats — DXT and uncompressed
+    alike — eliminating the previous conditional DXT flip that led to
+    double-flip / no-flip orientation bugs.
+
+    Cross-references
+    ----------------
+    • pykotor.resource.formats.tpc.tpc_auto.read_tpc   — format detection
+    • pykotor.resource.formats.tpc.io_tpc.TPCBinaryReader.load — TPC parse
+    • pykotor.resource.formats.tpc.io_tga.TPCTGAReader.load   — TGA parse
+    • pykotor.resource.formats.tpc.io_dds.TPCDDSReader.load   — DDS parse
+    • pykotor.resource.formats.tpc.tpc_data.TPC.convert       — DXT decode
+    • pykotor.resource.formats.tpc.tpc_data.TPCMipmap.to_pil_image
+    • pykotor.gl.shader.texture.Texture.from_tpc              — GL upload
+
+    Returns None if PIL is unavailable or data is invalid/corrupt.
     Attaches ._txi_str, ._tpc_raw, ._txi_alpha_test to the returned image.
     """
     if not _HAS_PIL or not data or len(data) < 128:
@@ -362,22 +392,30 @@ def load_tpc_as_pil(data: bytes):
 
     data = patch_tpc_header(data)
     try:
-        tpc      = pk_read_tpc(data)
-        orig_fmt = tpc.format()
-        is_dxt   = orig_fmt in (TPCTextureFormat.DXT1,
-                                TPCTextureFormat.DXT3,
-                                TPCTextureFormat.DXT5)
+        # ── PyKotor source: read_tpc auto-detects TPC / TGA / DDS ────────
+        tpc = pk_read_tpc(data)
+
+        # ── PyKotor source: TPC.convert decompresses DXT to RGBA ─────────
+        # This calls TPCMipmap.convert() which routes through pykotor's own
+        # dxt1_to_rgb / dxt3_to_rgba / dxt5_to_rgba decoders — the same
+        # decompression path used by pykotor's OpenGL Texture.from_tpc().
         tpc.convert(TPCTextureFormat.RGBA)
+
+        # ── PyKotor source: TPCMipmap.to_pil_image ──────────────────────
+        # Returns a PIL Image with row 0 = top of texture (top-down).
+        # All formats (DXT, RGB, RGBA, Grey, TGA, DDS) produce the same
+        # top-down orientation after conversion.
         img = tpc.get(0, 0).to_pil_image()
         if img is None:
             return None
         if img.mode != 'RGBA':
             img = img.convert('RGBA')
-        # PyKotor returns DXT images top-down; our renderer expects bottom-up.
-        if is_dxt:
-            img = img.transpose(_PILImage.FLIP_TOP_BOTTOM)
 
-        # Attach metadata
+        # NOTE: No FLIP_TOP_BOTTOM here.  PyKotor's decompressed RGBA data
+        # is always top-down.  The single V-flip is applied uniformly in
+        # gpu_renderer._upload() for ALL textures (DXT and non-DXT).
+
+        # ── Attach TXI metadata ──────────────────────────────────────────
         txi = ''
         try:
             txi = (tpc.txi or '').strip() if isinstance(getattr(tpc, 'txi', None), str) else ''
