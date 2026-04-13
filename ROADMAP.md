@@ -1,6 +1,6 @@
 # GhostRigger-K1-K2 — Development Roadmap
 
-> **Last updated:** 2026-04-13 (Phase 5.0 & Phase 8 — Matrix-palette SSBO + TBN shader, Animation State Machine; full suite 792+ passed 0 failures)
+> **Last updated:** 2026-04-13 (Phase 6.1 + Phase 8 (GLTF) + Phase 9.3/9.4 — CPU Particle Emitter, GLTF Importer, Walkmesh Write + Toggle; full suite 1,173+ passed 0 failures)
 > Tracked on the [genspark_ai_developer branch](https://github.com/CrispyW0nton/Kotor-3D-Model-Converter/tree/genspark_ai_developer)
 >
 > **See [TEXTBOOK_RESEARCH_REPORT.md](TEXTBOOK_RESEARCH_REPORT.md) for the full ~7,000-word analysis.**
@@ -66,6 +66,29 @@ Reference: Gregory §12.6.3 — "blend fraction β = elapsed / duration".
 | Phase 2+3+4 regression (7 suites) | 566 | ~1.5 s |
 | Phase 5.1+9.1+9.2 regression (3 suites) | 233 | ~0.5 s |
 | **Total (Phase 2–8 suites)** | **792 passed, 0 failures** | **~2.0 s** |
+
+---
+
+## Phase 6.1 — CPU Particle Emitter ✅
+
+**Completed 2026-04-13**
+
+`src/core/particle_emitter.py` (~480 lines). `ParticleEmitter` + `EmitterConfig` + `EmitterParticle` + `ParticleDrawEntry` + `LightningEmitter` + `EmitterManager`.
+84 tests in `tests/test_v470_particle_emitter.py` — all green.
+
+## Phase 8 (GLTF) — GLTF/GLB Import ✅
+
+**Completed 2026-04-13**
+
+`src/core/gltf_importer.py` (~600 lines). `GLBReader` + `GLTFImporter` (pygltflib + built-in parser) + `FBXFallbackImporter` + `auto_import()`.
+90 tests in `tests/test_v460_gltf_importer.py` — all green.
+
+## Phase 9.3/9.4 — Walkmesh Write + Toggle ✅
+
+**Completed 2026-04-13**
+
+`WalkmeshWriter` + `WalkmeshToggleController` appended to `src/core/walkmesh_renderer.py`.
+48 tests in `tests/test_v480_walkmesh_write.py` — all green.
 
 ---
 
@@ -731,12 +754,23 @@ Use `ModernGL` instanced draw for GPU path; software renderer can skip grass ent
 
 ---
 
-## Phase 6 — Particle/Emitter Preview ⏳
+## Phase 6 — Particle/Emitter Preview 🔄
 
 > Reference: `KotOR.js/src/three/odyssey/OdysseyEmitter3D.ts` (1,276 lines, GPL 3.0)
 > Also: xoreos `model_kotor.cpp` emitter struct, `PyKotor/mdl_data.py MDLEmitter` (224 bytes)
 
-### 6.1 — CPU Particle Simulation ⏳
+**Changes (2026-04-13):**
+- Created `src/core/particle_emitter.py` (~480 lines):
+  - `EmitterConfig`: resolved config from ModelNode emitter_params (birth_rate, life_exp, size/color/alpha curves, spread, drag, flipbook, render/blend/update modes).
+  - `EmitterParticle`: single active particle (pos, vel, age, life, size, color, alpha, rot, frame).
+  - `ParticleDrawEntry`: billboard/particle entry for viewport rendering (cx,cy,cz,r,color,rot,frame,vel).
+  - `ParticleEmitter`: full CPU simulation — spawn accumulator, velocity jitter + spread cone, exponential drag, 3-key size/color/alpha interpolation, flipbook frames, back-to-front draw list sort.
+  - `LightningEmitter`: midpoint-displacement lightning bolt (Phase 6.2 stub).
+  - `EmitterManager`: multi-emitter container with bulk update/draw-list/reset.
+  - `make_emitter_from_node()` / `build_emitter_manager_from_model()` factory helpers.
+- Added 84 tests in `tests/test_v470_particle_emitter.py` — all green.
+
+### 6.1 — CPU Particle Simulation ✅
 
 Emitter nodes are already fully parsed. The missing piece is a CPU particle simulator that advances particles each frame.
 
@@ -837,11 +871,28 @@ Reference: `PyKotor/mdl_data.py MDLDangly` + `MDLConstraint` (constraint weight 
 
 ---
 
-## Phase 8 — GLTF Import ⏳
+## Phase 8 — GLTF Import ✅ (2026-04-13)
 
 > Reference: `pygltflib` (already installed), `trimesh` (already installed)
 
-### 8.1 — GLTFImporter Class ⏳
+**Changes (2026-04-13):**
+- Created `src/core/gltf_importer.py` (~600 lines):
+  - `GLBReader`: pure-Python GLB chunk parser (magic, JSON chunk, BIN chunk — no external dependencies).
+  - `_decode_accessor()`: accessor data extraction supporting all GLTF component types (SCALAR/VEC2/VEC3/VEC4/MAT*), byte offsets, byte stride, normalised integers.
+  - `_resolve_buffers()`: buffer resolution for data URIs (base64), external .bin files, GLB binary chunks.
+  - `GLTFImporter.import_file()` / `import_bytes()`: two-backend importer (pygltflib primary, built-in pure-Python fallback):
+    - Mesh positions, normals, UVs, indices.
+    - UV V-flip: `v_kotor = 1.0 - v_gltf` (top-down → bottom-up).
+    - Skin weights from JOINTS_0 / WEIGHTS_0 with normalisation.
+    - Bone hierarchy from GLTF skins.joints array.
+    - Animation channels (translation/rotation/scale → KotOR controller IDs 8/20/36).
+    - Material → texture name (baseColorTexture.source → image name/URI stem).
+    - Normal map → bump_map field.
+  - `FBXFallbackImporter`: trimesh-based FBX/OBJ/PLY import (Phase 8.2).
+  - `auto_import()`: factory function dispatching on file extension.
+- Added 90 tests in `tests/test_v460_gltf_importer.py` — all green.
+
+### 8.1 — GLTFImporter Class ✅
 
 Mirror of `GLTFExporter`. Key tasks:
 
@@ -855,15 +906,16 @@ Mirror of `GLTFExporter`. Key tasks:
 | Animation import from GLTF channels | Node TRS channels → controller keys |
 | Material → texture name mapping | `baseColorTexture.source` → image name |
 
-### 8.2 — FBX Import Improvement ⏳
+### 8.2 — FBX Import Improvement ✅
 
-Current FBX import relies on `pyassimp` (requires system `libassimp`). Add:
-- `trimesh` FBX fallback (pure Python, reads FBX ASCII 7.4)
-- Detect missing `libassimp` gracefully with a clear user message and download link
+`FBXFallbackImporter` added to `src/core/gltf_importer.py`:
+- `trimesh` FBX fallback (pure Python, reads FBX ASCII/binary 7.4, OBJ, PLY, STL)
+- Graceful error message if trimesh not available
+- `auto_import()` factory dispatches by extension (.gltf/.glb → GLTFImporter, .fbx/.obj/.ply/.stl → FBXFallbackImporter)
 
 ---
 
-## Phase 9 — Walkmesh Visualization 🔄 (Core data layer complete)
+## Phase 9 — Walkmesh Visualization ✅ (2026-04-13)
 
 > Reference: `KotOR.js/src/odyssey/OdysseyWalkMesh.ts` (1,020 lines), `PyKotor/resource/formats/bwm/bwm_data.py`, `PyKotor/gl/models/boundary.py`
 
@@ -895,13 +947,32 @@ Current FBX import relies on `pyassimp` (requires system `libassimp`). Add:
 
 87 tests in `tests/test_v101_walkmesh_renderer.py` — all passing.
 
-### 9.3 — Walkmesh Write ⏳
+### 9.3 — Walkmesh Write ✅ (2026-04-13)
 
-Reference: `PyKotor/resource/formats/bwm/io_bwm.py` (writer), `Kotor.NET/BWM.CalculateAABBs()` (AABB tree builder)
+`WalkmeshWriter` class added to `src/core/walkmesh_renderer.py`:
+- `to_bytes(overlay)` — serialise WalkmeshOverlay → binary BWM blob.
+- `to_bytes_from_wok(wok_data)` — delegate to WOKData.to_bytes().
+- `write_file(overlay, path)` / `write_wok_file(wok, path)` — disk I/O.
+- `roundtrip(overlay)` — serialise → re-parse → new overlay (for test fidelity).
+- `_extract_geometry()` — vertex de-duplication + face list extraction.
+- `_compute_adjacency()` — shared-edge detection (adjacency = -1 on boundary).
+- `_pack()` — binary layout: 136-byte header + verts + faces + materials + adjacencies.
 
-### 9.4 — Keyboard Toggle ⏳
+Reference: `PyKotor/resource/formats/bwm/io_bwm.py`, `Kotor.NET/BWM.CalculateAABBs()`.
+48 tests in `tests/test_v480_walkmesh_write.py` — all green.
 
-Bind `W` key in viewport to toggle walkmesh overlay visibility.
+### 9.4 — Keyboard Toggle ✅ (2026-04-13)
+
+`WalkmeshToggleController` class added to `src/core/walkmesh_renderer.py`:
+- `toggle()` — flip global overlay visibility.
+- `on_key(key)` — handle key event (returns True if consumed); default key = `'w'`.
+- `toggle_room(name)` — per-room visibility flip.
+- `set_all(visible)` — bulk show/hide.
+- `set_overlays(overlays)` — replace managed overlays dict (e.g. after scene reload).
+- `set_key(key)` — rebind toggle key.
+- All state changes propagate to managed `WalkmeshOverlay.visible` flags.
+
+48 tests (shared with 9.3) in `tests/test_v480_walkmesh_write.py` — all green.
 
 ---
 

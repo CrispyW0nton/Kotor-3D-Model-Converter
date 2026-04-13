@@ -478,3 +478,351 @@ def build_draw_list(overlays: Dict[str, WalkmeshOverlay],
                 color = face.color,
             ))
     return entries
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  WalkmeshWriter — Phase 9.3
+# ─────────────────────────────────────────────────────────────────────────────
+
+class WalkmeshWriter:
+    """
+    Serialise a ``WalkmeshOverlay`` (or a raw ``WOKData``) back to a valid
+    Aurora BWM binary blob and optionally write it to disk.
+
+    Phase 9.3 — Walkmesh Write.
+
+    The Aurora BWM format (also used for PWK door walkmeshes and DWK placeable
+    walkmeshes) is straightforward:
+
+    Header (136 bytes):
+      0x00  sig          "BWM "  (4 bytes)
+      0x04  ver          "V1.0"  (4 bytes)
+      0x08  wok_type     uint32  (1 = room BWM)
+      0x0C  reserved     [52 bytes zero padding]
+      0x38  vert_count   uint32
+      0x3C  vert_offset  uint32
+      0x40  face_count   uint32
+      0x44  face_offset  uint32  (3 × uint16 per face)
+      0x48  mat_offset   uint32  (1 × uint32 per face — surface material ID)
+      0x4C  adj_offset   uint32  (3 × int32  per face — adjacent face indices, -1 = none)
+      0x50  [remaining header zeros to offset 0x88]
+
+    Data sections (immediately after header, in declared order):
+      verts        → faces → materials → adjacencies
+
+    References:
+      PyKotor/resource/formats/bwm/io_bwm.py (writer)
+      Kotor.NET/Formats/KotorBWM/KotorBWMBinaryWriter.cs
+      KotOR.js OdysseyWalkMesh.ts
+      Roadmap Phase 9.3
+    """
+
+    # Sentinel for "no adjacent face"
+    NO_ADJ = -1
+
+    def to_bytes(self, overlay: 'WalkmeshOverlay') -> bytes:
+        """
+        Convert a WalkmeshOverlay to a binary BWM blob.
+
+        The overlay's world-space vertex positions are used as-is (the world
+        offset was already baked in when the overlay was built from a room).
+
+        Returns raw bytes suitable for writing to a .wok / .dwk / .pwk file.
+        """
+        verts, faces, materials, adjacencies = self._extract_geometry(overlay)
+        return self._pack(verts, faces, materials, adjacencies)
+
+    def to_bytes_from_wok(self, wok_data) -> bytes:
+        """
+        Re-serialise a raw ``WOKData`` object (from module_format.py).
+
+        Delegates to ``WOKData.to_bytes()`` which has its own implementation.
+        This wrapper normalises the API so callers can use WalkmeshWriter for
+        both sources.
+        """
+        return wok_data.to_bytes()
+
+    def write_file(self, overlay: 'WalkmeshOverlay', path: str) -> int:
+        """
+        Write the overlay to a BWM file at ``path``.
+
+        Returns the number of bytes written.
+        """
+        from pathlib import Path as _Path
+        data = self.to_bytes(overlay)
+        _Path(path).write_bytes(data)
+        log.info("WalkmeshWriter: wrote %d bytes to %s", len(data), path)
+        return len(data)
+
+    def write_wok_file(self, wok_data, path: str) -> int:
+        """Write a WOKData object to a BWM file."""
+        from pathlib import Path as _Path
+        data = wok_data.to_bytes()
+        _Path(path).write_bytes(data)
+        log.info("WalkmeshWriter: wrote %d bytes (WOKData) to %s", len(data), path)
+        return len(data)
+
+    # ── Round-trip helpers ─────────────────────────────────────────────────
+
+    @staticmethod
+    def roundtrip(overlay: 'WalkmeshOverlay') -> 'WalkmeshOverlay':
+        """
+        Serialise ``overlay`` to bytes and re-parse into a new WalkmeshOverlay.
+
+        Used for round-trip fidelity tests (Phase 9.3 test suite).
+        """
+        writer = WalkmeshWriter()
+        data   = writer.to_bytes(overlay)
+        try:
+            from .module_format import WOKData
+        except ImportError:
+            from module_format import WOKData  # type: ignore[no-redef]
+        wok_rt = WOKData.from_bytes(data)
+        loader = WalkmeshLoader()
+        return loader.from_wok_data(wok_rt)
+
+    # ── Internal ──────────────────────────────────────────────────────────
+
+    def _extract_geometry(
+        self, overlay: 'WalkmeshOverlay'
+    ) -> Tuple[
+        List[Tuple[float,float,float]],   # verts
+        List[Tuple[int,int,int]],          # face vertex indices
+        List[int],                          # material IDs
+        List[Tuple[int,int,int]],           # adjacencies
+    ]:
+        """
+        Convert the overlay's WalkmeshFace list into raw geometry arrays
+        suitable for binary packing.
+
+        De-duplicates vertices (within float tolerance) to keep the output
+        compact.  Adjacency is reconstructed from shared-edge detection.
+        """
+        import struct as _s
+
+        # Build vertex list (de-duplicate)
+        vert_to_idx: Dict[Tuple, int] = {}
+        verts: List[Tuple[float,float,float]] = []
+
+        def _add_vert(v: Tuple[float,float,float]) -> int:
+            # Round to 5 decimal places to merge near-duplicate vertices
+            key = (round(v[0], 5), round(v[1], 5), round(v[2], 5))
+            if key not in vert_to_idx:
+                vert_to_idx[key] = len(verts)
+                verts.append(v)
+            return vert_to_idx[key]
+
+        face_triples: List[Tuple[int,int,int]] = []
+        materials:    List[int] = []
+
+        for face in overlay.faces:
+            i0 = _add_vert(face.v0)
+            i1 = _add_vert(face.v1)
+            i2 = _add_vert(face.v2)
+            face_triples.append((i0, i1, i2))
+            materials.append(face.surface)
+
+        # Rebuild adjacency: two faces are adjacent on edge (a,b) if one has
+        # edge a→b and the other has edge b→a.
+        adjacencies = self._compute_adjacency(face_triples)
+        return verts, face_triples, materials, adjacencies
+
+    @staticmethod
+    def _compute_adjacency(
+        face_triples: List[Tuple[int,int,int]]
+    ) -> List[Tuple[int,int,int]]:
+        """
+        Build the adjacency list for BWM: for each face, three adjacent face
+        indices (one per edge), or -1 if the edge is on the boundary.
+
+        An edge is shared between face i (edge k, vertices a→b) and face j
+        (edge m, vertices b→a — reversed).
+
+        Ref: Kotor.NET BWM.CalculateAABBs() edge-sharing logic.
+        """
+        # Build edge → (face_idx, edge_idx) map
+        edge_map: Dict[Tuple[int,int], Tuple[int,int]] = {}
+        for fi, (v0, v1, v2) in enumerate(face_triples):
+            edges = [(v0, v1), (v1, v2), (v2, v0)]
+            for ei, (a, b) in enumerate(edges):
+                edge_map[(a, b)] = (fi, ei)
+
+        result: List[Tuple[int,int,int]] = []
+        for fi, (v0, v1, v2) in enumerate(face_triples):
+            edges = [(v0, v1), (v1, v2), (v2, v0)]
+            adjs = []
+            for (a, b) in edges:
+                # Look for the reverse edge in another face
+                rev = edge_map.get((b, a))
+                if rev is not None and rev[0] != fi:
+                    adjs.append(rev[0])
+                else:
+                    adjs.append(-1)
+            result.append((adjs[0], adjs[1], adjs[2]))
+        return result
+
+    @staticmethod
+    def _pack(
+        verts:       List[Tuple[float,float,float]],
+        faces:       List[Tuple[int,int,int]],
+        materials:   List[int],
+        adjacencies: List[Tuple[int,int,int]],
+    ) -> bytes:
+        """Pack the geometry arrays into a BWM binary blob."""
+        import struct as _s
+
+        nv = len(verts)
+        nf = len(faces)
+
+        vert_sz = nv * 12          # 3 × float32
+        face_sz = nf * 6           # 3 × uint16
+        mat_sz  = nf * 4           # 1 × uint32
+        adj_sz  = nf * 12          # 3 × int32
+
+        header_size = 136
+        vert_off = header_size
+        face_off = vert_off + vert_sz
+        mat_off  = face_off + face_sz
+        adj_off  = mat_off  + mat_sz
+
+        buf = bytearray(adj_off + adj_sz)
+
+        buf[0:4] = b'BWM '
+        buf[4:8] = b'V1.0'
+        _s.pack_into('<I', buf, 8,  1)          # wok_type = 1 (room)
+        _s.pack_into('<I', buf, 56, nv)
+        _s.pack_into('<I', buf, 60, vert_off)
+        _s.pack_into('<I', buf, 64, nf)
+        _s.pack_into('<I', buf, 68, face_off)
+        _s.pack_into('<I', buf, 72, mat_off)
+        _s.pack_into('<I', buf, 76, adj_off)
+
+        for i, (x, y, z) in enumerate(verts):
+            _s.pack_into('<fff', buf, vert_off + i*12, x, y, z)
+
+        for i, (v0, v1, v2) in enumerate(faces):
+            _s.pack_into('<HHH', buf, face_off + i*6,  v0, v1, v2)
+            _s.pack_into('<I',   buf, mat_off  + i*4,  materials[i])
+            a0, a1, a2 = adjacencies[i] if i < len(adjacencies) else (-1, -1, -1)
+            _s.pack_into('<iii', buf, adj_off  + i*12, a0, a1, a2)
+
+        return bytes(buf)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  WalkmeshToggleController — Phase 9.4
+# ─────────────────────────────────────────────────────────────────────────────
+
+class WalkmeshToggleController:
+    """
+    Keyboard-driven controller for toggling walkmesh overlay visibility.
+
+    Phase 9.4 — Keyboard Toggle (``W`` key binding).
+
+    The controller holds a reference to a dict of ``WalkmeshOverlay`` objects
+    (typically maintained by the viewport FrameRenderer) and provides:
+
+      • ``toggle()``         — flip global visibility
+      • ``on_key(key)``      — handle key events (returns True if consumed)
+      • ``toggle_room(name)``— flip a single room's overlay visibility
+      • ``set_all(visible)`` — bulk show/hide
+      • ``visible``          — read global visibility state
+
+    The default key binding is ``'W'`` (case-insensitive), matching the
+    Roadmap Phase 9.4 keyboard shortcut table.
+
+    Usage in viewport.py FrameRenderer::
+
+        self._wm_toggle = WalkmeshToggleController(self._wm_overlays)
+        # In keyPressEvent:
+        consumed = self._wm_toggle.on_key(event.key_name)
+    """
+
+    DEFAULT_KEY = 'w'
+
+    def __init__(
+        self,
+        overlays: Optional[Dict[str, 'WalkmeshOverlay']] = None,
+        key: str = DEFAULT_KEY,
+    ) -> None:
+        self._overlays: Dict[str, 'WalkmeshOverlay'] = overlays or {}
+        self._key      = key.lower()
+        self._visible  = True   # global toggle state
+
+    @property
+    def visible(self) -> bool:
+        """Current global visibility state of the walkmesh overlay."""
+        return self._visible
+
+    @visible.setter
+    def visible(self, value: bool) -> None:
+        self._visible = value
+        self._sync_overlays()
+
+    def toggle(self) -> bool:
+        """
+        Flip the global walkmesh overlay visibility.
+
+        Returns the new visibility state.
+        """
+        self._visible = not self._visible
+        self._sync_overlays()
+        log.debug("WalkmeshToggleController: visibility → %s", self._visible)
+        return self._visible
+
+    def on_key(self, key: str) -> bool:
+        """
+        Handle a key press event.
+
+        Returns True if the event was consumed (key matched), False otherwise.
+
+        ``key`` should be the key character (e.g. ``'w'``, ``'W'``, ``'w'``).
+        """
+        if key.lower() == self._key:
+            self.toggle()
+            return True
+        return False
+
+    def toggle_room(self, room_name: str) -> Optional[bool]:
+        """
+        Toggle visibility of a single room's walkmesh overlay.
+
+        Returns the new visibility state, or None if the room is not found.
+        """
+        overlay = self._overlays.get(room_name)
+        if overlay is None:
+            return None
+        overlay.visible = not overlay.visible
+        log.debug("WalkmeshToggleController: room '%s' → %s", room_name, overlay.visible)
+        return overlay.visible
+
+    def set_all(self, visible: bool) -> None:
+        """Show or hide all walkmesh overlays at once."""
+        self._visible = visible
+        self._sync_overlays()
+
+    def set_overlays(self, overlays: Dict[str, 'WalkmeshOverlay']) -> None:
+        """Replace the managed overlays dict (e.g. after a scene reload)."""
+        self._overlays = overlays
+        self._sync_overlays()
+
+    def set_key(self, key: str) -> None:
+        """Change the toggle key binding."""
+        self._key = key.lower()
+
+    @property
+    def key(self) -> str:
+        """Current toggle key character."""
+        return self._key
+
+    @property
+    def overlay_count(self) -> int:
+        """Number of overlays currently managed."""
+        return len(self._overlays)
+
+    # ── Internal ──────────────────────────────────────────────────────────
+
+    def _sync_overlays(self) -> None:
+        """Propagate the global visible state to all overlay objects."""
+        for overlay in self._overlays.values():
+            overlay.visible = self._visible
