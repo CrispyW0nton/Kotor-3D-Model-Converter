@@ -80,10 +80,15 @@ echo  Installing mcp + pydantic + uvicorn...
 py -3.12 -m pip install "mcp>=1.0.0" "pydantic>=2.0.0" "uvicorn[standard]>=0.20.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] mcp/pydantic/uvicorn install failed - check build_log.txt )
 
-REM  pyassimp may not support Python 3.14 yet — fully optional
-echo  Installing pyassimp (optional - needed for binary FBX import)...
+REM  pyassimp — full bone/skin FBX import (needs Assimp DLL, installed in Step 4)
+echo  Installing pyassimp (optional - full FBX bone/skin import)...
 py -3.12 -m pip install "pyassimp>=5.2.0" >> "%LOG%" 2>&1
-if errorlevel 1 ( echo  [WARN] pyassimp install failed ^(optional^) - FBX import unavailable )
+if errorlevel 1 ( echo  [WARN] pyassimp install failed ^(optional^) )
+
+REM  assimp-py — geometry-only FBX fallback (bundles native DLL in wheel)
+echo  Installing assimp-py (optional - geometry-only FBX fallback)...
+py -3.12 -m pip install "assimp-py>=1.0.0" >> "%LOG%" 2>&1
+if errorlevel 1 ( echo  [WARN] assimp-py install failed ^(optional^) )
 
 REM  pykotor can fail on Python 3.14 — mark as optional
 echo  Installing pykotor (optional)...
@@ -111,30 +116,32 @@ if errorlevel 1 (
 echo  [OK] Dependencies installed.
 echo.
 
-REM ── Ensure Assimp DLL is present (optional — only if pyassimp imported OK) ──
+REM ── Ensure Assimp DLL is present for pyassimp ─────────────────────────────
 echo [Step 4/6] Checking for Assimp DLL (optional)...
 echo [Step 4/6] Checking for Assimp DLL... >> "%LOG%"
 
-REM Try to import pyassimp — may fail on Python 3.14, that is OK
-for /f "delims=" %%P in ('py -3.12 -c "import pyassimp, os; print(os.path.dirname(pyassimp.__file__))" 2^>nul') do set PYASSIMP_DIR=%%P
+REM Locate pyassimp's install folder (pip install may succeed even if DLL missing)
+set PYASSIMP_DIR=
+for /f "delims=" %%P in ('py -3.12 -c "import importlib.util; spec=importlib.util.find_spec(\"pyassimp\"); print(spec.submodule_search_locations[0] if spec and spec.submodule_search_locations else \"\")" 2^>nul') do set PYASSIMP_DIR=%%P
 
 if "!PYASSIMP_DIR!"=="" (
-    echo  [INFO] pyassimp not importable on this Python version - skipping DLL step.
-    echo  [INFO] FBX import will be unavailable, all other features unaffected.
-    echo  [INFO] pyassimp not importable - skipping >> "%LOG%"
+    echo  [INFO] pyassimp package not found - skipping DLL step.
+    echo  [INFO] assimp-py ^(geometry-only^) will still work for FBX import.
+    echo  [INFO] pyassimp package not found >> "%LOG%"
     goto :after_assimp
 )
 
 echo  pyassimp folder: !PYASSIMP_DIR!
 echo  pyassimp folder: !PYASSIMP_DIR! >> "%LOG%"
 
+REM Check if DLL is already present
 set ASSIMP_DLL_FOUND=0
 for %%F in ("!PYASSIMP_DIR!\*assimp*.dll") do set ASSIMP_DLL_FOUND=1
 
 if !ASSIMP_DLL_FOUND!==1 (
     echo  [OK] Assimp DLL already present.
     echo  [OK] Assimp DLL already present >> "%LOG%"
-    goto :after_assimp
+    goto :verify_pyassimp
 )
 
 echo  [INFO] Assimp DLL not found - downloading from GitHub...
@@ -147,8 +154,9 @@ set ASSIMP_EXTRACT=%TEMP%\assimp_extract
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%ASSIMP_URL%' -OutFile '%ASSIMP_ZIP%' -UseBasicParsing" >> "%LOG%" 2>&1
 
 if errorlevel 1 (
-    echo  [WARN] Download failed. FBX import will be unavailable.
+    echo  [WARN] Download failed. pyassimp bone import will be unavailable.
     echo  [WARN] Manual fix: copy assimp-vc143-mt.dll into: !PYASSIMP_DIR!
+    echo  [WARN] assimp-py ^(geometry-only^) will still work for FBX import.
     echo  [WARN] Assimp download failed >> "%LOG%"
     goto :after_assimp
 )
@@ -160,14 +168,46 @@ if exist "%ASSIMP_EXTRACT%\Release\assimp-vc143-mt.dll" (
     echo  [OK] assimp-vc143-mt.dll installed.
     echo  [OK] assimp-vc143-mt.dll installed to !PYASSIMP_DIR! >> "%LOG%"
 ) else (
-    echo  [WARN] DLL not found in archive. FBX import unavailable.
+    REM Try alternate archive structure (some releases have bin/ instead of Release/)
+    for /r "%ASSIMP_EXTRACT%" %%D in (*assimp*.dll) do (
+        copy /Y "%%D" "!PYASSIMP_DIR!\%%~nxD" >nul
+        echo  [OK] %%~nxD installed from archive.
+        echo  [OK] %%~nxD installed to !PYASSIMP_DIR! >> "%LOG%"
+        goto :cleanup_assimp
+    )
+    echo  [WARN] DLL not found in archive. pyassimp bone import unavailable.
+    echo  [WARN] assimp-py ^(geometry-only^) will still work for FBX import.
     echo  [WARN] DLL not in archive >> "%LOG%"
 )
 
+:cleanup_assimp
 del /Q "%ASSIMP_ZIP%" 2>nul
 rd /S /Q "%ASSIMP_EXTRACT%" 2>nul
 
+:verify_pyassimp
+REM Now verify pyassimp can actually import with the DLL in place
+py -3.12 -c "import pyassimp" >nul 2>&1
+if errorlevel 1 (
+    echo  [WARN] pyassimp installed but cannot load Assimp DLL.
+    echo  [WARN] FBX import will use assimp-py ^(geometry-only, no bone data^).
+    echo  [WARN] pyassimp DLL load failed >> "%LOG%"
+) else (
+    echo  [OK] pyassimp fully operational ^(bone/skin FBX import available^).
+    echo  [OK] pyassimp verified >> "%LOG%"
+)
+
 :after_assimp
+REM Verify at least one assimp library works
+py -3.12 -c "import assimp_py" >nul 2>&1
+if errorlevel 1 (
+    py -3.12 -c "import pyassimp" >nul 2>&1
+    if errorlevel 1 (
+        echo  [WARN] Neither pyassimp nor assimp-py available - FBX import disabled.
+        echo  [WARN] All other features ^(MDL, OBJ, GLB, GLTF^) work normally.
+    )
+) else (
+    echo  [OK] assimp-py available as FBX import fallback.
+)
 echo.
 
 REM ── Verify icon ─────────────────────────────────────────────────────

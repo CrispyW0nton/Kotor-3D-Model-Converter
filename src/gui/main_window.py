@@ -10817,8 +10817,9 @@ class KotorModToolsApp(tk.Tk):
                          f"({len(model.mesh_nodes())} meshes)", 'success')
             else:
                 self.log(
-                    "FBX import failed — pyassimp (with libassimp) is required "
-                    "for binary FBX.  Try exporting as OBJ or GLB instead.",
+                    "FBX import failed — install pyassimp + Assimp DLL for "
+                    "full bone/skin support, or assimp-py for geometry-only.  "
+                    "Try exporting as OBJ or GLB instead.",
                     'error')
         except Exception as e:
             self.log(f"FBX import error: {e}", 'error')
@@ -11089,7 +11090,7 @@ class KotorModToolsApp(tk.Tk):
                             "Rigging → rigging/ subfolder", 'info')
                 else:
                     self.log(
-                        "FBX export fell back to OBJ (pyassimp not installed)",
+                        "FBX export fell back to OBJ (pyassimp / assimp-py not installed)",
                         'warning')
         except Exception as e:
             self.log(f"Export error: {e}", 'error')
