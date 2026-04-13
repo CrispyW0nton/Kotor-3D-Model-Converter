@@ -1585,3 +1585,382 @@ class DanglySimulator:
     def num_pinned_vertices(self) -> int:
         """Return count of pinned (fixed) vertices."""
         return sum(1 for c in self._constraints if c >= self.PIN_THRESHOLD)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Phase 8 — Animation State Machine
+#  References: Gregory §12.12; Dunsky §7–8
+# ─────────────────────────────────────────────────────────────────────────────
+
+@dataclass
+class AnimTransition:
+    """A directed edge in the animation state graph.
+
+    Attributes
+    ----------
+    target_state : str
+        Name of the destination ``AnimState``.
+    condition : callable | None
+        If provided, a zero-arg callable returning ``bool``.  The transition
+        fires only when the condition returns ``True``.  If ``None`` the
+        transition is unconditional (triggers when explicitly requested via
+        :meth:`AnimStateMachine.request_transition`).
+    blend : bool
+        Whether to cross-fade into the target state (default ``True``).
+    sync_phase : bool
+        Whether to use phase-synchronized cross-fade (Gregory §12.6.3).
+        Useful for walk→run locomotion transitions.
+    priority : int
+        Higher-priority transitions are evaluated first when multiple
+        transitions share the same source state.
+    """
+    target_state : str
+    condition     : Optional[Any] = None     # callable() → bool | None
+    blend         : bool          = True
+    sync_phase    : bool          = False
+    priority      : int           = 0
+
+
+@dataclass
+class AnimState:
+    """A single node in the animation state graph.
+
+    Attributes
+    ----------
+    name : str
+        Unique state name (must match a key in ``AnimStateMachine._states``).
+    anim_name : str
+        Animation clip to play (passed to :meth:`AnimationEngine.play`).
+    loop : bool
+        Whether the clip should loop.
+    speed : float
+        Time-scale multiplier (1.0 = normal speed).
+    on_enter : callable | None
+        Optional callback ``(state_name: str) → None`` fired on entry.
+    on_exit : callable | None
+        Optional callback ``(state_name: str) → None`` fired on exit.
+    transitions : list[AnimTransition]
+        Outgoing transitions evaluated in descending priority order.
+    """
+    name        : str
+    anim_name   : str
+    loop        : bool                        = True
+    speed       : float                       = 1.0
+    on_enter    : Optional[Any]               = None   # callable(state_name) | None
+    on_exit     : Optional[Any]               = None   # callable(state_name) | None
+    transitions : List[AnimTransition]        = field(default_factory=list)
+
+
+class AnimStateMachine:
+    """Hierarchical animation state machine for KotOR character controllers.
+
+    Implements the architecture described in Gregory §12.12 and Dunsky §7–8:
+    a directed graph of ``AnimState`` nodes connected by ``AnimTransition``
+    edges.  Each state plays one animation clip via an ``AnimationEngine``.
+
+    Usage
+    -----
+    ::
+
+        engine = AnimationEngine(model)
+        sm     = AnimStateMachine(engine)
+
+        sm.add_state(AnimState('idle',  'cpause1', loop=True))
+        sm.add_state(AnimState('walk',  'cwalk',   loop=True))
+        sm.add_state(AnimState('run',   'crun',    loop=True))
+        sm.add_state(AnimState('attack', 'g1_a1',  loop=False))
+
+        sm.add_transition('idle', AnimTransition('walk', priority=10))
+        sm.add_transition('walk', AnimTransition('run',  sync_phase=True, priority=10))
+        sm.add_transition('walk', AnimTransition('idle', priority=5))
+        sm.add_transition('any',  AnimTransition('attack', priority=100))  # global
+
+        sm.set_initial('idle')
+        sm.start()
+
+        # Game loop:
+        sm.advance(dt)
+        pose = engine.evaluate()
+
+    Features
+    --------
+    * Any-state global transitions (registered under key ``'any'``).
+    * Phase-synchronized cross-fade for locomotion blends (§12.6.3).
+    * Per-state playback speed scaling (time-warp).
+    * ``on_enter`` / ``on_exit`` callbacks for game-logic hooks.
+    * ``request_transition(target)`` for unconditional imperative jumps.
+    * ``current_state_name`` / ``previous_state_name`` read-only properties.
+    * ``history()`` — ordered list of states visited since ``start()``.
+    """
+
+    def __init__(self, engine: AnimationEngine):
+        self._engine   : AnimationEngine = engine
+        self._states   : Dict[str, AnimState] = {}
+        self._initial  : Optional[str] = None
+        self._current  : Optional[AnimState] = None
+        self._previous : Optional[str] = None
+        self._history  : List[str] = []
+        self._running  : bool = False
+        # Pending transition requested via request_transition()
+        self._pending_transition : Optional[str] = None
+
+    # ── State registration ────────────────────────────────────────────────────
+
+    def add_state(self, state: AnimState) -> 'AnimStateMachine':
+        """Register an ``AnimState`` and return self for chaining."""
+        if state.name in self._states:
+            log.warning(f"AnimStateMachine: overwriting state '{state.name}'")
+        self._states[state.name] = state
+        return self
+
+    def remove_state(self, name: str) -> bool:
+        """Remove a state by name.  Returns ``True`` if it existed."""
+        if name in self._states:
+            del self._states[name]
+            return True
+        return False
+
+    def add_transition(self, from_state: str, transition: AnimTransition) -> 'AnimStateMachine':
+        """Add an outgoing transition from *from_state* (use ``'any'`` for global).
+
+        Transitions are stored inside the source ``AnimState``.  The special
+        key ``'any'`` is stored in a virtual ``AnimState`` named ``'any'``
+        and evaluated before per-state transitions every tick.
+        """
+        if from_state == 'any':
+            if 'any' not in self._states:
+                self._states['any'] = AnimState(name='any', anim_name='')
+            self._states['any'].transitions.append(transition)
+        elif from_state in self._states:
+            self._states[from_state].transitions.append(transition)
+        else:
+            log.warning(f"AnimStateMachine.add_transition: unknown source state '{from_state}'")
+        return self
+
+    def set_initial(self, name: str) -> 'AnimStateMachine':
+        """Set the initial state (must be added first)."""
+        if name not in self._states:
+            log.warning(f"AnimStateMachine.set_initial: unknown state '{name}'")
+        self._initial = name
+        return self
+
+    # ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    def start(self) -> bool:
+        """Enter the initial state and begin playback.
+
+        Returns
+        -------
+        bool
+            ``True`` if started successfully.
+        """
+        if not self._initial or self._initial not in self._states:
+            log.error("AnimStateMachine.start: no valid initial state")
+            return False
+        self._running = True
+        self._history.clear()
+        self._enter_state(self._initial, blend=False)
+        return True
+
+    def stop(self):
+        """Stop the state machine (does not stop the underlying engine)."""
+        self._running = False
+
+    def reset(self):
+        """Stop and reset; call :meth:`start` to restart."""
+        self.stop()
+        self._current  = None
+        self._previous = None
+        self._history.clear()
+        self._pending_transition = None
+
+    # ── Imperative transition ──────────────────────────────────────────────────
+
+    def request_transition(self, target_state: str,
+                            blend: bool = True,
+                            sync_phase: bool = False) -> bool:
+        """Request an immediate transition to *target_state*.
+
+        The transition is deferred to the next :meth:`advance` tick so that
+        the current state's ``on_exit`` callback fires cleanly.
+
+        Parameters
+        ----------
+        target_state : str
+            Name of the destination state.
+        blend : bool
+            Cross-fade on entry.
+        sync_phase : bool
+            Phase-synced cross-fade (Gregory §12.6.3).
+
+        Returns
+        -------
+        bool
+            ``True`` if the target state exists.
+        """
+        if target_state not in self._states:
+            log.warning(f"AnimStateMachine.request_transition: unknown state '{target_state}'")
+            return False
+        self._pending_transition = target_state
+        # Store blend/sync options on the pending transition
+        self._pending_blend      = blend
+        self._pending_sync_phase = sync_phase
+        return True
+
+    # ── Advance ───────────────────────────────────────────────────────────────
+
+    def advance(self, dt: float) -> Optional[str]:
+        """Advance the state machine by *dt* seconds.
+
+        Algorithm (per tick):
+        1.  Process any pending ``request_transition``.
+        2.  Evaluate global ('any') transitions in priority order.
+        3.  Evaluate per-state transitions in priority order.
+        4.  Advance the engine by ``dt * current_state.speed``.
+        5.  If the current clip ended (non-loop) automatically evaluate
+            exit transitions.
+
+        Parameters
+        ----------
+        dt : float
+            Wall-clock delta time in seconds.
+
+        Returns
+        -------
+        str | None
+            Name of a state we just entered this tick, or ``None``.
+        """
+        if not self._running or self._current is None:
+            return None
+
+        entered : Optional[str] = None
+
+        # ── 1. Pending imperative transition ─────────────────────────────────
+        if self._pending_transition is not None:
+            target = self._pending_transition
+            blend  = getattr(self, '_pending_blend', True)
+            sync   = getattr(self, '_pending_sync_phase', False)
+            self._pending_transition = None
+            self._enter_state(target, blend=blend, sync_phase=sync)
+            entered = target
+
+        if self._current is None:
+            return entered
+
+        # ── 2. Global any-state transitions ──────────────────────────────────
+        any_state = self._states.get('any')
+        if any_state and entered is None:
+            fired = self._eval_transitions(any_state)
+            if fired:
+                entered = fired
+
+        # ── 3. Per-state transitions ─────────────────────────────────────────
+        if entered is None:
+            fired = self._eval_transitions(self._current)
+            if fired:
+                entered = fired
+
+        # ── 4. Advance engine ─────────────────────────────────────────────────
+        speed = self._current.speed if self._current else 1.0
+        still_playing = self._engine.advance(dt * speed)
+
+        # ── 5. Auto-exit for non-looping clips ─────────────────────────────
+        if not still_playing and self._current and not self._current.loop:
+            fired = self._eval_transitions(self._current)
+            if not fired:
+                # No transition defined — stay on the last frame
+                pass
+            else:
+                entered = fired
+
+        return entered
+
+    # ── Read-only accessors ───────────────────────────────────────────────────
+
+    @property
+    def current_state_name(self) -> Optional[str]:
+        """Name of the currently active state, or ``None``."""
+        return self._current.name if self._current else None
+
+    @property
+    def previous_state_name(self) -> Optional[str]:
+        """Name of the previously active state, or ``None``."""
+        return self._previous
+
+    @property
+    def is_running(self) -> bool:
+        return self._running
+
+    @property
+    def state_names(self) -> List[str]:
+        """Sorted list of all registered state names (excluding 'any')."""
+        return sorted(n for n in self._states if n != 'any')
+
+    def history(self) -> List[str]:
+        """Return a copy of the state-visit history (oldest → newest)."""
+        return list(self._history)
+
+    def get_state(self, name: str) -> Optional[AnimState]:
+        """Return the ``AnimState`` for *name*, or ``None``."""
+        return self._states.get(name)
+
+    # ── Internal helpers ──────────────────────────────────────────────────────
+
+    def _enter_state(self, name: str, blend: bool = True,
+                     sync_phase: bool = False):
+        """Internal: fire on_exit, switch state, fire on_enter, start engine."""
+        target = self._states.get(name)
+        if target is None:
+            log.warning(f"AnimStateMachine: cannot enter unknown state '{name}'")
+            return
+
+        # on_exit for current state
+        if self._current is not None:
+            try:
+                if callable(self._current.on_exit):
+                    self._current.on_exit(self._current.name)
+            except Exception as e:
+                log.warning(f"AnimStateMachine on_exit error: {e}")
+            self._previous = self._current.name
+
+        self._current = target
+        self._history.append(name)
+
+        # on_enter
+        try:
+            if callable(target.on_enter):
+                target.on_enter(target.name)
+        except Exception as e:
+            log.warning(f"AnimStateMachine on_enter error: {e}")
+
+        # Start animation engine
+        if target.anim_name:
+            self._engine.play(
+                target.anim_name,
+                loop=target.loop,
+                blend=blend,
+                sync_phase=sync_phase,
+            )
+        log.debug(f"AnimStateMachine → '{name}' (anim='{target.anim_name}')")
+
+    def _eval_transitions(self, state: AnimState) -> Optional[str]:
+        """Evaluate outgoing transitions (highest priority first).
+
+        Returns the name of the entered state, or ``None``.
+        """
+        transitions = sorted(state.transitions, key=lambda t: -t.priority)
+        for tr in transitions:
+            if tr.target_state == (self._current.name if self._current else ''):
+                # Don't re-enter the same state via condition (use explicit request)
+                continue
+            if tr.condition is None:
+                continue   # unconditional: only fires via request_transition
+            try:
+                if callable(tr.condition) and tr.condition():
+                    self._enter_state(tr.target_state,
+                                      blend=tr.blend,
+                                      sync_phase=tr.sync_phase)
+                    return tr.target_state
+            except Exception as e:
+                log.warning(f"AnimStateMachine transition condition error: {e}")
+        return None
