@@ -1674,19 +1674,41 @@ class FBXExporter:
                 return '1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1'
 
         # ── Determine which nodes are skeleton joints ──────────────────────
-        # KotOR character models have three kinds of non-renderable nodes:
-        #   flags=0x01 (HEADER)   → model root dummy node  → export as "Null"
-        #   flags=0x00 (no flags) → pure bone/joint nodes  → export as "LimbNode"
-        # Both have type_label=='dummy'. All others (MESH, SKIN, etc.) are rendered geometry.
-        # Previously only is_dummy (flags==0x01) was exported as LimbNode, so bone
-        # nodes (flags==0) were silently skipped — UE5 would receive no skeleton joints.
-        skeleton_nodes = [n for n in model.all_nodes() if n.type_label == 'dummy']
+        # v6.0 FIX: Include ALL non-renderable nodes as skeleton joints.
+        # KotOR bone nodes include:
+        #   1. type_label=='dummy' (flags=0 or flags=HEADER) — pure joint nodes
+        #   2. Non-rendered trimesh nodes (bone proxies with null/empty texture)
+        #      KotorBlender's is_char_bone() includes TRIMESH nodes with no render
+        #      or null bitmap. These serve as skeleton bones in KotOR but were
+        #      previously excluded from the FBX skeleton hierarchy.
+        # Cross-ref: KotorBlender io_scene_kotor/utils.py is_char_bone() + is_char_dummy()
+        _mesh_node_names = {n.name for n in mesh_nodes_list}
+        skeleton_nodes = []
+        for n in model.all_nodes():
+            if n.type_label == 'dummy':
+                skeleton_nodes.append(n)
+            elif (n.is_mesh and not n.is_skin and n.name not in _mesh_node_names
+                  and not getattr(n, 'render', True)):
+                # Non-rendered trimesh bone proxy — include in skeleton
+                skeleton_nodes.append(n)
+
+        # v6.0 FIX: NodeAttribute IDs for skeleton nodes.
+        # Unreal Engine requires NodeAttribute objects of type "Skeleton" attached
+        # to each bone Model node. Without these, UE5 does not recognise the nodes
+        # as skeleton joints and the Skeleton Editor shows no bones.
+        # Cross-ref: ufbx.h ufbx_bone / FBX SDK FbxSkeleton::eLimbNode
+        skel_attr_ids: Dict[str, int] = {}  # node name → NodeAttribute ID
+        for n in skeleton_nodes:
+            skel_attr_ids[n.name] = new_id()
+        for bname in _extra_bone_nodes:
+            skel_attr_ids[bname] = new_id()
 
         # Skeleton/joint model nodes (root + all bone nodes)
         for n in skeleton_nodes:
             nid = node_ids[n.name]
-            # Root node (flags=HEADER) → "Null"; child joint nodes → "LimbNode"
-            fbx_node_type = 'Null' if n.is_dummy else 'LimbNode'
+            # Root node (flags=HEADER) → "Root"; child joint nodes → "LimbNode"
+            is_root = (n.parent is None) or (n.flags == int(NodeFlags.HEADER))
+            fbx_node_type = 'Null' if is_root else 'LimbNode'
             w(f'\tModel: {nid}, "{n.name}", "{fbx_node_type}" {{')
             w('\t\tVersion: 232')
             w('\t\tProperties70:  {')
@@ -1695,10 +1717,25 @@ class FBXExporter:
             qx, qy, qz, qw = n.rotation
             ex, ey, ez = _quat_to_euler_deg(qx, qy, qz, qw)
             w(f'\t\t\tP: "Lcl Rotation","Lcl Rotation","","A",{ex:.4f},{ey:.4f},{ez:.4f}')
+            w(f'\t\t\tP: "Lcl Scaling","Lcl Scaling","","A",1.000000,1.000000,1.000000')
             # Explicit rotation order (FBX default 0 = XYZ — same as KotOR/UE5 convention)
             w(f'\t\t\tP: "RotationOrder","enum","","",0')
             w('\t\t}')
             w('\t}')  # end Model (skeleton node)
+
+        # v6.0 FIX: NodeAttribute objects for skeleton nodes.
+        # FBX Skeleton NodeAttribute tells Unreal "this node is a bone".
+        # Root skeleton gets Size=1, Type="Root"; children get Type="Limb".
+        for n in skeleton_nodes:
+            attr_id = skel_attr_ids[n.name]
+            is_root = (n.parent is None) or (n.flags == int(NodeFlags.HEADER))
+            skel_type = 'Root' if is_root else 'Limb'
+            w(f'\tNodeAttribute: {attr_id}, "{n.name}_skel", "Skeleton" {{')
+            w(f'\t\tTypeFlags: "Skeleton"')
+            w(f'\t\tProperties70:  {{')
+            w(f'\t\t\tP: "Size", "double", "Number", "",1')
+            w(f'\t\t}}')
+            w(f'\t}}')
 
         # Synthetic (supermodel) bone nodes — emit as LimbNode stubs
         # These are referenced by skin clusters / animations but not in the model tree.
@@ -1720,9 +1757,20 @@ class FBXExporter:
             w('\t\tProperties70:  {')
             w(f'\t\t\tP: "Lcl Translation","Lcl Translation","","A",{_spx:.6f},{_spy:.6f},{_spz:.6f}')
             w(f'\t\t\tP: "Lcl Rotation","Lcl Rotation","","A",{_sex:.4f},{_sey:.4f},{_sez:.4f}')
+            w(f'\t\t\tP: "Lcl Scaling","Lcl Scaling","","A",1.000000,1.000000,1.000000')
             w(f'\t\t\tP: "RotationOrder","enum","","",0')
             w('\t\t}')
             w('\t}')  # end Model (synthetic bone stub)
+
+        # v6.0 FIX: NodeAttribute for synthetic bones
+        for bname in _extra_bone_nodes:
+            attr_id = skel_attr_ids[bname]
+            w(f'\tNodeAttribute: {attr_id}, "{bname}_skel", "Skeleton" {{')
+            w(f'\t\tTypeFlags: "Skeleton"')
+            w(f'\t\tProperties70:  {{')
+            w(f'\t\t\tP: "Size", "double", "Number", "",1')
+            w(f'\t\t}}')
+            w(f'\t}}')
 
         # Mesh model nodes (non-dummy mesh nodes)
         for n in mesh_nodes_list:
@@ -1732,10 +1780,14 @@ class FBXExporter:
             w('\t\tProperties70:  {')
             px, py, pz = n.position
             w(f'\t\t\tP: "Lcl Translation","Lcl Translation","","A",{px:.6f},{py:.6f},{pz:.6f}')
+            w(f'\t\t\tP: "Lcl Scaling","Lcl Scaling","","A",1.000000,1.000000,1.000000')
             w('\t\t}')
             w('\t}')  # end Model (mesh node)
 
         # Skin deformers
+        # v6.0 FIX: Weight normalization + zero-weight guard.
+        # Mukundan (2022) §Vertex Blending: weights must sum to 1.0 per vertex.
+        # Every vertex must have at least one bone influence.
         for n in mesh_nodes_list:
             if not n.is_skin: continue
             sid = deform_ids[n.name]
@@ -1746,26 +1798,49 @@ class FBXExporter:
 
             # Sub-deformers (clusters per bone)
             # TransformLink = bone world-space bind matrix in COLUMN-MAJOR order
-            # Transform = identity (UE5 assumes geometry is already in bind pose space
-            #   for KotOR models where vertices are stored in world/node-local space)
+            # Transform = mesh-space-to-bone-space matrix.
+            # For KotOR skin meshes, vertices are already in world/bind-pose space,
+            # so Transform is identity.
             identity_m = '1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1'
 
             # Normalise skin_data: must be a list of VertexSkinData objects.
-            # The MDL parser always populates it correctly, but models assembled
-            # from scratch (e.g. in tests or by the character builder) may leave
-            # skin_data as True/None or as a plain list of BoneWeight objects.
             raw_sd = getattr(n, 'skin_data', None)
             if not isinstance(raw_sd, (list, tuple)) or not raw_sd:
                 raw_sd = []  # no per-vertex skin data – clusters will be empty
             else:
-                # If elements are BoneWeight (not VertexSkinData), wrap them.
-                # This handles the case where the caller stored a flat list.
                 if raw_sd and hasattr(raw_sd[0], 'bone_index'):
-                    # flat BoneWeight list → one influence per vertex
                     raw_sd = [VertexSkinData(influences=[bw]) for bw in raw_sd]
                 elif raw_sd and not hasattr(raw_sd[0], 'influences'):
-                    raw_sd = []  # unknown format – skip safely
+                    raw_sd = []
 
+            # v6.0 FIX: Weight normalization pass.
+            # Ensure all vertex weights sum to 1.0 and every vertex has at least
+            # one bone influence (zero-weight guard).
+            # Cross-ref: Mukundan (2022) — "Every vertex must have >= 1 bone influence"
+            n_verts = len(n.vertices) if n.vertices else 0
+            _norm_sd = list(raw_sd)  # copy for normalization
+            for _vi in range(min(n_verts, len(_norm_sd))):
+                sd = _norm_sd[_vi]
+                if not sd.influences:
+                    # Zero-weight guard: assign to bone 0 with weight 1.0
+                    sd.influences = [BoneWeight(bone_index=0, weight=1.0)]
+                    continue
+                w_sum = sum(inf.weight for inf in sd.influences)
+                if w_sum > 1e-6 and abs(w_sum - 1.0) > 1e-5:
+                    for inf in sd.influences:
+                        inf.weight /= w_sum
+                elif w_sum < 1e-6:
+                    sd.influences = [BoneWeight(bone_index=0, weight=1.0)]
+            # Zero-weight guard for vertices beyond skin_data length
+            while len(_norm_sd) < n_verts:
+                _norm_sd.append(VertexSkinData(
+                    influences=[BoneWeight(bone_index=0, weight=1.0)]))
+
+            # v6.0 FIX: Emit ALL bone clusters, even empty ones.
+            # Unreal Engine requires every bone referenced by the skeleton to have
+            # a corresponding SubDeformer/Cluster in the Skin deformer, even if
+            # that bone has zero direct vertex influence. Empty clusters keep the
+            # skeleton hierarchy intact in UE5's Skeleton Editor.
             for bi, bname in enumerate(n.bone_map):
                 if bname not in cluster_ids.get(n.name, {}):
                     continue
@@ -1773,25 +1848,15 @@ class FBXExporter:
                 # Gather vertex indices + weights for this bone
                 vi_list = []
                 wt_list = []
-                for vi, sd in enumerate(raw_sd):
+                for vi, sd in enumerate(_norm_sd):
                     for inf in (sd.influences or []):
                         if inf.bone_index == bi and inf.weight > 0:
                             vi_list.append(vi)
                             wt_list.append(inf.weight)
-                if not vi_list: continue
 
-                w(f'\tSubDeformer: {cid}, "{bname}", "Cluster" {{')
-                w('\t\tVersion: 100')
-                w(f'\t\tIndexes: *{len(vi_list)} {{')
-                w('\t\t\ta: ' + ','.join(str(i) for i in vi_list))
-                w('\t\t}')
-                w(f'\t\tWeights: *{len(wt_list)} {{')
-                w('\t\t\ta: ' + ','.join(f'{x:.6f}' for x in wt_list))
-                w('\t\t}')
                 # TransformLink = bone world-space bind matrix (column-major for FBX)
                 # Priority: (1) this model's own node, (2) base_skeleton_model node,
-                # (3) identity fallback.  Without a real base-skeleton transform the
-                # accessory mesh will deform incorrectly in Unreal Engine.
+                # (3) identity fallback.
                 bone_node = model.find_node(bname)
                 if bone_node:
                     link_m = _world_matrix_col_major(bone_node)
@@ -1800,6 +1865,17 @@ class FBXExporter:
                         _base_skel_node_by_name[bname.lower()])
                 else:
                     link_m = identity_m
+
+                w(f'\tSubDeformer: {cid}, "{bname}", "Cluster" {{')
+                w('\t\tVersion: 100')
+                if vi_list:
+                    w(f'\t\tIndexes: *{len(vi_list)} {{')
+                    w('\t\t\ta: ' + ','.join(str(i) for i in vi_list))
+                    w('\t\t}')
+                    w(f'\t\tWeights: *{len(wt_list)} {{')
+                    w('\t\t\ta: ' + ','.join(f'{x:.6f}' for x in wt_list))
+                    w('\t\t}')
+                # v6.0: Always emit Transform + TransformLink, even for empty clusters
                 w(f'\t\tTransform: *16 {{')
                 w(f'\t\t\ta: {identity_m}')
                 w('\t\t}')
@@ -2062,6 +2138,12 @@ class FBXExporter:
             else:
                 w(f'\tC: "OO",{nid},0')
 
+        # v6.0 FIX: NodeAttribute → Model connections for skeleton nodes.
+        # Each skeleton NodeAttribute must be connected to its Model node via OO.
+        for n in skeleton_nodes:
+            if n.name in skel_attr_ids:
+                w(f'\tC: "OO",{skel_attr_ids[n.name]},{node_ids[n.name]}')
+
         # Synthetic supermodel bone stubs → parent under root node (or scene root 0)
         _root_nid = 0
         _root_n = next((n for n in model.all_nodes() if n.parent is None), None)
@@ -2070,6 +2152,9 @@ class FBXExporter:
         for bname in _extra_bone_nodes:
             nid = node_ids[bname]
             w(f'\tC: "OO",{nid},{_root_nid}')
+            # v6.0 FIX: NodeAttribute → synthetic bone connections
+            if bname in skel_attr_ids:
+                w(f'\tC: "OO",{skel_attr_ids[bname]},{nid}')
 
         # Geometry → mesh model node
         for n in mesh_nodes_list:

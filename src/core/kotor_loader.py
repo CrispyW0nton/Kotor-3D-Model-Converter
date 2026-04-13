@@ -641,14 +641,13 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
     #
     # Strategy:
     #   • Values that are NaN, ±Inf, or |x| > _GEOM_MAX are corrupt → clamp/discard.
-    #   • Legitimate tiled UVs stay intact (viewport.py _UV_SENTINEL = 100.0).
+    #   • Legitimate tiled UVs stay intact (module UVs can reach ±131,209).
     #   • Vertex positions with |x|>10000 are also corrupt (KotOR worlds fit in ~500 units).
     #
     # If MORE than 50% of vertices are corrupt, the whole mesh has a bad MDX offset;
     # we clear all UVs so the renderer shows the mesh as flat-shaded rather than
     # invisibly broken.  This is preferable to the user seeing garbage geometry.
     _GEOM_MAX = 1e6   # anything beyond ±1,000,000 is definitely corrupt
-    _UV_MAX   = 100.0 # matches viewport.py _UV_SENTINEL; preserves large-but-valid tiling
 
     def _safe_float(x: float, fallback: float = 0.0) -> float:
         """Return x if finite and within range, else fallback."""

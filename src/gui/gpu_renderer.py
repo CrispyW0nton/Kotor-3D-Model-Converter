@@ -64,10 +64,11 @@ Phase 2 rendering correctness fixes
   FIX-SEAMUV:   Seam-vertex UV healing: several KotOR models (p_hk47 hands/fingers,
                 c_kraytdragon claws) have UV-seam duplicate vertices where the seam
                 copy's UV was written as a sentinel/garbage value (e.g. -27.14, -104.93).
-                _build_vbo_data now detects vertices with |UV| > _UV_SENTINEL (20.0),
+                _build_vbo_data now detects vertices with |UV| > _UV_SENTINEL (1e18),
                 finds the nearest coincident vertex (distance < 0.001 units), and copies
                 its UV.  Falls back to UV=0.5 only when no valid neighbor exists.
-                This restores correct finger/claw texturing on HK-47 and the krayt dragon.
+                v6.0: sentinel raised to 1e18 (NaN/Inf only) so all finite tiled UVs
+                pass through.  GL_REPEAT handles any magnitude correctly.
   FIX-MULTITEX: Multi-texture nodes (tex_count > 1, face_mats per face) are now split
                 into per-texture draw groups.  Each group uploads its own VBO subset and
                 binds the correct texture, enabling correct rendering of area tile meshes
@@ -724,26 +725,14 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
                        abs(wo[0]) < 1e-6 and abs(wo[1]) < 1e-6 and abs(wo[2]) < 1e-6)
     is_identity_pos = (abs(wp[0]) < 1e-9 and abs(wp[1]) < 1e-9 and abs(wp[2]) < 1e-9)
 
-    # FIX-UV-SENTINEL: Two-tier threshold for UV corruption detection.
-    #
-    # Character/creature models: sentinel = 100.0
-    #   KotOR character geometry uses UV in range [-13, +13] for tiling on
-    #   robes/armour (e.g. N_sithpraet pelvis U=[-13,+13]).  Bad seam verts
-    #   from corrupt MDX data are far larger (e.g. ±1e28), so 100.0 is a
-    #   safe discriminating threshold for characters.
-    #
-    # Module/area/tile models: sentinel = 1e6 (effectively disabled)
-    #   KotOR module geometry uses extreme UV tiling for large surfaces.
-    #   e.g. Box86 in m10aa_01c has U/V ≈ 131,208.  These are VALID tiling
-    #   UVs — the GPU hardware GL_REPEAT wraps them correctly.  Clamping at
-    #   100.0 would replace these with 0.5, producing solid-colour rendering
-    #   on all large floor/wall tiles.  We allow up to 1e6 (matching the
-    #   kotor_loader _GEOM_MAX_CHECK threshold); genuinely corrupt values
-    #   (NaN, ±Inf, |uv| > 1e6) are still caught and replaced with 0.5.
-    #
-    # Reference: KotOR Game Engine Architecture (Gregory 4th ed.) §10.2,
-    #   texture coordinate handling for tiled/repeating textures §5.1.
-    _UV_SENTINEL = 1e6 if is_module else 100.0
+    # v6.0 FIX: UV sentinel unified to 1e18 for all model types.
+    # KotOR module geometry uses extreme UV tiling for large surfaces
+    # (e.g. Box86 in m10aa_01c has U/V ~ 131,208).  The GPU GL_REPEAT
+    # wraps them correctly.  The previous two-tier threshold (100 for
+    # characters, 1e6 for modules) was a fragile workaround.
+    # Now we only filter NaN/Inf (genuinely corrupt MDX data).
+    # Cross-ref: KotOR.js TextureLoader.ts -- default RepeatWrapping.
+    _UV_SENTINEL = 1e18
 
     # ── Convert vertices and normals to Nx3 float64 arrays ──────────────────
     try:
@@ -978,7 +967,7 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
         # vert (same 3-D position, within epsilon) that has a valid UV and copy it.
         # Only apply heal to the first n_verts entries (geometry-linked UVs);
         # extra tvert-only entries beyond n_verts are left as-is (or 0.5 if bad).
-        bad_uv = np.any(np.abs(uv_arr) > _UV_SENTINEL, axis=1)
+        bad_uv = ~np.all(np.isfinite(uv_arr), axis=1) | np.any(np.abs(uv_arr) > _UV_SENTINEL, axis=1)
         if np.any(bad_uv):
             # Restrict spatial healing to geometry verts (0..n_verts-1)
             bad_geo   = bad_uv[:n_verts]
@@ -1003,7 +992,7 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
                 if np.any(healed):
                     uv_arr[bad_indices[healed]] = uv_arr[nearest_k[healed]]
             # Fall back: any still-bad UV entries (geometry or extra tvert) get 0.5
-            bad_uv2 = np.any(np.abs(uv_arr) > _UV_SENTINEL, axis=1)
+            bad_uv2 = ~np.all(np.isfinite(uv_arr), axis=1) | np.any(np.abs(uv_arr) > _UV_SENTINEL, axis=1)
             if np.any(bad_uv2):
                 uv_arr[bad_uv2] = 0.5
     else:
@@ -1021,7 +1010,7 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
                 uv_lm_arr = np.vstack([uv_lm_arr, pad])
         except (ValueError, TypeError):
             uv_lm_arr = np.full((n_verts, 2), 0.5, dtype=np.float32)
-        bad_lm = np.any(np.abs(uv_lm_arr) > _UV_SENTINEL, axis=1)
+        bad_lm = ~np.all(np.isfinite(uv_lm_arr), axis=1) | np.any(np.abs(uv_lm_arr) > _UV_SENTINEL, axis=1)
         if np.any(bad_lm):
             uv_lm_arr[bad_lm] = 0.5
     else:
@@ -1789,7 +1778,16 @@ class GpuRenderer:
                 is_trans = (tb == 1) or (wa < 0.999) or decal or (na < 0.999 and not has_env) or _is_inner_geo
                 return na, tb, is_trans, has_env
 
+            # ── Three-pass node classification ────────────────────────────
+            # Pass 1 (opaque):       depth write ON, no blending, solid geometry.
+            # Pass 2 (alpha-cutout): depth write ON, shader discard below threshold.
+            #                        Hair, fur edges, eye cutouts, grates, foliage.
+            # Pass 3 (transparent):  depth write OFF, alpha blending, back-to-front
+            #                        sorted.  Glass, holograms, additive effects,
+            #                        inner-geometry (eyes, teeth) for depth layering.
+            # Cross-ref: Hayes (2025) §6.3 multi-pass; Gregory (2024) §10.6.
             opaque_nodes      = []
+            cutout_nodes      = []  # alpha-test / punchthrough pass
             transparent_nodes = []
             for node in nodes:
                 if not getattr(node, 'render', True):
@@ -1816,6 +1814,9 @@ class GpuRenderer:
                 na, tb, is_trans, has_env = _classify_node(node, anim_pose)
                 if is_trans:
                     transparent_nodes.append(node)
+                elif tb == 2:
+                    # Punchthrough / alpha-cutout → separate pass with discard
+                    cutout_nodes.append(node)
                 else:
                     opaque_nodes.append(node)
 
@@ -2096,22 +2097,11 @@ class GpuRenderer:
                 gm.vao.render(moderngl.TRIANGLES)
                 total_tris += gm.tri_count
 
-            # ── Pass 1: Opaque geometry (depth write ON, punchthrough included) ──
-            # BUG-WIND FIX: front_face='cw' was set above — all solid geometry
-            # is now culled correctly.  Punchthrough nodes also render here (depth
-            # write ON, alpha-test discard in shader) so foliage/grates sort properly.
-            #
-            # FIX-MULTITEX: Multi-texture nodes (tex_count > 1) have faces that use
-            # different textures indexed by face_mats[fi].  Instead of ignoring the
-            # secondary textures, we draw one call per material slot.
-            # For single-texture nodes this degenerates to one draw call (no change).
-            ctx.depth_mask = True
-            ctx.disable(moderngl.BLEND)
-            for node in opaque_nodes:
+            # Helper: draw a node with multi-texture support.
+            def _draw_node_multitex(node):
                 tex_names = getattr(node, 'texture_names', [])
                 tex_count = int(getattr(node, 'tex_count', 1))
                 if tex_count > 1 and len(tex_names) >= tex_count:
-                    # Draw once per unique texture slot
                     for slot_idx in range(tex_count):
                         slot_name = str(tex_names[slot_idx]).strip().lower()
                         if slot_name in ('null', '', 'none'):
@@ -2120,7 +2110,25 @@ class GpuRenderer:
                 else:
                     _draw_node(node)
 
-            # ── Pass 2: Transparent/additive geometry (depth write OFF) ───────────
+            # ── Pass 1: Opaque geometry (depth write ON, no blending) ─────────────
+            # Solid, fully-opaque surfaces with no alpha-test.
+            # Cross-ref: Hayes (2025) §6.3; reone: GL_DEPTH_TEST + depth write ON.
+            ctx.depth_mask = True
+            ctx.disable(moderngl.BLEND)
+            for node in opaque_nodes:
+                _draw_node_multitex(node)
+
+            # ── Pass 2: Alpha-cutout geometry (depth write ON, shader discard) ────
+            # Punchthrough / alpha-test surfaces: hair cards, fur edges, eye cutouts,
+            # grates, foliage.  Depth write stays ON so cutout geometry properly
+            # occludes what's behind it; the fragment shader discards pixels below
+            # the alpha threshold (u_alpha_test, default 0.5).
+            # Cross-ref: Hayes (2025) §8.2 alpha testing; Gregory (2024) §10.6.
+            # ctx.depth_mask stays True; no blending needed for cutout.
+            for node in cutout_nodes:
+                _draw_node_multitex(node)
+
+            # ── Pass 3: Transparent/additive geometry (depth write OFF) ───────────
             # BUG-ALPHA FIX: Sort transparent nodes back-to-front by their centroid
             # distance from the camera eye before drawing.  Without sorting, overlapping
             # transparent surfaces (glass visors, alpha-blended hair) produce incorrect
@@ -2163,16 +2171,7 @@ class GpuRenderer:
                                                   key=_node_sort_depth, reverse=True)
                 ctx.depth_mask = False
                 for node in transparent_nodes_sorted:
-                    tex_names = getattr(node, 'texture_names', [])
-                    tex_count = int(getattr(node, 'tex_count', 1))
-                    if tex_count > 1 and len(tex_names) >= tex_count:
-                        for slot_idx in range(tex_count):
-                            slot_name = str(tex_names[slot_idx]).strip().lower()
-                            if slot_name in ('null', '', 'none'):
-                                slot_name = ''
-                            _draw_node(node, tex_name_override=slot_name)
-                    else:
-                        _draw_node(node)
+                    _draw_node_multitex(node)
                 # Restore depth writes after transparent pass
                 ctx.depth_mask = True
                 ctx.disable(moderngl.BLEND)
