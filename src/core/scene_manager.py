@@ -1003,3 +1003,213 @@ def reset_character_registry() -> None:
     if _character_registry is not None:
         _character_registry.clear()
     _character_registry = None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Phase 5.0 — SceneFrameRenderer
+#  Wires SceneGraph (room assembly from LYT/VIS/ARE/GIT) into the
+#  viewport render loop.  Provides a scene-aware draw-list builder that
+#  combines frustum culling + VIS-based room culling and returns a flat
+#  list of (model_name, world_pos, room_name) tuples for the GPU renderer.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@dataclass
+class SceneDrawEntry:
+    """One render-eligible room or object from the scene graph.
+
+    Attributes
+    ----------
+    model_name  : str    – resref of the MDL to render
+    world_pos   : tuple  – (x, y, z) translation from LYT room position
+    room_name   : str    – source room name (for debug and culling info)
+    is_object   : bool   – True if this is a GIT object (not a room mesh)
+    object_type : str    – 'creature', 'placeable', 'door', 'waypoint', '' if room
+    """
+    model_name  : str
+    world_pos   : Tuple[float, float, float]
+    room_name   : str
+    is_object   : bool = False
+    object_type : str  = ''
+
+
+class SceneFrameRenderer:
+    """Bridge between ``SceneGraph`` and the GPU / CPU renderer in viewport.py.
+
+    Implements the ``ForgeArea.ts`` render-loop pattern:
+    1.  Determine which rooms are visible (frustum + VIS culling).
+    2.  For each visible room, emit its room-model ``SceneDrawEntry``.
+    3.  For each visible room, emit all ``SceneObject`` entries (GIT objects).
+    4.  Optionally filter by object type (creatures, placeables, etc.).
+
+    Usage
+    -----
+    ::
+
+        sfr = SceneFrameRenderer(scene_graph)
+
+        # Viewport code (called each frame):
+        draw_list = sfr.build_draw_list(
+            camera_pos   = cam.eye,
+            camera_fwd   = cam.forward,
+            fov_h        = 90.0,
+            fov_v        = 60.0,
+            near         = 0.01,
+            far          = 2000.0,
+            include_objs = True,
+        )
+        for entry in draw_list:
+            renderer.render_model(entry.model_name, entry.world_pos)
+
+    References
+    ----------
+    KotOR.js ForgeArea.ts — room iteration + object population pattern
+    ROADMAP.md Phase 5.1 — VIS-based culling wiring task
+    """
+
+    def __init__(self, scene_graph: Optional[SceneGraph] = None):
+        self._graph: Optional[SceneGraph] = scene_graph
+        # Toggle flags (matched to ROADMAP.md Phase 5.1 UI controls)
+        self.show_room_models   : bool = True
+        self.show_objects       : bool = True
+        self.object_type_filter : Optional[str] = None   # e.g. 'creature' or None for all
+        self.show_null_rooms    : bool = False
+        # Room visibility override: set by UI toggle per room name
+        self._room_visible_override: Dict[str, bool] = {}
+
+    # ── Scene assignment ──────────────────────────────────────────────────────
+
+    def set_scene(self, graph: Optional[SceneGraph]) -> None:
+        """Assign (or replace) the SceneGraph this renderer operates on."""
+        self._graph = graph
+        self._room_visible_override.clear()
+
+    # ── Per-room visibility override (UI toggle) ──────────────────────────────
+
+    def set_room_visible(self, room_name: str, visible: bool) -> None:
+        """Override visibility for a specific room from UI controls."""
+        self._room_visible_override[room_name] = visible
+
+    def clear_visibility_overrides(self) -> None:
+        """Remove all per-room overrides (reset to frustum+VIS culling)."""
+        self._room_visible_override.clear()
+
+    # ── Main draw-list builder ────────────────────────────────────────────────
+
+    def build_draw_list(
+        self,
+        camera_pos   : Tuple[float, float, float],
+        camera_fwd   : Tuple[float, float, float],
+        fov_h        : float = 90.0,
+        fov_v        : float = 60.0,
+        near         : float = 0.01,
+        far          : float = 2000.0,
+        include_objs : bool  = True,
+    ) -> List[SceneDrawEntry]:
+        """Build the per-frame draw list using frustum + VIS culling.
+
+        Parameters
+        ----------
+        camera_pos  : (x, y, z) camera world position.
+        camera_fwd  : (x, y, z) camera forward unit vector.
+        fov_h       : horizontal field-of-view in degrees.
+        fov_v       : vertical field-of-view in degrees.
+        near / far  : clip plane distances.
+        include_objs: if True, append GIT SceneObject entries.
+
+        Returns
+        -------
+        list[SceneDrawEntry]
+        """
+        if self._graph is None:
+            return []
+
+        # Determine which rooms pass frustum + VIS culling
+        try:
+            visible_rooms: List[SceneRoom] = self._graph.visible_rooms(
+                camera_pos, camera_fwd, fov_h, fov_v, near, far
+            )
+        except Exception as e:
+            log.warning(f"SceneFrameRenderer.build_draw_list: visible_rooms failed: {e}")
+            visible_rooms = list(self._graph.rooms)
+
+        draw_list: List[SceneDrawEntry] = []
+
+        for room in visible_rooms:
+            # SceneRoom uses 'resref' as the primary room/model identifier.
+            # Fall back to a 'name' attribute for subclasses or test stubs.
+            rname = getattr(room, 'resref', getattr(room, 'name', ''))
+
+            # NULL room filter
+            if not self.show_null_rooms and rname.lower() in ('', 'null', 'none'):
+                continue
+
+            # Per-room visibility override from UI
+            if rname in self._room_visible_override:
+                if not self._room_visible_override[rname]:
+                    continue
+
+            # Room model entry.  SceneRoom.resref IS the model name; fall back
+            # to 'model_name' attribute for test stubs.
+            mname_room = getattr(room, 'model_name', rname) or rname
+            if self.show_room_models and mname_room:
+                pos = getattr(room, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
+                draw_list.append(SceneDrawEntry(
+                    model_name  = mname_room,
+                    world_pos   = (float(pos[0]), float(pos[1]), float(pos[2])),
+                    room_name   = rname,
+                    is_object   = False,
+                    object_type = '',
+                ))
+
+            # GIT objects in this room.
+            if include_objs and self.show_objects:
+                for obj in self._graph.objects_in_room(rname):
+                    # Support both SceneObject.obj_type and legacy .object_type stubs
+                    otype = getattr(obj, 'obj_type', getattr(obj, 'object_type', ''))
+                    # Type filter
+                    if self.object_type_filter and otype != self.object_type_filter:
+                        continue
+                    # Support both .model_name and SceneObject.resref for model lookup
+                    obj_mname = getattr(obj, 'model_name',
+                                        getattr(obj, 'resref', ''))
+                    opos = getattr(obj, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
+                    if obj_mname:
+                        draw_list.append(SceneDrawEntry(
+                            model_name  = obj_mname,
+                            world_pos   = (float(opos[0]), float(opos[1]), float(opos[2])),
+                            room_name   = rname,
+                            is_object   = True,
+                            object_type = otype,
+                        ))
+
+        return draw_list
+
+    # ── Convenience queries ───────────────────────────────────────────────────
+
+    def all_room_names(self) -> List[str]:
+        """Return sorted list of all room names/refrefs in the scene graph."""
+        if self._graph is None:
+            return []
+        return sorted(
+            getattr(r, 'resref', getattr(r, 'name', ''))
+            for r in self._graph.rooms
+        )
+
+    def room_count(self) -> int:
+        """Return total number of rooms in the scene graph."""
+        return len(self._graph.rooms) if self._graph else 0
+
+    def object_count(self) -> int:
+        """Return total number of GIT objects in the scene graph."""
+        if self._graph is None:
+            return 0
+        return sum(
+            len(self._graph.objects_in_room(
+                getattr(r, 'resref', getattr(r, 'name', ''))
+            ))
+            for r in self._graph.rooms
+        )
+
+    def are_properties(self) -> Optional[AREProperties]:
+        """Return the ``AREProperties`` from the scene graph, or ``None``."""
+        return getattr(self._graph, 'are_properties', None) if self._graph else None

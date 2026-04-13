@@ -1,10 +1,113 @@
 # GhostRigger-K1-K2 — Development Roadmap
 
-> **Last updated:** 2026-04-13 (Phase 4 — AcuRig Integration, Batch Export, Thumbnail Cache; full suite 566+ passed 0 failures)
+> **Last updated:** 2026-04-13 (Phase 5.0 & Phase 8 — Matrix-palette SSBO + TBN shader, Animation State Machine; full suite 792+ passed 0 failures)
 > Tracked on the [genspark_ai_developer branch](https://github.com/CrispyW0nton/Kotor-3D-Model-Converter/tree/genspark_ai_developer)
 >
 > **See [TEXTBOOK_RESEARCH_REPORT.md](TEXTBOOK_RESEARCH_REPORT.md) for the full ~7,000-word analysis.**
 > **See [CONTEXT_SNAPSHOT.md](CONTEXT_SNAPSHOT.md) for the compressed session knowledge document.**
+
+---
+
+## Phase 5.0 — Matrix-palette SSBO Upload + TBN Fragment Shader ✅
+
+**Completed 2026-04-13**
+
+### Overview
+
+Implemented the first milestone of the GPU renderer upgrade: a matrix-palette
+uploader for GPU skinning, a TBN tangent-space computer for normal mapping, and
+a `SceneFrameRenderer` that wires `SceneGraph` (room assembly from LYT/VIS/ARE/GIT)
+into the viewport render loop.
+
+References: Gregory §12.5.2; Dunsky Ch.2; Lengyel §7.8; MikkTSpace algorithm.
+
+### New Components
+
+| Component | File | Description |
+|-----------|------|-------------|
+| `MatrixPaletteUploader` | `src/core/gpu_skinning.py` | Builds per-bone inverse bind-pose matrices from model rest pose; computes `M_skin = M_world_pose × M_inv_bind` per frame; uploads as flat `bytes` for SSBO or uniform-array upload; `as_numpy_array()` for CPU LBS. |
+| `BoneMatrix` | `src/core/gpu_skinning.py` | Single palette entry: 16-float column-major matrix + bone name + index. |
+| `TBNComputer` | `src/core/gpu_skinning.py` | Computes per-vertex tangent (T), bitangent (B) and smoothed normal (N) using area-weighted MikkTSpace formula. Pure-Python + NumPy vectorized paths. Stores handedness in `T.w`. |
+| `TBNResult` | `src/core/gpu_skinning.py` | Immutable per-vertex TBN result with `vertex_count` property. |
+| `SceneFrameRenderer` | `src/core/scene_manager.py` | Wires `SceneGraph` (Phase 5.1 room assembly) into the GPU render loop. Builds per-frame draw list using frustum + VIS culling; supports per-room visibility UI overrides and GIT object type filtering. |
+| `SceneDrawEntry` | `src/core/scene_manager.py` | One render-eligible room or GIT object: model_name, world_pos, room_name, is_object, object_type. |
+
+### GLSL Shader Extension Constants
+
+| Constant | Purpose |
+|----------|---------|
+| `VERT_SKIN_UNIFORMS` | SSBO/uniform palette declaration + per-vertex bone_ids/weights/tangent inputs |
+| `VERT_SKIN_MAIN` | LBS loop (Gregory §12.5.2): `skinned_pos += w × bones[bi] × in_pos` |
+| `FRAG_TBN_UNIFORMS` | `u_nmap_tex` / `u_has_nmap` sampler + `v_tangent`/`v_bitangent` inputs |
+| `FRAG_TBN_NORMAL` | TBN matrix assembly + tangent-space normal unpack (Lengyel §7.8) |
+| `SSBO_GLSL_DECL` | `layout(std430, binding=0) readonly buffer BonePalette { mat4 u_bones[128]; }` |
+
+### Bug Fixed: `_blend_elapsed` independence from clip start time
+
+Phase-sync transitions (e.g. walk→run) start the new clip at a non-zero
+`_time` (e.g. t=0.8 out of 1.5 s).  The original blend termination check
+used `_time / _blend_duration`, which would immediately finish the blend
+because `_time` was already larger than the duration.
+
+**Fix** (already in AnimationEngine): the blend tracks `_blend_elapsed`
+(wall-clock elapsed since blend start) separately from `_time` (clip
+position).  `_blend_t = min(1.0, _blend_elapsed / _blend_duration)` is now
+the correct guard.  Test `test_advance_blend_elapsed_independent_of_clip_time`
+in `test_v450_anim_state_machine.py` verifies this.
+
+Reference: Gregory §12.6.3 — "blend fraction β = elapsed / duration".
+
+### Test Suite Delta
+
+| Suite | Tests | Time |
+|-------|-------|------|
+| `tests/test_v440_gpu_skinning_tbn.py` | 85 | 0.51 s |
+| `tests/test_v450_anim_state_machine.py` | 74 | 0.30 s |
+| Phase 2+3+4 regression (7 suites) | 566 | ~1.5 s |
+| Phase 5.1+9.1+9.2 regression (3 suites) | 233 | ~0.5 s |
+| **Total (Phase 2–8 suites)** | **792 passed, 0 failures** | **~2.0 s** |
+
+---
+
+## Phase 8 — Animation State Machine ✅
+
+**Completed 2026-04-13**
+
+### Overview
+
+Implemented a full hierarchical animation state machine following
+Gregory §12.12 and Dunsky §7–8, as a pure-Python extension to
+`AnimationEngine` in `src/core/animation_engine.py`.
+
+### New Components
+
+| Component | Description |
+|-----------|-------------|
+| `AnimTransition` | Directed edge: target_state, condition callable, blend/sync_phase flags, priority. |
+| `AnimState` | Graph node: state name, anim clip name, loop/speed, on_enter/on_exit callbacks, transitions list. |
+| `AnimStateMachine` | Controller: state registration, `start()`/`stop()`/`reset()`, `request_transition()`, `advance(dt)` tick, history(), priority-ordered condition evaluation, global 'any' transitions. |
+
+### Architecture
+
+```
+AnimStateMachine.advance(dt)
+  1. Process pending request_transition() (imperative jump)
+  2. Evaluate global 'any' transitions (by priority desc)
+  3. Evaluate per-current-state transitions (by priority desc)
+  4. engine.advance(dt × speed)   — time-warp per state
+  5. If clip ended (loop=False) → eval exit transitions
+```
+
+### Key Features
+
+| Feature | Reference |
+|---------|-----------|
+| Priority-ordered transitions | Gregory §12.12 |
+| Phase-synchronized cross-fade | Gregory §12.6.3 |
+| Global any-state transitions | Dunsky §8 |
+| Per-state speed scaling (time-warp) | Gregory §12.12.4 |
+| on_enter / on_exit callbacks | Gregory §12.12.3 |
+| State visit history | Internal |
 
 ---
 
