@@ -2849,7 +2849,7 @@ class RigPanel(tk.Frame):
         _btn(fext, "▶ Apply Ext. Skeleton to Model",
              self._apply_ext_skeleton, accent=True).pack(fill='x', pady=2)
 
-        # Path to test_assets for offline use
+        # Search directories for offline model loading
         self._lib_search_dirs: List[str] = []
         self._ext_skeleton_model = None   # loaded KotorModel for overlay
 
@@ -2868,8 +2868,6 @@ class RigPanel(tk.Frame):
 
         # Search for MDL file in known locations
         search_dirs = self._lib_search_dirs + [
-            "test_assets/k1_extracted/models",
-            "test_assets/k2_extracted/models",
             ".",
         ]
         mdl_path = None
@@ -2929,8 +2927,6 @@ class RigPanel(tk.Frame):
     def _load_ext_skeleton(self):
         """Browse for a .mdl file and load it as a ghost overlay in the viewport."""
         search_dirs = self._lib_search_dirs + [
-            "test_assets/k1_extracted/models",
-            "test_assets/k2_extracted/models",
             ".",
         ]
         from tkinter import filedialog
@@ -8035,13 +8031,11 @@ class CharacterBuilderPanel(tk.Frame):
             except Exception as exc:
                 log.debug("CharacterBuilderPanel: rm.list_models failed: %s", exc)
 
-        # 2) Local test_assets / game_data scan (fallback)
+        # 2) Local game_data scan (fallback)
         if not resrefs:
             import struct, pathlib
             for root_dir in (
                 pathlib.Path("game_data/k1_extracted"),
-                pathlib.Path("test_assets/k1_extracted"),
-                pathlib.Path("test_assets/c_bantha"),
             ):
                 key = root_dir / "chitin.key"
                 if key.is_file():
@@ -8101,8 +8095,6 @@ class CharacterBuilderPanel(tk.Frame):
             import pathlib
             for root_dir in (
                 pathlib.Path("game_data/k1_extracted"),
-                pathlib.Path("test_assets/k1_extracted"),
-                pathlib.Path("test_assets/c_bantha"),
             ):
                 for candidate in (
                     root_dir / "models" / f"{resref}.mdl",

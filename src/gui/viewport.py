@@ -157,16 +157,22 @@ def _clamp(v, lo, hi):
 # KotOR skin meshes embed seam-split duplicate vertices whose UV coords are
 # intentionally set to a large placeholder (e.g. (-22, 127) in n_darthrevan's
 # torso).  Any triangle that references one of these vertices cannot be textured
-# sensibly.  Triangles with any UV component whose absolute value exceeds this
-# threshold are silently skipped during rasterisation.
+# v6.0 FIX: UV sentinel removed.  KotOR module textures intentionally use
+# tiled UVs well beyond the 0-1 range (walls, floors, terrain).  The software
+# rasterizer already uses frac() (u % 1.0) for GL_REPEAT wrapping, which
+# handles any UV magnitude correctly.  Filtering by magnitude was the root
+# cause of missing/stretched module textures.
 #
-# Phase 18 fix: raised from 20.0 to 100.0.
-# Legitimate tiled UVs can exceed 20 (e.g. mRobe2_g: U=[-13.58, 13.58]).
-# Genuine sentinel/placeholder UVs from KotOR seam-split vertices are always
-# far outside the legitimate range (observed values: -22, 127, etc.).
-# The gap between "large-but-legitimate" (<20) and "placeholder" (>100) is
-# sufficient; raising to 100 avoids incorrectly filtering unusual tiled meshes.
-_UV_SENTINEL = 100.0
+# Previously _UV_SENTINEL = 100.0 caused triangles with |UV| > 100 to be
+# silently skipped, and a fragile workaround raised the limit to 1e6 for
+# module models.  Both are now removed.
+#
+# Only NaN/Inf values (genuinely corrupt MDX data) are filtered.  The
+# threshold is set to a value that no legitimate UV will ever exceed,
+# while still catching corrupt floats.
+# Cross-ref: KotOR.js TextureLoader.ts -- default is RepeatWrapping, no UV
+# filtering.  KotorBlender scene/material.py -- GL_REPEAT default.
+_UV_SENTINEL = 1e18  # effectively disabled; only catches NaN/Inf
 
 # ── Inner-geometry node name substrings ─────────────────────────────────────
 # KotOR head models contain eye, eyelid, teeth, tongue, gum, and jaw meshes
@@ -2498,13 +2504,15 @@ def _paste_textured_triangle(
     if not _PIL or tex_img is None:
         return
 
-    # ── UV sentinel guard ────────────────────────────────────────────────
-    # Skip triangles that contain KotOR seam-split placeholder UV values
-    # (e.g. (-22, 127) in n_darthrevan's torso skin mesh).  Any UV component
-    # with |value| > _UV_SENTINEL indicates a sentinel, not real geometry.
-    if (abs(uv0[0]) > _UV_SENTINEL or abs(uv0[1]) > _UV_SENTINEL or
-            abs(uv1[0]) > _UV_SENTINEL or abs(uv1[1]) > _UV_SENTINEL or
-            abs(uv2[0]) > _UV_SENTINEL or abs(uv2[1]) > _UV_SENTINEL):
+    # v6.0 FIX: UV sentinel guard removed.  GL_REPEAT (frac) handles all UV
+    # magnitudes.  Only skip if UV contains NaN/Inf (corrupt data).
+    try:
+        _uv_check = (uv0[0] + uv0[1] + uv1[0] + uv1[1] + uv2[0] + uv2[1])
+        if _uv_check != _uv_check:  # NaN check
+            return
+        if not math.isfinite(_uv_check):  # Inf check
+            return
+    except (TypeError, IndexError):
         return
 
     sx0, sy0 = int(sp0[0]), int(sp0[1])
@@ -3130,9 +3138,14 @@ def _paste_lightmap_triangle(
     """
     if not _PIL or lm_img is None:
         return
-    if (abs(lm_uv0[0]) > _UV_SENTINEL or abs(lm_uv0[1]) > _UV_SENTINEL or
-            abs(lm_uv1[0]) > _UV_SENTINEL or abs(lm_uv1[1]) > _UV_SENTINEL or
-            abs(lm_uv2[0]) > _UV_SENTINEL or abs(lm_uv2[1]) > _UV_SENTINEL):
+    # v6.0 FIX: Lightmap UV sentinel removed. frac() handles all magnitudes.
+    try:
+        _lm_check = (lm_uv0[0] + lm_uv0[1] + lm_uv1[0] + lm_uv1[1] + lm_uv2[0] + lm_uv2[1])
+        if _lm_check != _lm_check:  # NaN check
+            return
+        if not math.isfinite(_lm_check):  # Inf check
+            return
+    except (TypeError, IndexError):
         return
 
     sx0, sy0 = int(sp0[0]), int(sp0[1])
@@ -4709,7 +4722,10 @@ class FrameRenderer:
             self._lod_prev_cap = cap
             return cap
 
-        eye_pos = self.cam.eye()
+        # FIX-CAMEYE: safely handle both callable (ArcBallCamera) and
+        # tuple/list (duck-typed camera) for the eye attribute.
+        _eye = self.cam.eye
+        eye_pos = _eye() if callable(_eye) else _eye
         fov_rad = math.radians(self.cam.fov)
 
         # Compute screen-size ratio using UE's formula
@@ -5092,17 +5108,16 @@ class FrameRenderer:
         total_tris = 0
         wire_tris  = []  # [(flat_pts, wire_col), ...]
 
-        # FIX-ACCEL-MODULE-UV: Detect module/area/tile model so the accel path
-        # uses a permissive UV sentinel (1e6) instead of 100.0.  Module geometry
-        # legitimately has UV coordinates up to ~200,000 (e.g. m10aa_01c Box86
-        # U/V ≈ 131,209).  Without this fix every face on large tiled surfaces
-        # was skipped by the per-face sentinel check → solid grey/black tiles.
-        # FIX-MODEL-TYPE-ZERO: read model_type raw to avoid treating 0 as falsy.
+        # v6.0 FIX: Module UV sentinel workaround removed.  _UV_SENTINEL is now
+        # set to 1e18 (effectively disabled), so there is no need for a separate
+        # module-specific threshold.  All UV magnitudes are valid; the software
+        # rasterizer uses frac() (GL_REPEAT) to wrap UVs correctly.
+        # Cross-ref: KotOR.js TextureLoader.ts -- default is RepeatWrapping.
         _accel_model_cls = (str(getattr(self.model, 'classification', 'character') or 'character')).lower() if self.model else 'character'
         _accel_mtype_raw = getattr(self.model, 'model_type', None) if self.model else None
         _accel_mtype = int(_accel_mtype_raw) if _accel_mtype_raw is not None else 4
         _accel_is_module = (_accel_model_cls in ('effect', 'tile', 'other') or _accel_mtype in (0, 2))
-        _accel_uv_sentinel = 1e6 if _accel_is_module else _UV_SENTINEL
+        _accel_uv_sentinel = _UV_SENTINEL
 
         for node in self._iter_visible_mesh_nodes():
             if not node.vertices or not node.faces:
@@ -5281,13 +5296,11 @@ class FrameRenderer:
                     uv1 = uvs[ti1] if ti1 < n_uvs else (0.5, 0.5)
                     uv2 = uvs[ti2] if ti2 < n_uvs else (0.5, 0.5)
 
-                    # UV sentinel guard (vectorized check per-face).
-                    # FIX-ACCEL-MODULE-UV: use _accel_uv_sentinel (1e6 for module
-                    # models) instead of _UV_SENTINEL (100) so tiled floor/wall
-                    # faces with UVs like ±131209 are NOT skipped as degenerate.
-                    if (abs(uv0[0]) > _accel_uv_sentinel or abs(uv0[1]) > _accel_uv_sentinel or
-                            abs(uv1[0]) > _accel_uv_sentinel or abs(uv1[1]) > _accel_uv_sentinel or
-                            abs(uv2[0]) > _accel_uv_sentinel or abs(uv2[1]) > _accel_uv_sentinel):
+                    # v6.0 FIX: UV sentinel guard effectively disabled.
+                    # Only NaN/Inf is filtered.  All legitimate UV magnitudes
+                    # are handled by the frac()-based GL_REPEAT wrapping.
+                    _uv_sum = (uv0[0] + uv0[1] + uv1[0] + uv1[1] + uv2[0] + uv2[1])
+                    if _uv_sum != _uv_sum:  # NaN check (NaN != NaN)
                         continue
 
                     u0r, u1r, u2r = uv0[0], uv1[0], uv2[0]
@@ -5857,25 +5870,16 @@ class FrameRenderer:
             # Batch-project all world vertices once per node for speed
             screen_verts_t = self._proj_batch(world_verts, W, H)
 
-            # Vectorized UV sentinel pre-filter.
-            # For nodes with UVs, build a NumPy array of face UVs and filter
-            # out entire faces with |uv| > _UV_SENTINEL in one vectorized pass.
-            # This avoids the per-face 6-component sentinel check inside the loop
-            # (220× speedup vs Python loop for 2k-face nodes).
-            #
-            # FIX-MODULE-UV: Module/area/tile models use extreme UV tiling
-            # (e.g. |uv| > 100,000) that is valid geometry — GL_REPEAT handles
-            # it correctly.  Use a much higher sentinel (1e6) for module models
-            # so these faces are NOT filtered out.  Only NaN/Inf and values
-            # beyond 1e6 (from corrupt MDX data) are considered degenerate.
+            # v6.0 FIX: Vectorized UV sentinel pre-filter simplified.
+            # _UV_SENTINEL is now 1e18 (effectively disabled) — only catches
+            # NaN/Inf from corrupt MDX data.  No module-specific workaround needed.
+            # The frac() wrapping in the software rasterizer handles all UV magnitudes.
             _model_cls_str = getattr(self.model, 'classification', 'character') if self.model else 'character'
-            # FIX-MODEL-TYPE-ZERO: model_type=0 means module/tile. int(val or 4)
-            # treats 0 as falsy -> 4.  Read raw then fall back only when None.
             _model_type_raw_vp = (getattr(self.model, 'model_type', None) if self.model else None)
             _model_type_int = int(_model_type_raw_vp) if _model_type_raw_vp is not None else 4
             _vp_is_module = (_model_cls_str in ('effect', 'tile', 'other') or
                              _model_type_int in (0, 2))
-            _node_uv_sentinel = 1e6 if _vp_is_module else _UV_SENTINEL
+            _node_uv_sentinel = _UV_SENTINEL  # 1e18 — effectively NaN/Inf only
             _sentinel_mask: Optional[np.ndarray] = None
             if _NUMPY and has_uvs and n_uvs > 0 and node.faces and not _node_is_multitex:
                 try:
@@ -6022,24 +6026,17 @@ class FrameRenderer:
                         lm_uv2 = _uvs_lm[vi2] if vi2 < _n_uvs_lm else (0.5, 0.5)
                     else:
                         lm_uv0 = lm_uv1 = lm_uv2 = (0.5, 0.5)
-                    # ── UV sentinel-value guard ──────────────────────────
-                    # KotOR skin meshes occasionally contain vertices at UV
-                    # seam boundaries that carry sentinel/garbage UV values
-                    # far outside the valid range (e.g. (-22, 127), (-7.5, 45.5)).
-                    # These arise from the NWN/KotOR MDL exporter duplicating
-                    # seam-split vertices and leaving a placeholder UV that the
-                    # game engine's skinning pipeline ignores.
-                    # Triangles whose UVs are this extreme cannot be rendered
-                    # meaningfully; skip them to avoid artefacts.
-                    # Threshold: |u| or |v| > _UV_SENTINEL → treat face as degenerate.
-                    # Use vectorized pre-filter result when available (220× speedup).
+                    # v6.0 FIX: UV sentinel guard simplified to NaN/Inf only.
+                    # All legitimate UV magnitudes are handled by frac() wrapping.
+                    # The vectorized pre-filter (_sentinel_mask) still runs but with
+                    # _UV_SENTINEL=1e18 it only catches corrupt NaN/Inf data.
                     if _sentinel_mask is not None:
                         if not _sentinel_mask[_fi]:
                             continue
-                    elif (abs(uv0[0]) > _node_uv_sentinel or abs(uv0[1]) > _node_uv_sentinel or
-                            abs(uv1[0]) > _node_uv_sentinel or abs(uv1[1]) > _node_uv_sentinel or
-                            abs(uv2[0]) > _node_uv_sentinel or abs(uv2[1]) > _node_uv_sentinel):
-                        continue
+                    else:
+                        _uv_sum_vp = (uv0[0] + uv0[1] + uv1[0] + uv1[1] + uv2[0] + uv2[1])
+                        if _uv_sum_vp != _uv_sum_vp or not math.isfinite(_uv_sum_vp):
+                            continue  # NaN or Inf check
                     # rotate_texture: (u,v) → (v, 1-u)  [90° CCW rotation]
                     # Used by KotOR for certain prop nodes (floor decals, lightmapped tiles).
                     if _node_rotate_tex:
@@ -8289,6 +8286,23 @@ class ViewportWidget(tk.Frame):
                 "Fast-drag mode: drops to flat-shading during orbit\n"
                 "(faster on slow machines, textures hidden during drag)")
 
+        # ── Renderer toggle (CPU ↔ GPU) ─────────────────────────────
+        # v6.0: UI toggle to switch between CPU PIL rasterizer and GPU
+        # ModernGL renderer at runtime.  GPU provides z-buffer depth testing,
+        # back-face culling, and 60fps for ≤100k triangles.  CPU fallback
+        # remains available for systems without GPU/EGL support.
+        # Cross-ref: Deliverable 3 (T308); Hayes (2025) §6.3.
+        self._use_gpu: bool = False  # default: CPU renderer (safe fallback)
+        self._gpu_renderer = None    # lazy-init GpuRenderer on first toggle
+        self._btn_gpu = tk.Button(
+            tb, text="CPU", command=self._toggle_gpu_renderer, **btn)
+        self._btn_gpu.configure(bg="#1a1a3a")  # dark = CPU mode
+        self._btn_gpu.pack(side='left', padx=2, pady=2)
+        _vp_tip(self._btn_gpu,
+                "Toggle CPU ↔ GPU renderer  (Ctrl+G)\n"
+                "GPU: z-buffer depth, back-face culling, 60fps\n"
+                "CPU: software rasterizer fallback")
+
         # Reset camera (far right)
         b_reset = tk.Button(tb, text="↺ Camera",
                             command=self.reset_camera, **btn)
@@ -8326,6 +8340,8 @@ class ViewportWidget(tk.Frame):
         self.canvas.bind("<g>",              lambda e: self._toggle_gimbal())
         self.canvas.bind("<Tab>",            lambda e: self._cycle_gimbal_mode())
         self.canvas.bind("<r>",              lambda e: self.reset_camera())
+        self.canvas.bind("<Control-g>",      lambda e: self._toggle_gpu_renderer())
+        self.canvas.bind("<Control-G>",      lambda e: self._toggle_gpu_renderer())
         self.canvas.bind("<plus>",           lambda e: self._zoom_in())
         self.canvas.bind("<minus>",          lambda e: self._zoom_out())
         self.canvas.bind("<equal>",          lambda e: self._zoom_in())
@@ -9263,6 +9279,33 @@ class ViewportWidget(tk.Frame):
         next_ms = self._RENDER_MS_INTERACTIVE if fast else self._RENDER_MS
         self.after(next_ms, self._schedule_render)
 
+    def _toggle_gpu_renderer(self):
+        """Toggle between CPU PIL rasterizer and GPU ModernGL renderer.
+
+        v6.0 Deliverable 3 (T308): runtime CPU ↔ GPU switch.
+        GPU renderer provides proper z-buffer depth testing (no painter's
+        algorithm), back-face culling, and 60fps for ≤100k triangles.
+        CPU fallback is always available for systems without GPU/EGL.
+        """
+        self._use_gpu = not self._use_gpu
+        if self._use_gpu:
+            # Lazy-init GPU renderer
+            if self._gpu_renderer is None:
+                try:
+                    try:
+                        from src.gui.gpu_renderer import GpuRenderer
+                    except ImportError:
+                        from gui.gpu_renderer import GpuRenderer  # type: ignore
+                    self._gpu_renderer = GpuRenderer()
+                except Exception as exc:
+                    log.warning(f"GPU renderer not available — staying on CPU: {exc}")
+                    self._use_gpu = False
+            self._btn_gpu.configure(text="GPU", bg="#224422")  # green = active
+        else:
+            self._btn_gpu.configure(text="CPU", bg="#1a1a3a")  # dark = inactive
+        # Force a re-render with the new renderer
+        self._request_render(fast=True)
+
     def _do_render(self):
         """Kick off rendering in a background thread so Tkinter stays responsive."""
         if not _PIL:
@@ -9277,11 +9320,29 @@ class ViewportWidget(tk.Frame):
         renderer  = self._renderer
         canvas    = self.canvas
 
+        # v6.0: GPU rendering path — uses GpuRenderer instead of CPU FrameRenderer
+        _use_gpu_local = getattr(self, '_use_gpu', False)
+        _gpu_r = getattr(self, '_gpu_renderer', None) if _use_gpu_local else None
+
         def _render_thread():
             t0 = _time_mod.perf_counter()
             img = None
             try:
-                img = renderer.render(W, H)
+                if _gpu_r is not None and self.model is not None:
+                    # GPU path: use GpuRenderer.render() for z-buffered rendering
+                    # Build {name: PIL.Image} dict from TextureCache for GpuRenderer.
+                    # TextureCache stores loaded PIL images in ._cache (dict);
+                    # GpuRenderer.render() expects textures={str: PIL.Image}.
+                    _tc = getattr(renderer, 'tex_cache', None)
+                    if _tc is not None and hasattr(_tc, '_cache'):
+                        _tex_dict = {k: v for k, v in _tc._cache.items()
+                                     if v is not None}
+                    else:
+                        _tex_dict = {}
+                    img = _gpu_r.render(self.model, self.camera, W, H,
+                                        textures=_tex_dict)
+                else:
+                    img = renderer.render(W, H)
             except MemoryError:
                 log.warning("Viewport render: MemoryError — reducing triangle cap")
                 # Auto-reduce tri cap to avoid repeat crash

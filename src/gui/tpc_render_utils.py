@@ -15,7 +15,7 @@ Functions exported:
   _edge_has_seam_global(a, b)    → bool
   _vflip_nontiled(v, th)         → float
   _vflip_tiled(v, tile_v, src_h) → float
-  _UV_SENTINEL                   = 20.0
+  _UV_SENTINEL                   = 1e18  (v6.0: NaN/Inf only)
 
 Used by:
   - src/gui/viewport.py  (imported at top, avoids code duplication)
@@ -41,7 +41,13 @@ except Exception:
     except Exception:
         pass
 
-_UV_SENTINEL = 100.0  # Phase 18: raised from 20.0; legitimate tiled UVs can exceed 20
+# v6.0 FIX: UV sentinel effectively disabled — only NaN/Inf filtering.
+# KotOR module textures intentionally use tiled UVs well beyond 0-1 range
+# (walls, floors, terrain up to |UV| ~ 200,000). GL_REPEAT (frac()) handles
+# any UV magnitude correctly. Sentinel-based magnitude filtering was the
+# root cause of missing/stretched module textures.
+# Cross-ref: KotOR.js TextureLoader.ts — default RepeatWrapping, no UV filtering.
+_UV_SENTINEL = 1e18  # effectively disabled; only catches NaN/Inf
 
 # ── Math helpers ─────────────────────────────────────────────────────────────
 def _normalize(v):
@@ -449,10 +455,15 @@ def _paste_textured_triangle(
     if not _PIL or tex_img is None:
         return
 
-    # UV sentinel guard
-    if (abs(uv0[0]) > _UV_SENTINEL or abs(uv0[1]) > _UV_SENTINEL or
-            abs(uv1[0]) > _UV_SENTINEL or abs(uv1[1]) > _UV_SENTINEL or
-            abs(uv2[0]) > _UV_SENTINEL or abs(uv2[1]) > _UV_SENTINEL):
+    # v6.0 FIX: UV sentinel guard — only filter NaN/Inf (corrupt data).
+    # All legitimate UV magnitudes are handled by frac() wrapping.
+    try:
+        _uv_check = (uv0[0] + uv0[1] + uv1[0] + uv1[1] + uv2[0] + uv2[1])
+        if _uv_check != _uv_check:  # NaN check (NaN != NaN)
+            return
+        if not math.isfinite(_uv_check):  # Inf check
+            return
+    except (TypeError, IndexError):
         return
 
     sx0,sy0=int(sp0[0]),int(sp0[1])

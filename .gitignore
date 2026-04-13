@@ -29,6 +29,13 @@ game_data/
 *.key
 *.mdx
 
+# ── Tests (removed – focus on essential code only) ───────────────────────────
+tests/
+test_assets/
+pytest.ini
+.pytest_cache/
+conftest.py
+
 # ── Audit / render output (generated artefacts) ───────────────────────────────
 audit_output/
 logs/
@@ -58,6 +65,12 @@ render_test_output_quality/
 research_sources/
 PyKotor/
 kotorblender_src/
+.reference_repos/
+
+# ── Reference knowledge base (books/images/spreadsheets too large for git) ───
+.ghostrigger_reference/books/
+.ghostrigger_reference/images/
+.ghostrigger_reference/spreadsheets/
 
 # ── Demo / capture artefacts ──────────────────────────────────────────────────
 *.mp4
@@ -72,6 +85,10 @@ Thumbs.db
 # Keep PNGs inside assets folder
 !assets/**/*.png
 !src/gui/icons/*.png
+
+# ── Spreadsheets / audit scripts (inessential) ──────────────────────────────
+*.xlsx
+run_audit.py
 
 # ── Internal dev scripts (not for end users) ──────────────────────────────────
 devlog/

@@ -367,7 +367,7 @@ class FileSystemModelLocator(ModelLocatorPort):
     Searches:
       1. Exact path (absolute or relative)
       2. Path + .mdl suffix
-      3. Standard local game_data/ and test_assets/ directories
+      3. Standard local game_data/ directory
     """
 
     def __init__(self, project_root: Optional[Path] = None):
@@ -387,8 +387,8 @@ class FileSystemModelLocator(ModelLocatorPort):
                 mdx = self._load_mdx(c)
                 return str(c), mdl, mdx
 
-        # Local game_data / test_assets directories
-        for search_dir in [self._root / "game_data", self._root / "test_assets"]:
+        # Local game_data directory
+        for search_dir in [self._root / "game_data"]:
             candidate = search_dir / f"{resref}.mdl"
             if candidate.exists():
                 mdl = candidate.read_bytes()

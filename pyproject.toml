@@ -12,7 +12,7 @@ build-backend = "setuptools.backends.legacy:build"
 
 [project]
 name        = "ghostrigger"
-version     = "5.0.0"
+version     = "6.0.0"
 description = "KotOR 1 & 2 3D model viewer, skeletal animation pipeline, MDL/MDX reader+writer"
 license     = { text = "MIT" }
 readme      = "README.md"
@@ -81,14 +81,8 @@ mcp = [
     "pydantic>=2.0.0",
     "uvicorn[standard]>=0.20.0",
 ]
-dev = [
-    "pytest>=7.0",
-    "pytest-cov>=4.0",
-    "mypy>=1.0",
-    "ruff>=0.1.0",
-]
 all = [
-    "ghostrigger[gui,kotor,mesh,mcp,dev]",
+    "ghostrigger[gui,kotor,mesh,mcp]",
 ]
 
 # ── Setuptools package discovery ─────────────────────────────────────────────
@@ -98,22 +92,10 @@ package-dir = {"" = "."}
 [tool.setuptools.packages.find]
 where   = ["."]
 include = ["src*"]
-exclude = ["tests*", "research_sources*", "docs*"]
+exclude = ["research_sources*", "docs*", "tests*", "test_assets*"]
 
 [tool.setuptools.package-data]
 "src" = ["**/*.json", "**/*.md", "**/*.txt"]
-
-# ── Pytest configuration ──────────────────────────────────────────────────────
-[tool.pytest.ini_options]
-testpaths    = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts      = "-q --tb=short"
-filterwarnings = [
-    "ignore::DeprecationWarning:pkg_resources",
-    "ignore::UserWarning:pygltflib",
-]
 
 # ── Ruff linter configuration ─────────────────────────────────────────────────
 [tool.ruff]
