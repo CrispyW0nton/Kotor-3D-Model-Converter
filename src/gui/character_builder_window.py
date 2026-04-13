@@ -27,6 +27,7 @@ Architecture notes
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import tkinter as tk
@@ -55,6 +56,14 @@ def _import_validation():
     except ImportError:
         from core.validation_service import ValidationService, Severity  # type: ignore
     return ValidationService, Severity
+
+
+def _import_scene_io():
+    try:
+        from src.core.model_data import SceneIO
+    except ImportError:
+        from core.model_data import SceneIO  # type: ignore
+    return SceneIO
 
 
 def _import_loaders():
@@ -290,68 +299,365 @@ class _FaceFrame(ttk.Frame):
 
 
 class _PreviewFrame(ttk.Frame):
-    """Preview mode — GPU viewport of assembled character."""
+    """Preview mode — live GPU viewport of the assembled character.
+
+    Architecture
+    ------------
+    * Embeds a ``ViewportWidget`` (software rasteriser / GPU hybrid) in the
+      central area.  Falls back to a placeholder label when no display
+      connection is available (headless CI / sandboxed environments).
+    * Scene-aware primary-model selection: prefers HEADLESS_BODY, then
+      HEAD_SHELL, then any other assigned slot – so the most meaningful
+      model is always shown.
+    * Lighting presets map to ``FrameRenderer._ambient`` / ``_light_dir``
+      so all four preset buttons immediately update the render.
+    * Camera presets manipulate ``ViewportWidget.camera`` (ArcBallCamera)
+      then call ``_request_render()`` for a live update.
+    * Render toggles (Bones / Wireframe / Texture) wire directly to the
+      renderer's boolean flags.
+    * Texture search directories are collected from scene slot
+      ``source_path`` values and passed to the viewport's texture cache.
+    """
+
+    # ── Lighting presets ─────────────────────────────────────────────────
+    # Each entry: (ambient, key_light_dir, fill_light_dir)
+    # light dirs are (x, y, z) un-normalised – FrameRenderer normalises internally.
+    _LIGHTING_PRESETS: Dict[str, tuple] = {
+        "Studio":  (0.55, (0.55, 0.40, 0.90), (-0.35, -0.20, 0.60)),
+        "Outdoor": (0.65, (0.30, 0.20, 1.00), (-0.20, -0.10, 0.40)),
+        "Dungeon": (0.20, (0.60, 0.10, 0.50), (-0.10, -0.05, 0.30)),
+        "Flat":    (0.90, (0.00, 0.00, 1.00), ( 0.00,  0.00, 1.00)),
+    }
+
+    # ── Camera presets ────────────────────────────────────────────────────
+    # Each entry: (azimuth_deg, elevation_deg, distance_multiplier, name)
+    # distance_multiplier is applied to the model's bounding radius.
+    _CAMERA_PRESETS: Dict[str, tuple] = {
+        "Full Body":   (-45.0, 25.0, 1.0),
+        "Head":        (-30.0, 10.0, 0.25),
+        "Upper Body":  (-40.0, 20.0, 0.50),
+        "Action":      (-20.0,  8.0, 0.80),
+    }
 
     def __init__(self, parent, window: "CharacterBuilderWindow"):
         super().__init__(parent)
         self._win = window
+        self._viewport = None          # ViewportWidget or None
+        self._current_model = None     # model currently shown in viewport
+        self._camera_preset = "Full Body"
         self._build_ui()
 
+    # ── UI construction ───────────────────────────────────────────────────
+
     def _build_ui(self):
-        top = tk.Frame(self, bg=_BG)
-        top.pack(fill=tk.BOTH, expand=True)
+        # ── Top control strip ────────────────────────────────────────────
+        ctrl_top = tk.Frame(self, bg=_BG2)
+        ctrl_top.pack(fill=tk.X, side=tk.TOP, padx=4, pady=(4, 0))
 
-        tk.Label(top, text="Preview", bg=_BG, fg=_FG,
-                 font=_FONT_BOLD).pack(anchor="w", padx=8, pady=(8, 2))
+        # Render toggles
+        tk.Label(ctrl_top, text="Show:", bg=_BG2, fg=_FG_DIM,
+                 font=_FONT_SM).pack(side=tk.LEFT, padx=(8, 2))
 
-        # Attempt to embed a ViewportWidget; fall back gracefully
-        vp_frame = tk.Frame(top, bg="#000000", relief=tk.SUNKEN, bd=1)
-        vp_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+        self._bones_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(
+            ctrl_top, text="Bones", variable=self._bones_var,
+            bg=_BG2, fg=_FG, selectcolor=_BG3, activebackground=_BG2,
+            font=_FONT_SM, command=self._apply_render_toggles,
+        ).pack(side=tk.LEFT, padx=2)
+
+        self._wire_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            ctrl_top, text="Wireframe", variable=self._wire_var,
+            bg=_BG2, fg=_FG, selectcolor=_BG3, activebackground=_BG2,
+            font=_FONT_SM, command=self._apply_render_toggles,
+        ).pack(side=tk.LEFT, padx=2)
+
+        self._tex_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            ctrl_top, text="Texture", variable=self._tex_var,
+            bg=_BG2, fg=_FG, selectcolor=_BG3, activebackground=_BG2,
+            font=_FONT_SM, command=self._apply_render_toggles,
+        ).pack(side=tk.LEFT, padx=2)
+
+        # Frame-all shortcut
+        tk.Button(
+            ctrl_top, text="⊞ Frame", bg=_BG3, fg=_FG,
+            font=_FONT_SM, relief=tk.FLAT,
+            command=self._frame_all,
+        ).pack(side=tk.LEFT, padx=(8, 2))
+
+        # Refresh
+        tk.Button(
+            ctrl_top, text="↺ Refresh", bg=_ACCENT, fg="#ffffff",
+            font=_FONT_SM, relief=tk.FLAT,
+            command=self.refresh,
+        ).pack(side=tk.RIGHT, padx=8)
+
+        # ── Viewport area ────────────────────────────────────────────────
+        vp_frame = tk.Frame(self, bg="#000000", relief=tk.SUNKEN, bd=1)
+        vp_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
         try:
             from src.gui.viewport import ViewportWidget
             self._viewport = ViewportWidget(vp_frame, width=640, height=400)
             self._viewport.pack(fill=tk.BOTH, expand=True)
+            # Apply initial renderer settings
+            self._apply_render_toggles()
         except Exception as exc:
-            log.debug("PreviewFrame: viewport unavailable: %s", exc)
+            log.debug("_PreviewFrame: ViewportWidget unavailable: %s", exc)
             self._viewport = None
-            tk.Label(
+            self._fallback_label = tk.Label(
                 vp_frame,
-                text="GPU Viewport\n(requires display connection)",
+                text="GPU Viewport\n(requires display connection)\n\n"
+                     "Models will appear here when a display is available.",
                 bg="#000000", fg=_FG_DIM, font=_FONT,
-            ).pack(expand=True)
+            )
+            self._fallback_label.pack(expand=True)
 
-        # Lighting preset selector
-        ctrl = tk.Frame(top, bg=_BG2)
-        ctrl.pack(fill=tk.X, padx=8, pady=(0, 4))
-        tk.Label(ctrl, text="Lighting:", bg=_BG2, fg=_FG_DIM,
-                 font=_FONT_SM).pack(side=tk.LEFT, padx=4)
+        # ── Bottom control strip ─────────────────────────────────────────
+        ctrl_bot = tk.Frame(self, bg=_BG2)
+        ctrl_bot.pack(fill=tk.X, side=tk.BOTTOM, padx=4, pady=(0, 4))
+
+        # Lighting presets
+        tk.Label(ctrl_bot, text="Lighting:", bg=_BG2, fg=_FG_DIM,
+                 font=_FONT_SM).pack(side=tk.LEFT, padx=(8, 2))
         self._light_var = tk.StringVar(value="Studio")
         for preset in ("Studio", "Outdoor", "Dungeon", "Flat"):
-            ttk.Radiobutton(
-                ctrl, text=preset, variable=self._light_var, value=preset,
-                command=self._apply_lighting,
-            ).pack(side=tk.LEFT, padx=4)
+            tk.Radiobutton(
+                ctrl_bot, text=preset, variable=self._light_var, value=preset,
+                bg=_BG2, fg=_FG, selectcolor=_BG3, activebackground=_BG2,
+                font=_FONT_SM, command=self._apply_lighting,
+            ).pack(side=tk.LEFT, padx=3)
 
-        tk.Button(
-            ctrl, text="Refresh", bg=_ACCENT, fg="#ffffff",
-            font=_FONT_SM, relief=tk.FLAT,
-            command=self.refresh,
-        ).pack(side=tk.RIGHT, padx=4)
+        # Camera presets
+        tk.Label(ctrl_bot, text="  Camera:", bg=_BG2, fg=_FG_DIM,
+                 font=_FONT_SM).pack(side=tk.LEFT, padx=(8, 2))
+        self._cam_preset_var = tk.StringVar(value="Full Body")
+        for cam_name in ("Full Body", "Head", "Upper Body", "Action"):
+            tk.Radiobutton(
+                ctrl_bot, text=cam_name, variable=self._cam_preset_var,
+                value=cam_name, bg=_BG2, fg=_FG, selectcolor=_BG3,
+                activebackground=_BG2, font=_FONT_SM,
+                command=self._apply_camera_preset,
+            ).pack(side=tk.LEFT, padx=3)
 
-    def _apply_lighting(self):
-        pass  # Phase 3 will wire this to the GPU renderer
+    # ── Public API ────────────────────────────────────────────────────────
 
     def refresh(self):
-        """Push the first model from the scene into the viewport."""
+        """Load the primary scene model into the viewport and re-render."""
+        if self._viewport is None:
+            self._refresh_fallback_label()
+            return
+        try:
+            model = self._pick_primary_model()
+            if model is None:
+                # No model assigned — clear the viewport gracefully
+                try:
+                    self._viewport.load_model(None)
+                except Exception:
+                    pass
+                self._current_model = None
+                return
+
+            # Collect texture search dirs from scene slot source_paths
+            tex_dirs = self._collect_texture_dirs()
+
+            self._viewport.load_model(
+                model,
+                extra_texture_dirs=tex_dirs if tex_dirs else None,
+            )
+            self._current_model = model
+
+            # Apply current lighting/camera presets to the freshly loaded model
+            self._apply_lighting()
+            self._apply_camera_preset()
+            self._apply_render_toggles()
+
+            log.debug("_PreviewFrame.refresh: loaded %s (%d nodes)",
+                      getattr(model, 'name', '?'),
+                      model.node_count() if hasattr(model, 'node_count') else '?')
+
+        except Exception as exc:
+            log.debug("_PreviewFrame.refresh: %s", exc, exc_info=True)
+
+    # ── Internal helpers ──────────────────────────────────────────────────
+
+    def _pick_primary_model(self):
+        """Return the most suitable KotorModel from the scene.
+
+        Priority order (first slot with a loaded model wins):
+          1. HEADLESS_BODY   – main character body
+          2. HEAD_SHELL      – head
+          3. BODY_VARIANT    – body variant / reskin
+          4. Any other slot  – whatever was loaded first
+        """
+        try:
+            PartSlot = _import_model_data()[1]
+            scene = self._win.scene
+            priority = [
+                PartSlot.HEADLESS_BODY,
+                PartSlot.HEAD_SHELL,
+                PartSlot.BODY_VARIANT,
+            ]
+            for slot in priority:
+                entry = scene.slots.get(slot)
+                if entry and entry.model is not None:
+                    return entry.model
+            # Fallback: first assigned slot with a model
+            for entry in scene.slots.values():
+                if entry.model is not None:
+                    return entry.model
+        except Exception as exc:
+            log.debug("_PreviewFrame._pick_primary_model: %s", exc)
+        return None
+
+    def _collect_texture_dirs(self) -> List[str]:
+        """Collect unique directories from scene slot source_paths for texture resolution."""
+        dirs: List[str] = []
+        try:
+            for entry in self._win.scene.slots.values():
+                if entry.source_path:
+                    d = os.path.dirname(entry.source_path)
+                    if d and os.path.isdir(d) and d not in dirs:
+                        dirs.append(d)
+        except Exception:
+            pass
+        return dirs
+
+    def _refresh_fallback_label(self):
+        """Update the fallback label text when viewport is unavailable."""
+        scene = self._win.scene
+        if scene.is_empty:
+            text = ("GPU Viewport\n(requires display connection)\n\n"
+                    "No parts assigned.")
+        else:
+            parts = list(scene.slots.keys())
+            text = (f"GPU Viewport\n(requires display connection)\n\n"
+                    f"Scene has {len(parts)} slot(s) assigned.\n"
+                    f"Connect a display to enable live preview.")
+        lbl = getattr(self, "_fallback_label", None)
+        if lbl is not None:
+            try:
+                lbl.configure(text=text)
+            except Exception:
+                pass
+
+    def _apply_lighting(self):
+        """Apply the selected lighting preset to the viewport renderer."""
+        preset_name = self._light_var.get()
+        preset = self._LIGHTING_PRESETS.get(preset_name, self._LIGHTING_PRESETS["Studio"])
+        ambient, key_dir, fill_dir = preset
+
         if self._viewport is None:
             return
         try:
-            models = self._win.scene.all_models
-            if models:
-                self._viewport.set_model(models[0])
+            renderer = self._viewport._renderer
+
+            def _norm3(v):
+                import math
+                l = math.sqrt(v[0]**2 + v[1]**2 + v[2]**2)
+                return (v[0]/l, v[1]/l, v[2]/l) if l > 1e-9 else (0.0, 0.0, 1.0)
+
+            renderer._ambient    = float(ambient)
+            renderer._light_dir  = _norm3(key_dir)
+            renderer._light_dir2 = _norm3(fill_dir)
+
+            # Trigger a re-render to show the new lighting
+            self._request_render()
+            log.debug("_PreviewFrame: lighting preset → %s (ambient=%.2f)", preset_name, ambient)
         except Exception as exc:
-            log.debug("PreviewFrame.refresh: %s", exc)
+            log.debug("_PreviewFrame._apply_lighting: %s", exc)
+
+    def _apply_camera_preset(self):
+        """Apply the selected camera preset to the viewport's ArcBallCamera."""
+        preset_name = self._cam_preset_var.get()
+        preset = self._CAMERA_PRESETS.get(preset_name, self._CAMERA_PRESETS["Full Body"])
+        azimuth, elevation, dist_mult = preset
+
+        if self._viewport is None:
+            return
+        try:
+            camera = self._viewport.camera
+            model  = self._current_model
+
+            # Determine target and distance from model bounds (if available)
+            if model is not None:
+                bb_min = getattr(model, 'bb_min', None) or getattr(model, 'bounding_box_min', None)
+                bb_max = getattr(model, 'bb_max', None) or getattr(model, 'bounding_box_max', None)
+                if bb_min and bb_max:
+                    cx = (bb_min[0] + bb_max[0]) * 0.5
+                    cy = (bb_min[1] + bb_max[1]) * 0.5
+                    cz = (bb_min[2] + bb_max[2]) * 0.5
+                    dx = bb_max[0] - bb_min[0]
+                    dy = bb_max[1] - bb_min[1]
+                    dz = bb_max[2] - bb_min[2]
+                    import math
+                    diag = math.sqrt(dx*dx + dy*dy + dz*dz)
+                    height = dz  # Z-up world: model height is Z extent
+
+                    if preset_name == "Head":
+                        # Focus on upper third of model
+                        head_z = bb_min[2] + height * 0.72
+                        camera.target = [cx, cy, head_z]
+                        camera.distance = max(0.3, diag * 0.18 * dist_mult)
+                    elif preset_name == "Upper Body":
+                        # Focus on chest/shoulders — upper 40–70% of Z range
+                        chest_z = bb_min[2] + height * 0.58
+                        camera.target = [cx, cy, chest_z]
+                        camera.distance = max(0.5, diag * 0.35 * dist_mult)
+                    else:
+                        # Full Body / Action — frame entire model
+                        camera.target = [cx, cy, cz]
+                        camera.distance = max(0.5, diag * 0.75 * dist_mult)
+                else:
+                    # No bounds — use default distance
+                    camera.target = [0.0, 0.0, 1.0]
+                    camera.distance = 5.0 * dist_mult
+            else:
+                camera.target = [0.0, 0.0, 1.0]
+                camera.distance = 5.0
+
+            camera.azimuth   = azimuth
+            camera.elevation = elevation
+            self._request_render()
+            log.debug("_PreviewFrame: camera preset → %s", preset_name)
+        except Exception as exc:
+            log.debug("_PreviewFrame._apply_camera_preset: %s", exc)
+
+    def _apply_render_toggles(self):
+        """Push render toggle states (bones/wireframe/texture) to renderer."""
+        if self._viewport is None:
+            return
+        try:
+            renderer = self._viewport._renderer
+            renderer.show_bones     = self._bones_var.get()
+            renderer.show_wireframe = self._wire_var.get()
+            renderer.show_texture   = self._tex_var.get()
+            self._request_render()
+        except Exception as exc:
+            log.debug("_PreviewFrame._apply_render_toggles: %s", exc)
+
+    def _frame_all(self):
+        """Frame the camera around the full model."""
+        if self._viewport is None:
+            return
+        try:
+            self._viewport.frame_all()
+        except Exception as exc:
+            log.debug("_PreviewFrame._frame_all: %s", exc)
+
+    def _request_render(self):
+        """Ask the viewport to re-render (no-op when viewport is unavailable)."""
+        if self._viewport is None:
+            return
+        try:
+            fn = getattr(self._viewport, '_request_render', None)
+            if fn is None:
+                fn = getattr(self._viewport, '_schedule_render', None)
+            if fn is not None:
+                fn()
+        except Exception:
+            pass
 
 
 class _ExportFrame(ttk.Frame):
@@ -491,7 +797,9 @@ class _ExportFrame(ttk.Frame):
 
         try:
             self._run_export(scene, fmt, path)
-            self._status_lbl.configure(text=f"Exported → {os.path.basename(path)}", fg=_OK)
+            sidecar_name = os.path.splitext(os.path.basename(path))[0] + ".ghostrig.json"
+            self._status_lbl.configure(
+                text=f"Exported → {os.path.basename(path)}  (+{sidecar_name})", fg=_OK)
             log.info("Export: %s → %s", fmt, path)
         except Exception as exc:
             log.error("Export: %s", exc, exc_info=True)
@@ -499,12 +807,16 @@ class _ExportFrame(ttk.Frame):
             messagebox.showerror("Export Failed", str(exc))
 
     def _run_export(self, scene, fmt: str, path: str) -> None:
-        """Dispatch to the appropriate exporter based on format."""
+        """Dispatch to the appropriate exporter and write a side-car JSON."""
         models = scene.all_models
         if not models:
             raise ValueError("No models in scene")
 
-        model = models[0]  # primary model (body or head depending on what's loaded)
+        model = models[0]  # primary model
+
+        # Store chosen format in scene metadata for the sidecar
+        scene.metadata["last_export_fmt"]  = fmt
+        scene.metadata["last_export_path"] = path
 
         if fmt == "MDL":
             try:
@@ -536,6 +848,14 @@ class _ExportFrame(ttk.Frame):
 
         else:
             raise ValueError(f"Unknown format: {fmt}")
+
+        # ── Write side-car .ghostrig.json alongside the exported file ────────
+        try:
+            SceneIO = _import_scene_io()
+            sidecar = SceneIO.write_sidecar(scene, path)
+            log.info("Export: wrote sidecar → %s", sidecar)
+        except Exception as sc_exc:
+            log.warning("Export: sidecar write failed (non-fatal): %s", sc_exc)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -578,18 +898,58 @@ class CharacterBuilderWindow(tk.Toplevel):
             CharacterScene, PartSlot, *_ = _import_model_data()
             self.scene = CharacterScene(game_version=game_version)
 
+        # Persistent scene file path (set after first save / load)
+        self._scene_path: str = ""
+
         # ── Apply dark ttk theme ──────────────────────────────────────────────
         self._apply_theme()
 
         # ── Build UI ──────────────────────────────────────────────────────────
+        self._build_menubar()
         self._build_toolbar()
         self._build_notebook()
         self._build_status_bar()
+        self._bind_keys()
 
         # Show Assembly mode by default
         self._switch_mode(0)
+        self._update_title()
 
     # ── Theme ─────────────────────────────────────────────────────────────────
+
+    # ── Menu bar ──────────────────────────────────────────────────────────────
+
+    def _build_menubar(self) -> None:
+        """Build a standard File menu for scene persistence."""
+        mb = tk.Menu(self, tearoff=False)
+        self.configure(menu=mb)
+
+        # File
+        fm = tk.Menu(mb, tearoff=False)
+        mb.add_cascade(label="File", menu=fm)
+        fm.add_command(label="New Scene",
+                       accelerator="Ctrl+N",
+                       command=self._new_scene)
+        fm.add_separator()
+        fm.add_command(label="Open Scene…",
+                       accelerator="Ctrl+O",
+                       command=self._open_scene)
+        fm.add_separator()
+        fm.add_command(label="Save Scene",
+                       accelerator="Ctrl+S",
+                       command=lambda: self._save_scene())
+        fm.add_command(label="Save Scene As…",
+                       accelerator="Ctrl+Shift+S",
+                       command=lambda: self._save_scene(save_as=True))
+        fm.add_separator()
+        fm.add_command(label="Close", command=self._on_close)
+
+    def _bind_keys(self) -> None:
+        """Bind keyboard shortcuts for this window."""
+        self.bind("<Control-n>", lambda e: self._new_scene())
+        self.bind("<Control-o>", lambda e: self._open_scene())
+        self.bind("<Control-s>", lambda e: self._save_scene())
+        self.bind("<Control-S>", lambda e: self._save_scene(save_as=True))
 
     def _apply_theme(self):
         style = ttk.Style(self)
@@ -705,6 +1065,8 @@ class CharacterBuilderWindow(tk.Toplevel):
         # Lightweight background validation
         self._run_background_validation()
         self._status_lbl.configure(text=self.scene.summary())
+        # Update window title dirty marker
+        self._update_title()
 
     def _run_background_validation(self):
         try:
@@ -739,11 +1101,145 @@ class CharacterBuilderWindow(tk.Toplevel):
             "  Face     – facial bones and hook alignment (Phase 5)\n"
             "  Preview  – GPU viewport of assembled character\n"
             "  Export   – validate and export (MDL/FBX/glTF/OBJ)\n\n"
+            "File menu:\n"
+            "  Ctrl+S  – Save scene as .ghostrig.json\n"
+            "  Ctrl+O  – Open a saved .ghostrig.json scene\n"
+            "  Ctrl+N  – New empty scene\n\n"
             "Parts are loaded from .mdl files via the slot buttons.\n"
             "Export is blocked until all ERRORs are resolved.",
         )
 
+    # ── Phase 2: Scene persistence (save / load / new) ───────────────────────
+
+    def _new_scene(self) -> None:
+        """Create a fresh empty scene (prompts to save if dirty)."""
+        if self.scene.dirty:
+            ans = messagebox.askyesnocancel(
+                "Unsaved Changes",
+                "The current scene has unsaved changes.\nSave before creating a new scene?",
+            )
+            if ans is None:   # Cancel
+                return
+            if ans:           # Yes
+                if not self._save_scene():
+                    return    # save was cancelled / failed
+
+        CharacterScene, PartSlot, *_ = _import_model_data()
+        self.scene = CharacterScene(game_version=self.scene.game_version)
+        self._on_scene_changed()
+        self._update_title()
+        self._scene_path = ""
+        log.info("CharacterBuilderWindow: new scene created")
+
+    def _save_scene(self, *, save_as: bool = False) -> bool:
+        """Persist the scene to a .ghostrig.json file.
+
+        Parameters
+        ----------
+        save_as : When True always prompts for a new path, even if the
+                  scene was previously saved.
+
+        Returns
+        -------
+        True if the save succeeded, False if the user cancelled or an
+        error occurred.
+        """
+        SceneIO = _import_scene_io()
+        path = getattr(self, "_scene_path", "")
+
+        if not path or save_as:
+            path = filedialog.asksaveasfilename(
+                title="Save Character Scene",
+                defaultextension=SceneIO.EXTENSION,
+                filetypes=[
+                    ("GhostRigger Scene", f"*{SceneIO.EXTENSION}"),
+                    ("All files", "*.*"),
+                ],
+            )
+            if not path:
+                return False
+
+        try:
+            SceneIO.save(self.scene, path)
+            self._scene_path = path
+            self._update_title()
+            log.info("CharacterBuilderWindow: scene saved → %s", path)
+            return True
+        except Exception as exc:
+            log.error("CharacterBuilderWindow: save failed: %s", exc, exc_info=True)
+            messagebox.showerror("Save Failed", str(exc))
+            return False
+
+    def _open_scene(self) -> None:
+        """Load a scene from a .ghostrig.json file (prompts to save if dirty)."""
+        if self.scene.dirty:
+            ans = messagebox.askyesnocancel(
+                "Unsaved Changes",
+                "Save current scene before opening another?",
+            )
+            if ans is None:
+                return
+            if ans:
+                if not self._save_scene():
+                    return
+
+        SceneIO = _import_scene_io()
+        path = filedialog.askopenfilename(
+            title="Open Character Scene",
+            filetypes=[
+                ("GhostRigger Scene", f"*{SceneIO.EXTENSION}"),
+                ("All files", "*.*"),
+            ],
+        )
+        if not path:
+            return
+
+        try:
+            new_scene = SceneIO.load(path, load_models=False)
+            # Try to reload models from their source_path (best-effort)
+            load_model_from_file = _import_loaders()
+            for entry in new_scene.slots.values():
+                if entry.source_path and os.path.isfile(entry.source_path):
+                    try:
+                        entry.model = load_model_from_file(entry.source_path)
+                        log.info("  loaded slot %s from %s",
+                                 entry.slot.value, entry.source_path)
+                    except Exception as exc2:
+                        log.warning("  could not reload %s: %s",
+                                    entry.source_path, exc2)
+
+            self.scene = new_scene
+            self._scene_path = path
+            self._on_scene_changed()
+            self._update_title()
+            log.info("CharacterBuilderWindow: scene loaded ← %s", path)
+        except Exception as exc:
+            log.error("CharacterBuilderWindow: open failed: %s", exc, exc_info=True)
+            messagebox.showerror("Open Failed", str(exc))
+
+    def _update_title(self) -> None:
+        """Refresh window title to reflect scene name and dirty state."""
+        name = self.scene.character_name
+        path = getattr(self, "_scene_path", "")
+        if not name and path:
+            name = os.path.splitext(os.path.basename(path))[0]
+        dirty_marker = " *" if self.scene.dirty else ""
+        if name:
+            self.title(f"GhostRigger — Character Builder — {name}{dirty_marker}")
+        else:
+            self.title(f"GhostRigger — Character Builder{dirty_marker}")
+
     def _on_close(self):
+        if self.scene.dirty:
+            ans = messagebox.askyesnocancel(
+                "Unsaved Changes",
+                "The scene has unsaved changes. Save before closing?",
+            )
+            if ans is None:   # Cancel — don't close
+                return
+            if ans:           # Yes
+                if not self._save_scene():
+                    return    # save cancelled — keep window open
         if self._on_close_cb:
             try:
                 self._on_close_cb()
