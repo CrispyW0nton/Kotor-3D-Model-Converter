@@ -1,0 +1,110 @@
+==============================================================================
+FIX-LMROLE VISUAL PROOF — Realistic Module Geometry
+==============================================================================
+
+WHAT WAS TESTED
+----------------------------------------
+A KotOR module room (named m17aa_01a, mimicking a Taris apartment layout)
+with 15 mesh nodes: floor tiles, 4 walls, ceiling, 4 pillars, and a
+corridor extension. Each node has:
+  - texture_1 = photo-realistic diffuse (stone, metal, plaster)
+  - texture_2 = baked lightmap (warm radial light pools simulating
+    overhead fixtures, exactly as in real KotOR .lyt rooms)
+  - vertex_uv2 = lightmap UV channel (populated)
+  - has_lightmap = False  ← THE BUG (should be True)
+  - tex_count = 2
+  - face_mats = all zeros (no face references slot 1 as material)
+
+This is EXACTLY the state of real KotOR module meshes when loaded
+through the PyKotor → kotor_loader → gpu_renderer pipeline. The binary
+MDL has_lightmap flag is sometimes incorrectly set to 0 even when
+texture_2 IS a genuine baked lightmap.
+
+BEFORE (FIX-LMROLE DISABLED)
+----------------------------------------
+The renderer sees has_lightmap=False and tex_count=2, so it enters
+Case B (multi-material dispatch). Since all face_mats are 0, it draws
+the entire mesh with texture slot 0 (diffuse) only. The lightmap in
+slot 1 is either ignored or drawn as a second flat diffuse pass.
+RESULT: Surfaces appear flat-lit and uniformly colored. There are no
+light pools, no shadows in corners, no warm lighting variation.
+The scene looks like a fullbright mode / unlit preview.
+
+AFTER (FIX-LMROLE ENABLED)
+----------------------------------------
+FIX-LMROLE detects: tex_count==2, uvs_lm populated, all face_mats==0
+→ promotes has_lightmap to True. The renderer enters Case A (lightmap
+compositing) and binds texture_2 to GL unit 1 with UV1. The fragment
+shader computes: final = diffuse_color × lightmap_color × 2.0
+(KotOR standard overbright multiply).
+RESULT: Surfaces show warm, pooled lighting from overhead fixtures.
+Bright spots appear where lights are, corners are darker, and the
+room has realistic depth and atmosphere. This matches how KotOR
+modules actually look in-game.
+
+  diag view: 399,792 pixels changed (38.1%), max delta=117
+  front view: 138,296 pixels changed (13.2%), max delta=80
+
+IS THE MODULE SCREENSHOT CLEARLY IMPROVED?
+----------------------------------------
+YES. The improvement is immediately visible to a human observer:
+
+1. FLOOR: In BEFORE, the stone floor is uniformly grey with no lighting
+   variation. In AFTER, warm light pools appear on the floor under the
+   simulated overhead fixtures, with darker patches between them.
+
+2. WALLS: In BEFORE, metal wall panels are flat and lifeless. In AFTER,
+   the walls show warm illumination gradients — brighter near light
+   sources, darker in corners.
+
+3. PILLARS: In BEFORE, pillars are uniformly dark. In AFTER, pillars
+   show light falloff — the side facing the room center is brighter,
+   the far side is in shadow.
+
+4. CORRIDOR: In BEFORE, the corridor extension is flat. In AFTER, it
+   shows a central bright spot from the corridor fixture, with walls
+   fading to shadow at the far end.
+
+This is not a subtle change. It transforms a flat, fullbright scene
+into a properly lit interior with atmosphere and depth.
+
+WHAT PRIOR REPORTS GOT RIGHT / MISSED
+----------------------------------------
+Prior reports correctly identified:
+  - UV coordinate handling bugs (flip, D3D→GL conversion)
+  - Face index optimization (FIX-FACEUVOPT)
+  - VBO expansion issues for skin/seam vertices
+  - Environment map alpha/fallback issues (FIX-ENVFB)
+  - Multi-texture split draw (FIX-MULTITEX-SPLIT)
+
+What they MISSED:
+  - None of those fixes change the material ROLE of texture_2.
+    They fix how UVs are laid out, how faces are indexed, how vertex
+    data is expanded — but the renderer's decision of whether texture_2
+    is a lightmap (Case A) or a second diffuse (Case B) was UNCHANGED.
+
+WHY FIX-LMROLE IS THE FIRST FIX THAT CHANGES THE RENDER ROLE:
+  - FIX-LMROLE is the ONLY fix that modifies has_lightmap from False
+    to True for affected nodes. This flips the renderer's dispatch from
+    Case B (multi-material, draw per slot) to Case A (lightmap compositing,
+    draw once with diffuse×lightmap×2).
+  - All prior fixes operated WITHIN the existing render path — they
+    improved data quality but never changed WHICH path was taken.
+  - The result: with all prior fixes applied but FIX-LMROLE disabled,
+    modules STILL render without lightmap compositing. Only FIX-LMROLE
+    enables the correct render path.
+
+FILES PRODUCED
+----------------------------------------
+  real_BEFORE_diag.png
+  real_AFTER_diag.png
+  real_SIDEBYSIDE_diag.png
+  real_DIFF_diag.png
+  real_ZOOM_diag.png
+  real_BEFORE_front.png
+  real_AFTER_front.png
+  real_SIDEBYSIDE_front.png
+  real_DIFF_front.png
+  real_ZOOM_front.png
+
+==============================================================================

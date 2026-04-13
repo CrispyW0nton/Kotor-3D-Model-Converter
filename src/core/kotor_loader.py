@@ -815,6 +815,38 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
     except Exception:
         pass
 
+    # ── FIX-LMROLE: Infer lightmap role when MDL has_lightmap flag is False ──
+    # KotOR module/area binary MDL meshes sometimes have has_lightmap=False even
+    # when texture_2 IS a genuine lightmap and vertex_uv2 contains valid lightmap
+    # UVs.  This causes the renderer to misclassify tex2 as a secondary diffuse
+    # texture (Case B multi-material) instead of compositing it as a lightmap.
+    #
+    # Heuristic: if ALL of these hold, promote has_lightmap to True:
+    #   1. has_lightmap is currently False
+    #   2. tex_count == 2 (exactly one diffuse + one secondary)
+    #   3. uvs_lm has real data (same count as uvs, i.e. came from vertex_uv2)
+    #   4. all face_mats are 0 (no face references slot 1 as a material)
+    #
+    # Condition (4) is the key discriminator: true multi-material meshes have
+    # some faces with face_mats[i] == 1, meaning slot 1 is used as a diffuse
+    # material.  Lightmap meshes have all face_mats == 0 because the lightmap
+    # is composited over the entire surface, not per-face.
+    #
+    # Cross-ref: KotOR.js checks texture_2 + UV2 presence; Kotor.NET treats
+    # module tex2 as lightmap; xoreos uses has_lightmap flag only (but always
+    # sets it correctly in its own parser).
+    if (not gr.has_lightmap
+            and gr.tex_count == 2
+            and len(gr.uvs_lm) > 0
+            and len(gr.uvs_lm) == len(gr.uvs)
+            and gr.face_mats):
+        _all_slot0 = all(m == 0 for m in gr.face_mats)
+        if _all_slot0:
+            gr.has_lightmap = True
+            log.debug("FIX-LMROLE: inferred has_lightmap=True for node '%s' "
+                       "(tex2='%s', %d LM UVs, all face_mats==0)",
+                       gr.name, gr.lightmap, len(gr.uvs_lm))
+
 
 def _read_skin_textures(skin, gr: ModelNode) -> None:
     """Override texture/material from MDLSkin (for SKIN nodes)."""
