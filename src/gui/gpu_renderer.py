@@ -100,6 +100,16 @@ Phase 3.8 rendering correctness fixes (deep audit vs Kotor.NET / KotOR.js / xore
                  _apply_txi_to_node() applies all three from TXI metadata.
   FIX-ENVOPAQUE: After env-map blend, diffuse.a is set to 1.0 — prevents the already-
                  consumed alpha from accidentally making env-map surfaces transparent.
+  FIX-LMSHADE:  For module/area geometry with baked lightmaps, skip the Phong
+                 directional lighting pass entirely.  The lightmap IS the lighting
+                 — applying Phong shade on top double-darkens the scene because
+                 lightmaps have a mean intensity of ~0.25 (×2 overbright → ~0.5)
+                 and the Phong shade multiplier (~0.65) further reduces to ~0.35.
+                 New formula: lit_color = diffuse_tex * lightmap * 2.0  (no Phong).
+                 Character models with lightmaps (rare) still use Phong + lightmap.
+                 Source: KotOR.js ShaderOdysseyModel.ts USE_LIGHTMAP path (lines
+                 359-365): completely replaces directDiffuse with lightmap-only
+                 indirectDiffuse, omitting the Phong direct lighting component.
 
 Phase 3.8 new features
   FIX-SPECMAP:  TXI 'specularcolour' texture is now bound to sampler unit 3 and
@@ -293,6 +303,261 @@ def debug_draw_table(model, textures: dict = None) -> str:
     return '\n'.join(lines)
 
 
+def debug_uv_channel_table(model) -> str:
+    """Return a per-node UV channel audit table.
+
+    Diagnostic function for Phase 2 of the face_uvs / tvert indexing audit.
+    For each mesh node, reports:
+      - node_name, texture, lightmap, tex_count, texture_names[]
+      - lengths of uvs, uvs_lm, uvs_2, uvs_3, face_uvs
+      - unique face_mats values
+      - has_lightmap flag
+      - whether face_uvs == faces (binary MDL convention)
+      - which VBO path the node takes (IBO indexed vs expanded)
+
+    Returns a multi-line string suitable for logging or UI display.
+    """
+    lines = []
+    lines.append(f"{'Node':<28s} {'tex':>3s} {'has_lm':>6s} "
+                 f"{'n_v':>5s} {'n_f':>5s} {'n_uv':>5s} {'n_lm':>5s} "
+                 f"{'n_fuv':>5s} {'umat':>8s} {'fuv=f':>5s} {'path':>8s} "
+                 f"{'texture':>24s} {'lightmap':>20s}")
+    lines.append('-' * 170)
+
+    all_fn = getattr(model, 'all_nodes', None)
+    nodes = list(all_fn()) if all_fn else getattr(model, 'nodes', [])
+
+    for node in nodes:
+        if not getattr(node, 'is_mesh', False):
+            continue
+        n_name  = str(getattr(node, 'name', '?'))[:27]
+        texture = str(getattr(node, 'texture', '') or '').strip()[:24]
+        lm      = str(getattr(node, 'lightmap', '') or '').strip()[:20]
+        tc      = int(getattr(node, 'tex_count', 1))
+        has_lm  = bool(getattr(node, 'has_lightmap', False))
+
+        verts    = getattr(node, 'vertices', getattr(node, 'verts', []))
+        faces    = getattr(node, 'faces', [])
+        uvs      = getattr(node, 'uvs', [])
+        uvs_lm   = getattr(node, 'uvs_lm', [])
+        uvs_2    = getattr(node, 'uvs_2', [])
+        uvs_3    = getattr(node, 'uvs_3', [])
+        face_uvs = getattr(node, 'face_uvs', [])
+        face_mats = getattr(node, 'face_mats', [])
+
+        n_v = len(verts)
+        n_f = len(faces)
+        n_uv = len(uvs)
+        n_lm = len(uvs_lm)
+        n_fuv = len(face_uvs)
+
+        # Unique face_mats
+        umat = str(sorted(set(face_mats)))[:8] if face_mats else '-'
+
+        # Check face_uvs == faces
+        fuv_eq = '-'
+        if n_fuv == n_f and n_f > 0:
+            try:
+                import numpy as _np
+                _fuv = _np.asarray(face_uvs, dtype=_np.int32)
+                _fv  = _np.asarray(faces, dtype=_np.int32)
+                if _fuv.shape == _fv.shape:
+                    fuv_eq = 'Y' if _np.array_equal(_fuv, _fv) else 'N'
+            except Exception:
+                fuv_eq = '?'
+
+        # Determine VBO path
+        is_skin = bool(getattr(node, 'is_skin', False))
+        has_fuv = (n_fuv == n_f) and fuv_eq != 'Y'
+        path = 'expand' if (has_fuv or is_skin) else 'IBO'
+
+        lines.append(f"{n_name:<28s} {tc:>3d} {'Y' if has_lm else 'N':>6s} "
+                     f"{n_v:>5d} {n_f:>5d} {n_uv:>5d} {n_lm:>5d} "
+                     f"{n_fuv:>5d} {umat:>8s} {fuv_eq:>5s} {path:>8s} "
+                     f"{texture:>24s} {lm:>20s}")
+
+        # Show texture_names
+        tex_names = getattr(node, 'texture_names', [])
+        if tc > 1 and tex_names:
+            for si, tn in enumerate(tex_names):
+                role = 'diffuse' if si == 0 else ('lightmap' if (has_lm and si == 1) else f'slot{si}')
+                lines.append(f"  └─ [{si}] {str(tn)[:24]} ({role})")
+
+    lines.append('-' * 170)
+    return '\n'.join(lines)
+
+
+def debug_texture_cache_table(model, textures: dict = None) -> str:
+    """Return a texture-cache validation table (Phase 4 diagnostic).
+
+    For each texture referenced by the model, reports:
+      - texture name
+      - source image dimensions (W×H) or 'MISSING' if not in textures dict
+      - cache key (id of the PIL Image object)
+      - which nodes reference this texture (as diffuse, lightmap, env, spec)
+
+    This proves that distinct textures are not sharing the same cached GPU
+    upload — each unique PIL Image should have a unique id() / cache key.
+
+    Parameters
+    ----------
+    model     : KotorModel
+    textures  : dict mapping lowercased texture name → PIL Image
+
+    Returns a multi-line string suitable for logging or UI display.
+    """
+    textures = textures or {}
+    lines = []
+    lines.append(f"{'Texture Name':<30s} {'Dims':>10s} {'CacheKey(id)':>16s} "
+                 f"{'Role':>10s} {'Nodes Using It':<50s}")
+    lines.append('-' * 130)
+
+    all_fn = getattr(model, 'all_nodes', None)
+    nodes = list(all_fn()) if all_fn else getattr(model, 'nodes', [])
+
+    # Collect all texture references and the nodes that use them
+    tex_refs: dict = {}  # name → {role: set of node names}
+    for node in nodes:
+        if not getattr(node, 'is_mesh', False):
+            continue
+        n_name = str(getattr(node, 'name', '?'))
+
+        tex = str(getattr(node, 'texture', '') or '').strip().lower()
+        if tex and tex not in ('null', 'none', ''):
+            tex_refs.setdefault(tex, {}).setdefault('diffuse', set()).add(n_name)
+
+        lm = str(getattr(node, 'lightmap', '') or '').strip().lower()
+        if lm and lm not in ('null', 'none', ''):
+            tex_refs.setdefault(lm, {}).setdefault('lightmap', set()).add(n_name)
+
+        env = str(getattr(node, 'txi_envmaptexture', '') or '').strip().lower()
+        if env:
+            tex_refs.setdefault(env, {}).setdefault('envmap', set()).add(n_name)
+
+        spec = str(getattr(node, 'txi_specularcolour', '') or '').strip().lower()
+        if spec:
+            tex_refs.setdefault(spec, {}).setdefault('specular', set()).add(n_name)
+
+    # Build the table
+    seen_keys = set()
+    for tex_name in sorted(tex_refs.keys()):
+        roles = tex_refs[tex_name]
+        img = textures.get(tex_name)
+        if img is not None:
+            try:
+                dims = f"{img.size[0]}×{img.size[1]}"
+            except Exception:
+                dims = "?"
+            cache_key = str(id(img))
+            if cache_key in seen_keys:
+                dims += " SHARED!"
+            seen_keys.add(cache_key)
+        else:
+            dims = "MISSING"
+            cache_key = "-"
+
+        for role, node_set in sorted(roles.items()):
+            node_list = ', '.join(sorted(node_set))
+            if len(node_list) > 49:
+                node_list = node_list[:46] + '...'
+            lines.append(f"{tex_name:<30s} {dims:>10s} {cache_key:>16s} "
+                         f"{role:>10s} {node_list:<50s}")
+
+    lines.append('-' * 130)
+
+    # Check for duplicate cache keys (same PIL object used for different names)
+    key_to_names: dict = {}
+    for tex_name in tex_refs:
+        img = textures.get(tex_name)
+        if img is not None:
+            key = id(img)
+            key_to_names.setdefault(key, []).append(tex_name)
+    dups = {k: v for k, v in key_to_names.items() if len(v) > 1}
+    if dups:
+        lines.append("WARNING: Same PIL Image object used for multiple texture names:")
+        for k, names in dups.items():
+            lines.append(f"  id={k} → {', '.join(names)}")
+    else:
+        lines.append("OK: All texture names map to distinct PIL Image objects.")
+
+    return '\n'.join(lines)
+
+
+def debug_material_role_table(model) -> str:
+    """Return a material-role audit table (Phase 1 diagnostic).
+
+    For each mesh node, shows the material-role semantics:
+      - node name, texture, lightmap, tex_count, texture_names[]
+      - has_lightmap flag (from MDL binary)
+      - FIX-LMROLE: whether lightmap role was inferred
+      - lengths of uvs, uvs_lm
+      - unique face_mats
+      - renderer dispatch path (single/Case A/Case B)
+      - slot 1 role (lightmap vs secondary diffuse)
+      - whether lightmap will be bound in _draw_node
+
+    Returns a multi-line string suitable for logging or UI display.
+    """
+    lines = []
+    lines.append(f"{'Node':<26s} {'texture':<20s} {'lightmap':<18s} "
+                 f"{'tc':>2s} {'lm?':>3s} {'infer':>5s} "
+                 f"{'uvs':>5s} {'uv_lm':>5s} {'fm':>8s} "
+                 f"{'dispatch':<18s} {'slot1_role':<16s} {'lm_bind':>7s}")
+    lines.append('-' * 160)
+
+    all_fn = getattr(model, 'all_nodes', None)
+    nodes = list(all_fn()) if all_fn else getattr(model, 'nodes', [])
+
+    for node in nodes:
+        if not getattr(node, 'is_mesh', False):
+            continue
+        n_name  = str(getattr(node, 'name', '?'))[:25]
+        texture = str(getattr(node, 'texture', '') or '').strip().lower()[:19]
+        lm      = str(getattr(node, 'lightmap', '') or '').strip().lower()[:17]
+        tc      = int(getattr(node, 'tex_count', 1))
+        has_lm  = bool(getattr(node, 'has_lightmap', False))
+        tex_names = getattr(node, 'texture_names', [])
+
+        uvs     = getattr(node, 'uvs', [])
+        uvs_lm  = getattr(node, 'uvs_lm', [])
+        face_mats = getattr(node, 'face_mats', [])
+
+        n_uv  = len(uvs)
+        n_lm  = len(uvs_lm)
+        umat  = str(sorted(set(face_mats)))[:8] if face_mats else '-'
+
+        # Determine if FIX-LMROLE would infer lightmap
+        _inferred = False
+        if (not has_lm and tc == 2 and n_lm > 0
+                and n_lm == n_uv and face_mats
+                and all(m == 0 for m in face_mats)):
+            _inferred = True
+        _effective_lm = has_lm or _inferred
+
+        # Dispatch path
+        if tc <= 1 or len(tex_names) < tc:
+            dispatch = 'single-tex'
+            slot1_role = 'N/A'
+        elif _effective_lm:
+            dispatch = 'Case A (lightmap)'
+            slot1_role = 'lightmap'
+        else:
+            dispatch = 'Case B (multi-mat)'
+            slot1_role = 'secondary diffuse'
+
+        # Lightmap binding
+        lm_bind = 'YES' if (_effective_lm and lm and n_lm > 0) else 'NO'
+
+        lines.append(f"{n_name:<26s} {texture:<20s} {lm:<18s} "
+                     f"{tc:>2d} {'Y' if has_lm else 'N':>3s} "
+                     f"{'INF' if _inferred else '-':>5s} "
+                     f"{n_uv:>5d} {n_lm:>5d} {umat:>8s} "
+                     f"{dispatch:<18s} {slot1_role:<16s} {lm_bind:>7s}")
+
+    lines.append('-' * 160)
+    return '\n'.join(lines)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  Shader sources
 # ─────────────────────────────────────────────────────────────────────────────
@@ -463,6 +728,7 @@ uniform vec3  u_light_dir2;     // secondary (fill) light direction
 uniform float u_ambient;        // ambient intensity
 uniform float u_specular;       // specular intensity scalar (used when u_has_spec==0)
 uniform float u_shininess;      // Phong shininess exponent (overridden per-node)
+uniform int   u_lm_shade;       // FIX-LMSHADE: 1 = lightmap-only shading (skip Phong)
 
 // Blend / material flags
 uniform int   u_blend_mode;     // 0=normal, 1=additive, 2=punchthrough
@@ -535,65 +801,108 @@ void main() {
     // -- Per-vertex colour modulation
     diffuse_samp.rgb *= v_color.rgb;
 
-    // -- Phong lighting
+    // -- Lighting
     vec3 N = normalize(v_world_norm);
-    float ndotl  = max(dot(N, u_light_dir),  0.0);
-    float ndotl2 = max(dot(N, u_light_dir2), 0.0);
     vec3 V = normalize(u_cam_pos - v_world_pos);
-    vec3 R = reflect(-u_light_dir, N);
-    // FIX-SPECMAP: sample per-texel specular intensity from specularcolour map when bound.
-    // KotOR specular maps store per-channel gloss in RGB; use luminance as scalar.
-    // When no spec map, fall back to the global u_specular float (unchanged behaviour).
-    float spec_intensity;
-    if (u_has_spec == 1) {
-        vec3 spec_col = texture(u_spec_tex, v_uv).rgb;
-        spec_intensity = dot(spec_col, vec3(0.299, 0.587, 0.114)); // luminance
-    } else {
-        spec_intensity = u_specular;
-    }
-    float eff_shininess = max(u_shininess, 1.0);  // FIX-SHININESS: clamp to avoid pow(0,0)
-    float spec = pow(max(dot(V, R), 0.0), eff_shininess) * spec_intensity;
-    float shade = u_ambient + ndotl * (1.0 - u_ambient) * 0.85
-                            + ndotl2 * (1.0 - u_ambient) * 0.15
-                            + spec;
-    shade = clamp(shade, 0.0, 1.5);
-    vec3 lit_color = diffuse_samp.rgb * shade;
+    vec3 lit_color;
 
-    // -- Environment map compositing (TXI envmaptexture / bumpyshinytexture)
-    // KotOR Odyssey engine algorithm (xoreos renderGeometryEnvMappedOver +
-    // KotOR.js ShaderOdysseyModel):
-    //   The env map is drawn OVER diffuse using GL blend (ONE_MINUS_DST_ALPHA, ONE):
-    //     env_contrib = env_color * (1 - diffuse_alpha)
-    //   Single-pass equivalent:
-    //     env_weight = 1.0 - diffuse_samp.a
-    //     out_rgb = mix(lit_color, env_color, env_weight)
-    //   Transparent areas (low alpha) => more env map visible.
-    //   Opaque areas (high alpha)     => mostly diffuse visible.
-    // Env UV: sphere-map (matcap) from view-space reflected normal.
-    // Sources: xoreos modelnode.cpp renderGeometryEnvMappedOver()
-    //          KotOR.js ShaderOdysseyModel.ts (1.0 - diffuseColor.a) blend factor
-    if (u_has_env == 1) {
-        vec3 R2 = reflect(-V, N);
-        float m = 2.0 * sqrt(R2.x*R2.x + R2.y*R2.y + (R2.z+1.0)*(R2.z+1.0));
-        vec2 env_uv = vec2(R2.x / m + 0.5, R2.y / m + 0.5);
-        vec3 env_col = texture(u_env_tex, env_uv).rgb;
-        // CORRECT: env shows through where diffuse is transparent (low alpha)
-        float env_weight = 1.0 - diffuse_samp.a;
-        lit_color = mix(lit_color, env_col, env_weight);
-        // Diffuse alpha consumed by env blend - mark surface as opaque
-        diffuse_samp.a = 1.0;
-    }
+    // FIX-LMSHADE: KotOR module geometry with baked lightmaps uses the
+    // lightmap as the sole lighting source.  The Phong directional shade
+    // must be SKIPPED for these nodes — otherwise the already-dim lightmap
+    // (mean intensity ~0.25) is further darkened by the Phong multiplier,
+    // producing an unrealistically dark scene.
+    //
+    // Reference: KotOR.js ShaderOdysseyModel.ts lines 359-365:
+    //   #ifdef USE_LIGHTMAP
+    //     reflectedLight.indirectDiffuse = vec3(0.0);
+    //     reflectedLight.indirectDiffuse += PI * texture2D(lightMap, vUv2).xyz * lightMapIntensity;
+    //     reflectedLight.indirectDiffuse *= BRDF_Lambert(diffuseColor.rgb);
+    //     vec3 outgoingLight = reflectedLight.indirectDiffuse + ...;
+    //   The directDiffuse (Phong shade) is NOT included in the lightmapped path.
+    //
+    // Our simplified single-pass equivalent:
+    //   lit_color = diffuse_tex.rgb * lightmap.rgb * 2.0
+    // The ×2.0 overbright factor matches the KotOR engine convention.
 
-    // -- Self-illumination (additive glow)
-    // v7.1 (Finding 5.6 — reone context.cpp GL_MAX blend equation):
-    // Self-illumination uses additive compositing. For surfaces with
-    // selfillum > 0, clamp so glow doesn't over-brighten dark areas.
-    lit_color += u_selfillum;
-
-    // -- Lightmap compositing: final = diffuse * lightmap * 2 (overbright)
-    if (u_has_lm == 1) {
+    if (u_lm_shade == 1 && u_has_lm == 1) {
+        // ── Lightmap-only path (module/area geometry) ─────────────────
         vec4 lm_samp = texture(u_lm_tex, v_uv_lm);
-        lit_color *= lm_samp.rgb * 2.0;
+        lit_color = diffuse_samp.rgb * lm_samp.rgb * 2.0;
+
+        // Self-illumination still applies additively
+        lit_color += u_selfillum;
+
+        // Environment map compositing (rare for modules but handle it)
+        if (u_has_env == 1) {
+            vec3 R2 = reflect(-V, N);
+            float m = 2.0 * sqrt(R2.x*R2.x + R2.y*R2.y + (R2.z+1.0)*(R2.z+1.0));
+            vec2 env_uv = vec2(R2.x / m + 0.5, R2.y / m + 0.5);
+            vec3 env_col = texture(u_env_tex, env_uv).rgb;
+            float env_weight = 1.0 - diffuse_samp.a;
+            lit_color = mix(lit_color, env_col, env_weight);
+            diffuse_samp.a = 1.0;
+        }
+    } else {
+        // ── Standard Phong path (characters, items, non-lightmapped) ─
+        float ndotl  = max(dot(N, u_light_dir),  0.0);
+        float ndotl2 = max(dot(N, u_light_dir2), 0.0);
+        vec3 R = reflect(-u_light_dir, N);
+        // FIX-SPECMAP: sample per-texel specular intensity from specularcolour map when bound.
+        // KotOR specular maps store per-channel gloss in RGB; use luminance as scalar.
+        // When no spec map, fall back to the global u_specular float (unchanged behaviour).
+        float spec_intensity;
+        if (u_has_spec == 1) {
+            vec3 spec_col = texture(u_spec_tex, v_uv).rgb;
+            spec_intensity = dot(spec_col, vec3(0.299, 0.587, 0.114)); // luminance
+        } else {
+            spec_intensity = u_specular;
+        }
+        float eff_shininess = max(u_shininess, 1.0);  // FIX-SHININESS: clamp to avoid pow(0,0)
+        float spec = pow(max(dot(V, R), 0.0), eff_shininess) * spec_intensity;
+        float shade = u_ambient + ndotl * (1.0 - u_ambient) * 0.85
+                                + ndotl2 * (1.0 - u_ambient) * 0.15
+                                + spec;
+        shade = clamp(shade, 0.0, 1.5);
+        lit_color = diffuse_samp.rgb * shade;
+
+        // -- Environment map compositing (TXI envmaptexture / bumpyshinytexture)
+        // KotOR Odyssey engine algorithm (xoreos renderGeometryEnvMappedOver +
+        // KotOR.js ShaderOdysseyModel):
+        //   The env map is drawn OVER diffuse using GL blend (ONE_MINUS_DST_ALPHA, ONE):
+        //     env_contrib = env_color * (1 - diffuse_alpha)
+        //   Single-pass equivalent:
+        //     env_weight = 1.0 - diffuse_samp.a
+        //     out_rgb = mix(lit_color, env_color, env_weight)
+        //   Transparent areas (low alpha) => more env map visible.
+        //   Opaque areas (high alpha)     => mostly diffuse visible.
+        // Env UV: sphere-map (matcap) from view-space reflected normal.
+        // Sources: xoreos modelnode.cpp renderGeometryEnvMappedOver()
+        //          KotOR.js ShaderOdysseyModel.ts (1.0 - diffuseColor.a) blend factor
+        if (u_has_env == 1) {
+            vec3 R2 = reflect(-V, N);
+            float m = 2.0 * sqrt(R2.x*R2.x + R2.y*R2.y + (R2.z+1.0)*(R2.z+1.0));
+            vec2 env_uv = vec2(R2.x / m + 0.5, R2.y / m + 0.5);
+            vec3 env_col = texture(u_env_tex, env_uv).rgb;
+            // CORRECT: env shows through where diffuse is transparent (low alpha)
+            float env_weight = 1.0 - diffuse_samp.a;
+            lit_color = mix(lit_color, env_col, env_weight);
+            // Diffuse alpha consumed by env blend - mark surface as opaque
+            diffuse_samp.a = 1.0;
+        }
+
+        // -- Self-illumination (additive glow)
+        // v7.1 (Finding 5.6 — reone context.cpp GL_MAX blend equation):
+        // Self-illumination uses additive compositing. For surfaces with
+        // selfillum > 0, clamp so glow doesn't over-brighten dark areas.
+        lit_color += u_selfillum;
+
+        // -- Lightmap compositing for non-lm_shade path (fallback):
+        // This handles lightmapped nodes that somehow reach this path
+        // (e.g. character models with lightmap textures).
+        if (u_has_lm == 1) {
+            vec4 lm_samp = texture(u_lm_tex, v_uv_lm);
+            lit_color *= lm_samp.rgb * 2.0;
+        }
     }
 
     lit_color = clamp(lit_color, 0.0, 1.0);
@@ -1295,20 +1604,28 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     #            PyKotor read_mdl.py gl_load_stitched_model (expands per-face).
     _has_face_uvs = (len(face_uvs) == n_faces)
 
-    # FIX-FACEUVOPT: When face_uvs has the same length as faces but all tvert
-    # indices equal the corresponding vertex indices (the t=-1→use_vert case
-    # from binary MDL trimeshes), treat it as "no per-face UV" so we can use
-    # the fast IBO path.  This avoids unnecessarily expanding a triangle-list
-    # for module/area models whose binary trimeshes always have t==-1.
-    # Skip this check for skin nodes (always need expansion) and for large
-    # meshes (>2000 faces) where the check itself would be slow.
-    if _has_face_uvs and not is_skin and n_faces <= 2000:
-        _all_tvert_eq_vert = all(
-            fuvs[0] == faces[fi][0] and fuvs[1] == faces[fi][1] and fuvs[2] == faces[fi][2]
-            for fi, fuvs in enumerate(face_uvs)
-        )
-        if _all_tvert_eq_vert:
-            _has_face_uvs = False
+    # FIX-FACEUVOPT-V2: When face_uvs has the same length as faces but all
+    # tvert indices equal the corresponding vertex indices (the t=-1→use_vert
+    # case from binary MDL trimeshes), treat it as "no per-face UV" so we can
+    # use the fast IBO path.  This avoids unnecessarily expanding a triangle-
+    # list for module/area models whose binary trimeshes always have t==-1.
+    #
+    # v2: Replaced the O(n) Python loop (which was capped at n_faces<=2000 to
+    # avoid slowness) with a vectorized NumPy comparison that runs in O(1)
+    # time for any mesh size.  Module room meshes commonly have 3000-10000
+    # faces; the previous cap forced them through the expanded path
+    # unnecessarily, wasting ~3x VBO memory and blocking per-material-slot
+    # IBO construction (since expanded meshes are non-indexed).
+    if _has_face_uvs and not is_skin:
+        try:
+            _fuv_arr = np.asarray(face_uvs, dtype=np.int32)  # (n_faces, 3)
+            _fv_arr  = np.asarray(faces,    dtype=np.int32)   # (n_faces, 3)
+            if (_fuv_arr.shape == _fv_arr.shape and
+                    _fuv_arr.ndim == 2 and _fuv_arr.shape[1] >= 3):
+                if np.array_equal(_fuv_arr[:, :3], _fv_arr[:, :3]):
+                    _has_face_uvs = False
+        except (ValueError, TypeError):
+            pass  # non-uniform lists — fall through to expanded path
 
     # Fast path: no per-face UV indices AND not a skin node → use IBO
     if not _has_face_uvs and not is_skin:
@@ -1787,6 +2104,7 @@ class GpuRenderer:
             prog['u_blend_mode'].value = 0       # normal blend (not additive/punchthrough)
             prog['u_has_tex'].value    = 0       # no diffuse tex until first node draw
             prog['u_has_lm'].value     = 0       # no lightmap
+            prog['u_lm_shade'].value   = 0       # FIX-LMSHADE: 0=Phong, 1=lightmap-only
             prog['u_has_env'].value    = 0       # no env map
             prog['u_diffuse'].value    = (1.0, 1.0, 1.0)   # white diffuse
             prog['u_selfillum'].value  = (0.0, 0.0, 0.0)   # no self-illumination
@@ -2295,14 +2613,24 @@ class GpuRenderer:
                         gm.vao = ctx.vertex_array(prog, [(gm.vbo, fmt, *attrs)])
                         gm.tri_count = len(vdata) // 3
                         gm.indexed = False
-                    # FIX-MULTITEX-SPLIT: Build per-material-slot IBOs for
-                    # multi-texture nodes so _draw_node_multitex can draw
+                    # FIX-MULTITEX-SPLIT-V2: Build per-material-slot draw groups
+                    # for multi-texture nodes so _draw_node_multitex can draw
                     # each face group with the correct texture.
+                    #
+                    # v2: Now supports both indexed and expanded (non-indexed) VBOs.
+                    # For indexed meshes, per-slot IBOs use original vertex indices.
+                    # For expanded meshes, per-slot IBOs use sequential face-corner
+                    # indices (fi*3, fi*3+1, fi*3+2) since the expanded VBO stores
+                    # one vertex per face corner in face order.
                     _nd_tc = int(getattr(node, 'tex_count', 1))
                     _nd_fm = getattr(node, 'face_mats', [])
                     _nd_lm = bool(getattr(node, 'has_lightmap', False))
-                    if (_nd_tc > 1 and _nd_fm and not _nd_lm
-                            and gm.indexed and idx_arr is not None):
+                    # FIX-LMROLE: Also detect inferred lightmap for mat_slots guard
+                    if (not _nd_lm and _nd_tc == 2
+                            and _nd_fm and all(m == 0 for m in _nd_fm)
+                            and len(getattr(node, 'uvs_lm', [])) > 0):
+                        _nd_lm = True
+                    if _nd_tc > 1 and _nd_fm and not _nd_lm:
                         _faces_arr = getattr(node, 'faces', [])
                         _n_faces = len(_faces_arr)
                         if len(_nd_fm) == _n_faces and _n_faces > 0:
@@ -2313,9 +2641,16 @@ class GpuRenderer:
                                 _s = max(0, min(_s, _nd_tc - 1))
                                 if _s not in _slot_faces:
                                     _slot_faces[_s] = []
-                                _f = _faces_arr[_fi]
-                                if len(_f) >= 3:
-                                    _slot_faces[_s].extend([int(_f[0]), int(_f[1]), int(_f[2])])
+                                if gm.indexed:
+                                    # Indexed VBO: use original vertex indices
+                                    _f = _faces_arr[_fi]
+                                    if len(_f) >= 3:
+                                        _slot_faces[_s].extend([int(_f[0]), int(_f[1]), int(_f[2])])
+                                else:
+                                    # Expanded VBO: vertex order is sequential per face
+                                    # Face _fi → expanded vertices _fi*3, _fi*3+1, _fi*3+2
+                                    _base = _fi * 3
+                                    _slot_faces[_s].extend([_base, _base + 1, _base + 2])
                             for _s, _idxs in _slot_faces.items():
                                 if not _idxs:
                                     continue
@@ -2556,6 +2891,18 @@ class GpuRenderer:
                 has_lm_flag = bool(getattr(node, 'has_lightmap', False))
                 lm_name     = str(getattr(node, 'lightmap', '')).strip().lower()
                 uvs_lm      = getattr(node, 'uvs_lm', [])
+                # FIX-LMROLE: Also accept lightmap when the role was inferred
+                # (tex_count==2, uvs_lm present, all face_mats==0) even if the
+                # MDL binary has_lightmap flag was False.  The loader's FIX-LMROLE
+                # normally promotes has_lightmap before we get here, but this
+                # guard handles models loaded via alternative paths.
+                if (not has_lm_flag
+                        and lm_name
+                        and len(uvs_lm) > 0
+                        and int(getattr(node, 'tex_count', 1)) == 2):
+                    _fm = getattr(node, 'face_mats', [])
+                    if _fm and all(m == 0 for m in _fm):
+                        has_lm_flag = True
                 lm_img      = textures.get(lm_name) if (lm_name and has_lm_flag
                                                          and len(uvs_lm) > 0) else None
                 gl_lm = self._tex_cache.get(lm_img) if lm_img else None
@@ -2563,8 +2910,15 @@ class GpuRenderer:
                     gl_lm.use(location=1)
                     prog['u_lm_tex'].value = 1
                     prog['u_has_lm'].value = 1
+                    # FIX-LMSHADE: For module/area geometry with lightmaps,
+                    # skip Phong directional lighting and use lightmap as
+                    # the sole lighting source.  Character models with
+                    # lightmaps (rare) still use Phong + lightmap multiply.
+                    # Reference: KotOR.js ShaderOdysseyModel.ts USE_LIGHTMAP path
+                    prog['u_lm_shade'].value = 1 if _gpu_is_module else 0
                 else:
                     prog['u_has_lm'].value = 0
+                    prog['u_lm_shade'].value = 0
 
                 # BUG-ENVMAP FIX: Bind environment map texture to unit 2.
                 # The TXI 'envmaptexture' field names the environment map texture.
@@ -2654,6 +3008,12 @@ class GpuRenderer:
                      Split into per-material draw groups using separate IBOs.
                      Each group is drawn with its own texture binding.
 
+                FIX-LMROLE: When has_lightmap is False but evidence strongly
+                suggests tex2 is a lightmap (uvs_lm present with real data,
+                all face_mats == 0), treat as Case A.  This handles KotOR
+                module meshes where the MDL binary has_lightmap flag is
+                incorrectly set to 0.
+
                 Reference: xoreos model_kotor.cpp — each face's material index
                 selects the texture; KotorBlender material.py — per-face
                 material assignment; KotOR.js — face material lookup.
@@ -2669,6 +3029,23 @@ class GpuRenderer:
                 # Case A: Lightmap is slot 1 — lightmap is handled separately
                 # by _draw_node (u_lm_tex binding).  Just draw once with diffuse.
                 _has_lm = bool(getattr(node, 'has_lightmap', False))
+
+                # FIX-LMROLE: Renderer-side lightmap inference safety net.
+                # Even if kotor_loader didn't promote has_lightmap, detect the
+                # lightmap case here by checking:
+                #   1. tex_count == 2 (exactly diffuse + one secondary)
+                #   2. uvs_lm has real data (populated from vertex_uv2)
+                #   3. All face_mats are 0 (no face uses slot 1 as diffuse)
+                # This catches any path where the loader's FIX-LMROLE didn't
+                # fire (e.g. models loaded via alternative bridges/importers).
+                if not _has_lm and tex_count == 2:
+                    _node_uvs_lm = getattr(node, 'uvs_lm', [])
+                    _node_fm = getattr(node, 'face_mats', [])
+                    if (len(_node_uvs_lm) > 0
+                            and _node_fm
+                            and all(m == 0 for m in _node_fm)):
+                        _has_lm = True
+
                 if _has_lm:
                     # Draw with primary diffuse texture only; lightmap handled
                     # via the u_lm_tex/u_has_lm uniforms inside _draw_node.
