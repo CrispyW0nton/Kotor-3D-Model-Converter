@@ -11810,7 +11810,7 @@ class KotorModToolsApp(tk.Tk):
             txt.pack(fill='both', expand=True, padx=4, pady=4)
             # Pull content from diag_panel
             try:
-                content = self.diag_panel._text.get('1.0', 'end')
+                content = self.diag_panel.text.get('1.0', 'end')
                 txt.insert('1.0', content)
             except Exception:
                 txt.insert('1.0', "(No diagnostics available – load a model first.)")

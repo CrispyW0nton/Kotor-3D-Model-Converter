@@ -688,15 +688,24 @@ class _GlTexCache:
     def _upload(self, img: 'Image.Image') -> Optional['moderngl.Texture']:
         try:
             rgba = img.convert('RGBA')
-            # FIX-VFLIP: moderngl with EGL/PIL input maps PIL row 0 to GL V=0 (top),
-            # but standard OpenGL convention is V=0 at bottom.
-            # The vertex shader does `1.0 - in_uv.y` to convert DX-convention UVs
-            # (V=0 at top) to GL UVs (V=0 at bottom).  For this to work correctly,
-            # the texture data must have row 0 at the GL bottom (= last row of PIL image).
-            # We flip the image vertically here so PIL row 0 (top) becomes GL row 0
-            # (bottom), restoring correct GL convention before the shader V-flip.
-            # Without this flip, the combined effect is NO flip (double-flip cancels),
-            # which reverses the UV atlas and puts mouth/gum texture at the tail tip.
+            # FIX-VFLIP: The ONLY vertical flip in the entire texture pipeline.
+            #
+            # PyKotor source (read_tpc → TPC.convert → TPCMipmap.to_pil_image)
+            # always produces top-down RGBA data for every format — DXT1/3/5,
+            # RGB, RGBA, Greyscale, TGA, DDS.  No format-conditional flips.
+            #
+            # moderngl uploads PIL bytes with row 0 → GL texture row 0 (V=0).
+            # OpenGL V=0 is the bottom of the texture, but PIL row 0 is the top.
+            # Without this flip the image is upside-down in GL.
+            #
+            # The vertex shader does `1.0 - in_uv.y` to convert D3D UVs (V=0 at
+            # top) to GL UVs (V=0 at bottom).  For the shader flip to map D3D V=0
+            # to the top of the texture, GL row-order must match GL convention:
+            #   PIL top-down image  → FLIP_TOP_BOTTOM → bottom-up GL data
+            #   D3D V=0 (top)       → shader → GL V=1 → samples last GL row = top
+            #
+            # Cross-ref: pykotor.gl.shader.texture.Texture.from_tpc uses
+            # glTexImage2D (GL convention) and never flips textures either.
             rgba = rgba.transpose(Image.FLIP_TOP_BOTTOM)
             # FIX-YELLOWPIXEL: KotOR TPC textures (e.g. c_bantha01) sometimes have
             # bright saturated test/marker pixels in the top-right corner of the
@@ -1725,6 +1734,20 @@ class GpuRenderer:
                     if _pt not in _skin_tex_verts:
                         _skin_tex_verts[_pt] = []
                     _skin_tex_verts[_pt].append((_pn, _pnv))
+                # FIX-INNER-GEO-PROXY: Inner-geometry nodes (eyes, teeth, eyelids,
+                # gums, tongue, jaw) must NEVER be classified as skin proxies.
+                # These nodes share the same diffuse texture as the head skin mesh
+                # and have fewer vertices, which matches the proxy heuristic, but
+                # they are genuine renderable geometry that sits behind the head's
+                # eye-socket and mouth-gap holes.  Filtering them out causes
+                # the head to render without eyes/teeth.
+                # Cross-ref: viewport._compute_skin_proxy_ids inner-geo exclusion;
+                #            xoreos modelnode.cpp (renders all child nodes);
+                #            KotOR.js OdysseyModel3D.ts (no proxy filtering).
+                _INNER_GEO_NAMES = (
+                    'eye', 'lid', 'teeth', 'gum', 'jaw', 'tongue',
+                    'teethu', 'teethl', 'tooth',
+                )
                 for _pn in nodes:
                     if not getattr(_pn, 'is_mesh', False) or getattr(_pn, 'is_skin', False):
                         continue
@@ -1732,6 +1755,10 @@ class GpuRenderer:
                     if not _pt or _pt in ('null', 'none', ''):
                         continue
                     if not getattr(_pn, 'uvs', []):
+                        continue
+                    # Skip inner-geometry nodes — they are NOT proxies
+                    _pn_name_low = str(getattr(_pn, 'name', '') or '').lower()
+                    if any(_ig in _pn_name_low for _ig in _INNER_GEO_NAMES):
                         continue
                     _pnv = len(getattr(_pn, 'vertices', []))
                     _matches = _skin_tex_verts.get(_pt, [])
@@ -1760,20 +1787,44 @@ class GpuRenderer:
                 FIX-PERSCACHE: For static geometry (no anim_pose override for this
                 node) the result is cached across frames so subsequent renders skip
                 the O(depth) parent-chain walk entirely.
+
+                FIX-SKIN-ANIM: Skin mesh nodes MUST NOT receive animation position/
+                rotation overrides.  Skin vertices are pre-baked in bind-pose world
+                space.  Applying the animated bone rotation directly to the mesh node
+                causes the entire skin mesh to be incorrectly rotated → extreme
+                stretching/deformation (observed on c_brith wings, limbs).
+
+                In the Aurora engine, skin mesh deformation is handled by Linear
+                Blend Skinning (LBS) using per-bone matrices computed from the
+                animated skeleton hierarchy.  Without GPU skinning, the best we can
+                do is keep skin meshes in their bind pose.
+
+                Non-skin nodes (rigid trimesh attachments like eyes, tongue, horns)
+                DO receive animation overrides so they move with the skeleton.
+
+                Cross-ref: reone mesh.cpp:307 (skin bone matrix computation);
+                           KotOR.js OdysseyModel3D.ts:730 (buildSkeleton, bind);
+                           xoreos modelnode.cpp:805 (skin pass separation).
                 """
                 nid = id(nd)
                 if anim_pose is not None:
-                    # Animated: check if this specific node has an override
-                    _pn = anim_pose.nodes.get(nd.name.lower()) if hasattr(anim_pose, 'nodes') else None
-                    if _pn is not None:
-                        # Has animation override → compute fresh, do NOT cache
-                        _wp = getattr(nd, 'position', (0.0, 0.0, 0.0))
-                        _wo = getattr(nd, 'rotation', (0.0, 0.0, 0.0, 1.0))
-                        if hasattr(_pn, 'position') and _pn.position:
-                            _wp = _pn.position
-                        if hasattr(_pn, 'rotation') and _pn.rotation:
-                            _wo = _pn.rotation
-                        return (_wp, _wo)
+                    # FIX-SKIN-ANIM: Skip animation overrides for skin nodes.
+                    # Skin vertices are in bind-pose space; animation transforms
+                    # should only be applied via bone matrices (GPU skinning), not
+                    # by directly transforming the mesh's world position/rotation.
+                    _is_skin_nd = bool(getattr(nd, 'is_skin', False))
+                    if not _is_skin_nd:
+                        # Non-skin: apply animation overrides for rigid attachments
+                        _pn = anim_pose.nodes.get(nd.name.lower()) if hasattr(anim_pose, 'nodes') else None
+                        if _pn is not None:
+                            # Has animation override → compute fresh, do NOT cache
+                            _wp = getattr(nd, 'position', (0.0, 0.0, 0.0))
+                            _wo = getattr(nd, 'rotation', (0.0, 0.0, 0.0, 1.0))
+                            if hasattr(_pn, 'position') and _pn.position:
+                                _wp = _pn.position
+                            if hasattr(_pn, 'rotation') and _pn.rotation:
+                                _wo = _pn.rotation
+                            return (_wp, _wo)
                 # Static / no override → use persistent cache
                 if nid in _wt_cache:
                     return _wt_cache[nid]
@@ -1857,39 +1908,46 @@ class GpuRenderer:
 
                 return False
 
-            # FIX-INNER-GEO-DEPTH: Inner-geometry substrings for head models.
-            # Eye/eyelid/teeth/tongue nodes sit geometrically INSIDE the head mesh.
-            # They must be drawn AFTER the opaque face mesh so they show through the
-            # eye-socket and mouth-gap openings — exactly as the CPU viewport's tier-1
-            # promotion does.  In the GPU path we achieve this by classifying inner-geo
-            # nodes as "transparent" (depth write OFF, drawn in Pass 2) regardless of
-            # their actual alpha, so they are always composited over the face mesh.
-            # This fixes the depth-test artifact where the head mesh painted over the
-            # eyeballs / teeth because the face centroid depth was computed as closer.
-            # Reference: viewport.py _INNER_GEO_SUBSTRINGS + tier-1 promotion logic;
-            #            Gregory "Game Engine Architecture" §10.6 depth-ordering.
-            _GPU_INNER_GEO = (
-                'eye', 'lid', 'teeth', 'gum', 'jaw', 'tongue',
-                'eyera', 'eyla', 'eyeshadow', 'lweye', 'rweye',
-                'teethupper', 'teethlower', 'teethlo', 'teethup',
-            )
+            # ── Transparency classification ─────────────────────────────
+            # Follows the definitive Aurora engine approach from reference
+            # implementations (xoreos, reone, KotOR.js):
+            #
+            # xoreos (modelnode.cpp:500-506):
+            #   if (hasTransparencyHint)
+            #       isTransparent = transparencyHint;
+            #   else
+            #       isTransparent = hasAlpha;  (texture has alpha channel)
+            #
+            # reone (mesh.cpp isTransparent()):
+            #   PunchThrough → NOT transparent (opaque with alpha-test)
+            #   Additive → transparent
+            #   alpha < 1.0 → transparent
+            #   Has envmap/bumpmap → NOT transparent
+            #   Diffuse has alpha channel → transparent
+            #
+            # KEY FIX: Inner-geometry nodes (eyes, teeth, gums) should NOT
+            # be promoted to the transparent pass.  They are opaque geometry
+            # (transparency_hint == 0) drawn in the opaque pass with depth
+            # write ON.  The head/face mesh has transparency_hint > 0 and
+            # its texture contains alpha=0 pixels at the eye sockets and
+            # mouth gap.  When drawn in the cutout pass (alpha-test discard),
+            # those holes reveal the already-rendered inner-geo beneath.
+            # This is exactly how the original Aurora engine works.
 
             def _classify_node(nd, ap):
                 """Return (node_alpha, txi_blend, is_transparent, has_env).
 
-                Transparency classification for two-pass rendering:
-                  - Pass 1 (opaque, depth write ON):  punchthrough, env-map, normal
-                  - Pass 2 (transparent, depth write OFF): additive, wateralpha<1,
-                    decal, per-node alpha<1 (glass, holograms)
-                  - Pass 2 also: inner-geometry (eyes, teeth, eyelids, tongue) so
-                    they are always drawn AFTER the opaque face mesh and show through
-                    eye-socket / mouth-gap openings.
+                Transparency classification for three-pass rendering:
+                  - Pass 1 (opaque, depth write ON): solid surfaces,
+                    inner-geometry (eyes, teeth), env-map surfaces.
+                  - Pass 2 (alpha-cutout, depth write ON, shader discard):
+                    transparency_hint > 0 nodes with alpha-test textures
+                    (head meshes with eye-socket/mouth-gap alpha holes).
+                  - Pass 3 (transparent, depth write OFF): additive blending,
+                    wateralpha < 1, decal, per-node alpha < 1.
 
-                punchthrough (tb==2): alpha-test discard in shader → opaque pass.
-                env-map: surface opaque after env blend → opaque pass.
-                wateralpha < 1: semi-transparent → transparent pass.
-                decal: blends over background → transparent pass.
-                inner-geo: drawn after face mesh regardless of alpha → transparent pass.
+                Cross-ref: xoreos modelnode.cpp:500; reone mesh.cpp:215;
+                           KotOR.js OdysseyModel3D.ts:1578.
                 """
                 na = float(getattr(nd, 'alpha', 1.0))
                 na = max(0.0, min(1.0, na))
@@ -1898,45 +1956,49 @@ class GpuRenderer:
                     if _pn is not None and getattr(_pn, 'alpha', None) is not None:
                         na = max(0.0, min(1.0, float(_pn.alpha)))
                 tb = int(getattr(nd, 'txi_blending', 0))
-                # FIX-TXI-PUNCH: Only promote to punchthrough when the MDL node
-                # explicitly requests it (transparency_hint > 0) OR when TXI blending
-                # is already set to punchthrough (tb == 2).  Do NOT auto-promote based
-                # solely on txi_alpha_test > 0 — the TPC alpha_test_threshold field is
-                # present on ALL DXT5 creature textures (including opaque body meshes
-                # like c_bantha01 with threshold=0.9333) but the Aurora engine only
-                # activates alpha-test when transparency_hint != 0 on the mesh node.
-                # Promoting opaque body nodes (transparency_hint=0) to punchthrough
-                # caused 9.6% of bantha body pixels to be discarded → dark patches.
-                _at = float(getattr(nd, 'txi_alpha_test', 0.0))
                 _th = int(getattr(nd, 'transparency_hint', 0))
-                if tb == 0 and _at > 0.0 and _th > 0:
-                    tb = 2
+                _at = float(getattr(nd, 'txi_alpha_test', 0.0))
                 has_env = bool(getattr(nd, 'txi_envmaptexture', ''))
                 wa = float(getattr(nd, 'txi_wateralpha', 1.0))
                 decal = bool(getattr(nd, 'txi_decal', False))
-                # FIX-INNER-GEO-DEPTH: Promote inner-geometry nodes (eyes, eyelids,
-                # teeth, tongue) to the transparent pass so they are drawn AFTER the
-                # opaque face mesh.  Only apply when the node has a real texture
-                # (deform-helpers without textures are skipped by _is_deform_helper).
-                _nd_name_lc = str(getattr(nd, 'name', '') or '').lower()
-                _nd_tex = str(getattr(nd, 'texture', '') or '').strip().lower()
-                _nd_has_tex = bool(_nd_tex and _nd_tex not in ('null', '', 'none', '****'))
-                _is_inner_geo = (_nd_has_tex and
-                                 any(s in _nd_name_lc for s in _GPU_INNER_GEO) and
-                                 _th == 0)  # only promote truly-opaque inner-geo
-                # Transparent pass when: additive(1) OR wateralpha<1 OR decal OR
-                # per-node alpha<1 (not punchthrough, not env-map surface) OR inner-geo
-                is_trans = (tb == 1) or (wa < 0.999) or decal or (na < 0.999 and not has_env) or _is_inner_geo
+
+                # Punchthrough classification (alpha-test discard in shader):
+                # Use cutout pass when the MDL node explicitly requests it
+                # via transparency_hint > 0 (head meshes, hair cards, foliage).
+                # Also apply when TXI blending is already set to punchthrough.
+                # Do NOT auto-promote based solely on txi_alpha_test — see
+                # the c_bantha body-pixel discard bug (threshold=0.9333 on
+                # opaque body textures with transparency_hint=0).
+                if tb == 0 and _th > 0:
+                    # transparency_hint > 0 → alpha-test cutout pass
+                    # This handles head meshes (eye-socket/mouth holes),
+                    # hair cards, and other alpha-tested geometry.
+                    tb = 2
+
+                # Transparent pass classification (following xoreos/reone):
+                # - Additive blending (tb==1)
+                # - Semi-transparent water/glass (wateralpha < 1)
+                # - Decal overlays
+                # - Per-node alpha < 1 (holograms, glass) unless env-mapped
+                is_trans = ((tb == 1) or
+                            (wa < 0.999) or
+                            decal or
+                            (na < 0.999 and not has_env))
                 return na, tb, is_trans, has_env
 
             # ── Three-pass node classification ────────────────────────────
             # Pass 1 (opaque):       depth write ON, no blending, solid geometry.
+            #                        Includes inner-geo (eyes, teeth, gums) which
+            #                        are opaque and must be in the depth buffer so
+            #                        the face mesh's alpha-test holes reveal them.
             # Pass 2 (alpha-cutout): depth write ON, shader discard below threshold.
-            #                        Hair, fur edges, eye cutouts, grates, foliage.
-            # Pass 3 (transparent):  depth write OFF, alpha blending, back-to-front
-            #                        sorted.  Glass, holograms, additive effects,
-            #                        inner-geometry (eyes, teeth) for depth layering.
-            # Cross-ref: Hayes (2025) §6.3 multi-pass; Gregory (2024) §10.6.
+            #                        Head face meshes (transparency_hint > 0) with
+            #                        alpha=0 at eye sockets / mouth gap, plus hair
+            #                        cards, fur edges, grates, foliage.
+            # Pass 3 (transparent):  depth write OFF, alpha blending, back-to-front.
+            #                        Additive effects, glass, holograms, water.
+            # Cross-ref: xoreos modelnode.cpp:805; reone retro.cpp render();
+            #            KotOR.js OdysseyModel3D.ts:1578.
             opaque_nodes      = []
             cutout_nodes      = []  # alpha-test / punchthrough pass
             transparent_nodes = []
@@ -1990,9 +2052,15 @@ class GpuRenderer:
                             selfillum = _pn.selfillum
 
                 node_id = id(node)
+                # FIX-SKIN-ANIM: Skin nodes are NOT considered "animated" for VBO
+                # rebuild purposes.  Their vertices are in bind-pose world space and
+                # should only change via GPU skinning (not yet implemented).
+                # Rebuilding skin VBOs with animation transforms causes stretching.
+                _nd_is_skin = bool(getattr(node, 'is_skin', False))
                 is_animated = (anim_pose is not None and
                                hasattr(anim_pose, 'nodes') and
-                               node.name.lower() in anim_pose.nodes)
+                               node.name.lower() in anim_pose.nodes and
+                               not _nd_is_skin)
                 if is_animated or node_id not in self._mesh_cache:
                     vdata, idx_arr = _build_vbo_data(node, wp, wo,
                                                      anim_pose_node=None,
@@ -2188,19 +2256,6 @@ class GpuRenderer:
                 prog['u_proc_type'].value = _proc_int
                 prog['u_water_time'].value = anim_time if _proc_int in (2, 3, 4) else 0.0
 
-                # v7.1/7.2: Build feature bitmask for this node (Finding 5.2)
-                _feat_mask = 0
-                if gl_diff and diff_img: _feat_mask |= (1 << 0)   # FEAT_TEXTURE
-                if gl_lm:               _feat_mask |= (1 << 1)   # FEAT_LIGHTMAP
-                if env_name:            _feat_mask |= (1 << 2)   # FEAT_ENVMAP
-                if spec_name:           _feat_mask |= (1 << 3)   # FEAT_SPECMAP
-                if _is_dangly:          _feat_mask |= (1 << 6)   # FEAT_DANGLY
-                if _is_saber:           _feat_mask |= (1 << 7)   # FEAT_SABER
-                if txi_decal:           _feat_mask |= (1 << 11)  # FEAT_DECAL
-                if txi_blend == 2:      _feat_mask |= (1 << 12)  # FEAT_PUNCHTHRU
-                if txi_blend == 1:      _feat_mask |= (1 << 13)  # FEAT_ADDITIVE
-                prog['u_features'].value = _feat_mask
-
                 if txi_proc == 'cycle' and txi_numx > 0 and txi_numy > 0 and txi_fps > 0.0:
                     total_frames = txi_numx * txi_numy
                     frame_idx    = int(anim_time * txi_fps) % total_frames
@@ -2313,6 +2368,23 @@ class GpuRenderer:
                         prog['u_has_spec'].value = 0
                 else:
                     prog['u_has_spec'].value = 0
+
+                # v7.1/7.2: Build feature bitmask for this node (Finding 5.2)
+                # FIX-FEATMASK-ORDER: Moved AFTER texture binding so that
+                # gl_diff, diff_img, gl_lm, env_name, spec_name are all
+                # defined before use.  Previously caused UnboundLocalError
+                # on the first draw call, silently falling back to CPU.
+                _feat_mask = 0
+                if gl_diff and diff_img: _feat_mask |= (1 << 0)   # FEAT_TEXTURE
+                if gl_lm:               _feat_mask |= (1 << 1)   # FEAT_LIGHTMAP
+                if env_name:            _feat_mask |= (1 << 2)   # FEAT_ENVMAP
+                if spec_name:           _feat_mask |= (1 << 3)   # FEAT_SPECMAP
+                if _is_dangly:          _feat_mask |= (1 << 6)   # FEAT_DANGLY
+                if _is_saber:           _feat_mask |= (1 << 7)   # FEAT_SABER
+                if txi_decal:           _feat_mask |= (1 << 11)  # FEAT_DECAL
+                if txi_blend == 2:      _feat_mask |= (1 << 12)  # FEAT_PUNCHTHRU
+                if txi_blend == 1:      _feat_mask |= (1 << 13)  # FEAT_ADDITIVE
+                prog['u_features'].value = _feat_mask
 
                 gm.vao.render(moderngl.TRIANGLES)
                 total_tris += gm.tri_count
