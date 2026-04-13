@@ -9408,6 +9408,21 @@ class KotorModToolsApp(tk.Tk):
         modm.add_command(label="About Module Editor",
                          command=self._about_modular)
 
+        # ── Tools menu (GhostRigger utilities) ────────────────────────────────
+        toolsm = tk.Menu(mb, tearoff=False, bg=C['panel'], fg=C['text'],
+                         activebackground=C['hover'], activeforeground='white')
+        mb.add_cascade(label="Tools", menu=toolsm)
+        toolsm.add_command(
+            label="Character Builder (New Window)…",
+            accelerator="Ctrl+B",
+            command=self._open_character_builder_window,
+        )
+        toolsm.add_separator()
+        toolsm.add_command(
+            label="Validate Current Character…",
+            command=self._validate_current_character,
+        )
+
         # ── IPC menu (Ghostworks Pipeline) ─────────────────────────────────
         ipcm = tk.Menu(mb, tearoff=False, bg=C['panel'], fg=C['text'],
                        activebackground=C['hover'], activeforeground='white')
@@ -9793,6 +9808,7 @@ class KotorModToolsApp(tk.Tk):
         self.bind("<Control-a>",    lambda e: self._switch_tab_right("anim"))
         self.bind("<Control-p>",    lambda e: self._switch_tab_right("props"))
         self.bind("<Control-l>",    lambda e: self._focus_library_search())
+        self.bind("<Control-b>",    lambda e: self._open_character_builder_window())
         self.bind("<F1>",           lambda e: self._about())
         self.bind("<F2>",           lambda e: self._open_settings())
         self.bind("<F3>",           lambda e: self._show_model_info()
@@ -11795,6 +11811,65 @@ class KotorModToolsApp(tk.Tk):
             "  • Batch model extraction for Blender import\n\n"
             "Works with both K1 and K2 game data.\n"
             "Part of the GhostRigger / GhostScripter / Gmodular pipeline.")
+
+    # ── Character Builder (standalone window) ─────────────────────────────────
+
+    def _open_character_builder_window(self):
+        """Open the standalone CharacterBuilderWindow (spec §3 workspace)."""
+        try:
+            from .character_builder_window import open_character_builder
+        except ImportError:
+            try:
+                from src.gui.character_builder_window import open_character_builder
+            except ImportError:
+                messagebox.showerror(
+                    "Character Builder",
+                    "Could not load character_builder_window module.")
+                return
+        gv = "K1"
+        if hasattr(self, 'char_builder_panel'):
+            gv_var = getattr(self.char_builder_panel, '_game_var', None)
+            if gv_var is not None:
+                gv = gv_var.get()
+        open_character_builder(self, game_version=gv)
+
+    def _validate_current_character(self):
+        """Run validation on the current char-builder scene and show results."""
+        try:
+            from .character_builder_window import open_character_builder
+        except ImportError:
+            try:
+                from src.gui.character_builder_window import open_character_builder
+            except ImportError:
+                messagebox.showerror("Validate", "character_builder_window not available.")
+                return
+        try:
+            from src.core.validation_service import ValidationService
+        except ImportError:
+            try:
+                from core.validation_service import ValidationService
+            except ImportError:
+                messagebox.showerror("Validate", "validation_service not available.")
+                return
+        from src.core.model_data import CharacterScene, PartSlot
+        # Build a scene from whatever is currently loaded in the main viewer
+        scene = CharacterScene(game_version="K1")
+        if self._model is not None:
+            scene.assign(PartSlot.HEAD_SHELL, self._model, resref=self._model.name)
+        issues = ValidationService(scene).validate()
+        lines = [str(i) for i in issues] if issues else ["No issues found."]
+        win = tk.Toplevel(self)
+        win.title("Character Validation Results")
+        win.configure(bg=C['bg'])
+        win.geometry("700x400")
+        txt = tk.Text(win, bg=C['bg2'], fg=C['text'],
+                      font=("Consolas", 9), relief='flat', wrap='word')
+        sb2 = ttk.Scrollbar(win, command=txt.yview)
+        txt.configure(yscrollcommand=sb2.set)
+        sb2.pack(side='right', fill='y')
+        txt.pack(fill='both', expand=True)
+        txt.insert('1.0', "\n".join(lines))
+        txt.configure(state='disabled')
 
     def _about(self):
         messagebox.showinfo("About GhostRigger-K1-K2",

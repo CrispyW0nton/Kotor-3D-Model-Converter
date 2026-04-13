@@ -86,6 +86,54 @@ GEOM_FP_K1 = (4273776, 4216096)
 GEOM_FP_K2 = (4285200, 4216320)
 
 # ──────────────────────────────────────────────────────────────
+#  Character Builder — Part Slots
+# ──────────────────────────────────────────────────────────────
+
+from enum import Enum as _Enum
+
+class PartSlot(_Enum):
+    """Canonical slot identifiers for character assembly.
+
+    Every visible piece of a KotOR character maps to exactly one slot.
+    The slot drives compatibility checking (K1 vs K2, species, body family)
+    and determines which panel section an asset appears in inside the
+    Assembly mode browser.
+
+    Ordering follows the spec §8.1 / §6 asset-picker categories.
+    """
+    # ── Head group ───────────────────────────────────────────────────────
+    HEAD_SHELL     = "head_shell"      # Primary head geometry (pfhc*, p_hk47, etc.)
+    EYES           = "eyes"            # Eyeball geometry (eyeRA, eyeLA, etc.)
+    TEETH          = "teeth"           # Teeth mesh (teethupper, teethLo, etc.)
+    TONGUE         = "tongue"          # Tongue geometry
+    HAIR           = "hair"            # Hair cards / hair geometry
+    LASHES         = "lashes"          # Eyelash geometry
+    # ── Body group ───────────────────────────────────────────────────────
+    HEADLESS_BODY  = "headless_body"   # Body mesh without head (pfbc*, n_darkjedi, etc.)
+    BODY_VARIANT   = "body_variant"    # Alternative body LOD / variant mesh
+    # ── Attachment group ─────────────────────────────────────────────────
+    ACCESSORY      = "accessory"       # Misc accessories (capes, belts, pouches)
+    HOOK           = "hook"            # Helper hooks: headhook, MaskHook, GoggleHook, etc.
+    # ── Catch-all ────────────────────────────────────────────────────────
+    OTHER          = "other"           # Unknown / unclassified part
+
+
+# Human-readable display name for each slot (used in UI labels)
+PART_SLOT_LABELS: Dict[PartSlot, str] = {
+    PartSlot.HEAD_SHELL:    "Head Shell",
+    PartSlot.EYES:          "Eyeballs",
+    PartSlot.TEETH:         "Teeth",
+    PartSlot.TONGUE:        "Tongue",
+    PartSlot.HAIR:          "Hair",
+    PartSlot.LASHES:        "Lashes",
+    PartSlot.HEADLESS_BODY: "Headless Body",
+    PartSlot.BODY_VARIANT:  "Body Variant",
+    PartSlot.ACCESSORY:     "Accessory",
+    PartSlot.HOOK:          "Hook / Helper",
+    PartSlot.OTHER:         "Other",
+}
+
+# ──────────────────────────────────────────────────────────────
 #  Quaternion helpers  (used by world_position)
 # ──────────────────────────────────────────────────────────────
 
@@ -1196,3 +1244,186 @@ class KotorModel:
         """
         from .kotor_loader import load_model_from_file
         return load_model_from_file(mdl_path, mdx_path)
+
+
+# ──────────────────────────────────────────────────────────────
+#  CharacterScene — canonical in-memory scene per GhostRigger spec §5
+# ──────────────────────────────────────────────────────────────
+
+import uuid as _uuid
+import hashlib as _hashlib
+
+
+def _make_asset_id(resref: str, game_version: str = "K1") -> str:
+    """Produce a stable string GUID from (resref, game_version).
+
+    The ID is deterministic: the same resref+game always yields the same
+    string, so assets can be referenced by ID across sessions without
+    persisting a database.
+
+    Format: ``gr:<upper-resref>:<game>`` for simple cases; a compact
+    hex digest is appended when resref contains non-ASCII characters.
+    """
+    key = f"{resref.upper()}:{game_version.upper()}"
+    try:
+        return f"gr:{resref.upper()}:{game_version.upper()}"
+    except Exception:
+        h = _hashlib.sha1(key.encode("utf-8", "replace")).hexdigest()[:12]
+        return f"gr:{h}"
+
+
+@dataclass
+class SceneSlot:
+    """One occupied slot in a CharacterScene.
+
+    Attributes
+    ----------
+    slot        : Which PartSlot this entry occupies.
+    model       : Loaded KotorModel (may be None if still loading).
+    resref      : Source resref (lowercase, no extension).
+    asset_id    : Stable string ID derived from resref + game_version.
+    game_version: 'K1' or 'K2'.
+    source_path : Absolute file path (for user-imported OBJ/FBX/MDL files).
+                  Empty string when loaded from BIF/ERF archives.
+    dirty       : True when the slot has been modified since last export.
+    """
+    slot:         PartSlot
+    model:        Optional[KotorModel]               = None
+    resref:       str                                = ""
+    asset_id:     str                                = ""
+    game_version: str                                = "K1"
+    source_path:  str                                = ""
+    dirty:        bool                               = False
+
+    def __post_init__(self) -> None:
+        if not self.asset_id and self.resref:
+            self.asset_id = _make_asset_id(self.resref, self.game_version)
+
+
+@dataclass
+class CharacterScene:
+    """Canonical in-memory character description shared by all builder modes.
+
+    This is the single source of truth that drives the importer, renderer,
+    validator, and exporter (GhostRigger spec §5).  Instead of each subsystem
+    maintaining its own parallel model references, every part of the UI reads
+    and writes CharacterScene slots.
+
+    Attributes
+    ----------
+    scene_id        : Unique session GUID (regenerated each time a new scene
+                      is created; not persisted).
+    game_version    : 'K1' or 'K2' — drives compatibility checks.
+    character_name  : Optional label for the character (for UI display).
+    slots           : Dict mapping PartSlot → SceneSlot.  Only occupied slots
+                      appear; missing slots mean "empty / not assigned".
+    supermodel      : Expected supermodel string (e.g. 'S_Female02').
+    dirty           : True when any slot has been modified since last save.
+    metadata        : Arbitrary key/value pairs for tools to store extra state
+                      (e.g. export settings, last camera position, etc.).
+
+    Usage
+    -----
+    ::
+
+        scene = CharacterScene(game_version='K1')
+        scene.assign(PartSlot.HEAD_SHELL, head_model, resref='pfhc01')
+        scene.assign(PartSlot.HEADLESS_BODY, body_model, resref='pfbcm')
+        issues = ValidationService(scene).validate()
+    """
+
+    scene_id:       str                          = field(
+        default_factory=lambda: str(_uuid.uuid4()))
+    game_version:   str                          = "K1"
+    character_name: str                          = ""
+    slots:          Dict[PartSlot, SceneSlot]    = field(default_factory=dict)
+    supermodel:     str                          = ""
+    dirty:          bool                         = False
+    metadata:       Dict[str, Any]               = field(default_factory=dict)
+
+    # ── Slot management ──────────────────────────────────────────────────────
+
+    def assign(
+        self,
+        slot: PartSlot,
+        model: Optional[KotorModel],
+        *,
+        resref: str = "",
+        game_version: str = "",
+        source_path: str = "",
+    ) -> SceneSlot:
+        """Assign a model to a slot (or clear it when model is None).
+
+        Creates a new SceneSlot, marks the scene dirty, and returns the
+        created slot descriptor.
+        """
+        gv = game_version or self.game_version
+        entry = SceneSlot(
+            slot=slot,
+            model=model,
+            resref=resref.lower(),
+            game_version=gv,
+            source_path=source_path,
+            dirty=True,
+        )
+        self.slots[slot] = entry
+        self.dirty = True
+        return entry
+
+    def clear_slot(self, slot: PartSlot) -> None:
+        """Remove a slot assignment."""
+        self.slots.pop(slot, None)
+        self.dirty = True
+
+    def get(self, slot: PartSlot) -> Optional[SceneSlot]:
+        """Return the SceneSlot for the given slot, or None."""
+        return self.slots.get(slot)
+
+    def get_model(self, slot: PartSlot) -> Optional[KotorModel]:
+        """Shorthand: return the KotorModel for the given slot, or None."""
+        entry = self.slots.get(slot)
+        return entry.model if entry else None
+
+    # ── Helpers ──────────────────────────────────────────────────────────────
+
+    @property
+    def is_empty(self) -> bool:
+        """True when no slots are assigned."""
+        return not self.slots
+
+    @property
+    def all_models(self) -> List[KotorModel]:
+        """Return all non-None KotorModel objects from all assigned slots."""
+        result = []
+        for entry in self.slots.values():
+            if entry.model is not None:
+                result.append(entry.model)
+        return result
+
+    @property
+    def head_model(self) -> Optional[KotorModel]:
+        return self.get_model(PartSlot.HEAD_SHELL)
+
+    @property
+    def body_model(self) -> Optional[KotorModel]:
+        return self.get_model(PartSlot.HEADLESS_BODY)
+
+    def mark_clean(self) -> None:
+        """Reset dirty flag on scene and all slots (call after successful save/export)."""
+        self.dirty = False
+        for entry in self.slots.values():
+            entry.dirty = False
+
+    def asset_id_for(self, slot: PartSlot) -> Optional[str]:
+        """Return the stable asset ID for the given slot, or None."""
+        entry = self.slots.get(slot)
+        return entry.asset_id if entry else None
+
+    def summary(self) -> str:
+        """One-line human-readable summary for logging / UI status bars."""
+        parts = []
+        for slot, entry in self.slots.items():
+            label = PART_SLOT_LABELS.get(slot, slot.value)
+            parts.append(f"{label}={entry.resref or '?'}")
+        return (f"CharacterScene({self.game_version}) "
+                + (", ".join(parts) if parts else "(empty)"))
