@@ -1814,16 +1814,83 @@ class GpuRenderer:
                     # by directly transforming the mesh's world position/rotation.
                     _is_skin_nd = bool(getattr(nd, 'is_skin', False))
                     if not _is_skin_nd:
-                        # Non-skin: apply animation overrides for rigid attachments
-                        _pn = anim_pose.nodes.get(nd.name.lower()) if hasattr(anim_pose, 'nodes') else None
-                        if _pn is not None:
-                            # Has animation override → compute fresh, do NOT cache
-                            _wp = getattr(nd, 'position', (0.0, 0.0, 0.0))
-                            _wo = getattr(nd, 'rotation', (0.0, 0.0, 0.0, 1.0))
-                            if hasattr(_pn, 'position') and _pn.position:
-                                _wp = _pn.position
-                            if hasattr(_pn, 'rotation') and _pn.rotation:
-                                _wo = _pn.rotation
+                        # FIX-GPU-ANIM-CHAIN: Walk the full parent chain for animated
+                        # non-skin nodes, substituting animation pose values at each
+                        # level.  Previously this returned just the local animated
+                        # position/rotation without accumulating the parent chain,
+                        # causing rigid attachments (eyes, horns, accessories) to
+                        # teleport to the origin during animation.  The CPU viewport
+                        # (viewport.py:4210-4276) correctly walks the full chain; we
+                        # replicate that approach here.
+                        #
+                        # For each node in the ancestor chain:
+                        #   - If the node has an animation pose entry, use animated pos/rot
+                        #   - Otherwise use the bind-pose pos/rot
+                        #   - Accumulate world transform: world_pos += quat_rotate(parent_orient, local_pos)
+                        #
+                        # Check if this node or any ancestor has animation data
+                        _has_any_anim = False
+                        _check = nd
+                        while _check is not None:
+                            if hasattr(anim_pose, 'nodes') and _check.name.lower() in anim_pose.nodes:
+                                _has_any_anim = True
+                                break
+                            _check = getattr(_check, 'parent', None)
+
+                        if _has_any_anim:
+                            # Walk the full parent chain, accumulating world transform
+                            _chain = []
+                            _n = nd
+                            _visited = set()
+                            while _n is not None:
+                                _nid_c = id(_n)
+                                if _nid_c in _visited or len(_chain) > 512:
+                                    break
+                                _visited.add(_nid_c)
+                                _chain.append(_n)
+                                _n = getattr(_n, 'parent', None)
+                            _chain.reverse()
+
+                            _awx, _awy, _awz = 0.0, 0.0, 0.0
+                            _aparent_q = np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float64)
+
+                            for _ci, _cn in enumerate(_chain):
+                                _is_leaf = (_ci == len(_chain) - 1)
+                                _apn = anim_pose.nodes.get(_cn.name.lower()) if hasattr(anim_pose, 'nodes') else None
+                                if _apn is not None:
+                                    _alx, _aly, _alz = _apn.position
+                                    _arot = list(_apn.rotation)
+                                else:
+                                    _alx, _aly, _alz = getattr(_cn, 'position', (0.0, 0.0, 0.0))
+                                    _arot = list(getattr(_cn, 'rotation', (0.0, 0.0, 0.0, 1.0)))
+
+                                # Normalize quaternion
+                                _ar2 = _arot[0]**2 + _arot[1]**2 + _arot[2]**2 + _arot[3]**2
+                                if _ar2 > 1e-9 and abs(_ar2 - 1.0) > 1e-4:
+                                    _ars = _ar2 ** 0.5
+                                    _arot = [_arot[0]/_ars, _arot[1]/_ars, _arot[2]/_ars, _arot[3]/_ars]
+
+                                # Rotate local position by parent orientation
+                                _local_pos = np.array([[_alx, _aly, _alz]], dtype=np.float64)
+                                _rotated = _quat_rotate_batch(_aparent_q, _local_pos)[0]
+                                _awx += _rotated[0]
+                                _awy += _rotated[1]
+                                _awz += _rotated[2]
+
+                                # Accumulate orientation: parent_q = parent_q * node_rot
+                                _nq = np.array(_arot, dtype=np.float64)
+                                # Quaternion multiply: aparent_q * _nq
+                                _px, _py, _pz, _pw = _aparent_q
+                                _nx, _ny, _nz, _nw = _nq
+                                _aparent_q = np.array([
+                                    _pw*_nx + _px*_nw + _py*_nz - _pz*_ny,
+                                    _pw*_ny - _px*_nz + _py*_nw + _pz*_nx,
+                                    _pw*_nz + _px*_ny - _py*_nx + _pz*_nw,
+                                    _pw*_nw - _px*_nx - _py*_ny - _pz*_nz,
+                                ], dtype=np.float64)
+
+                            _wp = (_awx, _awy, _awz)
+                            _wo = tuple(_aparent_q.tolist())
                             return (_wp, _wo)
                 # Static / no override → use persistent cache
                 if nid in _wt_cache:
@@ -2056,11 +2123,22 @@ class GpuRenderer:
                 # rebuild purposes.  Their vertices are in bind-pose world space and
                 # should only change via GPU skinning (not yet implemented).
                 # Rebuilding skin VBOs with animation transforms causes stretching.
+                #
+                # FIX-GPU-ANIM-CHAIN: Non-skin nodes must also be rebuilt when any
+                # ANCESTOR has animation keys, because the node's world position
+                # depends on the full parent chain.  Rigid attachments (eyes, horns,
+                # accessories) move when their parent bone is animated even if they
+                # themselves have no animation keys.
                 _nd_is_skin = bool(getattr(node, 'is_skin', False))
-                is_animated = (anim_pose is not None and
-                               hasattr(anim_pose, 'nodes') and
-                               node.name.lower() in anim_pose.nodes and
-                               not _nd_is_skin)
+                is_animated = False
+                if anim_pose is not None and hasattr(anim_pose, 'nodes') and not _nd_is_skin:
+                    # Check if this node or any ancestor has animation data
+                    _acheck = node
+                    while _acheck is not None:
+                        if _acheck.name.lower() in anim_pose.nodes:
+                            is_animated = True
+                            break
+                        _acheck = getattr(_acheck, 'parent', None)
                 if is_animated or node_id not in self._mesh_cache:
                     vdata, idx_arr = _build_vbo_data(node, wp, wo,
                                                      anim_pose_node=None,
