@@ -1682,15 +1682,31 @@ class FBXExporter:
         #      or null bitmap. These serve as skeleton bones in KotOR but were
         #      previously excluded from the FBX skeleton hierarchy.
         # Cross-ref: KotorBlender io_scene_kotor/utils.py is_char_bone() + is_char_dummy()
+        #
+        # v7.1 FIX-BONEFILTER (Finding 1.2 — KotorBlender utils.py cross-ref):
+        # KotorBlender's is_char_bone() also checks classification == CHARACTER.
+        # Non-CHARACTER models (effects, tiles) should not generate armature/skeleton.
+        # We add this check: only include skeleton joints when the model's
+        # classification is CHARACTER (4) or when it has skin mesh nodes.
+        # This prevents tile/effect models from generating spurious bone hierarchies.
         _mesh_node_names = {n.name for n in mesh_nodes_list}
+        _model_cls_int = int(getattr(model, 'model_type', 4) or 4)
+        _has_any_skin = any(n.is_skin for n in mesh_nodes_list)
+        _is_character_model = (_model_cls_int == 4 or _has_any_skin)
+
         skeleton_nodes = []
         for n in model.all_nodes():
             if n.type_label == 'dummy':
-                skeleton_nodes.append(n)
+                # v7.1: Only include dummy nodes in skeleton when model is CHARACTER
+                # or has skin nodes. For tile/effect models, only the root node is
+                # included (needed for FBX hierarchy).
+                if _is_character_model or n.parent is None:
+                    skeleton_nodes.append(n)
             elif (n.is_mesh and not n.is_skin and n.name not in _mesh_node_names
                   and not getattr(n, 'render', True)):
                 # Non-rendered trimesh bone proxy — include in skeleton
-                skeleton_nodes.append(n)
+                if _is_character_model:
+                    skeleton_nodes.append(n)
 
         # v6.0 FIX: NodeAttribute IDs for skeleton nodes.
         # Unreal Engine requires NodeAttribute objects of type "Skeleton" attached
@@ -1798,10 +1814,42 @@ class FBXExporter:
 
             # Sub-deformers (clusters per bone)
             # TransformLink = bone world-space bind matrix in COLUMN-MAJOR order
-            # Transform = mesh-space-to-bone-space matrix.
-            # For KotOR skin meshes, vertices are already in world/bind-pose space,
-            # so Transform is identity.
+            # Transform = mesh node's world-space bind matrix (geometry_to_world).
+            #   FBX spec: Transform brings vertices from mesh-local to bone-local.
+            #   = inverse(mesh_world) for identity-bone case; for correct skinning
+            #   UE5 uses: vertex_world = TransformLink^-1 * Transform * vertex_local
+            #   For KotOR, skin vertices are in node-local space. Transform should
+            #   be the mesh node's world matrix so UE5 can place them correctly.
+            # v6.1 FIX: Use mesh node world matrix as Transform instead of identity.
+            #   Cross-ref: ufbx.h ufbx_skin_cluster.mesh_node_to_bone
+            #   Cross-ref: Mukundan (2022) Jk = Lk x Fk (bind pose formula)
             identity_m = '1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1'
+            mesh_transform_m = _world_matrix_col_major(n)
+
+            # v7.1 FIX-QBONETBONE (Finding 2.5 — reone mdlmdxreader.cpp cross-ref):
+            # Build a qBone/tBone fallback matrix lookup from the skin node's stored
+            # bind-pose arrays.  When world_transform() fails for a bone, use
+            # qBone/tBone quaternion+translation to construct the bind matrix.
+            # reone reads qBone quaternions AND tBone translations (lines 280-292),
+            # then constructs per-bone matrices: M = translate(tBone) * rotate(qBone).
+            _qbone_list = getattr(n, 'qbone_list', []) or []
+            _tbone_list = getattr(n, 'tbone_list', []) or []
+
+            def _qbone_matrix_col_major(bi: int) -> str:
+                """Build column-major matrix from qBone/tBone arrays for bone index bi."""
+                if bi < len(_qbone_list) and bi < len(_tbone_list):
+                    qx, qy, qz, qw = _qbone_list[bi]
+                    tx, ty, tz = _tbone_list[bi]
+                    # Build rotation from quaternion
+                    r00 = 1 - 2*(qy*qy + qz*qz); r10 = 2*(qx*qy + qz*qw); r20 = 2*(qx*qz - qy*qw)
+                    r01 = 2*(qx*qy - qz*qw); r11 = 1 - 2*(qx*qx + qz*qz); r21 = 2*(qy*qz + qx*qw)
+                    r02 = 2*(qx*qz + qy*qw); r12 = 2*(qy*qz - qx*qw); r22 = 1 - 2*(qx*qx + qy*qy)
+                    mat = [r00, r10, r20, 0.0,
+                           r01, r11, r21, 0.0,
+                           r02, r12, r22, 0.0,
+                           tx,  ty,  tz,  1.0]
+                    return ','.join(f'{v:.6f}' for v in mat)
+                return identity_m
 
             # Normalise skin_data: must be a list of VertexSkinData objects.
             raw_sd = getattr(n, 'skin_data', None)
@@ -1813,10 +1861,15 @@ class FBXExporter:
                 elif raw_sd and not hasattr(raw_sd[0], 'influences'):
                     raw_sd = []
 
-            # v6.0 FIX: Weight normalization pass.
+            # v7.0 FIX: Weight normalization pass + 4-influence limit.
             # Ensure all vertex weights sum to 1.0 and every vertex has at least
             # one bone influence (zero-weight guard).
             # Cross-ref: Mukundan (2022) — "Every vertex must have >= 1 bone influence"
+            # v7.0 (Finding 1.4 — FBX2glTF FbxSkinningAccess.cpp cross-ref):
+            #   FBX2glTF limits to MAX_WEIGHTS=4 per vertex (the FBX/UE5 standard).
+            #   Sort influences by weight descending, keep top 4, re-normalize.
+            #   This prevents UE5 import errors from vertices with >4 influences.
+            _MAX_INFLUENCES = 4
             n_verts = len(n.vertices) if n.vertices else 0
             _norm_sd = list(raw_sd)  # copy for normalization
             for _vi in range(min(n_verts, len(_norm_sd))):
@@ -1825,6 +1878,11 @@ class FBXExporter:
                     # Zero-weight guard: assign to bone 0 with weight 1.0
                     sd.influences = [BoneWeight(bone_index=0, weight=1.0)]
                     continue
+                # Sort by weight descending, keep top MAX_INFLUENCES
+                sd.influences.sort(key=lambda inf: inf.weight, reverse=True)
+                if len(sd.influences) > _MAX_INFLUENCES:
+                    sd.influences = sd.influences[:_MAX_INFLUENCES]
+                # Normalize weights to sum to 1.0
                 w_sum = sum(inf.weight for inf in sd.influences)
                 if w_sum > 1e-6 and abs(w_sum - 1.0) > 1e-5:
                     for inf in sd.influences:
@@ -1863,6 +1921,9 @@ class FBXExporter:
                 elif bname.lower() in _base_skel_node_by_name:
                     link_m = _world_matrix_col_major(
                         _base_skel_node_by_name[bname.lower()])
+                elif bi < len(_qbone_list) and bi < len(_tbone_list):
+                    # v7.1: qBone/tBone fallback (Finding 2.5)
+                    link_m = _qbone_matrix_col_major(bi)
                 else:
                     link_m = identity_m
 
@@ -1875,9 +1936,13 @@ class FBXExporter:
                     w(f'\t\tWeights: *{len(wt_list)} {{')
                     w('\t\t\ta: ' + ','.join(f'{x:.6f}' for x in wt_list))
                     w('\t\t}')
-                # v6.0: Always emit Transform + TransformLink, even for empty clusters
+                # v6.1: Emit Transform (mesh world matrix) + TransformLink (bone world matrix).
+                # Transform = mesh node world-space bind matrix. UE5 uses this to
+                # convert vertices from geometry space to world space before applying
+                # inverse bone transform. Using the mesh node's world matrix ensures
+                # correct placement for skin nodes whose verts are in local space.
                 w(f'\t\tTransform: *16 {{')
-                w(f'\t\t\ta: {identity_m}')
+                w(f'\t\t\ta: {mesh_transform_m}')
                 w('\t\t}')
                 w(f'\t\tTransformLink: *16 {{')
                 w(f'\t\t\ta: {link_m}')
@@ -2077,13 +2142,46 @@ class FBXExporter:
                                               (bind_pos[0], bind_pos[1], bind_pos[2]),
                                               'Lcl Translation')
 
-                    # Rotation curves (absolute quaternion → Euler XYZ degrees)
+                    # Rotation curves (rest-pose delta quaternion → Euler XYZ degrees)
+                    # v7.0 FIX (Finding 1.1 — KotorBlender armature.py cross-ref):
+                    # KotorBlender applies rotation keyframes as DELTAS from rest pose:
+                    #   rotation_delta = rest_rotation.inverted() @ Quaternion(rotation[:4])
+                    # Previously we exported absolute quaternions which breaks in UE5 when
+                    # the rest pose is non-identity.  Now we compute the rest-pose delta
+                    # quaternion before converting to Euler — matching KotorBlender's
+                    # apply_object_keyframes_to_armature() (armature.py:185).
                     if rot_times and rot_vals:
-                        # Pre-compute euler angles list
+                        # Get rest-pose quaternion from bind node
+                        rest_quat = (0.0, 0.0, 0.0, 1.0)  # identity default
+                        if base and hasattr(base, 'rotation') and base.rotation:
+                            rest_quat = tuple(base.rotation[:4])
+                        # Quaternion inverse: inv(q) = conj(q) / |q|^2
+                        # For unit quaternions: inv(q) = (-x, -y, -z, w)
+                        rqx, rqy, rqz, rqw = rest_quat
+                        rmag2 = rqx*rqx + rqy*rqy + rqz*rqz + rqw*rqw
+                        if rmag2 > 1e-12:
+                            inv_rqx, inv_rqy, inv_rqz, inv_rqw = (
+                                -rqx/rmag2, -rqy/rmag2, -rqz/rmag2, rqw/rmag2)
+                        else:
+                            inv_rqx, inv_rqy, inv_rqz, inv_rqw = 0, 0, 0, 1
+
+                        def _quat_mul(ax, ay, az, aw, bx, by, bz, bw):
+                            """Hamilton product: a * b (quaternion multiply)."""
+                            return (
+                                aw*bx + ax*bw + ay*bz - az*by,
+                                aw*by - ax*bz + ay*bw + az*bx,
+                                aw*bz + ax*by - ay*bx + az*bw,
+                                aw*bw - ax*bx - ay*by - az*bz)
+
+                        # Pre-compute euler angles from rest-pose-delta quaternions
                         euler_list = []
                         for qv in rot_vals:
                             if len(qv) >= 4:
-                                ex, ey, ez = _quat_to_euler_deg(qv[0], qv[1], qv[2], qv[3])
+                                # delta = inv(rest_quat) * anim_quat
+                                dx, dy, dz, dw = _quat_mul(
+                                    inv_rqx, inv_rqy, inv_rqz, inv_rqw,
+                                    qv[0], qv[1], qv[2], qv[3])
+                                ex, ey, ez = _quat_to_euler_deg(dx, dy, dz, dw)
                                 euler_list.append((ex, ey, ez))
                             else:
                                 euler_list.append((0.0, 0.0, 0.0))

@@ -58,33 +58,45 @@ from . import icon_manager as Icons
 log = logging.getLogger(__name__)
 
 # ── Color palette ──────────────────────────────────────────────────────────
+# v6.1 UI redesign: Dark charcoal + neon mint-green cyberpunk theme.
+# Reference: Dashboard dark UI + green-on-black code editor aesthetic.
+# Element        Hex        Usage
+# Background     #0B0F0D    Main window, viewport surround
+# Panel surface  #111916    Sidebar, inspector, cards
+# Panel border   #1B2A22    Subtle separation between sections
+# Primary accent #00FF7A    Active selection, buttons, highlights, glow
+# Secondary      #00D7B5    Secondary info, hover states
+# Text primary   #E8F0EC    Labels, headings
+# Text muted     #7A9A88    Secondary labels, inactive items
+# Error/warning  #FF4444 / #FFAA00
 C = {
-    'bg':        "#0d0d1a",
-    'bg2':       "#13132b",
-    'panel':     "#1a1a38",
-    'panel2':    "#16163a",
-    'accent':    "#3a3aff",
-    'accent2':   "#6a6aff",
-    'gold':      "#ffcc44",
-    'green':     "#44ff88",
-    'red':       "#ff4444",
-    'text':      "#e0e0ff",
-    'text2':     "#9090cc",
-    'border':    "#2a2a5a",
-    'hover':     "#2a2a6a",
-    'selected':  "#1a3a6a",
-    'warning':   "#ff8844",
-    'success':   "#44cc88",
-    'sep':       "#252550",
+    'bg':        "#0B0F0D",
+    'bg2':       "#0E1210",
+    'panel':     "#111916",
+    'panel2':    "#151D1A",
+    'accent':    "#00FF7A",
+    'accent2':   "#00D7B5",
+    'gold':      "#00FF7A",       # primary accent (was gold, now neon green)
+    'green':     "#00FF7A",
+    'red':       "#FF4444",
+    'text':      "#E8F0EC",
+    'text2':     "#7A9A88",
+    'border':    "#1B2A22",
+    'hover':     "#1A3028",
+    'selected':  "#0D3D26",
+    'warning':   "#FFAA00",
+    'success':   "#00FF7A",
+    'sep':       "#1B2A22",
 }
 
 
 def _btn(master, text, command, accent=False, small=False, **kw):
-    """Create a styled flat button. Automatically attaches a KotOR-style
-    icon if one can be resolved from the button label text."""
+    """Create a styled flat button with neon-green cyberpunk theme.
+    Automatically attaches a KotOR-style icon if one can be resolved
+    from the button label text."""
     bg = C['accent'] if accent else C['panel']
-    fg = "white"
-    f  = ("Segoe UI", 8 if small else 9)
+    fg = "#0B0F0D" if accent else C['text']
+    f  = ("Consolas", 8 if small else 9)
     # ── Icon lookup ────────────────────────────────────────────────────
     icon_size = 16
     img = Icons.icon_for_label(text, icon_size)
@@ -93,8 +105,12 @@ def _btn(master, text, command, accent=False, small=False, **kw):
         extra = {"image": img, "compound": "left"}
     b  = tk.Button(master, text=text, command=command,
                    bg=bg, fg=fg, relief='flat', cursor='hand2',
-                   activebackground=C['accent2'], activeforeground='white',
-                   padx=6, pady=3, font=f, **extra, **kw)
+                   activebackground=C['accent2'],
+                   activeforeground='#0B0F0D' if accent else C['text'],
+                   padx=8, pady=4, font=f,
+                   highlightthickness=1,
+                   highlightbackground=C['border'],
+                   **extra, **kw)
     if img is not None:
         # Keep a strong reference so the image is not garbage-collected
         b._icon_img = img  # type: ignore[attr-defined]
@@ -111,7 +127,8 @@ def _sep(master, orient='vertical'):
 
 
 def _tooltip(widget, text: str):
-    """Attach a simple tooltip (hover label) to a widget."""
+    """Attach a simple tooltip (hover label) to a widget.
+    v6.1: Updated to match cyberpunk green-on-dark theme."""
     tip = None
 
     def _show(event):
@@ -124,11 +141,11 @@ def _tooltip(widget, text: str):
         tip.wm_overrideredirect(True)
         tip.wm_geometry(f"+{x}+{y}")
         tk.Label(tip, text=text, justify='left',
-                 bg="#2a2a5a", fg="#e0e0ff",
-                 font=("Segoe UI", 8),
+                 bg=C['panel2'], fg=C['green'],
+                 font=("Consolas", 8),
                  relief='flat', padx=6, pady=3,
                  bd=1, highlightthickness=1,
-                 highlightbackground="#5050aa").pack()
+                 highlightbackground=C['accent']).pack()
 
     def _hide(event):
         nonlocal tip
@@ -145,17 +162,18 @@ def _tooltip(widget, text: str):
 
 
 def _label(master, text, style="normal", **kw):
+    """Create a themed label. v6.1: monospace Consolas for data, Segoe UI for UI."""
     fonts = {
-        "normal":  ("Segoe UI", 9),
-        "heading": ("Segoe UI Semibold", 10),
-        "title":   ("Segoe UI", 14, "bold"),
-        "small":   ("Segoe UI", 8),
+        "normal":  ("Consolas", 9),
+        "heading": ("Consolas", 10, "bold"),
+        "title":   ("Consolas", 14, "bold"),
+        "small":   ("Consolas", 8),
         "mono":    ("Consolas", 9),
     }
     colors = {
         "normal":  C['text'],
-        "heading": C['gold'],
-        "title":   C['accent2'],
+        "heading": C['accent'],       # neon green headings
+        "title":   C['accent'],       # neon green titles
         "small":   C['text2'],
         "mono":    C['green'],
     }
@@ -163,7 +181,7 @@ def _label(master, text, style="normal", **kw):
     _fg = kw.pop('fg', colors.get(style, C['text']))
     return tk.Label(master, text=text, bg=kw.pop('bg', C['panel']),
                     fg=_fg,
-                    font=fonts.get(style, ("Segoe UI",9)), **kw)
+                    font=fonts.get(style, ("Consolas", 9)), **kw)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -5328,8 +5346,8 @@ class LogPanel(tk.Frame):
         self._collapsed = False
 
         self._toggle_btn = tk.Button(
-            hf, text="▼ Output Log", font=("Segoe UI", 8, "bold"),
-            bg=C['bg'], fg=C['text2'], relief='flat', cursor='hand2',
+            hf, text="// Output Log", font=("Consolas", 8, "bold"),
+            bg=C['bg'], fg=C['accent2'], relief='flat', cursor='hand2',
             padx=6, pady=2, command=self._toggle_collapse,
             bd=0, highlightthickness=0)
         self._toggle_btn.pack(side='left')
@@ -5362,17 +5380,17 @@ class LogPanel(tk.Frame):
         self.text.tag_configure('success', foreground=C['success'])
         self.text.tag_configure('warning', foreground=C['warning'])
         self.text.tag_configure('error',   foreground=C['red'])
-        self.text.tag_configure('ts',      foreground='#505080', font=("Consolas", 7))
+        self.text.tag_configure('ts',      foreground=C['accent2'], font=("Consolas", 7))
 
     def _toggle_collapse(self):
         """Collapse/expand the log body."""
         self._collapsed = not self._collapsed
         if self._collapsed:
             self._body.pack_forget()
-            self._toggle_btn.configure(text="▶ Output Log")
+            self._toggle_btn.configure(text=">> Output Log")
         else:
             self._body.pack(fill='both', expand=True)
-            self._toggle_btn.configure(text="▼ Output Log")
+            self._toggle_btn.configure(text="// Output Log")
 
     def log(self, msg: str, level: str = 'info'):
         import time as _t
@@ -9013,8 +9031,8 @@ class CharacterBuilderPanel(tk.Frame):
 # ──────────────────────────────────────────────────────────────────────
 
 class KotorModToolsApp(tk.Tk):
-    APP_TITLE   = "GhostRigger-K1-K2  ▸  Character Builder · Odyssey Engine Pipeline"
-    APP_VERSION = "5.1.0"  # v5.1: Phase 32 — streamlined UI, Module Editor promoted, dead code removed
+    APP_TITLE   = "GhostRigger-K1-K2  //  Odyssey Engine Pipeline v6.1"
+    APP_VERSION = "6.1.0"  # v6.1: UI redesign + FBX fix + texture wrapping + GPU renderer
     WIN_SIZE    = "1600x950"
 
     def __init__(self):
@@ -9254,51 +9272,69 @@ class KotorModToolsApp(tk.Tk):
 
 
     def _apply_ttk_theme(self):
+        """Apply the GhostRigger cyberpunk dark+neon-green TTK theme.
+        v6.1 UI redesign: dark charcoal base, neon mint green accent,
+        monospace fonts, rounded-feel panels."""
         style = ttk.Style(self)
         style.theme_use('clam')
         style.configure('.',
             background=C['panel'], foreground=C['text'],
             fieldbackground=C['bg2'], troughcolor=C['bg'],
-            selectbackground=C['selected'], selectforeground='white',
-            insertcolor=C['text'])
+            selectbackground=C['selected'], selectforeground=C['accent'],
+            insertcolor=C['accent'],
+            font=("Consolas", 9))
         style.configure('TLabelframe', background=C['panel2'],
-                        foreground=C['gold'], bordercolor=C['border'])
+                        foreground=C['accent'], bordercolor=C['border'])
         style.configure('TLabelframe.Label', background=C['panel2'],
-                        foreground=C['gold'], font=("Segoe UI Semibold",9))
+                        foreground=C['accent'], font=("Consolas", 9, "bold"))
         style.configure('Treeview', background=C['bg'], foreground=C['text'],
-                        fieldbackground=C['bg'], rowheight=20)
+                        fieldbackground=C['bg'], rowheight=22,
+                        font=("Consolas", 9))
         style.map('Treeview', background=[('selected', C['selected'])],
-                  foreground=[('selected', 'white')])
-        # Treeview headings: gold on dark panel
+                  foreground=[('selected', C['accent'])])
+        # Treeview headings: neon green on dark panel
         style.configure('Treeview.Heading', background=C['panel'],
-                        foreground=C['gold'], font=("Segoe UI Semibold", 8),
+                        foreground=C['accent'], font=("Consolas", 8, "bold"),
                         relief='flat')
         style.map('Treeview.Heading', background=[('active', C['hover'])])
-        # Slim, dark scrollbars
+        # Slim, dark scrollbars with green thumb
         style.configure('TScrollbar', background=C['panel'], troughcolor=C['bg'],
-                        arrowcolor=C['text2'], bordercolor=C['border'],
+                        arrowcolor=C['accent2'], bordercolor=C['border'],
                         width=10, relief='flat')
-        style.map('TScrollbar', background=[('active', C['hover'])])
-        # Notebook
+        style.map('TScrollbar', background=[('active', C['accent2'])])
+        # Notebook tabs with cyberpunk styling
         style.configure('TNotebook', background=C['bg'], borderwidth=0)
         style.configure('TNotebook.Tab', background=C['panel2'],
-                        foreground=C['text2'], padding=[10, 5], font=("Segoe UI", 8))
+                        foreground=C['text2'], padding=[12, 6],
+                        font=("Consolas", 8))
         style.map('TNotebook.Tab',
-                  background=[('selected', C['bg']), ('active', C['hover'])],
-                  foreground=[('selected', C['gold']), ('active', C['text'])])
+                  background=[('selected', C['panel']), ('active', C['hover'])],
+                  foreground=[('selected', C['accent']), ('active', C['text'])])
         # Combobox
         style.configure('TCombobox', fieldbackground=C['bg2'],
                         background=C['panel2'], foreground=C['text'],
-                        arrowcolor=C['text2'], bordercolor=C['border'])
+                        arrowcolor=C['accent2'], bordercolor=C['border'],
+                        font=("Consolas", 9))
         style.map('TCombobox',
                   fieldbackground=[('readonly', C['bg2'])],
                   selectbackground=[('readonly', C['selected'])],
-                  selectforeground=[('readonly', 'white')])
-        # Scale / seek slider
+                  selectforeground=[('readonly', C['accent'])])
+        # Scale / seek slider with green accent
         style.configure('TScale', background=C['panel2'],
                         troughcolor=C['bg'], sliderlength=14,
                         sliderrelief='flat')
         style.map('TScale', background=[('active', C['accent'])])
+        # Entry fields
+        style.configure('TEntry', fieldbackground=C['bg2'],
+                        foreground=C['text'], insertcolor=C['accent'],
+                        bordercolor=C['border'], font=("Consolas", 9))
+        # Buttons
+        style.configure('TButton', background=C['panel2'],
+                        foreground=C['text'], font=("Consolas", 9),
+                        bordercolor=C['border'])
+        style.map('TButton',
+                  background=[('active', C['hover']), ('pressed', C['selected'])],
+                  foreground=[('active', C['accent'])])
 
     # ── Menu bar ──────────────────────────────────────────────────────────
 
@@ -9438,40 +9474,47 @@ class KotorModToolsApp(tk.Tk):
     # ── Main UI layout ────────────────────────────────────────────────────
 
     def _build_ui(self):
-        # ── Header ──
-        hdr = tk.Frame(self, bg=C['bg2'], height=46)
+        # ── Header — cyberpunk dark chrome with neon green accents ──
+        hdr = tk.Frame(self, bg=C['bg'], height=48)
         hdr.pack(fill='x')
         hdr.pack_propagate(False)
 
         # Left: App icon + title
         _logo_img = Icons.get("logo", 24)
         _logo_lbl = tk.Label(hdr, image=_logo_img if _logo_img else None,
-                             text="" if _logo_img else "GR",
-                             font=("Segoe UI", 18),
-                             bg=C['bg2'], fg=C['gold'])
+                             text="" if _logo_img else "//",
+                             font=("Consolas", 18, "bold"),
+                             bg=C['bg'], fg=C['accent'])
         if _logo_img:
             _logo_lbl._icon_img = _logo_img  # prevent GC
         _logo_lbl.pack(side='left', padx=(14, 4))
-        title_frame = tk.Frame(hdr, bg=C['bg2'])
+        title_frame = tk.Frame(hdr, bg=C['bg'])
         title_frame.pack(side='left')
-        tk.Label(title_frame, text="GhostRigger-K1-K2",
-                 font=("Segoe UI", 13, "bold"),
-                 bg=C['bg2'], fg=C['gold']).pack(anchor='w')
-        tk.Label(title_frame, text="Odyssey Engine Pipeline  │  KotOR 1 & 2 TSL",
-                 font=("Segoe UI", 8), bg=C['bg2'], fg=C['text2']).pack(anchor='w')
+        tk.Label(title_frame, text="GHOSTRIGGER",
+                 font=("Consolas", 14, "bold"),
+                 bg=C['bg'], fg=C['accent']).pack(anchor='w')
+        tk.Label(title_frame, text="Odyssey Engine Pipeline  //  KotOR 1 & 2 TSL",
+                 font=("Consolas", 8), bg=C['bg'], fg=C['text2']).pack(anchor='w')
 
-        # Right side cluster: version + IPC badge
-        right_cluster = tk.Frame(hdr, bg=C['bg2'])
+        # Right side cluster: version + live metrics + IPC badge
+        right_cluster = tk.Frame(hdr, bg=C['bg'])
         right_cluster.pack(side='right', padx=12)
+
+        # Live metrics bar (polycount, FPS, RAM) — placeholder, updated by viewport
+        self._metrics_var = tk.StringVar(value="")
+        _metrics_lbl = tk.Label(right_cluster, textvariable=self._metrics_var,
+                                font=("Consolas", 8), bg=C['bg'], fg=C['accent2'])
+        _metrics_lbl.pack(anchor='e')
+
         tk.Label(right_cluster, text=f"v{self.APP_VERSION}",
-                 font=("Segoe UI Semibold", 8),
-                 bg=C['bg2'], fg=C['text2']).pack(anchor='e')
+                 font=("Consolas", 8, "bold"),
+                 bg=C['bg'], fg=C['text2']).pack(anchor='e')
 
         # IPC status indicator (clickable badge)
-        self._ipc_status_var = tk.StringVar(value="IPC: starting…")
+        self._ipc_status_var = tk.StringVar(value="IPC: starting...")
         self._ipc_status_lbl = tk.Label(
             right_cluster, textvariable=self._ipc_status_var,
-            font=("Segoe UI", 7), bg=C['bg2'], fg=C['text2'],
+            font=("Consolas", 7), bg=C['bg'], fg=C['text2'],
             cursor="hand2",
         )
         self._ipc_status_lbl.pack(anchor='e')
@@ -9513,8 +9556,8 @@ class KotorModToolsApp(tk.Tk):
         imp_btn = _btn(tb, "⬆ Import ▾", None)
         imp_btn.pack(side='left', padx=2, pady=2)
         imp_menu = tk.Menu(imp_btn, tearoff=False, bg=C['panel'], fg=C['text'],
-                           activebackground=C['hover'], activeforeground='white',
-                           font=("Segoe UI", 9))
+                           activebackground=C['hover'], activeforeground=C['accent'],
+                           font=("Consolas", 9))
         imp_menu.add_command(label="Import OBJ…        Ctrl+I",  command=self._import_obj)
         imp_menu.add_command(label="Import FBX…",                command=self._import_fbx)
         imp_menu.add_command(label="Import GLB/GLTF…",           command=self._import_gltf)
@@ -9533,8 +9576,8 @@ class KotorModToolsApp(tk.Tk):
         exp_btn = _btn(tb, "⬇ Export ▾", None)
         exp_btn.pack(side='left', padx=2, pady=2)
         exp_menu = tk.Menu(exp_btn, tearoff=False, bg=C['panel'], fg=C['text'],
-                           activebackground=C['hover'], activeforeground='white',
-                           font=("Segoe UI", 9))
+                           activebackground=C['hover'], activeforeground=C['accent'],
+                           font=("Consolas", 9))
         exp_menu.add_command(label="Export Binary MDL…  Ctrl+M",  command=self._export_mdl_binary)
         exp_menu.add_command(label="Export OBJ…        Ctrl+E",  command=self._export_obj)
         exp_menu.add_command(label="Export FBX…",                command=self._export_fbx)
@@ -9556,13 +9599,15 @@ class KotorModToolsApp(tk.Tk):
         # Separator
         _sep(tb).pack(side='left', fill='y', padx=5, pady=4)
 
-        # Model name pill – shows currently loaded model + game tag
-        self._model_name_var = tk.StringVar(value="No model loaded")
+        # Model name pill – shows currently loaded model + game tag (neon green badge)
+        self._model_name_var = tk.StringVar(value="// No model loaded")
         pill = tk.Label(tb, textvariable=self._model_name_var,
-                        font=("Segoe UI Semibold", 9),
-                        bg=C['bg2'], fg=C['gold'],
+                        font=("Consolas", 9, "bold"),
+                        bg=C['bg'], fg=C['accent'],
                         padx=10, pady=3,
-                        relief='flat', cursor='hand2')
+                        relief='flat', cursor='hand2',
+                        highlightthickness=1,
+                        highlightbackground=C['border'])
         pill.pack(side='left', padx=4, pady=4)
         _tooltip(pill, "Currently loaded model  (Ctrl+W to clear / click for info)")
         pill.bind("<Button-1>", lambda e: self._show_model_info()
@@ -9769,15 +9814,17 @@ class KotorModToolsApp(tk.Tk):
         self.log_panel = LogPanel(self)
         self.log_panel.pack(fill='x', side='bottom')
 
-        # ── Status bar (above log, below modular) ─────────────────────────
-        status_bar = tk.Frame(self, bg=C['bg2'], height=20)
+        # ── Status bar (above log, below modular) — neon green terminal style ──
+        status_bar = tk.Frame(self, bg=C['bg'], height=22)
         status_bar.pack(fill='x', side='bottom')
         status_bar.pack_propagate(False)
+        # Thin accent border at top of status bar
+        tk.Frame(status_bar, bg=C['border'], height=1).pack(fill='x')
         self._status_var = tk.StringVar(
-            value="Ready  │  Ctrl+O: Open  │  F: Frame  │  W/B/T: Wire/Bones/Tex  │  F5: Refresh  │  F1: About")
+            value="// Ready  |  Ctrl+O: Open  |  F: Frame  |  W/B/T: Wire/Bones/Tex  |  F5: Refresh  |  F1: About")
         tk.Label(status_bar, textvariable=self._status_var,
-                 font=("Segoe UI", 7), bg=C['bg2'], fg=C['text2'],
-                 anchor='w').pack(fill='x', padx=8)
+                 font=("Consolas", 7), bg=C['bg'], fg=C['text2'],
+                 anchor='w').pack(fill='x', padx=8, pady=1)
 
         # ── Global keyboard shortcuts ─────────────────────────────────────
         self.bind("f",              lambda e: self.viewport.frame_all())

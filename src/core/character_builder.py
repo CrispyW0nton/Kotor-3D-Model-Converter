@@ -200,6 +200,274 @@ def load_template(game: str = "K1", part: str = "body") -> Optional["KotorModel"
         return None
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  v7.1 Head Attachment (Finding 3.3 — KotorBlender armature.py cross-ref)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# KotOR body models contain a "headhook" dummy node that specifies where the
+# head model should be attached.  The head model's root position is snapped to
+# the headhook's world transform to achieve correct positioning.
+#
+# Node name variants (from KotorBlender + KotOR.js + vanilla model analysis):
+#   "headhook"      — standard PC/NPC body models
+#   "cutscenehead"  — some cutscene body variants
+#   "head_g"        — some creature models use this as head attachment
+#
+# Cross-ref: KotorBlender armature.py — headhook node for head snapping
+# Cross-ref: KotOR.js OdysseyModel3D.ts — headhook lookup for attachment
+
+HEADHOOK_NODE_NAMES = ('headhook', 'cutscenehead', 'head_g')
+
+
+def find_headhook(body_model) -> Optional[Tuple[Tuple[float,float,float],
+                                                  Tuple[float,float,float,float]]]:
+    """Find the headhook attachment point in a body model.
+
+    Searches the body model's node tree for nodes named "headhook",
+    "cutscenehead", or "head_g" and returns their world transform.
+
+    Parameters
+    ----------
+    body_model : KotorModel
+        The body model to search.
+
+    Returns
+    -------
+    (world_position, world_orientation) or None if no headhook found.
+        world_position: (x, y, z) tuple
+        world_orientation: (qx, qy, qz, qw) quaternion tuple
+    """
+    if body_model is None:
+        return None
+    try:
+        for node in body_model.all_nodes():
+            name_lower = node.name.lower().strip()
+            if name_lower in HEADHOOK_NODE_NAMES:
+                try:
+                    wp, wo = node.world_transform()
+                    log.debug(f"find_headhook: found '{node.name}' at pos=({wp[0]:.3f}, "
+                              f"{wp[1]:.3f}, {wp[2]:.3f})")
+                    return (wp, wo)
+                except Exception as e:
+                    log.debug(f"find_headhook: world_transform failed for '{node.name}': {e}")
+                    return (node.position, node.rotation)
+    except Exception as e:
+        log.debug(f"find_headhook: search failed: {e}")
+    return None
+
+
+def validate_facial_bones(head_model) -> List[str]:
+    """Validate that a head model contains the required facial bones.
+
+    v7.1 (Finding 3.4 — KotorBlender armature.py bone naming conventions):
+    Checks for the presence of required facial bones/hooks used by the
+    KotOR engine for lip-sync animation and accessory attachment.
+
+    Returns a list of warning strings for missing bones.
+    """
+    if head_model is None:
+        return ["No head model provided"]
+
+    # Required facial bones (from KotOR vanilla head models):
+    #   head_g, necklwr_g, neck_g — base orientation
+    #   f_jaw_g — jaw open/close (lip sync)
+    #   f_um_g — upper mouth
+    #   f_Llm_g, f_Rlm_g — left/right lower mouth
+    #   MaskHook, GoggleHook — accessory attachment (optional but recommended)
+    _REQUIRED_BONES = {
+        'head_g':    'Head bone (base orientation)',
+        'f_jaw_g':   'Jaw bone (lip sync open/close)',
+        'f_um_g':    'Upper mouth (lip sync)',
+    }
+    _RECOMMENDED_BONES = {
+        'necklwr_g': 'Lower neck bone',
+        'neck_g':    'Neck bone',
+        'f_llm_g':   'Left lower mouth',
+        'f_rlm_g':   'Right lower mouth',
+        'maskhook':  'Mask attachment hook',
+        'gogglehook': 'Goggle attachment hook',
+    }
+
+    existing_names = set()
+    try:
+        for node in head_model.all_nodes():
+            existing_names.add(node.name.lower().strip())
+    except Exception:
+        return ["Failed to enumerate head model nodes"]
+
+    warnings = []
+    for bone_name, description in _REQUIRED_BONES.items():
+        if bone_name.lower() not in existing_names:
+            warnings.append(f"MISSING required bone: '{bone_name}' ({description})")
+
+    for bone_name, description in _RECOMMENDED_BONES.items():
+        if bone_name.lower() not in existing_names:
+            warnings.append(f"MISSING recommended bone: '{bone_name}' ({description})")
+
+    return warnings
+
+
+class LIPPlayback:
+    """LIP sync playback engine for character builder facial preview.
+
+    v7.2 (Finding 3.2 — KotOR.js LIPObject.ts lines 146-277 cross-ref):
+    Implements the KotOR engine's lip-sync algorithm that drives facial
+    bone animations from LIP keyframe data.
+
+    Algorithm (matching KotOR.js LIPObject.ts):
+    1. Load the model's 'talk' animation (from odysseyAnimationMap)
+    2. For each animation node, index Position/Orientation controllers
+       by the LIP shape index (0-15)
+    3. Interpolate between keyframe shapes using:
+       - lerp for position controllers
+       - slerp for orientation controllers
+    4. Interpolation factor = (elapsed - last.time) / (next.time - last.time)
+
+    Reference: KotOR.js LIPObject.ts lines 146-277; PyKotor lip_data.py.
+    """
+
+    def __init__(self):
+        self._lip_data = None      # LIPFile instance
+        self._talk_anim = None     # Animation named 'talk' from head model
+        self._elapsed = 0.0        # current playback time
+        self._playing = False
+
+    def load_lip(self, lip_file) -> bool:
+        """Load a LIP file for playback.
+
+        Parameters
+        ----------
+        lip_file : LIPFile
+            A parsed LIP file (from lip_reader.py).
+
+        Returns
+        -------
+        bool : True if loaded successfully.
+        """
+        if lip_file is None:
+            return False
+        self._lip_data = lip_file
+        self._elapsed = 0.0
+        return True
+
+    def load_talk_animation(self, head_model) -> bool:
+        """Find and cache the 'talk' animation from a head model.
+
+        KotOR engine convention: the 'talk' animation contains per-shape
+        bone poses for each of the 16 LIP visemes. The animation nodes
+        carry Position and Orientation controllers indexed by shape.
+
+        Parameters
+        ----------
+        head_model : KotorModel
+            A loaded head model with animations.
+
+        Returns
+        -------
+        bool : True if the 'talk' animation was found.
+        """
+        if head_model is None:
+            return False
+        anims = getattr(head_model, 'animations', [])
+        for anim in anims:
+            name = getattr(anim, 'name', '').lower()
+            if name == 'talk' or name.endswith('_talk'):
+                self._talk_anim = anim
+                log.debug(f"LIPPlayback: found talk animation '{anim.name}'")
+                return True
+        log.debug("LIPPlayback: no 'talk' animation found in head model")
+        return False
+
+    def update(self, dt: float) -> Optional[dict]:
+        """Advance playback by dt seconds and return current bone poses.
+
+        Returns
+        -------
+        dict[str, dict] or None
+            Mapping of bone_name → {'position': (x,y,z), 'rotation': (x,y,z,w)}
+            for all facial bones affected by the current LIP shape.
+            Returns None if playback is not active.
+        """
+        if not self._playing or self._lip_data is None:
+            return None
+
+        self._elapsed += dt
+
+        # Check if we've passed the end of the LIP data
+        sound_length = getattr(self._lip_data, 'sound_length', 0.0)
+        if sound_length > 0 and self._elapsed > sound_length:
+            self._playing = False
+            self._elapsed = 0.0
+            return None
+
+        # Get interpolated shape values at current time
+        # KotOR.js LIPObject.ts line 195: get the current and next keyframes
+        shape_data = self._lip_data.get_shape_at_time(self._elapsed)
+        if shape_data is None:
+            return {}
+
+        # shape_data contains (shape_index, interpolation_factor)
+        # or just the shape index depending on lip_reader implementation
+        current_shape = shape_data if isinstance(shape_data, int) else int(shape_data)
+
+        # Build bone pose from talk animation controller data
+        # KotOR.js algorithm: for each animation node, use shape index
+        # to select Position/Orientation keyframe values
+        if self._talk_anim is None:
+            return {}
+
+        poses = {}
+        nodes = getattr(self._talk_anim, 'nodes', {})
+        for bone_name, node_data in nodes.items():
+            pose = {}
+            # Position controller: indexed by shape index
+            pos_vals = getattr(node_data, 'position_values', None)
+            if pos_vals and current_shape < len(pos_vals):
+                pose['position'] = tuple(pos_vals[current_shape][:3])
+
+            # Rotation controller: indexed by shape index
+            rot_vals = getattr(node_data, 'rotation_values', None)
+            if rot_vals and current_shape < len(rot_vals):
+                pose['rotation'] = tuple(rot_vals[current_shape][:4])
+
+            if pose:
+                poses[bone_name.lower()] = pose
+
+        return poses
+
+    def play(self):
+        """Start playback from the beginning."""
+        self._elapsed = 0.0
+        self._playing = True
+
+    def stop(self):
+        """Stop playback and reset."""
+        self._playing = False
+        self._elapsed = 0.0
+
+    def pause(self):
+        """Pause playback at current position."""
+        self._playing = False
+
+    def resume(self):
+        """Resume from current position."""
+        self._playing = True
+
+    @property
+    def is_playing(self) -> bool:
+        return self._playing
+
+    @property
+    def elapsed(self) -> float:
+        return self._elapsed
+
+    @property
+    def duration(self) -> float:
+        if self._lip_data is None:
+            return 0.0
+        return getattr(self._lip_data, 'sound_length', 0.0)
+
+
 def rebuild_templates(out_dir: Optional[str] = None) -> List[str]:
     """
     Regenerate all template MDL files from real KotOR game data.

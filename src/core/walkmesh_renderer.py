@@ -826,3 +826,87 @@ class WalkmeshToggleController:
         """Propagate the global visible state to all overlay objects."""
         for overlay in self._overlays.values():
             overlay.visible = self._visible
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  v7.2 Walkmesh FBX Material Export (Finding 4.3 — KotorBlender walkmesh.py)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# FBX-compatible material definitions for each walkmesh surface type.
+# Each material maps a surface ID to an FBX material name and diffuse color
+# so that Unreal Engine can assign physics materials per surface type.
+# Reference: KotorBlender walkmesh.py + constants.py WALKMESH_MATERIALS;
+#            reone bwmreader.h surface type constants.
+WALKMESH_FBX_MATERIALS: Dict[int, Dict[str, Any]] = {
+    SURFACE_INVALID:        {'name': 'WOK_Invalid',       'diffuse': (0.5, 0.5, 0.5)},
+    SURFACE_DIRT:           {'name': 'WOK_Dirt',          'diffuse': (0.60, 0.40, 0.20)},
+    SURFACE_OBSCURING:      {'name': 'WOK_Obscuring',    'diffuse': (0.30, 0.30, 0.30)},
+    SURFACE_GRASS:          {'name': 'WOK_Grass',         'diffuse': (0.20, 0.70, 0.20)},
+    SURFACE_STONE:          {'name': 'WOK_Stone',         'diffuse': (0.50, 0.50, 0.50)},
+    SURFACE_WOOD:           {'name': 'WOK_Wood',          'diffuse': (0.50, 0.30, 0.10)},
+    SURFACE_WATER:          {'name': 'WOK_Water',         'diffuse': (0.20, 0.45, 0.80)},
+    SURFACE_NON_WALK:       {'name': 'WOK_NonWalk',       'diffuse': (0.80, 0.10, 0.10)},
+    SURFACE_TRANSPARENT:    {'name': 'WOK_Transparent',   'diffuse': (0.90, 0.90, 0.90)},
+    SURFACE_CARPET:         {'name': 'WOK_Carpet',        'diffuse': (0.70, 0.30, 0.70)},
+    SURFACE_METAL:          {'name': 'WOK_Metal',         'diffuse': (0.65, 0.65, 0.75)},
+    SURFACE_PUDDLES:        {'name': 'WOK_Puddles',       'diffuse': (0.30, 0.50, 0.70)},
+    SURFACE_SWAMP:          {'name': 'WOK_Swamp',         'diffuse': (0.30, 0.50, 0.10)},
+    SURFACE_MUD:            {'name': 'WOK_Mud',           'diffuse': (0.45, 0.30, 0.10)},
+    SURFACE_LEAVES:         {'name': 'WOK_Leaves',        'diffuse': (0.20, 0.60, 0.20)},
+    SURFACE_LAVA:           {'name': 'WOK_Lava',          'diffuse': (0.90, 0.30, 0.05)},
+    SURFACE_BOTTOMLESS:     {'name': 'WOK_Bottomless',    'diffuse': (0.00, 0.00, 0.00)},
+    SURFACE_DEEP_WATER:     {'name': 'WOK_DeepWater',     'diffuse': (0.10, 0.20, 0.60)},
+    SURFACE_DOOR:           {'name': 'WOK_Door',          'diffuse': (0.80, 0.80, 0.20)},
+    SURFACE_NON_WALK_GRASS: {'name': 'WOK_NonWalkGrass',  'diffuse': (0.60, 0.20, 0.20)},
+    SURFACE_SNOW:           {'name': 'WOK_Snow',          'diffuse': (0.85, 0.90, 0.95)},
+    SURFACE_SAND:           {'name': 'WOK_Sand',          'diffuse': (0.85, 0.75, 0.45)},
+    SURFACE_BAREBONES:      {'name': 'WOK_Barebones',     'diffuse': (0.55, 0.45, 0.35)},
+}
+
+
+def get_walkmesh_fbx_material(surface_id: int) -> Dict[str, Any]:
+    """Return FBX material properties for a walkmesh surface type.
+
+    The returned dict contains 'name' (FBX material name) and 'diffuse'
+    (RGB tuple) suitable for writing into FBX material blocks.
+
+    In Unreal Engine, these material names can be mapped to UE5 Physical
+    Materials via a data table, enabling automatic footstep sounds and
+    surface-dependent gameplay effects.
+
+    Returns
+    -------
+    dict with 'name' and 'diffuse' keys.
+    """
+    return WALKMESH_FBX_MATERIALS.get(surface_id, {
+        'name': f'WOK_Surface{surface_id}',
+        'diffuse': (0.60, 0.60, 0.60),
+    })
+
+
+def walkmesh_to_fbx_materials(overlay: 'WalkmeshOverlay') -> Dict[str, List[int]]:
+    """Group walkmesh faces by surface type for FBX multi-material export.
+
+    Returns a dict mapping FBX material name → list of face indices.
+    This enables exporting the walkmesh as a single mesh with multiple
+    FBX materials (one per surface type), which UE5 imports as a
+    multi-material Static Mesh with named material slots.
+
+    Parameters
+    ----------
+    overlay : WalkmeshOverlay
+        A loaded walkmesh overlay with .faces list.
+
+    Returns
+    -------
+    dict[str, list[int]]
+        Material name → face index list.
+    """
+    mat_faces: Dict[str, List[int]] = {}
+    for fi, face in enumerate(overlay.faces):
+        mat_info = get_walkmesh_fbx_material(face.surface)
+        mat_name = mat_info['name']
+        if mat_name not in mat_faces:
+            mat_faces[mat_name] = []
+        mat_faces[mat_name].append(fi)
+    return mat_faces
