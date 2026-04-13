@@ -1,10 +1,58 @@
 # GhostRigger-K1-K2 — Development Roadmap
 
-> **Last updated:** 2026-04-03 (Phase 15.1 — Transparency, Eye/Teeth Rendering & LBS Explosion Guard; full suite 3985+ passed 0 failures)
+> **Last updated:** 2026-04-13 (Phase 4 — AcuRig Integration, Batch Export, Thumbnail Cache; full suite 566+ passed 0 failures)
 > Tracked on the [genspark_ai_developer branch](https://github.com/CrispyW0nton/Kotor-3D-Model-Converter/tree/genspark_ai_developer)
 >
 > **See [TEXTBOOK_RESEARCH_REPORT.md](TEXTBOOK_RESEARCH_REPORT.md) for the full ~7,000-word analysis.**
 > **See [CONTEXT_SNAPSHOT.md](CONTEXT_SNAPSHOT.md) for the compressed session knowledge document.**
+
+---
+
+## Phase 4 — AcuRig Integration, Batch Export & Thumbnail Cache ✅
+
+**Completed 2026-04-13**
+
+### Overview
+
+Implemented Phase 4 of the GhostRigger Character Builder, completing the full
+AcuRig/GRig rigging-pipeline integration, batch multi-format export, and
+per-slot thumbnail cache in the Assembly browser.
+
+### New Components
+
+| Component | File | Description |
+|-----------|------|-------------|
+| `_AcuRigPanel` | `src/gui/character_builder_window.py` | Headless controller wrapping `AcuRig` (guide placement, auto-skin, pose correction, template save/load) and `GRig` (weight stats, mirror, prune). Degrades gracefully when autorig unavailable. |
+| `ThumbnailCache` | `src/gui/character_builder_window.py` | PIL thumbnail generator + process-lifetime LRU store (64×64 bounding-box ortho renders). `get_thumbnail_cache()` / `reset_thumbnail_cache()` singleton helpers. |
+| `BatchExportConfig` | `src/gui/character_builder_window.py` | Configuration dataclass for batch export: output_dir, formats, sidecar flag, name_prefix, skip_empty_slots. `to_dict()`/`from_dict()` for persistence. |
+| `BatchExportResult` | `src/gui/character_builder_window.py` | Per-slot result object: slot_label, fmt, path, ok, error. |
+| `BatchExporter` | `src/gui/character_builder_window.py` | Headless batch controller: walks all scene slots, dispatches to MDL/FBX/glTF/OBJ exporters, writes `.ghostrig.json` sidecars, returns result list + summary dict. |
+
+### UI Changes
+
+| Frame | Change |
+|-------|--------|
+| `_RigFrame` | Added AcuRig sub-panel (detect profile, place guides, mask fingers/tail/toes, generate rig, auto skin, mirror weights, T-pose, A-pose, full pipeline, save/load template). |
+| `_ExportFrame` | Added Batch Export panel with output-dir picker, multi-format checkboxes, name prefix, sidecar toggle, run button, and results log. `get_batch_config()` accessor for testing. |
+| `_AssemblyFrame` | Added thumbnail strip (64 px PIL ortho renders), character name entry field. `_refresh_thumbnails()` updates on every slot change. `_on_name_change()` syncs character name to scene. |
+
+### Lazy Import Helpers Added
+
+- `_import_accurig()` — returns `(AcuRig, RigGuide, BoneMask, GRig)` or `(None, None, None, None)`.
+- `_import_exporters()` — returns `{"MDL": MDLAsciiWriter, "FBX": FBXExporter, …}`.
+
+### Tests
+
+```
+tests/test_v420_acurig_integration.py   105 tests, all passing
+tests/test_v430_batch_export.py          62 tests, all passing
+Phase 2 validation                       63 passed
+Phase 2 persistence                      83 passed
+Phase 2 viewport                         79 passed
+Phase 3 rig mode                         91 passed
+Phase 3 face mode                        83 passed
+Total suite: 566 passed, 0 failures
+```
 
 ---
 

@@ -861,3 +861,145 @@ class ModelLookup:
         """Resolve UTD resref → MDL resref via genericdoors.2da."""
         # Phase 5.2 TODO
         return ''
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  CharacterSceneRegistry  (Phase 2 — GhostRigger Character Builder)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class CharacterSceneRegistry:
+    """Thread-safe in-process registry for CharacterScene objects.
+
+    Allows different parts of the application (main window, character builder,
+    IPC server) to share and look up named CharacterScene instances without
+    passing references through every call stack.
+
+    The registry uses the scene's ``scene_id`` (UUID string) as the primary
+    key, with an optional human-readable ``alias`` for friendly lookup.
+
+    Usage
+    -----
+    ::
+
+        from src.core.scene_manager import get_character_registry
+        from src.core.model_data import CharacterScene, PartSlot
+
+        reg = get_character_registry()
+
+        scene = CharacterScene(game_version='K1', character_name='Revan')
+        reg.register(scene, alias='revan')
+
+        same = reg.get_by_alias('revan')
+        assert same is scene
+
+        reg.unregister(scene.scene_id)
+    """
+
+    def __init__(self) -> None:
+        import threading
+        self._lock   = threading.Lock()
+        self._scenes: Dict[str, Any]    = {}   # scene_id → CharacterScene
+        self._aliases: Dict[str, str]   = {}   # alias → scene_id
+
+    # ── Registration ──────────────────────────────────────────────────────────
+
+    def register(self, scene, alias: str = "") -> str:
+        """Register *scene* and return its scene_id.
+
+        Parameters
+        ----------
+        scene : CharacterScene to register.
+        alias : Optional friendly name (e.g. 'active', 'revan').
+                If a previous scene was registered under the same alias it
+                is *not* removed; only the alias mapping is updated.
+
+        Returns
+        -------
+        scene.scene_id
+        """
+        sid = scene.scene_id
+        with self._lock:
+            self._scenes[sid] = scene
+            if alias:
+                self._aliases[alias] = sid
+        log.debug("CharacterSceneRegistry.register: id=%s alias=%r", sid, alias)
+        return sid
+
+    def unregister(self, scene_id: str) -> None:
+        """Remove a scene from the registry by its scene_id."""
+        with self._lock:
+            self._scenes.pop(scene_id, None)
+            # Clean up any aliases pointing to this scene
+            dead = [k for k, v in self._aliases.items() if v == scene_id]
+            for k in dead:
+                del self._aliases[k]
+        log.debug("CharacterSceneRegistry.unregister: id=%s", scene_id)
+
+    # ── Lookup ────────────────────────────────────────────────────────────────
+
+    def get(self, scene_id: str):
+        """Return the CharacterScene for the given scene_id, or None."""
+        with self._lock:
+            return self._scenes.get(scene_id)
+
+    def get_by_alias(self, alias: str):
+        """Return the CharacterScene registered under *alias*, or None."""
+        with self._lock:
+            sid = self._aliases.get(alias)
+            return self._scenes.get(sid) if sid else None
+
+    def set_alias(self, scene_id: str, alias: str) -> None:
+        """Assign an alias to an already-registered scene."""
+        with self._lock:
+            if scene_id not in self._scenes:
+                raise KeyError(f"scene_id not registered: {scene_id!r}")
+            self._aliases[alias] = scene_id
+
+    # ── Introspection ─────────────────────────────────────────────────────────
+
+    def list_scenes(self) -> List[Any]:
+        """Return a snapshot list of all registered CharacterScene objects."""
+        with self._lock:
+            return list(self._scenes.values())
+
+    def list_aliases(self) -> Dict[str, str]:
+        """Return a copy of the alias → scene_id mapping."""
+        with self._lock:
+            return dict(self._aliases)
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._scenes)
+
+    def clear(self) -> None:
+        """Remove all registered scenes (mainly for testing)."""
+        with self._lock:
+            self._scenes.clear()
+            self._aliases.clear()
+
+
+# ── Module-level singleton ────────────────────────────────────────────────────
+
+_character_registry: Optional["CharacterSceneRegistry"] = None
+_registry_lock = None
+
+
+def get_character_registry() -> "CharacterSceneRegistry":
+    """Return the process-wide CharacterSceneRegistry singleton."""
+    global _character_registry, _registry_lock
+    if _character_registry is None:
+        import threading
+        if _registry_lock is None:
+            _registry_lock = threading.Lock()
+        with _registry_lock:
+            if _character_registry is None:
+                _character_registry = CharacterSceneRegistry()
+    return _character_registry
+
+
+def reset_character_registry() -> None:
+    """Reset the singleton registry (for testing only)."""
+    global _character_registry
+    if _character_registry is not None:
+        _character_registry.clear()
+    _character_registry = None
