@@ -58,15 +58,17 @@ class TestLightmapShadeFix(unittest.TestCase):
                       "FIX-LMSHADE: shader must have lightmap-only branch")
 
     def test_shader_overbright_factor(self):
-        """Lightmap compositing must use ×2.0 overbright factor."""
+        """Lightmap compositing must use raised overbright factor (FIX-LMBRIGHT)."""
         src_path = os.path.join(os.path.dirname(__file__),
                                 'src', 'gui', 'gpu_renderer.py')
         with open(src_path, 'r') as f:
             src = f.read()
 
-        # The shader must contain the overbright multiply
-        self.assertIn('lm_samp.rgb * 2.0', src,
-                      "FIX-LMSHADE: lightmap must use ×2.0 overbright factor")
+        # FIX-LMBRIGHT: Overbright raised from 2.0 → 2.5 to match
+        # KotOR.js effective lightMapIntensity and xoreos gamma-adjusted
+        # multi-pass BLEND_MULTIPLY.
+        self.assertIn('lm_samp.rgb * 2.5', src,
+                      "FIX-LMBRIGHT: lightmap must use ×2.5 overbright factor")
 
     def test_module_detection_sets_lm_shade(self):
         """_draw_node must set u_lm_shade=1 for module geometry."""

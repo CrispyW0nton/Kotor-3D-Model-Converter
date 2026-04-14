@@ -821,13 +821,30 @@ void main() {
     //   The directDiffuse (Phong shade) is NOT included in the lightmapped path.
     //
     // Our simplified single-pass equivalent:
-    //   lit_color = diffuse_tex.rgb * lightmap.rgb * 2.0
-    // The ×2.0 overbright factor matches the KotOR engine convention.
+    //   lit_color = diffuse_tex.rgb * lightmap.rgb * OVERBRIGHT
+    //
+    // FIX-LMBRIGHT: The original ×2.0 overbright factor produced visibly
+    // dark scenes because KotOR module lightmaps have a mean intensity of
+    // only ~0.25.  With ×2.0: 0.4 × 0.25 × 2.0 = 0.20 (far too dark).
+    //
+    // KotOR.js effective path (ShaderOdysseyModel.ts USE_LIGHTMAP):
+    //   indirectDiffuse = PI * lightmap * lightMapIntensity * BRDF_Lambert
+    // The PI factor (~3.14) plus Lambert normalization (/PI) cancel, but
+    // lightMapIntensity is tuned to produce visually correct results at
+    // approximately ×2.5 effective overbright.
+    //
+    // xoreos uses multi-pass BLEND_MULTIPLY with an implicit gamma boost
+    // that also results in ~2.5× effective brightness.
+    //
+    // We raise the single-pass overbright from 2.0 → 2.5 to match these
+    // reference implementations, plus add a small ambient floor (0.03) to
+    // prevent fully black areas in unlit corners of modules.
 
     if (u_lm_shade == 1 && u_has_lm == 1) {
         // ── Lightmap-only path (module/area geometry) ─────────────────
         vec4 lm_samp = texture(u_lm_tex, v_uv_lm);
-        lit_color = diffuse_samp.rgb * lm_samp.rgb * 2.0;
+        // FIX-LMBRIGHT: Raised overbright 2.0 → 2.5 + ambient floor 0.03
+        lit_color = diffuse_samp.rgb * (lm_samp.rgb * 2.5 + vec3(0.03));
 
         // Self-illumination still applies additively
         lit_color += u_selfillum;
@@ -901,7 +918,8 @@ void main() {
         // (e.g. character models with lightmap textures).
         if (u_has_lm == 1) {
             vec4 lm_samp = texture(u_lm_tex, v_uv_lm);
-            lit_color *= lm_samp.rgb * 2.0;
+            // FIX-LMBRIGHT: Match the raised overbright factor (2.5)
+            lit_color *= lm_samp.rgb * 2.5;
         }
     }
 

@@ -1,0 +1,1066 @@
+[
+  {
+    "node": "Mesh458",
+    "diffuse_tex": "lts_trim01",
+    "lightmap_tex": "m02aa_01a_lm1",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 64,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 64,
+    "n_faces": 32
+  },
+  {
+    "node": "Mesh460",
+    "diffuse_tex": "lts_pwall01i",
+    "lightmap_tex": "m02aa_01a_lm1",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 216,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 216,
+    "n_faces": 96
+  },
+  {
+    "node": "Line180",
+    "diffuse_tex": "lts_nwall04i",
+    "lightmap_tex": "m02aa_01a_lm2",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 96,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 96,
+    "n_faces": 48
+  },
+  {
+    "node": "Object337",
+    "diffuse_tex": "lts_lite08",
+    "lightmap_tex": "",
+    "has_lightmap": false,
+    "tex_count": 1,
+    "face_mats": [
+      0
+    ],
+    "uvs_lm_count": 0,
+    "dispatch": "single-tex \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": false,
+    "u_lm_shade": 0,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "N/A",
+    "n_verts": 72,
+    "n_faces": 48
+  },
+  {
+    "node": "Object344",
+    "diffuse_tex": "lts_bwall04i",
+    "lightmap_tex": "m02aa_01a_lm1",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 32,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 32,
+    "n_faces": 16
+  },
+  {
+    "node": "Box174",
+    "diffuse_tex": "lts_pwall04",
+    "lightmap_tex": "m02aa_01a_lm2",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 32,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 32,
+    "n_faces": 12
+  },
+  {
+    "node": "Box175",
+    "diffuse_tex": "lts_rwall01",
+    "lightmap_tex": "m02aa_01a_lm0",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 352,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 352,
+    "n_faces": 158
+  },
+  {
+    "node": "Box176",
+    "diffuse_tex": "lts_rwall01",
+    "lightmap_tex": "m02aa_01a_lm0",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 352,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 352,
+    "n_faces": 158
+  },
+  {
+    "node": "Box177",
+    "diffuse_tex": "lts_pwall04",
+    "lightmap_tex": "m02aa_01a_lm2",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 76,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 76,
+    "n_faces": 32
+  },
+  {
+    "node": "Mesh462",
+    "diffuse_tex": "lmi_bed01",
+    "lightmap_tex": "m02aa_01a_lm1",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 45,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 45,
+    "n_faces": 19
+  },
+  {
+    "node": "Mesh464",
+    "diffuse_tex": "lts_nwall02",
+    "lightmap_tex": "m02aa_01a_lm4",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 136,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 136,
+    "n_faces": 48
+  },
+  {
+    "node": "Object345",
+    "diffuse_tex": "lts_gwall01",
+    "lightmap_tex": "m02aa_01a_lm3",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 8,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 8,
+    "n_faces": 4
+  },
+  {
+    "node": "Object347",
+    "diffuse_tex": "lts_nwall04i",
+    "lightmap_tex": "m02aa_01a_lm2",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 48,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 48,
+    "n_faces": 24
+  },
+  {
+    "node": "Mesh467",
+    "diffuse_tex": "lts_bwall02i",
+    "lightmap_tex": "m02aa_01a_lm2",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 24,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 24,
+    "n_faces": 12
+  },
+  {
+    "node": "Object348",
+    "diffuse_tex": "lts_pwall01i",
+    "lightmap_tex": "m02aa_01a_lm2",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 40,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 40,
+    "n_faces": 20
+  },
+  {
+    "node": "Plane63",
+    "diffuse_tex": "lts_bwall04i",
+    "lightmap_tex": "m02aa_01a_lm2",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 110,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 110,
+    "n_faces": 44
+  },
+  {
+    "node": "Cylinder10",
+    "diffuse_tex": "lts_bwall04i",
+    "lightmap_tex": "m02aa_01a_lm2",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 32,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 32,
+    "n_faces": 16
+  },
+  {
+    "node": "Object350",
+    "diffuse_tex": "lts_lite08",
+    "lightmap_tex": "",
+    "has_lightmap": false,
+    "tex_count": 1,
+    "face_mats": [
+      0
+    ],
+    "uvs_lm_count": 0,
+    "dispatch": "single-tex \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": false,
+    "u_lm_shade": 0,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "N/A",
+    "n_verts": 8,
+    "n_faces": 4
+  },
+  {
+    "node": "Mesh472",
+    "diffuse_tex": "lts_nwall04i",
+    "lightmap_tex": "m02aa_01a_lm0",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 64,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 64,
+    "n_faces": 32
+  },
+  {
+    "node": "Plane94",
+    "diffuse_tex": "null",
+    "lightmap_tex": "",
+    "has_lightmap": false,
+    "tex_count": 1,
+    "face_mats": [
+      0
+    ],
+    "uvs_lm_count": 0,
+    "dispatch": "single-tex \u2192 _draw_node",
+    "diffuse_in_dict": false,
+    "lightmap_in_dict": false,
+    "u_lm_shade": 0,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "N/A",
+    "n_verts": 4,
+    "n_faces": 2
+  },
+  {
+    "node": "Plane95",
+    "diffuse_tex": "null",
+    "lightmap_tex": "",
+    "has_lightmap": false,
+    "tex_count": 1,
+    "face_mats": [
+      0
+    ],
+    "uvs_lm_count": 0,
+    "dispatch": "single-tex \u2192 _draw_node",
+    "diffuse_in_dict": false,
+    "lightmap_in_dict": false,
+    "u_lm_shade": 0,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "N/A",
+    "n_verts": 4,
+    "n_faces": 2
+  },
+  {
+    "node": "Mesh473",
+    "diffuse_tex": "lts_trim01",
+    "lightmap_tex": "m02aa_01a_lm4",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 8,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 8,
+    "n_faces": 4
+  },
+  {
+    "node": "Mesh474",
+    "diffuse_tex": "lts_bwall04i",
+    "lightmap_tex": "m02aa_01a_lm1",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 32,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 32,
+    "n_faces": 16
+  },
+  {
+    "node": "Mesh475",
+    "diffuse_tex": "lts_pwall01i",
+    "lightmap_tex": "m02aa_01a_lm2",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 48,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 48,
+    "n_faces": 24
+  },
+  {
+    "node": "Box181",
+    "diffuse_tex": "lts_pwall01i",
+    "lightmap_tex": "m02aa_01a_lm0",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 684,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 684,
+    "n_faces": 274
+  },
+  {
+    "node": "Mesh476",
+    "diffuse_tex": "lts_nwall04i",
+    "lightmap_tex": "m02aa_01a_lm2",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 56,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 56,
+    "n_faces": 28
+  },
+  {
+    "node": "Plane64",
+    "diffuse_tex": "lts_gwall01",
+    "lightmap_tex": "m02aa_01a_lm2",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 32,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 32,
+    "n_faces": 16
+  },
+  {
+    "node": "Mesh477",
+    "diffuse_tex": "lts_nwall02",
+    "lightmap_tex": "m02aa_01a_lm2",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 40,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 40,
+    "n_faces": 20
+  },
+  {
+    "node": "Mesh478",
+    "diffuse_tex": "lts_pwall01i",
+    "lightmap_tex": "m02aa_01a_lm4",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 320,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 320,
+    "n_faces": 152
+  },
+  {
+    "node": "Box182",
+    "diffuse_tex": "lts_pwall01i",
+    "lightmap_tex": "m02aa_01a_lm2",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 66,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 66,
+    "n_faces": 24
+  },
+  {
+    "node": "Mesh479",
+    "diffuse_tex": "lts_pwall04",
+    "lightmap_tex": "m02aa_01a_lm4",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 224,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 224,
+    "n_faces": 96
+  },
+  {
+    "node": "NGon18",
+    "diffuse_tex": "lts_bwall04i",
+    "lightmap_tex": "m02aa_01a_lm2",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 30,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 30,
+    "n_faces": 14
+  },
+  {
+    "node": "Mesh482",
+    "diffuse_tex": "lts_nwall04i",
+    "lightmap_tex": "m02aa_01a_lm2",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 40,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 40,
+    "n_faces": 20
+  },
+  {
+    "node": "Box184",
+    "diffuse_tex": "lts_rwall01",
+    "lightmap_tex": "m02aa_01a_lm0",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 352,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 352,
+    "n_faces": 158
+  },
+  {
+    "node": "Mesh483",
+    "diffuse_tex": "lts_gwall01",
+    "lightmap_tex": "m02aa_01a_lm2",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 102,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 102,
+    "n_faces": 46
+  },
+  {
+    "node": "Plane66",
+    "diffuse_tex": "lts_pwall01i",
+    "lightmap_tex": "m02aa_01a_lm1",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 158,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 158,
+    "n_faces": 64
+  },
+  {
+    "node": "Mesh486",
+    "diffuse_tex": "lts_gwall01",
+    "lightmap_tex": "m02aa_01a_lm5",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 34,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 34,
+    "n_faces": 14
+  },
+  {
+    "node": "Box185",
+    "diffuse_tex": "lts_pwall04",
+    "lightmap_tex": "m02aa_01a_lm2",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 42,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 42,
+    "n_faces": 20
+  },
+  {
+    "node": "Mesh488",
+    "diffuse_tex": "lts_nwall04i",
+    "lightmap_tex": "m02aa_01a_lm1",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 117,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 117,
+    "n_faces": 48
+  },
+  {
+    "node": "Mesh489",
+    "diffuse_tex": "lts_pwall01i",
+    "lightmap_tex": "m02aa_01a_lm5",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 32,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 32,
+    "n_faces": 16
+  },
+  {
+    "node": "Mesh490",
+    "diffuse_tex": "lts_trim01",
+    "lightmap_tex": "m02aa_01a_lm4",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 8,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 8,
+    "n_faces": 4
+  },
+  {
+    "node": "Mesh493",
+    "diffuse_tex": "lts_pwall01i",
+    "lightmap_tex": "m02aa_01a_lm0",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 16,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 16,
+    "n_faces": 8
+  },
+  {
+    "node": "Box186",
+    "diffuse_tex": "lts_pwall01i",
+    "lightmap_tex": "m02aa_01a_lm0",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 750,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 750,
+    "n_faces": 298
+  },
+  {
+    "node": "Mesh494",
+    "diffuse_tex": "lts_nwall02",
+    "lightmap_tex": "m02aa_01a_lm2",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 40,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 40,
+    "n_faces": 20
+  },
+  {
+    "node": "Mesh495",
+    "diffuse_tex": "lts_lite08",
+    "lightmap_tex": "",
+    "has_lightmap": false,
+    "tex_count": 1,
+    "face_mats": [
+      0
+    ],
+    "uvs_lm_count": 0,
+    "dispatch": "single-tex \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": false,
+    "u_lm_shade": 0,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "N/A",
+    "n_verts": 8,
+    "n_faces": 4
+  },
+  {
+    "node": "Mesh496",
+    "diffuse_tex": "lts_lite08",
+    "lightmap_tex": "",
+    "has_lightmap": false,
+    "tex_count": 1,
+    "face_mats": [
+      0
+    ],
+    "uvs_lm_count": 0,
+    "dispatch": "single-tex \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": false,
+    "u_lm_shade": 0,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "N/A",
+    "n_verts": 8,
+    "n_faces": 4
+  },
+  {
+    "node": "Mesh497",
+    "diffuse_tex": "lmi_bed01",
+    "lightmap_tex": "m02aa_01a_lm0",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 90,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 90,
+    "n_faces": 38
+  },
+  {
+    "node": "Box190",
+    "diffuse_tex": "lts_pwall04",
+    "lightmap_tex": "m02aa_01a_lm0",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 148,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 148,
+    "n_faces": 64
+  },
+  {
+    "node": "Mesh499",
+    "diffuse_tex": "lts_nwall04i",
+    "lightmap_tex": "m02aa_01a_lm4",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 234,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 234,
+    "n_faces": 96
+  },
+  {
+    "node": "Mesh501",
+    "diffuse_tex": "lts_bwall02i",
+    "lightmap_tex": "m02aa_01a_lm3",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 24,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": true,
+    "u_lm_shade": 1,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 24,
+    "n_faces": 12
+  },
+  {
+    "node": "Box241",
+    "diffuse_tex": "lts_glass01",
+    "lightmap_tex": "",
+    "has_lightmap": false,
+    "tex_count": 1,
+    "face_mats": [
+      0
+    ],
+    "uvs_lm_count": 0,
+    "dispatch": "single-tex \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": false,
+    "u_lm_shade": 0,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "N/A",
+    "n_verts": 8,
+    "n_faces": 4
+  },
+  {
+    "node": "Plane91",
+    "diffuse_tex": "lts_nums",
+    "lightmap_tex": "",
+    "has_lightmap": false,
+    "tex_count": 1,
+    "face_mats": [
+      0
+    ],
+    "uvs_lm_count": 0,
+    "dispatch": "single-tex \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": false,
+    "u_lm_shade": 0,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "N/A",
+    "n_verts": 4,
+    "n_faces": 2
+  },
+  {
+    "node": "Box249",
+    "diffuse_tex": "lts_pwall01i",
+    "lightmap_tex": "m02aa_01a_a0005a",
+    "has_lightmap": true,
+    "tex_count": 2,
+    "face_mats": [
+      1
+    ],
+    "uvs_lm_count": 62,
+    "dispatch": "Case A (has_lm) \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": false,
+    "u_lm_shade": 0,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "CLAMP",
+    "n_verts": 62,
+    "n_faces": 24
+  },
+  {
+    "node": "Mesh588",
+    "diffuse_tex": "lts_nums",
+    "lightmap_tex": "",
+    "has_lightmap": false,
+    "tex_count": 1,
+    "face_mats": [
+      0
+    ],
+    "uvs_lm_count": 0,
+    "dispatch": "single-tex \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": false,
+    "u_lm_shade": 0,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "N/A",
+    "n_verts": 8,
+    "n_faces": 4
+  },
+  {
+    "node": "Mesh581",
+    "diffuse_tex": "lts_nums",
+    "lightmap_tex": "",
+    "has_lightmap": false,
+    "tex_count": 1,
+    "face_mats": [
+      0
+    ],
+    "uvs_lm_count": 0,
+    "dispatch": "single-tex \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": false,
+    "u_lm_shade": 0,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "N/A",
+    "n_verts": 8,
+    "n_faces": 4
+  },
+  {
+    "node": "Mesh587",
+    "diffuse_tex": "lts_nums",
+    "lightmap_tex": "",
+    "has_lightmap": false,
+    "tex_count": 1,
+    "face_mats": [
+      0
+    ],
+    "uvs_lm_count": 0,
+    "dispatch": "single-tex \u2192 _draw_node",
+    "diffuse_in_dict": true,
+    "lightmap_in_dict": false,
+    "u_lm_shade": 0,
+    "diff_wrap": "REPEAT",
+    "lm_wrap": "N/A",
+    "n_verts": 8,
+    "n_faces": 4
+  }
+]
