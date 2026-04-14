@@ -8677,6 +8677,11 @@ class ViewportWidget(tk.Frame):
             # FIX (v10.4): use self._fast_drag_enabled directly (always defined).
             if self._fast_drag_enabled:
                 self._renderer.is_interactive = True
+            # PERF-GPU-INTERACTIVE: Tell GPU renderer we are in interactive drag
+            # so it can skip MSAA resolve (~59ms saved) and alpha composite (~19ms).
+            _gpu_r = getattr(self, '_gpu_renderer', None)
+            if _gpu_r is not None:
+                _gpu_r.interactive = True
             self._request_render(fast=True)
 
     def _release_lmb(self, e):
@@ -8719,6 +8724,11 @@ class ViewportWidget(tk.Frame):
 
         self._renderer._hovered_bone = None
         self._renderer.is_interactive = False  # restore full quality after drag
+        # PERF-GPU-INTERACTIVE: Clear GPU renderer interactive mode on release
+        # so the next still frame uses full MSAA + alpha composite quality.
+        _gpu_r = getattr(self, '_gpu_renderer', None)
+        if _gpu_r is not None:
+            _gpu_r.interactive = False
         # ── Progressive two-pass render after drag ────────────────────────────
         # When texture mode is active and the user was dragging, trigger a fast
         # LQ (mip1 half-res) first frame for immediate feedback, then auto-queue
@@ -9040,11 +9050,19 @@ class ViewportWidget(tk.Frame):
         # __init__), eliminating the getattr(..., True) default mismatch.
         if self._fast_drag_enabled:
             self._renderer.is_interactive = True
+        # PERF-GPU-INTERACTIVE: Tell GPU renderer we are in interactive drag
+        _gpu_r = getattr(self, '_gpu_renderer', None)
+        if _gpu_r is not None:
+            _gpu_r.interactive = True
         self._request_render(fast=True)
 
     def _release_pan(self, e):
         """MMB/RMB release: restore full-quality render after pan drag."""
         self._renderer.is_interactive = False
+        # PERF-GPU-INTERACTIVE: Clear GPU renderer interactive mode on release
+        _gpu_r = getattr(self, '_gpu_renderer', None)
+        if _gpu_r is not None:
+            _gpu_r.interactive = False
         # Progressive two-pass render: LQ first, then HQ
         if self._renderer.show_texture:
             self._renderer._lq_tex_mode = True
@@ -9335,7 +9353,13 @@ class ViewportWidget(tk.Frame):
                     # Walk all mesh nodes and trigger a .get() for each texture
                     # name so the cache is populated before we read _cache.items().
                     _tc = getattr(renderer, 'tex_cache', None)
-                    if _tc is not None:
+                    # PERF-TEXPRELOAD: Only walk all nodes for texture preloading
+                    # once per model.  Track the model id; if unchanged, skip the
+                    # expensive node walk + _tc.get() calls entirely.
+                    # This saves ~2-5ms/frame on 56-mesh-node module models.
+                    _cur_model_id_vp = id(self.model)
+                    _last_preload_id = getattr(self, '_gpu_tex_preload_model_id', 0)
+                    if _tc is not None and _cur_model_id_vp != _last_preload_id:
                         try:
                             _all_fn = getattr(self.model, 'all_nodes', None)
                             _mnodes = list(_all_fn()) if _all_fn else []
@@ -9345,17 +9369,12 @@ class ViewportWidget(tk.Frame):
                                 _mtex = str(getattr(_mn, 'texture', '') or '').strip()
                                 if _mtex and _mtex.upper() not in ('NULL', '', 'NONE'):
                                     _tc.get(_mtex)  # triggers lazy load
-                                # Also load lightmap texture
                                 _lmtex = str(getattr(_mn, 'lightmap', '') or '').strip()
                                 if _lmtex and _lmtex.upper() not in ('NULL', '', 'NONE'):
                                     _tc.get(_lmtex)
-                                # Also load env map texture
                                 _envtex = str(getattr(_mn, 'txi_envmaptexture', '') or '').strip()
                                 if _envtex and _envtex.upper() not in ('NULL', '', 'NONE'):
                                     _tc.get(_envtex)
-                                # FIX-MULTITEX-PRELOAD: Also load ALL texture_names[]
-                                # entries.  Multi-texture nodes (tex_count > 1) may
-                                # reference textures not in .texture or .lightmap.
                                 for _tn in getattr(_mn, 'texture_names', []):
                                     _tn_clean = str(_tn or '').strip()
                                     if (_tn_clean
@@ -9363,14 +9382,13 @@ class ViewportWidget(tk.Frame):
                                             and _tn_clean != _mtex
                                             and _tn_clean != _lmtex):
                                         _tc.get(_tn_clean)
-                                # Also load specular colour map texture
                                 _spectex = str(getattr(_mn, 'txi_specularcolour', '') or '').strip()
                                 if _spectex and _spectex.upper() not in ('NULL', '', 'NONE'):
                                     _tc.get(_spectex)
-                                # Also load bump map texture
                                 _bumptex = str(getattr(_mn, 'txi_bumpmaptexture', '') or '').strip()
                                 if _bumptex and _bumptex.upper() not in ('NULL', '', 'NONE'):
                                     _tc.get(_bumptex)
+                            self._gpu_tex_preload_model_id = _cur_model_id_vp
                         except Exception:
                             pass
                     if _tc is not None and hasattr(_tc, '_cache'):
