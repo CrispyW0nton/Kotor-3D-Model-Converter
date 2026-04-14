@@ -2907,6 +2907,18 @@ class GpuRenderer:
                                                          and len(uvs_lm) > 0) else None
                 gl_lm = self._tex_cache.get(lm_img) if lm_img else None
                 if gl_lm:
+                    # FIX-LMWRAP: Lightmap textures must use CLAMP_TO_EDGE
+                    # (not GL_REPEAT) because lightmap UVs are always in [0,1]
+                    # and wrap-around causes visible seam lines at texel boundaries.
+                    # Additionally, lightmaps are small (8x8 to 64x64) and their
+                    # mipmap chain can over-blur the lightmap when magnified across
+                    # large surfaces.  Use GL_LINEAR (no mipmap) for min filter.
+                    # Cross-ref: KotOR.js ShaderOdysseyModel.ts lightMap sampling;
+                    # xoreos model_kotor.cpp — lightmap uses CLAMP_TO_EDGE wrap;
+                    # KotorBlender — lightmap UV is always in [0,1] range.
+                    gl_lm.repeat_x = False  # GL_CLAMP_TO_EDGE
+                    gl_lm.repeat_y = False  # GL_CLAMP_TO_EDGE
+                    gl_lm.filter = (moderngl.LINEAR, moderngl.LINEAR)
                     gl_lm.use(location=1)
                     prog['u_lm_tex'].value = 1
                     prog['u_has_lm'].value = 1
