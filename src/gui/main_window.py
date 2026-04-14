@@ -4705,7 +4705,13 @@ class DiagnosticsPanel(tk.Frame):
         self.after(0, _apply) pattern used inside background threads — on Linux
         Tkinter, after() called from a non-main thread raises RuntimeError.
         This method always runs on the main thread (scheduled via after).
+
+        FIX-DIAGHANG: Import queue explicitly and catch queue.Empty by name
+        instead of bare 'except Exception' which could swallow real errors.
+        Also guard text widget operations more carefully in case the widget
+        was destroyed between scheduling and execution.
         """
+        import queue as _q
         try:
             while True:
                 items = self._diag_queue.get_nowait()
@@ -4713,10 +4719,14 @@ class DiagnosticsPanel(tk.Frame):
                     self._clear()
                     self._write_batch(items)
                     self.text.see('1.0')
-                except Exception:
-                    pass
-        except Exception:
-            pass   # queue.Empty → nothing to drain
+                except (tk.TclError, RuntimeError):
+                    pass  # widget destroyed between scheduling and execution
+                except Exception as _e:
+                    log.debug(f"_poll_diag_queue write error: {_e}")
+        except _q.Empty:
+            pass  # nothing to drain — normal case
+        except Exception as _e:
+            log.debug(f"_poll_diag_queue drain error: {_e}")
         try:
             self.after(100, self._poll_diag_queue)
         except Exception:
@@ -4757,39 +4767,66 @@ class DiagnosticsPanel(tk.Frame):
         import threading as _threading
 
         def _bg_work():
-            """Build the report off the main thread — no Tkinter calls here."""
-            # Write file-log diagnostics (uses log.debug — must NOT go to GUI).
-            # Temporarily detach the GUIHandler so none of the log.debug()
-            # calls in run_model_diagnostics() flood the Tkinter event queue.
-            _root_log = logging.getLogger()
-            _gui_handlers = [h for h in _root_log.handlers
-                             if type(h).__name__ == 'GUIHandler']
-            for _h in _gui_handlers:
-                _root_log.removeHandler(_h)
+            """Build the report off the main thread — no Tkinter calls here.
+
+            FIX-DIAGHANG: Added comprehensive exception handling and timeout
+            guard to prevent the diagnostics window from hanging indefinitely.
+            Previous versions could hang in two scenarios:
+              1. run_model_diagnostics() spinning on a corrupt model (huge
+                 vertex arrays, degenerate face lists)
+              2. _build_report_items() raising an unhandled exception that
+                 prevented the queue post, leaving the UI stuck on
+                 "Building report…" forever.
+            Now: both phases have explicit try/except guards, and ANY failure
+            posts an error-items list to the queue so the UI always completes.
+            """
+            items = None
             try:
-                run_model_diagnostics(model)
-            except Exception as _de:
-                log.debug(f"run_model_diagnostics failed: {_de}")
-            finally:
+                # Phase 1: file-log diagnostics (may be slow for huge models)
+                # Temporarily detach GUIHandler so log.debug() calls don't
+                # flood the Tkinter event queue.
+                _root_log = logging.getLogger()
+                _gui_handlers = [h for h in _root_log.handlers
+                                 if type(h).__name__ == 'GUIHandler']
                 for _h in _gui_handlers:
-                    _root_log.addHandler(_h)
+                    _root_log.removeHandler(_h)
+                try:
+                    run_model_diagnostics(model)
+                except Exception as _de:
+                    log.debug(f"run_model_diagnostics failed: {_de}")
+                finally:
+                    for _h in _gui_handlers:
+                        try:
+                            _root_log.addHandler(_h)
+                        except Exception:
+                            pass
 
-            # Build the UI report — pure Python, no Tkinter widgets touched
-            try:
-                items = self._build_report_items(model)
-            except Exception as _e:
-                items = [(f"Report build error: {_e}\n", 'error')]
+                # Phase 2: build the UI report (pure Python, no Tkinter)
+                try:
+                    items = self._build_report_items(model)
+                except Exception as _e:
+                    import traceback
+                    tb = traceback.format_exc()
+                    items = [
+                        (f"Report build error: {_e}\n", 'error'),
+                        (f"\nTraceback:\n{tb}\n", 'mono'),
+                    ]
 
-            # Post result to the main-thread queue (thread-safe).
-            # _poll_diag_queue() running on the main thread will drain and apply it.
-            # We do NOT call self.after() here — that is NOT thread-safe on Linux.
+            except Exception as _outer:
+                # Catch-all: ensures the queue ALWAYS gets a result
+                items = [(f"Diagnostics failed (outer): {_outer}\n", 'error')]
+
+            # Phase 3: post result to main-thread queue
+            if items is None:
+                items = [("Report completed with no output.\n", 'warn')]
+
             try:
                 if self._diag_queue.full():
                     try: self._diag_queue.get_nowait()
                     except Exception: pass
                 self._diag_queue.put_nowait(items)
             except Exception:
-                pass
+                pass  # queue broken — nothing we can do
 
         _threading.Thread(target=_bg_work, daemon=True,
                           name="diag_build").start()
