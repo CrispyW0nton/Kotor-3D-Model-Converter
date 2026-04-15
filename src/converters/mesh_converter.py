@@ -209,7 +209,8 @@ class FBXImporter:
             return self._load_assimp(path, model_name, game_version, supermodel, classification)
         except ImportError:
             log.debug("pyassimp not available for FBX import — trying assimp_py")
-        except Exception as e:
+        except BaseException as e:
+            # BaseException: AssimpError extends BaseException, not Exception
             log.debug(f"pyassimp FBX load failed: {e} — trying assimp_py")
         # 2) assimp_py (bundled native lib, geometry only — no bones)
         try:
@@ -1149,8 +1150,10 @@ class FBXExporter:
                 if _assimp_ok:
                     ok = True
                 # If False, keep ok=None so the ASCII path runs below.
-            except ImportError:
+            except (ImportError, Exception):
                 pass  # pyassimp not installed – go straight to ASCII
+            except BaseException:
+                pass  # pyassimp native lib missing (AssimpError is BaseException) – go to ASCII
 
         if ok is None:
             # Primary export path: FBX ASCII 7.4 (zero-dependency, full feature set)
@@ -1400,6 +1403,23 @@ class FBXExporter:
         w('}')
         w('')
 
+        # ── Documents section (mandatory for FBX 7.4 / UE5 / ufbx) ─────────
+        # FBX 7.4 spec requires a Documents block containing at least one
+        # Document (the "Scene").  Without this, UE5's FBX importer and
+        # the ufbx reference parser may reject the file outright.
+        # Cross-ref: Blender io_scene_fbx/export_fbx_bin.py fbx_documents_elements()
+        w('Documents:  {')
+        w('\tCount: 1')
+        w('\tDocument: 1000000000, "", "Scene" {')
+        w('\t\tProperties70:  {')
+        w('\t\t\tP: "SourceObject", "object", "", ""')
+        w('\t\t\tP: "ActiveAnimStackName", "KString", "", "", ""')
+        w('\t\t}')
+        w('\t\tRootNode: 0')
+        w('\t}')
+        w('}')
+        w('')
+
         # ── ID helpers ────────────────────────────────────────────────
         _id_counter = [1000]
         def new_id():
@@ -1462,13 +1482,37 @@ class FBXExporter:
                 for bname in n.bone_map:
                     cluster_ids[n.name][bname] = new_id()
 
+        # ── Definitions section (mandatory for FBX 7.4 / UE5 / ufbx) ─────
+        # FBX 7.4 requires a Definitions block that declares the count of
+        # each object type present in the file.  UE5 uses these counts to
+        # pre-allocate internal arrays; ufbx uses them for schema validation.
+        # Cross-ref: Blender io_scene_fbx/export_fbx_bin.py fbx_definitions_elements()
+        #
+        # We compute exact counts from the ID dicts that were just populated.
+        _n_models    = len(node_ids)  # skeleton + mesh + synthetic
+        _n_geometry  = len(mesh_ids)
+        _n_material  = len(mat_ids)
+        _n_nodeattr  = len(skel_attr_ids) if 'skel_attr_ids' in dir() else 0  # computed later
+        _n_deformer  = len(deform_ids)
+        _n_cluster   = sum(len(v) for v in cluster_ids.values())
+        _n_texture   = 0  # counted below after tex objects are built
+        _n_video     = 0
+        _n_anim_stack = len(model.animations)
+        _n_anim_layer = len(model.animations)
+        # Exact anim curve/node counts require walking the animation tree;
+        # we'll defer the Definitions block and write it via a placeholder.
+        # Instead, write Definitions as a post-pass after all objects are built.
+        # --- Mark position for Definitions insertion (placeholder approach) ---
+        _definitions_insert_idx = len(lines)
+        # (We insert the Definitions block here after counting all objects.)
+
         # ── Objects section ───────────────────────────────────────────
         w('Objects:  {')
 
         # Geometry objects
         for n in mesh_nodes_list:
             geo_id = mesh_ids[n.name]
-            w(f'\tGeometry: {geo_id}, "{n.name}", "Mesh" {{')
+            w(f'\tGeometry: {geo_id}, "Geometry::{n.name}", "Mesh" {{')
 
             # Vertices
             verts_flat = [c for v in n.vertices for c in v]
@@ -1675,7 +1719,8 @@ class FBXExporter:
                 _tex_obj_ids[tname_tex] = tex_obj_id
                 _tex_vid_ids[tname_tex] = vid_id
                 # Video (file reference)
-                w(f'\tVideo: {vid_id}, "{tname_tex}", "Clip" {{')
+                _n_video += 1
+                w(f'\tVideo: {vid_id}, "Video::{tname_tex}", "Clip" {{')
                 w(f'\t\tType: "Clip"')
                 w(f'\t\tProperties70:  {{')
                 w(f'\t\t\tP: "Path","KString","XRefUrl","","{tname_tex}.tga"')
@@ -1685,7 +1730,8 @@ class FBXExporter:
                 w(f'\t\tRelativeFilename: "{tname_tex}.tga"')
                 w(f'\t}}')
                 # Texture object
-                w(f'\tTexture: {tex_obj_id}, "{tname_tex}", "" {{')
+                _n_texture += 1
+                w(f'\tTexture: {tex_obj_id}, "Texture::{tname_tex}", "" {{')
                 w(f'\t\tType: "TextureVideoClip"')
                 w(f'\t\tVersion: 202')
                 w(f'\t\tTextureName: "{tname_tex}"')
@@ -1702,7 +1748,7 @@ class FBXExporter:
         for n in mesh_nodes_list:
             mid = mat_ids[n.name]
             tname = n.texture_clean or n.name
-            w(f'\tMaterial: {mid}, "{tname}", "" {{')
+            w(f'\tMaterial: {mid}, "Material::{tname}", "" {{')
             w('\t\tVersion: 102')
             w(f'\t\tShadingModel: "Phong"')
             w('\t\tMultiLayer: 0')
@@ -1798,7 +1844,10 @@ class FBXExporter:
         # classification is CHARACTER (4) or when it has skin mesh nodes.
         # This prevents tile/effect models from generating spurious bone hierarchies.
         _mesh_node_names = {n.name for n in mesh_nodes_list}
-        _model_cls_int = int(getattr(model, 'model_type', 4) or 4)
+        # v7.2 FIX: Use None-check, not truthiness, so model_type=0 (EFFECT) is not
+        # falsely promoted to CHARACTER (4).  0 is a valid classification.
+        _mt_raw = getattr(model, 'model_type', None)
+        _model_cls_int = int(_mt_raw) if _mt_raw is not None else 4
         _has_any_skin = any(n.is_skin for n in mesh_nodes_list)
         _is_character_model = (_model_cls_int == 4 or _has_any_skin)
 
@@ -1833,7 +1882,7 @@ class FBXExporter:
             # Root node (flags=HEADER) → "Root"; child joint nodes → "LimbNode"
             is_root = (n.parent is None) or (n.flags == int(NodeFlags.HEADER))
             fbx_node_type = 'Null' if is_root else 'LimbNode'
-            w(f'\tModel: {nid}, "{n.name}", "{fbx_node_type}" {{')
+            w(f'\tModel: {nid}, "Model::{n.name}", "{fbx_node_type}" {{')
             w('\t\tVersion: 232')
             w('\t\tProperties70:  {')
             px, py, pz = n.position
@@ -1854,7 +1903,7 @@ class FBXExporter:
             attr_id = skel_attr_ids[n.name]
             is_root = (n.parent is None) or (n.flags == int(NodeFlags.HEADER))
             skel_type = 'Root' if is_root else 'Limb'
-            w(f'\tNodeAttribute: {attr_id}, "{n.name}_skel", "Skeleton" {{')
+            w(f'\tNodeAttribute: {attr_id}, "NodeAttribute::{n.name}", "Skeleton" {{')
             w(f'\t\tTypeFlags: "Skeleton"')
             w(f'\t\tProperties70:  {{')
             w(f'\t\t\tP: "Size", "double", "Number", "",1')
@@ -1876,7 +1925,7 @@ class FBXExporter:
             else:
                 _spx = _spy = _spz = 0.0
                 _sex = _sey = _sez = 0.0
-            w(f'\tModel: {nid}, "{bname}", "LimbNode" {{')
+            w(f'\tModel: {nid}, "Model::{bname}", "LimbNode" {{')
             w('\t\tVersion: 232')
             w('\t\tProperties70:  {')
             w(f'\t\t\tP: "Lcl Translation","Lcl Translation","","A",{_spx:.6f},{_spy:.6f},{_spz:.6f}')
@@ -1889,7 +1938,7 @@ class FBXExporter:
         # v6.0 FIX: NodeAttribute for synthetic bones
         for bname in _extra_bone_nodes:
             attr_id = skel_attr_ids[bname]
-            w(f'\tNodeAttribute: {attr_id}, "{bname}_skel", "Skeleton" {{')
+            w(f'\tNodeAttribute: {attr_id}, "NodeAttribute::{bname}", "Skeleton" {{')
             w(f'\t\tTypeFlags: "Skeleton"')
             w(f'\t\tProperties70:  {{')
             w(f'\t\t\tP: "Size", "double", "Number", "",1')
@@ -1899,7 +1948,7 @@ class FBXExporter:
         # Mesh model nodes (non-dummy mesh nodes)
         for n in mesh_nodes_list:
             nid = node_ids[n.name]
-            w(f'\tModel: {nid}, "{n.name}", "Mesh" {{')
+            w(f'\tModel: {nid}, "Model::{n.name}", "Mesh" {{')
             w('\t\tVersion: 232')
             w('\t\tProperties70:  {')
             px, py, pz = n.position
@@ -1915,7 +1964,7 @@ class FBXExporter:
         for n in mesh_nodes_list:
             if not n.is_skin: continue
             sid = deform_ids[n.name]
-            w(f'\tDeformer: {sid}, "{n.name}_Skin", "Skin" {{')
+            w(f'\tDeformer: {sid}, "Deformer::{n.name}_Skin", "Skin" {{')
             w('\t\tVersion: 101')
             w('\t\tLink_DeformAcuracy: 50')
             w('\t}')
@@ -2035,7 +2084,7 @@ class FBXExporter:
                 else:
                     link_m = identity_m
 
-                w(f'\tSubDeformer: {cid}, "{bname}", "Cluster" {{')
+                w(f'\tSubDeformer: {cid}, "SubDeformer::{bname}", "Cluster" {{')
                 w('\t\tVersion: 100')
                 if vi_list:
                     w(f'\t\tIndexes: *{len(vi_list)} {{')
@@ -2064,7 +2113,7 @@ class FBXExporter:
         identity_bind = '1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1'
         pose_nodes = skeleton_nodes + mesh_nodes_list
         n_pose = len(pose_nodes) + len(_extra_bone_nodes)
-        w(f'\tPose: {pose_id}, "BIND_POSES", "BindPose" {{')
+        w(f'\tPose: {pose_id}, "Pose::BIND_POSES", "BindPose" {{')
         w(f'\t\tType: "BindPose"')
         w(f'\t\tVersion: 100')
         w(f'\t\tNbPoseNodes: {n_pose}')
@@ -2121,7 +2170,7 @@ class FBXExporter:
                 # AnimStack – UE5 FBX importer requires the "|<name>" naming convention
                 # to recognise individual animation clips from an FBX with multiple stacks.
                 anim_length_ticks = int(anim.length * FBX_TICKS_PER_SEC)
-                ue5_stack_name = f"|{anim.name}"  # FBX 7.4 UE5-compatible name
+                ue5_stack_name = f"AnimStack::|{anim.name}"  # FBX 7.4 UE5-compatible name
                 w(f'\tAnimationStack: {stack_id}, "{ue5_stack_name}", "" {{')
                 w(f'\t\tProperties70:  {{')
                 w(f'\t\t\tP: "LocalStart", "KTime", "Time", "",0')
@@ -2132,7 +2181,7 @@ class FBXExporter:
                 w(f'\t}}')  # end AnimationStack
 
                 # AnimationLayer
-                w(f'\tAnimationLayer: {layer_id}, "{anim.name}_Layer", "" {{')
+                w(f'\tAnimationLayer: {layer_id}, "AnimLayer::{anim.name}_Layer", "" {{')
                 w(f'\t}}')  # end AnimationLayer
 
                 if not anim.nodes:
@@ -2175,7 +2224,7 @@ class FBXExporter:
                         """
                         nt = len(ktimes)
                         ticks = [int(t * FBX_TICKS_PER_SEC) for t in ktimes]
-                        w(f'\tAnimationCurve: {cv_id}, "", "" {{')
+                        w(f'\tAnimationCurve: {cv_id}, "AnimCurve::", "" {{')
                         w(f'\t\tDefault: {default_val:.6f}')
                         w(f'\t\tKeyVer: 4008')
                         w(f'\t\tKeyTime: *{nt} {{')
@@ -2215,7 +2264,7 @@ class FBXExporter:
                         cz_id = new_id()
                         dx, dy, dz = def_vals
                         # One CurveNode for all 3 axes
-                        w(f'\tAnimationCurveNode: {cn_id}, "{prop_channel}", "" {{')
+                        w(f'\tAnimationCurveNode: {cn_id}, "AnimCurveNode::{prop_channel}", "" {{')
                         w(f'\t\tProperties70:  {{')
                         w(f'\t\t\tP: "d|X", "Number", "", "A",{dx:.6f}')
                         w(f'\t\t\tP: "d|Y", "Number", "", "A",{dy:.6f}')
@@ -2308,6 +2357,78 @@ class FBXExporter:
                 anim_connections.append(f'\tC: "OO",{layer_id},{stack_id}')
 
         w('}')  # end Objects
+
+        # ── Definitions section (deferred — insert at saved position) ──────────
+        # Now that all objects are emitted, we know exact counts for each type.
+        # Build the Definitions block and splice it into `lines` at the saved
+        # position (_definitions_insert_idx) so it appears BEFORE Objects.
+        # This two-pass approach avoids forward-counting complexity while keeping
+        # the final FBX output structurally correct.
+        #
+        # FBX 7.4 requires Definitions to appear between GlobalSettings/Documents
+        # and Objects.  UE5's FBX importer reads ObjectType counts to pre-allocate
+        # internal arrays.  ufbx uses them for validation.
+        # Cross-ref: Blender io_scene_fbx/export_fbx_bin.py fbx_definitions_elements()
+        _n_nodeattr  = len(skel_attr_ids)
+        _n_models    = len(node_ids)
+        _n_geometry  = len(mesh_ids)
+        _n_material  = len(mat_ids)
+        _n_deformer  = len(deform_ids) + sum(len(v) for v in cluster_ids.values())
+        _n_pose      = 1 if (skeleton_nodes or mesh_nodes_list) else 0
+        # Count anim objects from what was actually emitted
+        _n_anim_stack = 0
+        _n_anim_layer = 0
+        _n_anim_curvenode = 0
+        _n_anim_curve = 0
+        for _ln in lines:
+            if '\tAnimationStack:' in _ln:
+                _n_anim_stack += 1
+            elif '\tAnimationLayer:' in _ln:
+                _n_anim_layer += 1
+            elif '\tAnimationCurveNode:' in _ln:
+                _n_anim_curvenode += 1
+            elif '\tAnimationCurve:' in _ln:
+                _n_anim_curve += 1
+
+        _defs: List[str] = []
+        _da = _defs.append
+        # Count distinct ObjectTypes present (GlobalSettings always counts as 1)
+        _type_count = 1  # GlobalSettings
+        _obj_types = [
+            ('Model',              _n_models),
+            ('Geometry',           _n_geometry),
+            ('Material',           _n_material),
+            ('Texture',            _n_texture),
+            ('Video',              _n_video),
+            ('NodeAttribute',      _n_nodeattr),
+            ('Deformer',           _n_deformer),
+            ('Pose',               _n_pose),
+            ('AnimationStack',     _n_anim_stack),
+            ('AnimationLayer',     _n_anim_layer),
+            ('AnimationCurveNode', _n_anim_curvenode),
+            ('AnimationCurve',     _n_anim_curve),
+        ]
+        for _otype, _ocount in _obj_types:
+            if _ocount > 0:
+                _type_count += 1
+
+        _da('Definitions:  {')
+        _da(f'\tVersion: 100')
+        _da(f'\tCount: {_type_count}')
+        # GlobalSettings template (always present)
+        _da('\tObjectType: "GlobalSettings" {')
+        _da('\t\tCount: 1')
+        _da('\t}')
+        for _otype, _ocount in _obj_types:
+            if _ocount > 0:
+                _da(f'\tObjectType: "{_otype}" {{')
+                _da(f'\t\tCount: {_ocount}')
+                _da('\t}')
+        _da('}')
+        _da('')
+        # Splice into lines at the saved position
+        for _di, _dl in enumerate(_defs):
+            lines.insert(_definitions_insert_idx + _di, _dl)
 
         # ── Takes section (legacy Blender / MotionBuilder / UE4 compatibility) ─────
         # FBX 7.4 readers such as Blender's FBX importer, MotionBuilder, and UE4 use

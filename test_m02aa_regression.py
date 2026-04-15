@@ -118,14 +118,19 @@ class TestVBOFormat(unittest.TestCase):
     """Verify VBO attribute layout is unchanged (no regression)."""
 
     def test_vbo_format_string(self):
-        """Vertex format must be '3f 3f 2f 2f 4f' with correct attribute names."""
+        """Vertex format must be '3f 3f 2f 2f 4f 4f 4f' with correct attribute names.
+
+        Phase A: Extended VBO layout includes bone_ids (4f) + bone_weights (4f)
+        for GPU skinning.  22 floats per vertex = 88 bytes stride.
+        """
         src_path = os.path.join(os.path.dirname(__file__),
                                 'src', 'gui', 'gpu_renderer.py')
         with open(src_path, 'r') as f:
             src = f.read()
 
-        self.assertIn("'3f 3f 2f 2f 4f'", src,
-                      "VBO format must be '3f 3f 2f 2f 4f' (pos, norm, uv, uv_lm, color)")
+        self.assertIn("'3f 3f 2f 2f 4f 4f 4f'", src,
+                      "VBO format must be '3f 3f 2f 2f 4f 4f 4f' "
+                      "(pos, norm, uv, uv_lm, color, bone_ids, weights)")
 
     def test_shader_inputs_match_vbo(self):
         """Vertex shader must declare matching in_* attributes."""

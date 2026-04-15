@@ -74,6 +74,8 @@ kotorblender_src/
 
 # ── Demo / capture artefacts ──────────────────────────────────────────────────
 *.mp4
+# Keep the Matrix background video inside assets
+!assets/matrix_bg.mp4
 capture_demo_video.py
 
 # ── OS noise ──────────────────────────────────────────────────────────────────

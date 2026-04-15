@@ -54,6 +54,7 @@ from ..core.diagnostics import (
     log_crash_report, run_model_diagnostics,
 )
 from . import icon_manager as Icons
+from .matrix_background import MatrixBackground
 
 log = logging.getLogger(__name__)
 
@@ -9511,6 +9512,11 @@ class KotorModToolsApp(tk.Tk):
     # ── Main UI layout ────────────────────────────────────────────────────
 
     def _build_ui(self):
+        # ── Matrix animated background — placed behind all UI elements ──
+        self.matrix_bg = MatrixBackground(self, opacity=0.45)
+        self.matrix_bg.place(x=0, y=0, relwidth=1, relheight=1)
+        self.matrix_bg.lower()   # push behind all subsequently packed widgets
+
         # ── Header — cyberpunk dark chrome with neon green accents ──
         hdr = tk.Frame(self, bg=C['bg'], height=48)
         hdr.pack(fill='x')
@@ -9890,6 +9896,9 @@ class KotorModToolsApp(tk.Tk):
         self.bind("<F3>",           lambda e: self._show_model_info()
                   if self._model else None)
         self.bind("<Escape>",       lambda e: self._on_escape())
+
+        # ── Start the animated Matrix background ──
+        self.after(500, self.matrix_bg.start)
 
     # ── Logger setup ──────────────────────────────────────────────────────
 
