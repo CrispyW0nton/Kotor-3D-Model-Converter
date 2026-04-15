@@ -17,12 +17,25 @@ Architecture note (Constantine, "Structured Design"):
   are context-free — the same tool works in a Discord bot, VS Code extension,
   CI pipeline, or any other consumer without modification.
 
-Tool manifest (v3.4 — 43 total):
+Tool manifest (v3.5 — 68 total):
   Installation   (3): detectInstallations, loadInstallation, kotor_installation_info
   Discovery      (4): listResources, describeResource, kotor_find_resource, kotor_search_resources
   Game data      (3): journalOverview, kotor_lookup_2da, kotor_lookup_tlk
   GhostRigger    (5): ghostrigger_open_model, ghostrigger_render_model, ghostrigger_model_info,
                       ghostrigger_list_game_models, ghostrigger_audit
+  DebugSkinning (25): ghostrigger_debug_launch_app, ghostrigger_debug_close_app,
+                      ghostrigger_debug_get_runtime_status, ghostrigger_debug_set_game_library_path,
+                      ghostrigger_debug_verify_game_library, ghostrigger_debug_load_model,
+                      ghostrigger_debug_get_loaded_asset_info, ghostrigger_debug_list_animations,
+                      ghostrigger_debug_set_animation, ghostrigger_debug_set_animation_time,
+                      ghostrigger_debug_set_bind_pose, ghostrigger_debug_set_camera_preset,
+                      ghostrigger_debug_capture_viewport, ghostrigger_debug_capture_validation_set,
+                      ghostrigger_debug_get_skinning_state, ghostrigger_debug_get_renderer_state,
+                      ghostrigger_debug_get_bone_hierarchy, ghostrigger_debug_get_bone_map,
+                      ghostrigger_debug_get_palette_remap_table, ghostrigger_debug_get_bind_pose_matrices,
+                      ghostrigger_debug_get_animated_pose_matrices, ghostrigger_debug_get_uploaded_palette,
+                      ghostrigger_debug_sample_vertex_influences, ghostrigger_debug_compare_cpu_gpu_skinning,
+                      ghostrigger_debug_export_debug_bundle
   Modules        (3): kotor_list_modules, kotor_describe_module, kotor_module_resources
   GFF data       (3): kotor_read_gff, kotor_read_2da, kotor_read_tlk
   AgentDecompile (11): kotor_binary_ping, kotor_binary_info, kotor_list_engine_funcs,
@@ -44,6 +57,7 @@ from typing import Any, Dict, List
 
 from kotormcp.tools import (
     installation, discovery, gamedata, ghostrigger,
+    debug_skinning,
     modules, gffdata, decompile, resource, quest,
     refs, walkmesh, archives,
 )
@@ -52,17 +66,18 @@ from kotormcp.tools import (
 def get_all_tools() -> List[Dict[str, Any]]:
     """Return all tool definitions from all tool modules.
 
-    Tool count: 43 (v3.4)
+    Tool count: 68 (v3.5)
       3  installation  +  4 discovery  +  3 gamedata  +  5 ghostrigger
-    + 3  modules       +  3 gffdata    + 11 decompile  +  2 composite
-    + 6  refs          +  1 walkmesh   +  2 archives
-    = 43
+    + 25 debug_skinning + 3  modules   +  3 gffdata   + 11 decompile
+    +  2 composite     +  6  refs      +  1 walkmesh  +  2 archives
+    = 68
     """
     return (
         installation.get_tools()          # 3  installation management
         + discovery.get_tools()           # 4  resource discovery
         + gamedata.get_tools()            # 3  game data (2da, tlk, journal)
         + ghostrigger.get_tools()         # 5  3D model pipeline
+        + debug_skinning.get_tools()      # 25 debug skinning bridge
         + modules.get_tools()             # 3  module enumeration
         + gffdata.get_tools()             # 3  deep GFF/2DA/TLK reads
         + decompile.get_tools()           # 11 AgentDecompile / Ghidra bridge
@@ -183,5 +198,57 @@ async def handle_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         return await archives.handle_list_archive(arguments)
     if name == "kotor_extract_resource":
         return await archives.handle_extract_resource(arguments)
+
+    # ── Debug Skinning Bridge tools (v3.5 — observability-first) ─────────────
+    if name == "ghostrigger_debug_launch_app":
+        return await debug_skinning.handle_launch_app(arguments)
+    if name == "ghostrigger_debug_close_app":
+        return await debug_skinning.handle_close_app(arguments)
+    if name == "ghostrigger_debug_get_runtime_status":
+        return await debug_skinning.handle_get_runtime_status(arguments)
+    if name == "ghostrigger_debug_set_game_library_path":
+        return await debug_skinning.handle_set_game_library_path(arguments)
+    if name == "ghostrigger_debug_verify_game_library":
+        return await debug_skinning.handle_verify_game_library(arguments)
+    if name == "ghostrigger_debug_load_model":
+        return await debug_skinning.handle_load_model(arguments)
+    if name == "ghostrigger_debug_get_loaded_asset_info":
+        return await debug_skinning.handle_get_loaded_asset_info(arguments)
+    if name == "ghostrigger_debug_list_animations":
+        return await debug_skinning.handle_list_animations(arguments)
+    if name == "ghostrigger_debug_set_animation":
+        return await debug_skinning.handle_set_animation(arguments)
+    if name == "ghostrigger_debug_set_animation_time":
+        return await debug_skinning.handle_set_animation_time(arguments)
+    if name == "ghostrigger_debug_set_bind_pose":
+        return await debug_skinning.handle_set_bind_pose(arguments)
+    if name == "ghostrigger_debug_set_camera_preset":
+        return await debug_skinning.handle_set_camera_preset(arguments)
+    if name == "ghostrigger_debug_capture_viewport":
+        return await debug_skinning.handle_capture_viewport(arguments)
+    if name == "ghostrigger_debug_capture_validation_set":
+        return await debug_skinning.handle_capture_validation_set(arguments)
+    if name == "ghostrigger_debug_get_skinning_state":
+        return await debug_skinning.handle_get_skinning_state(arguments)
+    if name == "ghostrigger_debug_get_renderer_state":
+        return await debug_skinning.handle_get_renderer_state(arguments)
+    if name == "ghostrigger_debug_get_bone_hierarchy":
+        return await debug_skinning.handle_get_bone_hierarchy(arguments)
+    if name == "ghostrigger_debug_get_bone_map":
+        return await debug_skinning.handle_get_bone_map(arguments)
+    if name == "ghostrigger_debug_get_palette_remap_table":
+        return await debug_skinning.handle_get_palette_remap_table(arguments)
+    if name == "ghostrigger_debug_get_bind_pose_matrices":
+        return await debug_skinning.handle_get_bind_pose_matrices(arguments)
+    if name == "ghostrigger_debug_get_animated_pose_matrices":
+        return await debug_skinning.handle_get_animated_pose_matrices(arguments)
+    if name == "ghostrigger_debug_get_uploaded_palette":
+        return await debug_skinning.handle_get_uploaded_palette(arguments)
+    if name == "ghostrigger_debug_sample_vertex_influences":
+        return await debug_skinning.handle_sample_vertex_influences(arguments)
+    if name == "ghostrigger_debug_compare_cpu_gpu_skinning":
+        return await debug_skinning.handle_compare_cpu_gpu(arguments)
+    if name == "ghostrigger_debug_export_debug_bundle":
+        return await debug_skinning.handle_export_debug_bundle(arguments)
 
     raise ValueError(f"Unknown tool: '{name}'")
