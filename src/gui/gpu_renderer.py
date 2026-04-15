@@ -207,6 +207,21 @@ except ImportError:
 
 from dataclasses import dataclass, field as _field
 
+# ── Phase A: GPU Skinning ──────────────────────────────────────────────────
+# Import MatrixPaletteUploader for real-time skeletal animation in the GPU path.
+# gpu_skinning.py contains the palette builder, SSBO layout, and GLSL snippets.
+try:
+    from core.gpu_skinning import MatrixPaletteUploader, MAX_BONES as _SKIN_MAX_BONES
+    _GPU_SKINNING = True
+except ImportError:
+    try:
+        from src.core.gpu_skinning import MatrixPaletteUploader, MAX_BONES as _SKIN_MAX_BONES
+        _GPU_SKINNING = True
+    except ImportError:
+        _GPU_SKINNING = False
+        _SKIN_MAX_BONES = 128
+        log.info("gpu_renderer: gpu_skinning module not available – skinning disabled")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  ModuleDrawItem — per-node render record for debug inspection
@@ -572,10 +587,27 @@ in vec2  in_uv;        // primary UV (UV0) — KotOR D3D convention: V=0 at top
 in vec2  in_uv_lm;     // lightmap UV (UV1)
 in vec4  in_color;     // vertex colour (w = per-vertex alpha, 1.0 if unused)
 
+// ── Phase A: GPU Skinning — bone index + weight vertex attributes ───────────
+// For skin nodes: 4 bone indices and 4 blend weights per vertex.
+// For non-skin nodes: bone_ids = (0,0,0,0), weights = (1,0,0,0) (identity).
+// Bone indices are passed as vec4 (float) and cast to int in the shader
+// because ModernGL vertex arrays use float format consistently.
+in vec4  in_bone_ids;  // 4 bone palette indices (as floats, cast to int)
+in vec4  in_weights;   // 4 blend weights (sum ≈ 1.0)
+
 // Uniforms
 uniform mat4  u_mvp;           // model-view-projection matrix (column-major)
 uniform mat4  u_model;         // model matrix (identity — verts already in world space)
 uniform mat3  u_normal_mat;    // transpose(inverse(model)) 3x3
+
+// ── Phase A: GPU Skinning uniforms ──────────────────────────────────────────
+// Bone matrix palette (uniform array, GL 3.3+).
+// Each bone matrix = world_pose × inv_bind_pose (Gregory §12.5.2).
+// u_skin_enabled: 0 = pass-through (no LBS), 1 = apply LBS skinning.
+// u_bone_count: number of valid bones in the palette (for bounds checking).
+uniform mat4  u_bones[128];    // max 128 bones (KotOR engine limit)
+uniform int   u_skin_enabled;  // 1 = LBS skinning active for this draw call
+uniform int   u_bone_count;    // number of valid bone matrices uploaded
 
 // UV animation
 uniform vec2  u_uv_scroll;     // per-frame UV offset (animate_uv)
@@ -601,11 +633,43 @@ out vec2  v_uv_lm;
 out vec4  v_color;
 
 void main() {
-    vec4 world_pos = u_model * vec4(in_pos, 1.0);
+    // ── Phase A: Linear Blend Skinning (Gregory §12.5.2) ────────────────────
+    // When GPU skinning is enabled (u_skin_enabled == 1), transform position
+    // and normal by the weighted sum of bone matrices from the palette.
+    // Each vertex has up to 4 bone influences (in_bone_ids + in_weights).
+    // For non-skin nodes u_skin_enabled == 0 and the pass-through path is used.
+    vec3 final_pos;
+    vec3 final_norm;
+    if (u_skin_enabled == 1) {
+        vec4 skinned_pos  = vec4(0.0);
+        vec3 skinned_norm = vec3(0.0);
+        for (int i = 0; i < 4; ++i) {
+            int  bi = int(in_bone_ids[i] + 0.5);  // float→int with rounding
+            float w = in_weights[i];
+            if (bi < 0 || bi >= u_bone_count || w < 0.0001) continue;
+            mat4 M = u_bones[bi];
+            skinned_pos  += w * (M * vec4(in_pos, 1.0));
+            skinned_norm += w * (mat3(M) * in_norm);
+        }
+        // Guard: if total weight was zero, fall through to identity
+        float wtot = in_weights.x + in_weights.y + in_weights.z + in_weights.w;
+        if (wtot < 0.0001) {
+            final_pos  = in_pos;
+            final_norm = in_norm;
+        } else {
+            final_pos  = skinned_pos.xyz;
+            final_norm = skinned_norm;
+        }
+    } else {
+        final_pos  = in_pos;
+        final_norm = in_norm;
+    }
+
+    vec4 world_pos = u_model * vec4(final_pos, 1.0);
     v_world_pos  = world_pos.xyz;
     // Normals are already in world space (pre-transformed); u_normal_mat = I for
     // world-space verts, but we still normalize to handle precision loss.
-    v_world_norm = normalize(u_normal_mat * in_norm);
+    v_world_norm = normalize(u_normal_mat * final_norm);
 
     // BUG-UV FIX: KotOR MDX stores UV with V=0 at top (Direct3D convention).
     // OpenGL textures have V=0 at bottom.  Flip V axis here to match OpenGL.
@@ -1591,11 +1655,24 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     else:
         uv_lm_arr = np.full((n_verts, 2), 0.5, dtype=np.float32)
 
-    # ── Assemble interleaved vertex buffer (N × 14) ──────────────────────────
+    # ── Assemble interleaved vertex buffer (N × 22) ──────────────────────────
+    # Phase A: Extended VBO layout includes bone_ids (4f) + bone_weights (4f)
+    # for GPU skinning.  All nodes use 22 floats per vertex for a consistent
+    # VAO format; non-skin nodes get identity values (idx=0, weight=1,0,0,0).
+    #
+    # Layout per vertex (stride = 22 floats = 88 bytes):
+    #   pos.xyz       3 floats  [0:3]
+    #   norm.xyz      3 floats  [3:6]
+    #   uv.xy         2 floats  [6:8]   (UV0 — primary/diffuse)
+    #   uv_lm.xy      2 floats  [8:10]  (UV1 — lightmap)
+    #   color.xyzw    4 floats  [10:14] (vertex colour + per-vertex alpha)
+    #   bone_ids.xyzw 4 floats  [14:18] (bone palette indices, as float)
+    #   weights.xyzw  4 floats  [18:22] (blend weights, sum ≈ 1.0)
+    #
     # vdata is keyed by *vertex* index (0..n_verts-1).  uv_arr may have more
     # rows than n_verts (extra seam-split tvert entries beyond n_verts-1) so we
     # slice to exactly n_verts rows when copying into vdata.
-    vdata = np.zeros((n_verts, 14), dtype=np.float32)
+    vdata = np.zeros((n_verts, 22), dtype=np.float32)
     vdata[:, 0:3] = v_arr.astype(np.float32)
     vdata[:, 3:6] = n_arr.astype(np.float32)
     _uv_for_vdata = uv_arr[:n_verts] if len(uv_arr) >= n_verts else np.vstack(
@@ -1603,6 +1680,26 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     vdata[:, 6:8]  = _uv_for_vdata[:, :2]
     vdata[:, 8:10] = uv_lm_arr[:, :2]
     vdata[:, 10:14] = 1.0  # white vertex colour + alpha 1
+
+    # ── Phase A: Populate bone_ids and weights for skin nodes ────────────────
+    # bone_ids[14:18] = palette indices (float);  weights[18:22] = blend weights.
+    # Non-skin nodes: identity (idx=0, weight=[1,0,0,0]) — shader pass-through.
+    if is_skin:
+        _skin_data = getattr(node, 'skin_data', [])
+        if _skin_data and len(_skin_data) >= n_verts:
+            for _vi in range(n_verts):
+                _sd = _skin_data[_vi]
+                _infl = getattr(_sd, 'influences', [])
+                for _bi_idx in range(min(4, len(_infl))):
+                    _bw = _infl[_bi_idx]
+                    vdata[_vi, 14 + _bi_idx] = float(getattr(_bw, 'bone_index', 0))
+                    vdata[_vi, 18 + _bi_idx] = float(getattr(_bw, 'weight', 0.0))
+        else:
+            # No per-vertex skin data: identity (bone 0, weight 1.0)
+            vdata[:, 18] = 1.0  # first weight = 1.0
+    else:
+        # Non-skin node: identity skinning values (bone 0, weight 1.0)
+        vdata[:, 18] = 1.0  # first weight = 1.0
 
     # ── Build face index arrays ───────────────────────────────────────────────
     # FIX-SEAM: KotOR binary MDL uses per-face tvert (texture-vertex) indices
@@ -1839,6 +1936,13 @@ class GpuRenderer:
         # PERF: Interactive (low-quality) mode flag.
         # When True, skip MSAA and use smaller readback for faster frame times.
         self.interactive: bool = False
+        # ── Phase A: GPU Skinning state ──────────────────────────────────────────
+        # MatrixPaletteUploader instance, created per model when skin nodes exist.
+        # Caches inverse bind-pose matrices and computes per-frame bone palettes.
+        self._skin_uploader: Optional['MatrixPaletteUploader'] = None
+        self._skin_model_id: int = 0  # id() of model for which bind-pose was built
+        self._skin_bone_count: int = 0  # number of bones in the current palette
+        self._skin_logged: bool = False  # one-shot log for GPU skinning activation
         # Performance counters
         self.perf: Dict[str, float] = {
             'last_frame_ms': 0.0,
@@ -1881,6 +1985,8 @@ class GpuRenderer:
                 'u_dangly_displacement', 'u_dangly_time',
                 'u_saber_enabled', 'u_saber_displacement', 'u_saber_length',
                 'u_oit_enabled', 'u_tex', 'u_lm_tex', 'u_env_tex', 'u_spec_tex',
+                # Phase A: GPU Skinning uniforms
+                'u_skin_enabled', 'u_bone_count', 'u_bones',
             ):
                 try:
                     _u[_uname] = _p[_uname]
@@ -1938,6 +2044,13 @@ class GpuRenderer:
             try: self._grey_env_tex.release()
             except Exception: pass
             self._grey_env_tex = None
+        # Phase A: Release GPU skinning uploader
+        if self._skin_uploader is not None:
+            try: self._skin_uploader.release()
+            except Exception: pass
+            self._skin_uploader = None
+            self._skin_model_id = 0
+            self._skin_bone_count = 0
         if self._prog:
             try: self._prog.release()
             except Exception: pass
@@ -1980,6 +2093,13 @@ class GpuRenderer:
         self._node_cache_cutout = []
         self._node_cache_transparent = []
         self._node_cache_proxy_ids = set()
+        # Phase A: Clear GPU skinning state (new model = new bone palette)
+        if self._skin_uploader is not None:
+            try: self._skin_uploader.release()
+            except Exception: pass
+            self._skin_uploader = None
+        self._skin_model_id = 0
+        self._skin_bone_count = 0
         # NOTE: _init_attempted is intentionally NOT reset here — the EGL context
         # remains alive and valid across clear_caches() calls.
 
@@ -2207,6 +2327,14 @@ class GpuRenderer:
             _u['u_saber_length'].value        = 1.0
             _u['u_oit_enabled'].value         = 0
 
+            # ── Phase A: GPU Skinning — default off for each frame ───────────
+            # Set u_skin_enabled = 0 as the default per-frame state.
+            # Skin nodes will set it to 1 in _draw_node before their draw call.
+            if 'u_skin_enabled' in _u:
+                _u['u_skin_enabled'].value = 0
+            if 'u_bone_count' in _u:
+                _u['u_bone_count'].value = 0
+
             self.perf['gpu_upload_ms'] = (time.perf_counter() - t_upload) * 1000
             t_draw = time.perf_counter()
 
@@ -2230,6 +2358,38 @@ class GpuRenderer:
             if _model_changed:
                 self._wt_cache.clear()
                 self._wt_model_id = _cur_model_id
+
+            # ── Phase A: GPU Skinning — build bone palette for skin models ─────
+            # Detect if this model has any skin nodes; if so, build the
+            # MatrixPaletteUploader's inverse bind-pose (once per model).
+            # The palette is then uploaded per-frame when animating.
+            _has_skin_nodes = False
+            if _GPU_SKINNING:
+                for _sn in nodes:
+                    if bool(getattr(_sn, 'is_skin', False)):
+                        _has_skin_nodes = True
+                        break
+                if _has_skin_nodes:
+                    if self._skin_model_id != _cur_model_id or self._skin_uploader is None:
+                        self._skin_uploader = MatrixPaletteUploader(max_bones=_SKIN_MAX_BONES)
+                        n_built = self._skin_uploader.build_inverse_bind_pose(model)
+                        self._skin_model_id = _cur_model_id
+                        self._skin_bone_count = n_built
+                        if not self._skin_logged:
+                            log.info(f"GPU-SKINNING: MatrixPaletteUploader built {n_built} "
+                                     f"inverse bind-pose matrices for model "
+                                     f"'{getattr(model, 'name', '?')}'")
+                            self._skin_logged = True
+                    # Compute the palette for the current animation pose
+                    if self._skin_uploader is not None:
+                        self._skin_uploader.compute_palette(anim_pose)
+                        # Upload bone matrices as uniform array
+                        if 'u_bones' in _u and self._skin_uploader.bone_count > 0:
+                            palette_bytes = self._skin_uploader.as_flat_bytes()
+                            try:
+                                _u['u_bones'].write(palette_bytes)
+                            except Exception as e:
+                                log.debug(f"GPU-SKINNING: bone palette upload failed: {e}")
 
             # PERF: Only stamp model refs and compute proxy IDs when model changes.
             # These are O(N) walks that produce identical results across frames for
@@ -2657,8 +2817,11 @@ class GpuRenderer:
                     gm = _GpuMesh()
                     raw_verts = vdata.tobytes()
                     gm.vbo = ctx.buffer(raw_verts)
-                    fmt = '3f 3f 2f 2f 4f'
-                    attrs = ['in_pos', 'in_norm', 'in_uv', 'in_uv_lm', 'in_color']
+                    # Phase A: Extended VBO format includes bone_ids + weights
+                    # (22 floats per vertex = 88 bytes stride)
+                    fmt = '3f 3f 2f 2f 4f 4f 4f'
+                    attrs = ['in_pos', 'in_norm', 'in_uv', 'in_uv_lm', 'in_color',
+                             'in_bone_ids', 'in_weights']
                     if idx_arr is not None:
                         gm.ibo = ctx.buffer(idx_arr.tobytes())
                         gm.vao = ctx.vertex_array(prog, [(gm.vbo, fmt, *attrs)],
@@ -3047,7 +3210,24 @@ class GpuRenderer:
                 if txi_decal:           _feat_mask |= (1 << 11)  # FEAT_DECAL
                 if txi_blend == 2:      _feat_mask |= (1 << 12)  # FEAT_PUNCHTHRU
                 if txi_blend == 1:      _feat_mask |= (1 << 13)  # FEAT_ADDITIVE
+                # Phase A: Set FEAT_SKIN bit when GPU skinning is active
+                if _nd_is_skin and _has_skin_nodes and self._skin_uploader is not None:
+                    _feat_mask |= (1 << 10)  # FEAT_SKIN
                 _u['u_features'].value = _feat_mask
+
+                # ── Phase A: GPU Skinning — enable/disable per draw call ──────
+                # For skin nodes with a valid bone palette, enable LBS in the shader.
+                # For non-skin nodes, ensure skinning is disabled (pass-through).
+                if (_nd_is_skin and _has_skin_nodes
+                        and self._skin_uploader is not None
+                        and self._skin_bone_count > 0
+                        and 'u_skin_enabled' in _u
+                        and 'u_bone_count' in _u):
+                    _u['u_skin_enabled'].value = 1
+                    _u['u_bone_count'].value = self._skin_bone_count
+                else:
+                    if 'u_skin_enabled' in _u:
+                        _u['u_skin_enabled'].value = 0
 
                 _use_vao.render(moderngl.TRIANGLES)
                 total_tris += _use_tris

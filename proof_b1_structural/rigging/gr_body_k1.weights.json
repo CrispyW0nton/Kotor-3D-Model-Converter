@@ -1,0 +1,64 @@
+{
+  "body_skin": {
+    "0": [
+      [
+        "cutscenedummy",
+        0.6
+      ],
+      [
+        "rootdummy",
+        0.4
+      ]
+    ],
+    "1": [
+      [
+        "cutscenedummy",
+        0.6
+      ],
+      [
+        "rootdummy",
+        0.4
+      ]
+    ],
+    "2": [
+      [
+        "cutscenedummy",
+        0.6
+      ],
+      [
+        "rootdummy",
+        0.4
+      ]
+    ],
+    "3": [
+      [
+        "pelvis_g",
+        0.7
+      ],
+      [
+        "rootdummy",
+        0.3
+      ]
+    ],
+    "4": [
+      [
+        "pelvis_g",
+        0.7
+      ],
+      [
+        "rootdummy",
+        0.3
+      ]
+    ],
+    "5": [
+      [
+        "pelvis_g",
+        0.7
+      ],
+      [
+        "rootdummy",
+        0.3
+      ]
+    ]
+  }
+}
