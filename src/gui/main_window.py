@@ -54,7 +54,7 @@ from ..core.diagnostics import (
     log_crash_report, run_model_diagnostics,
 )
 from . import icon_manager as Icons
-from .matrix_background import MatrixBackground
+from .matrix_background import MatrixEngine, MatrixPanel, MatrixLabel
 
 log = logging.getLogger(__name__)
 
@@ -9512,20 +9512,24 @@ class KotorModToolsApp(tk.Tk):
     # ── Main UI layout ────────────────────────────────────────────────────
 
     def _build_ui(self):
-        # ── Matrix animated background — placed behind all UI elements ──
-        self.matrix_bg = MatrixBackground(self, opacity=0.45)
+        # ── Matrix Engine — single video decoder shared by all panels ──
+        self._matrix_engine = MatrixEngine(self, opacity=0.50)
+
+        # Full-window matrix backdrop — visible through PanedWindow sashes
+        # and any uncovered root-window areas.
+        self.matrix_bg = MatrixPanel(self, engine=self._matrix_engine)
         self.matrix_bg.place(x=0, y=0, relwidth=1, relheight=1)
-        # Push behind all subsequently packed widgets.
-        # NOTE: tk.Canvas overrides .lower() as tag_lower(), so we must call
-        # the widget-level stacking method via tk.Misc explicitly.
         tk.Misc.lower(self.matrix_bg)
 
-        # ── Header — cyberpunk dark chrome with neon green accents ──
-        hdr = tk.Frame(self, bg=C['bg'], height=48)
+        # ── Header — cyberpunk dark chrome with animated Matrix rain ──
+        # MatrixPanel(no_inner=True): the entire header bg is the animated
+        # matrix video.  Child widgets are placed via create_window() so the
+        # rain is visible in every gap between widgets.
+        hdr = MatrixPanel(self, engine=self._matrix_engine,
+                          height=48, no_inner=True)
         hdr.pack(fill='x')
-        hdr.pack_propagate(False)
 
-        # Left: App icon + title
+        # Left: App icon + title — placed directly on matrix canvas
         _logo_img = Icons.get("logo", 24)
         _logo_lbl = tk.Label(hdr, image=_logo_img if _logo_img else None,
                              text="" if _logo_img else "//",
@@ -9533,30 +9537,29 @@ class KotorModToolsApp(tk.Tk):
                              bg=C['bg'], fg=C['accent'])
         if _logo_img:
             _logo_lbl._icon_img = _logo_img  # prevent GC
-        _logo_lbl.pack(side='left', padx=(14, 4))
-        title_frame = tk.Frame(hdr, bg=C['bg'])
-        title_frame.pack(side='left')
-        tk.Label(title_frame, text="GHOSTRIGGER",
-                 font=("Consolas", 14, "bold"),
-                 bg=C['bg'], fg=C['accent']).pack(anchor='w')
-        tk.Label(title_frame, text="Odyssey Engine Pipeline  //  KotOR 1 & 2 TSL",
-                 font=("Consolas", 8), bg=C['bg'], fg=C['text2']).pack(anchor='w')
+        hdr.create_window(14, 24, anchor='w', window=_logo_lbl)
+
+        # Title uses MatrixLabel — the matrix rain is the text background
+        _title_lbl = MatrixLabel(
+            hdr, engine=self._matrix_engine,
+            text="GHOSTRIGGER", font=("Consolas", 14, "bold"),
+            fg=C['accent'], width=200, height=22)
+        hdr.create_window(50, 14, anchor='nw', window=_title_lbl)
+        _sub_lbl = MatrixLabel(
+            hdr, engine=self._matrix_engine,
+            text="Odyssey Engine Pipeline  //  KotOR 1 & 2 TSL",
+            font=("Consolas", 8), fg=C['text2'], width=320, height=14)
+        hdr.create_window(50, 36, anchor='nw', window=_sub_lbl)
 
         # Right side cluster: version + live metrics + IPC badge
         right_cluster = tk.Frame(hdr, bg=C['bg'])
-        right_cluster.pack(side='right', padx=12)
-
-        # Live metrics bar (polycount, FPS, RAM) — placeholder, updated by viewport
         self._metrics_var = tk.StringVar(value="")
         _metrics_lbl = tk.Label(right_cluster, textvariable=self._metrics_var,
                                 font=("Consolas", 8), bg=C['bg'], fg=C['accent2'])
         _metrics_lbl.pack(anchor='e')
-
         tk.Label(right_cluster, text=f"v{self.APP_VERSION}",
                  font=("Consolas", 8, "bold"),
                  bg=C['bg'], fg=C['text2']).pack(anchor='e')
-
-        # IPC status indicator (clickable badge)
         self._ipc_status_var = tk.StringVar(value="IPC: starting...")
         self._ipc_status_lbl = tk.Label(
             right_cluster, textvariable=self._ipc_status_var,
@@ -9567,48 +9570,69 @@ class KotorModToolsApp(tk.Tk):
         self._ipc_status_lbl.bind("<Button-1>", lambda e: self._ipc_status_click())
         _tooltip(self._ipc_status_lbl,
                  "GhostRigger IPC (port 7001)\nClick for IPC status details")
+        self._hdr_rc_id = hdr.create_window(10, 24, anchor='e', window=right_cluster)
+        # Reposition right cluster on resize
+        def _reposition_hdr_right(event=None):
+            w = hdr.winfo_width()
+            if w > 20:
+                hdr.coords(self._hdr_rc_id, w - 12, 24)
+        hdr.bind('<Configure>', lambda e: (_reposition_hdr_right(e),
+                                           hdr._on_configure(e)), add='')
 
         # ── Toolbar ──
-        tb = tk.Frame(self, bg=C['panel'], height=34)
+        # MatrixPanel with border strip: the content frame leaves a 3px
+        # animated Matrix rain border at top and bottom of the toolbar.
+        tb = MatrixPanel(self, engine=self._matrix_engine,
+                         height=38, no_inner=True)
         tb.pack(fill='x')
-        tb.pack_propagate(False)
+        _tb_content = tk.Frame(tb, bg=C['panel'])
+        _tb_content.pack_propagate(False)
+        _tb_cw_id = tb.create_window(0, 3, anchor='nw', window=_tb_content)
+        def _resize_tb_content(event=None):
+            w = tb.winfo_width()
+            h = tb.winfo_height()
+            if w > 0 and h > 6:
+                tb.itemconfig(_tb_cw_id, width=w, height=h - 6)
+        tb.bind('<Configure>', lambda e: (_resize_tb_content(e),
+                                          tb._on_configure(e)), add='')
 
         # Primary actions (always visible) with keyboard-shortcut hints
-        b_open = _btn(tb, " Open  Ctrl+O", self._open_mdl_binary)
+        _tb = _tb_content
+        b_open = _btn(_tb, " Open  Ctrl+O", self._open_mdl_binary)
         b_open.pack(side='left', padx=2, pady=2)
         _tooltip(b_open, "Open MDL binary file  (Ctrl+O)")
 
-        b_rig = _btn(tb, " Auto-Rig  R", self._quick_autorig, accent=True)
+        b_rig = _btn(_tb, " Auto-Rig  R", self._quick_autorig, accent=True)
         b_rig.pack(side='left', padx=2, pady=2)
         _tooltip(b_rig, "Auto-rig the current model  (R)")
 
-        b_cb = _btn(tb, " Character Builder", lambda: self._switch_tab("charbuilder"),
+        b_cb = _btn(_tb, " Character Builder", lambda: self._switch_tab("charbuilder"),
                     accent=True)
         b_cb.pack(side='left', padx=2, pady=2)
         _tooltip(b_cb, "Open Character Builder  (templates, skeleton selection, head/body assembly)")
 
-        b_modules = _btn(tb, " Modules", self._toggle_modular_panel)
+        b_modules = _btn(_tb, " Modules", self._toggle_modular_panel)
         b_modules.pack(side='left', padx=2, pady=2)
         _tooltip(b_modules, "Open Module Editor (walkmesh, K1\u2194K2 porter, module builder)")
 
-        b_tex = _btn(tb, " Tex Dir", self._set_texture_dir)
+        b_tex = _btn(_tb, " Tex Dir", self._set_texture_dir)
         b_tex.pack(side='left', padx=2, pady=2)
         _tooltip(b_tex, "Set texture search directory")
 
         # Separator
-        _sep(tb).pack(side='left', fill='y', padx=5, pady=4)
+        _sep(_tb).pack(side='left', fill='y', padx=5, pady=4)
 
         # Import dropdown (replaces 3 separate import buttons)
-        imp_btn = _btn(tb, "⬆ Import ▾", None)
+        imp_btn = _btn(_tb, "\u2b06 Import \u25be", None)
         imp_btn.pack(side='left', padx=2, pady=2)
         imp_menu = tk.Menu(imp_btn, tearoff=False, bg=C['panel'], fg=C['text'],
                            activebackground=C['hover'], activeforeground=C['accent'],
                            font=("Consolas", 9))
-        imp_menu.add_command(label="Import OBJ…        Ctrl+I",  command=self._import_obj)
-        imp_menu.add_command(label="Import FBX…",                command=self._import_fbx)
-        imp_menu.add_command(label="Import GLB/GLTF…",           command=self._import_gltf)
+        imp_menu.add_command(label="Import OBJ\u2026        Ctrl+I",  command=self._import_obj)
+        imp_menu.add_command(label="Import FBX\u2026",                command=self._import_fbx)
+        imp_menu.add_command(label="Import GLB/GLTF\u2026",           command=self._import_gltf)
         imp_menu.add_separator()
-        imp_menu.add_command(label="Open MDL (ASCII)…  Ctrl+Shift+O", command=self._open_mdl_ascii)
+        imp_menu.add_command(label="Open MDL (ASCII)\u2026  Ctrl+Shift+O", command=self._open_mdl_ascii)
         def _show_imp_menu():
             try:
                 imp_menu.tk_popup(imp_btn.winfo_rootx(),
@@ -9619,20 +9643,20 @@ class KotorModToolsApp(tk.Tk):
         _tooltip(imp_btn, "Import model from external format")
 
         # Export dropdown (replaces 3 separate export buttons)
-        exp_btn = _btn(tb, "⬇ Export ▾", None)
+        exp_btn = _btn(_tb, "\u2b07 Export \u25be", None)
         exp_btn.pack(side='left', padx=2, pady=2)
         exp_menu = tk.Menu(exp_btn, tearoff=False, bg=C['panel'], fg=C['text'],
                            activebackground=C['hover'], activeforeground=C['accent'],
                            font=("Consolas", 9))
-        exp_menu.add_command(label="Export Binary MDL…  Ctrl+M",  command=self._export_mdl_binary)
-        exp_menu.add_command(label="Export OBJ…        Ctrl+E",  command=self._export_obj)
-        exp_menu.add_command(label="Export FBX…",                command=self._export_fbx)
-        exp_menu.add_command(label="Export GLB/GLTF…   Ctrl+G",  command=self._export_gltf)
+        exp_menu.add_command(label="Export Binary MDL\u2026  Ctrl+M",  command=self._export_mdl_binary)
+        exp_menu.add_command(label="Export OBJ\u2026        Ctrl+E",  command=self._export_obj)
+        exp_menu.add_command(label="Export FBX\u2026",                command=self._export_fbx)
+        exp_menu.add_command(label="Export GLB/GLTF\u2026   Ctrl+G",  command=self._export_gltf)
         exp_menu.add_separator()
-        exp_menu.add_command(label="Save ASCII MDL…    Ctrl+S",  command=self._save_ascii_mdl)
-        exp_menu.add_command(label="Compile MDL…",               command=self._compile_mdlops)
+        exp_menu.add_command(label="Save ASCII MDL\u2026    Ctrl+S",  command=self._save_ascii_mdl)
+        exp_menu.add_command(label="Compile MDL\u2026",               command=self._compile_mdlops)
         exp_menu.add_separator()
-        exp_menu.add_command(label="Export Humanoid Template…",  command=self._export_humanoid_template)
+        exp_menu.add_command(label="Export Humanoid Template\u2026",  command=self._export_humanoid_template)
         def _show_exp_menu():
             try:
                 exp_menu.tk_popup(exp_btn.winfo_rootx(),
@@ -9643,11 +9667,11 @@ class KotorModToolsApp(tk.Tk):
         _tooltip(exp_btn, "Export model to external format")
 
         # Separator
-        _sep(tb).pack(side='left', fill='y', padx=5, pady=4)
+        _sep(_tb).pack(side='left', fill='y', padx=5, pady=4)
 
-        # Model name pill – shows currently loaded model + game tag (neon green badge)
+        # Model name pill -- shows currently loaded model + game tag (neon green badge)
         self._model_name_var = tk.StringVar(value="// No model loaded")
-        pill = tk.Label(tb, textvariable=self._model_name_var,
+        pill = tk.Label(_tb, textvariable=self._model_name_var,
                         font=("Consolas", 9, "bold"),
                         bg=C['bg'], fg=C['accent'],
                         padx=10, pady=3,
@@ -9660,26 +9684,28 @@ class KotorModToolsApp(tk.Tk):
                   if self._model else None)
 
         # Right side: quick actions toolbar
-        b_diag = _btn(tb, " Diag  Ctrl+D",
+        b_diag = _btn(_tb, " Diag  Ctrl+D",
                       lambda: self._switch_tab_right("diag"), small=True)
         b_diag.pack(side='right', padx=2, pady=2)
         _tooltip(b_diag, "Run model diagnostics  (Ctrl+D)")
 
-        b_anim = _btn(tb, " Anims  Ctrl+A",
+        b_anim = _btn(_tb, " Anims  Ctrl+A",
                       lambda: self._switch_tab_right("anim"), small=True)
         b_anim.pack(side='right', padx=2, pady=2)
         _tooltip(b_anim, "Open Animations panel  (Ctrl+A)")
 
-        _sep(tb).pack(side='right', fill='y', padx=3, pady=4)
+        _sep(_tb).pack(side='right', fill='y', padx=3, pady=4)
 
-        b_settings = _btn(tb, " Settings  F2", self._open_settings, small=True)
+        b_settings = _btn(_tb, " Settings  F2", self._open_settings, small=True)
         b_settings.pack(side='right', padx=2, pady=2)
         _tooltip(b_settings, "Open settings dialog  (F2)")
 
         # ── Main pane ──
+        # Wider sash (6px) lets the Matrix rain backdrop show through the
+        # vertical divider between panels.
         main = tk.PanedWindow(self, orient='horizontal', bg=C['bg'],
-                               sashwidth=4, sashrelief='flat')
-        main.pack(fill='both', expand=True)
+                               sashwidth=6, sashrelief='flat')
+        main.pack(fill='both', expand=True, padx=2, pady=(2, 0))
 
         # Left panel (Library + Skeleton)
         left = tk.Frame(main, bg=C['panel2'], width=240)
@@ -9861,14 +9887,27 @@ class KotorModToolsApp(tk.Tk):
         self.log_panel.pack(fill='x', side='bottom')
 
         # ── Status bar (above log, below modular) — neon green terminal style ──
-        status_bar = tk.Frame(self, bg=C['bg'], height=22)
+        # MatrixPanel with a 3px animated rain strip at the top border
+        status_bar = MatrixPanel(self, engine=self._matrix_engine,
+                                 height=25, no_inner=True)
         status_bar.pack(fill='x', side='bottom')
-        status_bar.pack_propagate(False)
+        _sb_content = tk.Frame(status_bar, bg=C['bg'])
+        _sb_cw_id = status_bar.create_window(0, 3, anchor='nw',
+                                              window=_sb_content)
+        def _resize_sb_content(event=None):
+            w = status_bar.winfo_width()
+            h = status_bar.winfo_height()
+            if w > 0 and h > 3:
+                status_bar.itemconfig(_sb_cw_id, width=w, height=h - 3)
+        status_bar.bind('<Configure>',
+                        lambda e: (_resize_sb_content(e),
+                                   status_bar._on_configure(e)), add='')
+        _sb = _sb_content
         # Thin accent border at top of status bar
-        tk.Frame(status_bar, bg=C['border'], height=1).pack(fill='x')
+        tk.Frame(_sb, bg=C['border'], height=1).pack(fill='x')
         self._status_var = tk.StringVar(
             value="// Ready  |  Ctrl+O: Open  |  F: Frame  |  W/B/T: Wire/Bones/Tex  |  F5: Refresh  |  F1: About")
-        tk.Label(status_bar, textvariable=self._status_var,
+        tk.Label(_sb, textvariable=self._status_var,
                  font=("Consolas", 7), bg=C['bg'], fg=C['text2'],
                  anchor='w').pack(fill='x', padx=8, pady=1)
 
@@ -9900,8 +9939,10 @@ class KotorModToolsApp(tk.Tk):
                   if self._model else None)
         self.bind("<Escape>",       lambda e: self._on_escape())
 
-        # ── Start the animated Matrix background ──
-        self.after(500, self.matrix_bg.start)
+        # ── Start the animated Matrix background engine ──
+        # The engine broadcasts frames to all registered MatrixPanel instances
+        # (header, toolbar, status bar, and the full-window backdrop panel).
+        self.after(500, self._matrix_engine.start)
 
     # ── Logger setup ──────────────────────────────────────────────────────
 
