@@ -9515,7 +9515,10 @@ class KotorModToolsApp(tk.Tk):
         # ── Matrix animated background — placed behind all UI elements ──
         self.matrix_bg = MatrixBackground(self, opacity=0.45)
         self.matrix_bg.place(x=0, y=0, relwidth=1, relheight=1)
-        self.matrix_bg.lower()   # push behind all subsequently packed widgets
+        # Push behind all subsequently packed widgets.
+        # NOTE: tk.Canvas overrides .lower() as tag_lower(), so we must call
+        # the widget-level stacking method via tk.Misc explicitly.
+        tk.Misc.lower(self.matrix_bg)
 
         # ── Header — cyberpunk dark chrome with neon green accents ──
         hdr = tk.Frame(self, bg=C['bg'], height=48)
