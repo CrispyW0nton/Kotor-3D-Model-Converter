@@ -3235,9 +3235,22 @@ class GpuRenderer:
                 # ── Phase A: GPU Skinning — enable/disable per draw call ──────
                 # For skin nodes with a valid bone palette, enable LBS in the shader.
                 # For non-skin nodes, ensure skinning is disabled (pass-through).
+                #
+                # FIX-SKIN-BINDPOSE: ONLY enable GPU skinning when there is an
+                # active animation pose.  KotOR skin mesh vertices are stored in
+                # world/bind-pose space (pre-transformed).  When anim_pose is
+                # None, compute_palette() produces M = I × inv_bind = inv_bind,
+                # which un-transforms verts from bind-pose to bone-local space,
+                # causing geometry stretching/explosion.  The correct bind-pose
+                # rendering path is to skip GPU skinning entirely (u_skin_enabled=0)
+                # so the shader passes in_pos through unchanged.
+                #
+                # GPU skinning should only activate when anim_pose provides
+                # world-pose matrices that differ from the bind pose.
                 if (_nd_is_skin and _has_skin_nodes
                         and self._skin_uploader is not None
                         and self._skin_bone_count > 0
+                        and anim_pose is not None
                         and 'u_skin_enabled' in _u
                         and 'u_bone_count' in _u):
                     _u['u_skin_enabled'].value = 1
