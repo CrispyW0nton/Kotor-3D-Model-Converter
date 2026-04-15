@@ -2146,7 +2146,8 @@ class GpuRenderer:
                W: int, H: int,
                textures: Optional[Dict[str, 'Image.Image']] = None,
                anim_pose=None,
-               anim_time: float = 0.0) -> Optional['Image.Image']:
+               anim_time: float = 0.0,
+               anim_base_pose=None) -> Optional['Image.Image']:
         """
         Render `model` from `camera` into a W×H PIL RGBA image.
 
@@ -2158,6 +2159,10 @@ class GpuRenderer:
         textures   : dict mapping lowercased texture name → PIL Image
         anim_pose  : AnimPose object (from animation_engine) or None
         anim_time  : current animation time in seconds (for UV scroll / flipbook)
+        anim_base_pose : AnimPose | None
+            FIX-SKIN-ANIM-D2: The animation's first-frame (t=0) pose.  When
+            provided, the GPU skinning palette uses this as the bind reference
+            instead of the static node hierarchy, matching the xoreos approach.
 
         Returns
         -------
@@ -2169,7 +2174,8 @@ class GpuRenderer:
         textures = textures or {}
 
         if self._ensure_context():
-            result = self._render_gpu(model, camera, W, H, textures, anim_pose, anim_time)
+            result = self._render_gpu(model, camera, W, H, textures, anim_pose, anim_time,
+                                       anim_base_pose=anim_base_pose)
             if result is not None:
                 self.perf['last_frame_ms'] = (time.perf_counter() - t0) * 1000
                 self.perf['backend'] = 'gpu'
@@ -2185,7 +2191,8 @@ class GpuRenderer:
 
     def _render_gpu(self, model, camera, W: int, H: int,
                     textures: Dict[str, 'Image.Image'],
-                    anim_pose, anim_time: float) -> Optional['Image.Image']:
+                    anim_pose, anim_time: float,
+                    anim_base_pose=None) -> Optional['Image.Image']:
         """Full GPU render via ModernGL EGL."""
         ctx = self._ctx
         prog = self._prog
@@ -2415,9 +2422,11 @@ class GpuRenderer:
                                      f"inverse bind-pose matrices for model "
                                      f"'{getattr(model, 'name', '?')}'")
                             self._skin_logged = True
-                    # Compute the palette for the current animation pose
+                    # FIX-SKIN-ANIM-D2: Compute the palette for the current animation pose.
+                    # If anim_base_pose is provided, pass it through so the uploader
+                    # uses the animation's first-frame pose as the bind reference.
                     if self._skin_uploader is not None:
-                        self._skin_uploader.compute_palette(anim_pose)
+                        self._skin_uploader.compute_palette(anim_pose, anim_base_pose=anim_base_pose)
                         # Upload bone matrices as uniform array
                         if 'u_bones' in _u and self._skin_uploader.bone_count > 0:
                             palette_bytes = self._skin_uploader.as_flat_bytes()

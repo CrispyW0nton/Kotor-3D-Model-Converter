@@ -224,6 +224,12 @@ class MatrixPaletteUploader:
         # animated palette computation.  Populated by build_inverse_bind_pose().
         self._node_lookup : Dict[str, object] = {}   # bone_name_lower → ModelNode
         self._node_parent : Dict[str, str] = {}      # bone_name_lower → parent_name_lower
+        # FIX-SKIN-ANIM-D2: Per-animation inverse bind pose override.
+        # When set, this replaces _inv_bind for palette computation.
+        # Built from the animation's first-frame (t=0) pose to match the
+        # vertex space (xoreos approach: boneTransform = absTransform * inv(absBaseTransform)).
+        self._inv_bind_anim : Optional[Dict[str, List[List[float]]]] = None
+        self._current_anim_bind_key : Optional[str] = None  # tracks which anim bind is cached
 
     # ── Build inverse bind-pose ───────────────────────────────────────────────
 
@@ -342,29 +348,139 @@ class MatrixPaletteUploader:
 
     # ── Compute palette for current pose ─────────────────────────────────────
 
-    def compute_palette(self, anim_pose) -> List[BoneMatrix]:
+    def set_bind_pose_from_anim(self, anim_pose) -> int:
+        """Rebuild inverse bind-pose matrices from an animation's first-frame pose.
+
+        FIX-SKIN-ANIM-D2 (xoreos cross-ref: modelnode.cpp computeTransforms):
+        ─────────────────────────────────────────────────────────────────────
+        KotOR skin vertices are stored to match the animation's first-frame
+        (t=0) pose, NOT the static node hierarchy rest pose.  This is because
+        position keyframes are DELTA offsets added to the rest position, and
+        t=0 keyframe deltas are often non-zero (e.g. Rootdummy shifts by
+        ~1.17 units at t=0 of 'cwalk').
+
+        The xoreos engine handles this by computing:
+            _absoluteBaseTransform  = parent_base × local_base  (from anim first frame)
+            _absoluteTransform      = parent_anim × local_anim  (from current frame)
+            _boneTransform          = _absoluteTransform × inverse(_absoluteBaseTransform)
+
+        When t = t0, boneTransform = identity, which is correct.
+
+        This method builds the inverse of the first-frame world-space poses,
+        which are then used as the bind reference in compute_palette().
+
+        Parameters
+        ----------
+        anim_pose : AnimPose
+            The animation's first-frame (t=0) pose from AnimationEngine.evaluate(0).
+
+        Returns
+        -------
+        int
+            Number of bind matrices updated.
+        """
+        if anim_pose is None:
+            self._inv_bind_anim = None
+            self._current_anim_bind_key = None
+            return 0
+
+        pose_nodes: Dict[str, object] = {}
+        raw = getattr(anim_pose, 'nodes', {})
+        pose_nodes = {k.lower(): v for k, v in raw.items()}
+
+        _world_base_cache: Dict[str, List[List[float]]] = {}
+
+        def _get_world_base(bone_name_lower: str) -> List[List[float]]:
+            if bone_name_lower in _world_base_cache:
+                return _world_base_cache[bone_name_lower]
+
+            pn = pose_nodes.get(bone_name_lower)
+            if pn is not None:
+                p = getattr(pn, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
+                q = getattr(pn, 'rotation', (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
+            else:
+                node = self._node_lookup.get(bone_name_lower)
+                if node is not None:
+                    p = getattr(node, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
+                    q = getattr(node, 'rotation', (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
+                else:
+                    m = _mat4_identity_py()
+                    _world_base_cache[bone_name_lower] = m
+                    return m
+
+            qx, qy, qz, qw = float(q[0]), float(q[1]), float(q[2]), float(q[3])
+            ql = math.sqrt(qx*qx + qy*qy + qz*qz + qw*qw)
+            if ql > 1e-9:
+                qx, qy, qz, qw = qx/ql, qy/ql, qz/ql, qw/ql
+            else:
+                qx, qy, qz, qw = 0.0, 0.0, 0.0, 1.0
+
+            rot_m = _quat_to_mat4((qx, qy, qz, qw))
+            tx, ty, tz = float(p[0]), float(p[1]), float(p[2])
+            local_m = _mat4_mul_py(_mat4_translate_py(tx, ty, tz), rot_m)
+
+            parent_name = self._node_parent.get(bone_name_lower)
+            if parent_name is not None:
+                parent_world = _get_world_base(parent_name)
+                world_m = _mat4_mul_py(parent_world, local_m)
+            else:
+                world_m = local_m
+
+            _world_base_cache[bone_name_lower] = world_m
+            return world_m
+
+        inv_bind_anim: Dict[str, List[List[float]]] = {}
+        count = 0
+        for bname in self._bone_order:
+            world_base = _get_world_base(bname)
+            try:
+                inv_m = _mat4_invert_py(world_base)
+            except Exception:
+                inv_m = _mat4_identity_py()
+            inv_bind_anim[bname] = inv_m
+            count += 1
+
+        self._inv_bind_anim = inv_bind_anim
+        log.debug(f"MatrixPaletteUploader: rebuilt {count} inverse bind matrices from anim first-frame (FIX-SKIN-ANIM-D2)")
+        return count
+
+    def compute_palette(self, anim_pose, anim_base_pose=None) -> List[BoneMatrix]:
         """Compute the full bone-matrix palette from an ``AnimPose``.
 
         For each bone in ``_bone_order``:
-            M_skin = M_world_pose × M_inv_world_bind
+            M_skin = M_world_pose × M_inv_bind_ref
 
-        FIX-SKIN-ANIM: The animated world pose is now computed by walking the
-        parent chain, accumulating transforms from the ``AnimPose`` at each
-        level (or falling back to the bind pose for nodes without animation
-        data).  Previously only the LOCAL pose was used, which produced
-        incorrect skinning matrices for bones deeper than depth 1.
+        FIX-SKIN-ANIM-D2 (xoreos cross-ref: modelnode.cpp computeTransforms):
+        The inverse bind reference is now taken from the animation's first-frame
+        pose (set via set_bind_pose_from_anim()) rather than the static node
+        hierarchy.  This matches the xoreos formula:
+            boneTransform = absoluteTransform × inverse(absoluteBaseTransform)
+        where absoluteBaseTransform is built from the animation's initial frame.
+
+        At t=0 of an animation, this produces identity matrices (correct).
+        At other times, it produces the delta from the first frame.
+
+        Falls back to the static hierarchy inverse bind if no animation bind
+        has been set.
 
         Parameters
         ----------
         anim_pose : AnimPose | None
             The pose evaluated by ``AnimationEngine.evaluate()``.  If None,
             all matrices are identity (bind pose).
+        anim_base_pose : AnimPose | None
+            The animation's first-frame (t=0) pose.  If provided, the inverse
+            bind is rebuilt from this pose on the fly.  This is the simplest
+            integration path for callers that track animation state.
 
         Returns
         -------
         list[BoneMatrix]
             Palette in the same order as ``_bone_order``.
         """
+        # FIX-SKIN-ANIM-D2: If caller provides a base pose, rebuild bind from it.
+        if anim_base_pose is not None:
+            self.set_bind_pose_from_anim(anim_base_pose)
         self._palette = []
 
         # FIX-SKIN-BINDPOSE: When anim_pose is None (no animation), the
@@ -387,11 +503,11 @@ class MatrixPaletteUploader:
         raw = getattr(anim_pose, 'nodes', {})
         pose_nodes = {k.lower(): v for k, v in raw.items()}
 
-        # FIX-SKIN-ANIM: Build world-space animated pose matrices by walking
-        # the parent chain for each bone.  For each node in the chain:
-        #   - If the node has an AnimPose entry, use animated pos/rot
-        #   - Otherwise, use the bind-pose pos/rot from the model node
-        # Accumulate: world_pose = parent_world_pose × T(local_pos) × R(local_rot)
+        # FIX-SKIN-ANIM-D2: Use animation-derived bind if available,
+        # otherwise fall back to static hierarchy bind.
+        active_inv_bind = self._inv_bind_anim if self._inv_bind_anim is not None else self._inv_bind
+
+        # Build world-space animated pose matrices by walking the parent chain.
         _world_anim_cache: Dict[str, List[List[float]]] = {}
 
         def _get_world_anim(bone_name_lower: str) -> List[List[float]]:
@@ -437,7 +553,7 @@ class MatrixPaletteUploader:
             return world_m
 
         for idx, bname in enumerate(self._bone_order):
-            inv_bind = self._inv_bind.get(bname, _mat4_identity_py())
+            inv_bind = active_inv_bind.get(bname, _mat4_identity_py())
 
             # World-space animated pose for this bone
             world_pose_m = _get_world_anim(bname)
