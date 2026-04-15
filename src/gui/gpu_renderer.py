@@ -1315,7 +1315,8 @@ def _quat_rotate_batch(q: np.ndarray, pts: np.ndarray) -> np.ndarray:
 
 def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
                     anim_pose_node=None,
-                    is_module: bool = False) -> Tuple[Optional[np.ndarray],
+                    is_module: bool = False,
+                    bone_index_remap: Optional[Dict[int, int]] = None) -> Tuple[Optional[np.ndarray],
                                                       Optional[np.ndarray]]:
     """
     Build interleaved VBO data for a ModelNode using vectorized NumPy.
@@ -1701,6 +1702,17 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     # ── Phase A: Populate bone_ids and weights for skin nodes ────────────────
     # bone_ids[14:18] = palette indices (float);  weights[18:22] = blend weights.
     # Non-skin nodes: identity (idx=0, weight=[1,0,0,0]) — shader pass-through.
+    #
+    # FIX-SKIN-BONEIDX: The bone_index stored in BoneWeight is a LOCAL index into
+    # the skin node's bone_map[] array (from the MDL binary).  The GPU shader's
+    # u_bones[] palette, however, is indexed by the DFS node traversal order from
+    # MatrixPaletteUploader._bone_order.  These orderings are completely different!
+    # For c_kraytdragon: bone_map[0]="KDB_NeckTop" has DFS index 45, but u_bones[0]
+    # is the root node.  Without remapping, every vertex fetches the WRONG bone
+    # matrix, causing severe geometry explosion during animation.
+    #
+    # The bone_index_remap dict (built by the caller from skin_node.bone_map and
+    # MatrixPaletteUploader.bone_index()) translates:  local_idx → palette_idx.
     if is_skin:
         _skin_data = getattr(node, 'skin_data', [])
         if _skin_data and len(_skin_data) >= n_verts:
@@ -1709,7 +1721,13 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
                 _infl = getattr(_sd, 'influences', [])
                 for _bi_idx in range(min(4, len(_infl))):
                     _bw = _infl[_bi_idx]
-                    vdata[_vi, 14 + _bi_idx] = float(getattr(_bw, 'bone_index', 0))
+                    _local_idx = int(getattr(_bw, 'bone_index', 0))
+                    # FIX-SKIN-BONEIDX: Remap local bone_map index to palette index
+                    if bone_index_remap is not None:
+                        _palette_idx = bone_index_remap.get(_local_idx, 0)
+                    else:
+                        _palette_idx = _local_idx
+                    vdata[_vi, 14 + _bi_idx] = float(_palette_idx)
                     vdata[_vi, 18 + _bi_idx] = float(getattr(_bw, 'weight', 0.0))
         else:
             # No per-vertex skin data: identity (bone 0, weight 1.0)
@@ -2824,9 +2842,29 @@ class GpuRenderer:
                             break
                         _acheck = getattr(_acheck, 'parent', None)
                 if is_animated or node_id not in self._mesh_cache:
+                    # FIX-SKIN-BONEIDX: Build bone index remap for skin nodes.
+                    # The MDL bone_map uses a compact local index (0..15) that
+                    # differs from the DFS-order palette index used by the GPU
+                    # shader's u_bones[] array.  We must translate:
+                    #   local_idx (into bone_map[]) → palette_idx (into u_bones[])
+                    _bone_remap = None
+                    if _nd_is_skin and self._skin_uploader is not None:
+                        _bmap = getattr(node, 'bone_map', [])
+                        if _bmap:
+                            _bone_remap = {}
+                            for _bmi, _bmname in enumerate(_bmap):
+                                if _bmname:
+                                    _pidx = self._skin_uploader.bone_index(_bmname)
+                                    if _pidx >= 0:
+                                        _bone_remap[_bmi] = _pidx
+                                    else:
+                                        _bone_remap[_bmi] = 0  # fallback: identity bone
+                                else:
+                                    _bone_remap[_bmi] = 0
                     vdata, idx_arr = _build_vbo_data(node, wp, wo,
                                                      anim_pose_node=None,
-                                                     is_module=_gpu_is_module)
+                                                     is_module=_gpu_is_module,
+                                                     bone_index_remap=_bone_remap)
                     if vdata is None:
                         return
                     if node_id in self._mesh_cache:
