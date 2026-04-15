@@ -215,16 +215,31 @@ class MatrixPaletteUploader:
 
     def __init__(self, max_bones: int = MAX_BONES):
         self._max_bones   = max_bones
-        self._inv_bind    : Dict[str, List[List[float]]] = {}   # bone_name → 4×4 row-major
+        self._inv_bind    : Dict[str, List[List[float]]] = {}   # bone_name → 4×4 row-major (WORLD-space inverse)
         self._palette     : List[BoneMatrix] = []
         self._bone_order  : List[str] = []   # ordered bone names for index lookup
         self._ssbo        : Optional['moderngl.Buffer'] = None
         self._dirty       : bool = True
+        # FIX-SKIN-ANIM: Store node hierarchy for parent-chain walks during
+        # animated palette computation.  Populated by build_inverse_bind_pose().
+        self._node_lookup : Dict[str, object] = {}   # bone_name_lower → ModelNode
+        self._node_parent : Dict[str, str] = {}      # bone_name_lower → parent_name_lower
 
     # ── Build inverse bind-pose ───────────────────────────────────────────────
 
     def build_inverse_bind_pose(self, model) -> int:
         """Walk the model's node tree and compute per-bone inverse bind-pose matrices.
+
+        FIX-SKIN-ANIM: Computes WORLD-SPACE (model-space) bind transforms by
+        accumulating the parent chain for each bone, then inverts.  Previously
+        used only LOCAL (parent-relative) transforms, which produced wrong
+        skinning matrices for any bone deeper than depth 1 in the hierarchy.
+
+        The world-space bind matrix for bone *i* is:
+            world_bind_i = world_bind_parent × T(local_pos) × R(local_rot)
+
+        And the inverse bind-pose stored is:
+            inv_bind_i = inv(world_bind_i)
 
         Parameters
         ----------
@@ -238,24 +253,48 @@ class MatrixPaletteUploader:
         """
         self._inv_bind.clear()
         self._bone_order.clear()
+        self._node_lookup.clear()
+        self._node_parent.clear()
 
         if model is None:
             return 0
 
         nodes = list(model.all_nodes()) if hasattr(model, 'all_nodes') else []
-        count = 0
+
+        # Build node lookup and parent map for hierarchy traversal
         for node in nodes:
             name = getattr(node, 'name', '')
             if not name:
                 continue
-            # Bind-pose position and rotation
-            pos  = getattr(node, 'position', getattr(node, 'pos', (0.0, 0.0, 0.0)))
-            quat = getattr(node, 'rotation', getattr(node, 'quat', (0.0, 0.0, 0.0, 1.0)))
-            if pos is None:
-                pos = (0.0, 0.0, 0.0)
-            if quat is None:
-                quat = (0.0, 0.0, 0.0, 1.0)
-            # Normalise quaternion
+            name_lower = name.lower()
+            self._node_lookup[name_lower] = node
+            parent = getattr(node, 'parent', None)
+            if parent is not None:
+                parent_name = getattr(parent, 'name', '')
+                if parent_name:
+                    self._node_parent[name_lower] = parent_name.lower()
+
+        # Compute world-space bind matrices by walking parent chains.
+        # Cache computed world bind matrices to avoid redundant chain walks.
+        _world_bind_cache: Dict[str, List[List[float]]] = {}
+
+        def _get_world_bind(bone_name_lower: str) -> List[List[float]]:
+            """Recursively compute the world-space bind matrix for a bone."""
+            if bone_name_lower in _world_bind_cache:
+                return _world_bind_cache[bone_name_lower]
+
+            node = self._node_lookup.get(bone_name_lower)
+            if node is None:
+                m = _mat4_identity_py()
+                _world_bind_cache[bone_name_lower] = m
+                return m
+
+            # Local bind transform: T(pos) × R(quat)
+            pos  = getattr(node, 'position', (0.0, 0.0, 0.0))
+            quat = getattr(node, 'rotation', (0.0, 0.0, 0.0, 1.0))
+            if pos is None:  pos = (0.0, 0.0, 0.0)
+            if quat is None: quat = (0.0, 0.0, 0.0, 1.0)
+
             qx, qy, qz, qw = float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3])
             qlen = math.sqrt(qx*qx + qy*qy + qz*qz + qw*qw)
             if qlen > 1e-9:
@@ -265,23 +304,40 @@ class MatrixPaletteUploader:
 
             rot_m  = _quat_to_mat4((qx, qy, qz, qw))
             tx, ty, tz = float(pos[0]), float(pos[1]), float(pos[2])
-            # Combine rotation + translation: T × R
-            bind_m = _mat4_mul_py(_mat4_translate_py(tx, ty, tz), rot_m)
+            local_m = _mat4_mul_py(_mat4_translate_py(tx, ty, tz), rot_m)
 
-            # Invert: for pure rotation + translation, inv = R^T × T(-t)
-            # General inversion via cofactors (pure Python, no numpy)
+            # world_bind = parent_world_bind × local_bind
+            parent_name = self._node_parent.get(bone_name_lower)
+            if parent_name is not None:
+                parent_world = _get_world_bind(parent_name)
+                world_m = _mat4_mul_py(parent_world, local_m)
+            else:
+                world_m = local_m
+
+            _world_bind_cache[bone_name_lower] = world_m
+            return world_m
+
+        count = 0
+        for node in nodes:
+            name = getattr(node, 'name', '')
+            if not name:
+                continue
+            name_lower = name.lower()
+
+            # Compute world-space bind matrix and invert
+            world_bind_m = _get_world_bind(name_lower)
             try:
-                inv_m = _mat4_invert_py(bind_m)
+                inv_m = _mat4_invert_py(world_bind_m)
             except Exception:
                 inv_m = _mat4_identity_py()
 
-            self._inv_bind[name.lower()] = inv_m
+            self._inv_bind[name_lower] = inv_m
             if len(self._bone_order) < self._max_bones:
-                self._bone_order.append(name.lower())
+                self._bone_order.append(name_lower)
             count += 1
 
         self._dirty = True
-        log.debug(f"MatrixPaletteUploader: built {count} inverse bind-pose matrices")
+        log.debug(f"MatrixPaletteUploader: built {count} world-space inverse bind-pose matrices")
         return count
 
     # ── Compute palette for current pose ─────────────────────────────────────
@@ -290,7 +346,13 @@ class MatrixPaletteUploader:
         """Compute the full bone-matrix palette from an ``AnimPose``.
 
         For each bone in ``_bone_order``:
-            M_skin = M_world_pose × M_inv_bind
+            M_skin = M_world_pose × M_inv_world_bind
+
+        FIX-SKIN-ANIM: The animated world pose is now computed by walking the
+        parent chain, accumulating transforms from the ``AnimPose`` at each
+        level (or falling back to the bind pose for nodes without animation
+        data).  Previously only the LOCAL pose was used, which produced
+        incorrect skinning matrices for bones deeper than depth 1.
 
         Parameters
         ----------
@@ -309,10 +371,6 @@ class MatrixPaletteUploader:
         # palette must be all-identity.  KotOR skin vertices are stored in
         # world/bind-pose space; the correct bind-pose formula is:
         #   M_skin = bind_pose × inv_bind = I  (identity)
-        # Previously this used pose_m = I (not bind_pose) when anim_pose
-        # was None, yielding M_skin = I × inv_bind = inv_bind, which
-        # un-transformed verts from world-space to bone-local-space, causing
-        # geometry stretching/explosion on all skinned characters.
         if anim_pose is None:
             identity_flat = _mat4_to_flat_col(_mat4_identity_py())
             for idx, bname in enumerate(self._bone_order):
@@ -329,25 +387,62 @@ class MatrixPaletteUploader:
         raw = getattr(anim_pose, 'nodes', {})
         pose_nodes = {k.lower(): v for k, v in raw.items()}
 
+        # FIX-SKIN-ANIM: Build world-space animated pose matrices by walking
+        # the parent chain for each bone.  For each node in the chain:
+        #   - If the node has an AnimPose entry, use animated pos/rot
+        #   - Otherwise, use the bind-pose pos/rot from the model node
+        # Accumulate: world_pose = parent_world_pose × T(local_pos) × R(local_rot)
+        _world_anim_cache: Dict[str, List[List[float]]] = {}
+
+        def _get_world_anim(bone_name_lower: str) -> List[List[float]]:
+            """Recursively compute the world-space animated transform for a bone."""
+            if bone_name_lower in _world_anim_cache:
+                return _world_anim_cache[bone_name_lower]
+
+            # Get animated or bind-pose local transform
+            pn = pose_nodes.get(bone_name_lower)
+            if pn is not None:
+                p = getattr(pn, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
+                q = getattr(pn, 'rotation', (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
+            else:
+                node = self._node_lookup.get(bone_name_lower)
+                if node is not None:
+                    p = getattr(node, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
+                    q = getattr(node, 'rotation', (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
+                else:
+                    m = _mat4_identity_py()
+                    _world_anim_cache[bone_name_lower] = m
+                    return m
+
+            qx, qy, qz, qw = float(q[0]), float(q[1]), float(q[2]), float(q[3])
+            ql = math.sqrt(qx*qx + qy*qy + qz*qz + qw*qw)
+            if ql > 1e-9:
+                qx, qy, qz, qw = qx/ql, qy/ql, qz/ql, qw/ql
+            else:
+                qx, qy, qz, qw = 0.0, 0.0, 0.0, 1.0
+
+            rot_m = _quat_to_mat4((qx, qy, qz, qw))
+            tx, ty, tz = float(p[0]), float(p[1]), float(p[2])
+            local_m = _mat4_mul_py(_mat4_translate_py(tx, ty, tz), rot_m)
+
+            # world_anim = parent_world_anim × local_anim
+            parent_name = self._node_parent.get(bone_name_lower)
+            if parent_name is not None:
+                parent_world = _get_world_anim(parent_name)
+                world_m = _mat4_mul_py(parent_world, local_m)
+            else:
+                world_m = local_m
+
+            _world_anim_cache[bone_name_lower] = world_m
+            return world_m
+
         for idx, bname in enumerate(self._bone_order):
             inv_bind = self._inv_bind.get(bname, _mat4_identity_py())
 
-            # World pose: position + rotation from AnimPose node
-            pn = pose_nodes.get(bname, None)
-            if pn is not None:
-                p   = getattr(pn, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
-                q   = getattr(pn, 'rotation', (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
-                qx, qy, qz, qw = float(q[0]), float(q[1]), float(q[2]), float(q[3])
-                ql = math.sqrt(qx*qx + qy*qy + qz*qz + qw*qw)
-                if ql > 1e-9:
-                    qx, qy, qz, qw = qx/ql, qy/ql, qz/ql, qw/ql
-                rot_m  = _quat_to_mat4((qx, qy, qz, qw))
-                tx, ty, tz = float(p[0]), float(p[1]), float(p[2])
-                pose_m = _mat4_mul_py(_mat4_translate_py(tx, ty, tz), rot_m)
-            else:
-                pose_m = _mat4_identity_py()
+            # World-space animated pose for this bone
+            world_pose_m = _get_world_anim(bname)
 
-            skin_m = _mat4_mul_py(pose_m, inv_bind)
+            skin_m = _mat4_mul_py(world_pose_m, inv_bind)
             bm = BoneMatrix(
                 flat_col   = _mat4_to_flat_col(skin_m),
                 bone_name  = bname,
