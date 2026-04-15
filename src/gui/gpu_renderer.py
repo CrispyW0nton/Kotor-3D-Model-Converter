@@ -64,11 +64,12 @@ Phase 2 rendering correctness fixes
   FIX-SEAMUV:   Seam-vertex UV healing: several KotOR models (p_hk47 hands/fingers,
                 c_kraytdragon claws) have UV-seam duplicate vertices where the seam
                 copy's UV was written as a sentinel/garbage value (e.g. -27.14, -104.93).
-                _build_vbo_data now detects vertices with |UV| > _UV_SENTINEL (1e18),
+                _build_vbo_data now detects vertices with |UV| > _UV_SENTINEL,
                 finds the nearest coincident vertex (distance < 0.001 units), and copies
                 its UV.  Falls back to UV=0.5 only when no valid neighbor exists.
-                v6.0: sentinel raised to 1e18 (NaN/Inf only) so all finite tiled UVs
-                pass through.  GL_REPEAT handles any magnitude correctly.
+                FIX-UVSENT-V2: two-tier sentinel — character models use 20.0 (heals
+                seam garbage UVs like -27.14); module/tile models use 1e18 (allows
+                legitimate large tiled UVs, GL_REPEAT handles any magnitude).
   FIX-MULTITEX: Multi-texture nodes (tex_count > 1, face_mats per face) are now split
                 into per-texture draw groups.  Each group uploads its own VBO subset and
                 binds the correct texture, enabling correct rendering of area tile meshes
@@ -1322,12 +1323,14 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     Returns (vertex_array, index_array) as float32/uint32 numpy arrays,
     or (None, None) on failure.
 
-    Vertex layout per vertex (stride = 14 floats = 56 bytes):
-      pos.xyz    3 floats
-      norm.xyz   3 floats
-      uv.xy      2 floats  (UV0 — primary/diffuse)
-      uv_lm.xy   2 floats  (UV1 — lightmap)
-      color.xyzw 4 floats  (vertex colour + per-vertex alpha)
+    Vertex layout per vertex (stride = 22 floats = 88 bytes):
+      pos.xyz       3 floats  [0:3]
+      norm.xyz      3 floats  [3:6]
+      uv.xy         2 floats  [6:8]   (UV0 — primary/diffuse)
+      uv_lm.xy      2 floats  [8:10]  (UV1 — lightmap)
+      color.xyzw    4 floats  [10:14] (vertex colour + per-vertex alpha)
+      bone_ids.xyzw 4 floats  [14:18] (bone palette indices, as float)
+      weights.xyzw  4 floats  [18:22] (blend weights, sum ~ 1.0)
 
     Vectorization notes
     -------------------
@@ -1364,14 +1367,28 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
                        abs(wo[0]) < 1e-6 and abs(wo[1]) < 1e-6 and abs(wo[2]) < 1e-6)
     is_identity_pos = (abs(wp[0]) < 1e-9 and abs(wp[1]) < 1e-9 and abs(wp[2]) < 1e-9)
 
-    # v6.0 FIX: UV sentinel unified to 1e18 for all model types.
-    # KotOR module geometry uses extreme UV tiling for large surfaces
-    # (e.g. Box86 in m10aa_01c has U/V ~ 131,208).  The GPU GL_REPEAT
-    # wraps them correctly.  The previous two-tier threshold (100 for
-    # characters, 1e6 for modules) was a fragile workaround.
-    # Now we only filter NaN/Inf (genuinely corrupt MDX data).
-    # Cross-ref: KotOR.js TextureLoader.ts -- default RepeatWrapping.
-    _UV_SENTINEL = 1e18
+    # FIX-UVSENT-V2: Two-tier UV sentinel restored for correct seam healing.
+    #
+    # Character models (is_module=False): UV sentinel = 20.0
+    #   KotOR skin meshes have seam-split duplicate vertices where the seam
+    #   copy's UV was written as garbage (e.g. -27.14, -104.93 on p_hk47
+    #   hand/finger nodes, c_kraytdragon claws).  These must be detected as
+    #   "bad" and healed by copying the UV from a coincident valid vertex.
+    #   The 20.0 threshold catches these garbage UVs while preserving all
+    #   legitimate character UVs (which are always in [0,1] or very close).
+    #   Reference: April 2 baseline (commit 90b914c) _UV_SENTINEL = 20.0.
+    #
+    # Module/tile models (is_module=True): UV sentinel = 1e18 (NaN/Inf only)
+    #   KotOR area/tile geometry legitimately tiles textures over large
+    #   surfaces with UVs far outside [0,1] (e.g. Box86 in m10aa_01c has
+    #   U/V ~ 131,208; LTS_logwal02 wall has U=-8.75).  GPU GL_REPEAT
+    #   wraps them correctly.  Only filter genuinely corrupt NaN/Inf data.
+    #   Cross-ref: KotOR.js TextureLoader.ts — default RepeatWrapping.
+    #
+    # The v6.0 change to a single 1e18 for all models broke character seam
+    # healing: UVs like -27.14 passed the NaN/Inf-only filter, causing
+    # incorrect texture mapping on character model seam vertices.
+    _UV_SENTINEL = 20.0 if not is_module else 1e18
 
     # ── Convert vertices and normals to Nx3 float64 arrays ──────────────────
     try:
