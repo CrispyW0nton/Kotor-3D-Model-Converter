@@ -9513,20 +9513,23 @@ class KotorModToolsApp(tk.Tk):
 
     def _build_ui(self):
         # ── Matrix Engine — single video decoder shared by all panels ──
-        self._matrix_engine = MatrixEngine(self, opacity=0.50)
+        self._matrix_engine = MatrixEngine(self, opacity=0.60)
 
-        # Full-window matrix backdrop — visible through PanedWindow sashes
-        # and any uncovered root-window areas.
+        # Full-window matrix backdrop — visible through PanedWindow sashes,
+        # root-window padding, toolbar/status bar rain borders, and header gaps.
         self.matrix_bg = MatrixPanel(self, engine=self._matrix_engine)
         self.matrix_bg.place(x=0, y=0, relwidth=1, relheight=1)
         tk.Misc.lower(self.matrix_bg)
+        # Add root padding so the matrix rain shows as a 3px animated border
+        # around the entire window (visible at left, right, and bottom edges).
+        self.configure(padx=3, pady=3)
 
         # ── Header — cyberpunk dark chrome with animated Matrix rain ──
         # MatrixPanel(no_inner=True): the entire header bg is the animated
         # matrix video.  Child widgets are placed via create_window() so the
         # rain is visible in every gap between widgets.
         hdr = MatrixPanel(self, engine=self._matrix_engine,
-                          height=48, no_inner=True)
+                          height=52, no_inner=True)
         hdr.pack(fill='x')
 
         # Left: App icon + title — placed directly on matrix canvas
@@ -9576,25 +9579,23 @@ class KotorModToolsApp(tk.Tk):
             w = hdr.winfo_width()
             if w > 20:
                 hdr.coords(self._hdr_rc_id, w - 12, 24)
-        hdr.bind('<Configure>', lambda e: (_reposition_hdr_right(e),
-                                           hdr._on_configure(e)), add='')
+        hdr.bind('<Configure>', lambda e: _reposition_hdr_right(e), add='+')
 
         # ── Toolbar ──
-        # MatrixPanel with border strip: the content frame leaves a 3px
+        # MatrixPanel with border strips: the content frame leaves a 4px
         # animated Matrix rain border at top and bottom of the toolbar.
         tb = MatrixPanel(self, engine=self._matrix_engine,
-                         height=38, no_inner=True)
+                         height=40, no_inner=True)
         tb.pack(fill='x')
         _tb_content = tk.Frame(tb, bg=C['panel'])
         _tb_content.pack_propagate(False)
-        _tb_cw_id = tb.create_window(0, 3, anchor='nw', window=_tb_content)
+        _tb_cw_id = tb.create_window(0, 4, anchor='nw', window=_tb_content)
         def _resize_tb_content(event=None):
             w = tb.winfo_width()
             h = tb.winfo_height()
-            if w > 0 and h > 6:
-                tb.itemconfig(_tb_cw_id, width=w, height=h - 6)
-        tb.bind('<Configure>', lambda e: (_resize_tb_content(e),
-                                          tb._on_configure(e)), add='')
+            if w > 0 and h > 8:
+                tb.itemconfig(_tb_cw_id, width=w, height=h - 8)
+        tb.bind('<Configure>', lambda e: _resize_tb_content(e), add='+')
 
         # Primary actions (always visible) with keyboard-shortcut hints
         _tb = _tb_content
@@ -9704,8 +9705,8 @@ class KotorModToolsApp(tk.Tk):
         # Wider sash (6px) lets the Matrix rain backdrop show through the
         # vertical divider between panels.
         main = tk.PanedWindow(self, orient='horizontal', bg=C['bg'],
-                               sashwidth=6, sashrelief='flat')
-        main.pack(fill='both', expand=True, padx=2, pady=(2, 0))
+                               sashwidth=8, sashrelief='flat')
+        main.pack(fill='both', expand=True, padx=0, pady=0)
 
         # Left panel (Library + Skeleton)
         left = tk.Frame(main, bg=C['panel2'], width=240)
@@ -9887,21 +9888,20 @@ class KotorModToolsApp(tk.Tk):
         self.log_panel.pack(fill='x', side='bottom')
 
         # ── Status bar (above log, below modular) — neon green terminal style ──
-        # MatrixPanel with a 3px animated rain strip at the top border
+        # MatrixPanel with a 4px animated rain strip at the top border
         status_bar = MatrixPanel(self, engine=self._matrix_engine,
-                                 height=25, no_inner=True)
+                                 height=27, no_inner=True)
         status_bar.pack(fill='x', side='bottom')
         _sb_content = tk.Frame(status_bar, bg=C['bg'])
-        _sb_cw_id = status_bar.create_window(0, 3, anchor='nw',
+        _sb_cw_id = status_bar.create_window(0, 4, anchor='nw',
                                               window=_sb_content)
         def _resize_sb_content(event=None):
             w = status_bar.winfo_width()
             h = status_bar.winfo_height()
-            if w > 0 and h > 3:
-                status_bar.itemconfig(_sb_cw_id, width=w, height=h - 3)
+            if w > 0 and h > 4:
+                status_bar.itemconfig(_sb_cw_id, width=w, height=h - 4)
         status_bar.bind('<Configure>',
-                        lambda e: (_resize_sb_content(e),
-                                   status_bar._on_configure(e)), add='')
+                        lambda e: _resize_sb_content(e), add='+')
         _sb = _sb_content
         # Thin accent border at top of status bar
         tk.Frame(_sb, bg=C['border'], height=1).pack(fill='x')

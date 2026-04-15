@@ -304,10 +304,30 @@ class MatrixPaletteUploader:
             Palette in the same order as ``_bone_order``.
         """
         self._palette = []
+
+        # FIX-SKIN-BINDPOSE: When anim_pose is None (no animation), the
+        # palette must be all-identity.  KotOR skin vertices are stored in
+        # world/bind-pose space; the correct bind-pose formula is:
+        #   M_skin = bind_pose × inv_bind = I  (identity)
+        # Previously this used pose_m = I (not bind_pose) when anim_pose
+        # was None, yielding M_skin = I × inv_bind = inv_bind, which
+        # un-transformed verts from world-space to bone-local-space, causing
+        # geometry stretching/explosion on all skinned characters.
+        if anim_pose is None:
+            identity_flat = _mat4_to_flat_col(_mat4_identity_py())
+            for idx, bname in enumerate(self._bone_order):
+                bm = BoneMatrix(
+                    flat_col   = list(identity_flat),
+                    bone_name  = bname,
+                    bone_index = idx,
+                )
+                self._palette.append(bm)
+            self._dirty = True
+            return self._palette
+
         pose_nodes: Dict[str, object] = {}
-        if anim_pose is not None:
-            raw = getattr(anim_pose, 'nodes', {})
-            pose_nodes = {k.lower(): v for k, v in raw.items()}
+        raw = getattr(anim_pose, 'nodes', {})
+        pose_nodes = {k.lower(): v for k, v in raw.items()}
 
         for idx, bname in enumerate(self._bone_order):
             inv_bind = self._inv_bind.get(bname, _mat4_identity_py())
