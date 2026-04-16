@@ -57,7 +57,7 @@ from typing import Any, Dict, List
 
 from kotormcp.tools import (
     installation, discovery, gamedata, ghostrigger,
-    debug_skinning,
+    debug_skinning, debug_materials,
     modules, gffdata, decompile, resource, quest,
     refs, walkmesh, archives,
 )
@@ -86,6 +86,7 @@ def get_all_tools() -> List[Dict[str, Any]]:
         + refs.get_tools()                # 6  reference tracing (ported from upstream)
         + walkmesh.get_tools()            # 1  walkmesh validation diagram
         + archives.get_tools()            # 2  archive listing + extraction
+        + debug_materials.get_tools()     # 13 debug materials/textures/assembly
     )
 
 
@@ -250,5 +251,40 @@ async def handle_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         return await debug_skinning.handle_compare_cpu_gpu(arguments)
     if name == "ghostrigger_debug_export_debug_bundle":
         return await debug_skinning.handle_export_debug_bundle(arguments)
+
+    # ── Debug Materials/Textures/Assembly tools (D4+D6) ───────────────────────
+    if name == "ghostrigger_list_materials":
+        return await debug_materials.handle_list_materials(arguments)
+    if name == "ghostrigger_list_textures":
+        return await debug_materials.handle_list_textures(arguments)
+    if name == "ghostrigger_get_material_info":
+        return await debug_materials.handle_get_material_info(arguments)
+    if name == "ghostrigger_get_texture_binding_info":
+        return await debug_materials.handle_get_texture_binding_info(arguments)
+    if name == "ghostrigger_get_txi_info":
+        return await debug_materials.handle_get_txi_info(arguments)
+    if name == "ghostrigger_get_uv_channel_info":
+        return await debug_materials.handle_get_uv_channel_info(arguments)
+    if name == "ghostrigger_get_supermodel_chain":
+        return await debug_materials.handle_get_supermodel_chain(arguments)
+    if name == "ghostrigger_list_body_parts":
+        return await debug_materials.handle_list_body_parts(arguments)
+    if name == "ghostrigger_get_missing_mesh_report":
+        return await debug_materials.handle_get_missing_mesh_report(arguments)
+    if name == "ghostrigger_get_node_classification_audit":
+        return await debug_materials.handle_get_node_classification_audit(arguments)
+    if name == "ghostrigger_get_vertex_space_audit":
+        return await debug_materials.handle_get_vertex_space_audit(arguments)
+    if name == "ghostrigger_get_render_filter_audit":
+        return await debug_materials.handle_get_render_filter_audit(arguments)
+    if name == "ghostrigger_export_render_debug_bundle":
+        return await debug_materials.handle_export_render_debug_bundle(arguments)
+    # Phase D6 regression-debug tools
+    if name == "ghostrigger_get_render_filter_results":
+        return await debug_materials.handle_get_render_filter_results(arguments)
+    if name == "ghostrigger_get_vbo_build_status":
+        return await debug_materials.handle_get_vbo_build_status(arguments)
+    if name == "ghostrigger_get_k1_vs_k2_model_differences":
+        return await debug_materials.handle_get_k1_vs_k2_model_differences(arguments)
 
     raise ValueError(f"Unknown tool: '{name}'")

@@ -3302,6 +3302,11 @@ class FrameRenderer:
         self._anim_name: str = ""   # current animation name for HUD display
         self._anim_time: float = 0.0   # current animation time for HUD display
         self._anim_length: float = 0.0  # current animation length for HUD display
+        # FIX-SKIN-ANIM-D3: Base pose (t=0) for GPU skinning bind reference.
+        # When a new animation starts, the caller should set this via
+        # set_anim_base_pose().  The GPU renderer uses it as:
+        #   M_skin = world_anim(t) * inv(world_anim(t=0))
+        self._anim_base_pose = None  # Optional[AnimPose]
         # Per-pose bone-transform cache: reused across all skin nodes in one frame
         self._bone_transforms_cache: Optional[Dict] = None
         self._bone_transforms_pose_id: int = -1
@@ -3326,6 +3331,15 @@ class FrameRenderer:
         self.show_walkmesh_walk:  bool = True   # show walkable surfaces
         self.show_walkmesh_block: bool = True   # show non-walkable blockers
         self._walkmesh_overlay: Optional['WalkmeshOverlay'] = None
+
+    def set_anim_base_pose(self, base_pose):
+        """Set the animation's first-frame (t=0) pose for GPU skinning.
+
+        FIX-SKIN-ANIM-D3: The GPU skinning palette needs the animation's
+        t=0 pose as the bind reference (xoreos approach).  Call this once
+        when a new animation starts, before the first set_animation_pose().
+        """
+        self._anim_base_pose = base_pose
 
     def set_animation_pose(self, pose, name: str = "", time: float = 0.0, length: float = 0.0):
         """Set the animation pose for rendering. Pass None to clear (bind pose).
@@ -3374,6 +3388,9 @@ class FrameRenderer:
         self._anim_name = name
         self._anim_time = time
         self._anim_length = length
+        # FIX-SKIN-ANIM-D3: Clear base pose when animation is cleared.
+        if pose is None:
+            self._anim_base_pose = None
         self._wt_cache.clear()  # force re-evaluation with new pose
         # Invalidate per-pose bone-transforms cache
         self._bone_transforms_cache = None
@@ -4091,6 +4108,12 @@ class FrameRenderer:
         This fixes the 'mouth texture rendering on the tail' bug: without this,
         all faces of a multi-material node got slot-0's texture regardless of
         which material zone they belonged to.
+
+        FIX-LMROUTE: When has_lightmap=True, always return the primary diffuse
+        texture (slot 0).  Lightmap nodes use slot 1 for the lightmap texture
+        (composited via a separate multiply pass), NOT as a per-face material.
+        face_mats[i]==1 on these nodes is a KotOR binary artifact, not a
+        material-selection indicator.
         """
         tex_count    = getattr(node, 'tex_count', 1)
         face_mats    = getattr(node, 'face_mats', [])
@@ -4098,6 +4121,11 @@ class FrameRenderer:
 
         if tex_count <= 1 or not face_mats or not tex_names:
             # Single-texture node — fast path
+            return self._get_tex(node)
+
+        # FIX-LMROUTE: Lightmapped nodes should always use the primary diffuse
+        # texture, not route faces to the lightmap via face_mats.
+        if bool(getattr(node, 'has_lightmap', False)):
             return self._get_tex(node)
 
         slot = face_mats[face_idx] if face_idx < len(face_mats) else 0
@@ -5164,9 +5192,19 @@ class FrameRenderer:
 
             # ── Per-node texture & diffuse colour ─────────────────────────
             _use_lq = self._lq_tex_mode
+            # FIX-LMROUTE: When has_lightmap=True, tex_count==2 means
+            # slot 0 = diffuse and slot 1 = lightmap.  The lightmap is
+            # composited as a separate multiply pass (not per-face material).
+            # Treating lightmapped nodes as multi-texture causes face_mats[i]=1
+            # to route ALL faces to the lightmap image as their diffuse texture,
+            # which is the "texture-to-face routing" bug (D5).  xoreos and
+            # KotOR.js both handle textureIndex==1 as lightmap, not per-face
+            # material selection.
+            _node_has_lightmap_accel = bool(getattr(node, 'has_lightmap', False))
             _node_is_multitex = (getattr(node, 'tex_count', 1) > 1
                                  and bool(getattr(node, 'face_mats', []))
-                                 and bool(getattr(node, 'texture_names', [])))
+                                 and bool(getattr(node, 'texture_names', []))
+                                 and not _node_has_lightmap_accel)
             node_alpha = float(_clamp(getattr(node, 'alpha', 1.0), 0.0, 1.0))
             # transparency_hint is a render-mode flag, not an alpha override.
             # Only explicit node.alpha < 1 or CTRL_MESH_ALPHA animation sets transparency.
@@ -5624,9 +5662,28 @@ class FrameRenderer:
             # tex_count > 1 means face_mats[i] indexes into texture_names[slot].
             # Single-texture fast-path: pre-resolve once per node.
             _node_tex_count = getattr(node, 'tex_count', 1)
+            # FIX-LMROUTE-V2: Determine lightmap status BEFORE multitex check.
+            # _node_has_lm must be computed here (not later at lightmap-setup)
+            # because _node_is_multitex depends on it.  The original code defined
+            # _node_has_lm 17 lines AFTER its first use, causing a NameError on
+            # the first loop iteration and stale-value bugs on subsequent nodes.
+            # This was the root cause of the D5 texture-to-face routing bug in
+            # the PIL AFFINE fallback path (_draw_mesh_textured).
+            _node_has_lm = bool(getattr(node, 'has_lightmap', False))
+            # FIX-LMROUTE: Lightmapped nodes (has_lightmap=True) must NOT
+            # be treated as multi-texture even when tex_count==2.  In KotOR,
+            # slot 1 is the lightmap (composited via UV1 multiply pass), not a
+            # per-face material variant.  face_mats[i]==1 on lightmapped nodes
+            # means "this face has a lightmap", NOT "use texture_names[1] as
+            # diffuse".  Without this guard, _get_tex_for_face routes all faces
+            # to the lightmap image as their primary diffuse texture, producing
+            # the D5 "texture-to-face routing" bug.
+            # Reference: xoreos setupShaderTexture (textureIndex==1 → LIGHTMAP,
+            #            not per-face material); KotOR.js textureMap2 = lightmap.
             _node_is_multitex = (_node_tex_count > 1
                                  and bool(getattr(node, 'face_mats', []))
-                                 and bool(getattr(node, 'texture_names', [])))
+                                 and bool(getattr(node, 'texture_names', []))
+                                 and not _node_has_lm)
             # For single-texture nodes resolve once; multi-tex resolves per face.
             # PERF-FIX (v10.2): When _lq_tex_mode is active (first frame after drag
             # release), use mip1 (half-res) textures to halve the PIL AFFINE warp
@@ -5643,7 +5700,8 @@ class FrameRenderer:
             # lightmap texture name; node.uvs_lm holds per-vertex lightmap UVs.
             # We load the lightmap image once per node and composite it as a
             # multiply pass (overbright ×2) after the diffuse pass.
-            _node_has_lm   = bool(getattr(node, 'has_lightmap', False))
+            # NOTE: _node_has_lm was already computed above (FIX-LMROUTE-V2)
+            # for the multitex check.  No need to re-compute here.
             _lm_tex_name   = str(getattr(node, 'lightmap', ''))
             _uvs_lm        = getattr(node, 'uvs_lm', [])
             _n_uvs_lm      = len(_uvs_lm)
@@ -9405,10 +9463,14 @@ class ViewportWidget(tk.Frame):
                     # _anim_pose (AnimPose object) and _anim_time (float seconds).
                     _gpu_anim_pose = getattr(renderer, '_anim_pose', None)
                     _gpu_anim_time = float(getattr(renderer, '_anim_time', 0.0))
+                    # FIX-SKIN-ANIM-D3: Pass the animation's first-frame (t=0)
+                    # pose as the bind reference for GPU skinning.
+                    _gpu_base_pose = getattr(renderer, '_anim_base_pose', None)
                     img = _gpu_r.render(self.model, self.camera, W, H,
                                         textures=_tex_dict,
                                         anim_pose=_gpu_anim_pose,
-                                        anim_time=_gpu_anim_time)
+                                        anim_time=_gpu_anim_time,
+                                        anim_base_pose=_gpu_base_pose)
                 else:
                     img = renderer.render(W, H)
             except MemoryError:

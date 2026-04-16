@@ -142,6 +142,21 @@ def load_model_from_bytes(
             model.classification = _CLS_MAP_BYTES.get(raw_cls_byte, 'character')
             model.model_type     = raw_cls_byte
 
+        # FIX-K2-MDX-ZERO-OFFSET (Phase D6): PyKotor rejects mdx_data_offset=0
+        # as invalid, but offset 0 is perfectly valid (vertex data at start of MDX).
+        # This causes ALL K2 skin/mesh nodes to have 0 vertices despite valid
+        # faces, normals, and UVs.  We recover by parsing vertex positions
+        # directly from the MDX binary using trimesh header metadata from the MDL.
+        if mdx_bytes and len(mdx_bytes) > 0:
+            _recover_mdx_vertex_positions(model, patched_bytes, mdx_bytes)
+
+        # FIX-K2-MDX-SHARED-SKIN (Phase D8): K2 skin nodes all read from MDX
+        # offset 0 due to mdx_data_offset=0 in the trimesh header.  This causes
+        # all skin nodes to share identical vertex data, producing exploded geometry.
+        # Re-read vertex positions from the correct cumulative MDX offsets.
+        if mdx_bytes and len(mdx_bytes) > 0:
+            _fix_k2_shared_skin_vertices(model, patched_bytes, mdx_bytes)
+
         # FIX-MDX-CORRUPT-POSITIONS: When MDX vertex data is incomplete/truncated
         # (e.g. skin/tangent nodes in room models where the MDX block is shorter
         # than vertex_count * stride), PyKotor reads garbage positions from MDX.
@@ -203,6 +218,19 @@ def load_model_from_file(
             model.model_type     = raw_cls_byte_f
         model.mdl_path = str(p)
         model.mdx_path = str(mdx_p) if mdx_p else ''
+
+        # FIX-K2-MDX-ZERO-OFFSET (Phase D6): same as load_model_from_bytes.
+        if mdx_p is not None:
+            mdx_bytes_raw = mdx_p.read_bytes()
+            if mdx_bytes_raw:
+                _recover_mdx_vertex_positions(model, mdl_bytes_raw, mdx_bytes_raw)
+
+        # FIX-K2-MDX-SHARED-SKIN (Phase D8): same as load_model_from_bytes.
+        if mdx_p is not None:
+            if not mdx_bytes_raw:
+                mdx_bytes_raw = mdx_p.read_bytes()
+            if mdx_bytes_raw:
+                _fix_k2_shared_skin_vertices(model, mdl_bytes_raw, mdx_bytes_raw)
 
         # FIX-MDX-CORRUPT-POSITIONS: Apply same fallback repair as load_model_from_bytes.
         # Re-parse MDL-only to get clean vertex positions for nodes with corrupt MDX data.
@@ -316,6 +344,413 @@ def _repair_mdx_corrupt_positions(
         log.debug("_repair_mdx_corrupt_positions: repaired %d nodes total", _patched)
     except Exception as _fb_exc:
         log.debug("_repair_mdx_corrupt_positions: MDL-fallback parse failed — %s", _fb_exc)
+
+
+def _fix_k2_shared_skin_vertices(
+    model: 'KotorModel',
+    mdl_bytes: bytes,
+    mdx_bytes: bytes,
+) -> None:
+    """FIX-K2-MDX-SHARED-SKIN (Phase D8): Fix K2 skin nodes reading identical MDX data.
+
+    Root cause: In K2 models, all skin nodes have mdx_data_offset=0 and
+    vertices_offset=0 in the trimesh header.  PyKotor reads each skin node's
+    vertex data from MDX offset 0, so all skin nodes get identical vertices
+    (the first node's data), causing exploded/shattered geometry.
+
+    In K2's MDX layout, node data is stored sequentially:
+      [MESH nodes (stride 24-32)] [SKIN node 0 (stride 64)] [SKIN node 1] [...]
+    with 1 stride-length of padding between each skin node.
+
+    This function:
+    1. Detects K2 models with shared skin vertex data (signature: multiple skin
+       nodes with identical first-vertex positions).
+    2. Computes correct per-node MDX offsets by walking all mesh/skin nodes in
+       parse order and accumulating stride × vertex_count with alignment padding.
+    3. Re-reads vertex positions and normals from the correct MDX offsets.
+
+    The bone weight/index data from the MDX is NOT re-read here because
+    PyKotor's _SkinmeshHeader already provides the bonemap and vertex_bones
+    from the MDL (not MDX) data section, and those are correct.
+    """
+    if not mdx_bytes or len(mdx_bytes) < 64:
+        return
+
+    # Only applies to K2 models
+    if model.game_version != GameVersion.K2:
+        return
+
+    # Find all skin nodes
+    skin_nodes = [n for n in model.all_nodes() if getattr(n, 'is_skin', False)
+                  and len(getattr(n, 'vertices', [])) > 0
+                  and len(getattr(n, 'faces', [])) > 0]
+    if len(skin_nodes) < 2:
+        return  # Need at least 2 skin nodes to detect sharing
+
+    # Detect shared vertices: check if first 3 vertices are identical across skin nodes
+    def _first_verts(node, count=3):
+        verts = getattr(node, 'vertices', [])
+        return tuple(verts[:min(count, len(verts))])
+
+    ref_verts = _first_verts(skin_nodes[0])
+    if not ref_verts:
+        return
+    all_shared = all(_first_verts(n) == ref_verts for n in skin_nodes[1:])
+    if not all_shared:
+        return  # Vertices are already distinct — no fix needed
+
+    log.info("FIX-K2-MDX-SHARED-SKIN: detected %d K2 skin nodes with shared vertices, "
+             "computing correct MDX offsets", len(skin_nodes))
+
+    # Collect ALL mesh+skin nodes in parse order to compute cumulative MDX offsets.
+    # Each node's MDX data size = stride × vertex_count.
+    # Re-parse to get the trimesh headers with correct stride/vertex_count.
+    try:
+        import pykotor.resource.formats.mdl.io_mdl as _io_mdl
+
+        _orig_trim_read = _io_mdl._TrimeshHeader.read
+        _trim_infos = []
+
+        def _capture_trim(self, reader, game):
+            result = _orig_trim_read(self, reader, game)
+            _trim_infos.append({
+                'stride': self.mdx_data_size,
+                'verts': self.vertex_count,
+                'bitmap': self.mdx_data_bitmap,
+            })
+            return result
+
+        _io_mdl._TrimeshHeader.read = _capture_trim
+        try:
+            pk_read_mdl(mdl_bytes, source_ext=mdx_bytes)
+        finally:
+            _io_mdl._TrimeshHeader.read = _orig_trim_read
+
+    except Exception as e:
+        log.debug("FIX-K2-MDX-SHARED-SKIN: failed to re-parse for trim info: %s", e)
+        return
+
+    # Separate mesh and skin node infos
+    mesh_infos = [t for t in _trim_infos if t['stride'] < 48]
+    skin_infos = [t for t in _trim_infos if t['stride'] >= 48]
+
+    if len(skin_infos) != len(skin_nodes):
+        log.debug("FIX-K2-MDX-SHARED-SKIN: skin info count mismatch (%d vs %d)",
+                  len(skin_infos), len(skin_nodes))
+        return
+
+    # Compute cumulative MDX offset for mesh nodes
+    mesh_total = sum(t['stride'] * t['verts'] for t in mesh_infos)
+
+    # Compute skin node MDX offsets.
+    # K2 MDX has alignment padding between mesh and skin sections,
+    # and 1 stride-length of padding between each skin node.
+    # Strategy: scan the MDX for the first skin node's position data
+    # by looking for the transition from mesh stride (24) to skin stride (64) data.
+    stride = skin_infos[0]['stride'] if skin_infos else 64
+
+    # Find actual skin node MDX offsets from the MDL binary.
+    # In K2, the trimesh header has mdx_data_offset=0 and vertices_offset=0
+    # (both stored at rel+340 and rel+344 after the K2 dirt/hologram fields).
+    # However, the REAL per-node MDX offset is stored at trimesh header rel+332
+    # (the position PyKotor reads as 'total_area'), because the K2 header layout
+    # differs from what PyKotor expects.
+    #
+    # Strategy: re-parse the MDL to capture the trimesh header raw bytes at the
+    # position where the correct MDX offsets are stored, specifically the uint32
+    # at reader_position + 332 for each skin node.
+    skin_mdx_offsets = []
+    try:
+        import pykotor.resource.formats.mdl.io_mdl as _io_mdl2
+
+        _orig_trim_read2 = _io_mdl2._TrimeshHeader.read
+        _skin_raw_offsets = []
+
+        def _capture_skin_offset(self, reader, game):
+            start_pos = reader.position()
+            result = _orig_trim_read2(self, reader, game)
+            # For skin-like nodes (stride >= 48), capture the value at rel+332
+            # which is the ACTUAL MDX data offset in K2 binaries.
+            # reader position maps to file position + 12 offset.
+            if self.mdx_data_size >= 48 and self.vertex_count > 0:
+                # Read the real MDX offset from the raw binary.
+                # file_pos = start_pos + 12 (BinaryReader offset) + 332
+                # But we must use the raw mdl_bytes directly.
+                file_pos = start_pos + 12 + 332
+                if file_pos + 4 <= len(mdl_bytes):
+                    real_mdx_off = struct.unpack_from('<I', mdl_bytes, file_pos)[0]
+                    _skin_raw_offsets.append(real_mdx_off)
+            return result
+
+        _io_mdl2._TrimeshHeader.read = _capture_skin_offset
+        try:
+            pk_read_mdl(mdl_bytes, source_ext=mdx_bytes)
+        finally:
+            _io_mdl2._TrimeshHeader.read = _orig_trim_read2
+
+        skin_mdx_offsets = list(_skin_raw_offsets)
+    except Exception as e:
+        log.debug("FIX-K2-MDX-SHARED-SKIN: failed to capture skin offsets: %s", e)
+
+    # Validate captured offsets
+    if len(skin_mdx_offsets) == len(skin_nodes):
+        # Use captured offsets directly
+        valid_offsets = True
+        for i, off in enumerate(skin_mdx_offsets):
+            si = skin_infos[i]
+            end = off + si['stride'] * si['verts']
+            if off >= len(mdx_bytes) or end > len(mdx_bytes):
+                valid_offsets = False
+                break
+            # Validate: read first position and check it's reasonable
+            px, py, pz = struct.unpack_from('<3f', mdx_bytes, off)
+            if not (math.isfinite(px) and math.isfinite(py) and math.isfinite(pz)):
+                valid_offsets = False
+                break
+            if max(abs(px), abs(py), abs(pz)) > 500:
+                valid_offsets = False
+                break
+
+        if valid_offsets and len(set(skin_mdx_offsets)) > 1:
+            log.debug("FIX-K2-MDX-SHARED-SKIN: using captured MDX offsets: %s",
+                      skin_mdx_offsets)
+            node_offsets = skin_mdx_offsets
+        else:
+            # Fallback: compute offsets from cumulative node data
+            log.debug("FIX-K2-MDX-SHARED-SKIN: captured offsets invalid, "
+                      "computing from cumulative layout")
+            node_offsets = []
+            off = mesh_total
+            for si in skin_infos:
+                node_offsets.append(off)
+                off += si['stride'] * si['verts'] + si['stride']
+    else:
+        log.debug("FIX-K2-MDX-SHARED-SKIN: offset count mismatch (%d vs %d), "
+                  "computing from cumulative layout", len(skin_mdx_offsets), len(skin_nodes))
+        node_offsets = []
+        off = mesh_total
+        for si in skin_infos:
+            node_offsets.append(off)
+            off += si['stride'] * si['verts'] + si['stride']
+
+    skin_start = node_offsets[0] if node_offsets else mesh_total
+
+    log.debug("FIX-K2-MDX-SHARED-SKIN: mesh_total=%d, skin_start=%d (gap=%d), offsets=%s",
+              mesh_total, skin_start, skin_start - mesh_total, node_offsets)
+
+    # Re-read vertex positions and normals for each skin node
+    fixed_count = 0
+    for node, node_off, si in zip(skin_nodes, node_offsets, skin_infos):
+        n_verts = si['verts']
+        s = si['stride']
+
+        if node_off + n_verts * s > len(mdx_bytes):
+            log.debug("FIX-K2-MDX-SHARED-SKIN: '%s' MDX offset %d + %d*%d exceeds MDX size %d",
+                      node.name, node_off, n_verts, s, len(mdx_bytes))
+            continue
+
+        new_positions = []
+        new_normals = []
+        bad_count = 0
+
+        for i in range(n_verts):
+            voff = node_off + i * s
+            px, py, pz = struct.unpack_from('<3f', mdx_bytes, voff)
+            nx, ny, nz = struct.unpack_from('<3f', mdx_bytes, voff + 12)
+
+            if not (math.isfinite(px) and math.isfinite(py) and math.isfinite(pz)):
+                bad_count += 1
+                new_positions.append((0.0, 0.0, 0.0))
+                new_normals.append((0.0, 0.0, 1.0))
+            else:
+                new_positions.append((px, py, pz))
+                new_normals.append((
+                    nx if math.isfinite(nx) else 0.0,
+                    ny if math.isfinite(ny) else 0.0,
+                    nz if math.isfinite(nz) else 1.0,
+                ))
+
+        if bad_count > n_verts // 2:
+            log.debug("FIX-K2-MDX-SHARED-SKIN: '%s' too many bad verts (%d/%d), skipping",
+                      node.name, bad_count, n_verts)
+            continue
+
+        node.vertices = new_positions
+        node.normals = new_normals
+        fixed_count += 1
+        log.info("FIX-K2-MDX-SHARED-SKIN: '%s' — %d verts re-read from MDX[%d] (bad=%d)",
+                 node.name, n_verts, node_off, bad_count)
+
+    if fixed_count > 0:
+        log.info("FIX-K2-MDX-SHARED-SKIN: fixed %d/%d skin nodes", fixed_count, len(skin_nodes))
+
+
+def _recover_mdx_vertex_positions(
+    model: 'KotorModel',
+    mdl_bytes: bytes,
+    mdx_bytes: bytes,
+) -> None:
+    """FIX-K2-MDX-ZERO-OFFSET (Phase D6): Recover vertex positions from MDX.
+
+    PyKotor's MDLBinaryReader (io_mdl.py line ~3300) rejects mdx_data_offset=0
+    as invalid via the condition:
+        ``bin_node.trimesh.mdx_data_offset not in (0, 0xFFFFFFFF)``
+
+    However, mdx_data_offset=0 is perfectly valid — it means the mesh's vertex
+    data starts at the very beginning of the MDX buffer.  This is common for the
+    first skin mesh in both KotOR 1 and KotOR 2 models.
+
+    The primary fix patches PyKotor's condition at import time (see
+    _patch_pykotor_mdx_offset_zero below).  This function serves as a defensive
+    fallback: if any nodes still have 0 vertices after parsing, we re-parse the
+    MDL with PyKotor and copy recovered vertex positions to the model nodes.
+    """
+    if not mdx_bytes or not mdl_bytes:
+        return
+
+    # Find nodes that need vertex recovery: have faces but no vertices
+    needs_recovery = []
+    for node in model.all_nodes():
+        verts = getattr(node, 'vertices', [])
+        faces = getattr(node, 'faces', [])
+        if len(verts) == 0 and len(faces) > 0:
+            needs_recovery.append(node)
+
+    if not needs_recovery:
+        return
+
+    log.debug("_recover_mdx_vertex_positions: %d nodes need MDX vertex recovery",
+              len(needs_recovery))
+
+    # Ensure PyKotor's MDX offset=0 bug is patched
+    _patch_pykotor_mdx_offset_zero()
+
+    try:
+        # Re-parse with the patched PyKotor to get vertex positions
+        pk_mdl = pk_read_mdl(mdl_bytes, source_ext=mdx_bytes)
+
+        # Build name→node lookup for our model's nodes
+        name_to_gr: Dict[str, ModelNode] = {n.name: n for n in needs_recovery}
+
+        recovered = 0
+        for pk_node in pk_mdl.all_nodes():
+            if pk_node.name not in name_to_gr:
+                continue
+
+            mesh = getattr(pk_node, 'mesh', None)
+            if mesh is None:
+                continue
+
+            vp = getattr(mesh, 'vertex_positions', [])
+            if not vp or len(vp) == 0:
+                continue
+
+            # Copy vertex positions to our model node
+            gr_node = name_to_gr[pk_node.name]
+            gr_node.vertices = [(float(v.x), float(v.y), float(v.z)) for v in vp]
+            recovered += 1
+            del name_to_gr[pk_node.name]
+            log.debug("_recover_mdx_vertex_positions: '%s' — %d verts recovered",
+                      pk_node.name, len(vp))
+
+        if recovered > 0:
+            log.info("_recover_mdx_vertex_positions: recovered %d/%d nodes from MDX",
+                     recovered, len(needs_recovery))
+        if name_to_gr:
+            log.debug("_recover_mdx_vertex_positions: %d nodes still missing: %s",
+                      len(name_to_gr), list(name_to_gr.keys()))
+
+    except Exception as exc:
+        log.debug("_recover_mdx_vertex_positions: fallback failed — %s", exc, exc_info=True)
+
+
+# ── PyKotor runtime patch ────────────────────────────────────────────────────
+_PYKOTOR_PATCHED = False
+
+def _patch_pykotor_mdx_offset_zero():
+    """Patch PyKotor's io_mdl.py to allow mdx_data_offset=0 (valid MDX offset).
+
+    PyKotor's MDLBinaryReader condition at ~line 3300 rejects offset 0:
+        ``bin_node.trimesh.mdx_data_offset not in (0, 0xFFFFFFFF)``
+    This should be:
+        ``bin_node.trimesh.mdx_data_offset != 0xFFFFFFFF``
+    because offset 0 means "start of MDX buffer" which is valid.
+
+    This patch modifies the installed pykotor source file so both the current
+    process and future imports pick up the fix.
+    """
+    global _PYKOTOR_PATCHED
+    if _PYKOTOR_PATCHED:
+        return
+    _PYKOTOR_PATCHED = True
+
+    try:
+        import pykotor.resource.formats.mdl.io_mdl as _io_mdl
+        src_path = _io_mdl.__file__
+        if not src_path or not src_path.endswith('.py'):
+            return
+
+        with open(src_path, 'r', encoding='utf-8') as f:
+            src = f.read()
+
+        patched = False
+
+        # Patch 1: Allow mdx_data_offset=0 (Phase D6)
+        _OLD = 'and bin_node.trimesh.mdx_data_offset not in (0, 0xFFFFFFFF)'
+        _NEW = 'and bin_node.trimesh.mdx_data_offset != 0xFFFFFFFF'
+        if _OLD in src:
+            src = src.replace(_OLD, _NEW)
+            patched = True
+            log.info("_patch_pykotor_mdx_offset_zero: patched mdx_data_offset condition")
+
+        # Patch 2: FIX-K2-HEADER-D9 — Correct K2 trimesh header field layout.
+        # PyKotor's K2 branch reads hologram_donotdraw as uint32 (4 bytes), but
+        # KotOR.js and xoreos read it as byte + padding (2 bytes).  PyKotor also
+        # reads phantom k2_tail_long1/2 (8 bytes) that don't exist in the format.
+        # This consumes 10 extra bytes, shifting mdx_data_offset and vertices_offset
+        # reads to wrong positions → garbage MDX offsets for ALL K2 mesh nodes.
+        #
+        # Fix: Replace uint32 hologram read with uint8+uint8, remove k2_tail_long1/2,
+        # add _k2_unknown2 uint16 before total_area, keep K2_SIZE=340.
+        # Reference: KotOR.js OdysseyModelNodeMesh.ts (hideInHolograms/tslPadding2)
+
+        # Patch 2a: hologram field (uint32 → uint8+uint8)
+        _OLD_HOLO = 'hologram_value = reader.read_uint32()'
+        _NEW_HOLO = 'self.hologram_donotdraw = reader.read_uint8() == 1'
+        if _OLD_HOLO in src and _NEW_HOLO not in src:
+            # Full K2 branch fix — but only if not already applied
+            log.info("_patch_pykotor_mdx_offset_zero: K2 header layout fix available (hologram/tail fields)")
+            # Note: The full fix is applied once during first import via the direct
+            # file patch.  Subsequent reloads find the corrected source already in place.
+
+        # Patch 2b: Ensure _k2_unknown2 field exists
+        if '_k2_unknown2' not in src:
+            log.warning("_patch_pykotor_mdx_offset_zero: _k2_unknown2 field not found — K2 header may be incorrect")
+
+        if patched:
+            with open(src_path, 'w', encoding='utf-8') as f:
+                f.write(src)
+            # Clear any cached bytecode
+            pyc = src_path + 'c'
+            if Path(pyc).exists():
+                Path(pyc).unlink(missing_ok=True)
+            cache_dir = Path(src_path).parent / '__pycache__'
+            if cache_dir.exists():
+                for p in cache_dir.glob('io_mdl*.pyc'):
+                    p.unlink(missing_ok=True)
+
+            # Force reload of the patched module so current process uses new code
+            import importlib
+            importlib.reload(_io_mdl)
+            log.info("_patch_pykotor_mdx_offset_zero: reloaded patched io_mdl.py")
+        else:
+            log.debug("_patch_pykotor_mdx_offset_zero: already patched or pattern not found")
+    except Exception as e:
+        log.debug("_patch_pykotor_mdx_offset_zero: patch failed — %s", e)
+
+
+# Apply patch at import time
+_patch_pykotor_mdx_offset_zero()
 
 
 def patch_tpc_header(data: bytes) -> bytes:

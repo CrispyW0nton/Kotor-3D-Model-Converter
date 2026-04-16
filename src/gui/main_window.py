@@ -5953,6 +5953,17 @@ class AnimationsPanel(tk.Frame):
         self._playback_fps = int(self._fps_var.get() or 30)
         ok = self._engine.play(anim_name, loop=self._loop_on)
         if ok:
+            # FIX-SKIN-ANIM-D3: Compute the animation's first-frame (t=0) pose
+            # and pass it to the viewport as the GPU skinning bind reference.
+            # This ensures the palette uses: M_skin = world(t) * inv(world(t=0))
+            # which produces identity at t=0 (correct for skin vertices in bind space).
+            vp = self._get_viewport()
+            if vp:
+                try:
+                    _base_pose = self._engine.evaluate(0.0)
+                    vp.set_anim_base_pose(_base_pose)
+                except Exception:
+                    pass
             self._cancel_after()
             self._tick_last_time = None  # reset real-time clock on play start
             self._tick()

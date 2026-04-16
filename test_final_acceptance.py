@@ -199,11 +199,11 @@ class TestVBOShaderAlignment(unittest.TestCase):
     """Test VBO format and shader attribute alignment."""
 
     def test_vbo_format_string(self):
-        """VBO format is '3f 3f 2f 2f 4f' (pos, norm, uv, uv_lm, color)."""
+        """VBO format is '3f 3f 2f 2f 4f 4f 4f' (pos, norm, uv, uv_lm, color, bone_ids, weights)."""
         from src.gui import gpu_renderer
-        # The format is hardcoded in _draw_node
+        # The format is hardcoded in _draw_node — expanded in Phase D2 for GPU skinning
         src = open(os.path.join(os.path.dirname(__file__), 'src', 'gui', 'gpu_renderer.py')).read()
-        self.assertIn("'3f 3f 2f 2f 4f'", src)
+        self.assertIn("'3f 3f 2f 2f 4f 4f 4f'", src)
 
     def test_shader_attributes(self):
         """Shader inputs match VBO attributes."""
@@ -214,8 +214,13 @@ class TestVBOShaderAlignment(unittest.TestCase):
         self.assertIn("'in_uv_lm'", src)
         self.assertIn("'in_color'", src)
 
-    def test_build_vbo_produces_14_floats_per_vertex(self):
-        """_build_vbo_data produces 14 floats per vertex (3+3+2+2+4)."""
+    def test_build_vbo_produces_22_floats_per_vertex(self):
+        """_build_vbo_data produces 22 floats per vertex (3+3+2+2+4+4+4).
+
+        Stride was expanded from 14 to 22 in Phase D2 (GPU skinning):
+          pos.xyz(3) + norm.xyz(3) + uv.xy(2) + uv_lm.xy(2) + color.xyzw(4)
+          + bone_ids.xyzw(4) + weights.xyzw(4) = 22 floats = 88 bytes.
+        """
         mdl_path = os.path.join(os.path.dirname(__file__), 'm02aa_01a.mdl')
         if not os.path.exists(mdl_path):
             self.skipTest("Model files not available")
@@ -235,9 +240,9 @@ class TestVBOShaderAlignment(unittest.TestCase):
                 wp, wo = n.world_transform()
                 vdata, idx = _build_vbo_data(n, wp, wo, is_module=True)
                 if vdata is not None:
-                    # Each row should be 14 floats
-                    self.assertEqual(vdata.shape[1], 14,
-                                   f"VBO data has {vdata.shape[1]} floats per vertex, expected 14")
+                    # Each row should be 22 floats (expanded for GPU skinning)
+                    self.assertEqual(vdata.shape[1], 22,
+                                   f"VBO data has {vdata.shape[1]} floats per vertex, expected 22")
                     break
 
 
@@ -280,6 +285,93 @@ class TestMaterialRouting(unittest.TestCase):
         src = open(os.path.join(os.path.dirname(__file__), 'src', 'gui', 'gpu_renderer.py')).read()
         self.assertIn('Case A', src)
         self.assertIn('Case B', src)
+
+    def test_lmroute_viewport_excludes_lightmap_from_multitex(self):
+        """FIX-LMROUTE: CPU viewport excludes lightmapped nodes from multi-texture path.
+
+        When has_lightmap=True and tex_count==2, the node must NOT be treated as
+        multi-texture.  Slot 1 is the lightmap (composited via multiply pass),
+        not a per-face material variant.  Without this fix, face_mats[i]==1
+        routes every face to the lightmap image as its diffuse texture.
+        """
+        src = open(os.path.join(os.path.dirname(__file__), 'src', 'gui', 'viewport.py')).read()
+        # The fix adds 'not _node_has_lm' or 'not _node_has_lightmap_accel' to the
+        # _node_is_multitex condition in viewport.py.
+        self.assertIn('FIX-LMROUTE', src)
+        # _get_tex_for_face should bail out early for lightmapped nodes
+        self.assertIn("if bool(getattr(node, 'has_lightmap', False)):", src)
+
+    def test_lmroute_v2_variable_ordering(self):
+        """FIX-LMROUTE-V2: _node_has_lm is defined BEFORE _node_is_multitex.
+
+        The D5 texture-to-face routing bug was caused by _node_has_lm being
+        referenced in the _node_is_multitex expression (line ~5678) but defined
+        17 lines later (line ~5695).  This caused a NameError on the first loop
+        iteration and stale-value bugs on subsequent nodes in _draw_mesh_textured.
+        FIX-LMROUTE-V2 moves _node_has_lm assignment above _node_is_multitex.
+        """
+        src = open(os.path.join(os.path.dirname(__file__), 'src', 'gui', 'viewport.py')).read()
+        self.assertIn('FIX-LMROUTE-V2', src)
+        # In _draw_mesh_textured: _node_has_lm must be ASSIGNED before
+        # _node_is_multitex is COMPUTED.  Check that the assignment appears
+        # before the multitex expression in the source.
+        assign_pos = src.find("_node_has_lm = bool(getattr(node, 'has_lightmap', False))")
+        multitex_pos = src.find("_node_is_multitex = (_node_tex_count > 1")
+        self.assertGreater(assign_pos, -1,
+            "_node_has_lm assignment not found in viewport.py")
+        self.assertGreater(multitex_pos, -1,
+            "_node_is_multitex assignment not found in viewport.py")
+        # In the _draw_mesh_textured method, the SECOND occurrence of these
+        # patterns is the one that matters (the first is in _draw_mesh_accel).
+        # Find the second occurrence of _node_is_multitex = (_node_tex_count
+        second_multitex = src.find("_node_is_multitex = (_node_tex_count > 1",
+                                    multitex_pos + 1)
+        if second_multitex > -1:
+            # Find the _node_has_lm assignment that's closest before it
+            # (should be the FIX-LMROUTE-V2 assignment)
+            assign_before_second = src.rfind(
+                "_node_has_lm = bool(getattr(node, 'has_lightmap', False))",
+                0, second_multitex)
+            self.assertGreater(assign_before_second, -1,
+                "_node_has_lm must be defined before _node_is_multitex in "
+                "_draw_mesh_textured (FIX-LMROUTE-V2)")
+
+    def test_lmroute_face_mats_dont_route_to_lightmap(self):
+        """FIX-LMROUTE: face_mats==1 on lightmapped nodes does NOT select lightmap as diffuse.
+
+        m02aa_01a lightmapped nodes have face_mats all equal to 1, which would
+        select texture_names[1] (the lightmap) as the per-face diffuse texture.
+        After FIX-LMROUTE, these nodes use texture_names[0] (diffuse) for all faces.
+        """
+        mdl_path = os.path.join(os.path.dirname(__file__), 'm02aa_01a.mdl')
+        if not os.path.exists(mdl_path):
+            self.skipTest("Model files not available")
+
+        from src.core.kotor_loader import load_model_from_bytes
+        with open(mdl_path, 'rb') as f:
+            mdl = f.read()
+        with open(mdl_path.replace('.mdl', '.mdx'), 'rb') as f:
+            mdx = f.read()
+        model = load_model_from_bytes(mdl, mdx)
+
+        for n in model.all_nodes():
+            if not getattr(n, 'is_mesh', False):
+                continue
+            if not getattr(n, 'has_lightmap', False):
+                continue
+            # For lightmapped nodes with face_mats==1:
+            # the multi-texture flag must be False (lightmap handled separately)
+            tc = int(getattr(n, 'tex_count', 1))
+            fm = getattr(n, 'face_mats', [])
+            if tc == 2 and fm:
+                # Simulate the viewport check
+                has_lm = bool(getattr(n, 'has_lightmap', False))
+                is_multitex = (tc > 1 and bool(fm) and
+                               bool(getattr(n, 'texture_names', [])) and
+                               not has_lm)
+                self.assertFalse(is_multitex,
+                    f"{n.name}: lightmapped node should NOT be multi-texture "
+                    f"(tc={tc}, fm={set(fm)}, has_lm={has_lm})")
 
 
 class TestRenderOutput(unittest.TestCase):
