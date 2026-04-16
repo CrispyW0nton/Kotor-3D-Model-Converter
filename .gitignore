@@ -94,7 +94,7 @@ run_audit.py
 
 # ── Internal dev scripts (not for end users) ──────────────────────────────────
 devlog/
-tools/
+/tools/
 scripts/
 audit_deep.py
 audit_exhaustive.py

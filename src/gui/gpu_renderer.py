@@ -70,11 +70,11 @@ Phase 2 rendering correctness fixes
                 FIX-UVSENT-V2: two-tier sentinel — character models use 20.0 (heals
                 seam garbage UVs like -27.14); module/tile models use 1e18 (allows
                 legitimate large tiled UVs, GL_REPEAT handles any magnitude).
-  FIX-MULTITEX: Multi-texture nodes (tex_count > 1, face_mats per face) are now split
-                into per-texture draw groups.  Each group uploads its own VBO subset and
-                binds the correct texture, enabling correct rendering of area tile meshes
-                and multi-material character parts.
-                Reference: KotOR MDL mesh header tex_count + face_mats array.
+  FIX-KILL-FACEMATS (Phase D10): REMOVED per-face-material texture splitting.
+                face_mats[] is a walk-mesh surface indicator, NOT a texture selector.
+                The correct KotOR texture model is: one diffuse on UV0, optional one
+                lightmap on UV1, composited as diffuse * lightmap * overbright.
+                No per-face texture splitting.  Reference: xoreos, KotOR.js, KotorBlender.
   FIX-FLIPBOOK: TXI proceduretype=cycle nodes (animated sprite sheets: water, displays,
                 fire) now advance the frame via anim_time × txi_fps and pass a UV tile
                 offset uniform (u_flipbook_offset) to the vertex shader.
@@ -2896,55 +2896,28 @@ class GpuRenderer:
                         gm.vao = ctx.vertex_array(prog, [(gm.vbo, fmt, *attrs)])
                         gm.tri_count = len(vdata) // 3
                         gm.indexed = False
-                    # FIX-MULTITEX-SPLIT-V2: Build per-material-slot draw groups
-                    # for multi-texture nodes so _draw_node_multitex can draw
-                    # each face group with the correct texture.
+                    # FIX-KILL-FACEMATS (Phase D10): REMOVED per-material-slot draw groups.
                     #
-                    # v2: Now supports both indexed and expanded (non-indexed) VBOs.
-                    # For indexed meshes, per-slot IBOs use original vertex indices.
-                    # For expanded meshes, per-slot IBOs use sequential face-corner
-                    # indices (fi*3, fi*3+1, fi*3+2) since the expanded VBO stores
-                    # one vertex per face corner in face order.
-                    _nd_tc = int(getattr(node, 'tex_count', 1))
-                    _nd_fm = getattr(node, 'face_mats', [])
-                    _nd_lm = bool(getattr(node, 'has_lightmap', False))
-                    # FIX-LMROLE: Also detect inferred lightmap for mat_slots guard
-                    if (not _nd_lm and _nd_tc == 2
-                            and _nd_fm and all(m == 0 for m in _nd_fm)
-                            and len(getattr(node, 'uvs_lm', [])) > 0):
-                        _nd_lm = True
-                    if _nd_tc > 1 and _nd_fm and not _nd_lm:
-                        _faces_arr = getattr(node, 'faces', [])
-                        _n_faces = len(_faces_arr)
-                        if len(_nd_fm) == _n_faces and _n_faces > 0:
-                            # Group face indices by material slot
-                            _slot_faces: Dict[int, list] = {}
-                            for _fi in range(_n_faces):
-                                _s = _nd_fm[_fi] if _fi < len(_nd_fm) else 0
-                                _s = max(0, min(_s, _nd_tc - 1))
-                                if _s not in _slot_faces:
-                                    _slot_faces[_s] = []
-                                if gm.indexed:
-                                    # Indexed VBO: use original vertex indices
-                                    _f = _faces_arr[_fi]
-                                    if len(_f) >= 3:
-                                        _slot_faces[_s].extend([int(_f[0]), int(_f[1]), int(_f[2])])
-                                else:
-                                    # Expanded VBO: vertex order is sequential per face
-                                    # Face _fi → expanded vertices _fi*3, _fi*3+1, _fi*3+2
-                                    _base = _fi * 3
-                                    _slot_faces[_s].extend([_base, _base + 1, _base + 2])
-                            for _s, _idxs in _slot_faces.items():
-                                if not _idxs:
-                                    continue
-                                try:
-                                    _s_idx = np.array(_idxs, dtype=np.uint32)
-                                    _s_ibo = ctx.buffer(_s_idx.tobytes())
-                                    _s_vao = ctx.vertex_array(
-                                        prog, [(gm.vbo, fmt, *attrs)], _s_ibo)
-                                    gm.mat_slots[_s] = (_s_vao, _s_ibo, len(_idxs) // 3)
-                                except Exception:
-                                    pass
+                    # Root cause analysis (user rejection D8):
+                    # The previous FIX-MULTITEX-SPLIT code treated face_mats[] as texture
+                    # selectors, splitting faces by face_mats value and drawing each group
+                    # with a different texture.  This is WRONG.
+                    #
+                    # In the KotOR MDL binary format, the per-face material field is a
+                    # WALK-MESH SURFACE INDICATOR (smoothing group / surface type), NOT
+                    # a texture selector.  Reference implementations confirm this:
+                    #   - xoreos model_kotor.cpp: one diffuse texture per mesh node
+                    #   - KotOR.js OdysseyModelNodeMesh.ts: single texture per mesh
+                    #   - KotorBlender reader.py: material field is surface type
+                    #
+                    # The correct KotOR texture model is:
+                    #   - One diffuse texture on UV0 (texture_1)
+                    #   - Optional one lightmap on UV1 (texture_2)
+                    #   - Composite: diffuse * lightmap * overbright
+                    #   - NO per-face texture splitting
+                    #
+                    # face_mats is now NEVER used for texture selection.
+                    # mat_slots dict remains empty (no per-material draw groups).
 
                     if not is_animated:
                         self._mesh_cache[node_id] = gm
@@ -3172,18 +3145,18 @@ class GpuRenderer:
                 has_lm_flag = bool(getattr(node, 'has_lightmap', False))
                 lm_name     = str(getattr(node, 'lightmap', '')).strip().lower()
                 uvs_lm      = getattr(node, 'uvs_lm', [])
-                # FIX-LMROLE: Also accept lightmap when the role was inferred
-                # (tex_count==2, uvs_lm present, all face_mats==0) even if the
-                # MDL binary has_lightmap flag was False.  The loader's FIX-LMROLE
-                # normally promotes has_lightmap before we get here, but this
-                # guard handles models loaded via alternative paths.
+                # FIX-LMROLE-V2 (Phase D10): Infer lightmap when texture_2 is present
+                # with valid lightmap UVs.  The KotOR texture model is: texture_1 =
+                # diffuse, texture_2 = lightmap (when present).  face_mats is NOT used
+                # for this determination — it is a walk-mesh surface indicator.
+                # Accept lightmap whenever: lm_name is set, uvs_lm has data, and
+                # tex_count >= 2.  The loader's FIX-LMROLE normally promotes
+                # has_lightmap, but this guard catches alternative load paths.
                 if (not has_lm_flag
                         and lm_name
                         and len(uvs_lm) > 0
-                        and int(getattr(node, 'tex_count', 1)) == 2):
-                    _fm = getattr(node, 'face_mats', [])
-                    if _fm and all(m == 0 for m in _fm):
-                        has_lm_flag = True
+                        and int(getattr(node, 'tex_count', 1)) >= 2):
+                    has_lm_flag = True
                 lm_img      = textures.get(lm_name) if (lm_name and has_lm_flag
                                                          and len(uvs_lm) > 0) else None
                 gl_lm = self._tex_cache.get(lm_img) if lm_img else None
@@ -3309,93 +3282,33 @@ class GpuRenderer:
                 _use_vao.render(moderngl.TRIANGLES)
                 total_tris += _use_tris
 
-            # Helper: draw a node with multi-texture support.
+            # Helper: draw a node with correct KotOR texture routing.
             def _draw_node_multitex(node):
-                """Draw a node, handling multi-texture material slots correctly.
+                """Draw a node with correct KotOR texture routing.
 
-                FIX-MULTITEX-SPLIT: For nodes with tex_count > 1, we must NOT
-                redraw the entire mesh for each texture slot.  The correct
-                approach depends on how tex_count > 1 is used in KotOR:
+                FIX-KILL-FACEMATS (Phase D10): The previous implementation split
+                multi-texture nodes by face_mats[], treating the walk-mesh surface
+                indicator as a texture selector.  This is WRONG and has been removed.
 
-                  A) has_lightmap=True: slot 0 = diffuse, slot 1 = lightmap.
-                     The lightmap is already handled by _draw_node via u_lm_tex
-                     + in_uv_lm.  Draw once with the primary texture only.
+                The correct KotOR texture model (per xoreos, KotOR.js, KotorBlender):
+                  - One diffuse texture (texture_1) on UV0
+                  - Optional one lightmap (texture_2) on UV1
+                  - Composite: diffuse * lightmap * overbright
+                  - face_mats is a walk-mesh surface type, NOT a texture selector
 
-                  B) True multi-material (has_lightmap=False, tex_count > 1):
-                     face_mats[i] selects which texture each face uses.
-                     Split into per-material draw groups using separate IBOs.
-                     Each group is drawn with its own texture binding.
+                For ALL nodes regardless of tex_count, we draw ONCE with:
+                  - Diffuse texture bound to sampler 0
+                  - Lightmap (if has_lightmap) bound to sampler 1
+                  - Lightmap compositing handled by fragment shader
 
-                FIX-LMROLE: When has_lightmap is False but evidence strongly
-                suggests tex2 is a lightmap (uvs_lm present with real data,
-                all face_mats == 0), treat as Case A.  This handles KotOR
-                module meshes where the MDL binary has_lightmap flag is
-                incorrectly set to 0.
-
-                Reference: xoreos model_kotor.cpp — each face's material index
-                selects the texture; KotorBlender material.py — per-face
-                material assignment; KotOR.js — face material lookup.
+                Reference: xoreos model_kotor.cpp — single diffuse per mesh;
+                KotOR.js OdysseyModelNodeMesh.ts — single texture per mesh;
+                KotorBlender reader.py — material field is surface type.
                 """
-                tex_names = getattr(node, 'texture_names', [])
-                tex_count = int(getattr(node, 'tex_count', 1))
-
-                if tex_count <= 1 or len(tex_names) < tex_count:
-                    # Single-texture node — standard path
-                    _draw_node(node)
-                    return
-
-                # Case A: Lightmap is slot 1 — lightmap is handled separately
-                # by _draw_node (u_lm_tex binding).  Just draw once with diffuse.
-                _has_lm = bool(getattr(node, 'has_lightmap', False))
-
-                # FIX-LMROLE: Renderer-side lightmap inference safety net.
-                # Even if kotor_loader didn't promote has_lightmap, detect the
-                # lightmap case here by checking:
-                #   1. tex_count == 2 (exactly diffuse + one secondary)
-                #   2. uvs_lm has real data (populated from vertex_uv2)
-                #   3. All face_mats are 0 (no face uses slot 1 as diffuse)
-                # This catches any path where the loader's FIX-LMROLE didn't
-                # fire (e.g. models loaded via alternative bridges/importers).
-                if not _has_lm and tex_count == 2:
-                    _node_uvs_lm = getattr(node, 'uvs_lm', [])
-                    _node_fm = getattr(node, 'face_mats', [])
-                    if (len(_node_uvs_lm) > 0
-                            and _node_fm
-                            and all(m == 0 for m in _node_fm)):
-                        _has_lm = True
-
-                if _has_lm:
-                    # Draw with primary diffuse texture only; lightmap handled
-                    # via the u_lm_tex/u_has_lm uniforms inside _draw_node.
-                    _draw_node(node)
-                    return
-
-                # Case B: True multi-material — need per-slot face groups
-                face_mats = getattr(node, 'face_mats', [])
-                if not face_mats:
-                    # No face_mats data — fall back to primary texture
-                    _draw_node(node)
-                    return
-
-                # Check if we have per-material-slot draw groups in the mesh cache
-                node_id = id(node)
-                gm = self._mesh_cache.get(node_id)
-                if gm is not None and gm.mat_slots:
-                    # Draw each material slot with its own texture
-                    for slot_idx in range(tex_count):
-                        slot_data = gm.mat_slots.get(slot_idx)
-                        if slot_data is None or slot_data[2] == 0:
-                            continue
-                        slot_name = str(tex_names[slot_idx]).strip().lower()
-                        if slot_name in ('null', '', 'none'):
-                            slot_name = ''
-                        _draw_node(node, tex_name_override=slot_name,
-                                   override_vao=slot_data[0],
-                                   override_tri_count=slot_data[2])
-                else:
-                    # No split IBOs available — fall back to primary texture
-                    # (better than drawing incorrectly with each slot)
-                    _draw_node(node)
+                # Always draw once with primary diffuse + optional lightmap.
+                # _draw_node already handles lightmap binding via u_lm_tex/u_has_lm
+                # when has_lightmap is True and lightmap UVs are present.
+                _draw_node(node)
 
             # ── Pass 1: Opaque geometry (depth write ON, no blending) ─────────────
             # Solid, fully-opaque surfaces with no alpha-test.
