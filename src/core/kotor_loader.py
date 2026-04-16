@@ -800,14 +800,16 @@ def load_tpc_as_pil(data: bytes):
     decompresses DXT using pykotor's pure-Python DXT1/3/5 decoders, and
     ``TPCMipmap.to_pil_image()`` wraps the result in a PIL Image.
 
-    The returned image is **always top-down** (PIL convention: row 0 = top
-    of the texture atlas).  The GPU renderer's ``_upload()`` applies a
-    single ``FLIP_TOP_BOTTOM`` to convert to OpenGL's bottom-up row order,
-    and the vertex shader's ``1.0 - in_uv.y`` converts D3D UV convention
-    (V=0 at top) to GL convention (V=0 at bottom).  This gives one
-    consistent flip for **all** texture formats — DXT and uncompressed
-    alike — eliminating the previous conditional DXT flip that led to
-    double-flip / no-flip orientation bugs.
+    The returned image is **always bottom-up** (OpenGL convention: row 0 =
+    bottom of the texture).  DXT-compressed textures are flipped from
+    PyKotor's top-down output to bottom-up.  This matches the contract of
+    viewport.py's _load_tpc_bytes and resource_manager._decode_texture.
+    The GPU renderer's ``_upload()`` does NO flip on upload, and the
+    vertex shader's ``1.0 - in_uv.y`` converts KotOR's D3D UV convention
+    (V=0 at top) to GL convention (V=0 at bottom).
+    Phase D11 fix: previously returned top-down for all formats, causing
+    upside-down textures when used by paths that skip viewport.py's
+    TextureCache (e.g. ResourceManager → gpu_renderer).
 
     Cross-references
     ----------------
@@ -830,25 +832,39 @@ def load_tpc_as_pil(data: bytes):
         # ── PyKotor source: read_tpc auto-detects TPC / TGA / DDS ────────
         tpc = pk_read_tpc(data)
 
+        # ── FIX-VFLIP-D11: Detect DXT before conversion ─────────────────
+        # PyKotor's to_pil_image returns DXT as top-down, uncompressed as
+        # bottom-up.  We must flip DXT to bottom-up for consistency with
+        # viewport.py's _load_tpc_bytes contract.
+        _orig_fmt = tpc.format()
+        _is_dxt = _orig_fmt in (
+            TPCTextureFormat.DXT1, TPCTextureFormat.DXT3, TPCTextureFormat.DXT5
+        ) if all(hasattr(TPCTextureFormat, x) for x in ('DXT1', 'DXT3', 'DXT5')) else False
+        if not _is_dxt and len(data) > 12:
+            _enc_byte = data[12]
+            _dsz = struct.unpack_from('<I', data, 0)[0] if len(data) >= 4 else 0
+            if _enc_byte in (2, 4, 10, 12, 13, 14):
+                _w = struct.unpack_from('<H', data, 8)[0] if len(data) >= 10 else 0
+                _h = struct.unpack_from('<H', data, 10)[0] if len(data) >= 12 else 0
+                _pdlen = len(data) - 128
+                _ucmin = {1: _w*_h, 2: _w*_h*3, 4: _w*_h*4}.get(_enc_byte, _w*_h*4)
+                if _dsz != 0 or (_w > 0 and _h > 0 and _pdlen < _ucmin):
+                    _is_dxt = True
+
         # ── PyKotor source: TPC.convert decompresses DXT to RGBA ─────────
-        # This calls TPCMipmap.convert() which routes through pykotor's own
-        # dxt1_to_rgb / dxt3_to_rgba / dxt5_to_rgba decoders — the same
-        # decompression path used by pykotor's OpenGL Texture.from_tpc().
         tpc.convert(TPCTextureFormat.RGBA)
 
         # ── PyKotor source: TPCMipmap.to_pil_image ──────────────────────
-        # Returns a PIL Image with row 0 = top of texture (top-down).
-        # All formats (DXT, RGB, RGBA, Grey, TGA, DDS) produce the same
-        # top-down orientation after conversion.
         img = tpc.get(0, 0).to_pil_image()
         if img is None:
             return None
         if img.mode != 'RGBA':
             img = img.convert('RGBA')
 
-        # NOTE: No FLIP_TOP_BOTTOM here.  PyKotor's decompressed RGBA data
-        # is always top-down.  The single V-flip is applied uniformly in
-        # gpu_renderer._upload() for ALL textures (DXT and non-DXT).
+        # FIX-VFLIP-D11: Flip DXT textures from top-down to bottom-up.
+        # Uncompressed textures are already bottom-up from PyKotor.
+        if _is_dxt:
+            img = img.transpose(_PILImage.FLIP_TOP_BOTTOM)
 
         # ── Attach TXI metadata ──────────────────────────────────────────
         txi = ''
@@ -1250,37 +1266,34 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
     except Exception:
         pass
 
-    # ── FIX-LMROLE: Infer lightmap role when MDL has_lightmap flag is False ──
+    # ── FIX-LMROLE-V2 (Phase D10): Infer lightmap role from texture_2 + UV2 ──
     # KotOR module/area binary MDL meshes sometimes have has_lightmap=False even
     # when texture_2 IS a genuine lightmap and vertex_uv2 contains valid lightmap
-    # UVs.  This causes the renderer to misclassify tex2 as a secondary diffuse
-    # texture (Case B multi-material) instead of compositing it as a lightmap.
+    # UVs.  This causes the renderer to miss lightmap compositing.
+    #
+    # The correct KotOR texture model (per xoreos, KotOR.js, KotorBlender):
+    #   - texture_1 = diffuse (UV0)
+    #   - texture_2 = lightmap (UV1) when present
+    #   - face_mats is a WALK-MESH SURFACE INDICATOR, NOT a texture selector
     #
     # Heuristic: if ALL of these hold, promote has_lightmap to True:
     #   1. has_lightmap is currently False
     #   2. tex_count == 2 (exactly one diffuse + one secondary)
     #   3. uvs_lm has real data (same count as uvs, i.e. came from vertex_uv2)
-    #   4. all face_mats are 0 (no face references slot 1 as a material)
     #
-    # Condition (4) is the key discriminator: true multi-material meshes have
-    # some faces with face_mats[i] == 1, meaning slot 1 is used as a diffuse
-    # material.  Lightmap meshes have all face_mats == 0 because the lightmap
-    # is composited over the entire surface, not per-face.
+    # NOTE: face_mats is NOT checked — it is a walk-mesh surface indicator and
+    # must never be used for texture-routing decisions (Phase D10 fix).
     #
     # Cross-ref: KotOR.js checks texture_2 + UV2 presence; Kotor.NET treats
-    # module tex2 as lightmap; xoreos uses has_lightmap flag only (but always
-    # sets it correctly in its own parser).
+    # module tex2 as lightmap; xoreos uses has_lightmap flag only.
     if (not gr.has_lightmap
             and gr.tex_count == 2
             and len(gr.uvs_lm) > 0
-            and len(gr.uvs_lm) == len(gr.uvs)
-            and gr.face_mats):
-        _all_slot0 = all(m == 0 for m in gr.face_mats)
-        if _all_slot0:
-            gr.has_lightmap = True
-            log.debug("FIX-LMROLE: inferred has_lightmap=True for node '%s' "
-                       "(tex2='%s', %d LM UVs, all face_mats==0)",
-                       gr.name, gr.lightmap, len(gr.uvs_lm))
+            and len(gr.uvs_lm) == len(gr.uvs)):
+        gr.has_lightmap = True
+        log.debug("FIX-LMROLE-V2: inferred has_lightmap=True for node '%s' "
+                   "(tex2='%s', %d LM UVs)",
+                   gr.name, gr.lightmap, len(gr.uvs_lm))
 
 
 def _read_skin_textures(skin, gr: ModelNode) -> None:

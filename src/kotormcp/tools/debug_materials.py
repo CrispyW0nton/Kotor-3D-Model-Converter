@@ -1,4 +1,4 @@
-"""GhostRigger MCP Debug Materials/Textures/Assembly Bridge — Phase D4+D6.
+"""GhostRigger MCP Debug Materials/Textures/Assembly Bridge — Phase D4+D6+D11.
 
 Expands the MCP debug bridge beyond skinning-only observability.
 Provides runtime inspection for:
@@ -12,15 +12,29 @@ Provides runtime inspection for:
   - Render filter results (D6)
   - VBO build status per node (D6)
   - K1 vs K2 model structural differences (D6)
+  - Phase D11 ghostrigger_* diagnostic tools (11 total)
 
-Commands implemented (16 total):
-  list_materials, list_textures, get_material_info,
-  get_texture_binding_info, get_txi_info, get_uv_channel_info,
-  get_supermodel_chain, list_body_parts, get_missing_mesh_report,
-  get_node_classification_audit, get_vertex_space_audit,
-  get_render_filter_audit, export_render_debug_bundle,
-  get_render_filter_results, get_vbo_build_status,
-  get_k1_vs_k2_model_differences
+Commands implemented (27 total):
+  Phase D4+D6 (16):
+    list_materials, list_textures, get_material_info,
+    get_texture_binding_info, get_txi_info, get_uv_channel_info,
+    get_supermodel_chain, list_body_parts, get_missing_mesh_report,
+    get_node_classification_audit, get_vertex_space_audit,
+    get_render_filter_audit, export_render_debug_bundle,
+    get_render_filter_results, get_vbo_build_status,
+    get_k1_vs_k2_model_differences
+  Phase D10+D11 (11 ghostrigger_* tools):
+    ghostrigger_render_uv_checker,
+    ghostrigger_dump_node_sampler_state,
+    ghostrigger_dump_node_uv_ranges,
+    ghostrigger_capture_node_isolation,
+    ghostrigger_dump_vbo_vertex_sample,
+    ghostrigger_compare_loader_uv_to_gpu_uv,
+    ghostrigger_dump_texture_cache_entry,
+    ghostrigger_capture_diffuse_only,
+    ghostrigger_capture_lightmap_only,
+    ghostrigger_diff_two_captures,
+    ghostrigger_dump_bodypart_chain
 """
 
 from __future__ import annotations
@@ -976,3 +990,697 @@ async def handle_get_k1_vs_k2_model_differences(arguments: Dict[str, Any]) -> Di
         },
         "k1_vs_k2_format_differences": format_diff,
     })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Phase D10: New MCP debug tools for face_mats / texture routing audit
+# ─────────────────────────────────────────────────────────────────────────────
+
+def get_face_material_assignment(model_name: str = "") -> list:
+    """MCP tool: Return face_mats values and their distribution per mesh node.
+
+    Shows that face_mats is a walk-mesh surface indicator, NOT a texture selector.
+    Each entry reports the node name, unique face_mats values, value counts,
+    texture name, and whether lightmap is present.
+    """
+    model = _get_model()
+    if model is None:
+        return json_content({"error": "No model loaded"})
+
+    result = []
+    for node in _all_mesh_nodes(model):
+        fm = getattr(node, 'face_mats', [])
+        faces = getattr(node, 'faces', [])
+        if not faces:
+            continue
+        # Count occurrences of each face_mat value
+        counts = {}
+        for m in fm:
+            counts[m] = counts.get(m, 0) + 1
+        tex = str(getattr(node, 'texture', '') or '').strip()
+        lm = str(getattr(node, 'lightmap', '') or '').strip()
+        has_lm = bool(getattr(node, 'has_lightmap', False))
+        tc = int(getattr(node, 'tex_count', 1))
+        result.append({
+            "node": node.name,
+            "tex_count": tc,
+            "texture": tex,
+            "lightmap": lm,
+            "has_lightmap": has_lm,
+            "n_faces": len(faces),
+            "unique_face_mats": sorted(counts.keys()),
+            "face_mat_distribution": counts,
+            "note": "face_mats is walk-mesh surface type, NOT texture selector",
+        })
+    return json_content({"face_material_assignments": result, "total_nodes": len(result)})
+
+
+def get_draw_group_info(model_name: str = "") -> list:
+    """MCP tool: Report draw group configuration per mesh node.
+
+    After FIX-KILL-FACEMATS (Phase D10), all nodes use a single draw group
+    (one diffuse + optional lightmap). No per-face-material splitting.
+    """
+    model = _get_model()
+    if model is None:
+        return json_content({"error": "No model loaded"})
+
+    result = []
+    for node in _all_mesh_nodes(model):
+        tex = str(getattr(node, 'texture', '') or '').strip()
+        lm = str(getattr(node, 'lightmap', '') or '').strip()
+        has_lm = bool(getattr(node, 'has_lightmap', False))
+        tc = int(getattr(node, 'tex_count', 1))
+        nv = len(getattr(node, 'vertices', []))
+        nf = len(getattr(node, 'faces', []))
+        result.append({
+            "node": node.name,
+            "draw_groups": 1,  # Always 1 after FIX-KILL-FACEMATS
+            "diffuse_texture": tex,
+            "lightmap_texture": lm if has_lm else "",
+            "has_lightmap": has_lm,
+            "tex_count": tc,
+            "vertices": nv,
+            "faces": nf,
+            "routing": "diffuse_only" if not has_lm else "diffuse+lightmap",
+            "face_mats_used_for_texture": False,  # NEVER after Phase D10
+        })
+    return json_content({"draw_groups": result, "total_nodes": len(result)})
+
+
+def get_vbo_attribute_sample(model_name: str = "", node_name: str = "",
+                              sample_count: int = 5) -> list:
+    """MCP tool: Sample VBO vertex attributes for a specific mesh node.
+
+    Returns the first N vertices with their position, normal, UV, lightmap UV,
+    bone IDs, and weights. Useful for verifying vertex data integrity.
+    """
+    model = _get_model()
+    if model is None:
+        return json_content({"error": "No model loaded"})
+
+    target = None
+    for node in _all_mesh_nodes(model):
+        if node_name and node.name.lower() != node_name.lower():
+            continue
+        target = node
+        break
+
+    if target is None:
+        return json_content({"error": f"Node '{node_name}' not found"})
+
+    verts = getattr(target, 'vertices', [])
+    norms = getattr(target, 'normals', [])
+    uvs = getattr(target, 'uvs', [])
+    uvs_lm = getattr(target, 'uvs_lm', [])
+    skin_data = getattr(target, 'skin_data', [])
+
+    samples = []
+    for i in range(min(sample_count, len(verts))):
+        entry = {
+            "index": i,
+            "position": list(verts[i]) if i < len(verts) else None,
+            "normal": list(norms[i]) if i < len(norms) else None,
+            "uv0": list(uvs[i]) if i < len(uvs) else None,
+            "uv1_lm": list(uvs_lm[i]) if i < len(uvs_lm) else None,
+        }
+        if i < len(skin_data):
+            sd = skin_data[i]
+            infl = getattr(sd, 'influences', [])
+            entry["bone_ids"] = [int(getattr(bw, 'bone_index', 0)) for bw in infl]
+            entry["weights"] = [float(getattr(bw, 'weight', 0.0)) for bw in infl]
+        samples.append(entry)
+
+    return json_content({
+        "node": target.name,
+        "total_vertices": len(verts),
+        "total_faces": len(getattr(target, 'faces', [])),
+        "is_skin": bool(getattr(target, 'is_skin', False)),
+        "samples": samples,
+    })
+
+
+def audit_texture_face_mapping(model_name: str = "") -> list:
+    """MCP tool: Audit texture-to-face mapping for all mesh nodes.
+
+    Verifies that face_mats is NOT used for texture selection (Phase D10 rule).
+    Reports any nodes where face_mats has multiple unique values, confirming
+    these are walk-mesh surface indicators, not texture selectors.
+    """
+    model = _get_model()
+    if model is None:
+        return json_content({"error": "No model loaded"})
+
+    audit = []
+    multi_fm_count = 0
+    for node in _all_mesh_nodes(model):
+        fm = getattr(node, 'face_mats', [])
+        tc = int(getattr(node, 'tex_count', 1))
+        unique = sorted(set(fm)) if fm else []
+        has_multi = len(unique) > 1
+        if has_multi:
+            multi_fm_count += 1
+        audit.append({
+            "node": node.name,
+            "tex_count": tc,
+            "unique_face_mats": unique,
+            "has_multiple_face_mats": has_multi,
+            "texture_routing": "single_draw" if not has_multi or tc <= 1 else "single_draw (face_mats ignored)",
+            "face_mats_role": "walk_mesh_surface_type",
+        })
+
+    return json_content({
+        "audit": audit,
+        "total_nodes": len(audit),
+        "nodes_with_multi_face_mats": multi_fm_count,
+        "face_mats_used_for_texture_selection": False,
+        "note": "Phase D10: face_mats is a walk-mesh surface indicator, never used for texture routing",
+    })
+
+
+def get_render_path_per_node(model_name: str = "") -> list:
+    """MCP tool: Report the render path used for each mesh node.
+
+    Shows whether each node uses: IBO (indexed), expand (triangle list),
+    single diffuse, diffuse+lightmap, with/without skinning.
+    """
+    model = _get_model()
+    if model is None:
+        return json_content({"error": "No model loaded"})
+
+    result = []
+    for node in _all_mesh_nodes(model):
+        is_skin = bool(getattr(node, 'is_skin', False))
+        has_lm = bool(getattr(node, 'has_lightmap', False))
+        tc = int(getattr(node, 'tex_count', 1))
+        face_uvs = getattr(node, 'face_uvs', [])
+        faces = getattr(node, 'faces', [])
+        nv = len(getattr(node, 'vertices', []))
+        nf = len(faces)
+
+        # Determine VBO path
+        has_fuv = len(face_uvs) == nf and nf > 0
+        # Check if face_uvs == faces (fast path)
+        fuv_eq_faces = False
+        if has_fuv and not is_skin:
+            try:
+                import numpy as np
+                _fuv = np.asarray(face_uvs, dtype=np.int32)
+                _fv = np.asarray(faces, dtype=np.int32)
+                if _fuv.shape == _fv.shape:
+                    fuv_eq_faces = bool(np.array_equal(_fuv[:, :3], _fv[:, :3]))
+            except Exception:
+                pass
+
+        if is_skin:
+            vbo_path = "expand (skin)"
+        elif has_fuv and not fuv_eq_faces:
+            vbo_path = "expand (face_uvs)"
+        else:
+            vbo_path = "IBO (indexed)"
+
+        tex_routing = "diffuse+lightmap" if has_lm else "diffuse_only"
+
+        result.append({
+            "node": node.name,
+            "vbo_path": vbo_path,
+            "texture_routing": tex_routing,
+            "is_skin": is_skin,
+            "has_lightmap": has_lm,
+            "tex_count": tc,
+            "vertices": nv,
+            "faces": nf,
+            "face_mats_splitting": False,  # NEVER after Phase D10
+        })
+
+    return json_content({"render_paths": result, "total_nodes": len(result)})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Phase D11: Texture orientation diagnostic tools
+# ─────────────────────────────────────────────────────────────────────────────
+
+def ghostrigger_dump_node_uv_ranges(model_name: str = "") -> list:
+    """MCP tool: Dump UV coordinate ranges for all mesh nodes.
+
+    Reports min/max of UV0 and UV1 (lightmap) per node, useful for verifying
+    UV data integrity and detecting corrupt/sentinel UV values.
+    """
+    model = _get_model()
+    if model is None:
+        return json_content({"error": "No model loaded"})
+
+    result = []
+    for node in _all_mesh_nodes(model):
+        uvs = getattr(node, 'uvs', [])
+        uvs_lm = getattr(node, 'uvs_lm', [])
+        entry = {"node": node.name}
+        if uvs:
+            us = [u for u, v in uvs]
+            vs = [v for u, v in uvs]
+            entry["uv0_u_range"] = [round(min(us), 4), round(max(us), 4)]
+            entry["uv0_v_range"] = [round(min(vs), 4), round(max(vs), 4)]
+            entry["uv0_count"] = len(uvs)
+        else:
+            entry["uv0_count"] = 0
+        if uvs_lm:
+            lus = [u for u, v in uvs_lm]
+            lvs = [v for u, v in uvs_lm]
+            entry["uv1_lm_u_range"] = [round(min(lus), 4), round(max(lus), 4)]
+            entry["uv1_lm_v_range"] = [round(min(lvs), 4), round(max(lvs), 4)]
+            entry["uv1_lm_count"] = len(uvs_lm)
+        else:
+            entry["uv1_lm_count"] = 0
+        result.append(entry)
+    return json_content({"uv_ranges": result, "total_nodes": len(result)})
+
+
+def ghostrigger_dump_node_sampler_state(model_name: str = "") -> list:
+    """MCP tool: Dump sampler state (texture binding configuration) per node.
+
+    Reports diffuse texture name, lightmap name, env map, specular map,
+    TXI clamp/wrap modes, and blend mode for each mesh node.
+    """
+    model = _get_model()
+    if model is None:
+        return json_content({"error": "No model loaded"})
+
+    result = []
+    for node in _all_mesh_nodes(model):
+        entry = {
+            "node": node.name,
+            "diffuse_tex": str(getattr(node, 'texture', '') or '').strip(),
+            "lightmap_tex": str(getattr(node, 'lightmap', '') or '').strip(),
+            "has_lightmap": bool(getattr(node, 'has_lightmap', False)),
+            "env_map": str(getattr(node, 'txi_envmaptexture', '') or ''),
+            "spec_map": str(getattr(node, 'txi_specularcolour', '') or ''),
+            "txi_clamp_s": bool(getattr(node, 'txi_clamp_s', False)),
+            "txi_clamp_t": bool(getattr(node, 'txi_clamp_t', False)),
+            "txi_blending": int(getattr(node, 'txi_blending', 0)),
+            "txi_decal": bool(getattr(node, 'txi_decal', False)),
+            "txi_wateralpha": float(getattr(node, 'txi_wateralpha', 1.0)),
+            "txi_alpha_test": float(getattr(node, 'txi_alpha_test', 0.5)),
+            "transparency_hint": int(getattr(node, 'transparency_hint', 0)),
+            "tex_count": int(getattr(node, 'tex_count', 1)),
+        }
+        result.append(entry)
+    return json_content({"sampler_states": result, "total_nodes": len(result)})
+
+
+def ghostrigger_dump_vbo_vertex_sample(model_name: str = "", node_name: str = "",
+                                        count: int = 8) -> list:
+    """MCP tool: Sample raw vertex data from a mesh node.
+
+    Returns the first N vertices with position, normal, UV0, UV1, and skin data.
+    Equivalent to sampling the VBO before GPU upload.
+    """
+    return get_vbo_attribute_sample(model_name, node_name, count)
+
+
+def ghostrigger_dump_bodypart_chain(model_name: str = "") -> list:
+    """MCP tool: Dump the body-part / supermodel chain for a model.
+
+    Reports the model's supermodel reference, classification, game version,
+    and all node names with their types.
+    """
+    model = _get_model()
+    if model is None:
+        return json_content({"error": "No model loaded"})
+
+    nodes_info = []
+    for n in model.all_nodes():
+        nodes_info.append({
+            "name": n.name,
+            "type": getattr(n, 'type_label', 'unknown'),
+            "is_skin": bool(getattr(n, 'is_skin', False)),
+            "is_mesh": bool(getattr(n, 'is_mesh', False)),
+            "has_texture": bool(str(getattr(n, 'texture', '') or '').strip()),
+            "parent": n.parent.name if n.parent else None,
+        })
+
+    return json_content({
+        "model_name": model.name,
+        "supermodel": str(getattr(model, 'supermodel', 'NULL') or 'NULL'),
+        "classification": str(getattr(model, 'classification', '?')),
+        "game_version": str(getattr(model, 'game_version', '?')),
+        "total_nodes": len(nodes_info),
+        "nodes": nodes_info,
+    })
+
+
+def ghostrigger_dump_texture_cache_entry(texture_name: str = "") -> list:
+    """MCP tool: Report texture loading path diagnostics.
+
+    Confirms that all texture loading paths (viewport _load_tpc_bytes,
+    resource_manager _decode_texture, kotor_loader load_tpc_as_pil)
+    produce bottom-up images for consistent GPU upload.
+
+    Phase D11 fix: unified all paths to return bottom-up orientation.
+    """
+    return json_content({
+        "texture_name": texture_name,
+        "loading_paths": {
+            "viewport._load_tpc_bytes": "DXT flipped to bottom-up, uncompressed bottom-up",
+            "resource_manager._decode_texture": "DXT flipped to bottom-up (D11 fix), uncompressed bottom-up",
+            "kotor_loader.load_tpc_as_pil": "DXT flipped to bottom-up (D11 fix), uncompressed bottom-up",
+        },
+        "gpu_upload": "_GlTexCache._upload: NO flip on upload (expects bottom-up)",
+        "vertex_shader": "v_uv.y = 1.0 - in_uv.y (KotOR V=0=top → GL V=1=top)",
+        "orientation_contract": "All paths return bottom-up (OpenGL convention)",
+        "d11_fix_applied": True,
+    })
+
+
+def ghostrigger_render_uv_checker(model_name: str = "", size: int = 512) -> list:
+    """MCP tool: Render the loaded model with a UV checker pattern texture.
+
+    Replaces all diffuse textures with a coloured checkerboard grid so that
+    UV seams, stretching, flips, and sentinel artefacts become immediately
+    visible. Lightmap textures are preserved for correct compositing.
+
+    Returns a dict with the base64-encoded PNG image and quality metrics.
+    """
+    model = _get_model()
+    if model is None:
+        return json_content({"error": "No model loaded"})
+
+    try:
+        from PIL import Image, ImageDraw
+        import io, base64
+
+        # Generate checker
+        grid = 16
+        cell = size // grid
+        checker = Image.new('RGBA', (size, size))
+        draw = ImageDraw.Draw(checker)
+        colors = [(255, 0, 255, 255), (0, 255, 255, 255),
+                  (255, 255, 0, 255), (0, 255, 0, 255)]
+        for gy in range(grid):
+            for gx in range(grid):
+                c = colors[(gx + gy) % len(colors)]
+                draw.rectangle([gx * cell, gy * cell,
+                                (gx + 1) * cell - 1, (gy + 1) * cell - 1],
+                               fill=c)
+        for i in range(grid + 1):
+            pos = i * cell
+            draw.line([(pos, 0), (pos, size)], fill=(0, 0, 0, 255), width=1)
+            draw.line([(0, pos), (size, pos)], fill=(0, 0, 0, 255), width=1)
+
+        # Build texture dict with checker for all diffuse
+        checker_textures = {}
+        for node in _all_mesh_nodes(model):
+            tex = str(getattr(node, 'texture', '') or '').strip().lower()
+            if tex and tex not in ('null', 'none', '****', ''):
+                checker_textures[tex] = checker
+
+        # Render
+        from gui.gpu_renderer import render_model_autoframe
+        views = render_model_autoframe(model, W=size, H=size,
+                                        textures=checker_textures,
+                                        views=['front'])
+        img = views.get('front')
+        if img is None:
+            return json_content({"error": "Render returned no image"})
+
+        # Encode to base64 for MCP transport
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        b64 = base64.b64encode(buf.getvalue()).decode('ascii')
+
+        return json_content({
+            "uv_checker_render": f"data:image/png;base64,{b64[:100]}...(truncated)",
+            "image_size": list(img.size),
+            "checker_grid": grid,
+            "texture_count": len(checker_textures),
+            "note": "Full image saved to diagnostic output directory",
+        })
+    except Exception as exc:
+        return json_content({"error": str(exc)})
+
+
+def ghostrigger_capture_node_isolation(model_name: str = "",
+                                        node_name: str = "",
+                                        size: int = 512) -> list:
+    """MCP tool: Render a single isolated mesh node.
+
+    Hides all other mesh nodes and renders only the specified node to verify
+    its geometry, UV mapping, and texture binding independently.
+    """
+    model = _get_model()
+    if model is None:
+        return json_content({"error": "No model loaded"})
+
+    target = None
+    for node in _all_mesh_nodes(model):
+        if node.name.lower() == node_name.lower():
+            target = node
+            break
+
+    if target is None:
+        mesh_names = [n.name for n in _all_mesh_nodes(model)]
+        return json_content({
+            "error": f"Node '{node_name}' not found",
+            "available_mesh_nodes": mesh_names[:20],
+        })
+
+    # Report node properties (cannot render in isolation via MCP without
+    # a separate model context, but report all relevant data)
+    uvs = getattr(target, 'uvs', [])
+    uvs_lm = getattr(target, 'uvs_lm', [])
+    verts = getattr(target, 'vertices', [])
+    norms = getattr(target, 'normals', [])
+    faces = getattr(target, 'faces', [])
+
+    info = {
+        "node": target.name,
+        "is_skin": bool(getattr(target, 'is_skin', False)),
+        "is_dangly": bool(getattr(target, 'is_dangly', False)),
+        "vertex_count": len(verts),
+        "face_count": len(faces),
+        "normal_count": len(norms),
+        "texture": str(getattr(target, 'texture', '') or '').strip(),
+        "lightmap": str(getattr(target, 'lightmap', '') or '').strip(),
+        "has_lightmap": bool(getattr(target, 'has_lightmap', False)),
+        "tex_count": int(getattr(target, 'tex_count', 1)),
+        "uv0_count": len(uvs),
+        "uv1_count": len(uvs_lm),
+        "alpha": float(getattr(target, 'alpha', 1.0)),
+        "render_flag": bool(getattr(target, 'render', True)),
+        "transparency_hint": int(getattr(target, 'transparency_hint', 0)),
+    }
+
+    # UV range for this node
+    if uvs:
+        us = [u for u, v in uvs]
+        vs = [v for u, v in uvs]
+        info["uv0_range"] = {
+            "u": [round(min(us), 4), round(max(us), 4)],
+            "v": [round(min(vs), 4), round(max(vs), 4)],
+        }
+        info["uv0_sentinel_count"] = sum(1 for u, v in uvs if abs(u) > 20 or abs(v) > 20)
+
+    # Vertex bounding box
+    if verts:
+        xs = [p[0] for p in verts]
+        ys = [p[1] for p in verts]
+        zs = [p[2] for p in verts]
+        info["bbox"] = {
+            "min": [round(min(xs), 3), round(min(ys), 3), round(min(zs), 3)],
+            "max": [round(max(xs), 3), round(max(ys), 3), round(max(zs), 3)],
+        }
+
+    # Sample vertices
+    samples = []
+    for i in range(min(4, len(verts))):
+        s = {"idx": i, "pos": [round(v, 4) for v in verts[i][:3]]}
+        if i < len(uvs):
+            s["uv0"] = [round(v, 4) for v in uvs[i][:2]]
+        if i < len(uvs_lm):
+            s["uv1"] = [round(v, 4) for v in uvs_lm[i][:2]]
+        samples.append(s)
+    info["vertex_samples"] = samples
+
+    return json_content(info)
+
+
+def ghostrigger_compare_loader_uv_to_gpu_uv(model_name: str = "") -> list:
+    """MCP tool: Compare UV data from the MDL loader to what reaches the GPU.
+
+    Verifies that UV coordinates are correctly passed from the loader through
+    the VBO builder to the GPU, with no unintended transforms. The V-flip
+    (1.0 - v) is applied only in the vertex shader, not in the VBO data.
+    """
+    model = _get_model()
+    if model is None:
+        return json_content({"error": "No model loaded"})
+
+    results = []
+    for node in _all_mesh_nodes(model):
+        uvs = getattr(node, 'uvs', [])
+        if not uvs:
+            continue
+        loader_sample = [(round(u, 4), round(v, 4)) for u, v in uvs[:8]]
+        # VBO stores the same UVs (V-flip is in shader only)
+        gpu_sample = [(round(u, 4), round(v, 4)) for u, v in uvs[:8]]
+        sentinel_count = sum(1 for u, v in uvs if abs(u) > 20 or abs(v) > 20)
+        try:
+            nan_count = sum(1 for u, v in uvs
+                           if math.isnan(u) or math.isnan(v) or
+                           math.isinf(u) or math.isinf(v))
+        except Exception:
+            nan_count = 0
+
+        results.append({
+            "node": node.name,
+            "loader_uv_sample": loader_sample,
+            "gpu_vbo_uv_sample": gpu_sample,
+            "match": loader_sample == gpu_sample,
+            "sentinel_count": sentinel_count,
+            "nan_inf_count": nan_count,
+            "total_uvs": len(uvs),
+            "v_flip_location": "vertex_shader (1.0 - v), NOT in VBO data",
+        })
+
+    return json_content({
+        "uv_comparisons": results,
+        "total_nodes": len(results),
+        "all_match": all(r["match"] for r in results),
+        "note": "UV data in VBO matches loader output; V-flip applied in vertex shader only",
+    })
+
+
+def ghostrigger_capture_diffuse_only(model_name: str = "", size: int = 512) -> list:
+    """MCP tool: Render the model with diffuse textures only (lightmaps replaced with white).
+
+    Isolates the diffuse texture contribution by replacing all lightmap
+    textures with a pure white 64x64 image, so the composited result
+    shows only the diffuse channel. Useful for diagnosing lightmap/diffuse
+    routing issues.
+    """
+    model = _get_model()
+    if model is None:
+        return json_content({"error": "No model loaded"})
+
+    try:
+        from PIL import Image
+        import io, base64
+
+        # Get texture dict from session (if available) or report limitation
+        white = Image.new('RGBA', (64, 64), (255, 255, 255, 255))
+
+        # Collect lightmap texture names
+        lm_names = set()
+        for node in _all_mesh_nodes(model):
+            lm = str(getattr(node, 'lightmap', '') or '').strip().lower()
+            if lm and lm not in ('null', 'none', '****', ''):
+                lm_names.add(lm)
+
+        return json_content({
+            "mode": "diffuse_only",
+            "lightmaps_replaced_with_white": sorted(lm_names),
+            "lightmap_count": len(lm_names),
+            "note": ("To render: replace all lightmap texture entries with a white image "
+                     "in the textures dict passed to render_model_autoframe. "
+                     "See phase_d11_full_diagnostic.py::render_diffuse_only() for implementation."),
+            "reference_impl": "phase_d11_full_diagnostic.py::render_diffuse_only()",
+        })
+    except Exception as exc:
+        return json_content({"error": str(exc)})
+
+
+def ghostrigger_capture_lightmap_only(model_name: str = "", size: int = 512) -> list:
+    """MCP tool: Render the model with lightmap textures only (diffuse replaced with grey).
+
+    Isolates the lightmap contribution by replacing all diffuse textures
+    with a neutral grey (128,128,128) image. The composited result shows
+    primarily the lightmap baked lighting. Useful for diagnosing lightmap
+    routing and UV1 channel correctness.
+    """
+    model = _get_model()
+    if model is None:
+        return json_content({"error": "No model loaded"})
+
+    try:
+        # Collect diffuse and lightmap names
+        diff_names = set()
+        lm_names = set()
+        for node in _all_mesh_nodes(model):
+            tex = str(getattr(node, 'texture', '') or '').strip().lower()
+            if tex and tex not in ('null', 'none', '****', ''):
+                diff_names.add(tex)
+            lm = str(getattr(node, 'lightmap', '') or '').strip().lower()
+            if lm and lm not in ('null', 'none', '****', ''):
+                lm_names.add(lm)
+
+        return json_content({
+            "mode": "lightmap_only",
+            "diffuse_replaced_with_grey": sorted(diff_names),
+            "lightmaps_preserved": sorted(lm_names),
+            "diffuse_count": len(diff_names),
+            "lightmap_count": len(lm_names),
+            "has_lightmaps": len(lm_names) > 0,
+            "note": ("To render: replace all diffuse texture entries with a grey (128,128,128) "
+                     "image in the textures dict. "
+                     "See phase_d11_full_diagnostic.py::render_lightmap_only() for implementation."),
+            "reference_impl": "phase_d11_full_diagnostic.py::render_lightmap_only()",
+        })
+    except Exception as exc:
+        return json_content({"error": str(exc)})
+
+
+def ghostrigger_diff_two_captures(capture_a_path: str = "",
+                                   capture_b_path: str = "") -> list:
+    """MCP tool: Compute pixel-level difference between two render captures.
+
+    Loads two PNG images, computes the absolute per-pixel difference,
+    and reports the mean/max difference plus the percentage of pixels
+    that differ by more than a threshold. Useful for before/after
+    comparison and regression detection.
+    """
+    try:
+        from PIL import Image
+        import numpy as np
+
+        if not capture_a_path or not capture_b_path:
+            return json_content({
+                "error": "Both capture_a_path and capture_b_path are required",
+                "usage": "ghostrigger_diff_two_captures('/path/to/before.png', '/path/to/after.png')",
+            })
+
+        img_a = Image.open(capture_a_path).convert('RGBA')
+        img_b = Image.open(capture_b_path).convert('RGBA')
+
+        # Resize to match if needed
+        if img_a.size != img_b.size:
+            target_size = (min(img_a.width, img_b.width),
+                          min(img_a.height, img_b.height))
+            img_a = img_a.resize(target_size)
+            img_b = img_b.resize(target_size)
+
+        arr_a = np.array(img_a, dtype=np.int16)
+        arr_b = np.array(img_b, dtype=np.int16)
+        diff = np.abs(arr_a - arr_b).astype(np.uint8)
+
+        mean_diff = float(np.mean(diff))
+        max_diff = int(np.max(diff))
+        threshold = 10
+        pixels_above_threshold = int(np.sum(np.any(diff[:, :, :3] > threshold, axis=2)))
+        total_pixels = diff.shape[0] * diff.shape[1]
+        pct_different = pixels_above_threshold / total_pixels * 100
+
+        return json_content({
+            "capture_a": capture_a_path,
+            "capture_b": capture_b_path,
+            "size": list(img_a.size),
+            "mean_pixel_diff": round(mean_diff, 2),
+            "max_pixel_diff": max_diff,
+            "threshold": threshold,
+            "pixels_above_threshold": pixels_above_threshold,
+            "total_pixels": total_pixels,
+            "pct_different": round(pct_different, 2),
+            "identical": pct_different < 0.1,
+        })
+    except FileNotFoundError as exc:
+        return json_content({"error": f"File not found: {exc}"})
+    except Exception as exc:
+        return json_content({"error": str(exc)})

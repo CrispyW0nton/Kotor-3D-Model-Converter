@@ -732,8 +732,13 @@ def _decode_texture(raw: bytes) -> Optional[object]:
       • pykotor.resource.formats.tpc.tpc_data.TPCMipmap.to_pil_image
       • pykotor.gl.shader.texture.Texture.from_tpc  (PyKotor GL upload)
 
-    The returned image is always **top-down** (row 0 = top of texture).
-    The single V-flip is applied in gpu_renderer._upload().
+    The returned image is always **bottom-up** (row 0 = bottom of texture,
+    OpenGL convention).  DXT-compressed textures are flipped from PyKotor's
+    top-down output to bottom-up.  This matches viewport.py's _load_tpc_bytes
+    contract so that gpu_renderer._upload() can upload without any flip, and
+    the vertex shader's ``v_uv.y = 1.0 - in_uv.y`` produces correct results.
+    Phase D11 fix: previously returned top-down, causing upside-down textures
+    when loaded through the ResourceManager → GPU renderer path.
 
     Only falls back to PIL.Image.open for non-KotOR formats (PNG, BMP)
     that PyKotor does not handle.
@@ -762,11 +767,52 @@ def _decode_texture(raw: bytes) -> Optional[object]:
         from pykotor.resource.formats.tpc.tpc_data import TPCTextureFormat as _Fmt
 
         tpc = _pk_read(patched)
+        # FIX-VFLIP-D11: Detect DXT-compressed format BEFORE conversion.
+        # PyKotor's to_pil_image() returns:
+        #   DXT1/DXT3/DXT5:  TOP-DOWN (DirectX DXT block order)
+        #   Uncompressed:    BOTTOM-UP (OpenGL convention)
+        # The GPU renderer's _upload() expects ALL images in BOTTOM-UP
+        # (OpenGL) orientation and does NO flip on upload.  The vertex
+        # shader applies v_uv.y = 1.0 - in_uv.y to convert KotOR's
+        # V=0=top convention to GL V=0=bottom.  This only works correctly
+        # when the image data is bottom-up.
+        #
+        # viewport.py _load_tpc_bytes already applies this flip for its
+        # TextureCache path.  _decode_texture must match to avoid
+        # top-down textures being sampled upside-down via the
+        # ResourceManager → GPU renderer path.
+        #
+        # Reference: viewport.py _load_tpc_bytes line 558; gpu_renderer.py
+        # _GlTexCache._upload docstring; KotOR.js TextureLoader.ts.
+        _orig_fmt = tpc.format()
+        _is_dxt = _orig_fmt in (
+            _Fmt.DXT1, _Fmt.DXT3, _Fmt.DXT5
+        ) if all(hasattr(_Fmt, x) for x in ('DXT1', 'DXT3', 'DXT5')) else False
+        # Fallback detection: check raw TPC encoding byte at offset 12
+        if not _is_dxt and len(raw) > 12:
+            _enc_byte = raw[12]
+            _data_sz_val = struct.unpack_from('<I', raw, 0)[0] if len(raw) >= 4 else 0
+            # enc=2 with data_sz!=0 or pixel data smaller than uncompressed → DXT1
+            # enc=4 with data_sz!=0 or pixel data smaller than uncompressed → DXT5
+            if _enc_byte in (2, 4, 10, 12, 13, 14):
+                _w = struct.unpack_from('<H', raw, 8)[0] if len(raw) >= 10 else 0
+                _h = struct.unpack_from('<H', raw, 10)[0] if len(raw) >= 12 else 0
+                _pixel_data_len = len(raw) - 128
+                _uncompressed_min = {1: _w*_h, 2: _w*_h*3, 4: _w*_h*4}.get(_enc_byte, _w*_h*4)
+                if _data_sz_val != 0 or (_w > 0 and _h > 0 and _pixel_data_len < _uncompressed_min):
+                    _is_dxt = True
+
         tpc.convert(_Fmt.RGBA)
         img = tpc.get(0, 0).to_pil_image()
         if img is not None:
             if img.mode != 'RGBA':
                 img = img.convert('RGBA')
+            # FIX-VFLIP-D11: Flip DXT textures from top-down to bottom-up
+            # so the GPU renderer's upload + vertex shader V-flip chain
+            # produces correct orientation.  Uncompressed textures are
+            # already bottom-up from PyKotor — no flip needed.
+            if _is_dxt:
+                img = img.transpose(Image.FLIP_TOP_BOTTOM)
             # Attach TXI metadata from the TPC object
             txi = ''
             try:
