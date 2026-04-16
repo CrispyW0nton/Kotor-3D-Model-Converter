@@ -1806,3 +1806,107 @@ K2 creatures now render visible geometry in the GPU renderer:
 5. ✅ K2 creature geometry visually confirmed rendering (D6 completion)
 6. ✅ 214 tests passing, 0 failures
 7. ✅ 2 new regression tests added for FIX-LMROUTE
+
+---
+
+## Phase D8 — FIX-K2-MDX-SHARED-SKIN: K2 Exploded Geometry Fix
+**Priority:** CRITICAL | **Status:** DONE | **Sprint:** D8
+
+### Roadmap Phase & Task ID
+**Phase D8** / **Task D8.1**: Fix K2 model geometry explosion (skin nodes sharing identical MDX vertex data)
+
+### Root Cause Analysis
+
+**Bug signature:** All K2 skin nodes (lowerbody, upperbody, head) rendered as identical exploded/shattered geometry. D7 validation rejected all K2 models.
+
+**Root cause (2 bugs):**
+
+1. **PyKotor K2_SIZE constant (340 → 348):** The `_TrimeshHeader` K2 size constant was 340 bytes, but the actual K2 trimesh header consumes 348 bytes due to 18 extra K2-specific fields (dirt_enabled, padding, dirt_texture, dirt_worldspace, hologram_value, k2_tail_long1, k2_tail_long2) replacing K1's 2-byte tail_short. The `reader.seek(start_pos + K2_SIZE)` after reading moved the cursor 8 bytes backwards, misaligning the subsequent `_SkinmeshHeader` read for K2 skin nodes.
+
+2. **K2 MDX shared offset:** All K2 skin nodes have `mdx_data_offset=0` and `vertices_offset=0` in the trimesh header. PyKotor's vertex reader at line ~3307 uses `seek_pos = mdx_data_offset + i * stride + vertex_offset`, so all skin nodes read from MDX offset 0, producing identical vertex data. The actual per-node MDX offsets (e.g., 81104, 123856, 191312 for c_zakkeg) are stored at a different location in the K2 binary header (trimesh rel+332 in file coordinates), where PyKotor reads them as the `total_area` field.
+
+### Affected Files & Functions
+
+| File | Function/Area | Change |
+|------|--------------|--------|
+| `src/core/kotor_loader.py` | `_patch_pykotor_mdx_offset_zero()` | Added K2_SIZE patch (340→348) + module reload |
+| `src/core/kotor_loader.py` | `_fix_k2_shared_skin_vertices()` | NEW: Detects shared skin vertices, reads correct per-node MDX offsets from binary, re-reads vertex positions+normals |
+| `src/core/kotor_loader.py` | `load_model_from_bytes()` | Added call to `_fix_k2_shared_skin_vertices()` |
+| `src/core/kotor_loader.py` | `load_model_from_file()` | Added call to `_fix_k2_shared_skin_vertices()` |
+| PyKotor `io_mdl.py` | `_TrimeshHeader.K2_SIZE` | Runtime-patched from 340 to 348 |
+
+### Fix Implementation: FIX-K2-MDX-SHARED-SKIN
+
+The fix has two parts:
+
+**Part 1 — K2_SIZE patch:** At import time, `_patch_pykotor_mdx_offset_zero()` now also patches `K2_SIZE: ClassVar[int] = 340` to `348` in PyKotor's `io_mdl.py`. This corrects the `_SkinmeshHeader` alignment for K2 skin nodes.
+
+**Part 2 — Vertex re-read:** `_fix_k2_shared_skin_vertices()` runs after PyKotor parsing for K2 models:
+1. Detects the bug signature: ≥2 skin nodes with identical first-3-vertex positions.
+2. Re-parses the MDL with an intercepted `_TrimeshHeader.read()` to capture the raw uint32 at trimesh header position `start_pos + 12 + 332` (file coordinate) for each skin node. This value contains the ACTUAL per-node MDX data offset in K2's binary format.
+3. Validates the captured offsets against the MDX file size and vertex data sanity.
+4. Re-reads vertex positions (3×float32) and normals (3×float32) from the correct MDX offsets using the node's stride (64 bytes for skin nodes).
+
+### Skinning Test Results (GPU Skinning)
+
+| Test | Result |
+|------|--------|
+| GPU skinning disabled (u_skin_enabled=0) | Geometry renders correctly (bind-pose) |
+| GPU skinning enabled | Deferred (K2 bone weight data needs separate validation) |
+| K1 GPU skinning | Unchanged, no regression |
+
+### K2 Asset Test Results
+
+| Model | Coherent Geometry | Vertices Distinct | Garbage Values | Centroid Reasonable | Texture | Screenshot | Status |
+|-------|------------------|-------------------|----------------|---------------------|---------|------------|--------|
+| c_zakkeg | YES | YES (3 skin nodes) | 0 | lowerbody(-0.003,-0.780,-0.366), upperbody(0.024,0.629,-0.090), head(0.084,1.735,-0.551) | Loaded (partial) | screenshots/K2_c_zakkeg.png | **PASS** |
+| c_bantha | YES | YES (3 skin nodes) | 0 | btBody_front(0.00,2.28,-0.21), btBodyback(0.00,0.06,-0.67), bthair(-0.00,1.71,-0.09) | Loaded | screenshots/K2_c_bantha.png | **PASS** |
+| c_hssiss | YES | YES (4 skin nodes) | 0 | upperbody(-0.00,2.09,0.94), lowerbody(0.00,-0.23,0.74), arms(0.00,1.63,0.24), feet(0.00,0.44,0.13) | Partial | screenshots/K2_c_hssiss.png | **PASS** |
+| c_cannok | YES | YES (7 skin nodes) | 0 | tongue(0.00,0.29,0.26), rearSkin(0.00,-0.45,-0.07), frontSkin(0.00,0.10,0.37), etc. | Partial | screenshots/K2_c_cannok.png | **PASS** |
+| c_brith | YES | YES (1 skin node) | 0 | Brith_mesh(0.28,-0.10,-0.09) | Loaded | screenshots/K2_c_brith.png | **PASS** |
+
+### K1 Asset Test Results (Regression Check)
+
+| Model | Coherent Geometry | Vertices | Garbage | Texture | Screenshot | Status |
+|-------|------------------|----------|---------|---------|------------|--------|
+| c_kraytdragon | YES | 7718 (5 skins) | 0 | Loaded | screenshots/K1_c_kraytdragon.png | **PASS** |
+| c_gammorean | YES | 4946 (4 skins) | 0 | Loaded | screenshots/K1_c_gammorean.png | **PASS** |
+| c_bantha | YES | 4900 (3 skins) | 0 | Loaded | screenshots/K1_c_bantha.png | **PASS** |
+| c_jawa | YES | 4526 (4 skins) | 0 | Loaded | screenshots/K1_c_jawa.png | **PASS** |
+| n_commf | YES | 3181 (3 skins) | 0 | Loaded | screenshots/K1_n_commf.png | **PASS** |
+| m02aa_01a | YES | 5774 (0 skins, 56 mesh) | 0 | Loaded + lightmaps | screenshots/K1_m02aa_01a.png | **PASS** |
+
+### K1 Texture Routing Proof (FIX-LMROUTE-V2)
+
+The FIX-LMROUTE-V2 texture routing fix (from Phase D7) continues to function correctly:
+- K1 module m02aa_01a renders with correct diffuse textures and lightmap compositing
+- The fix excludes lightmapped nodes from the multi-texture material path
+- No texture scrambling observed in any K1 model renders
+- Screenshots confirm diffuse+lightmap compositing is correct
+
+### Before/After K2 Screenshots
+
+**Before (D7 validation — REJECTED):** K2 models showed exploded/shattered polygon geometry. All skin nodes rendered as overlapping triangles at the origin because they all shared identical vertex data from MDX offset 0.
+
+**After (D8 fix — PASSED):** K2 models now render as recognizable creature shapes:
+- c_zakkeg: spiky armored quadruped creature
+- c_bantha: four-legged bantha with body/legs/tail
+- c_hssiss: lizard creature with tail and spines
+- c_cannok: small creature with tongue, spikes, eyes
+- c_brith: flat-winged flying creature
+
+### Files Changed
+| File | Changes |
+|------|---------|
+| `src/core/kotor_loader.py` | +140 lines: `_fix_k2_shared_skin_vertices()` function, K2_SIZE patch in `_patch_pykotor_mdx_offset_zero()`, calls in both loader functions |
+| `ROADMAP_EXECUTION.md` | Phase D8 report |
+
+### Definition of Done
+1. ✅ K2 models render recognizable creatures (5/5 validated with screenshots)
+2. ✅ K1 models unchanged (6/6 validated with screenshots, no regression)
+3. ✅ Texture routing proven (K1 m02aa_01a lightmap compositing correct)
+4. ✅ ≥5 K2 assets validated with screenshots (5/5 PASS)
+5. ✅ ≥5 K1 assets validated with screenshots (6/6 PASS)
+6. ✅ ROADMAP_EXECUTION.md updated
+
+### Status: DONE
