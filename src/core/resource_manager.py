@@ -910,3 +910,344 @@ def reset_manager() -> ResourceManager:
     with _manager_lock:
         _manager = ResourceManager()
     return _manager
+
+
+# ── Headless texture resolver ───────────────────────────────────────────────
+
+def resolve_model_textures(model, manager: Optional[ResourceManager] = None,
+                            game: str = 'K1',
+                            max_size: int = 512) -> Dict[str, Any]:
+    """
+    Load all textures referenced by *model* from the ResourceManager.
+
+    Returns a dict mapping **lowercased** texture name → PIL RGBA Image,
+    suitable for passing directly to ``GpuRenderer.render(textures=...)``.
+
+    This is the **headless** equivalent of what the live viewport does via
+    its ``TextureCache`` + prewarm thread: it walks every mesh node,
+    collects diffuse / lightmap / env-map / specular / bump texture names,
+    loads each TPC/TGA from the ResourceManager priority chain
+    (Override → module ERFs → TexturePacks → BIF), decodes to PIL RGBA,
+    and applies KotOR-specific alpha processing (bump-opaque, punchthrough,
+    env-blend-over).
+
+    Pipeline (mirrors KotOR engine / xoreos / KotOR.js):
+      node.texture      → diffuse texture  (textureMap1 in KotOR.js)
+      node.lightmap      → lightmap texture (textureMap2 in KotOR.js)
+      node.txi_envmaptexture → environment map
+      node.txi_specularcolour → specular colour map
+      node.txi_bumpmaptexture → bump/normal map
+      node.texture_names → additional per-material textures
+
+    Args:
+        model:    KotorModel (from src.core.model_data)
+        manager:  ResourceManager instance; if None, uses the global singleton.
+        game:     'K1' or 'K2'
+        max_size: max texture dimension (default 512)
+
+    Returns:
+        dict[str, PIL.Image.Image]  (lowercased name → RGBA image)
+    """
+    if manager is None:
+        manager = get_manager()
+    if not manager.is_ready():
+        log.warning("resolve_model_textures: ResourceManager not ready (no game dir set)")
+        return {}
+    if model is None:
+        return {}
+
+    textures: Dict[str, Any] = {}
+    tex_names: set = set()
+
+    # Collect all texture names from model nodes
+    all_nodes_fn = getattr(model, 'all_nodes', None)
+    nodes = list(all_nodes_fn()) if all_nodes_fn else []
+
+    for node in nodes:
+        if not getattr(node, 'is_mesh', False):
+            continue
+        # Primary diffuse texture
+        tex = str(getattr(node, 'texture', '') or '').strip()
+        if tex and tex.upper() not in ('NULL', '', 'NONE'):
+            tex_names.add(tex.lower())
+        # Lightmap texture
+        lm = str(getattr(node, 'lightmap', '') or '').strip()
+        if lm and lm.upper() not in ('NULL', '', 'NONE'):
+            tex_names.add(lm.lower())
+        # Environment map
+        env = str(getattr(node, 'txi_envmaptexture', '') or '').strip()
+        if env and env.upper() not in ('NULL', '', 'NONE'):
+            tex_names.add(env.lower())
+        # Specular colour map
+        spec = str(getattr(node, 'txi_specularcolour', '') or '').strip()
+        if spec and spec.upper() not in ('NULL', '', 'NONE'):
+            tex_names.add(spec.lower())
+        # Bump map
+        bump = str(getattr(node, 'txi_bumpmaptexture', '') or '').strip()
+        if bump and bump.upper() not in ('NULL', '', 'NONE'):
+            tex_names.add(bump.lower())
+        # Additional per-material texture names
+        for tn in getattr(node, 'texture_names', []):
+            tn_clean = str(tn or '').strip()
+            if tn_clean and tn_clean.upper() not in ('NULL', '', 'NONE'):
+                tex_names.add(tn_clean.lower())
+
+    # Load each texture
+    loaded = 0
+    missing = []
+    for name in sorted(tex_names):
+        raw = manager.get_texture(name, game)
+        if raw is None:
+            missing.append(name)
+            continue
+        try:
+            img = _decode_texture(raw)
+            if img is None:
+                missing.append(name)
+                continue
+            if max_size and (img.width > max_size or img.height > max_size):
+                img.thumbnail((max_size, max_size))
+            # Apply KotOR alpha processing
+            # Get TXI for alpha mode detection
+            txi_str = getattr(img, '_txi_str', None) or ''
+            if not txi_str:
+                txi_str = manager.get_txi(name, game)
+            txi_meta = _parse_txi_for_alpha(txi_str)
+            img = _apply_alpha_fix(raw, img, txi_meta)
+            textures[name] = img
+            loaded += 1
+        except Exception as exc:
+            log.debug(f"resolve_model_textures: '{name}' decode failed: {exc}")
+            missing.append(name)
+
+    if missing:
+        log.info(f"resolve_model_textures: {loaded} loaded, "
+                 f"{len(missing)} missing: {missing[:10]}")
+    else:
+        log.info(f"resolve_model_textures: {loaded} textures loaded successfully")
+
+    return textures
+
+
+def audit_model_textures(model, manager: Optional[ResourceManager] = None,
+                         game: str = 'K1') -> Dict[str, Any]:
+    """
+    Audit all textures referenced by a model — returns structured report.
+
+    Provides clear error reporting for every texture: found/missing,
+    source archive, size, format, and per-node mapping.
+
+    Returns:
+        dict with keys:
+          - model_name: str
+          - node_count / mesh_count: int
+          - textures_expected: list of names
+          - textures_found: dict[name → {size, format, source}]
+          - textures_missing: list of names
+          - per_node: list of {node_name, diffuse, lightmap, envmap, ...}
+    """
+    if manager is None:
+        manager = get_manager()
+    if model is None:
+        return {"model_name": None, "error": "No model provided"}
+    if not manager.is_ready():
+        return {"model_name": getattr(model, 'name', '?'),
+                "error": "ResourceManager not ready (no game dir set)"}
+
+    from src.core.resource_manager import RES_TPC, RES_TGA
+
+    model_name = getattr(model, 'name', getattr(model, 'model_name', '?'))
+    all_nodes_fn = getattr(model, 'all_nodes', None)
+    nodes = list(all_nodes_fn()) if all_nodes_fn else []
+
+    tex_names: set = set()
+    per_node = []
+
+    for node in nodes:
+        if not getattr(node, 'is_mesh', False):
+            continue
+        entry = {"node_name": getattr(node, 'name', '?')}
+        for attr, key in [('texture', 'diffuse'), ('lightmap', 'lightmap'),
+                          ('txi_envmaptexture', 'envmap'),
+                          ('txi_specularcolour', 'specular'),
+                          ('txi_bumpmaptexture', 'bumpmap')]:
+            val = str(getattr(node, attr, '') or '').strip()
+            if val and val.upper() not in ('NULL', '', 'NONE'):
+                entry[key] = val.lower()
+                tex_names.add(val.lower())
+            else:
+                entry[key] = None
+        per_node.append(entry)
+
+    textures_found = {}
+    textures_missing = []
+
+    for name in sorted(tex_names):
+        raw_tpc = manager.get(name, RES_TPC, game)
+        raw_tga = manager.get(name, RES_TGA, game)
+        raw = raw_tpc or raw_tga
+        if raw is not None:
+            fmt = "TPC" if raw_tpc else "TGA"
+            # Determine source: check priority chain
+            source = _identify_texture_source(name, manager, game)
+            textures_found[name] = {
+                "size": len(raw),
+                "format": fmt,
+                "source": source,
+            }
+            # Try to decode for dimensions
+            try:
+                img = _decode_texture(raw)
+                if img:
+                    textures_found[name]["width"] = img.width
+                    textures_found[name]["height"] = img.height
+            except Exception:
+                pass
+        else:
+            textures_missing.append(name)
+            log.warning(f"TEXTURE MISSING: '{name}' — not found in Override, "
+                        f"module ERFs, TexturePacks, or BIF archives "
+                        f"(game={game})")
+
+    return {
+        "model_name": model_name,
+        "node_count": len(nodes),
+        "mesh_count": len(per_node),
+        "textures_expected": sorted(tex_names),
+        "textures_found": textures_found,
+        "textures_missing": textures_missing,
+        "textures_found_count": len(textures_found),
+        "textures_missing_count": len(textures_missing),
+        "per_node": per_node,
+    }
+
+
+def _identify_texture_source(name: str, manager: ResourceManager,
+                              game: str = 'K1') -> str:
+    """Identify which archive a texture was loaded from (for error reporting)."""
+    inst = manager._k1 if game == 'K1' else manager._k2
+    if inst is None:
+        return "unknown"
+
+    k_tpc = _key(name, RES_TPC)
+    k_tga = _key(name, RES_TGA)
+
+    # 1. Override
+    if k_tpc in inst._override or k_tga in inst._override:
+        return "Override/"
+
+    # 2. Module ERFs
+    for erf in inst._mod_erfs:
+        if erf.has(name, RES_TPC) or erf.has(name, RES_TGA):
+            return f"module ERF ({os.path.basename(erf.path)})"
+
+    # 3. TexturePacks ERFs
+    for erf in inst._tex_erfs:
+        if erf.has(name, RES_TPC) or erf.has(name, RES_TGA):
+            return f"TexturePack ({os.path.basename(erf.path)})"
+
+    # 4. BIF
+    for k in (k_tpc, k_tga):
+        slot = inst._key_map.get(k)
+        if slot is not None:
+            bif_idx, _ = slot
+            bif = inst._bif_index.get(bif_idx)
+            if bif is not None:
+                return f"BIF ({os.path.basename(bif.path)})"
+            else:
+                return f"BIF index {bif_idx} (file not available)"
+
+    return "unknown"
+
+
+def _parse_txi_for_alpha(txi_str: str) -> dict:
+    """Minimal TXI parser for alpha-processing fields."""
+    meta: Dict[str, Any] = {'blending': 0}
+    if not txi_str:
+        return meta
+    for line in txi_str.splitlines():
+        line = line.strip().lower()
+        if line.startswith('blending '):
+            parts = line.split()
+            if len(parts) >= 2:
+                val = parts[1]
+                if val == 'punchthrough':
+                    meta['blending'] = 2
+                elif val == 'additive':
+                    meta['blending'] = 1
+                else:
+                    try:
+                        meta['blending'] = int(val)
+                    except ValueError:
+                        pass
+        elif line.startswith('bumpmaptexture '):
+            parts = line.split(None, 1)
+            if len(parts) >= 2:
+                meta['bumpmaptexture'] = parts[1]
+        elif line.startswith('envmaptexture '):
+            parts = line.split(None, 1)
+            if len(parts) >= 2:
+                meta['envmaptexture'] = parts[1]
+        elif line.startswith('bumpyshinytexture '):
+            parts = line.split(None, 1)
+            if len(parts) >= 2:
+                meta['envmaptexture'] = parts[1]
+    return meta
+
+
+def _apply_alpha_fix(raw_bytes: bytes, img, txi_meta: dict):
+    """Apply KotOR alpha processing to loaded texture (mirrors viewport logic).
+
+    Rules (matches gpu_renderer.py / viewport.py _apply_kotor_alpha):
+      1. bumpmaptexture → force alpha=255 (bump data in alpha channel)
+      2. envmaptexture  → preserve alpha (env blend weight)
+      3. blending=punchthrough → binary alpha cutoff
+      4. blending=additive     → preserve alpha
+      5. Standard (no bump, no env, blending=0) → force alpha=255
+    """
+    try:
+        import numpy as np
+    except ImportError:
+        return img
+    if img is None:
+        return img
+
+    blending = txi_meta.get('blending', 0)
+    has_bump = bool(txi_meta.get('bumpmaptexture', ''))
+    has_env = bool(txi_meta.get('envmaptexture', ''))
+
+    if has_bump:
+        # Bump map alpha = normal data, not transparency
+        arr = np.array(img)
+        arr[:, :, 3] = 255
+        from PIL import Image
+        return Image.fromarray(arr, 'RGBA')
+    elif has_env:
+        # Preserve alpha for env-map blend weight
+        return img
+    elif blending == 2:
+        # Punchthrough: binary alpha
+        try:
+            import struct as _st
+            alpha_thresh = _st.unpack_from('<f', raw_bytes, 4)[0]
+            if not (0.0 < alpha_thresh <= 1.0):
+                alpha_thresh = 0.5
+        except Exception:
+            alpha_thresh = 0.5
+        arr = np.array(img)
+        mask = arr[:, :, 3] < int(alpha_thresh * 255)
+        arr[mask, 3] = 0
+        arr[~mask, 3] = 255
+        from PIL import Image
+        return Image.fromarray(arr, 'RGBA')
+    elif blending == 1:
+        # Additive: keep alpha as-is
+        return img
+    else:
+        # Standard: force opaque (KotOR stores specular/bump in alpha)
+        arr = np.array(img)
+        arr[:, :, 3] = 255
+        from PIL import Image
+        return Image.fromarray(arr, 'RGBA')
+
+    return img

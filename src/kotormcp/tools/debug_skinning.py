@@ -90,6 +90,11 @@ class _DebugSession:
         self._start_time: float = 0.0
         # BIF extraction cache
         self._key_data: Optional[dict] = None
+        # FIX-TEXLOAD-D5: ResourceManager for texture loading pipeline.
+        # Previously textures={} was passed to the renderer, causing all
+        # models to render without textures (flat white/grey surfaces).
+        self._resource_manager = None
+        self._model_textures: dict = {}  # cached: name→PIL Image
 
     def launch(self):
         self.started = True
@@ -122,6 +127,19 @@ class _DebugSession:
         self.game_dir = path
         self.game_verified = False
         self._key_data = None
+        self._model_textures = {}  # clear texture cache on path change
+        # FIX-TEXLOAD-D5: Initialize ResourceManager for texture pipeline.
+        try:
+            from src.core.resource_manager import ResourceManager
+            rm = ResourceManager()
+            ok = rm.set_k1_dir(path)
+            if ok:
+                self._resource_manager = rm
+                log.info(f"DebugSession: ResourceManager initialized for {path}")
+            else:
+                log.warning(f"DebugSession: ResourceManager failed to index {path}")
+        except Exception as e:
+            log.warning(f"DebugSession: ResourceManager init error: {e}")
         # Auto-verify
         return self.verify_game()
 
@@ -239,6 +257,8 @@ class _DebugSession:
         self.current_anim_name = None
         self.current_anim_time = 0.0
         self.current_pose = None
+        # FIX-TEXLOAD-D5: Clear texture cache so new model's textures are loaded
+        self._model_textures = {}
 
         # Init animation engine
         try:
@@ -432,9 +452,23 @@ class _DebugSession:
                 camera.distance = 3.5
                 camera.target = [0.0, 0.0, 0.9]
 
+            # FIX-TEXLOAD-D5: Load textures from ResourceManager.
+            # Previously textures={} was passed, causing untextured renders.
+            # Now we resolve all model textures through the full KotOR
+            # resource chain: Override > module ERFs > TexturePacks > BIF.
+            if not self._model_textures and self._resource_manager is not None:
+                try:
+                    from src.core.resource_manager import resolve_model_textures
+                    self._model_textures = resolve_model_textures(
+                        self.model, self._resource_manager, game='K1')
+                    log.info(f"DebugSession: loaded {len(self._model_textures)} textures")
+                except Exception as tex_err:
+                    log.warning(f"DebugSession: texture load error: {tex_err}")
+
             img = self.renderer.render(
                 self.model, camera, width, height,
-                textures={}, anim_pose=self.current_pose,
+                textures=self._model_textures,
+                anim_pose=self.current_pose,
                 anim_time=self.current_anim_time,
                 anim_base_pose=self.anim_base_pose,  # FIX-SKIN-ANIM-D2
             )

@@ -142,6 +142,14 @@ def load_model_from_bytes(
             model.classification = _CLS_MAP_BYTES.get(raw_cls_byte, 'character')
             model.model_type     = raw_cls_byte
 
+        # FIX-K2-MDX-ZERO-OFFSET (Phase D6): PyKotor rejects mdx_data_offset=0
+        # as invalid, but offset 0 is perfectly valid (vertex data at start of MDX).
+        # This causes ALL K2 skin/mesh nodes to have 0 vertices despite valid
+        # faces, normals, and UVs.  We recover by parsing vertex positions
+        # directly from the MDX binary using trimesh header metadata from the MDL.
+        if mdx_bytes and len(mdx_bytes) > 0:
+            _recover_mdx_vertex_positions(model, patched_bytes, mdx_bytes)
+
         # FIX-MDX-CORRUPT-POSITIONS: When MDX vertex data is incomplete/truncated
         # (e.g. skin/tangent nodes in room models where the MDX block is shorter
         # than vertex_count * stride), PyKotor reads garbage positions from MDX.
@@ -203,6 +211,12 @@ def load_model_from_file(
             model.model_type     = raw_cls_byte_f
         model.mdl_path = str(p)
         model.mdx_path = str(mdx_p) if mdx_p else ''
+
+        # FIX-K2-MDX-ZERO-OFFSET (Phase D6): same as load_model_from_bytes.
+        if mdx_p is not None:
+            mdx_bytes_raw = mdx_p.read_bytes()
+            if mdx_bytes_raw:
+                _recover_mdx_vertex_positions(model, mdl_bytes_raw, mdx_bytes_raw)
 
         # FIX-MDX-CORRUPT-POSITIONS: Apply same fallback repair as load_model_from_bytes.
         # Re-parse MDL-only to get clean vertex positions for nodes with corrupt MDX data.
@@ -316,6 +330,142 @@ def _repair_mdx_corrupt_positions(
         log.debug("_repair_mdx_corrupt_positions: repaired %d nodes total", _patched)
     except Exception as _fb_exc:
         log.debug("_repair_mdx_corrupt_positions: MDL-fallback parse failed — %s", _fb_exc)
+
+
+def _recover_mdx_vertex_positions(
+    model: 'KotorModel',
+    mdl_bytes: bytes,
+    mdx_bytes: bytes,
+) -> None:
+    """FIX-K2-MDX-ZERO-OFFSET (Phase D6): Recover vertex positions from MDX.
+
+    PyKotor's MDLBinaryReader (io_mdl.py line ~3300) rejects mdx_data_offset=0
+    as invalid via the condition:
+        ``bin_node.trimesh.mdx_data_offset not in (0, 0xFFFFFFFF)``
+
+    However, mdx_data_offset=0 is perfectly valid — it means the mesh's vertex
+    data starts at the very beginning of the MDX buffer.  This is common for the
+    first skin mesh in both KotOR 1 and KotOR 2 models.
+
+    The primary fix patches PyKotor's condition at import time (see
+    _patch_pykotor_mdx_offset_zero below).  This function serves as a defensive
+    fallback: if any nodes still have 0 vertices after parsing, we re-parse the
+    MDL with PyKotor and copy recovered vertex positions to the model nodes.
+    """
+    if not mdx_bytes or not mdl_bytes:
+        return
+
+    # Find nodes that need vertex recovery: have faces but no vertices
+    needs_recovery = []
+    for node in model.all_nodes():
+        verts = getattr(node, 'vertices', [])
+        faces = getattr(node, 'faces', [])
+        if len(verts) == 0 and len(faces) > 0:
+            needs_recovery.append(node)
+
+    if not needs_recovery:
+        return
+
+    log.debug("_recover_mdx_vertex_positions: %d nodes need MDX vertex recovery",
+              len(needs_recovery))
+
+    # Ensure PyKotor's MDX offset=0 bug is patched
+    _patch_pykotor_mdx_offset_zero()
+
+    try:
+        # Re-parse with the patched PyKotor to get vertex positions
+        pk_mdl = pk_read_mdl(mdl_bytes, source_ext=mdx_bytes)
+
+        # Build name→node lookup for our model's nodes
+        name_to_gr: Dict[str, ModelNode] = {n.name: n for n in needs_recovery}
+
+        recovered = 0
+        for pk_node in pk_mdl.all_nodes():
+            if pk_node.name not in name_to_gr:
+                continue
+
+            mesh = getattr(pk_node, 'mesh', None)
+            if mesh is None:
+                continue
+
+            vp = getattr(mesh, 'vertex_positions', [])
+            if not vp or len(vp) == 0:
+                continue
+
+            # Copy vertex positions to our model node
+            gr_node = name_to_gr[pk_node.name]
+            gr_node.vertices = [(float(v.x), float(v.y), float(v.z)) for v in vp]
+            recovered += 1
+            del name_to_gr[pk_node.name]
+            log.debug("_recover_mdx_vertex_positions: '%s' — %d verts recovered",
+                      pk_node.name, len(vp))
+
+        if recovered > 0:
+            log.info("_recover_mdx_vertex_positions: recovered %d/%d nodes from MDX",
+                     recovered, len(needs_recovery))
+        if name_to_gr:
+            log.debug("_recover_mdx_vertex_positions: %d nodes still missing: %s",
+                      len(name_to_gr), list(name_to_gr.keys()))
+
+    except Exception as exc:
+        log.debug("_recover_mdx_vertex_positions: fallback failed — %s", exc, exc_info=True)
+
+
+# ── PyKotor runtime patch ────────────────────────────────────────────────────
+_PYKOTOR_PATCHED = False
+
+def _patch_pykotor_mdx_offset_zero():
+    """Patch PyKotor's io_mdl.py to allow mdx_data_offset=0 (valid MDX offset).
+
+    PyKotor's MDLBinaryReader condition at ~line 3300 rejects offset 0:
+        ``bin_node.trimesh.mdx_data_offset not in (0, 0xFFFFFFFF)``
+    This should be:
+        ``bin_node.trimesh.mdx_data_offset != 0xFFFFFFFF``
+    because offset 0 means "start of MDX buffer" which is valid.
+
+    This patch modifies the installed pykotor source file so both the current
+    process and future imports pick up the fix.
+    """
+    global _PYKOTOR_PATCHED
+    if _PYKOTOR_PATCHED:
+        return
+    _PYKOTOR_PATCHED = True
+
+    try:
+        import pykotor.resource.formats.mdl.io_mdl as _io_mdl
+        src_path = _io_mdl.__file__
+        if not src_path or not src_path.endswith('.py'):
+            return
+
+        with open(src_path, 'r', encoding='utf-8') as f:
+            src = f.read()
+
+        _OLD = 'and bin_node.trimesh.mdx_data_offset not in (0, 0xFFFFFFFF)'
+        _NEW = 'and bin_node.trimesh.mdx_data_offset != 0xFFFFFFFF'
+
+        if _OLD in src:
+            src = src.replace(_OLD, _NEW)
+            with open(src_path, 'w', encoding='utf-8') as f:
+                f.write(src)
+            # Clear any cached bytecode
+            pyc = src_path + 'c'
+            if Path(pyc).exists():
+                Path(pyc).unlink(missing_ok=True)
+            # Also check __pycache__
+            cache_dir = Path(src_path).parent / '__pycache__'
+            if cache_dir.exists():
+                for p in cache_dir.glob('io_mdl*.pyc'):
+                    p.unlink(missing_ok=True)
+            log.info("_patch_pykotor_mdx_offset_zero: patched PyKotor io_mdl.py "
+                     "(allow mdx_data_offset=0)")
+        else:
+            log.debug("_patch_pykotor_mdx_offset_zero: already patched or pattern not found")
+    except Exception as e:
+        log.debug("_patch_pykotor_mdx_offset_zero: patch failed — %s", e)
+
+
+# Apply patch at import time
+_patch_pykotor_mdx_offset_zero()
 
 
 def patch_tpc_header(data: bytes) -> bytes:
