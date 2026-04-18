@@ -430,6 +430,12 @@ class ModelNode:
     bb_max: Tuple[float,float,float] = (0.0, 0.0, 0.0)
     radius: float = 0.0
 
+    # D20-M: Per-node vertex coordinate space.
+    # Computed at load time by vertex_space.compute_vertex_space().
+    # 0 = NODE_LOCAL (apply world_transform), 1 = WORLD (no transform),
+    # 2 = AABB_WALK (walkmesh, skip rendering).
+    vertex_space: int = 0  # default NODE_LOCAL
+
     # Controllers (animation keyframes)
     controllers: List[Dict] = field(default_factory=list)
 
@@ -1012,13 +1018,12 @@ class KotorModel:
         """
         Compute model bounding box in world space.
 
-        Phase 17: All KotOR MDL vertices (skin AND non-skin) are stored in
-        NODE-LOCAL space. The full world transform (rotation + translation via
-        the parent chain) must always be applied to all node types.
+        D20-M: Uses per-node vertex_space contract.
+        NODE_LOCAL (0): apply world_transform (rotate + translate)
+        WORLD (1): use vertices as-is (already world-space)
+        AABB_WALK (2): skip (walkmesh, not rendered)
 
-        Verified by KotorBlender (base.py), PyKotor, and direct binary analysis
-        of c_bantha (btBody_front local Y=[1.117,3.391], world pivot Y=-1.163,
-        correct world Y=[-0.046,2.228]).
+        All KotOR MDL vertices are NODE_LOCAL per xoreos and KotOR.js.
         """
         verts_world = []
         for n in self.all_nodes():
@@ -1027,7 +1032,14 @@ class KotorModel:
             if not (n.is_mesh or n.is_skin):
                 continue
 
-            # All nodes: apply full world transform
+            vs = getattr(n, 'vertex_space', 0)  # default NODE_LOCAL
+            if vs == 2:  # AABB_WALK — skip walkmesh nodes
+                continue
+            if vs == 1:  # WORLD — already world-space
+                verts_world.extend(n.vertices)
+                continue
+
+            # NODE_LOCAL — apply full world transform (single application)
             wp, wo = n.world_transform()
             wo_rot = math.sqrt(wo[0]*wo[0] + wo[1]*wo[1] + wo[2]*wo[2])
             is_id = (wo_rot < 0.001)
@@ -1115,9 +1127,22 @@ class KotorModel:
         def _node_world_verts(n):
             """Return list of world-space (x,y,z) tuples for a mesh node.
 
-            Phase 17: ALL nodes (skin + non-skin) use full world transform.
-            Matches FrameRenderer._get_world_verts_for_node() in viewport.py.
+            D20-M: Uses per-node vertex_space contract.
+            NODE_LOCAL (0): apply world_transform (rotate + translate).
+            WORLD (1): use vertices as-is (already world-space).
+            AABB_WALK (2): skip (walkmesh, not rendered).
+
+            References:
+              xoreos model_kotor.cpp readMesh — raw MDX read, no transform
+              KotOR.js OdysseyModel3D.ts      — matrixWorld for GPU
             """
+            vs = getattr(n, 'vertex_space', 0)  # default NODE_LOCAL
+            if vs == 2:  # AABB_WALK
+                return []
+            if vs == 1:  # WORLD
+                return list(n.vertices)
+
+            # NODE_LOCAL — apply full world transform (single application)
             wp, wo = n.world_transform()
             wo_rot = math.sqrt(wo[0]*wo[0] + wo[1]*wo[1] + wo[2]*wo[2])
             is_id = (wo_rot < 0.001)
@@ -1131,72 +1156,29 @@ class KotorModel:
                     result.append((rx + wp[0], ry + wp[1], rz + wp[2]))
                 return result
 
-        # Collect all visible nodes, separated by skin/non-skin
-        # is_accessory is still used by the outlier exclusion logic below
-        is_accessory = (self.supermodel.strip().upper() not in KOTOR_BASE_SKELETONS)
-
-        nonskin_verts = []   # verts from non-skin (trimesh) nodes
-        skin_verts_by_node = []  # [(node, [verts...]), ...]
+        # D20-M: Collect world-space vertices from all visible (rendered) nodes.
+        # No accessory/outlier heuristics — the vertex_space contract in
+        # _node_world_verts handles the correct transform for every node type.
+        all_verts = []
 
         for n in self.all_nodes():
             if not n.vertices:
                 continue
             if not (n.is_mesh or n.is_skin):
                 continue
+            # Skip AABB_WALK nodes (walkmesh)
+            if getattr(n, 'vertex_space', 0) == 2:
+                continue
             if _is_render_helper(n):
                 continue
             # Skip UV-less non-skin nodes UNLESS they are explicitly imported
-            # (OBJ/FBX imports may have no UVs but are still renderable geometry).
             if not n.uvs and not getattr(n, '_imported', False):
                 continue
 
             wv = _node_world_verts(n)
             if not wv:
                 continue
-
-            if n.is_skin:
-                skin_verts_by_node.append((n, wv))
-            else:
-                nonskin_verts.extend(wv)
-
-        # For accessory models (non-standard supermodel), exclude skin proxy
-        # meshes that are far from the non-skin geometry centroid.
-        # This prevents body-proxy meshes from pulling camera too far back.
-        all_verts = list(nonskin_verts)
-
-        if nonskin_verts and is_accessory:
-            # Compute centroid of non-skin geometry (the "anchor")
-            ns_zs = [v[2] for v in nonskin_verts]
-            ns_cz = sum(ns_zs) / len(ns_zs)
-            max_ns_verts = max(len(n.vertices) for n, _ in skin_verts_by_node) if skin_verts_by_node else 0
-            # Strategy B: if all non-skin nodes are tiny (face pieces ≤50 verts),
-            # exclude skin nodes that are much larger (body proxies).
-            _ns_vc_cands = [len(n.vertices) for n in self.mesh_nodes()
-                             if not n.is_skin and n.vertices
-                             and not any(n.name.lower().endswith(s)
-                                         for s in ('_g','_g0','_dum'))]
-            max_ns_nonskin_verts = max(_ns_vc_cands) if _ns_vc_cands else 1
-            vc_threshold = max(max_ns_nonskin_verts * 5, 100)
-            small_ns = (max_ns_nonskin_verts <= 50)
-
-            # Include skin nodes whose centroid is within 1.5 units of anchor
-            # AND (if all non-skin are tiny) whose vert count is not too large
-            for node, wv in skin_verts_by_node:
-                node_zs = [v[2] for v in wv]
-                node_cz = sum(node_zs) / len(node_zs)
-                z_ok = abs(node_cz - ns_cz) <= 1.5
-                vc_ok = not small_ns or len(node.vertices) < vc_threshold
-                if z_ok and vc_ok:
-                    all_verts.extend(wv)
-        else:
-            # Non-accessory or no non-skin geometry: include all skin verts
-            for node, wv in skin_verts_by_node:
-                all_verts.extend(wv)
-
-        if not all_verts:
-            # Fall back: include all skin verts regardless
-            for node, wv in skin_verts_by_node:
-                all_verts.extend(wv)
+            all_verts.extend(wv)
 
         if not all_verts:
             # Last resort: full model bounds

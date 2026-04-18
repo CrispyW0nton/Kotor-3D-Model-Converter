@@ -2640,3 +2640,125 @@ screenshots/d12_evidence/
 - **D13:** PMHA01/PFHA01 player model validation (requires player.bif from K1 archive)
 - **D14:** Automated regression test suite with per-asset baselines
 - **D15:** K2 area/module model validation (requires K2 module ERF extraction)
+
+---
+
+## Phase D20-M — Vertex-Space Contract (Double-Transform Fix — RESET)
+**Priority:** HIGH | **Status:** IN PROGRESS | **Date:** 2026-04-18
+
+### Problem Statement
+Model `101perzc` renders as a broken triangular wedge with doubled bounding radius
+(R ≈ 132–182 vs expected ≈ 109.7).  Root cause: `_build_vbo_data()` and
+`_compute_model_bounds()` in `gpu_renderer.py` used centroid-magnitude heuristics
+(`_WORLDSPACE_VERT_THRESHOLD = 1.5`) to guess whether vertices were node-local or
+world-space, producing inconsistent transforms.  `model_data.py:compute_bounds()`
+applied world_transform unconditionally, while `render_bounds()` used a "Strategy B"
+outlier exclusion with a 1.5-unit Z threshold.
+
+### Reference Truth
+All reference KotOR engines (xoreos, KotOR.js, reone, KotorBlender, PyKotor) store
+ALL mesh and skin vertices in node-local space and apply a single world transform
+per draw call.  None use centroid heuristics.
+
+### Changes Made
+
+#### Phase 0 — Reality Check
+- Confirmed main branch has NO D20-M changes (prior claim was false)
+- Created `audit/D20M_reset_reality_check.md` documenting all remaining heuristics
+
+#### Phase 1 — Reference Truth
+- Created `audit/D20M_reference_truth.md` with citations from xoreos model_kotor.cpp,
+  KotOR.js OdysseyModelNodeMesh.ts/OdysseyModel3D.ts, reone mdlreader.cpp
+
+#### Phase 2 — vertex_space.py
+- Created `src/core/vertex_space.py` with `VertexSpace` enum:
+  - `NODE_LOCAL (0)` — vertices in node's local coordinate system → apply world_transform
+  - `WORLD (1)` — vertices already in world space (imported OBJ/FBX) → skip transform
+  - `AABB_WALK (2)` — walkmesh/collision → skip entirely
+- `compute_vertex_space(node, model)` classifies from flags only (no centroid checks)
+- Added `vertex_space: int = 0` field to `ModelNode` dataclass
+- `kotor_loader.py` assigns `node.vertex_space` at load time (lines 942-950)
+
+#### Phase 3 — Heuristic Deletion
+- **gpu_renderer.py `_build_vbo_data()`**: Deleted ~150 lines of centroid heuristic code:
+  - `_WORLDSPACE_VERT_THRESHOLD = 1.5`
+  - `_is_accessory_skin` / `_accessory_needs_centering` / `_skin_centroid_mag`
+  - `_nonskin_worldspace` flag
+  - All five skin/non-skin/accessory transform branches
+  - Replaced with 10-line `vertex_space` check: NODE_LOCAL → rotate+translate, WORLD → no-op
+- **gpu_renderer.py `_compute_model_bounds()`**: Deleted ~80 lines:
+  - `_WORLDSPACE_THRESHOLD = 1.5`
+  - `_is_accessory` / `_BASE_SKELS` / `_node_is_accessory` checks
+  - Separate skin/non-skin centroid_mag branches
+  - Replaced with `vertex_space` check (same logic as _build_vbo_data)
+- **model_data.py `render_bounds()`**: Deleted ~40 lines:
+  - Strategy B outlier exclusion (1.5-unit Z threshold)
+  - Accessory model skin proxy vertex-count heuristic
+  - `_node_world_verts()` now uses `vertex_space` contract
+
+#### Phase 4 — Single Transform Contract
+- Created `audit/D20M_single_transform_contract.md` documenting:
+  - Transform path choice (keep local, apply in renderer)
+  - All four code paths that read `vertex_space`
+  - Deleted heuristic inventory
+  - Reference engine corroboration table
+
+### Acceptance Gate — Grep Checks
+
+```
+D1 _WORLDSPACE_VERT_THRESHOLD active code: CLEAN (only in comment)
+D2 centroid_mag in gpu_renderer/model_data: CLEAN
+D3 _WORLDSPACE_THRESHOLD active code:      CLEAN (only in docstring)
+D4 _nonskin_worldspace:                     CLEAN
+D5 _is_accessory_skin/_skin_centroid_mag:   CLEAN
+D6 VertexSpace enum:                        FOUND (src/core/vertex_space.py:24)
+D7 vertex_space usage:                      18+ refs across 3 files
+```
+
+### Synthetic Bounds Tests (6/6 PASS)
+
+```
+A Non-skin NODE_LOCAL pos=10: R=1.1180 PASS
+B Skin NODE_LOCAL origin:     R=5.5902 PASS
+C 90° Z rotation:             R=10.3078 PASS
+D AABB_WALK excluded:         R=1.1180 PASS
+E Imported WORLD:             R=2.2361 PASS
+F Skin NODE_LOCAL pos=10:     R=1.1180 PASS
+```
+
+### Vertex-Space Unit Tests (5/5 PASS)
+
+```
+T1 Non-skin mesh → NODE_LOCAL: PASS
+T2 Skin mesh → NODE_LOCAL:     PASS
+T3 AABB walkmesh → AABB_WALK:  PASS
+T4 Imported → WORLD:           PASS
+T5 Enum values (0,1,2):        PASS
+```
+
+### Honesty Note
+Full regression on game assets (101perzc, character models, module models) cannot
+be executed in the sandbox because ResourceManager is not available.  User must
+validate locally:
+- 101perzc should render as a full ship/module, not a wedge
+- Bounding radius for 101perzc should be close to the "old working" value (≈ 109.7)
+- Character models should render identically to the pre-D20M state
+- Module models should not break
+
+### Modified Files
+- `src/core/vertex_space.py` (NEW)
+- `src/core/model_data.py` (vertex_space field + transform paths)
+- `src/core/kotor_loader.py` (vertex_space assignment at load time)
+- `src/gui/gpu_renderer.py` (_build_vbo_data + _compute_model_bounds rewritten)
+
+### Audit Artifacts
+- `audit/D20M_reset_reality_check.md`
+- `audit/D20M_reference_truth.md`
+- `audit/D20M_single_transform_contract.md`
+
+### Status: IN PROGRESS — Vertex-Space Contract Implemented, Awaiting Local Regression
+
+### Next Steps
+- User runs local regression with game assets
+- If 101perzc still broken: dump exact remaining transform path causing the issue
+- If pass: mark D20-M DONE, proceed to D21 (Supermodel chain walking)
