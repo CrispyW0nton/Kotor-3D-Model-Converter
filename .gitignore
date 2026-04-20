@@ -94,7 +94,11 @@ run_audit.py
 
 # ── Internal dev scripts (not for end users) ──────────────────────────────────
 devlog/
-/tools/
+# Contents of /tools/ are ignored by default (ad-hoc dev scripts).  Add a
+# "!/tools/<name>.py" exception below for any tool that should ship with the
+# repo.  Using /tools/* instead of /tools/ so re-inclusion patterns resolve.
+/tools/*
+!/tools/model_inspector.py
 scripts/
 audit_deep.py
 audit_exhaustive.py

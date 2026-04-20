@@ -31,8 +31,6 @@ GPU fast-path  (requires moderngl + EGL)
 Key rendering correctness fixes (Phase 1)
   BUG-UV:   UV V-axis flipped  → v_uv.y = 1.0 - in_uv.y  in vertex shader
              KotOR MDX stores V=0 at top (D3D convention); OpenGL wants V=0 at bottom.
-  BUG-SKIN: Skin vertices are already in world-space (baked by NWN exporter).
-             _build_vbo_data skips both rotation AND translation for skin nodes.
   BUG-WIND: KotOR uses clockwise triangle winding; set ctx.front_face = 'cw'.
   BUG-ALPHA: Transparent surfaces sorted back-to-front by camera depth before draw.
   BUG-ENVMAP: TXI envmaptexture/bumpyshinytexture → KotOR uses "BlendedOver"
@@ -82,6 +80,30 @@ Phase 2 rendering correctness fixes
   FIX-PERSCACHE: Per-model persistent world-transform cache survives across frames;
                 invalidated on model change.  Reduces O(N×depth) per-frame cost to
                 O(1) cache lookup for static geometry.
+
+Vertex-space contract (Phase D20-M — SUPERSEDES the old BUG-SKIN note)
+  Every node carries a ``vertex_space`` enum set at load time by
+  ``src/core/vertex_space.compute_vertex_space()``.  ``_build_vbo_data`` reads
+  that field and nothing else to decide whether to transform vertices:
+
+      NODE_LOCAL (0): vertices are node-local; apply full parent-chain
+                      world_transform (rotate + translate).  This is the
+                      DEFAULT for every KotOR MDL node — including SKIN,
+                      DANGLY, and SABER.  Skin meshes are node-local per
+                      xoreos ``model_kotor.cpp`` readSkin() and KotOR.js
+                      ``OdysseyModelNodeMesh.ts``.  The pre-D20-M claim
+                      that skin vertices were "already in world-space and
+                      baked by the NWN exporter" was WRONG — it was a
+                      coincidence on models whose skin parent chain happened
+                      to resolve to identity.
+      WORLD (1):      vertices already in model-root space (only set for
+                      externally-imported OBJ/FBX); skip world_transform.
+                      Not produced by any KotOR MDL loader path.
+      AABB_WALK (2):  walkmesh / collision — never rendered.
+
+  See ``_build_vbo_data`` (the ``_node_vs`` switch) and ``src/core/vertex_space.py``
+  for the authoritative implementation.  Do NOT reintroduce centroid-magnitude
+  or name-based heuristics to decide vertex space — the enum is the contract.
 
 Phase 3.8 rendering correctness fixes (deep audit vs Kotor.NET / KotOR.js / xoreos)
   FIX-ENVBLEND:  CRITICAL: The environment-map blend weight was inverted.
@@ -178,6 +200,36 @@ except ImportError:
             'C_KHOUNDA', 'C_TARENTATEK', 'C_RANCORM', 'C_TUKE',
             'WARDROID', 'N_WARDROID',
         })
+
+# ── Shared inner-geometry / face name lists ────────────────────────────────
+# Imported from the single source of truth shared with viewport.py.  The GPU
+# path MUST classify eye/teeth/tongue/gum/jaw nodes identically to the CPU
+# rasterizer — mismatched lists caused NPC-head regressions where the CPU
+# path kept inner geometry and the GPU path dropped it (or vice versa).
+try:
+    from core.render_constants import (
+        INNER_GEO_SUBSTRINGS as _INNER_GEO_SUBSTRINGS,
+        FACE_MESH_SUBSTRINGS as _FACE_MESH_SUBSTRINGS,
+    )
+except ImportError:
+    try:
+        from src.core.render_constants import (
+            INNER_GEO_SUBSTRINGS as _INNER_GEO_SUBSTRINGS,
+            FACE_MESH_SUBSTRINGS as _FACE_MESH_SUBSTRINGS,
+        )
+    except ImportError:
+        # Last-resort fallback so the GPU path still classifies correctly even
+        # when render_constants is unavailable (e.g. during import-cycle tests).
+        # If you edit these values, also edit src/core/render_constants.py —
+        # they MUST stay in sync with the canonical list.
+        _INNER_GEO_SUBSTRINGS = (
+            'eye', 'lid', 'teeth', 'tooth', 'gum', 'jaw', 'tongue',
+            'teethu', 'teethl',
+            'eyeball', 'cornea', 'iris', 'pupil',
+            'gumskin', 'tonguemesh', 'jawskin',
+            'eyelid', 'teetha', 'teethb',
+        )
+        _FACE_MESH_SUBSTRINGS = ('face', 'head', 'skull', 'fhead', 'fchead')
 
 log = logging.getLogger(__name__)
 
@@ -2337,10 +2389,11 @@ class GpuRenderer:
                         if _pt not in _skin_tex_verts:
                             _skin_tex_verts[_pt] = []
                         _skin_tex_verts[_pt].append((_pn, _pnv))
-                    _INNER_GEO_NAMES = (
-                        'eye', 'lid', 'teeth', 'gum', 'jaw', 'tongue',
-                        'teethu', 'teethl', 'tooth',
-                    )
+                    # Use the shared inner-geometry list (see render_constants.py).
+                    # This list MUST match viewport.py classification so the CPU
+                    # and GPU paths treat NPC-head eyelid/gumskin/tonguemesh nodes
+                    # identically — otherwise the same model renders with missing
+                    # inner geometry under one renderer and not the other.
                     for _pn in nodes:
                         if not getattr(_pn, 'is_mesh', False) or getattr(_pn, 'is_skin', False):
                             continue
@@ -2350,7 +2403,7 @@ class GpuRenderer:
                         if not getattr(_pn, 'uvs', []):
                             continue
                         _pn_name_low = str(getattr(_pn, 'name', '') or '').lower()
-                        if any(_ig in _pn_name_low for _ig in _INNER_GEO_NAMES):
+                        if any(_ig in _pn_name_low for _ig in _INNER_GEO_SUBSTRINGS):
                             continue
                         _pnv = len(getattr(_pn, 'vertices', []))
                         _matches = _skin_tex_verts.get(_pt, [])

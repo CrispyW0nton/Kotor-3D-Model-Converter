@@ -47,12 +47,20 @@ try:
                                    KOTOR_BASE_SKELETONS)
     from ..core.animation_engine import DanglySimulator
     from ..core.walkmesh_renderer import WalkmeshOverlay, WalkmeshLoader, build_draw_list
+    from ..core.render_constants import (
+        INNER_GEO_SUBSTRINGS as _INNER_GEO_SUBSTRINGS,
+        FACE_MESH_SUBSTRINGS as _FACE_MESH_SUBSTRINGS,
+    )
 except ImportError:
     from core.model_data import (  # type: ignore[no-redef]  # tests add src/ to sys.path
         KotorModel, ModelNode, NodeFlags, _quat_rotate, _quat_conjugate,
         KOTOR_BASE_SKELETONS
     )
     from core.animation_engine import DanglySimulator  # type: ignore[no-redef]
+    from core.render_constants import (  # type: ignore[no-redef]
+        INNER_GEO_SUBSTRINGS as _INNER_GEO_SUBSTRINGS,
+        FACE_MESH_SUBSTRINGS as _FACE_MESH_SUBSTRINGS,
+    )
     try:
         from core.walkmesh_renderer import WalkmeshOverlay, WalkmeshLoader, build_draw_list
     except ImportError:
@@ -174,39 +182,15 @@ def _clamp(v, lo, hi):
 # filtering.  KotorBlender scene/material.py -- GL_REPEAT default.
 _UV_SENTINEL = 1e18  # effectively disabled; only catches NaN/Inf
 
-# ── Inner-geometry node name substrings ─────────────────────────────────────
-# KotOR head models contain eye, eyelid, teeth, tongue, gum, and jaw meshes
-# that sit geometrically INSIDE the face mesh.  With a painter's-algorithm
-# (centroid-depth) sort these would sometimes be drawn before the opaque face
-# mesh and then overwritten by it.  We promote them to render tier 1 (drawn
-# after all tier-0 opaque geometry) so that the face mesh's eye-socket and
-# mouth-gap openings correctly expose the underlying inner geometry.
-#
-# Criteria for promotion:
-#   • Non-skin node (skin nodes are primary visible geometry — never promoted)
-#   • Node name contains any of the substrings below (case-insensitive)
-#   • transparency_hint == 0  (already-transparent nodes are already tier 1)
-#
-# Covers standard K1/K2 PC head naming (eyeRA, eyeLA, eyeRlid, eyeLlid,
-# teethU, teethL, teethUa, teethLa, tongue) and NPC face-node naming
-# (f_rlweye_g, f_llweye_g: NPC eyeball nodes that end in _g but are REAL
-# renderable geometry — they must NOT be excluded by _is_deformation_helper).
-# Also includes darthband_h / general NPC head model substrings for eyeball,
-# gumskin, tonguemesh, eyelid_mesh, jawskin which appear in KotOR NPC heads.
-_INNER_GEO_SUBSTRINGS: tuple = (
-    'eye', 'lid', 'teeth', 'tooth', 'gum', 'jaw',
-    'tongue', 'teethu', 'teethl',
-    'eyeball', 'cornea', 'iris', 'pupil',   # explicit eyeball naming
-    'gumskin', 'tonguemesh', 'jawskin',      # NPC sub-mesh names
-    'eyelid', 'teetha', 'teethb',            # additional NPC variant names
-)
-
-# Head/face node substrings — these nodes render the outer face surface and
-# must be treated as two-sided so that inner geometry (eyes, teeth visible
-# through the mouth gap / eye socket) does not show reversed winding.
-_FACE_MESH_SUBSTRINGS: tuple = (
-    'face', 'head', 'skull', 'fhead', 'fchead',
-)
+# ── Inner-geometry / face node substrings ──────────────────────────────────
+# The authoritative definitions now live in :mod:`src.core.render_constants`
+# so that the CPU rasterizer (this file) and the GPU renderer
+# (``src/gui/gpu_renderer.py``) classify nodes identically.  The ``_INNER_GEO_
+# SUBSTRINGS`` and ``_FACE_MESH_SUBSTRINGS`` module-level aliases are imported
+# from there at the top of this file; all call sites below reference the same
+# objects.  Do NOT re-define them here — any divergence reintroduces the
+# CPU/GPU inner-geometry classification drift that ate several days of NPC-
+# head debugging.  See render_constants.py for the full coverage rationale.
 
 def _lerp(a, b, t):
     return a + (b - a) * t
@@ -6524,6 +6508,18 @@ class FrameRenderer:
         # Reference: KotOR MDL mesh header — area/tile models tile textures
         # over large surfaces using UV coordinates that match the surface scale
         # in game units (e.g. a 9-unit wall maps to U≈9.0 with a 1-unit texture).
+        #
+        # FRAGILE: this classifier uses a single |u|>3 or |v|>3 threshold against
+        # the FIRST 20 UVs only, gated by ``classification`` / ``model_type``.
+        # Failure modes it can hit quietly:
+        #   * Character models carrying legitimate tiled UVs (armour belts,
+        #     creature body plates) whose classification is mis-set by the
+        #     loader → real geometry classified as a helper and dropped.
+        #   * A mesh whose helper portion sits past vertex 20 (sparse
+        #     seam-fix placeholders) → helper misclassified as renderable.
+        # A proper fix would be a statistical / bbox-containment test against
+        # the head/body mesh instead of a magic 3.0 threshold.  Leave the
+        # heuristic in place until a failing model is in hand.
         if node.uvs:
             _model_cls_str = getattr(self.model, 'classification', 'character') if self.model else 'character'
             # FIX-MODEL-TYPE-ZERO: don't treat model_type=0 as falsy
@@ -6542,6 +6538,16 @@ class FrameRenderer:
         # texture.  NPC head models use naming like f_rlweye_g / f_llweye_g for
         # actual eyeball trimesh nodes that end in _g but ARE visible geometry.
         # Without this exception those eyeballs are incorrectly hidden.
+        #
+        # FRAGILE: the ``_g`` / ``_g0`` / ``_dum`` suffix rule assumes the KotOR
+        # NWN-exporter naming convention.  Round-tripped MDLs whose node names
+        # lost the convention (e.g. exported from Blender without the suffix
+        # helper), and imported OBJ/FBX meshes whose authors chose ``_g`` for
+        # an unrelated reason, are protected only by the ``_imported=True``
+        # escape hatch at the top of this function.  Any pipeline that
+        # produces KotOR-flavoured names without setting ``_imported`` will
+        # silently lose those meshes.  Replace with a parent-chain / vertex-
+        # count classifier once we have a regression corpus.
         name_lower = node.name.lower()
         _name_is_inner_geo = any(s in name_lower for s in _INNER_GEO_SUBSTRINGS)
         if not node.is_skin and (name_lower.endswith('_g')
