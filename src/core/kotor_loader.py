@@ -472,6 +472,19 @@ def _convert_node(pk_node, parent: Optional[ModelNode],
         gr.position = (0.0, 0.0, 0.0)
 
     try:
+        # Quaternion convention (locked in for the entire pipeline)
+        # -----------------------------------------------------------
+        # Binary MDL on disk stores node orientation as W,X,Y,Z (W first) —
+        # see PyKotor ``_NodeHeader.read`` and xoreos
+        # ``ModelNode_KotOR::load`` which reads ``rad2deg(acos(W) * 2)``
+        # followed by X, Y, Z as an axis/angle pair.  PyKotor already
+        # deserialises that into its ``Vector4(x,y,z,w)`` accessor, so by
+        # the time we touch ``pk_node.orientation`` it is internally
+        # XYZW-ordered.  We keep it in XYZW form throughout the GhostRigger
+        # pipeline: ``_quat_mul``, ``_quat_rotate``, ``_quat_normalize_bind``
+        # in model_data.py, and every callsite in viewport.py / writers.
+        # Tests: ``test_quaternion_convention_consistency`` in
+        # ``test_geometry_phase_g2.py``.
         o = pk_node.orientation
         gr.rotation = (float(o.x), float(o.y), float(o.z), float(o.w))
     except Exception:
@@ -551,6 +564,30 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
     gr.transparency_hint   = int( getattr(mesh, 'transparency_hint',  0))
     gr.rotate_texture      = bool(getattr(mesh, 'rotate_texture',     False))
     gr.has_lightmap        = bool(getattr(mesh, 'has_lightmap',       False))
+
+    # ── K2-specific mesh-header fields (Phase G2) ─────────────────────────────
+    # These extra bytes exist only in KotOR 2's trimesh sub-header.  PyKotor
+    # exposes them on the mesh object regardless of game, defaulting to the
+    # "no-op" values on K1 models, so reading them unconditionally is safe.
+    #
+    #   dirt_enabled / dirt_texture / dirt_coordinate_space:
+    #       K2 dirt-overlay decal support (used on armour/creature weathering).
+    #   hologram_donotdraw / hide_in_hologram:
+    #       K2 hologram render-pass flag.  PyKotor exposes both the modern
+    #       name (``hologram_donotdraw``) and the legacy alias
+    #       (``hide_in_hologram``); we OR them so either source wins.
+    #
+    # We preserve these verbatim so round-trip writing through mdl_writer can
+    # emit a byte-identical K2 mesh header.  viewport.py will grow an opt-in
+    # respecter for ``hide_in_holograms`` in a follow-up; for now the field is
+    # populated purely for fidelity.
+    gr.dirt_enabled      = bool(getattr(mesh, 'dirt_enabled', False))
+    gr.dirt_texture      = int( getattr(mesh, 'dirt_texture', 0) or 0)
+    gr.dirt_coord_space  = int( getattr(mesh, 'dirt_coordinate_space', 0) or 0)
+    gr.hide_in_holograms = bool(
+        getattr(mesh, 'hologram_donotdraw', False)
+        or getattr(mesh, 'hide_in_hologram', False)
+    )
 
     # ── UV animation ─────────────────────────────────────────────────────────
     gr.animate_uv      = bool( getattr(mesh, 'animate_uv',       False))
@@ -871,7 +908,15 @@ def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
         log.debug("_read_skin_weights '%s': qBone/tBone read skipped: %s", gr.name, _e)
 
     # Step 2: per-vertex skin data
+    #
+    # Phase G2: we track out-of-range indices so a malformed MDL surfaces as
+    # a single summary warning rather than being silently swallowed.  Silent
+    # skipping is safe (the vertex just loses one influence and its other
+    # weights renormalise), but without any log line the user has no clue
+    # why a skin mesh looks wrong.  We log at most one WARNING line per
+    # skin node, regardless of how many vertices are affected.
     gr.skin_data = []
+    _oob_count = 0
     for bv in (getattr(skin, 'vertex_bones', None) or []):
         vsd = VertexSkinData()
         for j in range(4):
@@ -884,6 +929,11 @@ def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
                 continue
             w         = float(bv.vertex_weights[j])
             if local_idx < 0 or local_idx >= n_bones:
+                # Out-of-range bone index: record and skip this influence.
+                # Per-vertex weight renormalisation (below) redistributes the
+                # dropped weight across the surviving influences.
+                if local_idx >= 0:
+                    _oob_count += 1
                 continue
             if w <= 1e-6 or not math.isfinite(w):
                 continue
@@ -898,6 +948,13 @@ def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
                     bw.weight *= inv
 
         gr.skin_data.append(vsd)
+
+    if _oob_count:
+        log.warning(
+            "Skin node '%s': %d vertex bone-index(es) exceeded bone_map "
+            "size %d — influences dropped and weights renormalised",
+            gr.name, _oob_count, n_bones,
+        )
 
     log.debug("_read_skin_weights '%s': %d bones, %d verts",
               gr.name, n_bones, len(gr.skin_data))

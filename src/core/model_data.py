@@ -138,7 +138,17 @@ PART_SLOT_LABELS: Dict[PartSlot, str] = {
 # ──────────────────────────────────────────────────────────────
 
 def _quat_mul(a, b):
-    """Multiply two quaternions [x,y,z,w]."""
+    """Multiply two quaternions ``a ⊗ b``, both stored as ``[x, y, z, w]``.
+
+    Convention: XYZW (W last).  This matches:
+      * PyKotor ``Vector4`` accessor (x, y, z, w).
+      * KotorBlender internal quaternion form.
+      * GLM / DirectXMath / three.js.
+    The on-disk MDL binary stores W,X,Y,Z — ``kotor_loader._read_node``
+    swaps the order at load time, so every caller in GhostRigger sees
+    XYZW.  Cross-ref: xoreos ``Common::Matrix4::loadRotate`` reads the
+    same (x,y,z,w) form after its own disk conversion.
+    """
     ax, ay, az, aw = a
     bx, by, bz, bw = b
     return [
@@ -159,7 +169,15 @@ def _quat_conjugate(q):
     return (-x, -y, -z, w)
 
 def _quat_rotate(q, v):
-    """Rotate vector v by quaternion q = [x,y,z,w]. Returns rotated vector."""
+    """Rotate vector ``v`` by quaternion ``q = [x, y, z, w]``.
+
+    Uses the standard two-cross-product form
+        v' = v + 2·qw·(q_xyz × v) + 2·(q_xyz × (q_xyz × v))
+    which is equivalent to the ``q · v · q*`` sandwich for unit
+    quaternions and matches xoreos ``Common::Matrix4::rotate`` and
+    KotOR.js ``THREE.Quaternion.multiplyVector``.  See ``_quat_mul``
+    for the XYZW storage convention.
+    """
     qx, qy, qz, qw = q
     # Normalize q to avoid drift
     l2 = qx*qx + qy*qy + qz*qz + qw*qw
