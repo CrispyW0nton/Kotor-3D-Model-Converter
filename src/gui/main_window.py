@@ -44,6 +44,7 @@ from .modular_panel import ModularModePanel
 from ..core.animation_engine import AnimationEngine, AnimPose
 from ..autorig.cloth_rig import ClothRigger, ClothRigConfig, ClothRigPreset, ClothRigPanel
 from ..ipc.server import GhostRiggerIPCServer
+from ..infra.mcp_autostart import maybe_autostart_kotormcp
 from ..ipc.client import (
     notify_blueprint_saved, ping_all, ping_program,
     refresh_gmodular_viewport, ipc_call_async,
@@ -9135,6 +9136,8 @@ class KotorModToolsApp(tk.Tk):
         })
         self._ipc_server.start()
         self.after(800, self._update_ipc_status)
+
+        self.after(900, maybe_autostart_kotormcp)
 
         self.log("GhostRigger-K1-K2 v4.2 ready.", "success")
         self.log(f"→ Ghostworks IPC server on port {PORT_GHOSTRIGGER} (GhostRigger).")

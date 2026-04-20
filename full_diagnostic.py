@@ -271,7 +271,7 @@ def load_model_and_dump():
     print(f"  Classification: {model.classification} (type={model.model_type})")
     
     # Also load via PyKotor raw for comparison
-    from pykotor.resource.formats.mdl.mdl_auto import read_mdl as pk_read_mdl
+    from src.core.mdl_reader_wrapper import read_mdl_safe as pk_read_mdl
     pk_mdl = pk_read_mdl(mdl, source_ext=mdx)
     
     # Build pk raw lookup

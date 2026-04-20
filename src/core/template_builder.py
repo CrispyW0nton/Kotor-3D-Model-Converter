@@ -572,12 +572,12 @@ def validate_animations_via_pykotor(
 
     # Try PyKotor first (installed via pip install pykotor)
     try:
-        from pykotor.resource.formats.mdl.mdl_auto import read_mdl as _pk_read_mdl
+        from .mdl_reader_wrapper import read_mdl_safe as _pk_read_mdl
         result['pykotor'] = True
 
         # PyKotor needs a file-like object or bytes
         import io
-        pk_mdl = _pk_read_mdl(io.BytesIO(mdl_bytes), io.BytesIO(mdx_bytes) if mdx_bytes else None)
+        pk_mdl = _pk_read_mdl(io.BytesIO(mdl_bytes), source_ext=io.BytesIO(mdx_bytes) if mdx_bytes else None)
 
         anims = []
         pk_anim_names = set()
