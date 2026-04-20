@@ -1606,6 +1606,16 @@ class LibraryPanel(tk.Frame):
             mgr = ResourceManager()
             self._resource_manager = mgr
 
+        # Phase 5: let the super-model resolver load chain MDLs through
+        # the unified resource manager.  Idempotent — configure() simply
+        # swaps the installed manager, so calling it on every refresh is
+        # safe and keeps the resolver in sync if ``mgr`` is ever replaced.
+        try:
+            from ..core.animation_engine import SuperModelResolver
+            SuperModelResolver.configure(mgr)
+        except Exception as _e:  # pragma: no cover - defensive, GUI path
+            log.debug(f"SuperModelResolver configure failed: {_e}")
+
         if k1d and os.path.isdir(k1d):
             try:
                 mgr.set_k1_dir(k1d)
@@ -5695,7 +5705,7 @@ class AnimationsPanel(tk.Frame):
         list_frame = tk.Frame(self, bg=C['panel2'])
         list_frame.pack(fill='both', expand=True, padx=6, pady=2)
 
-        cols = ('name', 'length', 'keys', 'nodes', 'events')
+        cols = ('name', 'length', 'keys', 'nodes', 'events', 'source')
         self._tree = ttk.Treeview(list_frame, columns=cols,
                                    show='headings', height=10,
                                    selectmode='browse')
@@ -5704,11 +5714,13 @@ class AnimationsPanel(tk.Frame):
         self._tree.heading('keys',   text='Keys',       anchor='center')
         self._tree.heading('nodes',  text='Nodes',      anchor='center')
         self._tree.heading('events', text='Events',     anchor='center')
+        self._tree.heading('source', text='Source',     anchor='w')
         self._tree.column('name',   width=130, stretch=True)
         self._tree.column('length', width=65,  stretch=False)
         self._tree.column('keys',   width=55,  stretch=False)
         self._tree.column('nodes',  width=50,  stretch=False)
         self._tree.column('events', width=52,  stretch=False)
+        self._tree.column('source', width=110, stretch=False)
 
         # Style treeview
         style = ttk.Style()
@@ -5870,17 +5882,45 @@ class AnimationsPanel(tk.Frame):
             return
 
         self._engine = AnimationEngine(model)
-        anims = self._engine.list_animations()
+        # Phase 5: include animations inherited from the super-model chain
+        # so e.g. a character head model that stores zero clips locally still
+        # shows the parent skeleton's walk/run/idle anims in the UI.
+        # ``list_all_animations`` walks model.supermodel via
+        # SuperModelResolver; if the resolver has no ResourceManager (unit
+        # tests, no game dirs yet) it gracefully degrades to local only.
+        try:
+            anims = self._engine.list_all_animations()
+        except Exception as _e:
+            log.debug(f"list_all_animations failed, falling back: {_e}")
+            anims = self._engine.list_animations()
 
+        # Tag inherited rows so they render in an italic muted colour — makes
+        # the provenance obvious without adding a second column of glyphs.
+        try:
+            self._tree.tag_configure(
+                'inherited',
+                foreground=C.get('text_dim', '#8a8a8a'),
+                font=("Consolas", 8, "italic"),
+            )
+        except Exception:
+            pass
+
+        own_name_l = model.name.lower()
         for a in anims:
-            self._tree.insert('', 'end', iid=a['name'],
-                              values=(
-                                  a['name'],
-                                  f"{a['length']:.3f}",
-                                  str(a['key_count']),
-                                  str(a['node_count']),
-                                  str(a['event_count']),
-                              ))
+            source = a.get('source', model.name)
+            inherited = bool(a.get('inherited', source.lower() != own_name_l))
+            self._tree.insert(
+                '', 'end', iid=a['name'],
+                values=(
+                    a['name'],
+                    f"{a['length']:.3f}",
+                    str(a['key_count']),
+                    str(a['node_count']),
+                    str(a['event_count']),
+                    source,
+                ),
+                tags=('inherited',) if inherited else (),
+            )
 
         count = len(anims)
         total_keys = sum(a['key_count'] for a in anims)

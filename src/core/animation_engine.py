@@ -27,6 +27,232 @@ log = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────
+#  Super-model chain resolver
+# ─────────────────────────────────────────────────────────────────
+#
+# KotOR character / creature / placeable models rarely carry their own
+# animation blocks.  Each model stores a ``supermodel`` resref (e.g.
+# "S_Female02") naming a parent model that contains the shared animation
+# library.  Supermodels can themselves have supermodels, forming a chain:
+#
+#     c_bantha → S_Female02 → S_Female03 → NULL
+#     p_head  → P_BastilaBB → S_Female02 → S_Female03 → NULL
+#
+# Animation lookup is bottom-to-top (first match wins): own animations,
+# then supermodel, then supermodel's supermodel, and so on until NULL.
+#
+# References:
+#   • xoreos              src/graphics/aurora/model.cpp
+#                         Model::getAnimation() / Model::getAnimationScale()
+#   • KotorBlender        io_scene_kotor/scene/model.py (animscale rules)
+#   • Deadly Stream wiki  "Animations are always pulled from the lowest
+#                         (i.e. first) instance in the chain."
+#
+# Scale semantics (xoreos + KotorBlender agree):
+#   * The model's OWN animations are played with scale factor 1.0 — no
+#     animscale multiplication, even if ``model.anim_scale != 1.0``.
+#   * Animations inherited from a supermodel are scaled by the PRODUCT
+#     of ``anim_scale`` values along the chain from the requesting
+#     model down to (not including) the owning model.
+#   * Scaling applies to POSITION-delta keyframes only.  Orientation and
+#     other channels are not multiplied.
+
+
+class SuperModelResolver:
+    """Resolves super-model animation chains for KotOR models.
+
+    Keeps a process-wide cache of loaded super-models to avoid duplicate
+    file I/O (mirroring xoreos' ``ModelCache``).  A single
+    ``ResourceManager`` is configured once — the resolver uses its
+    ``load_model(resref, game)`` API to fetch supermodels on demand.
+    """
+
+    # Class-level cache: lower(resref) → KotorModel | None
+    # ``None`` is stored for known-missing resrefs so repeated lookups are
+    # still O(1).  Tests can invoke ``clear_cache()`` between runs.
+    _cache: Dict[str, Optional[KotorModel]] = {}
+
+    # Configured by ``configure()``.  When None, the resolver still works
+    # for in-memory / pre-loaded models but cannot load chains from disk.
+    _resource_manager: Any = None
+
+    _NULL_REFS = frozenset({'', 'null', 'none'})
+
+    @classmethod
+    def configure(cls, resource_manager: Any) -> None:
+        """Install the ResourceManager used to load supermodel MDL/MDX.
+
+        Safe to call repeatedly; later calls replace the previous manager.
+        """
+        cls._resource_manager = resource_manager
+
+    @classmethod
+    def clear_cache(cls) -> None:
+        """Empty the resolver cache (call from tests / between game installs)."""
+        cls._cache.clear()
+
+    @classmethod
+    def prime_cache(cls, resref: str, model: Optional[KotorModel]) -> None:
+        """Inject a pre-loaded model into the cache (used by tests)."""
+        cls._cache[resref.lower()] = model
+
+    @classmethod
+    def _is_null_ref(cls, resref: Optional[str]) -> bool:
+        if not resref:
+            return True
+        return resref.strip().lower() in cls._NULL_REFS
+
+    @classmethod
+    def load_supermodel(
+        cls,
+        resref: str,
+        game: Optional[str] = None,
+    ) -> Optional[KotorModel]:
+        """Load a supermodel by resref, honouring the cache.
+
+        ``game`` is passed verbatim to ``ResourceManager.load_model`` when
+        set; defaults to 'K1' to match the existing RM default.
+
+        Returns ``None`` when the resref is NULL-like, when no resource
+        manager is configured, or when the model cannot be located.
+        """
+        if cls._is_null_ref(resref):
+            return None
+        key = resref.lower()
+        if key in cls._cache:
+            return cls._cache[key]
+
+        if cls._resource_manager is None:
+            log.debug(
+                "SuperModelResolver: no resource_manager, cannot load %r",
+                resref,
+            )
+            cls._cache[key] = None
+            return None
+
+        try:
+            super_model = cls._resource_manager.load_model(
+                resref, game or 'K1',
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            log.debug(
+                "SuperModelResolver: load_model(%r) raised %s",
+                resref, exc,
+            )
+            super_model = None
+
+        cls._cache[key] = super_model
+        # Proactively pre-load the rest of the chain so later lookups are hot.
+        if super_model is not None and not cls._is_null_ref(super_model.supermodel):
+            cls.load_supermodel(super_model.supermodel, game)
+        return super_model
+
+    @classmethod
+    def resolve_animation(
+        cls,
+        model: KotorModel,
+        anim_name: str,
+        game: Optional[str] = None,
+    ) -> Tuple[Optional[Animation], float]:
+        """Walk the super-model chain to find an animation.
+
+        Returns ``(animation, cumulative_anim_scale)``.  When the
+        animation is defined on ``model`` itself, ``cumulative_anim_scale``
+        is always ``1.0`` (own animations are never scaled).
+
+        When the animation is inherited, the returned scale is the
+        product of ``anim_scale`` values from ``model`` down through each
+        intermediate supermodel, NOT including the owning model's own
+        ``anim_scale`` (the owner animates at its natural rate; the
+        chain scale only accounts for the import-space conversion of
+        every step that delegated the lookup).
+
+        On lookup failure returns ``(None, 1.0)``.
+        """
+        nl = anim_name.lower()
+
+        # 1. Local-model fast path (own animations are never scaled).
+        for a in model.animations:
+            if a.name.lower() == nl:
+                return (a, 1.0)
+
+        # 2. Walk up the supermodel chain.  ``cumulative`` accumulates the
+        #    anim_scale values of every step we had to traverse.
+        cumulative: float = model.anim_scale if model.anim_scale else 1.0
+        super_ref   = model.supermodel
+        visited     = {model.name.lower()}
+
+        while not cls._is_null_ref(super_ref):
+            key = super_ref.lower()
+            if key in visited:
+                log.warning(
+                    "SuperModelResolver: cycle detected at %r (chain=%s)",
+                    super_ref, sorted(visited),
+                )
+                return (None, 1.0)
+            visited.add(key)
+
+            super_model = cls.load_supermodel(super_ref, game)
+            if super_model is None:
+                break
+
+            for a in super_model.animations:
+                if a.name.lower() == nl:
+                    return (a, cumulative)
+
+            # Multiply the next step's scale into the cumulative factor.
+            step_scale = super_model.anim_scale if super_model.anim_scale else 1.0
+            cumulative *= step_scale
+            super_ref = super_model.supermodel
+
+        return (None, 1.0)
+
+    @classmethod
+    def list_all_animations(
+        cls,
+        model: KotorModel,
+        game: Optional[str] = None,
+    ) -> List[Tuple[str, str, float]]:
+        """Return ``[(anim_name, source_model_name, cumulative_scale), …]``
+        for every animation available through the full super-model chain.
+
+        If a name appears on both ``model`` and a supermodel, the model's
+        own definition wins (scale = 1.0, source = model.name).  The
+        returned list is sorted alphabetically by name for stable UI
+        ordering.
+        """
+        entries: Dict[str, Tuple[str, str, float]] = {}
+
+        for a in model.animations:
+            entries[a.name.lower()] = (a.name, model.name, 1.0)
+
+        cumulative: float = model.anim_scale if model.anim_scale else 1.0
+        super_ref   = model.supermodel
+        visited     = {model.name.lower()}
+
+        while not cls._is_null_ref(super_ref):
+            key = super_ref.lower()
+            if key in visited:
+                break
+            visited.add(key)
+
+            super_model = cls.load_supermodel(super_ref, game)
+            if super_model is None:
+                break
+
+            for a in super_model.animations:
+                nl = a.name.lower()
+                if nl not in entries:
+                    entries[nl] = (a.name, super_model.name, cumulative)
+
+            step_scale = super_model.anim_scale if super_model.anim_scale else 1.0
+            cumulative *= step_scale
+            super_ref = super_model.supermodel
+
+        return sorted(entries.values(), key=lambda tup: tup[0].lower())
+
+
+# ─────────────────────────────────────────────────────────────────
 #  Interpolation helpers
 # ─────────────────────────────────────────────────────────────────
 
@@ -267,6 +493,15 @@ class AnimationEngine:
         self._blend_from_time:  float = 0.0   # previous clip's local time at blend start
         # Fired-event tracking so each event fires exactly once per loop
         self._fired_events: set = set()  # indices into current_anim.events
+        # Super-model chain scaling (Phase 5).
+        # Cumulative anim_scale product for the currently-playing animation.
+        # 1.0 when the animation is defined on this model; > 0 otherwise.
+        # Updated by ``_find_anim`` whenever a new animation is resolved.
+        # Multiplied into POSITION-delta keyframe values so inherited
+        # animations from a supermodel are scaled correctly
+        # (matches KotorBlender ``p1 = restloc + animscale * val`` and
+        # xoreos Model::getAnimationScale).
+        self._current_anim_scale: float = 1.0
 
     # ── Playback control ────────────────────────────────────────────────────
 
@@ -580,17 +815,29 @@ class AnimationEngine:
                 # KotOR position keyframes are DELTA OFFSETS added to bind-pose
                 # local position (NOT absolute positions).  Verified against xoreos
                 # (arePositionFramesRelative()=true) and KotorBlender (animnode.py).
-                # NOTE: model.anim_scale (typically 0.971 from the MDL header) is a
-                # NWN→KotOR coordinate-space import factor used by Blender importers,
-                # NOT a runtime playback multiplier.  xoreos does not scale position
-                # keyframes during playback.  Applying 0.971 here shrinks every bone
-                # delta slightly, causing facial geometry (eyes, teeth) to misalign
-                # with the head mesh and breaking talking/blinking animations.
-                # Validate: reject non-finite position delta values
+                #
+                # Super-model chain scaling (Phase 5)
+                # ----------------------------------
+                # ``self._current_anim_scale`` is 1.0 for animations defined
+                # on this model and therefore a true no-op multiply on the
+                # common path.  It is > 0 only when the current animation
+                # was inherited from a supermodel — in that case we apply the
+                # cumulative anim_scale product, matching KotorBlender's
+                #     p1 = restloc + animscale * val
+                # (scene/animnode.py) and xoreos' Model::getAnimationScale()
+                # for chain-inherited animations.  Xoreos *does not* scale
+                # a model's OWN animations, which is exactly why the local
+                # branch of _find_anim sets _current_anim_scale = 1.0.
                 if all(math.isfinite(v) for v in val[:3]):
-                    pos = [pos[0] + val[0],
-                           pos[1] + val[1],
-                           pos[2] + val[2]]
+                    s = self._current_anim_scale
+                    if s == 1.0:
+                        pos = [pos[0] + val[0],
+                               pos[1] + val[1],
+                               pos[2] + val[2]]
+                    else:
+                        pos = [pos[0] + val[0] * s,
+                               pos[1] + val[1] * s,
+                               pos[2] + val[2] * s]
             elif ctype == self.CTRL_ORIENTATION and len(val) >= 4:
                 # KotOR orientation keyframes are ABSOLUTE quaternions (replace bind rot).
                 # Validate and normalize animated rotation.
@@ -653,16 +900,49 @@ class AnimationEngine:
     # ── Helpers ─────────────────────────────────────────────────────────────
 
     def _find_anim(self, name: str) -> Optional[Animation]:
+        """Locate an animation by name, walking the super-model chain if needed.
+
+        Lookup order (matches xoreos + KotorBlender):
+          1. This model's own animations (scale = 1.0).
+          2. Fuzzy alias fall-back for 'usecomp' variants (own animations only).
+          3. SuperModelResolver chain walk (scale = cumulative anim_scale
+             product of every step traversed).
+
+        On success ``self._current_anim_scale`` is updated so that
+        ``_eval_node`` can scale POSITION-delta keyframes appropriately.
+        """
         nl = name.lower()
+        # 1. Local animations — own animations never receive anim_scale (xoreos).
         for a in self.model.animations:
             if a.name.lower() == nl:
+                self._current_anim_scale = 1.0
                 return a
-        # Fuzzy fall-back: 'usecomp' is sometimes stored as 'use_comp' or vice-versa
+        # 2. 'usecomp' alias fall-back (local only).  This must stay ABOVE
+        #    the chain walk so a supermodel with a literal 'usecomp' does
+        #    not shadow a local 'use_comp' on the character model.
         if nl in ('usecomp', 'use_comp', 'use comp'):
             for a in self.model.animations:
                 al = a.name.lower()
                 if al in ('usecomp', 'use_comp', 'use comp'):
+                    self._current_anim_scale = 1.0
                     return a
+        # 3. Super-model chain resolution.
+        game = getattr(self.model, 'game_version', None)
+        try:
+            game_tag = game.value if hasattr(game, 'value') else (
+                str(game) if game else None
+            )
+        except Exception:
+            game_tag = None
+        anim, scale = SuperModelResolver.resolve_animation(
+            self.model, name, game_tag,
+        )
+        if anim is not None:
+            self._current_anim_scale = scale
+            return anim
+        # Not found anywhere — leave scale at 1.0 to avoid poisoning
+        # subsequent lookups with stale state.
+        self._current_anim_scale = 1.0
         return None
 
     # ── Usecomp / composite animation helpers ───────────────────────────────
@@ -778,10 +1058,13 @@ class AnimationEngine:
         return out_anim
 
     def list_animations(self) -> List[Dict[str, Any]]:
-        """Return list of animation info dicts."""
+        """Return list of animation info dicts for this model's OWN animations.
+
+        For the full set including inherited super-model animations use
+        :meth:`list_all_animations`.
+        """
         result = []
         for a in self.model.animations:
-            # Count total keyframes across all nodes
             total_keys = sum(
                 len(c['times'])
                 for n in a.nodes
@@ -795,6 +1078,61 @@ class AnimationEngine:
                 'key_count':  total_keys,
                 'event_count':len(a.events),
                 'anim_root':  a.anim_root,
+                'source':     self.model.name,
+                'inherited':  False,
+                'anim_scale': 1.0,
+            })
+        return result
+
+    def list_all_animations(self) -> List[Dict[str, Any]]:
+        """Return every animation reachable through the super-model chain.
+
+        Equivalent to :meth:`list_animations` but additionally walks
+        ``model.supermodel`` (recursively) via :class:`SuperModelResolver`
+        and includes inherited animations.  Own-model animations always
+        override same-named supermodel ones (first match wins, bottom-up).
+
+        Each entry carries extra bookkeeping fields on top of the shape
+        returned by :meth:`list_animations`:
+
+        ``source``      name of the model that actually stores the clip.
+        ``inherited``   True when ``source`` differs from ``self.model.name``.
+        ``anim_scale``  cumulative anim_scale for POSITION-delta playback;
+                        always 1.0 for own animations.
+        """
+        game = getattr(self.model, 'game_version', None)
+        try:
+            game_tag = game.value if hasattr(game, 'value') else (
+                str(game) if game else None
+            )
+        except Exception:
+            game_tag = None
+
+        entries = SuperModelResolver.list_all_animations(self.model, game_tag)
+        own_name_lower = self.model.name.lower()
+        result: List[Dict[str, Any]] = []
+        for anim_name, source, scale in entries:
+            anim, _resolved_scale = SuperModelResolver.resolve_animation(
+                self.model, anim_name, game_tag,
+            )
+            if anim is None:
+                continue
+            total_keys = sum(
+                len(c['times'])
+                for n in anim.nodes
+                for c in n.controllers
+            )
+            result.append({
+                'name':        anim.name,
+                'length':      anim.length,
+                'trans_time':  anim.transition_time,
+                'node_count':  len(anim.nodes),
+                'key_count':   total_keys,
+                'event_count': len(anim.events),
+                'anim_root':   anim.anim_root,
+                'source':      source,
+                'inherited':   source.lower() != own_name_lower,
+                'anim_scale':  scale,
             })
         return result
 
