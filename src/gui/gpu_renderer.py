@@ -185,6 +185,60 @@ import struct
 import time
 from typing import Dict, List, Optional, Tuple
 
+_GR_GPU_PROBE = os.environ.get('GHOSTRIGGER_VIEWPORT_PROBE', '').strip().lower() in ('1', 'true', 'yes', 'on')
+_GR_GPU_PROBE_SEEN: set = set()
+
+def _gr_gpu_probe(node, wp, wo, is_id_rot: bool, composite_off=None) -> None:
+    """GPU-path counterpart of the CPU probe in viewport.py.
+
+    Fires once per (model_id, node_name) for skin nodes whose name contains
+    'head' when env var GHOSTRIGGER_VIEWPORT_PROBE=1 is set.  Prints the
+    world_transform wp, composite offset (if any), and first-vertex data so
+    we can compare CPU and GPU transforms side by side.
+    """
+    if not _GR_GPU_PROBE:
+        return
+    try:
+        nl = (getattr(node, 'name', '') or '').lower()
+    except Exception:
+        return
+    if not getattr(node, 'is_skin', False) or 'head' not in nl:
+        return
+    key = (id(getattr(node, '_model_ref', None)), nl, id(node))
+    if key in _GR_GPU_PROBE_SEEN:
+        return
+    _GR_GPU_PROBE_SEEN.add(key)
+    import sys as _sys
+    try:
+        verts = getattr(node, 'vertices', []) or []
+        v0 = verts[0] if verts else (0.0, 0.0, 0.0)
+        pos = tuple(round(float(x), 4) for x in getattr(node, 'position', (0,0,0)))
+        wpr = tuple(round(float(x), 4) for x in wp)
+        wor = tuple(round(float(x), 4) for x in wo)
+        v0r = tuple(round(float(x), 4) for x in v0)
+        # Include composite_offset in the expected-world so the probe matches
+        # the actual rendered position after the Bug-C fix in _build_vbo_data.
+        _cox = float(composite_off[0]) if composite_off is not None else 0.0
+        _coy = float(composite_off[1]) if composite_off is not None else 0.0
+        _coz = float(composite_off[2]) if composite_off is not None else 0.0
+        ew = (float(v0[0]) + float(wp[0]) + _cox,
+              float(v0[1]) + float(wp[1]) + _coy,
+              float(v0[2]) + float(wp[2]) + _coz)
+        co = None
+        if composite_off is not None:
+            co = tuple(round(float(x), 4) for x in composite_off)
+        _sys.stderr.write(
+            f"[GR-PROBE GPU-vbo] node={node.name} is_skin=True nvert={len(verts)}\n"
+            f"  node.position       = {pos}\n"
+            f"  world_transform     = wp={wpr}  wo={wor}  is_id_rot={is_id_rot}\n"
+            f"  composite_offset    = {co}\n"
+            f"  raw vertex[0]       = {v0r}\n"
+            f"  expected world[0]   = ({ew[0]:.4f}, {ew[1]:.4f}, {ew[2]:.4f})\n"
+        )
+        _sys.stderr.flush()
+    except Exception:
+        pass
+
 try:
     from core.model_data import KOTOR_BASE_SKELETONS as _KOTOR_BASE_SKELETONS
 except ImportError:
@@ -1403,6 +1457,7 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     uvs_lm = getattr(node, 'uvs_lm', [])
     faces  = getattr(node, 'faces', [])
     face_uvs = getattr(node, 'face_uvs', [])
+    is_skin = bool(getattr(node, 'is_skin', False))
 
     n_verts = len(verts)
     n_faces = len(faces)
@@ -1502,16 +1557,28 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
         pass
     # _node_vs == 2 (AABB_WALK) should never reach VBO building
 
-    # FIX-COMPOSITE-NONSKIN: For non-skin nodes from an accessory head model
-    # (e.g. eyeRA, teethUa in ad_saul), apply the skeleton rebase offset so
-    # they render at the correct position in the body skeleton.
-    # The offset (_composite_nonskin_offset) is pre-computed by _CompositeModel
-    # as: body_head_g_world - head_head_g_local
+    # FIX-COMPOSITE-OFFSET: For nodes that belong to the head-accessory model
+    # inside a _CompositeModel (e.g. head skin, eyeRA, teethUa in ad_saul),
+    # apply the skeleton rebase offset so they render at the correct position
+    # in the body skeleton.  The offset (_composite_nonskin_offset — legacy
+    # name kept for attribute stability) is pre-computed by _CompositeModel
+    # as: body_head_g_world - head_head_g_local, and is only attached to nodes
+    # whose ownership is the head model (body nodes never carry this attr),
+    # so no ownership gate is needed here beyond the None check.
+    #
+    # Historical bug: the previous gate excluded is_skin nodes, which left the
+    # head *skin* mesh at floor level while eyes/teeth floated at head height.
+    # Probe-verified fix: apply offset to all head-accessory nodes including
+    # the skin, so the whole head moves as one with the body headhook.
     _cns_off = getattr(node, '_composite_nonskin_offset', None)
-    if _cns_off is not None and not is_skin:
+    if _cns_off is not None:
         _ox, _oy, _oz = float(_cns_off[0]), float(_cns_off[1]), float(_cns_off[2])
         if abs(_ox) > 1e-6 or abs(_oy) > 1e-6 or abs(_oz) > 1e-6:
             v_arr = v_arr + np.array([_ox, _oy, _oz], dtype=np.float64)
+
+    _gr_gpu_probe(node, world_pos or (0.0, 0.0, 0.0),
+                  world_orient or (0.0, 0.0, 0.0, 1.0),
+                  is_identity_rot, _cns_off)
 
     # ── Normalize normals (prevent shading errors from non-unit normals) ─────
     # After quaternion rotation and world-space transform, normals may drift from
