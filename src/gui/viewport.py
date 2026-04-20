@@ -4207,14 +4207,33 @@ class FrameRenderer:
 
     def _node_world_transform(self, node: 'ModelNode'):
         """
-        Return (wp, wo, is_identity_rot) with per-frame caching.
+        Return (wp, wo, is_identity_rot) for ``node`` with per-frame caching.
 
-        When an animation pose is active, always walk the full parent chain
-        and substitute animated position/rotation for nodes that have pose data.
-        Nodes NOT in the pose retain their bind-pose local transform.
-
-        This is critical: even if a leaf bone has no keyframes, its world
-        transform must be recomputed because its *parent* may have moved.
+        Conventions (audited Phase G1 against xoreos + KotorBlender + KotOR.js)
+        ──────────────────────────────────────────────────────────────────────
+        * Quaternion order is ``[x, y, z, w]`` (see ``_quat_mul`` /
+          ``_quat_rotate`` in ``model_data.py``).
+        * Composition is the standard SRT parent chain:
+              world = world(parent) ⋅ T(local_pos) ⋅ R(local_rot)
+          implemented in quaternion form as
+              wp_child = wp_parent + rotate(wo_parent, local_pos_child)
+              wo_child = wo_parent ⊗ local_rot_child
+          which corresponds to xoreos ``ModelNode::computeTransforms`` and
+          KotOR.js ``OdysseyModel3D.updateMatrixWorld``.
+        * The walk is iterative (root→leaf) with a ``_visited_chain`` cycle
+          guard for malformed MDLs.
+        * When ``self._anim_pose is not None`` the animated position /
+          rotation from ``AnimPose.nodes[name.lower()]`` is substituted for
+          every node that has a pose entry; nodes without keyframes keep
+          their bind-pose local transform.  This is critical — a leaf bone
+          with no keyframes must still re-accumulate if its *parent* moved.
+        * Non-leaf parent rotations go through ``_quat_normalize_bind`` which
+          collapses the NWN X-axis 180° coord-flip quaternion ``[1,0,0,0]``
+          to identity.  Actual animation keyframes don't match that exact
+          pattern, so they're preserved unchanged.
+        * Results are cached in ``self._wt_cache`` keyed by ``id(node)``.
+          The cache is cleared in ``set_animation_pose`` and ``set_model``
+          so pose changes always re-evaluate.
         """
         nid = id(node)
         cached = self._wt_cache.get(nid)
@@ -4648,6 +4667,25 @@ class FrameRenderer:
         verts = node.vertices
         if not verts:
             return []
+
+        # ── Imported WORLD-space geometry: already pre-transformed ────────────
+        # Phase G1 safeguard.  ``vertex_space.py`` classifies every node at
+        # load time.  Standard KotOR MDL nodes are NODE_LOCAL (apply the
+        # parent-chain transform), but externally-imported OBJ/FBX meshes
+        # carry ``_imported=True`` and land in ``VertexSpace.WORLD`` — their
+        # vertices are *already* in model-root space.  Running them through
+        # ``_node_world_transform`` would apply the hierarchy a second time,
+        # producing a double-transform bug.  Short-circuit here and return
+        # the raw tuples unchanged.  This intentionally skips the SKIN LBS
+        # branch too: imported meshes do not carry a KotOR bone_map.
+        vs = getattr(node, 'vertex_space', None)
+        if vs is not None:
+            try:
+                from ..core.vertex_space import VertexSpace
+                if int(vs) == int(VertexSpace.WORLD):
+                    return [tuple(v) for v in verts]
+            except Exception:
+                pass  # defensive: if the enum import fails, fall through
 
         # ── SKIN nodes: LBS path (animated pose) ──────────────────────────────
         if (self._anim_pose is not None and node.is_skin and
@@ -6634,19 +6672,29 @@ class FrameRenderer:
         return best_node
 
     def _iter_mesh_nodes(self):
-        """Yield all mesh and skin nodes in the model (depth-first).
+        """Yield all renderable mesh and skin nodes in the model (depth-first).
 
-        Added visited-set cycle guard.  Cyclic or corrupt MDL
-        node hierarchies (e.g. shared-child sub-graphs) could cause an infinite
-        loop here before this fix, stalling the render thread indefinitely.
-
-        Phase 16 FIX: Yield nodes with is_mesh OR is_skin.  KotOR MDL skin
-        nodes (flag 0x0040) have is_mesh=False but contain renderable geometry
-        (UV-mapped, textured body meshes).  Previously, skin nodes like
-        btBody_front / btBodyback / bthair were silently excluded from the
-        render loop, causing the creature body to be completely invisible
-        (only the bone-proxy helper geometry was rendered, which the
-        deformation-helper filter then removed, leaving an empty frame).
+        Draw-list contract (audited Phase G1)
+        ─────────────────────────────────────
+        * Traversal:     iterative DFS over ``root_node.children`` with a
+                         ``visited`` cycle guard.  Capped implicitly by the
+                         guard to prevent render-thread stalls on malformed
+                         MDLs that contain shared-child sub-graphs.
+        * Filter:        yields nodes with ``is_mesh`` OR ``is_skin``.  The
+                         SKIN flag (0x0040) does NOT set ``is_mesh``; without
+                         including it we would drop every character body
+                         mesh (``bthair`` / ``btBody_front`` / …).
+        * AABB walkmesh nodes (flag 0x0200) are excluded because
+                         ``is_mesh`` is False for them.  See ``vertex_space.py``.
+        * Non-rendered inner-head geometry (eyeRA / teethU / tongue …)
+                         gets a force-render override downstream in
+                         ``_render_one_node`` via ``_INNER_GEO_SUBSTRINGS``,
+                         so we must keep yielding them here even when their
+                         ``render`` flag is False.
+        * Vertices are transformed downstream by
+                         ``_get_world_verts_for_node`` which handles both
+                         the LBS (animated skin) path and the bind / trimesh
+                         path.
         """
         if not self.model or not self.model.root_node:
             return
