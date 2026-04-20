@@ -425,6 +425,13 @@ class ModelNode:
     # Kotor.NET: TrimeshHeader.AveragePoint; xoreos: _averagePoint.
     mesh_average_point: Tuple[float,float,float] = (0.0, 0.0, 0.0)
 
+    # ── Trimesh header opaque fields ──
+    # The 24 bytes at trimesh-header offset +152 are parsed as opaque data by
+    # PyKotor, KotorBlender, and Kotor.NET (formerly mis-labelled in our writer
+    # as ``bm3_name`` + ``bm4_name``).  We preserve the raw bytes captured at
+    # load time so round-trip writing reproduces the source file byte-for-byte.
+    mesh_unknown0: bytes = b"\x00" * 24
+
     # Bounding sphere / box
     bb_min: Tuple[float,float,float] = (0.0, 0.0, 0.0)
     bb_max: Tuple[float,float,float] = (0.0, 0.0, 0.0)
@@ -855,6 +862,7 @@ class ModelNode:
         n.shininess = self.shininess
         # Phase 3.7 fields
         n.mesh_average_point = self.mesh_average_point
+        n.mesh_unknown0      = self.mesh_unknown0
         n.hide_in_holograms  = self.hide_in_holograms
         n.dirt_enabled       = self.dirt_enabled
         n.dirt_texture       = self.dirt_texture
