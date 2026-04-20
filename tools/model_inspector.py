@@ -174,6 +174,48 @@ def inspect_model(model) -> Dict[str, Any]:
         bone_map = list(getattr(n, 'bone_map', []) or [])
         bone_map_floats = list(getattr(n, 'bone_map_floats', []) or [])
 
+        # Skin statistics — aggregated here so ``--bones`` doesn't have to
+        # re-walk ``skin_data`` later.  Cheap to compute (O(verts)) and all
+        # values are pure Python floats so they serialise to JSON cleanly.
+        skin_stats: Optional[Dict[str, Any]] = None
+        if is_skin:
+            skin_data = getattr(n, 'skin_data', None) or []
+            n_verts = len(verts)
+            covered = 0
+            max_inf = 0
+            weight_sum_min: Optional[float] = None
+            weight_sum_max: Optional[float] = None
+            oob_indices: List[Tuple[int, int]] = []  # (vertex, bad_index)
+            palette_size = len(bone_map)
+            for vi, vsd in enumerate(skin_data):
+                influences = list(getattr(vsd, 'influences', []) or [])
+                nonzero = [inf for inf in influences
+                           if float(getattr(inf, 'weight', 0.0) or 0.0) > 0.0]
+                if nonzero:
+                    covered += 1
+                if len(nonzero) > max_inf:
+                    max_inf = len(nonzero)
+                total = sum(float(getattr(inf, 'weight', 0.0) or 0.0)
+                            for inf in nonzero)
+                if nonzero:
+                    weight_sum_min = total if weight_sum_min is None \
+                        else min(weight_sum_min, total)
+                    weight_sum_max = total if weight_sum_max is None \
+                        else max(weight_sum_max, total)
+                for inf in influences:
+                    idx_val = int(getattr(inf, 'bone_index', -1))
+                    if idx_val < 0 or (palette_size and idx_val >= palette_size):
+                        oob_indices.append((vi, idx_val))
+            skin_stats = {
+                'vertex_count': n_verts,
+                'vertices_with_weights': covered,
+                'max_influences_per_vertex': max_inf,
+                'weight_sum_min': weight_sum_min,
+                'weight_sum_max': weight_sum_max,
+                'out_of_range_indices': oob_indices[:10],  # cap for readability
+                'out_of_range_count': len(oob_indices),
+            }
+
         inner_match = is_inner(name)
 
         node_rec: Dict[str, Any] = {
@@ -202,6 +244,7 @@ def inspect_model(model) -> Dict[str, Any]:
             'transparency_hint': int(getattr(n, 'transparency_hint', 0) or 0),
             'bone_map': bone_map,
             'bone_map_floats': bone_map_floats,
+            'skin_stats': skin_stats,
             'is_inner_geometry': inner_match,
         }
         nodes_out.append(node_rec)
@@ -322,6 +365,104 @@ def format_report(report: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def format_bones_section(report: Dict[str, Any]) -> str:
+    """Render the bone-map resolution chain for every skin node.
+
+    Output matches xoreos' ``fillBoneNodeMap`` semantics: for each palette
+    slot ``i`` we print ``bone_map[i] = <name>  →  <world position>``.  An
+    unused slot is rendered as ``(unused)``; an orphaned slot (a name that
+    doesn't resolve to an actual node) is rendered as ``(ORPHAN)`` so it
+    stands out in the diagnostic.
+    """
+    lines: List[str] = []
+    lines.append("BONE-MAP RESOLUTION CHAIN (per skin node)")
+    lines.append("-" * 78)
+
+    # Build a name → world_position lookup from the full node list so we can
+    # annotate each palette slot with the resolved node's world position.
+    name_to_wp: Dict[str, Optional[List[float]]] = {}
+    for rec in report['nodes']:
+        nm = (rec.get('name') or '').lower()
+        if nm:
+            name_to_wp[nm] = rec.get('world_position')
+
+    skin_nodes = [r for r in report['nodes'] if r.get('is_skin')]
+    if not skin_nodes:
+        lines.append("  (model has no skin nodes)")
+        lines.append("=" * 78)
+        return "\n".join(lines)
+
+    for rec in skin_nodes:
+        bm = rec.get('bone_map') or []
+        stats = rec.get('skin_stats') or {}
+        lines.append(
+            f"  SKIN NODE: {rec['name']!r}  "
+            f"(index={rec['index']}, depth={rec['depth']}, "
+            f"flags={rec['flags_hex']})"
+        )
+        if not bm:
+            lines.append("    bone_map is empty — mesh has no skinning data")
+            lines.append("")
+            continue
+
+        for slot, bname in enumerate(bm):
+            if not bname:
+                lines.append(f"    bone_map[{slot:>2d}] = (unused)")
+                continue
+            wp = name_to_wp.get(bname.lower())
+            if wp is None:
+                lines.append(
+                    f"    bone_map[{slot:>2d}] = {bname!r:<24s}  "
+                    f"-> (ORPHAN - no node with this name in tree)"
+                )
+            else:
+                lines.append(
+                    f"    bone_map[{slot:>2d}] = {bname!r:<24s}  "
+                    f"-> world pos {_fmt_vec3(tuple(wp))}"
+                )
+
+        # Per-skin summary: vertex coverage, max influences, weight sum range.
+        if stats:
+            vc = stats.get('vertex_count', 0) or 0
+            covered = stats.get('vertices_with_weights', 0) or 0
+            max_inf = stats.get('max_influences_per_vertex', 0) or 0
+            ws_min = stats.get('weight_sum_min')
+            ws_max = stats.get('weight_sum_max')
+            oob_n = stats.get('out_of_range_count', 0) or 0
+
+            lines.append(
+                f"    -> skin coverage     : {covered}/{vc} vertices "
+                f"have non-zero weights"
+            )
+            lines.append(
+                f"    -> max influences/v  : {max_inf}"
+            )
+            if ws_min is not None and ws_max is not None:
+                lines.append(
+                    f"    -> weight sum range  : "
+                    f"[{ws_min:.4f}, {ws_max:.4f}] "
+                    f"(target 1.0000)"
+                )
+            else:
+                lines.append(
+                    "    -> weight sum range  : n/a (no skinned vertices)"
+                )
+            if oob_n:
+                first = stats.get('out_of_range_indices', [])[:5]
+                lines.append(
+                    f"    -> OUT-OF-RANGE INDICES: {oob_n} vertex influence(s) "
+                    f"point outside palette.  Samples: {first}"
+                )
+            else:
+                lines.append(
+                    "    -> palette bounds     : all indices in range"
+                )
+        lines.append("")
+
+    lines.append("=" * 78)
+    return "\n".join(lines)
+
+
 # ── Model loaders ──────────────────────────────────────────────────────────
 def _load_from_files(mdl_path: str, mdx_path: Optional[str] = None):
     """Parse an MDL (+ optional sibling MDX) from disk."""
@@ -377,6 +518,15 @@ def _build_argparser() -> argparse.ArgumentParser:
                    help='KotOR installation root (required with --resref)')
     p.add_argument('--json', action='store_true',
                    help='Emit JSON instead of the human-readable report')
+    p.add_argument('--bones', action='store_true',
+                   help=('Append a dedicated bone-map resolution section for '
+                         'every skin node (bone_map[i] → node name → world '
+                         'pos, plus coverage / max-influence / weight-sum '
+                         'stats).  Mirrors xoreos fillBoneNodeMap output.'))
+    p.add_argument('--bones-only', action='store_true',
+                   help=('Print ONLY the bone-map section (implies --bones, '
+                         'suppresses the full node-tree dump).  Handy for '
+                         'diffing skinning behaviour across builds.'))
     p.add_argument('--output', '-o',
                    help='Write output to this file instead of stdout')
     p.add_argument('--verbose', '-v', action='store_true',
@@ -415,10 +565,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         log.error("inspect_model failed: %s", exc, exc_info=args.verbose)
         return 4
 
+    want_bones = args.bones or args.bones_only
+
     if args.json:
+        # JSON always carries every field; --bones just means "include the
+        # skin_stats block" which is already part of every skin node record.
         text = json.dumps(report, indent=2, default=str)
+    elif args.bones_only:
+        text = format_bones_section(report)
     else:
         text = format_report(report)
+        if want_bones:
+            text = text + "\n\n" + format_bones_section(report)
 
     if args.output:
         Path(args.output).write_text(text, encoding='utf-8')

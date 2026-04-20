@@ -29,8 +29,18 @@ game_data/
 *.key
 *.mdx
 
-# ── Tests (removed – focus on essential code only) ───────────────────────────
-tests/
+# ── Tests ─────────────────────────────────────────────────────────────────────
+# Contents of /tests/ are ignored by default (ad-hoc prototypes and pyc caches).
+# Add a "!/tests/<name>.py" exception below for any test that should ship with
+# the repo — same pattern as /tools/* / !/tools/model_inspector.py.  Using
+# /tests/* instead of /tests/ so re-inclusion patterns resolve.
+/tests/*
+!/tests/__init__.py
+!/tests/test_skinning_identity_at_t0.py
+!/tests/test_compressed_quat_decode.py
+!/tests/test_bone_map_direction.py
+!/tests/test_live_model_inspect.py
+!/tests/test_reparent_head_nodes.py
 test_assets/
 pytest.ini
 .pytest_cache/
@@ -40,6 +50,7 @@ conftest.py
 audit_output/
 logs/
 Logs/
+build_log.txt
 
 # ── One-off debug / prototype render PNGs at repo root ────────────────────────
 audit_c_*.png

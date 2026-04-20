@@ -482,6 +482,64 @@ def _decompress_dxt5_bytes(data: bytes, w: int, h: int) -> bytearray:
     return result
 
 
+def _ensure_bottom_up(img: 'Image.Image', data: bytes = b'') -> 'Image.Image':
+    """Normalise a TGA-derived image to bottom-up (OpenGL) row order.
+
+    This is a **defensive utility** for the niche case where a caller bypasses
+    Pillow (e.g. a hand-rolled TGA reader) and therefore needs explicit
+    origin-bit inspection.  The default TGA loading path in this module goes
+    through ``PIL.Image.open()``, which internally normalises every TGA
+    variant to top-down regardless of the origin bit — see the
+    ``FIX-TGA-ORIENT`` commentary in ``TextureCache._load_bytes`` — and then
+    flips unconditionally to bottom-up.  For those callers this helper is a
+    no-op.
+
+    TGA origin bits (byte 17, bits 4–5, "image descriptor"):
+
+      bit 5 (``0x20``) : screen origin     1 = top,    0 = bottom
+      bit 4 (``0x10``) : horizontal origin 1 = right,  0 = left   (ignored here)
+
+    Rule applied:
+
+      * ``origin`` bit 5 set → row 0 is at the **top** of the image →
+        image is already top-down as Pillow would produce it, so we flip it
+        to bottom-up to match the renderer's ``tv = (1-v)*h`` convention.
+      * ``origin`` bit 5 clear → row 0 is at the **bottom** → bottom-up
+        already; no flip.
+
+    Parameters
+    ----------
+    img : PIL.Image.Image
+        The RGBA image to (possibly) flip.
+    data : bytes
+        Raw TGA bytes for header inspection.  Must be at least 18 bytes to
+        include the image descriptor field.  If ``data`` is shorter than 18
+        bytes or empty, the image is returned unchanged (safe fall-through).
+
+    Returns
+    -------
+    PIL.Image.Image
+        The input image, optionally flipped to bottom-up.
+
+    Notes
+    -----
+    The helper is **not** wired into the Pillow code path on purpose — doing
+    so would double-flip files with a top origin bit (Pillow already
+    normalised them).  Callers that produce images from raw TGA bytes
+    without Pillow can opt in here explicitly.
+    """
+    if not data or len(data) < 18:
+        return img
+    image_descriptor = data[17]
+    top_origin = bool(image_descriptor & 0x20)
+    if top_origin:
+        try:
+            return img.transpose(Image.FLIP_TOP_BOTTOM)
+        except Exception:
+            return img
+    return img
+
+
 def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
     """Load a KotOR TPC image from raw bytes using pykotor's battle-tested reader.
 
@@ -3239,6 +3297,14 @@ class FrameRenderer:
         # When True the renderer draws an orange "Rig Edit Mode" banner and
         # colours adjustable bone joints orange so the user knows they're live.
         self.rig_edit_mode: bool = False
+        # ── Hologram preview mode (Phase G3, opt-in) ─────────────────────────
+        # When True, _iter_mesh_nodes filters out any node whose parser-set
+        # ``hide_in_holograms`` flag is True (K1+K2 mesh header "hologram_
+        # donotdraw" / "hide_in_hologram").  Default is False so vanilla
+        # rendering is untouched; wire up via ``set_hologram_mode(True)`` from
+        # a UI toggle or an automated screenshot harness that wants to mirror
+        # in-game hologram cutscenes.
+        self.hologram_mode: bool = False
         # Callback invoked after a bone joint is dragged in rig-edit mode:
         #   on_bone_moved(node_name: str, new_pos: tuple)
         self.on_bone_moved = None
@@ -6715,8 +6781,29 @@ class FrameRenderer:
                 continue
             visited.add(nid)
             if n.is_mesh or n.is_skin:
+                # Hologram-mode filter (Phase G3, opt-in).  Nodes whose MDL
+                # mesh header marks them "hologram_donotdraw" / "hide_in_
+                # hologram" are skipped here *only* when hologram_mode is
+                # enabled, preserving default rendering exactly.
+                if self.hologram_mode and getattr(n, 'hide_in_holograms', False):
+                    stack.extend(c for c in reversed(n.children) if c is not None)
+                    continue
                 yield n
             stack.extend(c for c in reversed(n.children) if c is not None)
+
+    def set_hologram_mode(self, enabled: bool) -> None:
+        """Enable or disable the hologram-preview render filter.
+
+        When enabled, ``_iter_mesh_nodes`` drops any node with
+        ``hide_in_holograms == True``.  Intended for UI toggles that want to
+        mirror in-game hologram cutscenes, or for screenshot tools that need
+        parity with the engine's ``holoGram`` camera pass.
+
+        This is a data-only flag change — callers are responsible for
+        scheduling a re-render afterwards (e.g. ``viewport.request_redraw()``
+        or the widget's own refresh hook).
+        """
+        self.hologram_mode = bool(enabled)
 
     # ── Bones ─────────────────────────────────────────────────────────
 

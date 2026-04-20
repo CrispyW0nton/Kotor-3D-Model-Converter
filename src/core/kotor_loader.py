@@ -1211,3 +1211,170 @@ def _apply_bind_pose(model: KotorModel) -> None:
                 # ctype == 128: alpha fallback (xoreos CTRL_ALPHA) — only default
                 if node.alpha == 1.0:
                     node.alpha = float(v0[0])
+
+
+# =============================================================================
+#  reparent_head_nodes — xoreos parity helper (opt-in, not in default path)
+# =============================================================================
+#
+# xoreos' Model_KotOR::reparentHeadNodes() walks the model tree and moves any
+# node named exactly ``head`` or ``tongue`` so it becomes a direct child of
+# the model root.  The rationale in xoreos is explicitly a perf optimisation
+# for the animation system's per-frame node lookup — NOT a geometric fix —
+# and the implementation explicitly preserves each moved node's world-space
+# transform by recomputing its local transform against the new parent.  See
+# ``xoreos/src/graphics/aurora/model_kotor.cpp`` (``reparentHeadNodes``) and
+# ``modelnode.cpp`` (``reparentTo``).
+#
+# GhostRigger's ``ModelNode.world_transform()`` already accumulates the full
+# parent chain, so world positions are identical regardless of tree depth.
+# We therefore do NOT call this from the default load pipeline; calling it
+# would change the tree shape (and thus diffs of ``model_inspector.py``
+# output) without changing rendering.  Callers that want 1:1 xoreos tree
+# topology for e.g. animation-system comparisons can invoke this explicitly
+# after loading:
+#
+#     model = load_model_from_file(mdl)
+#     reparent_head_nodes(model)   # explicit xoreos-parity flattening
+#
+# The function is idempotent — a second call finds the target nodes already
+# parented to root and returns ``0``.
+
+def _iter_nodes_dfs(root: ModelNode):
+    """Yield every node in the subtree rooted at ``root`` (DFS, cycle-safe)."""
+    stack: List[ModelNode] = [root]
+    visited: set = set()
+    while stack:
+        n = stack.pop()
+        if n is None:
+            continue
+        nid = id(n)
+        if nid in visited:
+            continue
+        visited.add(nid)
+        yield n
+        for c in reversed(n.children):
+            stack.append(c)
+
+
+def _find_node_exact(root: ModelNode, target_name: str) -> Optional[ModelNode]:
+    """Return the first node whose name matches ``target_name`` (case-insens.).
+
+    Uses an *exact* lower-case match — we deliberately do not substring match,
+    because in KotOR body MDLs ``head_hook`` / ``headTip`` / ``tongue_hook``
+    are attachment/dummy nodes that are meant to stay where they are in the
+    tree.  Only the geometry-bearing ``head`` / ``tongue`` nodes should be
+    flattened.  This mirrors xoreos' ``Model::getNode("head")`` exact-match
+    behaviour.
+    """
+    needle = target_name.lower()
+    for node in _iter_nodes_dfs(root):
+        if (node.name or '').lower() == needle:
+            return node
+    return None
+
+
+def reparent_head_nodes(model: KotorModel) -> int:
+    """Flatten ``head`` / ``tongue`` under the model root, preserving world xform.
+
+    xoreos parity helper.  **Not** wired into ``load_model_from_file`` /
+    ``load_model_from_bytes`` — this changes the node tree topology, which in
+    turn changes diagnostic output (``model_inspector.py``) even though the
+    rendered image is unchanged.  Only call this when you need strict xoreos
+    tree parity (animation-system cross-validation, reverse-engineering
+    diffs, etc.).
+
+    Algorithm per target node::
+
+        1. Remember its world transform   (wp, wr)  := node.world_transform()
+        2. Detach from old parent         parent.children.remove(node)
+        3. Attach to root                 root.children.append(node);
+                                          node.parent = root
+        4. Rewrite its local transform so (wp', wr') == (wp, wr).
+           Since the new parent is the root (world at identity, rotation
+           identity in our convention), the new local transform *is* the
+           preserved world transform — no per-parent de-rotation needed.
+
+    Parameters
+    ----------
+    model : KotorModel
+        Model to mutate in-place.  ``None`` / missing root are safe no-ops.
+
+    Returns
+    -------
+    int
+        Number of nodes reparented.  ``0`` when neither ``head`` nor
+        ``tongue`` exist, or when both are already direct children of root.
+    """
+    if model is None or model.root_node is None:
+        return 0
+
+    root = model.root_node
+    reparented = 0
+
+    # xoreos reparents exactly these two nodes.  We keep the same set for
+    # parity; if more need flattening later (e.g. 'gogglesmid'), add them
+    # here after confirming against xoreos source.
+    for target_name in ('head', 'tongue'):
+        node = _find_node_exact(root, target_name)
+        if node is None:
+            continue
+        if node is root:
+            # Pathological: a model whose root is literally named "head".
+            # Nothing to do — already at the "top".
+            continue
+        if node.parent is root:
+            # Already a direct child of root — idempotent skip.
+            continue
+
+        # Capture the world transform BEFORE mutating the tree.  After we
+        # move the node its parent chain changes, so a second call would
+        # give a different answer.
+        try:
+            world_pos, world_rot = node.world_transform()
+        except Exception as exc:  # pragma: no cover — defensive only
+            log.warning(
+                "reparent_head_nodes: skipping %r — world_transform failed: %s",
+                target_name, exc,
+            )
+            continue
+
+        # Detach from the old parent.  ``remove`` is O(N) in children but
+        # skeleton fan-out is small (<64 children per node in practice).
+        old_parent = node.parent
+        if old_parent is not None:
+            try:
+                old_parent.children.remove(node)
+            except ValueError:
+                # Child list was mutated mid-flight (shouldn't happen with
+                # a single-threaded loader) — recover by filtering by id.
+                old_parent.children = [
+                    c for c in old_parent.children if c is not node
+                ]
+
+        # Re-parent under root and rewrite the local transform.  Our root
+        # always sits at the world origin with identity rotation (model-local
+        # == world), so the new local is exactly the preserved world.
+        node.parent = root
+        root.children.append(node)
+        node.position = (float(world_pos[0]),
+                         float(world_pos[1]),
+                         float(world_pos[2]))
+        node.rotation = (float(world_rot[0]),
+                         float(world_rot[1]),
+                         float(world_rot[2]),
+                         float(world_rot[3]))
+
+        log.debug(
+            "reparent_head_nodes: moved '%s' from parent '%s' to root; "
+            "world pos preserved at (%+.4f, %+.4f, %+.4f)",
+            target_name,
+            getattr(old_parent, 'name', '?'),
+            world_pos[0], world_pos[1], world_pos[2],
+        )
+        reparented += 1
+
+    if reparented:
+        log.info("reparent_head_nodes: reparented %d node(s) to root",
+                 reparented)
+    return reparented
