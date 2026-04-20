@@ -1418,161 +1418,37 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
         n_arr = np.zeros((n_verts, 3), dtype=np.float64)
         n_arr[:, 2] = 1.0
 
-    # ── Apply world rotation (vectorized) ────────────────────────────────────
-    # BUG-SKIN FIX: KotOR/NWN skin mesh vertices are stored in WORLD SPACE by
-    # the Odyssey engine exporter.  The node's position/rotation fields are the
-    # skeleton's bind-pose root offset — adding them to already-world-space verts
-    # causes double-translation (verts float far from origin).
+    # ── D20-M: Apply world transform using per-node vertex_space contract ────
     #
-    # Correct behaviour (per KotorBlender reader.py + KotOR.js engine notes):
-    #   is_skin=True  → verts are already in world space; do NOT translate or rotate.
-    #   is_skin=False → standard trimesh/dangly in local space → rotate then translate.
+    # Every node's vertex_space is set at load time by compute_vertex_space()
+    # in src/core/vertex_space.py.  This replaces ALL centroid-magnitude
+    # heuristics, _WORLDSPACE_VERT_THRESHOLD, FIX-PROXY-THRESHOLD,
+    # FIX-ACCESSORY-WORLDSPACE, and FIX-CREATURE-WORLDSPACE checks.
     #
-    # BUG-01 FIX (Phase 3.8d): Accessory skin models (non-base supermodel, e.g.
-    # cloaks) store skin vertices in BONE-LOCAL space, not world space.  When the
-    # supermodel is not available (standalone render), the world_orient quaternion
-    # for the node will be non-identity and world_pos non-zero.  Applying the full
-    # world transform brings these verts into model space correctly.
-    # Heuristic: if the model is an accessory (node has a parent chain with a
-    # meaningful non-origin world_pos) AND is a skin node, apply the transform.
-    # We detect this by checking if the node's owning model has a non-base
-    # supermodel (stored on the model as supermodel != NULL/base skeleton).
+    # Rules (matching xoreos model_kotor.cpp, KotOR.js OdysseyModel3D.ts):
+    #   NODE_LOCAL (0): vertices are in node's local coordinate system.
+    #                   Apply full world_transform (rotate + translate).
+    #   WORLD (1):      vertices already in model-root space (imported OBJ/FBX).
+    #                   Do NOT apply world_transform.
+    #   AABB_WALK (2):  walkmesh/collision — not rendered (should never reach here).
     #
-    # BUG-CREATURE FIX (Phase 3.9): Some character/creature models (e.g. C_Bantha)
-    # have non-skin mesh nodes (horns, eyes, hair) whose vertex positions are stored
-    # in WORLD SPACE, not local space.  This happens when the Odyssey exporter writes
-    # already-transformed vertices for rigid attachments on a skeleton.  Heuristic:
-    # if the vertex centroid magnitude (distance from origin) exceeds
-    # _WORLDSPACE_VERT_THRESHOLD (0.5 units), the mesh is already in world space and
-    # we must NOT apply the world_pos/world_orient transform.
-    # Evidence: bantha btRhorn centroid ≈ (0.71, 2.40, 0.88) mag≈2.65 (world-space);
-    #           sithpraet mRobe2_g centroid ≈ (-0.001, 0.033, -0.130) mag≈0.134 (local).
-    # Threshold raised to 2.0 to avoid false-positives on small local-space meshes
-    # whose bounding box sits close to (but above 0.5 from) the origin (e.g. unit-quad
-    # test fixtures with centroid ~0.7 that are clearly in local space).
-    _WORLDSPACE_VERT_THRESHOLD = 1.5  # units; centroid beyond this → verts are world-space
-    # FIX-PROXY-THRESHOLD: Lowered from 2.0 to 1.5 to catch c_bantha 'head_Hair'
-    # (centroid_mag≈1.82) which is a non-skin node stored in world space on the
-    # skeleton.  The bantha's world extents are ~3 units so 1.5 is a safe lower
-    # bound that doesn't create false-positives on typical local-space meshes
-    # (e.g. sithpraet robe nodes have centroid_mag≈0.13, eyeRA has centroid≈0.002).
-    _parent_model = getattr(node, '_model_ref', None)
-    _supermodel   = getattr(_parent_model, 'supermodel', 'NULL') if _parent_model else 'NULL'
-    # FIX-BASE-SKELS: Use the canonical KOTOR_BASE_SKELETONS constant so that
-    # creature models (C_BANTHA, C_DEWBACK, etc.) are never treated as accessories.
-    # Previously this used a hardcoded mini-set ('S_FEMALE02', 'S_MALE02', …) that
-    # was missing all creature bases.  The constant now covers all KotOR 1/2 player
-    # skeletons: S_FEMALE02, S_MALE02, S_FEMALE03, S_MALE03, and all C_* supermodels.
-    _is_accessory_skin = (
-        bool(getattr(node, 'is_skin', False)) and
-        _supermodel.strip().upper() not in _KOTOR_BASE_SKELETONS
-    )
-    is_skin = bool(getattr(node, 'is_skin', False))
+    # References:
+    #   xoreos model_kotor.cpp readMesh/readSkin — raw MDX read, no transform
+    #   KotOR.js OdysseyModelNodeMesh.ts — raw push to array
+    #   KotOR.js OdysseyModel3D.ts NodeMeshBuilder — matrixWorld for GPU
+    #   reone mdlreader.cpp — reads verts as-is, applies node transform in renderer
+    #   KotorBlender parser.py — verts loaded into Blender mesh, Blender applies hierarchy
+    _node_vs = getattr(node, 'vertex_space', 0)  # default NODE_LOCAL
 
-    # FIX-ACCESSORY-WORLDSPACE: Determine whether accessory skin vertices need
-    # translation and which kind:
-    #
-    # A) Small centroid (< threshold): bone-local space.
-    #    Vertices are offset around the bone origin → apply +world_pos directly.
-    #    Examples: comm_b_f tongue (centroid_mag≈0.007), ad_saul eyeRA (≈0.003).
-    #
-    # B) Large centroid (> threshold): vertices stored with baked-in world offset.
-    #    The centroid roughly equals the negative of the bone's world position.
-    #    Correct transform: v_out = v - centroid + world_pos  (center on bone pos).
-    #    Example: ad_saul head (centroid_mag≈1.572, world_pos Z=1.7).
-    #    Raw Z≈-1.57; after centering: Z = -1.57 - (-1.57) + 1.7 = 1.7 (correct).
-    #
-    # C) Non-accessory skin (base skeleton, supermodel=NULL, or large centroid
-    #    that equals world-space already): no transform.
-    #    Examples: n_admrlsaulkar torso (world-space), c_bantha bthair (world-space).
-    #
-    # The centroid_mag threshold must match _WORLDSPACE_VERT_THRESHOLD so that
-    # the same geometry is handled identically in both the render and bounds paths.
-    _skin_centroid_mag = 0.0
-    _skin_centroid = None
-    _accessory_needs_centering = False
-    if is_skin and _is_accessory_skin and len(v_arr) > 0:
-        _skin_centroid = v_arr.mean(axis=0)
-        _skin_centroid_mag = float(np.linalg.norm(_skin_centroid))
-        if _skin_centroid_mag > _WORLDSPACE_VERT_THRESHOLD:
-            # Large centroid: baked-in world offset → centering transform
-            _accessory_needs_centering = True
-            # Leave _is_accessory_skin = True so the branch below fires
-
-    # Detect non-skin nodes whose verts are already in world space
-    _nonskin_worldspace = False
-    if not is_skin and len(v_arr) > 0:
-        _centroid = v_arr.mean(axis=0)
-        _centroid_mag = float(np.linalg.norm(_centroid))
-        if _centroid_mag > _WORLDSPACE_VERT_THRESHOLD:
-            _nonskin_worldspace = True
-
-    if is_skin and not _is_accessory_skin:
-        # Standard standalone skin: vertices already in world/bind-pose space.
-        # The node's position is the BONE PIVOT for animation — do NOT add it.
-        #
-        # FIX-SKIN-NODEROT: Some KotOR exporters (MDLOps, older toolchains) store
-        # skin vertices pre-multiplied by the parent chain but NOT the skin node's
-        # own LOCAL orientation.  The node's local rotation then acts as a
-        # corrective rotation that must be applied to the raw vertex positions.
-        #
-        # Evidence: c_terantanak Torso/feet/Tail carry rotation (0,0,~1,~0) = 180° Z.
-        # Without applying this rotation the torso shoulder verts land at
-        # Y ≈ [-0.88,-0.25] while RArm inner verts are at Y ≈ [0.25,0.76] —
-        # a Y-sign flip that makes the seam appear disconnected (confirmed by
-        # vertex-space junction analysis: Y-overlap = 0.0 before fix, 0.51 after).
-        # After the fix both ranges share Y ≈ [0.25,0.88] — fully connected.
-        #
-        # Apply ONLY the node's LOCAL rotation (not the full world_orient which
-        # includes the parent chain) to avoid double-applying the parent transform.
-        # NEVER add the node's position/wp — that is the bone pivot, not an offset.
-        #
-        # References: KotorBlender reader.py (line 241: from_root accumulates
-        # parent chain; verts loaded as-is into Blender mesh at line 240);
-        # KotOR.js OdysseyModel3D.ts (SkinnedMesh with no JS pre-transform);
-        # mdledit binaryread.cpp (line 429: transforms computed separately from verts).
-        _local_rot = getattr(node, 'rotation', (0.0, 0.0, 0.0, 1.0))
-        _lrx, _lry, _lrz, _lrw = _local_rot
-        _lr_len = (_lrx*_lrx + _lry*_lry + _lrz*_lrz + _lrw*_lrw) ** 0.5
-        if _lr_len > 1e-9:
-            _lrx /= _lr_len; _lry /= _lr_len; _lrz /= _lr_len; _lrw /= _lr_len
-        _local_is_identity = (abs(_lrw) > 0.9999 and abs(_lrx) < 1e-4 and
-                              abs(_lry) < 1e-4 and abs(_lrz) < 1e-4)
-        if not _local_is_identity:
-            # Apply ONLY the local rotation — no translation.
-            _local_rot_q = np.array([_lrx, _lry, _lrz, _lrw], dtype=np.float64)
-            v_arr = _quat_rotate_batch(_local_rot_q, v_arr)
-            n_arr = _quat_rotate_batch(_local_rot_q, n_arr)
-        # Identity rotation → vertices already in world/bind-pose space; no-op.
-    elif is_skin and _is_accessory_skin and _accessory_needs_centering:
-        # Accessory skin with large centroid: vertices have a baked-in offset equal
-        # to the negative of the bone's world position.  Apply centering transform:
-        # v_out = v - centroid + world_pos  → places mesh centre at world_pos.
-        # Example: ad_saul head (centroid≈-1.57, world_pos_z=1.7) → Z≈1.7 ± 0.13.
-        if not is_identity_rot:
-            v_arr = _quat_rotate_batch(wo, v_arr)
-            n_arr = _quat_rotate_batch(wo, n_arr)
-        if _skin_centroid is not None:
-            v_arr = v_arr - _skin_centroid + wp
-        elif not is_identity_pos:
-            v_arr = v_arr + wp
-    elif is_skin and _is_accessory_skin:
-        # Accessory skin with small centroid: bone-local space → apply +world_pos.
+    if _node_vs == 0:  # NODE_LOCAL — apply full world transform (single application)
         if not is_identity_rot:
             v_arr = _quat_rotate_batch(wo, v_arr)
             n_arr = _quat_rotate_batch(wo, n_arr)
         if not is_identity_pos:
             v_arr = v_arr + wp
-    elif _nonskin_worldspace:
-        # Non-skin rigid attachment with verts already in world space (e.g. creature
-        # horns, eyes, hair on a skeleton).  Do NOT apply world transform.
+    elif _node_vs == 1:  # WORLD — already in world space, skip transform
         pass
-    else:
-        if not is_identity_rot:
-            v_arr = _quat_rotate_batch(wo, v_arr)
-            n_arr = _quat_rotate_batch(wo, n_arr)
-        if not is_identity_pos:
-            v_arr = v_arr + wp
+    # _node_vs == 2 (AABB_WALK) should never reach VBO building
 
     # FIX-COMPOSITE-NONSKIN: For non-skin nodes from an accessory head model
     # (e.g. eyeRA, teethUa in ad_saul), apply the skeleton rebase offset so
@@ -3581,38 +3457,22 @@ class GpuRenderer:
 
 def _compute_model_bounds(model) -> dict:
     """
-    Walk all renderable mesh nodes and return the world-space AABB of the model,
-    applying the same world-transform logic as _build_vbo_data so the bounds
-    reflect the actual rendered geometry (not just the raw MDL pivot data).
+    D20-M: Walk all renderable mesh nodes and return the world-space AABB,
+    using the per-node vertex_space contract (same as _build_vbo_data).
 
     Returns dict with keys: min_x, max_x, min_y, max_y, min_z, max_z,
     center_x/y/z, extent_x/y/z, max_extent, radius.
     Falls back to the model's stored bb_min/bb_max if no vertex data is found.
+
+    No centroid heuristics, no _WORLDSPACE_THRESHOLD, no accessory detection.
+    References:
+      xoreos model_kotor.cpp readMesh — verts are node-local
+      KotOR.js OdysseyModel3D.ts      — matrixWorld for GPU transform
     """
-    _UV_EXTREME              = 3.0
-    _WORLDSPACE_THRESHOLD    = 1.5   # Must match _WORLDSPACE_VERT_THRESHOLD in _build_vbo_data
+    _UV_EXTREME = 3.0
 
-    # Determine if this is an accessory-skin model (head replacement, robe overlay, etc.)
-    # Accessory skin models store vertices in bone-local space: the skin mesh
-    # centroid is NOT near zero (it's offset to the bone attachment point), so a
-    # naive centroid-magnitude check misclassifies them as world-space.
-    # Use the shared KOTOR_BASE_SKELETONS constant (imported from core.model_data)
-    # to keep this consistent with viewport.py and model_data.py.
-    _BASE_SKELS = _KOTOR_BASE_SKELETONS
-    _parent_supermodel = ''
-    try:
-        _parent_supermodel = (getattr(model, 'supermodel', '') or '').strip().upper()
-    except Exception:
-        pass
-    # An accessory model has a non-NULL, non-base-skeleton supermodel AND its
-    # skin vertices are bone-local (they need the world_pos translation to reach
-    # their correct world position).
-    _is_accessory = (_parent_supermodel not in _BASE_SKELS)
-
-    # FIX-BOUNDS-MODULE: Detect module/area/tile models so that bounds computation
-    # does NOT exclude nodes with large tiled UVs (which are real geometry).
+    # Detect module/area/tile models for UV-filtering exemption
     _bounds_model_cls  = (str(getattr(model, 'classification', 'character') or 'character')).lower()
-    # FIX-MODEL-TYPE-ZERO: same fix as _gpu_model_type — don't treat 0 as falsy
     _bounds_model_type_raw = getattr(model, 'model_type', None)
     _bounds_model_type = int(_bounds_model_type_raw) if _bounds_model_type_raw is not None else 4
     _bounds_is_module  = (_bounds_model_cls in ('effect', 'tile', 'other') or
@@ -3631,12 +3491,10 @@ def _compute_model_bounds(model) -> dict:
         has_uvs = bool(uvs)
 
         # Skip deformation-helper nodes (same rules as _is_deform_helper)
-        # Module/area models: skip the no-UV check (MDX-sourced UVs may be absent)
         if not has_uvs and not _bounds_is_module:
             continue
         if node.name.lower().endswith(('_g', '_g0', '_dum')):
             continue
-        # Extreme UV check: skip for module/area models (legitimately large tiling UVs)
         if not _bounds_is_module:
             extreme = False
             for uv in uvs[:32]:
@@ -3652,67 +3510,31 @@ def _compute_model_bounds(model) -> dict:
         except Exception:
             continue
 
-        is_skin = bool(getattr(node, 'is_skin', False))
+        # D20-M: Use vertex_space contract — no centroid checks
+        _node_vs = getattr(node, 'vertex_space', 0)  # default NODE_LOCAL
 
-        # Determine the model that owns this node (for _CompositeModel support)
-        _node_model = getattr(node, '_model_ref', model)
-        _node_supermodel = ''
-        try:
-            _node_supermodel = (getattr(_node_model, 'supermodel', '') or '').strip().upper()
-        except Exception:
+        if _node_vs == 0:  # NODE_LOCAL — apply full world transform
+            try:
+                wt = node.world_transform()
+                wp = np.array(wt[0], dtype=np.float64)
+                wo = np.array(wt[1], dtype=np.float64)
+                qlen = np.linalg.norm(wo)
+                if qlen > 1e-9:
+                    wo = wo / qlen
+                is_id_rot = (abs(wo[3]) > 0.9999 and
+                             abs(wo[0]) < 1e-6 and
+                             abs(wo[1]) < 1e-6 and
+                             abs(wo[2]) < 1e-6)
+                if not is_id_rot:
+                    v_arr = _quat_rotate_batch(wo, v_arr)
+                v_arr = v_arr + wp
+            except Exception:
+                pass
+        elif _node_vs == 1:  # WORLD — already in world space, use as-is
             pass
-        _node_is_accessory = (_node_supermodel not in _BASE_SKELS)
-
-        if is_skin:
-            centroid_mag = float(np.linalg.norm(v_arr.mean(axis=0)))
-            if _node_is_accessory:
-                # FIX-ACCESSORY-BOUNDS: Apply the same centering/translation logic
-                # as _build_vbo_data to place skin vertices at their correct world
-                # position for bounding-box calculation.
-                try:
-                    wt = node.world_transform()
-                    wp = _np.array(wt[0], dtype=_np.float64)
-                    wo = _np.array(wt[1], dtype=_np.float64)
-                    qlen = _np.linalg.norm(wo)
-                    if qlen > 1e-9:
-                        wo = wo / qlen
-                    is_id_rot = (abs(wo[3]) > 0.9999 and
-                                 abs(wo[0]) < 1e-6 and
-                                 abs(wo[1]) < 1e-6 and
-                                 abs(wo[2]) < 1e-6)
-                    if not is_id_rot:
-                        v_arr = _quat_rotate_batch(wo, v_arr)
-                    if centroid_mag > _WORLDSPACE_THRESHOLD:
-                        # Large centroid: centering transform (v - centroid + wp)
-                        _c = v_arr.mean(axis=0)
-                        v_arr = v_arr - _c + wp
-                    else:
-                        # Small centroid: bone-local, simple +wp translation
-                        v_arr = v_arr + wp
-                except Exception:
-                    pass
-            # else: base-skeleton skin vertices are already in world space → no transform
-        else:
-            centroid_mag = float(np.linalg.norm(v_arr.mean(axis=0)))
-            if centroid_mag <= _WORLDSPACE_THRESHOLD:
-                # Local-space node: translate by world_pos
-                try:
-                    wt = node.world_transform()
-                    wp = np.array(wt[0], dtype=np.float64)
-                    wo = np.array(wt[1], dtype=np.float64)
-                    qlen = np.linalg.norm(wo)
-                    if qlen > 1e-9:
-                        wo = wo / qlen
-                    is_id_rot = (abs(wo[3]) > 0.9999 and
-                                 abs(wo[0]) < 1e-6 and
-                                 abs(wo[1]) < 1e-6 and
-                                 abs(wo[2]) < 1e-6)
-                    if not is_id_rot:
-                        v_arr = _quat_rotate_batch(wo, v_arr)
-                    v_arr = v_arr + wp
-                except Exception:
-                    pass
-            # else: world-space non-skin – use as-is
+        # _node_vs == 2 (AABB_WALK) — skip walkmesh
+        elif _node_vs == 2:
+            continue
 
         all_pts.append(v_arr)
 
