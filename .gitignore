@@ -117,9 +117,13 @@ devlog/
 scripts/
 !/scripts/
 !/scripts/generate_manifest.py
+!/scripts/full_scan.py
+!/scripts/analyze_scan.py
 exports/
 !/exports/
 !/exports/scan_manifest.json
+!/exports/full_scan_results.json
+!/exports/failure_analysis.json
 audit_deep.py
 audit_exhaustive.py
 _patch_viewport.py
