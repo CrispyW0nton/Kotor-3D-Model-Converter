@@ -116,6 +116,11 @@ devlog/
 /tools/*
 !/tools/model_inspector.py
 scripts/
+!/scripts/
+!/scripts/generate_manifest.py
+exports/
+!/exports/
+!/exports/scan_manifest.json
 audit_deep.py
 audit_exhaustive.py
 _patch_viewport.py
