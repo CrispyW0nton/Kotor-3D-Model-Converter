@@ -1,7 +1,8 @@
-"""Full MCP-driven scan over all manifest models (no pytest collection overhead).
+"""Tiered MCP-driven model scan (no pytest collection overhead).
 
-Heavy module/layout models (*m* prefixes, e.g. M01aa_01a) can take multiple minutes each
-(~4+ minutes for pipeline compare alone); long gaps between progress lines are normal.
+The default fast tier fully validates non-module models. Module/layout models
+(*m* prefixes, e.g. M01aa_01a) use a separate lightweight load-and-node-count
+tier because full per-node comparison can take several minutes per model.
 """
 
 from __future__ import annotations
@@ -9,7 +10,9 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import multiprocessing
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -38,9 +41,15 @@ os.environ.setdefault(
 
 
 MANIFEST_PATH = ROOT / "exports" / "scan_manifest.json"
-RESULTS_PATH = ROOT / "exports" / "full_scan_results.json"
+LEGACY_RESULTS_PATH = ROOT / "exports" / "full_scan_results.json"
+RESULTS_BY_TIER = {
+    "fast": ROOT / "exports" / "full_scan_results_fast.json",
+    "modules": ROOT / "exports" / "full_scan_results_modules.json",
+    "full": ROOT / "exports" / "full_scan_results.json",
+}
 FLUSH_INTERVAL = 100
 PROGRESS_INTERVAL = 50
+MODULE_AREA_RE = re.compile(r"^\d{3}[a-z]", re.IGNORECASE)
 
 
 def category_match(resref: str, cat: str) -> bool:
@@ -72,15 +81,45 @@ def load_manifest_pairs(game: str, category: str) -> list[tuple[str, str]]:
     return pairs
 
 
-def load_done_keys(path: Path) -> set[str]:
+def tier_match(resref: str, tier: str) -> bool:
+    is_module = is_module_geometry_resref(resref)
+    if tier == "fast":
+        return not is_module
+    if tier == "modules":
+        return is_module
+    return True
+
+
+def is_module_geometry_resref(resref: str) -> bool:
+    rl = resref.lower()
+    return rl.startswith("m") or bool(MODULE_AREA_RE.match(rl))
+
+
+def result_path_for_tier(tier: str) -> Path:
+    return RESULTS_BY_TIER[tier]
+
+
+def load_results(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
-        return set()
+        return []
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        return list(json.loads(path.read_text(encoding="utf-8")).get("results", []))
     except json.JSONDecodeError:
-        return set()
+        return []
+
+
+def normalize_seed_row(row: dict[str, Any], tier: str) -> dict[str, Any]:
+    seeded = dict(row)
+    if "validation_mode" not in seeded:
+        # Legacy full_scan_results.json rows came from the original full comparison,
+        # even if they are now routed into the modules tier for result-file grouping.
+        seeded["validation_mode"] = "full_compare"
+    return seeded
+
+
+def load_done_keys(path: Path) -> set[str]:
     keys: set[str] = set()
-    for row in data.get("results", []):
+    for row in load_results(path):
         g = row.get("game", "")
         r = row.get("resref", "")
         if g and r:
@@ -88,16 +127,16 @@ def load_done_keys(path: Path) -> set[str]:
     return keys
 
 
-def save_results(payload: dict[str, Any]) -> None:
-    RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    RESULTS_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+def save_results(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
-def run_one_scan(
+def run_full_scan_direct(
     game: str,
     resref: str,
-    _timeout_s: float,
     ghostrigger_tools: Any,
+    validation_mode: str,
 ) -> dict[str, Any]:
     t0 = time.perf_counter()
     discrepancies: list[Any] = []
@@ -111,9 +150,7 @@ def run_one_scan(
     node_count_pk = None
     node_count_gr = None
 
-    def work() -> None:
-        nonlocal pipeline_match, texture_status, skinning_status, has_skin, discrepancies
-        nonlocal missing_nodes, extra_nodes, node_count_pk, node_count_gr
+    try:
         cmp_ = ghostrigger_tools.compare_model_pipelines(game, resref)
         pipeline_match = bool(cmp_.get("match"))
         discrepancies = list(cmp_.get("discrepancies", []))
@@ -135,26 +172,20 @@ def run_one_scan(
         has_skin = len(nodes) > 0
         if not has_skin:
             skinning_status = "OK"
-            return
-        oob = sum(int(n.get("out_of_range_indices", 0) or 0) for n in nodes)
-        bad_weight = False
-        for n in nodes:
-            wmin, wmax = n.get("weight_sum_range") or [0.0, 0.0]
-            if wmin < 0.99 or wmax > 1.01:
-                bad_weight = True
-                break
-        if oob > 0:
-            skinning_status = "OOB"
-        elif bad_weight:
-            skinning_status = "WEIGHT"
         else:
-            skinning_status = "OK"
-
-    # Run synchronously on the main thread. A ThreadPoolExecutor + future.result(timeout=...)
-    # deadlock was observed mid-scan (~model 451) alongside PyKotor/GhostRigger loaders: the
-    # worker never completed and the timeout never fired. Hard timeouts need a subprocess/worker.
-    try:
-        work()
+            oob = sum(int(n.get("out_of_range_indices", 0) or 0) for n in nodes)
+            bad_weight = False
+            for n in nodes:
+                wmin, wmax = n.get("weight_sum_range") or [0.0, 0.0]
+                if wmin < 0.99 or wmax > 1.01:
+                    bad_weight = True
+                    break
+            if oob > 0:
+                skinning_status = "OOB"
+            elif bad_weight:
+                skinning_status = "WEIGHT"
+            else:
+                skinning_status = "OK"
     except Exception as exc:  # noqa: BLE001
         errors.append(f"{type(exc).__name__}: {exc}")
 
@@ -163,6 +194,7 @@ def run_one_scan(
     return {
         "game": game,
         "resref": resref,
+        "validation_mode": validation_mode,
         "pipeline_match": pipeline_match,
         "texture_status": texture_status,
         "skinning_status": skinning_status,
@@ -175,6 +207,123 @@ def run_one_scan(
         "errors": errors,
         "duration_ms": duration_ms,
     }
+
+
+def run_module_scan_direct(
+    game: str,
+    resref: str,
+    ghostrigger_tools: Any,
+) -> dict[str, Any]:
+    t0 = time.perf_counter()
+    errors: list[str] = []
+    discrepancies: list[Any] = []
+    pipeline_match = False
+    has_skin = False
+    node_count_pk = None
+    node_count_gr = None
+
+    try:
+        raw = ghostrigger_tools.inspect_mdl(game, resref)
+        gr = ghostrigger_tools.inspect_mdl_ghostrigger(game, resref)
+        node_count_pk = raw.get("node_count")
+        node_count_gr = gr.get("node_count")
+        has_skin = bool(gr.get("skin_nodes"))
+        pipeline_match = node_count_pk == node_count_gr
+        if not pipeline_match:
+            discrepancies.append(
+                {
+                    "field": "node_count",
+                    "pykotor": node_count_pk,
+                    "ghostrigger": node_count_gr,
+                },
+            )
+    except Exception as exc:  # noqa: BLE001
+        errors.append(f"{type(exc).__name__}: {exc}")
+
+    duration_ms = int((time.perf_counter() - t0) * 1000)
+    return {
+        "game": game,
+        "resref": resref,
+        "validation_mode": "module_light",
+        "pipeline_match": pipeline_match,
+        "texture_status": "SKIP" if not errors else "ERROR",
+        "skinning_status": "SKIP" if not errors else "ERROR",
+        "has_skin": has_skin,
+        "node_count_pykotor": node_count_pk,
+        "node_count_ghostrigger": node_count_gr,
+        "missing_in_ghostrigger": [],
+        "extra_in_ghostrigger": [],
+        "discrepancies": discrepancies,
+        "errors": errors,
+        "duration_ms": duration_ms,
+    }
+
+
+def run_one_scan_direct(game: str, resref: str, tier: str, ghostrigger_tools: Any) -> dict[str, Any]:
+    if tier == "modules":
+        return run_module_scan_direct(game, resref, ghostrigger_tools)
+    return run_full_scan_direct(game, resref, ghostrigger_tools, "full_compare")
+
+
+def timeout_row(game: str, resref: str, tier: str, timeout_s: float, message: str) -> dict[str, Any]:
+    return {
+        "game": game,
+        "resref": resref,
+        "validation_mode": "module_light" if tier == "modules" else "full_compare",
+        "pipeline_match": False,
+        "texture_status": "ERROR",
+        "skinning_status": "ERROR",
+        "has_skin": False,
+        "node_count_pykotor": None,
+        "node_count_ghostrigger": None,
+        "missing_in_ghostrigger": [],
+        "extra_in_ghostrigger": [],
+        "discrepancies": [],
+        "errors": [message],
+        "duration_ms": int(timeout_s * 1000),
+        "timed_out": True,
+    }
+
+
+def _scan_one_model_worker(game: str, resref: str, tier: str, result_queue: Any) -> None:
+    logging.basicConfig(level=logging.WARNING, force=True)
+    logging.getLogger("src").setLevel(logging.WARNING)
+    logging.getLogger("pykotor").setLevel(logging.WARNING)
+    try:
+        from kotormcp.tools import ghostrigger_tools as grt_mod
+
+        result_queue.put(run_one_scan_direct(game, resref, tier, grt_mod))
+    except Exception as exc:  # noqa: BLE001
+        result_queue.put(timeout_row(game, resref, tier, 0.0, f"{type(exc).__name__}: {exc}"))
+
+
+def run_one_scan(
+    game: str,
+    resref: str,
+    tier: str,
+    timeout_s: float,
+    ghostrigger_tools: Any,
+) -> dict[str, Any]:
+    # Non-module fast-tier models reuse the current process so KotorMCP/PyKotor caches
+    # stay warm. Full/module tiers use subprocess isolation because module geometry can
+    # run for minutes or hang in native/resource loading paths.
+    if tier == "fast":
+        return run_one_scan_direct(game, resref, tier, ghostrigger_tools)
+
+    result_queue: multiprocessing.Queue[Any] = multiprocessing.Queue()
+    proc = multiprocessing.Process(
+        target=_scan_one_model_worker,
+        args=(game, resref, tier, result_queue),
+    )
+    proc.start()
+    proc.join(timeout_s)
+    if proc.is_alive():
+        proc.terminate()
+        proc.join(5)
+        return timeout_row(game, resref, tier, timeout_s, f"TIMEOUT after {timeout_s:g}s")
+    if result_queue.empty():
+        return timeout_row(game, resref, tier, timeout_s, "Worker produced no result")
+    return result_queue.get()
 
 
 def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
@@ -191,11 +340,17 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
     tex_miss = sum(1 for r in results if r.get("texture_status") == "MISSING")
     tex_err = sum(1 for r in results if r.get("texture_status") == "ERROR")
 
-    skin_models = [r for r in results if r.get("has_skin")]
+    skin_models = [
+        r
+        for r in results
+        if r.get("has_skin") and r.get("skinning_status") != "SKIP"
+    ]
     skin_y = len(skin_models)
     skin_ok = sum(1 for r in skin_models if r.get("skinning_status") == "OK")
     skin_oob = sum(1 for r in skin_models if r.get("skinning_status") == "OOB")
     skin_wt = sum(1 for r in skin_models if r.get("skinning_status") == "WEIGHT")
+    full_validated = sum(1 for r in results if r.get("validation_mode") == "full_compare")
+    module_validated = sum(1 for r in results if r.get("validation_mode") == "module_light")
 
     return {
         "total": total,
@@ -209,6 +364,8 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
         "skinning_ok": skin_ok,
         "skinning_oob": skin_oob,
         "skinning_weight": skin_wt,
+        "full_validated": full_validated,
+        "module_light_validated": module_validated,
     }
 
 
@@ -217,8 +374,8 @@ def print_summary_table(s: dict[str, Any]) -> None:
     pm = s["pipeline_match"]
     pmm = s["pipeline_mismatch"]
     pe = s["pipeline_error"]
-    dash = "\u2500" * 43
-    dbl = "\u2550" * 43
+    dash = "-" * 43
+    dbl = "=" * 43
     date_s = time.strftime("%Y-%m-%d")
 
     print()
@@ -236,6 +393,9 @@ def print_summary_table(s: dict[str, Any]) -> None:
     print(f"    Texture MISSING:  {s['texture_missing']:,}")
     print(f"    Texture ERROR:    {s['texture_error']:,}")
     print(f"    {dash}")
+    print(f"    Full-compare models: {s.get('full_validated', 0):,}")
+    print(f"    Module-light models: {s.get('module_light_validated', 0):,}")
+    print(f"    {dash}")
     sy = max(s["skin_models"], 1)
     print(
         f"    Skinning OK:      {s['skinning_ok']:,} "
@@ -248,8 +408,10 @@ def print_summary_table(s: dict[str, Any]) -> None:
 
 
 def main() -> None:
+    multiprocessing.freeze_support()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--game", choices=("k1", "k2", "all"), default="all")
+    parser.add_argument("--tier", choices=("fast", "modules", "full"), default="fast")
     parser.add_argument(
         "--category",
         choices=("creatures", "players", "npcs", "modules", "all"),
@@ -264,8 +426,8 @@ def main() -> None:
     parser.add_argument(
         "--timeout",
         type=float,
-        default=30.0,
-        help="Hard per-model timeout (disabled; loaders run synchronously - use Ctrl+C)",
+        default=60.0,
+        help="Hard per-model timeout in seconds for isolated full/modules scans",
     )
     parser.add_argument(
         "--max-models",
@@ -282,22 +444,33 @@ def main() -> None:
 
     from kotormcp.tools import ghostrigger_tools as grt_mod
 
-    pairs = load_manifest_pairs(args.game, args.category)
+    results_path = result_path_for_tier(args.tier)
+    pairs = [
+        (g, r)
+        for g, r in load_manifest_pairs(args.game, args.category)
+        if tier_match(r, args.tier)
+    ]
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     manifest_total = int(manifest.get("total", len(pairs)))
 
     done: set[str] = set()
     existing_results: list[dict[str, Any]] = []
-    if args.resume and RESULTS_PATH.exists():
-        done = load_done_keys(RESULTS_PATH)
-        try:
-            existing_results = list(
-                json.loads(RESULTS_PATH.read_text(encoding="utf-8")).get("results", []),
-            )
-        except json.JSONDecodeError:
-            existing_results = []
-    elif RESULTS_PATH.exists():
-        RESULTS_PATH.unlink()
+    if args.resume:
+        if results_path.exists():
+            existing_results = [
+                normalize_seed_row(r, args.tier)
+                for r in load_results(results_path)
+                if tier_match(str(r.get("resref", "")), args.tier)
+            ]
+        elif LEGACY_RESULTS_PATH.exists() and results_path != LEGACY_RESULTS_PATH:
+            existing_results = [
+                normalize_seed_row(r, args.tier)
+                for r in load_results(LEGACY_RESULTS_PATH)
+                if tier_match(str(r.get("resref", "")), args.tier)
+            ]
+        done = {f"{r.get('game')}:{r.get('resref')}".lower() for r in existing_results}
+    elif results_path.exists():
+        results_path.unlink()
 
     to_run = [(g, r) for g, r in pairs if f"{g}:{r}".lower() not in done]
     if args.max_models > 0:
@@ -310,9 +483,17 @@ def main() -> None:
         "filtered_total": len(pairs),
         "filter_game": args.game,
         "filter_category": args.category,
+        "tier": args.tier,
         "resume": args.resume,
         "results": existing_results[:] if args.resume else [],
     }
+    if args.resume and existing_results:
+        payload["summary"] = summarize(payload["results"])
+        if not results_path.exists():
+            payload["seeded_from"] = str(LEGACY_RESULTS_PATH)
+        else:
+            payload["pruned_to_current_tier"] = True
+        save_results(results_path, payload)
 
     n_total = len(pairs)
     n_done_before = len(done)
@@ -320,10 +501,9 @@ def main() -> None:
 
     for game, resref in to_run:
         processed_this_run += 1
-        rl = resref.lower()
-        if rl.startswith("m"):
+        if args.tier == "modules":
             print(
-                f"[module] Starting {game}:{resref} (large levels can take several minutes)...",
+                f"[module] Starting {game}:{resref} (lightweight load + node count)...",
                 flush=True,
             )
         if args.diag:
@@ -331,7 +511,7 @@ def main() -> None:
                 f">> start {processed_this_run}/{len(to_run)} {game}:{resref}",
                 flush=True,
             )
-        row = run_one_scan(game, resref, args.timeout, grt_mod)
+        row = run_one_scan(game, resref, args.tier, args.timeout, grt_mod)
         payload["results"].append(row)
 
         pipe_label = (
@@ -351,10 +531,13 @@ def main() -> None:
         if processed_this_run % FLUSH_INTERVAL == 0:
             payload["summary"] = summarize(payload["results"])
             payload["last_resref"] = f"{game}:{resref}"
-            save_results(payload)
+            save_results(results_path, payload)
 
     payload["summary"] = summarize(payload["results"])
-    save_results(payload)
+    if payload["results"]:
+        last = payload["results"][-1]
+        payload["last_resref"] = f"{last.get('game')}:{last.get('resref')}"
+    save_results(results_path, payload)
     print_summary_table(payload["summary"])
 
 

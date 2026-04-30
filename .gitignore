@@ -123,6 +123,8 @@ exports/
 !/exports/
 !/exports/scan_manifest.json
 !/exports/full_scan_results.json
+!/exports/full_scan_results_fast.json
+!/exports/full_scan_results_modules.json
 !/exports/failure_analysis.json
 audit_deep.py
 audit_exhaustive.py

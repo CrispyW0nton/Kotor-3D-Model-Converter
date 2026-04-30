@@ -1,0 +1,3020 @@
+{
+  "summary": {
+    "total": 6272,
+    "pipeline_match": 6216,
+    "pipeline_mismatch": 4,
+    "pipeline_error": 52,
+    "texture_ok": 3101,
+    "texture_missing": 198,
+    "skinning_ok": 833,
+    "skinning_issues": 0,
+    "full_validated": 3306,
+    "module_light_validated": 2966
+  },
+  "inputs": [
+    "C:\\Users\\NewAdmin\\Documents\\GDeveloper\\Workspaces\\Kotor-3D-Model-Converter\\exports\\full_scan_results_fast.json",
+    "C:\\Users\\NewAdmin\\Documents\\GDeveloper\\Workspaces\\Kotor-3D-Model-Converter\\exports\\full_scan_results_modules.json"
+  ],
+  "failures_by_category": {
+    "load_error": [
+      "k1:dor_lsf01",
+      "k1:dor_lyv01",
+      "k1:dor_lza01",
+      "k1:fx_explode_03",
+      "k1:fx_flame01",
+      "k1:hcrates",
+      "k1:skyboxbase",
+      "k2:fx_explode_03",
+      "k2:fx_flame01",
+      "k2:n_darthmalak",
+      "k2:skyboxbase",
+      "k1:m12ac_01a",
+      "k1:m12ad_01a",
+      "k1:m12ae_01a",
+      "k1:m12af_01a",
+      "k1:m12ag_01a",
+      "k1:m12ah_01a",
+      "k1:m14ab_02a",
+      "k1:m14ac_10g",
+      "k1:m14ad_05f",
+      "k1:m17aa_54",
+      "k1:m17ab_00a",
+      "k1:m17ac_00b",
+      "k1:m17ad_00b",
+      "k1:m18aa_05a",
+      "k1:m18ac_05a",
+      "k1:m26ad_sp3",
+      "k1:m33ab_02",
+      "k1:m40ad_08c",
+      "k1:m40ad_27b",
+      "k1:m41ab_06b",
+      "k1:m41ad_03j",
+      "k1:m41ae_01x",
+      "k1:m41af_01x",
+      "k1:m42aa_14a",
+      "k1:m43aa_14a",
+      "k1:m44ac_01x",
+      "k1:m44ad_01x",
+      "k1:mgf_sithfighter",
+      "k1:mqa_01a",
+      "k2:421dxn_14",
+      "k2:501ondd",
+      "k2:502ondd",
+      "k2:504ondh",
+      "k2:505ond_fghtr",
+      "k2:505ondf",
+      "k2:511ondd",
+      "k2:512ondh",
+      "k2:605danh",
+      "k2:801drob",
+      "k2:802drok",
+      "k2:804drow"
+    ],
+    "quaternion_false_positive": [
+      "k1:wk_carbas2cam",
+      "k1:wk_carmi2_ehcam",
+      "k1:wk_carmi2_trcam",
+      "k1:m03af_03a"
+    ],
+    "texture_missing": [
+      "k1:3dgui",
+      "k1:a_jedirobe_001",
+      "k1:a_jedirobe_002",
+      "k1:a_jedirobe_003",
+      "k1:c_female",
+      "k1:c_holododonna",
+      "k1:c_spar2",
+      "k1:crossgob",
+      "k1:dor_lhr02",
+      "k1:gi_armor01",
+      "k1:gi_armor02",
+      "k1:gi_armor03",
+      "k1:gi_armor04",
+      "k1:gi_sound_area",
+      "k1:gi_sound_pos",
+      "k1:gi_sound_rndm",
+      "k1:gi_waypoint",
+      "k1:gi_waypoint01",
+      "k1:gi_waypoint02",
+      "k1:gi_waypoint03",
+      "k1:gi_waypoint04",
+      "k1:gui_mouse",
+      "k1:h_m_hi01",
+      "k1:hal01gob",
+      "k1:hal02gob",
+      "k1:hal03gob",
+      "k1:hal04gob",
+      "k1:hcrates",
+      "k1:load_sw",
+      "k1:n_commkidm",
+      "k1:n_commkidmd",
+      "k1:n_gammorean",
+      "k1:or_lamp01",
+      "k1:p_candbb",
+      "k1:p_juhanibb",
+      "k1:p_missionbb",
+      "k1:plc_chunk_m01",
+      "k1:plc_chunk_s01",
+      "k1:plc_chunk_s02",
+      "k1:plc_chunk_w01",
+      "k1:plc_chunk_w02",
+      "k1:plc_knrthvin01",
+      "k1:pmbc",
+      "k1:pmbd",
+      "k1:pmbh02",
+      "k1:shirt_001",
+      "k1:shirt_002",
+      "k1:shirt_003",
+      "k1:sol_start",
+      "k1:v_ehawk",
+      "k2:3dgui",
+      "k2:a_jedirobe_001",
+      "k2:a_jedirobe_002",
+      "k2:a_jedirobe_003",
+      "k2:c_bmspecdiff",
+      "k2:c_bosdrexl",
+      "k2:c_decal",
+      "k2:c_drexlf",
+      "k2:c_embmcube",
+      "k2:c_embmsphere",
+      "k2:c_emcube",
+      "k2:c_emsphere",
+      "k2:c_female",
+      "k2:c_holododonna",
+      "k2:c_spar2",
+      "k2:crossgob",
+      "k2:dor_lsi01",
+      "k2:dor_lts01",
+      "k2:dor_lts03",
+      "k2:dor_lts04",
+      "k2:dor_lyv01",
+      "k2:gi_armor01",
+      "k2:gi_armor02",
+      "k2:gi_armor03",
+      "k2:gi_armor04",
+      "k2:gi_sound_area",
+      "k2:gi_sound_pos",
+      "k2:gi_sound_rndm",
+      "k2:gi_waypoint",
+      "k2:gi_waypoint01",
+      "k2:gi_waypoint02",
+      "k2:gi_waypoint03",
+      "k2:gi_waypoint04",
+      "k2:gui_mouse",
+      "k2:h_m_hi01",
+      "k2:hal01gob",
+      "k2:hal02gob",
+      "k2:hal03gob",
+      "k2:hal04gob",
+      "k2:hcrates",
+      "k2:load_sw",
+      "k2:lqa_dewback",
+      "k2:lqa_gizka",
+      "k2:lqa_mykal",
+      "k2:n_commkidf",
+      "k2:n_commkidfd",
+      "k2:n_commkidm",
+      "k2:n_commkidmd",
+      "k2:n_dansalvagerh",
+      "k2:n_darkjhim",
+      "k2:n_darkjlowf",
+      "k2:n_darkjmidf",
+      "k2:n_darthrevanf",
+      "k2:n_darthrevanm",
+      "k2:n_gadonh",
+      "k2:n_gammorean",
+      "k2:n_jedirobem",
+      "k2:n_lala_xuh",
+      "k2:n_misch01",
+      "k2:n_tuskanf",
+      "k2:or_lamp01",
+      "k2:or_medshrub01",
+      "k2:or_medshrub02",
+      "k2:or_palm01",
+      "k2:or_smallpalm01",
+      "k2:or_smallpalm02",
+      "k2:or_smallshrub01",
+      "k2:or_smallshrub02",
+      "k2:or_tatshrub01",
+      "k2:pfbal",
+      "k2:pfbas",
+      "k2:pfbkm",
+      "k2:pfha02",
+      "k2:plc_chunk_m01",
+      "k2:plc_chunk_s01",
+      "k2:plc_chunk_s02",
+      "k2:plc_chunk_w01",
+      "k2:plc_chunk_w02",
+      "k2:plc_crate",
+      "k2:plc_deadfall_02",
+      "k2:plc_egg01",
+      "k2:plc_firepit",
+      "k2:plc_firpitlg",
+      "k2:plc_junkcrate01",
+      "k2:plc_knrthvin01",
+      "k2:plc_koltank2",
+      "k2:plc_rb1",
+      "k2:plc_rfl",
+      "k2:plc_rfl2",
+      "k2:plc_shpjnklg",
+      "k2:plc_trashcom",
+      "k2:pmbal",
+      "k2:pmbas",
+      "k2:pmbc",
+      "k2:pmbd",
+      "k2:pmbh02",
+      "k2:pmbtest",
+      "k2:pmha04",
+      "k2:pmhb02",
+      "k2:pmhb03",
+      "k2:pmhb04",
+      "k2:pmhb05",
+      "k2:pmhb07",
+      "k2:pmhc04",
+      "k2:s_female01",
+      "k2:s_female02",
+      "k2:s_female03",
+      "k2:shirt_001",
+      "k2:shirt_002",
+      "k2:shirt_003",
+      "k2:sol_start",
+      "k2:v_ehawk",
+      "k1:152unk30",
+      "k1:152unk33",
+      "k1:152unk36",
+      "k1:153unkhh",
+      "k1:153unktt",
+      "k1:m01aa_03a",
+      "k1:m01aa_04a",
+      "k1:m01aa_06a",
+      "k1:m01aa_09",
+      "k1:m01aa_10",
+      "k1:m01ab_09a",
+      "k1:m01ab_11a",
+      "k1:m01ab_12a",
+      "k1:m02aa_01a",
+      "k1:m02aa_02a",
+      "k1:m02aa_03a",
+      "k1:m02ae_01a",
+      "k1:m02ae_03a",
+      "k1:m02ae_07a",
+      "k1:m02ae_09a",
+      "k1:m02af_01a",
+      "k1:m03ab_02a",
+      "k1:m03ae_04a",
+      "k1:m03af_01a",
+      "k1:m03af_03a",
+      "k1:m04aa_04a",
+      "k1:m08aa_08b",
+      "k1:m08aa_10a",
+      "k1:m09zz_01c",
+      "k1:m10aa_06a",
+      "k1:m10ab_18a",
+      "k1:m10ac_31a",
+      "k1:m10ac_32a",
+      "k1:m10ac_33a",
+      "k1:m10ac_34b",
+      "k1:m12aa_c02_char01"
+    ]
+  },
+  "failure_details": [
+    {
+      "resref": "3dgui",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "a_jedirobe_001",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "a_jedirobe_002",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "a_jedirobe_003",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "c_female",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "c_holododonna",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "c_spar2",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "crossgob",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "dor_lhr02",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "dor_lsf01",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: TIMEOUT_AFTER_30s"
+      ],
+      "errors": [
+        "TIMEOUT_AFTER_30s"
+      ]
+    },
+    {
+      "resref": "dor_lyv01",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: TIMEOUT_AFTER_30s"
+      ],
+      "errors": [
+        "TIMEOUT_AFTER_30s"
+      ]
+    },
+    {
+      "resref": "dor_lza01",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: TIMEOUT_AFTER_30s"
+      ],
+      "errors": [
+        "TIMEOUT_AFTER_30s"
+      ]
+    },
+    {
+      "resref": "fx_explode_03",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "fx_flame01",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "gi_armor01",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_armor02",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_armor03",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_armor04",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_sound_area",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_sound_pos",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_sound_rndm",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_waypoint",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_waypoint01",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_waypoint02",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_waypoint03",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_waypoint04",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gui_mouse",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "h_m_hi01",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "hal01gob",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "hal02gob",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "hal03gob",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "hal04gob",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "hcrates",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error",
+        "texture_missing"
+      ],
+      "discrepancies": [
+        "error: TIMEOUT_AFTER_30s"
+      ],
+      "errors": [
+        "TIMEOUT_AFTER_30s"
+      ]
+    },
+    {
+      "resref": "load_sw",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_commkidm",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_commkidmd",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_gammorean",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "or_lamp01",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "p_candbb",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "p_juhanibb",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "p_missionbb",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_chunk_m01",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_chunk_s01",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_chunk_s02",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_chunk_w01",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_chunk_w02",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_knrthvin01",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pmbc",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pmbd",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pmbh02",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "shirt_001",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "shirt_002",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "shirt_003",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "skyboxbase",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "sol_start",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "v_ehawk",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "wk_carbas2cam",
+      "game": "k1",
+      "category": "quaternion_false_positive",
+      "categories": [
+        "quaternion_false_positive"
+      ],
+      "discrepancies": [
+        "camerahook.orientation: pykotor=[0.6700637936592102, 0.022052686661481857, 0.02440619468688965, 0.7415743470191956] ghostrigger=[0.0, 0.0, 0.0, 1.0]"
+      ],
+      "errors": []
+    },
+    {
+      "resref": "wk_carmi2_ehcam",
+      "game": "k1",
+      "category": "quaternion_false_positive",
+      "categories": [
+        "quaternion_false_positive"
+      ],
+      "discrepancies": [
+        "camerahook.orientation: pykotor=[4.333556877517949e-17, 0.7077235579490662, 0.7064894437789917, 4.32600008631391e-17] ghostrigger=[0.0, 0.0, 0.0, 1.0]"
+      ],
+      "errors": []
+    },
+    {
+      "resref": "wk_carmi2_trcam",
+      "game": "k1",
+      "category": "quaternion_false_positive",
+      "categories": [
+        "quaternion_false_positive"
+      ],
+      "discrepancies": [
+        "camerahook.orientation: pykotor=[0.653851330280304, 0.2708340883255005, 0.2703618109226227, 0.6527111530303955] ghostrigger=[0.0, 0.0, 0.0, 1.0]"
+      ],
+      "errors": []
+    },
+    {
+      "resref": "3dgui",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "a_jedirobe_001",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "a_jedirobe_002",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "a_jedirobe_003",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "c_bmspecdiff",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "c_bosdrexl",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "c_decal",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "c_drexlf",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "c_embmcube",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "c_embmsphere",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "c_emcube",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "c_emsphere",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "c_female",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "c_holododonna",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "c_spar2",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "crossgob",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "dor_lsi01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "dor_lts01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "dor_lts03",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "dor_lts04",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "dor_lyv01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "fx_explode_03",
+      "game": "k2",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "fx_flame01",
+      "game": "k2",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "gi_armor01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_armor02",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_armor03",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_armor04",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_sound_area",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_sound_pos",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_sound_rndm",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_waypoint",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_waypoint01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_waypoint02",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_waypoint03",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gi_waypoint04",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "gui_mouse",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "h_m_hi01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "hal01gob",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "hal02gob",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "hal03gob",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "hal04gob",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "hcrates",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "load_sw",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "lqa_dewback",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "lqa_gizka",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "lqa_mykal",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_commkidf",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_commkidfd",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_commkidm",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_commkidmd",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_dansalvagerh",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_darkjhim",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_darkjlowf",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_darkjmidf",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_darthmalak",
+      "game": "k2",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: OSError: This operation would exceed the streams boundaries."
+      ],
+      "errors": [
+        "OSError: This operation would exceed the streams boundaries."
+      ]
+    },
+    {
+      "resref": "n_darthrevanf",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_darthrevanm",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_gadonh",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_gammorean",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_jedirobem",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_lala_xuh",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_misch01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "n_tuskanf",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "or_lamp01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "or_medshrub01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "or_medshrub02",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "or_palm01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "or_smallpalm01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "or_smallpalm02",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "or_smallshrub01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "or_smallshrub02",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "or_tatshrub01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pfbal",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pfbas",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pfbkm",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pfha02",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_chunk_m01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_chunk_s01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_chunk_s02",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_chunk_w01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_chunk_w02",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_crate",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_deadfall_02",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_egg01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_firepit",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_firpitlg",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_junkcrate01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_knrthvin01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_koltank2",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_rb1",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_rfl",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_rfl2",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_shpjnklg",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "plc_trashcom",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pmbal",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pmbas",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pmbc",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pmbd",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pmbh02",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pmbtest",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pmha04",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pmhb02",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pmhb03",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pmhb04",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pmhb05",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pmhb07",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "pmhc04",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "s_female01",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "s_female02",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "s_female03",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "shirt_001",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "shirt_002",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "shirt_003",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "skyboxbase",
+      "game": "k2",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "sol_start",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "v_ehawk",
+      "game": "k2",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "152unk30",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "152unk33",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "152unk36",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "153unkhh",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "153unktt",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m01aa_03a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m01aa_04a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m01aa_06a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m01aa_09",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m01aa_10",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m01ab_09a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m01ab_11a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m01ab_12a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m02aa_01a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m02aa_02a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m02aa_03a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m02ae_01a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m02ae_03a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m02ae_07a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m02ae_09a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m02af_01a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m03ab_02a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m03ae_04a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m03af_01a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m03af_03a",
+      "game": "k1",
+      "category": "quaternion_false_positive",
+      "categories": [
+        "quaternion_false_positive",
+        "texture_missing"
+      ],
+      "discrepancies": [
+        "Plane89.orientation: pykotor=[0.0, 0.0, -0.09999999403953552, 1.0] ghostrigger=[0.0, 0.0, -0.0995037131488367, 0.9950371907972053]"
+      ],
+      "errors": []
+    },
+    {
+      "resref": "m04aa_04a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m08aa_08b",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m08aa_10a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m09zz_01c",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m10aa_06a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m10ab_18a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m10ac_31a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m10ac_32a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m10ac_33a",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m10ac_34b",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m12aa_c02_char01",
+      "game": "k1",
+      "category": "texture_missing",
+      "categories": [
+        "texture_missing"
+      ],
+      "discrepancies": [],
+      "errors": []
+    },
+    {
+      "resref": "m12ac_01a",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m12ad_01a",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m12ae_01a",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m12af_01a",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m12ag_01a",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m12ah_01a",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m14ab_02a",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m14ac_10g",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m14ad_05f",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m17aa_54",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m17ab_00a",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m17ac_00b",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m17ad_00b",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m18aa_05a",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m18ac_05a",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m26ad_sp3",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m33ab_02",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m40ad_08c",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m40ad_27b",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m41ab_06b",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m41ad_03j",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m41ae_01x",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m41af_01x",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m42aa_14a",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m43aa_14a",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m44ac_01x",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "m44ad_01x",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "mgf_sithfighter",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "mqa_01a",
+      "game": "k1",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "421dxn_14",
+      "game": "k2",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "501ondd",
+      "game": "k2",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "502ondd",
+      "game": "k2",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "504ondh",
+      "game": "k2",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "505ond_fghtr",
+      "game": "k2",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "505ondf",
+      "game": "k2",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "511ondd",
+      "game": "k2",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "512ondh",
+      "game": "k2",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "605danh",
+      "game": "k2",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "801drob",
+      "game": "k2",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "802drok",
+      "game": "k2",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    },
+    {
+      "resref": "804drow",
+      "game": "k2",
+      "category": "load_error",
+      "categories": [
+        "load_error"
+      ],
+      "discrepancies": [
+        "error: error: unpack requires a buffer of 4 bytes"
+      ],
+      "errors": [
+        "error: unpack requires a buffer of 4 bytes"
+      ]
+    }
+  ]
+}

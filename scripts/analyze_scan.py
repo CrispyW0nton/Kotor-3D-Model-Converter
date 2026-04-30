@@ -1,4 +1,4 @@
-"""Categorize full_scan_results.json failures for Phase 4 triage."""
+"""Categorize tiered full-scan JSON failures for Phase 4 triage."""
 
 from __future__ import annotations
 
@@ -11,6 +11,10 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCAN = ROOT / "exports" / "full_scan_results.json"
+DEFAULT_TIER_INPUTS = [
+    ROOT / "exports" / "full_scan_results_fast.json",
+    ROOT / "exports" / "full_scan_results_modules.json",
+]
 DEFAULT_OUT = ROOT / "exports" / "failure_analysis.json"
 
 
@@ -34,7 +38,7 @@ def categorize_row(row: dict[str, Any]) -> tuple[list[str], list[str]]:
         for e in errs:
             discrepancies.append(f"error: {e}")
 
-    if missing or extra:
+    if missing or extra or (n_pk is not None and n_gr is not None and n_pk != n_gr):
         tags.append("node_count_mismatch")
         if missing:
             discrepancies.append(f"missing_in_ghostrigger ({len(missing)}): " + ",".join(missing[:12]))
@@ -80,13 +84,29 @@ def categorize_row(row: dict[str, Any]) -> tuple[list[str], list[str]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, default=DEFAULT_SCAN)
+    parser.add_argument(
+        "--input",
+        type=Path,
+        action="append",
+        help="Scan result JSON to analyze. May be passed more than once.",
+    )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUT)
     args = parser.parse_args()
 
-    data = json.loads(args.input.read_text(encoding="utf-8"))
-    rows: list[dict[str, Any]] = list(data.get("results") or [])
-    summary = data.get("summary") or {}
+    input_paths = args.input
+    if not input_paths:
+        existing_tier_inputs = [p for p in DEFAULT_TIER_INPUTS if p.exists()]
+        input_paths = existing_tier_inputs or [DEFAULT_SCAN]
+
+    rows_by_key: dict[str, dict[str, Any]] = {}
+    for input_path in input_paths:
+        if not input_path.exists():
+            continue
+        data = json.loads(input_path.read_text(encoding="utf-8"))
+        for row in data.get("results") or []:
+            key = f"{row.get('game')}:{row.get('resref')}".lower()
+            rows_by_key[key] = row
+    rows: list[dict[str, Any]] = list(rows_by_key.values())
 
     total = len(rows)
     pipe_match = sum(1 for r in rows if r.get("pipeline_match") and not r.get("errors"))
@@ -95,19 +115,24 @@ def main() -> None:
     tex_ok = sum(1 for r in rows if r.get("texture_status") == "OK")
     tex_miss = sum(1 for r in rows if r.get("texture_status") == "MISSING")
 
-    skin_rows = [r for r in rows if r.get("has_skin")]
+    skin_rows = [r for r in rows if r.get("has_skin") and r.get("skinning_status") != "SKIP"]
     skin_ok = sum(1 for r in skin_rows if r.get("skinning_status") == "OK")
     skin_issues = sum(1 for r in skin_rows if r.get("skinning_status") not in ("OK",))
+    full_validated = sum(1 for r in rows if r.get("validation_mode") == "full_compare")
+    module_validated = sum(1 for r in rows if r.get("validation_mode") == "module_light")
 
     buckets: dict[str, list[str]] = defaultdict(list)
     details: list[dict[str, Any]] = []
 
     for row in rows:
         if row.get("pipeline_match") and not row.get("errors"):
+            is_module_light = row.get("validation_mode") == "module_light"
             ts = row.get("texture_status")
             sk_ok = True
             if row.get("has_skin") and row.get("skinning_status") != "OK":
                 sk_ok = False
+            if is_module_light:
+                continue
             if ts == "OK" and sk_ok:
                 continue
 
@@ -141,7 +166,10 @@ def main() -> None:
             "texture_missing": tex_miss,
             "skinning_ok": skin_ok,
             "skinning_issues": skin_issues,
+            "full_validated": full_validated,
+            "module_light_validated": module_validated,
         },
+        "inputs": [str(p) for p in input_paths],
         "failures_by_category": dict(sorted((k, v) for k, v in buckets.items())),
         "failure_details": details,
     }
