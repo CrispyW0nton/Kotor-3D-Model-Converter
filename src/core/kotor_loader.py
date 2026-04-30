@@ -874,6 +874,47 @@ def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
 
     n_bones = len(gr.bone_map)
 
+    # Some shipped creature skins use vertex palette indices beyond the fixed
+    # 16-entry ``bone_indices`` header array while PyKotor still exposes a
+    # longer ``bonemap`` table with valid node ids for those overflow slots.
+    # Example: c_brith/Brith_mesh has vertices weighted to local index 16,
+    # ``bone_indices`` has slots 0..15, and ``bonemap[16]`` resolves to the
+    # model root.  Dropping those influences leaves zero-weight vertices and
+    # frozen triangles during animation.  Preserve the palette slot by extending
+    # bone_map from bonemap only for indices actually referenced by vertices.
+    try:
+        max_vertex_idx = -1
+        for bv in (getattr(skin, 'vertex_bones', None) or []):
+            for j in range(4):
+                try:
+                    raw_idx = float(bv.vertex_indices[j])
+                except (TypeError, ValueError, IndexError):
+                    continue
+                if math.isfinite(raw_idx):
+                    max_vertex_idx = max(max_vertex_idx, int(raw_idx))
+
+        raw_bonemap = list(getattr(skin, 'bonemap', None) or [])
+        if max_vertex_idx >= n_bones and raw_bonemap:
+            for slot in range(n_bones, max_vertex_idx + 1):
+                name = ''
+                if slot < len(raw_bonemap):
+                    try:
+                        nid = int(raw_bonemap[slot])
+                    except (TypeError, ValueError):
+                        nid = -1
+                    if nid >= 0 and nid != 0xFFFF:
+                        pk_n = id_to_pknode.get(nid)
+                        name = pk_n.name if pk_n else ''
+                gr.bone_map.append(name)
+            n_bones = len(gr.bone_map)
+            log.debug(
+                "_read_skin_weights '%s': extended bone_map to %d slot(s) "
+                "using bonemap overflow (max vertex index=%d)",
+                gr.name, n_bones, max_vertex_idx,
+            )
+    except Exception as _e:
+        log.debug("_read_skin_weights '%s': bonemap overflow extension skipped: %s", gr.name, _e)
+
     # v7.1 FIX-QBONETBONE (Finding 2.5 — reone mdlmdxreader.cpp cross-ref):
     # Read qBone (quaternion) and tBone (translation) arrays from PyKotor skin object.
     # These provide per-bone bind-pose transforms that serve as fallback matrices
