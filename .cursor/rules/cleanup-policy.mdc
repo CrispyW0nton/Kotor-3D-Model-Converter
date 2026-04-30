@@ -1,0 +1,57 @@
+---
+description: "What to delete from the repo during cleanup"
+alwaysApply: false
+---
+
+# Repo Cleanup Policy
+
+## DELETE from GhostRigger root (junk files):
+- FIXED_render_*.png (4 files — old debug screenshots)
+- NEXT_ITERATION_TASKS.md (28KB — obsolete task list)
+- ROADMAP_EXECUTION.md (148KB — execution log, not source)
+- diag_animated_skinning.py (one-off diagnostic)
+- diagnose_skinning_v2.py (one-off diagnostic)
+- full_diagnostic.py (one-off diagnostic)
+- live_build_diagnostic.py (one-off diagnostic)
+- live_routing_table.json (debug artifact)
+- m02aa_01a_validation_proof.md (debug artifact)
+- material_analysis_report.md (debug artifact)
+- phase_d11_full_diagnostic.py (one-off diagnostic)
+- phase_d12_k2_audit.py (one-off diagnostic)
+- phase_d12_reopened_audit.py (one-off diagnostic)
+- phase_d5_validation.py (one-off diagnostic)
+- proof_lmrole.py, proof_real_lmrole.py, proof_lmrole_report.txt, real_lmrole_report.txt
+- regression_hardening.py (one-off script)
+- d5_validation/ directory
+- d6_screenshots/ directory
+- d6_validation_results.json
+- d7_renders/ directory
+- d7v2_renders/ directory
+- screenshots/ directory (move 2-3 best to assets/ if needed for README)
+- proof_b1_structural/ directory
+- audit/ directory (move essential docs to .ghostrigger_reference/docs/)
+
+## DELETE from .ghostrigger_reference/:
+- ghostrigger_bundle/books/ (PDF books — 76MB of copyrighted material in git!)
+- ghostrigger_bundle/docs/ (duplicates of files already in docs/)
+- ghostrigger_bundle/images/ (one contact sheet)
+- ghostrigger_bundle/links/ (duplicate manifest)
+- ghostrigger_bundle/prompts/ (duplicate of docs/ghostrigger_dev_prompt.md)
+- After cleanup, flatten: keep .ghostrigger_reference/docs/ and .ghostrigger_reference/knowledge_base/ only
+
+## DELETE from tests/:
+- Any test file that ONLY tests synthetic/mocked data with no connection to real game files
+- Keep: test files that test core contracts (vertex_space, render_constants, etc.)
+- Keep: test files that test regressions for known bugs
+
+## KEEP (do not delete):
+- src/ (all source code)
+- tools/model_inspector.py
+- main.py
+- build.bat
+- build_game_templates.py
+- pyproject.toml, requirements.txt
+- .gitignore
+- LICENSE, README.md
+- assets/icons/
+- GhostRigger-K1-K2.spec

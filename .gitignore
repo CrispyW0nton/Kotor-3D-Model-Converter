@@ -52,6 +52,12 @@ audit_output/
 logs/
 Logs/
 build_log.txt
+d*_renders/
+d*_screenshots/
+d*_validation*/
+proof_*/
+*_report.txt
+*_diagnostic*.py
 
 # ── One-off debug / prototype render PNGs at repo root ────────────────────────
 audit_c_*.png
@@ -67,7 +73,7 @@ screenshot*.png
 # ── Temp / scratch directories ────────────────────────────────────────────────
 lava_exercise/
 KotorModTools/
-screenshots/
+/screenshots/
 portfolio_post.md
 render_check/
 render_test_output/
@@ -86,8 +92,6 @@ kotorblender_src/
 
 # ── Demo / capture artefacts ──────────────────────────────────────────────────
 *.mp4
-# Keep the Matrix background video inside assets
-!assets/matrix_bg.mp4
 capture_demo_video.py
 
 # ── OS noise ──────────────────────────────────────────────────────────────────
