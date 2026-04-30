@@ -36,16 +36,15 @@ game_data/
 # /tests/* instead of /tests/ so re-inclusion patterns resolve.
 /tests/*
 !/tests/__init__.py
-!/tests/test_skinning_identity_at_t0.py
-!/tests/test_compressed_quat_decode.py
-!/tests/test_bone_map_direction.py
-!/tests/test_live_model_inspect.py
-!/tests/test_reparent_head_nodes.py
-!/tests/test_mcp_ground_truth.py
+!/tests/conftest.py
+!/tests/test_core_contracts.py
+!/tests/test_regression.py
+!/tests/test_mcp_full_scan.py
+!/tests/test_mcp_textures.py
+!/tests/test_mcp_skinning.py
 test_assets/
 pytest.ini
 .pytest_cache/
-conftest.py
 
 # ── Audit / render output (generated artefacts) ───────────────────────────────
 audit_output/

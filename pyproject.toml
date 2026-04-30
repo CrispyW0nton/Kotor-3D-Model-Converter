@@ -97,6 +97,11 @@ exclude = ["research_sources*", "docs*", "tests*", "test_assets*"]
 [tool.setuptools.package-data]
 "src" = ["**/*.json", "**/*.md", "**/*.txt"]
 
+[tool.pytest.ini_options]
+markers = [
+    "slow: full-installation MCP validation tests",
+]
+
 # ── Ruff linter configuration ─────────────────────────────────────────────────
 [tool.ruff]
 line-length = 100
