@@ -1,0 +1,19 @@
+---
+description: "How to run the validation scan when making changes"
+alwaysApply: false
+globs: "src/**/*.py"
+---
+
+# Scan Workflow After Code Changes
+
+When modifying any file in src/core/ or src/gui/, follow this validation workflow:
+
+1. Run fast tests: `pytest tests/ -m "not slow" -v` (must pass)
+2. Identify which model categories your change affects
+3. Run targeted scan: `python scripts/full_scan.py --game all --tier fast --category <affected>`
+4. If scan reveals new failures, fix before committing
+5. For loader changes: also run `python scripts/full_scan.py --game all --tier modules`
+
+Category flags: creatures, players, npcs, modules, all
+
+Current baseline: 6,224/6,272 match. Any commit that reduces this number is a regression.

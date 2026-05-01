@@ -18,7 +18,7 @@ tabs to four, and the Module Editor was promoted to a first-class left-panel tab
 
 | Area | What changed |
 |------|-------------|
-| **Test suite** | **5 007 tests passing**, 11 skipped, 0 failures |
+| **Test suite** | **13 fast tests passing** plus 6,272-model MCP validation suite |
 | **Right panel** | Reduced from 8 tabs → 4 focused tabs: Props · Anims · Char Builder · Textures |
 | **Diagnostics** | Moved from tab to popup window (Ctrl+D / Model menu) — less clutter |
 | **Cloth rigging** | Panel still available via Model menu; no longer occupies a permanent tab |
@@ -200,7 +200,7 @@ src/
     ├── server.py             # GhostRigger JSON-RPC IPC server
     └── client.py             # IPC client (GModular / GhostScripter)
 
-tests/                        # 5 007 tests across 66 files
+tests/                        # Core contracts, regressions, and MCP validation
 ```
 
 ---
@@ -208,19 +208,46 @@ tests/                        # 5 007 tests across 66 files
 ## Tests
 
 ```bash
-# Run all tests
-pytest
+# Fast tests (core contracts + regressions)
+pytest tests/ -m "not slow" -v
 
-# Run with verbose output
-pytest -v
+# Full MCP validation (requires game installations + KotorMCP)
+pytest tests/test_mcp_full_scan.py -v
+```
 
-# Run specific suites
-pytest tests/test_v47_thread_safety.py       # thread safety & render queue
-pytest tests/test_v58_phase17_ui_polish.py   # UI polish
-pytest tests/test_v340_character_builder_phase31.py  # character builder
+Current results: 13 core tests passing, 6,272-model MCP validation suite available.
 
-# Current results (Python 3.12)
-# 5 007 passed, 11 skipped, 0 failures  (~120 s)
+---
+
+## Validation
+
+GhostRigger's model pipeline is validated against every MDL resource in both
+KotOR 1 and KotOR 2 using [KotorMCP](https://github.com/CrispyW0nton/KotorMCP-Ghost)
+ground-truth comparison tools.
+
+| Metric | Result |
+|--------|--------|
+| Total models scanned | 6,272 |
+| Pipeline match (GhostRigger == PyKotor) | 6,224 (99.2%) |
+| Upstream load failures (PyKotor) | 48 |
+| GhostRigger-only failures | 0 |
+| Skinning issues | 0 |
+| Texture references classified | 198 (lightmaps, cut content) |
+
+To reproduce:
+
+```bash
+# Generate model manifest
+python scripts/generate_manifest.py
+
+# Run tiered scan (non-module models, full comparison)
+python scripts/full_scan.py --game all --tier fast
+
+# Run module models (load + node-count check)
+python scripts/full_scan.py --game all --tier modules --resume
+
+# Analyze results
+python scripts/analyze_scan.py
 ```
 
 ---

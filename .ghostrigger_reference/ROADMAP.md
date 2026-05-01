@@ -23,6 +23,32 @@
 
 ---
 
+## Completed Validation & Pipeline Work
+
+| Item | Status | Notes |
+|------|--------|-------|
+| MCP-driven validation pipeline | COMPLETE | KotorMCP-driven manifest, tiered scan, and analyzer committed |
+| Full K1+K2 model scan | COMPLETE | 6,272 MDL resources scanned across K1 and K2 |
+| K2 compatibility fixes | COMPLETE | Trimesh header and MDX offset handling validated |
+| Head-accessory composite offset (Bug C) | COMPLETE | Composite attachment offsets validated by regression tests |
+| Centroid heuristic removal | COMPLETE | VertexSpace enum replaces centroid-magnitude classification |
+| Performance optimization | COMPLETE | 7.8x FPS boost retained in current renderer path |
+| Lightmap overbright fix | COMPLETE | Lightmap handling no longer over-brightens module geometry |
+| Unified render constants | COMPLETE | Shared render constants prevent divergent face/inner-geometry filters |
+| Bonemap overflow handling | COMPLETE | Skin bonemap overflow path validated; 0 skinning issues in scan |
+
+## Current / Next Work
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Walkmesh editing | NEXT | Continue Module Editor `.wok` selection, painting, and write-back |
+| Module editing | NEXT | Continue `.lyt` scene graph, room placement, and GIT export |
+| GPU renderer migration | IN PROGRESS | CPU renderer remains primary; GPU path still needs full migration |
+| Resolve 48 upstream PyKotor load failures | NEXT | Requires PyKotor patches; GhostRigger has 0 GhostRigger-only load failures |
+| Expand module-tier scan to full pipeline comparison | NEXT | Optimization needed; full module compare currently takes 2-4 min/model |
+
+---
+
 ## M0: Environment & Audit (COMPLETE as of v6.0)
 **Status**: DONE
 
@@ -32,7 +58,7 @@
 | T002 | Audit viewport.py rendering path | DONE | Documented in architecture_audit.html |
 | T003 | Audit mesh_converter.py export path | DONE | FBX ASCII fallback identified |
 | T004 | Audit gpu_renderer.py state | DONE | Exists but not primary path |
-| T005 | Remove test suite & clutter | DONE | v6.0 commit |
+| T005 | Remove obsolete clutter | DONE | Legacy diagnostics and generated junk removed; current MCP test suite retained |
 | T006 | Set up knowledge base | DONE | .ghostrigger_reference/ |
 
 ### Remaining M0 Task
@@ -221,7 +247,7 @@ feat(gpu): add skeleton bone overlay rendering (T309)
 ---
 
 ## M8: Validation & Regression Suite
-**Status**: NOT STARTED
+**Status**: IN PROGRESS
 **Depends on**: M1, M2, M3
 
 | Task | Description | Hours | Status |
@@ -230,6 +256,7 @@ feat(gpu): add skeleton bone overlay rendering (T309)
 | T802 | Visual regression (screenshot diff) | 6 | PENDING |
 | T803 | Round-trip validation (export -> reimport) | 6 | PENDING |
 | T804 | CI pipeline setup | 4 | PENDING |
+| T805 | MCP-driven full-model validation | 0 | DONE |
 
 ---
 
