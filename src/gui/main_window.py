@@ -9174,6 +9174,7 @@ class KotorModToolsApp(tk.Tk):
             'open_utd': self._ipc_open_utd,
             'open_mdl': self._ipc_open_mdl,
             'refresh_viewport': self._refresh_current_model,
+            'load_model_by_resref': self._load_model_by_resref,
         })
         self._ipc_server.start()
         self.after(800, self._update_ipc_status)
@@ -11791,7 +11792,15 @@ class KotorModToolsApp(tk.Tk):
             self._try_load_from_library(resref)
         self.lift(); self.focus_force()
 
-    def _try_load_from_library(self, resref: str):
+    def _load_model_by_resref(self, game: str, resref: str):
+        """Load a model by game+resref via IPC for visual QA review."""
+        self.log(f"IPC QA: load_model game='{game}' resref='{resref}'")
+        if not resref:
+            return
+        self._try_load_from_library(resref, preferred_game=game.upper())
+        self.lift(); self.focus_force()
+
+    def _try_load_from_library(self, resref: str, preferred_game: str = ""):
         """Try to find a model by resref in the game library and load it.
 
         Fast path: tries KotorInstallation first (<20 ms per resource).
@@ -11806,7 +11815,12 @@ class KotorModToolsApp(tk.Tk):
         k1_inst = getattr(lib_panel, '_k1_install', None) if lib_panel else None
         k2_inst = getattr(lib_panel, '_k2_install', None) if lib_panel else None
 
-        for inst, game_tag in [(k1_inst, "K1"), (k2_inst, "K2")]:
+        install_order = [(k1_inst, "K1"), (k2_inst, "K2")]
+        pref = (preferred_game or "").upper()
+        if pref in {"K1", "K2"}:
+            install_order.sort(key=lambda item: 0 if item[1] == pref else 1)
+
+        for inst, game_tag in install_order:
             if inst is None:
                 continue
             try:
@@ -11836,6 +11850,12 @@ class KotorModToolsApp(tk.Tk):
         try:
             lib = self.lib_panel.library
             entries = lib.search(resref, "All")
+            if preferred_game:
+                pref = preferred_game.upper()
+                entries = sorted(
+                    entries,
+                    key=lambda entry: 0 if str(getattr(entry, "game", "")).upper() == pref else 1,
+                )
             if entries:
                 entry = entries[0]
                 mdl_bytes, mdx_bytes = lib.get_model_data(entry)

@@ -207,6 +207,22 @@ class GhostRiggerIPCServer:
             return jsonify({"status": "ok", "action": "reload",
                             "reloaded": reloaded, "errors": errors})
 
+        @app.route("/api/load_model", methods=["POST"])
+        def route_load_model():
+            """Load a game model into the running viewport for visual QA."""
+            body = request.get_json(force=True, silent=True) or {}
+            game = str(body.get("game", "k2") or "k2").lower()
+            resref = str(body.get("resref", "") or "").strip()
+            if not resref:
+                return jsonify({"error": "missing resref"}), 400
+            if game not in {"k1", "k2"}:
+                return jsonify({"error": "game must be 'k1' or 'k2'"}), 400
+
+            cb = self.callbacks.get("load_model_by_resref")
+            if cb is not None:
+                self._schedule_callback(cb, game, resref)
+            return jsonify({"status": "ok", "loading": resref, "game": game})
+
         @app.route("/api/health", methods=["GET"])
         def route_health():
             return jsonify({"status": "ok", "program": _PROGRAM_NAME,
