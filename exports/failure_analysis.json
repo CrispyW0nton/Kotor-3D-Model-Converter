@@ -1,9 +1,9 @@
 {
   "summary": {
     "total": 6272,
-    "pipeline_match": 6216,
-    "pipeline_mismatch": 4,
-    "pipeline_error": 52,
+    "pipeline_match": 6224,
+    "pipeline_mismatch": 0,
+    "pipeline_error": 48,
     "texture_ok": 3101,
     "texture_missing": 198,
     "skinning_ok": 833,
@@ -17,12 +17,8 @@
   ],
   "failures_by_category": {
     "load_error": [
-      "k1:dor_lsf01",
-      "k1:dor_lyv01",
-      "k1:dor_lza01",
       "k1:fx_explode_03",
       "k1:fx_flame01",
-      "k1:hcrates",
       "k1:skyboxbase",
       "k2:fx_explode_03",
       "k2:fx_flame01",
@@ -69,12 +65,6 @@
       "k2:801drob",
       "k2:802drok",
       "k2:804drow"
-    ],
-    "quaternion_false_positive": [
-      "k1:wk_carbas2cam",
-      "k1:wk_carmi2_ehcam",
-      "k1:wk_carmi2_trcam",
-      "k1:m03af_03a"
     ],
     "texture_missing": [
       "k1:3dgui",
@@ -369,48 +359,6 @@
       "errors": []
     },
     {
-      "resref": "dor_lsf01",
-      "game": "k1",
-      "category": "load_error",
-      "categories": [
-        "load_error"
-      ],
-      "discrepancies": [
-        "error: TIMEOUT_AFTER_30s"
-      ],
-      "errors": [
-        "TIMEOUT_AFTER_30s"
-      ]
-    },
-    {
-      "resref": "dor_lyv01",
-      "game": "k1",
-      "category": "load_error",
-      "categories": [
-        "load_error"
-      ],
-      "discrepancies": [
-        "error: TIMEOUT_AFTER_30s"
-      ],
-      "errors": [
-        "TIMEOUT_AFTER_30s"
-      ]
-    },
-    {
-      "resref": "dor_lza01",
-      "game": "k1",
-      "category": "load_error",
-      "categories": [
-        "load_error"
-      ],
-      "discrepancies": [
-        "error: TIMEOUT_AFTER_30s"
-      ],
-      "errors": [
-        "TIMEOUT_AFTER_30s"
-      ]
-    },
-    {
       "resref": "fx_explode_03",
       "game": "k1",
       "category": "load_error",
@@ -621,17 +569,12 @@
     {
       "resref": "hcrates",
       "game": "k1",
-      "category": "load_error",
+      "category": "texture_missing",
       "categories": [
-        "load_error",
         "texture_missing"
       ],
-      "discrepancies": [
-        "error: TIMEOUT_AFTER_30s"
-      ],
-      "errors": [
-        "TIMEOUT_AFTER_30s"
-      ]
+      "discrepancies": [],
+      "errors": []
     },
     {
       "resref": "load_sw",
@@ -865,42 +808,6 @@
         "texture_missing"
       ],
       "discrepancies": [],
-      "errors": []
-    },
-    {
-      "resref": "wk_carbas2cam",
-      "game": "k1",
-      "category": "quaternion_false_positive",
-      "categories": [
-        "quaternion_false_positive"
-      ],
-      "discrepancies": [
-        "camerahook.orientation: pykotor=[0.6700637936592102, 0.022052686661481857, 0.02440619468688965, 0.7415743470191956] ghostrigger=[0.0, 0.0, 0.0, 1.0]"
-      ],
-      "errors": []
-    },
-    {
-      "resref": "wk_carmi2_ehcam",
-      "game": "k1",
-      "category": "quaternion_false_positive",
-      "categories": [
-        "quaternion_false_positive"
-      ],
-      "discrepancies": [
-        "camerahook.orientation: pykotor=[4.333556877517949e-17, 0.7077235579490662, 0.7064894437789917, 4.32600008631391e-17] ghostrigger=[0.0, 0.0, 0.0, 1.0]"
-      ],
-      "errors": []
-    },
-    {
-      "resref": "wk_carmi2_trcam",
-      "game": "k1",
-      "category": "quaternion_false_positive",
-      "categories": [
-        "quaternion_false_positive"
-      ],
-      "discrepancies": [
-        "camerahook.orientation: pykotor=[0.653851330280304, 0.2708340883255005, 0.2703618109226227, 0.6527111530303955] ghostrigger=[0.0, 0.0, 0.0, 1.0]"
-      ],
       "errors": []
     },
     {
@@ -2322,14 +2229,11 @@
     {
       "resref": "m03af_03a",
       "game": "k1",
-      "category": "quaternion_false_positive",
+      "category": "texture_missing",
       "categories": [
-        "quaternion_false_positive",
         "texture_missing"
       ],
-      "discrepancies": [
-        "Plane89.orientation: pykotor=[0.0, 0.0, -0.09999999403953552, 1.0] ghostrigger=[0.0, 0.0, -0.0995037131488367, 0.9950371907972053]"
-      ],
+      "discrepancies": [],
       "errors": []
     },
     {

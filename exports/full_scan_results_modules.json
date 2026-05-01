@@ -3722,7 +3722,7 @@
     {
       "game": "k1",
       "resref": "m03af_03a",
-      "pipeline_match": false,
+      "pipeline_match": true,
       "texture_status": "MISSING",
       "skinning_status": "OK",
       "has_skin": false,
@@ -3730,27 +3730,9 @@
       "node_count_ghostrigger": 249,
       "missing_in_ghostrigger": [],
       "extra_in_ghostrigger": [],
-      "discrepancies": [
-        {
-          "node": "Plane89",
-          "field": "orientation",
-          "pykotor": [
-            0.0,
-            0.0,
-            -0.09999999403953552,
-            1.0
-          ],
-          "ghostrigger": [
-            0.0,
-            0.0,
-            -0.0995037131488367,
-            0.9950371907972053
-          ],
-          "severity": "MEDIUM"
-        }
-      ],
+      "discrepancies": [],
       "errors": [],
-      "duration_ms": 47413,
+      "duration_ms": 0,
       "validation_mode": "full_compare"
     },
     {
@@ -55246,8 +55228,8 @@
   ],
   "summary": {
     "total": 3446,
-    "pipeline_match": 3404,
-    "pipeline_mismatch": 1,
+    "pipeline_match": 3405,
+    "pipeline_mismatch": 0,
     "pipeline_error": 41,
     "texture_ok": 444,
     "texture_missing": 36,
