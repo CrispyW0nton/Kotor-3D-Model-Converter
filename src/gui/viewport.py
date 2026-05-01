@@ -4432,6 +4432,12 @@ class FrameRenderer:
                 wo = (wo[0]*_s, wo[1]*_s, wo[2]*_s, wo[3]*_s)
             wo_rot = _math.sqrt(wo[0]*wo[0] + wo[1]*wo[1] + wo[2]*wo[2])
             is_id  = (wo_rot < 0.001)
+            if getattr(node, 'is_skin', False):
+                # Skin vertices are translated by the node chain, but never
+                # rotated here; LBS owns rotation when animation is active.
+                result = (wp, (0.0, 0.0, 0.0, 1.0), True)
+                self._wt_cache[nid] = result
+                return result
             result = (wp, wo, is_id)
             self._wt_cache[nid] = result
             return result
@@ -4440,6 +4446,10 @@ class FrameRenderer:
         wp, wo = node.world_transform()
         wo_rot = _math.sqrt(wo[0]*wo[0] + wo[1]*wo[1] + wo[2]*wo[2])
         is_id  = (wo_rot < 0.001)
+        if getattr(node, 'is_skin', False):
+            result = (wp, (0.0, 0.0, 0.0, 1.0), True)
+            self._wt_cache[nid] = result
+            return result
         result = (wp, wo, is_id)
         self._wt_cache[nid] = result
         return result
@@ -4619,8 +4629,9 @@ class FrameRenderer:
         wp_s, wo_s, is_id_s = self._node_world_transform(node)
         if vi == 0:
             _gr_probe('CPU-LBS', node, wp_s, wo_s, is_id_s)
-        v_world = self._apply_vertex_transform(node, v, wp_s, wo_s, is_id_s)
-        vbx, vby, vbz = v_world[0], v_world[1], v_world[2]
+        vbx = v[0] + wp_s[0]
+        vby = v[1] + wp_s[1]
+        vbz = v[2] + wp_s[2]
 
         def _bind_fallback():
             """Return bind-pose world position."""

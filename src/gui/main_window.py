@@ -9173,6 +9173,7 @@ class KotorModToolsApp(tk.Tk):
             'open_utp': self._ipc_open_utp,
             'open_utd': self._ipc_open_utd,
             'open_mdl': self._ipc_open_mdl,
+            'refresh_viewport': self._refresh_current_model,
         })
         self._ipc_server.start()
         self.after(800, self._update_ipc_status)
@@ -9968,7 +9969,7 @@ class KotorModToolsApp(tk.Tk):
         # ── Global keyboard shortcuts ─────────────────────────────────────
         self.bind("f",              lambda e: self.viewport.frame_all())
         self.bind("F",              lambda e: self.viewport.frame_all())
-        self.bind("<F5>",           lambda e: self._refresh_all())
+        self.bind("<F5>",           self._hot_reload_and_refresh)
         self.bind("<Control-o>",    lambda e: self._open_mdl_binary())
         self.bind("<Control-O>",    lambda e: self._open_mdl_ascii())
         self.bind("<Control-i>",    lambda e: self._import_obj())
@@ -10052,6 +10053,26 @@ class KotorModToolsApp(tk.Tk):
     def _set_model_internal(self, model: KotorModel):
         self._model = model
         self._refresh_all()
+
+    def _refresh_current_model(self):
+        """Re-render the currently loaded model after a hot reload."""
+        if self._model:
+            self._refresh_all()
+
+    def _hot_reload_and_refresh(self, event=None):
+        """Reload renderer modules, then refresh the active viewport model."""
+        import importlib
+        import sys
+
+        for mod_name in ("src.gui.viewport", "src.gui.gpu_renderer"):
+            if mod_name not in sys.modules:
+                continue
+            try:
+                importlib.reload(sys.modules[mod_name])
+                log.info("Hot-reloaded %s", mod_name)
+            except Exception as exc:
+                log.error("Hot reload failed for %s: %s", mod_name, exc)
+        self._refresh_current_model()
 
     def _refresh_all(self):
         """Refresh all panels after a model is loaded.

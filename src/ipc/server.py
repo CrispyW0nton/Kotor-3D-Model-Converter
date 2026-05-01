@@ -169,6 +169,44 @@ class GhostRiggerIPCServer:
         def route_ping():
             return _handle("ping")
 
+        @app.route("/api/reload", methods=["POST"])
+        def route_reload():
+            """Hot-reload selected Python modules and refresh the viewport."""
+            import importlib
+            import sys
+
+            try:
+                body = request.get_json(force=True, silent=True) or {}
+            except Exception:
+                body = {}
+
+            targets = body.get("modules", [
+                "src.gui.viewport",
+                "src.gui.gpu_renderer",
+                "src.core.kotor_loader",
+            ])
+            reloaded: list[str] = []
+            errors: list[str] = []
+
+            for mod_name in targets:
+                if mod_name not in sys.modules:
+                    continue
+                try:
+                    importlib.reload(sys.modules[mod_name])
+                    reloaded.append(mod_name)
+                except Exception as exc:
+                    errors.append(f"{mod_name}: {exc}")
+
+            cb = self.callbacks.get("refresh_viewport")
+            if cb is not None:
+                try:
+                    self._schedule_callback(cb)
+                except Exception as exc:
+                    errors.append(f"refresh_viewport: {exc}")
+
+            return jsonify({"status": "ok", "action": "reload",
+                            "reloaded": reloaded, "errors": errors})
+
         @app.route("/api/health", methods=["GET"])
         def route_health():
             return jsonify({"status": "ok", "program": _PROGRAM_NAME,

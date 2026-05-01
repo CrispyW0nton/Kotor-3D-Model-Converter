@@ -33,6 +33,83 @@ def test_bug_c_composite_offset_applies_to_skin_nodes() -> None:
     ]
 
 
+def test_skin_bind_pose_vbo_applies_translation_only() -> None:
+    from src.gui.gpu_renderer import _build_vbo_data
+
+    node = SimpleNamespace(
+        name="body_skin",
+        vertices=[(1.0, 2.0, 3.0), (2.0, 2.0, 3.0), (1.0, 3.0, 3.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+        uvs_lm=[],
+        faces=[(0, 1, 2)],
+        face_uvs=[],
+        is_skin=True,
+        vertex_space=0,
+        skin_data=[],
+    )
+
+    vbo, indices = _build_vbo_data(node, (10.0, 20.0, 30.0), (0.0, 0.0, 0.0, 1.0))
+
+    assert indices is None
+    assert vbo is not None
+    assert vbo[:, 0:3].tolist() == [
+        [11.0, 22.0, 33.0],
+        [12.0, 22.0, 33.0],
+        [11.0, 23.0, 33.0],
+    ]
+
+
+def test_cpu_skin_bind_pose_applies_translation_only() -> None:
+    from src.gui.viewport import ArcBallCamera, FrameRenderer
+
+    node = SimpleNamespace(
+        name="body_skin",
+        vertices=[(1.0, 2.0, 3.0), (2.0, 2.0, 3.0), (1.0, 3.0, 3.0)],
+        faces=[(0, 1, 2)],
+        is_skin=True,
+        is_dangly=False,
+        vertex_space=0,
+        bone_map=[],
+        skin_data=[],
+        world_transform=lambda: ((10.0, 20.0, 30.0), (0.0, 0.0, 1.0, 0.0)),
+    )
+    renderer = FrameRenderer(ArcBallCamera())
+
+    assert renderer._get_world_verts_for_node(node) == [
+        (11.0, 22.0, 33.0),
+        (12.0, 22.0, 33.0),
+        (11.0, 23.0, 33.0),
+    ]
+
+
+def test_non_skin_node_local_vbo_still_applies_world_transform() -> None:
+    from src.gui.gpu_renderer import _build_vbo_data
+
+    node = SimpleNamespace(
+        name="rigid_mesh",
+        vertices=[(1.0, 2.0, 3.0), (2.0, 2.0, 3.0), (1.0, 3.0, 3.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+        uvs_lm=[],
+        faces=[(0, 1, 2)],
+        face_uvs=[],
+        is_skin=False,
+        vertex_space=0,
+        skin_data=[],
+    )
+
+    vbo, indices = _build_vbo_data(node, (10.0, 20.0, 30.0), (0.0, 0.0, 0.0, 1.0))
+
+    assert indices is not None
+    assert vbo is not None
+    assert vbo[:, 0:3].tolist() == [
+        [11.0, 22.0, 33.0],
+        [12.0, 22.0, 33.0],
+        [11.0, 23.0, 33.0],
+    ]
+
+
 def test_bonemap_overflow_slot_extends_bone_map_without_oob() -> None:
     from src.core.kotor_loader import _read_skin_weights
     from src.core.model_data import ModelNode
