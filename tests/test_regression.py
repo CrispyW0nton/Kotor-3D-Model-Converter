@@ -33,7 +33,7 @@ def test_bug_c_composite_offset_applies_to_skin_nodes() -> None:
     ]
 
 
-def test_skin_bind_pose_vbo_applies_translation_only() -> None:
+def test_skin_bind_pose_vbo_keeps_authored_coordinates() -> None:
     from src.gui.gpu_renderer import _build_vbo_data
 
     node = SimpleNamespace(
@@ -54,13 +54,13 @@ def test_skin_bind_pose_vbo_applies_translation_only() -> None:
     assert indices is None
     assert vbo is not None
     assert vbo[:, 0:3].tolist() == [
-        [11.0, 22.0, 33.0],
-        [12.0, 22.0, 33.0],
-        [11.0, 23.0, 33.0],
+        [1.0, 2.0, 3.0],
+        [2.0, 2.0, 3.0],
+        [1.0, 3.0, 3.0],
     ]
 
 
-def test_cpu_skin_bind_pose_applies_translation_only() -> None:
+def test_cpu_skin_bind_pose_keeps_authored_coordinates() -> None:
     from src.gui.viewport import ArcBallCamera, FrameRenderer
 
     node = SimpleNamespace(
@@ -77,9 +77,9 @@ def test_cpu_skin_bind_pose_applies_translation_only() -> None:
     renderer = FrameRenderer(ArcBallCamera())
 
     assert renderer._get_world_verts_for_node(node) == [
-        (11.0, 22.0, 33.0),
-        (12.0, 22.0, 33.0),
-        (11.0, 23.0, 33.0),
+        (1.0, 2.0, 3.0),
+        (2.0, 2.0, 3.0),
+        (1.0, 3.0, 3.0),
     ]
 
 

@@ -4433,9 +4433,9 @@ class FrameRenderer:
             wo_rot = _math.sqrt(wo[0]*wo[0] + wo[1]*wo[1] + wo[2]*wo[2])
             is_id  = (wo_rot < 0.001)
             if getattr(node, 'is_skin', False):
-                # Skin vertices are translated by the node chain, but never
-                # rotated here; LBS owns rotation when animation is active.
-                result = (wp, (0.0, 0.0, 0.0, 1.0), True)
+                # Skin vertices are authored in model-root bind space. Do not
+                # apply the skin node's hierarchy transform in bind-pose draws.
+                result = ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0), True)
                 self._wt_cache[nid] = result
                 return result
             result = (wp, wo, is_id)
@@ -4447,7 +4447,7 @@ class FrameRenderer:
         wo_rot = _math.sqrt(wo[0]*wo[0] + wo[1]*wo[1] + wo[2]*wo[2])
         is_id  = (wo_rot < 0.001)
         if getattr(node, 'is_skin', False):
-            result = (wp, (0.0, 0.0, 0.0, 1.0), True)
+            result = ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0), True)
             self._wt_cache[nid] = result
             return result
         result = (wp, wo, is_id)
@@ -4629,9 +4629,7 @@ class FrameRenderer:
         wp_s, wo_s, is_id_s = self._node_world_transform(node)
         if vi == 0:
             _gr_probe('CPU-LBS', node, wp_s, wo_s, is_id_s)
-        vbx = v[0] + wp_s[0]
-        vby = v[1] + wp_s[1]
-        vbz = v[2] + wp_s[2]
+        vbx, vby, vbz = v[0], v[1], v[2]
 
         def _bind_fallback():
             """Return bind-pose world position."""
@@ -4798,18 +4796,18 @@ class FrameRenderer:
             except Exception:
                 pass  # defensive: if the enum import fails, fall through
 
-        # ── SKIN nodes: LBS path (animated pose) ──────────────────────────────
-        if (self._anim_pose is not None and node.is_skin and
-                node.bone_map and node.skin_data):
-            bone_transforms = self._build_bone_transforms(node)
-            if bone_transforms:
-                return [self._lbs_vertex(node, i, bone_transforms)
-                        for i in range(len(verts))]
-            # LBS unavailable: fall through to bind-pose path
+        # ── SKIN nodes: authored bind frame, optionally deformed by LBS ───────
+        if node.is_skin:
+            if self._anim_pose is not None and node.bone_map and node.skin_data:
+                bone_transforms = self._build_bone_transforms(node)
+                if bone_transforms:
+                    return [self._lbs_vertex(node, i, bone_transforms)
+                            for i in range(len(verts))]
+            wp, wo, is_id = self._node_world_transform(node)
+            _gr_probe('CPU-bind', node, wp, wo, is_id)
+            return [tuple(v) for v in verts]
 
-        # ── All nodes (skin bind-pose + non-skin trimesh/dangly): apply full world transform ──
-        # Phase 17: This unified path handles ALL node types in bind pose.
-        # See docstring above for full rationale + references.
+        # ── Non-skin trimesh/dangly: apply full world transform ───────────────
         wp, wo, is_id = self._node_world_transform(node)
         _gr_probe('CPU-bind', node, wp, wo, is_id)
         xfm = self._apply_vertex_transform

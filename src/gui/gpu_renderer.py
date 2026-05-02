@@ -1535,10 +1535,8 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     # Rules (matching xoreos model_kotor.cpp, KotOR.js OdysseyModel3D.ts):
     #   NODE_LOCAL (0): vertices are in node's local coordinate system.
     #                   Apply full world_transform (rotate + translate).
-    #                   Exception: skin meshes receive translation only here.
-    #                   Their rotation comes from the bone palette/LBS; applying
-    #                   the skin node's parent-chain quaternion in bind pose
-    #                   double-rotates K2 skins.
+    #                   Exception: skin meshes are authored in model-root bind
+    #                   space; bind-pose VBOs keep those coordinates as-is.
     #   WORLD (1):      vertices already in model-root space (imported OBJ/FBX).
     #                   Do NOT apply world_transform.
     #   AABB_WALK (2):  walkmesh/collision — not rendered (should never reach here).
@@ -1552,8 +1550,7 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     _node_vs = getattr(node, 'vertex_space', 0)  # default NODE_LOCAL
 
     if _node_vs == 0 and is_skin:
-        if not is_identity_pos:
-            v_arr = v_arr + wp
+        pass
     elif _node_vs == 0:  # NODE_LOCAL — rigid meshes get one full world transform
         if not is_identity_rot:
             v_arr = _quat_rotate_batch(wo, v_arr)
