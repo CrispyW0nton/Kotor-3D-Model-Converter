@@ -25,6 +25,18 @@ _LOG_KEEP_FILES = 20          # keep the 20 most-recent session logs
 _LOG_MAX_BYTES  = 10_000_000  # 10 MB per file before rotation
 
 
+def _env_enabled(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw in ("1", "true", "yes", "on", "debug")
+
+
+def _log_level() -> int:
+    """Use quiet production logging unless detailed diagnostics are requested."""
+    return logging.DEBUG if _env_enabled("GHOSTRIGGER_DEBUG_LOG") else logging.INFO
+
+
 def _make_log_dir():
     """Create Logs/ folder if it does not exist."""
     try:
@@ -65,12 +77,13 @@ def _setup_logging():
     logfile = os.path.join(_LOG_DIR, f"ghostrigger_{stamp}.log")
 
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
+    level = _log_level()
+    root_logger.setLevel(level)
 
     # ── File handler: DEBUG+ (captures everything) ────────────────────────
     try:
         fh = logging.FileHandler(logfile, encoding="utf-8")
-        fh.setLevel(logging.DEBUG)
+        fh.setLevel(level)
         fh.setFormatter(logging.Formatter(
             "%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
             datefmt="%H:%M:%S"
@@ -102,7 +115,7 @@ def _flush_all_handlers():
             pass
 
 
-def _install_exception_hooks(logfile: str):
+def _install_exception_hooks(logfile: str, install_tk_hook: bool = True):
     """
     Install global exception handlers so crashes are always logged to file.
 
@@ -120,6 +133,9 @@ def _install_exception_hooks(logfile: str):
               file=sys.stderr)
 
     sys.excepthook = _handle_uncaught
+
+    if not install_tk_hook:
+        return
 
     # Tkinter swallows callback errors by default; redirect to our logger
     try:
@@ -181,8 +197,13 @@ def main():
     log.info(f"App directory: {_APP_DIR}")
     log.info("=" * 60)
 
-    # Install exception hooks before anything else can raise
-    _install_exception_hooks(logfile)
+    gui_mode = os.environ.get("GHOSTRIGGER_GUI", "auto").strip().lower()
+    if gui_mode not in ("auto", "qt", "tk", "tkinter"):
+        gui_mode = "auto"
+
+    # Install exception hooks before anything else can raise.  The Tk callback
+    # hook is only installed when the Tk app owns the process.
+    _install_exception_hooks(logfile, install_tk_hook=(gui_mode in ("tk", "tkinter")))
 
     # Log detailed session-start diagnostics (PIL, NumPy, platform)
     try:
@@ -190,6 +211,24 @@ def main():
         log_session_start(_APP_DIR, logfile or "(no log file)")
     except Exception as _diag_err:
         log.debug(f"diagnostics.log_session_start failed: {_diag_err}")
+
+    if gui_mode in ("auto", "qt"):
+        try:
+            from src.gui.qt_main_window import run as _run_qt
+
+            log.info("Qt main window starting.")
+            rc = _run_qt(_APP_DIR)
+            log.info("Qt main window exited cleanly.")
+            _flush_all_handlers()
+            return rc
+        except Exception:
+            if gui_mode == "qt":
+                log.critical("Fatal error during Qt startup:\n" + traceback.format_exc())
+                _flush_all_handlers()
+                raise
+            log.warning("Qt shell unavailable; falling back to Tkinter.\n%s",
+                        traceback.format_exc())
+            _install_exception_hooks(logfile, install_tk_hook=True)
 
     try:
         from src.gui.main_window import run as _run_gui, KotorModToolsApp

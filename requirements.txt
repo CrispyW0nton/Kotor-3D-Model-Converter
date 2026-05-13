@@ -7,6 +7,7 @@ numpy>=1.21.0
 PyOpenGL>=3.1.0
 PyOpenGL_accelerate>=3.1.0     # optional GPU acceleration for PyOpenGL
 moderngl>=5.8.0                 # ModernGL for GPU-accelerated preview rendering
+PySide6>=6.6.0                  # Qt shell for the main application window
 
 # ── KotOR file format library ───────────────────────────────────────────────
 # OldRepublicDevs/PyKotor — battle-tested KotOR MDL/TPC/TXI/ERF/BIF reader+writer

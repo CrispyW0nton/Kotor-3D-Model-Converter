@@ -10,6 +10,10 @@ from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 # ── Hidden imports ────────────────────────────────────────────────────────
 # tkinter and its sub-modules are not auto-detected on all platforms
 hiddenimports = [
+    'PySide6',
+    'PySide6.QtCore',
+    'PySide6.QtGui',
+    'PySide6.QtWidgets',
     'tkinter',
     'tkinter.ttk',
     'tkinter.filedialog',
@@ -47,6 +51,12 @@ except ImportError:
 try:
     import numpy  # noqa: F401
     hiddenimports += ['numpy', 'numpy.core', 'numpy.lib']
+except ImportError:
+    pass
+
+try:
+    import PySide6  # noqa: F401
+    hiddenimports += collect_submodules('PySide6')
 except ImportError:
     pass
 

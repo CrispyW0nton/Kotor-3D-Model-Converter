@@ -9148,11 +9148,15 @@ class KotorModToolsApp(tk.Tk):
         self._work_dir:     str = self.settings['work_dir'] or os.path.expanduser("~")
         self._texture_dir:  str = ""
         self._texture_cache: Dict[str,bytes] = {}
+        self._window_motion_after_id = None
+        self._suspend_viewport_render_until = 0.0
+        self._window_move_shell_active = False
 
         self._apply_ttk_theme()
         self._build_menubar()
         self._build_ui()
         self._setup_logger()
+        self.bind("<Configure>", self._on_root_configure, add='+')
 
         # Set game dirs from settings
         self.lib_panel.set_dirs(
@@ -9258,6 +9262,36 @@ class KotorModToolsApp(tk.Tk):
         else:
             self.log("  No KotOR installation found automatically. "
                      "Use 'Set K1/K2 Dir' or '🔍 Auto' in the Library panel.")
+
+    def _on_root_configure(self, event=None):
+        """Freeze expensive viewport work while Windows is moving/resizing us."""
+        if event is not None and getattr(event, 'widget', None) is not self:
+            return
+        self._suspend_viewport_render_until = _time.perf_counter() + 0.25
+        if not self._window_move_shell_active:
+            self._window_move_shell_active = True
+            try:
+                if hasattr(self, 'viewport'):
+                    self.viewport.enter_window_move_shell()
+            except Exception:
+                pass
+        if self._window_motion_after_id is None:
+            self._window_motion_after_id = self.after(250, self._on_root_configure_idle)
+
+    def _on_root_configure_idle(self):
+        now = _time.perf_counter()
+        if now < self._suspend_viewport_render_until:
+            wait_ms = max(120, int((self._suspend_viewport_render_until - now) * 1000))
+            self._window_motion_after_id = self.after(wait_ms, self._on_root_configure_idle)
+            return
+        self._suspend_viewport_render_until = 0.0
+        self._window_motion_after_id = None
+        self._window_move_shell_active = False
+        try:
+            if hasattr(self, 'viewport'):
+                self.viewport.exit_window_move_shell()
+        except Exception:
+            pass
 
     def _on_game_dir_set(self, k1_dir: Optional[str], k2_dir: Optional[str]):
         """
@@ -10044,7 +10078,10 @@ class KotorModToolsApp(tk.Tk):
         handler = GUIHandler(_safe_after)
         handler.setFormatter(logging.Formatter('%(levelname)s  %(name)s  %(message)s'))
         logging.getLogger().addHandler(handler)
-        logging.getLogger().setLevel(logging.DEBUG)  # File log still gets DEBUG+
+        # Keep the root level chosen by main._setup_logging(). Forcing DEBUG in
+        # release builds makes render/load hot paths synchronously write a lot
+        # of disk log traffic, which is especially noticeable in PyInstaller
+        # windowed builds on Windows.
 
     def log(self, msg: str, level: str = 'info'):
         self.log_panel.log(msg, level)

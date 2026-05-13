@@ -20,6 +20,16 @@ def maybe_autostart_kotormcp() -> None:
     Set ``GHOSTRIGGER_NO_MCP_AUTOSTART=1`` to disable.  Override port with
     ``GHOSTRIGGER_MCP_PORT``.
     """
+    if getattr(sys, "frozen", False):
+        # In a PyInstaller app sys.executable is GhostRigger.exe, not python.exe.
+        # Launching it with "-m kotormcp" starts another GUI instance instead of
+        # the MCP module, which can make the compiled app feel badly lagged.
+        if os.environ.get("GHOSTRIGGER_ALLOW_FROZEN_MCP_AUTOSTART", "").strip().lower() not in (
+            "1", "true", "yes", "on",
+        ):
+            log.info("maybe_autostart_kotormcp: skipped in frozen build")
+            return
+
     flag = os.environ.get("GHOSTRIGGER_NO_MCP_AUTOSTART", "").strip().lower()
     if flag in ("1", "true", "yes", "on"):
         return
@@ -44,6 +54,7 @@ def maybe_autostart_kotormcp() -> None:
         pass
 
     env = os.environ.copy()
+    env["GHOSTRIGGER_NO_MCP_AUTOSTART"] = "1"
     sep = os.pathsep
     pyp = str(src_dir)
     env["PYTHONPATH"] = f"{pyp}{sep}{env['PYTHONPATH']}" if env.get("PYTHONPATH") else pyp

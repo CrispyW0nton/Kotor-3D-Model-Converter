@@ -7622,6 +7622,7 @@ class UVViewerWindow(tk.Toplevel):
         self._pan_y  = 0.0
         self._mx = self._my = 0
         self._render_pending = False
+        self._render_after_id = None
 
         self._build_ui()
         self._schedule_render()
@@ -7826,6 +7827,12 @@ class UVViewerWindow(tk.Toplevel):
 
     def _request_render(self):
         self._render_pending = True
+        try:
+            if self._render_after_id is not None:
+                self.after_cancel(self._render_after_id)
+            self._render_after_id = self.after(0, self._schedule_render)
+        except Exception:
+            pass
 
     def _schedule_render(self):
         if not self.winfo_exists():
@@ -7833,7 +7840,7 @@ class UVViewerWindow(tk.Toplevel):
         if self._render_pending:
             self._render_pending = False
             self._do_render()
-        self.after(33, self._schedule_render)
+        self._render_after_id = self.after(150, self._schedule_render)
 
     def _do_render(self):
         if not _PIL:
@@ -8221,8 +8228,11 @@ class ViewportWidget(tk.Frame):
     Embeds a Tkinter Canvas and drives FrameRenderer at ~30 fps.
     """
 
-    _RENDER_MS = 33          # ~30 fps idle render tick
+    _RENDER_MS = 100         # idle queue poll; renders are request-driven
+    _RENDER_MS_ACTIVE = 33   # while a render/result is in flight
+    _RENDER_MS_SUSPENDED = 500  # native window move/resize: hold one frame
     _RENDER_MS_INTERACTIVE = 16  # ~60 fps during active drag (feels snappier)
+    _RESIZE_DEBOUNCE_MS = 120    # coalesce Windows Configure storms
 
     def __init__(self, master, **kw):
         super().__init__(master, **kw)
@@ -8238,6 +8248,12 @@ class ViewportWidget(tk.Frame):
         self._render_fast    = False          # True → use _RENDER_MS_INTERACTIVE tick
         self._render_in_progress = False   # guard: only one render thread at a time
         self._render_started_at: float = 0.0  # perf_counter when render thread launched
+        self._render_loop_after_id = None
+        self._resize_after_id = None
+        self._last_canvas_size = (0, 0)
+        self._move_shell_active = False
+        self._canvas_pack_info = None
+        self._move_shell = None
         self._last_render_ms: float = 0.0     # last frame render time in ms
         self._render_frame_count: int = 0     # total frames rendered
         # FIX (v10.4): FPS counter uses wall-clock time between displayed frames
@@ -8479,6 +8495,42 @@ class ViewportWidget(tk.Frame):
         self.canvas.bind("<ButtonPress-1>",  lambda e: self.canvas.focus_set(), add='+')
 
         self._schedule_render()
+
+    def enter_window_move_shell(self):
+        """Temporarily replace the heavy viewport canvas while the root moves."""
+        if self._move_shell_active:
+            return
+        try:
+            self._move_shell_active = True
+            self._render_pending = False
+            self._render_fast = False
+            self._canvas_pack_info = self.canvas.pack_info()
+            self.canvas.pack_forget()
+            shell = tk.Frame(self, bg="#0d0d1a")
+            shell.pack(fill='both', expand=True)
+            self._move_shell = shell
+        except Exception:
+            self._move_shell_active = False
+
+    def exit_window_move_shell(self):
+        """Restore the viewport canvas after native window movement settles."""
+        if not self._move_shell_active:
+            return
+        try:
+            if self._move_shell is not None:
+                self._move_shell.destroy()
+            self._move_shell = None
+            pack_info = self._canvas_pack_info or {'fill': 'both', 'expand': True}
+            self.canvas.pack(**pack_info)
+        except Exception:
+            try:
+                self.canvas.pack(fill='both', expand=True)
+            except Exception:
+                pass
+        finally:
+            self._canvas_pack_info = None
+            self._move_shell_active = False
+            self._request_render()
 
     # ── Public API ────────────────────────────────────────────────────
 
@@ -9222,6 +9274,20 @@ class ViewportWidget(tk.Frame):
         self._request_render()
 
     def _on_resize(self, e):
+        size = (getattr(e, 'width', 0), getattr(e, 'height', 0))
+        if size == self._last_canvas_size:
+            return
+        self._last_canvas_size = size
+        if self._resize_after_id is not None:
+            try:
+                self.after_cancel(self._resize_after_id)
+            except Exception:
+                pass
+        self._resize_after_id = self.after(
+            self._RESIZE_DEBOUNCE_MS, self._finish_resize_render)
+
+    def _finish_resize_render(self):
+        self._resize_after_id = None
         self._request_render()
 
     # ── Toolbar callbacks ─────────────────────────────────────────────
@@ -9328,9 +9394,25 @@ class ViewportWidget(tk.Frame):
 
     def _request_render(self, fast: bool = False):
         """Mark a render as needed.  fast=True uses the interactive tick interval."""
+        if self._move_shell_active:
+            return
         self._render_pending = True
         if fast:
             self._render_fast = True
+        # Wake the request-driven loop immediately when called from Tk's thread.
+        # Background workers still communicate through the queue and do not touch
+        # Tk scheduling directly.
+        if threading.current_thread() is threading.main_thread():
+            try:
+                top = self.winfo_toplevel()
+                suspend_until = float(getattr(top, '_suspend_viewport_render_until', 0.0) or 0.0)
+                if suspend_until > _time_mod.perf_counter():
+                    return
+                if self._render_loop_after_id is not None:
+                    self.after_cancel(self._render_loop_after_id)
+                self._render_loop_after_id = self.after(0, self._schedule_render)
+            except Exception:
+                pass
 
     def _schedule_render(self):
         if not self.winfo_exists():
@@ -9339,7 +9421,27 @@ class ViewportWidget(tk.Frame):
         # ── Drain render-result queue (main-thread safe) ──────────────────────
         # The render thread posts (img, render_ms, W, H) here instead of calling
         # self.after() directly; we drain and apply it now on the main thread.
+        if self._move_shell_active:
+            self._render_loop_after_id = self.after(
+                self._RENDER_MS_SUSPENDED, self._schedule_render)
+            return
+
         try:
+            top = self.winfo_toplevel()
+            suspend_until = float(getattr(top, '_suspend_viewport_render_until', 0.0) or 0.0)
+        except Exception:
+            suspend_until = 0.0
+        if suspend_until > _time_mod.perf_counter():
+            # During native Windows move/resize, hold the last completed frame.
+            # Do not convert queued images to PhotoImage and do not start new
+            # render work until the root window reports a quiet period.
+            self._render_loop_after_id = self.after(
+                self._RENDER_MS_SUSPENDED, self._schedule_render)
+            return
+
+        try:
+            while self._render_result_queue.qsize() > 1:
+                self._render_result_queue.get_nowait()
             while True:
                 img, render_ms, W, H = self._render_result_queue.get_nowait()
                 self._last_render_ms = render_ms
@@ -9424,9 +9526,16 @@ class ViewportWidget(tk.Frame):
             self._render_pending = False
             self._render_fast    = False
             self._do_render()
-        # Use faster tick during interactive drag for smoother orbit/pan feel
-        next_ms = self._RENDER_MS_INTERACTIVE if fast else self._RENDER_MS
-        self.after(next_ms, self._schedule_render)
+        # Idle slowly so Tk is not waking the UI thread 30 times/sec while the
+        # user is moving/resizing the window. Poll faster only while work exists.
+        if fast:
+            next_ms = self._RENDER_MS_INTERACTIVE
+        elif (self._render_pending or self._render_in_progress
+              or not self._render_result_queue.empty()):
+            next_ms = self._RENDER_MS_ACTIVE
+        else:
+            next_ms = self._RENDER_MS
+        self._render_loop_after_id = self.after(next_ms, self._schedule_render)
 
     def _toggle_gpu_renderer(self):
         """Toggle between CPU PIL rasterizer and GPU ModernGL renderer.
