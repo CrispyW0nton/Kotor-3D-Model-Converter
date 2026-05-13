@@ -58,6 +58,25 @@ proof_*/
 *_report.txt
 *_diagnostic*.py
 
+# ── Reproducible audit dumps (regenerate via scripts/dump_*.py) ───────────────
+diagnostics/
+/exports/baseline_renders/
+/exports/current_renders/
+/exports/skin_*/
+/exports/visual_*/
+/exports/baseline_renders_metadata.json
+/exports/k2_geometry_diagnosis*.json
+/exports/render_diff_report.json
+/exports/structural_validation.json
+/exports/visual_audit_k2.json
+/exports/skin_3f_postfix_gpu_dump.jsonl
+
+# ── User runtime state (never commit; auto-recreated on first launch) ─────────
+settings.json
+GhostRigger-K1-K2.exe
+/dist/
+/build/
+
 # ── One-off debug / prototype render PNGs at repo root ────────────────────────
 audit_c_*.png
 audit_n_*.png
