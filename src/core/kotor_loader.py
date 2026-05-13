@@ -1,10 +1,10 @@
 """
 kotor_loader.py  —  Direct PyKotor loader for GhostRigger.
 
-PyKotor is the *only* parsing path.  Binary MDL/MDX loads use ``read_mdl_safe``
-(``mdl_reader_wrapper``), which applies in-memory PyKotor fixes (see
-``pykotor_mdl_io_fix``) — no site-packages source patching.  TPC handling still
-calls PyKotor directly.
+Binary MDL/MDX loads use ``read_mdl_safe`` (``mdl_reader_wrapper``), which
+routes through GhostRigger's owned binary reader for K2 layout fixes without
+mutating PyKotor global state.  ASCII MDL and TPC handling still call PyKotor
+directly.
 
 Public surface
 --------------
@@ -210,6 +210,8 @@ def patch_tpc_header(data: bytes) -> bytes:
 
     Stock KotOR DXT TPC files store data_sz=0.  PyKotor needs a valid value
     to find the TXI trailer.  We compute it and patch in-place (copy only).
+    Uncompressed RGB/RGBA files also use data_sz=0, so only patch when the
+    payload is too small to contain uncompressed texels.
     """
     if len(data) < 128:
         return data
@@ -222,6 +224,16 @@ def patch_tpc_header(data: bytes) -> bytes:
     mips   = struct.unpack_from('B',  data, 13)[0]
     if enc not in (2, 4) or width == 0 or height == 0:
         return data          # uncompressed or invalid — leave alone
+
+    bpp = 3 if enc == 2 else 4
+    total_uncompressed = 0
+    uw, uh = width, height
+    for _ in range(max(1, mips)):
+        total_uncompressed += max(1, uw) * max(1, uh) * bpp
+        uw = max(1, uw >> 1)
+        uh = max(1, uh >> 1)
+    if len(data) >= 128 + total_uncompressed:
+        return data          # enc=2/4 with full texel payload is RGB/RGBA, not DXT
 
     total = 0
     w, h  = width, height
@@ -628,8 +640,8 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
     # These corrupt values come from reading the wrong byte region of the MDX file.
     #
     # Strategy:
-    #   • Values that are NaN, ±Inf, or |x| > _GEOM_MAX are corrupt → clamp/discard.
-    #   • Legitimate tiled UVs stay intact (module UVs can reach ±131,209).
+    #   • Position values that are NaN, ±Inf, or |x| > _GEOM_MAX are corrupt.
+    #   • UV magnitudes are not classified here; tiled UVs pass through unchanged.
     #   • Vertex positions with |x|>10000 are also corrupt (KotOR worlds fit in ~500 units).
     #
     # If MORE than 50% of vertices are corrupt, the whole mesh has a bad MDX offset;
@@ -644,9 +656,9 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
         return x
 
     def _safe_uv(x: float, y: float) -> tuple:
-        """Return clamped UV pair; replace corrupt component with 0.5."""
-        xu = x if math.isfinite(x) and abs(x) <= _GEOM_MAX else 0.5
-        yu = y if math.isfinite(y) and abs(y) <= _GEOM_MAX else 0.5
+        """Return UV pair; replace only non-finite components with 0.5."""
+        xu = x if math.isfinite(x) else 0.5
+        yu = y if math.isfinite(y) else 0.5
         return (xu, yu)
 
     # ── Vertex positions ─────────────────────────────────────────────────────
@@ -711,8 +723,7 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
                 uv1 = _safe_vec2_list(_uv1_raw)
         else:
             uv1 = _uv1_attr
-        # Sanitize: replace NaN/Inf/extreme UV components with 0.5.
-        # Legitimate tiled UVs (e.g. ±13) are kept intact.
+        # Keep finite UVs exactly as authored; large values are valid tiling data.
         gr.uvs = [_safe_uv(float(u.x), float(u.y)) for u in (uv1 or [])]
 
         # ── Secondary / lightmap UVs ─────────────────────────────────────────────

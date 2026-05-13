@@ -142,7 +142,6 @@ try:
         project_vertices_np as _accel_proj_verts,
         frustum_cull_np as _accel_frustum_cull,
         depth_sort_np as _accel_depth_sort,
-        sentinel_filter_np as _accel_sentinel_filter,
         rasterize_frame as _accel_rasterize_frame,
         flat_shade_frame as _accel_flat_shade_frame,
         shade_colors_np as _accel_shade_colors,
@@ -160,7 +159,6 @@ except Exception as _accel_err:
     def _accel_proj_verts(*a, **kw): return None
     def _accel_frustum_cull(*a, **kw): return None
     def _accel_depth_sort(*a, **kw): return None
-    def _accel_sentinel_filter(*a, **kw): return None
     def _accel_rasterize_frame(*a, **kw): pass
     def _accel_flat_shade_frame(*a, **kw): pass
     def _accel_shade_colors(*a, **kw): return None
@@ -209,26 +207,8 @@ def _add(a, b):
 def _clamp(v, lo, hi):
     return max(lo, min(hi, v))
 
-# ── UV sentinel threshold ────────────────────────────────────────────────────
-# KotOR skin meshes embed seam-split duplicate vertices whose UV coords are
-# intentionally set to a large placeholder (e.g. (-22, 127) in n_darthrevan's
-# torso).  Any triangle that references one of these vertices cannot be textured
-# v6.0 FIX: UV sentinel removed.  KotOR module textures intentionally use
-# tiled UVs well beyond the 0-1 range (walls, floors, terrain).  The software
-# rasterizer already uses frac() (u % 1.0) for GL_REPEAT wrapping, which
-# handles any UV magnitude correctly.  Filtering by magnitude was the root
-# cause of missing/stretched module textures.
-#
-# Previously _UV_SENTINEL = 100.0 caused triangles with |UV| > 100 to be
-# silently skipped, and a fragile workaround raised the limit to 1e6 for
-# module models.  Both are now removed.
-#
-# Only NaN/Inf values (genuinely corrupt MDX data) are filtered.  The
-# threshold is set to a value that no legitimate UV will ever exceed,
-# while still catching corrupt floats.
-# Cross-ref: KotOR.js TextureLoader.ts -- default is RepeatWrapping, no UV
-# filtering.  KotorBlender scene/material.py -- GL_REPEAT default.
-_UV_SENTINEL = 1e18  # effectively disabled; only catches NaN/Inf
+# KotOR uses tiled UV coordinates extensively.  UV magnitude is never used to
+# decide whether geometry is renderable; renderers wrap or clamp at sampling time.
 
 # ── Inner-geometry / face node substrings ──────────────────────────────────
 # The authoritative definitions now live in :mod:`src.core.render_constants`
@@ -2585,8 +2565,7 @@ def _paste_textured_triangle(
     if not _PIL or tex_img is None:
         return
 
-    # v6.0 FIX: UV sentinel guard removed.  GL_REPEAT (frac) handles all UV
-    # magnitudes.  Only skip if UV contains NaN/Inf (corrupt data).
+    # GL_REPEAT handles tiled finite UV coordinates at sampling time.
     try:
         _uv_check = (uv0[0] + uv0[1] + uv1[0] + uv1[1] + uv2[0] + uv2[1])
         if _uv_check != _uv_check:  # NaN check
@@ -3221,7 +3200,7 @@ def _paste_lightmap_triangle(
     """
     if not _PIL or lm_img is None:
         return
-    # v6.0 FIX: Lightmap UV sentinel removed. frac() handles all magnitudes.
+    # Lightmap UVs may also tile; wrapping is handled at sampling time.
     try:
         _lm_check = (lm_uv0[0] + lm_uv0[1] + lm_uv1[0] + lm_uv1[1] + lm_uv2[0] + lm_uv2[1])
         if _lm_check != _lm_check:  # NaN check
@@ -3805,7 +3784,7 @@ class FrameRenderer:
         # ── Strategy B: vertex-count ratio (face-overlay proxy detection) ───
         # If non-skin pieces are all tiny (≤50 verts), a skin node with
         # > 5× the max non-skin vertex count is a body proxy.
-        # EXCEPTION: skin nodes with a real texture AND valid UVs are never
+        # EXCEPTION: skin nodes with a real texture AND UVs are never
         # body proxies; they are the primary visible geometry (e.g. ad_saul body).
         max_ns_verts = max(len(n.vertices) for n in ns_visible)
         candidates_b = []
@@ -3814,11 +3793,10 @@ class FrameRenderer:
             for n, cz, dist in skin_nodes:
                 if len(n.vertices) < vcount_threshold:
                     continue
-                # Skip if the node has a real texture with valid UVs (it's renderable geometry)
+                # Skip if the node has a real texture with UVs (it's renderable geometry)
                 tex = _clean_tex_name(n.texture)
-                if tex and tex.upper() not in ('NULL', ''):
-                    if n.uvs and not any(abs(u) > 3.0 or abs(v) > 3.0 for u, v in n.uvs[:20]):
-                        continue  # real textured skin node – keep it
+                if tex and tex.upper() not in ('NULL', '') and n.uvs:
+                    continue  # real textured skin node – keep it
                 candidates_b.append((n, cz, dist))
 
         # Merge candidates (union of both strategies)
@@ -4598,24 +4576,23 @@ class FrameRenderer:
         """
         Apply Linear Blend Skinning to vertex vi of the given skin node.
 
-        KotOR stores skin vertices in NODE-LOCAL space (relative to the skin
-        node's pivot in the bind pose), the same as non-skin trimesh nodes.
-        The vertex must first be transformed to world space using the skin
-        node's world transform before LBS deformation is applied.
+        KotOR skin vertices are authored in the model-root bind frame consumed
+        by the skinning palette. Do not apply the skin node's own hierarchy
+        transform before LBS; in bind pose the xoreos skin formula collapses
+        back to the authored vertex coordinate.
 
         Standard LBS formula:
             v_world_anim = sum_i( w_i * (R_anim_i * R_bind_i^-1 * (v_bind_world - T_bind_i) + T_anim_i) )
 
         Where:
-          v_bind_world = vertex in world space at bind pose
-                         = skin_node_world_transform(v_local)
+          v_bind_world = authored skin bind coordinate
           T_bind_i     = bone i world position at bind pose
           R_bind_i     = bone i world rotation at bind pose
           T_anim_i     = bone i world position at animated pose
           R_anim_i     = bone i world rotation at animated pose
 
         If no valid bone influences found, falls back to the bind-pose world
-        position (skin node world transform applied to the local vertex).
+        position (the authored skin bind coordinate).
         """
         try:
             from ..core.model_data import _quat_rotate as _qr, _quat_conjugate
@@ -4624,8 +4601,6 @@ class FrameRenderer:
 
         v = node.vertices[vi]
 
-        # Convert vertex from node-local space to world space using the skin
-        # node's own world transform.  This is the bind-pose world position.
         wp_s, wo_s, is_id_s = self._node_world_transform(node)
         if vi == 0:
             _gr_probe('CPU-LBS', node, wp_s, wo_s, is_id_s)
@@ -4749,7 +4724,7 @@ class FrameRenderer:
         PyKotor, and direct binary analysis of c_bantha, c_terantanak, p_bastilabb,
         N_sithpraet and 50+ other models):
 
-        ALL nodes (skin AND non-skin trimesh/dangly) — BIND POSE:
+        Non-skin trimesh/dangly nodes — BIND POSE:
           Vertices are stored in NODE-LOCAL space (relative to the node's own
           pivot point in the hierarchy).  The full parent-chain world transform
           (translation + rotation accumulated root→leaf) must always be applied.
@@ -4768,10 +4743,14 @@ class FrameRenderer:
           btRhorn: local verts Y=[1.851,2.955], pivot (Y=-0.890,Z=1.469)
             World verts Y=[0.961,2.065] — curved upward/forward above the head. ✓
 
+        Skin nodes — BIND POSE:
+          Vertices are authored in model-root bind space. Render them as-is.
+          Applying the skin mesh node's parent-chain transform disassembles K2
+          creatures and characters into displaced fragments.
+
         SKIN nodes — ANIMATED POSE:
           Use Linear Blend Skinning (LBS) with bone_transforms.
-          LBS pre-transforms the local vertex to world space (via skin node's own
-          world transform) before applying bone deformation.
+          LBS starts from the authored bind coordinate and applies bone deltas.
         """
         verts = node.vertices
         if not verts:
@@ -5225,10 +5204,9 @@ class FrameRenderer:
         1. Collect world verts + UVs per node (same as _draw_mesh_textured).
         2. _proj_batch → NumPy vectorized screen projection.
         3. frustum_cull_np → vectorized AABB cull.
-        4. sentinel_filter_np → vectorized UV sentinel filter (220× speedup).
-        5. depth_sort_np → NumPy argsort (3× faster than Python sort).
-        6. _accel_rasterize_frame / _accel_flat_shade_frame → batch rasterize.
-        7. Convert NumPy framebuffer back to PIL for compositing.
+        4. depth_sort_np → NumPy argsort (3× faster than Python sort).
+        5. _accel_rasterize_frame / _accel_flat_shade_frame → batch rasterize.
+        6. Convert NumPy framebuffer back to PIL for compositing.
         """
         if not _ACCEL_AVAILABLE or not _NUMPY:
             return False
@@ -5276,17 +5254,6 @@ class FrameRenderer:
 
         total_tris = 0
         wire_tris  = []  # [(flat_pts, wire_col), ...]
-
-        # v6.0 FIX: Module UV sentinel workaround removed.  _UV_SENTINEL is now
-        # set to 1e18 (effectively disabled), so there is no need for a separate
-        # module-specific threshold.  All UV magnitudes are valid; the software
-        # rasterizer uses frac() (GL_REPEAT) to wrap UVs correctly.
-        # Cross-ref: KotOR.js TextureLoader.ts -- default is RepeatWrapping.
-        _accel_model_cls = (str(getattr(self.model, 'classification', 'character') or 'character')).lower() if self.model else 'character'
-        _accel_mtype_raw = getattr(self.model, 'model_type', None) if self.model else None
-        _accel_mtype = int(_accel_mtype_raw) if _accel_mtype_raw is not None else 4
-        _accel_is_module = (_accel_model_cls in ('effect', 'tile', 'other') or _accel_mtype in (0, 2))
-        _accel_uv_sentinel = _UV_SENTINEL
 
         for node in self._iter_visible_mesh_nodes():
             if not node.vertices or not node.faces:
@@ -5475,9 +5442,7 @@ class FrameRenderer:
                     uv1 = uvs[ti1] if ti1 < n_uvs else (0.5, 0.5)
                     uv2 = uvs[ti2] if ti2 < n_uvs else (0.5, 0.5)
 
-                    # v6.0 FIX: UV sentinel guard effectively disabled.
-                    # Only NaN/Inf is filtered.  All legitimate UV magnitudes
-                    # are handled by the frac()-based GL_REPEAT wrapping.
+                    # GL_REPEAT handles legitimate tiled UV coordinates.
                     _uv_sum = (uv0[0] + uv0[1] + uv1[0] + uv1[1] + uv2[0] + uv2[1])
                     if _uv_sum != _uv_sum:  # NaN check (NaN != NaN)
                         continue
@@ -6069,37 +6034,6 @@ class FrameRenderer:
             # Batch-project all world vertices once per node for speed
             screen_verts_t = self._proj_batch(world_verts, W, H)
 
-            # v6.0 FIX: Vectorized UV sentinel pre-filter simplified.
-            # _UV_SENTINEL is now 1e18 (effectively disabled) — only catches
-            # NaN/Inf from corrupt MDX data.  No module-specific workaround needed.
-            # The frac() wrapping in the software rasterizer handles all UV magnitudes.
-            _model_cls_str = getattr(self.model, 'classification', 'character') if self.model else 'character'
-            _model_type_raw_vp = (getattr(self.model, 'model_type', None) if self.model else None)
-            _model_type_int = int(_model_type_raw_vp) if _model_type_raw_vp is not None else 4
-            _vp_is_module = (_model_cls_str in ('effect', 'tile', 'other') or
-                             _model_type_int in (0, 2))
-            _node_uv_sentinel = _UV_SENTINEL  # 1e18 — effectively NaN/Inf only
-            _sentinel_mask: Optional[np.ndarray] = None
-            if _NUMPY and has_uvs and n_uvs > 0 and node.faces and not _node_is_multitex:
-                try:
-                    # Build (NF, 3, 2) UV array for all faces
-                    NF_all = len(node.faces)
-                    _uvs_arr = np.empty((NF_all, 3, 2), dtype=np.float32)
-                    for _mfi, _mface in enumerate(node.faces):
-                        if len(_mface) < 3:
-                            _uvs_arr[_mfi] = 0.0
-                            continue
-                        if _has_face_uvs:
-                            _fuv = face_uvs_list[_mfi]
-                            _ti = [_fuv[0], _fuv[1], _fuv[2]]
-                        else:
-                            _ti = [_mface[0], _mface[1], _mface[2]]
-                        for _k, _idx in enumerate(_ti):
-                            _uvs_arr[_mfi, _k] = uvs[_idx] if _idx < n_uvs else (0.5, 0.5)
-                    _sentinel_mask = _accel_sentinel_filter(_uvs_arr, _node_uv_sentinel)
-                except Exception:
-                    _sentinel_mask = None  # fall back to per-face check
-
             # ── Per-node seam-split vertex detection (v10.4 fix) ─────────────
             # Build PER-AXIS sets of vertex indices that are genuine UV-seam-split
             # duplicates: vertices sharing the same 3D position with UV near the
@@ -6225,17 +6159,6 @@ class FrameRenderer:
                         lm_uv2 = _uvs_lm[vi2] if vi2 < _n_uvs_lm else (0.5, 0.5)
                     else:
                         lm_uv0 = lm_uv1 = lm_uv2 = (0.5, 0.5)
-                    # v6.0 FIX: UV sentinel guard simplified to NaN/Inf only.
-                    # All legitimate UV magnitudes are handled by frac() wrapping.
-                    # The vectorized pre-filter (_sentinel_mask) still runs but with
-                    # _UV_SENTINEL=1e18 it only catches corrupt NaN/Inf data.
-                    if _sentinel_mask is not None:
-                        if not _sentinel_mask[_fi]:
-                            continue
-                    else:
-                        _uv_sum_vp = (uv0[0] + uv0[1] + uv1[0] + uv1[1] + uv2[0] + uv2[1])
-                        if _uv_sum_vp != _uv_sum_vp or not math.isfinite(_uv_sum_vp):
-                            continue  # NaN or Inf check
                     # rotate_texture: (u,v) → (v, 1-u)  [90° CCW rotation]
                     # Used by KotOR for certain prop nodes (floor decals, lightmapped tiles).
                     if _node_rotate_tex:
@@ -6569,7 +6492,7 @@ class FrameRenderer:
         lbicep_g, rthigh_g, pelvis_g, head_g, jaw2, etc.).  These are used by
         the engine's SkinMesh deformation pipeline and are never rendered directly.
         They have:
-          - No texture (tex=null/empty) OR extreme UV coordinates (|u|>3 or |v|>3)
+          - No texture (tex=null/empty) or helper-style node naming
           - Often named with a _g / _G suffix (geometry deformation)
           - Sometimes carry a visible texture name but with completely invalid UVs
             or NO UVs at all
@@ -6582,7 +6505,7 @@ class FrameRenderer:
 
         NON-skin _g nodes: always helpers regardless of texture (they are deform
         proxies used for SkinMesh influence even when textured, e.g. rthigh_g in
-        n_admrlsaulkar carries texture 'n_saulh' but has no UVs / extreme UVs).
+        n_admrlsaulkar carries texture 'n_saulh' but has no usable UVs).
 
         v12.14: Also treats skin-proxy nodes (identified by _compute_skin_proxy_ids)
         as deformation helpers.  A non-skin node is a proxy when it shares an
@@ -6601,7 +6524,7 @@ class FrameRenderer:
 
         # ── BUG FIX v26: Inner-geometry nodes (eyes, eyelids, teeth, tongue, ─
         # jaw, gum) are ALWAYS renderable when they have a real texture and
-        # valid UVs — regardless of is_skin status, name suffix, or proxy rules.
+        # UVs — regardless of is_skin status, name suffix, or proxy rules.
         # These nodes sit inside the face mesh and form the visible eye/mouth
         # content.  Treating them as deformation helpers (for any reason) causes
         # them to be silently dropped from the render list and the character
@@ -6610,54 +6533,13 @@ class FrameRenderer:
         _name_lower_check = node.name.lower()
         if any(s in _name_lower_check for s in _INNER_GEO_SUBSTRINGS):
             if not is_null_tex and node.uvs:
-                _uvs_ok = not any(abs(u) > 3.0 or abs(v) > 3.0
-                                  for u, v in node.uvs[:20])
-                if _uvs_ok:
-                    return False  # always render inner-geo nodes
+                return False  # always render inner-geo nodes
 
-        # ── Skin node with a real texture and valid UVs → always visible ──────
+        # ── Skin node with a real texture and UVs → always visible ────────────
         # Never treat it as a deformation helper regardless of name.
         # (Some KotOR models use _g-named skin meshes as primary geometry.)
         if node.is_skin and not is_null_tex and node.uvs:
-            has_extreme_uvs = any(abs(u) > 3.0 or abs(v) > 3.0
-                                  for u, v in node.uvs[:20])
-            if not has_extreme_uvs:
-                return False
-
-        # ── Extreme UV coordinates → always a deform helper ───────────────────
-        # EXCEPTION: Module/area/tile models (classification 'effect'=0 or
-        # 'tile'=2) legitimately use UV coordinates far outside [−3, +3] for
-        # tiled wall/floor textures (e.g. U=−8.75 for LTS_logwal02, or
-        # V=−9.71 for wall geometry in Dantooine/Taris modules).  These are
-        # real renderable geometry, not deformation helpers.  Skip the extreme-UV
-        # helper check for module classifications.
-        # Reference: KotOR MDL mesh header — area/tile models tile textures
-        # over large surfaces using UV coordinates that match the surface scale
-        # in game units (e.g. a 9-unit wall maps to U≈9.0 with a 1-unit texture).
-        #
-        # FRAGILE: this classifier uses a single |u|>3 or |v|>3 threshold against
-        # the FIRST 20 UVs only, gated by ``classification`` / ``model_type``.
-        # Failure modes it can hit quietly:
-        #   * Character models carrying legitimate tiled UVs (armour belts,
-        #     creature body plates) whose classification is mis-set by the
-        #     loader → real geometry classified as a helper and dropped.
-        #   * A mesh whose helper portion sits past vertex 20 (sparse
-        #     seam-fix placeholders) → helper misclassified as renderable.
-        # A proper fix would be a statistical / bbox-containment test against
-        # the head/body mesh instead of a magic 3.0 threshold.  Leave the
-        # heuristic in place until a failing model is in hand.
-        if node.uvs:
-            _model_cls_str = getattr(self.model, 'classification', 'character') if self.model else 'character'
-            # FIX-MODEL-TYPE-ZERO: don't treat model_type=0 as falsy
-            _model_type_raw2 = (getattr(self.model, 'model_type', None) if self.model else None)
-            _model_type_int = int(_model_type_raw2) if _model_type_raw2 is not None else 4
-            _is_module_model = (_model_cls_str in ('effect', 'tile', 'other') or
-                                _model_type_int in (0, 2))
-            if not _is_module_model:
-                has_extreme_uvs = any(abs(u) > 3.0 or abs(v) > 3.0
-                                      for u, v in node.uvs[:20])
-                if has_extreme_uvs:
-                    return True
+            return False
 
         # ── Non-skin _g / _G or _dum nodes are deform helpers — UNLESS they ───
         # are inner-geometry (eye, eyelid, teeth, tongue) nodes with a real
@@ -6679,14 +6561,11 @@ class FrameRenderer:
         if not node.is_skin and (name_lower.endswith('_g')
                                   or name_lower.endswith('_g0')
                                   or name_lower.endswith('_dum')):
-            # EXCEPTION: inner-geometry nodes with a real texture and valid
-            # (non-extreme) UVs are ALWAYS renderable — they are real eyeball /
+            # EXCEPTION: inner-geometry nodes with a real texture and UVs are
+            # ALWAYS renderable — they are real eyeball /
             # teeth / tongue meshes, not deformation proxies.
             if _name_is_inner_geo and not is_null_tex and node.uvs:
-                _uvs_ok = not any(abs(u) > 3.0 or abs(v) > 3.0
-                                  for u, v in node.uvs[:20])
-                if _uvs_ok:
-                    return False  # render this inner-geo node
+                return False  # render this inner-geo node
             return True
 
         # ── Null-texture, non-skin nodes → always deform helpers ─────────────

@@ -319,17 +319,6 @@ def log_model_anomalies(model: Any) -> int:
                             anomaly_count += 1
                             break
 
-                # UV range check — extreme UV coordinates (>1000) suggest
-                # a coordinate-space mismatch or corrupt data
-                if uvs:
-                    max_uv = max((max(abs(u), abs(v)) for u, v in uvs[:50]),
-                                 default=0.0)
-                    if max_uv > 1000.0:
-                        log.warning(
-                            f"  [{name}] mesh '{node_name}': "
-                            f"extreme UV coordinates (max={max_uv:.1f})")
-                        anomaly_count += 1
-
             # Check for NaN/Inf in position
             pos = getattr(node, 'position', None)
             if pos:

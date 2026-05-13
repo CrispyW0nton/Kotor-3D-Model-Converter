@@ -38,7 +38,7 @@ Usage
         project_vertices_np,
         frustum_cull_np,
         depth_sort_np,
-        sentinel_filter_np,
+        finite_uv_filter_np,
         rasterize_frame,
         warmup_jit,
     )
@@ -148,28 +148,18 @@ def depth_sort_np(depths: np.ndarray) -> np.ndarray:
     return np.argsort(-depths, kind='stable')
 
 
-def sentinel_filter_np(
+def finite_uv_filter_np(
     uvs: np.ndarray,    # (N, 3, 2) float UV coords for N triangles
-    sentinel: float = 1e18,
 ) -> np.ndarray:
     """
-    Vectorized UV sentinel filter — catches only NaN/Inf.
+    Vectorized finite-UV filter.
 
     Returns a boolean mask (N,) where True = triangle has NO corrupt UVs
     and is safe to rasterize.
 
-    v6.0: sentinel raised to 1e18 — all finite UV values pass through.
-    GL_REPEAT (frac()) handles any UV magnitude correctly.  Only NaN, ±Inf,
-    or values > 1e18 (from corrupt MDX data) are filtered out.
-
-    Note: np.abs(NaN) > threshold returns False (NaN comparisons always False),
-    so we must also check np.isfinite() to catch NaN explicitly.
-
     Speedup vs Python loop: ~220x on 2,000 triangles.
     """
-    finite_mask = np.all(np.isfinite(uvs), axis=(1, 2))   # False for NaN or Inf
-    range_mask  = ~np.any(np.abs(uvs) > sentinel, axis=(1, 2))  # False for extreme values
-    return finite_mask & range_mask
+    return np.all(np.isfinite(uvs), axis=(1, 2))   # False for NaN or Inf
 
 
 def shade_colors_np(

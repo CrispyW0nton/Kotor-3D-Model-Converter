@@ -1121,16 +1121,9 @@ class KotorModel:
             tex = t.strip()
             is_null = (not tex or tex.upper() == 'NULL')
 
-            # Skin node with a real texture and valid (non-extreme) UVs → visible
+            # Skin node with a real texture and UVs -> visible
             if n.is_skin and not is_null and n.uvs:
-                has_extreme = any(abs(u) > 3.0 or abs(v) > 3.0
-                                  for u, v in n.uvs[:20])
-                if not has_extreme:
-                    return False
-
-            if n.uvs:
-                if any(abs(u) > 3.0 or abs(v) > 3.0 for u, v in n.uvs[:20]):
-                    return True
+                return False
 
             # Non-skin _g / _G or _dum nodes are ALWAYS deform helpers
             name_lower = n.name.lower()

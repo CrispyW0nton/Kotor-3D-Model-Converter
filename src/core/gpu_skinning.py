@@ -66,10 +66,63 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 log = logging.getLogger(__name__)
+
+# 3i Step 7 + 3j Step 4 — env-gated skinning formula switch.
+#
+# Default unset => F1 (current 3f production baseline).  Setting
+# ``GHOSTRIGGER_SKIN_FORMULA=F11_rotation_only_skin_bind_wrapper`` swaps
+# ``compute_skin_node_palette`` to the diagnostic rotation-only outer
+# wrapper variant identified in the 3i Step 7 audit:
+#
+#     M_i = inverse(R(skin_bind)) * world_pose_i * inverse(qBone/tBone) * R(skin_bind)
+#
+# Setting ``GHOSTRIGGER_SKIN_FORMULA=G5_FULL_REF`` swaps to the 3j Step 3
+# corrected qBone consumption pipeline that matches reone's documented
+# convention (``mdlmdxreader.cpp:280-288`` + ``modelnode.h:40``):
+#
+#   1. Resolve the influenced bone's GLOBAL DFS NODE INDEX in the model.
+#   2. Read ``qbones[dfs_idx]`` / ``tbones[dfs_idx]`` (NOT the compact
+#      ``bone_map`` slot index that production currently uses).
+#   3. Decode the quaternion bytes as ``(qw, qx, qy, qz)`` (W-first,
+#      matching KotOR.js, reone, and PyKotor's own ``_NodeHeader.read``).
+#   4. Compose ``T(tBone) * R(qBone)`` and use it directly as the
+#      inverse-bind matrix in ``world_pose_m * inv_bind`` --- do NOT
+#      invert it before storage. The on-disk slot already encodes
+#      ``inverse(bone_world) * skin_world`` per reone's documentation.
+#
+# G5 collapses the bind-pose self-test to <= 1e-6 on 50/50 audited probes
+# across c_drexlf, c_brith, and c_bomabeast (3j-3 replay outcome). It
+# remains env-gated until the 3j-5 joint visual gate plus the 50-model
+# render-diff suite both pass. Production stays on F1 by default.
+#
+# Both switches exist ONLY for audit/visual-gate work and are never read
+# by the production code path when unset.  See
+# ``docs/skinning_parity_audit_2026_05.md`` 3i Step 7 and 3j Steps 3-5
+# for the decision rule that gates promoting either formula to the default.
+_SKIN_FORMULA_ENV = 'GHOSTRIGGER_SKIN_FORMULA'
+_SKIN_FORMULA_F1 = 'F1_current_TR_inverse'
+_SKIN_FORMULA_F11 = 'F11_rotation_only_skin_bind_wrapper'
+_SKIN_FORMULA_G5 = 'G5_FULL_REF'
+_SKIN_FORMULA_VALID = (_SKIN_FORMULA_F1, _SKIN_FORMULA_F11, _SKIN_FORMULA_G5)
+
+
+def _active_skin_formula() -> str:
+    """Return the active skinning formula key, falling back to F1.
+
+    Reads ``GHOSTRIGGER_SKIN_FORMULA`` on every call so that test
+    scaffolding and capture scripts can flip the switch per-render
+    without re-importing the module.  Unknown values silently fall back
+    to F1 so a typo never affects production.
+    """
+    raw = os.environ.get(_SKIN_FORMULA_ENV, '').strip()
+    if raw and raw in _SKIN_FORMULA_VALID:
+        return raw
+    return _SKIN_FORMULA_F1
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Optional dependency stubs
@@ -158,6 +211,21 @@ def _mat4_to_flat_col(m: List[List[float]]) -> List[float]:
     return out
 
 
+def _mat4_rotation_only_py(m: List[List[float]]) -> List[List[float]]:
+    """Return ``m`` with the translation column zeroed.
+
+    Used by the 3i Step 7 F11 wrapper to construct the rotation-only
+    outer transform that mirrors xoreos's ``ModelNode::computeInverseBindPose``
+    behaviour (which builds an orientation-only chain).
+    """
+    return [
+        [m[0][0], m[0][1], m[0][2], 0.0],
+        [m[1][0], m[1][1], m[1][2], 0.0],
+        [m[2][0], m[2][1], m[2][2], 0.0],
+        [0.0,     0.0,     0.0,     1.0],
+    ]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  BoneMatrix  – one palette entry
 # ─────────────────────────────────────────────────────────────────────────────
@@ -224,12 +292,24 @@ class MatrixPaletteUploader:
         # animated palette computation.  Populated by build_inverse_bind_pose().
         self._node_lookup : Dict[str, object] = {}   # bone_name_lower → ModelNode
         self._node_parent : Dict[str, str] = {}      # bone_name_lower → parent_name_lower
+        # 3j Step 4 — DFS index lookup for the env-gated G5_FULL_REF path.
+        # qBone/tBone arrays in the MDL are parallel to the global DFS node
+        # order (length == total model node count), not the compact 16-entry
+        # ``bone_map`` slot space. Populated by ``build_inverse_bind_pose``
+        # so ``compute_skin_node_palette`` can index correctly under G5.
+        self._name_to_dfs_index : Dict[str, int] = {}
         # FIX-SKIN-ANIM-D2: Per-animation inverse bind pose override.
         # When set, this replaces _inv_bind for palette computation.
         # Built from the animation's first-frame (t=0) pose to match the
         # vertex space (xoreos approach: boneTransform = absTransform * inv(absBaseTransform)).
         self._inv_bind_anim : Optional[Dict[str, List[List[float]]]] = None
         self._current_anim_bind_key : Optional[str] = None  # tracks which anim bind is cached
+        self._skin_local_inv_bind_by_slot: Dict[int, List[List[float]]] = {}
+        self._skin_local_direct_bind_by_slot: Dict[int, List[List[float]]] = {}
+        self._skin_bind_matrix: Optional[List[List[float]]] = None
+        self._skin_bind_inverse_matrix: Optional[List[List[float]]] = None
+        self._skin_palette_formula: str = ""
+        self._skin_inverse_bind_source: str = ""
 
     # ── Build inverse bind-pose ───────────────────────────────────────────────
 
@@ -261,19 +341,24 @@ class MatrixPaletteUploader:
         self._bone_order.clear()
         self._node_lookup.clear()
         self._node_parent.clear()
+        self._name_to_dfs_index.clear()
 
         if model is None:
             return 0
 
         nodes = list(model.all_nodes()) if hasattr(model, 'all_nodes') else []
 
-        # Build node lookup and parent map for hierarchy traversal
-        for node in nodes:
+        # Build node lookup, parent map, and DFS-index lookup. The DFS index
+        # is the position of the node in ``model.all_nodes()``, which matches
+        # the index space used by the MDL's qBone/tBone arrays per
+        # ``reone/src/libs/graphics/format/mdlmdxreader.cpp:280-288``.
+        for dfs_idx, node in enumerate(nodes):
             name = getattr(node, 'name', '')
             if not name:
                 continue
             name_lower = name.lower()
             self._node_lookup[name_lower] = node
+            self._name_to_dfs_index[name_lower] = dfs_idx
             parent = getattr(node, 'parent', None)
             if parent is not None:
                 parent_name = getattr(parent, 'name', '')
@@ -443,6 +528,290 @@ class MatrixPaletteUploader:
         self._inv_bind_anim = inv_bind_anim
         log.debug(f"MatrixPaletteUploader: rebuilt {count} inverse bind matrices from anim first-frame (FIX-SKIN-ANIM-D2)")
         return count
+
+    def _world_pose_matrix(self, bone_name_lower: str, pose_nodes: Dict[str, object],
+                           cache: Dict[str, List[List[float]]]) -> List[List[float]]:
+        """Return world-space pose matrix for one bone, using pose overrides."""
+        if bone_name_lower in cache:
+            return cache[bone_name_lower]
+
+        pn = pose_nodes.get(bone_name_lower)
+        if pn is not None:
+            p = getattr(pn, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
+            q = getattr(pn, 'rotation', (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
+        else:
+            node = self._node_lookup.get(bone_name_lower)
+            if node is not None:
+                p = getattr(node, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
+                q = getattr(node, 'rotation', (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
+            else:
+                m = _mat4_identity_py()
+                cache[bone_name_lower] = m
+                return m
+
+        qx, qy, qz, qw = float(q[0]), float(q[1]), float(q[2]), float(q[3])
+        ql = math.sqrt(qx*qx + qy*qy + qz*qz + qw*qw)
+        if ql > 1e-9:
+            qx, qy, qz, qw = qx/ql, qy/ql, qz/ql, qw/ql
+        else:
+            qx, qy, qz, qw = 0.0, 0.0, 0.0, 1.0
+
+        local_m = _mat4_mul_py(
+            _mat4_translate_py(float(p[0]), float(p[1]), float(p[2])),
+            _quat_to_mat4((qx, qy, qz, qw)),
+        )
+        parent_name = self._node_parent.get(bone_name_lower)
+        if parent_name is not None:
+            world_m = _mat4_mul_py(self._world_pose_matrix(parent_name, pose_nodes, cache), local_m)
+        else:
+            world_m = local_m
+        cache[bone_name_lower] = world_m
+        return world_m
+
+    @staticmethod
+    def qbone_inverse_bind_matrix(qbone, tbone) -> List[List[float]]:
+        """Build inverse-bind matrix from a skin node's qBone/tBone slot."""
+        try:
+            qx, qy, qz, qw = float(qbone[0]), float(qbone[1]), float(qbone[2]), float(qbone[3])
+            tx, ty, tz = float(tbone[0]), float(tbone[1]), float(tbone[2])
+        except Exception:
+            return _mat4_identity_py()
+        ql = math.sqrt(qx*qx + qy*qy + qz*qz + qw*qw)
+        if ql > 1e-9:
+            qx, qy, qz, qw = qx/ql, qy/ql, qz/ql, qw/ql
+        else:
+            qx, qy, qz, qw = 0.0, 0.0, 0.0, 1.0
+        bind_m = _mat4_mul_py(_mat4_translate_py(tx, ty, tz), _quat_to_mat4((qx, qy, qz, qw)))
+        try:
+            return _mat4_invert_py(bind_m)
+        except Exception:
+            return _mat4_identity_py()
+
+    @staticmethod
+    def qbone_direct_bind_matrix(qbone, tbone) -> List[List[float]]:
+        """Build the authored qBone/tBone matrix in TR order.
+
+        xoreos's CPU path wraps the skin node bind around a per-bone inverse
+        bind matrix (animation.cpp updateSkinnedModel + model_kotor.cpp skin
+        reader). KotOR.js stores the qBone/tBone-derived matrix directly as
+        the skin bone inverse matrix. GhostRigger keeps this helper available
+        for 3g/3i diagnostics while production remains on the 3f inverse path.
+        """
+        try:
+            qx, qy, qz, qw = float(qbone[0]), float(qbone[1]), float(qbone[2]), float(qbone[3])
+            tx, ty, tz = float(tbone[0]), float(tbone[1]), float(tbone[2])
+        except Exception:
+            return _mat4_identity_py()
+        ql = math.sqrt(qx*qx + qy*qy + qz*qz + qw*qw)
+        if ql > 1e-9:
+            qx, qy, qz, qw = qx/ql, qy/ql, qz/ql, qw/ql
+        else:
+            qx, qy, qz, qw = 0.0, 0.0, 0.0, 1.0
+        return _mat4_mul_py(_mat4_translate_py(tx, ty, tz), _quat_to_mat4((qx, qy, qz, qw)))
+
+    @staticmethod
+    def qbone_inverse_bind_matrix_g5(qbone, tbone) -> List[List[float]]:
+        """3j Step 4 - G5_FULL_REF qBone consumption (W-first, no invert).
+
+        Build the per-bone inverse-bind matrix under reone's documented
+        convention (``reone/src/libs/graphics/format/mdlmdxreader.cpp:286``
+        + ``reone/include/reone/graphics/modelnode.h:40``):
+
+            glm::mat4 boneMatrix(1.0f);
+            boneMatrix *= glm::translate(glm::make_vec3(&tBoneValues[3 * i]));
+            boneMatrix *= glm::mat4_cast(glm::quat(qBone[0], qBone[1], qBone[2], qBone[3]));
+            // doc: each matrix is "inverse of bone transform in this node space"
+
+        GLM's ``glm::quat`` constructor signature is ``quat(w, x, y, z)``,
+        so ``qBone[0]`` from disk is the W component. The composed result
+        is treated as the inverse-bind matrix directly --- it is NOT
+        inverted.
+
+        PyKotor stores the four disk floats verbatim into
+        ``Vector4(x=f0, y=f1, z=f2, w=f3)`` (X-first), so the on-disk W
+        byte ends up in ``qbone[0]`` and we remap to feed the existing
+        ``_quat_to_mat4(qx, qy, qz, qw)`` helper:
+
+            (qx, qy, qz, qw) <- (qbone[1], qbone[2], qbone[3], qbone[0])
+
+        The caller is responsible for indexing ``qbones``/``tbones`` by
+        the bone's GLOBAL DFS NODE INDEX in the model, not by the compact
+        ``bone_map`` slot index. ``MatrixPaletteUploader._name_to_dfs_index``
+        provides that lookup.
+
+        Empirical 3j-3 result on c_drexlf, c_brith, c_bomabeast: with the
+        DFS-indexed lookup plus this builder, ``bone_world * inv_bind``
+        equals ``skin_world`` to <= 1e-6 on every probed bone --- the
+        textbook bind-pose collapse for an LBS chain over NODE_LOCAL
+        vertices. See ``docs/skinning_parity_audit_2026_05.md`` 3j Step 3.
+        """
+        try:
+            qw_disk = float(qbone[0])
+            qx = float(qbone[1])
+            qy = float(qbone[2])
+            qz = float(qbone[3])
+            tx = float(tbone[0])
+            ty = float(tbone[1])
+            tz = float(tbone[2])
+        except Exception:
+            return _mat4_identity_py()
+        ql = math.sqrt(qx * qx + qy * qy + qz * qz + qw_disk * qw_disk)
+        if ql > 1e-9:
+            qx /= ql
+            qy /= ql
+            qz /= ql
+            qw_disk /= ql
+        else:
+            qx, qy, qz, qw_disk = 0.0, 0.0, 0.0, 1.0
+        return _mat4_mul_py(
+            _mat4_translate_py(tx, ty, tz),
+            _quat_to_mat4((qx, qy, qz, qw_disk)),
+        )
+
+    def compute_skin_node_palette(self, skin_node, anim_pose) -> List[BoneMatrix]:
+        """Compute a local skin-node palette using qBone/tBone inverse binds.
+
+        3g wrapper attempts were visually rejected. Keep the production path at
+        the 3f baseline while 3i audits the raw vertex space and pose chain:
+
+            animated_world * inverse(T(qBone/tBone) * R(qBone/tBone))      (F1)
+
+        3i Step 7 — env-gated F11 diagnostic
+        ------------------------------------
+        When ``GHOSTRIGGER_SKIN_FORMULA=F11_rotation_only_skin_bind_wrapper``
+        the per-bone matrix becomes::
+
+            inverse(R(skin_bind)) * world_pose_m * inverse(qBone/tBone) * R(skin_bind)
+
+        where ``R(skin_bind)`` is the rotation-only skin-node bind matrix
+        (translation column zeroed). This mirrors xoreos's outer-wrapper
+        transform inferred in 3i Step 6 and is used solely for the
+        ``c_bomabeast`` visual gate. Step 7 reduction proved this collapses
+        to F1 on the audited probes for ``c_drexlf``/``c_brith`` (identity
+        bind rotation), so they serve as a no-op control while
+        ``c_bomabeast`` is the falsification target.
+
+        3j Step 4 — env-gated G5_FULL_REF reference path
+        ------------------------------------------------
+        When ``GHOSTRIGGER_SKIN_FORMULA=G5_FULL_REF`` the per-bone matrix
+        keeps the textbook LBS shape ``world_pose_m * inv_bind`` but
+        ``inv_bind`` is rebuilt under reone's documented convention with
+        all three 3j-3 fixes applied jointly:
+
+          1. ``inv_bind`` is read at ``qbones[dfs_idx]`` /
+             ``tbones[dfs_idx]`` where ``dfs_idx`` is the influenced
+             bone's GLOBAL DFS NODE INDEX in the model (NOT the compact
+             ``bone_map`` slot index).
+          2. The quaternion bytes are decoded W-first
+             (``qbones[dfs_idx][0]`` is the W component).
+          3. The composed ``T * R`` is used as the inverse-bind matrix
+             directly --- it is NOT inverted before storage.
+
+        On the 3j-3 audited probes (``c_drexlf``, ``c_brith``,
+        ``c_bomabeast``) this collapses ``bone_world * inv_bind`` to
+        ``skin_world`` within ~1e-6, satisfying the bind-pose self-test
+        on 50/50 probes while F1 and the partial G3 fix both fail
+        100%. G5 stays env-gated until 3j-5 (the joint visual gate plus
+        the 50-model render-diff suite) clears it for production.
+        """
+        self._palette = []
+        self._skin_local_inv_bind_by_slot = {}
+        self._skin_local_direct_bind_by_slot = {}
+        self._skin_bind_matrix = None
+        self._skin_bind_inverse_matrix = None
+        active_formula = _active_skin_formula()
+        self._skin_palette_formula = active_formula
+        self._skin_inverse_bind_source = "qBone_tBone_inverse_TR"
+        pose_nodes = {k.lower(): v for k, v in getattr(anim_pose, 'nodes', {}).items()} if anim_pose is not None else {}
+        world_cache: Dict[str, List[List[float]]] = {}
+        skin_key = str(getattr(skin_node, 'name', '') or '').lower()
+        if skin_key:
+            skin_bind = self._world_pose_matrix(skin_key, {}, {})
+        else:
+            pos = getattr(skin_node, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
+            quat = getattr(skin_node, 'rotation', (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
+            skin_bind = _mat4_mul_py(
+                _mat4_translate_py(float(pos[0]), float(pos[1]), float(pos[2])),
+                _quat_to_mat4(tuple(float(v) for v in quat[:4])),
+            )
+        try:
+            inv_skin_bind = _mat4_invert_py(skin_bind)
+        except Exception:
+            inv_skin_bind = _mat4_identity_py()
+        self._skin_bind_matrix = skin_bind
+        self._skin_bind_inverse_matrix = inv_skin_bind
+        skin_bind_rot_only: Optional[List[List[float]]] = None
+        inv_skin_bind_rot_only: Optional[List[List[float]]] = None
+        if active_formula == _SKIN_FORMULA_F11:
+            skin_bind_rot_only = _mat4_rotation_only_py(skin_bind)
+            try:
+                inv_skin_bind_rot_only = _mat4_invert_py(skin_bind_rot_only)
+            except Exception:
+                inv_skin_bind_rot_only = _mat4_identity_py()
+        bone_map = list(getattr(skin_node, 'bone_map', []) or [])
+        qbones = list(getattr(skin_node, 'qbone_list', []) or [])
+        tbones = list(getattr(skin_node, 'tbone_list', []) or [])
+
+        # 3j Step 4 — under G5_FULL_REF, qBone/tBone are indexed by the
+        # bone's GLOBAL DFS NODE INDEX in the model (parallel to the
+        # length-N MDL skinmesh bonemap), not by the compact bone_map slot
+        # index that production currently uses. Document the active source
+        # so audit captures and tests can verify which path produced the
+        # palette without re-reading env state.
+        if active_formula == _SKIN_FORMULA_G5:
+            self._skin_inverse_bind_source = "qBone_tBone_dfs_indexed_TR_no_invert"
+        for idx, bname in enumerate(bone_map[:self._max_bones]):
+            bkey = str(bname or '').lower()
+            world_pose_m = (
+                self._world_pose_matrix(bkey, pose_nodes, world_cache)
+                if bkey else _mat4_identity_py()
+            )
+            if active_formula == _SKIN_FORMULA_G5:
+                # Resolve the bone's DFS index; fall back to identity if
+                # the bone is missing from the lookup so a malformed
+                # bone_map entry never crashes the renderer.
+                dfs_idx = self._name_to_dfs_index.get(bkey, -1) if bkey else -1
+                if 0 <= dfs_idx < len(qbones) and dfs_idx < len(tbones):
+                    inv_bind = self.qbone_inverse_bind_matrix_g5(
+                        qbones[dfs_idx], tbones[dfs_idx],
+                    )
+                    direct_bind = self.qbone_direct_bind_matrix(
+                        qbones[dfs_idx], tbones[dfs_idx],
+                    )
+                else:
+                    inv_bind = _mat4_identity_py()
+                    direct_bind = _mat4_identity_py()
+            else:
+                inv_bind = (
+                    self.qbone_inverse_bind_matrix(qbones[idx], tbones[idx])
+                    if idx < len(qbones) and idx < len(tbones) else _mat4_identity_py()
+                )
+                direct_bind = (
+                    self.qbone_direct_bind_matrix(qbones[idx], tbones[idx])
+                    if idx < len(qbones) and idx < len(tbones) else _mat4_identity_py()
+                )
+            self._skin_local_inv_bind_by_slot[idx] = inv_bind
+            self._skin_local_direct_bind_by_slot[idx] = direct_bind
+            if active_formula == _SKIN_FORMULA_F11 and skin_bind_rot_only is not None and inv_skin_bind_rot_only is not None:
+                skin_m = _mat4_mul_py(
+                    inv_skin_bind_rot_only,
+                    _mat4_mul_py(
+                        world_pose_m,
+                        _mat4_mul_py(inv_bind, skin_bind_rot_only),
+                    ),
+                )
+            else:
+                # F1 (production) and G5 both use the textbook LBS shape
+                # ``world_pose_m * inv_bind``. The semantic difference is
+                # entirely in how ``inv_bind`` is constructed above.
+                skin_m = _mat4_mul_py(world_pose_m, inv_bind)
+            self._palette.append(BoneMatrix(
+                flat_col=_mat4_to_flat_col(skin_m),
+                bone_name=str(bname or ''),
+                bone_index=idx,
+            ))
+        self._dirty = True
+        return self._palette
 
     def compute_palette(self, anim_pose, anim_base_pose=None) -> List[BoneMatrix]:
         """Compute the full bone-matrix palette from an ``AnimPose``.

@@ -17,15 +17,20 @@ Both patches target very specific shapes of upstream PyKotor code:
 * ``_TrimeshHeader.read`` must accept ``(self, reader, game)`` and the class
   must expose ``K1_SIZE`` / ``K2_SIZE`` size constants (the patch seeks past
   ``start_pos + expected`` using those values).
-* ``MDLBinaryReader._load_node`` source must contain the exact string
-  ``"and bin_node.trimesh.mdx_data_offset not in (0, 0xFFFFFFFF)"``.
+* ``MDLBinaryReader._load_node`` must exist.  When source is available, we also
+  verify that it still contains the known upstream ``mdx_data_offset`` guard.
 
-If PyKotor ever refactors either of those surfaces, our patch silently loses
-its effect and K2 models quietly render with the wrong MDX alignment.  To
-avoid that, :func:`ensure_pykotor_mdl_binary_fixes` performs a strict
-pre-flight check and logs an ``ERROR`` (not a debug warning) when any
-expected shape is missing.  The caller can inspect :data:`_last_check` to
-see a structured summary of what passed / failed.
+If PyKotor ever refactors either of those surfaces, an unapplied patch would
+make K2 models quietly render with the wrong MDX alignment.  To avoid that,
+:func:`ensure_pykotor_mdl_binary_fixes` performs a strict pre-flight check and
+raises :class:`PyKotorPatchError` when any expected shape is missing.  The
+caller can inspect :data:`_last_check` to see a structured summary of what
+passed / failed.
+
+``GHOSTRIGGER_ALLOW_UNPATCHED_PYKOTOR=1`` is a diagnostics-only escape hatch
+for raw-PyKotor A/B comparisons and pre-bump validation runs.  Do not use it
+for normal app startup or production model loading; bypassing this error can
+reintroduce silent K2 geometry corruption.
 
 Cross-references: KotOR.js ``OdysseyModelNodeMesh.ts``, KotorBlender ``reader.py``.
 """
@@ -34,23 +39,60 @@ from __future__ import annotations
 
 import inspect
 import logging
-import textwrap
+import os
 from typing import TYPE_CHECKING, Any, Dict
 
 log = logging.getLogger(__name__)
 
 _applied: bool = False
 
+# The patched reader is validated against PyKotor's current public constants.
+# K2's binary mesh header is 340 bytes: the K1 2-byte tail field is replaced by
+# a 10-byte K2 dirt/hologram block.
+K1_SIZE: int = 332
+K2_SIZE: int = 340
+
+_ALLOW_UNPATCHED_ENV = "GHOSTRIGGER_ALLOW_UNPATCHED_PYKOTOR"
+
+
+class _MdxDataOffsetZero(int):
+    """Integer zero that bypasses PyKotor's invalid offset-0 guard."""
+
+    def __new__(cls) -> "_MdxDataOffsetZero":
+        return int.__new__(cls, 0)
+
+    def __eq__(self, other: object) -> bool:
+        if other == 0:
+            return False
+        return int.__eq__(self, other)
+
+    def __hash__(self) -> int:
+        return int.__hash__(self)
+
+
+class PyKotorPatchError(RuntimeError):
+    """Raised when GhostRigger cannot install its required PyKotor MDL patches.
+
+    K2 models silently load with corrupt/empty geometry if the K2 trimesh patch
+    does not apply.  Set ``GHOSTRIGGER_ALLOW_UNPATCHED_PYKOTOR=1`` only for
+    diagnostics that intentionally compare against raw upstream PyKotor.
+    """
+
 # Structured summary of the most recent compatibility check.  Populated by
 # :func:`_check_pykotor_compat` so tests / diagnostics can assert on it.
 _last_check: Dict[str, Any] = {
     'checked': False,
     'ok': False,
+    'status': 'not_checked',
+    'detail': '',
+    'bypassed': False,
+    'applied': False,
     'failures': [],
     'trimesh_read_params': None,
     'k1_size': None,
     'k2_size': None,
     'load_node_pattern_present': None,
+    'trimesh_read_source_matches': None,
 }
 
 # Expected parameter list for ``_TrimeshHeader.read``.  Order matters —
@@ -68,47 +110,72 @@ if TYPE_CHECKING:
     from pykotor.resource.formats.mdl.io_mdl import _TrimeshHeader
 
 
-def ensure_pykotor_mdl_binary_fixes() -> None:
+def ensure_pykotor_mdl_binary_fixes() -> Dict[str, Any]:
     """Idempotent: patch PyKotor ``io_mdl`` once per process.
 
     Performs a strict pre-flight check first.  If PyKotor no longer matches
-    the layout the patches assume (e.g. after an upstream upgrade), every
-    failure is logged at ``ERROR`` level and the patch is NOT applied —
-    running on a broken assumption is worse than running on stock PyKotor
-    because it can produce silently corrupt K2 geometry.
+    the layout the patches assume (e.g. after an upstream upgrade), raises
+    :class:`PyKotorPatchError` unless ``GHOSTRIGGER_ALLOW_UNPATCHED_PYKOTOR=1``
+    is set for diagnostics.
     """
     global _applied
     if _applied:
-        return
+        return dict(_last_check)
     try:
         from pykotor.resource.formats.mdl import io_mdl as _iom
     except Exception as exc:
-        log.error(
-            "ensure_pykotor_mdl_binary_fixes: cannot import "
-            "pykotor.resource.formats.mdl.io_mdl — %s", exc,
-        )
-        return
+        _last_check.update({
+            'checked': True,
+            'ok': False,
+            'status': 'pykotor_missing',
+            'detail': f"cannot import pykotor.resource.formats.mdl.io_mdl: {exc}",
+            'failures': [str(exc)],
+            'applied': False,
+            'bypassed': False,
+        })
+        return _raise_or_bypass(_last_check)
 
     if not _check_pykotor_compat(_iom):
-        log.error(
-            "ensure_pykotor_mdl_binary_fixes: PyKotor compatibility check "
-            "FAILED — patches NOT applied.  Binary MDL reads will use the "
-            "stock PyKotor code path, which mis-parses the K2 trimesh tail "
-            "and rejects mdx_data_offset==0.  Re-pin PyKotor or update this "
-            "module.  Summary: %s", _last_check,
-        )
-        return
+        return _raise_or_bypass(_last_check)
 
     try:
         _iom._TrimeshHeader.read = _ghostrigger_trimesh_read  # type: ignore[method-assign]
         _patch_load_node_mdx_zero(_iom)
         log.debug("ensure_pykotor_mdl_binary_fixes: applied (K2 trimesh tail + MDX offset 0)")
         _applied = True
+        _last_check.update({
+            'ok': True,
+            'status': 'ok',
+            'detail': '',
+            'applied': True,
+            'bypassed': False,
+        })
     except Exception as exc:
-        log.error(
-            "ensure_pykotor_mdl_binary_fixes: applying patches failed — %s",
-            exc, exc_info=True,
-        )
+        _last_check.update({
+            'ok': False,
+            'status': 'apply_failed',
+            'detail': str(exc),
+            'applied': False,
+            'bypassed': False,
+        })
+        return _raise_or_bypass(_last_check)
+    return dict(_last_check)
+
+
+def _raise_or_bypass(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Raise for patch drift, with an explicit diagnostics-only bypass."""
+    msg = (
+        f"PyKotor K2 trimesh patch FAILED to install: {result.get('status', 'unknown')} "
+        f"(detail: {result.get('detail') or '-'}). "
+        "K2 models will load with corrupt geometry. "
+        "Pin pykotor in requirements.txt to a validated version, "
+        f"or set {_ALLOW_UNPATCHED_ENV}=1 to bypass for diagnostics only."
+    )
+    if os.environ.get(_ALLOW_UNPATCHED_ENV) == "1":
+        result['bypassed'] = True
+        log.error("%s  [BYPASSED via env var]", msg)
+        return dict(result)
+    raise PyKotorPatchError(msg)
 
 
 def _check_pykotor_compat(_iom) -> bool:
@@ -122,11 +189,16 @@ def _check_pykotor_compat(_iom) -> bool:
     _last_check.update({
         'checked': True,
         'ok': False,
+        'status': 'not_checked',
+        'detail': '',
+        'bypassed': False,
+        'applied': False,
         'failures': failures,
         'trimesh_read_params': None,
         'k1_size': None,
         'k2_size': None,
         'load_node_pattern_present': None,
+        'trimesh_read_source_matches': None,
     })
 
     TH = getattr(_iom, '_TrimeshHeader', None)
@@ -153,10 +225,30 @@ def _check_pykotor_compat(_iom) -> bool:
         k2 = getattr(TH, 'K2_SIZE', None)
         _last_check['k1_size'] = k1
         _last_check['k2_size'] = k2
-        if not isinstance(k1, int) or k1 <= 0:
-            failures.append(f"_TrimeshHeader.K1_SIZE missing or invalid ({k1!r})")
-        if not isinstance(k2, int) or k2 <= 0:
-            failures.append(f"_TrimeshHeader.K2_SIZE missing or invalid ({k2!r})")
+        if k1 != K1_SIZE:
+            failures.append(f"_TrimeshHeader.K1_SIZE changed: expected {K1_SIZE}, got {k1!r}")
+        if k2 != K2_SIZE:
+            failures.append(f"_TrimeshHeader.K2_SIZE changed: expected {K2_SIZE}, got {k2!r}")
+
+        if read_fn is not None:
+            try:
+                read_src = inspect.getsource(read_fn)
+            except (OSError, TypeError) as exc:
+                read_src = None
+                _last_check['trimesh_read_source_matches'] = None
+                log.debug("inspect.getsource(_TrimeshHeader.read) unavailable: %s", exc)
+            if read_src is not None:
+                source_matches = (
+                    "hologram_value = reader.read_uint32()" in read_src
+                    and "self.k2_tail_long1 = reader.read_uint32()" in read_src
+                    and "self.k2_tail_long2 = reader.read_uint32()" in read_src
+                )
+                _last_check['trimesh_read_source_matches'] = source_matches
+                if not source_matches:
+                    failures.append(
+                        "_TrimeshHeader.read source layout drifted from the "
+                        "PyKotor K2 tail this monkey-patch replaces"
+                    )
 
     MR = getattr(_iom, 'MDLBinaryReader', None)
     if MR is None:
@@ -170,7 +262,8 @@ def _check_pykotor_compat(_iom) -> bool:
                 src = inspect.getsource(load_fn)
             except (OSError, TypeError) as exc:
                 src = None
-                failures.append(f"inspect.getsource(_load_node) failed: {exc}")
+                _last_check['load_node_pattern_present'] = None
+                log.debug("inspect.getsource(_load_node) unavailable: %s", exc)
             if src is not None:
                 present = (_EXPECTED_LOAD_NODE_PATTERN in src)
                 _last_check['load_node_pattern_present'] = present
@@ -182,6 +275,8 @@ def _check_pykotor_compat(_iom) -> bool:
 
     ok = not failures
     _last_check['ok'] = ok
+    _last_check['status'] = 'ok' if ok else 'compat_failed'
+    _last_check['detail'] = '; '.join(failures)
     return ok
 
 
@@ -298,7 +393,8 @@ def _ghostrigger_trimesh_read(self, reader: "BinaryReader", game: "Game") -> "_T
         self.tail_short = reader.read_uint16()
     self.total_area = reader.read_single()
     self.tail_long0 = reader.read_uint32()
-    self.mdx_data_offset = reader.read_uint32()
+    mdx_data_offset = reader.read_uint32()
+    self.mdx_data_offset = _MdxDataOffsetZero() if mdx_data_offset == 0 else mdx_data_offset
     self.vertices_offset = reader.read_uint32()
     expected = TH.K1_SIZE if game == _Game.K1 else TH.K2_SIZE
     reader.seek(start_pos + expected)
@@ -306,29 +402,12 @@ def _ghostrigger_trimesh_read(self, reader: "BinaryReader", game: "Game") -> "_T
 
 
 def _patch_load_node_mdx_zero(_iom) -> None:
-    """Allow ``mdx_data_offset == 0`` (MDX data at start of buffer).
+    """Allow ``mdx_data_offset == 0`` without source rewriting.
 
-    The upstream pattern presence is validated up-front by
-    :func:`_check_pykotor_compat`, so by the time we get here the replacement
-    is guaranteed to match.  We still guard the string replacement so a stale
-    Python ``inspect.getsource`` cache doesn't produce a silent no-op.
+    PyInstaller builds do not retain source files for ``inspect.getsource``.
+    The replacement ``_TrimeshHeader.read`` stores offset 0 as
+    ``_MdxDataOffsetZero`` so upstream arithmetic still seeks to byte 0 while
+    PyKotor's ``not in (0, 0xFFFFFFFF)`` guard treats it as valid.
     """
-    # FRAGILE: textual monkey-patching against a specific source string.
-    # If PyKotor ever rewords the guard (e.g. to ``!= 0xFFFFFFFF``) this patch
-    # becomes a no-op.  _check_pykotor_compat catches that at startup — do NOT
-    # lower its failure to a debug log.
-    src = inspect.getsource(_iom.MDLBinaryReader._load_node)
-    src = textwrap.dedent(src)
-    old = _EXPECTED_LOAD_NODE_PATTERN
-    if old not in src:
-        log.error(
-            "GhostRigger PyKotor patch: _load_node MDX offset pattern missing "
-            "at replace-time (compat check passed but source changed in between?). "
-            "MDX offset 0 will still be rejected by PyKotor.",
-        )
-        return
-    src = src.replace(old, "and bin_node.trimesh.mdx_data_offset != 0xFFFFFFFF", 1)
-    code = compile(src, _iom.__file__, "exec")
-    ns = _iom.__dict__
-    exec(code, ns, ns)
-    _iom.MDLBinaryReader._load_node = ns["_load_node"]  # type: ignore[method-assign]
+    if getattr(_iom, "MDLBinaryReader", None) is None:
+        raise RuntimeError("GhostRigger PyKotor patch: MDLBinaryReader missing")

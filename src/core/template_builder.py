@@ -719,13 +719,7 @@ def check_model_eyeball_nodes(model) -> dict:
             node_issues.append("no vertices")
             node_ok = False
 
-        if uvs:
-            bad_uvs = [(u, v) for u, v in uvs[:20]
-                       if abs(u) > 3.0 or abs(v) > 3.0]
-            if bad_uvs:
-                node_issues.append(f"extreme UVs detected ({len(bad_uvs)} samples)")
-                node_ok = False
-        else:
+        if not uvs:
             node_issues.append("no UV coordinates")
             node_ok = False
 

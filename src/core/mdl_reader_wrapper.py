@@ -1,31 +1,34 @@
 """
-GhostRigger wrapper around PyKotor's binary ``read_mdl``.
+GhostRigger wrapper around PyKotor MDL parsing.
 
 All MDL/MDX loads that should respect GhostRigger fixes must go through
 ``read_mdl_safe`` instead of importing ``read_mdl`` from ``mdl_auto`` directly.
 
-Fixes (no edits to site-packages — see ``pykotor_mdl_io_fix``):
+Binary MDL/MDX files are loaded through ``GhostRiggerMDLBinaryReader`` so
+GhostRigger owns its K2 layout fixes without mutating PyKotor global state.
+ASCII MDL files still use PyKotor's ASCII reader directly.
+
+Fixes:
 
 - **K2 trimesh tail** — correct 8-byte dirt/hologram block and padding so
   ``mdx_data_offset`` / ``vertices_offset`` align with KotOR.js / KotorBlender.
 - **``mdx_data_offset == 0``** — PyKotor treats 0 like ``0xFFFFFFFF``; offset 0 is
   valid (vertex data at the start of the MDX buffer).
-
-``ensure_pykotor_mdl_binary_fixes()`` is idempotent and runs before each call so
-callers never need to import ``pykotor_mdl_io_fix`` themselves.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pykotor.resource.formats.mdl.mdl_auto import read_mdl as _pk_read_mdl
+from pykotor.resource.formats.mdl.io_mdl_ascii import MDLAsciiReader
+from pykotor.resource.formats.mdl.mdl_auto import detect_mdl
+from pykotor.resource.type import ResourceType
 
-from .pykotor_mdl_io_fix import ensure_pykotor_mdl_binary_fixes
+from .ghostrigger_mdl_reader import GhostRiggerMDLBinaryReader
 
 if TYPE_CHECKING:
     from pykotor.resource.formats.mdl.mdl_data import MDL
-    from pykotor.resource.type import SOURCE_TYPES, ResourceType
+    from pykotor.resource.type import SOURCE_TYPES
 
 
 def read_mdl_safe(
@@ -37,14 +40,36 @@ def read_mdl_safe(
     size_ext: int = 0,
     file_format: "ResourceType | None" = None,
 ) -> "MDL":
-    """Parse MDL (+ optional MDX) via PyKotor with GhostRigger in-memory fixes applied."""
-    ensure_pykotor_mdl_binary_fixes()
-    return _pk_read_mdl(
-        source,
-        offset=offset,
-        size=size,
-        source_ext=source_ext,
-        offset_ext=offset_ext,
-        size_ext=size_ext,
-        file_format=file_format,
-    )
+    """Parse MDL (+ optional MDX) through GhostRigger's owned safe reader path."""
+    resolved_format = file_format or detect_mdl(source, offset)
+    if resolved_format == ResourceType.MDL:
+        try:
+            return GhostRiggerMDLBinaryReader(
+                source,
+                offset,
+                size or 0,
+                source_ext,
+                offset_ext,
+                size_ext,
+            ).load()
+        except OSError as exc:
+            if not _is_mdl_aabb_seek_oserror(exc):
+                raise
+            return GhostRiggerMDLBinaryReader(
+                source,
+                offset,
+                size or 0,
+                source_ext,
+                offset_ext,
+                size_ext,
+                skip_aabb=True,
+            ).load()
+    if resolved_format == ResourceType.MDL_ASCII:
+        return MDLAsciiReader(source, offset, size or 0).load()
+
+    raise ValueError("Failed to determine the format of the MDL file.")
+
+
+def _is_mdl_aabb_seek_oserror(exc: OSError) -> bool:
+    msg = str(exc).lower()
+    return "seek" in msg and ("negative" in msg or "cannot seek" in msg)
