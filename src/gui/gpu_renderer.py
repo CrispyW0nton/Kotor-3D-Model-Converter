@@ -31,6 +31,8 @@ GPU fast-path  (requires moderngl + EGL)
 Key rendering correctness fixes (Phase 1)
   BUG-UV:   UV V-axis flipped  → v_uv.y = 1.0 - in_uv.y  in vertex shader
              KotOR MDX stores V=0 at top (D3D convention); OpenGL wants V=0 at bottom.
+  BUG-SKIN: Skin vertices are already in world-space (baked by NWN exporter).
+             _build_vbo_data skips both rotation AND translation for skin nodes.
   BUG-WIND: KotOR uses clockwise triangle winding; set ctx.front_face = 'cw'.
   BUG-ALPHA: Transparent surfaces sorted back-to-front by camera depth before draw.
   BUG-ENVMAP: TXI envmaptexture/bumpyshinytexture → KotOR uses "BlendedOver"
@@ -41,8 +43,8 @@ Key rendering correctness fixes (Phase 1)
   BUG-PUNCH: txi_blending=2 (punchthrough) now correctly sets u_blend_mode=2.
 
 Phase 2 rendering correctness fixes
-  FIX-DEFORM:   Deformation-helper mesh nodes (bone proxies with _g suffix, no UVs)
-                are now filtered in the GPU path using the same
+  FIX-DEFORM:   Deformation-helper mesh nodes (bone proxies with _g suffix, no UVs,
+                extreme UVs) are now filtered in the GPU path using the same
                 _is_deformation_helper logic as the CPU viewport.  This eliminates
                 opaque bone-blob ghosts on character models.
                 Reference: KotOR engine ProcessSkinSeams() + viewport._is_deformation_helper.
@@ -59,13 +61,20 @@ Phase 2 rendering correctness fixes
                 OR when the node is a skin mesh, correctly assigning per-face UV coords
                 to each triangle vertex.
                 Reference: PyKotor io_mdl.py ProcessSkinSeams engine note + read_mdl.py.
-  FIX-SEAMUV:   Seam-vertex UVs are preserved as authored. KotOR uses GL_REPEAT
-                by default, so large finite UV coordinates are valid tiling data.
-  FIX-KILL-FACEMATS (Phase D10): REMOVED per-face-material texture splitting.
-                face_mats[] is a walk-mesh surface indicator, NOT a texture selector.
-                The correct KotOR texture model is: one diffuse on UV0, optional one
-                lightmap on UV1, composited as diffuse * lightmap * overbright.
-                No per-face texture splitting.  Reference: xoreos, KotOR.js, KotorBlender.
+  FIX-SEAMUV:   Seam-vertex UV healing: several KotOR models (p_hk47 hands/fingers,
+                c_kraytdragon claws) have UV-seam duplicate vertices where the seam
+                copy's UV was written as a sentinel/garbage value (e.g. -27.14, -104.93).
+                _build_vbo_data now detects vertices with |UV| > _UV_SENTINEL,
+                finds the nearest coincident vertex (distance < 0.001 units), and copies
+                its UV.  Falls back to UV=0.5 only when no valid neighbor exists.
+                FIX-UVSENT-V2: two-tier sentinel — character models use 20.0 (heals
+                seam garbage UVs like -27.14); module/tile models use 1e18 (allows
+                legitimate large tiled UVs, GL_REPEAT handles any magnitude).
+  FIX-MULTITEX: Multi-texture nodes (tex_count > 1, face_mats per face) are now split
+                into per-texture draw groups.  Each group uploads its own VBO subset and
+                binds the correct texture, enabling correct rendering of area tile meshes
+                and multi-material character parts.
+                Reference: KotOR MDL mesh header tex_count + face_mats array.
   FIX-FLIPBOOK: TXI proceduretype=cycle nodes (animated sprite sheets: water, displays,
                 fire) now advance the frame via anim_time × txi_fps and pass a UV tile
                 offset uniform (u_flipbook_offset) to the vertex shader.
@@ -73,30 +82,6 @@ Phase 2 rendering correctness fixes
   FIX-PERSCACHE: Per-model persistent world-transform cache survives across frames;
                 invalidated on model change.  Reduces O(N×depth) per-frame cost to
                 O(1) cache lookup for static geometry.
-
-Vertex-space contract (Phase D20-M — SUPERSEDES the old BUG-SKIN note)
-  Every node carries a ``vertex_space`` enum set at load time by
-  ``src/core/vertex_space.compute_vertex_space()``.  ``_build_vbo_data`` reads
-  that field and nothing else to decide whether to transform vertices:
-
-      NODE_LOCAL (0): vertices are node-local; apply full parent-chain
-                      world_transform (rotate + translate).  This is the
-                      DEFAULT for every KotOR MDL node — including SKIN,
-                      DANGLY, and SABER.  Skin meshes are node-local per
-                      xoreos ``model_kotor.cpp`` readSkin() and KotOR.js
-                      ``OdysseyModelNodeMesh.ts``.  The pre-D20-M claim
-                      that skin vertices were "already in world-space and
-                      baked by the NWN exporter" was WRONG — it was a
-                      coincidence on models whose skin parent chain happened
-                      to resolve to identity.
-      WORLD (1):      vertices already in model-root space (only set for
-                      externally-imported OBJ/FBX); skip world_transform.
-                      Not produced by any KotOR MDL loader path.
-      AABB_WALK (2):  walkmesh / collision — never rendered.
-
-  See ``_build_vbo_data`` (the ``_node_vs`` switch) and ``src/core/vertex_space.py``
-  for the authoritative implementation.  Do NOT reintroduce centroid-magnitude
-  or name-based heuristics to decide vertex space — the enum is the contract.
 
 Phase 3.8 rendering correctness fixes (deep audit vs Kotor.NET / KotOR.js / xoreos)
   FIX-ENVBLEND:  CRITICAL: The environment-map blend weight was inverted.
@@ -171,1902 +156,12 @@ References
 
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 import math
 import os
 import struct
 import time
 from typing import Dict, List, Optional, Tuple
-
-_GR_GPU_PROBE = os.environ.get('GHOSTRIGGER_VIEWPORT_PROBE', '').strip().lower() in ('1', 'true', 'yes', 'on')
-_GR_GPU_PROBE_SEEN: set = set()
-
-_GL_STATE_TRACE_ENV = 'GHOSTRIGGER_GL_STATE_TRACE'
-_GL_STATE_TRACE_TRUE = ('1', 'true', 'yes', 'on')
-_GL_STATE_TRACE_FALSE = ('', '0', 'false', 'no', 'off')
-_GL_BACKEND_ENV = 'GHOSTRIGGER_GL_BACKEND'
-_DEBUG_VIZ_ENV = 'GHOSTRIGGER_DEBUG_VIZ'
-_LM_DATA_DUMP_ENV = 'GHOSTRIGGER_LM_DATA_DUMP'
-_LM_COMPOSITE_MODE_ENV = 'GHOSTRIGGER_LM_COMPOSITE_MODE'
-_SKIN_DUMP_ENV = 'GHOSTRIGGER_SKIN_DUMP'
-
-_VBO_MAIN_FORMAT = '3f 3f 2f 2f 4f 4f'
-_VBO_MAIN_ATTRS = ('in_pos', 'in_norm', 'in_uv', 'in_uv_lm', 'in_color', 'in_weights')
-_VBO_BONE_IDS_FORMAT = '4i'
-_VBO_BONE_IDS_ATTRS = ('in_bone_ids',)
-
-
-def _gl_state_trace_path() -> str:
-    """Return the JSONL trace path, or empty string when tracing is disabled."""
-    raw = os.environ.get(_GL_STATE_TRACE_ENV, '').strip()
-    if raw.lower() in _GL_STATE_TRACE_FALSE:
-        return ''
-    if raw.lower() in _GL_STATE_TRACE_TRUE:
-        return os.path.abspath(os.path.join('exports', 'gl_state_trace.jsonl'))
-    return os.path.abspath(raw)
-
-
-def _lm_data_dump_path() -> str:
-    """Return the lightmap data JSONL path, or empty string when disabled."""
-    raw = os.environ.get(_LM_DATA_DUMP_ENV, '').strip()
-    if raw.lower() in _GL_STATE_TRACE_FALSE:
-        return ''
-    if raw.lower() in _GL_STATE_TRACE_TRUE:
-        return os.path.abspath(os.path.join('diagnostics', 'lm_data', 'lm_data.jsonl'))
-    return os.path.abspath(raw)
-
-
-def _skin_dump_path() -> str:
-    """Return the skin parity JSONL path, or empty string when disabled."""
-    raw = os.environ.get(_SKIN_DUMP_ENV, '').strip()
-    if raw.lower() in _GL_STATE_TRACE_FALSE:
-        return ''
-    if raw.lower() in _GL_STATE_TRACE_TRUE:
-        return os.path.abspath(os.path.join('diagnostics', 'skinning', 'skin_dump.jsonl'))
-    return os.path.abspath(raw)
-
-
-def _debug_visualize_mode() -> int:
-    """Return debug visualization mode 0..4 from the environment."""
-    raw = os.environ.get(_DEBUG_VIZ_ENV, '').strip()
-    if not raw:
-        return 0
-    try:
-        mode = int(raw)
-    except (TypeError, ValueError):
-        return 0
-    return max(0, min(4, mode))
-
-
-def _lm_composite_mode() -> int:
-    """Return lightmap composite diagnostic mode 0..3 from the environment."""
-    raw = os.environ.get(_LM_COMPOSITE_MODE_ENV, '').strip()
-    if not raw:
-        return 0
-    try:
-        mode = int(raw)
-    except (TypeError, ValueError):
-        return 0
-    return max(0, min(3, mode))
-
-
-def _jsonable_gl_value(value):
-    """Convert ModernGL constants/uniform values to JSON-friendly data."""
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return value
-    if isinstance(value, (tuple, list)):
-        return [_jsonable_gl_value(item) for item in value]
-    try:
-        return int(value)
-    except Exception:
-        return str(value)
-
-
-def _safe_gl_attr(obj, name: str):
-    try:
-        return getattr(obj, name)
-    except Exception:
-        return None
-
-
-def _uniform_trace_value(uniforms: Dict[str, object], name: str):
-    uniform = uniforms.get(name)
-    if uniform is None:
-        return None
-    try:
-        return _jsonable_gl_value(uniform.value)
-    except Exception:
-        return None
-
-
-def _build_gl_state_trace_record(
-        *,
-        ctx,
-        prog,
-        node,
-        pass_name: str,
-        tri_count: int,
-        blend_enabled: bool,
-        tex_name: str,
-        lm_name: str,
-        env_name: str,
-        spec_name: str,
-        feature_mask: int,
-        uniforms: Dict[str, object]) -> dict:
-    """Build one draw-call GL state trace record."""
-    node_name = str(getattr(node, 'name', '') or '')
-    return {
-        'event': 'draw',
-        'time': time.time(),
-        'pass': pass_name,
-        'node': node_name,
-        'program_id': id(prog),
-        'tri_count': int(tri_count or 0),
-        'texture': tex_name,
-        'lightmap': lm_name,
-        'envmap': env_name,
-        'specular': spec_name,
-        'gl_depth_test': True,  # renderer enables DEPTH_TEST at frame start
-        'gl_depth_func': _jsonable_gl_value(_safe_gl_attr(ctx, 'depth_func')),
-        'gl_depth_writemask': False if pass_name == 'transparent' else True,
-        'gl_cull_face': True,  # renderer enables CULL_FACE at frame start
-        'gl_cull_face_mode': _jsonable_gl_value(_safe_gl_attr(ctx, 'cull_face')),
-        'gl_front_face': _jsonable_gl_value(_safe_gl_attr(ctx, 'front_face')),
-        'gl_blend_enabled': bool(blend_enabled),
-        'gl_blend_func': _jsonable_gl_value(_safe_gl_attr(ctx, 'blend_func')),
-        'gl_blend_equation': _jsonable_gl_value(_safe_gl_attr(ctx, 'blend_equation')),
-        'transparency_hint': int(getattr(node, 'transparency_hint', 0) or 0),
-        'txi_blending': int(getattr(node, 'txi_blending', 0) or 0),
-        'txi_alpha_test': float(getattr(node, 'txi_alpha_test', 0.0) or 0.0),
-        'txi_wateralpha': float(getattr(node, 'txi_wateralpha', 1.0) or 1.0),
-        'txi_decal': bool(getattr(node, 'txi_decal', False)),
-        'is_skin': bool(getattr(node, 'is_skin', False)),
-        'is_dangly': bool(getattr(node, 'is_dangly', False)),
-        'is_face_mesh_name': any(s in node_name.lower() for s in _FACE_MESH_SUBSTRINGS),
-        'is_inner_geometry_name': any(s in node_name.lower() for s in _INNER_GEO_SUBSTRINGS),
-        'u_alpha': _uniform_trace_value(uniforms, 'u_alpha'),
-        'u_node_alpha': _uniform_trace_value(uniforms, 'u_node_alpha'),
-        'u_blend_mode': _uniform_trace_value(uniforms, 'u_blend_mode'),
-        'u_alpha_test': _uniform_trace_value(uniforms, 'u_alpha_test'),
-        'u_wateralpha': _uniform_trace_value(uniforms, 'u_wateralpha'),
-        'u_oit_enabled': _uniform_trace_value(uniforms, 'u_oit_enabled'),
-        'u_debug_visualize': _uniform_trace_value(uniforms, 'u_debug_visualize'),
-        'u_lm_composite_mode': _uniform_trace_value(uniforms, 'u_lm_composite_mode'),
-        'u_has_tex': _uniform_trace_value(uniforms, 'u_has_tex'),
-        'u_has_lm': _uniform_trace_value(uniforms, 'u_has_lm'),
-        'u_has_env': _uniform_trace_value(uniforms, 'u_has_env'),
-        'u_lm_shade': _uniform_trace_value(uniforms, 'u_lm_shade'),
-        'u_features': int(feature_mask or 0),
-    }
-
-
-def _append_gl_state_trace(path: str, record: dict) -> None:
-    if not path:
-        return
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'a', encoding='utf-8') as fh:
-            fh.write(json.dumps(record, sort_keys=True) + '\n')
-    except Exception as exc:
-        log.debug("GL state trace write failed: %s", exc)
-
-
-def _first_uv_pairs(values, limit: int = 8) -> List[List[float]]:
-    out: List[List[float]] = []
-    for uv in list(values or [])[:limit]:
-        try:
-            out.append([float(uv[0]), float(uv[1])])
-        except Exception:
-            out.append([0.0, 0.0])
-    return out
-
-
-def _first_vbo_uv_pairs(vdata, start: int, limit: int = 8) -> List[List[float]]:
-    if vdata is None:
-        return []
-    try:
-        rows = vdata[:limit, start:start + 2]
-        return [[float(row[0]), float(row[1])] for row in rows]
-    except Exception:
-        return []
-
-
-def _texture_content_stats(img) -> Optional[dict]:
-    if img is None or not _PIL:
-        return None
-    try:
-        rgba = img.convert('RGBA')
-        data = rgba.tobytes()
-        w, h = rgba.size
-        if _NUMPY:
-            arr = np.asarray(rgba, dtype=np.uint8)
-            rgb = arr[:, :, :3]
-            min_rgb = [int(v) for v in rgb.reshape(-1, 3).min(axis=0)]
-            max_rgb = [int(v) for v in rgb.reshape(-1, 3).max(axis=0)]
-            mean_rgb = [round(float(v), 4) for v in rgb.reshape(-1, 3).mean(axis=0)]
-            alpha = arr[:, :, 3]
-            alpha_range = [int(alpha.min()), int(alpha.max())]
-        else:
-            pixels = list(rgba.getdata())
-            rgb_vals = [p[:3] for p in pixels]
-            min_rgb = [min(p[i] for p in rgb_vals) for i in range(3)]
-            max_rgb = [max(p[i] for p in rgb_vals) for i in range(3)]
-            mean_rgb = [round(sum(p[i] for p in rgb_vals) / max(1, len(rgb_vals)), 4)
-                        for i in range(3)]
-            alpha_vals = [p[3] for p in pixels]
-            alpha_range = [min(alpha_vals), max(alpha_vals)]
-
-        def _sample(x0: int, y0: int) -> List[List[List[int]]]:
-            rows: List[List[List[int]]] = []
-            for yy in range(y0, min(y0 + 4, h)):
-                row: List[List[int]] = []
-                for xx in range(x0, min(x0 + 4, w)):
-                    row.append([int(v) for v in rgba.getpixel((xx, yy))])
-                rows.append(row)
-            return rows
-
-        return {
-            'mode': getattr(img, 'mode', ''),
-            'decoded_pixel_format': 'RGBA8',
-            'size': [int(w), int(h)],
-            'sha256_rgba': hashlib.sha256(data).hexdigest(),
-            'min_rgb': min_rgb,
-            'max_rgb': max_rgb,
-            'mean_rgb': mean_rgb,
-            'alpha_range': alpha_range,
-            'corner_4x4_rgba': {
-                'top_left': _sample(0, 0),
-                'top_right': _sample(max(0, w - 4), 0),
-                'bottom_left': _sample(0, max(0, h - 4)),
-                'bottom_right': _sample(max(0, w - 4), max(0, h - 4)),
-            },
-        }
-    except Exception as exc:
-        return {'error': str(exc)}
-
-
-def _lightmap_role_info(node, has_lm_flag: bool, lightmap_bound: bool) -> dict:
-    tex_count = int(getattr(node, 'tex_count', 1) or 1)
-    tex_names = getattr(node, 'texture_names', []) or []
-    uvs = getattr(node, 'uvs', []) or []
-    uvs_lm = getattr(node, 'uvs_lm', []) or []
-    face_mats = getattr(node, 'face_mats', []) or []
-    authored_has_lm = bool(getattr(node, 'has_lightmap', False))
-    lm_name = str(getattr(node, 'lightmap', '') or '').strip().lower()
-    inferred = bool(
-        not authored_has_lm
-        and lm_name
-        and len(uvs_lm) > 0
-        and tex_count >= 2
-    )
-    effective_lm = bool(has_lm_flag)
-    if tex_count <= 1 or len(tex_names) < tex_count:
-        dispatch = 'single'
-        slot1_role = 'N/A'
-    elif effective_lm:
-        dispatch = 'Case A'
-        slot1_role = 'lightmap'
-    else:
-        dispatch = 'Case B'
-        slot1_role = 'secondary diffuse'
-    return {
-        'has_lightmap': authored_has_lm,
-        'lightmap_role_inferred': inferred,
-        'effective_lightmap': effective_lm,
-        'dispatch_path': dispatch,
-        'slot1_role': slot1_role,
-        'tex_count': tex_count,
-        'texture_names_count': len(tex_names),
-        'face_mats_unique': sorted({int(m) for m in face_mats})[:16] if face_mats else [],
-        'len_uvs': len(uvs),
-        'len_uvs_lm': len(uvs_lm),
-        'lightmap_bound': bool(lightmap_bound),
-    }
-
-
-def _build_lm_data_dump_record(
-        *,
-        ctx,
-        prog,
-        node,
-        pass_name: str,
-        gm,
-        has_lm_flag: bool,
-        lightmap_bound: bool,
-        lm_img,
-        lm_name: str,
-        uniforms: Dict[str, object]) -> dict:
-    """Build one lightmap data-path diagnostic record."""
-    verts = getattr(node, 'vertices', getattr(node, 'verts', [])) or []
-    uvs = getattr(node, 'uvs', []) or []
-    uvs_lm = getattr(node, 'uvs_lm', []) or []
-    role = _lightmap_role_info(node, has_lm_flag, lightmap_bound)
-    record = {
-        'event': 'lightmap_draw',
-        'time': time.time(),
-        'pass': pass_name,
-        'node': str(getattr(node, 'name', '') or ''),
-        'program_id': id(prog),
-        'vertex_count': len(verts),
-        'uploaded_vertex_count': int(getattr(gm, 'uploaded_vertex_count', 0) or 0),
-        'len_uvs': len(uvs),
-        'len_uvs_lm': len(uvs_lm),
-        'first8_uv0_model': _first_uv_pairs(uvs),
-        'first8_uv1_model': _first_uv_pairs(uvs_lm),
-        'first8_uv0_uploaded': list(getattr(gm, 'first8_uv0_uploaded', []) or []),
-        'first8_uv1_uploaded': list(getattr(gm, 'first8_uv1_uploaded', []) or []),
-        'lightmap_texture_name': lm_name,
-        'lightmap_texture_stats': _texture_content_stats(lm_img),
-        'uv1_attribute_bound': bool(getattr(gm, 'uv1_attribute_bound', False)),
-        'uv1_vbo_id': id(getattr(gm, 'vbo', None)) if getattr(gm, 'vbo', None) is not None else None,
-        'lightmap_uniforms': {
-            'u_has_lm': _uniform_trace_value(uniforms, 'u_has_lm'),
-            'u_lm_shade': _uniform_trace_value(uniforms, 'u_lm_shade'),
-            'u_lm_tex': _uniform_trace_value(uniforms, 'u_lm_tex'),
-            'u_debug_visualize': _uniform_trace_value(uniforms, 'u_debug_visualize'),
-            'u_lm_composite_mode': _uniform_trace_value(uniforms, 'u_lm_composite_mode'),
-        },
-    }
-    record.update(role)
-    return record
-
-
-def _append_jsonl_record(path: str, record: dict, label: str) -> None:
-    if not path:
-        return
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'a', encoding='utf-8') as fh:
-            fh.write(json.dumps(record, sort_keys=True) + '\n')
-    except Exception as exc:
-        log.debug("%s write failed: %s", label, exc)
-
-
-def _matrix4_json(matrix) -> List[List[float]]:
-    if matrix is None:
-        return []
-    try:
-        return [[round(float(v), 6) for v in row] for row in matrix]
-    except Exception:
-        return []
-
-
-def _matrix4_inverse_json(matrix) -> List[List[float]]:
-    if matrix is None or not _NUMPY:
-        return []
-    try:
-        return _matrix4_json(np.linalg.inv(np.asarray(matrix, dtype=np.float64)))
-    except Exception:
-        return []
-
-
-def _matrix4_mul_json(a, b) -> List[List[float]]:
-    if a is None or b is None or not _NUMPY:
-        return []
-    try:
-        return _matrix4_json(np.asarray(a, dtype=np.float64) @ np.asarray(b, dtype=np.float64))
-    except Exception:
-        return []
-
-
-def _matrix4_det_value(matrix) -> Optional[float]:
-    if matrix is None or not _NUMPY:
-        return None
-    try:
-        return round(float(np.linalg.det(np.asarray(matrix, dtype=np.float64))), 6)
-    except Exception:
-        return None
-
-
-def _qbone_inverse_bind_json(node, local_idx: int) -> List[List[float]]:
-    if not _NUMPY:
-        return []
-    qbones = getattr(node, 'qbone_list', []) or []
-    tbones = getattr(node, 'tbone_list', []) or []
-    if local_idx < 0 or local_idx >= len(qbones) or local_idx >= len(tbones):
-        return []
-    try:
-        x, y, z, w = (float(v) for v in qbones[local_idx])
-        tx, ty, tz = (float(v) for v in tbones[local_idx])
-        qlen = math.sqrt(x*x + y*y + z*z + w*w)
-        if qlen > 1e-9:
-            x, y, z, w = x/qlen, y/qlen, z/qlen, w/qlen
-        else:
-            x, y, z, w = 0.0, 0.0, 0.0, 1.0
-        xx, yy, zz = 2*x*x, 2*y*y, 2*z*z
-        xy, xz, yz = 2*x*y, 2*x*z, 2*y*z
-        wx, wy, wz = 2*w*x, 2*w*y, 2*w*z
-        m = np.array([
-            [1-yy-zz, xy-wz,   xz+wy,   tx],
-            [xy+wz,   1-xx-zz, yz-wx,   ty],
-            [xz-wy,   yz+wx,   1-xx-yy, tz],
-            [0.0,     0.0,     0.0,     1.0],
-        ], dtype=np.float64)
-        return _matrix4_json(np.linalg.inv(m))
-    except Exception:
-        return []
-
-
-def _qbone_direct_bind_json(node, local_idx: int) -> List[List[float]]:
-    if not _NUMPY:
-        return []
-    qbones = getattr(node, 'qbone_list', []) or []
-    tbones = getattr(node, 'tbone_list', []) or []
-    if local_idx < 0 or local_idx >= len(qbones) or local_idx >= len(tbones):
-        return []
-    try:
-        return _matrix4_json(_qbone_matrix_np(node, local_idx, order='TR', inverse=False))
-    except Exception:
-        return []
-
-
-def _uploaded_palette_array_from_uploader(uploader):
-    if uploader is None or not _NUMPY:
-        return None
-    try:
-        raw = uploader.as_flat_bytes()
-        arr = np.frombuffer(raw, dtype=np.float32).reshape((-1, 16))
-        out = np.zeros((len(arr), 4, 4), dtype=np.float32)
-        for idx, col in enumerate(arr):
-            for r in range(4):
-                for c in range(4):
-                    out[idx, r, c] = col[c * 4 + r]
-        return out
-    except Exception:
-        return None
-
-
-def _pose_node_transform(anim_pose, node) -> dict:
-    name = str(getattr(node, 'name', '') or '').lower()
-    pn = None
-    if anim_pose is not None and hasattr(anim_pose, 'nodes'):
-        pn = anim_pose.nodes.get(name)
-    if pn is not None:
-        pos = getattr(pn, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
-        rot = getattr(pn, 'rotation', (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
-    else:
-        pos = getattr(node, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
-        rot = getattr(node, 'rotation', (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
-    return {
-        'position': [float(v) for v in pos[:3]],
-        'rotation': [float(v) for v in rot[:4]],
-        'has_anim_pose': pn is not None,
-    }
-
-
-def _select_skin_probe_vertex(node) -> int:
-    skin_data = getattr(node, 'skin_data', []) or []
-    best_idx = 0
-    best_score = -1.0
-    for idx, skin in enumerate(skin_data):
-        influences = list(getattr(skin, 'influences', []) or [])
-        if not influences:
-            continue
-        weight_sum = sum(float(getattr(inf, 'weight', 0.0) or 0.0) for inf in influences)
-        score = len(influences) * 10.0 + weight_sum
-        if score > best_score:
-            best_idx = idx
-            best_score = score
-    return best_idx
-
-
-def _matrix_from_pos_quat_np(pos, quat):
-    if not _NUMPY:
-        return None
-    try:
-        tx, ty, tz = (float(v) for v in (pos or (0.0, 0.0, 0.0))[:3])
-        x, y, z, w = (float(v) for v in (quat or (0.0, 0.0, 0.0, 1.0))[:4])
-        qlen = math.sqrt(x*x + y*y + z*z + w*w)
-        if qlen > 1e-9:
-            x, y, z, w = x/qlen, y/qlen, z/qlen, w/qlen
-        else:
-            x, y, z, w = 0.0, 0.0, 0.0, 1.0
-        xx, yy, zz = 2*x*x, 2*y*y, 2*z*z
-        xy, xz, yz = 2*x*y, 2*x*z, 2*y*z
-        wx, wy, wz = 2*w*x, 2*w*y, 2*w*z
-        return np.array([
-            [1-yy-zz, xy-wz,   xz+wy,   tx],
-            [xy+wz,   1-xx-zz, yz-wx,   ty],
-            [xz-wy,   yz+wx,   1-xx-yy, tz],
-            [0.0,     0.0,     0.0,     1.0],
-        ], dtype=np.float64)
-    except Exception:
-        return np.eye(4, dtype=np.float64)
-
-
-def _qbone_matrix_np(node, local_idx: int, *, order: str, inverse: bool):
-    if not _NUMPY:
-        return None
-    qbones = getattr(node, 'qbone_list', []) or []
-    tbones = getattr(node, 'tbone_list', []) or []
-    if local_idx < 0 or local_idx >= len(qbones) or local_idx >= len(tbones):
-        return np.eye(4, dtype=np.float64)
-    q = qbones[local_idx]
-    t = tbones[local_idx]
-    rot = _matrix_from_pos_quat_np((0.0, 0.0, 0.0), q)
-    trans = _matrix_from_pos_quat_np(t, (0.0, 0.0, 0.0, 1.0))
-    mat = (trans @ rot) if order == 'TR' else (rot @ trans)
-    if inverse:
-        try:
-            return np.linalg.inv(mat)
-        except Exception:
-            return np.eye(4, dtype=np.float64)
-    return mat
-
-
-def _node_world_matrix_for_pose_np(node, anim_pose, cache: Dict[int, object]):
-    if not _NUMPY:
-        return None
-    if node is None:
-        return np.eye(4, dtype=np.float64)
-    node_id = id(node)
-    if node_id in cache:
-        return cache[node_id]
-    pose = None
-    name = str(getattr(node, 'name', '') or '').lower()
-    if anim_pose is not None and hasattr(anim_pose, 'nodes'):
-        pose = anim_pose.nodes.get(name)
-    if pose is not None:
-        pos = getattr(pose, 'position', (0.0, 0.0, 0.0))
-        quat = getattr(pose, 'rotation', (0.0, 0.0, 0.0, 1.0))
-    else:
-        pos = getattr(node, 'position', (0.0, 0.0, 0.0))
-        quat = getattr(node, 'rotation', (0.0, 0.0, 0.0, 1.0))
-    local = _matrix_from_pos_quat_np(pos, quat)
-    parent = getattr(node, 'parent', None)
-    if parent is not None:
-        mat = _node_world_matrix_for_pose_np(parent, anim_pose, cache) @ local
-    else:
-        mat = local
-    cache[node_id] = mat
-    return mat
-
-
-def _node_parent_chain_names(node) -> List[str]:
-    chain = []
-    cur = node
-    while cur is not None:
-        chain.append(str(getattr(cur, 'name', '') or ''))
-        cur = getattr(cur, 'parent', None)
-    return list(reversed([name for name in chain if name]))
-
-
-def _node_pose_chain_records(node, anim_pose) -> List[dict]:
-    if node is None or not _NUMPY:
-        return []
-    chain = []
-    cur = node
-    while cur is not None:
-        chain.append(cur)
-        cur = getattr(cur, 'parent', None)
-    records = []
-    for chain_node in reversed(chain):
-        records.append({
-            'node_name': str(getattr(chain_node, 'name', '') or ''),
-            'bind_local': _pose_node_transform(None, chain_node),
-            'animated_local': _pose_node_transform(anim_pose, chain_node),
-            'animated_world_matrix': _matrix4_json(
-                _node_world_matrix_for_pose_np(chain_node, anim_pose, {})
-            ),
-        })
-    return records
-
-
-_SKIN_3G_FORMULAS = {
-    'F1_current_TR_inverse': 'animated_world * inverse(T * R)',
-    'F2_RT_inverse': 'animated_world * inverse(R * T)',
-    'F3_skin_bind_pre': 'skin_node_bind * animated_world * inverse(T * R)',
-    'F4_skin_bind_post_inverse': 'animated_world * inverse(T * R) * inverse(skin_node_bind)',
-    'F5_skin_bind_precancel': 'inverse(skin_node_bind) * animated_world * inverse(T * R)',
-    'F6_TR_direct': 'animated_world * (T * R)',
-    'F7_RT_direct': 'animated_world * (R * T)',
-    'F8_bind_wrapper': 'inverse(skin_node_bind) * animated_world * inverse(T * R) * skin_node_bind',
-    'F9_xoreos_TR_direct_wrapper': 'inverse(skin_node_bind) * animated_world * (T * R) * skin_node_bind',
-    'F10_RT_direct_wrapper': 'inverse(skin_node_bind) * animated_world * (R * T) * skin_node_bind',
-    # 3i Step 7 - B-translation diagnostic candidates
-    'F11_rotation_only_skin_bind_wrapper': (
-        'inverse(R(skin_node_bind)) * animated_world * inverse(T * R) * R(skin_node_bind)'
-    ),
-    'F12_xoreos_first_frame_orientation_wrapper': (
-        'inverse(M_chain) * animated_world * inverse(T * R) * M_chain   '
-        'where M_chain = composed first-frame orientations of skin_node parent chain '
-        '(xoreos ModelNode::computeInverseBindPose L891-919)'
-    ),
-}
-
-
-def _quat_xyzw_to_mat4_np(qx: float, qy: float, qz: float, qw: float):
-    """Convert an XYZW quaternion to a row-major 4x4 numpy rotation matrix.
-
-    Uses the same XYZW convention enforced project-wide
-    (see ``project-identity.mdc`` constraint #5).  Identity quats and
-    near-zero norms collapse to the identity matrix safely.
-    """
-    if not _NUMPY:
-        return None
-    ql2 = qx * qx + qy * qy + qz * qz + qw * qw
-    if ql2 > 1e-9:
-        inv_l = 1.0 / float(np.sqrt(ql2))
-        qx, qy, qz, qw = qx * inv_l, qy * inv_l, qz * inv_l, qw * inv_l
-    else:
-        qx, qy, qz, qw = 0.0, 0.0, 0.0, 1.0
-    m = np.eye(4, dtype=np.float64)
-    m[0, 0] = 1.0 - 2.0 * (qy * qy + qz * qz)
-    m[0, 1] = 2.0 * (qx * qy - qz * qw)
-    m[0, 2] = 2.0 * (qx * qz + qy * qw)
-    m[1, 0] = 2.0 * (qx * qy + qz * qw)
-    m[1, 1] = 1.0 - 2.0 * (qx * qx + qz * qz)
-    m[1, 2] = 2.0 * (qy * qz - qx * qw)
-    m[2, 0] = 2.0 * (qx * qz - qy * qw)
-    m[2, 1] = 2.0 * (qy * qz + qx * qw)
-    m[2, 2] = 1.0 - 2.0 * (qx * qx + qy * qy)
-    return m
-
-
-def _xoreos_first_frame_orientation_matrix(skin_node, anim_pose):
-    """Build xoreos's pre-wrapper outer transform for ``skin_node``.
-
-    Reproduces ``ModelNode::computeInverseBindPose()`` (xoreos lines 891-919):
-
-    1. Walk parents from ``skin_node`` to root.
-    2. Iterate root-first and right-multiply each node's first-frame
-       orientation into an accumulator (translation frames are read but
-       intentionally never applied — see lines 904-907).
-    3. xoreos then inverts to produce ``_invBindPose``; this helper
-       returns the *uninverted* accumulator so the caller can use it as
-       ``transform = inverse(_invBindPose)`` directly (xoreos's outer
-       multiplier).
-
-    When ``anim_pose`` is provided the per-node rotation is taken from the
-    pose's first-frame snapshot; otherwise the static bind rotation is
-    used as a fallback.  Returns a 4x4 numpy matrix or ``None`` when
-    NumPy is unavailable.
-    """
-    if not _NUMPY or skin_node is None:
-        return None
-    chain = []
-    n = skin_node
-    visited = set()
-    while n is not None and id(n) not in visited:
-        visited.add(id(n))
-        chain.append(n)
-        n = getattr(n, 'parent', None)
-    chain.reverse()  # root-first
-    pose_nodes = (
-        {str(k).lower(): v for k, v in getattr(anim_pose, 'nodes', {}).items()}
-        if anim_pose is not None else {}
-    )
-    accum = np.eye(4, dtype=np.float64)
-    for node in chain:
-        name = str(getattr(node, 'name', '') or '').lower()
-        rot = None
-        if name and name in pose_nodes:
-            rot = getattr(pose_nodes[name], 'rotation', None)
-        if rot is None:
-            rot = getattr(node, 'rotation', (0.0, 0.0, 0.0, 1.0))
-        if rot is None:
-            rot = (0.0, 0.0, 0.0, 1.0)
-        try:
-            qx, qy, qz, qw = float(rot[0]), float(rot[1]), float(rot[2]), float(rot[3])
-        except Exception:
-            continue
-        # xoreos skips rotate when (x,y,z) all zero — matches identity quat case.
-        if qx == 0.0 and qy == 0.0 and qz == 0.0:
-            continue
-        rot_m = _quat_xyzw_to_mat4_np(qx, qy, qz, qw)
-        if rot_m is None:
-            continue
-        accum = accum @ rot_m
-    return accum
-
-
-def _skin_3g_matrix_for_formula(formula: str, skin_bind, animated_world, q_tr_inv,
-                                q_rt_inv, q_tr_direct, q_rt_direct,
-                                rot_only_skin_bind=None,
-                                xoreos_first_frame_outer=None):
-    try:
-        inv_skin = np.linalg.inv(skin_bind)
-    except Exception:
-        inv_skin = np.eye(4, dtype=np.float64)
-    if formula == 'F1_current_TR_inverse':
-        return animated_world @ q_tr_inv
-    if formula == 'F2_RT_inverse':
-        return animated_world @ q_rt_inv
-    if formula == 'F3_skin_bind_pre':
-        return skin_bind @ animated_world @ q_tr_inv
-    if formula == 'F4_skin_bind_post_inverse':
-        return animated_world @ q_tr_inv @ inv_skin
-    if formula == 'F5_skin_bind_precancel':
-        return inv_skin @ animated_world @ q_tr_inv
-    if formula == 'F6_TR_direct':
-        return animated_world @ q_tr_direct
-    if formula == 'F7_RT_direct':
-        return animated_world @ q_rt_direct
-    if formula == 'F8_bind_wrapper':
-        return inv_skin @ animated_world @ q_tr_inv @ skin_bind
-    if formula == 'F9_xoreos_TR_direct_wrapper':
-        return inv_skin @ animated_world @ q_tr_direct @ skin_bind
-    if formula == 'F10_RT_direct_wrapper':
-        return inv_skin @ animated_world @ q_rt_direct @ skin_bind
-    if formula == 'F11_rotation_only_skin_bind_wrapper':
-        outer = rot_only_skin_bind if rot_only_skin_bind is not None else skin_bind
-        try:
-            inv_outer = np.linalg.inv(outer)
-        except Exception:
-            inv_outer = np.eye(4, dtype=np.float64)
-        return inv_outer @ animated_world @ q_tr_inv @ outer
-    if formula == 'F12_xoreos_first_frame_orientation_wrapper':
-        outer = (
-            xoreos_first_frame_outer
-            if xoreos_first_frame_outer is not None else skin_bind
-        )
-        try:
-            inv_outer = np.linalg.inv(outer)
-        except Exception:
-            inv_outer = np.eye(4, dtype=np.float64)
-        return inv_outer @ animated_world @ q_tr_inv @ outer
-    return animated_world @ q_tr_inv
-
-
-def _skin_3g_role_for_bone(bone_name: str) -> str:
-    name = str(bone_name or '').lower()
-    if any(tok in name for tok in ('head', 'jaw', 'tooth', 'pincher')):
-        return 'head'
-    if any(tok in name for tok in ('forearm', 'upperarm', 'bicep', 'hand', 'finger', 'thumb')):
-        return 'forelimb'
-    if 'wing_01' in name or 'wing_bone_1' in name or name.endswith('wing_1'):
-        return 'wing_root'
-    if any(tok in name for tok in ('pelvis', 'lowerbody', 'torso')):
-        return 'pelvis'
-    return ''
-
-
-def _skin_3g_role_priority(bone_name: str, role: str) -> float:
-    name = str(bone_name or '').lower()
-    if role == 'head':
-        if 'head' in name:
-            return 3.0
-        if 'jaw' in name or 'neck' in name:
-            return 2.0
-        return 1.0
-    if role == 'forelimb':
-        if 'forearm' in name:
-            return 3.0
-        if 'upperarm' in name or 'bicep' in name:
-            return 2.0
-        return 1.0
-    if role == 'wing_root':
-        if 'wing_01' in name or 'wing_bone_1' in name:
-            return 3.0
-        return 1.0
-    if role == 'pelvis':
-        if 'pelvis' in name or 'lowerbody' in name:
-            return 3.0
-        return 1.0
-    return 0.0
-
-
-def _select_skin_3g_probe_vertices(node, bone_map: List[str], skin_data: List[object]) -> List[dict]:
-    best: Dict[str, dict] = {}
-    for vi, skin in enumerate(skin_data):
-        influences = list(getattr(skin, 'influences', []) or [])
-        for inf in influences:
-            local_idx = int(getattr(inf, 'bone_index', 0) or 0)
-            if local_idx < 0 or local_idx >= len(bone_map):
-                continue
-            weight = float(getattr(inf, 'weight', 0.0) or 0.0)
-            role = _skin_3g_role_for_bone(bone_map[local_idx])
-            if not role:
-                continue
-            # Prefer the intended anatomical discriminator over a nearby helper
-            # with the same weight (e.g. head_g over LPincher, wing_01 over wing_02).
-            score = weight + (_skin_3g_role_priority(bone_map[local_idx], role) * 0.01)
-            current = best.get(role)
-            if current is None or score > current['score']:
-                best[role] = {
-                    'vertex_role': role,
-                    'vertex_index': vi,
-                    'dominant_local_bone_index': local_idx,
-                    'dominant_bone_name': bone_map[local_idx],
-                    'score': score,
-                }
-    return [
-        {k: v for k, v in rec.items() if k != 'score'}
-        for _role, rec in sorted(best.items())
-    ]
-
-
-def _homogeneous_position_json(vec) -> List[float]:
-    if vec is None:
-        return []
-    try:
-        arr = np.asarray(vec, dtype=np.float64)
-        denom = float(arr[3]) if arr.shape[0] > 3 and abs(float(arr[3])) > 1e-9 else 1.0
-        return [round(float(v) / denom, 6) for v in arr[:3]]
-    except Exception:
-        return []
-
-
-def _first_divergence_stage(stage_pairs: List[Tuple[str, object, object]], tolerance: float = 1e-4) -> str:
-    if not _NUMPY:
-        return "unavailable_numpy"
-    for name, left, right in stage_pairs:
-        try:
-            a = np.asarray(left, dtype=np.float64)
-            b = np.asarray(right, dtype=np.float64)
-            if a.shape != b.shape or float(np.max(np.abs(a - b))) > tolerance:
-                return name
-        except Exception:
-            return name
-    return "none_within_tolerance"
-
-
-def _matrix_max_abs_delta(a, b) -> Optional[float]:
-    if a is None or b is None or not _NUMPY:
-        return None
-    try:
-        return round(float(np.max(np.abs(
-            np.asarray(a, dtype=np.float64) - np.asarray(b, dtype=np.float64)
-        ))), 6)
-    except Exception:
-        return None
-
-
-def _matrix_translation_norm(matrix) -> Optional[float]:
-    """L2 norm of the translation column of a 4x4 matrix.
-
-    Used by 3i Step 6 to quantify how much position content lives in
-    GhostRigger's ``skin_bind``.  xoreos's pre-wrapper ``transform`` is
-    rotation-only (positions are read but not applied — see
-    ``ModelNode::computeInverseBindPose`` lines 891-919), so any non-zero
-    translation here is a structural composition mismatch.
-    """
-    if matrix is None or not _NUMPY:
-        return None
-    try:
-        m = np.asarray(matrix, dtype=np.float64)
-        if m.shape != (4, 4):
-            return None
-        return round(float(np.linalg.norm(m[:3, 3])), 6)
-    except Exception:
-        return None
-
-
-def _matrix_rotation_only(matrix):
-    """Return ``matrix`` with the translation column zeroed (W=1 kept).
-
-    Used as a stand-in for xoreos's rotation-only ``inverse(_invBindPose)``
-    when probing whether GhostRigger's full-pose ``skin_bind`` is the
-    structural source of the wrapper visual failure.  Returned as a numpy
-    array (not JSON) so callers can multiply by a homogeneous vertex.
-    """
-    if matrix is None or not _NUMPY:
-        return None
-    try:
-        m = np.asarray(matrix, dtype=np.float64).copy()
-        if m.shape != (4, 4):
-            return None
-        m[:3, 3] = 0.0
-        m[3, :3] = 0.0
-        m[3, 3] = 1.0
-        return m
-    except Exception:
-        return None
-
-
-def _skin_bind_equivalence_record(node, uploader) -> dict:
-    current = getattr(uploader, '_skin_bind_matrix', None) if uploader is not None else None
-    node_world = _node_world_matrix_for_pose_np(node, None, {}) if _NUMPY else None
-    parent = getattr(node, 'parent', None)
-    parent_world = _node_world_matrix_for_pose_np(parent, None, {}) if parent is not None and _NUMPY else None
-    identity = np.eye(4, dtype=np.float64) if _NUMPY else None
-    # KotOR.js calls SkinnedMesh.bind(skeleton) with no explicit bindMatrix.
-    # Three.js therefore captures the SkinnedMesh's current matrixWorld.
-    kotorjs_default = node_world
-    candidates = {
-        'kotorjs_default_mesh_matrixWorld': kotorjs_default,
-        'ghostrigger_node_world_bind': node_world,
-        'parent_world_bind': parent_world,
-        'identity_bind': identity,
-    }
-    return {
-        'reference_renderer': 'KotOR.js/Three.js',
-        'reference_source': 'OdysseyModel3D.ts buildSkeleton skinNode.bind(new THREE.Skeleton(bones, inverses))',
-        'reference_bind_semantics': 'Three.js SkinnedMesh.bind without bindMatrix captures mesh.matrixWorld',
-        'ghostrigger_current_skin_bind_matrix': _matrix4_json(current),
-        'candidate_matrices': {
-            name: _matrix4_json(matrix)
-            for name, matrix in candidates.items()
-        },
-        'candidate_vs_current_max_abs': {
-            name: _matrix_max_abs_delta(current, matrix)
-            for name, matrix in candidates.items()
-        },
-        'candidate_vs_kotorjs_default_max_abs': {
-            name: _matrix_max_abs_delta(kotorjs_default, matrix)
-            for name, matrix in candidates.items()
-        },
-    }
-
-
-def _skin_3g_candidate_records(*, model, node, bone_map: List[str],
-                               skin_data: List[object], vertices: List[object],
-                               anim_pose, uploaded_palette_arr,
-                               uploaded_positions: Optional[List[List[float]]] = None,
-                               uploaded_bone_ids: Optional[List[List[int]]] = None,
-                               uploaded_weights: Optional[List[List[float]]] = None,
-                               uploaded_source_indices: Optional[List[int]] = None) -> List[dict]:
-    if not _NUMPY or not bone_map or not skin_data or not vertices:
-        return []
-    probes = _select_skin_3g_probe_vertices(node, bone_map, skin_data)
-    if not probes:
-        return []
-    skin_bind = _node_world_matrix_for_pose_np(node, None, {})
-    skin_pose = _node_world_matrix_for_pose_np(node, anim_pose, {})
-    # 3i Step 7 - B-translation diagnostic outer matrices
-    skin_bind_rot_only = _matrix_rotation_only(skin_bind)
-    xoreos_first_frame_outer = _xoreos_first_frame_orientation_matrix(node, anim_pose)
-    lookup = {}
-    try:
-        lookup = {str(getattr(n, 'name', '') or '').lower(): n for n in model.all_nodes()}
-    except Exception:
-        lookup = {}
-    out = []
-    for probe in probes:
-        vi = int(probe['vertex_index'])
-        if vi < 0 or vi >= len(vertices) or vi >= len(skin_data):
-            continue
-        raw = np.array([float(v) for v in vertices[vi][:3]], dtype=np.float64)
-        vbo = raw.copy()
-        vbo_row_index = vi
-        if uploaded_source_indices is not None:
-            try:
-                vbo_row_index = uploaded_source_indices.index(vi)
-            except ValueError:
-                vbo_row_index = vi
-        if uploaded_positions is not None and 0 <= vbo_row_index < len(uploaded_positions):
-            try:
-                vbo = np.array([float(v) for v in uploaded_positions[vbo_row_index][:3]], dtype=np.float64)
-            except Exception:
-                vbo = raw.copy()
-        hv = np.array([raw[0], raw[1], raw[2], 1.0], dtype=np.float64)
-        hv_vbo = np.array([vbo[0], vbo[1], vbo[2], 1.0], dtype=np.float64)
-        skin = skin_data[vi]
-        influences = list(getattr(skin, 'influences', []) or [])[:4]
-        formula_acc = {name: np.zeros(4, dtype=np.float64) for name in _SKIN_3G_FORMULAS}
-        gpu_acc = np.zeros(4, dtype=np.float64)
-        production_qbone_acc = np.zeros(4, dtype=np.float64)
-        production_weighted_acc = np.zeros(4, dtype=np.float64)
-        reference_f8_skin_bind_acc = np.zeros(4, dtype=np.float64)
-        reference_f8_qbone_acc = np.zeros(4, dtype=np.float64)
-        reference_f8_animated_acc = np.zeros(4, dtype=np.float64)
-        reference_f8_weighted_acc = np.zeros(4, dtype=np.float64)
-        reference_f9_qbone_acc = np.zeros(4, dtype=np.float64)
-        reference_f9_animated_acc = np.zeros(4, dtype=np.float64)
-        reference_f9_weighted_acc = np.zeros(4, dtype=np.float64)
-        try:
-            inv_skin_bind = np.linalg.inv(skin_bind)
-        except Exception:
-            inv_skin_bind = np.eye(4, dtype=np.float64)
-        influence_records = []
-        for inf in influences:
-            local_idx = int(getattr(inf, 'bone_index', 0) or 0)
-            weight = float(getattr(inf, 'weight', 0.0) or 0.0)
-            bone_name = bone_map[local_idx] if 0 <= local_idx < len(bone_map) else ''
-            bone_node = lookup.get(str(bone_name).lower()) if bone_name else None
-            animated_world = _node_world_matrix_for_pose_np(bone_node, anim_pose, {})
-            q_tr_inv = _qbone_matrix_np(node, local_idx, order='TR', inverse=True)
-            q_rt_inv = _qbone_matrix_np(node, local_idx, order='RT', inverse=True)
-            q_tr_direct = _qbone_matrix_np(node, local_idx, order='TR', inverse=False)
-            q_rt_direct = _qbone_matrix_np(node, local_idx, order='RT', inverse=False)
-            production_qbone_h = q_tr_inv @ hv_vbo
-            production_animated_h = animated_world @ production_qbone_h
-            reference_skin_bind_h = skin_bind @ hv_vbo
-            reference_f8_qbone_h = q_tr_inv @ reference_skin_bind_h
-            reference_f8_animated_h = animated_world @ reference_f8_qbone_h
-            reference_f8_final_h = inv_skin_bind @ reference_f8_animated_h
-            reference_f9_qbone_h = q_tr_direct @ reference_skin_bind_h
-            reference_f9_animated_h = animated_world @ reference_f9_qbone_h
-            reference_f9_final_h = inv_skin_bind @ reference_f9_animated_h
-            production_qbone_acc += weight * production_qbone_h
-            production_weighted_acc += weight * production_animated_h
-            reference_f8_skin_bind_acc += weight * reference_skin_bind_h
-            reference_f8_qbone_acc += weight * reference_f8_qbone_h
-            reference_f8_animated_acc += weight * reference_f8_animated_h
-            reference_f8_weighted_acc += weight * reference_f8_final_h
-            reference_f9_qbone_acc += weight * reference_f9_qbone_h
-            reference_f9_animated_acc += weight * reference_f9_animated_h
-            reference_f9_weighted_acc += weight * reference_f9_final_h
-            for fname in _SKIN_3G_FORMULAS:
-                mat = _skin_3g_matrix_for_formula(
-                    fname, skin_bind, animated_world, q_tr_inv, q_rt_inv,
-                    q_tr_direct, q_rt_direct,
-                    rot_only_skin_bind=skin_bind_rot_only,
-                    xoreos_first_frame_outer=xoreos_first_frame_outer,
-                )
-                formula_acc[fname] += weight * (mat @ hv)
-            if uploaded_palette_arr is not None and 0 <= local_idx < len(uploaded_palette_arr):
-                gpu_acc += weight * (np.asarray(uploaded_palette_arr[local_idx], dtype=np.float64) @ hv_vbo)
-            per_bone_production = []
-            if uploaded_palette_arr is not None and 0 <= local_idx < len(uploaded_palette_arr):
-                try:
-                    prod_h = np.asarray(uploaded_palette_arr[local_idx], dtype=np.float64) @ hv_vbo
-                    prod_pos = prod_h[:3] / (prod_h[3] if abs(prod_h[3]) > 1e-9 else 1.0)
-                    per_bone_production = [round(float(v), 6) for v in prod_pos]
-                except Exception:
-                    per_bone_production = []
-            influence_records.append({
-                'local_bone_index': local_idx,
-                'bone_name': bone_name,
-                'weight': round(weight, 6),
-                'parent_chain': _node_parent_chain_names(bone_node),
-                'animated_world_chain': _node_pose_chain_records(bone_node, anim_pose),
-                'animated_local': _pose_node_transform(anim_pose, bone_node) if bone_node is not None else {},
-                'animated_world_matrix': _matrix4_json(animated_world),
-                'qbone_tbone_TR_matrix': _matrix4_json(q_tr_direct),
-                'qbone_tbone_RT_matrix': _matrix4_json(q_rt_direct),
-                'qbone_tbone_TR_inverse_matrix': _matrix4_json(q_tr_inv),
-                'qbone_tbone_RT_inverse_matrix': _matrix4_json(q_rt_inv),
-                'production_per_bone_position_from_vbo_in_pos': per_bone_production,
-                'production_replay_pre_weight_position': _homogeneous_position_json(production_animated_h),
-                'reference_f8_replay_pre_weight_position': _homogeneous_position_json(reference_f8_final_h),
-                'reference_f9_replay_pre_weight_position': _homogeneous_position_json(reference_f9_final_h),
-                'skin_bind_applied_position': _homogeneous_position_json(reference_skin_bind_h),
-                'skin_unbind_applied_position_f8': _homogeneous_position_json(reference_f8_final_h),
-                'skin_unbind_applied_position_f9': _homogeneous_position_json(reference_f9_final_h),
-                'production_qbone_applied_position': _homogeneous_position_json(production_qbone_h),
-                'reference_f8_qbone_applied_position': _homogeneous_position_json(reference_f8_qbone_h),
-                'reference_f9_qbone_applied_position': _homogeneous_position_json(reference_f9_qbone_h),
-                'animated_world_applied_position': _homogeneous_position_json(production_animated_h),
-                'reference_f8_animated_world_applied_position': _homogeneous_position_json(reference_f8_animated_h),
-                'reference_f9_animated_world_applied_position': _homogeneous_position_json(reference_f9_animated_h),
-            })
-        candidate_positions = {}
-        candidate_distances = {}
-        raw_space_positions = {
-            'H1_raw_as_mesh_space': {},
-            'H2_raw_as_skin_node_local': {},
-        }
-        raw_space_distances = {
-            'H1_raw_as_mesh_space': {},
-            'H2_raw_as_skin_node_local': {},
-        }
-        hv_skin_local = skin_bind @ hv
-        for fname, accum in formula_acc.items():
-            pos = accum[:3] / (accum[3] if abs(accum[3]) > 1e-9 else 1.0)
-            candidate_positions[fname] = [round(float(v), 6) for v in pos]
-            candidate_distances[fname] = round(float(np.linalg.norm(pos - raw)), 6)
-            raw_space_positions['H1_raw_as_mesh_space'][fname] = candidate_positions[fname]
-            raw_space_distances['H1_raw_as_mesh_space'][fname] = candidate_distances[fname]
-
-            h2_accum = np.zeros(4, dtype=np.float64)
-            for inf in influences:
-                local_idx = int(getattr(inf, 'bone_index', 0) or 0)
-                weight = float(getattr(inf, 'weight', 0.0) or 0.0)
-                bone_name = bone_map[local_idx] if 0 <= local_idx < len(bone_map) else ''
-                bone_node = lookup.get(str(bone_name).lower()) if bone_name else None
-                animated_world = _node_world_matrix_for_pose_np(bone_node, anim_pose, {})
-                q_tr_inv = _qbone_matrix_np(node, local_idx, order='TR', inverse=True)
-                q_rt_inv = _qbone_matrix_np(node, local_idx, order='RT', inverse=True)
-                q_tr_direct = _qbone_matrix_np(node, local_idx, order='TR', inverse=False)
-                q_rt_direct = _qbone_matrix_np(node, local_idx, order='RT', inverse=False)
-                mat = _skin_3g_matrix_for_formula(
-                    fname, skin_bind, animated_world, q_tr_inv, q_rt_inv,
-                    q_tr_direct, q_rt_direct,
-                    rot_only_skin_bind=skin_bind_rot_only,
-                    xoreos_first_frame_outer=xoreos_first_frame_outer,
-                )
-                h2_accum += weight * (mat @ hv_skin_local)
-            h2_pos = h2_accum[:3] / (h2_accum[3] if abs(h2_accum[3]) > 1e-9 else 1.0)
-            raw_space_positions['H2_raw_as_skin_node_local'][fname] = [
-                round(float(v), 6) for v in h2_pos
-            ]
-            raw_space_distances['H2_raw_as_skin_node_local'][fname] = round(
-                float(np.linalg.norm(h2_pos - raw)), 6)
-        gpu_pos = gpu_acc[:3] / (gpu_acc[3] if abs(gpu_acc[3]) > 1e-9 else 1.0)
-        weight_total = sum(float(getattr(inf, 'weight', 0.0) or 0.0) for inf in influences)
-        weighted_vbo_h = hv_vbo * weight_total
-        raw_skin_bind_h = skin_bind @ hv_vbo
-        raw_skin_unbind_h = inv_skin_bind @ hv_vbo
-        first_divergence_f8 = _first_divergence_stage([
-            ('raw_to_vbo', raw, vbo),
-            ('skin_bind_applied', weighted_vbo_h, reference_f8_skin_bind_acc),
-            ('qbone_inverse_applied', production_qbone_acc, reference_f8_qbone_acc),
-            ('animated_world_applied', production_weighted_acc, reference_f8_animated_acc),
-            ('skin_unbind_applied', production_weighted_acc, reference_f8_weighted_acc),
-        ])
-        first_divergence_f9 = _first_divergence_stage([
-            ('raw_to_vbo', raw, vbo),
-            ('skin_bind_applied', weighted_vbo_h, reference_f8_skin_bind_acc),
-            ('qbone_direct_applied', production_qbone_acc, reference_f9_qbone_acc),
-            ('animated_world_applied', production_weighted_acc, reference_f9_animated_acc),
-            ('skin_unbind_applied', production_weighted_acc, reference_f9_weighted_acc),
-        ])
-        first_post_skin_bind_f8 = _first_divergence_stage([
-            ('qbone_inverse_after_skin_bind', production_qbone_acc, reference_f8_qbone_acc),
-            ('animated_world_after_skin_bind', production_weighted_acc, reference_f8_animated_acc),
-            ('skin_unbind_after_animated_world', production_weighted_acc, reference_f8_weighted_acc),
-        ])
-        first_post_skin_bind_f9 = _first_divergence_stage([
-            ('qbone_direct_after_skin_bind', production_qbone_acc, reference_f9_qbone_acc),
-            ('animated_world_after_skin_bind', production_weighted_acc, reference_f9_animated_acc),
-            ('skin_unbind_after_animated_world', production_weighted_acc, reference_f9_weighted_acc),
-        ])
-        try:
-            skin_bind_delta = float(np.max(np.abs((raw_skin_bind_h[:3] / raw_skin_bind_h[3]) - vbo)))
-        except Exception:
-            skin_bind_delta = None
-        try:
-            skin_unbind_delta = float(np.max(np.abs((raw_skin_unbind_h[:3] / raw_skin_unbind_h[3]) - vbo)))
-        except Exception:
-            skin_unbind_delta = None
-
-        # ── 3i Step 6: pre-qBone basis provenance ───────────────────────────
-        # Decisive question: does GhostRigger already pre-apply some basis
-        # change to the raw MDX position before qBone/tBone is multiplied?
-        #
-        # The loader (src/core/kotor_loader.py:_read_mesh L666-677) writes
-        # ``gr.vertices = raw_verts`` directly from PyKotor's
-        # ``mesh.vertex_positions``.  No bind matrix is ever folded in, so
-        # the VBO is the raw MDX position basis (= xoreos's
-        # ``_initialVertexCoords``).  ``raw_vs_vbo_max_abs == 0.0`` proven in
-        # Step 1 confirms this.  Together these say the loader does NOT
-        # pre-bake ``inverse(node->_invBindPose)`` into the input.
-        #
-        # On the reference side, xoreos's pre-wrapper ``transform`` is
-        # ``inverse(_invBindPose)`` where ``_invBindPose`` is built by
-        # rotating in the first-frame orientation of every parent in the
-        # node chain (xoreos ModelNode::computeInverseBindPose L891-919).
-        # Position frames are read at L904-907 but never applied, so the
-        # reference outer matrix is rotation-only.
-        #
-        # GhostRigger's ``skin_bind`` is the full position+rotation node
-        # world matrix from ``_node_world_matrix_for_pose_np(skin_node, None,
-        # {})``.  When a translation is present it makes the wrapper apply a
-        # structurally different transform than xoreos does.  The fields
-        # below quantify that mismatch per probe, and a rotation-only stand-
-        # in is reported so reduction can decide whether the residual error
-        # is purely the translation column or whether qBone/tBone itself was
-        # imported in a different basis.
-        skin_bind_translation_norm = _matrix_translation_norm(skin_bind)
-        skin_bind_rot_only = _matrix_rotation_only(skin_bind)
-        rot_only_h = (skin_bind_rot_only @ hv_vbo) if skin_bind_rot_only is not None else None
-        try:
-            rot_only_delta = (
-                None if rot_only_h is None
-                else round(float(np.max(np.abs((rot_only_h[:3] / rot_only_h[3]) - vbo))), 6)
-            )
-        except Exception:
-            rot_only_delta = None
-        try:
-            inv_skin_bind_times_vbo_h = inv_skin_bind @ hv_vbo
-            inv_skin_bind_vs_raw_max_abs = round(float(np.max(np.abs(
-                (inv_skin_bind_times_vbo_h[:3] / inv_skin_bind_times_vbo_h[3]) - raw))), 6)
-        except Exception:
-            inv_skin_bind_times_vbo_h = None
-            inv_skin_bind_vs_raw_max_abs = None
-        # Loader pre-transform classification: "none_passthrough" is the
-        # only outcome consistent with the loader source AND with raw==vbo.
-        loader_pretransform = (
-            'none_passthrough'
-            if abs(float(np.max(np.abs(vbo - raw)))) <= 1e-9
-            else 'pretransform_detected'
-        )
-        # If the loader had pre-applied skin_bind, then inv(skin_bind)*vbo
-        # would equal raw.  If not, inv(skin_bind)*vbo will diverge by
-        # exactly the amount of skin_bind's effect.  Empty/identity
-        # skin_bind makes both checks degenerate.
-        inverse_skin_bind_check = (
-            'no_pretransform_loader_passthrough'
-            if (inv_skin_bind_vs_raw_max_abs is None
-                or inv_skin_bind_vs_raw_max_abs > 1e-6)
-            else 'identity_skin_bind_or_pretransform_indistinguishable'
-        )
-        pre_qbone_basis_provenance = {
-            'loader_pretransform_detected': loader_pretransform,
-            'loader_source': (
-                'src/core/kotor_loader.py:_read_mesh L666-677 stores PyKotor '
-                'mesh.vertex_positions directly into gr.vertices (no bind '
-                'transform)'
-            ),
-            'loader_vbo_source': (
-                'src/gui/gpu_renderer.py uploads gr.vertices verbatim into '
-                'pos VBO via _GpuMesh.uploaded_positions'
-            ),
-            'reference_initial_vertex_coords_source': (
-                'xoreos Animation::updateSkinnedModel uses '
-                'node._initialVertexCoords (raw MDX) before applying '
-                'transform'
-            ),
-            'reference_pre_wrapper_transform_composition': (
-                'rotation_only_chain_of_first_frame_orientations'
-            ),
-            'reference_pre_wrapper_transform_source': (
-                'xoreos ModelNode::computeInverseBindPose L891-919 '
-                '(_positionFrames read at L904-907 but never applied; '
-                'orientations rotated in via glm::rotate at L912)'
-            ),
-            'ghostrigger_skin_bind_composition': (
-                'position_plus_rotation_node_world_pose_matrix'
-            ),
-            'ghostrigger_skin_bind_source': (
-                'gpu_skinning.MatrixPaletteUploader._skin_bind_matrix from '
-                '_node_world_matrix_for_pose_np(skin_node, None, {})'
-            ),
-            'skin_bind_translation_norm': skin_bind_translation_norm,
-            'skin_bind_rotation_only_matrix': _matrix4_json(skin_bind_rot_only),
-            'reference_pre_qbone_with_full_skin_bind_position':
-                _homogeneous_position_json(raw_skin_bind_h),
-            'reference_pre_qbone_with_rotation_only_skin_bind_position':
-                _homogeneous_position_json(rot_only_h),
-            'reference_pre_qbone_with_rotation_only_vs_production_vbo_max_abs':
-                rot_only_delta,
-            'inverse_skin_bind_times_vbo_position':
-                _homogeneous_position_json(inv_skin_bind_times_vbo_h),
-            'inverse_skin_bind_times_vbo_vs_raw_max_abs':
-                inv_skin_bind_vs_raw_max_abs,
-            'inverse_skin_bind_check': inverse_skin_bind_check,
-        }
-
-        # ── 3i Step 7: B-translation diagnostic comparison ───────────────────
-        # F11 (rotation-only skin_bind wrapper) and F12 (xoreos-strict
-        # first-frame-orientation chain wrapper) are both new diagnostic
-        # candidates added to ``_SKIN_3G_FORMULAS``.  Their accumulated
-        # weighted positions live in ``formula_acc`` already; we surface
-        # them explicitly here alongside a |F11 - F1| / |F12 - F1| delta
-        # and a "collapses to production" boolean so the audit doc and
-        # reduction script can name the outcome without re-deriving it.
-        f11_acc = formula_acc.get('F11_rotation_only_skin_bind_wrapper')
-        f12_acc = formula_acc.get('F12_xoreos_first_frame_orientation_wrapper')
-        f1_acc = formula_acc.get('F1_current_TR_inverse')
-
-        def _norm_pos(acc):
-            try:
-                if acc is None:
-                    return None
-                w = float(acc[3]) if abs(float(acc[3])) > 1e-9 else 1.0
-                return acc[:3] / w
-            except Exception:
-                return None
-
-        f1_pos = _norm_pos(f1_acc)
-        f11_pos = _norm_pos(f11_acc)
-        f12_pos = _norm_pos(f12_acc)
-
-        def _delta_to_production(pos):
-            if pos is None or f1_pos is None:
-                return None
-            try:
-                return round(float(np.max(np.abs(pos - f1_pos))), 6)
-            except Exception:
-                return None
-
-        f11_vs_f1 = _delta_to_production(f11_pos)
-        f12_vs_f1 = _delta_to_production(f12_pos)
-        f11_collapses = (f11_vs_f1 is not None and f11_vs_f1 < 1e-4)
-        f12_collapses = (f12_vs_f1 is not None and f12_vs_f1 < 1e-4)
-        # Per-probe interpretation: matches Step 7 stop/go phrasing.
-        if f11_collapses and f12_collapses:
-            step7_interpretation = (
-                'b_translation_loose_and_strict_both_collapse_to_production'
-            )
-        elif f11_collapses and not f12_collapses:
-            step7_interpretation = (
-                'b_translation_loose_collapses_to_production_strict_diverges'
-            )
-        elif not f11_collapses and f12_collapses:
-            step7_interpretation = (
-                'b_translation_loose_diverges_strict_collapses_to_production'
-            )
-        else:
-            step7_interpretation = (
-                'b_translation_loose_and_strict_both_diverge_from_production'
-            )
-        step7_b_translation_probe = {
-            'f11_outer_composition': 'rotation_only_skin_bind',
-            'f12_outer_composition': (
-                'xoreos_first_frame_orientation_chain_M_chain'
-            ),
-            'f11_outer_matrix': _matrix4_json(skin_bind_rot_only),
-            'f12_outer_matrix': _matrix4_json(xoreos_first_frame_outer),
-            'f11_weighted_position': (
-                [round(float(v), 6) for v in f11_pos] if f11_pos is not None else []
-            ),
-            'f12_weighted_position': (
-                [round(float(v), 6) for v in f12_pos] if f12_pos is not None else []
-            ),
-            'production_weighted_position': (
-                [round(float(v), 6) for v in f1_pos] if f1_pos is not None else []
-            ),
-            'f11_vs_production_max_abs': f11_vs_f1,
-            'f12_vs_production_max_abs': f12_vs_f1,
-            'f11_collapses_to_production': bool(f11_collapses),
-            'f12_collapses_to_production': bool(f12_collapses),
-            'step7_interpretation': step7_interpretation,
-        }
-
-        out.append({
-            **probe,
-            'raw_position': [round(float(v), 6) for v in raw],
-            'raw_mdx_position': [round(float(v), 6) for v in raw],
-            'vbo_in_pos': [round(float(v), 6) for v in vbo],
-            'vbo_row_index': int(vbo_row_index),
-            'vbo_source_vertex_index': (
-                int(uploaded_source_indices[vbo_row_index])
-                if uploaded_source_indices is not None and 0 <= vbo_row_index < len(uploaded_source_indices)
-                else vi
-            ),
-            'raw_vs_vbo_delta': [round(float(vbo[i] - raw[i]), 6) for i in range(3)],
-            'raw_vs_vbo_max_abs': round(float(np.max(np.abs(vbo - raw))), 6),
-            'interpreted_raw_space': 'skin_node_vbo_input_space',
-            'skin_node_bind_position': _pose_node_transform(None, node).get('position', []),
-            'skin_node_bind_rotation_quat': _pose_node_transform(None, node).get('rotation', []),
-            'skin_node_bind_matrix': _matrix4_json(skin_bind),
-            'skin_node_pose_matrix': _matrix4_json(skin_pose),
-            'bone_ids': [int(getattr(inf, 'bone_index', 0) or 0) for inf in influences],
-            'weights': [round(float(getattr(inf, 'weight', 0.0) or 0.0), 6) for inf in influences],
-            'vbo_bone_ids': uploaded_bone_ids[vbo_row_index] if uploaded_bone_ids is not None and 0 <= vbo_row_index < len(uploaded_bone_ids) else [],
-            'vbo_weights': uploaded_weights[vbo_row_index] if uploaded_weights is not None and 0 <= vbo_row_index < len(uploaded_weights) else [],
-            'influences': influence_records,
-            'production_replay_pre_weight_positions': [
-                rec.get('production_replay_pre_weight_position', [])
-                for rec in influence_records
-            ],
-            'reference_f8_replay_pre_weight_positions': [
-                rec.get('reference_f8_replay_pre_weight_position', [])
-                for rec in influence_records
-            ],
-            'reference_f9_replay_pre_weight_positions': [
-                rec.get('reference_f9_replay_pre_weight_position', [])
-                for rec in influence_records
-            ],
-            'production_weighted_sum_position': _homogeneous_position_json(production_weighted_acc),
-            'reference_f8_weighted_sum_position': _homogeneous_position_json(reference_f8_weighted_acc),
-            'reference_f9_weighted_sum_position': _homogeneous_position_json(reference_f9_weighted_acc),
-            'qbone_already_raw_basis_probe_weighted_sum_position': _homogeneous_position_json(production_weighted_acc),
-            'qbone_after_skin_bind_probe_weighted_sum_position_f8': _homogeneous_position_json(reference_f8_weighted_acc),
-            'qbone_after_skin_bind_probe_weighted_sum_position_f9': _homogeneous_position_json(reference_f9_weighted_acc),
-            'raw_after_skin_bind_position': _homogeneous_position_json(raw_skin_bind_h),
-            'raw_after_skin_unbind_position': _homogeneous_position_json(raw_skin_unbind_h),
-            'reference_pre_qbone_input_position': _homogeneous_position_json(raw_skin_bind_h),
-            'reference_pre_qbone_input_source': 'xoreos transform * initialVertexCoords; Three.js bindMatrix * position',
-            'production_pre_qbone_input_position': [round(float(v), 6) for v in vbo],
-            'reference_pre_qbone_vs_production_vbo_max_abs': (
-                round(skin_bind_delta, 6) if skin_bind_delta is not None else None
-            ),
-            'skin_bind_moves_raw_max_abs': round(skin_bind_delta, 6) if skin_bind_delta is not None else None,
-            'skin_unbind_moves_raw_max_abs': round(skin_unbind_delta, 6) if skin_unbind_delta is not None else None,
-            'skin_bind_applied_position': _homogeneous_position_json(reference_f8_skin_bind_acc),
-            'skin_unbind_applied_position': _homogeneous_position_json(reference_f8_weighted_acc),
-            'animated_world_applied_position': _homogeneous_position_json(production_weighted_acc),
-            'first_divergence_stage': first_divergence_f8,
-            'first_divergence_stage_reference_f8': first_divergence_f8,
-            'first_divergence_stage_reference_f9': first_divergence_f9,
-            'first_post_skin_bind_mismatch_stage_reference_f8': first_post_skin_bind_f8,
-            'first_post_skin_bind_mismatch_stage_reference_f9': first_post_skin_bind_f9,
-            'pre_qbone_basis_provenance': pre_qbone_basis_provenance,
-            'step7_b_translation': step7_b_translation_probe,
-            'candidate_formula_positions': candidate_positions,
-            'candidate_distance_from_raw': candidate_distances,
-            'raw_vertex_space_candidate_positions': raw_space_positions,
-            'raw_vertex_space_distance_from_raw': raw_space_distances,
-            'gpu_skinned_actual': [round(float(v), 6) for v in gpu_pos],
-            'gpu_skinned_position_after_3g_fix': [round(float(v), 6) for v in gpu_pos],
-            'gpu_skinned_actual_method': 'weighted uploaded_u_bones decode',
-        })
-    return out
-
-
-def _skin_live_slot_records(
-        *,
-        model,
-        node,
-        bone_map: List[str],
-        skin_data: List[object],
-        bone_remap: Optional[Dict[int, int]],
-        uploader,
-        palette_arr,
-        uploaded_palette_arr,
-        anim_pose,
-        anim_base_pose) -> List[dict]:
-    live: Dict[int, dict] = {}
-    for vi, skin in enumerate(skin_data):
-        influences = list(getattr(skin, 'influences', []) or [])
-        for inf in influences:
-            weight = float(getattr(inf, 'weight', 0.0) or 0.0)
-            if weight < 0.0001:
-                continue
-            local_idx = int(getattr(inf, 'bone_index', 0) or 0)
-            slot = live.setdefault(local_idx, {
-                'local_bone_index': local_idx,
-                'vertex_count': 0,
-                'weight_sum': 0.0,
-                'max_weight': 0.0,
-                'first_vertex': vi,
-            })
-            slot['vertex_count'] += 1
-            slot['weight_sum'] += weight
-            slot['max_weight'] = max(slot['max_weight'], weight)
-
-    root_name = str(getattr(getattr(model, 'root_node', None), 'name', '') or
-                    getattr(model, 'name', '') or '')
-    records = []
-    inv_source = {}
-    if uploader is not None:
-        inv_source = getattr(uploader, '_inv_bind_anim', None) or getattr(uploader, '_inv_bind', {})
-        if not isinstance(inv_source, dict):
-            inv_source = {}
-
-    for local_idx in sorted(live):
-        bone_name = bone_map[local_idx] if 0 <= local_idx < len(bone_map) else ''
-        palette_idx = bone_remap.get(local_idx, 0) if bone_remap is not None else local_idx
-        bone_node = None
-        try:
-            bone_node = model.find_node(bone_name) if bone_name else None
-        except Exception:
-            bone_node = None
-        local_inv_source = getattr(uploader, '_skin_local_inv_bind_by_slot', {}) if uploader is not None else {}
-        inv_bind = local_inv_source.get(local_idx) if isinstance(local_inv_source, dict) else None
-        if inv_bind is None:
-            inv_bind = inv_source.get(str(bone_name).lower()) if bone_name else None
-        cpu_matrix = None
-        if palette_arr is not None and 0 <= palette_idx < len(palette_arr):
-            cpu_matrix = palette_arr[palette_idx].tolist()
-        uploaded_matrix = None
-        if uploaded_palette_arr is not None and 0 <= palette_idx < len(uploaded_palette_arr):
-            uploaded_matrix = uploaded_palette_arr[palette_idx].tolist()
-        parity_error = None
-        if cpu_matrix is not None and uploaded_matrix is not None and _NUMPY:
-            try:
-                parity_error = float(np.max(np.abs(
-                    np.asarray(cpu_matrix, dtype=np.float64) -
-                    np.asarray(uploaded_matrix, dtype=np.float64))))
-            except Exception:
-                parity_error = None
-        qbone_inv = _qbone_inverse_bind_json(node, local_idx)
-        qbone_direct = _qbone_direct_bind_json(node, local_idx)
-        qbone_error = None
-        if inv_bind is not None and qbone_inv and _NUMPY:
-            try:
-                qbone_error = float(np.max(np.abs(
-                    np.asarray(inv_bind, dtype=np.float64) -
-                    np.asarray(qbone_inv, dtype=np.float64))))
-            except Exception:
-                qbone_error = None
-        slot = live[local_idx]
-        records.append({
-            'local_bone_index': local_idx,
-            'bone_name': bone_name,
-            'is_empty_bone_name': bone_name == '',
-            'is_model_root': bool(bone_name and root_name and bone_name.lower() == root_name.lower()),
-            'palette_index': int(palette_idx),
-            'vertex_count': int(slot['vertex_count']),
-            'weight_sum': round(float(slot['weight_sum']), 6),
-            'max_weight': round(float(slot['max_weight']), 6),
-            'first_vertex': int(slot['first_vertex']),
-            'bind_local': _pose_node_transform(None, bone_node) if bone_node is not None else {},
-            'base_pose_local': _pose_node_transform(anim_base_pose, bone_node) if bone_node is not None else {},
-            'animated_local': _pose_node_transform(anim_pose, bone_node) if bone_node is not None else {},
-            'inverse_bind_matrix': _matrix4_json(inv_bind),
-            'qbone_inverse_bind_matrix': qbone_inv,
-            'qbone_tbone_direct_matrix': qbone_direct,
-            'bone_inverse_bind_source': getattr(uploader, '_skin_inverse_bind_source', '')
-                                      if uploader is not None else '',
-            'inverse_bind_vs_qbone_max_abs': qbone_error,
-            'cpu_composed_skinning_matrix': _matrix4_json(cpu_matrix),
-            'uploaded_u_bones_matrix': _matrix4_json(uploaded_matrix),
-            'cpu_vs_uploaded_max_abs': parity_error,
-        })
-    return records
-
-
-def _build_skin_dump_record(
-        *,
-        model,
-        node,
-        pass_name: str,
-        uploader,
-        bone_remap: Optional[Dict[int, int]],
-        uniforms: Dict[str, object],
-        gm=None,
-        anim_pose,
-        anim_base_pose,
-        anim_time: float,
-        selected_vertex: Optional[int] = None) -> dict:
-    """Build one skinning parity diagnostic record for a skin draw."""
-    bone_map = list(getattr(node, 'bone_map', []) or [])
-    skin_data = list(getattr(node, 'skin_data', []) or [])
-    vertices = list(getattr(node, 'vertices', getattr(node, 'verts', [])) or [])
-    vertex_index = selected_vertex if selected_vertex is not None else _select_skin_probe_vertex(node)
-    vertex_index = max(0, min(int(vertex_index), max(0, len(vertices) - 1)))
-    skin = skin_data[vertex_index] if vertex_index < len(skin_data) else None
-    influences = list(getattr(skin, 'influences', []) or []) if skin is not None else []
-
-    palette_arr = None
-    try:
-        palette_arr = uploader.as_numpy_array() if uploader is not None else None
-    except Exception:
-        palette_arr = None
-    uploaded_palette_arr = _uploaded_palette_array_from_uploader(uploader)
-
-    referenced = []
-    for inf in influences[:4]:
-        local_idx = int(getattr(inf, 'bone_index', 0) or 0)
-        weight = float(getattr(inf, 'weight', 0.0) or 0.0)
-        bone_name = bone_map[local_idx] if 0 <= local_idx < len(bone_map) else ''
-        palette_idx = bone_remap.get(local_idx, 0) if bone_remap is not None else local_idx
-        bone_node = None
-        try:
-            bone_node = model.find_node(bone_name) if bone_name else None
-        except Exception:
-            bone_node = None
-        inv_bind = None
-        if uploader is not None:
-            local_inv_source = getattr(uploader, '_skin_local_inv_bind_by_slot', {})
-            if isinstance(local_inv_source, dict):
-                inv_bind = local_inv_source.get(local_idx)
-            inv_source = getattr(uploader, '_inv_bind_anim', None) or getattr(uploader, '_inv_bind', {})
-            if inv_bind is None:
-                inv_bind = inv_source.get(str(bone_name).lower()) if isinstance(inv_source, dict) else None
-        uploaded = None
-        if palette_arr is not None and 0 <= palette_idx < len(palette_arr):
-            uploaded = palette_arr[palette_idx].tolist()
-        bind_world = _matrix4_inverse_json(inv_bind)
-        referenced.append({
-            'local_bone_index': local_idx,
-            'weight': weight,
-            'bone_name': bone_name,
-            'palette_index': int(palette_idx),
-            'bind_local': _pose_node_transform(None, bone_node) if bone_node is not None else {},
-            'base_pose_local': _pose_node_transform(anim_base_pose, bone_node) if bone_node is not None else {},
-            'animated_local': _pose_node_transform(anim_pose, bone_node) if bone_node is not None else {},
-            'bind_pose_world_matrix': bind_world,
-            'animated_world_matrix': _matrix4_mul_json(uploaded, bind_world),
-            'inverse_bind_matrix': _matrix4_json(inv_bind),
-            'composed_skinning_matrix': _matrix4_json(uploaded),
-            'uploaded_u_bones_matrix': _matrix4_json(uploaded),
-        })
-
-    remap_items = sorted((int(k), int(v)) for k, v in (bone_remap or {}).items())
-    referenced_local = [int(getattr(inf, 'bone_index', 0) or 0) for inf in influences[:4]]
-    live_slots = _skin_live_slot_records(
-        model=model,
-        node=node,
-        bone_map=bone_map,
-        skin_data=skin_data,
-        bone_remap=bone_remap,
-        uploader=uploader,
-        palette_arr=palette_arr,
-        uploaded_palette_arr=uploaded_palette_arr,
-        anim_pose=anim_pose,
-        anim_base_pose=anim_base_pose,
-    )
-    convention_probes = _skin_3g_candidate_records(
-        model=model,
-        node=node,
-        bone_map=bone_map,
-        skin_data=skin_data,
-        vertices=vertices,
-        anim_pose=anim_pose,
-        uploaded_palette_arr=uploaded_palette_arr,
-        uploaded_positions=getattr(gm, 'uploaded_positions', None) if gm is not None else None,
-        uploaded_bone_ids=getattr(gm, 'uploaded_bone_ids', None) if gm is not None else None,
-        uploaded_weights=getattr(gm, 'uploaded_weights', None) if gm is not None else None,
-        uploaded_source_indices=getattr(gm, 'uploaded_source_indices', None) if gm is not None else None,
-    )
-    skin_bind_matrix = getattr(uploader, '_skin_bind_matrix', None) if uploader is not None else None
-    first_live = live_slots[0] if live_slots else {}
-
-    # ── 3i Step 6: aggregate pre-qBone basis provenance summary ─────────
-    # Roll the per-probe provenance up so the audit doc can read a single
-    # classification line per skin draw.  The classification follows the
-    # decision rule in the user's Step 6 brief:
-    #   Outcome A: GhostRigger raw/VBO already pre-bound  → keep 3f, document
-    #              wrapper as semantically wrong for our representation.
-    #   Outcome B: GhostRigger raw/VBO not pre-bound, but qBone/tBone
-    #              imported assuming a different basis → fix in loader/qBone
-    #              import semantics, not palette multiplication.
-    # The loader source (kotor_loader.py:_read_mesh L666-677 → gr.vertices =
-    # raw_verts) and ``raw_vs_vbo_max_abs == 0.0`` together force the
-    # pretransform branch to "none_passthrough" whenever the loader path is
-    # observed; the only remaining axis is whether skin_bind carries
-    # translation that xoreos's rotation-only transform does not.
-    skin_bind_translation_norm_top = _matrix_translation_norm(skin_bind_matrix)
-    probes_have_pretransform = any(
-        (p.get('pre_qbone_basis_provenance') or {}).get('loader_pretransform_detected')
-            == 'pretransform_detected'
-        for p in convention_probes
-    )
-    if convention_probes:
-        loader_pretransform_summary = (
-            'pretransform_detected_per_probe'
-            if probes_have_pretransform else 'none_passthrough_proven_by_raw_equals_vbo'
-        )
-    else:
-        loader_pretransform_summary = 'no_probes_available'
-    if skin_bind_translation_norm_top is None:
-        skin_bind_includes_translation = None
-        classification = 'unavailable_skin_bind_missing'
-    elif skin_bind_translation_norm_top > 1e-6:
-        skin_bind_includes_translation = True
-        classification = (
-            'outcome_b_loader_passthrough_but_skin_bind_includes_translation'
-            '_xoreos_transform_does_not'
-        )
-    else:
-        skin_bind_includes_translation = False
-        classification = (
-            'outcome_b_candidate_no_translation_in_skin_bind_check_qbone_basis'
-        )
-    # ── 3i Step 7: aggregate B-translation diagnostic across probes ─────
-    step7_probes = [
-        (p.get('step7_b_translation') or {})
-        for p in convention_probes
-    ]
-    f11_collapse_flags = [bool(p.get('f11_collapses_to_production'))
-                          for p in step7_probes if p]
-    f12_collapse_flags = [bool(p.get('f12_collapses_to_production'))
-                          for p in step7_probes if p]
-    f11_vs_f1_values = [
-        p.get('f11_vs_production_max_abs') for p in step7_probes
-        if p and p.get('f11_vs_production_max_abs') is not None
-    ]
-    f12_vs_f1_values = [
-        p.get('f12_vs_production_max_abs') for p in step7_probes
-        if p and p.get('f12_vs_production_max_abs') is not None
-    ]
-    if not step7_probes:
-        step7_summary_classification = 'no_probes_available'
-    elif all(f11_collapse_flags) and all(f12_collapse_flags):
-        step7_summary_classification = (
-            'b_translation_loose_and_strict_both_collapse_to_production'
-            '_no_visual_change_expected'
-        )
-    elif all(f11_collapse_flags) and not all(f12_collapse_flags):
-        step7_summary_classification = (
-            'b_translation_loose_collapses_to_production_strict_diverges'
-            '_strict_visual_gate_warranted'
-        )
-    elif not all(f11_collapse_flags) and all(f12_collapse_flags):
-        step7_summary_classification = (
-            'b_translation_loose_diverges_strict_collapses_to_production'
-            '_loose_visual_gate_warranted'
-        )
-    else:
-        step7_summary_classification = (
-            'b_translation_loose_and_strict_both_diverge_from_production'
-            '_either_variant_visual_gate_warranted'
-        )
-    step7_b_translation_summary = {
-        'f11_outer_composition': 'rotation_only_skin_bind',
-        'f12_outer_composition': (
-            'xoreos_first_frame_orientation_chain_M_chain'
-        ),
-        'f12_outer_source': (
-            'xoreos ModelNode::computeInverseBindPose L891-919: '
-            'transform = inverse(_invBindPose) where _invBindPose is the '
-            'composed first-frame orientation chain from skin_node parents'
-        ),
-        'probes_total': len(step7_probes),
-        'probes_with_f11_data': sum(1 for p in step7_probes if p),
-        'f11_collapses_to_production_in_all_probes': (
-            bool(f11_collapse_flags) and all(f11_collapse_flags)
-        ),
-        'f12_collapses_to_production_in_all_probes': (
-            bool(f12_collapse_flags) and all(f12_collapse_flags)
-        ),
-        'f11_vs_production_max_max_abs': (
-            round(max(f11_vs_f1_values), 6) if f11_vs_f1_values else None
-        ),
-        'f12_vs_production_max_max_abs': (
-            round(max(f12_vs_f1_values), 6) if f12_vs_f1_values else None
-        ),
-        'classification': step7_summary_classification,
-        'visual_gate_recommendation': (
-            'No visual gate needed: both diagnostic variants produce '
-            'pixel-identical output to current 3f production. The '
-            'B-translation hypothesis is provably a no-op for this skin '
-            'draw. Pivot to 3i B-qbone-basis (qBone/tBone import semantics).'
-            if step7_summary_classification.startswith(
-                'b_translation_loose_and_strict_both_collapse'
-            )
-            else (
-                'Visual gate warranted: at least one diagnostic variant '
-                'produces a different result than current 3f production. '
-                'Capture before/after screenshots for c_drexlf, c_brith, '
-                'and c_bomabeast under the divergent variant before any '
-                'production change.'
-            )
-        ),
-    }
-
-    pre_qbone_basis_provenance_summary = {
-        'loader_pretransform': loader_pretransform_summary,
-        'loader_source': (
-            'src/core/kotor_loader.py:_read_mesh L666-677: gr.vertices = '
-            'raw_verts (PyKotor mesh.vertex_positions copy, no bind '
-            'transform applied)'
-        ),
-        'reference_initial_vertex_coords_source': (
-            'xoreos Animation::updateSkinnedModel uses '
-            'node._initialVertexCoords (raw MDX) as the input to the '
-            'wrapper transform'
-        ),
-        'reference_pre_wrapper_transform_composition': (
-            'rotation_only_chain_of_first_frame_orientations'
-        ),
-        'reference_pre_wrapper_transform_source': (
-            'xoreos ModelNode::computeInverseBindPose L891-919: position '
-            'frames read at L904-907 but never applied; orientations '
-            'rotated in via glm::rotate at L912; result inverted at L918'
-        ),
-        'ghostrigger_skin_bind_composition': (
-            'position_plus_rotation_node_world_pose_matrix'
-        ),
-        'ghostrigger_skin_bind_source': (
-            'gpu_skinning.MatrixPaletteUploader._skin_bind_matrix from '
-            '_node_world_matrix_for_pose_np(skin_node, None, {})'
-        ),
-        'skin_bind_translation_norm': skin_bind_translation_norm_top,
-        'skin_bind_includes_translation_xoreos_does_not':
-            skin_bind_includes_translation,
-        'classification': classification,
-        'recommended_next_audit': (
-            'Test rotation-only-skin_bind wrapper variant against the same '
-            'tagged probes.  If reference_pre_qbone_with_rotation_only_'
-            'skin_bind matches the production basis, the structural defect '
-            'is the translation column inside skin_bind.  If it still '
-            'diverges, the qBone/tBone data itself was imported in a '
-            'basis that disagrees with the reference engines.'
-        ),
-    }
-    return {
-        'event': 'skin_draw',
-        'time': time.time(),
-        'model': str(getattr(model, 'name', '') or ''),
-        'node': str(getattr(node, 'name', '') or ''),
-        'pass': pass_name,
-        'anim_time': float(anim_time),
-        'anim_pose_time': float(getattr(anim_pose, 'time', 0.0) or 0.0) if anim_pose is not None else None,
-        'anim_base_pose_time': float(getattr(anim_base_pose, 'time', 0.0) or 0.0) if anim_base_pose is not None else None,
-        'is_skin': bool(getattr(node, 'is_skin', False)),
-        'is_dangly': bool(getattr(node, 'is_dangly', False)),
-        'vertex_count': len(vertices),
-        'skin_data_len': len(skin_data),
-        'bone_map': bone_map,
-        'bone_map_len': len(bone_map),
-        'bone_map_duplicates': sorted({b for b in bone_map if b and bone_map.count(b) > 1}),
-        'bone_map_remap': remap_items,
-        'bone_map_overflow_used': len(bone_map) > 16,
-        'referenced_local_indices': referenced_local,
-        'referenced_oob': [i for i in referenced_local if i < 0 or i >= len(bone_map)],
-        'live_local_indices': [slot['local_bone_index'] for slot in live_slots],
-        'live_palette_indices': [slot['palette_index'] for slot in live_slots],
-        'live_empty_bone_slots': [
-            slot['local_bone_index'] for slot in live_slots if slot['is_empty_bone_name']
-        ],
-        'live_model_root_slots': [
-            slot['local_bone_index'] for slot in live_slots if slot['is_model_root']
-        ],
-        'live_slots': live_slots,
-        'skin_transform_formula': getattr(uploader, '_skin_palette_formula', '')
-                                  if uploader is not None else '',
-        'skin_bind_present': bool(skin_bind_matrix),
-        'skin_bind_det': _matrix4_det_value(skin_bind_matrix),
-        'skin_bind_matrix': _matrix4_json(skin_bind_matrix),
-        'skin_bind_equivalence': _skin_bind_equivalence_record(node, uploader),
-        'pre_qbone_basis_provenance_summary': pre_qbone_basis_provenance_summary,
-        'step7_b_translation_summary': step7_b_translation_summary,
-        'bone_inverse_bind_source': getattr(uploader, '_skin_inverse_bind_source', '')
-                                    if uploader is not None else '',
-        'palette_matrix_preupload_first_live_slot': first_live.get('cpu_composed_skinning_matrix', []),
-        'palette_matrix_uploaded_first_live_slot': first_live.get('uploaded_u_bones_matrix', []),
-        'skin_transform_convention_formulas': dict(_SKIN_3G_FORMULAS),
-        'skin_transform_convention_probes': convention_probes,
-        'selected_vertex': {
-            'index': vertex_index,
-            'position': [float(v) for v in vertices[vertex_index][:3]] if vertices else [],
-            'influences': [
-                {
-                    'local_bone_index': int(getattr(inf, 'bone_index', 0) or 0),
-                    'weight': float(getattr(inf, 'weight', 0.0) or 0.0),
-                }
-                for inf in influences[:4]
-            ],
-        },
-        'referenced_bones': referenced,
-        'u_skin_enabled': _uniform_trace_value(uniforms, 'u_skin_enabled'),
-        'u_bone_count': _uniform_trace_value(uniforms, 'u_bone_count'),
-        'palette_bone_count': int(getattr(uploader, 'bone_count', 0) or 0) if uploader is not None else 0,
-        'vbo_attribute_layout': _VBO_MAIN_FORMAT,
-        'bone_ids_vbo_attribute_layout': _VBO_BONE_IDS_FORMAT,
-        'shader_bone_ids_type': 'ivec4',
-        'bone_ids_attribute_format': _VBO_BONE_IDS_FORMAT,
-        'weights_attribute_format': '4f',
-    }
-
-
-def _gl_context_backend_candidates(os_name: Optional[str] = None) -> Tuple[str, ...]:
-    """Return ModernGL standalone backend candidates for this platform."""
-    override = os.environ.get(_GL_BACKEND_ENV, '').strip().lower()
-    if override:
-        return (override,)
-    platform = os.name if os_name is None else os_name
-    if platform == 'nt':
-        # Windows native standalone contexts are WGL; ModernGL's default path
-        # resolves correctly there.  Forcing EGL on Windows fails on common wheels.
-        return ('default', 'wgl', 'egl')
-    if platform == 'posix':
-        # Preserve the old headless Linux preference, with default/X11 fallbacks.
-        return ('egl', 'default', 'x11')
-    return ('default',)
-
-
-def _create_moderngl_standalone_context():
-    """Create a standalone ModernGL context using platform-appropriate backends."""
-    failures = []
-    for backend in _gl_context_backend_candidates():
-        try:
-            if backend == 'default':
-                return moderngl.create_standalone_context(), backend
-            return moderngl.create_context(standalone=True, backend=backend), backend
-        except Exception as exc:
-            failures.append(f"{backend}: {exc}")
-            log.debug("ModernGL backend %s failed: %s", backend, exc)
-    raise RuntimeError("; ".join(failures) if failures else "no ModernGL backends attempted")
-
-def _gr_gpu_probe(node, wp, wo, is_id_rot: bool, composite_off=None) -> None:
-    """GPU-path counterpart of the CPU probe in viewport.py.
-
-    Fires once per (model_id, node_name) for skin nodes whose name contains
-    'head' when env var GHOSTRIGGER_VIEWPORT_PROBE=1 is set.  Prints the
-    world_transform wp, composite offset (if any), and first-vertex data so
-    we can compare CPU and GPU transforms side by side.
-    """
-    if not _GR_GPU_PROBE:
-        return
-    try:
-        nl = (getattr(node, 'name', '') or '').lower()
-    except Exception:
-        return
-    if not getattr(node, 'is_skin', False) or 'head' not in nl:
-        return
-    key = (id(getattr(node, '_model_ref', None)), nl, id(node))
-    if key in _GR_GPU_PROBE_SEEN:
-        return
-    _GR_GPU_PROBE_SEEN.add(key)
-    import sys as _sys
-    try:
-        verts = getattr(node, 'vertices', []) or []
-        v0 = verts[0] if verts else (0.0, 0.0, 0.0)
-        pos = tuple(round(float(x), 4) for x in getattr(node, 'position', (0,0,0)))
-        wpr = tuple(round(float(x), 4) for x in wp)
-        wor = tuple(round(float(x), 4) for x in wo)
-        v0r = tuple(round(float(x), 4) for x in v0)
-        # Include composite_offset in the expected-world so the probe matches
-        # the actual rendered position after the Bug-C fix in _build_vbo_data.
-        _cox = float(composite_off[0]) if composite_off is not None else 0.0
-        _coy = float(composite_off[1]) if composite_off is not None else 0.0
-        _coz = float(composite_off[2]) if composite_off is not None else 0.0
-        ew = (float(v0[0]) + float(wp[0]) + _cox,
-              float(v0[1]) + float(wp[1]) + _coy,
-              float(v0[2]) + float(wp[2]) + _coz)
-        co = None
-        if composite_off is not None:
-            co = tuple(round(float(x), 4) for x in composite_off)
-        _sys.stderr.write(
-            f"[GR-PROBE GPU-vbo] node={node.name} is_skin=True nvert={len(verts)}\n"
-            f"  node.position       = {pos}\n"
-            f"  world_transform     = wp={wpr}  wo={wor}  is_id_rot={is_id_rot}\n"
-            f"  composite_offset    = {co}\n"
-            f"  raw vertex[0]       = {v0r}\n"
-            f"  expected world[0]   = ({ew[0]:.4f}, {ew[1]:.4f}, {ew[2]:.4f})\n"
-        )
-        _sys.stderr.flush()
-    except Exception:
-        pass
 
 try:
     from core.model_data import KOTOR_BASE_SKELETONS as _KOTOR_BASE_SKELETONS
@@ -2083,36 +178,6 @@ except ImportError:
             'C_KHOUNDA', 'C_TARENTATEK', 'C_RANCORM', 'C_TUKE',
             'WARDROID', 'N_WARDROID',
         })
-
-# ── Shared inner-geometry / face name lists ────────────────────────────────
-# Imported from the single source of truth shared with viewport.py.  The GPU
-# path MUST classify eye/teeth/tongue/gum/jaw nodes identically to the CPU
-# rasterizer — mismatched lists caused NPC-head regressions where the CPU
-# path kept inner geometry and the GPU path dropped it (or vice versa).
-try:
-    from core.render_constants import (
-        INNER_GEO_SUBSTRINGS as _INNER_GEO_SUBSTRINGS,
-        FACE_MESH_SUBSTRINGS as _FACE_MESH_SUBSTRINGS,
-    )
-except ImportError:
-    try:
-        from src.core.render_constants import (
-            INNER_GEO_SUBSTRINGS as _INNER_GEO_SUBSTRINGS,
-            FACE_MESH_SUBSTRINGS as _FACE_MESH_SUBSTRINGS,
-        )
-    except ImportError:
-        # Last-resort fallback so the GPU path still classifies correctly even
-        # when render_constants is unavailable (e.g. during import-cycle tests).
-        # If you edit these values, also edit src/core/render_constants.py —
-        # they MUST stay in sync with the canonical list.
-        _INNER_GEO_SUBSTRINGS = (
-            'eye', 'lid', 'teeth', 'tooth', 'gum', 'jaw', 'tongue',
-            'teethu', 'teethl',
-            'eyeball', 'cornea', 'iris', 'pupil',
-            'gumskin', 'tonguemesh', 'jawskin',
-            'eyelid', 'teetha', 'teethb',
-        )
-        _FACE_MESH_SUBSTRINGS = ('face', 'head', 'skull', 'fhead', 'fchead')
 
 log = logging.getLogger(__name__)
 
@@ -2526,9 +591,9 @@ in vec4  in_color;     // vertex colour (w = per-vertex alpha, 1.0 if unused)
 // ── Phase A: GPU Skinning — bone index + weight vertex attributes ───────────
 // For skin nodes: 4 bone indices and 4 blend weights per vertex.
 // For non-skin nodes: bone_ids = (0,0,0,0), weights = (1,0,0,0) (identity).
-// Bone indices are supplied through an integer vertex attribute.  Do not bind
-// this as float: deterministic wrong-bone lookups produce stable pinned pieces.
-in ivec4 in_bone_ids;  // 4 bone palette indices
+// Bone indices are passed as vec4 (float) and cast to int in the shader
+// because ModernGL vertex arrays use float format consistently.
+in vec4  in_bone_ids;  // 4 bone palette indices (as floats, cast to int)
 in vec4  in_weights;   // 4 blend weights (sum ≈ 1.0)
 
 // Uniforms
@@ -2580,7 +645,7 @@ void main() {
         vec4 skinned_pos  = vec4(0.0);
         vec3 skinned_norm = vec3(0.0);
         for (int i = 0; i < 4; ++i) {
-            int  bi = in_bone_ids[i];
+            int  bi = int(in_bone_ids[i] + 0.5);  // float→int with rounding
             float w = in_weights[i];
             if (bi < 0 || bi >= u_bone_count || w < 0.0001) continue;
             mat4 M = u_bones[bi];
@@ -2745,8 +810,6 @@ uniform vec3  u_cam_pos;
 
 // v7.2 Order-Independent Transparency (Finding 5.5 — reone f_oit_model.glsl)
 uniform int   u_oit_enabled;    // 1 = weighted-blended OIT output mode
-uniform int   u_debug_visualize; // 0 normal, 1 red, 2 alpha, 3 diffuse, 4 lightmap
-uniform int   u_lm_composite_mode; // 0 current, 1 multiply, 2 overbright2, 3 clamp diagnostic
 
 // Inputs from vertex shader
 in vec3  v_world_pos;
@@ -2785,11 +848,6 @@ void main() {
         diffuse_samp = vec4(u_diffuse, 1.0);
     }
 
-    if (u_debug_visualize == 1) {
-        frag_color = vec4(1.0, 0.0, 0.0, 1.0);
-        return;
-    }
-
     // -- Punch-through alpha test (TXI blending=punchthrough)
     // v7.1 FIX-HASHEDALPHA (Finding 5.4 — reone i_hashedalpha.glsl):
     // When FEAT_HASHEDALPHA is enabled, use screen-space noise dithering
@@ -2807,8 +865,6 @@ void main() {
 
     // -- Per-vertex colour modulation
     diffuse_samp.rgb *= v_color.rgb;
-    vec3 debug_diffuse_rgb = diffuse_samp.rgb;
-    vec3 debug_lightmap_rgb = vec3(0.0);
 
     // -- Lighting
     vec3 N = normalize(v_world_norm);
@@ -2852,20 +908,8 @@ void main() {
     if (u_lm_shade == 1 && u_has_lm == 1) {
         // ── Lightmap-only path (module/area geometry) ─────────────────
         vec4 lm_samp = texture(u_lm_tex, v_uv_lm);
-        debug_lightmap_rgb = lm_samp.rgb;
-        if (u_lm_composite_mode == 1) {
-            // Diagnostic: pure multiply, no overbright and no ambient floor.
-            lit_color = diffuse_samp.rgb * lm_samp.rgb;
-        } else if (u_lm_composite_mode == 2) {
-            // Diagnostic: documented original overbright 2.0, no ambient floor.
-            lit_color = diffuse_samp.rgb * lm_samp.rgb * 2.0;
-        } else {
-            // FIX-LMBRIGHT: Raised overbright 2.0 → 2.5 + ambient floor 0.03
-            lit_color = diffuse_samp.rgb * (lm_samp.rgb * 2.5 + vec3(0.03));
-            if (u_lm_composite_mode == 3) {
-                lit_color = clamp(lit_color, 0.0, 1.0);
-            }
-        }
+        // FIX-LMBRIGHT: Raised overbright 2.0 → 2.5 + ambient floor 0.03
+        lit_color = diffuse_samp.rgb * (lm_samp.rgb * 2.5 + vec3(0.03));
 
         // Self-illumination still applies additively
         lit_color += u_selfillum;
@@ -2939,18 +983,8 @@ void main() {
         // (e.g. character models with lightmap textures).
         if (u_has_lm == 1) {
             vec4 lm_samp = texture(u_lm_tex, v_uv_lm);
-            debug_lightmap_rgb = lm_samp.rgb;
-            if (u_lm_composite_mode == 1) {
-                lit_color *= lm_samp.rgb;
-            } else if (u_lm_composite_mode == 2) {
-                lit_color *= lm_samp.rgb * 2.0;
-            } else {
-                // FIX-LMBRIGHT: Match the raised overbright factor (2.5)
-                lit_color *= lm_samp.rgb * 2.5;
-                if (u_lm_composite_mode == 3) {
-                    lit_color = clamp(lit_color, 0.0, 1.0);
-                }
-            }
+            // FIX-LMBRIGHT: Match the raised overbright factor (2.5)
+            lit_color *= lm_samp.rgb * 2.5;
         }
     }
 
@@ -2974,17 +1008,6 @@ void main() {
     } else {
         // Semi-transparent / additive
         final_alpha = diffuse_samp.a * effective_alpha;
-    }
-
-    if (u_debug_visualize == 2) {
-        frag_color = vec4(final_alpha, final_alpha, final_alpha, 1.0);
-        return;
-    } else if (u_debug_visualize == 3) {
-        frag_color = vec4(debug_diffuse_rgb, 1.0);
-        return;
-    } else if (u_debug_visualize == 4) {
-        frag_color = vec4(debug_lightmap_rgb, 1.0);
-        return;
     }
 
     // ── v7.2 Weighted-Blended OIT output (Finding 5.5 — reone f_oit_model.glsl) ─
@@ -3328,7 +1351,6 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     uvs_lm = getattr(node, 'uvs_lm', [])
     faces  = getattr(node, 'faces', [])
     face_uvs = getattr(node, 'face_uvs', [])
-    is_skin = bool(getattr(node, 'is_skin', False))
 
     n_verts = len(verts)
     n_faces = len(faces)
@@ -3345,6 +1367,29 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     is_identity_rot = (abs(wo[3]) > 0.9999 and
                        abs(wo[0]) < 1e-6 and abs(wo[1]) < 1e-6 and abs(wo[2]) < 1e-6)
     is_identity_pos = (abs(wp[0]) < 1e-9 and abs(wp[1]) < 1e-9 and abs(wp[2]) < 1e-9)
+
+    # FIX-UVSENT-V2: Two-tier UV sentinel restored for correct seam healing.
+    #
+    # Character models (is_module=False): UV sentinel = 20.0
+    #   KotOR skin meshes have seam-split duplicate vertices where the seam
+    #   copy's UV was written as garbage (e.g. -27.14, -104.93 on p_hk47
+    #   hand/finger nodes, c_kraytdragon claws).  These must be detected as
+    #   "bad" and healed by copying the UV from a coincident valid vertex.
+    #   The 20.0 threshold catches these garbage UVs while preserving all
+    #   legitimate character UVs (which are always in [0,1] or very close).
+    #   Reference: April 2 baseline (commit 90b914c) _UV_SENTINEL = 20.0.
+    #
+    # Module/tile models (is_module=True): UV sentinel = 1e18 (NaN/Inf only)
+    #   KotOR area/tile geometry legitimately tiles textures over large
+    #   surfaces with UVs far outside [0,1] (e.g. Box86 in m10aa_01c has
+    #   U/V ~ 131,208; LTS_logwal02 wall has U=-8.75).  GPU GL_REPEAT
+    #   wraps them correctly.  Only filter genuinely corrupt NaN/Inf data.
+    #   Cross-ref: KotOR.js TextureLoader.ts — default RepeatWrapping.
+    #
+    # The v6.0 change to a single 1e18 for all models broke character seam
+    # healing: UVs like -27.14 passed the NaN/Inf-only filter, causing
+    # incorrect texture mapping on character model seam vertices.
+    _UV_SENTINEL = 20.0 if not is_module else 1e18
 
     # ── Convert vertices and normals to Nx3 float64 arrays ──────────────────
     try:
@@ -3373,64 +1418,172 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
         n_arr = np.zeros((n_verts, 3), dtype=np.float64)
         n_arr[:, 2] = 1.0
 
-    # ── D20-M: Apply world transform using per-node vertex_space contract ────
+    # ── Apply world rotation (vectorized) ────────────────────────────────────
+    # BUG-SKIN FIX: KotOR/NWN skin mesh vertices are stored in WORLD SPACE by
+    # the Odyssey engine exporter.  The node's position/rotation fields are the
+    # skeleton's bind-pose root offset — adding them to already-world-space verts
+    # causes double-translation (verts float far from origin).
     #
-    # Every node's vertex_space is set at load time by compute_vertex_space()
-    # in src/core/vertex_space.py.  This replaces ALL centroid-magnitude
-    # heuristics, _WORLDSPACE_VERT_THRESHOLD, FIX-PROXY-THRESHOLD,
-    # FIX-ACCESSORY-WORLDSPACE, and FIX-CREATURE-WORLDSPACE checks.
+    # Correct behaviour (per KotorBlender reader.py + KotOR.js engine notes):
+    #   is_skin=True  → verts are already in world space; do NOT translate or rotate.
+    #   is_skin=False → standard trimesh/dangly in local space → rotate then translate.
     #
-    # Rules (matching xoreos model_kotor.cpp, KotOR.js OdysseyModel3D.ts):
-    #   NODE_LOCAL (0): vertices are in node's local coordinate system.
-    #                   Apply full world_transform (rotate + translate).
-    #                   Exception: skin meshes are authored in model-root bind
-    #                   space; bind-pose VBOs keep those coordinates as-is.
-    #   WORLD (1):      vertices already in model-root space (imported OBJ/FBX).
-    #                   Do NOT apply world_transform.
-    #   AABB_WALK (2):  walkmesh/collision — not rendered (should never reach here).
+    # BUG-01 FIX (Phase 3.8d): Accessory skin models (non-base supermodel, e.g.
+    # cloaks) store skin vertices in BONE-LOCAL space, not world space.  When the
+    # supermodel is not available (standalone render), the world_orient quaternion
+    # for the node will be non-identity and world_pos non-zero.  Applying the full
+    # world transform brings these verts into model space correctly.
+    # Heuristic: if the model is an accessory (node has a parent chain with a
+    # meaningful non-origin world_pos) AND is a skin node, apply the transform.
+    # We detect this by checking if the node's owning model has a non-base
+    # supermodel (stored on the model as supermodel != NULL/base skeleton).
     #
-    # References:
-    #   xoreos model_kotor.cpp readMesh/readSkin — raw MDX read, no transform
-    #   KotOR.js OdysseyModelNodeMesh.ts — raw push to array
-    #   KotOR.js OdysseyModel3D.ts NodeMeshBuilder — matrixWorld for GPU
-    #   reone mdlreader.cpp — reads verts as-is, applies node transform in renderer
-    #   KotorBlender parser.py — verts loaded into Blender mesh, Blender applies hierarchy
-    _node_vs = getattr(node, 'vertex_space', 0)  # default NODE_LOCAL
+    # BUG-CREATURE FIX (Phase 3.9): Some character/creature models (e.g. C_Bantha)
+    # have non-skin mesh nodes (horns, eyes, hair) whose vertex positions are stored
+    # in WORLD SPACE, not local space.  This happens when the Odyssey exporter writes
+    # already-transformed vertices for rigid attachments on a skeleton.  Heuristic:
+    # if the vertex centroid magnitude (distance from origin) exceeds
+    # _WORLDSPACE_VERT_THRESHOLD (0.5 units), the mesh is already in world space and
+    # we must NOT apply the world_pos/world_orient transform.
+    # Evidence: bantha btRhorn centroid ≈ (0.71, 2.40, 0.88) mag≈2.65 (world-space);
+    #           sithpraet mRobe2_g centroid ≈ (-0.001, 0.033, -0.130) mag≈0.134 (local).
+    # Threshold raised to 2.0 to avoid false-positives on small local-space meshes
+    # whose bounding box sits close to (but above 0.5 from) the origin (e.g. unit-quad
+    # test fixtures with centroid ~0.7 that are clearly in local space).
+    _WORLDSPACE_VERT_THRESHOLD = 1.5  # units; centroid beyond this → verts are world-space
+    # FIX-PROXY-THRESHOLD: Lowered from 2.0 to 1.5 to catch c_bantha 'head_Hair'
+    # (centroid_mag≈1.82) which is a non-skin node stored in world space on the
+    # skeleton.  The bantha's world extents are ~3 units so 1.5 is a safe lower
+    # bound that doesn't create false-positives on typical local-space meshes
+    # (e.g. sithpraet robe nodes have centroid_mag≈0.13, eyeRA has centroid≈0.002).
+    _parent_model = getattr(node, '_model_ref', None)
+    _supermodel   = getattr(_parent_model, 'supermodel', 'NULL') if _parent_model else 'NULL'
+    # FIX-BASE-SKELS: Use the canonical KOTOR_BASE_SKELETONS constant so that
+    # creature models (C_BANTHA, C_DEWBACK, etc.) are never treated as accessories.
+    # Previously this used a hardcoded mini-set ('S_FEMALE02', 'S_MALE02', …) that
+    # was missing all creature bases.  The constant now covers all KotOR 1/2 player
+    # skeletons: S_FEMALE02, S_MALE02, S_FEMALE03, S_MALE03, and all C_* supermodels.
+    _is_accessory_skin = (
+        bool(getattr(node, 'is_skin', False)) and
+        _supermodel.strip().upper() not in _KOTOR_BASE_SKELETONS
+    )
+    is_skin = bool(getattr(node, 'is_skin', False))
 
-    if _node_vs == 0 and is_skin:
-        pass
-    elif _node_vs == 0:  # NODE_LOCAL — rigid meshes get one full world transform
+    # FIX-ACCESSORY-WORLDSPACE: Determine whether accessory skin vertices need
+    # translation and which kind:
+    #
+    # A) Small centroid (< threshold): bone-local space.
+    #    Vertices are offset around the bone origin → apply +world_pos directly.
+    #    Examples: comm_b_f tongue (centroid_mag≈0.007), ad_saul eyeRA (≈0.003).
+    #
+    # B) Large centroid (> threshold): vertices stored with baked-in world offset.
+    #    The centroid roughly equals the negative of the bone's world position.
+    #    Correct transform: v_out = v - centroid + world_pos  (center on bone pos).
+    #    Example: ad_saul head (centroid_mag≈1.572, world_pos Z=1.7).
+    #    Raw Z≈-1.57; after centering: Z = -1.57 - (-1.57) + 1.7 = 1.7 (correct).
+    #
+    # C) Non-accessory skin (base skeleton, supermodel=NULL, or large centroid
+    #    that equals world-space already): no transform.
+    #    Examples: n_admrlsaulkar torso (world-space), c_bantha bthair (world-space).
+    #
+    # The centroid_mag threshold must match _WORLDSPACE_VERT_THRESHOLD so that
+    # the same geometry is handled identically in both the render and bounds paths.
+    _skin_centroid_mag = 0.0
+    _skin_centroid = None
+    _accessory_needs_centering = False
+    if is_skin and _is_accessory_skin and len(v_arr) > 0:
+        _skin_centroid = v_arr.mean(axis=0)
+        _skin_centroid_mag = float(np.linalg.norm(_skin_centroid))
+        if _skin_centroid_mag > _WORLDSPACE_VERT_THRESHOLD:
+            # Large centroid: baked-in world offset → centering transform
+            _accessory_needs_centering = True
+            # Leave _is_accessory_skin = True so the branch below fires
+
+    # Detect non-skin nodes whose verts are already in world space
+    _nonskin_worldspace = False
+    if not is_skin and len(v_arr) > 0:
+        _centroid = v_arr.mean(axis=0)
+        _centroid_mag = float(np.linalg.norm(_centroid))
+        if _centroid_mag > _WORLDSPACE_VERT_THRESHOLD:
+            _nonskin_worldspace = True
+
+    if is_skin and not _is_accessory_skin:
+        # Standard standalone skin: vertices already in world/bind-pose space.
+        # The node's position is the BONE PIVOT for animation — do NOT add it.
+        #
+        # FIX-SKIN-NODEROT: Some KotOR exporters (MDLOps, older toolchains) store
+        # skin vertices pre-multiplied by the parent chain but NOT the skin node's
+        # own LOCAL orientation.  The node's local rotation then acts as a
+        # corrective rotation that must be applied to the raw vertex positions.
+        #
+        # Evidence: c_terantanak Torso/feet/Tail carry rotation (0,0,~1,~0) = 180° Z.
+        # Without applying this rotation the torso shoulder verts land at
+        # Y ≈ [-0.88,-0.25] while RArm inner verts are at Y ≈ [0.25,0.76] —
+        # a Y-sign flip that makes the seam appear disconnected (confirmed by
+        # vertex-space junction analysis: Y-overlap = 0.0 before fix, 0.51 after).
+        # After the fix both ranges share Y ≈ [0.25,0.88] — fully connected.
+        #
+        # Apply ONLY the node's LOCAL rotation (not the full world_orient which
+        # includes the parent chain) to avoid double-applying the parent transform.
+        # NEVER add the node's position/wp — that is the bone pivot, not an offset.
+        #
+        # References: KotorBlender reader.py (line 241: from_root accumulates
+        # parent chain; verts loaded as-is into Blender mesh at line 240);
+        # KotOR.js OdysseyModel3D.ts (SkinnedMesh with no JS pre-transform);
+        # mdledit binaryread.cpp (line 429: transforms computed separately from verts).
+        _local_rot = getattr(node, 'rotation', (0.0, 0.0, 0.0, 1.0))
+        _lrx, _lry, _lrz, _lrw = _local_rot
+        _lr_len = (_lrx*_lrx + _lry*_lry + _lrz*_lrz + _lrw*_lrw) ** 0.5
+        if _lr_len > 1e-9:
+            _lrx /= _lr_len; _lry /= _lr_len; _lrz /= _lr_len; _lrw /= _lr_len
+        _local_is_identity = (abs(_lrw) > 0.9999 and abs(_lrx) < 1e-4 and
+                              abs(_lry) < 1e-4 and abs(_lrz) < 1e-4)
+        if not _local_is_identity:
+            # Apply ONLY the local rotation — no translation.
+            _local_rot_q = np.array([_lrx, _lry, _lrz, _lrw], dtype=np.float64)
+            v_arr = _quat_rotate_batch(_local_rot_q, v_arr)
+            n_arr = _quat_rotate_batch(_local_rot_q, n_arr)
+        # Identity rotation → vertices already in world/bind-pose space; no-op.
+    elif is_skin and _is_accessory_skin and _accessory_needs_centering:
+        # Accessory skin with large centroid: vertices have a baked-in offset equal
+        # to the negative of the bone's world position.  Apply centering transform:
+        # v_out = v - centroid + world_pos  → places mesh centre at world_pos.
+        # Example: ad_saul head (centroid≈-1.57, world_pos_z=1.7) → Z≈1.7 ± 0.13.
+        if not is_identity_rot:
+            v_arr = _quat_rotate_batch(wo, v_arr)
+            n_arr = _quat_rotate_batch(wo, n_arr)
+        if _skin_centroid is not None:
+            v_arr = v_arr - _skin_centroid + wp
+        elif not is_identity_pos:
+            v_arr = v_arr + wp
+    elif is_skin and _is_accessory_skin:
+        # Accessory skin with small centroid: bone-local space → apply +world_pos.
         if not is_identity_rot:
             v_arr = _quat_rotate_batch(wo, v_arr)
             n_arr = _quat_rotate_batch(wo, n_arr)
         if not is_identity_pos:
             v_arr = v_arr + wp
-    elif _node_vs == 1:  # WORLD — already in world space, skip transform
+    elif _nonskin_worldspace:
+        # Non-skin rigid attachment with verts already in world space (e.g. creature
+        # horns, eyes, hair on a skeleton).  Do NOT apply world transform.
         pass
-    # _node_vs == 2 (AABB_WALK) should never reach VBO building
+    else:
+        if not is_identity_rot:
+            v_arr = _quat_rotate_batch(wo, v_arr)
+            n_arr = _quat_rotate_batch(wo, n_arr)
+        if not is_identity_pos:
+            v_arr = v_arr + wp
 
-    # FIX-COMPOSITE-OFFSET: For nodes that belong to the head-accessory model
-    # inside a _CompositeModel (e.g. head skin, eyeRA, teethUa in ad_saul),
-    # apply the skeleton rebase offset so they render at the correct position
-    # in the body skeleton.  The offset (_composite_nonskin_offset — legacy
-    # name kept for attribute stability) is pre-computed by _CompositeModel
-    # as: body_head_g_world - head_head_g_local, and is only attached to nodes
-    # whose ownership is the head model (body nodes never carry this attr),
-    # so no ownership gate is needed here beyond the None check.
-    #
-    # Historical bug: the previous gate excluded is_skin nodes, which left the
-    # head *skin* mesh at floor level while eyes/teeth floated at head height.
-    # Probe-verified fix: apply offset to all head-accessory nodes including
-    # the skin, so the whole head moves as one with the body headhook.
+    # FIX-COMPOSITE-NONSKIN: For non-skin nodes from an accessory head model
+    # (e.g. eyeRA, teethUa in ad_saul), apply the skeleton rebase offset so
+    # they render at the correct position in the body skeleton.
+    # The offset (_composite_nonskin_offset) is pre-computed by _CompositeModel
+    # as: body_head_g_world - head_head_g_local
     _cns_off = getattr(node, '_composite_nonskin_offset', None)
     if _cns_off is not None:
         _ox, _oy, _oz = float(_cns_off[0]), float(_cns_off[1]), float(_cns_off[2])
         if abs(_ox) > 1e-6 or abs(_oy) > 1e-6 or abs(_oz) > 1e-6:
             v_arr = v_arr + np.array([_ox, _oy, _oz], dtype=np.float64)
-
-    _gr_gpu_probe(node, world_pos or (0.0, 0.0, 0.0),
-                  world_orient or (0.0, 0.0, 0.0, 1.0),
-                  is_identity_rot, _cns_off)
 
     # ── Normalize normals (prevent shading errors from non-unit normals) ─────
     # After quaternion rotation and world-space transform, normals may drift from
@@ -3464,9 +1617,41 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
                 uv_arr = uv_arr[:, :2]
         except (ValueError, TypeError):
             uv_arr = np.full((n_uvs, 2), 0.5, dtype=np.float32)
-        bad_uv = ~np.all(np.isfinite(uv_arr), axis=1)
+        # Seam-vert UV healing: some KotOR models have duplicate vertices at UV
+        # seams where the seam copy's UV was never written correctly (e.g. the
+        # p_hk47 hand/finger nodes and c_kraytdragon claw nodes whose seam verts
+        # have UVs like (-27.14, -104.93)).  For each bad vert, find a coincident
+        # vert (same 3-D position, within epsilon) that has a valid UV and copy it.
+        # Only apply heal to the first n_verts entries (geometry-linked UVs);
+        # extra tvert-only entries beyond n_verts are left as-is (or 0.5 if bad).
+        bad_uv = ~np.all(np.isfinite(uv_arr), axis=1) | np.any(np.abs(uv_arr) > _UV_SENTINEL, axis=1)
         if np.any(bad_uv):
-            uv_arr[bad_uv] = 0.5
+            # Restrict spatial healing to geometry verts (0..n_verts-1)
+            bad_geo   = bad_uv[:n_verts]
+            bad_indices = np.where(bad_geo)[0]
+            good_mask   = ~bad_uv[:n_verts]
+            good_indices = np.where(good_mask)[0]
+            if len(bad_indices) > 0 and len(good_indices) > 0 and len(v_arr) >= n_verts:
+                # Build spatial lookup: for each bad vert find nearest good vert
+                # using the (already-transformed) vertex positions.
+                bad_pos  = v_arr[bad_indices].astype(np.float32)   # (M,3)
+                good_pos = v_arr[good_indices].astype(np.float32)  # (K,3)
+                # Vectorised nearest-neighbour via broadcast (M × K distance matrix)
+                # Works well for typical meshes (< 1000 verts per node).
+                diff = bad_pos[:, None, :] - good_pos[None, :, :]  # (M,K,3)
+                dist2 = (diff * diff).sum(axis=2)                   # (M,K)
+                nearest_k = good_indices[np.argmin(dist2, axis=1)]  # (M,)
+                # Only heal if the nearest vert is very close (< 0.001 units) —
+                # this confirms it's a true seam duplicate, not an unrelated vert.
+                min_dist = np.sqrt(dist2[np.arange(len(bad_indices)), np.argmin(dist2, axis=1)])
+                _SEAM_EPS = 0.001
+                healed = min_dist < _SEAM_EPS
+                if np.any(healed):
+                    uv_arr[bad_indices[healed]] = uv_arr[nearest_k[healed]]
+            # Fall back: any still-bad UV entries (geometry or extra tvert) get 0.5
+            bad_uv2 = ~np.all(np.isfinite(uv_arr), axis=1) | np.any(np.abs(uv_arr) > _UV_SENTINEL, axis=1)
+            if np.any(bad_uv2):
+                uv_arr[bad_uv2] = 0.5
     else:
         uv_arr = np.full((n_verts, 2), 0.5, dtype=np.float32)
         n_uvs = n_verts  # for consistent indexing below
@@ -3482,7 +1667,7 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
                 uv_lm_arr = np.vstack([uv_lm_arr, pad])
         except (ValueError, TypeError):
             uv_lm_arr = np.full((n_verts, 2), 0.5, dtype=np.float32)
-        bad_lm = ~np.all(np.isfinite(uv_lm_arr), axis=1)
+        bad_lm = ~np.all(np.isfinite(uv_lm_arr), axis=1) | np.any(np.abs(uv_lm_arr) > _UV_SENTINEL, axis=1)
         if np.any(bad_lm):
             uv_lm_arr[bad_lm] = 0.5
     else:
@@ -3518,10 +1703,16 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     # bone_ids[14:18] = palette indices (float);  weights[18:22] = blend weights.
     # Non-skin nodes: identity (idx=0, weight=[1,0,0,0]) — shader pass-through.
     #
-    # FIX-SKIN-QBONE: BoneWeight.bone_index is a LOCAL index into this skin
-    # node's bone_map[] array.  The renderer now uploads a per-skin local
-    # qBone/tBone palette before each skin draw, so no remap is needed in the
-    # normal path.  The optional remap remains for focused tests and diagnostics.
+    # FIX-SKIN-BONEIDX: The bone_index stored in BoneWeight is a LOCAL index into
+    # the skin node's bone_map[] array (from the MDL binary).  The GPU shader's
+    # u_bones[] palette, however, is indexed by the DFS node traversal order from
+    # MatrixPaletteUploader._bone_order.  These orderings are completely different!
+    # For c_kraytdragon: bone_map[0]="KDB_NeckTop" has DFS index 45, but u_bones[0]
+    # is the root node.  Without remapping, every vertex fetches the WRONG bone
+    # matrix, causing severe geometry explosion during animation.
+    #
+    # The bone_index_remap dict (built by the caller from skin_node.bone_map and
+    # MatrixPaletteUploader.bone_index()) translates:  local_idx → palette_idx.
     if is_skin:
         _skin_data = getattr(node, 'skin_data', [])
         if _skin_data and len(_skin_data) >= n_verts:
@@ -3531,8 +1722,7 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
                 for _bi_idx in range(min(4, len(_infl))):
                     _bw = _infl[_bi_idx]
                     _local_idx = int(getattr(_bw, 'bone_index', 0))
-                    # Optional remap for tests/diagnostics; production skin draws
-                    # keep local bone_map indices for the per-skin qBone palette.
+                    # FIX-SKIN-BONEIDX: Remap local bone_map index to palette index
                     if bone_index_remap is not None:
                         _palette_idx = bone_index_remap.get(_local_idx, 0)
                     else:
@@ -3599,10 +1789,6 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
                 idx = idx[valid].astype(np.uint32)
                 if len(idx) == 0:
                     return None, None
-                try:
-                    setattr(node, '_gr_last_vbo_source_indices', list(range(n_verts)))
-                except Exception:
-                    pass
                 return vdata, idx.flatten()
         except (ValueError, TypeError):
             pass
@@ -3616,10 +1802,6 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
                 idx_list.extend([vi0, vi1, vi2])
         if not idx_list:
             return None, None
-        try:
-            setattr(node, '_gr_last_vbo_source_indices', list(range(n_verts)))
-        except Exception:
-            pass
         return vdata, np.array(idx_list, dtype=np.uint32)
 
     # Expanded path: per-face UV indices OR skin mesh → expand to triangle list
@@ -3636,7 +1818,6 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     # index), we must use the correct tvert UV from uv_arr[ti].  This is the
     # KotOR ProcessSkinSeams() case.
     expanded_rows = []
-    expanded_source_indices = []
     n_uv_arr = len(uv_arr)   # sanitized UV array (already seam-healed)
     for fi, face in enumerate(faces):
         if len(face) < 3:
@@ -3663,24 +1844,10 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
                 row[7] = uv_arr[vi, 1]
             # else: keep row's UV from vdata[vi] (already set from uv_arr[vi])
             expanded_rows.append(row)
-            expanded_source_indices.append(int(vi))
 
     if not expanded_rows:
         return None, None
-    try:
-        setattr(node, '_gr_last_vbo_source_indices', expanded_source_indices)
-    except Exception:
-        pass
     return np.stack(expanded_rows).astype(np.float32), None
-
-
-def _split_vbo_attributes_for_gpu(vdata: 'np.ndarray') -> Tuple['np.ndarray', 'np.ndarray']:
-    """Split legacy 22-float rows into float attributes plus int32 bone IDs."""
-    main = np.empty((len(vdata), 18), dtype=np.float32)
-    main[:, 0:14] = vdata[:, 0:14]
-    main[:, 14:18] = vdata[:, 18:22]  # weights remain float
-    bone_ids = np.rint(vdata[:, 14:18]).astype(np.int32)
-    return main, bone_ids
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3700,18 +1867,9 @@ class _GpuMesh:
     def __init__(self):
         self.vao: Optional['moderngl.VertexArray'] = None
         self.vbo: Optional['moderngl.Buffer'] = None
-        self.bone_id_vbo: Optional['moderngl.Buffer'] = None
         self.ibo: Optional['moderngl.Buffer'] = None
         self.tri_count: int = 0
         self.indexed: bool = False
-        self.uploaded_vertex_count: int = 0
-        self.first8_uv0_uploaded: List[List[float]] = []
-        self.first8_uv1_uploaded: List[List[float]] = []
-        self.uploaded_positions: List[List[float]] = []
-        self.uploaded_bone_ids: List[List[int]] = []
-        self.uploaded_weights: List[List[float]] = []
-        self.uploaded_source_indices: List[int] = []
-        self.uv1_attribute_bound: bool = False
         # Per-material-slot draw groups for multi-texture nodes
         self.mat_slots: Dict[int, tuple] = {}  # {slot: (vao, ibo, tri_count)}
 
@@ -3724,10 +1882,6 @@ class _GpuMesh:
             try: self.vbo.release()
             except Exception: pass
             self.vbo = None
-        if self.bone_id_vbo:
-            try: self.bone_id_vbo.release()
-            except Exception: pass
-            self.bone_id_vbo = None
         if self.ibo:
             try: self.ibo.release()
             except Exception: pass
@@ -3824,11 +1978,6 @@ class GpuRenderer:
         self._skin_model_id: int = 0  # id() of model for which bind-pose was built
         self._skin_bone_count: int = 0  # number of bones in the current palette
         self._skin_logged: bool = False  # one-shot log for GPU skinning activation
-        self._gl_state_trace_path: str = _gl_state_trace_path()
-        self._lm_data_dump_path: str = _lm_data_dump_path()
-        self._lm_data_dump_seen: set = set()
-        self._skin_dump_path: str = _skin_dump_path()
-        self._skin_dump_seen: set = set()
         # Performance counters
         self.perf: Dict[str, float] = {
             'last_frame_ms': 0.0,
@@ -3849,7 +1998,7 @@ class GpuRenderer:
         if not _MODERNGL or not _NUMPY or self.force_cpu:
             return False
         try:
-            self._ctx, _ctx_backend = _create_moderngl_standalone_context()
+            self._ctx = moderngl.create_context(standalone=True, backend='egl')
             self._prog = self._ctx.program(
                 vertex_shader=_VERT_SRC,
                 fragment_shader=_FRAG_SRC,
@@ -3865,14 +2014,12 @@ class GpuRenderer:
                 'u_shininess', 'u_alpha_test', 'u_decal', 'u_wateralpha',
                 'u_has_spec', 'u_alpha', 'u_node_alpha', 'u_blend_mode',
                 'u_has_tex', 'u_has_lm', 'u_lm_shade', 'u_has_env',
-                'u_lm_composite_mode',
                 'u_diffuse', 'u_selfillum', 'u_uv_scroll', 'u_rotate_tex',
                 'u_flipbook_off', 'u_flipbook_size', 'u_features',
                 'u_water_time', 'u_proc_type', 'u_dangly_enabled',
                 'u_dangly_displacement', 'u_dangly_time',
                 'u_saber_enabled', 'u_saber_displacement', 'u_saber_length',
                 'u_oit_enabled', 'u_tex', 'u_lm_tex', 'u_env_tex', 'u_spec_tex',
-                'u_debug_visualize',
                 # Phase A: GPU Skinning uniforms
                 'u_skin_enabled', 'u_bone_count', 'u_bones',
             ):
@@ -3882,8 +2029,7 @@ class GpuRenderer:
                     pass
             self._u = _u
             self._gpu_available = True
-            log.info("GpuRenderer: ModernGL %s context GL %s",
-                     _ctx_backend, self._ctx.version_code)
+            log.info(f"GpuRenderer: ModernGL EGL context GL {self._ctx.version_code}")
             return True
         except Exception as e:
             log.info(f"GpuRenderer: GPU init failed ({e}) – using CPU fallback")
@@ -4205,7 +2351,6 @@ class GpuRenderer:
             _u['u_has_tex'].value    = 0
             _u['u_has_lm'].value     = 0
             _u['u_lm_shade'].value   = 0
-            _u['u_lm_composite_mode'].value = _lm_composite_mode()
             _u['u_has_env'].value    = 0
             _u['u_diffuse'].value    = (1.0, 1.0, 1.0)
             _u['u_selfillum'].value  = (0.0, 0.0, 0.0)
@@ -4223,8 +2368,6 @@ class GpuRenderer:
             _u['u_saber_displacement'].value  = 0.0
             _u['u_saber_length'].value        = 1.0
             _u['u_oit_enabled'].value         = 0
-            if 'u_debug_visualize' in _u:
-                _u['u_debug_visualize'].value = _debug_visualize_mode()
 
             # ── Phase A: GPU Skinning — default off for each frame ───────────
             # Set u_skin_enabled = 0 as the default per-frame state.
@@ -4279,10 +2422,18 @@ class GpuRenderer:
                                      f"inverse bind-pose matrices for model "
                                      f"'{getattr(model, 'name', '?')}'")
                             self._skin_logged = True
-                    # FIX-SKIN-QBONE: Skin palettes are now built per skin node
-                    # immediately before the draw call.  qBone/tBone slots are
-                    # indexed by the skin node's local bone_map, not the global
-                    # model node order, so a single model-wide palette is wrong.
+                    # FIX-SKIN-ANIM-D2: Compute the palette for the current animation pose.
+                    # If anim_base_pose is provided, pass it through so the uploader
+                    # uses the animation's first-frame pose as the bind reference.
+                    if self._skin_uploader is not None:
+                        self._skin_uploader.compute_palette(anim_pose, anim_base_pose=anim_base_pose)
+                        # Upload bone matrices as uniform array
+                        if 'u_bones' in _u and self._skin_uploader.bone_count > 0:
+                            palette_bytes = self._skin_uploader.as_flat_bytes()
+                            try:
+                                _u['u_bones'].write(palette_bytes)
+                            except Exception as e:
+                                log.debug(f"GPU-SKINNING: bone palette upload failed: {e}")
 
             # PERF: Only stamp model refs and compute proxy IDs when model changes.
             # These are O(N) walks that produce identical results across frames for
@@ -4310,11 +2461,10 @@ class GpuRenderer:
                         if _pt not in _skin_tex_verts:
                             _skin_tex_verts[_pt] = []
                         _skin_tex_verts[_pt].append((_pn, _pnv))
-                    # Use the shared inner-geometry list (see render_constants.py).
-                    # This list MUST match viewport.py classification so the CPU
-                    # and GPU paths treat NPC-head eyelid/gumskin/tonguemesh nodes
-                    # identically — otherwise the same model renders with missing
-                    # inner geometry under one renderer and not the other.
+                    _INNER_GEO_NAMES = (
+                        'eye', 'lid', 'teeth', 'gum', 'jaw', 'tongue',
+                        'teethu', 'teethl', 'tooth',
+                    )
                     for _pn in nodes:
                         if not getattr(_pn, 'is_mesh', False) or getattr(_pn, 'is_skin', False):
                             continue
@@ -4324,7 +2474,7 @@ class GpuRenderer:
                         if not getattr(_pn, 'uvs', []):
                             continue
                         _pn_name_low = str(getattr(_pn, 'name', '') or '').lower()
-                        if any(_ig in _pn_name_low for _ig in _INNER_GEO_SUBSTRINGS):
+                        if any(_ig in _pn_name_low for _ig in _INNER_GEO_NAMES):
                             continue
                         _pnv = len(getattr(_pn, 'vertices', []))
                         _matches = _skin_tex_verts.get(_pt, [])
@@ -4468,10 +2618,17 @@ class GpuRenderer:
             # viewport._is_deformation_helper, inlined here for GPU-path independence):
             #   1. Non-skin nodes with no UVs → helper (UNLESS module/area model)
             #   2. Non-skin nodes whose names end with '_g', '_g0', or '_dum' → helper
-            #   3. Nodes with null/empty texture AND no UVs → helper
-            #   4. Skin nodes with a real texture and UVs → ALWAYS render
+            #   3. Nodes with extreme UV coordinates (|u|>3 or |v|>3) → helper
+            #      EXCEPTION: module/area/tile models legitimately use large tiled UVs
+            #   4. Nodes with null/empty texture AND no UVs → helper
+            #   5. Skin nodes with a real texture and valid UVs → ALWAYS render
             # Reference: viewport._is_deformation_helper, PyKotor geometry_utils.py,
             #            KotOR engine ProcessSkinSeams().
+            _UV_EXTREME = 3.0
+            # Detect module/area model classification so we can exempt large tiled UVs.
+            # KotOR module/area geometry tiles textures over large surfaces (e.g.
+            # LTS_logwal02 wall mesh has U=−8.75, floor mesh V=−9.71). These are
+            # real renderable geometry, NOT deformation helpers.
             _gpu_model_cls   = (str(getattr(model, 'classification', 'character') or 'character')).lower()
             # FIX-MODEL-TYPE-ZERO: model_type=0 means "module/tile" in KotOR.
             # Using `int(val or 4)` treated 0 as falsy → replaced with 4 (character)
@@ -4511,6 +2668,17 @@ class GpuRenderer:
                     if (node_name.endswith('_g') or node_name.endswith('_g0')
                             or node_name.endswith('_dum')):
                         return True
+
+                # Extreme UV check (applies to both skin and non-skin)
+                # EXCEPTION: skip for module/area/tile models which legitimately use
+                # large tiled UV coordinates (|u|>3, |v|>9 etc.) for wall/floor textures.
+                if has_uvs and not _gpu_is_module:
+                    try:
+                        for uv in uvs[:min(len(uvs), 32)]:  # sample first 32 UVs
+                            if abs(uv[0]) > _UV_EXTREME or abs(uv[1]) > _UV_EXTREME:
+                                return True
+                    except (TypeError, IndexError):
+                        pass
 
                 return False
 
@@ -4637,12 +2805,10 @@ class GpuRenderer:
                 transparent_nodes = self._node_cache_transparent
 
             def _draw_node(node, tex_name_override: str = '',
-                           pass_name: str = 'opaque',
                            override_vao=None, override_tri_count: int = 0):
                 """Draw a single node.
 
                 tex_name_override: override the diffuse texture name (for multi-tex).
-                pass_name: render pass label for diagnostic state tracing.
                 override_vao: when set, use this VAO instead of the cached gm.vao
                     (for per-material-slot sub-mesh drawing).
                 override_tri_count: triangle count for the override VAO.
@@ -4685,10 +2851,25 @@ class GpuRenderer:
                             break
                         _acheck = getattr(_acheck, 'parent', None)
                 if is_animated or node_id not in self._mesh_cache:
-                    # FIX-SKIN-QBONE: Skin nodes now use a per-draw local palette
-                    # in bone_map order.  Keep authored bone IDs local so slot k in
-                    # vertex influences addresses qBone[k]/tBone[k] for this skin.
+                    # FIX-SKIN-BONEIDX: Build bone index remap for skin nodes.
+                    # The MDL bone_map uses a compact local index (0..15) that
+                    # differs from the DFS-order palette index used by the GPU
+                    # shader's u_bones[] array.  We must translate:
+                    #   local_idx (into bone_map[]) → palette_idx (into u_bones[])
                     _bone_remap = None
+                    if _nd_is_skin and self._skin_uploader is not None:
+                        _bmap = getattr(node, 'bone_map', [])
+                        if _bmap:
+                            _bone_remap = {}
+                            for _bmi, _bmname in enumerate(_bmap):
+                                if _bmname:
+                                    _pidx = self._skin_uploader.bone_index(_bmname)
+                                    if _pidx >= 0:
+                                        _bone_remap[_bmi] = _pidx
+                                    else:
+                                        _bone_remap[_bmi] = 0  # fallback: identity bone
+                                else:
+                                    _bone_remap[_bmi] = 0
                     vdata, idx_arr = _build_vbo_data(node, wp, wo,
                                                      anim_pose_node=None,
                                                      is_module=_gpu_is_module,
@@ -4698,74 +2879,72 @@ class GpuRenderer:
                     if node_id in self._mesh_cache:
                         self._mesh_cache[node_id].release()
                     gm = _GpuMesh()
-                    main_vdata, bone_id_vdata = _split_vbo_attributes_for_gpu(vdata)
-                    gm.vbo = ctx.buffer(main_vdata.tobytes())
-                    gm.bone_id_vbo = ctx.buffer(bone_id_vdata.tobytes())
-                    gm.uploaded_vertex_count = int(len(vdata))
-                    gm.first8_uv0_uploaded = _first_vbo_uv_pairs(vdata, 6)
-                    gm.first8_uv1_uploaded = _first_vbo_uv_pairs(vdata, 8)
-                    try:
-                        gm.uploaded_positions = [
-                            [round(float(x), 6) for x in row[:3]]
-                            for row in vdata[:, 0:3]
-                        ]
-                        gm.uploaded_bone_ids = [
-                            [int(x) for x in row]
-                            for row in bone_id_vdata
-                        ]
-                        gm.uploaded_weights = [
-                            [round(float(x), 6) for x in row]
-                            for row in vdata[:, 18:22]
-                        ]
-                        gm.uploaded_source_indices = [
-                            int(x) for x in (
-                                getattr(node, '_gr_last_vbo_source_indices', []) or []
-                            )
-                        ]
-                    except Exception:
-                        gm.uploaded_positions = []
-                        gm.uploaded_bone_ids = []
-                        gm.uploaded_weights = []
-                        gm.uploaded_source_indices = []
-                    gm.uv1_attribute_bound = (
-                        getattr(vdata, 'ndim', 0) == 2
-                        and getattr(vdata, 'shape', (0, 0))[1] >= 10
-                    )
-                    vertex_buffers = [
-                        (gm.vbo, _VBO_MAIN_FORMAT, *_VBO_MAIN_ATTRS),
-                        (gm.bone_id_vbo, _VBO_BONE_IDS_FORMAT, *_VBO_BONE_IDS_ATTRS),
-                    ]
+                    raw_verts = vdata.tobytes()
+                    gm.vbo = ctx.buffer(raw_verts)
+                    # Phase A: Extended VBO format includes bone_ids + weights
+                    # (22 floats per vertex = 88 bytes stride)
+                    fmt = '3f 3f 2f 2f 4f 4f 4f'
+                    attrs = ['in_pos', 'in_norm', 'in_uv', 'in_uv_lm', 'in_color',
+                             'in_bone_ids', 'in_weights']
                     if idx_arr is not None:
                         gm.ibo = ctx.buffer(idx_arr.tobytes())
-                        gm.vao = ctx.vertex_array(prog, vertex_buffers, gm.ibo)
+                        gm.vao = ctx.vertex_array(prog, [(gm.vbo, fmt, *attrs)],
+                                                  gm.ibo)
                         gm.tri_count = len(idx_arr) // 3
                         gm.indexed = True
                     else:
-                        gm.vao = ctx.vertex_array(prog, vertex_buffers)
+                        gm.vao = ctx.vertex_array(prog, [(gm.vbo, fmt, *attrs)])
                         gm.tri_count = len(vdata) // 3
                         gm.indexed = False
-                    # FIX-KILL-FACEMATS (Phase D10): REMOVED per-material-slot draw groups.
+                    # FIX-MULTITEX-SPLIT-V2: Build per-material-slot draw groups
+                    # for multi-texture nodes so _draw_node_multitex can draw
+                    # each face group with the correct texture.
                     #
-                    # Root cause analysis (user rejection D8):
-                    # The previous FIX-MULTITEX-SPLIT code treated face_mats[] as texture
-                    # selectors, splitting faces by face_mats value and drawing each group
-                    # with a different texture.  This is WRONG.
-                    #
-                    # In the KotOR MDL binary format, the per-face material field is a
-                    # WALK-MESH SURFACE INDICATOR (smoothing group / surface type), NOT
-                    # a texture selector.  Reference implementations confirm this:
-                    #   - xoreos model_kotor.cpp: one diffuse texture per mesh node
-                    #   - KotOR.js OdysseyModelNodeMesh.ts: single texture per mesh
-                    #   - KotorBlender reader.py: material field is surface type
-                    #
-                    # The correct KotOR texture model is:
-                    #   - One diffuse texture on UV0 (texture_1)
-                    #   - Optional one lightmap on UV1 (texture_2)
-                    #   - Composite: diffuse * lightmap * overbright
-                    #   - NO per-face texture splitting
-                    #
-                    # face_mats is now NEVER used for texture selection.
-                    # mat_slots dict remains empty (no per-material draw groups).
+                    # v2: Now supports both indexed and expanded (non-indexed) VBOs.
+                    # For indexed meshes, per-slot IBOs use original vertex indices.
+                    # For expanded meshes, per-slot IBOs use sequential face-corner
+                    # indices (fi*3, fi*3+1, fi*3+2) since the expanded VBO stores
+                    # one vertex per face corner in face order.
+                    _nd_tc = int(getattr(node, 'tex_count', 1))
+                    _nd_fm = getattr(node, 'face_mats', [])
+                    _nd_lm = bool(getattr(node, 'has_lightmap', False))
+                    # FIX-LMROLE: Also detect inferred lightmap for mat_slots guard
+                    if (not _nd_lm and _nd_tc == 2
+                            and _nd_fm and all(m == 0 for m in _nd_fm)
+                            and len(getattr(node, 'uvs_lm', [])) > 0):
+                        _nd_lm = True
+                    if _nd_tc > 1 and _nd_fm and not _nd_lm:
+                        _faces_arr = getattr(node, 'faces', [])
+                        _n_faces = len(_faces_arr)
+                        if len(_nd_fm) == _n_faces and _n_faces > 0:
+                            # Group face indices by material slot
+                            _slot_faces: Dict[int, list] = {}
+                            for _fi in range(_n_faces):
+                                _s = _nd_fm[_fi] if _fi < len(_nd_fm) else 0
+                                _s = max(0, min(_s, _nd_tc - 1))
+                                if _s not in _slot_faces:
+                                    _slot_faces[_s] = []
+                                if gm.indexed:
+                                    # Indexed VBO: use original vertex indices
+                                    _f = _faces_arr[_fi]
+                                    if len(_f) >= 3:
+                                        _slot_faces[_s].extend([int(_f[0]), int(_f[1]), int(_f[2])])
+                                else:
+                                    # Expanded VBO: vertex order is sequential per face
+                                    # Face _fi → expanded vertices _fi*3, _fi*3+1, _fi*3+2
+                                    _base = _fi * 3
+                                    _slot_faces[_s].extend([_base, _base + 1, _base + 2])
+                            for _s, _idxs in _slot_faces.items():
+                                if not _idxs:
+                                    continue
+                                try:
+                                    _s_idx = np.array(_idxs, dtype=np.uint32)
+                                    _s_ibo = ctx.buffer(_s_idx.tobytes())
+                                    _s_vao = ctx.vertex_array(
+                                        prog, [(gm.vbo, fmt, *attrs)], _s_ibo)
+                                    gm.mat_slots[_s] = (_s_vao, _s_ibo, len(_idxs) // 3)
+                                except Exception:
+                                    pass
 
                     if not is_animated:
                         self._mesh_cache[node_id] = gm
@@ -4845,13 +3024,11 @@ class GpuRenderer:
                     or txi_wateralpha < 0.999
                     or txi_decal
                 )
-                blend_enabled = False
                 if txi_blend == 1:
                     # Additive blend: src=ONE, dst=ONE
                     ctx.enable(moderngl.BLEND)
                     ctx.blend_equation = moderngl.FUNC_ADD
                     ctx.blend_func = (moderngl.ONE, moderngl.ONE)
-                    blend_enabled = True
                 elif txi_blend == 2:
                     pass  # Already handled above (alpha_test + disable BLEND)
                 elif txi_blend == 3:
@@ -4869,13 +3046,11 @@ class GpuRenderer:
                         # Fallback: GL_MAX not available on this driver
                         ctx.blend_equation = moderngl.FUNC_ADD
                         ctx.blend_func = (moderngl.ONE, moderngl.ONE)
-                    blend_enabled = True
                 elif is_semi_transparent or txi_decal:
                     # Decal / wateralpha / per-node transparency
                     ctx.enable(moderngl.BLEND)
                     ctx.blend_equation = moderngl.FUNC_ADD
                     ctx.blend_func = (moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA)
-                    blend_enabled = True
                 else:
                     ctx.disable(moderngl.BLEND)
 
@@ -4997,18 +3172,18 @@ class GpuRenderer:
                 has_lm_flag = bool(getattr(node, 'has_lightmap', False))
                 lm_name     = str(getattr(node, 'lightmap', '')).strip().lower()
                 uvs_lm      = getattr(node, 'uvs_lm', [])
-                # FIX-LMROLE-V2 (Phase D10): Infer lightmap when texture_2 is present
-                # with valid lightmap UVs.  The KotOR texture model is: texture_1 =
-                # diffuse, texture_2 = lightmap (when present).  face_mats is NOT used
-                # for this determination — it is a walk-mesh surface indicator.
-                # Accept lightmap whenever: lm_name is set, uvs_lm has data, and
-                # tex_count >= 2.  The loader's FIX-LMROLE normally promotes
-                # has_lightmap, but this guard catches alternative load paths.
+                # FIX-LMROLE: Also accept lightmap when the role was inferred
+                # (tex_count==2, uvs_lm present, all face_mats==0) even if the
+                # MDL binary has_lightmap flag was False.  The loader's FIX-LMROLE
+                # normally promotes has_lightmap before we get here, but this
+                # guard handles models loaded via alternative paths.
                 if (not has_lm_flag
                         and lm_name
                         and len(uvs_lm) > 0
-                        and int(getattr(node, 'tex_count', 1)) >= 2):
-                    has_lm_flag = True
+                        and int(getattr(node, 'tex_count', 1)) == 2):
+                    _fm = getattr(node, 'face_mats', [])
+                    if _fm and all(m == 0 for m in _fm):
+                        has_lm_flag = True
                 lm_img      = textures.get(lm_name) if (lm_name and has_lm_flag
                                                          and len(uvs_lm) > 0) else None
                 gl_lm = self._tex_cache.get(lm_img) if lm_img else None
@@ -5119,121 +3294,108 @@ class GpuRenderer:
                 #
                 # GPU skinning should only activate when anim_pose provides
                 # world-pose matrices that differ from the bind pose.
-                _skin_local_bone_count = 0
                 if (_nd_is_skin and _has_skin_nodes
                         and self._skin_uploader is not None
+                        and self._skin_bone_count > 0
                         and anim_pose is not None
                         and 'u_skin_enabled' in _u
                         and 'u_bone_count' in _u):
-                    try:
-                        self._skin_uploader.compute_skin_node_palette(node, anim_pose)
-                        _skin_local_bone_count = len(getattr(node, 'bone_map', []) or [])
-                        _skin_local_bone_count = min(_skin_local_bone_count, _SKIN_MAX_BONES)
-                        if 'u_bones' in _u and _skin_local_bone_count > 0:
-                            _u['u_bones'].write(self._skin_uploader.as_flat_bytes())
-                        _u['u_skin_enabled'].value = 1 if _skin_local_bone_count > 0 else 0
-                        _u['u_bone_count'].value = _skin_local_bone_count
-                    except Exception as e:
-                        log.debug(f"GPU-SKINNING: per-skin qBone/tBone palette upload failed: {e}")
-                        _u['u_skin_enabled'].value = 0
-                        _u['u_bone_count'].value = 0
+                    _u['u_skin_enabled'].value = 1
+                    _u['u_bone_count'].value = self._skin_bone_count
                 else:
                     if 'u_skin_enabled' in _u:
                         _u['u_skin_enabled'].value = 0
-                    if 'u_bone_count' in _u:
-                        _u['u_bone_count'].value = 0
-
-                if self._gl_state_trace_path:
-                    _append_gl_state_trace(
-                        self._gl_state_trace_path,
-                        _build_gl_state_trace_record(
-                            ctx=ctx,
-                            prog=prog,
-                            node=node,
-                            pass_name=pass_name,
-                            tri_count=_use_tris,
-                            blend_enabled=blend_enabled,
-                            tex_name=tex_name,
-                            lm_name=lm_name,
-                            env_name=env_name,
-                            spec_name=spec_name,
-                            feature_mask=_feat_mask,
-                            uniforms=_u,
-                        ),
-                    )
-
-                if self._lm_data_dump_path and has_lm_flag:
-                    _lm_key = (id(model), str(getattr(node, 'name', '') or '').lower())
-                    if _lm_key not in self._lm_data_dump_seen:
-                        self._lm_data_dump_seen.add(_lm_key)
-                        _append_jsonl_record(
-                            self._lm_data_dump_path,
-                            _build_lm_data_dump_record(
-                                ctx=ctx,
-                                prog=prog,
-                                node=node,
-                                pass_name=pass_name,
-                                gm=gm,
-                                has_lm_flag=has_lm_flag,
-                                lightmap_bound=gl_lm is not None,
-                                lm_img=lm_img,
-                                lm_name=lm_name,
-                                uniforms=_u,
-                            ),
-                            'Lightmap data dump',
-                        )
-
-                if self._skin_dump_path and _nd_is_skin:
-                    _skin_key = (id(model), str(getattr(node, 'name', '') or '').lower())
-                    if _skin_key not in self._skin_dump_seen:
-                        self._skin_dump_seen.add(_skin_key)
-                        _append_jsonl_record(
-                            self._skin_dump_path,
-                            _build_skin_dump_record(
-                                model=model,
-                                node=node,
-                                pass_name=pass_name,
-                                uploader=self._skin_uploader,
-                                bone_remap=_bone_remap,
-                                uniforms=_u,
-                                gm=gm,
-                                anim_pose=anim_pose,
-                                anim_base_pose=anim_base_pose,
-                                anim_time=anim_time,
-                            ),
-                            'Skin parity dump',
-                        )
 
                 _use_vao.render(moderngl.TRIANGLES)
                 total_tris += _use_tris
 
-            # Helper: draw a node with correct KotOR texture routing.
-            def _draw_node_multitex(node, pass_name: str = 'opaque'):
-                """Draw a node with correct KotOR texture routing.
+            # Helper: draw a node with multi-texture support.
+            def _draw_node_multitex(node):
+                """Draw a node, handling multi-texture material slots correctly.
 
-                FIX-KILL-FACEMATS (Phase D10): The previous implementation split
-                multi-texture nodes by face_mats[], treating the walk-mesh surface
-                indicator as a texture selector.  This is WRONG and has been removed.
+                FIX-MULTITEX-SPLIT: For nodes with tex_count > 1, we must NOT
+                redraw the entire mesh for each texture slot.  The correct
+                approach depends on how tex_count > 1 is used in KotOR:
 
-                The correct KotOR texture model (per xoreos, KotOR.js, KotorBlender):
-                  - One diffuse texture (texture_1) on UV0
-                  - Optional one lightmap (texture_2) on UV1
-                  - Composite: diffuse * lightmap * overbright
-                  - face_mats is a walk-mesh surface type, NOT a texture selector
+                  A) has_lightmap=True: slot 0 = diffuse, slot 1 = lightmap.
+                     The lightmap is already handled by _draw_node via u_lm_tex
+                     + in_uv_lm.  Draw once with the primary texture only.
 
-                For ALL nodes regardless of tex_count, we draw ONCE with:
-                  - Diffuse texture bound to sampler 0
-                  - Lightmap (if has_lightmap) bound to sampler 1
-                  - Lightmap compositing handled by fragment shader
+                  B) True multi-material (has_lightmap=False, tex_count > 1):
+                     face_mats[i] selects which texture each face uses.
+                     Split into per-material draw groups using separate IBOs.
+                     Each group is drawn with its own texture binding.
 
-                Reference: xoreos model_kotor.cpp — single diffuse per mesh;
-                KotOR.js OdysseyModelNodeMesh.ts — single texture per mesh;
-                KotorBlender reader.py — material field is surface type.
+                FIX-LMROLE: When has_lightmap is False but evidence strongly
+                suggests tex2 is a lightmap (uvs_lm present with real data,
+                all face_mats == 0), treat as Case A.  This handles KotOR
+                module meshes where the MDL binary has_lightmap flag is
+                incorrectly set to 0.
+
+                Reference: xoreos model_kotor.cpp — each face's material index
+                selects the texture; KotorBlender material.py — per-face
+                material assignment; KotOR.js — face material lookup.
                 """
-                # Always draw once with primary diffuse + optional lightmap.
-                # _draw_node already handles lightmap binding via u_lm_tex/u_has_lm
-                # when has_lightmap is True and lightmap UVs are present.
-                _draw_node(node, pass_name=pass_name)
+                tex_names = getattr(node, 'texture_names', [])
+                tex_count = int(getattr(node, 'tex_count', 1))
+
+                if tex_count <= 1 or len(tex_names) < tex_count:
+                    # Single-texture node — standard path
+                    _draw_node(node)
+                    return
+
+                # Case A: Lightmap is slot 1 — lightmap is handled separately
+                # by _draw_node (u_lm_tex binding).  Just draw once with diffuse.
+                _has_lm = bool(getattr(node, 'has_lightmap', False))
+
+                # FIX-LMROLE: Renderer-side lightmap inference safety net.
+                # Even if kotor_loader didn't promote has_lightmap, detect the
+                # lightmap case here by checking:
+                #   1. tex_count == 2 (exactly diffuse + one secondary)
+                #   2. uvs_lm has real data (populated from vertex_uv2)
+                #   3. All face_mats are 0 (no face uses slot 1 as diffuse)
+                # This catches any path where the loader's FIX-LMROLE didn't
+                # fire (e.g. models loaded via alternative bridges/importers).
+                if not _has_lm and tex_count == 2:
+                    _node_uvs_lm = getattr(node, 'uvs_lm', [])
+                    _node_fm = getattr(node, 'face_mats', [])
+                    if (len(_node_uvs_lm) > 0
+                            and _node_fm
+                            and all(m == 0 for m in _node_fm)):
+                        _has_lm = True
+
+                if _has_lm:
+                    # Draw with primary diffuse texture only; lightmap handled
+                    # via the u_lm_tex/u_has_lm uniforms inside _draw_node.
+                    _draw_node(node)
+                    return
+
+                # Case B: True multi-material — need per-slot face groups
+                face_mats = getattr(node, 'face_mats', [])
+                if not face_mats:
+                    # No face_mats data — fall back to primary texture
+                    _draw_node(node)
+                    return
+
+                # Check if we have per-material-slot draw groups in the mesh cache
+                node_id = id(node)
+                gm = self._mesh_cache.get(node_id)
+                if gm is not None and gm.mat_slots:
+                    # Draw each material slot with its own texture
+                    for slot_idx in range(tex_count):
+                        slot_data = gm.mat_slots.get(slot_idx)
+                        if slot_data is None or slot_data[2] == 0:
+                            continue
+                        slot_name = str(tex_names[slot_idx]).strip().lower()
+                        if slot_name in ('null', '', 'none'):
+                            slot_name = ''
+                        _draw_node(node, tex_name_override=slot_name,
+                                   override_vao=slot_data[0],
+                                   override_tri_count=slot_data[2])
+                else:
+                    # No split IBOs available — fall back to primary texture
+                    # (better than drawing incorrectly with each slot)
+                    _draw_node(node)
 
             # ── Pass 1: Opaque geometry (depth write ON, no blending) ─────────────
             # Solid, fully-opaque surfaces with no alpha-test.
@@ -5241,7 +3403,7 @@ class GpuRenderer:
             ctx.depth_mask = True
             ctx.disable(moderngl.BLEND)
             for node in opaque_nodes:
-                _draw_node_multitex(node, pass_name='opaque')
+                _draw_node_multitex(node)
 
             # ── Pass 2: Alpha-cutout geometry (depth write ON, shader discard) ────
             # Punchthrough / alpha-test surfaces: hair cards, fur edges, eye cutouts,
@@ -5251,7 +3413,7 @@ class GpuRenderer:
             # Cross-ref: Hayes (2025) §8.2 alpha testing; Gregory (2024) §10.6.
             # ctx.depth_mask stays True; no blending needed for cutout.
             for node in cutout_nodes:
-                _draw_node_multitex(node, pass_name='cutout')
+                _draw_node_multitex(node)
 
             # ── Pass 3: Transparent/additive geometry (depth write OFF) ───────────
             # BUG-ALPHA FIX: Sort transparent nodes back-to-front by their centroid
@@ -5296,7 +3458,7 @@ class GpuRenderer:
                                                   key=_node_sort_depth, reverse=True)
                 ctx.depth_mask = False
                 for node in transparent_nodes_sorted:
-                    _draw_node_multitex(node, pass_name='transparent')
+                    _draw_node_multitex(node)
                 # Restore depth writes after transparent pass
                 ctx.depth_mask = True
                 ctx.disable(moderngl.BLEND)
@@ -5506,20 +3668,38 @@ class GpuRenderer:
 
 def _compute_model_bounds(model) -> dict:
     """
-    D20-M: Walk all renderable mesh nodes and return the world-space AABB,
-    using the per-node vertex_space contract (same as _build_vbo_data).
+    Walk all renderable mesh nodes and return the world-space AABB of the model,
+    applying the same world-transform logic as _build_vbo_data so the bounds
+    reflect the actual rendered geometry (not just the raw MDL pivot data).
 
     Returns dict with keys: min_x, max_x, min_y, max_y, min_z, max_z,
     center_x/y/z, extent_x/y/z, max_extent, radius.
     Falls back to the model's stored bb_min/bb_max if no vertex data is found.
-
-    No centroid heuristics, no _WORLDSPACE_THRESHOLD, no accessory detection.
-    References:
-      xoreos model_kotor.cpp readMesh — verts are node-local
-      KotOR.js OdysseyModel3D.ts      — matrixWorld for GPU transform
     """
-    # Detect module/area/tile models for renderable no-UV geometry.
+    _UV_EXTREME              = 3.0
+    _WORLDSPACE_THRESHOLD    = 1.5   # Must match _WORLDSPACE_VERT_THRESHOLD in _build_vbo_data
+
+    # Determine if this is an accessory-skin model (head replacement, robe overlay, etc.)
+    # Accessory skin models store vertices in bone-local space: the skin mesh
+    # centroid is NOT near zero (it's offset to the bone attachment point), so a
+    # naive centroid-magnitude check misclassifies them as world-space.
+    # Use the shared KOTOR_BASE_SKELETONS constant (imported from core.model_data)
+    # to keep this consistent with viewport.py and model_data.py.
+    _BASE_SKELS = _KOTOR_BASE_SKELETONS
+    _parent_supermodel = ''
+    try:
+        _parent_supermodel = (getattr(model, 'supermodel', '') or '').strip().upper()
+    except Exception:
+        pass
+    # An accessory model has a non-NULL, non-base-skeleton supermodel AND its
+    # skin vertices are bone-local (they need the world_pos translation to reach
+    # their correct world position).
+    _is_accessory = (_parent_supermodel not in _BASE_SKELS)
+
+    # FIX-BOUNDS-MODULE: Detect module/area/tile models so that bounds computation
+    # does NOT exclude nodes with large tiled UVs (which are real geometry).
     _bounds_model_cls  = (str(getattr(model, 'classification', 'character') or 'character')).lower()
+    # FIX-MODEL-TYPE-ZERO: same fix as _gpu_model_type — don't treat 0 as falsy
     _bounds_model_type_raw = getattr(model, 'model_type', None)
     _bounds_model_type = int(_bounds_model_type_raw) if _bounds_model_type_raw is not None else 4
     _bounds_is_module  = (_bounds_model_cls in ('effect', 'tile', 'other') or
@@ -5538,41 +3718,88 @@ def _compute_model_bounds(model) -> dict:
         has_uvs = bool(uvs)
 
         # Skip deformation-helper nodes (same rules as _is_deform_helper)
+        # Module/area models: skip the no-UV check (MDX-sourced UVs may be absent)
         if not has_uvs and not _bounds_is_module:
             continue
         if node.name.lower().endswith(('_g', '_g0', '_dum')):
             continue
+        # Extreme UV check: skip for module/area models (legitimately large tiling UVs)
+        if not _bounds_is_module:
+            extreme = False
+            for uv in uvs[:32]:
+                if abs(uv[0]) > _UV_EXTREME or abs(uv[1]) > _UV_EXTREME:
+                    extreme = True
+                    break
+            if extreme:
+                continue
+
         try:
             import numpy as _np
             v_arr = _np.array(verts, dtype=np.float64)
         except Exception:
             continue
 
-        # D20-M: Use vertex_space contract — no centroid checks
-        _node_vs = getattr(node, 'vertex_space', 0)  # default NODE_LOCAL
+        is_skin = bool(getattr(node, 'is_skin', False))
 
-        if _node_vs == 0:  # NODE_LOCAL — apply full world transform
-            try:
-                wt = node.world_transform()
-                wp = np.array(wt[0], dtype=np.float64)
-                wo = np.array(wt[1], dtype=np.float64)
-                qlen = np.linalg.norm(wo)
-                if qlen > 1e-9:
-                    wo = wo / qlen
-                is_id_rot = (abs(wo[3]) > 0.9999 and
-                             abs(wo[0]) < 1e-6 and
-                             abs(wo[1]) < 1e-6 and
-                             abs(wo[2]) < 1e-6)
-                if not is_id_rot:
-                    v_arr = _quat_rotate_batch(wo, v_arr)
-                v_arr = v_arr + wp
-            except Exception:
-                pass
-        elif _node_vs == 1:  # WORLD — already in world space, use as-is
+        # Determine the model that owns this node (for _CompositeModel support)
+        _node_model = getattr(node, '_model_ref', model)
+        _node_supermodel = ''
+        try:
+            _node_supermodel = (getattr(_node_model, 'supermodel', '') or '').strip().upper()
+        except Exception:
             pass
-        # _node_vs == 2 (AABB_WALK) — skip walkmesh
-        elif _node_vs == 2:
-            continue
+        _node_is_accessory = (_node_supermodel not in _BASE_SKELS)
+
+        if is_skin:
+            centroid_mag = float(np.linalg.norm(v_arr.mean(axis=0)))
+            if _node_is_accessory:
+                # FIX-ACCESSORY-BOUNDS: Apply the same centering/translation logic
+                # as _build_vbo_data to place skin vertices at their correct world
+                # position for bounding-box calculation.
+                try:
+                    wt = node.world_transform()
+                    wp = _np.array(wt[0], dtype=_np.float64)
+                    wo = _np.array(wt[1], dtype=_np.float64)
+                    qlen = _np.linalg.norm(wo)
+                    if qlen > 1e-9:
+                        wo = wo / qlen
+                    is_id_rot = (abs(wo[3]) > 0.9999 and
+                                 abs(wo[0]) < 1e-6 and
+                                 abs(wo[1]) < 1e-6 and
+                                 abs(wo[2]) < 1e-6)
+                    if not is_id_rot:
+                        v_arr = _quat_rotate_batch(wo, v_arr)
+                    if centroid_mag > _WORLDSPACE_THRESHOLD:
+                        # Large centroid: centering transform (v - centroid + wp)
+                        _c = v_arr.mean(axis=0)
+                        v_arr = v_arr - _c + wp
+                    else:
+                        # Small centroid: bone-local, simple +wp translation
+                        v_arr = v_arr + wp
+                except Exception:
+                    pass
+            # else: base-skeleton skin vertices are already in world space → no transform
+        else:
+            centroid_mag = float(np.linalg.norm(v_arr.mean(axis=0)))
+            if centroid_mag <= _WORLDSPACE_THRESHOLD:
+                # Local-space node: translate by world_pos
+                try:
+                    wt = node.world_transform()
+                    wp = np.array(wt[0], dtype=np.float64)
+                    wo = np.array(wt[1], dtype=np.float64)
+                    qlen = np.linalg.norm(wo)
+                    if qlen > 1e-9:
+                        wo = wo / qlen
+                    is_id_rot = (abs(wo[3]) > 0.9999 and
+                                 abs(wo[0]) < 1e-6 and
+                                 abs(wo[1]) < 1e-6 and
+                                 abs(wo[2]) < 1e-6)
+                    if not is_id_rot:
+                        v_arr = _quat_rotate_batch(wo, v_arr)
+                    v_arr = v_arr + wp
+                except Exception:
+                    pass
+            # else: world-space non-skin – use as-is
 
         all_pts.append(v_arr)
 
