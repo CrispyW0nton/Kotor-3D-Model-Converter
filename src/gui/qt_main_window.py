@@ -35,13 +35,14 @@ from .qt_animation_panel import QtAnimationLibraryPanel, QtAnimationsPanel
 from .qt_blueprint_editor import QtBlueprintEditorPanel
 from .qt_character_builder_panel import QtCharacterBuilderPanel, QtCharacterBuilderWindow
 from .qt_diagnostics_panel import QtDiagnosticsPanel
-from .qt_dialogs import show_about, show_format_reference, show_ipc_info
+from .qt_dialogs import show_about, show_format_reference, show_ipc_info, show_viewport_navigation_reference
 from .qt_modular_panel import QtModularModePanel
 from .qt_normal_map_panel import QtNormalMapPanel
 from .qt_resource_panel import QtResourceBrowserPanel, QtTwoDaBrowserPanel
 from .qt_rig_panel import QtRigPanel
 from .qt_settings_dialog import QtSettingsDialog, save_settings
 from .qt_texture_panel import QtTexturePanel
+from .viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
 
 
 C = {
@@ -638,20 +639,26 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.uv_action.triggered.connect(self._open_uv_viewer)
         self.diag_action = QtGui.QAction("Run Diagnostics", self)
         self.diag_action.setShortcut("Ctrl+D")
-        self.diag_action.triggered.connect(self._run_diagnostics_popup)
+        self.diag_action.triggered.connect(self._show_diagnostics_panel)
         self.info_action = QtGui.QAction("Model Info...", self)
         self.info_action.triggered.connect(self._show_model_info)
         self.refresh_action = QtGui.QAction("Refresh All", self)
         self.refresh_action.setShortcut("F5")
         self.refresh_action.triggered.connect(self._refresh_all)
-        self.character_builder_action = QtGui.QAction(self._icon("charbuilder"), "Character Builder", self)
+        self.character_builder_action = QtGui.QAction(self._icon("charbuilder"), "Character Builder (New Window)...", self)
         self.character_builder_action.setShortcut("Ctrl+B")
         self.character_builder_action.triggered.connect(self._open_qt_character_builder_window)
         self.anims_action = QtGui.QAction(self._icon("anims"), "Animations", self)
         self.anims_action.setShortcut("Ctrl+A")
         self.anims_action.triggered.connect(lambda: self._show_right_tab("Animations"))
-        self.modules_action = QtGui.QAction(self._icon("modular"), "Modules", self)
+        self.modules_action = QtGui.QAction(self._icon("modular"), "Open Module Editor", self)
         self.modules_action.triggered.connect(self._show_modules_tab)
+        self.nodes_panel_action = QtGui.QAction(self._icon("skeleton"), "Open Nodes Panel", self)
+        self.nodes_panel_action.triggered.connect(lambda: self._show_detachable_panel("nodes"))
+        self.twoda_panel_action = QtGui.QAction(self._icon("twoda"), "Open 2DA Browser", self)
+        self.twoda_panel_action.triggered.connect(lambda: self._show_detachable_panel("2das"))
+        self.resources_panel_action = QtGui.QAction(self._icon("resources"), "Open Resource Browser", self)
+        self.resources_panel_action.triggered.connect(lambda: self._show_detachable_panel("resources"))
         self.set_mdlops_action = QtGui.QAction("Set MDLOps Path...", self)
         self.set_mdlops_action.triggered.connect(self._set_mdlops)
         self.compile_action = QtGui.QAction("Compile ASCII MDL to Binary", self)
@@ -739,11 +746,18 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         about_action.triggered.connect(lambda: show_about(self))
         format_action = QtGui.QAction("KotOR MDL Format Reference", self)
         format_action.triggered.connect(lambda: show_format_reference(self))
+        viewport_controls_action = QtGui.QAction("Viewport Navigation Controls", self)
+        viewport_controls_action.triggered.connect(lambda: show_viewport_navigation_reference(self))
         help_menu.addAction(about_action)
+        help_menu.addAction(viewport_controls_action)
         help_menu.addAction(format_action)
 
         modules_menu = self.menuBar().addMenu("Modules")
         modules_menu.addAction(self.modules_action)
+        modules_menu.addSeparator()
+        modules_menu.addAction(self.nodes_panel_action)
+        modules_menu.addAction(self.twoda_panel_action)
+        modules_menu.addAction(self.resources_panel_action)
         modules_menu.addSeparator()
         modules_menu.addAction(self.port_model_action)
         modules_menu.addAction(self.generate_module_action)
@@ -945,6 +959,36 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         sep.setFixedWidth(1)
         return sep
 
+    def _create_detachable_panel(self, key: str, title: str, widget: QtWidgets.QWidget, area) -> QtWidgets.QDockWidget:
+        dock = QtWidgets.QDockWidget(title, self)
+        dock.setObjectName(f"{key}Dock")
+        dock.setWidget(widget)
+        dock.setAllowedAreas(QtCore.Qt.AllDockWidgetAreas)
+        dock.setFeatures(
+            QtWidgets.QDockWidget.DockWidgetClosable
+            | QtWidgets.QDockWidget.DockWidgetFloatable
+            | QtWidgets.QDockWidget.DockWidgetMovable
+        )
+        self.addDockWidget(area, dock)
+        dock.hide()
+        self._detachable_panels[key] = dock
+        return dock
+
+    def _show_detachable_panel(self, key: str):
+        dock = getattr(self, "_detachable_panels", {}).get(key)
+        if dock is None:
+            self._not_migrated(key)
+            return
+        if key == "resources" and getattr(self.resource_panel, "listbox", None) is not None:
+            if self.resource_panel.listbox.count() == 0:
+                self._populate_resource_panel()
+        dock.show()
+        dock.setFloating(True)
+        width, height = getattr(self, "_detachable_panel_sizes", {}).get(key, (760, 520))
+        dock.resize(width, height)
+        dock.raise_()
+        dock.activateWindow()
+
     def _build_layout(self):
         central = QtWidgets.QWidget()
         root = QtWidgets.QVBoxLayout(central)
@@ -996,7 +1040,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.normal_map_panel = QtNormalMapPanel(self)
         self.diagnostics_panel = QtDiagnosticsPanel(self._get_model, self)
         self.animations_panel = QtAnimationsPanel(self)
+        self.animations_panel.animationSelected.connect(self._handle_animation_selected)
         self.animations_panel.animationActionRequested.connect(self._handle_animation_action)
+        self.animations_panel.seekRequested.connect(self._handle_animation_seek)
         self.animation_library_panel = QtAnimationLibraryPanel(self)
         self.animation_library_panel.libraryActionRequested.connect(self._handle_animation_library_action)
         self.twoda_panel = QtTwoDaBrowserPanel(self)
@@ -1010,13 +1056,22 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.modular_panel = QtModularModePanel(self)
         self.modular_panel.moduleActionRequested.connect(self._handle_module_action)
         self.blueprint_panel = QtBlueprintEditorPanel(self)
-        left_tabs.addTab(self.skeleton_panel, self._icon("skeleton", 16), "Nodes")
-        left_tabs.addTab(self.twoda_panel, self._icon("twoda", 16), "2DAs")
-        left_tabs.addTab(self.resource_panel, self._icon("resources", 16), "Resources")
+        self._detachable_panels: dict[str, QtWidgets.QDockWidget] = {}
+        self._detachable_panel_sizes = {
+            "nodes": (620, 700),
+            "2das": (980, 640),
+            "resources": (980, 640),
+        }
+        self._create_detachable_panel("nodes", "Nodes", self.skeleton_panel, QtCore.Qt.LeftDockWidgetArea)
+        self._create_detachable_panel("2das", "2DA Browser", self.twoda_panel, QtCore.Qt.LeftDockWidgetArea)
+        self._create_detachable_panel("resources", "Resource Browser", self.resource_panel, QtCore.Qt.LeftDockWidgetArea)
         left_tabs.addTab(self.modular_panel, self._icon("modular", 16), "Modules")
         main_splitter.addWidget(left_tabs)
 
         self.viewport = QtViewportWidget(self)
+        self.viewport.set_navigation_profile(
+            self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
+        )
         self.viewport.setMinimumWidth(420)
         self.viewport.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.viewport_label = self.viewport.canvas
@@ -1054,9 +1109,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.library_list = QtWidgets.QListWidget()
         self.library_filter = QtWidgets.QLineEdit()
         self.props_text = QtWidgets.QTextEdit()
-
-        self.resource_panel.type_combo.currentTextChanged.connect(lambda _text: self._populate_resource_panel())
-        self.resource_panel.search_edit.textChanged.connect(lambda _text: self._populate_resource_panel())
 
     @QtCore.Slot(str, str)
     def _on_library_dirs_changed(self, k1_dir: str, k2_dir: str):
@@ -1375,6 +1427,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(close_button, 0, QtCore.Qt.AlignRight)
         dialog.exec()
 
+    def _show_diagnostics_panel(self):
+        if hasattr(self, "diagnostics_panel"):
+            self.diagnostics_panel.run_diagnostics(self._current_model)
+        self._show_right_tab("Diag")
+
     def _quick_autorig(self):
         model = self._require_model("Auto-Rig")
         if model is None:
@@ -1414,11 +1471,89 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._log(f"Remove rigging error: {exc}", "error")
             QtWidgets.QMessageBox.critical(self, "Remove Rigging Error", str(exc))
 
+    def _clear_skeleton(self):
+        model = self._require_model("Clear Skeleton")
+        if model is None:
+            return
+        if not getattr(model, "root_node", None):
+            QtWidgets.QMessageBox.warning(self, "Clear Skeleton", "No root node found.")
+            return
+        if QtWidgets.QMessageBox.question(
+            self,
+            "Clear Skeleton",
+            "Remove all bone/dummy nodes and skin weights from this model?\n\nMesh nodes will be re-parented to the root.",
+        ) != QtWidgets.QMessageBox.Yes:
+            return
+        try:
+            from src.core.model_data import NodeFlags
+
+            root = model.root_node
+            mesh_nodes = [node for node in model.all_nodes() if getattr(node, "is_mesh", False)]
+            for node in mesh_nodes:
+                node.flags &= ~int(NodeFlags.SKIN)
+                node.skin_data = []
+                node.bone_map = []
+                if hasattr(node, "bone_map_floats"):
+                    node.bone_map_floats = []
+                node.parent = root
+                node.position = (0.0, 0.0, 0.0)
+            root.children = mesh_nodes
+            self._set_model_internal(model, self._model_path)
+            self._log(f"Skeleton cleared: {len(mesh_nodes)} mesh nodes remain at root.", "success")
+            if hasattr(self, "rig_panel"):
+                self.rig_panel.status_label.setText(f"Skeleton cleared: {len(mesh_nodes)} mesh nodes")
+        except Exception as exc:
+            self._log(f"Clear skeleton error: {exc}", "error")
+            QtWidgets.QMessageBox.critical(self, "Clear Skeleton Error", str(exc))
+
+    def _show_weight_stats(self):
+        model = self._require_model("Weight Stats")
+        if model is None:
+            return
+        try:
+            from src.autorig.auto_rigger import AutoRigger
+
+            stats = AutoRigger().get_weight_stats(model)
+            if not stats:
+                QtWidgets.QMessageBox.information(self, "Weight Stats", "No rigged nodes found. Run Auto-Rig first.")
+                return
+            lines = []
+            for node_name, data in stats.items():
+                lines.append(f"-- {node_name} --")
+                lines.append(
+                    f"  verts={data['total_verts']}  avg_infl={data['avg_influences']:.2f}  "
+                    f"max_infl={data['max_influences']}  zero={data['zero_weight_verts']}"
+                )
+                lines.append("  Top bones:")
+                for bone_name, total_w in sorted(data["bone_usage"].items(), key=lambda item: -item[1])[:8]:
+                    bar = "#" * int(total_w / max(data["total_verts"], 1) * 20)
+                    lines.append(f"    {bone_name:<16} {bar}")
+                lines.append("")
+            dialog = QtWidgets.QDialog(self)
+            dialog.setWindowTitle("Weight Statistics")
+            dialog.resize(560, 420)
+            layout = QtWidgets.QVBoxLayout(dialog)
+            text = QtWidgets.QPlainTextEdit()
+            text.setReadOnly(True)
+            text.setPlainText("\n".join(lines))
+            layout.addWidget(text, 1)
+            close_button = QtWidgets.QPushButton("Close")
+            close_button.clicked.connect(dialog.accept)
+            layout.addWidget(close_button, 0, QtCore.Qt.AlignRight)
+            dialog.exec()
+        except Exception as exc:
+            self._log(f"Weight stats error: {exc}", "error")
+            QtWidgets.QMessageBox.critical(self, "Weight Stats", str(exc))
+
     def _handle_rig_action(self, action: str):
         if action == "Auto-Rig Model":
             self._quick_autorig()
         elif action == "Remove Rigging":
             self._remove_rig()
+        elif action == "Clear Skeleton":
+            self._clear_skeleton()
+        elif action == "Weight Stats":
+            self._show_weight_stats()
         else:
             self._log(f"{action} is waiting for its Qt behavior migration.", "warning")
 
@@ -1821,6 +1956,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             output = Path(out_dir)
             for name, text in files.items():
                 (output / name).write_text(text, encoding="utf-8")
+            self._last_module_output_dir = str(output)
             self._log(f"Generated starter module files for {mod} in {output}", "success")
         except Exception as exc:
             self._log(f"Module generation error: {exc}", "error")
@@ -1830,13 +1966,52 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if action in {"Generate Module Files", "Validate Module", "Open Output"}:
             if action == "Generate Module Files":
                 self._generate_module_files()
+            elif action == "Open Output":
+                path = getattr(self, "_last_module_output_dir", "")
+                if path:
+                    QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(path))
+                else:
+                    self._log("Generate module files first, then Open Output.", "warning")
             else:
                 self._log(f"{action} needs a generated/open module workspace first.", "warning")
             return
         if action in {"Port K1 to K2", "Port K2 to K1"}:
             self._port_current_model()
             return
+        if action == "Open Blueprint":
+            self._show_right_tab("Blueprint")
+            self.blueprint_panel.open_blueprint()
+            return
+        if action == "Save Blueprint":
+            self._show_right_tab("Blueprint")
+            self.blueprint_panel.save_blueprint()
+            return
+        if action == "Send to GModular":
+            self._ipc_notify_saved()
+            return
         self._log(f"{action} is waiting for deeper Qt module-editor migration.", "warning")
+
+    def _handle_animation_selected(self, anim_name: str):
+        model = self._current_model
+        if not model or not anim_name:
+            return
+        for anim in getattr(model, "animations", []) or []:
+            if getattr(anim, "name", "") != anim_name:
+                continue
+            length = float(getattr(anim, "length", 0.0) or 0.0)
+            events = getattr(anim, "events", []) or []
+            node_anims = getattr(anim, "node_anims", {}) or {}
+            key_count = 0
+            for node_anim in node_anims.values() if hasattr(node_anims, "values") else []:
+                for attr in ("position_keys", "rotation_keys", "scale_keys"):
+                    key_count += len(getattr(node_anim, attr, []) or [])
+            self.animations_panel.info.setPlainText(
+                f"{anim_name}\nLength: {length:.3f} s\nKeys: {key_count}  Nodes: {len(node_anims)}  Events: {len(events)}"
+            )
+            self.animations_panel.seek.blockSignals(True)
+            self.animations_panel.seek.setValue(0)
+            self.animations_panel.seek.blockSignals(False)
+            return
 
     def _handle_animation_action(self, action: str, anim_name: str):
         model = self._require_model("Animations")
@@ -1884,6 +2059,37 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         except Exception as exc:
             self._log(f"Animation action error: {exc}", "error")
             QtWidgets.QMessageBox.critical(self, "Animations", str(exc))
+
+    def _handle_animation_seek(self, percent: int):
+        model = self._current_model
+        anim_name = self.animations_panel.selected_animation() if hasattr(self, "animations_panel") else ""
+        if model is None or not anim_name:
+            return
+        try:
+            from src.core.animation_engine import AnimationEngine
+
+            if self._animation_engine is None or getattr(self._animation_engine, "model", None) is not model:
+                self._animation_engine = AnimationEngine(model)
+            current = self._animation_engine.current_animation
+            if current is None or getattr(current, "name", "") != anim_name:
+                if not self._animation_engine.play(anim_name, loop=self._animation_loop, blend=False):
+                    return
+                self._animation_engine.stop()
+                current = self._animation_engine.current_animation
+            length = float(getattr(current, "length", 0.0) or 0.0) if current else 0.0
+            if length <= 0.0:
+                return
+            t = max(0.0, min(100.0, float(percent))) / 100.0 * length
+            was_playing = self._animation_engine.is_playing
+            self._animation_engine.seek(t)
+            pose = self._animation_engine.evaluate()
+            if hasattr(self, "viewport"):
+                self.viewport.set_animation_pose(pose, name=anim_name, time=t, length=length)
+            self.animations_panel.info.setPlainText(f"{anim_name}\n{t:.3f} / {length:.3f} s")
+            if not was_playing:
+                self._animation_engine.stop()
+        except Exception as exc:
+            self._log(f"Animation seek error: {exc}", "error")
 
     def _tick_animation(self):
         engine = self._animation_engine
@@ -1987,36 +2193,110 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     def _populate_resource_panel(self):
         if not hasattr(self, "resource_panel"):
             return
-        rows = []
-        for row in self._library_rows:
-            rows.append(
-                {
-                    "game": row.get("game", ""),
-                    "resref": row.get("resref", ""),
-                    "source": row.get("source", ""),
-                    "type": "mdl",
-                }
-            )
+        try:
+            from src.core import resource_manager as rm
+
+            manager = rm.ResourceManager()
+            k1_dir = self.k1_dir_edit.text().strip()
+            k2_dir = self.k2_dir_edit.text().strip()
+            if k1_dir:
+                manager.set_k1_dir(k1_dir)
+            if k2_dir:
+                manager.set_k2_dir(k2_dir)
+            type_map = {
+                "mdl": rm.RES_MDL,
+                "mdx": rm.RES_MDX,
+                "tpc": rm.RES_TPC,
+                "tga": rm.RES_TGA,
+                "2da": rm.RES_2DA,
+                "dlg": rm.RES_DLG,
+                "utc": rm.RES_UTC,
+                "uti": getattr(rm, "RES_UTI", None),
+                "are": rm.RES_ARE,
+                "git": rm.RES_GIT,
+                "ifo": rm.RES_IFO,
+                "wok": rm.RES_WOK,
+            }
+            rows = []
+            for game, install in (("K1", manager.get_k1()), ("K2", manager.get_k2())):
+                if install is None:
+                    continue
+                for ext, res_type in type_map.items():
+                    if res_type is None:
+                        continue
+                    try:
+                        names = install.list_resrefs(res_type)
+                    except Exception:
+                        names = []
+                    for name in names:
+                        rows.append(
+                            {
+                                "game": game,
+                                "resref": name,
+                                "type": ext,
+                                "res_type": res_type,
+                                "source": k1_dir if game == "K1" else k2_dir,
+                            }
+                        )
+            self._resource_manager = manager
+        except Exception as exc:
+            self._log(f"Resource scan error: {exc}", "error")
+            rows = []
+            self._resource_manager = None
+
+        if not rows:
+            for row in self._library_rows:
+                if row.get("template"):
+                    continue
+                rows.append(
+                    {
+                        "game": row.get("game", ""),
+                        "resref": row.get("resref", ""),
+                        "source": row.get("source", ""),
+                        "type": "mdl",
+                        "res_type": 2002,
+                    }
+                )
         self.resource_panel.set_resources(rows)
-        self.resource_panel.text_preview.setPlainText(f"{len(rows)} model resources indexed from the library scan.")
+        self.resource_panel.text_preview.setPlainText(f"{len(rows)} resources indexed.")
 
     def _preview_resource_row(self, row: dict):
+        raw = None
+        manager = getattr(self, "_resource_manager", None)
+        if manager is not None and row.get("res_type"):
+            try:
+                raw = manager.get(str(row.get("resref", "")), int(row.get("res_type")), str(row.get("game", "K1")))
+            except Exception as exc:
+                self._log(f"Resource preview read error: {exc}", "warning")
         text = "\n".join(
             [
                 f"Resource: {row.get('resref', '')}.{row.get('type', '')}",
                 f"Game:     {row.get('game', '')}",
                 f"Source:   {row.get('source', '')}",
+                f"Bytes:    {len(raw) if raw is not None else '(not loaded)'}",
                 "",
-                "Double-click loading will be wired when the resource browser is expanded beyond model rows.",
+                (raw[:4096].decode("latin-1", errors="replace") if raw else ""),
             ]
         )
         self.resource_panel.text_preview.setPlainText(text)
-        raw = repr(row).encode("utf-8")
-        self.resource_panel.hex_preview.setPlainText(" ".join(f"{byte:02x}" for byte in raw))
+        hex_raw = raw if raw is not None else repr(row).encode("utf-8")
+        lines = []
+        for offset in range(0, min(len(hex_raw), 1024), 16):
+            chunk = hex_raw[offset:offset + 16]
+            hex_part = " ".join(f"{byte:02x}" for byte in chunk)
+            asc_part = "".join(chr(byte) if 32 <= byte < 127 else "." for byte in chunk)
+            lines.append(f"{offset:06x}  {hex_part:<48}  {asc_part}")
+        if len(hex_raw) > 1024:
+            lines.append(f"... ({len(hex_raw)} total bytes)")
+        self.resource_panel.hex_preview.setPlainText("\n".join(lines))
 
     def _activate_resource_row(self, row: dict):
         if str(row.get("type", "")).lower() == "mdl" and row.get("resref") and row.get("game"):
             self._start_resource_load(str(row["resref"]), str(row["game"]))
+        elif str(row.get("type", "")).lower() == "2da" and row.get("resref") and row.get("game"):
+            self._show_detachable_panel("2das")
+            self.twoda_panel.game_combo.setCurrentText(str(row["game"]))
+            self._load_twoda_table(str(row["game"]), str(row["resref"]))
         else:
             self._log(f"No activation handler for {row.get('resref', 'resource')}", "warning")
 
@@ -2024,16 +2304,18 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.twoda_panel.listbox.clear()
         self.twoda_panel.table.clear()
         try:
-            from src.resources.game_library import GameLibrary
+            from src.core import resource_manager as rm
 
-            lib = GameLibrary()
+            manager = rm.ResourceManager()
             k1_dir = self.k1_dir_edit.text().strip()
             k2_dir = self.k2_dir_edit.text().strip()
             if k1_dir:
-                lib.set_k1_dir(k1_dir)
+                manager.set_k1_dir(k1_dir)
             if k2_dir:
-                lib.set_k2_dir(k2_dir)
-            names = lib.list_2da_names(game)
+                manager.set_k2_dir(k2_dir)
+            install = manager.get_k1() if game == "K1" else manager.get_k2()
+            names = sorted(install.list_resrefs(rm.RES_2DA)) if install is not None else []
+            self._resource_manager = manager
             self.twoda_panel.listbox.addItems(names)
             self._log(f"2DA list refreshed: {len(names)} tables for {game}", "success")
         except Exception as exc:
@@ -2043,19 +2325,24 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if not name:
             return
         try:
-            from src.resources.game_library import GameLibrary
+            from src.core import resource_manager as rm
+            from src.core.twoda import TwoDA
 
-            lib = GameLibrary()
-            k1_dir = self.k1_dir_edit.text().strip()
-            k2_dir = self.k2_dir_edit.text().strip()
-            if k1_dir:
-                lib.set_k1_dir(k1_dir)
-            if k2_dir:
-                lib.set_k2_dir(k2_dir)
-            table = lib.get_2da(name, game)
-            if table is None:
+            manager = getattr(self, "_resource_manager", None)
+            if manager is None:
+                manager = rm.ResourceManager()
+                k1_dir = self.k1_dir_edit.text().strip()
+                k2_dir = self.k2_dir_edit.text().strip()
+                if k1_dir:
+                    manager.set_k1_dir(k1_dir)
+                if k2_dir:
+                    manager.set_k2_dir(k2_dir)
+                self._resource_manager = manager
+            raw = manager.get(name, rm.RES_2DA, game)
+            if not raw:
                 self._log(f"2DA not found: {game}:{name}", "warning")
                 return
+            table = TwoDA.from_bytes(raw, name=name)
             columns = list(getattr(table, "columns", []) or [])
             rows = list(table)
             self.twoda_panel.table.clear()
@@ -2580,6 +2867,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def _save_settings_data(self, values: dict):
         self.settings_data = values
+        viewport = getattr(self, "viewport", None)
+        if viewport is not None:
+            viewport.set_navigation_profile(
+                normalize_viewport_navigation_profile(
+                    values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
+                )
+            )
         try:
             save_settings(self.settings_path, values)
             self._log("Settings saved.", "success")

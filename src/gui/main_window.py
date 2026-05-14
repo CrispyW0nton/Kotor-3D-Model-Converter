@@ -9852,9 +9852,6 @@ class KotorModToolsApp(tk.Tk):
         self.viewport.on_bone_selected = self._on_viewport_bone_selected
         # Gimbal node-moved callback: refresh properties panel
         self.viewport.on_node_moved = self._on_viewport_node_moved
-        self.props_panel._set_pos_cb = (
-            lambda node, _x, _y, _z: self.viewport.refresh_node_transform(node)
-        )
 
         # Right panel — 4 focused tabs: Props | Anims | Character Builder | Textures
         right = tk.Frame(main, bg=C['panel2'], width=280)
@@ -9867,6 +9864,9 @@ class KotorModToolsApp(tk.Tk):
 
         # 1. Properties – node info / model metadata
         self.props_panel = PropertiesPanel(right_nb)
+        self.props_panel._set_pos_cb = (
+            lambda node, _x, _y, _z: self.viewport.refresh_node_transform(node)
+        )
         right_nb.add(self.props_panel,
                      **Icons.tab_kwargs("props", " Props", 16))
         self._tab_names['props'] = right_nb.index('end') - 1

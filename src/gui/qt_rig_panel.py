@@ -155,6 +155,6 @@ class QtRigPanel(QtWidgets.QWidget):
             layout.addWidget(button)
 
     def _emit_action(self, action: str) -> None:
-        self.status_label.setText(f"{action} is pending Qt behavior wiring.")
+        self.status_label.setText(f"{action} requested.")
         self.rigActionRequested.emit(action)
 

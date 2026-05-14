@@ -6,6 +6,8 @@ from typing import Optional
 
 from PySide6 import QtWidgets
 
+from .viewport_navigation import VIEWPORT_NAVIGATION_HELP
+
 
 def show_about(parent: Optional[QtWidgets.QWidget] = None) -> None:
     QtWidgets.QMessageBox.about(
@@ -20,6 +22,14 @@ def show_format_reference(parent: Optional[QtWidgets.QWidget] = None) -> None:
         parent,
         "KotOR MDL Format Reference",
         "The full MDL/MDX format reference will be migrated into a Qt document viewer.",
+    )
+
+
+def show_viewport_navigation_reference(parent: Optional[QtWidgets.QWidget] = None) -> None:
+    QtWidgets.QMessageBox.information(
+        parent,
+        "Viewport Navigation Controls",
+        VIEWPORT_NAVIGATION_HELP,
     )
 
 

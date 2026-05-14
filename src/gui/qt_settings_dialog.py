@@ -9,6 +9,12 @@ from typing import Optional
 from PySide6 import QtCore, QtWidgets
 
 from .qt_theme import C
+from .viewport_navigation import (
+    DEFAULT_VIEWPORT_NAVIGATION_PROFILE,
+    VIEWPORT_NAVIGATION_PROFILES,
+    normalize_viewport_navigation_profile,
+)
+from .qt_dialogs import show_viewport_navigation_reference
 
 
 class QtSettingsDialog(QtWidgets.QDialog):
@@ -28,6 +34,9 @@ class QtSettingsDialog(QtWidgets.QDialog):
         self.k2_dir = QtWidgets.QLineEdit()
         self.texture_dir = QtWidgets.QLineEdit()
         self.mdlops_path = QtWidgets.QLineEdit()
+        self.viewport_navigation_profile = QtWidgets.QComboBox()
+        for key, profile in VIEWPORT_NAVIGATION_PROFILES.items():
+            self.viewport_navigation_profile.addItem(profile.label, key)
         for label, edit in (
             ("KotOR 1 Directory:", self.k1_dir),
             ("KotOR 2 Directory:", self.k2_dir),
@@ -40,6 +49,12 @@ class QtSettingsDialog(QtWidgets.QDialog):
             browse.clicked.connect(lambda _checked=False, e=edit, l=label: self._browse(e, l))
             row.addWidget(browse)
             form.addRow(label, row)
+        viewport_controls_row = QtWidgets.QHBoxLayout()
+        viewport_controls_row.addWidget(self.viewport_navigation_profile, 1)
+        controls_help = QtWidgets.QPushButton("Controls...")
+        controls_help.clicked.connect(lambda _checked=False: show_viewport_navigation_reference(self))
+        viewport_controls_row.addWidget(controls_help)
+        form.addRow("Viewport Controls:", viewport_controls_row)
         root.addLayout(form)
 
         self.autoscan_check = QtWidgets.QCheckBox("Scan library on startup")
@@ -57,6 +72,11 @@ class QtSettingsDialog(QtWidgets.QDialog):
         self.k2_dir.setText(str(self.settings.get("k2_dir", "")))
         self.texture_dir.setText(str(self.settings.get("texture_dir", "")))
         self.mdlops_path.setText(str(self.settings.get("mdlops_path", "")))
+        profile_key = normalize_viewport_navigation_profile(
+            self.settings.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
+        )
+        index = self.viewport_navigation_profile.findData(profile_key)
+        self.viewport_navigation_profile.setCurrentIndex(max(index, 0))
         self.autoscan_check.setChecked(bool(self.settings.get("autoscan", False)))
         self.matrix_check.setChecked(bool(self.settings.get("matrix_background", True)))
 
@@ -67,6 +87,7 @@ class QtSettingsDialog(QtWidgets.QDialog):
             "k2_dir": self.k2_dir.text().strip(),
             "texture_dir": self.texture_dir.text().strip(),
             "mdlops_path": self.mdlops_path.text().strip(),
+            "viewport_navigation_profile": self.viewport_navigation_profile.currentData(),
             "autoscan": self.autoscan_check.isChecked(),
             "matrix_background": self.matrix_check.isChecked(),
         }

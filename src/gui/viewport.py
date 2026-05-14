@@ -2529,8 +2529,8 @@ def _rasterize_triangle_textured(pixels, W, H, z_buf,
 #  Colour constants
 # ─────────────────────────────────────────────────────────────────────
 
-_BG      = (18,  18, 40,  255)
-_GRID    = (45,  45, 90,  255)
+_BG      = (23,  25, 28,  255)
+_GRID    = (58,  64, 72,  255)
 _WIRE    = (100,100,200, 255)
 _BONE    = (255,170,  0, 255)
 _SEL     = (0,  255,170, 255)
@@ -3964,11 +3964,10 @@ class FrameRenderer:
         img  = Image.new('RGBA', (W, H), _BG[:3] + (255,))
         draw = ImageDraw.Draw(img)
 
-        if self.show_grid:
-            self._draw_grid(draw, W, H)
+        self._draw_grid(draw, W, H)
 
         if self.model:
-            if self.show_texture:
+            if self.show_texture and self.show_solid:
                 # ── Render path selection (v10.5) ─────────────────────────
                 # Priority order:
                 #   1. Accel (Numba/NumPy) – 17–40× speedup, handles both flat
@@ -4115,22 +4114,94 @@ class FrameRenderer:
 
     # ── Grid ──────────────────────────────────────────────────────────
 
+    def _project_clipped_line(self, p0, p1, W: int, H: int):
+        fv = getattr(self, '_frame_view', None)
+        if fv is None:
+            self._frame_view = self._cam_view_matrix()
+            fv = self._frame_view
+        right, up, fwd, eye = fv
+        near = max(0.001, float(getattr(self.cam, '_near', getattr(self.cam, 'near', 0.01))))
+
+        def to_camera(p):
+            dx, dy, dz = p[0] - eye[0], p[1] - eye[1], p[2] - eye[2]
+            return (
+                dx * right[0] + dy * right[1] + dz * right[2],
+                dx * up[0] + dy * up[1] + dz * up[2],
+                dx * fwd[0] + dy * fwd[1] + dz * fwd[2],
+            )
+
+        c0 = to_camera(p0)
+        c1 = to_camera(p1)
+        if c0[2] < near and c1[2] < near:
+            return None
+        if c0[2] < near or c1[2] < near:
+            denom = c1[2] - c0[2]
+            if abs(denom) < 1e-9:
+                return None
+            t = (near - c0[2]) / denom
+            clipped = (
+                c0[0] + (c1[0] - c0[0]) * t,
+                c0[1] + (c1[1] - c0[1]) * t,
+                near,
+            )
+            if c0[2] < near:
+                c0 = clipped
+            else:
+                c1 = clipped
+
+        import math as _m
+        f = 1.0 / _m.tan(_m.radians(self.cam.fov) * 0.5)
+
+        def to_screen(c):
+            sx = int(W * 0.5 + (c[0] / c[2]) * f * H * 0.5)
+            sy = int(H * 0.5 - (c[1] / c[2]) * f * H * 0.5)
+            return sx, sy
+
+        return to_screen(c0), to_screen(c1)
+
     def _draw_grid(self, draw: 'ImageDraw.Draw', W: int, H: int):
-        n    = 8
-        step = max(0.1, self.cam.distance * 0.15)
-        for s in (0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 25.0, 50.0):
-            if step <= s:
-                step = s; break
-        gr = _GRID[:3]
-        for i in range(-n, n+1):
-            p1 = self._proj(-n*step, i*step, 0, W, H)
-            p2 = self._proj( n*step, i*step, 0, W, H)
-            if p1 and p2:
-                draw.line([p1[0],p1[1],p2[0],p2[1]], fill=gr, width=1)
-            p1 = self._proj(i*step, -n*step, 0, W, H)
-            p2 = self._proj(i*step,  n*step, 0, W, H)
-            if p1 and p2:
-                draw.line([p1[0],p1[1],p2[0],p2[1]], fill=gr, width=1)
+        step = 1.0
+        major_every = 5
+        extent = 20.0
+        try:
+            if self.model is not None:
+                bb_min, bb_max = self._get_render_bounds()
+                size_x = abs(float(bb_max[0]) - float(bb_min[0]))
+                size_y = abs(float(bb_max[1]) - float(bb_min[1]))
+                centre_x = (float(bb_min[0]) + float(bb_max[0])) * 0.5
+                centre_y = (float(bb_min[1]) + float(bb_max[1])) * 0.5
+                radius = max(
+                    size_x,
+                    size_y,
+                    abs(centre_x) + size_x * 0.5,
+                    abs(centre_y) + size_y * 0.5,
+                    8.0,
+                ) * 1.5
+                extent = max(16.0, min(60.0, math.ceil(radius / major_every) * major_every))
+        except Exception:
+            pass
+        x0 = -int(extent)
+        x1 = int(extent)
+        y0 = -int(extent)
+        y1 = int(extent)
+        minor = _GRID[:3]
+        major = (82, 90, 102)
+        x_axis = (118, 54, 54)
+        y_axis = (62, 112, 68)
+        for i in range(y0, y1 + 1):
+            y = i * step
+            segment = self._project_clipped_line((x0 * step, y, 0.0), (x1 * step, y, 0.0), W, H)
+            if segment:
+                p1, p2 = segment
+                col = x_axis if i == 0 else major if i % major_every == 0 else minor
+                draw.line([p1[0], p1[1], p2[0], p2[1]], fill=col, width=1)
+        for i in range(x0, x1 + 1):
+            x = i * step
+            segment = self._project_clipped_line((x, y0 * step, 0.0), (x, y1 * step, 0.0), W, H)
+            if segment:
+                p1, p2 = segment
+                col = y_axis if i == 0 else major if i % major_every == 0 else minor
+                draw.line([p1[0], p1[1], p2[0], p2[1]], fill=col, width=1)
 
     # ── Texture loading helper ─────────────────────────────────────────
 
@@ -4745,9 +4816,10 @@ class FrameRenderer:
             World verts Y=[0.961,2.065] — curved upward/forward above the head. ✓
 
         Skin nodes — BIND POSE:
-          Vertices are authored in model-root bind space. Render them as-is.
-          Applying the skin mesh node's parent-chain transform disassembles K2
-          creatures and characters into displaced fragments.
+          Vertices use the same node-local import contract as trimeshes. This
+          matters for binary head/accessory models such as ad_saul, where the
+          binary reader marks head/tongue meshes as skin but the matching ASCII
+          import keeps the same raw vertices under the node transform.
 
         SKIN nodes — ANIMATED POSE:
           Use Linear Blend Skinning (LBS) with bone_transforms.
@@ -4784,9 +4856,15 @@ class FrameRenderer:
                     return [self._lbs_vertex(node, i, bone_transforms)
                             for i in range(len(verts))]
             wp, wo, is_id = self._node_world_transform(node)
-            _gr_probe('CPU-bind', node, wp, wo, is_id)
+            _gr_probe('CPU-skin-bind', node, wp, wo, is_id)
             xfm = self._apply_vertex_transform
-            return [xfm(node, v, wp, wo, is_id) for v in verts]
+            result = [xfm(node, v, wp, wo, is_id) for v in verts]
+            off = getattr(node, '_composite_nonskin_offset', None)
+            if off is not None:
+                ox, oy, oz = float(off[0]), float(off[1]), float(off[2])
+                if abs(ox) > 1e-6 or abs(oy) > 1e-6 or abs(oz) > 1e-6:
+                    result = [(x + ox, y + oy, z + oz) for x, y, z in result]
+            return result
 
         # ── Non-skin trimesh/dangly: apply full world transform ───────────────
         wp, wo, is_id = self._node_world_transform(node)
@@ -5173,7 +5251,7 @@ class FrameRenderer:
                 sel_fill = (min(fill[0]+30,255), min(fill[1]+50,255), fill[2]) if is_sel else fill
                 if t_alpha < 0.999:
                     # Blend with background colour for transparent flat-shaded faces
-                    bg = (18, 18, 40)
+                    bg = _BG[:3]
                     a = t_alpha
                     sel_fill = (int(sel_fill[0]*a + bg[0]*(1-a)),
                                 int(sel_fill[1]*a + bg[1]*(1-a)),
@@ -7367,8 +7445,8 @@ class FrameRenderer:
     # ── Axes gizmo ────────────────────────────────────────────────────
 
     def _draw_axes(self, draw: 'ImageDraw.Draw', W: int, H: int):
-        ox, oy = 45, H - 45
-        L      = 28
+        ox, oy = 42, H - 42
+        L      = 26
         right, up, fwd, _ = self._cam_view_matrix()
 
         def axis_end(ax):
@@ -7380,6 +7458,7 @@ class FrameRenderer:
         y_end = axis_end((0,1,0))
         z_end = axis_end((0,0,1))
 
+        draw.ellipse([ox - 25, oy - 25, ox + 25, oy + 25], fill=(12, 14, 16), outline=(68, 76, 86))
         draw.line([ox,oy, x_end[0],x_end[1]], fill=_AXIS_X[:3], width=2)
         draw.line([ox,oy, y_end[0],y_end[1]], fill=_AXIS_Y[:3], width=2)
         draw.line([ox,oy, z_end[0],z_end[1]], fill=_AXIS_Z[:3], width=2)
@@ -7393,9 +7472,31 @@ class FrameRenderer:
 
     # ── Stats HUD ─────────────────────────────────────────────────────
 
+    @staticmethod
+    def _hud_text_width(text: str) -> int:
+        return max(18, len(str(text)) * 6)
+
+    def _draw_hud_pill(
+        self,
+        draw: 'ImageDraw.Draw',
+        x: int,
+        y: int,
+        text: str,
+        *,
+        fill=(30, 34, 40),
+        fg=(213, 220, 230),
+        outline=(78, 88, 102),
+    ) -> int:
+        pad_x = 7
+        width = self._hud_text_width(text) + pad_x * 2
+        height = 17
+        draw.rectangle([x, y, x + width, y + height], fill=fill, outline=outline)
+        draw.text((x + pad_x, y + 4), text, fill=fg)
+        return width
+
     def _draw_stats(self, draw: 'ImageDraw.Draw', W: int, H: int):
         if not self.model:
-            draw.text((8, 8), "No model loaded", fill=(150,150,200))
+            self._draw_hud_pill(draw, 12, 12, "No model loaded", fill=(34, 38, 44), fg=(170, 180, 195))
             return
         vc = bc = fc = tex_ok = tex_total = uv_ok = 0
         # Cache visible mesh nodes list for this stats call (avoid 3× iteration)
@@ -7424,9 +7525,9 @@ class FrameRenderer:
                 bc += 1
             stack.extend(c for c in n.children if c is not None)
         skin_nodes = sum(1 for n in visible_nodes if n.is_skin)
-        mode_str = " [TEX+PHONG]" if (self.show_texture and not self.is_interactive) else \
-                   " [FLAT(drag)]" if (self.show_texture and self.is_interactive) else \
-                   " [FLAT]"
+        mode_str = "Textured" if (self.show_texture and self.show_solid and not self.is_interactive) else \
+                   "Fast shaded" if (self.show_texture and self.show_solid and self.is_interactive) else \
+                   "Flat"
         uv_mesh  = sum(1 for n in visible_nodes if n.vertices)
         # Game version string
         try:
@@ -7434,15 +7535,30 @@ class FrameRenderer:
         except ImportError:
             from core.model_data import GameVersion  # type: ignore
         gv_str = "K1" if self.model.game_version == GameVersion.K1 else "K2"
-        txt = (f"{self.model.name}  [{gv_str}]  |  V:{vc:,}  F:{fc:,}  "
-               f"Bones:{bc}  Skin:{skin_nodes}  "
-               f"UV:{uv_ok}/{uv_mesh}  Tex:{tex_ok}/{tex_total}{mode_str}")
-        draw.text((8, 8), txt, fill=(160,160,220))
+        model_name = str(getattr(self.model, "name", "model") or "model")
+        if len(model_name) > 34:
+            model_name = model_name[:31] + "..."
+        x = 12
+        y = 12
+        x += self._draw_hud_pill(draw, x, y, f"{model_name}  [{gv_str}]", fill=(28, 32, 38), fg=(226, 232, 240)) + 6
+        x += self._draw_hud_pill(draw, x, y, mode_str, fill=(25, 43, 37), fg=(138, 230, 178), outline=(58, 118, 88)) + 6
+        if self.show_bones:
+            x += self._draw_hud_pill(draw, x, y, f"Bones {bc}", fill=(45, 37, 24), fg=(255, 198, 88), outline=(120, 86, 38)) + 6
+        compact_stats = f"V {vc:,}  F {fc:,}  Skin {skin_nodes}  UV {uv_ok}/{uv_mesh}  Tex {tex_ok}/{tex_total}"
+        self._draw_hud_pill(draw, 12, 34, compact_stats, fill=(22, 25, 30), fg=(165, 176, 190), outline=(58, 66, 78))
         # Show render bounds info — use CACHED value (not recomputed every frame)
         rbb_min, rbb_max = self._get_render_bounds()
         dx = rbb_max[0]-rbb_min[0]; dy = rbb_max[1]-rbb_min[1]; dz = rbb_max[2]-rbb_min[2]
-        bounds_txt = f"Bounds: {dx:.2f}×{dy:.2f}×{dz:.2f}m"
-        draw.text((8, H - 18), bounds_txt, fill=(100, 100, 160))
+        bounds_txt = f"{dx:.2f} x {dy:.2f} x {dz:.2f} m"
+        self._draw_hud_pill(
+            draw,
+            max(12, W - self._hud_text_width(bounds_txt) - 26),
+            max(12, H - 28),
+            bounds_txt,
+            fill=(18, 21, 25),
+            fg=(120, 132, 146),
+            outline=(46, 52, 60),
+        )
         if vc == 0:
             # Context-aware "no geometry" message:
             # Check if ALL mesh nodes have render=False (intentional invisible model)
@@ -7555,7 +7671,7 @@ class FrameRenderer:
             draw.text((W//2 - 220, H//2 - 8), warn, fill=warn_col)
         elif self.show_texture and tex_ok == 0 and tex_total > 0:
             warn = f"⚠ {tex_total} texture(s) referenced but none loaded – set texture directory"
-            draw.text((8, 24), warn, fill=(255,180,80))
+            self._draw_hud_pill(draw, 12, 58, warn, fill=(68, 44, 22), fg=(255, 190, 95), outline=(135, 82, 34))
 
         # Show animation state in bottom-right corner
         if self._anim_pose is not None and self._anim_name:
@@ -7565,7 +7681,15 @@ class FrameRenderer:
                 anim_txt += f"  {self._anim_time:.3f}/{self._anim_length:.3f}s  [{pct}%]"
             # Estimate text width (~6px per char at 8pt font) and right-align
             txt_w = len(anim_txt) * 6
-            draw.text((max(8, W - txt_w - 8), H - 24), anim_txt, fill=(100, 220, 100))
+            self._draw_hud_pill(
+                draw,
+                max(12, W - txt_w - 24),
+                max(12, H - 52),
+                anim_txt,
+                fill=(18, 46, 28),
+                fg=(125, 232, 142),
+                outline=(42, 118, 64),
+            )
             # Draw a progress bar at the very bottom of the frame
             bar_h = 4
             bar_y = H - bar_h
@@ -7575,7 +7699,16 @@ class FrameRenderer:
                 draw.rectangle([0, bar_y, bar_w, H], fill=(60, 200, 100))
         elif not self._anim_pose:
             # Show "Bind Pose" indicator when in rest position
-            draw.text((W - 72, H - 18), "Bind Pose", fill=(80, 80, 120))
+            pose_txt = "Bind pose"
+            self._draw_hud_pill(
+                draw,
+                max(12, W - self._hud_text_width(pose_txt) - 26),
+                12,
+                pose_txt,
+                fill=(22, 25, 30),
+                fg=(112, 124, 140),
+                outline=(50, 58, 68),
+            )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -9423,16 +9556,6 @@ class ViewportWidget(tk.Frame):
         active = self._renderer.show_texture
         self._btn_tex.configure(
             bg="#224422" if active else "#1e1e3a")
-        # When enabling Texture mode, ensure the solid fill pass
-        # is active.  If the user had selected the 'Wireframe' shade radio
-        # (show_solid=False, show_wireframe=True), texture mode is meaningless
-        # because no polygon fill is ever drawn.  Switch to 'Both' (solid +
-        # wireframe) so textured faces become visible immediately.
-        if active and not self._renderer.show_solid:
-            self._renderer.show_solid = True
-            # Keep wireframe on if it was already on; update radio button
-            new_mode = "Both" if self._renderer.show_wireframe else "Solid"
-            self._shade_var.set(new_mode)
         self._request_render()
 
     def _toggle_fast_drag(self):
@@ -9494,14 +9617,6 @@ class ViewportWidget(tk.Frame):
         mode = self._shade_var.get()
         self._renderer.show_solid     = mode in ("Solid", "Both")
         self._renderer.show_wireframe = mode in ("Wireframe", "Both")
-        # If Texture mode is ON and user switches to Wireframe-only,
-        # auto-upgrade to 'Both' so textured faces remain visible.
-        # Pure wireframe with texture mode active is always user-error;
-        # they almost certainly want Both (solid fill + wire overlay).
-        if (self._renderer.show_texture and not self._renderer.show_solid
-                and self._renderer.show_wireframe):
-            self._renderer.show_solid = True
-            self._shade_var.set("Both")
         self._request_render()
 
     # ── Render loop ───────────────────────────────────────────────────

@@ -74,16 +74,18 @@ log = logging.getLogger(__name__)
 
 # 3i Step 7 + 3j Step 4 — env-gated skinning formula switch.
 #
-# Default unset => F1 (current 3f production baseline).  Setting
+# Default unset => G5_FULL_REF, the corrected qBone consumption path.
+# Set ``GHOSTRIGGER_SKIN_FORMULA=F1_current_TR_inverse`` only when a
+# legacy comparison render is needed. Setting
 # ``GHOSTRIGGER_SKIN_FORMULA=F11_rotation_only_skin_bind_wrapper`` swaps
 # ``compute_skin_node_palette`` to the diagnostic rotation-only outer
 # wrapper variant identified in the 3i Step 7 audit:
 #
 #     M_i = inverse(R(skin_bind)) * world_pose_i * inverse(qBone/tBone) * R(skin_bind)
 #
-# Setting ``GHOSTRIGGER_SKIN_FORMULA=G5_FULL_REF`` swaps to the 3j Step 3
-# corrected qBone consumption pipeline that matches reone's documented
-# convention (``mdlmdxreader.cpp:280-288`` + ``modelnode.h:40``):
+# ``G5_FULL_REF`` follows the 3j Step 3 corrected qBone consumption
+# pipeline that matches reone's documented convention
+# (``mdlmdxreader.cpp:280-288`` + ``modelnode.h:40``):
 #
 #   1. Resolve the influenced bone's GLOBAL DFS NODE INDEX in the model.
 #   2. Read ``qbones[dfs_idx]`` / ``tbones[dfs_idx]`` (NOT the compact
@@ -96,12 +98,11 @@ log = logging.getLogger(__name__)
 #      ``inverse(bone_world) * skin_world`` per reone's documentation.
 #
 # G5 collapses the bind-pose self-test to <= 1e-6 on 50/50 audited probes
-# across c_drexlf, c_brith, and c_bomabeast (3j-3 replay outcome). It
-# remains env-gated until the 3j-5 joint visual gate plus the 50-model
-# render-diff suite both pass. Production stays on F1 by default.
+# across c_drexlf, c_brith, and c_bomabeast (3j-3 replay outcome). A
+# direct K1 diagnostic also keeps n_bith/run skin meshes near their
+# authored extents while the legacy F1 path expands them several meters.
 #
-# Both switches exist ONLY for audit/visual-gate work and are never read
-# by the production code path when unset.  See
+# The F1 and F11 switches remain for audit/visual-gate work. See
 # ``docs/skinning_parity_audit_2026_05.md`` 3i Step 7 and 3j Steps 3-5
 # for the decision rule that gates promoting either formula to the default.
 _SKIN_FORMULA_ENV = 'GHOSTRIGGER_SKIN_FORMULA'
@@ -111,18 +112,102 @@ _SKIN_FORMULA_G5 = 'G5_FULL_REF'
 _SKIN_FORMULA_VALID = (_SKIN_FORMULA_F1, _SKIN_FORMULA_F11, _SKIN_FORMULA_G5)
 
 
+@dataclass(frozen=True)
+class SkinningSpeciesProfile:
+    """Species-level defaults for choosing a skinning profile.
+
+    Species is a guide, not a hard override: the resolver still validates the
+    qBone/tBone layout on each skin node before selecting the final formula.
+    """
+
+    key: str
+    label: str
+    preferred_qbone_layout: str = "dfs"
+    preferred_formula: str = _SKIN_FORMULA_G5
+
+
+SKINNING_SPECIES_PROFILES: Dict[str, SkinningSpeciesProfile] = {
+    "human": SkinningSpeciesProfile("human", "Human"),
+    "bith": SkinningSpeciesProfile("bith", "Bith"),
+    "droid": SkinningSpeciesProfile("droid", "Droid"),
+    "utility_droid": SkinningSpeciesProfile("utility_droid", "Utility Droid"),
+    "battle_droid": SkinningSpeciesProfile("battle_droid", "Battle Droid"),
+    "yoda": SkinningSpeciesProfile("yoda", "Yoda"),
+    "mandalorian": SkinningSpeciesProfile("mandalorian", "Mandalorian"),
+    "gamorrean": SkinningSpeciesProfile("gamorrean", "Gamorrean"),
+    "unknown": SkinningSpeciesProfile("unknown", "Unknown"),
+}
+
+
+def classify_skinning_species(model_name: str = "", supermodel: str = "",
+                              node_names: Optional[List[str]] = None) -> str:
+    """Classify a model into a species skinning profile.
+
+    The rules intentionally use stable resref/supermodel conventions before
+    broad humanoid fallbacks. Returning ``unknown`` is preferable to forcing a
+    questionable species label onto an unusual model.
+    """
+    name = str(model_name or "").lower()
+    super_name = str(supermodel or "").lower()
+    haystack = " ".join([name, super_name] + [
+        str(n or "").lower() for n in (node_names or [])
+    ])
+
+    if "bith" in haystack or "brith" in haystack:
+        return "bith"
+    if "yoda" in haystack:
+        return "yoda"
+    if "gammorean" in haystack or "gamorrean" in haystack or "gamorian" in haystack:
+        return "gamorrean"
+    if "mandalorian" in haystack or "mandalore" in haystack:
+        return "mandalorian"
+
+    utility_tokens = (
+        "p_t3", "c_drdastro", "c_drdmkone", "c_drdmktwo", "c_drdmkfour",
+        "c_drdprot", "c_drdprobe", "c_drdsentry", "plc_subdroid",
+    )
+    if any(token in haystack for token in utility_tokens):
+        return "utility_droid"
+
+    battle_tokens = (
+        "c_drdwar", "c_drdassassin", "c_drdspyder", "c_tankdroid",
+        "battledroid", "battle_droid", "plc_bdroid",
+    )
+    if any(token in haystack for token in battle_tokens):
+        return "battle_droid"
+
+    droid_tokens = ("p_hk", "hk47", "droid", "c_drd", "drd")
+    if any(token in haystack for token in droid_tokens):
+        return "droid"
+
+    humanoid_supermodels = (
+        "s_male", "s_female", "s_fml", "s_mal",
+        "n_admrlsaulkar", "n_darthband", "n_darthrevan",
+    )
+    if (
+        any(token in super_name for token in humanoid_supermodels)
+        or name.startswith(("pf", "pm", "n_"))
+        or name.startswith(("ad_", "cp_"))
+    ):
+        return "human"
+
+    return "unknown"
+
+
+def _explicit_skin_formula_override() -> str:
+    raw = os.environ.get(_SKIN_FORMULA_ENV, '').strip()
+    return raw if raw in _SKIN_FORMULA_VALID else ''
+
+
 def _active_skin_formula() -> str:
-    """Return the active skinning formula key, falling back to F1.
+    """Return the active skinning formula key, falling back to G5.
 
     Reads ``GHOSTRIGGER_SKIN_FORMULA`` on every call so that test
     scaffolding and capture scripts can flip the switch per-render
     without re-importing the module.  Unknown values silently fall back
-    to F1 so a typo never affects production.
+    to the production G5 path so a typo never re-enables legacy skinning.
     """
-    raw = os.environ.get(_SKIN_FORMULA_ENV, '').strip()
-    if raw and raw in _SKIN_FORMULA_VALID:
-        return raw
-    return _SKIN_FORMULA_F1
+    return _explicit_skin_formula_override() or _SKIN_FORMULA_G5
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Optional dependency stubs
@@ -292,6 +377,11 @@ class MatrixPaletteUploader:
         # animated palette computation.  Populated by build_inverse_bind_pose().
         self._node_lookup : Dict[str, object] = {}   # bone_name_lower → ModelNode
         self._node_parent : Dict[str, str] = {}      # bone_name_lower → parent_name_lower
+        self._model_name: str = ""
+        self._model_supermodel: str = ""
+        self._model_node_count: int = 0
+        self._skin_species: str = "unknown"
+        self._skin_species_profile: SkinningSpeciesProfile = SKINNING_SPECIES_PROFILES["unknown"]
         # 3j Step 4 — DFS index lookup for the env-gated G5_FULL_REF path.
         # qBone/tBone arrays in the MDL are parallel to the global DFS node
         # order (length == total model node count), not the compact 16-entry
@@ -310,6 +400,7 @@ class MatrixPaletteUploader:
         self._skin_bind_inverse_matrix: Optional[List[List[float]]] = None
         self._skin_palette_formula: str = ""
         self._skin_inverse_bind_source: str = ""
+        self._skin_profile_reason: str = ""
 
     # ── Build inverse bind-pose ───────────────────────────────────────────────
 
@@ -342,11 +433,28 @@ class MatrixPaletteUploader:
         self._node_lookup.clear()
         self._node_parent.clear()
         self._name_to_dfs_index.clear()
+        self._model_name = ""
+        self._model_supermodel = ""
+        self._model_node_count = 0
+        self._skin_species = "unknown"
+        self._skin_species_profile = SKINNING_SPECIES_PROFILES["unknown"]
 
         if model is None:
             return 0
 
         nodes = list(model.all_nodes()) if hasattr(model, 'all_nodes') else []
+        self._model_name = str(getattr(model, 'name', '') or '').lower()
+        self._model_supermodel = str(getattr(model, 'supermodel', '') or '').lower()
+        self._model_node_count = len(nodes)
+        self._skin_species = classify_skinning_species(
+            self._model_name,
+            self._model_supermodel,
+            [str(getattr(n, 'name', '') or '') for n in nodes],
+        )
+        self._skin_species_profile = SKINNING_SPECIES_PROFILES.get(
+            self._skin_species,
+            SKINNING_SPECIES_PROFILES["unknown"],
+        )
 
         # Build node lookup, parent map, and DFS-index lookup. The DFS index
         # is the position of the node in ``model.all_nodes()``, which matches
@@ -668,6 +776,59 @@ class MatrixPaletteUploader:
             _quat_to_mat4((qx, qy, qz, qw_disk)),
         )
 
+    def _resolve_skin_formula_for_skin_node(self, skin_node) -> str:
+        """Choose the skinning profile from species plus qBone layout.
+
+        Species provides the default convention family (Human, Bith, Droid,
+        Utility Droid, Battle Droid, Yoda, Mandalorian, Gamorrean, etc.).
+        The actual qBone/tBone shape still validates the decision per node:
+        full DFS arrays use G5, compact arrays use F1, and explicit env
+        overrides remain available for visual-gate comparisons.
+        """
+        override = _explicit_skin_formula_override()
+        if override:
+            self._skin_profile_reason = (
+                f"env:{override} species={self._skin_species}"
+            )
+            return override
+
+        bone_map = list(getattr(skin_node, 'bone_map', []) or [])
+        q_count = len(getattr(skin_node, 'qbone_list', []) or [])
+        t_count = len(getattr(skin_node, 'tbone_list', []) or [])
+        qt_count = min(q_count, t_count)
+        node_count = int(self._model_node_count or len(self._node_lookup) or 0)
+        species = self._skin_species or "unknown"
+        profile = self._skin_species_profile or SKINNING_SPECIES_PROFILES["unknown"]
+        preferred_layout = str(getattr(profile, 'preferred_qbone_layout', 'dfs') or 'dfs')
+        preferred_formula = str(getattr(profile, 'preferred_formula', _SKIN_FORMULA_G5) or _SKIN_FORMULA_G5)
+
+        if preferred_layout == "compact" and bone_map and qt_count >= len(bone_map):
+            self._skin_profile_reason = (
+                f"species:{species} auto:compact_qbone model={self._model_name or '?'} "
+                f"qt={qt_count} bone_map={len(bone_map)}"
+            )
+            return _SKIN_FORMULA_F1
+
+        if node_count > 0 and qt_count >= node_count:
+            self._skin_profile_reason = (
+                f"species:{species} auto:dfs_qbone model={self._model_name or '?'} "
+                f"qt={qt_count} nodes={node_count}"
+            )
+            return preferred_formula if preferred_formula in _SKIN_FORMULA_VALID else _SKIN_FORMULA_G5
+
+        if bone_map and qt_count >= len(bone_map):
+            self._skin_profile_reason = (
+                f"species:{species} auto:compact_qbone model={self._model_name or '?'} "
+                f"qt={qt_count} bone_map={len(bone_map)}"
+            )
+            return _SKIN_FORMULA_F1
+
+        self._skin_profile_reason = (
+            f"species:{species} auto:fallback_g5 model={self._model_name or '?'} "
+            f"qt={qt_count} nodes={node_count} bone_map={len(bone_map)}"
+        )
+        return _SKIN_FORMULA_G5
+
     def compute_skin_node_palette(self, skin_node, anim_pose) -> List[BoneMatrix]:
         """Compute a local skin-node palette using qBone/tBone inverse binds.
 
@@ -719,7 +880,7 @@ class MatrixPaletteUploader:
         self._skin_local_direct_bind_by_slot = {}
         self._skin_bind_matrix = None
         self._skin_bind_inverse_matrix = None
-        active_formula = _active_skin_formula()
+        active_formula = self._resolve_skin_formula_for_skin_node(skin_node)
         self._skin_palette_formula = active_formula
         self._skin_inverse_bind_source = "qBone_tBone_inverse_TR"
         pose_nodes = {k.lower(): v for k, v in getattr(anim_pose, 'nodes', {}).items()} if anim_pose is not None else {}

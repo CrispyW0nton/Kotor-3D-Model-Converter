@@ -141,11 +141,60 @@ def test_qt_gpu_viewport_disables_gpu_culling_for_cpu_parity() -> None:
     assert "cull_faces = False" in source
 
 
-def test_gpu_vbo_applies_node_local_transform_to_skin_nodes() -> None:
+def test_viewport_navigation_profiles_are_available() -> None:
+    from src.gui.viewport_navigation import (
+        DEFAULT_VIEWPORT_NAVIGATION_PROFILE,
+        VIEWPORT_NAVIGATION_HELP,
+        VIEWPORT_NAVIGATION_PROFILES,
+        normalize_viewport_navigation_profile,
+    )
+
+    assert set(VIEWPORT_NAVIGATION_PROFILES) == {"3dsmax", "blender", "maya"}
+    assert DEFAULT_VIEWPORT_NAVIGATION_PROFILE == "maya"
+    assert normalize_viewport_navigation_profile("3ds Max") == "3dsmax"
+    assert normalize_viewport_navigation_profile("Blender") == "blender"
+    assert normalize_viewport_navigation_profile("Maya") == "maya"
+    assert "T: Toggle texture" in VIEWPORT_NAVIGATION_HELP
+    assert "Shift+T: Top view" in VIEWPORT_NAVIGATION_HELP
+    assert "Alt+X: Toggle X-Ray viewport overlay" in VIEWPORT_NAVIGATION_HELP
+
+
+def test_qt_viewport_uses_profiled_navigation_actions() -> None:
+    import inspect
+
+    from src.gui.qt_viewport import QtViewportWidget
+
+    source = inspect.getsource(QtViewportWidget._navigation_action)
+    assert 'profile == "3dsmax"' in source
+    assert 'profile == "blender"' in source
+    assert 'profile == "maya"' in source
+    assert "QtCore.Qt.AltModifier" in source
+
+
+def test_qt_viewport_gpu_grid_is_native_and_xray_is_overlay_only() -> None:
+    import inspect
+
+    from src.gui.gpu_renderer import GpuRenderer
+    from src.gui.qt_viewport import QtViewportWidget
+
+    gpu_source = inspect.getsource(GpuRenderer._draw_grid)
+    assert "ctx.depth_mask = False" in gpu_source
+    assert "vao.render(moderngl.LINES)" in gpu_source
+    render_source = inspect.getsource(GpuRenderer._render_gpu)
+    assert "self._draw_grid(ctx, mvp)" in render_source
+    overlay_source = inspect.getsource(QtViewportWidget._draw_cpu_overlays)
+    assert "self._xray_mode or not gpu_base" in overlay_source
+    event_source = inspect.getsource(QtViewportWidget.eventFilter)
+    assert "QtCore.Qt.Key_X" in event_source
+    assert "QtCore.Qt.AltModifier" in event_source
+
+
+def test_gpu_vbo_splits_skin_bind_and_animated_input_space() -> None:
     import inspect
 
     from src.gui import gpu_renderer
 
     source = inspect.getsource(gpu_renderer._build_vbo_data)
-    assert "if _node_vs == 0:  # NODE_LOCAL" in source
-    assert "if _node_vs == 0 and is_skin" not in source
+    assert "apply_skin_node_transform_for_bind" in source
+    assert "not is_skin or bool(apply_skin_node_transform_for_bind)" in source
+    assert "elif _node_vs == 1 or is_skin" in source

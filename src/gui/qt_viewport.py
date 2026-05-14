@@ -13,6 +13,12 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from .qt_gpu_renderer import GpuRenderer
 from .qt_uv_viewer import QtUVViewerWindow
 from .viewport import ArcBallCamera, FrameRenderer
+from .viewport_navigation import (
+    DEFAULT_VIEWPORT_NAVIGATION_PROFILE,
+    has_modifier,
+    normalize_viewport_navigation_profile,
+    viewport_profile_label,
+)
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +44,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._drag_threshold = 4
         self._is_dragging = False
         self._pan_dragging = False
+        self._nav_dragging = ""
+        self._nav_button = QtCore.Qt.NoButton
         self._gimbal_dragging = False
         self._gimbal_axis = ""
         self._gimbal_drag_start = (0, 0)
@@ -54,11 +62,32 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._use_gpu = True
         self._gpu_renderer: Optional[GpuRenderer] = None
         self._gpu_tex_preload_model_id = 0
+        self._navigation_profile = DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+        self._xray_mode = False
 
         self._render_timer = QtCore.QTimer(self)
         self._render_timer.setSingleShot(True)
         self._render_timer.timeout.connect(self._render_now)
         self._build()
+
+    @property
+    def navigation_profile(self) -> str:
+        return self._navigation_profile
+
+    def set_navigation_profile(self, profile: object) -> None:
+        self._navigation_profile = normalize_viewport_navigation_profile(profile)
+        if hasattr(self, "navigation_button"):
+            self.navigation_button.setText(viewport_profile_label(self._navigation_profile))
+            self.navigation_button.setToolTip(self._navigation_tooltip())
+
+    def _navigation_tooltip(self) -> str:
+        label = viewport_profile_label(self._navigation_profile)
+        controls = {
+            "3dsmax": "3ds Max: Alt+MMB orbit, MMB pan, Alt+RMB zoom, wheel zoom; Shift+F/T/L/P views",
+            "blender": "Blender: MMB orbit, Shift+MMB pan, Ctrl+MMB zoom, wheel zoom; 1/3/7/Home views",
+            "maya": "Maya: Alt+LMB orbit, Alt+MMB pan, Alt+RMB zoom, wheel zoom; A/F frame",
+        }.get(self._navigation_profile, "")
+        return f"Viewport navigation profile: {label}\n{controls}"
 
     def _build(self) -> None:
         root = QtWidgets.QVBoxLayout(self)
@@ -66,24 +95,37 @@ class QtViewportWidget(QtWidgets.QWidget):
         root.setSpacing(0)
 
         tb = QtWidgets.QFrame()
-        tb.setStyleSheet("background:#0e0e20;")
-        tb.setFixedHeight(32)
+        tb.setObjectName("ViewportToolbar")
+        tb.setStyleSheet(
+            "#ViewportToolbar { background:#202124; border:0; border-bottom:1px solid #3a3d42; }"
+        )
+        tb.setFixedHeight(30)
         row = QtWidgets.QHBoxLayout(tb)
-        row.setContentsMargins(4, 3, 4, 3)
-        row.setSpacing(4)
+        row.setContentsMargins(5, 3, 5, 3)
+        row.setSpacing(3)
 
         self.wire_button = self._button("Wire  W", self.toggle_wireframe, checkable=True)
         self.bones_button = self._button("Bones  B", self.toggle_bones, checkable=True)
         self.texture_button = self._button("Texture  T", self.toggle_texture, checkable=True, active=True)
         self.renderer_button = self._button("GPU", self.toggle_gpu_renderer, checkable=True, active=True)
+        self.xray_button = self._button("X-Ray  Alt+X", self.toggle_xray, checkable=True)
         row.addWidget(self.wire_button)
         row.addWidget(self.bones_button)
         row.addWidget(self.texture_button)
         row.addWidget(self.renderer_button)
+        row.addWidget(self.xray_button)
         row.addWidget(self._separator())
 
         self.shade_combo = QtWidgets.QComboBox()
         self.shade_combo.addItems(["Solid", "Wire", "Both"])
+        self.shade_combo.setFixedHeight(22)
+        self.shade_combo.setStyleSheet(
+            "QComboBox { background:#2b2e33; color:#d7dde6; border:1px solid #464b53; "
+            "padding:2px 18px 2px 7px; min-width:68px; }"
+            "QComboBox:hover { border-color:#6d747f; }"
+            "QComboBox::drop-down { border:0; width:16px; }"
+            "QComboBox QAbstractItemView { background:#24272c; color:#d7dde6; selection-background-color:#3d5f8a; }"
+        )
         row.addWidget(self.shade_combo)
         row.addWidget(self._button("Frame  F", self.frame_all))
         row.addWidget(self._button("Camera  R", self.reset_camera))
@@ -95,6 +137,10 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.gimbal_mode_button = self._button("[Translate]", self.cycle_gimbal_mode)
         row.addWidget(self.gimbal_mode_button)
         row.addWidget(self._button("UV View", self.open_uv_viewer))
+        row.addWidget(self._separator())
+        self.navigation_button = self._button(viewport_profile_label(self._navigation_profile), self._cycle_navigation_profile)
+        self.navigation_button.setToolTip(self._navigation_tooltip())
+        row.addWidget(self.navigation_button)
         row.addStretch(1)
 
         self.canvas = QtWidgets.QLabel("No model loaded")
@@ -103,7 +149,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.canvas.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.canvas.setMouseTracking(True)
         self.canvas.setStyleSheet(
-            "background:#111128; color:#8a8ac8; border:1px solid #252550;"
+            "background:#17191c; color:#8f9aaa; border:1px solid #34383f;"
         )
         self.canvas.installEventFilter(self)
         self.shade_combo.currentTextChanged.connect(self._on_shade_change)
@@ -125,10 +171,13 @@ class QtViewportWidget(QtWidgets.QWidget):
         button = QtWidgets.QPushButton(text)
         button.setCheckable(checkable)
         button.setChecked(active if checkable else False)
+        button.setFixedHeight(22)
+        button.setCursor(QtCore.Qt.PointingHandCursor)
         button.setStyleSheet(
-            "QPushButton { background:#1a1a3a; color:#ccccff; border:0; padding:3px 7px; }"
-            "QPushButton:checked { background:#333322; color:#ffffff; }"
-            "QPushButton:hover { background:#3333aa; color:#ffffff; }"
+            "QPushButton { background:#2b2e33; color:#d7dde6; border:1px solid #464b53; padding:2px 7px; }"
+            "QPushButton:checked { background:#35506f; color:#ffffff; border-color:#6ea0d8; }"
+            "QPushButton:hover { background:#363a40; color:#ffffff; border-color:#6d747f; }"
+            "QPushButton:pressed { background:#1f2227; }"
         )
         button.clicked.connect(lambda checked=False: callback(checked) if checkable else callback())
         return button
@@ -136,7 +185,7 @@ class QtViewportWidget(QtWidgets.QWidget):
     def _separator(self) -> QtWidgets.QFrame:
         sep = QtWidgets.QFrame()
         sep.setFrameShape(QtWidgets.QFrame.VLine)
-        sep.setStyleSheet("background:#252550;")
+        sep.setStyleSheet("background:#4a4f58;")
         sep.setFixedWidth(1)
         return sep
 
@@ -207,10 +256,18 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def toggle_wireframe(self, checked: Optional[bool] = None) -> None:
         self._renderer.show_wireframe = bool(checked) if checked is not None else not self._renderer.show_wireframe
-        if self._renderer.show_wireframe and self._renderer.show_solid:
-            self.shade_combo.setCurrentText("Both")
-        elif self._renderer.show_wireframe:
-            self.shade_combo.setCurrentText("Wire")
+        if self._renderer.show_wireframe:
+            mode = "Both" if self._renderer.show_solid else "Wire"
+        else:
+            if not self._renderer.show_solid:
+                self._renderer.show_solid = True
+            mode = "Solid"
+        self.shade_combo.blockSignals(True)
+        self.shade_combo.setCurrentText(mode)
+        self.shade_combo.blockSignals(False)
+        self.wire_button.blockSignals(True)
+        self.wire_button.setChecked(self._renderer.show_wireframe)
+        self.wire_button.blockSignals(False)
         self._request_render()
 
     def toggle_bones(self, checked: Optional[bool] = None) -> None:
@@ -219,14 +276,22 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def toggle_texture(self, checked: Optional[bool] = None) -> None:
         self._renderer.show_texture = bool(checked) if checked is not None else not self._renderer.show_texture
-        if self._renderer.show_texture and not self._renderer.show_solid:
-            self.shade_combo.setCurrentText("Both")
+        self.texture_button.blockSignals(True)
+        self.texture_button.setChecked(self._renderer.show_texture)
+        self.texture_button.blockSignals(False)
         self._request_render()
 
     def toggle_gpu_renderer(self, checked: Optional[bool] = None) -> None:
         self._use_gpu = bool(checked) if checked is not None else not self._use_gpu
         self.renderer_button.setChecked(self._use_gpu)
         self.renderer_button.setText("GPU" if self._use_gpu else "CPU")
+        self._request_render(fast=True)
+
+    def toggle_xray(self, checked: Optional[bool] = None) -> None:
+        self._xray_mode = bool(checked) if checked is not None else not self._xray_mode
+        self.xray_button.blockSignals(True)
+        self.xray_button.setChecked(self._xray_mode)
+        self.xray_button.blockSignals(False)
         self._request_render(fast=True)
 
     def toggle_walkmesh(self, checked: Optional[bool] = None) -> None:
@@ -405,6 +470,14 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._uv_viewer.raise_()
         self._uv_viewer.activateWindow()
 
+    def _cycle_navigation_profile(self) -> None:
+        order = ["3dsmax", "blender", "maya"]
+        try:
+            index = order.index(self._navigation_profile)
+        except ValueError:
+            index = -1
+        self.set_navigation_profile(order[(index + 1) % len(order)])
+
     def eventFilter(self, obj, event):  # noqa: N802 - Qt override
         if obj is self.canvas:
             et = event.type()
@@ -416,25 +489,26 @@ class QtViewportWidget(QtWidgets.QWidget):
                 return False
             if et == QtCore.QEvent.MouseButtonPress:
                 self.canvas.setFocus()
+                action = self._navigation_action(event.button(), event.modifiers())
+                if action:
+                    self._press_navigation(event, action)
+                    return True
                 if event.button() == QtCore.Qt.LeftButton:
                     self._press_lmb(event)
                     return True
-                if event.button() in (QtCore.Qt.MiddleButton, QtCore.Qt.RightButton):
-                    self._press_pan(event)
-                    return True
             if et == QtCore.QEvent.MouseMove:
+                if self._nav_dragging:
+                    self._drag_navigation(event)
+                    return True
                 if event.buttons() & QtCore.Qt.LeftButton:
                     self._drag_lmb(event)
                     return True
-                if event.buttons() & (QtCore.Qt.MiddleButton | QtCore.Qt.RightButton):
-                    self._drag_pan(event)
-                    return True
             if et == QtCore.QEvent.MouseButtonRelease:
+                if self._nav_dragging and event.button() == self._nav_button:
+                    self._release_navigation(event)
+                    return True
                 if event.button() == QtCore.Qt.LeftButton:
                     self._release_lmb(event)
-                    return True
-                if event.button() in (QtCore.Qt.MiddleButton, QtCore.Qt.RightButton):
-                    self._release_pan(event)
                     return True
             if et == QtCore.QEvent.Wheel:
                 steps = event.angleDelta().y() / 120.0
@@ -444,19 +518,26 @@ class QtViewportWidget(QtWidgets.QWidget):
                 return True
             if et == QtCore.QEvent.KeyPress:
                 key = event.key()
-                if key == QtCore.Qt.Key_F:
+                modifiers = event.modifiers()
+                no_modifiers = not (
+                    modifiers
+                    & (QtCore.Qt.ControlModifier | QtCore.Qt.AltModifier | QtCore.Qt.ShiftModifier)
+                )
+                if key == QtCore.Qt.Key_F and no_modifiers:
                     self.frame_all(); return True
-                if key == QtCore.Qt.Key_R:
+                if key == QtCore.Qt.Key_Home and no_modifiers:
+                    self.frame_all(); return True
+                if key == QtCore.Qt.Key_R and no_modifiers:
                     self.reset_camera(); return True
-                if key == QtCore.Qt.Key_W:
+                if key == QtCore.Qt.Key_W and no_modifiers:
                     self.wire_button.click(); return True
-                if key == QtCore.Qt.Key_B:
+                if key == QtCore.Qt.Key_B and no_modifiers:
                     self.bones_button.click(); return True
-                if key == QtCore.Qt.Key_T:
+                if key == QtCore.Qt.Key_T and no_modifiers:
                     self.texture_button.click(); return True
-                if key == QtCore.Qt.Key_G:
+                if key == QtCore.Qt.Key_G and no_modifiers:
                     self.gimbal_button.click(); return True
-                if key == QtCore.Qt.Key_Tab:
+                if key == QtCore.Qt.Key_Tab and no_modifiers:
                     self.cycle_gimbal_mode(); return True
                 if key == QtCore.Qt.Key_Z and (event.modifiers() & QtCore.Qt.ControlModifier):
                     if event.modifiers() & QtCore.Qt.ShiftModifier:
@@ -467,7 +548,130 @@ class QtViewportWidget(QtWidgets.QWidget):
                 if key == QtCore.Qt.Key_Y and (event.modifiers() & QtCore.Qt.ControlModifier):
                     self.redo()
                     return True
+                if key == QtCore.Qt.Key_X and (event.modifiers() & QtCore.Qt.AltModifier):
+                    self.xray_button.click()
+                    return True
+                if self._handle_view_key(event):
+                    return True
         return super().eventFilter(obj, event)
+
+    def _navigation_action(self, button, modifiers) -> str:
+        alt = has_modifier(modifiers, QtCore.Qt.AltModifier)
+        shift = has_modifier(modifiers, QtCore.Qt.ShiftModifier)
+        ctrl = has_modifier(modifiers, QtCore.Qt.ControlModifier)
+        profile = self._navigation_profile
+        if profile == "3dsmax":
+            if button == QtCore.Qt.MiddleButton and alt:
+                return "orbit"
+            if button == QtCore.Qt.MiddleButton:
+                return "pan"
+            if button == QtCore.Qt.RightButton and alt:
+                return "zoom"
+            return ""
+        if profile == "blender":
+            if button == QtCore.Qt.MiddleButton and shift:
+                return "pan"
+            if button == QtCore.Qt.MiddleButton and ctrl:
+                return "zoom"
+            if button == QtCore.Qt.MiddleButton:
+                return "orbit"
+            return ""
+        if profile == "maya":
+            if not alt:
+                return ""
+            if button == QtCore.Qt.LeftButton:
+                return "orbit"
+            if button == QtCore.Qt.MiddleButton:
+                return "pan"
+            if button == QtCore.Qt.RightButton:
+                return "zoom"
+        return ""
+
+    def _press_navigation(self, event, action: str) -> None:
+        self._nav_dragging = action
+        self._nav_button = event.button()
+        self._mx = int(event.position().x())
+        self._my = int(event.position().y())
+        self._renderer._hovered_bone = None
+
+    def _drag_navigation(self, event) -> None:
+        x, y = int(event.position().x()), int(event.position().y())
+        dx, dy = x - self._mx, y - self._my
+        self._mx, self._my = x, y
+        if self._nav_dragging == "orbit":
+            self.camera.orbit(dx * 0.4, -dy * 0.4)
+        elif self._nav_dragging == "pan":
+            self.camera.pan(dx, dy, self.canvas.height())
+        elif self._nav_dragging == "zoom":
+            self.camera.zoom((-dy + dx) / 120.0)
+        self._renderer.is_interactive = self._fast_drag_enabled
+        self._request_render(fast=True)
+
+    def _release_navigation(self, _event) -> None:
+        self._nav_dragging = ""
+        self._nav_button = QtCore.Qt.NoButton
+        self._renderer.is_interactive = False
+        self._request_render()
+
+    def _handle_view_key(self, event) -> bool:
+        key = event.key()
+        modifiers = event.modifiers()
+        ctrl = bool(modifiers & QtCore.Qt.ControlModifier)
+        alt = bool(modifiers & QtCore.Qt.AltModifier)
+        shift = bool(modifiers & QtCore.Qt.ShiftModifier)
+        profile = self._navigation_profile
+        if profile == "3dsmax":
+            if ctrl or alt:
+                return False
+            if key == QtCore.Qt.Key_F and shift:
+                self._set_camera_view("front")
+            elif key == QtCore.Qt.Key_T and shift:
+                self._set_camera_view("top")
+            elif key == QtCore.Qt.Key_L and shift:
+                self._set_camera_view("left")
+            elif key == QtCore.Qt.Key_P and shift:
+                self.reset_camera()
+            elif key == QtCore.Qt.Key_Z and not shift:
+                self.frame_all()
+            else:
+                return False
+            return True
+        if profile == "blender":
+            if alt or shift:
+                return False
+            if key == QtCore.Qt.Key_1:
+                self._set_camera_view("back" if ctrl else "front")
+            elif key == QtCore.Qt.Key_3:
+                self._set_camera_view("left" if ctrl else "right")
+            elif key == QtCore.Qt.Key_7:
+                self._set_camera_view("bottom" if ctrl else "top")
+            elif key == QtCore.Qt.Key_Home:
+                self.frame_all()
+            else:
+                return False
+            return True
+        if profile == "maya":
+            if ctrl or alt or shift:
+                return False
+            if key in (QtCore.Qt.Key_A, QtCore.Qt.Key_F):
+                self.frame_all()
+                return True
+            return False
+        return False
+
+    def _set_camera_view(self, view: str) -> None:
+        views = {
+            "front": (90.0, 0.0),
+            "back": (270.0, 0.0),
+            "right": (0.0, 0.0),
+            "left": (180.0, 0.0),
+            "top": (90.0, 85.0),
+            "bottom": (90.0, -85.0),
+        }
+        azimuth, elevation = views.get(view, views["front"])
+        self.camera.azimuth = azimuth
+        self.camera.elevation = elevation
+        self._request_render()
 
     def _request_render(self, fast: bool = False) -> None:
         self._render_pending = True
@@ -503,13 +707,34 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.canvas.setPixmap(self._pixmap)
 
     def _render_frame(self, w: int, h: int):
-        if self._use_gpu and self.model is not None:
+        gpu_can_match_mode = (
+            self._renderer.show_solid
+            and self._renderer.show_texture
+        )
+        if self._use_gpu and self.model is not None and gpu_can_match_mode:
             img = self._render_gpu_frame(w, h)
             if img is not None:
                 self._set_renderer_badge(True)
-                return self._draw_cpu_overlays(img, w, h)
+                return self._draw_cpu_overlays(img, w, h, gpu_base=True)
         self._set_renderer_badge(False)
-        return self._renderer.render(w, h)
+        img = self._renderer.render(w, h)
+        if self._xray_mode:
+            img = self._draw_xray_grid_overlay(img, w, h)
+        return img
+
+    def _draw_xray_grid_overlay(self, img, w: int, h: int):
+        if img is None:
+            return None
+        try:
+            from PIL import ImageDraw
+
+            if img.mode != "RGBA":
+                img = img.convert("RGBA")
+            self._renderer._draw_grid(ImageDraw.Draw(img, "RGBA"), w, h)
+            return img
+        except Exception as exc:
+            log.debug("X-Ray grid overlay draw failed: %s", exc)
+            return img
 
     def _render_gpu_frame(self, w: int, h: int):
         if self._gpu_renderer is None:
@@ -522,9 +747,10 @@ class QtViewportWidget(QtWidgets.QWidget):
             if value is not None
         }
         self._gpu_renderer.interactive = bool(
-            self._renderer.is_interactive or self._pan_dragging or self._is_dragging
+            self._renderer.is_interactive or self._pan_dragging or self._nav_dragging or self._is_dragging
         )
         self._gpu_renderer.show_wireframe = bool(self._renderer.show_wireframe)
+        self._gpu_renderer.show_grid = True
         self._gpu_renderer.cull_faces = False
         return self._gpu_renderer.render(
             self.model,
@@ -537,7 +763,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             anim_base_pose=getattr(self._renderer, "_anim_base_pose", None),
         )
 
-    def _draw_cpu_overlays(self, img, w: int, h: int):
+    def _draw_cpu_overlays(self, img, w: int, h: int, *, gpu_base: bool = False):
         if img is None:
             return None
         try:
@@ -554,7 +780,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             except Exception:
                 pass
             draw = ImageDraw.Draw(img, "RGBA")
-            if self._renderer.show_grid:
+            if self._xray_mode or not gpu_base:
                 self._renderer._draw_grid(draw, w, h)
             if self._renderer.show_bones:
                 self._renderer._draw_bones(draw, w, h)
@@ -614,11 +840,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         mode = "Wireframe" if text == "Wire" else text
         self._renderer.show_solid = mode in ("Solid", "Both")
         self._renderer.show_wireframe = mode in ("Wireframe", "Both")
-        if self._renderer.show_texture and not self._renderer.show_solid and self._renderer.show_wireframe:
-            self._renderer.show_solid = True
-            if self.shade_combo.currentText() != "Both":
-                self.shade_combo.setCurrentText("Both")
+        self.wire_button.blockSignals(True)
         self.wire_button.setChecked(self._renderer.show_wireframe)
+        self.wire_button.blockSignals(False)
         self._request_render()
 
     def _press_lmb(self, event) -> None:
@@ -658,11 +882,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._is_dragging = True
                 self._renderer._hovered_bone = None
         if self._is_dragging:
-            dx, dy = x - self._mx, y - self._my
             self._mx, self._my = x, y
-            self.camera.orbit(dx * 0.4, -dy * 0.4)
-            self._renderer.is_interactive = self._fast_drag_enabled
-            self._request_render(fast=True)
 
     def _release_lmb(self, event) -> None:
         x, y = int(event.position().x()), int(event.position().y())

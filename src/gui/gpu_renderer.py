@@ -1953,6 +1953,13 @@ def _build_skin_dump_record(
         'live_slots': live_slots,
         'skin_transform_formula': getattr(uploader, '_skin_palette_formula', '')
                                   if uploader is not None else '',
+        'skin_species': getattr(uploader, '_skin_species', '')
+                        if uploader is not None else '',
+        'skin_species_profile': getattr(
+            getattr(uploader, '_skin_species_profile', None), 'label', ''
+        ) if uploader is not None else '',
+        'skin_profile_reason': getattr(uploader, '_skin_profile_reason', '')
+                               if uploader is not None else '',
         'skin_bind_present': bool(skin_bind_matrix),
         'skin_bind_det': _matrix4_det_value(skin_bind_matrix),
         'skin_bind_matrix': _matrix4_json(skin_bind_matrix),
@@ -2632,8 +2639,8 @@ void main() {
     vec2 base_uv = scrolled_uv * u_flipbook_size + u_flipbook_off;
     // If flipbook is inactive (size==0,0) fall back to unscaled UVs
     v_uv = (u_flipbook_size.x > 0.0001) ? base_uv : scrolled_uv;
-    // Lightmap UVs also need V-flip (same D3D→OpenGL convention)
-    v_uv_lm  = vec2(in_uv_lm.x, mix(in_uv_lm.y, 1.0 - in_uv_lm.y, u_uv_v_flip));
+    // Lightmap UVs stay on their own channel and keep the D3D→OpenGL V-flip.
+    v_uv_lm  = vec2(in_uv_lm.x, 1.0 - in_uv_lm.y);
     v_color  = in_color;
 
     // ── v7.2 GPU Dangly Mesh Animation (Finding 5.10 — reone v_model.glsl) ──────
@@ -3012,6 +3019,29 @@ void main() {
 """
 
 
+_GRID_VERT_SRC = """
+#version 330
+uniform mat4 u_mvp;
+in vec3 in_pos;
+in vec3 in_color;
+out vec3 v_color;
+void main() {
+    v_color = in_color;
+    gl_Position = u_mvp * vec4(in_pos, 1.0);
+}
+"""
+
+
+_GRID_FRAG_SRC = """
+#version 330
+in vec3 v_color;
+out vec4 frag_color;
+void main() {
+    frag_color = vec4(v_color, 1.0);
+}
+"""
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  Matrix helpers (column-major, OpenGL convention)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3294,7 +3324,8 @@ def _quat_rotate_batch(q: np.ndarray, pts: np.ndarray) -> np.ndarray:
 def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
                     anim_pose_node=None,
                     is_module: bool = False,
-                    bone_index_remap: Optional[Dict[int, int]] = None) -> Tuple[Optional[np.ndarray],
+                    bone_index_remap: Optional[Dict[int, int]] = None,
+                    apply_skin_node_transform_for_bind: bool = True) -> Tuple[Optional[np.ndarray],
                                                       Optional[np.ndarray]]:
     """
     Build interleaved VBO data for a ModelNode using vectorized NumPy.
@@ -3396,13 +3427,18 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     #   KotorBlender parser.py — verts loaded into Blender mesh, Blender applies hierarchy
     _node_vs = getattr(node, 'vertex_space', 0)  # default NODE_LOCAL
 
-    if _node_vs == 0:  # NODE_LOCAL — apply one full world transform
+    _apply_node_transform = (
+        _node_vs == 0
+        and (not is_skin or bool(apply_skin_node_transform_for_bind))
+    )
+
+    if _apply_node_transform:  # NODE_LOCAL: apply one full world transform
         if not is_identity_rot:
             v_arr = _quat_rotate_batch(wo, v_arr)
             n_arr = _quat_rotate_batch(wo, n_arr)
         if not is_identity_pos:
             v_arr = v_arr + wp
-    elif _node_vs == 1:  # WORLD — already in world space, skip transform
+    elif _node_vs == 1 or is_skin:  # WORLD or animated-skin input: pass through
         pass
     # _node_vs == 2 (AABB_WALK) should never reach VBO building
 
@@ -3709,6 +3745,7 @@ class _GpuMesh:
         self.uploaded_weights: List[List[float]] = []
         self.uploaded_source_indices: List[int] = []
         self.uv1_attribute_bound: bool = False
+        self.skin_bind_transform: Optional[bool] = None
         # Per-material-slot draw groups for multi-texture nodes
         self.mat_slots: Dict[int, tuple] = {}  # {slot: (vao, ibo, tri_count)}
 
@@ -3769,6 +3806,9 @@ class GpuRenderer:
     def __init__(self):
         self._ctx: Optional['moderngl.Context'] = None
         self._prog: Optional['moderngl.Program'] = None
+        self._grid_prog: Optional['moderngl.Program'] = None
+        self._grid_vbo: Optional['moderngl.Buffer'] = None
+        self._grid_vao: Optional['moderngl.VertexArray'] = None
         self._tex_cache: Optional[_GlTexCache] = None
         self._mesh_cache: Dict[int, _GpuMesh] = {}  # node id → _GpuMesh
         self._gpu_available: bool = False
@@ -3815,6 +3855,7 @@ class GpuRenderer:
         # When True, skip MSAA and use smaller readback for faster frame times.
         self.interactive: bool = False
         self.show_wireframe: bool = False
+        self.show_grid: bool = True
         self.cull_faces: bool = True
         # ── Phase A: GPU Skinning state ──────────────────────────────────────────
         # MatrixPaletteUploader instance, created per model when skin nodes exist.
@@ -3852,6 +3893,10 @@ class GpuRenderer:
             self._prog = self._ctx.program(
                 vertex_shader=_VERT_SRC,
                 fragment_shader=_FRAG_SRC,
+            )
+            self._grid_prog = self._ctx.program(
+                vertex_shader=_GRID_VERT_SRC,
+                fragment_shader=_GRID_FRAG_SRC,
             )
             self._tex_cache = _GlTexCache(self._ctx)
             # PERF-UNIFCACHE: Pre-cache all uniform references to avoid
@@ -3943,6 +3988,18 @@ class GpuRenderer:
             try: self._prog.release()
             except Exception: pass
             self._prog = None
+        if self._grid_vao:
+            try: self._grid_vao.release()
+            except Exception: pass
+            self._grid_vao = None
+        if self._grid_vbo:
+            try: self._grid_vbo.release()
+            except Exception: pass
+            self._grid_vbo = None
+        if self._grid_prog:
+            try: self._grid_prog.release()
+            except Exception: pass
+            self._grid_prog = None
         if self._ctx:
             try: self._ctx.release()
             except Exception: pass
@@ -3992,6 +4049,56 @@ class GpuRenderer:
         # remains alive and valid across clear_caches() calls.
 
     # ── Main render entry ─────────────────────────────────────────────────────
+
+    def _ensure_grid_vao(self):
+        if not (_NUMPY and self._ctx is not None and self._grid_prog is not None):
+            return None
+        if self._grid_vao is not None:
+            return self._grid_vao
+
+        extent = 60
+        major_every = 5
+        minor = (58 / 255.0, 64 / 255.0, 72 / 255.0)
+        major = (82 / 255.0, 90 / 255.0, 102 / 255.0)
+        x_axis = (118 / 255.0, 54 / 255.0, 54 / 255.0)
+        y_axis = (62 / 255.0, 112 / 255.0, 68 / 255.0)
+        rows = []
+
+        for i in range(-extent, extent + 1):
+            color = x_axis if i == 0 else (major if i % major_every == 0 else minor)
+            rows.append((-extent, i, 0.0, *color))
+            rows.append((extent, i, 0.0, *color))
+
+        for i in range(-extent, extent + 1):
+            color = y_axis if i == 0 else (major if i % major_every == 0 else minor)
+            rows.append((i, -extent, 0.0, *color))
+            rows.append((i, extent, 0.0, *color))
+
+        data = np.asarray(rows, dtype=np.float32)
+        self._grid_vbo = self._ctx.buffer(data.tobytes())
+        self._grid_vao = self._ctx.vertex_array(
+            self._grid_prog,
+            [(self._grid_vbo, '3f 3f', 'in_pos', 'in_color')],
+        )
+        return self._grid_vao
+
+    def _draw_grid(self, ctx, mvp) -> None:
+        if not self.show_grid:
+            return
+        vao = self._ensure_grid_vao()
+        if vao is None or self._grid_prog is None:
+            return
+        self._grid_prog['u_mvp'].write(_mat4_tobytes(mvp))
+        ctx.disable(moderngl.BLEND)
+        ctx.depth_mask = False
+        try:
+            ctx.line_width = 1.0
+        except Exception:
+            pass
+        try:
+            vao.render(moderngl.LINES)
+        finally:
+            ctx.depth_mask = True
 
     def render(self,
                model,
@@ -4134,8 +4241,8 @@ class GpuRenderer:
             fbo.use()
             # PERF-READBACK: Clear with OPAQUE background (alpha=1.0) so that
             # the readback path can skip the expensive alpha compositing step
-            # (saves ~19ms/frame at 800x600).  The viewport _BG is (18, 18, 40).
-            ctx.clear(18/255, 18/255, 40/255, 1.0)
+            # (saves ~19ms/frame at 800x600).  Keep this in sync with viewport._BG.
+            ctx.clear(23/255, 25/255, 28/255, 1.0)
             ctx.enable(moderngl.DEPTH_TEST)
             # v7.0 FIX (Finding 5.8 — reone context.cpp cross-ref):
             # reone uses GL_LEQUAL (not GL_LESS) to match KotOR engine behavior.
@@ -4236,6 +4343,8 @@ class GpuRenderer:
                 _u['u_skin_enabled'].value = 0
             if 'u_bone_count' in _u:
                 _u['u_bone_count'].value = 0
+
+            self._draw_grid(ctx, mvp)
 
             self.perf['gpu_upload_ms'] = (time.perf_counter() - t_upload) * 1000
             t_draw = time.perf_counter()
@@ -4674,6 +4783,15 @@ class GpuRenderer:
                 # accessories) move when their parent bone is animated even if they
                 # themselves have no animation keys.
                 _nd_is_skin = bool(getattr(node, 'is_skin', False))
+                _skin_can_lbs = bool(
+                    _nd_is_skin
+                    and _has_skin_nodes
+                    and self._skin_uploader is not None
+                    and anim_pose is not None
+                    and getattr(node, 'bone_map', None)
+                    and getattr(node, 'skin_data', None)
+                )
+                _skin_bind_transform = bool(_nd_is_skin and not _skin_can_lbs)
                 is_animated = False
                 if anim_pose is not None and hasattr(anim_pose, 'nodes') and not _nd_is_skin:
                     # Check if this node or any ancestor has animation data
@@ -4683,7 +4801,14 @@ class GpuRenderer:
                             is_animated = True
                             break
                         _acheck = getattr(_acheck, 'parent', None)
-                if is_animated or node_id not in self._mesh_cache:
+                _skin_vbo_mode_changed = False
+                if _nd_is_skin and node_id in self._mesh_cache:
+                    _gm_existing = self._mesh_cache[node_id]
+                    _skin_vbo_mode_changed = (
+                        getattr(_gm_existing, 'skin_bind_transform', None)
+                        != _skin_bind_transform
+                    )
+                if is_animated or node_id not in self._mesh_cache or _skin_vbo_mode_changed:
                     # FIX-SKIN-QBONE: Skin nodes now use a per-draw local palette
                     # in bone_map order.  Keep authored bone IDs local so slot k in
                     # vertex influences addresses qBone[k]/tBone[k] for this skin.
@@ -4691,12 +4816,14 @@ class GpuRenderer:
                     vdata, idx_arr = _build_vbo_data(node, wp, wo,
                                                      anim_pose_node=None,
                                                      is_module=_gpu_is_module,
-                                                     bone_index_remap=_bone_remap)
+                                                     bone_index_remap=_bone_remap,
+                                                     apply_skin_node_transform_for_bind=_skin_bind_transform)
                     if vdata is None:
                         return
                     if node_id in self._mesh_cache:
                         self._mesh_cache[node_id].release()
                     gm = _GpuMesh()
+                    gm.skin_bind_transform = _skin_bind_transform if _nd_is_skin else None
                     main_vdata, bone_id_vdata = _split_vbo_attributes_for_gpu(vdata)
                     gm.vbo = ctx.buffer(main_vdata.tobytes())
                     gm.bone_id_vbo = ctx.buffer(bone_id_vdata.tobytes())
@@ -5382,7 +5509,7 @@ class GpuRenderer:
                 raw = read_fbo.read(components=4, dtype='f1')
                 arr = np.frombuffer(raw, dtype=np.uint8).reshape(H, W, 4)[::-1].copy()
                 # Alpha composite against opaque background for transparent surfaces
-                bg = np.array([18, 18, 40], dtype=np.uint16)
+                bg = np.array([23, 25, 28], dtype=np.uint16)
                 rgb  = arr[:, :, :3].astype(np.uint16)
                 a    = arr[:, :, 3:4].astype(np.uint16)
                 out  = ((rgb * a + bg * (255 - a)) // 255).clip(0, 255).astype(np.uint8)
@@ -5391,7 +5518,7 @@ class GpuRenderer:
                 raw = read_fbo.read(components=4, dtype='f1')
                 rgba_img = Image.frombytes('RGBA', (W, H), raw)
                 rgba_img = rgba_img.transpose(Image.FLIP_TOP_BOTTOM)
-                bg_img = Image.new('RGB', (W, H), (18, 18, 40))
+                bg_img = Image.new('RGB', (W, H), (23, 25, 28))
                 bg_img.paste(rgba_img, mask=rgba_img.split()[3])
                 img = bg_img
             # PERF-HALRES: Upscale half-resolution interactive frame to full size
@@ -5483,7 +5610,7 @@ class GpuRenderer:
             img = renderer.render(W, H)
             # Kill the alpha layer — flatten RGBA to RGB against the background
             if img is not None and getattr(img, 'mode', 'RGB') == 'RGBA':
-                bg_img = Image.new('RGB', img.size, (18, 18, 40))
+                bg_img = Image.new('RGB', img.size, (23, 25, 28))
                 bg_img.paste(img, mask=img.split()[3])
                 img = bg_img
             return img

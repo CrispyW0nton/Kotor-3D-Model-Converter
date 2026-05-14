@@ -12,6 +12,7 @@ from .qt_theme import C, heading
 class QtAnimationsPanel(QtWidgets.QWidget):
     animationSelected = QtCore.Signal(str)
     animationActionRequested = QtCore.Signal(str, str)
+    seekRequested = QtCore.Signal(int)
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
@@ -23,12 +24,15 @@ class QtAnimationsPanel(QtWidgets.QWidget):
         root.addWidget(heading("Animations"))
         self.listbox = QtWidgets.QListWidget()
         self.listbox.currentTextChanged.connect(self.animationSelected.emit)
+        self.listbox.itemDoubleClicked.connect(lambda _item: self._emit_action("Play"))
         root.addWidget(self.listbox, 1)
         self.info = QtWidgets.QPlainTextEdit()
         self.info.setReadOnly(True)
         self.info.setMaximumHeight(90)
         root.addWidget(self.info)
         self.seek = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.seek.setRange(0, 100)
+        self.seek.valueChanged.connect(self.seekRequested.emit)
         root.addWidget(self.seek)
         controls = QtWidgets.QHBoxLayout()
         for label in ("Play", "Stop", "Loop", "Export"):

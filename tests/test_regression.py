@@ -72,7 +72,7 @@ def test_bug_c_composite_offset_applies_to_skin_nodes() -> None:
     ]
 
 
-def test_skin_bind_pose_vbo_keeps_authored_coordinates() -> None:
+def test_skin_bind_pose_vbo_applies_node_local_transform() -> None:
     from src.gui.gpu_renderer import _build_vbo_data
 
     node = SimpleNamespace(
@@ -93,10 +93,80 @@ def test_skin_bind_pose_vbo_keeps_authored_coordinates() -> None:
     assert indices is None
     assert vbo is not None
     assert vbo[:, 0:3].tolist() == [
+        [11.0, 22.0, 33.0],
+        [12.0, 22.0, 33.0],
+        [11.0, 23.0, 33.0],
+    ]
+
+
+def test_animated_skin_vbo_can_keep_authored_input_coordinates() -> None:
+    from src.gui.gpu_renderer import _build_vbo_data
+
+    node = SimpleNamespace(
+        name="body_skin",
+        vertices=[(1.0, 2.0, 3.0), (2.0, 2.0, 3.0), (1.0, 3.0, 3.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+        uvs_lm=[],
+        faces=[(0, 1, 2)],
+        face_uvs=[],
+        is_skin=True,
+        vertex_space=0,
+        skin_data=[],
+    )
+
+    vbo, indices = _build_vbo_data(
+        node,
+        (10.0, 20.0, 30.0),
+        (0.0, 0.0, 0.0, 1.0),
+        apply_skin_node_transform_for_bind=False,
+    )
+
+    assert indices is None
+    assert vbo is not None
+    assert vbo[:, 0:3].tolist() == [
         [1.0, 2.0, 3.0],
         [2.0, 2.0, 3.0],
         [1.0, 3.0, 3.0],
     ]
+
+
+def test_ad_saul_binary_skin_bind_matches_ascii_fixture() -> None:
+    import numpy as np
+
+    from src.core.kotor_loader import load_model_from_file
+    from src.core.mdl_parser import MDLAsciiParser
+    from src.gui.gpu_renderer import _build_vbo_data
+
+    fixture_root = Path(__file__).parent / "modeltests" / "kotor_tool_1.0.3.4"
+    ascii_path = fixture_root / "mdlops_ascii" / "ad_saul" / "ad_saul-ascii.mdl"
+    binary_path = fixture_root / "mdlops_binary" / "ad_saul" / "ad_saul.mdl"
+    mdx_path = fixture_root / "mdlops_binary" / "ad_saul" / "ad_saul.mdx"
+    if not ascii_path.exists() or not binary_path.exists() or not mdx_path.exists():
+        pytest.skip("ad_saul ASCII/binary fixtures are not available")
+
+    ascii_model = MDLAsciiParser().parse_file(str(ascii_path))
+    binary_model = load_model_from_file(binary_path, mdx_path)
+
+    ascii_nodes = _nodes_by_name(ascii_model)
+    binary_nodes = _nodes_by_name(binary_model)
+
+    for node_name in ("head", "tongue"):
+        ascii_node = ascii_nodes[node_name]
+        binary_node = binary_nodes[node_name]
+        assert not getattr(ascii_node, "is_skin", False)
+        assert getattr(binary_node, "is_skin", False)
+
+        a_pos, a_orient = ascii_node.world_transform()
+        b_pos, b_orient = binary_node.world_transform()
+        ascii_vbo, _ = _build_vbo_data(ascii_node, a_pos, a_orient)
+        binary_vbo, _ = _build_vbo_data(binary_node, b_pos, b_orient)
+
+        assert ascii_vbo is not None
+        assert binary_vbo is not None
+        ascii_bounds = np.vstack([ascii_vbo[:, 0:3].min(axis=0), ascii_vbo[:, 0:3].max(axis=0)])
+        binary_bounds = np.vstack([binary_vbo[:, 0:3].min(axis=0), binary_vbo[:, 0:3].max(axis=0)])
+        np.testing.assert_allclose(binary_bounds, ascii_bounds, atol=1e-5, rtol=0.0)
 
 
 def test_gpu_skin_bone_id_attribute_contract_is_integer() -> None:
@@ -180,7 +250,7 @@ def test_qbone_direct_bind_matrix_uses_authored_tr_order() -> None:
     ]
 
 
-def test_skin_node_palette_restores_3f_qbone_tbone_path() -> None:
+def test_skin_node_palette_restores_3f_qbone_tbone_path(monkeypatch) -> None:
     import pytest
 
     from src.core.gpu_skinning import MatrixPaletteUploader
@@ -213,6 +283,7 @@ def test_skin_node_palette_restores_3f_qbone_tbone_path() -> None:
             rotation=(0.0, 0.0, 0.0, 1.0),
         )
     })
+    monkeypatch.setenv("GHOSTRIGGER_SKIN_FORMULA", "F1_current_TR_inverse")
     uploader = MatrixPaletteUploader(max_bones=4)
 
     uploader.build_inverse_bind_pose(model)
@@ -233,7 +304,7 @@ def test_skin_node_palette_env_switch_F11_rotation_only_wrapper(
 ) -> None:
     """3i Step 7 — env-gated F11 wrapper formula switch.
 
-    Default (env unset) keeps the F1 production palette.  Setting
+    F1 remains available as an explicit legacy comparison palette. Setting
     ``GHOSTRIGGER_SKIN_FORMULA=F11_rotation_only_skin_bind_wrapper`` swaps
     the per-bone matrix to ``inv(R(skin_bind)) * world_pose * inv_bind *
     R(skin_bind)``.  For an identity skin-bind rotation (this fixture)
@@ -279,7 +350,7 @@ def test_skin_node_palette_env_switch_F11_rotation_only_wrapper(
     palette_f11 = uploader_f11.as_numpy_array()
     assert uploader_f11._skin_palette_formula == "F11_rotation_only_skin_bind_wrapper"
 
-    monkeypatch.delenv("GHOSTRIGGER_SKIN_FORMULA", raising=False)
+    monkeypatch.setenv("GHOSTRIGGER_SKIN_FORMULA", "F1_current_TR_inverse")
     uploader_f1 = MatrixPaletteUploader(max_bones=4)
     uploader_f1.build_inverse_bind_pose(model)
     uploader_f1.compute_skin_node_palette(skin_node, pose)
@@ -344,7 +415,7 @@ def test_skin_node_palette_env_switch_F11_diverges_with_nonidentity_skin_bind(
     uploader_f11.compute_skin_node_palette(skin_node, pose)
     palette_f11 = uploader_f11.as_numpy_array()
 
-    monkeypatch.delenv("GHOSTRIGGER_SKIN_FORMULA", raising=False)
+    monkeypatch.setenv("GHOSTRIGGER_SKIN_FORMULA", "F1_current_TR_inverse")
     uploader_f1 = MatrixPaletteUploader(max_bones=4)
     uploader_f1.build_inverse_bind_pose(model)
     uploader_f1.compute_skin_node_palette(skin_node, pose)
@@ -357,11 +428,10 @@ def test_skin_node_palette_env_switch_F11_diverges_with_nonidentity_skin_bind(
     )
 
 
-def test_skin_node_palette_env_switch_unknown_value_falls_back_to_F1(
+def test_skin_node_palette_env_switch_unknown_value_falls_back_to_G5(
     monkeypatch,
 ) -> None:
-    """Unknown env values must silently fall back to F1 so a typo cannot
-    perturb production rendering."""
+    """Unknown env values must silently fall back to production G5."""
     from src.core.gpu_skinning import MatrixPaletteUploader
 
     root = SimpleNamespace(
@@ -385,7 +455,130 @@ def test_skin_node_palette_env_switch_unknown_value_falls_back_to_F1(
     uploader = MatrixPaletteUploader(max_bones=4)
     uploader.build_inverse_bind_pose(model)
     uploader.compute_skin_node_palette(skin_node, anim_pose=None)
+    assert uploader._skin_palette_formula == "G5_FULL_REF"
+
+
+def test_skin_node_palette_auto_profile_uses_dfs_qbone_for_full_arrays(
+    monkeypatch,
+) -> None:
+    import pytest
+
+    from src.core.gpu_skinning import MatrixPaletteUploader
+
+    monkeypatch.delenv("GHOSTRIGGER_SKIN_FORMULA", raising=False)
+    root = SimpleNamespace(name="Root", parent=None, position=(0, 0, 0), rotation=(0, 0, 0, 1))
+    extra = SimpleNamespace(name="Extra", parent=root, position=(0, 0, 0), rotation=(0, 0, 0, 1))
+    arm = SimpleNamespace(name="Arm", parent=extra, position=(0, 0, 0), rotation=(0, 0, 0, 1))
+    qbones = [(1, 0, 0, 0), (1, 0, 0, 0), (1, 0, 0, 0), (1, 0, 0, 0)]
+    tbones = [(0, 0, 0), (0, 0, 0), (5, 0, 0), (0, 0, 0)]
+    skin_node = SimpleNamespace(
+        name="SkinMesh",
+        parent=root,
+        position=(0, 0, 0),
+        rotation=(0, 0, 0, 1),
+        bone_map=["Arm"],
+        qbone_list=qbones,
+        tbone_list=tbones,
+    )
+    model = SimpleNamespace(name="dfs_model", all_nodes=lambda: [root, extra, arm, skin_node])
+    pose = SimpleNamespace(nodes={"arm": SimpleNamespace(position=(0, 0, 0), rotation=(0, 0, 0, 1))})
+
+    uploader = MatrixPaletteUploader(max_bones=4)
+    uploader.build_inverse_bind_pose(model)
+    uploader.compute_skin_node_palette(skin_node, pose)
+    palette = uploader.as_numpy_array()
+
+    assert uploader._skin_palette_formula == "G5_FULL_REF"
+    assert uploader._skin_inverse_bind_source == "qBone_tBone_dfs_indexed_TR_no_invert"
+    assert "auto:dfs_qbone" in uploader._skin_profile_reason
+    assert palette[0, 0, 3] == pytest.approx(5.0, abs=1e-6)
+
+
+def test_skin_node_palette_auto_profile_uses_compact_qbone_for_local_arrays(
+    monkeypatch,
+) -> None:
+    import pytest
+
+    from src.core.gpu_skinning import MatrixPaletteUploader
+
+    monkeypatch.delenv("GHOSTRIGGER_SKIN_FORMULA", raising=False)
+    root = SimpleNamespace(name="Root", parent=None, position=(0, 0, 0), rotation=(0, 0, 0, 1))
+    arm = SimpleNamespace(name="Arm", parent=root, position=(0, 0, 0), rotation=(0, 0, 0, 1))
+    skin_node = SimpleNamespace(
+        name="SkinMesh",
+        parent=root,
+        position=(0, 0, 0),
+        rotation=(0, 0, 0, 1),
+        bone_map=["Arm"],
+        qbone_list=[(0, 0, 0, 1)],
+        tbone_list=[(1, 0, 0)],
+    )
+    model = SimpleNamespace(name="compact_model", all_nodes=lambda: [root, arm, skin_node])
+    pose = SimpleNamespace(nodes={"arm": SimpleNamespace(position=(3, 0, 0), rotation=(0, 0, 0, 1))})
+
+    uploader = MatrixPaletteUploader(max_bones=4)
+    uploader.build_inverse_bind_pose(model)
+    uploader.compute_skin_node_palette(skin_node, pose)
+    palette = uploader.as_numpy_array()
+
     assert uploader._skin_palette_formula == "F1_current_TR_inverse"
+    assert uploader._skin_inverse_bind_source == "qBone_tBone_inverse_TR"
+    assert "auto:compact_qbone" in uploader._skin_profile_reason
+    assert palette[0, 0, 3] == pytest.approx(2.0, abs=1e-6)
+
+
+def test_skinning_species_classifier_covers_primary_character_families() -> None:
+    from src.core.gpu_skinning import (
+        SKINNING_SPECIES_PROFILES,
+        classify_skinning_species,
+    )
+
+    expected = {
+        "human": ("ad_saul", "N_AdmrlSaulKar"),
+        "bith": ("n_bith", "S_Male02"),
+        "droid": ("p_hk47", "NULL"),
+        "utility_droid": ("p_t3m4", "NULL"),
+        "battle_droid": ("c_drdwar", "NULL"),
+        "yoda": ("n_yoda", "S_Male02"),
+        "mandalorian": ("n_mandalorian", "S_Female02"),
+        "gamorrean": ("c_gammorean", "NULL"),
+    }
+
+    for species, (model_name, supermodel) in expected.items():
+        assert classify_skinning_species(model_name, supermodel) == species
+        assert species in SKINNING_SPECIES_PROFILES
+
+
+def test_skin_node_palette_records_species_profile_reason(monkeypatch) -> None:
+    from src.core.gpu_skinning import MatrixPaletteUploader
+
+    monkeypatch.delenv("GHOSTRIGGER_SKIN_FORMULA", raising=False)
+    root = SimpleNamespace(name="Root", parent=None, position=(0, 0, 0), rotation=(0, 0, 0, 1))
+    arm = SimpleNamespace(name="Arm", parent=root, position=(0, 0, 0), rotation=(0, 0, 0, 1))
+    skin_node = SimpleNamespace(
+        name="BithSkin",
+        parent=root,
+        position=(0, 0, 0),
+        rotation=(0, 0, 0, 1),
+        bone_map=["Arm"],
+        qbone_list=[(1, 0, 0, 0), (1, 0, 0, 0), (1, 0, 0, 0)],
+        tbone_list=[(0, 0, 0), (0, 0, 0), (0, 0, 0)],
+    )
+    model = SimpleNamespace(
+        name="n_bith",
+        supermodel="S_Male02",
+        all_nodes=lambda: [root, arm, skin_node],
+    )
+
+    uploader = MatrixPaletteUploader(max_bones=4)
+    uploader.build_inverse_bind_pose(model)
+    uploader.compute_skin_node_palette(skin_node, SimpleNamespace(nodes={}))
+
+    assert uploader._skin_species == "bith"
+    assert uploader._skin_species_profile.label == "Bith"
+    assert uploader._skin_palette_formula == "G5_FULL_REF"
+    assert "species:bith" in uploader._skin_profile_reason
+    assert "auto:dfs_qbone" in uploader._skin_profile_reason
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -518,7 +711,7 @@ def test_skin_node_palette_env_switch_G5_uses_dfs_indexed_qbone(
     assert g5._skin_palette_formula == "G5_FULL_REF"
     assert g5._skin_inverse_bind_source == "qBone_tBone_dfs_indexed_TR_no_invert"
 
-    monkeypatch.delenv("GHOSTRIGGER_SKIN_FORMULA", raising=False)
+    monkeypatch.setenv("GHOSTRIGGER_SKIN_FORMULA", "F1_current_TR_inverse")
     f1 = MatrixPaletteUploader(max_bones=4)
     f1.build_inverse_bind_pose(model)
     f1.compute_skin_node_palette(skin_node, pose)
@@ -608,7 +801,7 @@ def test_skin_node_palette_env_switch_G5_decodes_quaternion_w_first(
     g5.compute_skin_node_palette(skin_node, pose)
     inv_bind_g5 = g5._skin_local_inv_bind_by_slot[0]
 
-    monkeypatch.delenv("GHOSTRIGGER_SKIN_FORMULA", raising=False)
+    monkeypatch.setenv("GHOSTRIGGER_SKIN_FORMULA", "F1_current_TR_inverse")
     f1 = MatrixPaletteUploader(max_bones=4)
     f1.build_inverse_bind_pose(model)
     f1.compute_skin_node_palette(skin_node, pose)
@@ -772,7 +965,7 @@ def test_gpu_renderer_uploads_skin_node_local_palette() -> None:
     assert "self._skin_uploader.bone_index(_bmname)" not in source
 
 
-def test_cpu_skin_bind_pose_keeps_authored_coordinates() -> None:
+def test_cpu_skin_bind_pose_applies_node_local_transform() -> None:
     from src.gui.viewport import ArcBallCamera, FrameRenderer
 
     node = SimpleNamespace(
@@ -784,14 +977,14 @@ def test_cpu_skin_bind_pose_keeps_authored_coordinates() -> None:
         vertex_space=0,
         bone_map=[],
         skin_data=[],
-        world_transform=lambda: ((10.0, 20.0, 30.0), (0.0, 0.0, 1.0, 0.0)),
+        world_transform=lambda: ((10.0, 20.0, 30.0), (0.0, 0.0, 0.0, 1.0)),
     )
     renderer = FrameRenderer(ArcBallCamera())
 
     assert renderer._get_world_verts_for_node(node) == [
-        (1.0, 2.0, 3.0),
-        (2.0, 2.0, 3.0),
-        (1.0, 3.0, 3.0),
+        (11.0, 22.0, 33.0),
+        (12.0, 22.0, 33.0),
+        (11.0, 23.0, 33.0),
     ]
 
 
