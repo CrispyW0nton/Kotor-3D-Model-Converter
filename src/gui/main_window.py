@@ -10668,13 +10668,27 @@ class KotorModToolsApp(tk.Tk):
         """Placeholder — screenshot feature removed."""
         pass
 
+    def open_startup_model(
+        self,
+        path: str,
+        mdx_path: str = "",
+        texture_dir: str = "",
+        game: str = "",
+    ):
+        if texture_dir:
+            self._texture_dir = texture_dir
+        self._load_mdl_path(path, mdx_path=mdx_path, game=game)
+
     def _open_mdl_binary(self):
         path = filedialog.askopenfilename(
             title="Open MDL (Binary or ASCII auto-detected)",
             filetypes=[("MDL files","*.mdl"),("All files","*.*")])
         if not path: return
-        mdx_path = Path(path).with_suffix('.mdx')
-        mdx_data = mdx_path.read_bytes() if mdx_path.exists() else b''
+        self._load_mdl_path(path)
+
+    def _load_mdl_path(self, path: str, mdx_path: str = "", game: str = ""):
+        mdx_file = Path(mdx_path) if mdx_path else Path(path).with_suffix('.mdx')
+        mdx_data = mdx_file.read_bytes() if mdx_file.exists() else b''
         try:
             raw = Path(path).read_bytes()
             # ── Auto-detect binary vs ASCII format ────────────────────────────
@@ -10689,10 +10703,10 @@ class KotorModToolsApp(tk.Tk):
                             raw[:8].lstrip(b'\x00').startswith(b'newmodel') or
                             raw[:2] == b'#\x20' or raw[:2] == b'# ')
             self._model_path   = path
-            self._texture_dir  = str(Path(path).parent)
+            self._texture_dir  = self._texture_dir or str(Path(path).parent)
             resref = Path(path).stem
             if is_ascii_mdl:
-                model = load_model_from_file(path)
+                model = load_model_from_file(path, str(mdx_file) if mdx_file.exists() else "")
                 log_model_summary(model, source=path)
                 self._set_model_internal(model)
                 self.log(f"Opened ASCII MDL (auto-detected): {Path(path).name}", 'success')
@@ -10706,6 +10720,8 @@ class KotorModToolsApp(tk.Tk):
                     # Set path/texture_dir BEFORE _set_model_internal so _refresh_all
                     # can include the model's folder in the texture search dirs.
                     model = load_model_from_bytes(raw, mdx_data)
+                if game and model is not None:
+                    model.game_version = GameVersion.K2 if game.upper() == "K2" else GameVersion.K1
                 log_model_summary(model, source=path)
                 self._set_model_internal(model)
                 self.log(f"Opened binary MDL: {Path(path).name}", 'success')

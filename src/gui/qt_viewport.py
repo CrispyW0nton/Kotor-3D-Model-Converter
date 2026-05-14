@@ -196,6 +196,18 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._request_render()
 
     def toggle_walkmesh(self, checked: Optional[bool] = None) -> None:
+        if self._renderer._walkmesh_overlay is None:
+            parent = self.window()
+            coload = getattr(parent, "_try_coload_walkmesh", None)
+            if callable(coload):
+                try:
+                    coload()
+                except TypeError:
+                    coload(None)
+            if self._renderer._walkmesh_overlay is None:
+                self.walkmesh_button.setChecked(False)
+                self._request_render()
+                return
         self._renderer.show_walkmesh = bool(checked) if checked is not None else not self._renderer.show_walkmesh
         self.walkmesh_button.setChecked(self._renderer.show_walkmesh)
         self._request_render()

@@ -120,8 +120,10 @@ else:
 
 # ── Data files ────────────────────────────────────────────────────────────
 datas = [
-    # Bundle the entire assets folder (icons, etc.)
+    # Bundle app assets plus GUI resources loaded by package-relative paths.
     ('assets', 'assets'),
+    ('src/gui/icons', 'src/gui/icons'),
+    ('src/gui/fonts', 'src/gui/fonts'),
 ]
 
 # ── Analysis ──────────────────────────────────────────────────────────────

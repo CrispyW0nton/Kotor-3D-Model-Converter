@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import time
@@ -66,16 +67,44 @@ _QT_ICON_DIR = (Path(__file__).resolve().parent / "icons").as_posix()
 class ModelLoadWorker(QtCore.QObject):
     finished = QtCore.Signal(object, str, str)
 
-    def __init__(self, path: str):
+    def __init__(self, path: str, mdx_path: str = "", game: str = ""):
         super().__init__()
         self.path = path
+        self.mdx_path = mdx_path
+        self.game = game.upper()
 
     @QtCore.Slot()
     def run(self):
         try:
-            from src.core.kotor_loader import load_model_from_file
+            path = Path(self.path)
+            raw = path.read_bytes()
+            first16 = raw[:16]
+            printable_count = sum(
+                1 for byte in first16
+                if 0x20 <= byte <= 0x7E or byte in (0x09, 0x0A, 0x0D)
+            )
+            is_ascii_mdl = (
+                printable_count >= 10
+                or raw[:8].lstrip(b"\x00").startswith(b"newmodel")
+                or raw[:2] in (b"#\x20", b"# ")
+            )
+            if is_ascii_mdl:
+                from src.core.mdl_parser import MDLAsciiParser
 
-            model = load_model_from_file(self.path)
+                lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+                model = MDLAsciiParser().parse(lines)
+                model.mdl_path = str(path)
+                model.mdx_path = ""
+            else:
+                from src.core.kotor_loader import load_model_from_file
+
+                model = load_model_from_file(self.path, self.mdx_path)
+            if model is None:
+                raise RuntimeError(f"Could not parse {path.name}")
+            if self.game:
+                from src.core.model_data import GameVersion
+
+                model.game_version = GameVersion.K2 if self.game == "K2" else GameVersion.K1
             self.finished.emit(model, self.path, "")
         except Exception:
             self.finished.emit(None, self.path, traceback.format_exc())
@@ -144,6 +173,90 @@ class LibraryScanWorker(QtCore.QObject):
             self.finished.emit(rows, "")
         except Exception:
             self.finished.emit([], traceback.format_exc())
+
+
+class LibraryBatchExportWorker(QtCore.QObject):
+    progress = QtCore.Signal(int, int, int, int)
+    finished = QtCore.Signal(str, int, int, int, str, str)
+
+    def __init__(self, rows: list[dict], out_dir: str, fmt: str, k1_dir: str = "", k2_dir: str = ""):
+        super().__init__()
+        self.rows = rows
+        self.out_dir = out_dir
+        self.fmt = fmt
+        self.k1_dir = k1_dir
+        self.k2_dir = k2_dir
+
+    @QtCore.Slot()
+    def run(self):
+        ok = 0
+        fail = 0
+        total = len(self.rows)
+        try:
+            from src.core.resource_manager import ResourceManager
+
+            mgr = ResourceManager()
+            if self.k1_dir:
+                mgr.set_k1_dir(self.k1_dir)
+            if self.k2_dir:
+                mgr.set_k2_dir(self.k2_dir)
+
+            os.makedirs(self.out_dir, exist_ok=True)
+            for index, row in enumerate(self.rows, start=1):
+                try:
+                    resref = str(row.get("resref", ""))
+                    game = str(row.get("game", "K1")).upper()
+                    mdl = mgr.get_mdl(resref, game)
+                    mdx = mgr.get_mdx(resref, game) or b""
+                    if not mdl:
+                        fail += 1
+                        continue
+
+                    from src.core.kotor_loader import load_model_from_bytes
+
+                    model = load_model_from_bytes(mdl, mdx)
+                    if self.fmt == "obj":
+                        from src.converters.mesh_converter import OBJExporter
+
+                        OBJExporter().export(model, os.path.join(self.out_dir, f"{resref}.obj"))
+                        ok += 1
+                    elif self.fmt == "ascii":
+                        from src.core.mdl_parser import MDLAsciiWriter
+
+                        MDLAsciiWriter().write(model, os.path.join(self.out_dir, f"{resref}.mdl"))
+                        ok += 1
+                    elif self.fmt == "tga":
+                        from src.gui.viewport import _load_tpc_bytes
+
+                        tex_names = {
+                            str(getattr(node, "texture", "") or "").strip()
+                            for node in model.all_nodes()
+                            if str(getattr(node, "texture", "") or "").strip().lower() not in ("", "null", "none")
+                        }
+                        wrote_any = False
+                        for tex_name in tex_names:
+                            raw = mgr.get_texture(tex_name, game)
+                            if not raw:
+                                continue
+                            dst = os.path.join(self.out_dir, f"{tex_name}.tga")
+                            if os.path.exists(dst):
+                                continue
+                            img = _load_tpc_bytes(raw)
+                            if img:
+                                img.save(dst)
+                                ok += 1
+                                wrote_any = True
+                        if not wrote_any:
+                            fail += 1
+                    else:
+                        fail += 1
+                except Exception:
+                    fail += 1
+                if index % 25 == 0 or index == total:
+                    self.progress.emit(index, total, ok, fail)
+            self.finished.emit(self.fmt, ok, fail, total, self.out_dir, "")
+        except Exception:
+            self.finished.emit(self.fmt, ok, fail, total, self.out_dir, traceback.format_exc())
 
 
 class ModelListItem(QtWidgets.QListWidgetItem):
@@ -255,17 +368,24 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     APP_TITLE = "GhostRigger-K1-K2  //  Odyssey Engine Pipeline v6.1"
     APP_VERSION = "6.1.0"
 
-    def __init__(self, app_root: Optional[Path] = None):
+    def __init__(self, app_root: Optional[Path] = None, startup_input: Optional[dict] = None):
         super().__init__()
         self.app_root = app_root or Path(__file__).resolve().parents[2]
+        self.startup_input = startup_input or {}
         self.settings_path = self.app_root / "settings.json"
         self.settings_data = self._load_settings()
         self._worker_thread: Optional[QtCore.QThread] = None
+        self._model_worker: Optional[QtCore.QObject] = None
         self._scan_thread: Optional[QtCore.QThread] = None
+        self._scan_worker: Optional[QtCore.QObject] = None
+        self._batch_thread: Optional[QtCore.QThread] = None
+        self._batch_worker: Optional[QtCore.QObject] = None
         self._legacy_process: Optional[subprocess.Popen] = None
         self._library_rows: list[dict] = []
         self._current_model = None
         self._model_path = ""
+        self._current_game = ""
+        self._resource_manager = None
         self._texture_dir = ""
         self._animation_engine = None
         self._animation_loop = False
@@ -286,6 +406,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._build_layout()
         self._build_statusbar()
         self._log("Qt host window ready.", "success")
+        QtCore.QTimer.singleShot(0, self._open_startup_inputs)
 
     def _load_settings(self) -> dict:
         try:
@@ -454,7 +575,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
         self.open_ascii_action = QtGui.QAction("Open MDL (ASCII text)...", self)
         self.open_ascii_action.setShortcut("Ctrl+Shift+O")
-        self.open_ascii_action.triggered.connect(self._open_model)
+        self.open_ascii_action.triggered.connect(lambda _checked=False: self._open_model(ascii_only=True))
         self.clear_model_action = QtGui.QAction("Clear Model", self)
         self.clear_model_action.setShortcut("Ctrl+W")
         self.clear_model_action.triggered.connect(self._clear_model)
@@ -825,17 +946,25 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
         main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         main_splitter.setChildrenCollapsible(False)
+        main_splitter.setHandleWidth(8)
+        self.main_splitter = main_splitter
 
         left_tabs = QtWidgets.QTabWidget()
         left_tabs.setUsesScrollButtons(True)
         left_tabs.setElideMode(QtCore.Qt.ElideRight)
         left_tabs.tabBar().setExpanding(False)
+        left_tabs.setMinimumWidth(260)
+        left_tabs.setMaximumWidth(520)
+        left_tabs.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         self.left_tabs = left_tabs
 
         self.library_panel = QtLibraryPanel(self)
+        self.library_panel.autoDetectRequested.connect(self._auto_detect_dirs)
         self.library_panel.scanRequested.connect(self._scan_library)
         self.library_panel.deepScanRequested.connect(self._scan_library)
         self.library_panel.loadRequested.connect(self._start_resource_load)
+        self.library_panel.extractRequested.connect(self._extract_library_row)
+        self.library_panel.batchRequested.connect(self._batch_library_export)
         self.library_panel.dirsChanged.connect(self._on_library_dirs_changed)
         left_tabs.addTab(self.library_panel, self._icon("library", 16), "Library")
 
@@ -843,6 +972,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         right_tabs.setUsesScrollButtons(True)
         right_tabs.setElideMode(QtCore.Qt.ElideRight)
         right_tabs.tabBar().setExpanding(False)
+        right_tabs.setMinimumWidth(280)
+        right_tabs.setMaximumWidth(560)
+        right_tabs.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         self.right_tabs = right_tabs
         self.skeleton_panel = QtSkeletonPanel(self)
         self.properties_panel = QtPropertiesPanel(self)
@@ -874,6 +1006,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         main_splitter.addWidget(left_tabs)
 
         self.viewport = QtViewportWidget(self)
+        self.viewport.setMinimumWidth(420)
+        self.viewport.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.viewport_label = self.viewport.canvas
         self.skeleton_panel.nodeSelected.connect(self.viewport.set_selected_node)
         self.viewport.nodeSelected.connect(self.properties_panel.show_node)
@@ -892,6 +1026,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         right_tabs.addTab(self.character_builder_panel, self._icon("charbuilder", 16), "Builder")
         right_tabs.addTab(self.blueprint_panel, self._icon("library", 16), "Blueprint")
         main_splitter.addWidget(right_tabs)
+        main_splitter.setStretchFactor(0, 0)
+        main_splitter.setStretchFactor(1, 1)
+        main_splitter.setStretchFactor(2, 0)
         main_splitter.setSizes([420, 760, 380])
         root.addWidget(main_splitter, 1)
 
@@ -913,8 +1050,143 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     def _on_library_dirs_changed(self, k1_dir: str, k2_dir: str):
         self.k1_dir_edit.setText(k1_dir)
         self.k2_dir_edit.setText(k2_dir)
+        self.settings_data["k1_dir"] = k1_dir
+        self.settings_data["k2_dir"] = k2_dir
+        try:
+            save_settings(self.settings_path, self.settings_data)
+        except Exception as exc:
+            self._log(f"Could not save game directories: {exc}", "warning")
+        self._resource_manager = None
         self.library_panel.set_status("Game directories updated")
         self._log("Game directories updated. Run Scan to refresh the library.", "success")
+
+    def _auto_detect_dirs(self):
+        try:
+            from src.resources.game_detector import detect_kotor_dirs
+
+            k1_dir, k2_dir = detect_kotor_dirs()
+        except Exception as exc:
+            self._log(f"Auto-detect failed: {exc}", "error")
+            return
+        if not (k1_dir or k2_dir):
+            self.library_panel.set_status("No KotOR directories found")
+            self._log("No KotOR installation found automatically.", "warning")
+            return
+        self._on_library_dirs_changed(k1_dir or self.k1_dir_edit.text().strip(), k2_dir or self.k2_dir_edit.text().strip())
+        self._scan_library()
+
+    def _extract_library_row(self, row: dict):
+        resref = str(row.get("resref") or "")
+        game = str(row.get("game") or "K1").upper()
+        if not resref:
+            return
+        out_dir = QtWidgets.QFileDialog.getExistingDirectory(self, f"Extract {game}:{resref}")
+        if not out_dir:
+            return
+        try:
+            written = self._extract_model_resource(row, out_dir)
+            QtWidgets.QMessageBox.information(
+                self,
+                "Extracted",
+                f"Extracted {len(written)} file(s) to:\n{out_dir}",
+            )
+            self._log(f"Extracted {game}:{resref} -> {Path(out_dir).name}", "success")
+        except Exception as exc:
+            self._log(f"Extract failed: {exc}", "error")
+            QtWidgets.QMessageBox.critical(self, "Extract", str(exc))
+
+    def _extract_model_resource(self, row: dict, out_dir: str) -> list[str]:
+        from src.gui.viewport import _is_tpc_data
+
+        mgr = self._get_resource_manager()
+        if mgr is None:
+            raise RuntimeError("Set a KotOR game directory before extracting library resources.")
+        resref = str(row.get("resref") or "")
+        game = str(row.get("game") or "K1").upper()
+        os.makedirs(out_dir, exist_ok=True)
+        written: list[str] = []
+        mdl = mgr.get_mdl(resref, game)
+        mdx = mgr.get_mdx(resref, game) or b""
+        if not mdl:
+            raise FileNotFoundError(f"{game}:{resref}.mdl")
+        mdl_path = os.path.join(out_dir, f"{resref}.mdl")
+        Path(mdl_path).write_bytes(mdl)
+        written.append(mdl_path)
+        if mdx:
+            mdx_path = os.path.join(out_dir, f"{resref}.mdx")
+            Path(mdx_path).write_bytes(mdx)
+            written.append(mdx_path)
+
+        try:
+            from src.core.kotor_loader import load_model_from_bytes
+
+            model = load_model_from_bytes(mdl, mdx)
+            tex_names = {
+                str(getattr(node, "texture", "") or "").strip()
+                for node in model.all_nodes()
+                if str(getattr(node, "texture", "") or "").strip().lower() not in ("", "null", "none")
+            }
+            tex_dir = Path(out_dir) / "textures"
+            tex_dir.mkdir(exist_ok=True)
+            for tex_name in tex_names:
+                raw = mgr.get_texture(tex_name, game)
+                if not raw:
+                    continue
+                ext = ".tpc" if _is_tpc_data(raw) else ".tga"
+                dst = tex_dir / f"{tex_name}{ext}"
+                if not dst.exists():
+                    dst.write_bytes(raw)
+                    written.append(str(dst))
+        except Exception as exc:
+            self._log(f"Texture extraction skipped for {resref}: {exc}", "warning")
+        return written
+
+    def _batch_library_export(self, fmt: str, rows: list):
+        rows = [row for row in rows if row.get("resref") and row.get("game")]
+        if not rows:
+            QtWidgets.QMessageBox.information(self, "Batch Export", "No models visible. Apply a filter first.")
+            return
+        if self._batch_thread is not None and self._batch_thread.isRunning():
+            self._log("A batch export is already running.", "warning")
+            return
+        labels = {"obj": "OBJ", "ascii": "ASCII MDL", "tga": "TGA textures"}
+        out_dir = QtWidgets.QFileDialog.getExistingDirectory(self, f"Export {len(rows)} models as {labels.get(fmt, fmt)}")
+        if not out_dir:
+            return
+        k1_dir, k2_dir = self._configured_game_dirs()
+        if not (k1_dir or k2_dir):
+            QtWidgets.QMessageBox.information(self, "Batch Export", "Set a KotOR game directory first.")
+            return
+        worker = LibraryBatchExportWorker(rows, out_dir, fmt, k1_dir, k2_dir)
+        thread = QtCore.QThread(self)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.progress.connect(self._on_batch_progress)
+        worker.finished.connect(self._on_batch_finished)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: setattr(self, "_batch_worker", None))
+        self._batch_thread = thread
+        self._batch_worker = worker
+        self.library_panel.set_status(f"Starting batch {fmt} export ({len(rows)} models)...")
+        self._log(f"Batch {fmt}: {len(rows)} visible model(s) -> {out_dir}")
+        thread.start()
+
+    @QtCore.Slot(int, int, int, int)
+    def _on_batch_progress(self, index: int, total: int, ok: int, fail: int):
+        self.library_panel.set_status(f"Batch: {index}/{total}  ok={ok} fail={fail}")
+
+    @QtCore.Slot(str, int, int, int, str, str)
+    def _on_batch_finished(self, fmt: str, ok: int, fail: int, total: int, out_dir: str, error: str):
+        if error:
+            self._log(f"Batch {fmt} error:\n{error}", "error")
+        self.library_panel.set_status(f"Batch done: ok={ok} fail={fail} total={total}")
+        QtWidgets.QMessageBox.information(
+            self,
+            "Batch Export Complete",
+            f"Format: {fmt.upper()}\nOutput: {out_dir}\nOK: {ok}   Failed: {fail}   Total: {total}",
+        )
 
     def _build_statusbar(self):
         self.statusBar().showMessage("Ready")
@@ -1008,6 +1280,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     def _refresh_all(self):
         model = self._current_model
         if hasattr(self, "viewport"):
+            self._configure_viewport_resources()
             self.viewport.load_model(model, self._texture_dir)
         if hasattr(self, "skeleton_panel"):
             self.skeleton_panel.load_model(model)
@@ -1901,7 +2174,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: setattr(self, "_scan_worker", None))
         self._scan_thread = thread
+        self._scan_worker = worker
         thread.start()
 
     @QtCore.Slot(list, str)
@@ -1958,6 +2233,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return
         self._log(f"Loading {game}:{resref} ...")
         self.statusBar().showMessage(f"Loading {game}:{resref}...")
+        self._current_game = game.upper()
 
         worker = ResourceModelLoadWorker(
             resref,
@@ -1972,22 +2248,61 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: setattr(self, "_model_worker", None))
         self._worker_thread = thread
+        self._model_worker = worker
         thread.start()
 
-    def _open_model(self):
+    def _open_model(self, _checked: bool = False, *, ascii_only: bool = False):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self,
-            "Open KotOR MDL",
+            "Open ASCII MDL" if ascii_only else "Open KotOR MDL",
             str(Path(self.settings_data.get("last_import") or self.app_root)),
-            "KotOR MDL (*.mdl);;All files (*.*)",
+            "ASCII MDL (*.mdl);;All files (*.*)" if ascii_only else "KotOR MDL (*.mdl);;All files (*.*)",
         )
         if not path:
             return
-        self._log(f"Loading {path} ...")
-        self.statusBar().showMessage("Loading model...")
+        self._start_model_load(path)
 
-        worker = ModelLoadWorker(path)
+    def _open_startup_inputs(self):
+        mdl_path = str(self.startup_input.get("mdl") or "").strip()
+        if not mdl_path:
+            return
+        texture_dir = str(self.startup_input.get("texture_dir") or "").strip()
+        textures = [str(path) for path in (self.startup_input.get("tga") or []) if path]
+        if not texture_dir and textures:
+            texture_dir = str(Path(textures[0]).resolve().parent)
+        mdx_path = str(self.startup_input.get("mdx") or "").strip()
+        game = str(self.startup_input.get("game") or "").upper()
+        self._start_model_load(mdl_path, mdx_path=mdx_path, texture_dir=texture_dir, game=game)
+        if textures:
+            self._log(f"Startup texture context: {len(textures)} file(s)", "info")
+
+    def _start_model_load(
+        self,
+        path: str,
+        *,
+        mdx_path: str = "",
+        texture_dir: str = "",
+        game: str = "",
+    ):
+        if self._worker_thread is not None and self._worker_thread.isRunning():
+            self._log("A model is already loading.", "warning")
+            return
+        mdl = Path(path)
+        if not mdl.exists():
+            self._log(f"Startup model not found: {path}", "error")
+            self.statusBar().showMessage("Model file not found")
+            return
+        if mdx_path and not Path(mdx_path).exists():
+            self._log(f"MDX file not found, using sibling lookup: {mdx_path}", "warning")
+            mdx_path = ""
+        self._texture_dir = texture_dir or str(mdl.parent)
+        self._log(f"Loading {mdl} ...")
+        self.statusBar().showMessage("Loading model...")
+        self._current_game = game.upper()
+
+        worker = ModelLoadWorker(str(mdl), mdx_path, self._current_game)
         thread = QtCore.QThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
@@ -1995,7 +2310,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: setattr(self, "_model_worker", None))
         self._worker_thread = thread
+        self._model_worker = worker
         thread.start()
 
     @QtCore.Slot(object, str, str)
@@ -2007,14 +2324,19 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._current_model = model
         if path:
             self._model_path = path
-            if not str(path).startswith(("K1:", "K2:")):
-                self._texture_dir = str(Path(path).parent)
+            if str(path).startswith(("K1:", "K2:")):
+                self._current_game = str(path).split(":", 1)[0].upper()
+            else:
+                self._texture_dir = self._texture_dir or str(Path(path).parent)
+                self._current_game = self._infer_game_from_model(model)
         mesh_count = len(model.mesh_nodes()) if hasattr(model, "mesh_nodes") else 0
         node_count = model.node_count() if hasattr(model, "node_count") else 0
         anim_count = len(getattr(model, "animations", []) or [])
         name = getattr(model, "name", Path(path).stem)
         if hasattr(self, "viewport"):
+            self._configure_viewport_resources()
             self.viewport.load_model(model, self._texture_dir)
+            self._try_coload_walkmesh()
         else:
             self.viewport_label.setText(f"{name}\n\nQt viewport host\n{mesh_count} mesh | {node_count} nodes")
         self.model_pill.setText(f"// {name}")
@@ -2040,6 +2362,132 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         )
         self._log(f"Loaded {name} ({mesh_count} mesh, {node_count} nodes)", "success")
         self.statusBar().showMessage(f"Loaded {name}")
+
+    def _infer_game_from_model(self, model) -> str:
+        try:
+            game_name = getattr(getattr(model, "game_version", ""), "name", "")
+            if str(game_name).upper() == "K2":
+                return "K2"
+        except Exception:
+            pass
+        return str(self.settings_data.get("default_game") or "K1").upper()
+
+    def _configured_game_dirs(self) -> tuple[str, str]:
+        k1_dir = self.k1_dir_edit.text().strip() if hasattr(self, "k1_dir_edit") else ""
+        k2_dir = self.k2_dir_edit.text().strip() if hasattr(self, "k2_dir_edit") else ""
+        return k1_dir, k2_dir
+
+    def _get_resource_manager(self):
+        k1_dir, k2_dir = self._configured_game_dirs()
+        if not (k1_dir or k2_dir):
+            return None
+        try:
+            from src.core.resource_manager import ResourceManager
+
+            mgr = ResourceManager()
+            if k1_dir:
+                mgr.set_k1_dir(k1_dir)
+            if k2_dir:
+                mgr.set_k2_dir(k2_dir)
+            self._resource_manager = mgr
+            return mgr
+        except Exception as exc:
+            self._log(f"Resource manager unavailable: {exc}", "warning")
+            return None
+
+    def _configure_viewport_resources(self):
+        viewport = getattr(self, "viewport", None)
+        if viewport is None:
+            return
+        game = (self._current_game or self._infer_game_from_model(self._current_model)).upper()
+        mgr = self._get_resource_manager()
+        if mgr is not None:
+            try:
+                viewport.set_resource_manager(mgr, game)
+            except Exception as exc:
+                self._log(f"Viewport texture resource setup failed: {exc}", "warning")
+
+    @staticmethod
+    def _derive_wok_resrefs(stem: str) -> list[str]:
+        candidates = [stem]
+        match = re.match(r"^(.+?)_[0-9a-z]+$", stem)
+        if match:
+            base = match.group(1)
+            if base and base != stem:
+                candidates.append(base)
+                if base[:3].isdigit() and len(base) > 3:
+                    candidates.append(base[:3])
+        return candidates
+
+    def _try_coload_walkmesh(self, mdl_path: Optional[Path] = None):
+        try:
+            if mdl_path is None:
+                path = str(self._model_path or "")
+                if path and not path.startswith(("K1:", "K2:")):
+                    mdl_path = Path(path)
+            self._do_coload_walkmesh(mdl_path)
+        except Exception as exc:
+            log.debug("_try_coload_walkmesh: %s", exc)
+
+    def _do_coload_walkmesh(self, mdl_path: Optional[Path]):
+        viewport = getattr(self, "viewport", None)
+        if viewport is None:
+            return
+        model = self._current_model
+        if model is None:
+            viewport.clear_walkmesh()
+            return
+
+        path_label = str(self._model_path or "")
+        if mdl_path is not None and mdl_path.name:
+            stem = mdl_path.stem.lower()
+            folder = mdl_path.parent
+        elif ":" in path_label:
+            stem = path_label.split(":", 1)[1].lower()
+            folder = None
+        else:
+            stem = str(getattr(model, "name", "") or "").lower()
+            folder = None
+        if not stem:
+            return
+
+        viewport.clear_walkmesh()
+        candidates = self._derive_wok_resrefs(stem)
+        for base in candidates:
+            if folder is not None:
+                for ext in (".wok", ".pwk", ".dwk", ".bwm"):
+                    path = folder / f"{base}{ext}"
+                    if path.exists() and self._load_walkmesh_source(str(path), path.name):
+                        return
+
+        mgr = self._resource_manager or self._get_resource_manager()
+        game = (self._current_game or self._infer_game_from_model(model)).upper()
+        if mgr is not None:
+            try:
+                from src.core.resource_manager import RES_WOK
+
+                for base in candidates:
+                    data = mgr.get(base, RES_WOK, game)
+                    if data and self._load_walkmesh_source(data, f"{game}:{base}.wok"):
+                        return
+            except Exception as exc:
+                log.debug("resource walkmesh lookup failed: %s", exc)
+
+    def _load_walkmesh_source(self, source, label: str) -> bool:
+        try:
+            if isinstance(source, (bytes, bytearray)):
+                from src.core.module_format import WOKData
+
+                source = WOKData.from_bytes(bytes(source))
+            self.viewport.load_walkmesh(source)
+            self.viewport._renderer.show_walkmesh = True
+            self.viewport.walkmesh_button.setChecked(True)
+            self.viewport._request_render()
+            self._log(f"Walkmesh loaded: {label}", "success")
+            return True
+        except Exception as exc:
+            log.debug("walkmesh load failed for %s: %s", label, exc)
+            return False
 
     def _launch_legacy_tk(self):
         if self._legacy_process is not None and self._legacy_process.poll() is None:
@@ -2100,10 +2548,14 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             log.info(msg)
 
 
-def run(app_root: Optional[str] = None) -> int:
+def run(app_root: Optional[str] = None, startup_input: Optional[dict] = None) -> int:
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
     app.setApplicationName("GhostRigger")
     app.setStyle("Fusion")
-    win = QtGhostRiggerMainWindow(Path(app_root) if app_root else None)
+    for family in ("Consolas", "Lucida Console", "Courier New"):
+        if family in QtGui.QFontDatabase.families():
+            app.setFont(QtGui.QFont(family, 9))
+            break
+    win = QtGhostRiggerMainWindow(Path(app_root) if app_root else None, startup_input=startup_input)
     win.show()
     return app.exec()

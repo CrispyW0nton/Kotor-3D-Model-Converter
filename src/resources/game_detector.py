@@ -33,8 +33,9 @@ import os
 import sys
 import json
 import logging
+import string
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Iterable
 
 log = logging.getLogger(__name__)
 
@@ -268,6 +269,15 @@ def _steam_library_paths() -> List[Path]:
             Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "Steam",
             Path("C:/Steam"),
         ]
+        steam_roots += _windows_registry_steam_roots()
+        for drive in _windows_drive_roots():
+            steam_roots += [
+                drive / "Steam",
+                drive / "SteamLibrary",
+                drive / "Games" / "Steam",
+                drive / "Program Files (x86)" / "Steam",
+                drive / "Program Files" / "Steam",
+            ]
     elif sys.platform == "darwin":
         steam_roots += [
             Path.home() / "Library" / "Application Support" / "Steam",
@@ -283,10 +293,13 @@ def _steam_library_paths() -> List[Path]:
             Path("/home/deck/.local/share/Steam"),
         ]
 
-    for root in steam_roots:
+    for root in _unique_paths(steam_roots):
         if not root.is_dir():
             continue
-        libraries.append(root / "steamapps")
+        if (root / "steamapps").is_dir():
+            libraries.append(root / "steamapps")
+        elif root.name.lower() == "steamapps":
+            libraries.append(root)
 
         # Read libraryfolders.vdf for additional library paths
         vdf = root / "steamapps" / "libraryfolders.vdf"
@@ -305,7 +318,7 @@ def _steam_library_paths() -> List[Path]:
             except Exception as e:
                 log.debug(f"Failed to parse {vdf}: {e}")
 
-    return libraries
+    return _unique_paths(libraries)
 
 
 def _steam_candidates() -> List[Path]:
@@ -367,25 +380,26 @@ def _gog_candidates() -> List[Path]:
                 r"SOFTWARE\GOG.com\Games\1207666283",
                 r"SOFTWARE\GOG.com\Games\1207666893",
             ]
-            for key_path in gog_keys:
-                try:
-                    key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path)
-                    path_val, _ = winreg.QueryValueEx(key, "PATH")
-                    if path_val:
-                        candidates.append(Path(path_val))
-                    winreg.CloseKey(key)
-                except OSError:
-                    pass
+            for root_key in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+                for key_path in gog_keys:
+                    candidates += _registry_path_values(root_key, key_path, ("PATH", "path", "InstallLocation"))
         except ImportError:
             pass  # Not Windows
 
         # Common GOG install locations
-        for base in [
-            "C:/GOG Games",
-            "D:/GOG Games",
-            os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)") + "/GOG Galaxy/Games",
-            os.environ.get("ProgramFiles", "C:/Program Files") + "/GOG Galaxy/Games",
-        ]:
+        bases = [
+            Path("C:/GOG Games"),
+            Path("D:/GOG Games"),
+            Path(os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)")) / "GOG Galaxy" / "Games",
+            Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "GOG Galaxy" / "Games",
+        ]
+        for drive in _windows_drive_roots():
+            bases += [
+                drive / "GOG Games",
+                drive / "Games" / "GOG",
+                drive / "GOG Galaxy" / "Games",
+            ]
+        for base in _unique_paths(bases):
             candidates += [
                 Path(base) / "Star Wars - KotOR",
                 Path(base) / "Star Wars - KotOR 2",
@@ -402,7 +416,7 @@ def _gog_candidates() -> List[Path]:
             Path("/Applications") / "Star Wars- Knights of the Old Republic.app" / "Contents" / "Resources" / "game",
         ]
 
-    return candidates
+    return _unique_paths(candidates)
 
 
 def _default_candidates() -> List[Path]:
@@ -412,7 +426,11 @@ def _default_candidates() -> List[Path]:
     if sys.platform == "win32":
         pf86 = os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)")
         pf = os.environ.get("ProgramFiles", "C:/Program Files")
-        for base in [pf86, pf, "C:", "D:", "E:"]:
+        bases: list[Path | str] = [pf86, pf, "C:", "D:", "E:"]
+        bases += list(_windows_drive_roots())
+        candidates += _windows_registry_kotor_candidates()
+        candidates += _windows_uninstall_kotor_candidates()
+        for base in _unique_paths(Path(base) for base in bases):
             candidates += [
                 Path(base) / "LucasArts" / "SWKotOR",
                 Path(base) / "LucasArts" / "SWKotOR2",
@@ -444,7 +462,146 @@ def _default_candidates() -> List[Path]:
             Path.home() / "Games" / "star-wars-kotor-ii",
         ]
 
-    return candidates
+    return _unique_paths(candidates)
+
+
+def _unique_paths(paths: Iterable[Path]) -> List[Path]:
+    seen: set[str] = set()
+    result: List[Path] = []
+    for path in paths:
+        try:
+            p = Path(path).expanduser()
+            key = str(p).lower() if sys.platform == "win32" else str(p)
+        except Exception:
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(p)
+    return result
+
+
+def _windows_drive_roots() -> List[Path]:
+    if sys.platform != "win32":
+        return []
+    roots: List[Path] = []
+    try:
+        import ctypes
+
+        mask = ctypes.windll.kernel32.GetLogicalDrives()
+        for index, letter in enumerate(string.ascii_uppercase):
+            if mask & (1 << index):
+                roots.append(Path(f"{letter}:/"))
+    except Exception:
+        roots = [Path(f"{letter}:/") for letter in "CDEFGHIJKLMNOPQRSTUVWXYZ"]
+    return roots
+
+
+def _registry_path_values(root_key, key_path: str, value_names: Iterable[str]) -> List[Path]:
+    paths: List[Path] = []
+    if sys.platform != "win32":
+        return paths
+    try:
+        import winreg
+
+        with winreg.OpenKey(root_key, key_path) as key:
+            for value_name in value_names:
+                try:
+                    value, _kind = winreg.QueryValueEx(key, value_name)
+                except OSError:
+                    continue
+                if value:
+                    paths.append(Path(str(value)))
+    except OSError:
+        pass
+    return paths
+
+
+def _windows_registry_steam_roots() -> List[Path]:
+    if sys.platform != "win32":
+        return []
+    try:
+        import winreg
+    except ImportError:
+        return []
+
+    roots: List[Path] = []
+    keys = [
+        r"SOFTWARE\Valve\Steam",
+        r"SOFTWARE\WOW6432Node\Valve\Steam",
+    ]
+    for root_key in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        for key_path in keys:
+            roots += _registry_path_values(root_key, key_path, ("SteamPath", "InstallPath"))
+    return _unique_paths(roots)
+
+
+def _windows_registry_kotor_candidates() -> List[Path]:
+    if sys.platform != "win32":
+        return []
+    try:
+        import winreg
+    except ImportError:
+        return []
+
+    keys = [
+        r"SOFTWARE\LucasArts\KotOR\v1.0",
+        r"SOFTWARE\LucasArts\KotOR2\v1.0",
+        r"SOFTWARE\LucasArts\Star Wars Knights of the Old Republic",
+        r"SOFTWARE\LucasArts\Star Wars Knights of the Old Republic II",
+        r"SOFTWARE\WOW6432Node\LucasArts\KotOR\v1.0",
+        r"SOFTWARE\WOW6432Node\LucasArts\KotOR2\v1.0",
+        r"SOFTWARE\WOW6432Node\LucasArts\Star Wars Knights of the Old Republic",
+        r"SOFTWARE\WOW6432Node\LucasArts\Star Wars Knights of the Old Republic II",
+    ]
+    candidates: List[Path] = []
+    for root_key in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+        for key_path in keys:
+            candidates += _registry_path_values(
+                root_key,
+                key_path,
+                ("Path", "PATH", "InstallLocation", "Install Dir", "InstallDir"),
+            )
+    return _unique_paths(candidates)
+
+
+def _windows_uninstall_kotor_candidates() -> List[Path]:
+    if sys.platform != "win32":
+        return []
+    try:
+        import winreg
+    except ImportError:
+        return []
+
+    uninstall_roots = [
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+        r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+    ]
+    candidates: List[Path] = []
+    needles = ("knights of the old republic", "kotor")
+    for root_key in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+        for uninstall_root in uninstall_roots:
+            try:
+                with winreg.OpenKey(root_key, uninstall_root) as parent:
+                    for index in range(winreg.QueryInfoKey(parent)[0]):
+                        try:
+                            sub_name = winreg.EnumKey(parent, index)
+                            with winreg.OpenKey(parent, sub_name) as sub_key:
+                                display, _kind = winreg.QueryValueEx(sub_key, "DisplayName")
+                                if not any(needle in str(display).lower() for needle in needles):
+                                    continue
+                                for value_name in ("InstallLocation", "InstallSource"):
+                                    try:
+                                        value, _kind = winreg.QueryValueEx(sub_key, value_name)
+                                    except OSError:
+                                        continue
+                                    if value:
+                                        candidates.append(Path(str(value)))
+                        except OSError:
+                            continue
+            except OSError:
+                continue
+    return _unique_paths(candidates)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

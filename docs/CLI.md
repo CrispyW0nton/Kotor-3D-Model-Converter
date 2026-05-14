@@ -59,11 +59,12 @@ consult when you need every flag of every script.
 
 ### 1.1 `python main.py`
 
-Launches the full GhostRigger Tk UI.
+Launches the full GhostRigger GUI. Qt is preferred by default, with Tkinter as
+the fallback or explicit `--gui tk` mode.
 
 | Aspect | Value |
 |--------|-------|
-| **Arguments** | none |
+| **Arguments** | optional startup model inputs: `--mdl`, `--mdx`, `--tga` / `--texture`, `--texture-dir`, `--game`, `--gui` |
 | **Reads** | `settings.json` (auto-created in CWD on first launch; gitignored) |
 | **Writes** | `Logs/ghostrigger_<YYYY-MM-DD_HHMMSS>.log` (rotated; newest 20 kept) |
 | **Side effects** | Embedded MCP server may autostart (port 7401) — disable with `GHOSTRIGGER_NO_MCP_AUTOSTART=1` |
@@ -71,7 +72,13 @@ Launches the full GhostRigger Tk UI.
 
 ```bash
 python main.py
+python main.py --mdl path/to/pfhc01.mdl --mdx path/to/pfhc01.mdx --tga path/to/PFHC01.tga --game K1
 ```
+
+Startup model arguments still launch the GUI. They are intended for toolchain
+interop tests where an exporter hands GhostRigger an `.mdl` / `.mdx` pair and
+one or more texture files, then lets the normal viewport and panels validate
+the result interactively.
 
 The `dist\GhostRigger-K1-K2.exe` produced by `build.bat` is functionally
 identical to running `python main.py` from a frozen Python.

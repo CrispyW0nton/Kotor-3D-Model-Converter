@@ -13,7 +13,7 @@ All logging.* output (DEBUG and above) is captured, plus:
 The Logs/ folder is created automatically if it does not exist.
 Old log files beyond LOG_KEEP_FILES are auto-rotated (newest kept).
 """
-import sys, os, logging, atexit, traceback, datetime
+import sys, os, logging, atexit, traceback, datetime, argparse
 
 # ── Path setup ────────────────────────────────────────────────────────────
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -186,7 +186,32 @@ def _install_close_hook(app, logfile: str):
     atexit.register(_atexit_flush)
 
 
-def main():
+def _parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Launch GhostRigger and optionally open a KotOR model.",
+    )
+    parser.add_argument("--gui", choices=("auto", "qt", "tk", "tkinter"),
+                        help="GUI backend to launch. Overrides GHOSTRIGGER_GUI.")
+    parser.add_argument("--mdl", help="Path to a .mdl file to open after startup.")
+    parser.add_argument("--mdx", help="Path to the matching .mdx file.")
+    parser.add_argument(
+        "--tga",
+        action="append",
+        default=[],
+        help="Path to a texture file to make available to the viewport. May be repeated.",
+    )
+    parser.add_argument("--texture", dest="tga", action="append",
+                        help="Alias for --tga.")
+    parser.add_argument("--texture-dir",
+                        help="Texture search directory to use for the startup model.")
+    parser.add_argument("--game", choices=("K1", "K2", "k1", "k2"),
+                        help="Preferred game version for the startup model.")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None):
+    args = _parse_args(sys.argv[1:] if argv is None else argv)
+
     # ── Logging setup (must happen before any imports that use logging) ───
     logfile = _setup_logging()
     log = logging.getLogger("ghostrigger.main")
@@ -197,7 +222,7 @@ def main():
     log.info(f"App directory: {_APP_DIR}")
     log.info("=" * 60)
 
-    gui_mode = os.environ.get("GHOSTRIGGER_GUI", "auto").strip().lower()
+    gui_mode = (args.gui or os.environ.get("GHOSTRIGGER_GUI", "auto")).strip().lower()
     if gui_mode not in ("auto", "qt", "tk", "tkinter"):
         gui_mode = "auto"
 
@@ -217,7 +242,7 @@ def main():
             from src.gui.qt_main_window import run as _run_qt
 
             log.info("Qt main window starting.")
-            rc = _run_qt(_APP_DIR)
+            rc = _run_qt(_APP_DIR, startup_input=vars(args))
             log.info("Qt main window exited cleanly.")
             _flush_all_handlers()
             return rc
@@ -237,6 +262,17 @@ def main():
         def run():
             app = KotorModToolsApp()
             _install_close_hook(app, logfile)
+            if args.texture_dir:
+                app._texture_dir = args.texture_dir
+            elif args.tga:
+                app._texture_dir = os.path.dirname(os.path.abspath(args.tga[0]))
+            if args.mdl:
+                app.after(0, lambda: app.open_startup_model(
+                    args.mdl,
+                    mdx_path=args.mdx or "",
+                    texture_dir=getattr(app, "_texture_dir", ""),
+                    game=(args.game or "").upper(),
+                ) if hasattr(app, "open_startup_model") else None)
             log.info("Tkinter mainloop starting.")
             app.mainloop()
             log.info("Tkinter mainloop exited cleanly.")

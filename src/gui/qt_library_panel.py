@@ -18,6 +18,9 @@ class QtModelListItem(QtWidgets.QListWidgetItem):
 
 class QtLibraryPanel(QtWidgets.QWidget):
     loadRequested = QtCore.Signal(str, str)
+    extractRequested = QtCore.Signal(dict)
+    batchRequested = QtCore.Signal(str, list)
+    autoDetectRequested = QtCore.Signal()
     dirsChanged = QtCore.Signal(str, str)
     scanRequested = QtCore.Signal()
     deepScanRequested = QtCore.Signal()
@@ -52,6 +55,7 @@ class QtLibraryPanel(QtWidgets.QWidget):
         self.scan_button.setProperty("accent", True)
         self.k1_button.clicked.connect(lambda: self._choose_dir("K1"))
         self.k2_button.clicked.connect(lambda: self._choose_dir("K2"))
+        self.auto_button.clicked.connect(self.autoDetectRequested.emit)
         self.deep_button.clicked.connect(self.deepScanRequested.emit)
         self.scan_button.clicked.connect(self.scanRequested.emit)
         for button in (self.k1_button, self.k2_button, self.auto_button):
@@ -127,14 +131,16 @@ class QtLibraryPanel(QtWidgets.QWidget):
         self.load_button.setProperty("accent", True)
         self.extract_button = QtWidgets.QPushButton("Extract")
         self.load_button.clicked.connect(self.load_selected)
+        self.extract_button.clicked.connect(self.extract_selected)
         action_row.addWidget(self.load_button, 1)
         action_row.addWidget(self.extract_button)
         root.addLayout(action_row)
 
         batch_row = QtWidgets.QHBoxLayout()
-        for label in ("Batch OBJ", "Batch ASCII", "Batch TGA"):
+        for label, fmt in (("Batch OBJ", "obj"), ("Batch ASCII", "ascii"), ("Batch TGA", "tga")):
             button = QtWidgets.QPushButton(label)
             button.setProperty("compact", True)
+            button.clicked.connect(lambda _checked=False, f=fmt: self.batchRequested.emit(f, self.visible_rows()))
             batch_row.addWidget(button)
         batch_row.addStretch(1)
         root.addLayout(batch_row)
@@ -151,10 +157,23 @@ class QtLibraryPanel(QtWidgets.QWidget):
         item = self.listbox.currentItem()
         return getattr(item, "row", None) if item else None
 
+    def visible_rows(self) -> list[dict]:
+        rows = []
+        for index in range(self.listbox.count()):
+            row = getattr(self.listbox.item(index), "row", None)
+            if row:
+                rows.append(row)
+        return rows
+
     def load_selected(self) -> None:
         row = self.selected_row()
         if row:
             self.loadRequested.emit(row.get("resref", ""), row.get("game", ""))
+
+    def extract_selected(self) -> None:
+        row = self.selected_row()
+        if row:
+            self.extractRequested.emit(row)
 
     def _load_item(self, item: QtWidgets.QListWidgetItem) -> None:
         row = getattr(item, "row", None)
