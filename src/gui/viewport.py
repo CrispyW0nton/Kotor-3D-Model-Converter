@@ -1486,9 +1486,14 @@ class ArcBallCamera:
       • MMB / RMB  → pan    (shift target)
       • Scroll     → zoom
     """
+    DEFAULT_AZIMUTH = 90.0
+    DEFAULT_ELEVATION = 20.0
+
     def __init__(self):
-        self.azimuth   = 30.0     # degrees
-        self.elevation = 20.0     # degrees  (clamped –89..89)
+        # KotOR actors face +Y, so the canonical front view places the eye on
+        # +Y and looks back toward the model centre.
+        self.azimuth   = self.DEFAULT_AZIMUTH
+        self.elevation = self.DEFAULT_ELEVATION
         self.distance  = 5.0
         self.target    = [0.0, 1.0, 0.0]
         self.fov       = 45.0
@@ -1526,20 +1531,25 @@ class ArcBallCamera:
         self.target[1] += up[1] * dy_px * scale
         self.target[2] += up[2] * dy_px * scale
 
-    def frame_bounds(self, bb_min, bb_max):
+    def frame_bounds(self, bb_min, bb_max, reset_view: bool = False):
         """Fit camera to bounding box using screen-space projection (Z-up world).
 
         Instead of using the raw 3-D diagonal (which over-distances wide/flat
         models like quadrupeds or banthas), we iterate over the 8 BB corners,
         project them onto the camera's right/up plane, and derive the minimum
         distance required so that all projected corners fit inside the FOV.
+
+        ``reset_view`` also restores the canonical front camera.  Plain
+        frame-all preserves the user's current orbit and only adjusts target
+        and distance.
         """
         cx = (bb_min[0] + bb_max[0]) * 0.5
         cy = (bb_min[1] + bb_max[1]) * 0.5
         cz = (bb_min[2] + bb_max[2]) * 0.5
         self.target    = [cx, cy, cz]
-        self.elevation = 25.0
-        self.azimuth   = -45.0
+        if reset_view:
+            self.azimuth = self.DEFAULT_AZIMUTH
+            self.elevation = self.DEFAULT_ELEVATION
 
         # Compute a safe initial distance (3-D diagonal) just to get camera vectors
         dx = bb_max[0] - bb_min[0]
@@ -1573,12 +1583,14 @@ class ArcBallCamera:
         ]
 
         # Project each corner onto right/up plane; find max screen extent
-        max_right = max_up = 0.0
+        max_right = max_up = max_depth = 0.0
         for c in corners:
             pr = abs(_dot(c, right_v))
             pu = abs(_dot(c, up_v))
+            pd = abs(_dot(c, fwd_v))
             if pr > max_right: max_right = pr
             if pu > max_up:    max_up    = pu
+            if pd > max_depth:  max_depth = pd
 
         # Determine required distance so the extent fits inside the FOV
         # At distance d: half_screen_world = d * tan(fov/2)
@@ -1587,9 +1599,8 @@ class ArcBallCamera:
         screen_extent = max(max_right, max_up, 0.01)
         fitted_dist   = (screen_extent * 1.18) / half_fov_tan
 
-        # Also keep at least the depth-extent / 2 to avoid near-plane clipping
-        depth_extent = abs(_dot((dx, dy, dz), fwd_v))
-        min_dist     = max(0.3, depth_extent * 0.6)
+        # Also keep enough depth margin to avoid near-plane clipping.
+        min_dist = max(0.3, max_depth * 1.25)
 
         self.distance = max(fitted_dist, min_dist)
 
@@ -4410,12 +4421,6 @@ class FrameRenderer:
                 wo = (wo[0]*_s, wo[1]*_s, wo[2]*_s, wo[3]*_s)
             wo_rot = _math.sqrt(wo[0]*wo[0] + wo[1]*wo[1] + wo[2]*wo[2])
             is_id  = (wo_rot < 0.001)
-            if getattr(node, 'is_skin', False):
-                # Skin vertices are authored in model-root bind space. Do not
-                # apply the skin node's hierarchy transform in bind-pose draws.
-                result = ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0), True)
-                self._wt_cache[nid] = result
-                return result
             result = (wp, wo, is_id)
             self._wt_cache[nid] = result
             return result
@@ -4424,10 +4429,6 @@ class FrameRenderer:
         wp, wo = node.world_transform()
         wo_rot = _math.sqrt(wo[0]*wo[0] + wo[1]*wo[1] + wo[2]*wo[2])
         is_id  = (wo_rot < 0.001)
-        if getattr(node, 'is_skin', False):
-            result = ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0), True)
-            self._wt_cache[nid] = result
-            return result
         result = (wp, wo, is_id)
         self._wt_cache[nid] = result
         return result
@@ -4784,7 +4785,8 @@ class FrameRenderer:
                             for i in range(len(verts))]
             wp, wo, is_id = self._node_world_transform(node)
             _gr_probe('CPU-bind', node, wp, wo, is_id)
-            return [tuple(v) for v in verts]
+            xfm = self._apply_vertex_transform
+            return [xfm(node, v, wp, wo, is_id) for v in verts]
 
         # ── Non-skin trimesh/dangly: apply full world transform ───────────────
         wp, wo, is_id = self._node_world_transform(node)
@@ -8289,6 +8291,10 @@ class ViewportWidget(tk.Frame):
         self._gimbal_axis: str = ''
         self._gimbal_drag_start: tuple = (0, 0)
         self._gimbal_node_start_pos: tuple = (0.0, 0.0, 0.0)
+        self._gimbal_node_start_rot: tuple = (0.0, 0.0, 0.0, 1.0)
+        self._undo_limit = 250
+        self._undo_stack: list = []
+        self._redo_stack: list = []
 
         # ── AcuRig guide drag state ────────────────────────────────────
         self._acurig_guide_dragging: bool = False
@@ -8487,6 +8493,10 @@ class ViewportWidget(tk.Frame):
         self.canvas.bind("<g>",              lambda e: self._toggle_gimbal())
         self.canvas.bind("<Tab>",            lambda e: self._cycle_gimbal_mode())
         self.canvas.bind("<r>",              lambda e: self.reset_camera())
+        self.canvas.bind("<Control-z>",      lambda e: self.undo())
+        self.canvas.bind("<Control-Z>",      lambda e: self.undo())
+        self.canvas.bind("<Control-y>",      lambda e: self.redo())
+        self.canvas.bind("<Control-Y>",      lambda e: self.redo())
         self.canvas.bind("<Control-g>",      lambda e: self._toggle_gpu_renderer())
         self.canvas.bind("<Control-G>",      lambda e: self._toggle_gpu_renderer())
         self.canvas.bind("<plus>",           lambda e: self._zoom_in())
@@ -8540,6 +8550,7 @@ class ViewportWidget(tk.Frame):
                    texture_cache: Dict[str, bytes] = None):
         self.model = model
         self._renderer.set_model(model)
+        self._clear_edit_history()
 
         # Build search dirs list: texture_dir + extra_dirs
         search_dirs = []
@@ -8713,6 +8724,108 @@ class ViewportWidget(tk.Frame):
             self._uv_viewer.set_selected_node(node)
         self._request_render()
 
+    def refresh_node_transform(self, node=None):
+        if node is not None:
+            before = getattr(node, "_gr_undo_before_transform", None)
+            if before is not None:
+                try:
+                    self._commit_node_transform(
+                        node,
+                        before[0],
+                        before[1],
+                        tuple(getattr(node, "position", (0.0, 0.0, 0.0))),
+                        tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))),
+                        "Set Position",
+                    )
+                finally:
+                    try:
+                        delattr(node, "_gr_undo_before_transform")
+                    except Exception:
+                        pass
+            self._evict_transform_cache(node)
+        else:
+            self._renderer._wt_cache.clear()
+        self._request_render()
+
+    def _clear_edit_history(self):
+        self._undo_stack.clear()
+        self._redo_stack.clear()
+
+    @staticmethod
+    def _state_changed(before_pos, before_rot, after_pos, after_rot) -> bool:
+        values = tuple(before_pos) + tuple(before_rot) + tuple(after_pos) + tuple(after_rot)
+        if any(not math.isfinite(float(v)) for v in values):
+            return False
+        return (
+            any(abs(float(a) - float(b)) > 1e-7 for a, b in zip(before_pos, after_pos))
+            or any(abs(float(a) - float(b)) > 1e-7 for a, b in zip(before_rot, after_rot))
+        )
+
+    def _commit_node_transform(self, node, before_pos, before_rot, after_pos, after_rot, label: str):
+        if node is None or not self._state_changed(before_pos, before_rot, after_pos, after_rot):
+            return
+        self._undo_stack.append({
+            "node": node,
+            "before_pos": tuple(before_pos),
+            "before_rot": tuple(before_rot),
+            "after_pos": tuple(after_pos),
+            "after_rot": tuple(after_rot),
+            "label": label,
+        })
+        if len(self._undo_stack) > self._undo_limit:
+            self._undo_stack.pop(0)
+        self._redo_stack.clear()
+
+    def _evict_transform_cache(self, node):
+        self._renderer._wt_cache.pop(id(node), None)
+        stack = list(getattr(node, "children", []) or [])
+        visited = set()
+        while stack:
+            child = stack.pop()
+            cid = id(child)
+            if cid in visited:
+                continue
+            visited.add(cid)
+            self._renderer._wt_cache.pop(cid, None)
+            stack.extend(getattr(child, "children", []) or [])
+
+    def _notify_node_moved(self, node):
+        if self.on_node_moved:
+            self.on_node_moved(node)
+        if self._renderer.rig_edit_mode and self._renderer.on_bone_moved:
+            try:
+                self._renderer.on_bone_moved(node.name, node.position)
+            except Exception:
+                pass
+
+    def _apply_transform_action(self, action, use_after: bool):
+        node = action.get("node")
+        if node is None:
+            return
+        node.position = action["after_pos"] if use_after else action["before_pos"]
+        node.rotation = action["after_rot"] if use_after else action["before_rot"]
+        self._evict_transform_cache(node)
+        self._notify_node_moved(node)
+        self._request_render()
+
+    def undo(self):
+        if not self._undo_stack:
+            return False
+        action = self._undo_stack.pop()
+        self._apply_transform_action(action, use_after=False)
+        self._redo_stack.append(action)
+        return True
+
+    def redo(self):
+        if not self._redo_stack:
+            return False
+        action = self._redo_stack.pop()
+        self._apply_transform_action(action, use_after=True)
+        self._undo_stack.append(action)
+        if len(self._undo_stack) > self._undo_limit:
+            self._undo_stack.pop(0)
+        return True
+
     def frame_all(self):
         if self.model:
             rbb_min, rbb_max = self._renderer._get_render_bounds()
@@ -8723,7 +8836,7 @@ class ViewportWidget(tk.Frame):
         self.camera.__init__()
         if self.model:
             rbb_min, rbb_max = self._renderer._get_render_bounds()
-            self.camera.frame_bounds(rbb_min, rbb_max)
+            self.camera.frame_bounds(rbb_min, rbb_max, reset_view=True)
         self._request_render()
 
     def set_animation_pose(self, pose, name: str = "", time: float = 0.0, length: float = 0.0):
@@ -8825,6 +8938,7 @@ class ViewportWidget(tk.Frame):
                 self._gimbal_drag_start = (e.x, e.y)
                 node = self._renderer.selected_node
                 self._gimbal_node_start_pos = tuple(node.position)
+                self._gimbal_node_start_rot = tuple(node.rotation)
                 self._renderer.gimbal_active_axis = axis
                 self._request_render()
                 return  # consumed; don't start orbit/bone check
@@ -8900,15 +9014,15 @@ class ViewportWidget(tk.Frame):
             self._renderer._wt_cache.clear()  # re-propagate moved bone to children
             node = self._renderer.selected_node
             if node:
-                # Generic node-moved callback
-                if self.on_node_moved:
-                    self.on_node_moved(node)
-                # Rig-edit mode: forward bone move to the RetargetEngine
-                if self._renderer.rig_edit_mode and self._renderer.on_bone_moved:
-                    try:
-                        self._renderer.on_bone_moved(node.name, node.position)
-                    except Exception:
-                        pass
+                self._commit_node_transform(
+                    node,
+                    self._gimbal_node_start_pos,
+                    self._gimbal_node_start_rot,
+                    tuple(node.position),
+                    tuple(node.rotation),
+                    "Gimbal Transform",
+                )
+                self._notify_node_moved(node)
             self._request_render()
             return
 

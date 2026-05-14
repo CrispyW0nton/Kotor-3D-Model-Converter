@@ -442,6 +442,8 @@ class MDLAsciiParser:
     def _parse_node_block(self, type_str: str, name: str) -> ModelNode:
         flags = _ascii_type_to_flags(type_str)
         node  = ModelNode(name=name, flags=flags)
+        node.imported_ascii = True
+        node.uv_v_flip = True
         if self._stack:
             p = self._stack[-1]
             node.parent = p
@@ -461,6 +463,9 @@ class MDLAsciiParser:
                     # bitmap2 without a real lightmap = secondary material texture
                     node.texture_names.append(node.lightmap)
                     node.tex_count = 2
+                if node.face_mats and node.texture_names:
+                    max_slot = max(0, len(node.texture_names) - 1)
+                    node.face_mats = [max(0, min(int(mat), max_slot)) for mat in node.face_mats]
                 self._stack.pop(); return node
 
             elif cmd == 'parent' and len(t)>1:
@@ -547,9 +552,7 @@ class MDLAsciiParser:
                             node.face_uvs = []
                         node.face_uvs.append((t1, t2, t3))
                         if len(ft) >= 8:
-                            mat = min(int(ft[7]) & 0x7FFFFFFF,
-                                      max(0, getattr(node, 'tex_count', 1) - 1))
-                            node.face_mats.append(mat)
+                            node.face_mats.append(int(ft[7]) & 0x7FFFFFFF)
                         else:
                             node.face_mats.append(0)
                     self._pos+=1

@@ -67,3 +67,85 @@ def test_pykotor_mdl_binary_fixes_are_idempotent() -> None:
 
     ensure_pykotor_mdl_binary_fixes()
     ensure_pykotor_mdl_binary_fixes()
+
+
+def test_ascii_mdl_nodes_keep_imported_uv_orientation() -> None:
+    from src.core.mdl_parser import MDLAsciiParser
+
+    model = MDLAsciiParser().parse(
+        [
+            "newmodel uv_test",
+            "node trimesh mesh",
+            "parent NULL",
+            "bitmap redtex",
+            "bitmap2 greentex",
+            "verts 3",
+            "0 0 0",
+            "1 0 0",
+            "0 1 0",
+            "tverts 3",
+            "0 0",
+            "1 0",
+            "0 1",
+            "faces 1",
+            "0 1 2 1 0 1 2 0",
+            "endnode",
+            "donemodel",
+        ]
+    )
+
+    assert model.root_node is not None
+    assert model.root_node.texture_names == ["redtex", "greentex"]
+    assert model.root_node.uvs == [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]
+    assert model.root_node.imported_ascii is True
+    assert model.root_node.uv_v_flip is True
+    assert model.root_node.face_mats == [0]
+
+
+def test_gpu_shader_has_per_node_uv_v_flip_control() -> None:
+    from src.gui.gpu_renderer import _VERT_SRC
+
+    assert "uniform float u_uv_v_flip" in _VERT_SRC
+    assert "mix(in_uv.y, 1.0 - in_uv.y, u_uv_v_flip)" in _VERT_SRC
+
+
+def test_gpu_ascii_multitexture_split_is_ascii_gated() -> None:
+    import inspect
+
+    from src.gui.gpu_renderer import GpuRenderer
+
+    source = inspect.getsource(GpuRenderer._render_gpu)
+    assert "ASCII/Kotor Tool MDLs use face_mats as per-face texture slots" in source
+    assert "getattr(node, 'imported_ascii', False)" in source
+    assert "gm.mat_slots" in source
+
+
+def test_qt_gpu_viewport_uses_overlay_not_cpu_textured_fallback() -> None:
+    import inspect
+
+    from src.gui.qt_viewport import QtViewportWidget
+
+    source = inspect.getsource(QtViewportWidget._draw_cpu_overlays)
+    assert "_draw_mesh_textured" not in source
+    assert "_draw_mesh_flat" in source
+    assert "_draw_grid" in source
+    assert "_draw_stats" in source
+
+
+def test_qt_gpu_viewport_disables_gpu_culling_for_cpu_parity() -> None:
+    import inspect
+
+    from src.gui.qt_viewport import QtViewportWidget
+
+    source = inspect.getsource(QtViewportWidget._render_gpu_frame)
+    assert "cull_faces = False" in source
+
+
+def test_gpu_vbo_applies_node_local_transform_to_skin_nodes() -> None:
+    import inspect
+
+    from src.gui import gpu_renderer
+
+    source = inspect.getsource(gpu_renderer._build_vbo_data)
+    assert "if _node_vs == 0:  # NODE_LOCAL" in source
+    assert "if _node_vs == 0 and is_skin" not in source

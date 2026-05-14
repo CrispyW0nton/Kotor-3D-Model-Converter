@@ -26,7 +26,7 @@ try:
 except ImportError as exc:  # pragma: no cover - import gate for Tk fallback
     raise RuntimeError("PySide6 is required for the Qt shell") from exc
 
-from .qt_library_panel import QtLibraryPanel
+from .qt_library_panel import QtLibraryPanel, enrich_library_rows
 from .qt_log_panel import QtLogPanel
 from .qt_matrix_background import QtMatrixEngine, QtMatrixLabel, QtMatrixPanel
 from .qt_properties_panel import QtPropertiesPanel, QtSkeletonPanel
@@ -169,6 +169,7 @@ class LibraryScanWorker(QtCore.QObject):
                 if ok:
                     for resref, _restype in mgr.list_models("K2"):
                         rows.append({"game": "K2", "resref": resref, "source": self.k2_dir})
+            rows = enrich_library_rows(rows)
             rows.sort(key=lambda item: (item["game"], item["resref"]))
             self.finished.emit(rows, "")
         except Exception:
@@ -618,6 +619,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.reset_camera_action = QtGui.QAction("Reset Camera", self)
         self.reset_camera_action.setShortcut("R")
         self.reset_camera_action.triggered.connect(lambda: self._call_viewport("reset_camera"))
+        self.undo_viewport_action = QtGui.QAction("Undo Viewport Edit", self)
+        self.undo_viewport_action.setShortcut("Ctrl+Z")
+        self.undo_viewport_action.triggered.connect(lambda: self._call_viewport("undo"))
+        self.redo_viewport_action = QtGui.QAction("Redo Viewport Edit", self)
+        self.redo_viewport_action.setShortcut("Ctrl+Y")
+        self.redo_viewport_action.triggered.connect(lambda: self._call_viewport("redo"))
         self.wire_action = QtGui.QAction("Toggle Wireframe", self)
         self.wire_action.setShortcut("W")
         self.wire_action.triggered.connect(lambda: self._click_viewport_button("wire_button"))
@@ -706,6 +713,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             None,
             self.frame_all_action,
             self.reset_camera_action,
+            None,
+            self.undo_viewport_action,
+            self.redo_viewport_action,
             None,
             self.wire_action,
             self.bones_action,
@@ -881,6 +891,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.model_pill.setObjectName("ModelPill")
         self.model_pill.setMinimumWidth(154)
         self.model_pill.setAlignment(QtCore.Qt.AlignCenter)
+        self.model_pill.setToolTip("No model loaded. Ctrl+W clears the current viewport.")
         layout.addWidget(self.model_pill)
         layout.addStretch(1)
 
@@ -1011,6 +1022,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport_label = self.viewport.canvas
         self.skeleton_panel.nodeSelected.connect(self.viewport.set_selected_node)
         self.viewport.nodeSelected.connect(self.properties_panel.show_node)
+        self.viewport.nodeMoved.connect(self.properties_panel.show_node)
         self.properties_panel.positionApplied.connect(
             lambda node, _x, _y, _z: self.viewport.refresh_node_transform(node)
         )
@@ -1197,6 +1209,28 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return None
         return self._current_model
 
+    def _model_worker_is_running(self) -> bool:
+        thread = self._worker_thread
+        if thread is None:
+            return False
+        try:
+            return thread.isRunning()
+        except RuntimeError:
+            self._worker_thread = None
+            self._model_worker = None
+            return False
+
+    def _scan_worker_is_running(self) -> bool:
+        thread = self._scan_thread
+        if thread is None:
+            return False
+        try:
+            return thread.isRunning()
+        except RuntimeError:
+            self._scan_thread = None
+            self._scan_worker = None
+            return False
+
     def _set_model_internal(self, model, path: str = ""):
         if model is None:
             self._animation_timer.stop()
@@ -1205,6 +1239,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._current_model = None
             self._model_path = ""
             self.model_pill.setText("// No model loaded")
+            self.model_pill.setToolTip("No model loaded. Ctrl+W clears the current viewport.")
             self.statusBar().showMessage("Ready")
             if hasattr(self, "viewport"):
                 self.viewport.set_model(None)
@@ -2156,7 +2191,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.library_list.addItem("No saved game directories yet")
 
     def _scan_library(self):
-        if self._scan_thread is not None and self._scan_thread.isRunning():
+        if self._scan_worker_is_running():
             return
         k1_dir = self.k1_dir_edit.text().strip()
         k2_dir = self.k2_dir_edit.text().strip()
@@ -2174,6 +2209,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: setattr(self, "_scan_thread", None))
         thread.finished.connect(lambda: setattr(self, "_scan_worker", None))
         self._scan_thread = thread
         self._scan_worker = worker
@@ -2228,8 +2264,19 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._start_resource_load(row["resref"], row["game"])
 
     def _start_resource_load(self, resref: str, game: str):
-        if self._worker_thread is not None and self._worker_thread.isRunning():
+        if self._model_worker_is_running():
             self._log("A model is already loading.", "warning")
+            return
+        if str(resref).lower().startswith("gr_humanoid"):
+            try:
+                from src.core.template_builder import build_humanoid_template
+
+                game_tag = game.upper() if game else "K1"
+                model = build_humanoid_template(game_version=game_tag, name=resref)
+                self._current_game = game_tag
+                self._on_model_loaded(model, f"{game_tag}:{resref}", "")
+            except Exception:
+                self._log(f"Template load failed:\n{traceback.format_exc()}", "error")
             return
         self._log(f"Loading {game}:{resref} ...")
         self.statusBar().showMessage(f"Loading {game}:{resref}...")
@@ -2248,6 +2295,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: setattr(self, "_worker_thread", None))
         thread.finished.connect(lambda: setattr(self, "_model_worker", None))
         self._worker_thread = thread
         self._model_worker = worker
@@ -2286,7 +2334,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         texture_dir: str = "",
         game: str = "",
     ):
-        if self._worker_thread is not None and self._worker_thread.isRunning():
+        if self._model_worker_is_running():
             self._log("A model is already loading.", "warning")
             return
         mdl = Path(path)
@@ -2310,6 +2358,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: setattr(self, "_worker_thread", None))
         thread.finished.connect(lambda: setattr(self, "_model_worker", None))
         self._worker_thread = thread
         self._model_worker = worker
@@ -2340,6 +2389,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         else:
             self.viewport_label.setText(f"{name}\n\nQt viewport host\n{mesh_count} mesh | {node_count} nodes")
         self.model_pill.setText(f"// {name}")
+        self.model_pill.setToolTip(
+            f"Currently loaded model: {name} (Ctrl+W to clear)"
+        )
         if hasattr(self, "skeleton_panel"):
             self.skeleton_panel.load_model(model)
         if hasattr(self, "properties_panel"):

@@ -10,6 +10,7 @@ from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from .qt_gpu_renderer import GpuRenderer
 from .qt_uv_viewer import QtUVViewerWindow
 from .viewport import ArcBallCamera, FrameRenderer
 
@@ -41,11 +42,18 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gimbal_axis = ""
         self._gimbal_drag_start = (0, 0)
         self._gimbal_node_start_pos = (0.0, 0.0, 0.0)
+        self._gimbal_node_start_rot = (0.0, 0.0, 0.0, 1.0)
+        self._undo_limit = 250
+        self._undo_stack: list[dict] = []
+        self._redo_stack: list[dict] = []
         self._render_pending = False
         self._last_canvas_size = (0, 0)
         self._pixmap: Optional[QtGui.QPixmap] = None
         self._fast_drag_enabled = False
         self._uv_viewer: Optional[QtUVViewerWindow] = None
+        self._use_gpu = True
+        self._gpu_renderer: Optional[GpuRenderer] = None
+        self._gpu_tex_preload_model_id = 0
 
         self._render_timer = QtCore.QTimer(self)
         self._render_timer.setSingleShot(True)
@@ -65,11 +73,13 @@ class QtViewportWidget(QtWidgets.QWidget):
         row.setSpacing(4)
 
         self.wire_button = self._button("Wire  W", self.toggle_wireframe, checkable=True)
-        self.bones_button = self._button("Bones  B", self.toggle_bones, checkable=True, active=True)
+        self.bones_button = self._button("Bones  B", self.toggle_bones, checkable=True)
         self.texture_button = self._button("Texture  T", self.toggle_texture, checkable=True, active=True)
+        self.renderer_button = self._button("GPU", self.toggle_gpu_renderer, checkable=True, active=True)
         row.addWidget(self.wire_button)
         row.addWidget(self.bones_button)
         row.addWidget(self.texture_button)
+        row.addWidget(self.renderer_button)
         row.addWidget(self._separator())
 
         self.shade_combo = QtWidgets.QComboBox()
@@ -97,6 +107,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         )
         self.canvas.installEventFilter(self)
         self.shade_combo.currentTextChanged.connect(self._on_shade_change)
+        self._renderer.show_bones = self.bones_button.isChecked()
+        self._renderer.show_texture = self.texture_button.isChecked()
+        self._renderer.show_wireframe = self.wire_button.isChecked()
 
         root.addWidget(tb)
         root.addWidget(self.canvas, 1)
@@ -136,6 +149,25 @@ class QtViewportWidget(QtWidgets.QWidget):
     ) -> None:
         self.model = model
         self._renderer.set_model(model)
+        self._clear_edit_history()
+        self._gpu_tex_preload_model_id = 0
+        if self._gpu_renderer is not None:
+            self._gpu_renderer.clear_caches()
+        if model is None:
+            self._pixmap = None
+            self._render_pending = False
+            self._renderer.set_animation_pose(None)
+            self._renderer.clear_walkmesh()
+            self.walkmesh_button.setChecked(False)
+            self._renderer._frame_view = None
+            self._renderer._frame_verts_cache = {}
+            self._renderer._frame_norms_cache = {}
+            self.renderer_button.setText("GPU" if self._use_gpu else "CPU")
+            self.canvas.setPixmap(QtGui.QPixmap())
+            self.canvas.setText("No model loaded")
+            self._update_uv_viewer_model()
+            self.modelChanged.emit(None)
+            return
         self._renderer.show_texture = self.texture_button.isChecked()
         self._renderer.show_bones = self.bones_button.isChecked()
         self._renderer.show_wireframe = self.wire_button.isChecked()
@@ -150,14 +182,10 @@ class QtViewportWidget(QtWidgets.QWidget):
         if search_dirs:
             self._renderer.tex_cache.set_search_dirs(search_dirs)
 
-        if model is None:
-            self.canvas.setText("No model loaded")
-            self.canvas.setPixmap(QtGui.QPixmap())
-        else:
-            self._compute_bb(model)
-            self.frame_all()
-            self._prewarm_textures(model)
-            self._update_uv_viewer_model()
+        self._compute_bb(model)
+        self.frame_all()
+        self._prewarm_textures(model)
+        self._update_uv_viewer_model()
         self.modelChanged.emit(model)
         self._request_render()
 
@@ -194,6 +222,12 @@ class QtViewportWidget(QtWidgets.QWidget):
         if self._renderer.show_texture and not self._renderer.show_solid:
             self.shade_combo.setCurrentText("Both")
         self._request_render()
+
+    def toggle_gpu_renderer(self, checked: Optional[bool] = None) -> None:
+        self._use_gpu = bool(checked) if checked is not None else not self._use_gpu
+        self.renderer_button.setChecked(self._use_gpu)
+        self.renderer_button.setText("GPU" if self._use_gpu else "CPU")
+        self._request_render(fast=True)
 
     def toggle_walkmesh(self, checked: Optional[bool] = None) -> None:
         if self._renderer._walkmesh_overlay is None:
@@ -234,7 +268,10 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def reset_camera(self) -> None:
         self.camera.__init__()
-        self.frame_all()
+        if self.model:
+            bb_min, bb_max = self._renderer._get_render_bounds()
+            self.camera.frame_bounds(bb_min, bb_max, reset_view=True)
+        self._request_render()
 
     def set_selected_node(self, node) -> None:
         self._renderer.selected_node = node
@@ -245,10 +282,95 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def refresh_node_transform(self, node=None) -> None:
         if node is not None:
+            before = getattr(node, "_gr_undo_before_transform", None)
+            if before is not None:
+                try:
+                    self._commit_node_transform(
+                        node,
+                        before[0],
+                        before[1],
+                        tuple(getattr(node, "position", (0.0, 0.0, 0.0))),
+                        tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))),
+                        "Set Position",
+                    )
+                finally:
+                    try:
+                        delattr(node, "_gr_undo_before_transform")
+                    except Exception:
+                        pass
             self._evict_transform_cache(node)
         else:
             self._renderer._wt_cache.clear()
         self._request_render()
+
+    def _clear_edit_history(self) -> None:
+        self._undo_stack.clear()
+        self._redo_stack.clear()
+
+    @staticmethod
+    def _state_changed(before_pos, before_rot, after_pos, after_rot) -> bool:
+        values = tuple(before_pos) + tuple(before_rot) + tuple(after_pos) + tuple(after_rot)
+        if any(not math.isfinite(float(v)) for v in values):
+            return False
+        return (
+            any(abs(float(a) - float(b)) > 1e-7 for a, b in zip(before_pos, after_pos))
+            or any(abs(float(a) - float(b)) > 1e-7 for a, b in zip(before_rot, after_rot))
+        )
+
+    def _commit_node_transform(self, node, before_pos, before_rot, after_pos, after_rot, label: str) -> None:
+        if node is None or not self._state_changed(before_pos, before_rot, after_pos, after_rot):
+            return
+        self._undo_stack.append(
+            {
+                "node": node,
+                "before_pos": tuple(before_pos),
+                "before_rot": tuple(before_rot),
+                "after_pos": tuple(after_pos),
+                "after_rot": tuple(after_rot),
+                "label": label,
+            }
+        )
+        if len(self._undo_stack) > self._undo_limit:
+            self._undo_stack.pop(0)
+        self._redo_stack.clear()
+
+    def _apply_transform_action(self, action: dict, use_after: bool) -> None:
+        node = action.get("node")
+        if node is None:
+            return
+        node.position = action["after_pos"] if use_after else action["before_pos"]
+        node.rotation = action["after_rot"] if use_after else action["before_rot"]
+        self._evict_transform_cache(node)
+        self._notify_node_moved(node)
+        self._request_render()
+
+    def undo(self) -> bool:
+        if not self._undo_stack:
+            return False
+        action = self._undo_stack.pop()
+        self._apply_transform_action(action, use_after=False)
+        self._redo_stack.append(action)
+        return True
+
+    def redo(self) -> bool:
+        if not self._redo_stack:
+            return False
+        action = self._redo_stack.pop()
+        self._apply_transform_action(action, use_after=True)
+        self._undo_stack.append(action)
+        if len(self._undo_stack) > self._undo_limit:
+            self._undo_stack.pop(0)
+        return True
+
+    def _notify_node_moved(self, node) -> None:
+        if self.on_node_moved:
+            self.on_node_moved(node)
+        self.nodeMoved.emit(node)
+        if self._renderer.rig_edit_mode and self._renderer.on_bone_moved:
+            try:
+                self._renderer.on_bone_moved(node.name, node.position)
+            except Exception:
+                pass
 
     def set_anim_base_pose(self, base_pose) -> None:
         self._renderer.set_anim_base_pose(base_pose)
@@ -336,6 +458,15 @@ class QtViewportWidget(QtWidgets.QWidget):
                     self.gimbal_button.click(); return True
                 if key == QtCore.Qt.Key_Tab:
                     self.cycle_gimbal_mode(); return True
+                if key == QtCore.Qt.Key_Z and (event.modifiers() & QtCore.Qt.ControlModifier):
+                    if event.modifiers() & QtCore.Qt.ShiftModifier:
+                        self.redo()
+                    else:
+                        self.undo()
+                    return True
+                if key == QtCore.Qt.Key_Y and (event.modifiers() & QtCore.Qt.ControlModifier):
+                    self.redo()
+                    return True
         return super().eventFilter(obj, event)
 
     def _request_render(self, fast: bool = False) -> None:
@@ -347,10 +478,13 @@ class QtViewportWidget(QtWidgets.QWidget):
             return
         self._render_pending = False
         if self.model is None:
+            self._pixmap = None
+            self.canvas.setPixmap(QtGui.QPixmap())
+            self.canvas.setText("No model loaded")
             return
         w = max(8, self.canvas.width())
         h = max(8, self.canvas.height())
-        img = self._renderer.render(w, h)
+        img = self._render_frame(w, h)
         if img is None:
             mesh_count = len(self.model.mesh_nodes()) if hasattr(self.model, "mesh_nodes") else 0
             node_count = self.model.node_count() if hasattr(self.model, "node_count") else 0
@@ -367,6 +501,114 @@ class QtViewportWidget(QtWidgets.QWidget):
         ).copy()
         self._pixmap = QtGui.QPixmap.fromImage(qimg)
         self.canvas.setPixmap(self._pixmap)
+
+    def _render_frame(self, w: int, h: int):
+        if self._use_gpu and self.model is not None:
+            img = self._render_gpu_frame(w, h)
+            if img is not None:
+                self._set_renderer_badge(True)
+                return self._draw_cpu_overlays(img, w, h)
+        self._set_renderer_badge(False)
+        return self._renderer.render(w, h)
+
+    def _render_gpu_frame(self, w: int, h: int):
+        if self._gpu_renderer is None:
+            self._gpu_renderer = GpuRenderer()
+        self._preload_gpu_textures()
+        tex_cache = getattr(self._renderer, "tex_cache", None)
+        textures = {
+            key: value
+            for key, value in getattr(tex_cache, "_cache", {}).items()
+            if value is not None
+        }
+        self._gpu_renderer.interactive = bool(
+            self._renderer.is_interactive or self._pan_dragging or self._is_dragging
+        )
+        self._gpu_renderer.show_wireframe = bool(self._renderer.show_wireframe)
+        self._gpu_renderer.cull_faces = False
+        return self._gpu_renderer.render(
+            self.model,
+            self.camera,
+            w,
+            h,
+            textures=textures,
+            anim_pose=getattr(self._renderer, "_anim_pose", None),
+            anim_time=float(getattr(self._renderer, "_anim_time", 0.0)),
+            anim_base_pose=getattr(self._renderer, "_anim_base_pose", None),
+        )
+
+    def _draw_cpu_overlays(self, img, w: int, h: int):
+        if img is None:
+            return None
+        try:
+            from PIL import ImageDraw
+
+            if img.mode != "RGBA":
+                img = img.convert("RGBA")
+            self._renderer._last_W = w
+            self._renderer._last_H = h
+            try:
+                self._renderer._frame_view = self._renderer._cam_view_matrix()
+                self._renderer._frame_verts_cache = {}
+                self._renderer._frame_norms_cache = {}
+            except Exception:
+                pass
+            draw = ImageDraw.Draw(img, "RGBA")
+            if self._renderer.show_grid:
+                self._renderer._draw_grid(draw, w, h)
+            if self._renderer.show_bones:
+                self._renderer._draw_bones(draw, w, h)
+            if self._renderer.show_walkmesh:
+                self._renderer._draw_walkmesh_overlay(draw, w, h)
+            if self._renderer.show_wireframe:
+                old_solid = self._renderer.show_solid
+                try:
+                    self._renderer.show_solid = False
+                    self._renderer._draw_mesh_flat(draw, img, w, h)
+                finally:
+                    self._renderer.show_solid = old_solid
+            if self._renderer.show_gimbal:
+                self._renderer._draw_gimbal(draw, w, h)
+            self._renderer._draw_axes(draw, w, h)
+            self._renderer._draw_stats(draw, w, h)
+            return img
+        except Exception as exc:
+            log.debug("Qt GPU overlay draw failed: %s", exc)
+            return img
+
+    def _preload_gpu_textures(self) -> None:
+        model = self.model
+        tex_cache = getattr(self._renderer, "tex_cache", None)
+        if model is None or tex_cache is None or id(model) == self._gpu_tex_preload_model_id:
+            return
+        try:
+            nodes = list(model.all_nodes()) if hasattr(model, "all_nodes") else []
+            for node in nodes:
+                if not getattr(node, "is_mesh", False):
+                    continue
+                names = [
+                    getattr(node, "texture", ""),
+                    getattr(node, "lightmap", ""),
+                    getattr(node, "txi_envmaptexture", ""),
+                    getattr(node, "txi_specularcolour", ""),
+                    getattr(node, "txi_bumpmaptexture", ""),
+                ]
+                names.extend(getattr(node, "texture_names", []) or [])
+                for name in names:
+                    clean = str(name or "").strip()
+                    if clean and clean.upper() not in ("NULL", "NONE"):
+                        tex_cache.get(clean)
+            self._gpu_tex_preload_model_id = id(model)
+        except Exception as exc:
+            log.debug("Qt GPU texture preload failed: %s", exc)
+
+    def _set_renderer_badge(self, gpu_active: bool) -> None:
+        if not hasattr(self, "renderer_button"):
+            return
+        if not self._use_gpu:
+            self.renderer_button.setText("CPU")
+            return
+        self.renderer_button.setText("GPU" if gpu_active else "CPU*")
 
     def _on_shade_change(self, text: str) -> None:
         mode = "Wireframe" if text == "Wire" else text
@@ -393,6 +635,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._gimbal_axis = axis
                 self._gimbal_drag_start = (x, y)
                 self._gimbal_node_start_pos = tuple(self._renderer.selected_node.position)
+                self._gimbal_node_start_rot = tuple(self._renderer.selected_node.rotation)
                 self._renderer.gimbal_active_axis = axis
                 self._request_render()
                 return
@@ -430,9 +673,15 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._renderer._wt_cache.clear()
             node = self._renderer.selected_node
             if node is not None:
-                if self.on_node_moved:
-                    self.on_node_moved(node)
-                self.nodeMoved.emit(node)
+                self._commit_node_transform(
+                    node,
+                    self._gimbal_node_start_pos,
+                    self._gimbal_node_start_rot,
+                    tuple(node.position),
+                    tuple(node.rotation),
+                    "Gimbal Transform",
+                )
+                self._notify_node_moved(node)
             self._request_render()
             return
 

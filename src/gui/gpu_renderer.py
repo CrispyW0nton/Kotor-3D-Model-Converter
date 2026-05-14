@@ -2547,6 +2547,7 @@ uniform int   u_bone_count;    // number of valid bone matrices uploaded
 
 // UV animation
 uniform vec2  u_uv_scroll;     // per-frame UV offset (animate_uv)
+uniform float u_uv_v_flip;     // 1.0 = KotOR binary/D3D V flip, 0.0 = imported ASCII/OpenGL UVs
 uniform float u_rotate_tex;    // 1.0 = swap UVs 90 deg CCW: (u,v) -> (v,1-u)
 uniform vec2  u_flipbook_off;  // FIX-FLIPBOOK: tile offset for proceduretype=cycle sprite sheets
 uniform vec2  u_flipbook_size; // FIX-FLIPBOOK: tile size (1/numx, 1/numy)
@@ -2615,7 +2616,7 @@ void main() {
     //   GL V=0 → bottom of image, GL V=1 → top of image.
     // KotOR UV V=0 → top of image → shader maps to GL V=1.0 (correct).
     // KotOR UV V=1 → bottom of image → shader maps to GL V=0.0 (correct).
-    vec2 flipped_uv = vec2(in_uv.x, 1.0 - in_uv.y);
+    vec2 flipped_uv = vec2(in_uv.x, mix(in_uv.y, 1.0 - in_uv.y, u_uv_v_flip));
 
     // UV scroll (animate_uv): offset primary UVs by time-based scroll amount
     vec2 scrolled_uv = flipped_uv + u_uv_scroll;
@@ -2632,7 +2633,7 @@ void main() {
     // If flipbook is inactive (size==0,0) fall back to unscaled UVs
     v_uv = (u_flipbook_size.x > 0.0001) ? base_uv : scrolled_uv;
     // Lightmap UVs also need V-flip (same D3D→OpenGL convention)
-    v_uv_lm  = vec2(in_uv_lm.x, 1.0 - in_uv_lm.y);
+    v_uv_lm  = vec2(in_uv_lm.x, mix(in_uv_lm.y, 1.0 - in_uv_lm.y, u_uv_v_flip));
     v_color  = in_color;
 
     // ── v7.2 GPU Dangly Mesh Animation (Finding 5.10 — reone v_model.glsl) ──────
@@ -3383,8 +3384,6 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     # Rules (matching xoreos model_kotor.cpp, KotOR.js OdysseyModel3D.ts):
     #   NODE_LOCAL (0): vertices are in node's local coordinate system.
     #                   Apply full world_transform (rotate + translate).
-    #                   Exception: skin meshes are authored in model-root bind
-    #                   space; bind-pose VBOs keep those coordinates as-is.
     #   WORLD (1):      vertices already in model-root space (imported OBJ/FBX).
     #                   Do NOT apply world_transform.
     #   AABB_WALK (2):  walkmesh/collision — not rendered (should never reach here).
@@ -3397,9 +3396,7 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     #   KotorBlender parser.py — verts loaded into Blender mesh, Blender applies hierarchy
     _node_vs = getattr(node, 'vertex_space', 0)  # default NODE_LOCAL
 
-    if _node_vs == 0 and is_skin:
-        pass
-    elif _node_vs == 0:  # NODE_LOCAL — rigid meshes get one full world transform
+    if _node_vs == 0:  # NODE_LOCAL — apply one full world transform
         if not is_identity_rot:
             v_arr = _quat_rotate_batch(wo, v_arr)
             n_arr = _quat_rotate_batch(wo, n_arr)
@@ -3817,6 +3814,8 @@ class GpuRenderer:
         # PERF: Interactive (low-quality) mode flag.
         # When True, skip MSAA and use smaller readback for faster frame times.
         self.interactive: bool = False
+        self.show_wireframe: bool = False
+        self.cull_faces: bool = True
         # ── Phase A: GPU Skinning state ──────────────────────────────────────────
         # MatrixPaletteUploader instance, created per model when skin nodes exist.
         # Caches inverse bind-pose matrices and computes per-frame bone palettes.
@@ -3867,7 +3866,7 @@ class GpuRenderer:
                 'u_has_tex', 'u_has_lm', 'u_lm_shade', 'u_has_env',
                 'u_lm_composite_mode',
                 'u_diffuse', 'u_selfillum', 'u_uv_scroll', 'u_rotate_tex',
-                'u_flipbook_off', 'u_flipbook_size', 'u_features',
+                'u_uv_v_flip', 'u_flipbook_off', 'u_flipbook_size', 'u_features',
                 'u_water_time', 'u_proc_type', 'u_dangly_enabled',
                 'u_dangly_displacement', 'u_dangly_time',
                 'u_saber_enabled', 'u_saber_displacement', 'u_saber_length',
@@ -4151,7 +4150,10 @@ class GpuRenderer:
             # which means back-face culling discards the correct (back) faces.
             # Reference: KotorBlender reader.py winding notes + KotOR.js geometry.
             ctx.front_face = 'cw'
-            ctx.enable(moderngl.CULL_FACE)
+            if self.show_wireframe or not self.cull_faces:
+                ctx.disable(moderngl.CULL_FACE)
+            else:
+                ctx.enable(moderngl.CULL_FACE)
 
             # ── Camera matrices ────────────────────────────────────────────
             # ArcBallCamera.eye is a METHOD (not a property); call it if callable.
@@ -4210,6 +4212,7 @@ class GpuRenderer:
             _u['u_diffuse'].value    = (1.0, 1.0, 1.0)
             _u['u_selfillum'].value  = (0.0, 0.0, 0.0)
             _u['u_uv_scroll'].value  = (0.0, 0.0)
+            _u['u_uv_v_flip'].value  = 1.0
             _u['u_rotate_tex'].value = 0.0
             _u['u_flipbook_off'].value  = (0.0, 0.0)
             _u['u_flipbook_size'].value = (0.0, 0.0)
@@ -4365,10 +4368,6 @@ class GpuRenderer:
                 """
                 nid = id(nd)
                 if anim_pose is not None:
-                    # FIX-SKIN-ANIM: Skip animation overrides for skin nodes.
-                    # Skin vertices are in bind-pose space; animation transforms
-                    # should only be applied via bone matrices (GPU skinning), not
-                    # by directly transforming the mesh's world position/rotation.
                     _is_skin_nd = bool(getattr(nd, 'is_skin', False))
                     if not _is_skin_nd:
                         # FIX-GPU-ANIM-CHAIN: Walk the full parent chain for animated
@@ -4744,28 +4743,48 @@ class GpuRenderer:
                         gm.vao = ctx.vertex_array(prog, vertex_buffers)
                         gm.tri_count = len(vdata) // 3
                         gm.indexed = False
-                    # FIX-KILL-FACEMATS (Phase D10): REMOVED per-material-slot draw groups.
-                    #
-                    # Root cause analysis (user rejection D8):
-                    # The previous FIX-MULTITEX-SPLIT code treated face_mats[] as texture
-                    # selectors, splitting faces by face_mats value and drawing each group
-                    # with a different texture.  This is WRONG.
-                    #
-                    # In the KotOR MDL binary format, the per-face material field is a
-                    # WALK-MESH SURFACE INDICATOR (smoothing group / surface type), NOT
-                    # a texture selector.  Reference implementations confirm this:
-                    #   - xoreos model_kotor.cpp: one diffuse texture per mesh node
-                    #   - KotOR.js OdysseyModelNodeMesh.ts: single texture per mesh
-                    #   - KotorBlender reader.py: material field is surface type
-                    #
-                    # The correct KotOR texture model is:
-                    #   - One diffuse texture on UV0 (texture_1)
-                    #   - Optional one lightmap on UV1 (texture_2)
-                    #   - Composite: diffuse * lightmap * overbright
-                    #   - NO per-face texture splitting
-                    #
-                    # face_mats is now NEVER used for texture selection.
-                    # mat_slots dict remains empty (no per-material draw groups).
+                    # ASCII/Kotor Tool MDLs use face_mats as per-face texture slots.
+                    # Binary KotOR MDLs still use the single-diffuse + optional
+                    # lightmap path, so only enable this for parser-tagged ASCII
+                    # nodes whose secondary slots are not lightmaps.
+                    if (
+                        bool(getattr(node, 'imported_ascii', False))
+                        and int(getattr(node, 'tex_count', 1) or 1) > 1
+                        and not bool(getattr(node, 'has_lightmap', False))
+                        and getattr(node, 'face_mats', None)
+                        and getattr(node, 'texture_names', None)
+                    ):
+                        try:
+                            slot_indices = {}
+                            tex_names = list(getattr(node, 'texture_names', []) or [])
+                            face_mats = list(getattr(node, 'face_mats', []) or [])
+                            faces = list(getattr(node, 'faces', []) or [])
+                            n_verts = len(getattr(node, 'vertices', []) or [])
+                            row_face = 0
+                            for face_i, face in enumerate(faces):
+                                if len(face) < 3:
+                                    continue
+                                vi0, vi1, vi2 = int(face[0]), int(face[1]), int(face[2])
+                                if vi0 >= n_verts or vi1 >= n_verts or vi2 >= n_verts:
+                                    continue
+                                slot = int(face_mats[face_i]) if face_i < len(face_mats) else 0
+                                slot = max(0, min(slot, len(tex_names) - 1))
+                                bucket = slot_indices.setdefault(slot, [])
+                                if gm.indexed:
+                                    bucket.extend([vi0, vi1, vi2])
+                                else:
+                                    base = row_face * 3
+                                    bucket.extend([base, base + 1, base + 2])
+                                row_face += 1
+                            for slot, indices in slot_indices.items():
+                                if not indices:
+                                    continue
+                                slot_ibo = ctx.buffer(np.asarray(indices, dtype=np.uint32).tobytes())
+                                slot_vao = ctx.vertex_array(prog, vertex_buffers, slot_ibo)
+                                gm.mat_slots[slot] = (slot_vao, slot_ibo, len(indices) // 3)
+                        except Exception as exc:
+                            log.debug("ASCII multi-texture split failed for %s: %s",
+                                      getattr(node, 'name', ''), exc)
 
                     if not is_animated:
                         self._mesh_cache[node_id] = gm
@@ -4777,6 +4796,19 @@ class GpuRenderer:
                 _use_tris = override_tri_count if override_vao is not None else gm.tri_count
 
                 if _use_vao is None or _use_tris == 0:
+                    return
+
+                if override_vao is None and gm.mat_slots:
+                    tex_names = list(getattr(node, 'texture_names', []) or [])
+                    for slot, (slot_vao, _slot_ibo, slot_tris) in gm.mat_slots.items():
+                        tex_override = tex_names[slot] if 0 <= slot < len(tex_names) else ''
+                        _draw_node(
+                            node,
+                            tex_name_override=tex_override,
+                            pass_name=pass_name,
+                            override_vao=slot_vao,
+                            override_tri_count=slot_tris,
+                        )
                     return
 
                 diff = getattr(node, 'diffuse', (1.0, 1.0, 1.0))
@@ -4934,6 +4966,7 @@ class GpuRenderer:
                 txi_numx  = int(getattr(node, 'txi_numx', 0))
                 txi_numy  = int(getattr(node, 'txi_numy', 0))
                 txi_fps   = float(getattr(node, 'txi_fps', 0.0))
+                _u['u_uv_v_flip'].value = 1.0 if bool(getattr(node, 'uv_v_flip', True)) else 0.0
 
                 # v7.1 FIX-PROCTYPE (Finding 1.6 — KotOR.js TXI.ts cross-ref):
                 # Set u_proc_type uniform for water/ring UV distortion in fragment shader.

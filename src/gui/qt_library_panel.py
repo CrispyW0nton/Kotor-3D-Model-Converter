@@ -10,6 +10,106 @@ from PySide6 import QtCore, QtWidgets
 from .qt_theme import icon, heading
 
 
+_ITEM_PREFIXES = (
+    "w_", "iw_", "ia_", "g_w_", "g_i_", "g_a_", "g1_", "g2_", "g3_",
+    "i_", "a_", "uti_", "plc_", "lbl_", "lbn_",
+)
+
+
+def infer_model_category(resref: str, model_class: str = "") -> str:
+    """Return the library tab category for a model row."""
+    r = (resref or "").lower()
+    cls = (model_class or "").lower()
+    if r.startswith("gr_"):
+        return "Template"
+    if cls == "tile":
+        return "Module"
+    if cls == "character":
+        return "Creature" if r.startswith("c_") else "Character"
+    if cls in {"item"}:
+        return "Item/Armor/Weapons"
+    if cls in {"door", "effect", "effects", "misc"}:
+        return "Other"
+    if r.startswith("c_"):
+        return "Creature"
+    if r.startswith(
+        (
+            "p_", "n_", "k_p_", "k_m_", "pmh", "pmb", "pmf", "pmc", "po_",
+            "pfh", "pfb", "pff", "pfc", "s_male", "s_female", "s_human",
+            "darkjedi", "malak", "bastila", "trask", "canderous", "revan",
+            "jolee", "juhani", "carth", "mission", "zaalbar", "hk47", "g0t0",
+            "t3m4", "kreia", "atton", "mical", "bao", "visas", "hanharr",
+            "mandra", "darth",
+        )
+    ):
+        return "Character"
+    if _module_area_key(r):
+        return "Module"
+    if any(r.startswith(prefix) for prefix in _ITEM_PREFIXES):
+        return "Item/Armor/Weapons"
+    if r.startswith(
+        (
+            "ad_", "ai_", "jo_", "bi_", "br_", "bo_", "do_", "dr_", "du_",
+            "fr_", "ga_", "gi_", "go_", "gr_", "gu_", "ha_", "he_", "ho_",
+            "hu_", "ja_", "je_", "ki_", "la_", "le_", "li_", "lo_", "ma_",
+            "me_", "mi_", "mo_", "mu_", "ni_", "nu_", "or_", "pa_", "pi_",
+            "qu_", "ra_", "ri_", "ro_", "sa_", "se_", "si_", "sk_", "sl_",
+            "sm_", "so_", "sp_", "st_", "su_", "sw_", "ta_", "te_", "ti_",
+            "tr_", "tu_", "ul_", "un_", "ur_", "va_", "vi_", "wa_", "wi_",
+            "wo_", "ya_", "yo_", "za_", "ze_", "zo_", "zu_",
+        )
+    ):
+        return "Character"
+    return "Other"
+
+
+def _module_area_key(resref: str) -> str:
+    r = (resref or "").lower()
+    if len(r) >= 6 and r[:3].isdigit() and r[3:6].isalpha():
+        return r[:3]
+    for prefix in ("end_", "tar_", "tat_", "kas_", "lev_", "unk_", "sta_", "ebo_", "liv_"):
+        if r.startswith(prefix):
+            return prefix
+    for prefix in ("danm", "manm"):
+        if r.startswith(prefix):
+            return prefix
+    if r.startswith("m") and len(r) >= 3 and r[1:3].isdigit():
+        return r[:3]
+    return ""
+
+
+def enrich_library_rows(rows: list[dict]) -> list[dict]:
+    """Copy rows, add category/area fields, and append built-in templates."""
+    enriched: list[dict] = []
+    seen = set()
+    for row in rows:
+        item = dict(row)
+        resref = str(item.get("resref", ""))
+        game = str(item.get("game", ""))
+        item.setdefault("category", infer_model_category(resref, str(item.get("model_class", ""))))
+        area = _module_area_key(resref)
+        if area:
+            item.setdefault("area", area)
+        enriched.append(item)
+        seen.add((resref.lower(), game.upper()))
+
+    for game in ("K1", "K2"):
+        resref = f"gr_humanoid_{game.lower()}"
+        if (resref, game) in seen:
+            continue
+        enriched.append(
+            {
+                "game": game,
+                "resref": resref,
+                "source": "[GhostRigger Built-in]",
+                "category": "Template",
+                "template": True,
+            }
+        )
+    enriched.sort(key=lambda item: (str(item.get("game", "")), str(item.get("category", "")), str(item.get("resref", ""))))
+    return enriched
+
+
 class QtModelListItem(QtWidgets.QListWidgetItem):
     def __init__(self, row: dict):
         super().__init__(f"[{row.get('game', '?')}] {row.get('resref', '')}")
@@ -146,7 +246,7 @@ class QtLibraryPanel(QtWidgets.QWidget):
         root.addLayout(batch_row)
 
     def set_rows(self, rows: list[dict]) -> None:
-        self._rows = rows
+        self._rows = enrich_library_rows(rows)
         self._rebuild_module_areas()
         self._apply_filter()
 
@@ -210,15 +310,23 @@ class QtLibraryPanel(QtWidgets.QWidget):
         self.module_area_combo.setVisible(category == "Module")
         game_filter = self._current_game_filter()
         needle = self.search_edit.text().lower().strip()
+        area_filter = self.module_area_combo.currentText() if category == "Module" else "All Areas"
 
         self.listbox.clear()
         count = 0
+        counts: dict[str, int] = {}
+        for row in self._rows:
+            row_cat = row.get("category") or infer_model_category(str(row.get("resref", "")))
+            counts[row_cat] = counts.get(row_cat, 0) + 1
+
         for row in self._rows:
             text = f"[{row.get('game', '?')}] {row.get('resref', '')}"
             if game_filter != "All" and row.get("game") != game_filter:
                 continue
-            row_cat = row.get("category", "All")
+            row_cat = row.get("category") or infer_model_category(str(row.get("resref", "")))
             if category != "All" and row_cat != category:
+                continue
+            if category == "Module" and area_filter not in ("", "All Areas") and row.get("area") != area_filter:
                 continue
             if needle and needle not in text.lower():
                 continue
@@ -227,7 +335,12 @@ class QtLibraryPanel(QtWidgets.QWidget):
         if count == 0:
             self.listbox.addItem("No matching models")
         self.filter_count_label.setText(f"{count} shown")
-        self.category_count_label.setText(f"All: {len(self._rows)}")
+        parts = [f"All: {len(self._rows)}"]
+        for label, key, _icon_name in self.CATEGORIES[1:]:
+            value = counts.get(key, 0)
+            if value:
+                parts.append(f"{label}: {value}")
+        self.category_count_label.setText("  ".join(parts))
 
     def _rebuild_module_areas(self) -> None:
         current = self.module_area_combo.currentText()

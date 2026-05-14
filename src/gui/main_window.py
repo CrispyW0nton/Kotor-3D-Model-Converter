@@ -506,6 +506,11 @@ class PropertiesPanel(tk.Frame):
             return
         try:
             nx, ny, nz = self._px.get(), self._py.get(), self._pz.get()
+            before = (
+                tuple(getattr(node, "position", (0.0, 0.0, 0.0))),
+                tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))),
+            )
+            setattr(node, "_gr_undo_before_transform", before)
             node.position = (nx, ny, nz)
             if self._set_pos_cb:
                 self._set_pos_cb(node, nx, ny, nz)
@@ -1969,7 +1974,8 @@ class LibraryPanel(tk.Frame):
                     self._resource_manager = mgr
                     if fast_entries:
                         self._all_entries = fast_entries
-                        n_fast = len(fast_entries)
+                        self._inject_template_entries()
+                        n_fast = len(self._all_entries)
                         self.listbox.after(0, self._apply_filter)
                         self.listbox.after(0, lambda: self._status_var.set(
                             f"{n_fast} models (fast index — full scan running…)"))
@@ -2177,6 +2183,7 @@ class LibraryPanel(tk.Frame):
                         pass
                 self.library.scan(progress_cb=_safe_progress, deep_scan=True)
                 self._all_entries = list(self.library.models)
+                self._inject_template_entries()
 
                 # ── Create fast KotorInstallation objects after scan ──────
                 k1d = self.library.k1_dir
@@ -9845,6 +9852,9 @@ class KotorModToolsApp(tk.Tk):
         self.viewport.on_bone_selected = self._on_viewport_bone_selected
         # Gimbal node-moved callback: refresh properties panel
         self.viewport.on_node_moved = self._on_viewport_node_moved
+        self.props_panel._set_pos_cb = (
+            lambda node, _x, _y, _z: self.viewport.refresh_node_transform(node)
+        )
 
         # Right panel — 4 focused tabs: Props | Anims | Character Builder | Textures
         right = tk.Frame(main, bg=C['panel2'], width=280)
@@ -10013,6 +10023,10 @@ class KotorModToolsApp(tk.Tk):
         self.bind("<Control-g>",    lambda e: self._export_gltf())
         self.bind("<Control-s>",    lambda e: self._save_ascii_mdl())
         self.bind("<Control-w>",    lambda e: self._clear_model())
+        self.bind("<Control-z>",    lambda e: self.viewport.undo())
+        self.bind("<Control-Z>",    lambda e: self.viewport.undo())
+        self.bind("<Control-y>",    lambda e: self.viewport.redo())
+        self.bind("<Control-Y>",    lambda e: self.viewport.redo())
         self.bind("<Control-r>",    lambda e: self._quick_autorig())
         self.bind("<Control-f>",    lambda e: self._focus_search())
         self.bind("r",              lambda e: self._quick_autorig()
@@ -10090,7 +10104,52 @@ class KotorModToolsApp(tk.Tk):
 
     def _set_model_internal(self, model: KotorModel):
         self._model = model
+        if model is None:
+            self._clear_model_views()
+            return
         self._refresh_all()
+
+    def _clear_model_views(self):
+        """Clear viewport and dependent panels after the current model is removed."""
+        try:
+            self.viewport.load_model(None)
+        except Exception as exc:
+            log.debug(f"viewport clear failed: {exc}")
+        try:
+            self.skel_panel.load_model(None)
+        except Exception:
+            pass
+        try:
+            self.props_panel._set([])
+            self.props_panel._current_node = None
+        except Exception:
+            pass
+        try:
+            self.anim_panel.load_model(None)
+        except Exception:
+            pass
+        try:
+            self.diag_panel.run_diagnostics(None)
+        except Exception:
+            pass
+        for panel_name in ("retarget_panel", "char_builder_panel", "head_snap_panel"):
+            panel = getattr(self, panel_name, None)
+            if panel is None:
+                continue
+            for method_name in ("on_model_loaded", "notify_model_loaded", "load_model"):
+                method = getattr(panel, method_name, None)
+                if method is None:
+                    continue
+                try:
+                    method(None)
+                except Exception:
+                    pass
+                break
+        try:
+            if hasattr(self, "cloth_panel"):
+                self.cloth_panel.refresh()
+        except Exception:
+            pass
 
     def _refresh_current_model(self):
         """Re-render the currently loaded model after a hot reload."""
