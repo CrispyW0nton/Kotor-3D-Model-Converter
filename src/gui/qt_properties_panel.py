@@ -191,6 +191,11 @@ class QtPropertiesPanel(QtWidgets.QWidget):
             return
         x, y, z = self.x_spin.value(), self.y_spin.value(), self.z_spin.value()
         try:
+            before = (
+                tuple(getattr(node, "position", (0.0, 0.0, 0.0))),
+                tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))),
+            )
+            setattr(node, "_gr_undo_before_transform", before)
             node.position = (x, y, z)
         finally:
             self.positionApplied.emit(node, x, y, z)
