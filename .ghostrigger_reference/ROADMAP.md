@@ -1,19 +1,9 @@
 # GhostRigger v6.0 Iteration Roadmap
 # ====================================
 # Generated: 2026-04-13
-# Last Updated: 2026-05-15 — M5 expanded into four-mode Character Builder
-#                            (Headless / Head / Supermodel / Creature) on the
-#                            qt-ghostrigger branch. Sources: AccuRig 6-step
-#                            workflow video, facial rigging tutorial video,
-#                            Stewart Jones "Digital Creature Rigging:
-#                            Wings, Tails & Tentacles" (CRC Press, 2019).
 # Source: ghostrigger_developer_handoff_bundle.zip + reference books
-#         + 2026-05 user-supplied refs (AccuRig video, facial rig video,
-#           Stewart Jones PDF, AccuRig HUD screenshot)
-# Total Estimated Effort: 67-82 dev-days (~536 hours)
-#                         original 35-50d + M5 expansion 32d + P5 stretch 5d
+# Total Estimated Effort: 35-50 dev-days (~220 hours)
 # Execution Order: M0 -> M1 -> M2 -> M3 -> M4 -> M5 -> M6 -> M7 -> M8
-# Active Branch: qt-ghostrigger (main is not touched by M5 work)
 
 ---
 
@@ -26,7 +16,7 @@
 | M2 | Texture Wrapping Fix | HIGH | 2-3 days | 1 (UV sentinel) | Correct tiling | M0 |
 | M3 | GPU Renderer Foundation | HIGH | 7-9 days | 2 (depth, perf) | GPU viewport | M0 |
 | M4 | GPU Renderer Polish | MEDIUM | 3-4 days | 0 | Quality | M3 |
-| M5 | Character Builder & Rigging Workspace | MEDIUM | 32-37 days | 0 | Four-mode workspace (Headless/Head/Supermodel/Creature), AccuRig-style step sidebar, Jones-derived wings/tails/tentacles | M3, M1 |
+| M5 | Character Builder | MEDIUM | 5-7 days | 0 | Dedicated workspace | M3, M1 |
 | M6 | Performance Polish | MEDIUM | 3-4 days | 0 | Memory mgmt | M3 |
 | M7 | Export Pipeline Expansion | LOW | 3-4 days | 0 | glTF, batch | M1 |
 | M8 | Validation & Regression | LOW | 3-4 days | 0 | CI, golden tests | M1, M2, M3 |
@@ -211,276 +201,21 @@ feat(gpu): add skeleton bone overlay rendering (T309)
 
 ---
 
-## M5: Character Builder & Rigging Workspace (Deliverable 4)
-**Status**: REPLANNED 2026-05 — four-mode workspace
+## M5: Character Builder (Deliverable 4)
+**Status**: NOT STARTED
 **Depends on**: M3 (GPU viewport), M1 (export)
 **Knowledge**: `.ghostrigger_reference/knowledge_base/d4_character_builder.md`
-**Branch scope**: All work in this milestone lands on `qt-ghostrigger`. Nothing
-touches `main`.
-
-### Reference Sources (baked into this plan, 2026-05)
-
-- **AccuRig 6-step workflow video** — Load Character → Check Model → Body Rig →
-  Hand Rig → Check Actor → Add Motions. Numbered left-sidebar UX, joint-dot
-  guide system, dual front/back view, midpoint placement, joint-opacity/size
-  sliders, symmetry, finger count, export to iClone / USD / FBX.
-- **Facial rigging tutorial video** — left wizard sidebar, central head viewport,
-  context-sensitive right-hand property panel, ortho front/side presets,
-  jaw-pivot precision, neck hierarchy, weight-paint influence-lock list,
-  viseme / expression scrub.
-- **Stewart Jones — *Digital Creature Rigging: Wings, Tails & Tentacles for
-  Animation & VFX*** (CRC Press, 2019) — 3-Stage Asset Build (Base /
-  Animation / Deformation), 12 rigging principles, naming convention,
-  blocked-weighting workflow, Custom Spline-IK, wing FLAP/FOLD/LINK +
-  Reaction-Manager fold driver, cloth membranes, real-time export
-  constraints.
-
-### The Four KOTOR Rig Modes
-
-| Mode | KOTOR Reality | Skeleton | UX Comparable |
-|------|--------------|----------|---------------|
-| **Headless Body** | Body mesh with no head (`pfbc*`, `pmbc*`, `n_darkjedi`). Skinned humanoid skeleton ending at the `neck` bone; head plugs in at `headhook`. | Humanoid (chest → neck → headhook + arms + legs). No jaw, no eye bones. | AccuRig body rig, truncated at the neck. |
-| **Head** | Standalone head model (`pfhc*`, `pmhc*`, `p_hk47`). Either rigid (jaw is geometry) or rigged with jaw + lip bones for talking heads. | Head + neck stub + optional jaw, eyes (L/R), tongue, teeth-upper, teeth-lower. | Facial rigging video — wizard sidebar + viseme preview. |
-| **Supermodel (Combined)** | Body + head assembled at runtime via `headhook`. Carries the full humanoid animation set (the "supermodel"). | Full hierarchy: humanoid + facial chain glued at `headhook`. | AccuRig + Facial workflow steps appended. |
-| **Creature** | Non-humanoid (`c_bantha`, `c_dewback`, `c_rancor`, `c_gammorean`, `c_drdastro`). Skeleton bespoke per species — wings, tails, tentacles, optional fingers. | Anatomy-driven, often quadruped + tail/wing/tentacle add-ons. | Jones book — wings/tails/tentacles, Custom Spline-IK, COG at chest for fliers, centre-of-mass for swimmers. |
-
-These labels are already in the data layer
-(`src/core/model_data.py::PartSlot`, `ModelClassification`,
-`src/autorig/accurig.py::PROFILE_HUMANOID / QUADRUPED / DROID / CREATURE`) —
-what is missing is a single `RigMode` selector that wires it all together
-(T501).
-
-### Final Window Layout
-
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ Menu Bar:  File | Edit | View | Tools | Rigging | Help                       │
-├────────────────┬─────────────────────────────────────┬───────────────────────┤
-│  STEP SIDEBAR  │         CENTRAL VIEWPORT            │  CONTEXTUAL PROPERTY  │
-│  (left, fixed) │   (front + back dual-view split,    │       PANEL           │
-│                │    or single perspective view)      │  (right, QStackedW)   │
-│ [Mode strip]   │                                     │                       │
-│ ◉ Headless     │   ┌──────────┐ ┌──────────┐         │  Step header          │
-│ ○ Head         │   │  FRONT   │ │   BACK   │         │  ──────────────       │
-│ ○ Supermodel   │   │          │ │          │         │  Joint Name [dropdown]│
-│ ○ Creature     │   │  • • •   │ │  • • •   │         │  ☐ Symmetry           │
-│                │   │ • cyan • │ │ • cyan • │         │  ☐ Midpoint Placement │
-│ 1 Load Model   │   │ • yellow │ │ • yellow │         │  ◉ Whole Mesh         │
-│ 2 Check Model  │   │  • • •   │ │  • • •   │         │  ○ Front Part         │
-│ 3 Body Rig     │   └──────────┘ └──────────┘         │                       │
-│ 4 Hand Rig     │                                     │  Joint Opacity ───●── │
-│ 5 Face Rig*    │   Bottom-left HUD: model name,      │  Joint Size    ──●─── │
-│ 6 Check Actor  │   game version, classification.     │  [Reset All Masks]    │
-│ 7 Add Motions  │   Top-right HUD: FPS + render time  │                       │
-│                │   (already shipped: qt_viewport.py) │  ─── Upload & Save ── │
-│                │                                     │  [Add Motions]        │
-│                │                                     │  [Export ▼]           │
-└────────────────┴─────────────────────────────────────┴───────────────────────┘
-   * Step 5 is only present in Head and Supermodel modes.
-```
-
-### Step Visibility Per Mode
-
-| Step | Headless | Head | Supermodel | Creature |
-|------|----------|------|------------|----------|
-| 1 Load Model | ● | ● | ● (body + head) | ● |
-| 2 Check Model (T-pose / centre / ground) | ● | ● (front-face) | ● | ● |
-| 3 Body Rig | ● | — | ● | ● (Creature skeleton sub-tabs) |
-| 4 Hand Rig | ● | — | ● | conditional (`c_gammorean` etc.) |
-| 5 Face Rig | — | ● | ● | conditional (`c_rancor` etc.) |
-| 6 Check Actor (preview motion) | ● | ● | ● | ● |
-| 7 Add Motions / Export | ● | ● | ● | ● |
-
-Creature mode injects two extra sub-tabs into Step 3 for the appendage rigs:
-**Tail / Tentacle** and **Wings**.
-
-### M5 Task Breakdown — Phased Plan (32 dev-days total)
-
-#### M5.P0 — Mode-Aware Character Builder Foundation (≈ 8 dev-days)
-
-The current `qt_character_builder_panel.py` (231 lines) is a single 5-tab
-panel with placeholder buttons. P0 replaces it with a real four-mode
-workspace and wires it to the existing autorig backends.
-
-| Task | File | Hours | Status | Acceptance |
-|------|------|-------|--------|-----------|
-| T501 | `src/core/character_builder.py` | 8 | PENDING | Add `RigMode` enum (`HEADLESS / HEAD / SUPERMODEL / CREATURE`) + `detect_rig_mode(model)` heuristic (`ModelClassification`, supermodel string, presence of `headhook` and finger bones). Unit-tested against ≥ 12 reference models per mode. |
-| T502 | `src/gui/qt_character_builder_panel.py` (rewrite) | 16 | PENDING | Three-pane layout. Sidebar shows mode strip + numbered step buttons (`QToolButton`, exclusive `QButtonGroup`). Right panel = `QStackedWidget` index-linked to active step. |
-| T503 | `src/gui/qt_character_builder_window.py` | 4 | PENDING | Convert from façade to real `QMainWindow` with menubar wired to existing actions in `qt_main_window.py`. Persist last-used mode in `QSettings`. |
-| T504 | `src/gui/qt_viewport.py` | 12 | PENDING | Dual-view mode (front + back, split horizontally). Reuses existing `set_dual_viewport_mode()` from retarget window. Cameras linked-orbit: yaw mirrored, pitch shared. |
-| T505 | `src/gui/qt_viewport_overlay.py` (new) | 8 | PENDING | Joint-dot screen-space overlay (`QPainter.paintEvent`). Cyan = primary chain (limbs), yellow = spine/aux. Per-dot drag, hover-highlight, alt-click reset. Honors opacity/size sliders. |
-| T506 | `src/gui/qt_character_builder_panel.py` | 8 | PENDING | Step 3 right-panel widgets: joint-name `QComboBox`, symmetry `QCheckBox`, midpoint `QCheckBox`, whole-mesh/front-part `QRadioButton`, opacity + size sliders, reset-masks button. Each wired to a signal the overlay listens to. |
-| T507 | `tests/test_character_builder_modes.py` | 8 | PENDING | Mode-detection golden tests (12+ models per mode); panel build-up smoke tests; overlay click→guide-move signal test. |
-
-**P0 gate:** open the builder, switch through all four modes without
-exception, see the correct step set per mode, confirm guide dots draw on
-a loaded `pmbc05` and a loaded `c_bantha`.
-
-#### M5.P1 — Body & Hand Rig Pass (≈ 6 dev-days)
-
-Make Step 3 + Step 4 useful for **Headless / Supermodel**. Backend
-(`src/autorig/accurig.py`) already has guide-placement, mirror, and
-skeleton-build code — P1 wires it to the new UI.
-
-| Task | File | Hours | Status | Acceptance |
-|------|------|-------|--------|-----------|
-| T511 | `src/autorig/accurig.py` | 8 | PENDING | `auto_place_guides(model, profile)` returning positions from `HUMANOID_GUIDES` × measured bbox height. Finish + cover with tests. |
-| T512 | `src/gui/qt_character_builder_panel.py` | 8 | PENDING | Step 3 actions: "Auto-Place Guides", "Mirror Left → Right", "Build Skeleton". Build inserts bones into the live `KotorModel` and refreshes the viewport. |
-| T513 | `src/autorig/accurig.py` | 8 | PENDING | **Blocked-weighting workflow** per Jones Ch.5: 100 % per-bone → mirror → remove zero weights → step-smooth at 0/10/25/50/75/90/100. Coroutine reporting % to the status bar. Caps influences at 4 (KOTOR engine limit). |
-| T514 | `src/gui/qt_character_builder_panel.py` | 8 | PENDING | Step 4 (Hand Rig): finger-count `QComboBox` (`0, 1, 3, 5`), thumb-direction gizmo toggle, "Copy to Other Hand" button. Camera auto-zooms to hand bbox on entering Step 4. |
-| T515 | `src/gui/qt_viewport_overlay.py` | 8 | PENDING | Influence-colour heatmap (blue → red) keyed off the active selected bone. Toggled via View menu. Used to verify weighting in Step 3. |
-| T516 | `tests/test_blocked_weighting.py` | 8 | PENDING | Every vertex Σ = 1.0, max 4 influences, mirror symmetry within 1e-4, monotone-smooth invariant (no negative weights mid-blend). |
-
-#### M5.P2 — Face Rig (Head / Supermodel modes, ≈ 5 dev-days)
-
-Implements the facial-rigging-video workflow. Data layer already supports
-the slots (`EYES`, `TEETH`, `TONGUE`, `LASHES`) — P2 adds the bone-level
-rig.
-
-| Task | File | Hours | Status | Acceptance |
-|------|------|-------|--------|-----------|
-| T521 | `src/autorig/face_rig.py` (new) | 12 | PENDING | Face-rig profile: `head_root`, `jaw`, `eye_L`, `eye_R`, `tongue`, `teeth_upper` (parented to head), `teeth_lower` (parented to jaw). `jaw` pivot at TMJ-equivalent landmark (slightly forward of ear hook). |
-| T522 | `src/gui/qt_character_builder_panel.py` | 8 | PENDING | Step 5 properties panel: jaw-pivot XYZ spinners (constrained to X = 0 unless symmetry off), eye-radius slider, "Snap eyes to mesh sockets" button. |
-| T523 | `src/gui/qt_viewport.py` | 4 | PENDING | Ortho preset buttons (Front / 3-Quarter / Side / Top) floating top-right beside the existing FPS HUD. |
-| T524 | `src/gui/qt_viseme_panel.py` (new) | 8 | PENDING | Bottom dock for Step 5: viseme/expression sliders (Jaw Open, Smile L, Smile R, Brow Up, Blink L, Blink R). Live-drives the skin in the viewport via the existing GPU skinning path. |
-| T525 | `src/gui/qt_viewport_overlay.py` | 4 | PENDING | Centre-line guideline (X = 0 dashed line in front view). Red-warning HUD chip if `jaw.position.x != 0` in symmetric mode. |
-| T526 | `tests/test_face_rig.py` | 4 | PENDING | Build a face rig on a known `pfhc01` head; assert bone count, hierarchy, and pivot placement against a golden JSON. |
-
-#### M5.P3 — Creature Rig: Wings · Tails · Tentacles (≈ 9 dev-days)
-
-The Stewart Jones-driven phase. Creature mode adds two appendage sub-systems
-on top of the body rig. Existing `src/autorig/cloth_rig.py` (1618 lines) is
-the foundation for membrane / cloth dynamics — P3 extends rather than
-rewrites.
-
-| Task | File | Hours | Status | Acceptance |
-|------|------|-------|--------|-----------|
-| T531 | `src/autorig/creature_profiles.py` (new) | 8 | PENDING | Per-species profile presets (`bantha`, `dewback`, `rancor`, `gammorean`, `kath_hound`, `tach`, `wraid`). Each = guide list + appendage flags (`has_tail`, `has_wings`, `has_tentacles`, `has_hands`). |
-| T532 | `src/autorig/spline_ik.py` (new) | 12 | PENDING | Custom Spline-IK per Jones Ch.6: chain of `Point` helpers `Path-Constrained` to a polyline, with `LookAt` + `Upnode` constraints to prevent twist flipping. Bake-down to per-bone Euler at export. |
-| T533 | `src/autorig/creature_profiles.py` + `accurig.py` | 12 | PENDING | **Tail tab**: pick "Standard Spline-IK" (quick) vs "Custom Spline-IK" (no flip). Joint count slider (3-24). Joints auto-distribute along a user-drawn polyline. |
-| T534 | `src/autorig/wing_rig.py` (new) | 16 | PENDING | Wing rig with FLAP / FOLD / LINK three-tier point-helper hierarchy. **Reaction-Manager-equivalent** in Python: a single `fold_amount` 0.0-1.0 attribute drives interpolated rotation of every FOLD locator from open-pose (0) to folded-pose (1). Per-feather/membrane FK array for secondary motion. |
-| T535 | `src/autorig/cloth_rig.py` | 8 | PENDING | Extend existing cloth rigger with "wing-membrane" preset: attaches to wing leading-edge bones, applies Jones-style spring/flex damping defaults, supports per-vertex pin-weights. |
-| T536 | `src/gui/qt_creature_rig_panel.py` (new) | 12 | PENDING | Step 3 sub-tabs for Creature mode: **Body**, **Tail**, **Wings**, **Tentacles**. Each sub-tab routes to the matching panel. Species combo at the top auto-populates the sub-tabs. |
-| T537 | `tests/test_creature_rigs.py` | 4 | PENDING | Golden tests: build bantha (no wings, has tail), rancor (no wings, tentacle-arms, jaw), gammorean (humanoid + tail-stub). Assert bone counts, parent chains, weight totals. |
-
-#### M5.P4 — Validation, Motion Preview & Export Polish (≈ 4 dev-days)
-
-Completes Steps 6 & 7 of the workflow for **all four modes**.
-
-| Task | File | Hours | Status | Acceptance |
-|------|------|-------|--------|-----------|
-| T541 | `src/gui/qt_character_builder_panel.py` | 8 | PENDING | Step 6 (Check Actor): motion-library list (idle / walk / run / squat / talk / damage). Plays via the existing animation engine. Warning chip if a required bone is missing or weights don't sum to 1.0. |
-| T542 | `src/core/rig_validator.py` (new) | 8 | PENDING | Centralised rig-health checks: hierarchy integrity, weight normalisation, zero-weight removal, supermodel-bone-name match. Returns `RigHealthReport` dataclass with severities. |
-| T543 | `src/gui/qt_character_builder_panel.py` | 4 | PENDING | Right-panel validation widget shows the `RigHealthReport` as a coloured list (green / amber / red). Click an issue → camera frames the offending bone. |
-| T544 | `src/gui/qt_export_dialog.py` (new) | 8 | PENDING | Step 7 export dropdown: KOTOR MDL/MDX (round-trip), KOTOR ASCII MDL, FBX (re-uses M1 pipeline), glTF / GLB (re-uses M7). Mode-aware defaults — Head mode defaults to MDL+TPC bundle. |
-| T545 | `docs/character_builder_audit_2026_05.md` (new) | 4 | PENDING | Audit doc per `AGENTS.md`: before/after screenshots of the four modes, golden-report deltas, performance numbers. |
-
-#### M5.P5 — Stretch Goals (≈ 5 dev-days, no fixed order)
 
 | Task | Description | Hours | Status |
 |------|------------|-------|--------|
-| T551 | Live mirror across X = 0 while a user drags a joint guide (face & body) | 8 | PENDING |
-| T552 | Heat-map / geodesic weight initialisation (replacing the inverse-distance fallback in `accurig.py`) | 12 | PENDING |
-| T553 | Viseme presets driven by `dialog.tlk` phoneme data → lipsync preview in Step 5 (uses `src/core/lip_reader.py`) | 8 | PENDING |
-| T554 | "Reaction Manager" GUI: a node-graph editor wiring a master custom-attribute slider to N slave rotations, per Jones Ch.4 | 8 | PENDING |
-| T555 | Asset-library browser side panel (drag-drop heads / bodies onto a Supermodel workspace) | 4 | PENDING |
-| T556 | Undo/redo stack for all rig edits (`QUndoStack`) — currently absent | 4 | PENDING |
-
-### Architectural Notes & Conventions
-
-#### Naming convention (adopted from Jones, adapted for KOTOR)
-
-```
-CATEGORY_itemNameNumber_SIDE_TYPE
-```
-
-| Category | KOTOR mapping |
-|----------|---------------|
-| `CH`  | character (`pfbc*`, `pmbc*`, `p_hk47`) |
-| `CR`  | creature (`c_bantha`, `c_dewback`) |
-| `HD`  | head model (`pfhc*`, `pmhc*`) |
-| `SM`  | supermodel (`S_Female02`, `S_Male02`, `c_sup_*`) |
-| `RIG` | rig-only helpers (guides, IK targets, pole-vectors) |
-
-Side: `L` / `R` / `C` / `UPR` / `LWR`. Type: `JNT` / `CTRL` / `IK` / `GEO` /
-`BS` / `MEMB` (membrane). **Internal only** — KOTOR's actual on-disk MDL
-bone names stay byte-identical to the originals (the converter only
-round-trips existing names); the convention applies to **new** rig helpers
-GhostRigger introduces.
-
-#### Engine-export constraints (hard rules — enforced by T542 validator)
-
-1. **Single skeleton hierarchy** — base rig must be one tree. No broken
-   hierarchies on export. Animation rigs and IK helpers must bake down.
-2. **Max 4 influences per vertex.** Sum-to-1.0. Remove zero weights.
-3. **Bone names are stable.** Never rename an existing skinned bone — that
-   invalidates the supermodel animation references.
-4. **No `ExposeTM`-equivalents on export.** Helper nodes must be `dummy`
-   nodes (Aurora-compatible) or be stripped at bake.
-5. **`headhook` placement.** Supermodel mode must verify the body's
-   `headhook` and the head's root sit at the same world position within
-   1e-3 units after bind.
-
-#### Always-preserve guardrails (from `.cursor/rules/project-identity.mdc`)
-
-- Never modify `src/core/creature_appearance.py:snap_head_onto_body`.
-- Never reintroduce centroid-magnitude heuristics for vertex-space.
-- Never bypass `read_mdl_safe`.
-- Never treat skin-node vertices as world-space.
-- Quaternion convention stays xyzw.
-
-#### UX rules baked into the layout
-
-- **Numbered left sidebar.** Mirrors AccuRig 1-N step buttons; each button
-  is a `QToolButton` with an integer badge. Sequential gating — Step N+1
-  enabled only when Step N reports `valid=True`.
-- **Right-panel `QStackedWidget`.** Step index ↔ stack index; no duplicate
-  property widgets, easy to add new steps.
-- **Dual front/back viewport.** Already half-built in `qt_viewport.py`
-  (`set_dual_viewport_mode`). T504 finishes the linked-orbit cameras.
-- **Joint colour code.** Cyan = primary chain joints (knee, elbow, jaw,
-  tail segments). Yellow = secondary / aux (spine, neck, midpoints).
-- **Existing FPS overlay (top-right of viewport) stays.** New mode-strip
-  HUD chip goes top-left so it doesn't fight the FPS counter.
-- **Live mirror is opt-in** (T551). Default is post-edit mirror on a
-  button — safer for low-poly KOTOR meshes where snap order matters.
-
-### M5 Critical Path
-
-```
-P0 (Mode-aware shell) ──┬──> P1 (Body + Hand) ──┬──> P4 (Validation + Export)
-                        │                       │
-                        ├──> P2 (Face)  ────────┤
-                        │                       │
-                        └──> P3 (Creature) ─────┘
-                                                │
-                                                └──> P5 (Stretch)
-```
-
-P0 must land first — every later phase depends on `RigMode` and the new
-panel scaffold. P1, P2, P3 can run in parallel after P0 ships. P4 runs
-once any two of P1/P2/P3 have shipped.
-
-### Reference Cross-Links
-
-| Topic | Source |
-|-------|--------|
-| 6-step sidebar workflow | AccuRig video (Load → Check → Body → Hand → Check → Motion) |
-| Joint dot colour code, midpoint placement, opacity slider | AccuRig screenshot supplied by user |
-| Front/back dual view | AccuRig screenshot — large central panel |
-| Hand rig finger-count dropdown | AccuRig video — Step 4 right panel |
-| Face wizard sidebar, contextual property panel | Facial rigging tutorial video |
-| Jaw pivot at TMJ landmark | Facial rigging tutorial video |
-| Influence-lock list, weight-paint heatmap | Facial rigging tutorial video |
-| 12 rigging principles (KISS, planning, anatomy, biomech …) | Jones, Ch.1 |
-| Naming convention `CATEGORY_itemNameNumber_SIDE_TYPE` | Jones, Ch.2 |
-| 3-Stage Asset Build (Base / Animation / Deformation) | Jones, Ch.3 |
-| Wing FLAP/FOLD/LINK + Reaction-Manager fold driver | Jones, Ch.4 |
-| Spline-IK vs Custom Spline-IK trade-off | Jones, Ch.6 |
-| Blocked-weighting → mirror → step-smooth | Jones, Ch.5 |
-| COG placement (biped / quadruped / flier / swimmer) | Jones, Ch.3 |
-| Cloth modifier for wing membranes | Jones, Ch.7 |
-| Real-time engine export constraints (4 influences, single hierarchy) | Jones, Appendix A |
+| T501 | New CharacterBuilder window | 8 | PENDING |
+| T502 | Workflow navigation (5 modes) | 6 | PENDING |
+| T503 | Part library browser | 6 | PENDING |
+| T504 | Head-hook snapping | 4 | PENDING |
+| T505 | Symmetry-aware rigging | 6 | PENDING |
+| T506 | Camera presets | 3 | PENDING |
+| T507 | Facial preview (LIP) | 4 | PENDING |
+| T508 | Validation panel | 6 | PENDING |
 
 ---
 
@@ -550,7 +285,7 @@ M0 (Setup) ──┬──> M1 (FBX Export) ──┬──> M5 (Character Build
 | `src/converters/mesh_converter.py` | ~50 h | HIGH | M1, M7 |
 | `src/gui/gpu_renderer.py` | ~55 h | HIGH | M3, M4, M6 |
 | `src/gui/viewport.py` | ~20 h | MEDIUM | M2, M3 |
-| `src/gui/qt_character_builder_panel.py` + new rig modules | ~256 h | MEDIUM | M5 (P0-P5) |
+| `src/gui/character_builder_window.py` | ~43 h | MEDIUM | M5 |
 | `src/resources/resource_manager.py` | ~20 h | MEDIUM | M6 |
 | `src/core/scene_manager.py` | ~14 h | LOW | M6 |
 | `src/gui/main_window.py` | ~10 h | LOW | M3, M5 |

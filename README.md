@@ -605,12 +605,6 @@ Other 2026-05 audits in `docs/`:
 
 ## 11. Roadmap
 
-> **Rigging / Character Builder track:** the four-mode workspace plan
-> (Headless / Head / Supermodel / Creature) is captured as the expanded **M5**
-> milestone in [`.ghostrigger_reference/ROADMAP.md`](.ghostrigger_reference/ROADMAP.md).
-> Sources: AccuRig 6-step workflow video, facial rigging tutorial video,
-> Stewart Jones *Digital Creature Rigging* (CRC 2019).
-
 ### In progress
 
 | Issue | Status |
@@ -618,13 +612,12 @@ Other 2026-05 audits in `docs/`:
 | **3j-5 visual gate** for the corrected `G5_FULL_REF` skinning pipeline | pending; production stays on F1 |
 | **CaloNord `usecomp` animation** — LBS guard clamps cross-region pull < 8 units; full fix needs Aurora `bone_remap` table generation | partially mitigated |
 | **PyKotor pipeline consolidation** — texture decode + normal-map dual paths consolidating to `pykotor.resource.formats.tpc` | ~70 % migrated |
-| **Rigging / Character Builder (M5)** | replanned 2026-05 — four-mode workspace; P0 mode-aware shell is the next ship |
 
 ### Near-term
 
 - Walkmesh editor: in-viewport `.wok` triangle select + surface-type paint brush + writeback to valid Aurora `.wok`
 - `.lyt` scene-graph room-instance editor with snap-to-grid and door / trigger / waypoint editing
-- AcuRig / Character Builder: four-mode workspace, joint-guide overlay, Jones-derived creature appendage rigs — full plan in [`.ghostrigger_reference/ROADMAP.md`](.ghostrigger_reference/ROADMAP.md) M5
+- AcuRig: draggable joint handles overlaid on mesh; geodesic / heat-diffuse weight initialisation; smoothing brush
 
 ### Long-term
 
