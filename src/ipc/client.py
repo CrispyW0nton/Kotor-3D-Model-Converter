@@ -82,19 +82,18 @@ def ipc_call(
 
 def _marshal_to_gui_thread(cb, *args) -> None:
     """
-    T002 — Qt-first callback marshaling.
+    T002 — Qt-first callback marshaling (M3/T304: Tk fallback removed).
 
-    Schedule ``cb(*args)`` on the main GUI thread without coupling the IPC
-    layer to any single UI framework:
+    Schedule ``cb(*args)`` on the main GUI thread:
 
       1. If a Qt application is running (``QCoreApplication.instance()`` is
          not None) use ``QTimer.singleShot(0, ...)`` to defer onto the Qt
-         event loop. This is the production path under the qt-ghostrigger
-         branch.
-      2. Else, if a Tk default root is available, fall back to
-         ``root.after(0, ...)`` so legacy Tk launches still work until M3.
-      3. Otherwise (headless / unit tests / no event loop) invoke the
+         event loop. This is the production path.
+      2. Otherwise (headless / unit tests / no event loop) invoke the
          callback directly in the worker thread.
+
+    The legacy Tk fallback (``tk._default_root.after(0, ...)``) was
+    deleted in M3/T304 along with the rest of the Tk codepath.
 
     All marshaling exceptions are swallowed; the direct-call fallback runs
     so the callback never silently disappears.
@@ -109,17 +108,7 @@ def _marshal_to_gui_thread(cb, *args) -> None:
     except Exception:
         pass
 
-    # ── 2. Legacy Tk path (kept until M3/T303 drops Tk) ───────────────
-    try:
-        import tkinter as tk  # noqa: PLC0415
-        root = tk._default_root  # type: ignore[attr-defined]
-        if root is not None:
-            root.after(0, cb, *args)
-            return
-    except Exception:
-        pass
-
-    # ── 3. Headless fallback ──────────────────────────────────────────
+    # ── 2. Headless fallback ──────────────────────────────────────────
     try:
         cb(*args)
     except Exception as exc:

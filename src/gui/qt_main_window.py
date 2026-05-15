@@ -229,7 +229,7 @@ class LibraryBatchExportWorker(QtCore.QObject):
                         MDLAsciiWriter().write(model, os.path.join(self.out_dir, f"{resref}.mdl"))
                         ok += 1
                     elif self.fmt == "tga":
-                        from src.gui.viewport import _load_tpc_bytes
+                        from src.gui.viewport_core import _load_tpc_bytes
 
                         tex_names = {
                             str(getattr(node, "texture", "") or "").strip()
@@ -1195,7 +1195,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.critical(self, "Extract", str(exc))
 
     def _extract_model_resource(self, row: dict, out_dir: str) -> list[str]:
-        from src.gui.viewport import _is_tpc_data
+        from src.gui.viewport_core import _is_tpc_data
 
         mgr = self._get_resource_manager()
         if mgr is None:

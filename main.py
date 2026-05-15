@@ -7,11 +7,17 @@ Logging policy
 Every session writes a rotating log to  <app_dir>/Logs/ghostrigger_<date>.log
 All logging.* output (DEBUG and above) is captured, plus:
   - Unhandled Python exceptions   (sys.excepthook)
-  - Tkinter internal errors       (Tk.report_callback_exception)
-  - Graceful on-exit flush        (atexit + WM_DELETE_WINDOW)
+  - Graceful on-exit flush        (atexit)
 
 The Logs/ folder is created automatically if it does not exist.
 Old log files beyond LOG_KEEP_FILES are auto-rotated (newest kept).
+
+History
+-------
+Pre-M3/T303 this entry point also supported a ``--gui=tk`` legacy
+shell launched from ``src/gui/main_window.py``. Both the flag and the
+Tk shell were removed in milestone M3 (T302 deleted the modules,
+T303 trimmed the launcher). Qt is now the only supported front-end.
 """
 import sys, os, logging, atexit, traceback, datetime, argparse
 
@@ -115,12 +121,14 @@ def _flush_all_handlers():
             pass
 
 
-def _install_exception_hooks(logfile: str, install_tk_hook: bool = True):
+def _install_exception_hooks(logfile: str):
     """
-    Install global exception handlers so crashes are always logged to file.
+    Install the global exception handler so crashes are always logged.
 
-    1. sys.excepthook  – catches unhandled exceptions in the main thread.
-    2. Tk.report_callback_exception – catches errors in Tkinter callbacks.
+    Qt callbacks raise into ``sys.excepthook`` already (QCoreApplication
+    re-raises into Python), so a single hook is enough. The pre-M3
+    Tk-specific ``Tk.report_callback_exception`` patch was removed in
+    M3/T303 along with the Tk launcher.
     """
     _log = logging.getLogger("ghostrigger.crash")
 
@@ -134,50 +142,16 @@ def _install_exception_hooks(logfile: str, install_tk_hook: bool = True):
 
     sys.excepthook = _handle_uncaught
 
-    if not install_tk_hook:
-        return
 
-    # Tkinter swallows callback errors by default; redirect to our logger
-    try:
-        import tkinter as tk
-        _orig_report = tk.Tk.report_callback_exception
+def _install_atexit_flush():
+    """Register an atexit hook that flushes log handlers on shutdown.
 
-        def _tk_exception_handler(self, exc, val, tb):
-            msg = "".join(traceback.format_exception(exc, val, tb))
-            _log.error(f"Tkinter callback exception:\n{msg}")
-            _flush_all_handlers()
-            # Fall back to the original handler (shows error in console)
-            try:
-                _orig_report(self, exc, val, tb)
-            except Exception:
-                pass
-
-        tk.Tk.report_callback_exception = _tk_exception_handler
-    except Exception as e:
-        _log.warning(f"Could not install Tkinter exception hook: {e}")
-
-
-def _install_close_hook(app, logfile: str):
-    """
-    Wire up WM_DELETE_WINDOW so the log is flushed before Tk exits.
-    Also registers atexit as a fallback.
+    Replaces the pre-M3 ``_install_close_hook`` which wired into Tk's
+    ``WM_DELETE_WINDOW`` protocol. Under Qt the application closes
+    through ``QCoreApplication.quit()`` which already triggers normal
+    interpreter shutdown, so a plain ``atexit`` is sufficient.
     """
     _log = logging.getLogger("ghostrigger.shutdown")
-
-    def _on_close():
-        _log.info("=" * 60)
-        _log.info("GhostRigger session ended (window closed by user).")
-        _log.info("=" * 60)
-        _flush_all_handlers()
-        try:
-            app.destroy()
-        except Exception:
-            pass
-
-    try:
-        app.protocol("WM_DELETE_WINDOW", _on_close)
-    except Exception as e:
-        _log.warning(f"Could not register WM_DELETE_WINDOW hook: {e}")
 
     def _atexit_flush():
         _log.info("GhostRigger atexit flush.")
@@ -190,12 +164,14 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Launch GhostRigger and optionally open a KotOR model.",
     )
-    parser.add_argument("--gui", choices=("qt", "tk", "tkinter"),
-                        default=None,
-                        help="GUI backend to launch (default: qt). "
-                             "Use --gui=tk only for the legacy Tkinter shell "
-                             "(scheduled for removal in M3). "
-                             "Overrides GHOSTRIGGER_GUI.")
+    # M3/T303 — Qt is the only supported GUI. The ``--gui`` flag is kept
+    # purely so historical scripts that pass ``--gui=qt`` still work; any
+    # other value is silently coerced to ``qt`` with a warning.
+    parser.add_argument("--gui", choices=("qt",),
+                        default="qt",
+                        help="GUI backend to launch. Qt is the only supported "
+                             "value; the legacy ``tk`` option was removed in "
+                             "M3/T303 together with src/gui/main_window.py.")
     parser.add_argument("--mdl", help="Path to a .mdl file to open after startup.")
     parser.add_argument("--mdx", help="Path to the matching .mdx file.")
     parser.add_argument(
@@ -226,20 +202,24 @@ def main(argv: list[str] | None = None):
     log.info(f"App directory: {_APP_DIR}")
     log.info("=" * 60)
 
-    # T003 — Qt is the default GUI. Tk remains as an explicit opt-in until
-    # M3/T303 deletes it. There is NO auto-fallback: if --gui=qt fails the
-    # process dies with the Qt traceback so the user sees the real error
-    # instead of silently dropping into the legacy Tk shell.
+    # M3/T303 — Qt is the only supported GUI. ``--gui=qt`` is accepted for
+    # backward compatibility; ``GHOSTRIGGER_GUI`` is still consulted so
+    # existing launch scripts keep working, but any non-``qt`` value is
+    # coerced to ``qt`` with a warning rather than entering a dead Tk path.
     gui_mode = (args.gui or os.environ.get("GHOSTRIGGER_GUI", "qt")).strip().lower()
-    if gui_mode in ("tkinter",):
-        gui_mode = "tk"
-    if gui_mode not in ("qt", "tk"):
-        log.warning("Unknown GUI mode %r; defaulting to qt.", gui_mode)
+    if gui_mode not in ("qt",):
+        log.warning(
+            "Unsupported GUI mode %r requested; Qt is the only supported "
+            "front-end after M3/T303. Continuing with --gui=qt.",
+            gui_mode,
+        )
         gui_mode = "qt"
 
-    # Install exception hooks before anything else can raise.  The Tk callback
-    # hook is only installed when the Tk app owns the process.
-    _install_exception_hooks(logfile, install_tk_hook=(gui_mode == "tk"))
+    # Install the unified exception hook + atexit log flush. No Tk-specific
+    # hooks any more — they were deleted alongside the Tk launcher in
+    # M3/T303.
+    _install_exception_hooks(logfile)
+    _install_atexit_flush()
 
     # Log detailed session-start diagnostics (PIL, NumPy, platform)
     try:
@@ -248,50 +228,16 @@ def main(argv: list[str] | None = None):
     except Exception as _diag_err:
         log.debug(f"diagnostics.log_session_start failed: {_diag_err}")
 
-    if gui_mode == "qt":
-        try:
-            from src.gui.qt_main_window import run as _run_qt
-
-            log.info("Qt main window starting.")
-            rc = _run_qt(_APP_DIR, startup_input=vars(args))
-            log.info("Qt main window exited cleanly.")
-            _flush_all_handlers()
-            return rc
-        except Exception:
-            log.critical("Fatal error during Qt startup:\n" + traceback.format_exc())
-            _flush_all_handlers()
-            raise
-
-    # gui_mode == "tk" — legacy path (frozen, slated for deletion in M3/T303).
-    log.warning("Launching legacy Tkinter shell (--gui=tk). "
-                "This path is frozen and will be removed in M3.")
     try:
-        from src.gui.main_window import run as _run_gui, KotorModToolsApp
+        from src.gui.qt_main_window import run as _run_qt
 
-        # Patch run() to install the close hook
-        def run():
-            app = KotorModToolsApp()
-            _install_close_hook(app, logfile)
-            if args.texture_dir:
-                app._texture_dir = args.texture_dir
-            elif args.tga:
-                app._texture_dir = os.path.dirname(os.path.abspath(args.tga[0]))
-            if args.mdl:
-                app.after(0, lambda: app.open_startup_model(
-                    args.mdl,
-                    mdx_path=args.mdx or "",
-                    texture_dir=getattr(app, "_texture_dir", ""),
-                    game=(args.game or "").upper(),
-                ) if hasattr(app, "open_startup_model") else None)
-            log.info("Tkinter mainloop starting.")
-            app.mainloop()
-            log.info("Tkinter mainloop exited cleanly.")
-            _flush_all_handlers()
-
-        run()
-
+        log.info("Qt main window starting.")
+        rc = _run_qt(_APP_DIR, startup_input=vars(args))
+        log.info("Qt main window exited cleanly.")
+        _flush_all_handlers()
+        return rc
     except Exception:
-        log.critical("Fatal error during startup:\n" + traceback.format_exc())
+        log.critical("Fatal error during Qt startup:\n" + traceback.format_exc())
         _flush_all_handlers()
         raise
 

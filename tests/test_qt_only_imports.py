@@ -1,18 +1,21 @@
 """
-tests/test_qt_only_imports.py — T005 acceptance test (M0)
+tests/test_qt_only_imports.py — Qt-only imports guard (M0/T005, M3/T305)
 
 Guard rail: every module in the Qt subtree (``src/gui/qt_*.py``) and the
 new Tk-free rendering core (``src/gui/viewport_core.py``) MUST import
-without ``tkinter`` being available. This proves the M0 Tk-decoupling
-is real and prevents regressions where a future contributor adds a
-``from tkinter import ...`` line to a Qt module.
+without ``tkinter`` being available. After M3/T302 deleted the legacy
+Tk modules this is extended to ``src/gui/*.py`` — no file under
+``src/gui/`` may import tkinter — and to a guard that the eight deleted
+files never reappear on disk.
 
 The test runs in two layers, in order of strictness:
 
   1.  **Static AST scan** — the most reliable check, runs even without
       PySide6 installed. Walks every ``ast.Import`` / ``ast.ImportFrom``
-      node in the Qt subtree and asserts none of them name ``tkinter``
-      (or any submodule). This is what gates the CI build.
+      node under ``src/gui/`` and asserts none of them name ``tkinter``
+      (or any submodule). This is what gates the CI build via the
+      ``.github/workflows/qt-only-imports.yml`` workflow added in
+      M3/T305.
 
   2.  **Live import probe** (best effort) — when PySide6 is installed,
       we additionally try to actually ``importlib.import_module`` each
@@ -22,7 +25,14 @@ The test runs in two layers, in order of strictness:
       other third-party runtime dependency such as ``pykotor``) is not
       installed in the test environment.
 
-Roadmap reference: knowledge_base/roadmap/02_roadmap_2026_05.md M0/T005.
+CI wiring (M3/T305): ``.github/workflows/qt-only-imports.yml`` runs the
+Layer-1 AST scan on every push and pull request targeting ``main`` or
+``qt-ghostrigger``. Layer-2 is auto-skipped on the CI image because
+PySide6 / pykotor / moderngl / numpy / PIL are not installed there;
+local developer runs with those deps still execute the live probe.
+
+Roadmap reference: knowledge_base/roadmap/02_roadmap_2026_05.md
+M0/T005 + M3/T305.
 """
 
 from __future__ import annotations
@@ -44,20 +54,15 @@ _GUI_DIR = _REPO_ROOT / "src" / "gui"
 _QT_FILES = sorted(_GUI_DIR.glob("qt_*.py"))
 _VIEWPORT_CORE = _GUI_DIR / "viewport_core.py"
 
-# Files that are EXPECTED to import tkinter (do NOT add to the Qt subtree).
-#   * viewport.py — backward-compat shim that pulls in viewport_tk.
-#   * viewport_tk.py — Tk widgets, frozen and slated for M3 deletion.
-#   * All other frozen legacy Tk modules.
-_FROZEN_TK_FILES = {
-    _GUI_DIR / "viewport.py",
-    _GUI_DIR / "viewport_tk.py",
-    _GUI_DIR / "main_window.py",
-    _GUI_DIR / "character_builder_window.py",
-    _GUI_DIR / "blueprint_editor.py",
-    _GUI_DIR / "modular_panel.py",
-    _GUI_DIR / "matrix_background.py",
-    _GUI_DIR / "icon_manager.py",
-}
+# Files that are EXPECTED to import tkinter — empty after M3/T302.
+#
+# Pre-M3 this set listed the frozen Tk modules (viewport.py shim,
+# viewport_tk.py, main_window.py, character_builder_window.py,
+# blueprint_editor.py, modular_panel.py, matrix_background.py,
+# icon_manager.py). All eight files were deleted in M3/T302 and the
+# tree is now Qt-only, so the roster is empty and the cross-check tests
+# below assert that nothing in src/gui/ imports tkinter any more.
+_FROZEN_TK_FILES: set[pathlib.Path] = set()
 
 
 def _collect_tkinter_imports(path: pathlib.Path) -> list[tuple[int, str]]:
@@ -103,7 +108,13 @@ def test_viewport_core_has_no_tkinter_imports():
 
 
 def test_frozen_tk_files_are_correctly_classified():
-    """Sanity: the frozen-Tk roster matches what is actually on disk."""
+    """Sanity: the frozen-Tk roster matches what is actually on disk.
+
+    After M3/T302 the roster is empty (all eight legacy Tk modules were
+    deleted). The assertion below still runs so a future re-introduction
+    of a frozen Tk file is caught by an explicit set membership rather
+    than silently slipping into the Qt subtree.
+    """
     missing = [p for p in _FROZEN_TK_FILES if not p.exists()]
     assert not missing, (
         "Frozen-Tk roster references files that don't exist on disk: "
@@ -111,13 +122,40 @@ def test_frozen_tk_files_are_correctly_classified():
     )
 
 
-def test_no_new_qt_files_shadow_frozen_tk():
-    """No qt_*.py may share a basename with a frozen Tk module
-    (catches accidental misclassification, e.g. 'qt_main_window.py' is fine
-    but 'qt_main_window_tk.py' should not exist)."""
-    qt_basenames = {p.name for p in _QT_FILES}
-    overlap = qt_basenames & {p.name for p in _FROZEN_TK_FILES}
-    assert not overlap, f"qt_*.py basenames clash with frozen Tk roster: {overlap}"
+def test_legacy_tk_modules_are_deleted():
+    """M3/T302 — the eight frozen Tk modules must NOT exist on disk."""
+    deleted = [
+        _GUI_DIR / "viewport.py",
+        _GUI_DIR / "viewport_tk.py",
+        _GUI_DIR / "main_window.py",
+        _GUI_DIR / "character_builder_window.py",
+        _GUI_DIR / "blueprint_editor.py",
+        _GUI_DIR / "modular_panel.py",
+        _GUI_DIR / "matrix_background.py",
+        _GUI_DIR / "icon_manager.py",
+    ]
+    resurrected = [p for p in deleted if p.exists()]
+    assert not resurrected, (
+        "Frozen Tk modules deleted in M3/T302 were resurrected on disk: "
+        + ", ".join(str(p.relative_to(_REPO_ROOT)) for p in resurrected)
+    )
+
+
+def test_no_gui_module_imports_tkinter():
+    """Post-M3, no file under src/gui/ may import tkinter."""
+    offenders: list[tuple[pathlib.Path, list[tuple[int, str]]]] = []
+    for path in sorted(_GUI_DIR.glob("*.py")):
+        hits = _collect_tkinter_imports(path)
+        if hits:
+            offenders.append((path, hits))
+    assert not offenders, (
+        "Post-M3 src/gui/ must be Tk-free. Offending files:\n  "
+        + "\n  ".join(
+            f"{p.relative_to(_REPO_ROOT)}: "
+            + ", ".join(f"L{ln}:{stmt}" for ln, stmt in hits)
+            for p, hits in offenders
+        )
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────
