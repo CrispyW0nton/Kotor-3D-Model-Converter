@@ -55,6 +55,8 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.skin_paint_action = QtGui.QAction("Skin Paint", self)
         self.weight_balance_action = QtGui.QAction("Weights", self)
         self.diagnostics_action = QtGui.QAction("Diagnostics", self)
+        self.cloth_rigging_action = QtGui.QAction("Cloth Rigging...", self)
+        self.cloth_rigging_action.triggered.connect(self._show_cloth_tool)
         self.tool_action_group = QtGui.QActionGroup(self)
         self.tool_action_group.setExclusive(True)
         for action in (
@@ -83,6 +85,8 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         mode_menu.addAction(self.skin_paint_action)
         mode_menu.addAction(self.weight_balance_action)
         mode_menu.addAction(self.diagnostics_action)
+        tools_menu.addSeparator()
+        tools_menu.addAction(self.cloth_rigging_action)
 
     def _build_statusbar(self) -> None:
         self.statusBar().showMessage("Ready")
@@ -92,6 +96,8 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         root.setChildrenCollapsible(False)
         self.source_viewport = QtViewportWidget(self)
         self.target_viewport = QtViewportWidget(self)
+        self.source_viewport.set_dual_viewport_mode(True)
+        self.target_viewport.set_dual_viewport_mode(True)
 
         self.panel = QtAnimationRetargetPanel(self)
         self.panel.sourceCurrentRequested.connect(self.sourceCurrentRequested.emit)
@@ -149,6 +155,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             self.source_viewport.set_resource_manager(self._resource_manager, self._source_game)
         self.panel.set_source_model(model)
         self.source_viewport.load_model(model, self._texture_dir)
+        self._refresh_cloth_tool()
         self.statusBar().showMessage(f"Source: {getattr(model, 'name', 'None') if model else 'None'}")
 
     def set_target_model(self, model, game_tag: str = "") -> None:
@@ -158,6 +165,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             self.target_viewport.set_resource_manager(self._resource_manager, self._target_game)
         self.panel.set_target_model(model)
         self.target_viewport.load_model(model, self._texture_dir)
+        self._refresh_cloth_tool()
         self.statusBar().showMessage(f"Target: {getattr(model, 'name', 'None') if model else 'None'}")
 
     def set_mapping_report(self, report) -> None:
@@ -183,3 +191,206 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
     def _tool_mode_changed(self) -> None:
         active = self.tool_action_group.checkedAction()
         self.statusBar().showMessage(f"Tool: {active.text()}" if active else "Tools: Ready")
+
+    def _show_cloth_tool(self) -> None:
+        if not hasattr(self, "_cloth_tool"):
+            self._cloth_tool = QtClothRetargetDialog(self)
+        self._refresh_cloth_tool()
+        self._cloth_tool.show()
+        self._cloth_tool.raise_()
+        self._cloth_tool.activateWindow()
+
+    def _refresh_cloth_tool(self) -> None:
+        tool = getattr(self, "_cloth_tool", None)
+        if tool is not None:
+            tool.set_models(self.panel._source_model, self.panel._target_model)
+
+
+class QtClothRetargetDialog(QtWidgets.QDialog):
+    """Manual source-cloth to target-cloth assignment helper."""
+
+    def __init__(self, workbench: QtAnimationRetargetWindow):
+        super().__init__(workbench)
+        self.workbench = workbench
+        self.source_model = None
+        self.target_model = None
+        self.setWindowTitle("Cloth Rigging")
+        self.resize(620, 360)
+        self._build()
+
+    def _build(self) -> None:
+        root = QtWidgets.QVBoxLayout(self)
+        root.setContentsMargins(8, 8, 8, 8)
+        root.setSpacing(6)
+
+        form = QtWidgets.QFormLayout()
+        form.setLabelAlignment(QtCore.Qt.AlignRight)
+        self.source_combo = QtWidgets.QComboBox()
+        self.target_combo = QtWidgets.QComboBox()
+        self.attach_combo = QtWidgets.QComboBox()
+        form.addRow("Source cloth", self.source_combo)
+        form.addRow("Target cloth mesh", self.target_combo)
+        form.addRow("Attach bone", self.attach_combo)
+        root.addLayout(form)
+
+        options = QtWidgets.QGroupBox("Cloth Settings")
+        opt = QtWidgets.QGridLayout(options)
+        self.preset_combo = QtWidgets.QComboBox()
+        try:
+            from src.autorig.cloth_rig import ClothRigPreset
+
+            self.preset_combo.addItems(ClothRigPreset.names())
+        except Exception:
+            self.preset_combo.addItems(["Robe (Loose / K2 default)", "Cape (Light)", "Cape (Heavy)", "Belt / Loin-cloth"])
+        self.copy_source_box = QtWidgets.QCheckBox("Copy source cloth parameters")
+        self.copy_source_box.setChecked(True)
+        self.attach_box = QtWidgets.QCheckBox("Re-parent target mesh to attach bone")
+        opt.addWidget(QtWidgets.QLabel("Preset"), 0, 0)
+        opt.addWidget(self.preset_combo, 0, 1)
+        opt.addWidget(self.copy_source_box, 1, 0, 1, 2)
+        opt.addWidget(self.attach_box, 2, 0, 1, 2)
+        root.addWidget(options)
+
+        self.summary = QtWidgets.QPlainTextEdit()
+        self.summary.setReadOnly(True)
+        self.summary.setMinimumHeight(92)
+        root.addWidget(self.summary, 1)
+
+        buttons = QtWidgets.QHBoxLayout()
+        self.refresh_button = QtWidgets.QPushButton("Refresh")
+        self.apply_button = QtWidgets.QPushButton("Apply Cloth")
+        self.remove_button = QtWidgets.QPushButton("Remove Cloth")
+        self.close_button = QtWidgets.QPushButton("Close")
+        self.refresh_button.clicked.connect(lambda: self.set_models(self.source_model, self.target_model))
+        self.apply_button.clicked.connect(self._apply_cloth)
+        self.remove_button.clicked.connect(self._remove_cloth)
+        self.close_button.clicked.connect(self.close)
+        buttons.addWidget(self.refresh_button)
+        buttons.addStretch(1)
+        buttons.addWidget(self.apply_button)
+        buttons.addWidget(self.remove_button)
+        buttons.addWidget(self.close_button)
+        root.addLayout(buttons)
+
+    def set_models(self, source_model, target_model) -> None:
+        self.source_model = source_model
+        self.target_model = target_model
+        self._fill_combo(self.source_combo, self._cloth_nodes(source_model, include_candidates=True))
+        self._fill_combo(self.target_combo, self._cloth_nodes(target_model, include_candidates=True))
+        self._fill_combo(self.attach_combo, self._bone_nodes(target_model))
+        self._update_summary()
+
+    def _fill_combo(self, combo: QtWidgets.QComboBox, nodes: list) -> None:
+        current = combo.currentText()
+        combo.blockSignals(True)
+        combo.clear()
+        for node in nodes:
+            label = f"{getattr(node, 'name', '?')}  ({getattr(node, 'type_label', 'node')})"
+            combo.addItem(label, node)
+        idx = combo.findText(current)
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+        combo.blockSignals(False)
+
+    def _cloth_nodes(self, model, *, include_candidates: bool) -> list:
+        if model is None or not hasattr(model, "all_nodes"):
+            return []
+        try:
+            from src.autorig.cloth_rig import ClothRigger
+
+            patterns = tuple(ClothRigger.CLOTH_NAME_PATTERNS)
+        except Exception:
+            patterns = ("cloth", "cloak", "cape", "robe", "sash", "skirt", "belt")
+        nodes = []
+        for node in model.all_nodes():
+            if not getattr(node, "is_mesh", False) or getattr(node, "is_skin", False):
+                continue
+            name = str(getattr(node, "name", "")).lower()
+            is_cloth = bool(getattr(node, "is_dangly", False)) or any(part in name for part in patterns)
+            if is_cloth or include_candidates:
+                nodes.append(node)
+        nodes.sort(key=lambda n: (not bool(getattr(n, "is_dangly", False)), str(getattr(n, "name", "")).lower()))
+        return nodes
+
+    def _bone_nodes(self, model) -> list:
+        if model is None or not hasattr(model, "all_nodes"):
+            return []
+        nodes = [
+            node for node in model.all_nodes()
+            if not getattr(node, "is_mesh", False)
+            and not getattr(node, "is_skin", False)
+        ]
+        nodes.sort(key=lambda n: str(getattr(n, "name", "")).lower())
+        return nodes
+
+    def _selected_node(self, combo: QtWidgets.QComboBox):
+        return combo.currentData()
+
+    def _apply_cloth(self) -> None:
+        target = self._selected_node(self.target_combo)
+        if target is None:
+            self.summary.setPlainText("Select a target cloth mesh first.")
+            return
+        try:
+            from src.autorig.cloth_rig import ClothRigConfig, ClothRigPreset, ClothRigger
+
+            source = self._selected_node(self.source_combo)
+            if self.copy_source_box.isChecked() and source is not None and getattr(source, "is_dangly", False):
+                cfg = ClothRigConfig(
+                    displacement=float(getattr(source, "dangly_displacement", 0.5) or 0.5),
+                    tightness=float(getattr(source, "dangly_tightness", 0.5) or 0.5),
+                    period=float(getattr(source, "dangly_period", 1.0) or 1.0),
+                    constraint_mode="manual",
+                )
+            else:
+                cfg = ClothRigPreset.get(self.preset_combo.currentText())
+            rigger = ClothRigger()
+            ok = rigger.apply_cloth_to_node(target, cfg)
+            if ok and source is not None and len(getattr(source, "dangly_constraints", []) or []) == len(getattr(target, "vertices", []) or []):
+                target.dangly_constraints = list(getattr(source, "dangly_constraints", []) or [])
+            if ok and self.attach_box.isChecked():
+                self._reparent_target(target, self._selected_node(self.attach_combo))
+            self.workbench.target_viewport.refresh_node_transform(target)
+            self.set_models(self.source_model, self.target_model)
+            self.summary.setPlainText(f"Applied cloth rigging to {getattr(target, 'name', '?')}.")
+            self.workbench.statusBar().showMessage(f"Cloth rigged: {getattr(target, 'name', '?')}")
+        except Exception as exc:
+            self.summary.setPlainText(f"Cloth rigging failed: {exc}")
+
+    def _remove_cloth(self) -> None:
+        target = self._selected_node(self.target_combo)
+        if target is None:
+            self.summary.setPlainText("Select a target cloth mesh first.")
+            return
+        try:
+            from src.autorig.cloth_rig import ClothRigger
+
+            removed = ClothRigger().remove_cloth_from_node(target)
+            self.workbench.target_viewport.refresh_node_transform(target)
+            self.set_models(self.source_model, self.target_model)
+            self.summary.setPlainText(
+                f"Removed cloth rigging from {getattr(target, 'name', '?')}." if removed else "Target was not a cloth/dangly mesh."
+            )
+        except Exception as exc:
+            self.summary.setPlainText(f"Remove cloth failed: {exc}")
+
+    def _reparent_target(self, target, bone) -> None:
+        if target is None or bone is None or target is bone:
+            return
+        old_parent = getattr(target, "parent", None)
+        if old_parent is not None and target in getattr(old_parent, "children", []):
+            old_parent.children.remove(target)
+        target.parent = bone
+        if target not in getattr(bone, "children", []):
+            bone.children.append(target)
+
+    def _update_summary(self) -> None:
+        src_count = self.source_combo.count()
+        dst_count = self.target_combo.count()
+        bone_count = self.attach_combo.count()
+        self.summary.setPlainText(
+            f"Source cloth candidates: {src_count}\n"
+            f"Target cloth candidates: {dst_count}\n"
+            f"Target attach bones: {bone_count}\n"
+            "Pick matching source and target cloth pieces, then apply cloth settings to the target."
+        )

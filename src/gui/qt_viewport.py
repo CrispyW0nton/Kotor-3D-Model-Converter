@@ -6,6 +6,7 @@ import logging
 import math
 import os
 import threading
+import time as time_module
 from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -64,6 +65,14 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gpu_tex_preload_model_id = 0
         self._navigation_profile = DEFAULT_VIEWPORT_NAVIGATION_PROFILE
         self._xray_mode = False
+        self._dual_viewport_mode = False
+        self._last_render_wall = 0.0
+        self._last_render_ms = 0.0
+        self._fps_accum = 0.0
+        self._fps_frames = 0
+        self._fps_last_wall = time_module.perf_counter()
+        self._fps_display = 0.0
+        self._fast_frame_until = 0.0
 
         self._render_timer = QtCore.QTimer(self)
         self._render_timer.setSingleShot(True)
@@ -240,6 +249,9 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def set_model(self, model) -> None:
         self.load_model(model)
+
+    def set_dual_viewport_mode(self, enabled: bool) -> None:
+        self._dual_viewport_mode = bool(enabled)
 
     def set_game_library(self, library, game_tag: str = "K1") -> None:
         self._renderer.tex_cache.set_game_library(library, game_tag)
@@ -442,10 +454,12 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def set_animation_pose(self, pose, name: str = "", time: float = 0.0, length: float = 0.0) -> None:
         self._renderer.set_animation_pose(pose, name=name, time=time, length=length)
+        self._fast_frame_until = max(self._fast_frame_until, time_module.perf_counter() + 0.12)
         self._request_render(fast=True)
 
     def clear_animation_pose(self) -> None:
         self._renderer.set_animation_pose(None)
+        self._fast_frame_until = 0.0
         self._request_render()
 
     def load_walkmesh(self, wok_data_or_path, world_offset=(0.0, 0.0, 0.0)) -> None:
@@ -611,6 +625,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._nav_dragging = ""
         self._nav_button = QtCore.Qt.NoButton
         self._renderer.is_interactive = False
+        self._fast_frame_until = 0.0
         self._request_render()
 
     def _handle_view_key(self, event) -> bool:
@@ -675,7 +690,18 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def _request_render(self, fast: bool = False) -> None:
         self._render_pending = True
-        self._render_timer.start(0 if fast else 16)
+        now = time_module.perf_counter()
+        min_interval_ms = 33 if self._dual_viewport_mode else 16
+        if fast:
+            self._fast_frame_until = max(self._fast_frame_until, now + 0.08)
+            elapsed_ms = (now - self._last_render_wall) * 1000.0 if self._last_render_wall else min_interval_ms
+            delay = max(1, int(min_interval_ms - elapsed_ms))
+        else:
+            elapsed_ms = (now - self._last_render_wall) * 1000.0 if self._last_render_wall else min_interval_ms
+            delay = max(16, int(min_interval_ms - elapsed_ms))
+        if self._render_timer.isActive():
+            delay = min(delay, max(1, self._render_timer.remainingTime()))
+        self._render_timer.start(delay)
 
     def _render_now(self) -> None:
         if not self._render_pending:
@@ -688,7 +714,10 @@ class QtViewportWidget(QtWidgets.QWidget):
             return
         w = max(8, self.canvas.width())
         h = max(8, self.canvas.height())
+        t0 = time_module.perf_counter()
         img = self._render_frame(w, h)
+        self._last_render_ms = (time_module.perf_counter() - t0) * 1000.0
+        self._last_render_wall = time_module.perf_counter()
         if img is None:
             mesh_count = len(self.model.mesh_nodes()) if hasattr(self.model, "mesh_nodes") else 0
             node_count = self.model.node_count() if hasattr(self.model, "node_count") else 0
@@ -696,6 +725,8 @@ class QtViewportWidget(QtWidgets.QWidget):
             return
         if img.mode != "RGBA":
             img = img.convert("RGBA")
+        self._update_fps()
+        img = self._draw_performance_overlay(img, w, h)
         qimg = QtGui.QImage(
             img.tobytes("raw", "RGBA"),
             img.width,
@@ -747,7 +778,11 @@ class QtViewportWidget(QtWidgets.QWidget):
             if value is not None
         }
         self._gpu_renderer.interactive = bool(
-            self._renderer.is_interactive or self._pan_dragging or self._nav_dragging or self._is_dragging
+            self._renderer.is_interactive
+            or self._pan_dragging
+            or self._nav_dragging
+            or self._is_dragging
+            or time_module.perf_counter() < self._fast_frame_until
         )
         self._gpu_renderer.show_wireframe = bool(self._renderer.show_wireframe)
         self._gpu_renderer.show_grid = True
@@ -800,6 +835,45 @@ class QtViewportWidget(QtWidgets.QWidget):
             return img
         except Exception as exc:
             log.debug("Qt GPU overlay draw failed: %s", exc)
+            return img
+
+    def _update_fps(self) -> None:
+        now = time_module.perf_counter()
+        delta = max(0.0, now - self._fps_last_wall)
+        self._fps_last_wall = now
+        self._fps_accum += delta
+        self._fps_frames += 1
+        if self._fps_accum >= 0.5:
+            self._fps_display = self._fps_frames / max(self._fps_accum, 1e-6)
+            self._fps_accum = 0.0
+            self._fps_frames = 0
+
+    def _draw_performance_overlay(self, img, w: int, h: int):
+        try:
+            from PIL import ImageDraw
+
+            if img.mode != "RGBA":
+                img = img.convert("RGBA")
+            draw = ImageDraw.Draw(img, "RGBA")
+            fps = self._fps_display
+            if fps <= 0.0 and self._last_render_ms > 0.0:
+                fps = 1000.0 / max(self._last_render_ms, 1.0)
+            mode = "fast" if time_module.perf_counter() < self._fast_frame_until else "hq"
+            label = f"{fps:4.0f} fps  {self._last_render_ms:4.0f} ms  {mode}"
+            text_w = self._renderer._hud_text_width(label) if hasattr(self._renderer, "_hud_text_width") else len(label) * 7
+            x = max(8, w - text_w - 20)
+            self._renderer._draw_hud_pill(
+                draw,
+                x,
+                8,
+                label,
+                fill=(18, 22, 27),
+                fg=(156, 232, 184),
+                outline=(42, 90, 62),
+            )
+            return img
+        except Exception as exc:
+            log.debug("Viewport FPS overlay draw failed: %s", exc)
             return img
 
     def _preload_gpu_textures(self) -> None:
