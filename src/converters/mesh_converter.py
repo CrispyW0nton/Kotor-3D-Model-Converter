@@ -452,7 +452,7 @@ class OBJExporter:
     Only *renderable* nodes are exported:
       - Nodes with ``render=False`` are invisible engine-internal nodes (collision
         proxies, occluders, camera helpers) and are never exported.
-      - Deformation-helper trimeshes (texture='null', extreme UVs, _g/_dum suffix)
+      - Deformation-helper trimeshes (texture='null', _g/_dum suffix)
         are skipped; they are used by the engine's SkinMesh pipeline and do not
         represent visible geometry.
     """
@@ -508,7 +508,7 @@ class OBJExporter:
           2. Substring match against _FACIAL_MESH_SUBSTRINGS  (covers NPC names such as
              f_rlweye_g, f_llweye_g, f_teetha_g, jawbone_g, etc.)
 
-        A real texture AND valid (non-extreme) UVs are additionally required so
+        A real texture AND UVs are additionally required so
         that bare bone-helper dummies accidentally named 'jaw_g' are NOT promoted.
         The vertex-count guard in _is_renderable acts as a final safety net.
         """
@@ -524,8 +524,7 @@ class OBJExporter:
             tex = cls._clean_tex(getattr(node, 'texture', '') or '')
             if tex and tex.upper() != 'NULL':
                 uvs = getattr(node, 'uvs', []) or []
-                if uvs and not any(abs(u) > 3.0 or abs(v) > 3.0
-                                   for u, v in uvs[:20]):
+                if uvs:
                     return True
             # Even without a texture: if the node has vertices and is explicitly
             # named with a strong facial keyword, treat it as facial geometry.
@@ -544,7 +543,7 @@ class OBJExporter:
         viewport.py::FrameRenderer._is_deformation_helper.
 
         Facial geometry nodes (eyes, teeth, tongue, gums, jaw) are NEVER helpers
-        even if they carry extreme UVs or a null texture — some NPC head variants
+            even if they carry large tiled UVs or a null texture — some NPC head variants
         store these with render=0 or broken UV coordinates in the binary MDL.
         """
         # Facial geometry is always visible — never classify as a helper
@@ -556,14 +555,9 @@ class OBJExporter:
         is_skin = getattr(node, 'is_skin', False)
         uvs = getattr(node, 'uvs', []) or []
 
-        # Skin node with a real texture and valid (non-extreme) UVs → visible
+        # Skin node with a real texture and UVs -> visible
         if is_skin and not is_null_tex and uvs:
-            if not any(abs(u) > 3.0 or abs(v) > 3.0 for u, v in uvs[:20]):
-                return False
-
-        # Extreme UV coordinates → deform helper (unless facial, already handled)
-        if uvs and any(abs(u) > 3.0 or abs(v) > 3.0 for u, v in uvs[:20]):
-            return True
+            return False
 
         # Non-skin _g / _G / _dum nodes → always helpers
         # EXCEPTION: inner-geometry nodes whose names CONTAIN facial substrings
@@ -574,12 +568,9 @@ class OBJExporter:
                             or name_lower.endswith('_g0')
                             or name_lower.endswith('_dum')):
             # Inner-geo NPC eyeball/teeth nodes (e.g. f_rlweye_g) with a real
-            # texture and valid UVs are renderable despite the _g suffix.
+            # texture and UVs are renderable despite the _g suffix.
             if _name_is_inner_geo and not is_null_tex and uvs:
-                _uvs_ok = not any(abs(u) > 3.0 or abs(v) > 3.0
-                                  for u, v in uvs[:20])
-                if _uvs_ok:
-                    return False
+                return False
             return True
 
         # Null-texture non-skin nodes → helpers

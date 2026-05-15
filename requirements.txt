@@ -7,11 +7,15 @@ numpy>=1.21.0
 PyOpenGL>=3.1.0
 PyOpenGL_accelerate>=3.1.0     # optional GPU acceleration for PyOpenGL
 moderngl>=5.8.0                 # ModernGL for GPU-accelerated preview rendering
+PySide6>=6.6.0                  # Qt shell for the main application window
 
 # ── KotOR file format library ───────────────────────────────────────────────
 # OldRepublicDevs/PyKotor — battle-tested KotOR MDL/TPC/TXI/ERF/BIF reader+writer
 # Provides: read_tpc, write_tga, read_mdl, write_mdl, ERF/BIF archive access
-pykotor>=2.3.1
+# Pinned: src/core/pykotor_mdl_io_fix.py monkey-patches PyKotor internals for
+# K2 trimesh layout and mdx_data_offset==0. Bumping this version requires
+# re-validating the patch signature, source layout, and K1/K2 size constants.
+pykotor==2.3.1
 
 # ── 3D mesh import/export ───────────────────────────────────────────────────
 trimesh[easy]>=3.15.0           # OBJ/DAE import + fallback GLTF reader

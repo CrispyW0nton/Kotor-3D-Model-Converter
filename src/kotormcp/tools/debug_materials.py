@@ -199,27 +199,9 @@ def _classify_deform_helper(node, model) -> dict:
 
     # Skin with texture+UVs → always renderable
     if is_skin and has_tex and has_uvs:
-        extreme = False
-        if uvs:
-            try:
-                extreme = any(abs(u) > 3.0 or abs(v) > 3.0 for u, v in uvs[:20])
-            except Exception:
-                pass
-        if not extreme:
-            result["classification"] = "RENDERABLE"
-            result["reason"] = "skin node with texture+valid UVs"
-            return result
-
-    # Extreme UV check
-    if has_uvs and not is_module:
-        try:
-            extreme = any(abs(u) > 3.0 or abs(v) > 3.0 for u, v in uvs[:20])
-            if extreme:
-                result["classification"] = "HELPER"
-                result["reason"] = "extreme UV coordinates (|u|>3 or |v|>3)"
-                return result
-        except Exception:
-            pass
+        result["classification"] = "RENDERABLE"
+        result["reason"] = "skin node with texture+UVs"
+        return result
 
     # _g / _dum suffix
     if not is_skin and (name_lower.endswith('_g') or name_lower.endswith('_g0') or name_lower.endswith('_dum')):

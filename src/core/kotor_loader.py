@@ -1,8 +1,10 @@
 """
 kotor_loader.py  —  Direct PyKotor loader for GhostRigger.
 
-PyKotor is the *only* parsing path.  This module calls PyKotor's own source
-(pykotor.resource.formats.mdl / tpc) directly — no wrapper, no bridge.
+Binary MDL/MDX loads use ``read_mdl_safe`` (``mdl_reader_wrapper``), which
+routes through GhostRigger's owned binary reader for K2 layout fixes without
+mutating PyKotor global state.  ASCII MDL and TPC handling still call PyKotor
+directly.
 
 Public surface
 --------------
@@ -21,14 +23,13 @@ PyKotor bone-weight contract (MDLSkin):
 import math
 import struct
 import logging
-import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
 log = logging.getLogger(__name__)
 
 # ── PyKotor imports (installed via pip install pykotor) ──────────────────────
-from pykotor.resource.formats.mdl.mdl_auto import read_mdl as pk_read_mdl
+from .mdl_reader_wrapper import read_mdl_safe as pk_read_mdl
 from pykotor.resource.formats.mdl.mdl_data import (
     MDLNodeType,
     MDLNodeFlags,
@@ -142,29 +143,6 @@ def load_model_from_bytes(
             model.classification = _CLS_MAP_BYTES.get(raw_cls_byte, 'character')
             model.model_type     = raw_cls_byte
 
-        # FIX-K2-MDX-ZERO-OFFSET (Phase D6): PyKotor rejects mdx_data_offset=0
-        # as invalid, but offset 0 is perfectly valid (vertex data at start of MDX).
-        # This causes ALL K2 skin/mesh nodes to have 0 vertices despite valid
-        # faces, normals, and UVs.  We recover by parsing vertex positions
-        # directly from the MDX binary using trimesh header metadata from the MDL.
-        if mdx_bytes and len(mdx_bytes) > 0:
-            _recover_mdx_vertex_positions(model, patched_bytes, mdx_bytes)
-
-        # FIX-K2-MDX-SHARED-SKIN (Phase D8): K2 skin nodes all read from MDX
-        # offset 0 due to mdx_data_offset=0 in the trimesh header.  This causes
-        # all skin nodes to share identical vertex data, producing exploded geometry.
-        # Re-read vertex positions from the correct cumulative MDX offsets.
-        if mdx_bytes and len(mdx_bytes) > 0:
-            _fix_k2_shared_skin_vertices(model, patched_bytes, mdx_bytes)
-
-        # FIX-MDX-CORRUPT-POSITIONS: When MDX vertex data is incomplete/truncated
-        # (e.g. skin/tangent nodes in room models where the MDX block is shorter
-        # than vertex_count * stride), PyKotor reads garbage positions from MDX.
-        # The MDL vertex array always has the full correct positions.
-        # Repair by re-parsing MDL-only and replacing garbage position entries.
-        if mdx_bytes:
-            _repair_mdx_corrupt_positions(model, patched_bytes)
-
         log.debug("load_model_from_bytes: '%s'  nodes=%d  anims=%d",
                   model.name, len(model.all_nodes()), len(model.animations))
         return model
@@ -219,24 +197,6 @@ def load_model_from_file(
         model.mdl_path = str(p)
         model.mdx_path = str(mdx_p) if mdx_p else ''
 
-        # FIX-K2-MDX-ZERO-OFFSET (Phase D6): same as load_model_from_bytes.
-        if mdx_p is not None:
-            mdx_bytes_raw = mdx_p.read_bytes()
-            if mdx_bytes_raw:
-                _recover_mdx_vertex_positions(model, mdl_bytes_raw, mdx_bytes_raw)
-
-        # FIX-K2-MDX-SHARED-SKIN (Phase D8): same as load_model_from_bytes.
-        if mdx_p is not None:
-            if not mdx_bytes_raw:
-                mdx_bytes_raw = mdx_p.read_bytes()
-            if mdx_bytes_raw:
-                _fix_k2_shared_skin_vertices(model, mdl_bytes_raw, mdx_bytes_raw)
-
-        # FIX-MDX-CORRUPT-POSITIONS: Apply same fallback repair as load_model_from_bytes.
-        # Re-parse MDL-only to get clean vertex positions for nodes with corrupt MDX data.
-        if mdx_p is not None:
-            _repair_mdx_corrupt_positions(model, mdl_bytes_raw, patched_bytes=None)
-
         log.debug("load_model_from_file: '%s'  nodes=%d  anims=%d",
                   model.name, len(model.all_nodes()), len(model.animations))
         return model
@@ -245,519 +205,13 @@ def load_model_from_file(
         return None
 
 
-def _repair_mdx_corrupt_positions(
-    model: 'KotorModel',
-    mdl_bytes: bytes,
-    patched_bytes: Optional[bytes] = None,
-) -> None:
-    """Repair nodes whose vertex positions are corrupt from MDX truncation.
-
-    When the MDX file has incomplete data for a node (common in room models with
-    skin-style stride=76 nodes), PyKotor reads garbage positions beyond the valid
-    region.  The MDL vertex array always contains the complete correct positions.
-
-    This function:
-    1. Detects nodes with any corrupt vertex positions.
-    2. Re-parses the MDL-only (no MDX) to get clean positions from the vertex array.
-    3. Replaces corrupt position entries with the clean fallback values.
-    4. Pads/sanitizes normals and UVs so the node can render.
-
-    Called after _mdl_to_kotormodel() by both load_model_from_bytes and
-    load_model_from_file when MDX data was provided (and thus may be corrupt).
-    """
-    _GEOM_MAX_CHECK = 1e6
-    _corrupt_node_names: set = set()
-    for _n in model.all_nodes():
-        _verts = getattr(_n, 'vertices', [])
-        if not _verts:
-            continue
-        _bad = sum(1 for _vx, _vy, _vz in _verts
-                   if not (math.isfinite(_vx) and math.isfinite(_vy) and math.isfinite(_vz))
-                   or max(abs(_vx), abs(_vy), abs(_vz)) > _GEOM_MAX_CHECK)
-        if _bad > 0:
-            _corrupt_node_names.add(_n.name)
-
-    if not _corrupt_node_names:
-        return
-
-    log.debug("_repair_mdx_corrupt_positions: %d nodes have corrupt MDX positions, "
-              "re-parsing MDL-only for fallback", len(_corrupt_node_names))
-
-    src_bytes = patched_bytes if patched_bytes is not None else mdl_bytes
-    try:
-        pk_mdl_fallback = pk_read_mdl(src_bytes, source_ext=None)
-        _mdl_fallback_map: Dict[str, list] = {}
-        for _fbnode in pk_mdl_fallback.all_nodes():
-            _fbmesh = getattr(_fbnode, 'mesh', None)
-            if _fbmesh is None:
-                continue
-            _fbverts = getattr(_fbmesh, 'vertex_positions', None) or []
-            if _fbverts:
-                _mdl_fallback_map[_fbnode.name] = _fbverts
-
-        _patched = 0
-        for _n in model.all_nodes():
-            if _n.name not in _corrupt_node_names:
-                continue
-            _fb = _mdl_fallback_map.get(_n.name)
-            _cur_verts = getattr(_n, 'vertices', [])
-            if not _fb or len(_fb) != len(_cur_verts):
-                continue
-            # Replace corrupt positions with MDL-fallback values
-            _new_verts = []
-            _fixed = 0
-            for _fv, (_vx, _vy, _vz) in zip(_fb, _cur_verts):
-                _fx, _fy, _fz = float(_fv.x), float(_fv.y), float(_fv.z)
-                _is_orig_bad = (
-                    not (math.isfinite(_vx) and math.isfinite(_vy) and math.isfinite(_vz))
-                    or max(abs(_vx), abs(_vy), abs(_vz)) > _GEOM_MAX_CHECK
-                )
-                if _is_orig_bad:
-                    _new_verts.append((_fx, _fy, _fz))
-                    _fixed += 1
-                else:
-                    _new_verts.append((_vx, _vy, _vz))
-            _n.vertices = _new_verts
-
-            # Ensure normals length matches vertices
-            _norms = getattr(_n, 'normals', [])
-            if len(_norms) < len(_new_verts):
-                _n.normals = list(_norms) + [(0.0, 0.0, 1.0)] * (len(_new_verts) - len(_norms))
-
-            # Ensure UVs length matches vertices (corrupt UV verts get 0.5)
-            _uvs = getattr(_n, 'uvs', [])
-            if len(_uvs) < len(_new_verts):
-                _n.uvs = list(_uvs) + [(0.5, 0.5)] * (len(_new_verts) - len(_uvs))
-
-            # Sanitize any remaining extreme UV values (from partially-corrupt MDX UV data)
-            _UV_MAX_REPAIR = 1e6
-            _n.uvs = [
-                (u if math.isfinite(u) and abs(u) <= _UV_MAX_REPAIR else 0.5,
-                 v if math.isfinite(v) and abs(v) <= _UV_MAX_REPAIR else 0.5)
-                for (u, v) in (_n.uvs or [])
-            ]
-
-            log.debug("_repair_mdx_corrupt_positions: '%s' — %d/%d verts repaired from MDL",
-                      _n.name, _fixed, len(_new_verts))
-            _patched += 1
-
-        log.debug("_repair_mdx_corrupt_positions: repaired %d nodes total", _patched)
-    except Exception as _fb_exc:
-        log.debug("_repair_mdx_corrupt_positions: MDL-fallback parse failed — %s", _fb_exc)
-
-
-def _fix_k2_shared_skin_vertices(
-    model: 'KotorModel',
-    mdl_bytes: bytes,
-    mdx_bytes: bytes,
-) -> None:
-    """FIX-K2-MDX-SHARED-SKIN (Phase D8): Fix K2 skin nodes reading identical MDX data.
-
-    Root cause: In K2 models, all skin nodes have mdx_data_offset=0 and
-    vertices_offset=0 in the trimesh header.  PyKotor reads each skin node's
-    vertex data from MDX offset 0, so all skin nodes get identical vertices
-    (the first node's data), causing exploded/shattered geometry.
-
-    In K2's MDX layout, node data is stored sequentially:
-      [MESH nodes (stride 24-32)] [SKIN node 0 (stride 64)] [SKIN node 1] [...]
-    with 1 stride-length of padding between each skin node.
-
-    This function:
-    1. Detects K2 models with shared skin vertex data (signature: multiple skin
-       nodes with identical first-vertex positions).
-    2. Computes correct per-node MDX offsets by walking all mesh/skin nodes in
-       parse order and accumulating stride × vertex_count with alignment padding.
-    3. Re-reads vertex positions and normals from the correct MDX offsets.
-
-    The bone weight/index data from the MDX is NOT re-read here because
-    PyKotor's _SkinmeshHeader already provides the bonemap and vertex_bones
-    from the MDL (not MDX) data section, and those are correct.
-    """
-    if not mdx_bytes or len(mdx_bytes) < 64:
-        return
-
-    # Only applies to K2 models
-    if model.game_version != GameVersion.K2:
-        return
-
-    # Find all skin nodes
-    skin_nodes = [n for n in model.all_nodes() if getattr(n, 'is_skin', False)
-                  and len(getattr(n, 'vertices', [])) > 0
-                  and len(getattr(n, 'faces', [])) > 0]
-    if len(skin_nodes) < 2:
-        return  # Need at least 2 skin nodes to detect sharing
-
-    # Detect shared vertices: check if first 3 vertices are identical across skin nodes
-    def _first_verts(node, count=3):
-        verts = getattr(node, 'vertices', [])
-        return tuple(verts[:min(count, len(verts))])
-
-    ref_verts = _first_verts(skin_nodes[0])
-    if not ref_verts:
-        return
-    all_shared = all(_first_verts(n) == ref_verts for n in skin_nodes[1:])
-    if not all_shared:
-        return  # Vertices are already distinct — no fix needed
-
-    log.info("FIX-K2-MDX-SHARED-SKIN: detected %d K2 skin nodes with shared vertices, "
-             "computing correct MDX offsets", len(skin_nodes))
-
-    # Collect ALL mesh+skin nodes in parse order to compute cumulative MDX offsets.
-    # Each node's MDX data size = stride × vertex_count.
-    # Re-parse to get the trimesh headers with correct stride/vertex_count.
-    try:
-        import pykotor.resource.formats.mdl.io_mdl as _io_mdl
-
-        _orig_trim_read = _io_mdl._TrimeshHeader.read
-        _trim_infos = []
-
-        def _capture_trim(self, reader, game):
-            result = _orig_trim_read(self, reader, game)
-            _trim_infos.append({
-                'stride': self.mdx_data_size,
-                'verts': self.vertex_count,
-                'bitmap': self.mdx_data_bitmap,
-            })
-            return result
-
-        _io_mdl._TrimeshHeader.read = _capture_trim
-        try:
-            pk_read_mdl(mdl_bytes, source_ext=mdx_bytes)
-        finally:
-            _io_mdl._TrimeshHeader.read = _orig_trim_read
-
-    except Exception as e:
-        log.debug("FIX-K2-MDX-SHARED-SKIN: failed to re-parse for trim info: %s", e)
-        return
-
-    # Separate mesh and skin node infos
-    mesh_infos = [t for t in _trim_infos if t['stride'] < 48]
-    skin_infos = [t for t in _trim_infos if t['stride'] >= 48]
-
-    if len(skin_infos) != len(skin_nodes):
-        log.debug("FIX-K2-MDX-SHARED-SKIN: skin info count mismatch (%d vs %d)",
-                  len(skin_infos), len(skin_nodes))
-        return
-
-    # Compute cumulative MDX offset for mesh nodes
-    mesh_total = sum(t['stride'] * t['verts'] for t in mesh_infos)
-
-    # Compute skin node MDX offsets.
-    # K2 MDX has alignment padding between mesh and skin sections,
-    # and 1 stride-length of padding between each skin node.
-    # Strategy: scan the MDX for the first skin node's position data
-    # by looking for the transition from mesh stride (24) to skin stride (64) data.
-    stride = skin_infos[0]['stride'] if skin_infos else 64
-
-    # Find actual skin node MDX offsets from the MDL binary.
-    # In K2, the trimesh header has mdx_data_offset=0 and vertices_offset=0
-    # (both stored at rel+340 and rel+344 after the K2 dirt/hologram fields).
-    # However, the REAL per-node MDX offset is stored at trimesh header rel+332
-    # (the position PyKotor reads as 'total_area'), because the K2 header layout
-    # differs from what PyKotor expects.
-    #
-    # Strategy: re-parse the MDL to capture the trimesh header raw bytes at the
-    # position where the correct MDX offsets are stored, specifically the uint32
-    # at reader_position + 332 for each skin node.
-    skin_mdx_offsets = []
-    try:
-        import pykotor.resource.formats.mdl.io_mdl as _io_mdl2
-
-        _orig_trim_read2 = _io_mdl2._TrimeshHeader.read
-        _skin_raw_offsets = []
-
-        def _capture_skin_offset(self, reader, game):
-            start_pos = reader.position()
-            result = _orig_trim_read2(self, reader, game)
-            # For skin-like nodes (stride >= 48), capture the value at rel+332
-            # which is the ACTUAL MDX data offset in K2 binaries.
-            # reader position maps to file position + 12 offset.
-            if self.mdx_data_size >= 48 and self.vertex_count > 0:
-                # Read the real MDX offset from the raw binary.
-                # file_pos = start_pos + 12 (BinaryReader offset) + 332
-                # But we must use the raw mdl_bytes directly.
-                file_pos = start_pos + 12 + 332
-                if file_pos + 4 <= len(mdl_bytes):
-                    real_mdx_off = struct.unpack_from('<I', mdl_bytes, file_pos)[0]
-                    _skin_raw_offsets.append(real_mdx_off)
-            return result
-
-        _io_mdl2._TrimeshHeader.read = _capture_skin_offset
-        try:
-            pk_read_mdl(mdl_bytes, source_ext=mdx_bytes)
-        finally:
-            _io_mdl2._TrimeshHeader.read = _orig_trim_read2
-
-        skin_mdx_offsets = list(_skin_raw_offsets)
-    except Exception as e:
-        log.debug("FIX-K2-MDX-SHARED-SKIN: failed to capture skin offsets: %s", e)
-
-    # Validate captured offsets
-    if len(skin_mdx_offsets) == len(skin_nodes):
-        # Use captured offsets directly
-        valid_offsets = True
-        for i, off in enumerate(skin_mdx_offsets):
-            si = skin_infos[i]
-            end = off + si['stride'] * si['verts']
-            if off >= len(mdx_bytes) or end > len(mdx_bytes):
-                valid_offsets = False
-                break
-            # Validate: read first position and check it's reasonable
-            px, py, pz = struct.unpack_from('<3f', mdx_bytes, off)
-            if not (math.isfinite(px) and math.isfinite(py) and math.isfinite(pz)):
-                valid_offsets = False
-                break
-            if max(abs(px), abs(py), abs(pz)) > 500:
-                valid_offsets = False
-                break
-
-        if valid_offsets and len(set(skin_mdx_offsets)) > 1:
-            log.debug("FIX-K2-MDX-SHARED-SKIN: using captured MDX offsets: %s",
-                      skin_mdx_offsets)
-            node_offsets = skin_mdx_offsets
-        else:
-            # Fallback: compute offsets from cumulative node data
-            log.debug("FIX-K2-MDX-SHARED-SKIN: captured offsets invalid, "
-                      "computing from cumulative layout")
-            node_offsets = []
-            off = mesh_total
-            for si in skin_infos:
-                node_offsets.append(off)
-                off += si['stride'] * si['verts'] + si['stride']
-    else:
-        log.debug("FIX-K2-MDX-SHARED-SKIN: offset count mismatch (%d vs %d), "
-                  "computing from cumulative layout", len(skin_mdx_offsets), len(skin_nodes))
-        node_offsets = []
-        off = mesh_total
-        for si in skin_infos:
-            node_offsets.append(off)
-            off += si['stride'] * si['verts'] + si['stride']
-
-    skin_start = node_offsets[0] if node_offsets else mesh_total
-
-    log.debug("FIX-K2-MDX-SHARED-SKIN: mesh_total=%d, skin_start=%d (gap=%d), offsets=%s",
-              mesh_total, skin_start, skin_start - mesh_total, node_offsets)
-
-    # Re-read vertex positions and normals for each skin node
-    fixed_count = 0
-    for node, node_off, si in zip(skin_nodes, node_offsets, skin_infos):
-        n_verts = si['verts']
-        s = si['stride']
-
-        if node_off + n_verts * s > len(mdx_bytes):
-            log.debug("FIX-K2-MDX-SHARED-SKIN: '%s' MDX offset %d + %d*%d exceeds MDX size %d",
-                      node.name, node_off, n_verts, s, len(mdx_bytes))
-            continue
-
-        new_positions = []
-        new_normals = []
-        bad_count = 0
-
-        for i in range(n_verts):
-            voff = node_off + i * s
-            px, py, pz = struct.unpack_from('<3f', mdx_bytes, voff)
-            nx, ny, nz = struct.unpack_from('<3f', mdx_bytes, voff + 12)
-
-            if not (math.isfinite(px) and math.isfinite(py) and math.isfinite(pz)):
-                bad_count += 1
-                new_positions.append((0.0, 0.0, 0.0))
-                new_normals.append((0.0, 0.0, 1.0))
-            else:
-                new_positions.append((px, py, pz))
-                new_normals.append((
-                    nx if math.isfinite(nx) else 0.0,
-                    ny if math.isfinite(ny) else 0.0,
-                    nz if math.isfinite(nz) else 1.0,
-                ))
-
-        if bad_count > n_verts // 2:
-            log.debug("FIX-K2-MDX-SHARED-SKIN: '%s' too many bad verts (%d/%d), skipping",
-                      node.name, bad_count, n_verts)
-            continue
-
-        node.vertices = new_positions
-        node.normals = new_normals
-        fixed_count += 1
-        log.info("FIX-K2-MDX-SHARED-SKIN: '%s' — %d verts re-read from MDX[%d] (bad=%d)",
-                 node.name, n_verts, node_off, bad_count)
-
-    if fixed_count > 0:
-        log.info("FIX-K2-MDX-SHARED-SKIN: fixed %d/%d skin nodes", fixed_count, len(skin_nodes))
-
-
-def _recover_mdx_vertex_positions(
-    model: 'KotorModel',
-    mdl_bytes: bytes,
-    mdx_bytes: bytes,
-) -> None:
-    """FIX-K2-MDX-ZERO-OFFSET (Phase D6): Recover vertex positions from MDX.
-
-    PyKotor's MDLBinaryReader (io_mdl.py line ~3300) rejects mdx_data_offset=0
-    as invalid via the condition:
-        ``bin_node.trimesh.mdx_data_offset not in (0, 0xFFFFFFFF)``
-
-    However, mdx_data_offset=0 is perfectly valid — it means the mesh's vertex
-    data starts at the very beginning of the MDX buffer.  This is common for the
-    first skin mesh in both KotOR 1 and KotOR 2 models.
-
-    The primary fix patches PyKotor's condition at import time (see
-    _patch_pykotor_mdx_offset_zero below).  This function serves as a defensive
-    fallback: if any nodes still have 0 vertices after parsing, we re-parse the
-    MDL with PyKotor and copy recovered vertex positions to the model nodes.
-    """
-    if not mdx_bytes or not mdl_bytes:
-        return
-
-    # Find nodes that need vertex recovery: have faces but no vertices
-    needs_recovery = []
-    for node in model.all_nodes():
-        verts = getattr(node, 'vertices', [])
-        faces = getattr(node, 'faces', [])
-        if len(verts) == 0 and len(faces) > 0:
-            needs_recovery.append(node)
-
-    if not needs_recovery:
-        return
-
-    log.debug("_recover_mdx_vertex_positions: %d nodes need MDX vertex recovery",
-              len(needs_recovery))
-
-    # Ensure PyKotor's MDX offset=0 bug is patched
-    _patch_pykotor_mdx_offset_zero()
-
-    try:
-        # Re-parse with the patched PyKotor to get vertex positions
-        pk_mdl = pk_read_mdl(mdl_bytes, source_ext=mdx_bytes)
-
-        # Build name→node lookup for our model's nodes
-        name_to_gr: Dict[str, ModelNode] = {n.name: n for n in needs_recovery}
-
-        recovered = 0
-        for pk_node in pk_mdl.all_nodes():
-            if pk_node.name not in name_to_gr:
-                continue
-
-            mesh = getattr(pk_node, 'mesh', None)
-            if mesh is None:
-                continue
-
-            vp = getattr(mesh, 'vertex_positions', [])
-            if not vp or len(vp) == 0:
-                continue
-
-            # Copy vertex positions to our model node
-            gr_node = name_to_gr[pk_node.name]
-            gr_node.vertices = [(float(v.x), float(v.y), float(v.z)) for v in vp]
-            recovered += 1
-            del name_to_gr[pk_node.name]
-            log.debug("_recover_mdx_vertex_positions: '%s' — %d verts recovered",
-                      pk_node.name, len(vp))
-
-        if recovered > 0:
-            log.info("_recover_mdx_vertex_positions: recovered %d/%d nodes from MDX",
-                     recovered, len(needs_recovery))
-        if name_to_gr:
-            log.debug("_recover_mdx_vertex_positions: %d nodes still missing: %s",
-                      len(name_to_gr), list(name_to_gr.keys()))
-
-    except Exception as exc:
-        log.debug("_recover_mdx_vertex_positions: fallback failed — %s", exc, exc_info=True)
-
-
-# ── PyKotor runtime patch ────────────────────────────────────────────────────
-_PYKOTOR_PATCHED = False
-
-def _patch_pykotor_mdx_offset_zero():
-    """Patch PyKotor's io_mdl.py to allow mdx_data_offset=0 (valid MDX offset).
-
-    PyKotor's MDLBinaryReader condition at ~line 3300 rejects offset 0:
-        ``bin_node.trimesh.mdx_data_offset not in (0, 0xFFFFFFFF)``
-    This should be:
-        ``bin_node.trimesh.mdx_data_offset != 0xFFFFFFFF``
-    because offset 0 means "start of MDX buffer" which is valid.
-
-    This patch modifies the installed pykotor source file so both the current
-    process and future imports pick up the fix.
-    """
-    global _PYKOTOR_PATCHED
-    if _PYKOTOR_PATCHED:
-        return
-    _PYKOTOR_PATCHED = True
-
-    try:
-        import pykotor.resource.formats.mdl.io_mdl as _io_mdl
-        src_path = _io_mdl.__file__
-        if not src_path or not src_path.endswith('.py'):
-            return
-
-        with open(src_path, 'r', encoding='utf-8') as f:
-            src = f.read()
-
-        patched = False
-
-        # Patch 1: Allow mdx_data_offset=0 (Phase D6)
-        _OLD = 'and bin_node.trimesh.mdx_data_offset not in (0, 0xFFFFFFFF)'
-        _NEW = 'and bin_node.trimesh.mdx_data_offset != 0xFFFFFFFF'
-        if _OLD in src:
-            src = src.replace(_OLD, _NEW)
-            patched = True
-            log.info("_patch_pykotor_mdx_offset_zero: patched mdx_data_offset condition")
-
-        # Patch 2: FIX-K2-HEADER-D9 — Correct K2 trimesh header field layout.
-        # PyKotor's K2 branch reads hologram_donotdraw as uint32 (4 bytes), but
-        # KotOR.js and xoreos read it as byte + padding (2 bytes).  PyKotor also
-        # reads phantom k2_tail_long1/2 (8 bytes) that don't exist in the format.
-        # This consumes 10 extra bytes, shifting mdx_data_offset and vertices_offset
-        # reads to wrong positions → garbage MDX offsets for ALL K2 mesh nodes.
-        #
-        # Fix: Replace uint32 hologram read with uint8+uint8, remove k2_tail_long1/2,
-        # add _k2_unknown2 uint16 before total_area, keep K2_SIZE=340.
-        # Reference: KotOR.js OdysseyModelNodeMesh.ts (hideInHolograms/tslPadding2)
-
-        # Patch 2a: hologram field (uint32 → uint8+uint8)
-        _OLD_HOLO = 'hologram_value = reader.read_uint32()'
-        _NEW_HOLO = 'self.hologram_donotdraw = reader.read_uint8() == 1'
-        if _OLD_HOLO in src and _NEW_HOLO not in src:
-            # Full K2 branch fix — but only if not already applied
-            log.info("_patch_pykotor_mdx_offset_zero: K2 header layout fix available (hologram/tail fields)")
-            # Note: The full fix is applied once during first import via the direct
-            # file patch.  Subsequent reloads find the corrected source already in place.
-
-        # Patch 2b: Ensure _k2_unknown2 field exists
-        if '_k2_unknown2' not in src:
-            log.warning("_patch_pykotor_mdx_offset_zero: _k2_unknown2 field not found — K2 header may be incorrect")
-
-        if patched:
-            with open(src_path, 'w', encoding='utf-8') as f:
-                f.write(src)
-            # Clear any cached bytecode
-            pyc = src_path + 'c'
-            if Path(pyc).exists():
-                Path(pyc).unlink(missing_ok=True)
-            cache_dir = Path(src_path).parent / '__pycache__'
-            if cache_dir.exists():
-                for p in cache_dir.glob('io_mdl*.pyc'):
-                    p.unlink(missing_ok=True)
-
-            # Force reload of the patched module so current process uses new code
-            import importlib
-            importlib.reload(_io_mdl)
-            log.info("_patch_pykotor_mdx_offset_zero: reloaded patched io_mdl.py")
-        else:
-            log.debug("_patch_pykotor_mdx_offset_zero: already patched or pattern not found")
-    except Exception as e:
-        log.debug("_patch_pykotor_mdx_offset_zero: patch failed — %s", e)
-
-
-# Apply patch at import time
-_patch_pykotor_mdx_offset_zero()
-
-
 def patch_tpc_header(data: bytes) -> bytes:
     """Patch TPC header data_sz=0 for stock KotOR DXT1/DXT5 files.
 
     Stock KotOR DXT TPC files store data_sz=0.  PyKotor needs a valid value
     to find the TXI trailer.  We compute it and patch in-place (copy only).
+    Uncompressed RGB/RGBA files also use data_sz=0, so only patch when the
+    payload is too small to contain uncompressed texels.
     """
     if len(data) < 128:
         return data
@@ -770,6 +224,16 @@ def patch_tpc_header(data: bytes) -> bytes:
     mips   = struct.unpack_from('B',  data, 13)[0]
     if enc not in (2, 4) or width == 0 or height == 0:
         return data          # uncompressed or invalid — leave alone
+
+    bpp = 3 if enc == 2 else 4
+    total_uncompressed = 0
+    uw, uh = width, height
+    for _ in range(max(1, mips)):
+        total_uncompressed += max(1, uw) * max(1, uh) * bpp
+        uw = max(1, uw >> 1)
+        uh = max(1, uh >> 1)
+    if len(data) >= 128 + total_uncompressed:
+        return data          # enc=2/4 with full texel payload is RGB/RGBA, not DXT
 
     total = 0
     w, h  = width, height
@@ -1020,6 +484,19 @@ def _convert_node(pk_node, parent: Optional[ModelNode],
         gr.position = (0.0, 0.0, 0.0)
 
     try:
+        # Quaternion convention (locked in for the entire pipeline)
+        # -----------------------------------------------------------
+        # Binary MDL on disk stores node orientation as W,X,Y,Z (W first) —
+        # see PyKotor ``_NodeHeader.read`` and xoreos
+        # ``ModelNode_KotOR::load`` which reads ``rad2deg(acos(W) * 2)``
+        # followed by X, Y, Z as an axis/angle pair.  PyKotor already
+        # deserialises that into its ``Vector4(x,y,z,w)`` accessor, so by
+        # the time we touch ``pk_node.orientation`` it is internally
+        # XYZW-ordered.  We keep it in XYZW form throughout the GhostRigger
+        # pipeline: ``_quat_mul``, ``_quat_rotate``, ``_quat_normalize_bind``
+        # in model_data.py, and every callsite in viewport.py / writers.
+        # Tests: ``test_quaternion_convention_consistency`` in
+        # ``test_geometry_phase_g2.py``.
         o = pk_node.orientation
         gr.rotation = (float(o.x), float(o.y), float(o.z), float(o.w))
     except Exception:
@@ -1100,6 +577,30 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
     gr.rotate_texture      = bool(getattr(mesh, 'rotate_texture',     False))
     gr.has_lightmap        = bool(getattr(mesh, 'has_lightmap',       False))
 
+    # ── K2-specific mesh-header fields (Phase G2) ─────────────────────────────
+    # These extra bytes exist only in KotOR 2's trimesh sub-header.  PyKotor
+    # exposes them on the mesh object regardless of game, defaulting to the
+    # "no-op" values on K1 models, so reading them unconditionally is safe.
+    #
+    #   dirt_enabled / dirt_texture / dirt_coordinate_space:
+    #       K2 dirt-overlay decal support (used on armour/creature weathering).
+    #   hologram_donotdraw / hide_in_hologram:
+    #       K2 hologram render-pass flag.  PyKotor exposes both the modern
+    #       name (``hologram_donotdraw``) and the legacy alias
+    #       (``hide_in_hologram``); we OR them so either source wins.
+    #
+    # We preserve these verbatim so round-trip writing through mdl_writer can
+    # emit a byte-identical K2 mesh header.  viewport.py will grow an opt-in
+    # respecter for ``hide_in_holograms`` in a follow-up; for now the field is
+    # populated purely for fidelity.
+    gr.dirt_enabled      = bool(getattr(mesh, 'dirt_enabled', False))
+    gr.dirt_texture      = int( getattr(mesh, 'dirt_texture', 0) or 0)
+    gr.dirt_coord_space  = int( getattr(mesh, 'dirt_coordinate_space', 0) or 0)
+    gr.hide_in_holograms = bool(
+        getattr(mesh, 'hologram_donotdraw', False)
+        or getattr(mesh, 'hide_in_hologram', False)
+    )
+
     # ── UV animation ─────────────────────────────────────────────────────────
     gr.animate_uv      = bool( getattr(mesh, 'animate_uv',       False))
     gr.uv_dir_x        = float(getattr(mesh, 'uv_direction_x',   0.0) or 0.0)
@@ -1139,8 +640,8 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
     # These corrupt values come from reading the wrong byte region of the MDX file.
     #
     # Strategy:
-    #   • Values that are NaN, ±Inf, or |x| > _GEOM_MAX are corrupt → clamp/discard.
-    #   • Legitimate tiled UVs stay intact (module UVs can reach ±131,209).
+    #   • Position values that are NaN, ±Inf, or |x| > _GEOM_MAX are corrupt.
+    #   • UV magnitudes are not classified here; tiled UVs pass through unchanged.
     #   • Vertex positions with |x|>10000 are also corrupt (KotOR worlds fit in ~500 units).
     #
     # If MORE than 50% of vertices are corrupt, the whole mesh has a bad MDX offset;
@@ -1155,9 +656,9 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
         return x
 
     def _safe_uv(x: float, y: float) -> tuple:
-        """Return clamped UV pair; replace corrupt component with 0.5."""
-        xu = x if math.isfinite(x) and abs(x) <= _GEOM_MAX else 0.5
-        yu = y if math.isfinite(y) and abs(y) <= _GEOM_MAX else 0.5
+        """Return UV pair; replace only non-finite components with 0.5."""
+        xu = x if math.isfinite(x) else 0.5
+        yu = y if math.isfinite(y) else 0.5
         return (xu, yu)
 
     # ── Vertex positions ─────────────────────────────────────────────────────
@@ -1175,25 +676,17 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
             raw_verts.append((vx, vy, vz))
     gr.vertices = raw_verts
 
-    # Detect mesh with corrupt MDX data: ANY corrupt vert → MDX positions are wrong.
-    # DO NOT clear geometry here — the outer load_model_from_bytes() will repair positions
-    # by re-parsing MDL-only and copying clean positions from the MDL vertex array.
+    # Detect mesh with corrupt MDX data: extreme or non-finite values (misaligned MDX).
     # We set _mesh_is_mdx_corrupt to suppress UV loading for very-corrupt meshes
-    # (>50% corrupt) where UVs are also garbage. For partially-corrupt meshes, UVs
-    # are loaded and per-vert repair is done by the outer pass.
-    #
-    # IMPORTANT: Keep gr.vertices populated (even with some garbage values) so that
-    # the outer fallback repair can check len(gr.vertices) == len(fallback_verts).
-    # The outer pass replaces individual garbage entries with MDL fallback values.
+    # (>50% corrupt) where UVs are also garbage.  Partially corrupt meshes still load UVs.
     _has_any_corrupt = corrupt_vert_count > 0
     _mesh_is_mdx_corrupt = (len(raw_verts) > 0 and
                             corrupt_vert_count > len(raw_verts) // 2)
     if _has_any_corrupt:
-        log.debug("_read_mesh '%s': %d/%d verts have corrupt MDX positions (will repair)",
+        log.debug("_read_mesh '%s': %d/%d verts have suspect MDX positions (clamped)",
                   gr.name, corrupt_vert_count, len(raw_verts))
     if _mesh_is_mdx_corrupt:
         # For severely-corrupt meshes (>50% bad), normals are also garbage — clear them.
-        # Vertices are kept for the outer fallback repair.
         # Faces are loaded below (they reference MDL vertex indices, not MDX).
         # UVs are skipped for >50% corrupt meshes (they're from MDX and also garbage).
         gr.normals = []
@@ -1218,9 +711,7 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
     # PyKotor: MDLMesh.vertex_uv1  (= .vertex_uv property alias)
     # Use explicit None checks so that an empty-list attribute ([]) doesn't
     # fall through to a method-object lookup (which is not iterable).
-    # FIX-UV-CORRUPT: If >50% of verts are corrupt, skip UV loading — UVs are
-    # also garbage. The outer load_model_from_bytes() will later patch the vertices
-    # from the MDL fallback and fill UVs with 0.5 (flat-shaded but visible geometry).
+    # If >50% of verts are corrupt, skip UV loading — UVs are likely garbage too.
     if not _mesh_is_mdx_corrupt:
         _uv1_attr = getattr(mesh, 'vertex_uv1', None)
         if _uv1_attr is None or isinstance(_uv1_attr, bool):
@@ -1232,8 +723,7 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
                 uv1 = _safe_vec2_list(_uv1_raw)
         else:
             uv1 = _uv1_attr
-        # Sanitize: replace NaN/Inf/extreme UV components with 0.5.
-        # Legitimate tiled UVs (e.g. ±13) are kept intact.
+        # Keep finite UVs exactly as authored; large values are valid tiling data.
         gr.uvs = [_safe_uv(float(u.x), float(u.y)) for u in (uv1 or [])]
 
         # ── Secondary / lightmap UVs ─────────────────────────────────────────────
@@ -1247,7 +737,7 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
     # PyKotor: MDLFace fields — v1/v2/v3 (vertex idx), t1/t2/t3 (UV idx, -1=same as vertex)
     # MDLFace.material: lower 5 bits = material slot (& 0x1F strips upper garbage bits)
     # Always load faces — they reference MDL vertex indices which are correct regardless
-    # of MDX corruption. The outer repair will fix positions for individual bad verts.
+    # of MDX corruption.
     gr.faces     = []
     gr.face_uvs  = []
     gr.face_mats = []
@@ -1395,6 +885,47 @@ def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
 
     n_bones = len(gr.bone_map)
 
+    # Some shipped creature skins use vertex palette indices beyond the fixed
+    # 16-entry ``bone_indices`` header array while PyKotor still exposes a
+    # longer ``bonemap`` table with valid node ids for those overflow slots.
+    # Example: c_brith/Brith_mesh has vertices weighted to local index 16,
+    # ``bone_indices`` has slots 0..15, and ``bonemap[16]`` resolves to the
+    # model root.  Dropping those influences leaves zero-weight vertices and
+    # frozen triangles during animation.  Preserve the palette slot by extending
+    # bone_map from bonemap only for indices actually referenced by vertices.
+    try:
+        max_vertex_idx = -1
+        for bv in (getattr(skin, 'vertex_bones', None) or []):
+            for j in range(4):
+                try:
+                    raw_idx = float(bv.vertex_indices[j])
+                except (TypeError, ValueError, IndexError):
+                    continue
+                if math.isfinite(raw_idx):
+                    max_vertex_idx = max(max_vertex_idx, int(raw_idx))
+
+        raw_bonemap = list(getattr(skin, 'bonemap', None) or [])
+        if max_vertex_idx >= n_bones and raw_bonemap:
+            for slot in range(n_bones, max_vertex_idx + 1):
+                name = ''
+                if slot < len(raw_bonemap):
+                    try:
+                        nid = int(raw_bonemap[slot])
+                    except (TypeError, ValueError):
+                        nid = -1
+                    if nid >= 0 and nid != 0xFFFF:
+                        pk_n = id_to_pknode.get(nid)
+                        name = pk_n.name if pk_n else ''
+                gr.bone_map.append(name)
+            n_bones = len(gr.bone_map)
+            log.debug(
+                "_read_skin_weights '%s': extended bone_map to %d slot(s) "
+                "using bonemap overflow (max vertex index=%d)",
+                gr.name, n_bones, max_vertex_idx,
+            )
+    except Exception as _e:
+        log.debug("_read_skin_weights '%s': bonemap overflow extension skipped: %s", gr.name, _e)
+
     # v7.1 FIX-QBONETBONE (Finding 2.5 — reone mdlmdxreader.cpp cross-ref):
     # Read qBone (quaternion) and tBone (translation) arrays from PyKotor skin object.
     # These provide per-bone bind-pose transforms that serve as fallback matrices
@@ -1429,7 +960,15 @@ def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
         log.debug("_read_skin_weights '%s': qBone/tBone read skipped: %s", gr.name, _e)
 
     # Step 2: per-vertex skin data
+    #
+    # Phase G2: we track out-of-range indices so a malformed MDL surfaces as
+    # a single summary warning rather than being silently swallowed.  Silent
+    # skipping is safe (the vertex just loses one influence and its other
+    # weights renormalise), but without any log line the user has no clue
+    # why a skin mesh looks wrong.  We log at most one WARNING line per
+    # skin node, regardless of how many vertices are affected.
     gr.skin_data = []
+    _oob_count = 0
     for bv in (getattr(skin, 'vertex_bones', None) or []):
         vsd = VertexSkinData()
         for j in range(4):
@@ -1442,6 +981,11 @@ def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
                 continue
             w         = float(bv.vertex_weights[j])
             if local_idx < 0 or local_idx >= n_bones:
+                # Out-of-range bone index: record and skip this influence.
+                # Per-vertex weight renormalisation (below) redistributes the
+                # dropped weight across the surviving influences.
+                if local_idx >= 0:
+                    _oob_count += 1
                 continue
             if w <= 1e-6 or not math.isfinite(w):
                 continue
@@ -1456,6 +1000,13 @@ def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
                     bw.weight *= inv
 
         gr.skin_data.append(vsd)
+
+    if _oob_count:
+        log.warning(
+            "Skin node '%s': %d vertex bone-index(es) exceeded bone_map "
+            "size %d — influences dropped and weights renormalised",
+            gr.name, _oob_count, n_bones,
+        )
 
     log.debug("_read_skin_weights '%s': %d bones, %d verts",
               gr.name, n_bones, len(gr.skin_data))
@@ -1712,3 +1263,170 @@ def _apply_bind_pose(model: KotorModel) -> None:
                 # ctype == 128: alpha fallback (xoreos CTRL_ALPHA) — only default
                 if node.alpha == 1.0:
                     node.alpha = float(v0[0])
+
+
+# =============================================================================
+#  reparent_head_nodes — xoreos parity helper (opt-in, not in default path)
+# =============================================================================
+#
+# xoreos' Model_KotOR::reparentHeadNodes() walks the model tree and moves any
+# node named exactly ``head`` or ``tongue`` so it becomes a direct child of
+# the model root.  The rationale in xoreos is explicitly a perf optimisation
+# for the animation system's per-frame node lookup — NOT a geometric fix —
+# and the implementation explicitly preserves each moved node's world-space
+# transform by recomputing its local transform against the new parent.  See
+# ``xoreos/src/graphics/aurora/model_kotor.cpp`` (``reparentHeadNodes``) and
+# ``modelnode.cpp`` (``reparentTo``).
+#
+# GhostRigger's ``ModelNode.world_transform()`` already accumulates the full
+# parent chain, so world positions are identical regardless of tree depth.
+# We therefore do NOT call this from the default load pipeline; calling it
+# would change the tree shape (and thus diffs of ``model_inspector.py``
+# output) without changing rendering.  Callers that want 1:1 xoreos tree
+# topology for e.g. animation-system comparisons can invoke this explicitly
+# after loading:
+#
+#     model = load_model_from_file(mdl)
+#     reparent_head_nodes(model)   # explicit xoreos-parity flattening
+#
+# The function is idempotent — a second call finds the target nodes already
+# parented to root and returns ``0``.
+
+def _iter_nodes_dfs(root: ModelNode):
+    """Yield every node in the subtree rooted at ``root`` (DFS, cycle-safe)."""
+    stack: List[ModelNode] = [root]
+    visited: set = set()
+    while stack:
+        n = stack.pop()
+        if n is None:
+            continue
+        nid = id(n)
+        if nid in visited:
+            continue
+        visited.add(nid)
+        yield n
+        for c in reversed(n.children):
+            stack.append(c)
+
+
+def _find_node_exact(root: ModelNode, target_name: str) -> Optional[ModelNode]:
+    """Return the first node whose name matches ``target_name`` (case-insens.).
+
+    Uses an *exact* lower-case match — we deliberately do not substring match,
+    because in KotOR body MDLs ``head_hook`` / ``headTip`` / ``tongue_hook``
+    are attachment/dummy nodes that are meant to stay where they are in the
+    tree.  Only the geometry-bearing ``head`` / ``tongue`` nodes should be
+    flattened.  This mirrors xoreos' ``Model::getNode("head")`` exact-match
+    behaviour.
+    """
+    needle = target_name.lower()
+    for node in _iter_nodes_dfs(root):
+        if (node.name or '').lower() == needle:
+            return node
+    return None
+
+
+def reparent_head_nodes(model: KotorModel) -> int:
+    """Flatten ``head`` / ``tongue`` under the model root, preserving world xform.
+
+    xoreos parity helper.  **Not** wired into ``load_model_from_file`` /
+    ``load_model_from_bytes`` — this changes the node tree topology, which in
+    turn changes diagnostic output (``model_inspector.py``) even though the
+    rendered image is unchanged.  Only call this when you need strict xoreos
+    tree parity (animation-system cross-validation, reverse-engineering
+    diffs, etc.).
+
+    Algorithm per target node::
+
+        1. Remember its world transform   (wp, wr)  := node.world_transform()
+        2. Detach from old parent         parent.children.remove(node)
+        3. Attach to root                 root.children.append(node);
+                                          node.parent = root
+        4. Rewrite its local transform so (wp', wr') == (wp, wr).
+           Since the new parent is the root (world at identity, rotation
+           identity in our convention), the new local transform *is* the
+           preserved world transform — no per-parent de-rotation needed.
+
+    Parameters
+    ----------
+    model : KotorModel
+        Model to mutate in-place.  ``None`` / missing root are safe no-ops.
+
+    Returns
+    -------
+    int
+        Number of nodes reparented.  ``0`` when neither ``head`` nor
+        ``tongue`` exist, or when both are already direct children of root.
+    """
+    if model is None or model.root_node is None:
+        return 0
+
+    root = model.root_node
+    reparented = 0
+
+    # xoreos reparents exactly these two nodes.  We keep the same set for
+    # parity; if more need flattening later (e.g. 'gogglesmid'), add them
+    # here after confirming against xoreos source.
+    for target_name in ('head', 'tongue'):
+        node = _find_node_exact(root, target_name)
+        if node is None:
+            continue
+        if node is root:
+            # Pathological: a model whose root is literally named "head".
+            # Nothing to do — already at the "top".
+            continue
+        if node.parent is root:
+            # Already a direct child of root — idempotent skip.
+            continue
+
+        # Capture the world transform BEFORE mutating the tree.  After we
+        # move the node its parent chain changes, so a second call would
+        # give a different answer.
+        try:
+            world_pos, world_rot = node.world_transform()
+        except Exception as exc:  # pragma: no cover — defensive only
+            log.warning(
+                "reparent_head_nodes: skipping %r — world_transform failed: %s",
+                target_name, exc,
+            )
+            continue
+
+        # Detach from the old parent.  ``remove`` is O(N) in children but
+        # skeleton fan-out is small (<64 children per node in practice).
+        old_parent = node.parent
+        if old_parent is not None:
+            try:
+                old_parent.children.remove(node)
+            except ValueError:
+                # Child list was mutated mid-flight (shouldn't happen with
+                # a single-threaded loader) — recover by filtering by id.
+                old_parent.children = [
+                    c for c in old_parent.children if c is not node
+                ]
+
+        # Re-parent under root and rewrite the local transform.  Our root
+        # always sits at the world origin with identity rotation (model-local
+        # == world), so the new local is exactly the preserved world.
+        node.parent = root
+        root.children.append(node)
+        node.position = (float(world_pos[0]),
+                         float(world_pos[1]),
+                         float(world_pos[2]))
+        node.rotation = (float(world_rot[0]),
+                         float(world_rot[1]),
+                         float(world_rot[2]),
+                         float(world_rot[3]))
+
+        log.debug(
+            "reparent_head_nodes: moved '%s' from parent '%s' to root; "
+            "world pos preserved at (%+.4f, %+.4f, %+.4f)",
+            target_name,
+            getattr(old_parent, 'name', '?'),
+            world_pos[0], world_pos[1], world_pos[2],
+        )
+        reparented += 1
+
+    if reparented:
+        log.info("reparent_head_nodes: reparented %d node(s) to root",
+                 reparented)
+    return reparented

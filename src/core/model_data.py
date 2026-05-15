@@ -138,7 +138,17 @@ PART_SLOT_LABELS: Dict[PartSlot, str] = {
 # ──────────────────────────────────────────────────────────────
 
 def _quat_mul(a, b):
-    """Multiply two quaternions [x,y,z,w]."""
+    """Multiply two quaternions ``a ⊗ b``, both stored as ``[x, y, z, w]``.
+
+    Convention: XYZW (W last).  This matches:
+      * PyKotor ``Vector4`` accessor (x, y, z, w).
+      * KotorBlender internal quaternion form.
+      * GLM / DirectXMath / three.js.
+    The on-disk MDL binary stores W,X,Y,Z — ``kotor_loader._read_node``
+    swaps the order at load time, so every caller in GhostRigger sees
+    XYZW.  Cross-ref: xoreos ``Common::Matrix4::loadRotate`` reads the
+    same (x,y,z,w) form after its own disk conversion.
+    """
     ax, ay, az, aw = a
     bx, by, bz, bw = b
     return [
@@ -159,7 +169,15 @@ def _quat_conjugate(q):
     return (-x, -y, -z, w)
 
 def _quat_rotate(q, v):
-    """Rotate vector v by quaternion q = [x,y,z,w]. Returns rotated vector."""
+    """Rotate vector ``v`` by quaternion ``q = [x, y, z, w]``.
+
+    Uses the standard two-cross-product form
+        v' = v + 2·qw·(q_xyz × v) + 2·(q_xyz × (q_xyz × v))
+    which is equivalent to the ``q · v · q*`` sandwich for unit
+    quaternions and matches xoreos ``Common::Matrix4::rotate`` and
+    KotOR.js ``THREE.Quaternion.multiplyVector``.  See ``_quat_mul``
+    for the XYZW storage convention.
+    """
     qx, qy, qz, qw = q
     # Normalize q to avoid drift
     l2 = qx*qx + qy*qy + qz*qz + qw*qw
@@ -424,6 +442,13 @@ class ModelNode:
     # when available, this gives a more accurate centroid than the bounding-box midpoint.
     # Kotor.NET: TrimeshHeader.AveragePoint; xoreos: _averagePoint.
     mesh_average_point: Tuple[float,float,float] = (0.0, 0.0, 0.0)
+
+    # ── Trimesh header opaque fields ──
+    # The 24 bytes at trimesh-header offset +152 are parsed as opaque data by
+    # PyKotor, KotorBlender, and Kotor.NET (formerly mis-labelled in our writer
+    # as ``bm3_name`` + ``bm4_name``).  We preserve the raw bytes captured at
+    # load time so round-trip writing reproduces the source file byte-for-byte.
+    mesh_unknown0: bytes = b"\x00" * 24
 
     # Bounding sphere / box
     bb_min: Tuple[float,float,float] = (0.0, 0.0, 0.0)
@@ -855,6 +880,7 @@ class ModelNode:
         n.shininess = self.shininess
         # Phase 3.7 fields
         n.mesh_average_point = self.mesh_average_point
+        n.mesh_unknown0      = self.mesh_unknown0
         n.hide_in_holograms  = self.hide_in_holograms
         n.dirt_enabled       = self.dirt_enabled
         n.dirt_texture       = self.dirt_texture
@@ -1095,16 +1121,9 @@ class KotorModel:
             tex = t.strip()
             is_null = (not tex or tex.upper() == 'NULL')
 
-            # Skin node with a real texture and valid (non-extreme) UVs → visible
+            # Skin node with a real texture and UVs -> visible
             if n.is_skin and not is_null and n.uvs:
-                has_extreme = any(abs(u) > 3.0 or abs(v) > 3.0
-                                  for u, v in n.uvs[:20])
-                if not has_extreme:
-                    return False
-
-            if n.uvs:
-                if any(abs(u) > 3.0 or abs(v) > 3.0 for u, v in n.uvs[:20]):
-                    return True
+                return False
 
             # Non-skin _g / _G or _dum nodes are ALWAYS deform helpers
             name_lower = n.name.lower()

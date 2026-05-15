@@ -1,3 +1,14 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  ⚠  FROZEN — LEGACY TKINTER MODULE  ⚠
+# ─────────────────────────────────────────────────────────────────────────────
+#  This file is part of the pre-Qt GhostRigger UI and is kept ONLY as a
+#  read-only reference until milestone M3 (T302) deletes it.
+#
+#  Do NOT add new features here.  Do NOT touch business logic here.
+#  All active UI work happens under qt_*.py in this package.
+#
+#  Tracking: knowledge_base/roadmap/02_roadmap_2026_05.md  (M0/T004, M3/T302)
+# ─────────────────────────────────────────────────────────────────────────────
 """
 Main Application Window - GhostRigger-K1-K2  v5.1.0
 Five-pillar KotOR modding pipeline:
@@ -44,6 +55,7 @@ from .modular_panel import ModularModePanel
 from ..core.animation_engine import AnimationEngine, AnimPose
 from ..autorig.cloth_rig import ClothRigger, ClothRigConfig, ClothRigPreset, ClothRigPanel
 from ..ipc.server import GhostRiggerIPCServer
+from ..infra.mcp_autostart import maybe_autostart_kotormcp
 from ..ipc.client import (
     notify_blueprint_saved, ping_all, ping_program,
     refresh_gmodular_viewport, ipc_call_async,
@@ -505,6 +517,11 @@ class PropertiesPanel(tk.Frame):
             return
         try:
             nx, ny, nz = self._px.get(), self._py.get(), self._pz.get()
+            before = (
+                tuple(getattr(node, "position", (0.0, 0.0, 0.0))),
+                tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))),
+            )
+            setattr(node, "_gr_undo_before_transform", before)
             node.position = (nx, ny, nz)
             if self._set_pos_cb:
                 self._set_pos_cb(node, nx, ny, nz)
@@ -1605,6 +1622,16 @@ class LibraryPanel(tk.Frame):
             mgr = ResourceManager()
             self._resource_manager = mgr
 
+        # Phase 5: let the super-model resolver load chain MDLs through
+        # the unified resource manager.  Idempotent — configure() simply
+        # swaps the installed manager, so calling it on every refresh is
+        # safe and keeps the resolver in sync if ``mgr`` is ever replaced.
+        try:
+            from ..core.animation_engine import SuperModelResolver
+            SuperModelResolver.configure(mgr)
+        except Exception as _e:  # pragma: no cover - defensive, GUI path
+            log.debug(f"SuperModelResolver configure failed: {_e}")
+
         if k1d and os.path.isdir(k1d):
             try:
                 mgr.set_k1_dir(k1d)
@@ -1958,7 +1985,8 @@ class LibraryPanel(tk.Frame):
                     self._resource_manager = mgr
                     if fast_entries:
                         self._all_entries = fast_entries
-                        n_fast = len(fast_entries)
+                        self._inject_template_entries()
+                        n_fast = len(self._all_entries)
                         self.listbox.after(0, self._apply_filter)
                         self.listbox.after(0, lambda: self._status_var.set(
                             f"{n_fast} models (fast index — full scan running…)"))
@@ -2166,6 +2194,7 @@ class LibraryPanel(tk.Frame):
                         pass
                 self.library.scan(progress_cb=_safe_progress, deep_scan=True)
                 self._all_entries = list(self.library.models)
+                self._inject_template_entries()
 
                 # ── Create fast KotorInstallation objects after scan ──────
                 k1d = self.library.k1_dir
@@ -5694,7 +5723,7 @@ class AnimationsPanel(tk.Frame):
         list_frame = tk.Frame(self, bg=C['panel2'])
         list_frame.pack(fill='both', expand=True, padx=6, pady=2)
 
-        cols = ('name', 'length', 'keys', 'nodes', 'events')
+        cols = ('name', 'length', 'keys', 'nodes', 'events', 'source')
         self._tree = ttk.Treeview(list_frame, columns=cols,
                                    show='headings', height=10,
                                    selectmode='browse')
@@ -5703,11 +5732,13 @@ class AnimationsPanel(tk.Frame):
         self._tree.heading('keys',   text='Keys',       anchor='center')
         self._tree.heading('nodes',  text='Nodes',      anchor='center')
         self._tree.heading('events', text='Events',     anchor='center')
+        self._tree.heading('source', text='Source',     anchor='w')
         self._tree.column('name',   width=130, stretch=True)
         self._tree.column('length', width=65,  stretch=False)
         self._tree.column('keys',   width=55,  stretch=False)
         self._tree.column('nodes',  width=50,  stretch=False)
         self._tree.column('events', width=52,  stretch=False)
+        self._tree.column('source', width=110, stretch=False)
 
         # Style treeview
         style = ttk.Style()
@@ -5869,17 +5900,45 @@ class AnimationsPanel(tk.Frame):
             return
 
         self._engine = AnimationEngine(model)
-        anims = self._engine.list_animations()
+        # Phase 5: include animations inherited from the super-model chain
+        # so e.g. a character head model that stores zero clips locally still
+        # shows the parent skeleton's walk/run/idle anims in the UI.
+        # ``list_all_animations`` walks model.supermodel via
+        # SuperModelResolver; if the resolver has no ResourceManager (unit
+        # tests, no game dirs yet) it gracefully degrades to local only.
+        try:
+            anims = self._engine.list_all_animations()
+        except Exception as _e:
+            log.debug(f"list_all_animations failed, falling back: {_e}")
+            anims = self._engine.list_animations()
 
+        # Tag inherited rows so they render in an italic muted colour — makes
+        # the provenance obvious without adding a second column of glyphs.
+        try:
+            self._tree.tag_configure(
+                'inherited',
+                foreground=C.get('text_dim', '#8a8a8a'),
+                font=("Consolas", 8, "italic"),
+            )
+        except Exception:
+            pass
+
+        own_name_l = model.name.lower()
         for a in anims:
-            self._tree.insert('', 'end', iid=a['name'],
-                              values=(
-                                  a['name'],
-                                  f"{a['length']:.3f}",
-                                  str(a['key_count']),
-                                  str(a['node_count']),
-                                  str(a['event_count']),
-                              ))
+            source = a.get('source', model.name)
+            inherited = bool(a.get('inherited', source.lower() != own_name_l))
+            self._tree.insert(
+                '', 'end', iid=a['name'],
+                values=(
+                    a['name'],
+                    f"{a['length']:.3f}",
+                    str(a['key_count']),
+                    str(a['node_count']),
+                    str(a['event_count']),
+                    source,
+                ),
+                tags=('inherited',) if inherited else (),
+            )
 
         count = len(anims)
         total_keys = sum(a['key_count'] for a in anims)
@@ -9107,11 +9166,15 @@ class KotorModToolsApp(tk.Tk):
         self._work_dir:     str = self.settings['work_dir'] or os.path.expanduser("~")
         self._texture_dir:  str = ""
         self._texture_cache: Dict[str,bytes] = {}
+        self._window_motion_after_id = None
+        self._suspend_viewport_render_until = 0.0
+        self._window_move_shell_active = False
 
         self._apply_ttk_theme()
         self._build_menubar()
         self._build_ui()
         self._setup_logger()
+        self.bind("<Configure>", self._on_root_configure, add='+')
 
         # Set game dirs from settings
         self.lib_panel.set_dirs(
@@ -9132,9 +9195,13 @@ class KotorModToolsApp(tk.Tk):
             'open_utp': self._ipc_open_utp,
             'open_utd': self._ipc_open_utd,
             'open_mdl': self._ipc_open_mdl,
+            'refresh_viewport': self._refresh_current_model,
+            'load_model_by_resref': self._load_model_by_resref,
         })
         self._ipc_server.start()
         self.after(800, self._update_ipc_status)
+
+        self.after(900, maybe_autostart_kotormcp)
 
         self.log("GhostRigger-K1-K2 v4.2 ready.", "success")
         self.log(f"→ Ghostworks IPC server on port {PORT_GHOSTRIGGER} (GhostRigger).")
@@ -9213,6 +9280,36 @@ class KotorModToolsApp(tk.Tk):
         else:
             self.log("  No KotOR installation found automatically. "
                      "Use 'Set K1/K2 Dir' or '🔍 Auto' in the Library panel.")
+
+    def _on_root_configure(self, event=None):
+        """Freeze expensive viewport work while Windows is moving/resizing us."""
+        if event is not None and getattr(event, 'widget', None) is not self:
+            return
+        self._suspend_viewport_render_until = _time.perf_counter() + 0.25
+        if not self._window_move_shell_active:
+            self._window_move_shell_active = True
+            try:
+                if hasattr(self, 'viewport'):
+                    self.viewport.enter_window_move_shell()
+            except Exception:
+                pass
+        if self._window_motion_after_id is None:
+            self._window_motion_after_id = self.after(250, self._on_root_configure_idle)
+
+    def _on_root_configure_idle(self):
+        now = _time.perf_counter()
+        if now < self._suspend_viewport_render_until:
+            wait_ms = max(120, int((self._suspend_viewport_render_until - now) * 1000))
+            self._window_motion_after_id = self.after(wait_ms, self._on_root_configure_idle)
+            return
+        self._suspend_viewport_render_until = 0.0
+        self._window_motion_after_id = None
+        self._window_move_shell_active = False
+        try:
+            if hasattr(self, 'viewport'):
+                self.viewport.exit_window_move_shell()
+        except Exception:
+            pass
 
     def _on_game_dir_set(self, k1_dir: Optional[str], k2_dir: Optional[str]):
         """
@@ -9778,6 +9875,9 @@ class KotorModToolsApp(tk.Tk):
 
         # 1. Properties – node info / model metadata
         self.props_panel = PropertiesPanel(right_nb)
+        self.props_panel._set_pos_cb = (
+            lambda node, _x, _y, _z: self.viewport.refresh_node_transform(node)
+        )
         right_nb.add(self.props_panel,
                      **Icons.tab_kwargs("props", " Props", 16))
         self._tab_names['props'] = right_nb.index('end') - 1
@@ -9925,7 +10025,7 @@ class KotorModToolsApp(tk.Tk):
         # ── Global keyboard shortcuts ─────────────────────────────────────
         self.bind("f",              lambda e: self.viewport.frame_all())
         self.bind("F",              lambda e: self.viewport.frame_all())
-        self.bind("<F5>",           lambda e: self._refresh_all())
+        self.bind("<F5>",           self._hot_reload_and_refresh)
         self.bind("<Control-o>",    lambda e: self._open_mdl_binary())
         self.bind("<Control-O>",    lambda e: self._open_mdl_ascii())
         self.bind("<Control-i>",    lambda e: self._import_obj())
@@ -9934,6 +10034,10 @@ class KotorModToolsApp(tk.Tk):
         self.bind("<Control-g>",    lambda e: self._export_gltf())
         self.bind("<Control-s>",    lambda e: self._save_ascii_mdl())
         self.bind("<Control-w>",    lambda e: self._clear_model())
+        self.bind("<Control-z>",    lambda e: self.viewport.undo())
+        self.bind("<Control-Z>",    lambda e: self.viewport.undo())
+        self.bind("<Control-y>",    lambda e: self.viewport.redo())
+        self.bind("<Control-Y>",    lambda e: self.viewport.redo())
         self.bind("<Control-r>",    lambda e: self._quick_autorig())
         self.bind("<Control-f>",    lambda e: self._focus_search())
         self.bind("r",              lambda e: self._quick_autorig()
@@ -9999,7 +10103,10 @@ class KotorModToolsApp(tk.Tk):
         handler = GUIHandler(_safe_after)
         handler.setFormatter(logging.Formatter('%(levelname)s  %(name)s  %(message)s'))
         logging.getLogger().addHandler(handler)
-        logging.getLogger().setLevel(logging.DEBUG)  # File log still gets DEBUG+
+        # Keep the root level chosen by main._setup_logging(). Forcing DEBUG in
+        # release builds makes render/load hot paths synchronously write a lot
+        # of disk log traffic, which is especially noticeable in PyInstaller
+        # windowed builds on Windows.
 
     def log(self, msg: str, level: str = 'info'):
         self.log_panel.log(msg, level)
@@ -10008,7 +10115,72 @@ class KotorModToolsApp(tk.Tk):
 
     def _set_model_internal(self, model: KotorModel):
         self._model = model
+        if model is None:
+            self._clear_model_views()
+            return
         self._refresh_all()
+
+    def _clear_model_views(self):
+        """Clear viewport and dependent panels after the current model is removed."""
+        try:
+            self.viewport.load_model(None)
+        except Exception as exc:
+            log.debug(f"viewport clear failed: {exc}")
+        try:
+            self.skel_panel.load_model(None)
+        except Exception:
+            pass
+        try:
+            self.props_panel._set([])
+            self.props_panel._current_node = None
+        except Exception:
+            pass
+        try:
+            self.anim_panel.load_model(None)
+        except Exception:
+            pass
+        try:
+            self.diag_panel.run_diagnostics(None)
+        except Exception:
+            pass
+        for panel_name in ("retarget_panel", "char_builder_panel", "head_snap_panel"):
+            panel = getattr(self, panel_name, None)
+            if panel is None:
+                continue
+            for method_name in ("on_model_loaded", "notify_model_loaded", "load_model"):
+                method = getattr(panel, method_name, None)
+                if method is None:
+                    continue
+                try:
+                    method(None)
+                except Exception:
+                    pass
+                break
+        try:
+            if hasattr(self, "cloth_panel"):
+                self.cloth_panel.refresh()
+        except Exception:
+            pass
+
+    def _refresh_current_model(self):
+        """Re-render the currently loaded model after a hot reload."""
+        if self._model:
+            self._refresh_all()
+
+    def _hot_reload_and_refresh(self, event=None):
+        """Reload renderer modules, then refresh the active viewport model."""
+        import importlib
+        import sys
+
+        for mod_name in ("src.gui.viewport", "src.gui.gpu_renderer"):
+            if mod_name not in sys.modules:
+                continue
+            try:
+                importlib.reload(sys.modules[mod_name])
+                log.info("Hot-reloaded %s", mod_name)
+            except Exception as exc:
+                log.error("Hot reload failed for %s: %s", mod_name, exc)
+        self._refresh_current_model()
 
     def _refresh_all(self):
         """Refresh all panels after a model is loaded.
@@ -10566,13 +10738,27 @@ class KotorModToolsApp(tk.Tk):
         """Placeholder — screenshot feature removed."""
         pass
 
+    def open_startup_model(
+        self,
+        path: str,
+        mdx_path: str = "",
+        texture_dir: str = "",
+        game: str = "",
+    ):
+        if texture_dir:
+            self._texture_dir = texture_dir
+        self._load_mdl_path(path, mdx_path=mdx_path, game=game)
+
     def _open_mdl_binary(self):
         path = filedialog.askopenfilename(
             title="Open MDL (Binary or ASCII auto-detected)",
             filetypes=[("MDL files","*.mdl"),("All files","*.*")])
         if not path: return
-        mdx_path = Path(path).with_suffix('.mdx')
-        mdx_data = mdx_path.read_bytes() if mdx_path.exists() else b''
+        self._load_mdl_path(path)
+
+    def _load_mdl_path(self, path: str, mdx_path: str = "", game: str = ""):
+        mdx_file = Path(mdx_path) if mdx_path else Path(path).with_suffix('.mdx')
+        mdx_data = mdx_file.read_bytes() if mdx_file.exists() else b''
         try:
             raw = Path(path).read_bytes()
             # ── Auto-detect binary vs ASCII format ────────────────────────────
@@ -10587,10 +10773,10 @@ class KotorModToolsApp(tk.Tk):
                             raw[:8].lstrip(b'\x00').startswith(b'newmodel') or
                             raw[:2] == b'#\x20' or raw[:2] == b'# ')
             self._model_path   = path
-            self._texture_dir  = str(Path(path).parent)
+            self._texture_dir  = self._texture_dir or str(Path(path).parent)
             resref = Path(path).stem
             if is_ascii_mdl:
-                model = load_model_from_file(path)
+                model = load_model_from_file(path, str(mdx_file) if mdx_file.exists() else "")
                 log_model_summary(model, source=path)
                 self._set_model_internal(model)
                 self.log(f"Opened ASCII MDL (auto-detected): {Path(path).name}", 'success')
@@ -10604,6 +10790,8 @@ class KotorModToolsApp(tk.Tk):
                     # Set path/texture_dir BEFORE _set_model_internal so _refresh_all
                     # can include the model's folder in the texture search dirs.
                     model = load_model_from_bytes(raw, mdx_data)
+                if game and model is not None:
+                    model.game_version = GameVersion.K2 if game.upper() == "K2" else GameVersion.K1
                 log_model_summary(model, source=path)
                 self._set_model_internal(model)
                 self.log(f"Opened binary MDL: {Path(path).name}", 'success')
@@ -11727,7 +11915,15 @@ class KotorModToolsApp(tk.Tk):
             self._try_load_from_library(resref)
         self.lift(); self.focus_force()
 
-    def _try_load_from_library(self, resref: str):
+    def _load_model_by_resref(self, game: str, resref: str):
+        """Load a model by game+resref via IPC for visual QA review."""
+        self.log(f"IPC QA: load_model game='{game}' resref='{resref}'")
+        if not resref:
+            return
+        self._try_load_from_library(resref, preferred_game=game.upper())
+        self.lift(); self.focus_force()
+
+    def _try_load_from_library(self, resref: str, preferred_game: str = ""):
         """Try to find a model by resref in the game library and load it.
 
         Fast path: tries KotorInstallation first (<20 ms per resource).
@@ -11742,7 +11938,12 @@ class KotorModToolsApp(tk.Tk):
         k1_inst = getattr(lib_panel, '_k1_install', None) if lib_panel else None
         k2_inst = getattr(lib_panel, '_k2_install', None) if lib_panel else None
 
-        for inst, game_tag in [(k1_inst, "K1"), (k2_inst, "K2")]:
+        install_order = [(k1_inst, "K1"), (k2_inst, "K2")]
+        pref = (preferred_game or "").upper()
+        if pref in {"K1", "K2"}:
+            install_order.sort(key=lambda item: 0 if item[1] == pref else 1)
+
+        for inst, game_tag in install_order:
             if inst is None:
                 continue
             try:
@@ -11772,6 +11973,12 @@ class KotorModToolsApp(tk.Tk):
         try:
             lib = self.lib_panel.library
             entries = lib.search(resref, "All")
+            if preferred_game:
+                pref = preferred_game.upper()
+                entries = sorted(
+                    entries,
+                    key=lambda entry: 0 if str(getattr(entry, "game", "")).upper() == pref else 1,
+                )
             if entries:
                 entry = entries[0]
                 mdl_bytes, mdx_bytes = lib.get_model_data(entry)

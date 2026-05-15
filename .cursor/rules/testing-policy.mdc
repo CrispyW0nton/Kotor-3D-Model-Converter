@@ -1,0 +1,37 @@
+---
+description: "Testing philosophy: MCP-driven ground-truth tests replace synthetic mocks"
+alwaysApply: false
+globs: "tests/**/*.py"
+---
+
+# Testing Policy
+
+## Philosophy
+Tests must validate GhostRigger against real game data, not synthetic mocks.
+The previous test suite had 5,007 tests but most were synthetic — they tested internal data structures rather than correctness against the actual KotOR game files.
+
+## Test Structure (after cleanup)
+tests/
+  conftest.py                    — shared fixtures, skip-if-no-game markers
+  test_mcp_full_scan.py          — THE primary test: scans ALL 6,078 models via MCP
+  test_mcp_texture_validation.py — texture existence and loading for all models
+  test_mcp_skinning.py           — skinning correctness for all skin models  
+  test_core_contracts.py         — unit tests for vertex_space, render_constants, mdl_reader_wrapper
+  test_k2_compat.py              — K2-specific: trimesh header patch, MDX offset 0
+  test_regression.py             — regression guards for fixed bugs (Bug C offset, bonemap overflow)
+
+## Rules
+- Every test that touches game data MUST use MCP tools or skip gracefully if game not installed
+- Use pytest.mark.skipif for missing game installations
+- Use pytest parametrize with model lists loaded from JSON (exports/scan_manifest.json)
+- No test should take more than 5 seconds per model
+- The full scan test can be slow — mark it with @pytest.mark.slow
+- Do NOT create tests that mock internal PyKotor structures
+- Do NOT create tests that only verify GhostRigger's internal data structures match themselves
+
+## conftest.py Fixtures
+- game_k1_available: bool fixture checking K1_PATH exists
+- game_k2_available: bool fixture checking K2_PATH exists
+- k1_models: list of all K1 MDL resrefs (cached from MCP or manifest)
+- k2_models: list of all K2 MDL resrefs (cached from MCP or manifest)
+- ghostrigger_tools: importable reference to the five MCP tool functions

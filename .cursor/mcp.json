@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "kotormcp": {
+      "command": "python",
+      "args": ["-m", "kotormcp.server"],
+      "cwd": "C:\\Users\\NewAdmin\\Documents\\GDeveloper\\Workspaces\\KotorMCP",
+      "env": {
+        "K1_PATH": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\swkotor",
+        "K2_PATH": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Knights of the Old Republic II",
+        "PYTHONPATH": "C:\\Users\\NewAdmin\\Documents\\GDeveloper\\Workspaces\\KotorMCP\\src;C:\\Users\\NewAdmin\\Documents\\GDeveloper\\Workspaces\\PyKotor\\Libraries\\PyKotor\\src;C:\\Users\\NewAdmin\\Documents\\GDeveloper\\Workspaces\\PyKotor\\Libraries\\PyKotorGL\\src;C:\\Users\\NewAdmin\\Documents\\GDeveloper\\Workspaces\\PyKotor\\Libraries\\Utility\\src;C:\\Users\\NewAdmin\\Documents\\GDeveloper\\Workspaces\\Kotor-3D-Model-Converter"
+      }
+    }
+  }
+}

@@ -16,10 +16,37 @@ echo.
 REM ── Navigate to the folder this .bat lives in ──────────────────────
 cd /d "%~dp0"
 
+REM Resolve Python from environment / launcher / PATH.
+REM Set GHOSTRIGGER_PYTHON to an exact interpreter if you need to pin one.
+set "PYTHON_EXE="
+if defined GHOSTRIGGER_PYTHON (
+    set "PYTHON_EXE=%GHOSTRIGGER_PYTHON%"
+)
+if not defined PYTHON_EXE (
+    py -3.12 --version >nul 2>&1
+    if not errorlevel 1 set "PYTHON_EXE=py -3.12"
+)
+if not defined PYTHON_EXE (
+    python --version >nul 2>&1
+    if not errorlevel 1 set "PYTHON_EXE=python"
+)
+if not defined PYTHON_EXE (
+    echo.
+    echo ============================================================
+    echo  ERROR: Python not found!
+    echo.
+    echo  Install Python 3.12 and add it to PATH, or set:
+    echo  GHOSTRIGGER_PYTHON=C:\Path\To\python.exe
+    echo ============================================================
+    echo ERROR: Python not found >> "%LOG%"
+    pause
+    exit /b 1
+)
+
 REM ── Check Python is installed ───────────────────────────────────────
 echo [Step 1/6] Checking Python... >> "%LOG%"
-py -3.12 --version >> "%LOG%" 2>&1
-py -3.12 --version >nul 2>&1
+%PYTHON_EXE% --version >> "%LOG%" 2>&1
+%PYTHON_EXE% --version >nul 2>&1
 if errorlevel 1 (
     echo.
     echo ============================================================
@@ -34,14 +61,14 @@ if errorlevel 1 (
 )
 
 echo Python found:
-py -3.12 --version
-py -3.12 --version >> "%LOG%" 2>&1
+%PYTHON_EXE% --version
+%PYTHON_EXE% --version >> "%LOG%" 2>&1
 echo.
 
 REM ── Upgrade pip ─────────────────────────────────────────────────────
 echo [Step 2/6] Upgrading pip...
 echo [Step 2/6] Upgrading pip... >> "%LOG%"
-py -3.12 -m pip install --upgrade pip >> "%LOG%" 2>&1
+%PYTHON_EXE% -m pip install --upgrade pip >> "%LOG%" 2>&1
 if errorlevel 1 (
     echo  [WARN] pip upgrade failed - continuing anyway.
     echo  [WARN] pip upgrade failed >> "%LOG%"
@@ -53,55 +80,59 @@ echo [Step 3/6] Installing core dependencies...
 echo [Step 3/6] Installing core dependencies... >> "%LOG%"
 
 echo  Installing Pillow...
-py -3.12 -m pip install "Pillow>=9.0.0" >> "%LOG%" 2>&1
+%PYTHON_EXE% -m pip install "Pillow>=9.0.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] Pillow install failed - check build_log.txt )
 
 echo  Installing numpy...
-py -3.12 -m pip install "numpy>=1.21.0" >> "%LOG%" 2>&1
+%PYTHON_EXE% -m pip install "numpy>=1.21.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] numpy install failed - check build_log.txt )
 
 echo  Installing PyOpenGL...
-py -3.12 -m pip install "PyOpenGL>=3.1.0" "PyOpenGL_accelerate>=3.1.0" >> "%LOG%" 2>&1
+%PYTHON_EXE% -m pip install "PyOpenGL>=3.1.0" "PyOpenGL_accelerate>=3.1.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] PyOpenGL install failed - check build_log.txt )
 
+echo  Installing PySide6...
+%PYTHON_EXE% -m pip install "PySide6>=6.6.0" >> "%LOG%" 2>&1
+if errorlevel 1 ( echo  [WARN] PySide6 install failed - Qt shell will fall back to Tkinter )
+
 echo  Installing trimesh...
-py -3.12 -m pip install "trimesh[easy]>=3.15.0" >> "%LOG%" 2>&1
+%PYTHON_EXE% -m pip install "trimesh[easy]>=3.15.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] trimesh install failed - check build_log.txt )
 
 echo  Installing pygltflib...
-py -3.12 -m pip install "pygltflib>=1.15.0" >> "%LOG%" 2>&1
+%PYTHON_EXE% -m pip install "pygltflib>=1.15.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] pygltflib install failed - check build_log.txt )
 
 echo  Installing flask + requests...
-py -3.12 -m pip install "flask>=2.3.0" "requests>=2.28.0" >> "%LOG%" 2>&1
+%PYTHON_EXE% -m pip install "flask>=2.3.0" "requests>=2.28.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] flask/requests install failed - check build_log.txt )
 
 echo  Installing mcp + pydantic + uvicorn...
-py -3.12 -m pip install "mcp>=1.0.0" "pydantic>=2.0.0" "uvicorn[standard]>=0.20.0" >> "%LOG%" 2>&1
+%PYTHON_EXE% -m pip install "mcp>=1.0.0" "pydantic>=2.0.0" "uvicorn[standard]>=0.20.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] mcp/pydantic/uvicorn install failed - check build_log.txt )
 
 REM  pyassimp — full bone/skin FBX import (needs Assimp DLL, installed in Step 4)
 echo  Installing pyassimp (optional - full FBX bone/skin import)...
-py -3.12 -m pip install "pyassimp>=5.2.0" >> "%LOG%" 2>&1
+%PYTHON_EXE% -m pip install "pyassimp>=5.2.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] pyassimp install failed ^(optional^) )
 
 REM  assimp-py — geometry-only FBX fallback (bundles native DLL in wheel)
 echo  Installing assimp-py (optional - geometry-only FBX fallback)...
-py -3.12 -m pip install "assimp-py>=1.0.0" >> "%LOG%" 2>&1
+%PYTHON_EXE% -m pip install "assimp-py>=1.0.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] assimp-py install failed ^(optional^) )
 
 REM  pykotor can fail on Python 3.14 — mark as optional
 echo  Installing pykotor (optional)...
-py -3.12 -m pip install "pykotor>=2.3.1" >> "%LOG%" 2>&1
+%PYTHON_EXE% -m pip install "pykotor>=2.3.1" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] pykotor install failed ^(optional^) - check build_log.txt )
 
 REM  moderngl can fail on Python 3.14 — mark as optional
 echo  Installing moderngl (optional)...
-py -3.12 -m pip install "moderngl>=5.8.0" >> "%LOG%" 2>&1
+%PYTHON_EXE% -m pip install "moderngl>=5.8.0" >> "%LOG%" 2>&1
 if errorlevel 1 ( echo  [WARN] moderngl install failed ^(optional^) - check build_log.txt )
 
 echo  Installing PyInstaller...
-py -3.12 -m pip install "pyinstaller>=5.0" pyinstaller-hooks-contrib >> "%LOG%" 2>&1
+%PYTHON_EXE% -m pip install "pyinstaller>=5.0" pyinstaller-hooks-contrib >> "%LOG%" 2>&1
 if errorlevel 1 (
     echo.
     echo ============================================================
@@ -122,7 +153,7 @@ echo [Step 4/6] Checking for Assimp DLL... >> "%LOG%"
 
 REM Locate pyassimp's install folder (pip install may succeed even if DLL missing)
 set PYASSIMP_DIR=
-for /f "delims=" %%P in ('py -3.12 -c "import importlib.util; spec=importlib.util.find_spec(\"pyassimp\"); print(spec.submodule_search_locations[0] if spec and spec.submodule_search_locations else \"\")" 2^>nul') do set PYASSIMP_DIR=%%P
+for /f "delims=" %%P in ('%PYTHON_EXE% -c "import importlib.util; spec=importlib.util.find_spec(\"pyassimp\"); print(spec.submodule_search_locations[0] if spec and spec.submodule_search_locations else \"\")" 2^>nul') do set PYASSIMP_DIR=%%P
 
 if "!PYASSIMP_DIR!"=="" (
     echo  [INFO] pyassimp package not found - skipping DLL step.
@@ -186,7 +217,7 @@ rd /S /Q "%ASSIMP_EXTRACT%" 2>nul
 
 :verify_pyassimp
 REM Now verify pyassimp can actually import with the DLL in place
-py -3.12 -c "import pyassimp" >nul 2>&1
+%PYTHON_EXE% -c "import pyassimp" >nul 2>&1
 if errorlevel 1 (
     echo  [WARN] pyassimp installed but cannot load Assimp DLL.
     echo  [WARN] FBX import will use assimp-py ^(geometry-only, no bone data^).
@@ -198,9 +229,9 @@ if errorlevel 1 (
 
 :after_assimp
 REM Verify at least one assimp library works
-py -3.12 -c "import assimp_py" >nul 2>&1
+%PYTHON_EXE% -c "import assimp_py" >nul 2>&1
 if errorlevel 1 (
-    py -3.12 -c "import pyassimp" >nul 2>&1
+    %PYTHON_EXE% -c "import pyassimp" >nul 2>&1
     if errorlevel 1 (
         echo  [WARN] Neither pyassimp nor assimp-py available - FBX import disabled.
         echo  [WARN] All other features ^(MDL, OBJ, GLB, GLTF^) work normally.
@@ -217,7 +248,7 @@ if exist "assets\icons\ghostrigger.ico" (
     echo  [OK] Icon found.
 ) else (
     echo  [INFO] Icon not found - generating placeholder...
-    py -3.12 -c "from PIL import Image; import os; os.makedirs('assets/icons', exist_ok=True); Image.new('RGBA',(256,256),(30,30,60,255)).save('assets/icons/ghostrigger.ico')" >> "%LOG%" 2>&1
+    %PYTHON_EXE% -c "from PIL import Image; import os; os.makedirs('assets/icons', exist_ok=True); Image.new('RGBA',(256,256),(30,30,60,255)).save('assets/icons/ghostrigger.ico')" >> "%LOG%" 2>&1
 )
 
 echo.
@@ -225,7 +256,7 @@ echo.
 REM ── Build the exe ────────────────────────────────────────────────────
 echo [Step 6/6] Building GhostRigger-K1-K2.exe - this takes a few minutes...
 echo [Step 6/6] Running PyInstaller... >> "%LOG%"
-py -3.12 -m PyInstaller GhostRigger-K1-K2.spec --clean --noconfirm >> "%LOG%" 2>&1
+%PYTHON_EXE% -m PyInstaller GhostRigger-K1-K2.spec --clean --noconfirm >> "%LOG%" 2>&1
 
 if errorlevel 1 (
     echo.

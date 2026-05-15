@@ -68,6 +68,7 @@ gui = [
     "PyOpenGL>=3.1.0",
     "PyOpenGL_accelerate>=3.1.0",
     "moderngl>=5.8.0",
+    "PySide6>=6.6.0",
 ]
 kotor = [
     "pykotor>=2.3.1",
@@ -96,6 +97,11 @@ exclude = ["research_sources*", "docs*", "tests*", "test_assets*"]
 
 [tool.setuptools.package-data]
 "src" = ["**/*.json", "**/*.md", "**/*.txt"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: full-installation MCP validation tests",
+]
 
 # ── Ruff linter configuration ─────────────────────────────────────────────────
 [tool.ruff]

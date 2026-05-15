@@ -169,6 +169,60 @@ class GhostRiggerIPCServer:
         def route_ping():
             return _handle("ping")
 
+        @app.route("/api/reload", methods=["POST"])
+        def route_reload():
+            """Hot-reload selected Python modules and refresh the viewport."""
+            import importlib
+            import sys
+
+            try:
+                body = request.get_json(force=True, silent=True) or {}
+            except Exception:
+                body = {}
+
+            targets = body.get("modules", [
+                "src.gui.viewport",
+                "src.gui.gpu_renderer",
+                "src.core.kotor_loader",
+            ])
+            reloaded: list[str] = []
+            errors: list[str] = []
+
+            for mod_name in targets:
+                if mod_name not in sys.modules:
+                    continue
+                try:
+                    importlib.reload(sys.modules[mod_name])
+                    reloaded.append(mod_name)
+                except Exception as exc:
+                    errors.append(f"{mod_name}: {exc}")
+
+            cb = self.callbacks.get("refresh_viewport")
+            if cb is not None:
+                try:
+                    self._schedule_callback(cb)
+                except Exception as exc:
+                    errors.append(f"refresh_viewport: {exc}")
+
+            return jsonify({"status": "ok", "action": "reload",
+                            "reloaded": reloaded, "errors": errors})
+
+        @app.route("/api/load_model", methods=["POST"])
+        def route_load_model():
+            """Load a game model into the running viewport for visual QA."""
+            body = request.get_json(force=True, silent=True) or {}
+            game = str(body.get("game", "k2") or "k2").lower()
+            resref = str(body.get("resref", "") or "").strip()
+            if not resref:
+                return jsonify({"error": "missing resref"}), 400
+            if game not in {"k1", "k2"}:
+                return jsonify({"error": "game must be 'k1' or 'k2'"}), 400
+
+            cb = self.callbacks.get("load_model_by_resref")
+            if cb is not None:
+                self._schedule_callback(cb, game, resref)
+            return jsonify({"status": "ok", "loading": resref, "game": game})
+
         @app.route("/api/health", methods=["GET"])
         def route_health():
             return jsonify({"status": "ok", "program": _PROGRAM_NAME,
@@ -275,23 +329,44 @@ class GhostRiggerIPCServer:
         finally:
             self._running = False
 
-    # ── Tkinter thread-safe callback scheduling ───────────────────────────
+    # ── GUI-thread callback scheduling (Qt-first, Tk fallback) ────────────
+    #
+    # T002 — IPC handler callbacks must run on the main GUI thread because
+    # they typically mutate Qt widgets (or, on the legacy Tk path, tk
+    # widgets). The order is:
+    #
+    #   1. Qt: ``QTimer.singleShot(0, ...)`` if a ``QCoreApplication`` is
+    #      running. This is the production path under qt-ghostrigger.
+    #   2. Tk: ``tk._default_root.after(0, ...)`` if a Tk root is alive
+    #      (kept until M3/T303 deletes the Tk fallback).
+    #   3. Direct: call the callback inline in the HTTP worker thread.
+    #      Used by unit tests and headless runs.
+    #
+    # All errors are logged; we never raise out of the marshaling helper.
 
     def _schedule_callback(self, cb: Callable, *args):
-        """
-        Execute a callback safely on the Tkinter main thread.
-        If a tk root is available, use after(0, ...).
-        Otherwise call directly (unit tests, headless mode).
-        """
+        """Execute a callback safely on the main GUI thread (Qt → Tk → direct)."""
+        # ── 1. Qt path ────────────────────────────────────────────────
         try:
-            import tkinter as tk
+            from PySide6.QtCore import QCoreApplication, QTimer  # noqa: PLC0415
+            app = QCoreApplication.instance()
+            if app is not None:
+                QTimer.singleShot(0, lambda: cb(*args))
+                return
+        except Exception:
+            pass
+
+        # ── 2. Legacy Tk path ─────────────────────────────────────────
+        try:
+            import tkinter as tk  # noqa: PLC0415
             root = tk._default_root  # type: ignore[attr-defined]
             if root is not None:
                 root.after(0, cb, *args)
                 return
         except Exception:
             pass
-        # Fallback: call directly
+
+        # ── 3. Headless / direct fallback ─────────────────────────────
         try:
             cb(*args)
         except Exception as exc:

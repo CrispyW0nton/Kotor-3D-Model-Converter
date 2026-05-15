@@ -1,0 +1,271 @@
+"""GhostRigger-owned binary MDL reader.
+
+This module keeps GhostRigger's K2 binary fixes behind ``read_mdl_safe``
+without mutating PyKotor's global module state:
+
+* K2 trimesh headers use the KotOR.js/KotorBlender dirt+hologram tail layout.
+* ``mdx_data_offset == 0`` is treated as a valid MDX base offset.
+
+The implementation deliberately reuses PyKotor's conversion flow where possible
+and only owns the binary parsing points GhostRigger must correct.
+"""
+
+from __future__ import annotations
+
+from types import FunctionType
+from typing import Any, Dict
+
+from pykotor.common.misc import Game
+from pykotor.common.stream import BinaryReader
+from pykotor.resource.formats.mdl import io_mdl as _iom
+
+
+K1_TRIMESH_SIZE = 332
+K2_TRIMESH_SIZE = 340
+
+_ACTIVE_READERS: Dict[int, "GhostRiggerMDLBinaryReader"] = {}
+
+
+class GhostRiggerTrimeshHeader(_iom._TrimeshHeader):  # type: ignore[attr-defined]
+    """Trimesh header reader with GhostRigger's corrected K2 tail layout."""
+
+    def read(self, reader: BinaryReader, game: Game) -> "GhostRiggerTrimeshHeader":
+        start_pos = reader.position()
+        self.function_pointer0 = reader.read_uint32()
+        self.function_pointer1 = reader.read_uint32()
+        self.offset_to_faces = reader.read_uint32()
+        faces_count_raw = reader.read_uint32()
+        if faces_count_raw > 0x7FFFFFFF:
+            faces_count_raw = 0x7FFFFFFF
+        self.faces_count = faces_count_raw
+        faces_count2_raw = reader.read_uint32()
+        if faces_count2_raw > 0x7FFFFFFF:
+            faces_count2_raw = 0x7FFFFFFF
+        self.faces_count2 = faces_count2_raw
+        self.bounding_box_min = reader.read_vector3()
+        self.bounding_box_max = reader.read_vector3()
+        self.radius = reader.read_single()
+        self.average = reader.read_vector3()
+        self.diffuse = reader.read_vector3()
+        self.ambient = reader.read_vector3()
+        self.transparency_hint = reader.read_uint32()
+        self.texture1 = reader.read_terminated_string("\0", 32)
+        self.texture2 = reader.read_terminated_string("\0", 32)
+        self.unknown0 = reader.read_bytes(24)
+        self.offset_to_indices_counts = reader.read_uint32()
+        indices_counts_count_raw = reader.read_uint32()
+        if indices_counts_count_raw > 0x7FFFFFFF:
+            indices_counts_count_raw = 0x7FFFFFFF
+        self.indices_counts_count = indices_counts_count_raw
+        indices_counts_count2_raw = reader.read_uint32()
+        if indices_counts_count2_raw > 0x7FFFFFFF:
+            indices_counts_count2_raw = 0x7FFFFFFF
+        self.indices_counts_count2 = indices_counts_count2_raw
+        self.offset_to_indices_offset = reader.read_uint32()
+        indices_offsets_count_raw = reader.read_uint32()
+        if indices_offsets_count_raw > 0x7FFFFFFF:
+            indices_offsets_count_raw = 0x7FFFFFFF
+        self.indices_offsets_count = indices_offsets_count_raw
+        indices_offsets_count2_raw = reader.read_uint32()
+        if indices_offsets_count2_raw > 0x7FFFFFFF:
+            indices_offsets_count2_raw = 0x7FFFFFFF
+        self.indices_offsets_count2 = indices_offsets_count2_raw
+        self.offset_to_counters = reader.read_uint32()
+        counters_count_raw = reader.read_uint32()
+        if counters_count_raw > 0x7FFFFFFF:
+            counters_count_raw = 0x7FFFFFFF
+        self.counters_count = counters_count_raw
+        counters_count2_raw = reader.read_uint32()
+        if counters_count2_raw > 0x7FFFFFFF:
+            counters_count2_raw = 0x7FFFFFFF
+        self.counters_count2 = counters_count2_raw
+        self.unknown1 = reader.read_bytes(12)
+        self.saber_unknowns = reader.read_bytes(8)
+        self.unknown2 = reader.read_int32()
+        self.uv_direction = reader.read_vector2()
+        self.uv_jitter = reader.read_single()
+        self.uv_speed = reader.read_single()
+
+        def _read_i32_as_u32() -> int:
+            value = reader.read_int32()
+            return 0xFFFFFFFF if value < 0 else value
+
+        self.mdx_data_size = _read_i32_as_u32()
+        self.mdx_data_bitmap = _read_i32_as_u32()
+        self.mdx_vertex_offset = _read_i32_as_u32()
+        self.mdx_normal_offset = _read_i32_as_u32()
+        self.mdx_color_offset = _read_i32_as_u32()
+        self.mdx_texture1_offset = _read_i32_as_u32()
+        self.mdx_texture2_offset = _read_i32_as_u32()
+        self.mdx_uv3_offset = _read_i32_as_u32()
+        self.mdx_uv4_offset = _read_i32_as_u32()
+        self.mdx_tangent_offset = _read_i32_as_u32()
+        self.mdx_unknown_offset = _read_i32_as_u32()
+        self.mdx_unknown2_offset = _read_i32_as_u32()
+        self.mdx_unknown3_offset = _read_i32_as_u32()
+        self.vertex_count = reader.read_uint16()
+        self.texture_count = reader.read_uint16()
+        self.has_lightmap = reader.read_uint8()
+        self.rotate_texture = reader.read_uint8()
+        self.background = reader.read_uint8()
+        self.has_shadow = reader.read_uint8()
+        self.beaming = reader.read_uint8()
+        self.render = reader.read_uint8()
+        if game == Game.K2:
+            self.dirt_enabled = reader.read_uint8() != 0
+            reader.read_uint8()
+            self.dirt_texture = reader.read_int16()
+            self.dirt_worldspace = reader.read_int16()
+            self.hologram_donotdraw = reader.read_uint8() == 1
+            reader.read_uint8()
+            self.tail_short = 0
+            self.k2_tail_long1 = 0
+            self.k2_tail_long2 = 0
+            reader.read_bytes(2)
+        else:
+            self.tail_short = reader.read_uint16()
+        self.total_area = reader.read_single()
+        self.tail_long0 = reader.read_uint32()
+        self.mdx_data_offset = reader.read_uint32()
+        self.vertices_offset = reader.read_uint32()
+        expected = K1_TRIMESH_SIZE if game == Game.K1 else K2_TRIMESH_SIZE
+        reader.seek(start_pos + expected)
+        return self
+
+
+class GhostRiggerNode(_iom._Node):  # type: ignore[attr-defined]
+    """PyKotor binary node with GhostRigger's fixed trimesh header reader."""
+
+    def read(self, reader: BinaryReader, game: Game) -> "GhostRiggerNode":
+        start_pos = reader.position()
+        self.header = _iom._NodeHeader().read(reader)  # type: ignore[attr-defined]
+
+        if self.header.type_id & _iom.MDLNodeFlags.MESH:
+            self.trimesh = GhostRiggerTrimeshHeader().read(reader, game)
+
+        if self.header.type_id & _iom.MDLNodeFlags.SKIN:
+            self.skin = _iom._SkinmeshHeader().read(reader)  # type: ignore[attr-defined]
+
+        if self.header.type_id & _iom.MDLNodeFlags.LIGHT:
+            self.light = _iom._LightHeader().read(reader)  # type: ignore[attr-defined]
+
+        if self.header.type_id & _iom.MDLNodeFlags.EMITTER:
+            self.emitter = _iom._EmitterHeader().read(reader)  # type: ignore[attr-defined]
+
+        if self.header.type_id & _iom.MDLNodeFlags.REFERENCE:
+            self.reference = _iom._ReferenceHeader().read(reader)  # type: ignore[attr-defined]
+
+        if self.header.type_id & _iom.MDLNodeFlags.DANGLY and self.trimesh is not None:
+            self.dangly = _iom._DanglymeshHeader().read(reader)  # type: ignore[attr-defined]
+
+        if self.header.type_id & _iom.MDLNodeFlags.AABB and self.trimesh is not None:
+            aabb_offset_raw = reader.read_int32()
+            self.trimesh.offset_to_aabb = aabb_offset_raw if aabb_offset_raw > 0 else 0
+
+        if self.trimesh is not None:
+            self.trimesh.read_extra(reader)
+        if self.skin is not None:
+            self.skin.read_extra(reader)
+
+        if self.header.children_count == 0:
+            self.children_offsets = []
+            self._record_for_active_reader(reader, start_pos)
+            return self
+
+        child_loc = self.header.offset_to_children
+        if (
+            child_loc in (0, 0xFFFFFFFF)
+            or child_loc >= reader.size()
+            or self.header.children_count > 0x7FFFFFFF
+            or (self.header.children_count * 4) + child_loc > reader.size()
+        ):
+            self.header.children_count = 0
+            self.header.children_count2 = 0
+            self.children_offsets = []
+            self._record_for_active_reader(reader, start_pos)
+            return self
+
+        try:
+            reader.seek(child_loc)
+            self.children_offsets = [reader.read_uint32() for _ in range(self.header.children_count)]
+        except Exception:
+            self.header.children_count = 0
+            self.header.children_count2 = 0
+            self.children_offsets = []
+
+        self._record_for_active_reader(reader, start_pos)
+        return self
+
+    def _record_for_active_reader(self, reader: BinaryReader, offset: int) -> None:
+        owner = _ACTIVE_READERS.get(id(reader))
+        if owner is not None:
+            owner._gr_bin_nodes[offset] = self
+
+
+_LOAD_NODE_GLOBALS: Dict[str, Any] = dict(_iom.MDLBinaryReader._load_node.__globals__)
+_LOAD_NODE_GLOBALS["_Node"] = GhostRiggerNode
+_GHOSTRIGGER_LOAD_NODE = FunctionType(
+    _iom.MDLBinaryReader._load_node.__code__,
+    _LOAD_NODE_GLOBALS,
+    name="_load_node",
+    argdefs=_iom.MDLBinaryReader._load_node.__defaults__,
+    closure=_iom.MDLBinaryReader._load_node.__closure__,
+)
+
+
+class GhostRiggerMDLBinaryReader(_iom.MDLBinaryReader):
+    """MDLBinaryReader variant that owns GhostRigger's K2 binary fixes."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._gr_bin_nodes: Dict[int, GhostRiggerNode] = {}
+
+    def _load_node(self, offset: int, parent):
+        previous = _ACTIVE_READERS.get(id(self._reader))
+        _ACTIVE_READERS[id(self._reader)] = self
+        try:
+            node = _GHOSTRIGGER_LOAD_NODE(self, offset, parent)
+        finally:
+            if previous is None:
+                _ACTIVE_READERS.pop(id(self._reader), None)
+            else:
+                _ACTIVE_READERS[id(self._reader)] = previous
+
+        bin_node = self._gr_bin_nodes.get(offset)
+        if bin_node is not None:
+            self._fill_mdx_offset_zero_vertices(node, bin_node)
+        return node
+
+    def _fill_mdx_offset_zero_vertices(self, node, bin_node: GhostRiggerNode) -> None:
+        trimesh = bin_node.trimesh
+        mesh = getattr(node, "mesh", None)
+        if trimesh is None or mesh is None or self._reader_ext is None:
+            return
+        if trimesh.mdx_data_offset != 0 or trimesh.mdx_data_size <= 0 or trimesh.vertex_count <= 0:
+            return
+        if not bool(trimesh.mdx_data_bitmap & _iom._MDXDataFlags.VERTEX):
+            return
+        if self._reader_ext.size() <= 0:
+            return
+
+        vertex_offset = 0 if trimesh.mdx_vertex_offset == 0xFFFFFFFF else trimesh.mdx_vertex_offset
+        positions = []
+        saved_pos = self._reader_ext.position()
+        try:
+            for index in range(trimesh.vertex_count):
+                seek_pos = index * trimesh.mdx_data_size + vertex_offset
+                if seek_pos + 12 > self._reader_ext.size():
+                    return
+                self._reader_ext.seek(seek_pos)
+                positions.append(
+                    _iom.Vector3(
+                        self._reader_ext.read_single(),
+                        self._reader_ext.read_single(),
+                        self._reader_ext.read_single(),
+                    )
+                )
+        finally:
+            self._reader_ext.seek(saved_pos)
+
+        mesh.vertex_positions = positions
+

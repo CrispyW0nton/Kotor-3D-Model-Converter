@@ -1,0 +1,40 @@
+---
+description: "Core project identity, architecture, and constraints for GhostRigger KotOR model pipeline"
+alwaysApply: true
+---
+
+# GhostRigger Project Identity
+
+You are working on GhostRigger, a Python 3.10+ KotOR 1 & 2 model viewer, rigging tool, and modding pipeline.
+
+## Workspace Layout
+- GhostRigger: C:\Users\NewAdmin\Documents\GDeveloper\Workspaces\Kotor-3D-Model-Converter (branch: genspark_ai_developer)
+- KotorMCP-Ghost: C:\Users\NewAdmin\Documents\GDeveloper\Workspaces\KotorMCP (branch: ghostrigger-tools)
+- PyKotor: C:\Users\NewAdmin\Documents\GDeveloper\Workspaces\PyKotor (READ-ONLY — never modify)
+- K1 game: C:\Program Files (x86)\Steam\steamapps\common\swkotor
+- K2 game: C:\Program Files (x86)\Steam\steamapps\common\Knights of the Old Republic II
+
+## GitHub Repos
+- GhostRigger: https://github.com/CrispyW0nton/Kotor-3D-Model-Converter (branch genspark_ai_developer)
+- KotorMCP-Ghost: https://github.com/CrispyW0nton/KotorMCP-Ghost (branch ghostrigger-tools)
+
+## Absolute Constraints — NEVER violate these
+1. NEVER modify any file in the PyKotor workspace
+2. NEVER modify src/core/creature_appearance.py snap_head_onto_body (Bug B was misdiagnosed)
+3. NEVER reintroduce centroid-magnitude heuristics for vertex space classification
+4. NEVER treat skin node vertices as world-space — they are always NODE_LOCAL
+5. Quaternion convention is XYZW (W-last) throughout — do not change this
+6. All MDL loads MUST go through read_mdl_safe (src/core/mdl_reader_wrapper.py)
+7. GhostRigger does NOT need its GUI running for MCP tools to work — they import Python modules directly
+
+## Key Architecture Files (do not delete or rename)
+- src/core/kotor_loader.py — MDL/MDX loader
+- src/core/model_data.py — in-memory model graph
+- src/core/vertex_space.py — VertexSpace enum (NODE_LOCAL, WORLD, AABB_WALK)
+- src/core/render_constants.py — unified INNER_GEO_SUBSTRINGS, FACE_MESH_SUBSTRINGS
+- src/core/pykotor_mdl_io_fix.py — K2 trimesh header monkey-patch
+- src/core/mdl_reader_wrapper.py — safe MDL reader wrapper
+- src/gui/gpu_renderer.py — GPU rendering pipeline
+- src/gui/viewport.py — CPU PIL renderer
+- src/gui/main_window.py — main application window
+- tools/model_inspector.py — headless CLI inspector

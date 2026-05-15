@@ -1,0 +1,38 @@
+---
+description: "How to use KotorMCP tools for validation and debugging"
+alwaysApply: false
+globs: "src/**/*.py,tests/**/*.py"
+---
+
+# KotorMCP Tool Usage
+
+The kotormcp MCP server is configured and available. Use it for ground-truth validation.
+
+## Available MCP Tools (base KotorMCP)
+- detectInstallations — confirm K1/K2 paths
+- loadInstallation(game) — load game into memory cache
+- listResources(game, resourceTypes, resrefQuery, limit) — enumerate game resources
+- describeResource(game, resref, restype) — inspect a specific resource
+- openInstallation(game) — get snapshot handle for paged queries
+- getInstallationSnapshot(snapshotId, resourceTypes, resrefQuery, limit, offset) — page through resources
+- journalOverview(game) — journal/quest data
+
+## GhostRigger-specific MCP Tools (in ghostrigger_tools.py)
+- inspect_mdl(game, resref) — parse MDL via raw PyKotor, return full node tree
+- inspect_mdl_ghostrigger(game, resref) — parse via GhostRigger pipeline, return node tree with world_position and vertex_space
+- compare_model_pipelines(game, resref) — side-by-side diff of PyKotor vs GhostRigger output
+- validate_textures(game, resref) — verify all textures referenced by model exist and load
+- inspect_skinning(game, resref) — bone maps, weight sums, OOB indices per skin node
+
+## Critical: MCP tools import GhostRigger as a library
+The tools in ghostrigger_tools.py do `from src.core.kotor_loader import ...` etc. 
+GhostRigger's GUI does NOT need to be open. The PYTHONPATH in mcp.json includes the GhostRigger project root.
+If an import fails, check that PYTHONPATH is set correctly, not that the GUI is running.
+
+## Validation Pattern
+1. loadInstallation(game="k1") or (game="k2")
+2. listResources(game, resourceTypes="mdl", limit=9999) to enumerate ALL models
+3. For each model: compare_model_pipelines(game, resref) 
+4. For failures: inspect_mdl + inspect_mdl_ghostrigger to identify divergence
+5. For texture issues: validate_textures(game, resref)
+6. For skinning issues: inspect_skinning(game, resref)

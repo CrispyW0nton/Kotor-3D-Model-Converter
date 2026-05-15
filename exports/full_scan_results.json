@@ -1,0 +1,1808 @@
+{
+  "generated": "2026-05-07T01:07:12Z",
+  "results": [
+    {
+      "game": "k1",
+      "resref": "152unk16",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk17",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk18",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk19",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk20",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk21",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk22",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk23",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk24",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk25",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk26",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk27",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk28",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk29",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk30",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk31",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk32",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk33",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk34",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk36",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "152unk38",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unkaa",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unkbb",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unkcc",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unkdd",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unkee",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unkff",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unkgg",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unkhh",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unkii",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unkjj",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unkkk",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unkll",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unkmm",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unkoo",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unkpp",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unkqq",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unkrr",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unkss",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "153unktt",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "3dgui",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "a_jedirobe_001",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "a_jedirobe_002",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "a_jedirobe_003",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "ad_saul",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_bantha",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_bmspecdiff",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_brith",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_decal",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_dewback",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_drdassassin",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_drdastro",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_drdmkfour",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_drdmkone",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_drdmktwo",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_drdprobe",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_drdprot",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_drdsentry",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_drdspyder",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_drdwar",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_embmcube",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_embmsphere",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_emcube",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_emsphere",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_female",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_firixa",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_gammorean",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_gammoreanp",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_gizka",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_holododonna",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_holorakata",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_holovandar",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_hutt",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_iriaz",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_ithorian",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_jawa",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_kataarn",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_kath",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_khounda",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_khoundb",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_kinrath",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_kraytdragon",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_mykal",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_notready",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_rakghoul",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_rancor",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_rancors",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_ronto",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_seabeast",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_selkath",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_spar2",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_tach",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_terantanak",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_tukata",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_turret01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_turret02",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_twohead",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_verkaal",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "c_wraid",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "cgbody_light",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "cghead_light",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "cgmain_light",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "char3d_light",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "charmain_light",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "charrec_light",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "charviewaxis",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "child_f",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "child_m",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "comm_a_f",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "comm_a_f2",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "comm_a_m",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "comm_a_m2",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "comm_b_f",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "comm_b_f2",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "comm_b_m",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "comm_b_m2",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "comm_w_f",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "comm_w_f2",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "comm_w_m",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "comm_w_m2",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "computer",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "cp_commf02",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "cp_commf03",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "cp_commf04",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "cp_commf05",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "cp_commf06",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "cp_commm02",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "cp_commm03",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "cp_commm04",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "cp_commm05",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "cp_commm06",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "cp_m40ad_saul01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "cp_s_calonordtar",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "cp_snt_unkzaal",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "cp_tar08cam01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "crossgob",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "czerka_com_h",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "darthband_h",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lda01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lda02",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lda03",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lda04",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lhr01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lhr02",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lka01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lka02",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lka03",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lko01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lko02",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lko03",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lko04",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lko05",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lko06",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lko07",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lma01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lma02",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lma022",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lma03",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lma04",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lma05",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lma06",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lma07",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lmadoor01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lrk01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lrk02",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lrk03",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lrk04",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lsf01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lsi01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lsi02",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lsi03",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lsi04",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lsi05",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lsi06",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lta01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lta02",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lta03",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lts01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lts02",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lts03",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lts04",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lts05",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lts06",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lts07",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lts08",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lts09",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lts10",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lun01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lyh01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lyv01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_lza01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_ukn01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dor_ukn02",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dp_hf_b1",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dp_hf_c2",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dp_hf_twa",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dp_hm_b2",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dp_hm_c02",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dp_hm_twa",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dp_holododonna",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dp_holovandar",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dp_s_hk47_lev40",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dp_stnofff_01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dp_stnoffm_01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dp_stntdrkjedf01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dp_stntdrkjedm01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dp_stnttrp_01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dp_stnttrpcmd_01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dp_stntwardrd_01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dp_trandoshan",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "dptwmaster",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "empty",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "fx_carbref",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "fx_droid01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "fx_droid02",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "fx_droid03",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "fx_droid04",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "fx_droid05",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "fx_droid06",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "fx_droid07",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "fx_droid08",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "fx_droid18",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "fx_explode_01",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "fx_explode_02",
+      "match": true,
+      "discrepancies": [],
+      "missing_in_ghostrigger": [],
+      "extra_in_ghostrigger": []
+    },
+    {
+      "game": "k1",
+      "resref": "fx_explode_03",
+      "error": "error: unpack requires a buffer of 4 bytes"
+    }
+  ],
+  "summary": {
+    "total": 225,
+    "match": 224,
+    "mismatch": 0,
+    "error": 1
+  }
+}

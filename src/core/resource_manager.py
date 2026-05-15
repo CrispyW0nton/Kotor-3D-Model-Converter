@@ -99,6 +99,27 @@ def _key(name: str, res_type: int) -> str:
     return f"{name.lower()}:{res_type}"
 
 
+_TEXTURE_ALIASES: Dict[str, Tuple[str, ...]] = {
+    # TSL's c_drexlf.mdl references c_drex01, but the shipped texture pack
+    # stores the diffuse as c_drexl01.
+    'c_drex01': ('c_drexl01',),
+}
+
+
+def _texture_name_candidates(name: str) -> Tuple[str, ...]:
+    """Return texture lookup candidates, preserving the authored name first."""
+    key = (name or '').strip().lower()
+    if not key:
+        return ()
+
+    candidates = [key]
+    for alias in _TEXTURE_ALIASES.get(key, ()):
+        alias_key = alias.strip().lower()
+        if alias_key and alias_key not in candidates:
+            candidates.append(alias_key)
+    return tuple(candidates)
+
+
 # ── Low-level archive readers ────────────────────────────────────────────────
 
 class _BifIndex:
@@ -309,19 +330,24 @@ class ResourceManager:
 
     def get_texture(self, name: str, game: str = 'K1') -> Optional[bytes]:
         """Load texture: TPC first, then TGA."""
-        data = self.get(name, RES_TPC, game)
-        if data is not None:
-            return data
-        return self.get(name, RES_TGA, game)
+        for candidate in _texture_name_candidates(name):
+            data = self.get(candidate, RES_TPC, game)
+            if data is not None:
+                return data
+            data = self.get(candidate, RES_TGA, game)
+            if data is not None:
+                return data
+        return None
 
     def get_txi(self, name: str, game: str = 'K1') -> str:
         """Return TXI string for texture name (empty string if absent)."""
-        raw = self.get(name, RES_TXI, game)
-        if raw:
-            try:
-                return raw.decode('ascii', 'replace')
-            except Exception:
-                return ''
+        for candidate in _texture_name_candidates(name):
+            raw = self.get(candidate, RES_TXI, game)
+            if raw:
+                try:
+                    return raw.decode('ascii', 'replace')
+                except Exception:
+                    return ''
         return ''
 
     # ── Model listing ────────────────────────────────────────────────────
@@ -446,7 +472,7 @@ class _GameInstall:
     Internal class: indexes one KotOR installation (K1 or K2).
 
     Priority chain for get():
-      1. _override dict  (pre-loaded loose Override/ files, instant)
+      1. _override dict  (indexed loose Override/ file paths, lazy read)
       2. _mod_erfs list  (module ERFs, lazy seek)
       3. _tex_erfs list  (TexturePacks ERFs for TPC/TGA, lazy seek)
       4. _bif_index dict (BIF files via chitin.key, lazy seek)
@@ -461,7 +487,7 @@ class _GameInstall:
         self._bif_index: Dict[int, _BifIndex] = {}        # bif_file_idx → _BifIndex
         self._tex_erfs: List[_ErfIndex] = []              # TexturePacks ERFs, TPA first
         self._mod_erfs: List[_ErfIndex] = []              # modules/ ERFs
-        self._override: Dict[str, bytes] = {}             # Override/ loose files
+        self._override: Dict[str, str] = {}               # Override/ loose file paths
 
         t0 = time.perf_counter()
         self._index_chitin()
@@ -565,7 +591,7 @@ class _GameInstall:
         log.debug(f"_GameInstall {self.tag}: {len(self._mod_erfs)} module ERFs")
 
     def _load_override(self):
-        """Pre-load Override/ loose files into memory (fast path for overrides)."""
+        """Index Override/ loose files without loading their contents."""
         ovr_dir = self._find_dir('Override') or self._find_dir('override')
         if not ovr_dir:
             return
@@ -579,16 +605,12 @@ class _GameInstall:
                 rtype = EXT_TO_TYPE.get(ext.lstrip('.'))
                 if rtype is None:
                     continue
-                try:
-                    with open(path, 'rb') as fh:
-                        self._override[_key(base, rtype)] = fh.read()
-                    loaded += 1
-                except OSError:
-                    pass
+                self._override[_key(base, rtype)] = path
+                loaded += 1
         except OSError:
             pass
         if loaded:
-            log.debug(f"_GameInstall {self.tag}: {loaded} Override files loaded")
+            log.debug(f"_GameInstall {self.tag}: {loaded} Override files indexed")
 
     # ── Resource access ───────────────────────────────────────────────────
 
@@ -600,9 +622,13 @@ class _GameInstall:
         k = _key(name, res_type)
 
         # 1. Override
-        data = self._override.get(k)
-        if data is not None:
-            return data
+        override_path = self._override.get(k)
+        if override_path is not None:
+            try:
+                with open(override_path, 'rb') as fh:
+                    return fh.read()
+            except OSError:
+                return None
 
         # 2. Module ERFs (area-specific resources)
         for erf in self._mod_erfs:
@@ -819,6 +845,9 @@ def _decode_texture(raw: bytes) -> Optional[object]:
                 txi = (tpc.txi or '').strip() if isinstance(getattr(tpc, 'txi', None), str) else ''
             except Exception:
                 pass
+            manual_txi = _tpc_uncompressed_txi(raw)
+            if manual_txi:
+                txi = manual_txi
             img._txi_str = txi                        # type: ignore[attr-defined]
             img._tpc_raw = raw                         # type: ignore[attr-defined]
             try:
@@ -836,6 +865,41 @@ def _decode_texture(raw: bytes) -> Optional[object]:
         return img
     except Exception:
         return None
+
+
+def _tpc_uncompressed_txi(raw: bytes) -> str:
+    """Return TXI text for uncompressed TPC payloads, or empty string."""
+    if not _is_tpc(raw):
+        return ''
+    try:
+        data_size = struct.unpack_from('<I', raw, 0)[0]
+        if data_size != 0:
+            return ''
+        width = struct.unpack_from('<H', raw, 8)[0]
+        height = struct.unpack_from('<H', raw, 10)[0]
+        encoding = raw[12]
+        mip_count = max(1, raw[13])
+        bpp = {1: 1, 2: 3, 4: 4, 12: 4}.get(encoding)
+        if bpp is None or width <= 0 or height <= 0:
+            return ''
+        total = 0
+        w, h = width, height
+        for _ in range(mip_count):
+            total += max(1, w) * max(1, h) * bpp
+            w = max(1, w >> 1)
+            h = max(1, h >> 1)
+        start = 128 + total
+        if start >= len(raw):
+            return ''
+        txi = raw[start:].rstrip(b'\x00').decode('utf-8', errors='replace').strip()
+        if not txi:
+            return ''
+        first = txi.splitlines()[0].split()
+        if first and first[0].isascii() and first[0].isalpha():
+            return txi
+    except Exception:
+        return ''
+    return ''
 
 
 def tpc_info(raw: bytes) -> Optional[Dict[str, Any]]:

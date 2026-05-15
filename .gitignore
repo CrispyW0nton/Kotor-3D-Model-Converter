@@ -29,17 +29,54 @@ game_data/
 *.key
 *.mdx
 
-# ── Tests (removed – focus on essential code only) ───────────────────────────
-tests/
+# ── Tests ─────────────────────────────────────────────────────────────────────
+# Contents of /tests/ are ignored by default (ad-hoc prototypes and pyc caches).
+# Add a "!/tests/<name>.py" exception below for any test that should ship with
+# the repo — same pattern as /tools/* / !/tools/model_inspector.py.  Using
+# /tests/* instead of /tests/ so re-inclusion patterns resolve.
+/tests/*
+!/tests/__init__.py
+!/tests/conftest.py
+!/tests/test_core_contracts.py
+!/tests/test_regression.py
+!/tests/test_mcp_full_scan.py
+!/tests/test_mcp_textures.py
+!/tests/test_mcp_skinning.py
+!/tests/test_qt_only_imports.py
 test_assets/
 pytest.ini
 .pytest_cache/
-conftest.py
 
 # ── Audit / render output (generated artefacts) ───────────────────────────────
 audit_output/
 logs/
 Logs/
+build_log.txt
+d*_renders/
+d*_screenshots/
+d*_validation*/
+proof_*/
+*_report.txt
+*_diagnostic*.py
+
+# ── Reproducible audit dumps (regenerate via scripts/dump_*.py) ───────────────
+diagnostics/
+/exports/baseline_renders/
+/exports/current_renders/
+/exports/skin_*/
+/exports/visual_*/
+/exports/baseline_renders_metadata.json
+/exports/k2_geometry_diagnosis*.json
+/exports/render_diff_report.json
+/exports/structural_validation.json
+/exports/visual_audit_k2.json
+/exports/skin_3f_postfix_gpu_dump.jsonl
+
+# ── User runtime state (never commit; auto-recreated on first launch) ─────────
+settings.json
+GhostRigger-K1-K2.exe
+/dist/
+/build/
 
 # ── One-off debug / prototype render PNGs at repo root ────────────────────────
 audit_c_*.png
@@ -55,7 +92,7 @@ screenshot*.png
 # ── Temp / scratch directories ────────────────────────────────────────────────
 lava_exercise/
 KotorModTools/
-screenshots/
+/screenshots/
 portfolio_post.md
 render_check/
 render_test_output/
@@ -68,14 +105,12 @@ kotorblender_src/
 .reference_repos/
 
 # ── Reference knowledge base (books/images/spreadsheets too large for git) ───
-.ghostrigger_reference/books/
-.ghostrigger_reference/images/
-.ghostrigger_reference/spreadsheets/
+knowledge_base/reference/books/
+knowledge_base/reference/images/
+knowledge_base/reference/spreadsheets/
 
 # ── Demo / capture artefacts ──────────────────────────────────────────────────
 *.mp4
-# Keep the Matrix background video inside assets
-!assets/matrix_bg.mp4
 capture_demo_video.py
 
 # ── OS noise ──────────────────────────────────────────────────────────────────
@@ -94,8 +129,23 @@ run_audit.py
 
 # ── Internal dev scripts (not for end users) ──────────────────────────────────
 devlog/
-/tools/
+# Contents of /tools/ are ignored by default (ad-hoc dev scripts).  Add a
+# "!/tools/<name>.py" exception below for any tool that should ship with the
+# repo.  Using /tools/* instead of /tools/ so re-inclusion patterns resolve.
+/tools/*
+!/tools/model_inspector.py
 scripts/
+!/scripts/
+!/scripts/generate_manifest.py
+!/scripts/full_scan.py
+!/scripts/analyze_scan.py
+exports/
+!/exports/
+!/exports/scan_manifest.json
+!/exports/full_scan_results.json
+!/exports/full_scan_results_fast.json
+!/exports/full_scan_results_modules.json
+!/exports/failure_analysis.json
 audit_deep.py
 audit_exhaustive.py
 _patch_viewport.py

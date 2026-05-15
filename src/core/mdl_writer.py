@@ -62,7 +62,9 @@ Node header  (80 bytes per node):
   +8   root_off     uint32   (relative to BASE)
   +12  parent_off   uint32   (relative to BASE)
   +16  position     3×float
-  +28  rotation     4×float  (w,x,y,z in file — parser reorders to x,y,z,w internally)
+  +28  rotation     4×float  (file layout is w,x,y,z; our ModelNode uses x,y,z,w internally —
+                               verified against PyKotor _NodeHeader.read, KotorBlender
+                               reader.py, and KotOR.js OdysseyModelNodeHeader)
   +44  child_arr_off uint32  (relative to BASE)
   +48  child_cnt    uint32
   +52  child_cnt2   uint32
@@ -112,18 +114,77 @@ from .model_data import (
 log = logging.getLogger(__name__)
 
 # ─────────────────────────────  Constants  ──────────────────────────────────
+#
+# PC function pointer pairs — verified against KotorBlender types.py
+# (`io_scene_kotor/format/mdl/types.py` in OpenKotOR/kotorblender) and
+# PyKotor's ``io_mdl._TrimeshHeader`` K1/K2 function pointer constants.
+#
+# There are FOUR distinct FP-pair families in a KotOR binary MDL:
+#
+#   1. MODEL_FN_PTR  — the TOP-LEVEL geometry header (at BASE + 0).  This is the
+#                      one written into the model's outer 80-byte geometry
+#                      header.  These values differ between K1/K2 PC vs XBOX.
+#   2. ANIM_FN_PTR   — the geometry header embedded in every Animation block.
+#                      Completely distinct values from MODEL_FN_PTR.
+#   3. MESH_FN_PTR   — the first 8 bytes of every TrimeshHeader (type=MESH).
+#                      PyKotor calls these ``K1_FUNCTION_POINTER0/1``.
+#   4. SKIN_FN_PTR / DANGLY_FN_PTR — replace MESH_FN_PTR when the node carries
+#                      the SKIN or DANGLY flag respectively.
+#
+# Prior revisions of this writer mixed families (used MODEL_FN_PTR in place of
+# MESH_FN_PTR, and a geometry fp2 in place of ANIM_FN_PTR_2), which produces
+# files that crash the engine and confuse PyKotor's reader.
 
-# PC function pointer pairs (write K1 by default)
-# Source: mdl_parser.py fp1 detection + Kotor.NET MDLBinaryWriter.cs
-_K1_GEOM_FP1 = 4273776   # 0x0041BCC0
-_K1_GEOM_FP2 = 4216096   # 0x0040A120  (fp2 — geo vtable)
-_K2_GEOM_FP1 = 4285200   # 0x0041 ?? (K2 PC value)
-_K2_GEOM_FP2 = 4216320   # 0x0040A200  (fp2 — geo vtable)
+# ── Model (top-level geometry header) ────────────────────────────────────────
+_K1_MODEL_FP1 = 4273776   # 0x0041BCC0  (MODEL_FN_PTR_1_K1_PC)
+_K1_MODEL_FP2 = 4216096   # 0x0040A120  (MODEL_FN_PTR_2_K1_PC)
+_K2_MODEL_FP1 = 4285200   # 0x0041E850  (MODEL_FN_PTR_1_K2_PC)
+_K2_MODEL_FP2 = 4216320   # 0x0040A200  (MODEL_FN_PTR_2_K2_PC)
 
-_K1_ANIM_FP1 = 4273392   # 0x0041BB30
-_K1_ANIM_FP2 = 4216096
-_K2_ANIM_FP1 = 4284816   # 0x00414050 (K2 anim geo fp1)
-_K2_ANIM_FP2 = 4216320
+# Backwards-compat aliases (legacy name used elsewhere in the module).
+_K1_GEOM_FP1 = _K1_MODEL_FP1
+_K1_GEOM_FP2 = _K1_MODEL_FP2
+_K2_GEOM_FP1 = _K2_MODEL_FP1
+_K2_GEOM_FP2 = _K2_MODEL_FP2
+
+# ── Animation geometry header ────────────────────────────────────────────────
+# Used for the geometry header embedded inside each animation block.
+# Source: KotorBlender types.py ANIM_FN_PTR_{1,2}_K{1,2}_PC.
+_K1_ANIM_FP1 = 4273392   # 0x0041BB30  (ANIM_FN_PTR_1_K1_PC)
+_K1_ANIM_FP2 = 4451552   # 0x00440F20  (ANIM_FN_PTR_2_K1_PC)  ← NOT 4216096
+_K2_ANIM_FP1 = 4284816   # 0x0041E6D0  (ANIM_FN_PTR_1_K2_PC)
+_K2_ANIM_FP2 = 4522928   # 0x00451C70  (ANIM_FN_PTR_2_K2_PC)  ← NOT 4216320
+
+# ── Mesh / Skin / Dangly node-type function pointers ─────────────────────────
+# These populate the first 8 bytes of every TrimeshHeader subheader.
+# Source: PyKotor ``io_mdl._TrimeshHeader.K*_FUNCTION_POINTER0/1`` and
+# KotorBlender types.py MESH/SKIN/DANGLY FN_PTR constants.
+_K1_MESH_FP1   = 4216656  # 0x00405750
+_K1_MESH_FP2   = 4216672  # 0x00405760
+_K2_MESH_FP1   = 4216880  # 0x00405830
+_K2_MESH_FP2   = 4216896  # 0x00405840
+
+_K1_SKIN_FP1   = 4216592  # 0x00405710
+_K1_SKIN_FP2   = 4216608  # 0x00405720
+_K2_SKIN_FP1   = 4216816  # 0x004057F0
+_K2_SKIN_FP2   = 4216832  # 0x00405800
+
+# NOTE: KotorBlender/PyKotor list the DANGLY pair as (FP1=0x00405740,
+# FP2=0x00405730) — fp2 is lower than fp1 on purpose, this is NOT a swap.
+_K1_DANGLY_FP1 = 4216640  # 0x00405740
+_K1_DANGLY_FP2 = 4216624  # 0x00405730
+_K2_DANGLY_FP1 = 4216864  # 0x00405820
+_K2_DANGLY_FP2 = 4216848  # 0x00405810
+
+
+def _mesh_fp_pair(is_k2: bool, flags: int) -> Tuple[int, int]:
+    """Return the (fp1, fp2) pair that belongs at the start of a trimesh
+    subheader, selected by node flags (SKIN / DANGLY specialisation)."""
+    if flags & NodeFlags.SKIN:
+        return (_K2_SKIN_FP1, _K2_SKIN_FP2) if is_k2 else (_K1_SKIN_FP1, _K1_SKIN_FP2)
+    if flags & NodeFlags.DANGLY:
+        return (_K2_DANGLY_FP1, _K2_DANGLY_FP2) if is_k2 else (_K1_DANGLY_FP1, _K1_DANGLY_FP2)
+    return (_K2_MESH_FP1, _K2_MESH_FP2) if is_k2 else (_K1_MESH_FP1, _K1_MESH_FP2)
 
 _BASE = 12          # all MDL offsets are relative to byte 12
 
@@ -605,7 +666,14 @@ class MDLBinaryWriter:
         px, py, pz = node.position if node.position else (0.0, 0.0, 0.0)
         buf.write(struct.pack('<fff', px, py, pz))
 
-        # Rotation: internal is (x,y,z,w), file format is (w,x,y,z)
+        # Rotation: internal tuple is (x, y, z, w); on-disk layout is W-first.
+        # Verified against three independent references, all of which read the
+        # quaternion in W → X → Y → Z order after the node position field:
+        #   • PyKotor  ``_NodeHeader.read`` (io_mdl.py): reads ``orientation.w``,
+        #     ``orientation.x``, ``orientation.y``, ``orientation.z`` in turn.
+        #   • KotorBlender ``reader.py``   (format/mdl/reader.py)
+        #   • KotOR.js     ``OdysseyModelNodeHeader.ts``
+        # So the writer must emit W first.  Do NOT swap.
         rx, ry, rz, rw = (node.rotation if node.rotation
                           else (0.0, 0.0, 0.0, 1.0))
         buf.write(struct.pack('<ffff', rw, rx, ry, rz))
@@ -764,8 +832,8 @@ class MDLBinaryWriter:
           +84   transparency_hint (4 B)
           +88   tex_name          (32 B)
           +120  lm_name           (32 B)
-          +152  bm3_name          (12 B)   ← 12 bytes, NOT 32!
-          +164  bm4_name          (12 B)   ← 12 bytes, NOT 32!
+          +152  unknown0          (24 B)   opaque bytes preserved from read;
+                                           NOT two 12-byte bitmap names
           +176  vic array         (12 B)   off/cnt/cnt2 (zeros)
           +188  vo array          (12 B)   off/cnt/cnt2 (zeros)
           +200  inv array         (12 B)   off/cnt/cnt2 (zeros)
@@ -805,19 +873,27 @@ class MDLBinaryWriter:
             MDL vertex array (vert_cnt × 12 B)
           Then skin/dangly headers if applicable.
         """
-        fp1 = _K2_GEOM_FP1 if self._is_k2 else _K1_GEOM_FP1
-        fp2 = _K2_GEOM_FP2 if self._is_k2 else _K1_GEOM_FP2
+        # Mesh-subheader FPs differ by node flag family (MESH vs SKIN vs DANGLY).
+        # Using the TOP-LEVEL geometry fp pair here (the old behaviour) produces
+        # files that the KotOR engine refuses to load because the runtime vtable
+        # dispatch in ``CMDLMesh`` / ``CMDLSkinMesh`` matches on these FPs.
+        fp1, fp2 = _mesh_fp_pair(self._is_k2, int(node.flags))
 
         vert_cnt  = len(node.vertices)
         face_cnt  = len(node.faces)
         tex_name  = (node.texture or '').lower()
         lm_name   = (node.lightmap or '').lower()
-        bm3_name  = ''
-        bm4_name  = ''
-        if node.texture_names and len(node.texture_names) > 2:
-            bm3_name = node.texture_names[2][:12]
-        if node.texture_names and len(node.texture_names) > 3:
-            bm4_name = node.texture_names[3][:12]
+        # NOTE: the 24 bytes at mesh-header offset +152 are NOT two 12-byte
+        # bitmap name slots.  PyKotor (and KotorBlender) parse them as an
+        # opaque ``unknown0`` block (``reader.read_bytes(24)``).  Writing
+        # nul-terminated text there can be mis-interpreted by downstream
+        # readers and validators.  We preserve any bytes we captured at load
+        # time via ``node.mesh_unknown0``; otherwise we emit 24 zero bytes.
+        mesh_unknown0: bytes = bytes(getattr(node, 'mesh_unknown0', b'') or b'')
+        if len(mesh_unknown0) < 24:
+            mesh_unknown0 = mesh_unknown0.ljust(24, b'\x00')
+        else:
+            mesh_unknown0 = mesh_unknown0[:24]
 
         bb_min  = getattr(node, 'mesh_bb_min', None) or (0.0, 0.0, 0.0)
         bb_max  = getattr(node, 'mesh_bb_max', None) or (0.0, 0.0, 0.0)
@@ -886,9 +962,12 @@ class MDLBinaryWriter:
         buf.write(_wstr(tex_name, 32))
         buf.write(_wstr(lm_name, 32))
 
-        # +152 bm3_name (12 B) + bm4_name (12 B)  ← 12 bytes each!
-        buf.write(_wstr(bm3_name, 12))
-        buf.write(_wstr(bm4_name, 12))
+        # +152: 24-byte ``unknown0`` block.  Previously written as two 12-byte
+        # ASCII strings ("bm3_name" / "bm4_name") — that layout does not match
+        # any known reference reader (PyKotor reads opaque bytes here, so do
+        # KotorBlender and Kotor.NET).  Emit the raw bytes captured at load
+        # time so round-trip tests produce identical files.
+        buf.write(mesh_unknown0)
 
         # +176 vic/vo/inv arrays (3 × 12 B = 36 B) + {-1,-1,0} (12 B) + saber (8 B)
         buf.write(b'\x00' * 36)          # vic + vo + inv
@@ -950,6 +1029,14 @@ class MDLBinaryWriter:
         if node.flags & NodeFlags.DANGLY:
             self._write_dangly_header(buf, node)
 
+        # ── AABB: 4-byte ``offset_to_aabb`` field + minimal tree ─────────────
+        # PyKotor ``_Node.read`` reads a single int32 immediately after the
+        # trimesh/skin/dangly headers when ``type_id & AABB`` is set.  Without
+        # this field walkmesh nodes fail to parse (reader gets misaligned and
+        # subsequent data / children pointers go to garbage offsets).
+        if node.flags & NodeFlags.AABB:
+            self._write_aabb_section(buf, node)
+
         # ── Face array — placed after skin/dangly headers, offset patched above ──
         _align4(buf)
         faces_off_abs = buf.tell()
@@ -983,60 +1070,132 @@ class MDLBinaryWriter:
 
     def _write_skin_header(self, buf: BytesIO, node: ModelNode) -> None:
         """
-        Write the 100-byte skin header that follows the mesh header.
-        Layout (verified against mdl_parser._parse_skin):
-          +0   compile_weights array desc (3×uint32 = 12 B)
-          +12  sw_off  uint32  (MDX weight channel offset)
-          +16  sbr_off uint32  (MDX bone-ref channel offset)
-          +20  bm_off  uint32  (bone_map float array off, rel BASE)
-          +24  bm_cnt  uint32
-          +28  qbone desc (12 B)
-          +40  tbone desc (12 B)
-          +52  garbage desc (12 B)
-          +64  bone_parts[17] uint16[17] = 34 B
-          +98  pad (2 B)
-          Total: 100 B
+        Write the 100-byte skin sub-header (``_SkinmeshHeader`` in PyKotor
+        parlance) that immediately follows the mesh header for SKIN nodes,
+        plus the qbone / tbone / bonemap data arrays pointed at by it.
+
+        Layout — verified field-for-field against PyKotor
+        ``io_mdl._SkinmeshHeader.read`` / ``.write`` (100 bytes on the nose):
+
+          +0   unknown_weights       int32
+          +4   unknown3              int32
+          +8   unknown4              int32
+          +12  offset_to_mdx_weights uint32  (MDX weight-channel byte offset)
+          +16  offset_to_mdx_bones   uint32  (MDX bone-ref-channel byte offset)
+          +20  offset_to_bonemap     uint32  (rel BASE)
+          +24  bonemap_count         uint32
+          +28  offset_to_qbones      uint32
+          +32  qbones_count          uint32
+          +36  qbones_count2         uint32
+          +40  offset_to_tbones      uint32
+          +44  tbones_count          uint32
+          +48  tbones_count2         uint32
+          +52  offset_to_unknown0    uint32
+          +56  unknown0_count        uint32
+          +60  unknown0_count2       uint32
+          +64  bones[16]             uint16[16]  (32 B — NOT 17!)
+          +96  unknown1              uint32      (4 B pad — NOT 2!)
+          = 100 B
+
+        Previous revisions wrote ``bone_parts[17]`` + 2 pad bytes.  That summed
+        to 100 B by coincidence but desynchronised PyKotor's reader on the
+        ``bones`` tuple length and trailing padding.
         """
         _, ch_offsets = self._mdx_stride_for(node)
 
         sw_off  = ch_offsets.get('sw', 0xFFFFFFFF)
         sbr_off = ch_offsets.get('br', 0xFFFFFFFF)
 
-        bone_map = node.bone_map or []
-        bm_cnt = len(bone_map)
+        # Bonemap entries.  ``node.bone_map_floats`` is the authoritative
+        # float32 array captured at load; fall back to per-index floats derived
+        # from the bone name list when we're writing a fresh model.
+        bone_map_names  = list(node.bone_map or [])
+        bonemap_floats  = list(getattr(node, 'bone_map_floats', []) or [])
+        bm_cnt          = len(bonemap_floats) if bonemap_floats else len(bone_map_names)
+        if not bonemap_floats and bone_map_names:
+            bonemap_floats = [
+                float(i) if nm else -1.0
+                for i, nm in enumerate(bone_map_names)
+            ]
 
-        # Compile weights descriptor (placeholder)
+        qbones = list(getattr(node, 'qbone_list', []) or [])
+        tbones = list(getattr(node, 'tbone_list', []) or [])
+
+        skin_hdr_start = buf.tell()
+
+        # +0  unknown_weights / unknown3 / unknown4 (3×int32)
         buf.write(b'\x00' * 12)
-
+        # +12 MDX channel offsets (weights / bone refs)
         buf.write(_wu32(sw_off))
         buf.write(_wu32(sbr_off))
-
-        # bone_map offset (patched below) + count
+        # +20 bonemap desc (patched below)
         bm_off_patch = buf.tell()
         buf.write(_wu32(0))
         buf.write(_wu32(bm_cnt))
+        # +28 qbones desc (patched below)
+        qb_off_patch = buf.tell()
+        buf.write(_wu32(0))
+        buf.write(_wu32(len(qbones)))
+        buf.write(_wu32(len(qbones)))
+        # +40 tbones desc (patched below)
+        tb_off_patch = buf.tell()
+        buf.write(_wu32(0))
+        buf.write(_wu32(len(tbones)))
+        buf.write(_wu32(len(tbones)))
+        # +52 offset_to_unknown0 / counts (zeros — we don't emit this array)
+        buf.write(b'\x00' * 12)
+        # +64 bones[16] uint16 — partial-skin "head bone" references.
+        # Unused slots are sentinel 0xFFFF (= -1 as int16), matching the
+        # defaults PyKotor assigns in ``_SkinmeshHeader.__init__``.
+        for i in range(16):
+            if i < len(bone_map_names) and bone_map_names[i]:
+                buf.write(_wu16(i))
+            else:
+                buf.write(_wu16(0xFFFF))
+        # +96 unknown1 uint32 pad
+        buf.write(_wu32(0))
 
-        # qbone / tbone / garbage descriptors (12 bytes each = 36 bytes)
-        buf.write(b'\x00' * 36)
+        assert buf.tell() - skin_hdr_start == 100, (
+            f"Skin sub-header wrong size: {buf.tell() - skin_hdr_start}")
 
-        # bone_parts[17] uint16 + 2 pad
-        for i in range(17):
-            val = i if i < len(bone_map) else 0xFFFF
-            buf.write(_wu16(val))
-        buf.write(b'\x00' * 2)
-
-        # Bone map float array
+        # ── Data arrays pointed-to by the header above ────────────────────
+        # Bonemap float32 array.  Count = bm_cnt (may be 0 for skin nodes
+        # whose weights use direct bone indices instead of a remap table).
         _align4(buf)
-        bm_abs = buf.tell()
-        for _ in range(len(bone_map)):
-            buf.write(_wf32(float(len(bone_map))))  # placeholder (node_num)
-        # Pad unused entries as -1.0
-        end = buf.tell()
+        if bm_cnt > 0:
+            bm_abs = buf.tell()
+            for v in bonemap_floats[:bm_cnt]:
+                buf.write(_wf32(float(v)))
+            # Pad the array up to bm_cnt entries (if provided list is short).
+            pad_entries = bm_cnt - len(bonemap_floats)
+            for _ in range(max(0, pad_entries)):
+                buf.write(_wf32(-1.0))
+            end = buf.tell()
+            buf.seek(bm_off_patch)
+            buf.write(_wu32(bm_abs - _BASE))
+            buf.seek(end)
 
-        # Patch bm_off
-        buf.seek(bm_off_patch)
-        buf.write(_wu32(bm_abs - _BASE))
-        buf.seek(end)
+        # qbones: Vector4 each (16 bytes)
+        if qbones:
+            _align4(buf)
+            qb_abs = buf.tell()
+            for qx, qy, qz, qw in qbones:
+                buf.write(struct.pack('<ffff', qx, qy, qz, qw))
+            end = buf.tell()
+            buf.seek(qb_off_patch)
+            buf.write(_wu32(qb_abs - _BASE))
+            buf.seek(end)
+
+        # tbones: Vector3 each (12 bytes)
+        if tbones:
+            _align4(buf)
+            tb_abs = buf.tell()
+            for tx, ty, tz in tbones:
+                buf.write(struct.pack('<fff', tx, ty, tz))
+            end = buf.tell()
+            buf.seek(tb_off_patch)
+            buf.write(_wu32(tb_abs - _BASE))
+            buf.seek(end)
 
     def _write_dangly_header(self, buf: BytesIO, node: ModelNode) -> None:
         """
@@ -1074,6 +1233,55 @@ class MDLBinaryWriter:
         buf.seek(cst_off_patch)
         buf.write(_wu32(cst_abs - _BASE))
         buf.seek(end)
+
+    def _write_aabb_section(self, buf: BytesIO, node: ModelNode) -> None:
+        """
+        Write the 4-byte AABB tree offset field plus a minimal AABB tree
+        immediately after it.
+
+        Layout (per PyKotor ``_Node.write`` / MDLOps):
+          +0  offset_to_aabb  int32  (= current_pos - 12 + 4, i.e. the byte
+                                     right after this field, relative to BASE)
+          +4  aabb_tree       N × 40-byte entries
+
+        Each AABB tree entry (40 B) is:
+          bounding_box_min   3×float (12)
+          bounding_box_max   3×float (12)
+          leaf_face_index    int32   (4)   (-1 for internal nodes)
+          split_plane        int32   (4)   (axis index: 0/1/2, or -1 for leaves)
+          offset_to_left     int32   (4)   (relative to BASE)
+          offset_to_right    int32   (4)
+
+        We do not currently parse the source AABB tree into ModelNode, so we
+        synthesise a minimal 1-leaf tree spanning the mesh bounding box.
+        This is sufficient to keep the file structurally valid and PyKotor's
+        reader aligned; real walkmesh content preservation is a Phase-4 task.
+        """
+        # The offset stored in the field is a BASE-relative pointer to the
+        # AABB tree, which begins immediately after the 4-byte field itself.
+        tree_off_rel = (buf.tell() + 4) - _BASE
+        buf.write(_wi32(tree_off_rel))
+
+        # Compute a mesh-local bounding box from the node's vertex cloud.
+        if node.vertices:
+            xs = [v[0] for v in node.vertices]
+            ys = [v[1] for v in node.vertices]
+            zs = [v[2] for v in node.vertices]
+            bb_min = (min(xs), min(ys), min(zs))
+            bb_max = (max(xs), max(ys), max(zs))
+        else:
+            bb_min = getattr(node, 'mesh_bb_min', None) or (0.0, 0.0, 0.0)
+            bb_max = getattr(node, 'mesh_bb_max', None) or (0.0, 0.0, 0.0)
+
+        # One-leaf AABB: leaf_face_index=0 (or -1 if no faces), no children,
+        # split_plane=-1 (sentinel for "leaf").
+        leaf_face = 0 if node.faces else -1
+        buf.write(struct.pack('<fff', *bb_min))
+        buf.write(struct.pack('<fff', *bb_max))
+        buf.write(_wi32(leaf_face))
+        buf.write(_wi32(-1))   # split_plane (-1 = leaf)
+        buf.write(_wi32(0))    # offset_to_left  (0 = none)
+        buf.write(_wi32(0))    # offset_to_right (0 = none)
 
     def _write_emitter_header(self, buf: BytesIO, node: ModelNode) -> None:
         """

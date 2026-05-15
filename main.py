@@ -13,7 +13,7 @@ All logging.* output (DEBUG and above) is captured, plus:
 The Logs/ folder is created automatically if it does not exist.
 Old log files beyond LOG_KEEP_FILES are auto-rotated (newest kept).
 """
-import sys, os, logging, atexit, traceback, datetime
+import sys, os, logging, atexit, traceback, datetime, argparse
 
 # ── Path setup ────────────────────────────────────────────────────────────
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -23,6 +23,18 @@ sys.path.insert(0, _APP_DIR)
 _LOG_DIR        = os.path.join(_APP_DIR, "Logs")
 _LOG_KEEP_FILES = 20          # keep the 20 most-recent session logs
 _LOG_MAX_BYTES  = 10_000_000  # 10 MB per file before rotation
+
+
+def _env_enabled(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw in ("1", "true", "yes", "on", "debug")
+
+
+def _log_level() -> int:
+    """Use quiet production logging unless detailed diagnostics are requested."""
+    return logging.DEBUG if _env_enabled("GHOSTRIGGER_DEBUG_LOG") else logging.INFO
 
 
 def _make_log_dir():
@@ -65,12 +77,13 @@ def _setup_logging():
     logfile = os.path.join(_LOG_DIR, f"ghostrigger_{stamp}.log")
 
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
+    level = _log_level()
+    root_logger.setLevel(level)
 
     # ── File handler: DEBUG+ (captures everything) ────────────────────────
     try:
         fh = logging.FileHandler(logfile, encoding="utf-8")
-        fh.setLevel(logging.DEBUG)
+        fh.setLevel(level)
         fh.setFormatter(logging.Formatter(
             "%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
             datefmt="%H:%M:%S"
@@ -102,7 +115,7 @@ def _flush_all_handlers():
             pass
 
 
-def _install_exception_hooks(logfile: str):
+def _install_exception_hooks(logfile: str, install_tk_hook: bool = True):
     """
     Install global exception handlers so crashes are always logged to file.
 
@@ -120,6 +133,9 @@ def _install_exception_hooks(logfile: str):
               file=sys.stderr)
 
     sys.excepthook = _handle_uncaught
+
+    if not install_tk_hook:
+        return
 
     # Tkinter swallows callback errors by default; redirect to our logger
     try:
@@ -170,7 +186,36 @@ def _install_close_hook(app, logfile: str):
     atexit.register(_atexit_flush)
 
 
-def main():
+def _parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Launch GhostRigger and optionally open a KotOR model.",
+    )
+    parser.add_argument("--gui", choices=("qt", "tk", "tkinter"),
+                        default=None,
+                        help="GUI backend to launch (default: qt). "
+                             "Use --gui=tk only for the legacy Tkinter shell "
+                             "(scheduled for removal in M3). "
+                             "Overrides GHOSTRIGGER_GUI.")
+    parser.add_argument("--mdl", help="Path to a .mdl file to open after startup.")
+    parser.add_argument("--mdx", help="Path to the matching .mdx file.")
+    parser.add_argument(
+        "--tga",
+        action="append",
+        default=[],
+        help="Path to a texture file to make available to the viewport. May be repeated.",
+    )
+    parser.add_argument("--texture", dest="tga", action="append",
+                        help="Alias for --tga.")
+    parser.add_argument("--texture-dir",
+                        help="Texture search directory to use for the startup model.")
+    parser.add_argument("--game", choices=("K1", "K2", "k1", "k2"),
+                        help="Preferred game version for the startup model.")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None):
+    args = _parse_args(sys.argv[1:] if argv is None else argv)
+
     # ── Logging setup (must happen before any imports that use logging) ───
     logfile = _setup_logging()
     log = logging.getLogger("ghostrigger.main")
@@ -181,8 +226,20 @@ def main():
     log.info(f"App directory: {_APP_DIR}")
     log.info("=" * 60)
 
-    # Install exception hooks before anything else can raise
-    _install_exception_hooks(logfile)
+    # T003 — Qt is the default GUI. Tk remains as an explicit opt-in until
+    # M3/T303 deletes it. There is NO auto-fallback: if --gui=qt fails the
+    # process dies with the Qt traceback so the user sees the real error
+    # instead of silently dropping into the legacy Tk shell.
+    gui_mode = (args.gui or os.environ.get("GHOSTRIGGER_GUI", "qt")).strip().lower()
+    if gui_mode in ("tkinter",):
+        gui_mode = "tk"
+    if gui_mode not in ("qt", "tk"):
+        log.warning("Unknown GUI mode %r; defaulting to qt.", gui_mode)
+        gui_mode = "qt"
+
+    # Install exception hooks before anything else can raise.  The Tk callback
+    # hook is only installed when the Tk app owns the process.
+    _install_exception_hooks(logfile, install_tk_hook=(gui_mode == "tk"))
 
     # Log detailed session-start diagnostics (PIL, NumPy, platform)
     try:
@@ -191,6 +248,23 @@ def main():
     except Exception as _diag_err:
         log.debug(f"diagnostics.log_session_start failed: {_diag_err}")
 
+    if gui_mode == "qt":
+        try:
+            from src.gui.qt_main_window import run as _run_qt
+
+            log.info("Qt main window starting.")
+            rc = _run_qt(_APP_DIR, startup_input=vars(args))
+            log.info("Qt main window exited cleanly.")
+            _flush_all_handlers()
+            return rc
+        except Exception:
+            log.critical("Fatal error during Qt startup:\n" + traceback.format_exc())
+            _flush_all_handlers()
+            raise
+
+    # gui_mode == "tk" — legacy path (frozen, slated for deletion in M3/T303).
+    log.warning("Launching legacy Tkinter shell (--gui=tk). "
+                "This path is frozen and will be removed in M3.")
     try:
         from src.gui.main_window import run as _run_gui, KotorModToolsApp
 
@@ -198,6 +272,17 @@ def main():
         def run():
             app = KotorModToolsApp()
             _install_close_hook(app, logfile)
+            if args.texture_dir:
+                app._texture_dir = args.texture_dir
+            elif args.tga:
+                app._texture_dir = os.path.dirname(os.path.abspath(args.tga[0]))
+            if args.mdl:
+                app.after(0, lambda: app.open_startup_model(
+                    args.mdl,
+                    mdx_path=args.mdx or "",
+                    texture_dir=getattr(app, "_texture_dir", ""),
+                    game=(args.game or "").upper(),
+                ) if hasattr(app, "open_startup_model") else None)
             log.info("Tkinter mainloop starting.")
             app.mainloop()
             log.info("Tkinter mainloop exited cleanly.")

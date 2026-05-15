@@ -572,12 +572,12 @@ def validate_animations_via_pykotor(
 
     # Try PyKotor first (installed via pip install pykotor)
     try:
-        from pykotor.resource.formats.mdl.mdl_auto import read_mdl as _pk_read_mdl
+        from .mdl_reader_wrapper import read_mdl_safe as _pk_read_mdl
         result['pykotor'] = True
 
         # PyKotor needs a file-like object or bytes
         import io
-        pk_mdl = _pk_read_mdl(io.BytesIO(mdl_bytes), io.BytesIO(mdx_bytes) if mdx_bytes else None)
+        pk_mdl = _pk_read_mdl(io.BytesIO(mdl_bytes), source_ext=io.BytesIO(mdx_bytes) if mdx_bytes else None)
 
         anims = []
         pk_anim_names = set()
@@ -719,13 +719,7 @@ def check_model_eyeball_nodes(model) -> dict:
             node_issues.append("no vertices")
             node_ok = False
 
-        if uvs:
-            bad_uvs = [(u, v) for u, v in uvs[:20]
-                       if abs(u) > 3.0 or abs(v) > 3.0]
-            if bad_uvs:
-                node_issues.append(f"extreme UVs detected ({len(bad_uvs)} samples)")
-                node_ok = False
-        else:
+        if not uvs:
             node_issues.append("no UV coordinates")
             node_ok = False
 

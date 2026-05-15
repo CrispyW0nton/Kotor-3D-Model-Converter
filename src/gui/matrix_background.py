@@ -1,3 +1,14 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  ⚠  FROZEN — LEGACY TKINTER MODULE  ⚠
+# ─────────────────────────────────────────────────────────────────────────────
+#  This file is part of the pre-Qt GhostRigger UI and is kept ONLY as a
+#  read-only reference until milestone M3 (T302) deletes it.
+#
+#  Do NOT add new features here.  Do NOT touch business logic here.
+#  All active UI work happens under qt_*.py in this package.
+#
+#  Tracking: knowledge_base/roadmap/02_roadmap_2026_05.md  (M0/T004, M3/T302)
+# ─────────────────────────────────────────────────────────────────────────────
 """
 Matrix Background Engine – animated MP4 video background for GhostRigger UI.
 
@@ -26,28 +37,63 @@ Performance notes
 
 import os
 import logging
+import sys
 import tkinter as tk
 from typing import Optional, List, Callable
 
 log = logging.getLogger(__name__)
 
+
+def _env_enabled(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw in ("1", "true", "yes", "on")
+
+
+def _matrix_enabled_by_default() -> bool:
+    """Avoid OpenCV video decoding in frozen Windows builds unless requested."""
+    if _env_enabled("GHOSTRIGGER_DISABLE_MATRIX_BG"):
+        return False
+    if getattr(sys, "frozen", False):
+        return _env_enabled("GHOSTRIGGER_MATRIX_BG")
+    return _env_enabled("GHOSTRIGGER_MATRIX_BG", default=True)
+
+
+_MATRIX_ENABLED_DEFAULT = _matrix_enabled_by_default()
+
 # ── Optional dependency imports (graceful degradation) ────────────────
 try:
-    import cv2
-    _HAS_CV2 = True
+    if _MATRIX_ENABLED_DEFAULT:
+        import cv2
+        _HAS_CV2 = True
+    else:
+        cv2 = None
+        _HAS_CV2 = False
 except ImportError:
+    cv2 = None
     _HAS_CV2 = False
 
 try:
-    from PIL import Image, ImageTk
-    _HAS_PIL = True
+    if _MATRIX_ENABLED_DEFAULT:
+        from PIL import Image, ImageTk
+        _HAS_PIL = True
+    else:
+        Image = ImageTk = None
+        _HAS_PIL = False
 except ImportError:
+    Image = ImageTk = None
     _HAS_PIL = False
 
 try:
-    import numpy as np
-    _HAS_NP = True
+    if _MATRIX_ENABLED_DEFAULT:
+        import numpy as np
+        _HAS_NP = True
+    else:
+        np = None
+        _HAS_NP = False
 except ImportError:
+    np = None
     _HAS_NP = False
 
 # ── Configuration ─────────────────────────────────────────────────────
@@ -60,7 +106,6 @@ _FRAME_INTERVAL_MS = max(1, int(1000 / _TARGET_FPS))
 _OPACITY = 0.50          # higher default so the rain is clearly visible
 _GREEN_TINT = (0, 255, 122)
 _BASE_RGB = (11, 15, 13)  # C['bg'] = "#0B0F0D"
-
 
 # ======================================================================
 #  MatrixEngine – singleton frame decoder
@@ -93,6 +138,10 @@ class MatrixEngine:
         self._current_frame: Optional['Image.Image'] = None
         self._last_w = 0
         self._last_h = 0
+        self._enabled = _matrix_enabled_by_default()
+        if not self._enabled:
+            log.info("MatrixEngine: disabled")
+            return
         self._init_capture()
 
     # ── Video capture init ────────────────────────────────────────────
@@ -141,6 +190,8 @@ class MatrixEngine:
 
     # ── Lifecycle ─────────────────────────────────────────────────────
     def start(self):
+        if not self._enabled:
+            return
         if self._running:
             return
         self._running = True
@@ -166,6 +217,13 @@ class MatrixEngine:
     # ── Frame loop ────────────────────────────────────────────────────
     def _tick(self):
         if not self._running:
+            return
+        try:
+            suspend_until = float(getattr(self._root, '_suspend_viewport_render_until', 0.0) or 0.0)
+        except Exception:
+            suspend_until = 0.0
+        if suspend_until > 0:
+            self._after_id = self._root.after(500, self._tick)
             return
         try:
             self._decode_frame()
