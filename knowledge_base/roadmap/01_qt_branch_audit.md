@@ -1,10 +1,21 @@
 # Qt Branch Audit — `qt-ghostrigger` @ `bd787f3+`
 
-**Date:** 2026-05-15
-**Branch:** `qt-ghostrigger` (head: `3448116` — post sync from LordVaderCW fork)
+**Date:** 2026-05-01 (original) — **historical reference**
+**Branch:** `qt-ghostrigger` (head at audit time: `3448116` — post sync from LordVaderCW fork; current head: `5a56dfd`+ after M0-M5 shipped)
 **Audited against:** Reallusion AccuRig demo, facial rig tutorial (`pLRxzsPAqrE`),
 Stewart Jones *Digital Creature Rigging: Wings, Tails & Tentacles* (2019, CRC Press),
 and the existing `knowledge_base/reference/specs/character_builder_spec.md`.
+
+> ⚠️ **Status note (2026-05-15):** This audit was written **before M0-M5 landed**.
+> Several entries below describe modules and gaps that have since been fixed,
+> renamed, or deleted. Notable stale entries:
+> - §1.2 "Tk import audit" — **all 8 Tk modules deleted in M3 (`10ca0d4`)**; CI guard via `tests/test_qt_only_imports.py`. See `AGENTS.md` for the deletion ledger.
+> - §2.4 references `src/autorig/grig.py` — **the file does not exist**. Symmetry/weights live in `src/autorig/accurig.py` (`BoneMask`, `SymmetryEnforcer`, `WeightPainter`).
+> - §6 pain points 1-12 — most are **closed by M0-M5**. The "stub Qt Character Builder" pain (#1) shipped in M2; "no left-rail" (#3) shipped in M2; "Tk leaks" (#4-5) closed in M3; "no bone-dot HUD" (#8), "no thumbnail" (#9), "validation banner missing" (#11) closed in M4-M5.
+>
+> For the **live status of every milestone and remaining work**, read `02_roadmap_2026_05.md` (last revised 2026-05-15). This audit is preserved unchanged below as the snapshot of conditions that produced the roadmap.
+
+---
 
 ---
 
