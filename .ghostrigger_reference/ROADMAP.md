@@ -1,9 +1,19 @@
 # GhostRigger v6.0 Iteration Roadmap
 # ====================================
 # Generated: 2026-04-13
+# Last Updated: 2026-05-15 — M5 expanded into four-mode Character Builder
+#                            (Headless / Head / Supermodel / Creature) on the
+#                            qt-ghostrigger branch. Sources: AccuRig 6-step
+#                            workflow video, facial rigging tutorial video,
+#                            Stewart Jones "Digital Creature Rigging:
+#                            Wings, Tails & Tentacles" (CRC Press, 2019).
 # Source: ghostrigger_developer_handoff_bundle.zip + reference books
-# Total Estimated Effort: 35-50 dev-days (~220 hours)
+#         + 2026-05 user-supplied refs (AccuRig video, facial rig video,
+#           Stewart Jones PDF, AccuRig HUD screenshot)
+# Total Estimated Effort: 67-82 dev-days (~536 hours)
+#                         original 35-50d + M5 expansion 32d + P5 stretch 5d
 # Execution Order: M0 -> M1 -> M2 -> M3 -> M4 -> M5 -> M6 -> M7 -> M8
+# Active Branch: qt-ghostrigger (main is not touched by M5 work)
 
 ---
 
@@ -16,7 +26,7 @@
 | M2 | Texture Wrapping Fix | HIGH | 2-3 days | 1 (UV sentinel) | Correct tiling | M0 |
 | M3 | GPU Renderer Foundation | HIGH | 7-9 days | 2 (depth, perf) | GPU viewport | M0 |
 | M4 | GPU Renderer Polish | MEDIUM | 3-4 days | 0 | Quality | M3 |
-| M5 | Character Builder | MEDIUM | 5-7 days | 0 | Dedicated workspace | M3, M1 |
+| M5 | Character Builder & Rigging Workspace | MEDIUM | 32-37 days | 0 | Four-mode workspace (Headless/Head/Supermodel/Creature), AccuRig-style step sidebar, Jones-derived wings/tails/tentacles | M3, M1 |
 | M6 | Performance Polish | MEDIUM | 3-4 days | 0 | Memory mgmt | M3 |
 | M7 | Export Pipeline Expansion | LOW | 3-4 days | 0 | glTF, batch | M1 |
 | M8 | Validation & Regression | LOW | 3-4 days | 0 | CI, golden tests | M1, M2, M3 |
