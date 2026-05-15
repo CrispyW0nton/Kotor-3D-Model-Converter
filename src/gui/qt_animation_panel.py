@@ -40,17 +40,35 @@ class QtAnimationsPanel(QtWidgets.QWidget):
             button.clicked.connect(lambda _checked=False, text=label: self._emit_action(text))
             controls.addWidget(button)
         root.addLayout(controls)
+        output_controls = QtWidgets.QHBoxLayout()
+        for label in ("Bake Animation", "Export Binary MDL"):
+            button = QtWidgets.QPushButton(label)
+            button.clicked.connect(lambda _checked=False, text=label: self._emit_action(text))
+            output_controls.addWidget(button)
+        root.addLayout(output_controls)
 
-    def load_model(self, model) -> None:
+    def load_model(self, model, select_name: str = "") -> None:
         self.listbox.clear()
         animations = getattr(model, "animations", []) or [] if model else []
         for anim in animations:
             self.listbox.addItem(getattr(anim, "name", str(anim)))
+        if select_name:
+            self.select_animation(select_name)
         self.info.setPlainText(f"{len(animations)} animation(s)")
 
     def selected_animation(self) -> str:
         item = self.listbox.currentItem()
         return item.text() if item else ""
+
+    def select_animation(self, anim_name: str) -> bool:
+        if not anim_name:
+            return False
+        matches = self.listbox.findItems(anim_name, QtCore.Qt.MatchExactly)
+        if not matches:
+            return False
+        self.listbox.setCurrentItem(matches[0])
+        self.listbox.scrollToItem(matches[0])
+        return True
 
     def _emit_action(self, action: str) -> None:
         self.animationActionRequested.emit(action, self.selected_animation())

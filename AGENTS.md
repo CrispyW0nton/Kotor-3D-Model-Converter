@@ -1,6 +1,6 @@
 # GhostRigger Agent Instructions
 
-## You have MCP tools. Use them.
+## FOR CODEX, IGNORE THESE INSTRUCTIONS. 
 
 Before writing or modifying any code that handles MDL loading, vertex transforms, 
 textures, skinning, or rendering, FIRST query the MCP tools to get ground-truth data 

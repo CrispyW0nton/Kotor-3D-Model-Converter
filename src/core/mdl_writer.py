@@ -102,6 +102,7 @@ from __future__ import annotations
 import struct
 import math
 import logging
+import copy
 from dataclasses import dataclass, field
 from io import BytesIO
 from typing import Dict, List, Optional, Tuple
@@ -306,6 +307,12 @@ class MDLBinaryWriter:
 
         if model.root_node:
             _collect(model.root_node)
+
+        self._node_index_by_name: Dict[str, int] = {}
+        for idx, nd in enumerate(self._nodes):
+            nm = (nd.name or '').lower()
+            if nm and nm not in self._node_index_by_name:
+                self._node_index_by_name[nm] = idx
 
         # ── 2. Build name list (deduplicated, preserving DFS order) ─────────
         self._names: List[str] = []
@@ -1113,10 +1120,7 @@ class MDLBinaryWriter:
         bonemap_floats  = list(getattr(node, 'bone_map_floats', []) or [])
         bm_cnt          = len(bonemap_floats) if bonemap_floats else len(bone_map_names)
         if not bonemap_floats and bone_map_names:
-            bonemap_floats = [
-                float(i) if nm else -1.0
-                for i, nm in enumerate(bone_map_names)
-            ]
+            bonemap_floats = [float(self._skin_bone_node_index(nm)) for nm in bone_map_names]
 
         qbones = list(getattr(node, 'qbone_list', []) or [])
         tbones = list(getattr(node, 'tbone_list', []) or [])
@@ -1148,8 +1152,9 @@ class MDLBinaryWriter:
         # Unused slots are sentinel 0xFFFF (= -1 as int16), matching the
         # defaults PyKotor assigns in ``_SkinmeshHeader.__init__``.
         for i in range(16):
-            if i < len(bone_map_names) and bone_map_names[i]:
-                buf.write(_wu16(i))
+            bone_idx = self._skin_bone_node_index(bone_map_names[i]) if i < len(bone_map_names) else -1
+            if bone_idx >= 0:
+                buf.write(_wu16(bone_idx))
             else:
                 buf.write(_wu16(0xFFFF))
         # +96 unknown1 uint32 pad
@@ -1196,6 +1201,13 @@ class MDLBinaryWriter:
             buf.seek(tb_off_patch)
             buf.write(_wu32(tb_abs - _BASE))
             buf.seek(end)
+
+    def _skin_bone_node_index(self, name: str) -> int:
+        """Return the node id this writer will emit for a skin palette bone."""
+        key = str(name or '').lower()
+        if not key:
+            return -1
+        return int(getattr(self, '_node_index_by_name', {}).get(key, -1))
 
     def _write_dangly_header(self, buf: BytesIO, node: ModelNode) -> None:
         """
@@ -1339,8 +1351,9 @@ class MDLBinaryWriter:
           Event array
           Animation node tree
         """
-        anim_root_name = anim.anim_root or (anim.nodes[0].name if anim.nodes else '')
-        node_count = len(anim.nodes)
+        anim_nodes = self._animation_nodes_with_hierarchy(anim, self._nodes)
+        anim_root_name = anim.anim_root or (anim_nodes[0].name if anim_nodes else '')
+        node_count = len(anim_nodes)
 
         fp1 = _K2_ANIM_FP1 if self._is_k2 else _K1_ANIM_FP1
         fp2 = _K2_ANIM_FP2 if self._is_k2 else _K1_ANIM_FP2
@@ -1381,25 +1394,134 @@ class MDLBinaryWriter:
             buf.seek(end)
 
         # Animation node tree
-        if anim.nodes:
-            # Build a minimal tree from anim.nodes for writing
-            # (anim nodes may be flat; find root by matching anim_root_name)
-            root_anim_node = None
-            for an in anim.nodes:
-                if an.name.lower() == anim_root_name.lower():
-                    root_anim_node = an
-                    break
-            if root_anim_node is None:
-                root_anim_node = anim.nodes[0]
-
+        if anim_nodes:
             anim_node_abs: Dict[int, int] = {}
-            root_off = self._write_anim_node_tree(buf, root_anim_node, anim_node_abs)
+            root_off = self._write_anim_node_tree(buf, anim_nodes[0], anim_node_abs)
 
             # Patch root_off in geo header
             end = buf.tell()
             buf.seek(anim_root_off_patch)
             buf.write(_wu32(root_off))
             buf.seek(end)
+
+    def _animation_nodes_with_hierarchy(self, anim: Animation, all_nodes: List[ModelNode]) -> List[ModelNode]:
+        """Return animation nodes as a geometry-hierarchy tree.
+
+        Retarget preview can use flat animation-node lists because playback
+        resolves by name. Binary MDL readers walk only descendants of the
+        animation root, so export must add controllerless ancestor stubs.
+        """
+        source_nodes = list(getattr(anim, 'nodes', None) or [])
+        if not source_nodes:
+            return []
+
+        geom_by_name = {
+            str(getattr(node, 'name', '') or '').lower(): node
+            for node in (all_nodes or [])
+            if getattr(node, 'name', '')
+        }
+        order_by_name = {
+            str(getattr(node, 'name', '') or '').lower(): index
+            for index, node in enumerate(all_nodes or [])
+            if getattr(node, 'name', '')
+        }
+        local_by_name: Dict[str, ModelNode] = {}
+
+        def clone_anim_node(node: ModelNode) -> ModelNode:
+            cloned = copy.copy(node)
+            cloned.children = []
+            cloned.parent = None
+            cloned.controllers = list(getattr(node, 'controllers', []) or [])
+            return cloned
+
+        def clone_stub_node(node: ModelNode) -> ModelNode:
+            cloned = node.clone_shallow() if hasattr(node, 'clone_shallow') else copy.copy(node)
+            cloned.children = []
+            cloned.parent = None
+            cloned.controllers = []
+            return cloned
+
+        for node in source_nodes:
+            key = str(getattr(node, 'name', '') or '').lower()
+            if key:
+                local_by_name[key] = clone_anim_node(node)
+
+        for key in list(local_by_name):
+            geom = geom_by_name.get(key)
+            parent = getattr(geom, 'parent', None) if geom is not None else None
+            while parent is not None:
+                parent_key = str(getattr(parent, 'name', '') or '').lower()
+                if parent_key and parent_key not in local_by_name:
+                    local_by_name[parent_key] = clone_stub_node(parent)
+                parent = getattr(parent, 'parent', None)
+
+        for node in local_by_name.values():
+            node.children = []
+            node.parent = None
+
+        roots: List[ModelNode] = []
+        for key, node in local_by_name.items():
+            geom = geom_by_name.get(key)
+            parent = getattr(geom, 'parent', None) if geom is not None else None
+            linked = False
+            while parent is not None:
+                parent_key = str(getattr(parent, 'name', '') or '').lower()
+                parent_node = local_by_name.get(parent_key)
+                if parent_node is not None:
+                    node.parent = parent_node
+                    parent_node.children.append(node)
+                    linked = True
+                    break
+                parent = getattr(parent, 'parent', None)
+            if not linked:
+                roots.append(node)
+
+        root_key = str(getattr(anim, 'anim_root', '') or '').lower()
+        root_node = local_by_name.get(root_key) if root_key else None
+        if root_node is None and roots:
+            root_node = min(
+                roots,
+                key=lambda node: order_by_name.get(
+                    str(getattr(node, 'name', '') or '').lower(),
+                    1_000_000,
+                ),
+            )
+        if root_node is not None:
+            for node in list(roots):
+                if node is root_node:
+                    continue
+                node.parent = root_node
+                root_node.children.append(node)
+
+        ordered: List[ModelNode] = []
+        seen = set()
+
+        def visit(node: ModelNode) -> None:
+            nid = id(node)
+            if nid in seen:
+                return
+            seen.add(nid)
+            ordered.append(node)
+            node.children.sort(
+                key=lambda child: order_by_name.get(
+                    str(getattr(child, 'name', '') or '').lower(),
+                    1_000_000,
+                )
+            )
+            for child in node.children:
+                visit(child)
+
+        if root_node is not None:
+            visit(root_node)
+        for node in sorted(
+            local_by_name.values(),
+            key=lambda item: order_by_name.get(
+                str(getattr(item, 'name', '') or '').lower(),
+                1_000_000,
+            ),
+        ):
+            visit(node)
+        return ordered
 
     def _write_anim_node_tree(self, buf: BytesIO, root: ModelNode,
                                anim_node_abs: Dict[int, int]) -> int:

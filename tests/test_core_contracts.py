@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
+import os
+from types import MethodType, SimpleNamespace
 
 
 def test_vertex_space_enum_contract() -> None:
@@ -187,6 +188,219 @@ def test_qt_viewport_gpu_grid_is_native_and_xray_is_overlay_only() -> None:
     event_source = inspect.getsource(QtViewportWidget.eventFilter)
     assert "QtCore.Qt.Key_X" in event_source
     assert "QtCore.Qt.AltModifier" in event_source
+
+
+def test_qt_animations_panel_can_select_loaded_animation() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_animation_panel import QtAnimationsPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtAnimationsPanel()
+    model = SimpleNamespace(
+        animations=[
+            SimpleNamespace(name="pause1"),
+            SimpleNamespace(name="walkss"),
+        ]
+    )
+
+    panel.load_model(model, select_name="walkss")
+
+    assert panel.selected_animation() == "walkss"
+    assert panel.info.toPlainText() == "2 animation(s)"
+
+
+def test_qt_animations_panel_exposes_bake_and_binary_export_actions() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_animation_panel import QtAnimationsPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtAnimationsPanel()
+    labels = {button.text() for button in panel.findChildren(QtWidgets.QPushButton)}
+
+    assert "Bake Animation" in labels
+    assert "Export Binary MDL" in labels
+
+
+def test_qt_main_window_builds_baked_animation_clip() -> None:
+    from src.core.model_data import Animation, KotorModel, ModelNode
+    from src.gui.qt_main_window import QtGhostRiggerMainWindow
+
+    root = ModelNode(name="rootdummy")
+    head = ModelNode(name="head")
+    root.children.append(head)
+    head.parent = root
+    anim_node = ModelNode(name="head")
+    anim_node.controllers = [
+        {
+            "type": 8,
+            "name": "position",
+            "columns": 3,
+            "times": [0.0, 1.0],
+            "values": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+        }
+    ]
+    model = KotorModel(name="BakeTest", root_node=root)
+    model.animations = [Animation(name="move", length=1.0, nodes=[anim_node])]
+
+    baked = QtGhostRiggerMainWindow._build_baked_animation(
+        SimpleNamespace(),
+        model,
+        "move",
+        "move_baked",
+        fps=2,
+    )
+
+    assert baked.name == "move_baked"
+    assert len(baked.nodes) == 1
+    ctrl = baked.nodes[0].controllers[0]
+    assert ctrl["type"] == 8
+    assert ctrl["times"] == [0.0, 0.5, 1.0]
+    assert ctrl["values"] == [[0.0, 0.0, 0.0], [0.5, 0.0, 0.0], [1.0, 0.0, 0.0]]
+
+
+def test_mdl_porter_animation_nodes_are_serialized_as_dummy_nodes() -> None:
+    from src.core.mdl_porter import MDLBinaryWriter
+    from src.core.model_data import ModelNode, NodeFlags
+
+    anim_node = ModelNode(name="robe", flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN))
+    anim_node.controllers = [
+        {
+            "type": 20,
+            "name": "orientation",
+            "columns": 4,
+            "times": [0.0],
+            "values": [[0.0, 0.0, 0.0, 1.0]],
+        }
+    ]
+
+    block = MDLBinaryWriter()._build_anim_node(anim_node, [anim_node], False, 168)
+
+    assert int.from_bytes(block[0:2], "little") == int(NodeFlags.HEADER)
+
+
+def test_mdl_porter_rebuilds_flat_animation_nodes_as_reachable_tree() -> None:
+    from src.core.mdl_porter import MDLBinaryWriter
+    from src.core.model_data import Animation, ModelNode
+
+    root = ModelNode(name="root")
+    pelvis = ModelNode(name="pelvis")
+    head = ModelNode(name="head")
+    root.children.append(pelvis)
+    pelvis.parent = root
+    pelvis.children.append(head)
+    head.parent = pelvis
+
+    anim_head = ModelNode(name="head")
+    anim_head.controllers = [
+        {
+            "type": 20,
+            "name": "orientation",
+            "columns": 4,
+            "times": [0.0],
+            "values": [[0.0, 0.0, 0.0, 1.0]],
+        }
+    ]
+    anim = Animation(name="look", nodes=[anim_head])
+
+    nodes = MDLBinaryWriter()._animation_nodes_with_hierarchy(anim, [root, pelvis, head])
+
+    assert [node.name for node in nodes] == ["root", "pelvis", "head"]
+    assert nodes[1].parent is nodes[0]
+    assert nodes[2].parent is nodes[1]
+    assert nodes[2].controllers == anim_head.controllers
+
+
+def test_mdl_writer_skin_palette_uses_emitted_node_indices() -> None:
+    from src.core.mdl_writer import MDLBinaryWriter
+
+    writer = MDLBinaryWriter()
+    writer._node_index_by_name = {
+        "root": 0,
+        "cape05_g": 14,
+        "rforearm_g": 27,
+    }
+
+    assert writer._skin_bone_node_index("Cape05_g") == 14
+    assert writer._skin_bone_node_index("RForeArm_G") == 27
+    assert writer._skin_bone_node_index("") == -1
+
+
+def test_mdl_writer_rebuilds_flat_animation_nodes_as_reachable_tree() -> None:
+    from src.core.mdl_writer import MDLBinaryWriter
+    from src.core.model_data import Animation, ModelNode
+
+    root = ModelNode(name="root")
+    pelvis = ModelNode(name="pelvis")
+    head = ModelNode(name="head")
+    root.children.append(pelvis)
+    pelvis.parent = root
+    pelvis.children.append(head)
+    head.parent = pelvis
+
+    anim_head = ModelNode(name="head")
+    anim_head.controllers = [
+        {
+            "type": 20,
+            "name": "orientation",
+            "columns": 4,
+            "times": [0.0],
+            "values": [[0.0, 0.0, 0.0, 1.0]],
+        }
+    ]
+    anim = Animation(name="look", nodes=[anim_head])
+
+    nodes = MDLBinaryWriter()._animation_nodes_with_hierarchy(anim, [root, pelvis, head])
+
+    assert [node.name for node in nodes] == ["root", "pelvis", "head"]
+    assert nodes[1].parent is nodes[0]
+    assert nodes[2].parent is nodes[1]
+    assert nodes[2].controllers == anim_head.controllers
+
+
+def test_binary_mdl_export_uses_skin_aware_writer() -> None:
+    import inspect
+
+    from src.gui.qt_main_window import QtGhostRiggerMainWindow
+
+    source = inspect.getsource(QtGhostRiggerMainWindow._export_mdl_binary)
+
+    assert "from src.core.mdl_writer import MDLBinaryWriter" in source
+
+
+def test_retarget_apply_promotes_target_model_for_animation_list() -> None:
+    from src.gui.qt_main_window import QtGhostRiggerMainWindow
+
+    window = SimpleNamespace()
+    target = SimpleNamespace(name="N_Bith", mdl_path="")
+    calls = []
+    window._retarget_target_model = target
+    window._current_model = SimpleNamespace(name="N_DarthMalak")
+    window._current_game = "K1"
+    window.animation_retarget_panel = SimpleNamespace(_target_game="K2")
+    window._infer_game_from_model = lambda _model: "K1"
+    window._set_model_internal = lambda model, path="": calls.append(("set", model, path))
+    window._populate_animation_library_from_current_model = lambda: calls.append(("populate",))
+    window._show_right_tab = lambda label: calls.append(("tab", label))
+    window.animations_panel = SimpleNamespace(
+        select_animation=lambda name: calls.append(("select", name))
+    )
+    window._retarget_target_label = MethodType(
+        QtGhostRiggerMainWindow._retarget_target_label,
+        window,
+    )
+
+    QtGhostRiggerMainWindow._activate_retarget_target_model(window, "walkss")
+
+    assert ("set", target, "K2:N_Bith") in calls
+    assert ("populate",) in calls
+    assert ("select", "walkss") in calls
+    assert ("tab", "Animations") in calls
 
 
 def test_gpu_vbo_splits_skin_bind_and_animated_input_space() -> None:
