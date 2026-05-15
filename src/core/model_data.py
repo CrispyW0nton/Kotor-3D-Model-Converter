@@ -133,6 +133,180 @@ PART_SLOT_LABELS: Dict[PartSlot, str] = {
     PartSlot.OTHER:         "Other",
 }
 
+
+# ──────────────────────────────────────────────────────────────
+#  Character Builder — Mode Taxonomy  (M1 / T101)
+# ──────────────────────────────────────────────────────────────
+
+class CharacterMode(_Enum):
+    """Top-level classification of a KotOR character model.
+
+    Every KotOR character/creature MDL falls into exactly one of four
+    "real" modes (HEADLESS_BODY / HEAD / SUPERMODEL / CREATURE) which
+    drive the Character Builder UI workflow, asset compatibility rules,
+    and the rigging / animation pipeline that should be applied.
+
+    Two fallback values cover the long tail:
+      * ``AMBIGUOUS``   — heuristics disagreed; user must pick a mode.
+      * ``UNSUPPORTED`` — model is not a character (door, placeable,
+        flyer, area model …) and the Character Builder will refuse it.
+
+    See ``knowledge_base/roadmap/01_qt_branch_audit.md`` §3.1 for the
+    full detection-rule spec.  Detection is implemented in
+    :func:`detect_character_mode` (M1 / T102).
+    """
+
+    # ── Real character modes ────────────────────────────────────────────
+    HEADLESS_BODY = "headless_body"   # pfbc*, pmbc*, n_* body meshes — needs head attached at headhook
+    HEAD          = "head"            # pfhc*, pmhc*, p_hk47 — head-only model, attaches to a body
+    SUPERMODEL    = "supermodel"      # Animation-bearing parent skeleton (s_male01, etc.)
+    CREATURE      = "creature"        # Self-contained non-humanoid (c_bantha, c_rancor, …)
+
+    # ── Fallback / sentinel values ──────────────────────────────────────
+    AMBIGUOUS     = "ambiguous"       # Detection rules conflict — user input required
+    UNSUPPORTED   = "unsupported"     # Not a character model (doors, placeables, flyers …)
+
+    @property
+    def display_name(self) -> str:
+        """Human-readable label for UI surfaces (badges, dropdowns, tooltips)."""
+        return _CHARACTER_MODE_DISPLAY_NAMES[self]
+
+    @property
+    def icon_key(self) -> str:
+        """Stable key used by the Qt icon manager to look up the mode's icon.
+
+        Icon files are expected under ``assets/icons/character_mode/<key>.svg``
+        (or PNG fallback).  The key is intentionally lower-case kebab-free so
+        it can be embedded in Qt object names / QSS selectors without escaping.
+        """
+        return _CHARACTER_MODE_ICON_KEYS[self]
+
+
+# Display names — separate dict so the enum stays a pure value type.
+_CHARACTER_MODE_DISPLAY_NAMES: Dict["CharacterMode", str] = {
+    CharacterMode.HEADLESS_BODY: "Headless Body",
+    CharacterMode.HEAD:          "Head",
+    CharacterMode.SUPERMODEL:    "Supermodel",
+    CharacterMode.CREATURE:      "Creature",
+    CharacterMode.AMBIGUOUS:     "Ambiguous",
+    CharacterMode.UNSUPPORTED:   "Unsupported",
+}
+
+# Icon lookup keys — consumed by src/gui/qt_properties_panel.py (T105).
+_CHARACTER_MODE_ICON_KEYS: Dict["CharacterMode", str] = {
+    CharacterMode.HEADLESS_BODY: "mode_headless_body",
+    CharacterMode.HEAD:          "mode_head",
+    CharacterMode.SUPERMODEL:    "mode_supermodel",
+    CharacterMode.CREATURE:      "mode_creature",
+    CharacterMode.AMBIGUOUS:     "mode_ambiguous",
+    CharacterMode.UNSUPPORTED:   "mode_unsupported",
+}
+
+
+# Node-name sets used by the detector (kept module-level so they can be
+# unit-tested and overridden by data-driven tools without monkey-patching
+# the function body).
+_FACIAL_BONE_NAMES: frozenset = frozenset({
+    "f_jaw_g", "f_um_g", "f_lmc_g", "f_rmc_g",
+})
+_HEAD_GEOM_NAMES: frozenset = frozenset({
+    "head_g", "necklwr_g", "neck_g",
+})
+_BODY_HOOK_NAMES: frozenset = frozenset({
+    "headhook", "rhand", "lhand_g", "camerahook",
+    "chestconjure", "handconjure", "impact_bolt",
+})
+_CREATURE_HOOK_NAMES: frozenset = frozenset({
+    "cameramaster", "impact_head", "impact_chest",
+})
+
+
+def detect_character_mode(model: "KotorModel") -> "CharacterMode":
+    """Heuristically classify a :class:`KotorModel` into a :class:`CharacterMode`.
+
+    Implements the audit §3.1 detection rules (see
+    ``knowledge_base/roadmap/01_qt_branch_audit.md`` §3.1).  The rules are
+    applied in a fixed priority order:
+
+      0. Reject models whose classification byte is neither CHARACTER nor
+         FLYER  →  :attr:`CharacterMode.UNSUPPORTED`.
+      1. Name prefix ``c_`` or ``n_*`` with a base-skeleton supermodel
+         (e.g. ``c_bantha``, ``n_wardroid``)  →  :attr:`CREATURE`.
+      2. Presence of ``talkdummy`` OR (``head_g`` + ``f_jaw_g`` without
+         ``pelvis_g``)  →  :attr:`HEAD`.
+      3. ``headhook`` + ``rhand`` without facial bones  →
+         :attr:`HEADLESS_BODY`.
+      4. Otherwise  →  :attr:`AMBIGUOUS` (older/non-standard PC base —
+         user must pick a mode in the toolbar).
+
+    Note: SUPERMODEL is a *composite* (body + head), not a single MDL, so
+    it is never auto-detected here.  The Character Builder constructs a
+    SUPERMODEL scene programmatically when the user loads a head onto a
+    body — see :class:`CharacterScene` (T103).
+
+    :param model:  Fully-loaded ``KotorModel`` instance.
+    :return:       The detected :class:`CharacterMode` value.
+    """
+    # Defensive: a stub / partial model still gets a sensible answer.
+    name = (getattr(model, "name", "") or "").lower()
+    supermodel = (getattr(model, "supermodel", "") or "").upper()
+
+    try:
+        node_iter = model.all_nodes()
+    except Exception:                                     # pragma: no cover
+        node_iter = []
+    nodes = {(getattr(n, "name", "") or "").lower() for n in node_iter}
+
+    # ── Step 0 — Classification gate ─────────────────────────────────────
+    try:
+        classification = int(getattr(model, "model_type",
+                                     int(ModelClassification.CHARACTER)))
+    except (TypeError, ValueError):
+        classification = int(ModelClassification.CHARACTER)
+    if classification not in (int(ModelClassification.CHARACTER),
+                              int(ModelClassification.FLYER)):
+        return CharacterMode.UNSUPPORTED
+
+    has_facial = bool(_FACIAL_BONE_NAMES & nodes)
+    has_head_geom = "head_g" in nodes
+    has_pelvis = "pelvis_g" in nodes
+    has_headhook = "headhook" in nodes
+    has_rhand = "rhand" in nodes
+    has_talkdummy = "talkdummy" in nodes
+    has_creature_hook = bool(_CREATURE_HOOK_NAMES & nodes)
+
+    # ── Step 1 — Creature ────────────────────────────────────────────────
+    #   • ``c_*`` prefix is the canonical signal.
+    #   • ``n_*`` prefix is shared with humanoid NPCs, so require either a
+    #     creature-style supermodel (C_*, N_WARDROID, WARDROID) OR a
+    #     creature-only hook to flip the verdict to CREATURE.
+    #   • Standalone creature-hook nodes (impact_head, cameramaster …)
+    #     without humanoid signals are also creatures.
+    _CREATURE_SUPERMODEL_PREFIXES = ("C_",)
+    _CREATURE_SUPERMODEL_NAMES = {"WARDROID", "N_WARDROID"}
+    is_creature_supermodel = (
+        any(supermodel.startswith(p) for p in _CREATURE_SUPERMODEL_PREFIXES)
+        or supermodel in _CREATURE_SUPERMODEL_NAMES
+    )
+    if name.startswith("c_"):
+        return CharacterMode.CREATURE
+    if name.startswith("n_") and is_creature_supermodel:
+        return CharacterMode.CREATURE
+    if has_creature_hook and not has_headhook and not has_facial:
+        return CharacterMode.CREATURE
+
+    # ── Step 2 — Head ────────────────────────────────────────────────────
+    if has_talkdummy or (has_head_geom and has_facial and not has_pelvis):
+        return CharacterMode.HEAD
+
+    # ── Step 3 — Headless body ───────────────────────────────────────────
+    if has_headhook and has_rhand and not has_facial:
+        return CharacterMode.HEADLESS_BODY
+
+    # ── Step 4 — Fall-through ────────────────────────────────────────────
+    return CharacterMode.AMBIGUOUS
+
+
 # ──────────────────────────────────────────────────────────────
 #  Quaternion helpers  (used by world_position)
 # ──────────────────────────────────────────────────────────────
@@ -1352,6 +1526,109 @@ class CharacterScene:
     supermodel:     str                          = ""
     dirty:          bool                         = False
     metadata:       Dict[str, Any]               = field(default_factory=dict)
+    # ── Mode taxonomy (M1 / T103) ────────────────────────────────────────────
+    # ``mode`` is the top-level CharacterMode of this scene.  It is
+    # auto-populated from the loaded models whenever a slot is assigned or
+    # cleared, but the user may override it (the toolbar mode-switcher in
+    # the Character Builder writes to this field directly).
+    #
+    # ``mode_locked`` records whether the user has manually overridden the
+    # detected mode.  When True, ``recompute_mode()`` becomes a no-op, so
+    # subsequent slot edits don't undo the user's choice.  SceneIO
+    # round-trips both fields so a saved/loaded scene preserves intent.
+    mode:        "CharacterMode"  = field(default=None)  # type: ignore[assignment]
+    mode_locked: bool             = False
+
+    def __post_init__(self) -> None:
+        # Default mode to AMBIGUOUS for empty scenes; recompute from any
+        # slots that the caller already pre-populated via the dataclass
+        # constructor (rare, but supported for testing).
+        if self.mode is None:
+            self.mode = CharacterMode.AMBIGUOUS
+        if self.slots and not self.mode_locked:
+            self.recompute_mode()
+
+    # ── Mode management (M1 / T103) ──────────────────────────────────────────
+
+    def recompute_mode(self) -> "CharacterMode":
+        """Re-derive ``self.mode`` from the currently assigned slots.
+
+        Resolution rules (consistent with audit §3.1 + M1 spec):
+
+          * Empty scene  →  ``AMBIGUOUS``.
+          * Both ``HEADLESS_BODY`` and ``HEAD_SHELL`` occupied  →
+            ``SUPERMODEL`` (composite preview — never a single-MDL mode).
+          * Exactly one model loaded  →  run :func:`detect_character_mode`
+            on it and use the result.
+          * Multiple non-composite models  →  fall back to whichever
+            single-model result is most specific (HEAD > HEADLESS_BODY >
+            CREATURE > AMBIGUOUS).
+
+        No-op when ``self.mode_locked`` is True — the user's manual
+        override always wins.
+
+        Returns the resolved :class:`CharacterMode`.
+        """
+        if self.mode_locked:
+            return self.mode
+
+        body = self.get_model(PartSlot.HEADLESS_BODY)
+        head = self.get_model(PartSlot.HEAD_SHELL)
+
+        if body is not None and head is not None:
+            self.mode = CharacterMode.SUPERMODEL
+            return self.mode
+
+        candidates: List[CharacterMode] = []
+        for entry in self.slots.values():
+            if entry.model is None:
+                continue
+            try:
+                candidates.append(detect_character_mode(entry.model))
+            except Exception:                              # pragma: no cover
+                candidates.append(CharacterMode.AMBIGUOUS)
+
+        if not candidates:
+            self.mode = CharacterMode.AMBIGUOUS
+            return self.mode
+
+        # Priority order: most specific first.
+        _PRIORITY = (
+            CharacterMode.CREATURE,
+            CharacterMode.HEAD,
+            CharacterMode.HEADLESS_BODY,
+            CharacterMode.SUPERMODEL,
+            CharacterMode.AMBIGUOUS,
+            CharacterMode.UNSUPPORTED,
+        )
+        for choice in _PRIORITY:
+            if choice in candidates:
+                self.mode = choice
+                return self.mode
+
+        self.mode = CharacterMode.AMBIGUOUS
+        return self.mode
+
+    def set_mode(self, mode: "CharacterMode", *, locked: bool = True) -> None:
+        """Manually override the scene's mode.
+
+        Parameters
+        ----------
+        mode    : The :class:`CharacterMode` to apply.
+        locked  : When True (default), subsequent slot edits will *not*
+                  recompute the mode — the user's choice sticks until
+                  :meth:`unlock_mode` is called.  When False, the override
+                  is provisional and the next ``recompute_mode()`` call
+                  will replace it.
+        """
+        self.mode = mode
+        self.mode_locked = bool(locked)
+        self.dirty = True
+
+    def unlock_mode(self) -> "CharacterMode":
+        """Clear the manual-override lock and re-derive from slots."""
+        self.mode_locked = False
+        return self.recompute_mode()
 
     # ── Slot management ──────────────────────────────────────────────────────
 
@@ -1380,12 +1657,16 @@ class CharacterScene:
         )
         self.slots[slot] = entry
         self.dirty = True
+        # Auto-update CharacterMode (no-op when user has locked the mode).
+        self.recompute_mode()
         return entry
 
     def clear_slot(self, slot: PartSlot) -> None:
         """Remove a slot assignment."""
         self.slots.pop(slot, None)
         self.dirty = True
+        # Auto-update CharacterMode (no-op when user has locked the mode).
+        self.recompute_mode()
 
     def get(self, slot: PartSlot) -> Optional[SceneSlot]:
         """Return the SceneSlot for the given slot, or None."""
@@ -1495,6 +1776,12 @@ class CharacterScene:
             "saved_at":         _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z"),
             "metadata":         dict(self.metadata),
             "slots":            slot_list,
+            # Mode taxonomy (M1 / T103) — persisted as the enum *value*
+            # string (e.g. "headless_body") so the file format stays
+            # human-readable and tolerant to future enum additions.
+            "mode":             (self.mode.value if isinstance(self.mode, CharacterMode)
+                                 else CharacterMode.AMBIGUOUS.value),
+            "mode_locked":      bool(self.mode_locked),
         }
 
     @classmethod
@@ -1544,6 +1831,20 @@ class CharacterScene:
         saved_id = data.get("scene_id", "")
         if saved_id:
             scene.scene_id = saved_id
+
+        # ── Restore CharacterMode (M1 / T103) ────────────────────────────
+        # Read both the mode and its lock state; tolerate missing fields
+        # (older .ghostrig.json files written before M1) and unknown enum
+        # values (forward compatibility — fall back to AMBIGUOUS).
+        saved_mode = data.get("mode", "")
+        if saved_mode:
+            try:
+                scene.mode = CharacterMode(saved_mode)
+            except ValueError:
+                log.warning("CharacterScene.from_dict: unknown mode '%s', "
+                            "falling back to AMBIGUOUS", saved_mode)
+                scene.mode = CharacterMode.AMBIGUOUS
+        scene.mode_locked = bool(data.get("mode_locked", False))
 
         for slot_data in data.get("slots", []):
             slot_value = slot_data.get("slot", "")

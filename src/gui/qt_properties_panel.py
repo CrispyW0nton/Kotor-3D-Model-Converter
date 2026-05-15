@@ -4,9 +4,34 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from .qt_theme import C, heading
+
+# ── CharacterMode wiring (M1 / T105) ────────────────────────────────────────
+# Imported lazily-safe: ``model_data`` is a pure-Python module but the
+# enclosing ``src.core`` package imports the pykotor loader stack at
+# import time.  We isolate the failure so the Qt panel still loads in
+# environments where pykotor is missing (the badge simply stays empty).
+try:
+    from ..core.model_data import CharacterMode, detect_character_mode
+    _CHARACTER_MODE_AVAILABLE = True
+except Exception:                                       # pragma: no cover
+    CharacterMode = None                                # type: ignore[assignment]
+    detect_character_mode = None                        # type: ignore[assignment]
+    _CHARACTER_MODE_AVAILABLE = False
+
+
+# Accent colour per CharacterMode for the badge background.  Keys must
+# match :attr:`CharacterMode.icon_key` so future icon assets line up.
+_CHARACTER_MODE_BADGE_COLORS = {
+    "mode_headless_body": "#3FA9F5",   # blue
+    "mode_head":          "#F5A623",   # amber
+    "mode_supermodel":    "#9B59B6",   # purple
+    "mode_creature":      "#27AE60",   # green
+    "mode_ambiguous":     "#7F8C8D",   # grey
+    "mode_unsupported":   "#C0392B",   # red
+}
 
 
 class QtSkeletonPanel(QtWidgets.QWidget):
@@ -144,10 +169,18 @@ class QtSkeletonPanel(QtWidgets.QWidget):
 
 class QtPropertiesPanel(QtWidgets.QWidget):
     positionApplied = QtCore.Signal(object, float, float, float)
+    # Emitted whenever the user manually overrides the CharacterMode via
+    # the override QComboBox.  Payload: the new :class:`CharacterMode`
+    # value (or ``None`` when the enum isn't importable).  The Character
+    # Builder toolbar / scene controller should connect to this and call
+    # ``scene.set_mode(mode, locked=True)`` to honour the choice.
+    characterModeChanged = QtCore.Signal(object)
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
         self._current_node = None
+        self._current_model = None
+        self._suppress_mode_signal = False
         self._build()
 
     def _build(self) -> None:
@@ -155,6 +188,9 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         root.setContentsMargins(6, 6, 6, 6)
         root.setSpacing(6)
         root.addWidget(heading("Properties"))
+
+        # ── CharacterMode badge + override (M1 / T105) ────────────────────
+        self._build_character_mode_row(root)
 
         self.text = QtWidgets.QTextEdit()
         self.text.setReadOnly(True)
@@ -185,6 +221,143 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         spin.setSingleStep(0.05)
         return spin
 
+    # ── CharacterMode UI (M1 / T105) ──────────────────────────────────────────
+
+    def _build_character_mode_row(self, parent_layout: QtWidgets.QBoxLayout) -> None:
+        """Construct the read-only badge + manual-override combo row.
+
+        Layout::
+
+            [ Mode: ] [ ●● HEADLESS BODY ●● ]   [Override ▾]
+
+        The badge displays the auto-detected mode with a colour swatch
+        from :data:`_CHARACTER_MODE_BADGE_COLORS`.  The combo lets the
+        user pin a different mode; selecting "(Auto)" clears the lock
+        and emits :attr:`characterModeChanged` with ``None``.
+        """
+        group = QtWidgets.QGroupBox("Character Mode")
+        group.setStyleSheet(f"QGroupBox {{ color:{C['gold']}; }}")
+        grid = QtWidgets.QGridLayout(group)
+        grid.setContentsMargins(6, 6, 6, 6)
+        grid.setHorizontalSpacing(6)
+
+        # ── Read-only badge ─────────────────────────────────────────────
+        self.character_mode_badge = QtWidgets.QLabel("(unknown)")
+        self.character_mode_badge.setAlignment(QtCore.Qt.AlignCenter)
+        self.character_mode_badge.setMinimumWidth(140)
+        self.character_mode_badge.setStyleSheet(
+            "QLabel { "
+            f"background:{_CHARACTER_MODE_BADGE_COLORS['mode_ambiguous']}; "
+            "color:#FFFFFF; "
+            "padding:2px 8px; "
+            "border-radius:6px; "
+            "font-weight:bold; "
+            "}"
+        )
+        grid.addWidget(QtWidgets.QLabel("Detected:"), 0, 0)
+        grid.addWidget(self.character_mode_badge, 0, 1)
+
+        # ── Manual-override combo ───────────────────────────────────────
+        self.character_mode_combo = QtWidgets.QComboBox()
+        # Index 0 is always "(Auto)" — represents "no override / use
+        # detected value".  The remaining entries enumerate CharacterMode.
+        self.character_mode_combo.addItem("(Auto)", userData=None)
+        if _CHARACTER_MODE_AVAILABLE and CharacterMode is not None:
+            for mode in CharacterMode:
+                self.character_mode_combo.addItem(mode.display_name,
+                                                  userData=mode)
+        else:
+            self.character_mode_combo.setEnabled(False)
+            self.character_mode_combo.setToolTip(
+                "CharacterMode enum unavailable (pykotor not installed?)"
+            )
+        self.character_mode_combo.currentIndexChanged.connect(
+            self._on_mode_override_changed
+        )
+        grid.addWidget(QtWidgets.QLabel("Override:"), 1, 0)
+        grid.addWidget(self.character_mode_combo, 1, 1)
+
+        parent_layout.addWidget(group)
+
+    def _update_character_mode_badge(self, mode) -> None:
+        """Refresh the badge label + colour to reflect *mode*.
+
+        Accepts a :class:`CharacterMode`, ``None`` (clears the badge),
+        or any value with a ``.display_name`` / ``.icon_key`` interface
+        for forward compatibility.
+        """
+        if mode is None:
+            self.character_mode_badge.setText("(unknown)")
+            color = _CHARACTER_MODE_BADGE_COLORS["mode_ambiguous"]
+        else:
+            display = getattr(mode, "display_name", str(mode))
+            icon_key = getattr(mode, "icon_key", "mode_ambiguous")
+            color = _CHARACTER_MODE_BADGE_COLORS.get(
+                icon_key, _CHARACTER_MODE_BADGE_COLORS["mode_ambiguous"]
+            )
+            self.character_mode_badge.setText(display.upper())
+
+        self.character_mode_badge.setStyleSheet(
+            "QLabel { "
+            f"background:{color}; "
+            "color:#FFFFFF; "
+            "padding:2px 8px; "
+            "border-radius:6px; "
+            "font-weight:bold; "
+            "}"
+        )
+
+    def set_character_mode(self, mode, *, from_scene: bool = False) -> None:
+        """Public API: update the badge + combo to reflect a known mode.
+
+        Call this whenever the underlying scene's CharacterMode changes
+        (e.g. after a slot edit, or after :meth:`CharacterScene.set_mode`).
+
+        Parameters
+        ----------
+        mode      : :class:`CharacterMode` value (or ``None`` for "unknown").
+        from_scene: When True, suppresses the :attr:`characterModeChanged`
+                    signal so the panel doesn't echo back to the scene
+                    that just notified it.
+        """
+        self._update_character_mode_badge(mode)
+        if from_scene:
+            self._suppress_mode_signal = True
+        try:
+            # Match the combo selection to the new mode; "(Auto)" stays
+            # selected when caller passes None.
+            if mode is None:
+                self.character_mode_combo.setCurrentIndex(0)
+            else:
+                for i in range(self.character_mode_combo.count()):
+                    if self.character_mode_combo.itemData(i) is mode:
+                        self.character_mode_combo.setCurrentIndex(i)
+                        break
+        finally:
+            self._suppress_mode_signal = False
+
+    def _on_mode_override_changed(self, index: int) -> None:
+        """Emit :attr:`characterModeChanged` when the user picks an entry.
+
+        Selecting "(Auto)" emits ``None`` so the scene can unlock its
+        mode and fall back to auto-detection.
+        """
+        if self._suppress_mode_signal:
+            return
+        mode = self.character_mode_combo.itemData(index)
+        # Reflect the user's choice in the badge immediately.  When mode
+        # is None ("(Auto)"), recompute from the current model so the
+        # badge stays informative.
+        if mode is None and self._current_model is not None and detect_character_mode is not None:
+            try:
+                detected = detect_character_mode(self._current_model)
+            except Exception:                              # pragma: no cover
+                detected = None
+            self._update_character_mode_badge(detected)
+        else:
+            self._update_character_mode_badge(mode)
+        self.characterModeChanged.emit(mode)
+
     def _apply_transform(self) -> None:
         node = self._current_node
         if not node:
@@ -202,8 +375,38 @@ class QtPropertiesPanel(QtWidgets.QWidget):
 
     def show_model(self, model) -> None:
         if not model:
+            self._current_model = None
             self.text.setPlainText("No model loaded.")
+            self._update_character_mode_badge(None)
+            self._suppress_mode_signal = True
+            try:
+                self.character_mode_combo.setCurrentIndex(0)
+            finally:
+                self._suppress_mode_signal = False
             return
+        self._current_model = model
+        # Auto-detect CharacterMode for the badge (panel-level preview).
+        # The owning scene/toolbar still drives the canonical mode via
+        # set_character_mode() — this is a best-effort live indicator.
+        if detect_character_mode is not None:
+            try:
+                detected = detect_character_mode(model)
+            except Exception:                              # pragma: no cover
+                detected = None
+            self._update_character_mode_badge(detected)
+            # Sync combo to the detected value (unless user already locked
+            # an override — represented by a non-zero combo index that
+            # doesn't match the detected mode; we leave that alone).
+            if self.character_mode_combo.currentIndex() == 0:
+                self._suppress_mode_signal = True
+                try:
+                    for i in range(self.character_mode_combo.count()):
+                        if self.character_mode_combo.itemData(i) is detected:
+                            # Only reflect in badge; keep combo at "(Auto)"
+                            # so the override semantics stay unambiguous.
+                            break
+                finally:
+                    self._suppress_mode_signal = False
         mesh_nodes = model.mesh_nodes() if hasattr(model, "mesh_nodes") else []
         all_nodes = model.all_nodes() if hasattr(model, "all_nodes") else []
         bone_nodes = model.bone_nodes() if hasattr(model, "bone_nodes") else []
