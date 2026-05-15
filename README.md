@@ -600,17 +600,16 @@ Other 2026-05 audits in `docs/`:
 | `debug_visualization_audit_2026_05.md` | Per-skin debug-visualisation PNG pipeline |
 | `visual_performance_audit_2026_05.md` | Frame-time and pass-count regression trace |
 | `k2_skin_transform_audit.md` | K2-specific skin transform notes (referenced from 3j) |
-| `RIGGING_ROADMAP_2026_05.md` | **Authoritative rigging / Character Builder roadmap** — four-mode workspace (Headless / Head / Supermodel / Creature), AccuRig-style step sidebar, Jones-derived wings/tails/tentacles plan |
 
 ---
 
 ## 11. Roadmap
 
-> **Rigging track:** the dedicated rigging & Character Builder plan now lives in
-> [`docs/RIGGING_ROADMAP_2026_05.md`](docs/RIGGING_ROADMAP_2026_05.md) — it
-> supersedes the "AcuRig" near-term bullet below and M5 in
-> `.ghostrigger_reference/ROADMAP.md`. The phases here remain authoritative for
-> render / export / pipeline tracks.
+> **Rigging / Character Builder track:** the four-mode workspace plan
+> (Headless / Head / Supermodel / Creature) is captured as the expanded **M5**
+> milestone in [`.ghostrigger_reference/ROADMAP.md`](.ghostrigger_reference/ROADMAP.md).
+> Sources: AccuRig 6-step workflow video, facial rigging tutorial video,
+> Stewart Jones *Digital Creature Rigging* (CRC 2019).
 
 ### In progress
 
@@ -619,13 +618,13 @@ Other 2026-05 audits in `docs/`:
 | **3j-5 visual gate** for the corrected `G5_FULL_REF` skinning pipeline | pending; production stays on F1 |
 | **CaloNord `usecomp` animation** — LBS guard clamps cross-region pull < 8 units; full fix needs Aurora `bone_remap` table generation | partially mitigated |
 | **PyKotor pipeline consolidation** — texture decode + normal-map dual paths consolidating to `pykotor.resource.formats.tpc` | ~70 % migrated |
-| **Rigging / Character Builder track** | see [`docs/RIGGING_ROADMAP_2026_05.md`](docs/RIGGING_ROADMAP_2026_05.md) — P0 mode-aware shell is the next ship |
+| **Rigging / Character Builder (M5)** | replanned 2026-05 — four-mode workspace; P0 mode-aware shell is the next ship |
 
 ### Near-term
 
 - Walkmesh editor: in-viewport `.wok` triangle select + surface-type paint brush + writeback to valid Aurora `.wok`
 - `.lyt` scene-graph room-instance editor with snap-to-grid and door / trigger / waypoint editing
-- AcuRig / Character Builder: see [`docs/RIGGING_ROADMAP_2026_05.md`](docs/RIGGING_ROADMAP_2026_05.md) for the four-mode workspace, joint-guide overlay, Jones-derived creature appendage rigs
+- AcuRig / Character Builder: four-mode workspace, joint-guide overlay, Jones-derived creature appendage rigs — full plan in [`.ghostrigger_reference/ROADMAP.md`](.ghostrigger_reference/ROADMAP.md) M5
 
 ### Long-term
 
