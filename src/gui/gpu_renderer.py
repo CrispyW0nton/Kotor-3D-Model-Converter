@@ -3851,9 +3851,11 @@ class GpuRenderer:
         self._node_cache_transparent: list = []
         self._node_cache_proxy_ids: set = set()
         self._node_cache_is_module: bool = False
-        # PERF: Interactive (low-quality) mode flag.
-        # When True, skip MSAA and use smaller readback for faster frame times.
+        # PERF: Interactive mode skips MSAA for faster frame times.
+        # Keep the default scale at full resolution; lowering it is available
+        # for emergency performance mode, but makes animated previews pixelated.
         self.interactive: bool = False
+        self.interactive_render_scale: float = 1.0
         self.show_wireframe: bool = False
         self.show_grid: bool = True
         self.cull_faces: bool = True
@@ -4161,14 +4163,14 @@ class GpuRenderer:
         if not _NUMPY or not _PIL:
             return None
 
-        # PERF-HALRES: During interactive drag, render at half resolution and
-        # upscale to final size.  This cuts readback bytes by 4× and draw work
-        # by ~4× (fewer fragments), which is the dominant cost on llvmpipe.
-        # The upscale uses PIL NEAREST (fast) for ~0.5ms overhead.
+        # PERF-SCALE: Interactive preview skips MSAA below, but stays at full
+        # resolution by default.  Lower interactive_render_scale only when the
+        # user explicitly accepts reduced quality for more FPS.
         _full_W, _full_H = W, H
-        if self.interactive and W > 200 and H > 200:
-            W = W // 2
-            H = H // 2
+        _scale = max(0.25, min(1.0, float(getattr(self, "interactive_render_scale", 1.0) or 1.0)))
+        if self.interactive and _scale < 1.0 and W > 200 and H > 200:
+            W = max(8, int(W * _scale))
+            H = max(8, int(H * _scale))
 
         try:
             t_upload = time.perf_counter()
@@ -4239,6 +4241,14 @@ class GpuRenderer:
                 fbo = self._fbo_simple
 
             fbo.use()
+            # ModernGL keeps viewport/scissor as context state. After loading a
+            # model into a newly laid-out Qt viewport, stale dimensions can leave
+            # part of the framebuffer cleared but undrawn until a window resize.
+            ctx.viewport = (0, 0, W, H)
+            try:
+                ctx.scissor = None
+            except Exception:
+                pass
             # PERF-READBACK: Clear with OPAQUE background (alpha=1.0) so that
             # the readback path can skip the expensive alpha compositing step
             # (saves ~19ms/frame at 800x600).  Keep this in sync with viewport._BG.
@@ -5521,9 +5531,9 @@ class GpuRenderer:
                 bg_img = Image.new('RGB', (W, H), (23, 25, 28))
                 bg_img.paste(rgba_img, mask=rgba_img.split()[3])
                 img = bg_img
-            # PERF-HALRES: Upscale half-resolution interactive frame to full size
+            # PERF-SCALE: Upscale reduced-resolution interactive frames smoothly.
             if self.interactive and (_full_W != W or _full_H != H):
-                img = img.resize((_full_W, _full_H), Image.NEAREST)
+                img = img.resize((_full_W, _full_H), Image.BILINEAR)
             self.perf['readback_ms'] = (time.perf_counter() - t_rb) * 1000
 
             return img

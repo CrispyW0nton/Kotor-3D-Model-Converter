@@ -2149,6 +2149,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             if source_anim is None:
                 QtWidgets.QMessageBox.information(self, "Retarget", f"Animation not found: {anim_name}")
                 return
+            apply_options = self.animation_retarget_panel.request_apply_options(
+                source_anim,
+                self._retarget_target_model,
+            )
+            if apply_options is None:
+                return
             report = self._retarget_refresh_mapping()
             new_anim, report = retarget_animation(
                 source_anim,
@@ -2157,12 +2163,30 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 config=self._retarget_config(),
                 mapping_report=report,
             )
-            self._retarget_target_model.animations.append(new_anim)
+            new_anim.name = str(apply_options["name"])
+            target_anims = getattr(self._retarget_target_model, "animations", None)
+            if target_anims is None:
+                self._retarget_target_model.animations = []
+                target_anims = self._retarget_target_model.animations
+            replaced = False
+            if apply_options.get("replace"):
+                needle = new_anim.name.lower()
+                for index, existing in enumerate(list(target_anims)):
+                    if str(getattr(existing, "name", "") or "").lower() == needle:
+                        target_anims[index] = new_anim
+                        replaced = True
+                        break
+            if not replaced:
+                target_anims.append(new_anim)
             if self._current_model is self._retarget_target_model and hasattr(self, "animations_panel"):
                 self.animations_panel.load_model(self._retarget_target_model)
+                self._populate_animation_library_from_current_model()
+            if hasattr(self, "animation_retarget_panel") and hasattr(self.animation_retarget_panel, "panel"):
+                self.animation_retarget_panel.panel.set_target_model(self._retarget_target_model)
             self.animation_retarget_panel.set_mapping_report(report)
             self._log(
-                f"Retargeted {anim_name} -> {new_anim.name} ({report.matched_count} bones)",
+                f"{'Replaced' if replaced else 'Added'} retargeted animation {new_anim.name} "
+                f"from {anim_name} ({report.matched_count} bones)",
                 "success",
             )
         except Exception as exc:

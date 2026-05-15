@@ -30,6 +30,7 @@ class QtViewportWidget(QtWidgets.QWidget):
     modelChanged = QtCore.Signal(object)
     nodeSelected = QtCore.Signal(object)
     nodeMoved = QtCore.Signal(object)
+    _texturePrewarmFinished = QtCore.Signal(object)
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
@@ -78,6 +79,12 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._render_timer = QtCore.QTimer(self)
         self._render_timer.setSingleShot(True)
         self._render_timer.timeout.connect(self._render_now)
+        self._last_rendered_canvas_size = (0, 0)
+        self._post_load_refresh_timer = QtCore.QTimer(self)
+        self._post_load_refresh_timer.setSingleShot(True)
+        self._post_load_refresh_timer.timeout.connect(self._post_load_gpu_refresh)
+        self._post_load_refresh_model_id = 0
+        self._texturePrewarmFinished.connect(self._on_texture_prewarm_finished)
         self._build()
 
     @property
@@ -249,6 +256,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._update_uv_viewer_model()
         self.modelChanged.emit(model)
         self._request_render()
+        self._queue_post_load_gpu_refresh()
 
     def set_model(self, model) -> None:
         self.load_model(model)
@@ -710,6 +718,19 @@ class QtViewportWidget(QtWidgets.QWidget):
             delay = min(delay, max(1, self._render_timer.remainingTime()))
         self._render_timer.start(delay)
 
+    def _queue_post_load_gpu_refresh(self) -> None:
+        self._post_load_refresh_model_id = id(self.model) if self.model is not None else 0
+        self._post_load_refresh_timer.start(250)
+
+    def _post_load_gpu_refresh(self) -> None:
+        if self.model is None or id(self.model) != self._post_load_refresh_model_id:
+            return
+        self._request_render()
+
+    def _on_texture_prewarm_finished(self, model_id: object) -> None:
+        if self.model is not None and id(self.model) == model_id:
+            self._queue_post_load_gpu_refresh()
+
     def _render_now(self) -> None:
         if not self._render_pending:
             return
@@ -743,6 +764,11 @@ class QtViewportWidget(QtWidgets.QWidget):
         ).copy()
         self._pixmap = QtGui.QPixmap.fromImage(qimg)
         self.canvas.setPixmap(self._pixmap)
+        rendered_size = (w, h)
+        self._last_rendered_canvas_size = rendered_size
+        current_size = (max(8, self.canvas.width()), max(8, self.canvas.height()))
+        if current_size != rendered_size:
+            self._request_render()
 
     def _render_frame(self, w: int, h: int):
         gpu_can_match_mode = (
@@ -1135,6 +1161,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         if not tex_names:
             return
         tex_cache = self._renderer.tex_cache
+        model_id = id(model)
 
         def load() -> None:
             any_loaded = False
@@ -1144,7 +1171,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 except Exception:
                     pass
             if any_loaded:
-                QtCore.QTimer.singleShot(0, self._request_render)
+                self._texturePrewarmFinished.emit(model_id)
 
         threading.Thread(target=load, daemon=True, name="qt-tex-prewarm").start()
 

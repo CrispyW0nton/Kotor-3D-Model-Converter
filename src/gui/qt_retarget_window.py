@@ -193,6 +193,12 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
     def selected_animation(self) -> str:
         return self.panel.selected_animation()
 
+    def request_apply_options(self, source_anim, target_model) -> Optional[dict]:
+        dialog = QtRetargetApplyDialog(source_anim, target_model, self)
+        if dialog.exec() != QtWidgets.QDialog.Accepted:
+            return None
+        return dialog.values()
+
     def set_source_pose(self, pose, name: str = "", time: float = 0.0, length: float = 0.0) -> None:
         self.source_viewport.set_animation_pose(pose, name=name, time=time, length=length)
 
@@ -409,3 +415,93 @@ class QtClothRetargetDialog(QtWidgets.QDialog):
             f"Target attach bones: {bone_count}\n"
             "Pick matching source and target cloth pieces, then apply cloth settings to the target."
         )
+
+
+class QtRetargetApplyDialog(QtWidgets.QDialog):
+    """Confirm how a retargeted animation should be added to the target model."""
+
+    def __init__(self, source_anim, target_model, parent: Optional[QtWidgets.QWidget] = None):
+        super().__init__(parent)
+        self.source_anim = source_anim
+        self.target_model = target_model
+        self._existing_names = {
+            str(getattr(anim, "name", "") or "").lower()
+            for anim in (getattr(target_model, "animations", []) or [])
+        }
+        self.setWindowTitle("Apply Retargeted Animation")
+        self.resize(460, 230)
+        self._build()
+        self._update_state()
+
+    def _build(self) -> None:
+        root = QtWidgets.QVBoxLayout(self)
+        root.setContentsMargins(10, 10, 10, 10)
+        root.setSpacing(8)
+
+        details = QtWidgets.QPlainTextEdit()
+        details.setReadOnly(True)
+        details.setMaximumHeight(76)
+        details.setPlainText(
+            f"Source animation: {getattr(self.source_anim, 'name', '')}\n"
+            f"Target model: {getattr(self.target_model, 'name', '')}\n"
+            f"Length: {float(getattr(self.source_anim, 'length', 0.0) or 0.0):.3f} s"
+        )
+        root.addWidget(details)
+
+        form = QtWidgets.QFormLayout()
+        form.setLabelAlignment(QtCore.Qt.AlignRight)
+        self.name_edit = QtWidgets.QLineEdit(self._default_name())
+        self.name_edit.textChanged.connect(self._update_state)
+        form.addRow("Animation name", self.name_edit)
+        root.addLayout(form)
+
+        self.replace_box = QtWidgets.QCheckBox("Replace existing animation with this name")
+        self.replace_box.toggled.connect(self._update_state)
+        root.addWidget(self.replace_box)
+
+        self.message = QtWidgets.QLabel("")
+        self.message.setWordWrap(True)
+        root.addWidget(self.message)
+
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        self.ok_button = buttons.button(QtWidgets.QDialogButtonBox.Ok)
+        self.ok_button.setText("Add Animation")
+        root.addWidget(buttons)
+
+    def _default_name(self) -> str:
+        base = str(getattr(self.source_anim, "name", "") or "animation").strip() or "animation"
+        if base.lower() not in self._existing_names:
+            return base
+        suffix_base = f"{base}_retarget"
+        if suffix_base.lower() not in self._existing_names:
+            return suffix_base
+        index = 2
+        while f"{suffix_base}{index}".lower() in self._existing_names:
+            index += 1
+        return f"{suffix_base}{index}"
+
+    def _update_state(self) -> None:
+        name = self.name_edit.text().strip()
+        exists = name.lower() in self._existing_names if name else False
+        valid = bool(name) and (not exists or self.replace_box.isChecked())
+        self.replace_box.setEnabled(bool(name and exists))
+        self.ok_button.setEnabled(valid)
+        if not name:
+            self.message.setText("Enter a name for the animation.")
+        elif exists and not self.replace_box.isChecked():
+            self.message.setText("That animation already exists on the target model.")
+        elif exists:
+            self.message.setText("The existing animation will be replaced on the target model.")
+        else:
+            self.message.setText("The animation will be added to the target model.")
+
+    def values(self) -> dict:
+        name = self.name_edit.text().strip()
+        return {
+            "name": name,
+            "replace": name.lower() in self._existing_names and self.replace_box.isChecked(),
+        }
