@@ -1065,6 +1065,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.animation_library_panel = QtAnimationLibraryPanel(self)
         self.animation_library_panel.libraryActionRequested.connect(self._handle_animation_library_action)
         self.animation_retarget_window = QtAnimationRetargetWindow(self)
+        self.animation_retarget_window.set_navigation_profile(
+            self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
+        )
         self.animation_retarget_window.sourceCurrentRequested.connect(self._retarget_set_source_current)
         self.animation_retarget_window.targetCurrentRequested.connect(self._retarget_set_target_current)
         self.animation_retarget_window.sourceLibraryRequested.connect(
@@ -2693,6 +2696,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return
         try:
             window.set_texture_dir(self._texture_dir)
+            window.set_navigation_profile(
+                self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
+            )
             if self._retarget_source_model is not None:
                 window.set_source_model(self._retarget_source_model)
             if self._retarget_target_model is not None:
@@ -3207,6 +3213,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         viewport = getattr(self, "viewport", None)
         if viewport is not None:
             viewport.set_navigation_profile(
+                normalize_viewport_navigation_profile(
+                    values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
+                )
+            )
+        retarget_window = getattr(self, "animation_retarget_window", None)
+        if retarget_window is not None:
+            retarget_window.set_navigation_profile(
                 normalize_viewport_navigation_profile(
                     values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
                 )

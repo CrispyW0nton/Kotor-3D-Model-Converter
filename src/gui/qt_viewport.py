@@ -62,6 +62,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._uv_viewer: Optional[QtUVViewerWindow] = None
         self._use_gpu = True
         self._gpu_renderer: Optional[GpuRenderer] = None
+        self._owns_gpu_renderer = True
         self._gpu_tex_preload_model_id = 0
         self._navigation_profile = DEFAULT_VIEWPORT_NAVIGATION_PROFILE
         self._xray_mode = False
@@ -154,9 +155,11 @@ class QtViewportWidget(QtWidgets.QWidget):
 
         self.canvas = QtWidgets.QLabel("No model loaded")
         self.canvas.setAlignment(QtCore.Qt.AlignCenter)
-        self.canvas.setMinimumSize(480, 320)
+        self.canvas.setMinimumSize(180, 140)
+        self.canvas.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.canvas.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.canvas.setMouseTracking(True)
+        self.canvas.setScaledContents(False)
         self.canvas.setStyleSheet(
             "background:#17191c; color:#8f9aaa; border:1px solid #34383f;"
         )
@@ -252,6 +255,10 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def set_dual_viewport_mode(self, enabled: bool) -> None:
         self._dual_viewport_mode = bool(enabled)
+
+    def set_shared_gpu_renderer(self, renderer: Optional[GpuRenderer]) -> None:
+        self._gpu_renderer = renderer
+        self._owns_gpu_renderer = renderer is None
 
     def set_game_library(self, library, game_tag: str = "K1") -> None:
         self._renderer.tex_cache.set_game_library(library, game_tag)
@@ -862,10 +869,11 @@ class QtViewportWidget(QtWidgets.QWidget):
             label = f"{fps:4.0f} fps  {self._last_render_ms:4.0f} ms  {mode}"
             text_w = self._renderer._hud_text_width(label) if hasattr(self._renderer, "_hud_text_width") else len(label) * 7
             x = max(8, w - text_w - 20)
+            y = max(8, h - 28)
             self._renderer._draw_hud_pill(
                 draw,
                 x,
-                8,
+                y,
                 label,
                 fill=(18, 22, 27),
                 fg=(156, 232, 184),

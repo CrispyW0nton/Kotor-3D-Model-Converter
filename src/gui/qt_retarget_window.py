@@ -7,7 +7,9 @@ from typing import Optional
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from .qt_animation_panel import QtAnimationRetargetPanel
+from .qt_gpu_renderer import GpuRenderer
 from .qt_viewport import QtViewportWidget
+from .viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 
 
 class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
@@ -30,6 +32,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self._resource_manager = None
         self._source_game = "K1"
         self._target_game = "K1"
+        self._navigation_profile = DEFAULT_VIEWPORT_NAVIGATION_PROFILE
         self._build_actions()
         self._build_menu()
         self._build_statusbar()
@@ -96,8 +99,13 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         root.setChildrenCollapsible(False)
         self.source_viewport = QtViewportWidget(self)
         self.target_viewport = QtViewportWidget(self)
+        self._shared_gpu_renderer = GpuRenderer()
+        self.source_viewport.set_shared_gpu_renderer(self._shared_gpu_renderer)
+        self.target_viewport.set_shared_gpu_renderer(self._shared_gpu_renderer)
         self.source_viewport.set_dual_viewport_mode(True)
         self.target_viewport.set_dual_viewport_mode(True)
+        self.source_viewport.set_navigation_profile(self._navigation_profile)
+        self.target_viewport.set_navigation_profile(self._navigation_profile)
 
         self.panel = QtAnimationRetargetPanel(self)
         self.panel.sourceCurrentRequested.connect(self.sourceCurrentRequested.emit)
@@ -139,6 +147,13 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self._resource_manager = manager
         self._source_game = (game_tag or self._source_game or "K1").upper()
         self._target_game = (game_tag or self._target_game or "K1").upper()
+
+    def set_navigation_profile(self, profile: object) -> None:
+        self._navigation_profile = profile or DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+        if hasattr(self, "source_viewport"):
+            self.source_viewport.set_navigation_profile(self._navigation_profile)
+        if hasattr(self, "target_viewport"):
+            self.target_viewport.set_navigation_profile(self._navigation_profile)
 
     def set_source_resource_context(self, manager, game_tag: str = "K1") -> None:
         self._resource_manager = manager
