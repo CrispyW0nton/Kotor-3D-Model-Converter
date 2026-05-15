@@ -8,18 +8,14 @@ import sys
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 # ── Hidden imports ────────────────────────────────────────────────────────
-# tkinter and its sub-modules are not auto-detected on all platforms
+# M3/T304 — Qt is the only supported front-end. The previous tkinter +
+# PIL._tkinter_finder hidden-imports block was removed when the Tk
+# launcher was deleted in M3/T302+T303.
 hiddenimports = [
     'PySide6',
     'PySide6.QtCore',
     'PySide6.QtGui',
     'PySide6.QtWidgets',
-    'tkinter',
-    'tkinter.ttk',
-    'tkinter.filedialog',
-    'tkinter.messagebox',
-    'tkinter.colorchooser',
-    'PIL._tkinter_finder',
 ]
 
 # Collect every sub-module under src/ individually so a single broken
@@ -142,6 +138,15 @@ a = Analysis(
         'unittest',
         'pydantic',
         'mcp',
+        # M3/T304 — actively exclude tkinter so PyInstaller doesn't auto-pull
+        # the stdlib Tcl/Tk runtime into the bundle (~5-10 MB on Windows).
+        # GhostRigger no longer imports tkinter from any module.
+        'tkinter',
+        'tkinter.ttk',
+        'tkinter.filedialog',
+        'tkinter.messagebox',
+        'tkinter.colorchooser',
+        'PIL._tkinter_finder',
         # Exclude assimp libs if not importable so PyInstaller doesn't crash
         *( [] if _pyassimp_available else ['pyassimp'] ),
         *( [] if _assimp_py_available else ['assimp_py'] ),

@@ -3,12 +3,12 @@
 #
 #  This module contains the rasterizer, ArcBallCamera, FrameRenderer,
 #  TextureCache, TPC/DXT decoders, and TXI helpers. It MUST NOT import
-#  tkinter. Tk-coupled widgets live in viewport_tk.py.
+#  tkinter. The legacy Tk widgets that previously lived in
+#  viewport_tk.py were deleted in M3/T302.
 #
 #  Consumers (Qt viewport, MCP tools, tests) import from this module
-#  directly. The legacy src.gui.viewport module remains as a
-#  backward-compatibility shim that re-exports everything from here
-#  plus the Tk classes from viewport_tk.
+#  directly. The pre-M3 ``src.gui.viewport`` shim that used to re-export
+#  this module plus the Tk classes was deleted in M3/T302.
 # ─────────────────────────────────────────────────────────────────────
 """
 3D Viewport Widget – GhostRigger-K1-K2
@@ -51,7 +51,7 @@ Features
 """
 
 import math, os, logging, struct, threading, time as _time_mod
-# (Tk import removed in T001 split; see src/gui/viewport_tk.py)
+# (Tk import removed in T001 split; viewport_tk.py itself was deleted in M3/T302.)
 
 _GR_VIEWPORT_PROBE = os.environ.get('GHOSTRIGGER_VIEWPORT_PROBE', '').strip().lower() in ('1', 'true', 'yes', 'on')
 _GR_VIEWPORT_PROBE_SEEN: set = set()
@@ -100,7 +100,7 @@ def _gr_probe(tag: str, node, wp, wo, is_id: bool) -> None:
     except Exception:
         pass  # probe must never break rendering
 
-# (Tk import removed in T001 split; see src/gui/viewport_tk.py)
+# (Tk import removed in T001 split; viewport_tk.py itself was deleted in M3/T302.)
 from typing import Optional, Dict, List, Tuple
 try:
     from ..core.model_data import (KotorModel, ModelNode, NodeFlags, _quat_rotate, _quat_conjugate,

@@ -306,7 +306,7 @@ async def handle_render_model(arguments: Dict[str, Any]) -> Dict[str, Any]:
             sys.path.insert(0, _project_root)
 
         from src.gui.gpu_renderer import GpuRenderer, render_model_autoframe  # noqa: PLC0415
-        from src.gui.viewport import ArcBallCamera, _load_tpc_bytes, _is_tpc_data  # noqa: PLC0415
+        from src.gui.viewport_core import ArcBallCamera, _load_tpc_bytes, _is_tpc_data  # noqa: PLC0415
 
         # ── Build texture dict from model nodes + game library ─────────────────
         # Collect all texture names referenced by the model
