@@ -3221,6 +3221,17 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._log(f"Could not launch legacy Tk workbench: {exc}", "error")
 
     def _open_qt_character_builder_window(self):
+        """Open (or raise) the M2 AccuRig-style Character Builder window.
+
+        Entry points (all wired here per M2/T206):
+          * Tools → Character Builder (New Window)…
+          * Main toolbar Character Builder button
+          * Keyboard shortcut Ctrl+B
+
+        The window is created lazily on first access and reused for the
+        rest of the session — closing it merely hides it so QSettings
+        (T207) persists window/dock state between opens.
+        """
         if self._character_builder_window is None:
             self._character_builder_window = QtCharacterBuilderWindow(self)
         self._character_builder_window.show()
