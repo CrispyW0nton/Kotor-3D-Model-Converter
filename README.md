@@ -51,7 +51,7 @@ goals:
    compiling/decompiling MDL — without dropping out to MDLOps or the CLI.
 3. **Reproducible audits.** When a render bug is found, the project's
    "audit-first, document-then-fix" workflow produces a JSONL trace under
-   `diagnostics/`, a Markdown audit doc under `docs/`, and an env-gated
+   `diagnostics/`, a Markdown audit doc under `knowledge_base/audits/`, and an env-gated
    diagnostic formula in code so the fix can be validated numerically before
    it is allowed near production. See section 10.
 
@@ -494,10 +494,13 @@ Kotor-3D-Model-Converter/
 │   └── dump_qbone_*.py                  # 3j-1 → 3j-4 audit reproducers
 │
 ├── templates/                    # gr_body / gr_head MDL templates (Character Builder)
-├── docs/                         # audit Markdown (3j skinning, lightmap, GPU transparency, ...)
+├── knowledge_base/               # consolidated docs (roadmap, audits, CLI, reference specs)
+│   ├── roadmap/                  # active Qt-branch roadmap (2026-05, Character Builder)
+│   ├── audits/2026-05/           # active audit Markdown (3j skinning, lightmap, GPU transparency, ...)
+│   ├── cli/                      # CLI reference
+│   └── reference/                # historical specs, deliverables, protocol, mandatory checklist
 ├── exports/                      # tracked: scan results / failure analysis only (rest gitignored)
 ├── assets/                       # icons + screenshots used by the UI and README
-├── .ghostrigger_reference/       # internal reference docs (build guide, char builder spec, ...)
 └── .cursor/                      # Cursor rules (project identity, cleanup policy)
 ```
 
@@ -579,7 +582,7 @@ Animated K1/K2 creatures (humanoids and beasts) are under an
 **audit-first, document-then-fix** review. Production rendering remains pinned
 to the **3f baseline** (F1) until the visual-gate stage clears. The full
 ground-truth findings are tracked in
-[`docs/skinning_parity_audit_2026_05.md`](docs/skinning_parity_audit_2026_05.md).
+[`knowledge_base/audits/2026-05/skinning_parity.md`](knowledge_base/audits/2026-05/skinning_parity.md).
 
 | Step | Status | Result |
 |------|--------|--------|
@@ -589,17 +592,17 @@ ground-truth findings are tracked in
 | **3j-4** env-gated G5 implementation + full numerical proofs | complete | 2 546 / 2 546 weighted vertices on `c_drexlf` / `c_brith` / `c_bomabeast` collapse under G5; 121 / 121 in-renderer palette slots bit-exact to offline replay |
 | **3j-5** joint visual gate + 50-model render-diff | pending | Final ship gate before production flip |
 
-Other 2026-05 audits in `docs/`:
+Other 2026-05 audits in `knowledge_base/audits/2026-05/`:
 
 | File | Subject |
 |------|---------|
-| `lightmap_composite_audit_2026_05.md` | Lightmap composite blend modes (multiplicative vs additive) |
-| `lightmap_data_audit_2026_05.md` | Lightmap UV layout and data parity |
-| `gl_state_recorder_audit_2026_05.md` | GL state recorder used by GPU diagnostics |
-| `gpu_transparency_depth_audit_2026_05.md` | Transparency / depth-test ordering |
-| `debug_visualization_audit_2026_05.md` | Per-skin debug-visualisation PNG pipeline |
-| `visual_performance_audit_2026_05.md` | Frame-time and pass-count regression trace |
-| `k2_skin_transform_audit.md` | K2-specific skin transform notes (referenced from 3j) |
+| `lightmap_composite.md` | Lightmap composite blend modes (multiplicative vs additive) |
+| `lightmap_data.md` | Lightmap UV layout and data parity |
+| `gl_state_recorder.md` | GL state recorder used by GPU diagnostics |
+| `gpu_transparency_depth.md` | Transparency / depth-test ordering |
+| `debug_visualization.md` | Per-skin debug-visualisation PNG pipeline |
+| `visual_performance.md` | Frame-time and pass-count regression trace |
+| `../k2_skin_transform.md` | K2-specific skin transform notes (referenced from 3j) |
 
 ---
 
@@ -666,7 +669,7 @@ project rule in `AGENTS.md`:
 1. Use the MCP tools to confirm the bug exists against PyKotor ground truth.
 2. Ship a diagnostic dump script (`scripts/dump_*.py`) that reproduces the
    numerical evidence.
-3. Add an audit Markdown under `docs/` documenting the finding.
+3. Add an audit Markdown under `knowledge_base/audits/` documenting the finding.
 4. Land any fix behind an env switch (see section 9), keep production on
    the baseline until the visual-gate suite clears.
 

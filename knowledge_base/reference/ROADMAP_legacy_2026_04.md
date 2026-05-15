@@ -59,7 +59,7 @@
 | T003 | Audit mesh_converter.py export path | DONE | FBX ASCII fallback identified |
 | T004 | Audit gpu_renderer.py state | DONE | Exists but not primary path |
 | T005 | Remove obsolete clutter | DONE | Legacy diagnostics and generated junk removed; current MCP test suite retained |
-| T006 | Set up knowledge base | DONE | .ghostrigger_reference/ |
+| T006 | Set up knowledge base | DONE | knowledge_base/reference/ |
 
 ### Remaining M0 Task
 **T001 - Clone Reference Repos**: Must be done before M1 coding begins.
@@ -80,7 +80,7 @@ git clone --depth 1 https://github.com/facebookincubator/FBX2glTF.git .reference
 ## M1: FBX Export Fix (Deliverable 1)
 **Status**: NOT STARTED
 **File**: `src/converters/mesh_converter.py`
-**Knowledge**: `.ghostrigger_reference/knowledge_base/d1_fbx_export.md`
+**Knowledge**: `knowledge_base/reference/deliverables/d1_fbx_export.md`
 **Depends on**: M0 (reference repos cloned)
 **Critical path**: T101 -> T102 -> T103 -> T105 -> T106 -> T107
 
@@ -118,7 +118,7 @@ test(fbx): add ufbx round-trip validation tests (T107)
 ## M2: Texture Wrapping Fix (Deliverable 2)
 **Status**: NOT STARTED
 **File**: `src/gui/viewport.py`
-**Knowledge**: `.ghostrigger_reference/knowledge_base/d2_texture_wrapping.md`
+**Knowledge**: `knowledge_base/reference/deliverables/d2_texture_wrapping.md`
 **Depends on**: M0
 **Can run in parallel with M1**
 
@@ -149,7 +149,7 @@ refactor(uv): remove module-specific UV workaround (T204)
 ## M3: GPU Renderer Foundation (Deliverable 3)
 **Status**: NOT STARTED
 **File**: `src/gui/gpu_renderer.py`, `src/gui/viewport.py`
-**Knowledge**: `.ghostrigger_reference/knowledge_base/d3_gpu_renderer.md`
+**Knowledge**: `knowledge_base/reference/deliverables/d3_gpu_renderer.md`
 **Depends on**: M0
 **Can start in parallel with M1/M2 but needs M2 for texture params**
 
@@ -204,7 +204,7 @@ feat(gpu): add skeleton bone overlay rendering (T309)
 ## M5: Character Builder (Deliverable 4)
 **Status**: NOT STARTED
 **Depends on**: M3 (GPU viewport), M1 (export)
-**Knowledge**: `.ghostrigger_reference/knowledge_base/d4_character_builder.md`
+**Knowledge**: `knowledge_base/reference/deliverables/d4_character_builder.md`
 
 | Task | Description | Hours | Status |
 |------|------------|-------|--------|
@@ -222,7 +222,7 @@ feat(gpu): add skeleton bone overlay rendering (T309)
 ## M6: Performance Polish (Deliverable 5)
 **Status**: NOT STARTED
 **Depends on**: M3 (GPU renderer)
-**Knowledge**: `.ghostrigger_reference/knowledge_base/d5_performance.md`
+**Knowledge**: `knowledge_base/reference/deliverables/d5_performance.md`
 
 | Task | Description | Hours | Status |
 |------|------------|-------|--------|

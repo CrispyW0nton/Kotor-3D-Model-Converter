@@ -104,9 +104,9 @@ kotorblender_src/
 .reference_repos/
 
 # ── Reference knowledge base (books/images/spreadsheets too large for git) ───
-.ghostrigger_reference/books/
-.ghostrigger_reference/images/
-.ghostrigger_reference/spreadsheets/
+knowledge_base/reference/books/
+knowledge_base/reference/images/
+knowledge_base/reference/spreadsheets/
 
 # ── Demo / capture artefacts ──────────────────────────────────────────────────
 *.mp4

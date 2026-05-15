@@ -368,7 +368,7 @@ arguments**. They hard-code the three audit creatures
 the top of each file to point at different models.
 
 Each script's purpose is documented in
-[`docs/skinning_parity_audit_2026_05.md`](skinning_parity_audit_2026_05.md);
+[`knowledge_base/audits/2026-05/skinning_parity.md`](../audits/2026-05/skinning_parity.md);
 the table here covers what each one writes and what numerical fact it
 proves.
 

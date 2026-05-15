@@ -8,32 +8,33 @@
 
 ### Step 1: Read the Knowledge Base Index
 ```
-cat .ghostrigger_reference/knowledge_base/INDEX.md
+cat knowledge_base/reference/INDEX.md
 ```
 
 ### Step 2: Identify which deliverable your task falls under
-- D1: FBX Export Fix -> read `knowledge_base/d1_fbx_export.md`
-- D2: Texture Wrapping Fix -> read `knowledge_base/d2_texture_wrapping.md`
-- D3: GPU Renderer Foundation -> read `knowledge_base/d3_gpu_renderer.md`
-- D4: Character Builder -> read `knowledge_base/d4_character_builder.md`
-- D5: Performance & Memory -> read `knowledge_base/d5_performance.md`
-- D6: Module Editor & Scene -> read `knowledge_base/d6_module_scene.md`
+- D1: FBX Export Fix -> read `knowledge_base/reference/deliverables/d1_fbx_export.md`
+- D2: Texture Wrapping Fix -> read `knowledge_base/reference/deliverables/d2_texture_wrapping.md`
+- D3: GPU Renderer Foundation -> read `knowledge_base/reference/deliverables/d3_gpu_renderer.md`
+- D4: Character Builder -> read `knowledge_base/reference/deliverables/d4_character_builder.md`
+- D5: Performance & Memory -> read `knowledge_base/reference/deliverables/d5_performance.md`
+- D6: Module Editor & Scene -> read `knowledge_base/reference/deliverables/d6_module_scene.md`
 
 ### Step 3: Check the cross-reference map
 ```
-cat .ghostrigger_reference/knowledge_base/cross_reference_map.md
+cat knowledge_base/reference/cross_reference_map.md
 ```
 Find the feature you're implementing. Note which reference repos and book sections apply.
 
 ### Step 4: Check the book knowledge extract
 ```
-cat .ghostrigger_reference/knowledge_base/book_extracts.md
+cat knowledge_base/reference/book_extracts.md
 ```
 Find the relevant section. Make sure your approach aligns with established principles.
 
 ### Step 5: Check the roadmap for task dependencies
 ```
-cat .ghostrigger_reference/ROADMAP.md
+cat knowledge_base/roadmap/02_roadmap_2026_05.md   # current Qt-branch roadmap
+cat knowledge_base/reference/ROADMAP_legacy_2026_04.md   # historical (pre-Qt) roadmap
 ```
 Verify your task's prerequisites are complete and you're not skipping ahead.
 

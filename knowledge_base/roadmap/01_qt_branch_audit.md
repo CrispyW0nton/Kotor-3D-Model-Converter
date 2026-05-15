@@ -4,7 +4,7 @@
 **Branch:** `qt-ghostrigger` (head: `3448116` — post sync from LordVaderCW fork)
 **Audited against:** Reallusion AccuRig demo, facial rig tutorial (`pLRxzsPAqrE`),
 Stewart Jones *Digital Creature Rigging: Wings, Tails & Tentacles* (2019, CRC Press),
-and the existing `.ghostrigger_reference/docs/character_builder_spec.md`.
+and the existing `knowledge_base/reference/specs/character_builder_spec.md`.
 
 ---
 
@@ -98,7 +98,7 @@ qt_texture_panel
 | `src/core/creature_appearance.py` | 2,161 | UTC → appearance.2da → body+head model resolution | Working |
 | `src/core/model_data.py` (PartSlot, CharacterScene) | — | Canonical scene model with 11 PartSlots | Working |
 
-**Gap:** the Qt window today is essentially five tabs of buttons (Assembly / Selection / Transform / Rig / Export) with no viewport, no asset browser, no symmetry tools, no validation HUD, no model-type awareness. The spec in `.ghostrigger_reference/docs/character_builder_spec.md` is the source of truth for what it *should* be — we just haven't built it.
+**Gap:** the Qt window today is essentially five tabs of buttons (Assembly / Selection / Transform / Rig / Export) with no viewport, no asset browser, no symmetry tools, no validation HUD, no model-type awareness. The spec in `knowledge_base/reference/specs/character_builder_spec.md` is the source of truth for what it *should* be — we just haven't built it.
 
 ### 2.3 Retarget workbench (already shipped)
 
@@ -287,7 +287,7 @@ The book is 3ds-Max-specific, but the principles map cleanly. Highest-value take
 | 9 | Mini-thumbnail inset missing | LOW | viewport extension |
 | 10 | Symmetry toggle present in `grig.py` but not exposed in any Qt panel | MEDIUM | rig panel wiring |
 | 11 | Validation service exists but no banner UI to surface it | MEDIUM | bottom-strip widget |
-| 12 | Old `.ghostrigger_reference/ROADMAP.md` predates Qt migration; M5 Character Builder bullets are obsolete | HIGH | superseded by this doc |
+| 12 | Old `knowledge_base/reference/ROADMAP_legacy_2026_04.md` predates Qt migration; M5 Character Builder bullets are obsolete | HIGH | superseded by this doc |
 
 ---
 

@@ -7,12 +7,13 @@
 
 ### 1. Read the mandatory checklist
 ```bash
-cat .ghostrigger_reference/MANDATORY_CHECKLIST.md
+cat knowledge_base/reference/MANDATORY_CHECKLIST.md
 ```
 
 ### 2. Identify the task in the roadmap
 ```bash
-cat .ghostrigger_reference/ROADMAP.md
+cat knowledge_base/roadmap/02_roadmap_2026_05.md            # current Qt-branch roadmap
+cat knowledge_base/reference/ROADMAP_legacy_2026_04.md      # legacy pre-Qt roadmap (T001-T804)
 ```
 Find the task ID (T001-T804). Note:
 - What milestone it belongs to
@@ -22,12 +23,12 @@ Find the task ID (T001-T804). Note:
 
 ### 3. Read the deliverable knowledge file
 ```bash
-cat .ghostrigger_reference/knowledge_base/d<N>_<name>.md
+cat knowledge_base/reference/deliverables/d<N>_<name>.md
 ```
 
 ### 4. Check the cross-reference map
 ```bash
-cat .ghostrigger_reference/knowledge_base/cross_reference_map.md
+cat knowledge_base/reference/cross_reference_map.md
 ```
 Identify:
 - Which reference repos to consult
@@ -36,7 +37,7 @@ Identify:
 
 ### 5. Consult book extracts for the relevant principle
 ```bash
-cat .ghostrigger_reference/knowledge_base/book_extracts.md
+cat knowledge_base/reference/book_extracts.md
 ```
 Find the section that matches your task. Verify your planned approach aligns.
 

@@ -6,7 +6,7 @@ This folder contains the post-Qt-migration roadmap for GhostRigger, derived from
 - Facial rigging tutorial (`pLRxzsPAqrE`)
 - Stewart Jones, *Digital Creature Rigging: Wings, Tails & Tentacles* (CRC Press, 2019)
 - A full audit of the `qt-ghostrigger` branch as of commit `3448116`
-- The pre-existing `.ghostrigger_reference/docs/character_builder_spec.md`
+- The pre-existing `knowledge_base/reference/specs/character_builder_spec.md`
 
 ## Files
 
@@ -31,4 +31,4 @@ This folder contains the post-Qt-migration roadmap for GhostRigger, derived from
 
 `M0 → M1 → M2 → M4 → M5`  (~22-30 dev-days to a usable Headless Body workflow in the new shell)
 
-Supersedes `.ghostrigger_reference/ROADMAP.md` for the Qt branch. The older roadmap is kept for historical reference only.
+Supersedes `knowledge_base/reference/ROADMAP_legacy_2026_04.md` for the Qt branch. The older roadmap is kept for historical reference only.

@@ -1,6 +1,6 @@
 # GL State Recorder Audit - 2026-05-06
 
-This is the Work item 2b follow-up to `docs/gpu_transparency_depth_audit_2026_05.md`.
+This is the Work item 2b follow-up to `knowledge_base/audits/2026-05/gpu_transparency_depth.md`.
 
 ## Scope
 
