@@ -1,3 +1,14 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  ⚠  FROZEN — LEGACY TKINTER MODULE  ⚠
+# ─────────────────────────────────────────────────────────────────────────────
+#  This file is part of the pre-Qt GhostRigger UI and is kept ONLY as a
+#  read-only reference until milestone M3 (T302) deletes it.
+#
+#  Do NOT add new features here.  Do NOT touch business logic here.
+#  All active UI work happens under qt_*.py in this package.
+#
+#  Tracking: knowledge_base/roadmap/02_roadmap_2026_05.md  (M0/T004, M3/T302)
+# ─────────────────────────────────────────────────────────────────────────────
 """
 GhostRigger — Blueprint Editor Panel (UTC / UTP / UTD)
 

@@ -190,8 +190,12 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Launch GhostRigger and optionally open a KotOR model.",
     )
-    parser.add_argument("--gui", choices=("auto", "qt", "tk", "tkinter"),
-                        help="GUI backend to launch. Overrides GHOSTRIGGER_GUI.")
+    parser.add_argument("--gui", choices=("qt", "tk", "tkinter"),
+                        default=None,
+                        help="GUI backend to launch (default: qt). "
+                             "Use --gui=tk only for the legacy Tkinter shell "
+                             "(scheduled for removal in M3). "
+                             "Overrides GHOSTRIGGER_GUI.")
     parser.add_argument("--mdl", help="Path to a .mdl file to open after startup.")
     parser.add_argument("--mdx", help="Path to the matching .mdx file.")
     parser.add_argument(
@@ -222,13 +226,20 @@ def main(argv: list[str] | None = None):
     log.info(f"App directory: {_APP_DIR}")
     log.info("=" * 60)
 
-    gui_mode = (args.gui or os.environ.get("GHOSTRIGGER_GUI", "auto")).strip().lower()
-    if gui_mode not in ("auto", "qt", "tk", "tkinter"):
-        gui_mode = "auto"
+    # T003 — Qt is the default GUI. Tk remains as an explicit opt-in until
+    # M3/T303 deletes it. There is NO auto-fallback: if --gui=qt fails the
+    # process dies with the Qt traceback so the user sees the real error
+    # instead of silently dropping into the legacy Tk shell.
+    gui_mode = (args.gui or os.environ.get("GHOSTRIGGER_GUI", "qt")).strip().lower()
+    if gui_mode in ("tkinter",):
+        gui_mode = "tk"
+    if gui_mode not in ("qt", "tk"):
+        log.warning("Unknown GUI mode %r; defaulting to qt.", gui_mode)
+        gui_mode = "qt"
 
     # Install exception hooks before anything else can raise.  The Tk callback
     # hook is only installed when the Tk app owns the process.
-    _install_exception_hooks(logfile, install_tk_hook=(gui_mode in ("tk", "tkinter")))
+    _install_exception_hooks(logfile, install_tk_hook=(gui_mode == "tk"))
 
     # Log detailed session-start diagnostics (PIL, NumPy, platform)
     try:
@@ -237,7 +248,7 @@ def main(argv: list[str] | None = None):
     except Exception as _diag_err:
         log.debug(f"diagnostics.log_session_start failed: {_diag_err}")
 
-    if gui_mode in ("auto", "qt"):
+    if gui_mode == "qt":
         try:
             from src.gui.qt_main_window import run as _run_qt
 
@@ -247,14 +258,13 @@ def main(argv: list[str] | None = None):
             _flush_all_handlers()
             return rc
         except Exception:
-            if gui_mode == "qt":
-                log.critical("Fatal error during Qt startup:\n" + traceback.format_exc())
-                _flush_all_handlers()
-                raise
-            log.warning("Qt shell unavailable; falling back to Tkinter.\n%s",
-                        traceback.format_exc())
-            _install_exception_hooks(logfile, install_tk_hook=True)
+            log.critical("Fatal error during Qt startup:\n" + traceback.format_exc())
+            _flush_all_handlers()
+            raise
 
+    # gui_mode == "tk" — legacy path (frozen, slated for deletion in M3/T303).
+    log.warning("Launching legacy Tkinter shell (--gui=tk). "
+                "This path is frozen and will be removed in M3.")
     try:
         from src.gui.main_window import run as _run_gui, KotorModToolsApp
 

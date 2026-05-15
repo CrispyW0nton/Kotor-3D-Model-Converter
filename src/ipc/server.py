@@ -329,23 +329,44 @@ class GhostRiggerIPCServer:
         finally:
             self._running = False
 
-    # ── Tkinter thread-safe callback scheduling ───────────────────────────
+    # ── GUI-thread callback scheduling (Qt-first, Tk fallback) ────────────
+    #
+    # T002 — IPC handler callbacks must run on the main GUI thread because
+    # they typically mutate Qt widgets (or, on the legacy Tk path, tk
+    # widgets). The order is:
+    #
+    #   1. Qt: ``QTimer.singleShot(0, ...)`` if a ``QCoreApplication`` is
+    #      running. This is the production path under qt-ghostrigger.
+    #   2. Tk: ``tk._default_root.after(0, ...)`` if a Tk root is alive
+    #      (kept until M3/T303 deletes the Tk fallback).
+    #   3. Direct: call the callback inline in the HTTP worker thread.
+    #      Used by unit tests and headless runs.
+    #
+    # All errors are logged; we never raise out of the marshaling helper.
 
     def _schedule_callback(self, cb: Callable, *args):
-        """
-        Execute a callback safely on the Tkinter main thread.
-        If a tk root is available, use after(0, ...).
-        Otherwise call directly (unit tests, headless mode).
-        """
+        """Execute a callback safely on the main GUI thread (Qt → Tk → direct)."""
+        # ── 1. Qt path ────────────────────────────────────────────────
         try:
-            import tkinter as tk
+            from PySide6.QtCore import QCoreApplication, QTimer  # noqa: PLC0415
+            app = QCoreApplication.instance()
+            if app is not None:
+                QTimer.singleShot(0, lambda: cb(*args))
+                return
+        except Exception:
+            pass
+
+        # ── 2. Legacy Tk path ─────────────────────────────────────────
+        try:
+            import tkinter as tk  # noqa: PLC0415
             root = tk._default_root  # type: ignore[attr-defined]
             if root is not None:
                 root.after(0, cb, *args)
                 return
         except Exception:
             pass
-        # Fallback: call directly
+
+        # ── 3. Headless / direct fallback ─────────────────────────────
         try:
             cb(*args)
         except Exception as exc:

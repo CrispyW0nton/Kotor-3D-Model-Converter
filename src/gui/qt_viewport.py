@@ -13,7 +13,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from .qt_gpu_renderer import GpuRenderer
 from .qt_uv_viewer import QtUVViewerWindow
-from .viewport import ArcBallCamera, FrameRenderer
+from .viewport_core import ArcBallCamera, FrameRenderer
 from .viewport_navigation import (
     DEFAULT_VIEWPORT_NAVIGATION_PROFILE,
     has_modifier,
