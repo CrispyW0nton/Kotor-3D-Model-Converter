@@ -39,6 +39,7 @@ from .qt_dialogs import show_about, show_format_reference, show_ipc_info, show_v
 from .qt_modular_panel import QtModularModePanel
 from .qt_normal_map_panel import QtNormalMapPanel
 from .qt_resource_panel import QtResourceBrowserPanel, QtTwoDaBrowserPanel
+from .qt_retarget_window import QtAnimationRetargetWindow
 from .qt_rig_panel import QtRigPanel
 from .qt_settings_dialog import QtSettingsDialog, save_settings
 from .qt_texture_panel import QtTexturePanel
@@ -392,11 +393,19 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._animation_engine = None
         self._animation_loop = False
         self._animation_last_tick: Optional[float] = None
+        self._retarget_source_model = None
+        self._retarget_target_model = None
+        self._retarget_engine = None
+        self._retarget_mapping_report = None
+        self._retarget_last_tick: Optional[float] = None
         self._character_builder_window: Optional[QtCharacterBuilderWindow] = None
         self._matrix_engine = QtMatrixEngine(self, fps=12)
         self._animation_timer = QtCore.QTimer(self)
         self._animation_timer.setInterval(33)
         self._animation_timer.timeout.connect(self._tick_animation)
+        self._retarget_timer = QtCore.QTimer(self)
+        self._retarget_timer.setInterval(33)
+        self._retarget_timer.timeout.connect(self._tick_retarget_animation)
 
         self.setWindowTitle(self.APP_TITLE)
         self.resize(1600, 950)
@@ -651,6 +660,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.anims_action = QtGui.QAction(self._icon("anims"), "Animations", self)
         self.anims_action.setShortcut("Ctrl+A")
         self.anims_action.triggered.connect(lambda: self._show_right_tab("Animations"))
+        self.retarget_workbench_action = QtGui.QAction(self._icon("anims"), "Animation Retargeting Workbench...", self)
+        self.retarget_workbench_action.setShortcut("Ctrl+Shift+A")
+        self.retarget_workbench_action.triggered.connect(self._open_animation_retarget_window)
         self.modules_action = QtGui.QAction(self._icon("modular"), "Open Module Editor", self)
         self.modules_action.triggered.connect(self._show_modules_tab)
         self.nodes_panel_action = QtGui.QAction(self._icon("skeleton"), "Open Nodes Panel", self)
@@ -754,6 +766,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
         modules_menu = self.menuBar().addMenu("Modules")
         modules_menu.addAction(self.modules_action)
+        modules_menu.addAction(self.retarget_workbench_action)
         modules_menu.addSeparator()
         modules_menu.addAction(self.nodes_panel_action)
         modules_menu.addAction(self.twoda_panel_action)
@@ -1019,6 +1032,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.library_panel.deepScanRequested.connect(self._scan_library)
         self.library_panel.loadRequested.connect(self._start_resource_load)
         self.library_panel.extractRequested.connect(self._extract_library_row)
+        self.library_panel.retargetSourceRequested.connect(
+            lambda row: self._send_library_row_to_retarget(row, "source")
+        )
+        self.library_panel.retargetTargetRequested.connect(
+            lambda row: self._send_library_row_to_retarget(row, "target")
+        )
         self.library_panel.batchRequested.connect(self._batch_library_export)
         self.library_panel.dirsChanged.connect(self._on_library_dirs_changed)
         left_tabs.addTab(self.library_panel, self._icon("library", 16), "Library")
@@ -1045,6 +1064,19 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.animations_panel.seekRequested.connect(self._handle_animation_seek)
         self.animation_library_panel = QtAnimationLibraryPanel(self)
         self.animation_library_panel.libraryActionRequested.connect(self._handle_animation_library_action)
+        self.animation_retarget_window = QtAnimationRetargetWindow(self)
+        self.animation_retarget_window.sourceCurrentRequested.connect(self._retarget_set_source_current)
+        self.animation_retarget_window.targetCurrentRequested.connect(self._retarget_set_target_current)
+        self.animation_retarget_window.sourceLibraryRequested.connect(
+            lambda: self._retarget_select_library_model("source")
+        )
+        self.animation_retarget_window.targetLibraryRequested.connect(
+            lambda: self._retarget_select_library_model("target")
+        )
+        self.animation_retarget_window.previewRequested.connect(self._retarget_preview)
+        self.animation_retarget_window.applyRequested.connect(self._retarget_apply)
+        self.animation_retarget_window.stopRequested.connect(self._retarget_stop)
+        self.animation_retarget_panel = self.animation_retarget_window
         self.twoda_panel = QtTwoDaBrowserPanel(self)
         self.twoda_panel.refreshRequested.connect(self._refresh_twoda_panel)
         self.twoda_panel.tableSelected.connect(self._load_twoda_table)
@@ -1286,8 +1318,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     def _set_model_internal(self, model, path: str = ""):
         if model is None:
             self._animation_timer.stop()
+            self._retarget_timer.stop()
             self._animation_engine = None
             self._animation_last_tick = None
+            self._retarget_engine = None
+            self._retarget_target_model = None
+            self._retarget_last_tick = None
             self._current_model = None
             self._model_path = ""
             self.model_pill.setText("// No model loaded")
@@ -1301,6 +1337,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self.properties_panel.show_model(None)
             if hasattr(self, "animations_panel"):
                 self.animations_panel.load_model(None)
+            if hasattr(self, "animation_retarget_panel"):
+                self.animation_retarget_panel.set_target_model(None)
             if hasattr(self, "diagnostics_panel"):
                 self.diagnostics_panel.run_diagnostics(None)
             self.props_text.clear()
@@ -1375,9 +1413,21 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.properties_panel.show_model(model)
         if hasattr(self, "animations_panel"):
             self.animations_panel.load_model(model)
+        if hasattr(self, "animation_retarget_panel"):
+            self.animation_retarget_panel.set_texture_dir(self._texture_dir)
+            mgr = self._get_resource_manager()
+            game = (self._current_game or self._infer_game_from_model(model)).upper()
+            if mgr is not None:
+                self.animation_retarget_panel.set_target_resource_context(mgr, game)
+            self._retarget_target_model = model
+            self._retarget_mapping_report = None
+            self.animation_retarget_panel.set_target_model(model, game)
         self._animation_engine = None
         self._animation_timer.stop()
         self._animation_last_tick = None
+        self._retarget_timer.stop()
+        self._retarget_engine = None
+        self._retarget_last_tick = None
         if hasattr(self, "diagnostics_panel"):
             self.diagnostics_panel.run_diagnostics(model)
         self.statusBar().showMessage("Refreshed")
@@ -1991,6 +2041,191 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return
         self._log(f"{action} is waiting for deeper Qt module-editor migration.", "warning")
 
+    def _retarget_config(self):
+        from src.core.animation_retargeting import RetargetConfig
+
+        kwargs = (
+            self.animation_retarget_panel.config_kwargs()
+            if hasattr(self, "animation_retarget_panel") else {}
+        )
+        return RetargetConfig(**kwargs)
+
+    def _retarget_refresh_mapping(self):
+        if self._retarget_source_model is None or self._retarget_target_model is None:
+            return None
+        from src.core.animation_retargeting import build_bone_map
+
+        self._retarget_mapping_report = build_bone_map(
+            self._retarget_source_model,
+            self._retarget_target_model,
+        )
+        self.animation_retarget_panel.set_mapping_report(self._retarget_mapping_report)
+        return self._retarget_mapping_report
+
+    def _retarget_set_source_current(self):
+        model = self._require_model("Retarget Source")
+        if model is None:
+            return
+        if not (getattr(model, "animations", []) or []):
+            QtWidgets.QMessageBox.information(
+                self, "Retarget Source",
+                "The current model has no local animations to use as a source.",
+            )
+            return
+        self._retarget_source_model = model
+        self._retarget_engine = None
+        self.animation_retarget_panel.set_texture_dir(self._texture_dir)
+        game = (self._current_game or self._infer_game_from_model(model)).upper()
+        mgr = self._get_resource_manager()
+        if mgr is not None:
+            self.animation_retarget_panel.set_source_resource_context(mgr, game)
+        self.animation_retarget_panel.set_source_model(model, game)
+        self._retarget_refresh_mapping()
+        self._log(f"Retarget source set: {getattr(model, 'name', '?')}", "success")
+
+    def _retarget_set_target_current(self):
+        model = self._require_model("Retarget Target")
+        if model is None:
+            return
+        self._retarget_target_model = model
+        self._retarget_engine = None
+        self.animation_retarget_panel.set_texture_dir(self._texture_dir)
+        game = (self._current_game or self._infer_game_from_model(model)).upper()
+        mgr = self._get_resource_manager()
+        if mgr is not None:
+            self.animation_retarget_panel.set_target_resource_context(mgr, game)
+        self.animation_retarget_panel.set_target_model(model, game)
+        self._retarget_refresh_mapping()
+        self._log(f"Retarget target set: {getattr(model, 'name', '?')}", "success")
+
+    def _retarget_preview(self, anim_name: str):
+        if not anim_name:
+            QtWidgets.QMessageBox.information(self, "Retarget", "Select a source animation first.")
+            return
+        if self._retarget_source_model is None or self._retarget_target_model is None:
+            QtWidgets.QMessageBox.information(self, "Retarget", "Set both a source and target model.")
+            return
+        try:
+            from src.core.animation_engine import AnimationEngine
+
+            self._animation_timer.stop()
+            self._animation_engine = None
+            self._retarget_engine = AnimationEngine(self._retarget_source_model)
+            if not self._retarget_engine.play(anim_name, loop=True, blend=False):
+                QtWidgets.QMessageBox.information(self, "Retarget", f"Animation not found: {anim_name}")
+                return
+            self._retarget_refresh_mapping()
+            self._retarget_last_tick = None
+            self._retarget_timer.start()
+            self._log(
+                f"Retarget preview: {getattr(self._retarget_source_model, 'name', '?')}:{anim_name} -> "
+                f"{getattr(self._retarget_target_model, 'name', '?')}",
+                "success",
+            )
+        except Exception as exc:
+            self._log(f"Retarget preview error: {exc}", "error")
+            QtWidgets.QMessageBox.critical(self, "Retarget", str(exc))
+
+    def _retarget_apply(self, anim_name: str):
+        if not anim_name:
+            QtWidgets.QMessageBox.information(self, "Retarget", "Select a source animation first.")
+            return
+        if self._retarget_source_model is None or self._retarget_target_model is None:
+            QtWidgets.QMessageBox.information(self, "Retarget", "Set both a source and target model.")
+            return
+        try:
+            from src.core.animation_retargeting import retarget_animation
+
+            source_anim = next(
+                (
+                    anim for anim in (getattr(self._retarget_source_model, "animations", []) or [])
+                    if str(getattr(anim, "name", "")).lower() == anim_name.lower()
+                ),
+                None,
+            )
+            if source_anim is None:
+                QtWidgets.QMessageBox.information(self, "Retarget", f"Animation not found: {anim_name}")
+                return
+            report = self._retarget_refresh_mapping()
+            new_anim, report = retarget_animation(
+                source_anim,
+                self._retarget_source_model,
+                self._retarget_target_model,
+                config=self._retarget_config(),
+                mapping_report=report,
+            )
+            self._retarget_target_model.animations.append(new_anim)
+            if self._current_model is self._retarget_target_model and hasattr(self, "animations_panel"):
+                self.animations_panel.load_model(self._retarget_target_model)
+            self.animation_retarget_panel.set_mapping_report(report)
+            self._log(
+                f"Retargeted {anim_name} -> {new_anim.name} ({report.matched_count} bones)",
+                "success",
+            )
+        except Exception as exc:
+            self._log(f"Retarget apply error: {exc}", "error")
+            QtWidgets.QMessageBox.critical(self, "Retarget", str(exc))
+
+    def _retarget_stop(self):
+        self._retarget_timer.stop()
+        self._retarget_last_tick = None
+        if self._retarget_engine is not None:
+            self._retarget_engine.stop()
+        if hasattr(self, "animation_retarget_panel"):
+            self.animation_retarget_panel.clear_poses()
+        self._log("Retarget preview stopped.", "info")
+
+    def _tick_retarget_animation(self):
+        engine = self._retarget_engine
+        if engine is None or not engine.is_playing:
+            self._retarget_timer.stop()
+            self._retarget_last_tick = None
+            return
+        if self._retarget_source_model is None or self._retarget_target_model is None:
+            self._retarget_stop()
+            return
+        now = time.perf_counter()
+        if self._retarget_last_tick is None:
+            dt = 1.0 / 30.0
+        else:
+            dt = max(1.0 / 60.0, min(now - self._retarget_last_tick, 0.25))
+        self._retarget_last_tick = now
+        still_playing = engine.advance(dt)
+        source_pose = engine.evaluate()
+        anim = engine.current_animation
+        anim_name = getattr(anim, "name", "") if anim else ""
+        anim_length = float(getattr(anim, "length", 0.0) or 0.0) if anim else 0.0
+        try:
+            from src.core.animation_retargeting import retarget_pose
+
+            result = retarget_pose(
+                source_pose,
+                self._retarget_source_model,
+                self._retarget_target_model,
+                config=self._retarget_config(),
+                mapping_report=self._retarget_mapping_report,
+            )
+            self._retarget_mapping_report = result.report
+            if hasattr(self, "animation_retarget_panel"):
+                self.animation_retarget_panel.set_source_pose(
+                    source_pose,
+                    name=anim_name,
+                    time=engine.current_time,
+                    length=anim_length,
+                )
+                self.animation_retarget_panel.set_target_pose(
+                    result.pose,
+                    name=f"retarget:{anim_name}",
+                    time=engine.current_time,
+                    length=anim_length,
+                )
+        except Exception as exc:
+            self._log(f"Retarget tick error: {exc}", "error")
+            self._retarget_stop()
+            return
+        if not still_playing:
+            self._retarget_stop()
+
     def _handle_animation_selected(self, anim_name: str):
         model = self._current_model
         if not model or not anim_name:
@@ -2451,6 +2686,23 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if index >= 0:
             tabs.setCurrentIndex(index)
 
+    def _open_animation_retarget_window(self):
+        window = getattr(self, "animation_retarget_window", None)
+        if window is None:
+            self._not_migrated("Animation Retargeting Workbench")
+            return
+        try:
+            window.set_texture_dir(self._texture_dir)
+            if self._retarget_source_model is not None:
+                window.set_source_model(self._retarget_source_model)
+            if self._retarget_target_model is not None:
+                window.set_target_model(self._retarget_target_model)
+        except Exception:
+            pass
+        window.show()
+        window.raise_()
+        window.activateWindow()
+
     def _show_right_tab(self, label: str):
         tabs = getattr(self, "right_tabs", None)
         if tabs is None:
@@ -2467,6 +2719,76 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def _get_model(self):
         return self._current_model
+
+    def _load_resource_model_for_retarget(self, row: dict):
+        resref = str(row.get("resref", "") or "").strip()
+        game = str(row.get("game", "") or self._current_game or "K1").upper()
+        if not resref:
+            return None, game
+        mgr = self._get_resource_manager()
+        if mgr is None:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Retarget Workbench",
+                "Set the K1/K2 game directories before sending library models to retargeting.",
+            )
+            return None, game
+        try:
+            model = mgr.load_model(resref, game)
+        except Exception as exc:
+            self._log(f"Retarget load failed for {game}:{resref}: {exc}", "error")
+            model = None
+        if model is None:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Retarget Workbench",
+                f"Could not load {game}:{resref}.",
+            )
+        return model, game
+
+    def _send_library_row_to_retarget(self, row: dict, role: str) -> None:
+        model, game = self._load_resource_model_for_retarget(row)
+        if model is None:
+            return
+        window = getattr(self, "animation_retarget_window", None)
+        if window is None:
+            return
+        window.set_texture_dir(self._texture_dir)
+        mgr = self._get_resource_manager()
+        if role == "source":
+            self._retarget_source_model = model
+            self._retarget_engine = None
+            if mgr is not None:
+                window.set_source_resource_context(mgr, game)
+            window.set_source_model(model, game)
+            self._log(f"Retarget source <- {game}:{row.get('resref', '')}", "success")
+        else:
+            self._retarget_target_model = model
+            self._retarget_engine = None
+            self._retarget_mapping_report = None
+            if mgr is not None:
+                window.set_target_resource_context(mgr, game)
+            window.set_target_model(model, game)
+            self._log(f"Retarget target <- {game}:{row.get('resref', '')}", "success")
+        self._retarget_refresh_mapping()
+        self._open_animation_retarget_window()
+
+    def _retarget_select_library_model(self, role: str) -> None:
+        panel = getattr(self, "library_panel", None)
+        row = panel.selected_row() if panel is not None else None
+        if not row:
+            tabs = getattr(self, "left_tabs", None)
+            if tabs is not None and panel is not None:
+                index = tabs.indexOf(panel)
+                if index >= 0:
+                    tabs.setCurrentIndex(index)
+            QtWidgets.QMessageBox.information(
+                self,
+                "Retarget Workbench",
+                "Select a model in the Game Library first.",
+            )
+            return
+        self._send_library_row_to_retarget(row, role)
 
     def _populate_saved_dirs(self):
         self.library_list.clear()
@@ -2657,7 +2979,15 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._log(f"Model load failed:\n{error}", "error")
             self.statusBar().showMessage("Model load failed")
             return
+        self._animation_timer.stop()
+        self._animation_engine = None
+        self._animation_last_tick = None
+        self._retarget_timer.stop()
+        self._retarget_engine = None
+        self._retarget_last_tick = None
         self._current_model = model
+        self._retarget_target_model = model
+        self._retarget_mapping_report = None
         if path:
             self._model_path = path
             if str(path).startswith(("K1:", "K2:")):
@@ -2685,6 +3015,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.properties_panel.show_model(model)
         if hasattr(self, "animations_panel"):
             self.animations_panel.load_model(model)
+        if hasattr(self, "animation_retarget_panel"):
+            self.animation_retarget_panel.set_texture_dir(self._texture_dir)
+            mgr = self._get_resource_manager()
+            game = (self._current_game or self._infer_game_from_model(model)).upper()
+            if mgr is not None:
+                self.animation_retarget_panel.set_target_resource_context(mgr, game)
+            self.animation_retarget_panel.set_target_model(model, game)
         if hasattr(self, "diagnostics_panel"):
             self.diagnostics_panel.run_diagnostics(model)
         self.props_text.setPlainText(

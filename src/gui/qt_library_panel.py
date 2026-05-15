@@ -119,6 +119,8 @@ class QtModelListItem(QtWidgets.QListWidgetItem):
 class QtLibraryPanel(QtWidgets.QWidget):
     loadRequested = QtCore.Signal(str, str)
     extractRequested = QtCore.Signal(dict)
+    retargetSourceRequested = QtCore.Signal(dict)
+    retargetTargetRequested = QtCore.Signal(dict)
     batchRequested = QtCore.Signal(str, list)
     autoDetectRequested = QtCore.Signal()
     dirsChanged = QtCore.Signal(str, str)
@@ -208,6 +210,8 @@ class QtLibraryPanel(QtWidgets.QWidget):
         self.listbox = QtWidgets.QListWidget()
         self.listbox.itemDoubleClicked.connect(self._load_item)
         self.listbox.itemSelectionChanged.connect(self._update_selection_text)
+        self.listbox.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.listbox.customContextMenuRequested.connect(self._show_context_menu)
         root.addWidget(self.listbox, 1)
 
         self.thumb_label = QtWidgets.QLabel("")
@@ -279,6 +283,29 @@ class QtLibraryPanel(QtWidgets.QWidget):
         row = getattr(item, "row", None)
         if row:
             self.loadRequested.emit(row.get("resref", ""), row.get("game", ""))
+
+    def _show_context_menu(self, pos: QtCore.QPoint) -> None:
+        item = self.listbox.itemAt(pos)
+        if item is not None:
+            self.listbox.setCurrentItem(item)
+        row = self.selected_row()
+        if not row:
+            return
+        menu = QtWidgets.QMenu(self)
+        load_action = menu.addAction("Load Model")
+        extract_action = menu.addAction("Extract")
+        menu.addSeparator()
+        source_action = menu.addAction("Send to Retarget Workbench (Source)")
+        target_action = menu.addAction("Send to Retarget Workbench (Target)")
+        chosen = menu.exec(self.listbox.mapToGlobal(pos))
+        if chosen is load_action:
+            self.loadRequested.emit(row.get("resref", ""), row.get("game", ""))
+        elif chosen is extract_action:
+            self.extractRequested.emit(row)
+        elif chosen is source_action:
+            self.retargetSourceRequested.emit(row)
+        elif chosen is target_action:
+            self.retargetTargetRequested.emit(row)
 
     def _choose_dir(self, game: str) -> None:
         title = "Select KotOR 1 Game Directory" if game == "K1" else "Select KotOR 2 TSL Game Directory"
