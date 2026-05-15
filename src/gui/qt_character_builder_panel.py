@@ -7,18 +7,19 @@ left :class:`QtWorkflowRail` / centre viewport stack / right
 :class:`QtInspectorPanel`, and the :class:`QtBottomStrip` docked at
 the bottom (validation banner, anim scrubber, stats, export log).
 
-The embedded :class:`QtCharacterBuilderPanel` (right-tab stub used by
-:mod:`qt_main_window`) is unchanged — it remains a five-tab placeholder
-until M5+ replaces its individual mode workflows.
+M5 (T501–T506) is progressively replacing the legacy five-tab
+:class:`QtCharacterBuilderPanel` with the new workflow service in
+:mod:`src.core.headless_body_workflow`.  T501 (this task) wires the
+real *Load Body* path; later tasks fill in check / rig / export.
 
-Roadmap: knowledge_base/roadmap/02_roadmap_2026_05.md §M2.
+Roadmap: knowledge_base/roadmap/02_roadmap_2026_05.md §M2 + §M5.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-from typing import Optional
+from typing import Any, Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -84,70 +85,121 @@ _QSK_LAST_MODE       = "window/last_mode"
 
 
 class QtCharacterBuilderPanel(QtWidgets.QWidget):
+    """Compact launcher panel embedded in the main window's right-pane tabs.
+
+    The original M0 implementation was a five-tab placeholder
+    (Assembly / Selection / Transform / Rig / Export) full of dead
+    buttons that did nothing.  M2 introduced the proper full-window
+    Character Builder (:class:`QtCharacterBuilderWindow`) and M5
+    completes the migration by replacing the dead tabs with a thin
+    launcher that opens the real builder.
+
+    Public attributes preserved for backward compatibility with
+    ``qt_main_window.py``:
+      * ``game_combo``   — K1/K2 selector (still used by the main shell)
+
+    Signals:
+      * ``launchRequested()`` — emitted when the user clicks the
+        "Open Character Builder…" button.  The main window connects this
+        to its existing builder-window action; if no listener connects,
+        the panel opens the window itself.
+    """
+
+    launchRequested = QtCore.Signal()
+
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
+        self._builder_window: Optional[QtWidgets.QMainWindow] = None
         self._build()
 
     def _build(self) -> None:
         root = QtWidgets.QVBoxLayout(self)
-        root.setContentsMargins(6, 6, 6, 6)
-        title = QtWidgets.QHBoxLayout()
-        title.addWidget(heading("Character Builder"))
+        root.setContentsMargins(8, 8, 8, 8)
+        root.setSpacing(8)
+
+        title_row = QtWidgets.QHBoxLayout()
+        title_row.addWidget(heading("Character Builder"))
+        title_row.addStretch(1)
+        # K1/K2 game-version selector (preserved so qt_main_window
+        # keeps its setCurrentText() / currentTextChanged() bindings).
         self.game_combo = QtWidgets.QComboBox()
         self.game_combo.addItems(["K1", "K2"])
-        title.addWidget(self.game_combo)
-        root.addLayout(title)
+        self.game_combo.setToolTip("Active KOTOR game version")
+        title_row.addWidget(QtWidgets.QLabel("Game:"))
+        title_row.addWidget(self.game_combo)
+        root.addLayout(title_row)
 
-        self.tabs = QtWidgets.QTabWidget()
-        root.addWidget(self.tabs, 1)
-        self.tabs.addTab(self._assembly_tab(), "Assembly")
-        self.tabs.addTab(self._selection_tab(), "Selection")
-        self.tabs.addTab(self._transform_tab(), "Transform")
-        self.tabs.addTab(self._rig_tab(), "Rig")
-        self.tabs.addTab(self._export_tab(), "Export")
+        # Brief explanation of the new workflow.
+        blurb = QtWidgets.QLabel(
+            "The full Character Builder opens in its own window.  It hosts the\n"
+            "AccuRig-style HUD (joint dots, mini-thumbnail, snap-view, weight\n"
+            "heat-map) and the seven-step mode-aware workflow rail."
+        )
+        blurb.setWordWrap(True)
+        blurb.setStyleSheet(f"color:{C.get('text2', '#888')}; padding:2px 0;")
+        root.addWidget(blurb)
 
-    def _page(self) -> QtWidgets.QWidget:
-        page = QtWidgets.QWidget()
-        layout = QtWidgets.QVBoxLayout(page)
-        layout.setContentsMargins(6, 6, 6, 6)
-        layout.setSpacing(6)
-        return page
+        # The seven workflow steps as a read-only summary so the user
+        # can see what the builder will guide them through.
+        steps_label = QtWidgets.QLabel("Headless-Body workflow (M5):")
+        steps_label.setStyleSheet(
+            f"color:{C.get('gold', '#FFD700')}; font-weight:bold; padding-top:6px;"
+        )
+        root.addWidget(steps_label)
 
-    def _assembly_tab(self) -> QtWidgets.QWidget:
-        page = self._page()
-        page.layout().addWidget(QtWidgets.QPushButton("Load Body Template"))
-        page.layout().addWidget(QtWidgets.QPushButton("Load Head Template"))
-        page.layout().addWidget(QtWidgets.QPushButton("Assemble Character"))
-        page.layout().addStretch(1)
-        return page
+        steps_list = QtWidgets.QListWidget()
+        steps_list.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
+        steps_list.setFocusPolicy(QtCore.Qt.NoFocus)
+        steps_list.setFrameShape(QtWidgets.QFrame.NoFrame)
+        steps_list.setStyleSheet(
+            f"QListWidget {{ background:{C.get('bg2', '#1a1a1a')}; "
+            f"               color:{C.get('text1', '#ddd')}; "
+            f"               border:1px solid {C.get('bg3', '#222')}; }}"
+        )
+        for i, label in enumerate([
+            "1. Load Body",
+            "2. Check Model",
+            "3. Body Rig",
+            "4. Hand Rig",
+            "5. Check Actor",
+            "6. Add Motions",
+            "7. Validate + Export",
+        ], start=1):
+            QtWidgets.QListWidgetItem(label, steps_list)
+        root.addWidget(steps_list, 1)
+        self.workflow_steps = steps_list
 
-    def _selection_tab(self) -> QtWidgets.QWidget:
-        page = self._page()
-        self.parts_tree = QtWidgets.QTreeWidget()
-        self.parts_tree.setHeaderLabels(["Slot", "Model", "Status"])
-        page.layout().addWidget(self.parts_tree, 1)
-        return page
+        # Launch button — opens the real Character Builder window.
+        self.launch_button = QtWidgets.QPushButton("Open Character Builder…")
+        self.launch_button.setToolTip(
+            "Open the AccuRig-style Character Builder window for the active mode"
+        )
+        self.launch_button.clicked.connect(self._on_launch_clicked)
+        root.addWidget(self.launch_button)
 
-    def _transform_tab(self) -> QtWidgets.QWidget:
-        page = self._page()
-        for label in ("Fit Body", "Rotate Selected", "Scale Selected", "Reset Transform"):
-            page.layout().addWidget(QtWidgets.QPushButton(label))
-        page.layout().addStretch(1)
-        return page
-
-    def _rig_tab(self) -> QtWidgets.QWidget:
-        page = self._page()
-        for label in ("Apply Template Rig", "Validate Character", "Preview Weights"):
-            page.layout().addWidget(QtWidgets.QPushButton(label))
-        page.layout().addStretch(1)
-        return page
-
-    def _export_tab(self) -> QtWidgets.QWidget:
-        page = self._page()
-        for label in ("Export Scene", "Export Body", "Export Head", "Batch Export"):
-            page.layout().addWidget(QtWidgets.QPushButton(label))
-        page.layout().addStretch(1)
-        return page
+    # ── Slots ────────────────────────────────────────────────────────
+    @QtCore.Slot()
+    def _on_launch_clicked(self) -> None:
+        # Emit first so the host window can intercept (e.g. to reuse an
+        # already-open builder instance).
+        self.launchRequested.emit()
+        if self.receivers(self.launchRequested) > 1:
+            # Host took over; nothing else to do.
+            return
+        # No listener — open a window owned by this panel.
+        if self._builder_window is None:
+            try:
+                self._builder_window = QtCharacterBuilderWindow(self)
+            except Exception as exc:                        # pragma: no cover
+                log.exception("Failed to open Character Builder window")
+                QtWidgets.QMessageBox.critical(
+                    self, "Character Builder",
+                    f"Could not open the Character Builder window:\n\n{exc}",
+                )
+                return
+        self._builder_window.show()
+        self._builder_window.raise_()
+        self._builder_window.activateWindow()
 
 
 class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
@@ -189,6 +241,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         # Prevents echo loops when the scene pushes a mode change back
         # to the toolbar.
         self._suppress_mode_signal = False
+        # M5 / T503 — AcuRig instance shared between "Place Guides" and
+        # "Generate Skeleton" so user-locked guide overrides survive
+        # across the two clicks.  Lazily populated by the body-rig slot.
+        self._acurig: Optional[Any] = None
 
         self.setObjectName("QtCharacterBuilderWindow")
         self.setWindowTitle("GhostRigger - Character Builder")
@@ -428,6 +484,30 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self.inspector.loadRequested.connect(self._on_load_model_requested)
         self.inspector.validateRequested.connect(self._on_validate_requested)
         self.inspector.checkModelRequested.connect(self._on_check_model_requested)
+        # M5 / T503 — body-rig action buttons.
+        if hasattr(self.inspector, "placeGuidesRequested"):
+            self.inspector.placeGuidesRequested.connect(
+                self._on_place_body_guides_requested)
+        if hasattr(self.inspector, "generateSkeletonRequested"):
+            self.inspector.generateSkeletonRequested.connect(
+                self._on_generate_skeleton_requested)
+        # M5 / T504 — hand-rig action buttons.
+        if hasattr(self.inspector, "placeHandGuidesRequested"):
+            self.inspector.placeHandGuidesRequested.connect(
+                self._on_place_hand_guides_requested)
+        if hasattr(self.inspector, "handMaskChanged"):
+            self.inspector.handMaskChanged.connect(
+                self._on_hand_mask_changed)
+        # M5 / T505 — check-actor preview animations.
+        if hasattr(self.inspector, "playPreviewAnimationRequested"):
+            self.inspector.playPreviewAnimationRequested.connect(
+                self._on_play_preview_animation_requested)
+        if hasattr(self.inspector, "stopPreviewAnimationRequested"):
+            self.inspector.stopPreviewAnimationRequested.connect(
+                self._on_stop_preview_animation_requested)
+        if hasattr(self.inspector, "refreshPreviewAnimationsRequested"):
+            self.inspector.refreshPreviewAnimationsRequested.connect(
+                self._on_refresh_preview_animations_requested)
         # When the user picks a different mode in the properties panel
         # (M1/T105), echo it through the toolbar so the two stay in sync.
         if hasattr(self.properties, "characterModeChanged"):
@@ -482,30 +562,640 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
     @QtCore.Slot()
     def _on_load_model_requested(self) -> None:
-        # Stub for M5+: opens a file dialog and loads the chosen MDL
-        # into the appropriate slot.  For M2 we just surface the intent.
-        self.statusBar().showMessage(
-            "Load Model — file picker will be wired in M5", 4000
+        """Workflow Step 1 (Load Body) — M5 / T501.
+
+        Opens a file picker scoped to the formats the
+        :mod:`headless_body_workflow` service accepts (MDL, glTF, GLB,
+        FBX, OBJ, PLY, STL, UTC), invokes the service, and reports the
+        result through the bottom-strip validation banner.
+
+        Mode-mismatch handling: when the auto-detector says the file
+        looks like a Head / Creature / Supermodel rather than a
+        Headless Body, the user is prompted to either:
+          • switch the active mode to match the detected file (and
+            keep the load), or
+          • cancel the load (which leaves the slot assigned but warns
+            in the banner).
+        """
+        try:
+            from ..core import headless_body_workflow as _wf
+        except Exception as exc:                            # pragma: no cover
+            log.exception("Could not import headless_body_workflow")
+            self.bottom_strip.set_validation(
+                "error", "LOAD_UNAVAILABLE",
+                issues=[f"Workflow service unavailable: {exc}"],
+            )
+            return
+
+        path, _selected = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Load Body Model",
+            "",
+            _wf.load_file_filter(),
         )
+        if not path:
+            return
+
+        gv = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
+             getattr(self.scene, "game_version", "K1")
+        result = _wf.load_body(path, self.scene, game_version=gv)
+
+        # ── Mode mismatch — offer to switch ──────────────────────────
+        if result.code == "mode_mismatch" and result.detected_mode is not None:
+            detected_label = getattr(result.detected_mode, "display_name",
+                                     str(result.detected_mode))
+            answer = QtWidgets.QMessageBox.question(
+                self,
+                "Wrong character mode?",
+                f"This file looks like a {detected_label} model, not a "
+                "Headless Body.\n\nSwitch the Character Builder to "
+                f"{detected_label} mode and keep this file loaded?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.Yes,
+            )
+            if answer == QtWidgets.QMessageBox.Yes:
+                self._apply_mode(result.detected_mode,
+                                 locked=True, source="load_body_autoswitch")
+                self.bottom_strip.set_validation(
+                    "info", "LOADED",
+                    issues=[f"Loaded {result.resref}; mode → {detected_label}"],
+                )
+                self.statusBar().showMessage(
+                    f"Loaded {result.resref} (mode switched to {detected_label})",
+                    5000,
+                )
+                self._on_model_loaded_into_scene(result)
+                return
+            # User declined the switch — keep the slot, warn the banner.
+            self.bottom_strip.set_validation(
+                "warning", "MODE_MISMATCH",
+                issues=[result.message],
+            )
+            self.statusBar().showMessage(result.message, 6000)
+            self._on_model_loaded_into_scene(result)
+            return
+
+        # ── Hard failures ────────────────────────────────────────────
+        if not result.ok:
+            self.bottom_strip.set_validation(
+                "error", result.code.upper(),
+                issues=[result.message],
+            )
+            self.statusBar().showMessage(result.message, 6000)
+            return
+
+        # ── Happy path ───────────────────────────────────────────────
+        self.bottom_strip.set_validation(
+            "info", "LOADED",
+            issues=[result.message],
+        )
+        self.statusBar().showMessage(result.message, 5000)
+        self._on_model_loaded_into_scene(result)
+
+    def _on_model_loaded_into_scene(self, result) -> None:
+        """Post-load housekeeping shared by every load branch.
+
+        Pushes the new model into the viewport, refreshes the workflow
+        rail, and marks the scene dirty so File→Save offers to write.
+        """
+        # Sync rail / properties panel with the (possibly auto-updated)
+        # CharacterMode now reflected in the scene.
+        self._sync_from_scene()
+        # Push the model into the viewport so the user sees it.
+        try:
+            if (result.model is not None
+                    and hasattr(self, "viewport")
+                    and hasattr(self.viewport, "load_model")):
+                self.viewport.load_model(result.model)
+        except Exception:                                    # pragma: no cover
+            log.exception("Failed to push loaded model into the viewport")
+        self._update_title()
 
     @QtCore.Slot()
     def _on_validate_requested(self) -> None:
-        # Stub for M9: runs the validation service and pushes results to
-        # the banner.  For M2 we wire a synthetic clean result so the
-        # banner round-trip is observable.
-        self.bottom_strip.set_validation("clean", "CLEAN", issues=[])
+        """Workflow Step 7 (Validate Scene) — M5 / T506.
+
+        Runs :func:`headless_body_workflow.validate_for_export` and
+        pushes the result into the inspector's validation tally + the
+        bottom-strip banner.  Replaces the M2 synthetic-clean stub.
+        """
+        try:
+            from core import headless_body_workflow as _wf
+        except Exception as exc:                            # pragma: no cover
+            log.exception("Could not import headless_body_workflow")
+            self.bottom_strip.set_validation(
+                "error", "VALIDATE_UNAVAILABLE",
+                issues=[f"Workflow service unavailable: {exc}"],
+            )
+            return
+
+        result = _wf.validate_for_export(self.scene, strict=True)
+
+        # Push detailed tally + Export-button-enable state into the
+        # inspector's validate page.
+        if hasattr(self.inspector, "set_validate_for_export_result"):
+            try:
+                self.inspector.set_validate_for_export_result(result)
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_validate_for_export_result failed")
+
+        # Banner severity follows the workflow's code.
+        if result.code == "blocked":
+            severity = "error"
+        elif result.code == "warnings_only":
+            severity = "warning"
+        else:
+            severity = "clean"
+
+        self.bottom_strip.set_validation(
+            severity, result.code.upper(),
+            issues=result.issues,
+        )
+        self.statusBar().showMessage(result.message, 6000)
 
     @QtCore.Slot()
     def _on_check_model_requested(self) -> None:
-        self.statusBar().showMessage(
-            "Check Model — implementation pending (M5+)", 4000
+        """Workflow Step 2 (Check Model) — M5 / T502.
+
+        Runs :func:`headless_body_workflow.check_model` and projects
+        the result into the bottom-strip validation banner.  Severity
+        colour and summary text are computed inside the service so the
+        Qt code stays a thin adapter.
+        """
+        try:
+            from ..core import headless_body_workflow as _wf
+        except Exception as exc:                            # pragma: no cover
+            log.exception("Could not import headless_body_workflow")
+            self.bottom_strip.set_validation(
+                "error", "CHECK_UNAVAILABLE",
+                issues=[f"Workflow service unavailable: {exc}"],
+            )
+            return
+
+        result = _wf.check_model(self.scene)
+        # Store full issues list so a future banner-click can drill into
+        # the report (UX hook documented in qt_bottom_strip.py).
+        self.bottom_strip.set_validation(
+            result.banner_key,
+            result.summary,
+            issues=result.issues,
         )
+        # Push the issue table into the inspector so the user can
+        # triage findings without leaving the workflow.
+        if hasattr(self.inspector, "set_check_model_result"):
+            try:
+                self.inspector.set_check_model_result(result)
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_check_model_result failed")
+        # Brief status-bar tail with the per-severity tally.
+        if result.error_count or result.warning_count or result.info_count:
+            self.statusBar().showMessage(
+                f"Check Model: {result.error_count} error(s), "
+                f"{result.warning_count} warning(s), "
+                f"{result.info_count} info ({len(result.codes)} unique code(s))",
+                6000,
+            )
+        else:
+            self.statusBar().showMessage("Check Model: all good", 4000)
 
     @QtCore.Slot()
     def _on_export_requested(self) -> None:
-        self.statusBar().showMessage(
-            "Export — implementation pending (M10)", 4000
+        """Workflow Step 7 (Export…) — M5 / T506.
+
+        Opens the modal :class:`QtExportDialog`; on Accept, runs the
+        validation gate again, then dispatches
+        :func:`headless_body_workflow.export_scene` with the user-
+        selected formats / output directory / sidecar option.
+        Per-format outcomes are surfaced in the inspector status line
+        and the bottom-strip banner.
+
+        Replaces the M2 "Export — implementation pending (M10)" status
+        stub with the real workflow.  Per-format MDL/MDX/FBX/glTF/OBJ
+        binary writers are still M10 work — the workflow service
+        reports ``not_implemented`` for those, which the UI displays
+        as "pending" rather than a crash.
+        """
+        from core import headless_body_workflow as _wf
+        try:
+            from gui.qt_export_dialog import QtExportDialog
+        except Exception:                                   # pragma: no cover
+            try:
+                from src.gui.qt_export_dialog import QtExportDialog
+            except Exception as exc:
+                log.exception("Could not import QtExportDialog")
+                self.bottom_strip.set_validation(
+                    "error", "EXPORT_UNAVAILABLE",
+                    issues=[f"Export dialog unavailable: {exc}"],
+                )
+                return
+
+        # Derive a sensible default resref from the body slot for the
+        # dialog's read-only hint label.
+        md = None
+        try:
+            from core import model_data as md  # noqa: WPS433 - lazy on purpose
+        except Exception:                                   # pragma: no cover
+            md = None
+        initial_resref = ""
+        if md is not None:
+            entry = self.scene.get(md.PartSlot.HEADLESS_BODY)
+            if entry is not None:
+                initial_resref = (entry.resref or "").lower() or ""
+
+        dlg = QtExportDialog(
+            self,
+            default_dir=getattr(self, "_last_export_dir", ""),
+            initial_resref=initial_resref,
+            initial_formats=("kotor",),
+            initial_write_sidecar=True,
         )
+        if dlg.exec() != QtWidgets.QDialog.Accepted:
+            self.statusBar().showMessage("Export cancelled.", 3000)
+            return
+
+        formats = dlg.selected_formats()
+        out_dir = dlg.output_dir()
+        write_sidecar = dlg.write_sidecar()
+        # Remember the chosen folder for the next invocation.
+        self._last_export_dir = out_dir
+
+        result = _wf.export_scene(
+            self.scene,
+            formats=formats,
+            out_dir=out_dir,
+            write_sidecar=write_sidecar,
+            skip_validation=False,
+        )
+
+        # Inspector status line + bottom-strip banner.
+        if hasattr(self.inspector, "set_export_status"):
+            try:
+                self.inspector.set_export_status(
+                    result.message,
+                    kind=("ok" if result.ok else "error"),
+                )
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_export_status failed")
+
+        # Banner severity: blocked / no_body / all_failed → error;
+        # any successful row (sidecar OK or a future format OK) → info.
+        if not result.ok:
+            severity = "error"
+            tag = (result.code or "export").upper()
+        else:
+            severity = "info"
+            tag = "EXPORTED"
+
+        # Compose a multi-line issue list summarising per-format outcomes.
+        issues: list = []
+        for row in result.formats:
+            issues.append(f"{row.label}: {row.message}")
+        if result.sidecar_path:
+            issues.append(f"Sidecar JSON: {result.sidecar_path}")
+
+        self.bottom_strip.set_validation(severity, tag, issues=issues)
+        self.statusBar().showMessage(result.message, 6000)
+
+    # ── M5 / T503 — Body-rig step slots ──────────────────────────────────
+
+    @QtCore.Slot()
+    def _on_place_body_guides_requested(self) -> None:
+        """Place AcuRig humanoid guides on the loaded body model.
+
+        Wraps :func:`headless_body_workflow.place_body_guides` and pushes
+        the result into the inspector status label, the bottom-strip
+        banner, and (on success) refreshes the viewport so the joint-dot
+        HUD picks up the newly-placed guides.  The created
+        :class:`AcuRig` instance is kept on ``self._acurig`` so the
+        subsequent *Generate Skeleton* click reuses it (preserving any
+        user-locked guide overrides).
+        """
+        from core import headless_body_workflow as _wf
+
+        result = _wf.place_body_guides(
+            self.scene,
+            snap_to_bones=True,
+            acurig=self._acurig,
+        )
+
+        # Inspector status label — colour-coded per kind.
+        if hasattr(self.inspector, "set_body_rig_status"):
+            try:
+                self.inspector.set_body_rig_status(
+                    result.message,
+                    kind=("ok" if result.ok else "error"),
+                )
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_body_rig_status failed")
+
+        if not result.ok:
+            self.bottom_strip.set_validation(
+                "error", "PLACE_GUIDES",
+                issues=[result.message],
+            )
+            self.statusBar().showMessage(result.message, 6000)
+            return
+
+        # Persist the AcuRig instance for the next click.
+        self._acurig = result.acurig
+
+        # Refresh viewport joint-dot overlay by re-loading the body.
+        try:
+            body = _wf._get_body_model(self.scene)
+            if (body is not None
+                    and hasattr(self, "viewport")
+                    and hasattr(self.viewport, "load_model")):
+                self.viewport.load_model(body)
+        except Exception:                                    # pragma: no cover
+            log.exception("Failed to refresh viewport after place_body_guides")
+
+        self.bottom_strip.set_validation(
+            "info", "GUIDES_PLACED",
+            issues=[result.message],
+        )
+        self.statusBar().showMessage(result.message, 5000)
+
+    @QtCore.Slot()
+    def _on_generate_skeleton_requested(self) -> None:
+        """Build the skeleton + heat-map weights on the body model.
+
+        Wraps :func:`headless_body_workflow.generate_skeleton`, forwards
+        the cached :class:`AcuRig` instance (so user-edited guides are
+        respected), pushes status into the inspector + bottom strip, and
+        refreshes the viewport with the freshly-rigged model on success.
+        """
+        from core import headless_body_workflow as _wf
+
+        result = _wf.generate_skeleton(
+            self.scene,
+            acurig=self._acurig,
+            smooth_iterations=2,
+        )
+
+        if hasattr(self.inspector, "set_body_rig_status"):
+            try:
+                self.inspector.set_body_rig_status(
+                    result.message,
+                    kind=("ok" if result.ok else "error"),
+                )
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_body_rig_status failed")
+
+        if not result.ok:
+            severity_code = (result.code or "skeleton").upper()
+            self.bottom_strip.set_validation(
+                "error", severity_code,
+                issues=[result.message],
+            )
+            self.statusBar().showMessage(result.message, 6000)
+            return
+
+        # Push the rigged body back into the viewport.
+        try:
+            body = _wf._get_body_model(self.scene)
+            if (body is not None
+                    and hasattr(self, "viewport")
+                    and hasattr(self.viewport, "load_model")):
+                self.viewport.load_model(body)
+        except Exception:                                    # pragma: no cover
+            log.exception("Failed to refresh viewport after generate_skeleton")
+
+        # Mark the scene dirty so File → Save offers to persist.
+        try:
+            self.scene.dirty = True
+        except Exception:                                    # pragma: no cover
+            pass
+
+        self.bottom_strip.set_validation(
+            "info", "SKELETON_GENERATED",
+            issues=[result.message],
+        )
+        self.statusBar().showMessage(result.message, 5000)
+        self._update_title()
+
+    # ── M5 / T504 — Hand-rig step slots ──────────────────────────────────
+
+    @QtCore.Slot()
+    def _on_place_hand_guides_requested(self) -> None:
+        """Refresh AcuRig hand-subset guides and sync the mask checkboxes.
+
+        Wraps :func:`headless_body_workflow.place_hand_guides` and
+        pushes the result into the inspector status label + bottom-strip
+        banner.  The :class:`AcuRig` instance is cached on
+        ``self._acurig`` (shared with T503) so subsequent mask toggles
+        and the next body-rig pass keep working on the same instance.
+        """
+        from core import headless_body_workflow as _wf
+
+        result = _wf.place_hand_guides(
+            self.scene,
+            acurig=self._acurig,
+            snap_to_bones=True,
+        )
+
+        if hasattr(self.inspector, "set_hand_rig_status"):
+            try:
+                self.inspector.set_hand_rig_status(
+                    result.message,
+                    kind=("ok" if result.ok else "error"),
+                )
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_hand_rig_status failed")
+
+        if not result.ok:
+            self.bottom_strip.set_validation(
+                "error", (result.code or "hand_guides").upper(),
+                issues=[result.message],
+            )
+            self.statusBar().showMessage(result.message, 6000)
+            return
+
+        # Persist the AcuRig instance so subsequent mask toggles share it.
+        self._acurig = result.acurig
+
+        # Push the current mask state into the checkbox column so the UI
+        # reflects whatever AcuRig already had set.
+        if hasattr(self.inspector, "set_hand_masked_bones"):
+            try:
+                self.inspector.set_hand_masked_bones(result.masked_bones)
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_hand_masked_bones failed")
+
+        # Refresh viewport joint-dot overlay.
+        try:
+            body = _wf._get_body_model(self.scene)
+            if (body is not None
+                    and hasattr(self, "viewport")
+                    and hasattr(self.viewport, "load_model")):
+                self.viewport.load_model(body)
+        except Exception:                                    # pragma: no cover
+            log.exception("Failed to refresh viewport after place_hand_guides")
+
+        self.bottom_strip.set_validation(
+            "info", "HAND_GUIDES",
+            issues=[result.message],
+        )
+        self.statusBar().showMessage(result.message, 5000)
+
+    @QtCore.Slot(str, bool)
+    def _on_hand_mask_changed(self, bone: str, checked: bool) -> None:
+        """One of the per-bone mask checkboxes was toggled.
+
+        Recomputes the full masked-bone set from the current checkbox
+        state and forwards it to
+        :func:`headless_body_workflow.apply_hand_masks` so AcuRig's
+        :class:`BoneMask` mirrors the UI.
+        """
+        from core import headless_body_workflow as _wf
+
+        if self._acurig is None:
+            # User toggled a checkbox before clicking *Place Hand Guides*.
+            # Surface a friendly status instead of silently failing.
+            if hasattr(self.inspector, "set_hand_rig_status"):
+                self.inspector.set_hand_rig_status(
+                    "Click Place Hand Guides first.",
+                    kind="warning",
+                )
+            return
+
+        # Recover the *full* set of intended-masked bones from the
+        # current checkbox state, not just the single bone that
+        # triggered the signal — keeps AcuRig in sync even if multiple
+        # signals fire in quick succession.
+        checkboxes = getattr(self.inspector, "_hand_mask_checkboxes", {}) or {}
+        masked_now: list = [
+            name for name, cb in checkboxes.items() if cb.isChecked()
+        ]
+        # Override with the freshly-toggled state in case the checkbox
+        # widget hasn't latched yet (defensive).
+        if checked and bone not in masked_now:
+            masked_now.append(bone)
+        elif (not checked) and bone in masked_now:
+            masked_now = [b for b in masked_now if b != bone]
+
+        result = _wf.apply_hand_masks(
+            self.scene,
+            acurig=self._acurig,
+            masked_bones=masked_now,
+        )
+
+        if hasattr(self.inspector, "set_hand_rig_status"):
+            try:
+                self.inspector.set_hand_rig_status(
+                    result.message,
+                    kind=("ok" if result.ok else "warning"),
+                )
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_hand_rig_status failed")
+
+        # Re-sync checkbox column with the canonical AcuRig state — in
+        # case ``apply_hand_masks`` snapped to a slightly different set.
+        if result.ok and hasattr(self.inspector, "set_hand_masked_bones"):
+            try:
+                self.inspector.set_hand_masked_bones(result.masked_bones)
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_hand_masked_bones failed")
+
+    # ── M5 / T505 — Check-Actor step slots ───────────────────────────────
+
+    @QtCore.Slot()
+    def _on_refresh_preview_animations_requested(self) -> None:
+        """Re-enumerate preview animations on the body model.
+
+        Calls :func:`headless_body_workflow.available_preview_animations`
+        and pushes the available / missing split into the inspector
+        dropdown.  Also surfaces a status banner so the user knows
+        whether the standard set (walk / idle / talk) is present.
+        """
+        from core import headless_body_workflow as _wf
+
+        result = _wf.available_preview_animations(self.scene)
+
+        if hasattr(self.inspector, "set_preview_animations"):
+            try:
+                self.inspector.set_preview_animations(
+                    result.available, result.missing,
+                )
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_preview_animations failed")
+
+        # Pick the status kind based on the workflow code.
+        if result.code == "no_body":
+            kind = "error"
+        elif result.code == "no_animations":
+            kind = "warning"
+        else:
+            kind = ("ok" if result.available else "warning")
+
+        if hasattr(self.inspector, "set_preview_status"):
+            try:
+                self.inspector.set_preview_status(result.message, kind=kind)
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_preview_status failed")
+
+        self.statusBar().showMessage(result.message, 5000)
+
+    @QtCore.Slot(str)
+    def _on_play_preview_animation_requested(self, anim_name: str) -> None:
+        """Dispatch a preview animation to the viewport.
+
+        Wraps :func:`headless_body_workflow.play_preview_animation`,
+        passing the live viewport widget so its
+        ``set_animation_pose`` is invoked on the chosen
+        :class:`Animation`.
+        """
+        from core import headless_body_workflow as _wf
+
+        viewport = getattr(self, "viewport", None)
+        result = _wf.play_preview_animation(
+            self.scene, anim_name, viewport=viewport,
+        )
+
+        if hasattr(self.inspector, "set_preview_status"):
+            try:
+                self.inspector.set_preview_status(
+                    result.message,
+                    kind=("ok" if result.ok else "error"),
+                )
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_preview_status failed")
+
+        if not result.ok:
+            self.bottom_strip.set_validation(
+                "warning", (result.code or "preview").upper(),
+                issues=[result.message],
+            )
+            self.statusBar().showMessage(result.message, 6000)
+            return
+
+        self.bottom_strip.set_validation(
+            "info", "PREVIEW_PLAYING",
+            issues=[result.message],
+        )
+        self.statusBar().showMessage(result.message, 4000)
+
+    @QtCore.Slot()
+    def _on_stop_preview_animation_requested(self) -> None:
+        """Halt the currently-playing preview animation.
+
+        Wraps :func:`headless_body_workflow.stop_preview_animation`,
+        which dispatches ``viewport.set_animation_pose(None)`` per the
+        existing viewport contract.
+        """
+        from core import headless_body_workflow as _wf
+
+        viewport = getattr(self, "viewport", None)
+        result = _wf.stop_preview_animation(viewport=viewport)
+
+        if hasattr(self.inspector, "set_preview_status"):
+            try:
+                self.inspector.set_preview_status(
+                    result.message, kind="info",
+                )
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_preview_status failed")
+
+        self.statusBar().showMessage(result.message, 4000)
 
     # ── Mode-application helper (T205) ───────────────────────────────────
 
