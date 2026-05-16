@@ -41,7 +41,7 @@ This folder contains the post-Qt-migration roadmap for GhostRigger, derived from
 | M11 Visual regression | 🟡 infra ready | ~2 d |
 | M13 Unity MCP transfer | 🟡 started | ~4 d |
 | M14 Asset Viewer | ✅ done locally | awaiting review/PR |
-| M15 Module Editor | 🟡 started | T1501-T1504 done locally |
+| M15 Module Editor | ✅ done locally | T1501-T1505 done locally |
 | M16 Map Builder | 🔴 gap | ~8 d |
 | **Character Builder launch remaining** | | **~8 d** |
 | **Full suite foundation remaining** | | **~33 d** |
