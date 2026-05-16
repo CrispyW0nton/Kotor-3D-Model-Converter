@@ -240,6 +240,10 @@ def get_tools() -> List[Dict[str, Any]]:
                         "default": "Assets/KotorImported/GhostRigger",
                         "description": "Unity-project-relative output folder",
                     },
+                    "output_name": {
+                        "type": "string",
+                        "description": "Optional output filename stem; defaults to resref",
+                    },
                     "format": {
                         "type": "string",
                         "enum": ["fbx"],
@@ -603,6 +607,7 @@ async def handle_export_model_for_unity(arguments: Dict[str, Any]) -> Dict[str, 
     asset_subdir = str(
         arguments.get("asset_subdir") or "Assets/KotorImported/GhostRigger"
     )
+    output_name = str(arguments.get("output_name", "") or "").strip() or None
     fmt = str(arguments.get("format") or "fbx").lower().lstrip(".")
     export_rigging = bool(arguments.get("export_rigging", True))
     svc = _get_services()
@@ -633,6 +638,7 @@ async def handle_export_model_for_unity(arguments: Dict[str, Any]) -> Dict[str, 
             model,
             game=str(game).upper(),
             resref=resref,
+            asset_name=output_name,
             unity_project=Path(unity_project_raw),
             asset_subdir=asset_subdir,
             extension=fmt,

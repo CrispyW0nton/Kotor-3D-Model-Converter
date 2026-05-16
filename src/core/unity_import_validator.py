@@ -121,6 +121,13 @@ def build_unity_import_manifest(
     if material_count <= 0 and renderer_types:
         warnings.append({"code": "no_materials", "message": "Unity renderers have no material assignments."})
 
+    fbx_diag = transfer_metadata.get("fbx") or {}
+    if isinstance(fbx_diag, dict) and fbx_diag.get("checked") and not fbx_diag.get("ok", True):
+        errors.append({
+            "code": "fbx_skin_object_error",
+            "message": "GhostRigger FBX skin diagnostics found duplicate or invalid deformer object IDs.",
+        })
+
     character_mode = str(source.get("character_mode", "") or "").lower()
     expected_animation_count = int((transfer_metadata.get("counts", {}) or {}).get("animations", 0) or 0)
     if character_mode in {"headless_body", "head", "supermodel", "creature"} and expected_animation_count > 0:

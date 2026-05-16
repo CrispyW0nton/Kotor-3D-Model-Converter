@@ -10,8 +10,15 @@ LOCAL_SRC = ROOT / "src"
 if str(LOCAL_SRC) not in sys.path:
     sys.path.insert(0, str(LOCAL_SRC))
 
-from src.core.unity_export_bridge import build_output_paths, summarize_model
+from src.core.unity_export_bridge import (
+    build_output_paths,
+    export_model_for_unity,
+    inspect_fbx_skin_objects,
+    summarize_model,
+)
 from src.core.unity_import_validator import build_unity_import_manifest
+from src.core.model_data import BoneWeight, KotorModel, ModelNode, NodeFlags, VertexSkinData
+from src.converters.mesh_converter import FBXExporter
 from kotormcp.tools import get_all_tools, handle_tool
 from kotormcp.tools import ghostrigger
 
@@ -124,8 +131,91 @@ def test_mcp_unity_export_action_writes_asset_and_metadata(monkeypatch):
         sidecar = json.loads(Path(payload["metadata"]).read_text(encoding="utf-8"))
         assert sidecar["source"]["path"] == "installation:n_darthmalak.mdl"
         assert sidecar["counts"]["animations"] == 2
+        assert sidecar["fbx"]["checked"] is True
     finally:
-        shutil.rmtree(out_root.parent, ignore_errors=True)
+        shutil.rmtree(out_root, ignore_errors=True)
+
+
+def test_unity_export_sidecar_records_fbx_skin_diagnostics():
+    out_root = Path(".pytest_tmp_unity_bridge") / "UnityProject"
+
+    def _fake_exporter(model, out_path, export_rigging):
+        out_path.write_text(
+            '\n'.join([
+                'Deformer: 1, "Deformer::torso_Skin", "Skin" {',
+                'SubDeformer: 2, "SubDeformer::root", "Cluster" {',
+            ]),
+            encoding="utf-8",
+        )
+        return True
+
+    try:
+        result = export_model_for_unity(
+            _Model(),
+            game="K1",
+            resref="n_darthmalak",
+            unity_project=out_root,
+            asset_subdir="Assets/KotorImported/Test",
+            extension="fbx",
+            export_rigging=True,
+            exporter=_fake_exporter,
+        )
+        sidecar = json.loads(Path(result["metadata"]).read_text(encoding="utf-8"))
+
+        assert sidecar["fbx"] == {
+            "checked": True,
+            "skin_deformers": 1,
+            "clusters": 1,
+            "duplicate_object_ids": {},
+            "ok": True,
+        }
+    finally:
+        shutil.rmtree(out_root, ignore_errors=True)
+
+
+def test_unity_export_can_use_custom_output_name():
+    out_root = Path(".pytest_tmp_unity_bridge") / "UnityProject"
+
+    def _fake_exporter(model, out_path, export_rigging):
+        out_path.write_text("fbx", encoding="utf-8")
+        return True
+
+    try:
+        result = export_model_for_unity(
+            _Model(),
+            game="K1",
+            resref="n_darthmalak",
+            asset_name="N_DarthMalak_GhostRiggerFresh",
+            unity_project=out_root,
+            asset_subdir="Assets/KotorImported/Test",
+            extension="fbx",
+            export_rigging=True,
+            exporter=_fake_exporter,
+        )
+
+        assert result["unity_asset_path"] == (
+            "Assets/KotorImported/Test/N_DarthMalak_GhostRiggerFresh.fbx"
+        )
+        sidecar = json.loads(Path(result["metadata"]).read_text(encoding="utf-8"))
+        assert sidecar["source"]["resref"] == "n_darthmalak"
+    finally:
+        shutil.rmtree(out_root, ignore_errors=True)
+
+
+def test_fbx_skin_diagnostics_flags_duplicate_deformer_ids(tmp_path):
+    path = tmp_path / "bad.fbx"
+    path.write_text(
+        '\n'.join([
+            'SubDeformer: 42, "SubDeformer::root", "Cluster" {',
+            'SubDeformer: 42, "SubDeformer::root", "Cluster" {',
+        ]),
+        encoding="utf-8",
+    )
+
+    diagnostics = inspect_fbx_skin_objects(path)
+
+    assert diagnostics["ok"] is False
+    assert diagnostics["duplicate_object_ids"] == {"42": 2}
 
 
 def test_unity_import_manifest_reports_missing_skin_warning():
@@ -162,8 +252,33 @@ def test_unity_import_manifest_reports_missing_skin_warning():
     }
 
 
+def test_unity_import_manifest_errors_on_bad_fbx_skin_diagnostics():
+    transfer = {
+        "source": {"game": "K1", "resref": "n_darthmalak", "character_mode": "creature"},
+        "unity": {"asset_path": "Assets/KotorImported/Test/n_darthmalak.fbx"},
+        "counts": {"animations": 1},
+        "animations": ["pause1"],
+        "fbx": {
+            "checked": True,
+            "ok": False,
+            "duplicate_object_ids": {"42": 2},
+        },
+    }
+    unity_summary = {
+        "asset_path": "Assets/KotorImported/Test/n_darthmalak.fbx",
+        "clips": [{"name": "pause1"}],
+        "renderers": [{"type": "SkinnedMeshRenderer", "materialCount": 1, "boneCount": 1, "bindposeCount": 1}],
+    }
+
+    manifest = build_unity_import_manifest(transfer, unity_summary)
+
+    assert manifest["status"] == "error"
+    assert manifest["ok"] is False
+    assert {item["code"] for item in manifest["errors"]} == {"fbx_skin_object_error"}
+
+
 def test_mcp_unity_import_validator_writes_manifest():
-    out_root = Path(".pytest_tmp_unity_bridge")
+    out_root = Path(".pytest_tmp_unity_bridge") / "validator"
     sidecar = out_root / "n_darthmalak.ghostrigger.json"
     manifest_path = out_root / "validation.json"
     sidecar.parent.mkdir(parents=True, exist_ok=True)
@@ -199,3 +314,33 @@ def test_mcp_unity_import_validator_writes_manifest():
         assert manifest_path.exists()
     finally:
         shutil.rmtree(out_root, ignore_errors=True)
+
+
+def test_fbx_export_merges_duplicate_bone_map_clusters(tmp_path):
+    root = ModelNode(name="root", flags=int(NodeFlags.HEADER))
+    skin = ModelNode(
+        name="torso",
+        flags=int(NodeFlags.MESH | NodeFlags.SKIN),
+        parent=root,
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+        faces=[(0, 1, 2)],
+        texture="torso",
+        bone_map=["root", "root"],
+        skin_data=[
+            VertexSkinData([BoneWeight(0, 0.25), BoneWeight(1, 0.75)]),
+            VertexSkinData([BoneWeight(1, 1.0)]),
+            VertexSkinData([BoneWeight(0, 1.0)]),
+        ],
+    )
+    root.children.append(skin)
+    model = KotorModel(name="duplicate_cluster_case", root_node=root)
+    out_path = tmp_path / "duplicate_cluster_case.fbx"
+
+    assert FBXExporter()._export_fbx_ascii(model, str(out_path))
+    text = out_path.read_text(encoding="utf-8")
+
+    assert text.count('"SubDeformer::root", "Cluster"') == 1
+    assert "Indexes: *3" in text
+    assert "\ta: 0,1,2" in text

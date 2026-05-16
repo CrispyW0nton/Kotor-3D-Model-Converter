@@ -51,6 +51,7 @@ def export_model(args: argparse.Namespace) -> dict[str, Any]:
         model,
         game=args.game,
         resref=args.resref,
+        asset_name=args.output_name,
         unity_project=unity_project,
         asset_subdir=args.asset_subdir,
         extension=args.format,
@@ -70,6 +71,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--game", type=_normalise_game, required=True, help="k1 or k2")
     parser.add_argument("--game-dir", required=True, help="KotOR install directory containing chitin.key")
     parser.add_argument("--resref", required=True, help="Model resref, for example n_darthmalak")
+    parser.add_argument("--output-name", help="Optional output filename stem; defaults to resref")
     parser.add_argument("--unity-project", required=True, help="Unity project root")
     parser.add_argument(
         "--asset-subdir",

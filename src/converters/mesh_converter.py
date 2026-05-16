@@ -1471,7 +1471,8 @@ class FBXExporter:
                 deform_ids[n.name] = new_id()
                 cluster_ids[n.name] = {}
                 for bname in n.bone_map:
-                    cluster_ids[n.name][bname] = new_id()
+                    if bname and bname not in cluster_ids[n.name]:
+                        cluster_ids[n.name][bname] = new_id()
 
         # ── Definitions section (mandatory for FBX 7.4 / UE5 / ufbx) ─────
         # FBX 7.4 requires a Definitions block that declares the count of
@@ -2047,18 +2048,27 @@ class FBXExporter:
             # a corresponding SubDeformer/Cluster in the Skin deformer, even if
             # that bone has zero direct vertex influence. Empty clusters keep the
             # skeleton hierarchy intact in UE5's Skeleton Editor.
-            for bi, bname in enumerate(n.bone_map):
-                if bname not in cluster_ids.get(n.name, {}):
+            for bname, cid in cluster_ids.get(n.name, {}).items():
+                bone_indices = [
+                    bi for bi, candidate in enumerate(n.bone_map or [])
+                    if candidate == bname
+                ]
+                if not bone_indices:
                     continue
-                cid = cluster_ids[n.name][bname]
-                # Gather vertex indices + weights for this bone
-                vi_list = []
-                wt_list = []
+                primary_bi = bone_indices[0]
+                # Gather vertex indices + weights for this bone. Some KotOR skin
+                # bone maps repeat the same bone name in multiple slots; FBX
+                # needs one Cluster object per bone node, so merge those slots
+                # into a single per-vertex weight list.
+                weight_by_vertex = {}
                 for vi, sd in enumerate(_norm_sd):
                     for inf in (sd.influences or []):
-                        if inf.bone_index == bi and inf.weight > 0:
-                            vi_list.append(vi)
-                            wt_list.append(inf.weight)
+                        if inf.bone_index in bone_indices and inf.weight > 0:
+                            weight_by_vertex[vi] = (
+                                weight_by_vertex.get(vi, 0.0) + inf.weight
+                            )
+                vi_list = sorted(weight_by_vertex)
+                wt_list = [weight_by_vertex[vi] for vi in vi_list]
 
                 # TransformLink = bone world-space bind matrix (column-major for FBX)
                 # Priority: (1) this model's own node, (2) base_skeleton_model node,
@@ -2069,9 +2079,9 @@ class FBXExporter:
                 elif bname.lower() in _base_skel_node_by_name:
                     link_m = _world_matrix_col_major(
                         _base_skel_node_by_name[bname.lower()])
-                elif bi < len(_qbone_list) and bi < len(_tbone_list):
+                elif primary_bi < len(_qbone_list) and primary_bi < len(_tbone_list):
                     # v7.1: qBone/tBone fallback (Finding 2.5)
-                    link_m = _qbone_matrix_col_major(bi)
+                    link_m = _qbone_matrix_col_major(primary_bi)
                 else:
                     link_m = identity_m
 
