@@ -30,10 +30,25 @@ class _Anim:
 
 
 class _Node:
-    def __init__(self, name, position=(0.0, 0.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0)):
+    def __init__(
+        self,
+        name,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        *,
+        is_mesh=False,
+        is_skin=False,
+        texture="",
+        texture_names=None,
+    ):
         self.name = name
         self.position = position
         self.rotation = rotation
+        self.is_mesh = is_mesh
+        self.is_skin = is_skin
+        self.texture = texture
+        self.texture_names = list(texture_names or [])
+        self.vertices = [(0.0, 0.0, 0.0)] if is_mesh or is_skin else []
 
     def world_transform(self):
         return self.position, self.rotation
@@ -451,3 +466,133 @@ def test_t1404_attachment_validation_reports_missing_blaster_bullet_hook(monkeyp
     assert report.ok is True
     assert [issue.code for issue in report.issues] == ["BULLET_HOOK_MISSING"]
     assert "bullethook" in report.issues[0].action
+
+
+def test_t1405_export_preview_parity_clean_reload(monkeypatch):
+    _install(monkeypatch)
+    scene = md.CharacterScene(game_version="K1")
+    source = _Model(
+        "preview_body",
+        nodes=[
+            _Node("rootdummy"),
+            _Node("headhook"),
+            _Node("rhand"),
+            _Node("torso", is_mesh=True, texture="pmbam01"),
+        ],
+        animations=[_Anim("pause1"), _Anim("walk")],
+    )
+    exported = _Model(
+        "preview_body",
+        nodes=[
+            _Node("rootdummy"),
+            _Node("headhook"),
+            _Node("rhand"),
+            _Node("torso", is_mesh=True, texture="pmbam01"),
+        ],
+        animations=[_Anim("pause1"), _Anim("walk")],
+    )
+    source.supermodel = "S_Male02"
+    exported.supermodel = "S_Male02"
+    scene.assign(md.PartSlot.HEADLESS_BODY, source, resref="pmbam")
+
+    report = ap.compare_export_preview_parity(scene, exported_model=exported)
+
+    assert report.ok is True
+    assert report.code == "matched"
+    assert report.deltas == []
+    payload = scene.metadata["asset_preview"]["export_preview_parity"]
+    assert payload["source_summary"]["mesh_count"] == 1
+    assert payload["exported_summary"]["hooks"] == ["headhook", "rhand"]
+
+
+def test_t1405_export_preview_parity_reports_missing_mesh_hook_and_animation(monkeypatch):
+    _install(monkeypatch)
+    scene = md.CharacterScene(game_version="K1")
+    source = _Model(
+        "preview_body",
+        nodes=[
+            _Node("headhook"),
+            _Node("rhand"),
+            _Node("torso", is_mesh=True, texture="pmbam01"),
+            _Node("belt", is_mesh=True, texture="belt01"),
+        ],
+        animations=[_Anim("pause1"), _Anim("walk")],
+    )
+    exported = _Model(
+        "preview_body",
+        nodes=[
+            _Node("headhook"),
+            _Node("torso", is_mesh=True, texture="pmbam01"),
+        ],
+        animations=[_Anim("pause1")],
+    )
+    scene.assign(md.PartSlot.HEADLESS_BODY, source, resref="pmbam")
+
+    report = ap.compare_export_preview_parity(scene, exported_model=exported)
+
+    assert report.ok is False
+    assert report.code == "errors"
+    codes = [delta.kind for delta in report.deltas]
+    assert "mesh_missing" in codes
+    assert "hook_missing" in codes
+    assert "animation_missing" in codes
+    assert scene.metadata["asset_preview"]["export_preview_parity"]["deltas"][0]["severity"] == "error"
+
+
+def test_t1405_export_preview_parity_reports_material_and_supermodel_changes(monkeypatch):
+    _install(monkeypatch)
+    scene = md.CharacterScene(game_version="K1")
+    source = _Model(
+        "preview_body",
+        nodes=[_Node("torso", is_mesh=True, texture_names=["pmbam01", "lm01"])],
+        animations=[],
+    )
+    exported = _Model(
+        "preview_body",
+        nodes=[_Node("torso", is_mesh=True, texture_names=["pmbam02", "lm01"])],
+        animations=[],
+    )
+    source.supermodel = "S_Female02"
+    exported.supermodel = "NULL"
+    scene.assign(md.PartSlot.HEADLESS_BODY, source, resref="pmbam")
+
+    report = ap.compare_export_preview_parity(scene, exported_model=exported)
+
+    assert report.ok is False
+    assert report.code == "warnings"
+    assert [delta.kind for delta in report.deltas] == ["material_changed", "supermodel_changed"]
+    assert report.deltas[0].source == ("pmbam01", "lm01")
+    assert report.deltas[0].exported == ("pmbam02", "lm01")
+
+
+def test_t1405_export_preview_parity_can_load_export_path(monkeypatch):
+    _install(monkeypatch)
+    scene = md.CharacterScene(game_version="K1")
+    source = _Model("preview_body", nodes=[_Node("torso", is_mesh=True)], animations=[])
+    exported = _Model("preview_body", nodes=[_Node("torso", is_mesh=True)], animations=[])
+    scene.assign(md.PartSlot.HEADLESS_BODY, source, resref="pmbam")
+    monkeypatch.setattr(ap, "_load_exported_preview_model", lambda path: exported)
+
+    report = ap.compare_export_preview_parity(scene, exported_path="C:/out/pmbam.mdl")
+
+    assert report.ok is True
+    assert report.exported_path == "C:/out/pmbam.mdl"
+    assert scene.metadata["asset_preview"]["export_preview_parity"]["exported_path"] == "C:/out/pmbam.mdl"
+
+
+def test_t1405_export_preview_parity_reports_reload_failure(monkeypatch):
+    _install(monkeypatch)
+    scene = md.CharacterScene(game_version="K1")
+    source = _Model("preview_body", nodes=[_Node("torso", is_mesh=True)], animations=[])
+    scene.assign(md.PartSlot.HEADLESS_BODY, source, resref="pmbam")
+
+    def _boom(_path):
+        raise RuntimeError("bad mdl")
+
+    monkeypatch.setattr(ap, "_load_exported_preview_model", _boom)
+
+    report = ap.compare_export_preview_parity(scene, exported_path="C:/out/bad.mdl")
+
+    assert report.ok is False
+    assert report.code == "reload_failed"
+    assert "bad mdl" in report.message

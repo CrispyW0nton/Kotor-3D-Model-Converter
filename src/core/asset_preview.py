@@ -8,6 +8,7 @@ booting KOTOR.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -48,6 +49,14 @@ def _import_composite_workflow():  # pragma: no cover - import shim
     except ImportError:
         from core import composite_workflow as _cw  # type: ignore
     return _cw
+
+
+def _import_kotor_loader():  # pragma: no cover - import shim
+    try:
+        from src.core.kotor_loader import load_model_from_file  # type: ignore
+    except ImportError:
+        from core.kotor_loader import load_model_from_file  # type: ignore
+    return load_model_from_file
 
 
 @dataclass(frozen=True)
@@ -178,6 +187,32 @@ class AttachmentValidationReport:
     available_sockets: list[str] = field(default_factory=list)
     message: str = ""
     code: str = "validated"
+
+
+@dataclass(frozen=True)
+class ExportPreviewDelta:
+    """One difference between the preview model and exported/reloaded model."""
+
+    severity: str
+    kind: str
+    name: str
+    message: str
+    source: Any = None
+    exported: Any = None
+    action: str = ""
+
+
+@dataclass
+class ExportPreviewParityReport:
+    """Asset Viewer report comparing preview state to a reloaded export."""
+
+    ok: bool = False
+    deltas: list[ExportPreviewDelta] = field(default_factory=list)
+    source_summary: dict[str, Any] = field(default_factory=dict)
+    exported_summary: dict[str, Any] = field(default_factory=dict)
+    exported_path: str = ""
+    message: str = ""
+    code: str = "not_compared"
 
 
 ANIMATION_GROUP_ORDER: tuple[str, ...] = (
@@ -347,6 +382,48 @@ def _model_animations(model: Any) -> list[Any]:
         except Exception:
             return []
     return []
+
+
+def _mesh_nodes(model: Any) -> list[Any]:
+    meshes: list[Any] = []
+    for node in _all_nodes(model):
+        if (
+            bool(getattr(node, "is_mesh", False))
+            or bool(getattr(node, "is_skin", False))
+            or bool(getattr(node, "vertices", None))
+            or str(getattr(node, "type_label", "") or "").lower() in {"trimesh", "skin", "dangly", "saber"}
+        ):
+            meshes.append(node)
+    return meshes
+
+
+def _clean_token(value: Any) -> str:
+    return str(value or "").strip().strip("\x00").lower()
+
+
+def _node_textures(node: Any) -> tuple[str, ...]:
+    values: list[str] = []
+    texture_clean = getattr(node, "texture_clean", None)
+    if isinstance(texture_clean, str):
+        values.append(texture_clean)
+    for attr in ("texture", "lightmap", "bump_map", "txi_envmaptexture", "txi_bumpmaptexture"):
+        values.append(getattr(node, attr, ""))
+    texture_names = getattr(node, "texture_names", None)
+    if texture_names:
+        try:
+            values.extend(list(texture_names))
+        except Exception:
+            pass
+    cleaned = [_clean_token(value) for value in values]
+    return tuple(dict.fromkeys(value for value in cleaned if value))
+
+
+def _preview_source_model(scene: Any) -> Any:
+    md = _import_model_data()
+    preview_model = getattr(scene, "preview_model", None)
+    if _all_nodes(preview_model):
+        return preview_model
+    return _slot_model(scene, md.PartSlot.HEADLESS_BODY)
 
 
 def _slot_entry(scene: Any, slot: Any) -> Any:
@@ -931,6 +1008,279 @@ def validate_attachment_overlay(scene: Any) -> AttachmentValidationReport:
         ),
         code=report_payload["code"],
     )
+
+
+def _load_exported_preview_model(exported_path: str) -> Any:
+    if not exported_path:
+        return None
+    loader = _import_kotor_loader()
+    mdx_path = os.path.splitext(exported_path)[0] + ".mdx"
+    return loader(exported_path, mdx_path if os.path.isfile(mdx_path) else "")
+
+
+def _model_parity_summary(model: Any) -> dict[str, Any]:
+    nodes = _all_nodes(model)
+    meshes = _mesh_nodes(model)
+    mesh_names = sorted(
+        dict.fromkeys(_node_name(node) for node in meshes if _node_name(node)),
+        key=str.lower,
+    )
+    hooks = _socket_names(model)
+    animations = sorted(
+        dict.fromkeys(_animation_name(anim) for anim in _model_animations(model) if _animation_name(anim)),
+        key=str.lower,
+    )
+    materials = {
+        _node_name(node): _node_textures(node)
+        for node in meshes
+        if _node_name(node)
+    }
+    return {
+        "model": _model_identity(model, "model"),
+        "node_count": len(nodes),
+        "mesh_count": len(mesh_names),
+        "hook_count": len(hooks),
+        "animation_count": len(animations),
+        "material_count": len([value for value in materials.values() if value]),
+        "meshes": mesh_names,
+        "hooks": hooks,
+        "animations": animations,
+        "materials": materials,
+        "supermodel": str(getattr(model, "supermodel", "") or ""),
+    }
+
+
+def _delta(
+    severity: str,
+    kind: str,
+    name: str,
+    message: str,
+    *,
+    source: Any = None,
+    exported: Any = None,
+    action: str = "",
+) -> ExportPreviewDelta:
+    return ExportPreviewDelta(
+        severity=severity,
+        kind=kind,
+        name=name,
+        message=message,
+        source=source,
+        exported=exported,
+        action=action,
+    )
+
+
+def _delta_payload(delta: ExportPreviewDelta) -> dict[str, Any]:
+    return {
+        "severity": delta.severity,
+        "kind": delta.kind,
+        "name": delta.name,
+        "message": delta.message,
+        "source": delta.source,
+        "exported": delta.exported,
+        "action": delta.action,
+    }
+
+
+def compare_export_preview_parity(
+    scene: Any,
+    *,
+    exported_model: Any = None,
+    exported_path: str = "",
+) -> ExportPreviewParityReport:
+    """Compare the current preview model against an exported/reloaded MDL.
+
+    The report is intentionally structural and UI-ready: it lists mesh,
+    material, animation, hook, and supermodel deltas that would make a KOTOR
+    modder's in-game test differ from the Asset Viewer preview.
+    """
+
+    source_model = _preview_source_model(scene)
+    if source_model is None:
+        return ExportPreviewParityReport(
+            message="Load a preview model before comparing export parity.",
+            code="preview_missing",
+            exported_path=exported_path,
+        )
+
+    if exported_model is None and exported_path:
+        try:
+            exported_model = _load_exported_preview_model(exported_path)
+        except Exception as exc:
+            report = ExportPreviewParityReport(
+                ok=False,
+                source_summary=_model_parity_summary(source_model),
+                exported_path=exported_path,
+                message=f"Exported MDL reload failed: {exc}",
+                code="reload_failed",
+            )
+            _scene_metadata(scene).setdefault("asset_preview", {})["export_preview_parity"] = {
+                "ok": False,
+                "code": report.code,
+                "exported_path": exported_path,
+                "message": report.message,
+            }
+            return report
+
+    if exported_model is None:
+        return ExportPreviewParityReport(
+            ok=False,
+            source_summary=_model_parity_summary(source_model),
+            exported_path=exported_path,
+            message="Provide a reloaded exported model or an exported MDL path for parity comparison.",
+            code="export_missing",
+        )
+
+    source = _model_parity_summary(source_model)
+    exported = _model_parity_summary(exported_model)
+    deltas: list[ExportPreviewDelta] = []
+
+    source_meshes = set(source["meshes"])
+    exported_meshes = set(exported["meshes"])
+    for name in sorted(source_meshes - exported_meshes, key=str.lower):
+        deltas.append(
+            _delta(
+                "error",
+                "mesh_missing",
+                name,
+                f"Exported/reloaded model is missing preview mesh '{name}'.",
+                source=True,
+                exported=False,
+                action="Check export slot selection and MDL writer mesh inclusion.",
+            )
+        )
+    for name in sorted(exported_meshes - source_meshes, key=str.lower):
+        deltas.append(
+            _delta(
+                "info",
+                "mesh_added",
+                name,
+                f"Exported/reloaded model contains additional mesh '{name}'.",
+                source=False,
+                exported=True,
+                action="Confirm this is an intentional generated helper or export artifact.",
+            )
+        )
+
+    source_hooks = {name.lower(): name for name in source["hooks"]}
+    exported_hooks = {name.lower(): name for name in exported["hooks"]}
+    for key, name in sorted(source_hooks.items(), key=lambda item: item[0]):
+        if key not in exported_hooks:
+            deltas.append(
+                _delta(
+                    "error",
+                    "hook_missing",
+                    name,
+                    f"Exported/reloaded model is missing hook '{name}'.",
+                    source=True,
+                    exported=False,
+                    action="Preserve KOTOR hooks before shipping the MDL.",
+                )
+            )
+    for key, name in sorted(exported_hooks.items(), key=lambda item: item[0]):
+        if key not in source_hooks:
+            deltas.append(
+                _delta(
+                    "info",
+                    "hook_added",
+                    name,
+                    f"Exported/reloaded model contains additional hook '{name}'.",
+                    source=False,
+                    exported=True,
+                    action="Verify the added hook is expected for the target game.",
+                )
+            )
+
+    source_anims = {name.lower(): name for name in source["animations"]}
+    exported_anims = {name.lower(): name for name in exported["animations"]}
+    for key, name in sorted(source_anims.items(), key=lambda item: item[0]):
+        if key not in exported_anims:
+            deltas.append(
+                _delta(
+                    "warning",
+                    "animation_missing",
+                    name,
+                    f"Exported/reloaded model is missing preview animation '{name}'.",
+                    source=True,
+                    exported=False,
+                    action="Assign inherited or exported clips before testing this animation in game.",
+                )
+            )
+    for key, name in sorted(exported_anims.items(), key=lambda item: item[0]):
+        if key not in source_anims:
+            deltas.append(
+                _delta(
+                    "info",
+                    "animation_added",
+                    name,
+                    f"Exported/reloaded model contains additional animation '{name}'.",
+                    source=False,
+                    exported=True,
+                    action="Confirm the additional clip is expected from inherited/generated motion handling.",
+                )
+            )
+
+    source_materials = source["materials"]
+    exported_materials = exported["materials"]
+    for name in sorted(source_meshes & exported_meshes, key=str.lower):
+        source_tex = tuple(source_materials.get(name, ()))
+        exported_tex = tuple(exported_materials.get(name, ()))
+        if source_tex != exported_tex:
+            deltas.append(
+                _delta(
+                    "warning",
+                    "material_changed",
+                    name,
+                    f"Material/texture assignment changed for mesh '{name}'.",
+                    source=source_tex,
+                    exported=exported_tex,
+                    action="Check texture names, lightmaps, and TXI sidecars before packaging.",
+                )
+            )
+
+    source_super = str(source.get("supermodel") or "")
+    exported_super = str(exported.get("supermodel") or "")
+    if source_super.lower() != exported_super.lower():
+        deltas.append(
+            _delta(
+                "warning",
+                "supermodel_changed",
+                "supermodel",
+                f"Supermodel changed from {source_super or 'NULL'} to {exported_super or 'NULL'}.",
+                source=source_super,
+                exported=exported_super,
+                action="Confirm the exported MDL inherits the intended KOTOR animation set.",
+            )
+        )
+
+    errors = [delta for delta in deltas if delta.severity == "error"]
+    warnings = [delta for delta in deltas if delta.severity == "warning"]
+    ok = not errors and not warnings
+    report = ExportPreviewParityReport(
+        ok=ok,
+        deltas=deltas,
+        source_summary=source,
+        exported_summary=exported,
+        exported_path=exported_path,
+        message=(
+            "Export preview parity is clean."
+            if ok else
+            f"{len(deltas)} export-preview delta(s) found."
+        ),
+        code="matched" if ok else ("errors" if errors else "warnings"),
+    )
+
+    _scene_metadata(scene).setdefault("asset_preview", {})["export_preview_parity"] = {
+        "ok": report.ok,
+        "code": report.code,
+        "message": report.message,
+        "exported_path": exported_path,
+        "source_summary": source,
+        "exported_summary": exported,
+        "deltas": [_delta_payload(delta) for delta in deltas],
+    }
+    return report
 
 
 def build_animation_workbench(scene: Any) -> AnimationWorkbenchResult:
