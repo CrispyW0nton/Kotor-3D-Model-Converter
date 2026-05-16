@@ -191,6 +191,24 @@ def test_t401_setter_enabled_toggle():
         w.deleteLater()
 
 
+def test_t401_toolbar_dot_button_tracks_joint_dot_enabled():
+    """The launch HUD exposes a Dots toggle and keeps it synced to the model."""
+    app, w = _make_widget()
+    try:
+        assert hasattr(w, "joint_dot_button")
+        assert w.joint_dot_button.isChecked() is True
+
+        w.joint_dot_button.click()
+        assert w.joint_dot_enabled is False
+        assert w.joint_dot_button.isChecked() is False
+
+        w.set_joint_dot_enabled(True)
+        assert w.joint_dot_enabled is True
+        assert w.joint_dot_button.isChecked() is True
+    finally:
+        w.deleteLater()
+
+
 # ── T402 ▸ Joint-dot hit-test ────────────────────────────────────────────────
 class _FakeNode:
     """Minimal stand-in for a ModelNode for hit-test unit tests."""
@@ -579,6 +597,24 @@ def test_t405_heatmap_toggle():
         w.deleteLater()
 
 
+def test_t405_toolbar_heat_button_tracks_heatmap_enabled():
+    """The viewport HUD exposes a Heat toggle synced with the heat-map flag."""
+    app, w = _make_widget()
+    try:
+        assert hasattr(w, "heatmap_button")
+        assert w.heatmap_button.isChecked() is False
+
+        w.heatmap_button.click()
+        assert w.weight_heatmap_enabled is True
+        assert w.heatmap_button.isChecked() is True
+
+        w.set_weight_heatmap_enabled(False)
+        assert w.weight_heatmap_enabled is False
+        assert w.heatmap_button.isChecked() is False
+    finally:
+        w.deleteLater()
+
+
 def test_t405_heatmap_dot_size_clamping():
     """Heat-map dot size clamps to [1, 8]."""
     app, w = _make_widget()
@@ -611,6 +647,17 @@ def test_t405_heatmap_noop_when_no_selection():
         assert d.calls == 0
     finally:
         w.deleteLater()
+
+
+def test_hud_inspector_overlay_signals_are_wired_to_viewport():
+    """Builder window routes inspector HUD controls into viewport setters."""
+    source = pathlib.Path("src/gui/qt_character_builder_panel.py").read_text()
+    assert "symmetryToggled.connect(self._on_joint_symmetry_toggled)" in source
+    assert "jointOpacityChanged.connect(self._on_joint_opacity_changed)" in source
+    assert "jointSizeChanged.connect(self._on_joint_size_changed)" in source
+    assert "viewport.set_joint_symmetry" in source
+    assert "viewport.set_joint_dot_opacity" in source
+    assert "viewport.set_joint_dot_size" in source
 
 
 # ── T406 ▸ Per-mode camera presets ───────────────────────────────────────────

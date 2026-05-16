@@ -445,11 +445,17 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.texture_button = self._button("Texture  T", self.toggle_texture, checkable=True, active=True)
         self.renderer_button = self._button("GPU", self.toggle_gpu_renderer, checkable=True, active=True)
         self.xray_button = self._button("X-Ray  Alt+X", self.toggle_xray, checkable=True)
+        self.joint_dot_button = self._button("Dots", self.toggle_joint_dots, checkable=True, active=True)
+        self.joint_dot_button.setToolTip("Show or hide AccuRig joint-dot handles")
+        self.heatmap_button = self._button("Heat", self.toggle_weight_heatmap, checkable=True)
+        self.heatmap_button.setToolTip("Show selected-bone weight heat-map")
         row.addWidget(self.wire_button)
         row.addWidget(self.bones_button)
         row.addWidget(self.texture_button)
         row.addWidget(self.renderer_button)
         row.addWidget(self.xray_button)
+        row.addWidget(self.joint_dot_button)
+        row.addWidget(self.heatmap_button)
         row.addWidget(self._separator())
 
         self.shade_combo = QtWidgets.QComboBox()
@@ -675,6 +681,16 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.xray_button.setChecked(self._xray_mode)
         self.xray_button.blockSignals(False)
         self._request_render(fast=True)
+
+    def toggle_joint_dots(self, checked: Optional[bool] = None) -> None:
+        """Toolbar toggle for the AccuRig joint-dot HUD layer."""
+        enabled = bool(checked) if checked is not None else not self._joint_dot_enabled
+        self.set_joint_dot_enabled(enabled)
+
+    def toggle_weight_heatmap(self, checked: Optional[bool] = None) -> None:
+        """Toolbar toggle for the selected-bone weight heat-map HUD layer."""
+        enabled = bool(checked) if checked is not None else not self._weight_heatmap_enabled
+        self.set_weight_heatmap_enabled(enabled)
 
     def toggle_walkmesh(self, checked: Optional[bool] = None) -> None:
         if self._renderer._walkmesh_overlay is None:
@@ -1881,8 +1897,16 @@ class QtViewportWidget(QtWidgets.QWidget):
         """Toggle the per-vertex weight heat-map overlay."""
         new_val = bool(enabled)
         if new_val == self._weight_heatmap_enabled:
+            if hasattr(self, "heatmap_button"):
+                self.heatmap_button.blockSignals(True)
+                self.heatmap_button.setChecked(new_val)
+                self.heatmap_button.blockSignals(False)
             return
         self._weight_heatmap_enabled = new_val
+        if hasattr(self, "heatmap_button"):
+            self.heatmap_button.blockSignals(True)
+            self.heatmap_button.setChecked(new_val)
+            self.heatmap_button.blockSignals(False)
         self._request_render()
 
     def set_weight_heatmap_dot_size(self, size: int) -> None:
@@ -2018,8 +2042,16 @@ class QtViewportWidget(QtWidgets.QWidget):
         """Toggle the joint-dot overlay layer on/off."""
         new_val = bool(enabled)
         if new_val == self._joint_dot_enabled:
+            if hasattr(self, "joint_dot_button"):
+                self.joint_dot_button.blockSignals(True)
+                self.joint_dot_button.setChecked(new_val)
+                self.joint_dot_button.blockSignals(False)
             return
         self._joint_dot_enabled = new_val
+        if hasattr(self, "joint_dot_button"):
+            self.joint_dot_button.blockSignals(True)
+            self.joint_dot_button.setChecked(new_val)
+            self.joint_dot_button.blockSignals(False)
         self._request_render()
 
     def set_joint_dot_size(self, size: int) -> None:

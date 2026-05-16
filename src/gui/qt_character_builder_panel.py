@@ -484,6 +484,11 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self.inspector.loadRequested.connect(self._on_load_model_requested)
         self.inspector.validateRequested.connect(self._on_validate_requested)
         self.inspector.checkModelRequested.connect(self._on_check_model_requested)
+        # M4 HUD QoL: wire the inspector's overlay controls to the
+        # viewport instead of leaving them as passive surface widgets.
+        self.inspector.symmetryToggled.connect(self._on_joint_symmetry_toggled)
+        self.inspector.jointOpacityChanged.connect(self._on_joint_opacity_changed)
+        self.inspector.jointSizeChanged.connect(self._on_joint_size_changed)
         # M5 / T503 — body-rig action buttons.
         if hasattr(self.inspector, "placeGuidesRequested"):
             self.inspector.placeGuidesRequested.connect(
@@ -579,6 +584,40 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             viewport.set_camera_preset(preset)              # type: ignore[attr-defined]
         except Exception as exc:                            # pragma: no cover
             log.warning("Camera preset '%s' failed: %s", preset, exc)
+
+    @QtCore.Slot(bool)
+    def _on_joint_symmetry_toggled(self, enabled: bool) -> None:
+        """Mirror the inspector Symmetry checkbox into the viewport HUD."""
+        viewport = getattr(self, "viewport", None)
+        if viewport is None or not hasattr(viewport, "set_joint_symmetry"):
+            return
+        try:
+            viewport.set_joint_symmetry(bool(enabled))
+        except Exception:                                   # pragma: no cover
+            log.exception("viewport.set_joint_symmetry failed")
+
+    @QtCore.Slot(float)
+    def _on_joint_opacity_changed(self, value: float) -> None:
+        """Mirror the inspector opacity slider into joint-dot alpha."""
+        viewport = getattr(self, "viewport", None)
+        if viewport is None or not hasattr(viewport, "set_joint_dot_opacity"):
+            return
+        try:
+            viewport.set_joint_dot_opacity(float(value))
+        except Exception:                                   # pragma: no cover
+            log.exception("viewport.set_joint_dot_opacity failed")
+
+    @QtCore.Slot(float)
+    def _on_joint_size_changed(self, value: float) -> None:
+        """Map inspector 0..1 size values onto the viewport's 2..16 px dots."""
+        viewport = getattr(self, "viewport", None)
+        if viewport is None or not hasattr(viewport, "set_joint_dot_size"):
+            return
+        try:
+            clamped = max(0.0, min(1.0, float(value)))
+            viewport.set_joint_dot_size(round(2 + clamped * 14))
+        except Exception:                                   # pragma: no cover
+            log.exception("viewport.set_joint_dot_size failed")
 
     # ── Inspector slots ──────────────────────────────────────────────────
 
