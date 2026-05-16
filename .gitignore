@@ -68,6 +68,7 @@ game_data/
 !/tests/test_lyt_room_graph.py
 !/tests/test_map_snap_tools.py
 !/tests/test_vis_editor.py
+!/tests/test_area_wok_integration.py
 test_assets/
 pytest.ini
 .pytest_cache/

@@ -42,7 +42,7 @@ This folder contains the post-Qt-migration roadmap for GhostRigger, derived from
 | M13 Unity MCP transfer | 🟡 started | ~4 d |
 | M14 Asset Viewer | ✅ done locally | awaiting review/PR |
 | M15 Module Editor | ✅ done locally | T1501-T1505 done locally |
-| M16 Map Builder | 🟡 started | T1601-T1603 done locally |
+| M16 Map Builder | 🟡 started | T1601-T1604 done locally |
 | **Character Builder launch remaining** | | **~8 d** |
 | **Full suite foundation remaining** | | **~33 d** |
 
