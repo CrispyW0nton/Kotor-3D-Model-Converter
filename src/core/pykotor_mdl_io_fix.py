@@ -103,6 +103,13 @@ _EXPECTED_READ_PARAMS: tuple = ('self', 'reader', 'game')
 _EXPECTED_LOAD_NODE_PATTERN: str = (
     "and bin_node.trimesh.mdx_data_offset not in (0, 0xFFFFFFFF)"
 )
+_EXPECTED_LOAD_NODE_TOKENS: tuple[str, ...] = (
+    "_MDXDataFlags.VERTEX",
+    "_reader_ext",
+    "mdx_data_offset",
+    "0xFFFFFFFF",
+    "mdx_data_size",
+)
 
 if TYPE_CHECKING:
     from pykotor.common.misc import Game
@@ -265,12 +272,17 @@ def _check_pykotor_compat(_iom) -> bool:
                 _last_check['load_node_pattern_present'] = None
                 log.debug("inspect.getsource(_load_node) unavailable: %s", exc)
             if src is not None:
-                present = (_EXPECTED_LOAD_NODE_PATTERN in src)
+                present = (
+                    _EXPECTED_LOAD_NODE_PATTERN in src
+                    or all(token in src for token in _EXPECTED_LOAD_NODE_TOKENS)
+                )
                 _last_check['load_node_pattern_present'] = present
                 if not present:
                     failures.append(
-                        "MDLBinaryReader._load_node: expected MDX-offset guard "
-                        f"{_EXPECTED_LOAD_NODE_PATTERN!r} not present in source"
+                        "MDLBinaryReader._load_node: expected MDX vertex-reader "
+                        "shape not present in source "
+                        f"(exact guard: {_EXPECTED_LOAD_NODE_PATTERN!r}; "
+                        f"tokens: {_EXPECTED_LOAD_NODE_TOKENS!r})"
                     )
 
     ok = not failures

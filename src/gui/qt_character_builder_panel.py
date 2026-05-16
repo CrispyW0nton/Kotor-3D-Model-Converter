@@ -1320,9 +1320,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         Replaces the M2 "Export — implementation pending (M10)" status
         stub with the real workflow.  Per-format MDL/MDX/FBX/glTF/OBJ
-        binary writers are still M10 work — the workflow service
-        reports ``not_implemented`` for those, which the UI displays
-        as "pending" rather than a crash.
+        binary writers are routed through the per-mode workflow service.
+        Supermodel mode uses the composite exporter so FBX/glTF contain
+        the head parented under the body's headhook.
         """
         from core import headless_body_workflow as _wf
         try:
@@ -1368,13 +1368,26 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         # Remember the chosen folder for the next invocation.
         self._last_export_dir = out_dir
 
-        result = _wf.export_scene(
-            self.scene,
-            formats=formats,
-            out_dir=out_dir,
-            write_sidecar=write_sidecar,
-            skip_validation=False,
-        )
+        if self._is_scene_mode("supermodel"):
+            try:
+                from core import composite_workflow as _cw  # noqa: WPS433
+            except Exception:                               # pragma: no cover
+                from src.core import composite_workflow as _cw  # type: ignore
+            result = _cw.export_composite_scene(
+                self.scene,
+                formats=formats,
+                out_dir=out_dir,
+                write_sidecar=write_sidecar,
+                skip_validation=False,
+            )
+        else:
+            result = _wf.export_scene(
+                self.scene,
+                formats=formats,
+                out_dir=out_dir,
+                write_sidecar=write_sidecar,
+                skip_validation=False,
+            )
 
         # Inspector status line + bottom-strip banner.
         if hasattr(self.inspector, "set_export_status"):

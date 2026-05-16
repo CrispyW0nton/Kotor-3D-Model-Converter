@@ -13,7 +13,7 @@ This folder contains the post-Qt-migration roadmap for GhostRigger, derived from
 | File | Purpose |
 |------|---------|
 | `01_qt_branch_audit.md` | Audit of the current Qt branch: Tk-vs-Qt status, module map, KOTOR model-type taxonomy, HUD design notes, Stewart Jones takeaways, gaps |
-| `02_roadmap_2026_05.md` | Live launch roadmap with task IDs, hours, acceptance criteria, commit-message templates. **Last revised 2026-05-16** after M12 locally completed external-mesh skeleton selection, guide persistence with undo/redo, animation assignment, and end-to-end MDL reload proof, then M10 locally completed sidecar schema v2, mode-aware export defaults, and per-mode export validation |
+| `02_roadmap_2026_05.md` | Live launch roadmap with task IDs, hours, acceptance criteria, commit-message templates. **Last revised 2026-05-16** after M12 locally completed external-mesh skeleton selection, guide persistence with undo/redo, animation assignment, and end-to-end MDL reload proof, then M10 locally completed export polish including Supermodel composite FBX/glTF export |
 
 ## Headline
 
@@ -35,15 +35,15 @@ This folder contains the post-Qt-migration roadmap for GhostRigger, derived from
 | M7 Supermodel | 🟡 partial | ~3 d |
 | M8 Creature | 🔴 greenfield | ~7 d |
 | M9 Live validation | 🟡 partial | ~2 d |
-| M10 Export polish | 🟡 partial: only T1003 remains | ~0.5 d |
+| M10 Export polish | ✅ done locally | awaiting review/PR |
 | M12 External Mesh Launch Path | ✅ done locally | awaiting review/PR |
 | M11 Visual regression | 🟡 infra ready | ~2 d |
-| **Launch remaining** | | **~8.5 d** |
+| **Launch remaining** | | **~8 d** |
 
 ## Critical path remaining
 
-`M10 → M9 → M11`, with M8 Creature work deferred until the humanoid/head pipeline polish is locked.
+`M9 → M11`, with M8 Creature work deferred until the humanoid/head pipeline polish is locked.
 
-Shortest path to feature-complete v7 Character Builder: **M10 → M9**. M8 + M11 ship after unless Creature is explicitly prioritized.
+Shortest path to feature-complete v7 Character Builder: **M9**, then M11 regression lock-in. M8 ships after unless Creature is explicitly prioritized.
 
 Supersedes `knowledge_base/reference/ROADMAP_legacy_2026_04.md` for the Qt branch. The older roadmap is kept for historical reference only.

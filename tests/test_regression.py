@@ -966,7 +966,7 @@ def test_gpu_renderer_uploads_skin_node_local_palette() -> None:
 
 
 def test_cpu_skin_bind_pose_applies_node_local_transform() -> None:
-    from src.gui.viewport import ArcBallCamera, FrameRenderer
+    from src.gui.viewport_core import ArcBallCamera, FrameRenderer
 
     node = SimpleNamespace(
         name="body_skin",
@@ -1627,7 +1627,7 @@ def test_k2_rgba_lightmap_txi_starts_at_clean_boundary(caplog) -> None:
     import logging
 
     from src.core.resource_manager import RES_TPC, _tpc_uncompressed_txi
-    from src.gui.viewport import _parse_txi_string
+    from src.gui.viewport_core import _parse_txi_string
 
     manager = _resource_manager()
     raw = manager.get("101peras_lm0", RES_TPC, "K2")

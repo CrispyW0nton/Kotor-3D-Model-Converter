@@ -2050,7 +2050,13 @@ class QtViewportWidget(QtWidgets.QWidget):
         try:
             from ..autorig.accurig import MIRROR_PAIRS
         except Exception:
-            return None
+            try:
+                from src.autorig.accurig import MIRROR_PAIRS  # type: ignore
+            except Exception:
+                try:
+                    from autorig.accurig import MIRROR_PAIRS  # type: ignore
+                except Exception:
+                    return None
         partner_name = None
         # Forward lookup (left -> right)
         if name in MIRROR_PAIRS:
@@ -2121,7 +2127,7 @@ class QtViewportWidget(QtWidgets.QWidget):
     def joint_dot_opacity(self) -> float:
         return self._joint_dot_opacity
 
-    def _request_render(self) -> None:
+    def _request_render(self, fast: bool = False) -> None:
         """Best-effort viewport refresh used by joint-dot setters.
 
         Reuses the existing render-coalescing timer when available; falls
@@ -2129,9 +2135,33 @@ class QtViewportWidget(QtWidgets.QWidget):
         changes immediately even on minimal viewports.
         """
         try:
-            if hasattr(self, "_render_timer") and self._render_timer is not None:
-                if not self._render_timer.isActive():
-                    self._render_timer.start(0)
+            if (
+                hasattr(self, "_render_timer")
+                and self._render_timer is not None
+                and hasattr(self, "_last_render_wall")
+            ):
+                self._render_pending = True
+                now = time_module.perf_counter()
+                min_interval_ms = 33 if getattr(self, "_dual_viewport_mode", False) else 16
+                if fast:
+                    self._fast_frame_until = max(
+                        getattr(self, "_fast_frame_until", 0.0),
+                        now + 0.08,
+                    )
+                    elapsed_ms = (
+                        (now - self._last_render_wall) * 1000.0
+                        if self._last_render_wall else min_interval_ms
+                    )
+                    delay = max(1, int(min_interval_ms - elapsed_ms))
+                else:
+                    elapsed_ms = (
+                        (now - self._last_render_wall) * 1000.0
+                        if self._last_render_wall else min_interval_ms
+                    )
+                    delay = max(16, int(min_interval_ms - elapsed_ms))
+                if self._render_timer.isActive():
+                    delay = min(delay, max(1, self._render_timer.remainingTime()))
+                self._render_timer.start(delay)
                 return
         except Exception:
             pass

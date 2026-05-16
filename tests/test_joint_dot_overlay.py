@@ -651,7 +651,9 @@ def test_t405_heatmap_noop_when_no_selection():
 
 def test_hud_inspector_overlay_signals_are_wired_to_viewport():
     """Builder window routes inspector HUD controls into viewport setters."""
-    source = pathlib.Path("src/gui/qt_character_builder_panel.py").read_text()
+    source = pathlib.Path("src/gui/qt_character_builder_panel.py").read_text(
+        encoding="utf-8",
+    )
     assert "symmetryToggled.connect(self._on_joint_symmetry_toggled)" in source
     assert "jointOpacityChanged.connect(self._on_joint_opacity_changed)" in source
     assert "jointSizeChanged.connect(self._on_joint_size_changed)" in source

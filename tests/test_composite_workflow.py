@@ -189,6 +189,44 @@ class _CreatureAppearance:
                 "message": "preview ok", "warnings": ["preview warning"]}
 
 
+class _FakeSceneIO:
+    written = []
+
+    @staticmethod
+    def write_sidecar(scene, anchor_path):
+        path = pathlib.Path(anchor_path).with_suffix(".ghostrig.json")
+        path.write_text("{}", encoding="utf-8")
+        _FakeSceneIO.written.append((scene, str(path)))
+        return str(path)
+
+
+class _FakeFBXExporter:
+    calls = []
+
+    def export(self, model, path, *args, **kwargs):
+        _FakeFBXExporter.calls.append((model, path, args, kwargs))
+        pathlib.Path(path).write_text("; fake fbx\n", encoding="utf-8")
+        return True
+
+
+class _FakeGLTFExporter:
+    calls = []
+
+    def export(self, model, path, *args, **kwargs):
+        _FakeGLTFExporter.calls.append((model, path, args, kwargs))
+        pathlib.Path(path).write_bytes(b"glTF")
+        return True
+
+
+class _FakeOBJExporter:
+    calls = []
+
+    def export(self, model, path, *args, **kwargs):
+        _FakeOBJExporter.calls.append((model, path, args, kwargs))
+        pathlib.Path(path).write_text("# fake obj\n", encoding="utf-8")
+        return True
+
+
 def _install_backends(monkeypatch, body_wf=None, head_wf=None):
     body_wf = body_wf or _BodyWorkflow()
     head_wf = head_wf or _HeadWorkflow()
@@ -199,6 +237,19 @@ def _install_backends(monkeypatch, body_wf=None, head_wf=None):
     monkeypatch.setattr(wf, "_import_character_builder", lambda: _CharacterBuilder)
     monkeypatch.setattr(wf, "_import_creature_appearance", lambda: _CreatureAppearance)
     return body_wf, head_wf
+
+
+def _install_export_backends(monkeypatch):
+    _FakeSceneIO.written = []
+    _FakeFBXExporter.calls = []
+    _FakeGLTFExporter.calls = []
+    _FakeOBJExporter.calls = []
+    monkeypatch.setattr(wf, "_import_scene_io", lambda: _FakeSceneIO)
+    monkeypatch.setattr(
+        wf,
+        "_import_mesh_exporters",
+        lambda: (_FakeFBXExporter, _FakeGLTFExporter, _FakeOBJExporter),
+    )
 
 
 def test_t701_load_composite_loads_body_head_and_sets_supermodel_mode(monkeypatch):
@@ -460,6 +511,80 @@ def test_t705_check_composite_warns_on_headhook_seam_gap(monkeypatch):
     assert "12.0 cm" in result.issues[0].message
 
 
+def test_t1003_export_composite_writes_fbx_gltf_and_sidecar(monkeypatch, tmp_path):
+    scene = _make_scene()
+    scene.assign(md.PartSlot.HEADLESS_BODY, _body(), resref="pfbcm")
+    scene.assign(md.PartSlot.HEAD_SHELL, _head(), resref="pfhc01")
+    scene.set_mode(md.CharacterMode.SUPERMODEL, locked=True)
+    _install_backends(monkeypatch)
+    _install_export_backends(monkeypatch)
+
+    result = wf.export_composite_scene(
+        scene,
+        formats=["fbx", "gltf"],
+        out_dir=str(tmp_path),
+        write_sidecar=True,
+        skip_validation=True,
+    )
+
+    assert result.ok is True
+    assert result.code == "exported"
+    assert [row.key for row in result.formats] == ["fbx", "gltf"]
+    assert all(row.code == "exported" for row in result.formats)
+    assert (tmp_path / "pfbcm_pfhc01_composite.fbx").exists()
+    assert (tmp_path / "pfbcm_pfhc01_composite.glb").exists()
+    assert result.sidecar_path.endswith(".ghostrig.json")
+    assert _FakeFBXExporter.calls[0][0].name == "pfbcm_pfhc01_composite"
+    assert _FakeGLTFExporter.calls[0][3]["binary"] is True
+    assert scene.metadata["composite_export"]["resref"] == "pfbcm_pfhc01_composite"
+    assert scene.metadata["composite_snap"]["code"] == "snapped"
+
+
+def test_t1003_export_composite_rejects_non_interchange_format(monkeypatch, tmp_path):
+    scene = _make_scene()
+    scene.assign(md.PartSlot.HEADLESS_BODY, _body(), resref="pfbcm")
+    scene.assign(md.PartSlot.HEAD_SHELL, _head(), resref="pfhc01")
+    _install_backends(monkeypatch)
+    _install_export_backends(monkeypatch)
+
+    result = wf.export_composite_scene(
+        scene,
+        formats=["kotor"],
+        out_dir=str(tmp_path),
+        write_sidecar=False,
+        skip_validation=True,
+    )
+
+    assert result.ok is False
+    assert result.code == "all_failed"
+    assert result.formats[0].code == "failed"
+    assert "FBX/glTF only" in result.formats[0].message
+
+
+def test_t1003_export_composite_blocks_without_headhook_snap(monkeypatch, tmp_path):
+    scene = _make_scene()
+    scene.assign(
+        md.PartSlot.HEADLESS_BODY,
+        _FakeModel("pfbcm", [_FakeNode("rootdummy"), _FakeNode("rhand")]),
+        resref="pfbcm",
+    )
+    scene.assign(md.PartSlot.HEAD_SHELL, _head(), resref="pfhc01")
+    _install_backends(monkeypatch)
+    _install_export_backends(monkeypatch)
+
+    result = wf.export_composite_scene(
+        scene,
+        formats=["fbx"],
+        out_dir=str(tmp_path),
+        write_sidecar=False,
+        skip_validation=True,
+    )
+
+    assert result.ok is False
+    assert result.code == "merge_failed"
+    assert "headhook" in result.message.lower()
+
+
 def test_t703_known_pc_supermodel_constant_is_uppercase():
     assert "S_FEMALE02" in wf.KOTOR_PC_SUPERMODELS
     assert all(value == value.upper() for value in wf.KOTOR_PC_SUPERMODELS)
@@ -482,6 +607,14 @@ def test_t702_character_builder_check_button_routes_supermodel_to_composite():
     )
     assert 'self._is_scene_mode("supermodel")' in source
     assert "check_composite" in source
+
+
+def test_t1003_character_builder_export_routes_supermodel_to_composite():
+    source = (_SRC_DIR / "gui" / "qt_character_builder_panel.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'self._is_scene_mode("supermodel")' in source
+    assert "export_composite_scene" in source
 
 
 def test_launch_hud_defaults_to_accurig_like_body_workflow():

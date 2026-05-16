@@ -22,6 +22,7 @@ Roadmap reference: M7 / T701-T702.
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -105,6 +106,30 @@ def _import_creature_appearance():                          # pragma: no cover -
     return _ca
 
 
+def _import_scene_io():                                     # pragma: no cover - import shim
+    try:
+        from src.core.model_data import SceneIO             # type: ignore
+    except ImportError:
+        from core.model_data import SceneIO                 # type: ignore
+    return SceneIO
+
+
+def _import_mesh_exporters():                               # pragma: no cover - import shim
+    try:
+        from src.converters.mesh_converter import (         # type: ignore
+            FBXExporter,
+            GLTFExporter,
+            OBJExporter,
+        )
+    except ImportError:
+        from converters.mesh_converter import (             # type: ignore
+            FBXExporter,
+            GLTFExporter,
+            OBJExporter,
+        )
+    return FBXExporter, GLTFExporter, OBJExporter
+
+
 @dataclass
 class HeadhookSnapResult:
     """Result of recomputing the body ``headhook`` attachment.
@@ -156,6 +181,30 @@ class CompositeCheckResult:
     snap: HeadhookSnapResult = field(default_factory=HeadhookSnapResult)
     message: str = "Composite check clean."
     code: str = "clean"
+
+
+@dataclass
+class CompositeExportFormatResult:
+    """Per-format row for Supermodel composite export."""
+
+    key: str = ""
+    label: str = ""
+    ok: bool = False
+    path: str = ""
+    message: str = ""
+    code: str = "exported"
+
+
+@dataclass
+class CompositeExportResult:
+    """Result of writing a merged body/head interchange export."""
+
+    ok: bool = False
+    formats: List[CompositeExportFormatResult] = field(default_factory=list)
+    sidecar_path: str = ""
+    out_dir: str = ""
+    message: str = ""
+    code: str = "exported"
 
 
 def _slot_models(scene: Any) -> Tuple[Optional[Any], Optional[Any]]:
@@ -583,13 +632,255 @@ def update_snap_after_scene_mutation(
     )
 
 
+def _scene_resref(scene: Any, body: Any, head: Any) -> str:
+    md = _import_model_data()
+    wb = _import_workflow_base()
+    body_entry = scene.get(md.PartSlot.HEADLESS_BODY)
+    head_entry = scene.get(md.PartSlot.HEAD_SHELL)
+    body_ref = (
+        getattr(body_entry, "resref", "")
+        or getattr(body, "name", "")
+        or "body"
+    )
+    head_ref = (
+        getattr(head_entry, "resref", "")
+        or getattr(head, "name", "")
+        or "head"
+    )
+    return wb.safe_resref(f"{body_ref}_{head_ref}_composite", fallback="composite")
+
+
+def _composite_export_model(scene: Any) -> Tuple[Optional[Any], List[str], str]:
+    """Build the merged interchange model used by FBX/glTF export."""
+    body, head = _slot_models(scene)
+    if body is None or head is None:
+        return None, [], "Composite export needs both body and head models."
+
+    snap = snap_head_to_body(scene, build_preview=False, update_metadata=True)
+    if not snap.ok:
+        return None, list(snap.warnings), snap.message
+
+    ca = _import_creature_appearance()
+    merged = ca.snap_head_onto_body(
+        body,
+        head,
+        scale_head=False,
+        merge_animations=False,
+    )
+    warnings = list(merged.get("warnings", []) or [])
+    model = merged.get("model") if merged.get("ok") else None
+    if model is None:
+        return None, warnings, str(merged.get("message", "Composite merge failed."))
+
+    setattr(model, "name", _scene_resref(scene, body, head))
+    return model, warnings, "Composite export model ready."
+
+
+def _export_composite_single_format(
+    model: Any,
+    fmt_key: str,
+    label: str,
+    out_dir: str,
+    resref: str,
+) -> CompositeExportFormatResult:
+    primary_ext = {
+        "fbx": ".fbx",
+        "gltf": ".glb",
+    }.get(fmt_key, "")
+    if not primary_ext:
+        return CompositeExportFormatResult(
+            key=fmt_key,
+            label=label,
+            ok=False,
+            message=(
+                f"Supermodel composite export supports FBX/glTF only; "
+                f"'{fmt_key}' is not available for merged output."
+            ),
+            code="failed",
+        )
+
+    out_path = os.path.join(out_dir, f"{resref}{primary_ext}")
+    try:
+        fbx_cls, gltf_cls, _obj_cls = _import_mesh_exporters()
+        if fmt_key == "fbx":
+            ok = fbx_cls().export(model, out_path)
+            if ok is False:
+                raise RuntimeError("FBX exporter returned False")
+        elif fmt_key == "gltf":
+            ok = gltf_cls().export(model, out_path, binary=True)
+            if ok is False:
+                raise RuntimeError("glTF exporter returned False")
+    except Exception as exc:
+        log.exception("export_composite_scene: %s writer failed", fmt_key)
+        return CompositeExportFormatResult(
+            key=fmt_key,
+            label=label,
+            ok=False,
+            path=out_path,
+            message=f"{label} composite export failed: {exc}",
+            code="failed",
+        )
+
+    return CompositeExportFormatResult(
+        key=fmt_key,
+        label=label,
+        ok=True,
+        path=out_path,
+        message=f"{label} composite exported to {out_path}.",
+        code="exported",
+    )
+
+
+def export_composite_scene(
+    scene: Any,
+    *,
+    formats: Optional[List[str]] = None,
+    out_dir: str = "",
+    write_sidecar: bool = True,
+    skip_validation: bool = False,
+) -> CompositeExportResult:
+    """M10/T1003: export a snapped Supermodel body/head as FBX/glTF."""
+    body, head = _slot_models(scene)
+    if body is None:
+        return CompositeExportResult(
+            message="No body model loaded — nothing to export.",
+            code="no_body",
+        )
+    if head is None:
+        return CompositeExportResult(
+            message="No head model loaded — nothing to export.",
+            code="no_head",
+        )
+    if not out_dir:
+        return CompositeExportResult(
+            message="No output directory supplied.",
+            code="no_out_dir",
+        )
+
+    requested = list(formats or [])
+    if not requested and not write_sidecar:
+        return CompositeExportResult(
+            out_dir=out_dir,
+            message="Nothing requested — pick FBX/glTF or enable the sidecar JSON.",
+            code="no_formats",
+        )
+
+    if not skip_validation:
+        body_wf = _import_body_workflow()
+        gate = body_wf.validate_for_export(scene, strict=True)
+        if not getattr(gate, "ok", False):
+            return CompositeExportResult(
+                out_dir=out_dir,
+                message=("Export blocked by validation: "
+                         f"{getattr(gate, 'error_count', 0)} error(s). "
+                         f"Codes: {', '.join(getattr(gate, 'blocking_codes', []))}"),
+                code="blocked",
+            )
+
+    try:
+        os.makedirs(out_dir, exist_ok=True)
+    except OSError as exc:
+        return CompositeExportResult(
+            out_dir=out_dir,
+            message=f"Cannot create output directory: {exc}",
+            code="no_out_dir",
+        )
+
+    model, warnings, merge_message = _composite_export_model(scene)
+    if model is None:
+        return CompositeExportResult(
+            out_dir=out_dir,
+            message=f"Composite export model could not be built: {merge_message}",
+            code="merge_failed",
+        )
+
+    resref = _scene_resref(scene, body, head)
+    label_by_key = {
+        "fbx": "FBX (Autodesk)",
+        "gltf": "glTF / GLB",
+    }
+    rows: List[CompositeExportFormatResult] = []
+    for fmt_key in requested:
+        label = label_by_key.get(fmt_key, fmt_key)
+        rows.append(_export_composite_single_format(
+            model,
+            fmt_key,
+            label,
+            out_dir,
+            resref,
+        ))
+
+    sidecar_path = ""
+    if write_sidecar:
+        try:
+            scene.metadata["composite_export"] = {
+                "resref": resref,
+                "warnings": warnings,
+                "formats": [
+                    {
+                        "format": row.key,
+                        "ok": bool(row.ok),
+                        "path": row.path,
+                        "code": row.code,
+                        "message": row.message,
+                    }
+                    for row in rows
+                ],
+            }
+            sio = _import_scene_io()
+            anchor = os.path.join(out_dir, f"{resref}.fbx")
+            sidecar_path = sio.write_sidecar(scene, anchor)
+        except Exception as exc:                            # pragma: no cover
+            log.exception("export_composite_scene: write_sidecar raised")
+            rows.append(CompositeExportFormatResult(
+                key="sidecar",
+                label="Scene JSON sidecar",
+                ok=False,
+                message=f"Sidecar write failed: {exc}",
+                code="failed",
+            ))
+
+    any_ok = any(row.ok for row in rows) or bool(sidecar_path)
+    if rows and not any_ok and not sidecar_path:
+        return CompositeExportResult(
+            formats=rows,
+            out_dir=out_dir,
+            message="Every requested composite format failed.",
+            code="all_failed",
+        )
+
+    ok_count = sum(1 for row in rows if row.ok)
+    fail_count = sum(1 for row in rows if not row.ok)
+    parts: List[str] = []
+    if ok_count:
+        parts.append(f"{ok_count} written")
+    if fail_count:
+        parts.append(f"{fail_count} failed")
+    if sidecar_path:
+        parts.append("sidecar written")
+    if warnings:
+        parts.append(f"{len(warnings)} warning(s)")
+
+    return CompositeExportResult(
+        ok=any_ok and fail_count == 0,
+        formats=rows,
+        sidecar_path=sidecar_path,
+        out_dir=out_dir,
+        message="Composite export complete — " + ", ".join(parts or ["nothing requested"]),
+        code="exported" if any_ok and fail_count == 0 else "partial",
+    )
+
+
 __all__ = [
     "CompositeResult",
     "CompositeCheckResult",
+    "CompositeExportFormatResult",
+    "CompositeExportResult",
     "HeadhookSnapResult",
     "IDENTITY_MATRIX",
     "KOTOR_PC_SUPERMODELS",
     "check_composite",
+    "export_composite_scene",
     "load_composite",
     "snap_head_to_body",
     "update_snap_after_scene_mutation",
