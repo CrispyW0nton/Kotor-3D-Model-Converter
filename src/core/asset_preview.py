@@ -155,6 +155,31 @@ class PreviewPlaybackState:
     code: str = "not_playing"
 
 
+@dataclass(frozen=True)
+class AttachmentValidationIssue:
+    """Actionable Asset Viewer finding for an attached item or socket."""
+
+    severity: str
+    code: str
+    message: str
+    socket: str = ""
+    item_resref: str = ""
+    action: str = ""
+    overlay_anchor: Optional[Matrix4] = None
+
+
+@dataclass
+class AttachmentValidationReport:
+    """Validation overlay payload for preview attachments."""
+
+    ok: bool = True
+    issues: list[AttachmentValidationIssue] = field(default_factory=list)
+    overlay: list[dict[str, Any]] = field(default_factory=list)
+    available_sockets: list[str] = field(default_factory=list)
+    message: str = ""
+    code: str = "validated"
+
+
 ANIMATION_GROUP_ORDER: tuple[str, ...] = (
     "idle",
     "locomotion",
@@ -173,6 +198,14 @@ DEFAULT_PREVIEW_PRIORITY: tuple[str, ...] = (
     "run",
     "tlknorm",
 )
+
+_HAND_SOCKET_SIDES: dict[str, str] = {
+    "rhand": "right",
+    "rhand_g": "right",
+    "lightsaberhook": "right",
+    "lhand": "left",
+    "lhand_g": "left",
+}
 
 
 def _scene_metadata(scene: Any) -> dict[str, Any]:
@@ -314,6 +347,23 @@ def _model_animations(model: Any) -> list[Any]:
         except Exception:
             return []
     return []
+
+
+def _slot_entry(scene: Any, slot: Any) -> Any:
+    getter = getattr(scene, "get", None)
+    if callable(getter):
+        return getter(slot)
+    return None
+
+
+def _slot_game_version(scene: Any, slot: Any) -> str:
+    entry = _slot_entry(scene, slot)
+    return str(getattr(entry, "game_version", "") or "").upper()
+
+
+def _slot_resref(scene: Any, slot: Any) -> str:
+    entry = _slot_entry(scene, slot)
+    return str(getattr(entry, "resref", "") or "").lower()
 
 
 def _animation_group(name: str, source: str = "") -> str:
@@ -645,6 +695,242 @@ def attach_item_to_preview(scene: Any, spec: AttachmentSpec) -> AttachmentResult
     attachments.append(attachment_payload)
     metadata["active_attachment"] = attachment_payload
     return result
+
+
+def _issue_payload(issue: AttachmentValidationIssue) -> dict[str, Any]:
+    return {
+        "severity": issue.severity,
+        "code": issue.code,
+        "message": issue.message,
+        "socket": issue.socket,
+        "item_resref": issue.item_resref,
+        "action": issue.action,
+        "overlay_anchor": issue.overlay_anchor,
+    }
+
+
+def _attachment_issue(
+    severity: str,
+    code: str,
+    message: str,
+    *,
+    socket: str = "",
+    item_resref: str = "",
+    action: str = "",
+    overlay_anchor: Optional[Matrix4] = None,
+) -> AttachmentValidationIssue:
+    return AttachmentValidationIssue(
+        severity=severity,
+        code=code,
+        message=message,
+        socket=socket,
+        item_resref=item_resref,
+        action=action,
+        overlay_anchor=overlay_anchor,
+    )
+
+
+def _socket_side(socket_name: str) -> str:
+    return _HAND_SOCKET_SIDES.get((socket_name or "").lower(), "")
+
+
+def _expected_attachment_side(attachment: dict[str, Any]) -> str:
+    side = str(attachment.get("side") or "").lower()
+    if side in {"right", "left"}:
+        return side
+    alias = str(attachment.get("socket_alias") or "").lower()
+    if alias in {"right_hand", "lightsaber"}:
+        return "right"
+    if alias == "left_hand":
+        return "left"
+    return ""
+
+
+def _is_lightsaber_attachment(attachment: dict[str, Any]) -> bool:
+    item_resref = str(attachment.get("item_resref") or "").lower()
+    kind = str(attachment.get("type") or "").lower()
+    socket_alias = str(attachment.get("socket_alias") or "").lower()
+    return (
+        "lghtsbr" in item_resref
+        or "lightsaber" in kind
+        or socket_alias == "lightsaber"
+    )
+
+
+def _requires_bullet_hook(attachment: dict[str, Any]) -> bool:
+    item_resref = str(attachment.get("item_resref") or "").lower()
+    kind = str(attachment.get("type") or "").lower()
+    return (
+        "blaster" in kind
+        or item_resref.startswith("w_blstr")
+        or item_resref.startswith("w_rfl")
+        or item_resref.startswith("w_bow")
+    )
+
+
+def _matrix_close(a: Any, b: Any, tolerance: float = 0.001) -> bool:
+    try:
+        for row_a, row_b in zip(a, b):
+            for value_a, value_b in zip(row_a, row_b):
+                if abs(float(value_a) - float(value_b)) > tolerance:
+                    return False
+    except Exception:
+        return False
+    return True
+
+
+def validate_attachment_overlay(scene: Any) -> AttachmentValidationReport:
+    """Validate Asset Viewer attachments and write overlay-ready metadata."""
+
+    md = _import_model_data()
+    body = _slot_model(scene, md.PartSlot.HEADLESS_BODY)
+    accessory = _slot_model(scene, md.PartSlot.ACCESSORY)
+    available = _socket_names(body)
+    metadata = _scene_metadata(scene)
+    preview = metadata.setdefault("asset_preview", {})
+    attachments = list(preview.get("attachments") or [])
+    issues: list[AttachmentValidationIssue] = []
+
+    if body is None:
+        issues.append(
+            _attachment_issue(
+                "error",
+                "PREVIEW_BODY_MISSING",
+                "Load a character preview before validating weapon or item attachments.",
+                action="Load a headless body/outfit and head, then attach the item again.",
+            )
+        )
+    if body is not None and not attachments:
+        issues.append(
+            _attachment_issue(
+                "info",
+                "NO_ATTACHMENTS",
+                "No preview attachments are active.",
+                action="Attach a weapon or item to test its in-game socket placement.",
+            )
+        )
+
+    scene_game = str(getattr(scene, "game_version", "") or "").upper()
+    body_game = _slot_game_version(scene, md.PartSlot.HEADLESS_BODY)
+    accessory_game = _slot_game_version(scene, md.PartSlot.ACCESSORY)
+    if body is not None and scene_game and body_game and body_game != scene_game:
+        issues.append(
+            _attachment_issue(
+                "warning",
+                "BODY_GAME_MISMATCH",
+                f"Preview body is {body_game}, but the scene is {scene_game}.",
+                action="Use body/outfit assets from the same game target before final export.",
+            )
+        )
+    if accessory is not None and scene_game and accessory_game and accessory_game != scene_game:
+        issues.append(
+            _attachment_issue(
+                "warning",
+                "ATTACHMENT_GAME_MISMATCH",
+                f"Attached item is {accessory_game}, but the scene is {scene_game}.",
+                item_resref=_slot_resref(scene, md.PartSlot.ACCESSORY),
+                action="Swap the item for the matching K1/K2 version or change the preview target game.",
+            )
+        )
+
+    body_nodes = {_node_name(node).lower(): node for node in _all_nodes(body) if _node_name(node)}
+    item_nodes = {_node_name(node).lower(): node for node in _all_nodes(accessory) if _node_name(node)}
+    for attachment in attachments:
+        socket = str(attachment.get("socket") or "")
+        socket_key = socket.lower()
+        item_resref = str(attachment.get("item_resref") or _slot_resref(scene, md.PartSlot.ACCESSORY) or "")
+        stored_matrix = attachment.get("item_local_offset")
+        current_node = body_nodes.get(socket_key)
+        current_matrix: Optional[Matrix4] = None
+        if current_node is None:
+            issues.append(
+                _attachment_issue(
+                    "error",
+                    "ATTACHMENT_SOCKET_MISSING",
+                    f"Attachment socket '{socket or 'unknown'}' is not present on the current preview body.",
+                    socket=socket,
+                    item_resref=item_resref,
+                    action="Choose one of the body's available sockets or load a body that provides this hook.",
+                )
+            )
+            continue
+
+        position, rotation = _node_world_transform(current_node)
+        current_matrix = _matrix_from_transform(position, rotation)
+        expected_side = _expected_attachment_side(attachment)
+        actual_side = _socket_side(socket)
+        if expected_side and actual_side and expected_side != actual_side:
+            issues.append(
+                _attachment_issue(
+                    "warning",
+                    "WRONG_HAND_ATTACHMENT",
+                    f"{item_resref or 'Attachment'} is assigned to the {expected_side} side but parented to {socket}.",
+                    socket=socket,
+                    item_resref=item_resref,
+                    action=f"Reattach it to a {expected_side}-hand socket.",
+                    overlay_anchor=current_matrix,
+                )
+            )
+        if stored_matrix is not None and not _matrix_close(stored_matrix, current_matrix):
+            issues.append(
+                _attachment_issue(
+                    "warning",
+                    "ATTACHMENT_TRANSFORM_STALE",
+                    f"{item_resref or 'Attachment'} was attached before the body socket moved.",
+                    socket=socket,
+                    item_resref=item_resref,
+                    action="Refresh or reattach the item so its preview transform matches the current socket.",
+                    overlay_anchor=current_matrix,
+                )
+            )
+        if _is_lightsaber_attachment(attachment) and socket_key not in {"lightsaberhook", "rhand", "rhand_g"}:
+            issues.append(
+                _attachment_issue(
+                    "warning",
+                    "LIGHTSABER_SOCKET_UNUSUAL",
+                    f"{item_resref or 'Lightsaber'} is not attached to LightsaberHook or the right hand.",
+                    socket=socket,
+                    item_resref=item_resref,
+                    action="Use the lightsaber socket when present; otherwise use rhand.",
+                    overlay_anchor=current_matrix,
+                )
+            )
+        if _requires_bullet_hook(attachment) and accessory is not None and "bullethook" not in item_nodes:
+            issues.append(
+                _attachment_issue(
+                    "warning",
+                    "BULLET_HOOK_MISSING",
+                    f"{item_resref or 'Blaster'} has no bullethook node for muzzle/VFX preview.",
+                    socket=socket,
+                    item_resref=item_resref,
+                    action="Add or preserve bullethook on blaster-style weapon models.",
+                    overlay_anchor=current_matrix,
+                )
+            )
+
+    error_count = sum(1 for issue in issues if issue.severity == "error")
+    actionable = [issue for issue in issues if issue.severity in {"error", "warning"}]
+    overlay = [_issue_payload(issue) for issue in actionable]
+    report_payload = {
+        "ok": error_count == 0,
+        "code": "validated" if error_count == 0 else "errors",
+        "available_sockets": list(available),
+        "issues": [_issue_payload(issue) for issue in issues],
+        "overlay": overlay,
+    }
+    preview["attachment_validation"] = report_payload
+    return AttachmentValidationReport(
+        ok=error_count == 0,
+        issues=issues,
+        overlay=overlay,
+        available_sockets=available,
+        message=(
+            "Attachment validation is clean."
+            if not actionable
+            else f"{len(actionable)} attachment issue(s) need attention."
+        ),
+        code=report_payload["code"],
+    )
 
 
 def build_animation_workbench(scene: Any) -> AnimationWorkbenchResult:

@@ -337,3 +337,117 @@ def test_t1403_play_reports_missing_clip(monkeypatch):
 
     assert state.ok is False
     assert state.code == "clip_missing"
+
+
+def test_t1404_attachment_validation_clean_lightsaber(monkeypatch):
+    _install(monkeypatch)
+    result = ap.load_character_preview(ap.CharacterPreviewSpec(body_path="body.mdl", head_path="head.mdl"))
+    saber = _Model("w_lghtsbr_001")
+    ap.attach_item_to_preview(
+        result.scene,
+        ap.AttachmentSpec(item_model=saber, item_resref="w_lghtsbr_001", socket="lightsaber"),
+    )
+
+    report = ap.validate_attachment_overlay(result.scene)
+
+    assert report.ok is True
+    assert report.issues == []
+    assert report.overlay == []
+    assert "LightsaberHook" in report.available_sockets
+    assert result.scene.metadata["asset_preview"]["attachment_validation"]["ok"] is True
+
+
+def test_t1404_attachment_validation_reports_missing_socket_after_body_change(monkeypatch):
+    _install(monkeypatch)
+    result = ap.load_character_preview(ap.CharacterPreviewSpec(body_path="body.mdl", head_path="head.mdl"))
+    ap.attach_item_to_preview(
+        result.scene,
+        ap.AttachmentSpec(item_model=_Model("w_blstrpstl_001"), item_resref="w_blstrpstl_001"),
+    )
+    body = result.scene.get_model(md.PartSlot.HEADLESS_BODY)
+    body._nodes = [_Node("rootdummy"), _Node("lhand")]
+
+    report = ap.validate_attachment_overlay(result.scene)
+
+    assert report.ok is False
+    assert report.code == "errors"
+    assert report.issues[0].code == "ATTACHMENT_SOCKET_MISSING"
+    assert report.issues[0].socket == "rhand"
+    assert result.scene.metadata["asset_preview"]["attachment_validation"]["overlay"][0]["code"] == "ATTACHMENT_SOCKET_MISSING"
+
+
+def test_t1404_attachment_validation_reports_wrong_hand(monkeypatch):
+    _install(monkeypatch)
+    result = ap.load_character_preview(ap.CharacterPreviewSpec(body_path="body.mdl", head_path="head.mdl"))
+    ap.attach_item_to_preview(
+        result.scene,
+        ap.AttachmentSpec(
+            item_model=_Model("w_shortswrd_001"),
+            item_resref="w_shortswrd_001",
+            socket="right_hand",
+            side="left",
+        ),
+    )
+
+    report = ap.validate_attachment_overlay(result.scene)
+
+    assert report.ok is True
+    assert [issue.code for issue in report.issues] == ["WRONG_HAND_ATTACHMENT"]
+    assert report.overlay[0]["severity"] == "warning"
+    assert report.overlay[0]["socket"] == "rhand"
+
+
+def test_t1404_attachment_validation_reports_game_mismatch(monkeypatch):
+    _install(monkeypatch)
+    result = ap.load_character_preview(ap.CharacterPreviewSpec(body_path="body.mdl", head_path="head.mdl"))
+    item = _Model("w_blstrpstl_001", nodes=[_Node("bullethook")])
+    ap.attach_item_to_preview(
+        result.scene,
+        ap.AttachmentSpec(item_model=item, item_resref="w_blstrpstl_001", socket="right_hand"),
+    )
+    result.scene.get(md.PartSlot.ACCESSORY).game_version = "K2"
+
+    report = ap.validate_attachment_overlay(result.scene)
+
+    assert report.ok is True
+    codes = {issue.code for issue in report.issues}
+    assert "ATTACHMENT_GAME_MISMATCH" in codes
+    assert result.scene.metadata["asset_preview"]["attachment_validation"]["issues"][0]["severity"] == "warning"
+
+
+def test_t1404_attachment_validation_reports_stale_transform(monkeypatch):
+    _install(monkeypatch)
+    result = ap.load_character_preview(ap.CharacterPreviewSpec(body_path="body.mdl", head_path="head.mdl"))
+    ap.attach_item_to_preview(
+        result.scene,
+        ap.AttachmentSpec(item_model=_Model("w_shortswrd_001"), item_resref="w_shortswrd_001"),
+    )
+    body = result.scene.get_model(md.PartSlot.HEADLESS_BODY)
+    for node in body._nodes:
+        if node.name == "rhand":
+            node.position = (9.0, 9.0, 9.0)
+
+    report = ap.validate_attachment_overlay(result.scene)
+
+    assert report.ok is True
+    assert [issue.code for issue in report.issues] == ["ATTACHMENT_TRANSFORM_STALE"]
+    assert report.overlay[0]["overlay_anchor"][0][3] == 9.0
+
+
+def test_t1404_attachment_validation_reports_missing_blaster_bullet_hook(monkeypatch):
+    _install(monkeypatch)
+    result = ap.load_character_preview(ap.CharacterPreviewSpec(body_path="body.mdl", head_path="head.mdl"))
+    ap.attach_item_to_preview(
+        result.scene,
+        ap.AttachmentSpec(
+            item_model=_Model("w_blstrpstl_001"),
+            item_resref="w_blstrpstl_001",
+            attachment_type="blaster",
+        ),
+    )
+
+    report = ap.validate_attachment_overlay(result.scene)
+
+    assert report.ok is True
+    assert [issue.code for issue in report.issues] == ["BULLET_HOOK_MISSING"]
+    assert "bullethook" in report.issues[0].action
