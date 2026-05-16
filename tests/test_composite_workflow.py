@@ -40,11 +40,21 @@ try:
         "ghostrigger_md_for_composite_wf",
         _SRC_DIR / "core" / "model_data.py",
     )
+    wb = _load_module_direct(
+        "ghostrigger_workflow_base_for_composite_wf",
+        _SRC_DIR / "core" / "_workflow_base.py",
+    )
+    vs = _load_module_direct(
+        "ghostrigger_validation_for_composite_wf",
+        _SRC_DIR / "core" / "validation_service.py",
+    )
     wf = _load_module_direct(
         "ghostrigger_composite_workflow_under_test",
         _SRC_DIR / "core" / "composite_workflow.py",
     )
     wf._import_model_data = lambda: md                       # type: ignore[attr-defined]
+    wf._import_workflow_base = lambda: wb                     # type: ignore[attr-defined]
+    wf._import_validation_service = lambda: vs                # type: ignore[attr-defined]
 except Exception as exc:                                     # pragma: no cover
     pytest.skip(f"composite_workflow / model_data unavailable: {exc}",
                 allow_module_level=True)
@@ -71,15 +81,26 @@ class _FakeNode:
 
 
 class _FakeModel:
-    def __init__(self, name: str, nodes):
+    def __init__(
+        self,
+        name: str,
+        nodes,
+        bb_min=(-0.5, -0.5, -0.1),
+        bb_max=(0.5, 0.5, 0.8),
+    ):
         self.name = name
         self.supermodel = "S_Female02"
         self.model_type = int(md.ModelClassification.CHARACTER)
         self._nodes = list(nodes)
         self.root_node = self._nodes[0] if self._nodes else None
+        self.bb_min = bb_min
+        self.bb_max = bb_max
 
     def all_nodes(self):
         return list(self._nodes)
+
+    def compute_bounds(self):
+        return None
 
 
 def _body(name="pfbcm", hook_pos=(0.0, 0.0, 1.72), hook_rot=(0.0, 0.0, 0.0, 1.0)):
@@ -89,13 +110,14 @@ def _body(name="pfbcm", hook_pos=(0.0, 0.0, 1.72), hook_rot=(0.0, 0.0, 0.0, 1.0)
     return _FakeModel(name, [root, hook, rhand])
 
 
-def _head(name="pfhc01"):
+def _head(name="pfhc01", bb_min=(-0.5, -0.5, -0.1), bb_max=(0.5, 0.5, 0.8)):
     root = _FakeNode("rootdummy")
     head_g = _FakeNode("head_g", parent=root)
     jaw = _FakeNode("f_jaw_g", parent=head_g)
     upper = _FakeNode("f_um_g", parent=head_g)
     talk = _FakeNode("talkdummy", parent=head_g)
-    return _FakeModel(name, [root, head_g, jaw, upper, talk])
+    return _FakeModel(name, [root, head_g, jaw, upper, talk],
+                      bb_min=bb_min, bb_max=bb_max)
 
 
 def _make_scene():
@@ -362,6 +384,82 @@ def test_t702_preview_failure_is_warning_not_snap_failure(monkeypatch):
     assert "preview failed" in snap.warnings
 
 
+def test_t702_check_composite_reports_missing_parts(monkeypatch):
+    scene = _make_scene()
+    _install_backends(monkeypatch)
+
+    result = wf.check_composite(scene)
+
+    assert result.ok is False
+    assert result.code == "blocked"
+    assert {"COMPOSITE_BODY_MISSING", "COMPOSITE_HEAD_MISSING"} <= result.codes
+    assert result.error_count == 2
+
+
+def test_t702_check_composite_clean_pair(monkeypatch):
+    scene = _make_scene()
+    scene.assign(md.PartSlot.HEADLESS_BODY, _body(), resref="pfbcm")
+    scene.assign(md.PartSlot.HEAD_SHELL, _head(), resref="pfhc01")
+    _install_backends(monkeypatch)
+
+    result = wf.check_composite(scene)
+
+    assert result.ok is True
+    assert result.code == "clean"
+    assert result.summary == "CLEAN"
+
+
+def test_t703_check_composite_flags_unknown_body_supermodel(monkeypatch):
+    scene = _make_scene()
+    body = _body()
+    body.supermodel = "C_BANTHA"
+    scene.assign(md.PartSlot.HEADLESS_BODY, body, resref="pfbcm")
+    scene.assign(md.PartSlot.HEAD_SHELL, _head(), resref="pfhc01")
+    _install_backends(monkeypatch)
+
+    result = wf.check_composite(scene, strict=True)
+
+    assert result.ok is False
+    assert result.code == "blocked"
+    assert "SUPERMODEL_MISMATCH" in result.codes
+    assert result.error_count == 2
+
+
+def test_t703_check_composite_flags_body_head_supermodel_mismatch(monkeypatch):
+    scene = _make_scene()
+    body = _body()
+    head = _head()
+    body.supermodel = "S_Female02"
+    head.supermodel = "S_Male02"
+    scene.assign(md.PartSlot.HEADLESS_BODY, body, resref="pfbcm")
+    scene.assign(md.PartSlot.HEAD_SHELL, head, resref="pfhc01")
+    _install_backends(monkeypatch)
+
+    result = wf.check_composite(scene)
+
+    assert result.ok is True
+    assert result.code == "warnings_only"
+    assert "SUPERMODEL_MISMATCH" in result.codes
+    assert result.warning_count == 1
+
+
+def test_t705_check_composite_warns_on_headhook_seam_gap(monkeypatch):
+    scene = _make_scene()
+    scene.assign(md.PartSlot.HEADLESS_BODY, _body(), resref="pfbcm")
+    # A custom head whose entire local bbox starts 12 cm above its root would
+    # leave the headhook below the visible head geometry after attachment.
+    scene.assign(md.PartSlot.HEAD_SHELL, _head(bb_min=(-0.5, -0.5, 0.12)),
+                 resref="custom_head")
+    _install_backends(monkeypatch)
+
+    result = wf.check_composite(scene)
+
+    assert result.ok is True
+    assert result.code == "warnings_only"
+    assert "SEAM_GAP" in result.codes
+    assert "12.0 cm" in result.issues[0].message
+
+
 def test_t703_known_pc_supermodel_constant_is_uppercase():
     assert "S_FEMALE02" in wf.KOTOR_PC_SUPERMODELS
     assert all(value == value.upper() for value in wf.KOTOR_PC_SUPERMODELS)
@@ -376,3 +474,11 @@ def test_t701_character_builder_load_button_routes_supermodel_to_composite():
     assert "composite_workflow" in source
     assert "_cw.load_composite" in source
     assert "COMPOSITE_LOADED" in source
+
+
+def test_t702_character_builder_check_button_routes_supermodel_to_composite():
+    source = (_SRC_DIR / "gui" / "qt_character_builder_panel.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'self._is_scene_mode("supermodel")' in source
+    assert "check_composite" in source

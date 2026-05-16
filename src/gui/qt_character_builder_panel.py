@@ -877,6 +877,34 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         colour and summary text are computed inside the service so the
         Qt code stays a thin adapter.
         """
+        if self._is_scene_mode("supermodel"):
+            try:
+                from core import composite_workflow as _cw
+            except ImportError:                             # pragma: no cover
+                try:
+                    from src.core import composite_workflow as _cw  # type: ignore
+                except Exception as exc:
+                    log.exception("Could not import composite_workflow")
+                    self.bottom_strip.set_validation(
+                        "error", "CHECK_UNAVAILABLE",
+                        issues=[f"Composite workflow unavailable: {exc}"],
+                    )
+                    return
+
+            result = _cw.check_composite(self.scene, strict=False)
+            self.bottom_strip.set_validation(
+                result.banner_key,
+                result.summary,
+                issues=result.issues,
+            )
+            if hasattr(self.inspector, "set_check_model_result"):
+                try:
+                    self.inspector.set_check_model_result(result)
+                except Exception:                           # pragma: no cover
+                    log.exception("inspector.set_check_model_result failed")
+            self.statusBar().showMessage(result.message, 6000)
+            return
+
         try:
             from ..core import headless_body_workflow as _wf
         except Exception as exc:                            # pragma: no cover

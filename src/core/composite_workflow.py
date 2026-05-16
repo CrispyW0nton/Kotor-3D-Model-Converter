@@ -81,6 +81,22 @@ def _import_character_builder():                            # pragma: no cover -
     return _cb
 
 
+def _import_validation_service():                           # pragma: no cover - import shim
+    try:
+        from src.core import validation_service as _vs      # type: ignore
+    except ImportError:
+        from core import validation_service as _vs          # type: ignore
+    return _vs
+
+
+def _import_workflow_base():                                # pragma: no cover - import shim
+    try:
+        from src.core import _workflow_base as _wb          # type: ignore
+    except ImportError:
+        from core import _workflow_base as _wb              # type: ignore
+    return _wb
+
+
 def _import_creature_appearance():                          # pragma: no cover - import shim
     try:
         from src.core import creature_appearance as _ca     # type: ignore
@@ -125,11 +141,44 @@ class CompositeResult:
     code: str = "load_failed"
 
 
+@dataclass
+class CompositeCheckResult:
+    """Step-2 validation result for Supermodel composite mode."""
+
+    ok: bool = True
+    issues: List[Any] = field(default_factory=list)
+    banner_key: str = "clean"
+    summary: str = "CLEAN"
+    error_count: int = 0
+    warning_count: int = 0
+    info_count: int = 0
+    codes: set = field(default_factory=set)
+    snap: HeadhookSnapResult = field(default_factory=HeadhookSnapResult)
+    message: str = "Composite check clean."
+    code: str = "clean"
+
+
 def _slot_models(scene: Any) -> Tuple[Optional[Any], Optional[Any]]:
     md = _import_model_data()
     body = scene.get_model(md.PartSlot.HEADLESS_BODY)
     head = scene.get_model(md.PartSlot.HEAD_SHELL)
     return body, head
+
+
+def _make_issue(severity: str, code: str, message: str, slot=None, node: str = ""):
+    vs = _import_validation_service()
+    sev = {
+        "error": vs.Severity.ERROR,
+        "warning": vs.Severity.WARNING,
+        "info": vs.Severity.INFO,
+    }[severity]
+    return vs.ValidationIssue(
+        severity=sev,
+        code=code,
+        message=message,
+        slot=slot,
+        node=node,
+    )
 
 
 def _normalise_quat(q: Tuple[float, float, float, float]) -> Tuple[float, float, float, float]:
@@ -194,6 +243,108 @@ def _write_snap_metadata(scene: Any, snap: HeadhookSnapResult) -> None:
         setattr(head, "composite_parent_hook", snap.headhook_name)
         setattr(head, "head_local_offset", snap.head_local_offset)
         setattr(head, "headhook_world_transform", snap.headhook)
+
+
+def _supermodel_value(model: Any) -> str:
+    return (getattr(model, "supermodel", "") or "").strip().upper()
+
+
+def _bounds(model: Any):
+    if model is None:
+        return None
+    try:
+        if hasattr(model, "compute_bounds"):
+            model.compute_bounds()
+    except Exception:
+        pass
+    bb_min = getattr(model, "bb_min", None)
+    bb_max = getattr(model, "bb_max", None)
+    if not bb_min or not bb_max:
+        return None
+    try:
+        mn = (float(bb_min[0]), float(bb_min[1]), float(bb_min[2]))
+        mx = (float(bb_max[0]), float(bb_max[1]), float(bb_max[2]))
+    except Exception:
+        return None
+    if mn == (0.0, 0.0, 0.0) and mx == (0.0, 0.0, 0.0):
+        return None
+    return mn, mx
+
+
+def _append_supermodel_issues(scene: Any, issues: List[Any], *, strict: bool) -> None:
+    md = _import_model_data()
+    body, head = _slot_models(scene)
+    if body is None or head is None:
+        return
+
+    body_sm = _supermodel_value(body)
+    head_sm = _supermodel_value(head)
+    nulls = {"", "NULL", "NONE"}
+    severity = "error" if strict else "warning"
+
+    if body_sm in nulls:
+        issues.append(_make_issue(
+            severity,
+            "SUPERMODEL_MISMATCH",
+            "Body has no supermodel set. KOTOR body/head composites need a "
+            "shared PC supermodel such as S_Female02 or S_Male02.",
+            slot=md.PartSlot.HEADLESS_BODY,
+        ))
+    elif body_sm not in KOTOR_PC_SUPERMODELS:
+        issues.append(_make_issue(
+            severity,
+            "SUPERMODEL_MISMATCH",
+            f"Body supermodel '{body_sm}' is not a known PC base rig. "
+            "Pick a KOTOR player/NPC body or retarget both models to "
+            "S_Female02/S_Female03/S_Male02/S_Male03 before export.",
+            slot=md.PartSlot.HEADLESS_BODY,
+        ))
+
+    if body_sm not in nulls and head_sm not in nulls and body_sm != head_sm:
+        issues.append(_make_issue(
+            severity,
+            "SUPERMODEL_MISMATCH",
+            f"Body and head supermodels differ: body={body_sm}, head={head_sm}. "
+            "They must share the same supermodel or the face/body animations "
+            "will not stay in sync in game.",
+            slot=md.PartSlot.HEAD_SHELL,
+        ))
+
+
+def _append_seam_issue(scene: Any, snap: HeadhookSnapResult, issues: List[Any]) -> None:
+    md = _import_model_data()
+    if not snap.ok or snap.headhook is None or snap.head_model is None:
+        return
+    b = _bounds(snap.head_model)
+    if b is None:
+        return
+
+    head_min, head_max = b
+    hook_z = float(snap.headhook[0][2])
+    root_z = float(snap.head_local_offset[2][3])
+    lower_world_z = root_z + head_min[2]
+    upper_world_z = root_z + head_max[2]
+
+    tolerance_m = 0.02
+    if (lower_world_z - tolerance_m) <= hook_z <= (upper_world_z + tolerance_m):
+        return
+
+    if hook_z < lower_world_z:
+        gap = lower_world_z - hook_z
+        direction = "above"
+    else:
+        gap = hook_z - upper_world_z
+        direction = "below"
+
+    issues.append(_make_issue(
+        "warning",
+        "SEAM_GAP",
+        f"Head bounds sit {gap * 100.0:.1f} cm {direction} the body headhook "
+        "plane. The preview may show a neck gap or clipping; check the head "
+        "root/origin before exporting.",
+        slot=md.PartSlot.HEAD_SHELL,
+        node="headhook",
+    ))
 
 
 def snap_head_to_body(
@@ -356,6 +507,68 @@ def load_composite(
     )
 
 
+def check_composite(scene: Any, *, strict: bool = False) -> CompositeCheckResult:
+    """Run Step 2 checks that matter for a body/head KOTOR composite."""
+
+    body, head = _slot_models(scene)
+    issues: List[Any] = []
+    md = _import_model_data()
+
+    if body is None:
+        issues.append(_make_issue(
+            "error",
+            "COMPOSITE_BODY_MISSING",
+            "Load a headless body first. KOTOR needs a body MDL with a headhook.",
+            slot=md.PartSlot.HEADLESS_BODY,
+        ))
+    if head is None:
+        issues.append(_make_issue(
+            "error",
+            "COMPOSITE_HEAD_MISSING",
+            "Load a head model next. The composite preview needs both body and head.",
+            slot=md.PartSlot.HEAD_SHELL,
+        ))
+
+    snap = update_snap_after_scene_mutation(scene, build_preview=False)
+    if body is not None and head is not None and not snap.ok:
+        issues.append(_make_issue(
+            "error",
+            "HEADHOOK_MISSING",
+            snap.message or "Body model has no usable headhook attachment.",
+            slot=md.PartSlot.HEADLESS_BODY,
+            node="headhook",
+        ))
+
+    _append_supermodel_issues(scene, issues, strict=strict)
+    _append_seam_issue(scene, snap, issues)
+
+    wb = _import_workflow_base()
+    banner, summary, errors, warnings, infos, codes = wb.summarize_issues(issues)
+    if errors:
+        message = f"Composite check blocked: {summary}."
+        code = "blocked"
+    elif warnings:
+        message = f"Composite check found warnings: {summary}."
+        code = "warnings_only"
+    else:
+        message = "Composite check clean: body/head snap and supermodel look usable."
+        code = "clean"
+
+    return CompositeCheckResult(
+        ok=(errors == 0),
+        issues=issues,
+        banner_key=banner,
+        summary=summary,
+        error_count=errors,
+        warning_count=warnings,
+        info_count=infos,
+        codes=codes,
+        snap=snap,
+        message=message,
+        code=code,
+    )
+
+
 def update_snap_after_scene_mutation(
     scene: Any,
     *,
@@ -372,9 +585,11 @@ def update_snap_after_scene_mutation(
 
 __all__ = [
     "CompositeResult",
+    "CompositeCheckResult",
     "HeadhookSnapResult",
     "IDENTITY_MATRIX",
     "KOTOR_PC_SUPERMODELS",
+    "check_composite",
     "load_composite",
     "snap_head_to_body",
     "update_snap_after_scene_mutation",
