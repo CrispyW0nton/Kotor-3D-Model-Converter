@@ -254,6 +254,33 @@ def get_tools() -> List[Dict[str, Any]]:
                 "required": ["resref", "game", "unity_project"],
             },
         },
+        {
+            "name": "ghostrigger_validate_unity_import",
+            "description": (
+                "Build a validation manifest for a GhostRigger-exported Unity asset. "
+                "Pass the GhostRigger transfer metadata sidecar and Unity-side import "
+                "facts (clips, renderer types, material count, skin/bindpose counts) "
+                "to get stable pass/warning/error diagnostics."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "transfer_metadata_path": {
+                        "type": "string",
+                        "description": "Path to the *.ghostrigger.json transfer sidecar",
+                    },
+                    "unity_summary": {
+                        "type": "object",
+                        "description": "Unity import facts: asset_path, clips, renderers, warnings, errors",
+                    },
+                    "output_path": {
+                        "type": "string",
+                        "description": "Optional path to write the validation manifest JSON",
+                    },
+                },
+                "required": ["transfer_metadata_path", "unity_summary"],
+            },
+        },
     ]
 
 
@@ -616,6 +643,32 @@ async def handle_export_model_for_unity(arguments: Dict[str, Any]) -> Dict[str, 
         return json_content(result)
     except Exception as exc:
         return json_content({"error": f"Unity export failed: {exc}"})
+
+
+async def handle_validate_unity_import(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate Unity-side import facts against a GhostRigger transfer sidecar."""
+    transfer_path = str(arguments.get("transfer_metadata_path", "") or "").strip()
+    unity_summary = arguments.get("unity_summary") or {}
+    output_raw = str(arguments.get("output_path", "") or "").strip()
+    if not transfer_path:
+        return json_content({"error": "transfer_metadata_path is required."})
+    if not isinstance(unity_summary, dict):
+        return json_content({"error": "unity_summary must be an object."})
+
+    try:
+        try:
+            from src.core.unity_import_validator import validate_unity_import_file  # noqa: PLC0415
+        except ImportError:                                      # pragma: no cover - MCP path shim
+            from core.unity_import_validator import validate_unity_import_file  # type: ignore  # noqa: PLC0415
+
+        manifest = validate_unity_import_file(
+            Path(transfer_path),
+            unity_summary,
+            Path(output_raw) if output_raw else None,
+        )
+        return json_content(manifest)
+    except Exception as exc:
+        return json_content({"error": f"Unity import validation failed: {exc}"})
 
 
 # ── Backward-compatible helper ────────────────────────────────────────────────

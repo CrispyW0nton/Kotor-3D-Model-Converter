@@ -17,13 +17,13 @@ Architecture note (Constantine, "Structured Design"):
   are context-free — the same tool works in a Discord bot, VS Code extension,
   CI pipeline, or any other consumer without modification.
 
-Tool manifest (v3.5 — 68 total):
+Tool manifest (v3.6 — 70 total):
   Installation   (3): detectInstallations, loadInstallation, kotor_installation_info
   Discovery      (4): listResources, describeResource, kotor_find_resource, kotor_search_resources
   Game data      (3): journalOverview, kotor_lookup_2da, kotor_lookup_tlk
-  GhostRigger    (6): ghostrigger_open_model, ghostrigger_render_model, ghostrigger_model_info,
+  GhostRigger    (7): ghostrigger_open_model, ghostrigger_render_model, ghostrigger_model_info,
                       ghostrigger_list_game_models, ghostrigger_audit,
-                      ghostrigger_export_model_for_unity
+                      ghostrigger_export_model_for_unity, ghostrigger_validate_unity_import
   DebugSkinning (25): ghostrigger_debug_launch_app, ghostrigger_debug_close_app,
                       ghostrigger_debug_get_runtime_status, ghostrigger_debug_set_game_library_path,
                       ghostrigger_debug_verify_game_library, ghostrigger_debug_load_model,
@@ -67,11 +67,11 @@ from kotormcp.tools import (
 def get_all_tools() -> List[Dict[str, Any]]:
     """Return all tool definitions from all tool modules.
 
-    Tool count: 69 (v3.6)
-      3  installation  +  4 discovery  +  3 gamedata  +  6 ghostrigger
+    Tool count: 70 (v3.6)
+      3  installation  +  4 discovery  +  3 gamedata  +  7 ghostrigger
     + 25 debug_skinning + 3  modules   +  3 gffdata   + 11 decompile
     +  2 composite     +  6  refs      +  1 walkmesh  +  2 archives
-    = 69
+    = 70
     """
     return (
         installation.get_tools()          # 3  installation management
@@ -132,6 +132,8 @@ async def handle_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         return await ghostrigger.handle_audit(arguments)
     if name == "ghostrigger_export_model_for_unity":
         return await ghostrigger.handle_export_model_for_unity(arguments)
+    if name == "ghostrigger_validate_unity_import":
+        return await ghostrigger.handle_validate_unity_import(arguments)
 
     # ── Module tools ──────────────────────────────────────────────────────────
     if name == "kotor_list_modules":

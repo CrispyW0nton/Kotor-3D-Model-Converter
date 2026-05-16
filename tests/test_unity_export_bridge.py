@@ -11,6 +11,7 @@ if str(LOCAL_SRC) not in sys.path:
     sys.path.insert(0, str(LOCAL_SRC))
 
 from src.core.unity_export_bridge import build_output_paths, summarize_model
+from src.core.unity_import_validator import build_unity_import_manifest
 from kotormcp.tools import get_all_tools, handle_tool
 from kotormcp.tools import ghostrigger
 
@@ -77,6 +78,7 @@ def test_mcp_tool_manifest_exposes_unity_export_action():
     names = {tool["name"] for tool in get_all_tools()}
 
     assert "ghostrigger_export_model_for_unity" in names
+    assert "ghostrigger_validate_unity_import" in names
 
 
 def test_mcp_unity_export_action_writes_asset_and_metadata(monkeypatch):
@@ -124,3 +126,76 @@ def test_mcp_unity_export_action_writes_asset_and_metadata(monkeypatch):
         assert sidecar["counts"]["animations"] == 2
     finally:
         shutil.rmtree(out_root.parent, ignore_errors=True)
+
+
+def test_unity_import_manifest_reports_missing_skin_warning():
+    transfer = {
+        "source": {
+            "game": "K1",
+            "resref": "n_darthmalak",
+            "character_mode": "creature",
+        },
+        "unity": {
+            "asset_path": "Assets/KotorImported/Test/n_darthmalak.fbx",
+        },
+        "counts": {
+            "animations": 2,
+        },
+        "animations": ["pause1", "tlknorm"],
+    }
+    unity_summary = {
+        "asset_path": "Assets/KotorImported/Test/n_darthmalak.fbx",
+        "clips": [{"name": "pause1", "length": 1.0}],
+        "renderers": [{"type": "MeshRenderer", "materialCount": 1}],
+    }
+
+    manifest = build_unity_import_manifest(transfer, unity_summary)
+
+    assert manifest["status"] == "warning"
+    assert manifest["ok"] is True
+    assert manifest["counts"]["mesh_renderers"] == 1
+    assert manifest["counts"]["skinned_mesh_renderers"] == 0
+    assert "tlknorm" in manifest["missing_clips"]
+    assert {item["code"] for item in manifest["warnings"]} >= {
+        "missing_skinned_renderer",
+        "missing_animation_clips",
+    }
+
+
+def test_mcp_unity_import_validator_writes_manifest():
+    out_root = Path(".pytest_tmp_unity_bridge")
+    sidecar = out_root / "n_darthmalak.ghostrigger.json"
+    manifest_path = out_root / "validation.json"
+    sidecar.parent.mkdir(parents=True, exist_ok=True)
+    sidecar.write_text(json.dumps({
+        "source": {"game": "K1", "resref": "n_darthmalak", "character_mode": "creature"},
+        "unity": {"asset_path": "Assets/KotorImported/Test/n_darthmalak.fbx"},
+        "counts": {"animations": 1},
+        "animations": ["pause1"],
+    }), encoding="utf-8")
+
+    try:
+        result = asyncio.run(handle_tool(
+            "ghostrigger_validate_unity_import",
+            {
+                "transfer_metadata_path": str(sidecar),
+                "unity_summary": {
+                    "asset_path": "Assets/KotorImported/Test/n_darthmalak.fbx",
+                    "clips": [{"name": "pause1", "length": 1.0}],
+                    "renderers": [{
+                        "type": "SkinnedMeshRenderer",
+                        "materialCount": 2,
+                        "boneCount": 14,
+                        "bindposeCount": 14,
+                    }],
+                },
+                "output_path": str(manifest_path),
+            },
+        ))
+        payload = json.loads(result["text"])
+
+        assert payload["status"] == "ok"
+        assert payload["counts"]["skinned_mesh_renderers"] == 1
+        assert manifest_path.exists()
+    finally:
+        shutil.rmtree(out_root, ignore_errors=True)
