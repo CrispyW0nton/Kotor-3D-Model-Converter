@@ -28,6 +28,7 @@ Changes from v2.9:
 from __future__ import annotations
 
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from kotormcp.ports import (
@@ -207,6 +208,52 @@ def get_tools() -> List[Dict[str, Any]]:
                 "required": ["resref"],
             },
         },
+        {
+            "name": "ghostrigger_export_model_for_unity",
+            "description": (
+                "Export a KotOR MDL/MDX model from game data or a file path into "
+                "a Unity project Assets folder as FBX, with a GhostRigger metadata "
+                "JSON sidecar. Use this for repeatable GhostRigger -> Unity MCP "
+                "asset transfer tests."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "resref": {
+                        "type": "string",
+                        "description": "MDL resource name or absolute file path",
+                    },
+                    "game": {
+                        "type": "string",
+                        "description": "Game alias: k1 or k2",
+                    },
+                    "game_path": {
+                        "type": "string",
+                        "description": "Optional absolute path to KotOR installation",
+                    },
+                    "unity_project": {
+                        "type": "string",
+                        "description": "Absolute Unity project root",
+                    },
+                    "asset_subdir": {
+                        "type": "string",
+                        "default": "Assets/KotorImported/GhostRigger",
+                        "description": "Unity-project-relative output folder",
+                    },
+                    "format": {
+                        "type": "string",
+                        "enum": ["fbx"],
+                        "default": "fbx",
+                    },
+                    "export_rigging": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "Write rigging JSON sidecars next to the FBX",
+                    },
+                },
+                "required": ["resref", "game", "unity_project"],
+            },
+        },
     ]
 
 
@@ -227,6 +274,16 @@ def _locate_and_parse(
     path_label, mdl_bytes, mdx_bytes = svc.locator.locate(resref, game, game_path)
     model = svc.parser.parse(mdl_bytes, mdx_bytes, path_label)
     return path_label, model
+
+
+def _export_fbx_for_unity(model: Any, out_path: Path, export_rigging: bool) -> bool:
+    """Small seam for tests around the real FBX exporter."""
+    try:
+        from src.converters.mesh_converter import FBXExporter  # noqa: PLC0415
+    except ImportError:                                      # pragma: no cover - MCP path shim
+        from converters.mesh_converter import FBXExporter     # type: ignore  # noqa: PLC0415
+
+    return FBXExporter().export(model, str(out_path), export_rigging=export_rigging)
 
 
 # ── Handlers ──────────────────────────────────────────────────────────────────
@@ -508,6 +565,57 @@ async def handle_audit(arguments: Dict[str, Any]) -> Dict[str, Any]:
         })
     except Exception as exc:
         return json_content({"error": f"Audit failed: {exc}"})
+
+
+async def handle_export_model_for_unity(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """Export a KotOR model into a Unity project asset folder."""
+    resref = str(arguments.get("resref", "") or "").strip()
+    game = arguments.get("game")
+    game_path = arguments.get("game_path")
+    unity_project_raw = str(arguments.get("unity_project", "") or "").strip()
+    asset_subdir = str(
+        arguments.get("asset_subdir") or "Assets/KotorImported/GhostRigger"
+    )
+    fmt = str(arguments.get("format") or "fbx").lower().lstrip(".")
+    export_rigging = bool(arguments.get("export_rigging", True))
+    svc = _get_services()
+
+    if not resref:
+        return json_content({"error": "resref is required."})
+    if not game:
+        return json_content({"error": "game is required."})
+    if not unity_project_raw:
+        return json_content({"error": "unity_project is required."})
+    if fmt != "fbx":
+        return json_content({"error": f"Unsupported Unity transfer format: {fmt}"})
+
+    try:
+        path_label, model = _locate_and_parse(resref, game, game_path, svc)
+    except FileNotFoundError as exc:
+        return json_content({"error": str(exc)})
+    except Exception as exc:
+        return json_content({"error": f"Failed to parse MDL: {exc}"})
+
+    try:
+        try:
+            from src.core.unity_export_bridge import export_model_for_unity  # noqa: PLC0415
+        except ImportError:                                      # pragma: no cover - MCP path shim
+            from core.unity_export_bridge import export_model_for_unity  # type: ignore  # noqa: PLC0415
+
+        result = export_model_for_unity(
+            model,
+            game=str(game).upper(),
+            resref=resref,
+            unity_project=Path(unity_project_raw),
+            asset_subdir=asset_subdir,
+            extension=fmt,
+            export_rigging=export_rigging,
+            exporter=_export_fbx_for_unity,
+            source_path=path_label,
+        )
+        return json_content(result)
+    except Exception as exc:
+        return json_content({"error": f"Unity export failed: {exc}"})
 
 
 # ── Backward-compatible helper ────────────────────────────────────────────────

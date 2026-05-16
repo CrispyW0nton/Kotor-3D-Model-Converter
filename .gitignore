@@ -57,6 +57,7 @@ game_data/
 !/tests/test_guide_edit_persistence_wiring.py
 !/tests/test_motion_assignment_wiring.py
 !/tests/test_launch_workflow.py
+!/tests/test_unity_export_bridge.py
 test_assets/
 pytest.ini
 .pytest_cache/
@@ -154,6 +155,7 @@ scripts/
 !/scripts/generate_manifest.py
 !/scripts/full_scan.py
 !/scripts/analyze_scan.py
+!/scripts/export_kotor_model_for_unity.py
 exports/
 !/exports/
 !/exports/scan_manifest.json

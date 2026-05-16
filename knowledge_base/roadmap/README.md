@@ -13,7 +13,7 @@ This folder contains the post-Qt-migration roadmap for GhostRigger, derived from
 | File | Purpose |
 |------|---------|
 | `01_qt_branch_audit.md` | Audit of the current Qt branch: Tk-vs-Qt status, module map, KOTOR model-type taxonomy, HUD design notes, Stewart Jones takeaways, gaps |
-| `02_roadmap_2026_05.md` | Live launch roadmap with task IDs, hours, acceptance criteria, commit-message templates. **Last revised 2026-05-16** after M12 locally completed external-mesh skeleton selection, guide persistence with undo/redo, animation assignment, and end-to-end MDL reload proof, then M10 locally completed export polish including Supermodel composite FBX/glTF export |
+| `02_roadmap_2026_05.md` | Live launch roadmap with task IDs, hours, acceptance criteria, commit-message templates. **Last revised 2026-05-16** after M12/M10 local Character Builder launch work plus the broader product-pillar audit for Unity MCP transfer, Asset Viewer, Module Editor, and Map Builder |
 
 ## Headline
 
@@ -26,6 +26,7 @@ This folder contains the post-Qt-migration roadmap for GhostRigger, derived from
    - Creature — M8 (only mostly-greenfield milestone)
 4. **Stewart Jones playbook** drives Creature mode: 3-Stage Asset Build, spline-IK chains, wing rig with FLAP/FOLD/LINK/CTRL layers, ROM test files. — M8
 5. **Validation surfaces live** through the bottom-strip banner. — M5 partial; M9 debounces.
+6. **Unity/MCP transfer, Asset Viewer, Module Editor, and Map Builder** now have explicit milestone gates instead of being treated as vague future work.
 
 ## Status (post-M12 launch-proof update, 2026-05-16)
 
@@ -38,12 +39,17 @@ This folder contains the post-Qt-migration roadmap for GhostRigger, derived from
 | M10 Export polish | ✅ done locally | awaiting review/PR |
 | M12 External Mesh Launch Path | ✅ done locally | awaiting review/PR |
 | M11 Visual regression | 🟡 infra ready | ~2 d |
-| **Launch remaining** | | **~8 d** |
+| M13 Unity MCP transfer | 🟡 started | ~4 d |
+| M14 Asset Viewer | 🔴 gap | ~5 d |
+| M15 Module Editor | 🔴 gap | ~8 d |
+| M16 Map Builder | 🔴 gap | ~8 d |
+| **Character Builder launch remaining** | | **~8 d** |
+| **Full suite foundation remaining** | | **~33 d** |
 
 ## Critical path remaining
 
-`M9 → M11`, with M8 Creature work deferred until the humanoid/head pipeline polish is locked.
+`M13 → M14 → M9 → M11`, with M8 Creature work deferred until the humanoid/head pipeline polish is locked.
 
-Shortest path to feature-complete v7 Character Builder: **M9**, then M11 regression lock-in. M8 ships after unless Creature is explicitly prioritized.
+Shortest path to feature-complete v7 Character Builder: **M9**, then M11 regression lock-in. A public modder beta also needs M13/M14 so exported characters can be transferred and previewed outside the game. M8 ships after unless Creature is explicitly prioritized.
 
 Supersedes `knowledge_base/reference/ROADMAP_legacy_2026_04.md` for the Qt branch. The older roadmap is kept for historical reference only.
