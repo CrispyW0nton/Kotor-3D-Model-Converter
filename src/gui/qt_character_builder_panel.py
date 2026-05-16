@@ -638,6 +638,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
           • cancel the load (which leaves the slot assigned but warns
             in the banner).
         """
+        if self._is_scene_mode("supermodel"):
+            self._on_load_composite_requested()
+            return
+
         try:
             from ..core import headless_body_workflow as _wf
         except Exception as exc:                            # pragma: no cover
@@ -712,6 +716,96 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         )
         self.statusBar().showMessage(result.message, 5000)
         self._on_model_loaded_into_scene(result)
+
+    def _is_scene_mode(self, value: str) -> bool:
+        mode = getattr(self.scene, "mode", None)
+        mode_value = (
+            getattr(mode, "value", None)
+            or getattr(mode, "name", "")
+            or str(mode or "")
+        ).lower()
+        return mode_value == value.lower()
+
+    def _on_load_composite_requested(self) -> None:
+        """Workflow Step 1 for M7 Supermodel mode: load body + head."""
+        try:
+            from core import composite_workflow as _cw
+            from core import head_workflow as _head_wf
+            from core import headless_body_workflow as _body_wf
+        except ImportError:                                 # pragma: no cover
+            try:
+                from src.core import composite_workflow as _cw       # type: ignore
+                from src.core import head_workflow as _head_wf       # type: ignore
+                from src.core import headless_body_workflow as _body_wf  # type: ignore
+            except Exception as exc:
+                log.exception("Could not import composite workflow")
+                self.bottom_strip.set_validation(
+                    "error", "COMPOSITE_UNAVAILABLE",
+                    issues=[f"Composite workflow unavailable: {exc}"],
+                )
+                return
+
+        body_path, _selected = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Load Body Model",
+            "",
+            _body_wf.load_file_filter(),
+        )
+        if not body_path:
+            return
+
+        head_path, _selected = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Load Head Model",
+            "",
+            _head_wf.load_file_filter(),
+        )
+        if not head_path:
+            return
+
+        gv = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
+             getattr(self.scene, "game_version", "K1")
+        result = _cw.load_composite(
+            self.scene,
+            body_path=body_path,
+            head_path=head_path,
+            game_version=gv,
+            build_preview=True,
+        )
+
+        issues = [result.message]
+        snap = getattr(result, "snap", None)
+        if snap is not None:
+            if getattr(snap, "message", ""):
+                issues.append(snap.message)
+            issues.extend(list(getattr(snap, "warnings", []) or []))
+
+        if not result.ok:
+            self.bottom_strip.set_validation(
+                "error", (result.code or "composite").upper(),
+                issues=issues,
+            )
+            self.statusBar().showMessage(result.message, 6000)
+            self._sync_from_scene()
+            self._update_title()
+            return
+
+        self.bottom_strip.set_validation(
+            "info", "COMPOSITE_LOADED", issues=issues,
+        )
+        self.statusBar().showMessage(result.message, 5000)
+        self._sync_from_scene()
+        try:
+            preview_model = getattr(snap, "preview_model", None)
+            body_model = getattr(getattr(result, "body_result", None), "model", None)
+            model = preview_model or body_model
+            if (model is not None
+                    and hasattr(self, "viewport")
+                    and hasattr(self.viewport, "load_model")):
+                self.viewport.load_model(model)
+        except Exception:                                    # pragma: no cover
+            log.exception("Failed to push composite preview into viewport")
+        self._update_title()
 
     def _on_model_loaded_into_scene(self, result) -> None:
         """Post-load housekeeping shared by every load branch.

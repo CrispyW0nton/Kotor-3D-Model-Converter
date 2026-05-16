@@ -365,3 +365,14 @@ def test_t702_preview_failure_is_warning_not_snap_failure(monkeypatch):
 def test_t703_known_pc_supermodel_constant_is_uppercase():
     assert "S_FEMALE02" in wf.KOTOR_PC_SUPERMODELS
     assert all(value == value.upper() for value in wf.KOTOR_PC_SUPERMODELS)
+
+
+def test_t701_character_builder_load_button_routes_supermodel_to_composite():
+    source = (_SRC_DIR / "gui" / "qt_character_builder_panel.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'self._is_scene_mode("supermodel")' in source
+    assert "self._on_load_composite_requested()" in source
+    assert "composite_workflow" in source
+    assert "_cw.load_composite" in source
+    assert "COMPOSITE_LOADED" in source
