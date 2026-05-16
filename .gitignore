@@ -63,6 +63,7 @@ game_data/
 !/tests/test_module_hydration.py
 !/tests/test_module_object_inspector.py
 !/tests/test_walkmesh_editor.py
+!/tests/test_module_save_pipeline.py
 test_assets/
 pytest.ini
 .pytest_cache/
