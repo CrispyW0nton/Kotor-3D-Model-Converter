@@ -595,6 +595,11 @@ def _get_body_model(scene: Any) -> Optional[Any]:
     return scene.get_model(md.PartSlot.HEADLESS_BODY)
 
 
+def _get_head_model(scene: Any) -> Optional[Any]:
+    md = _import_model_data()
+    return scene.get_model(md.PartSlot.HEAD_SHELL)
+
+
 def _coerce_position3(position: Any) -> Optional[Tuple[float, float, float]]:
     try:
         values = tuple(position)
@@ -1849,6 +1854,66 @@ def _motion_assignment_issues(scene: Any) -> List[Any]:
     )]
 
 
+def _scene_mode_value(scene: Any) -> str:
+    mode = getattr(scene, "mode", "")
+    return (
+        getattr(mode, "value", None)
+        or getattr(mode, "name", "")
+        or str(mode or "")
+    ).lower()
+
+
+def _animation_names(model: Any) -> List[str]:
+    return [
+        str(getattr(anim, "name", "") or "").strip().lower()
+        for anim in _iter_model_animations(model)
+        if str(getattr(anim, "name", "") or "").strip()
+    ]
+
+
+def _per_mode_export_issues(scene: Any) -> List[Any]:
+    """M10/T1005 mode-specific blockers that validation_service cannot infer."""
+    mode = _scene_mode_value(scene)
+    issues: List[Any] = []
+
+    if mode == "head":
+        head = _get_head_model(scene)
+        names = _animation_names(head) if head is not None else []
+        if not any(name == "talk" or name.startswith("tlk") for name in names):
+            issues.append(_WorkflowIssue(
+                _WorkflowSeverity("error"),
+                "TALK_ANIMATION_MISSING",
+                "Head export requires a talk animation for KOTOR LIP/viseme playback.",
+                node="talkdummy",
+            ))
+
+    if mode == "supermodel":
+        snap = getattr(scene, "metadata", {}).get("composite_snap", {})
+        if not (
+            isinstance(snap, dict)
+            and bool(snap.get("ok"))
+            and str(snap.get("code", "")).lower() == "snapped"
+            and snap.get("head_local_offset") is not None
+        ):
+            issues.append(_WorkflowIssue(
+                _WorkflowSeverity("error"),
+                "COMPOSITE_SNAP_MISSING",
+                "Supermodel export requires a completed headhook snap before export.",
+                node="headhook",
+            ))
+
+    if mode == "creature":
+        state = _motion_assignment_state(scene)
+        if str(state.get("source") or "") != MOTION_SOURCE_ROM:
+            issues.append(_WorkflowIssue(
+                _WorkflowSeverity("error"),
+                "ROM_CLIP_MISSING",
+                "Creature export requires a generated ROM clip to prove the rig extremes.",
+            ))
+
+    return issues
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  T506 ▸ Validate + Export step
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2295,6 +2360,7 @@ def validate_for_export(
         service = svc_mod.ValidationService(scene, strict=strict)
         issues = list(service.validate() or [])
         issues.extend(_motion_assignment_issues(scene))
+        issues.extend(_per_mode_export_issues(scene))
     except Exception as exc:                                # pragma: no cover
         log.exception("validate_for_export: ValidationService raised")
         return ValidateForExportResult(

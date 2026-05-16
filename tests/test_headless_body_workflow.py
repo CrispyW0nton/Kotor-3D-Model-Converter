@@ -1596,6 +1596,93 @@ def test_t506_validate_for_export_strict_passes_through_to_service(monkeypatch):
     assert captured["strict"] is False
 
 
+def test_t1005_head_export_requires_talk_animation(monkeypatch):
+    _make_check_service(monkeypatch, issues=[])
+    scene = _make_scene("K1")
+    head = _FakeHeadModel("pfhc01")
+    head.animations = []
+    scene.assign(md.PartSlot.HEAD_SHELL, head, resref="pfhc01")
+    scene.set_mode(md.CharacterMode.HEAD, locked=True)
+
+    result = wf.validate_for_export(scene)
+
+    assert result.ok is False
+    assert "TALK_ANIMATION_MISSING" in result.blocking_codes
+
+
+def test_t1005_head_export_allows_talk_animation(monkeypatch):
+    _make_check_service(monkeypatch, issues=[])
+    scene = _make_scene("K1")
+    head = _FakeHeadModel("pfhc01")
+
+    class _Anim:
+        name = "talk"
+
+    head.animations = [_Anim()]
+    scene.assign(md.PartSlot.HEAD_SHELL, head, resref="pfhc01")
+    scene.set_mode(md.CharacterMode.HEAD, locked=True)
+
+    result = wf.validate_for_export(scene)
+
+    assert result.ok is True
+    assert "TALK_ANIMATION_MISSING" not in result.blocking_codes
+
+
+def test_t1005_supermodel_export_requires_completed_snap(monkeypatch):
+    _make_check_service(monkeypatch, issues=[])
+    scene, _body = _scene_with_body("pfbcm")
+    scene.assign(md.PartSlot.HEAD_SHELL, _FakeHeadModel("pfhc01"), resref="pfhc01")
+    scene.set_mode(md.CharacterMode.SUPERMODEL, locked=True)
+
+    result = wf.validate_for_export(scene)
+
+    assert result.ok is False
+    assert "COMPOSITE_SNAP_MISSING" in result.blocking_codes
+
+
+def test_t1005_supermodel_export_allows_completed_snap(monkeypatch):
+    _make_check_service(monkeypatch, issues=[])
+    scene, _body = _scene_with_body("pfbcm")
+    scene.assign(md.PartSlot.HEAD_SHELL, _FakeHeadModel("pfhc01"), resref="pfhc01")
+    scene.set_mode(md.CharacterMode.SUPERMODEL, locked=True)
+    scene.metadata["composite_snap"] = {
+        "ok": True,
+        "code": "snapped",
+        "head_local_offset": [[1, 0, 0, 0],
+                              [0, 1, 0, 0],
+                              [0, 0, 1, 0],
+                              [0, 0, 0, 1]],
+    }
+
+    result = wf.validate_for_export(scene)
+
+    assert result.ok is True
+    assert "COMPOSITE_SNAP_MISSING" not in result.blocking_codes
+
+
+def test_t1005_creature_export_requires_generated_rom(monkeypatch):
+    _make_check_service(monkeypatch, issues=[])
+    scene, _body = _scene_with_body("c_bantha")
+    scene.set_mode(md.CharacterMode.CREATURE, locked=True)
+
+    result = wf.validate_for_export(scene)
+
+    assert result.ok is False
+    assert "ROM_CLIP_MISSING" in result.blocking_codes
+
+
+def test_t1005_creature_export_allows_generated_rom(monkeypatch):
+    _make_check_service(monkeypatch, issues=[])
+    scene, _body = _scene_with_body("c_bantha")
+    scene.set_mode(md.CharacterMode.CREATURE, locked=True)
+    wf.assign_motion_source(scene, wf.MOTION_SOURCE_ROM)
+
+    result = wf.validate_for_export(scene)
+
+    assert result.ok is True
+    assert "ROM_CLIP_MISSING" not in result.blocking_codes
+
+
 # ── T506 ▸ export_scene ────────────────────────────────────────────────────
 def test_t506_export_scene_no_body_returns_structured_error(monkeypatch):
     _install_fake_scene_io(monkeypatch)
