@@ -508,6 +508,28 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if hasattr(self.inspector, "refreshPreviewAnimationsRequested"):
             self.inspector.refreshPreviewAnimationsRequested.connect(
                 self._on_refresh_preview_animations_requested)
+        # M6 / T602 — Head Facial Palette.
+        if hasattr(self.inspector, "headFacialBoneSelected"):
+            self.inspector.headFacialBoneSelected.connect(
+                self._on_head_facial_bone_selected)
+        if hasattr(self.inspector, "rigHeadRequested"):
+            self.inspector.rigHeadRequested.connect(
+                self._on_rig_head_requested)
+        if hasattr(self.inspector, "rigFaceRequested"):
+            self.inspector.rigFaceRequested.connect(
+                self._on_rig_face_requested)
+        # M6 / T603 — Viseme Test Panel.
+        if hasattr(self.inspector, "applyVisemeRequested"):
+            self.inspector.applyVisemeRequested.connect(
+                self._on_apply_viseme_requested)
+        # M6 / T604 — Phoneme Calibration Panel.
+        if hasattr(self.inspector, "calibratePhonemeRequested"):
+            self.inspector.calibratePhonemeRequested.connect(
+                self._on_calibrate_phoneme_requested)
+        # M6 / T605 — Head-mode camera preset request.
+        if hasattr(self.inspector, "headCameraPresetRequested"):
+            self.inspector.headCameraPresetRequested.connect(
+                self._on_head_camera_preset_requested)
         # When the user picks a different mode in the properties panel
         # (M1/T105), echo it through the toolbar so the two stay in sync.
         if hasattr(self.properties, "characterModeChanged"):
@@ -1197,6 +1219,208 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         self.statusBar().showMessage(result.message, 4000)
 
+    # ── M6 / T602 — Head Facial Palette slots ────────────────────────────
+
+    @QtCore.Slot(str)
+    def _on_head_facial_bone_selected(self, bone_name: str) -> None:
+        """Forward a Head Facial Palette click to viewport + status bar.
+
+        For M6 we surface the selection on the status bar and the
+        bottom-strip info banner; M7 / M8 will wire this to the M4
+        joint-dot HUD so the matching dot highlights in the viewport.
+        """
+        if not bone_name:
+            return
+        msg = f"Facial bone: {bone_name}"
+        # Surface on the bottom strip (informational, not blocking).
+        try:
+            self.bottom_strip.set_validation(
+                "info", "FACIAL_BONE_SELECTED",
+                issues=[msg],
+            )
+        except Exception:                                   # pragma: no cover
+            log.exception("bottom_strip.set_validation failed for "
+                          "head facial bone selection")
+        self.statusBar().showMessage(msg, 4000)
+        # Best-effort: highlight on the joint-dot HUD when the viewport
+        # exposes a per-joint selector (M4 / T402 surface).
+        viewport = getattr(self, "viewport", None)
+        if viewport is not None and hasattr(viewport, "highlight_joint"):
+            try:
+                viewport.highlight_joint(bone_name)
+            except Exception:                               # pragma: no cover
+                log.exception("viewport.highlight_joint failed for %s",
+                              bone_name)
+
+    @QtCore.Slot()
+    def _on_rig_head_requested(self) -> None:
+        """Run the M6 / T601 Head Rig step from the Inspector palette."""
+        try:
+            from core import head_workflow as _hw
+        except ImportError:                                 # pragma: no cover
+            from src.core import head_workflow as _hw       # type: ignore
+        # Parent body is None for stand-alone head edits; the
+        # supermodel-mode window will pass scene.headless_body model.
+        result = _hw.rig_head(self.scene, parent_body=None)
+        kind = "ok" if result.ok else "error"
+        try:
+            self.bottom_strip.set_validation(
+                kind, (result.code or "rig_head").upper(),
+                issues=[result.message],
+            )
+        except Exception:                                   # pragma: no cover
+            log.exception("bottom_strip.set_validation failed for rig_head")
+        self.statusBar().showMessage(result.message, 5000)
+
+    @QtCore.Slot()
+    def _on_rig_face_requested(self) -> None:
+        """Run the M6 / T601 Face Rig step from the Inspector palette."""
+        try:
+            from core import head_workflow as _hw
+        except ImportError:                                 # pragma: no cover
+            from src.core import head_workflow as _hw       # type: ignore
+        result = _hw.rig_face(self.scene)
+        kind = "ok" if result.ok else "warning"
+        try:
+            self.bottom_strip.set_validation(
+                kind, (result.code or "rig_face").upper(),
+                issues=[result.message],
+            )
+        except Exception:                                   # pragma: no cover
+            log.exception("bottom_strip.set_validation failed for rig_face")
+        self.statusBar().showMessage(result.message, 5000)
+
+    @QtCore.Slot(int)
+    def _on_apply_viseme_requested(self, viseme_index: int) -> None:
+        """Apply a LIPShape viseme to the head's facial bones (M6 / T603).
+
+        Forwards to :func:`head_workflow.apply_viseme`.  The result
+        (``(ok, message)``) is surfaced through the inspector's viseme
+        status line, the bottom-strip banner, and the main-window
+        status bar so the user gets consistent feedback regardless of
+        which surface they're watching.
+        """
+        try:
+            from core import head_workflow as _hw
+        except ImportError:                                 # pragma: no cover
+            from src.core import head_workflow as _hw       # type: ignore
+        try:
+            ok, message = _hw.apply_viseme(self.scene, int(viseme_index))
+        except Exception as exc:                            # pragma: no cover
+            log.exception("apply_viseme failed for viseme=%s", viseme_index)
+            ok, message = False, f"apply_viseme raised: {exc}"
+
+        kind = "ok" if ok else "warning"
+
+        # 1. Inspector status line.
+        if hasattr(self.inspector, "set_viseme_status"):
+            try:
+                self.inspector.set_viseme_status(message, kind=kind)
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_viseme_status failed")
+
+        # 2. Bottom-strip banner.
+        try:
+            self.bottom_strip.set_validation(
+                kind, f"VISEME_{int(viseme_index):02d}",
+                issues=[message],
+            )
+        except Exception:                                   # pragma: no cover
+            log.exception("bottom_strip.set_validation failed for viseme")
+
+        # 3. Main status bar.
+        try:
+            self.statusBar().showMessage(message, 5000)
+        except Exception:                                   # pragma: no cover
+            pass
+
+    @QtCore.Slot(str, int)
+    def _on_calibrate_phoneme_requested(
+        self, phoneme_label: str, viseme_index: int,
+    ) -> None:
+        """Persist a phoneme→viseme calibration (M6 / T604).
+
+        Forwards to :func:`head_workflow.calibrate_phoneme` which
+        stashes the mapping on ``scene.head_phoneme_calibration`` for
+        the M9 persistence pass to consume.  Result is surfaced via
+        inspector status, bottom-strip banner, and status bar.
+        """
+        try:
+            from core import head_workflow as _hw
+        except ImportError:                                 # pragma: no cover
+            from src.core import head_workflow as _hw       # type: ignore
+        try:
+            ok, message = _hw.calibrate_phoneme(
+                self.scene, str(phoneme_label), int(viseme_index)
+            )
+        except Exception as exc:                            # pragma: no cover
+            log.exception(
+                "calibrate_phoneme failed for label=%r viseme=%s",
+                phoneme_label, viseme_index,
+            )
+            ok, message = False, f"calibrate_phoneme raised: {exc}"
+
+        kind = "ok" if ok else "warning"
+
+        # 1. Inspector status line.
+        if hasattr(self.inspector, "set_phoneme_status"):
+            try:
+                self.inspector.set_phoneme_status(message, kind=kind)
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_phoneme_status failed")
+
+        # 2. Bottom-strip banner.  Code segment is the phoneme label
+        # with non-identifier chars stripped so the banner code key
+        # stays parseable (e.g. "PHONEME_AH_OPEN_VOWEL").
+        safe_label = "".join(
+            ch if ch.isalnum() else "_"
+            for ch in str(phoneme_label).strip().upper()
+        ).strip("_")
+        try:
+            self.bottom_strip.set_validation(
+                kind, f"PHONEME_{safe_label or 'UNKNOWN'}",
+                issues=[message],
+            )
+        except Exception:                                   # pragma: no cover
+            log.exception("bottom_strip.set_validation failed for phoneme")
+
+        # 3. Main status bar.
+        try:
+            self.statusBar().showMessage(message, 5000)
+        except Exception:                                   # pragma: no cover
+            pass
+
+    @QtCore.Slot()
+    def _on_head_camera_preset_requested(self) -> None:
+        """Apply the Head-mode camera preset to the viewport (M6 / T605).
+
+        Forwards to :meth:`QtViewportWidget.apply_head_camera_preset`.
+        Result is surfaced through the bottom-strip banner and the
+        main status bar.  Silently no-ops when the viewport lacks the
+        method (e.g. in lightweight test envs).
+        """
+        if not hasattr(self.viewport, "apply_head_camera_preset"):
+            return                                          # pragma: no cover
+        try:
+            ok, message = self.viewport.apply_head_camera_preset()
+        except Exception as exc:                            # pragma: no cover
+            log.exception("apply_head_camera_preset failed")
+            ok, message = False, f"head camera preset raised: {exc}"
+
+        kind = "ok" if ok else "warning"
+        try:
+            self.bottom_strip.set_validation(
+                kind, "HEAD_CAMERA_PRESET", issues=[message],
+            )
+        except Exception:                                   # pragma: no cover
+            log.exception(
+                "bottom_strip.set_validation failed for head camera preset"
+            )
+        try:
+            self.statusBar().showMessage(message, 5000)
+        except Exception:                                   # pragma: no cover
+            pass
+
     # ── Mode-application helper (T205) ───────────────────────────────────
 
     def _apply_mode(self, mode, *, locked: bool, source: str) -> None:
@@ -1220,6 +1444,20 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 log.exception("scene.set_mode failed from %s", source)
         # Rebuild rail content.
         self.rail.set_mode(mode)
+        # M6 / T602 — also tell the inspector so it can swap the
+        # Face-Rig page between legacy controls and the Head Facial
+        # Palette.  Guarded with hasattr() because the inspector
+        # method ships in M6.
+        if hasattr(self.inspector, "set_active_mode"):
+            try:
+                self.inspector.set_active_mode(mode)
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_active_mode failed from %s",
+                              source)
+        # M6 / T605 — auto-apply the Head camera preset when switching
+        # into HEAD mode so the viewport frames the head canonically.
+        # Duck-typed detection (matches inspector.set_active_mode).
+        self._maybe_apply_head_camera_preset(mode, source=source)
         # Push into properties panel without echoing the signal back.
         if hasattr(self.properties, "set_character_mode"):
             self.properties.set_character_mode(mode, from_scene=True)
@@ -1229,6 +1467,32 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._update_title()
         log.info("Character Builder mode → %s (source=%s, locked=%s)",
                  getattr(mode, "name", mode), source, locked)
+
+    def _maybe_apply_head_camera_preset(self, mode, *, source: str) -> None:
+        """Apply :func:`head_workflow.head_camera_preset` when *mode* is HEAD.
+
+        M6 / T605.  Duck-typed HEAD detection (``.value`` /``.name``/
+        ``str(mode)``) so we don't bind to the pykotor-importing
+        :mod:`core` package.  Silently no-ops when the viewport lacks
+        the apply method (lightweight test envs).
+        """
+        if mode is None:
+            return
+        mode_value = (
+            getattr(mode, "value", None)
+            or getattr(mode, "name", "")
+            or str(mode or "")
+        ).lower()
+        if mode_value != "head":
+            return
+        if not hasattr(self.viewport, "apply_head_camera_preset"):
+            return
+        try:
+            self.viewport.apply_head_camera_preset()
+        except Exception:                                   # pragma: no cover
+            log.exception(
+                "Auto-apply of head camera preset failed from %s", source
+            )
 
     def _reflect_mode_in_toolbar(self, mode) -> None:
         """Tick the matching toolbar action without firing handlers."""
@@ -1245,6 +1509,15 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         """Push the scene's current mode out to rail / inspector / panel."""
         mode = getattr(self.scene, "mode", None)
         self.rail.set_mode(mode)
+        # M6 / T602 — keep inspector face-rig page in sync with mode.
+        if hasattr(self.inspector, "set_active_mode"):
+            try:
+                self.inspector.set_active_mode(mode)
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_active_mode failed from _sync_from_scene")
+        # M6 / T605 — also auto-apply Head camera preset when syncing
+        # into HEAD mode on scene-restore.
+        self._maybe_apply_head_camera_preset(mode, source="_sync_from_scene")
         if hasattr(self.properties, "set_character_mode"):
             self.properties.set_character_mode(mode, from_scene=True)
         self._reflect_mode_in_toolbar(mode)

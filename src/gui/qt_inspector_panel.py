@@ -113,12 +113,40 @@ class QtInspectorPanel(QtWidgets.QWidget):
     playPreviewAnimationRequested = QtCore.Signal(str)    # (anim_name,)
     stopPreviewAnimationRequested = QtCore.Signal()
     refreshPreviewAnimationsRequested = QtCore.Signal()
+    # M6 / T602 — Head-mode facial-bone palette.
+    headFacialBoneSelected    = QtCore.Signal(str)        # (bone_name,)
+    rigHeadRequested          = QtCore.Signal()           # Head Rig step (M6/T601)
+    rigFaceRequested          = QtCore.Signal()           # Face Rig step (M6/T601)
+    # M6 / T603 — Viseme test panel (16 LIPShape buttons).
+    applyVisemeRequested      = QtCore.Signal(int)        # (viseme_index,)
+    # M6 / T604 — Phoneme calibration (8 phoneme → viseme mappings).
+    calibratePhonemeRequested = QtCore.Signal(str, int)   # (label, viseme_index)
+    # M6 / T605 — Head-mode camera preset request.
+    headCameraPresetRequested = QtCore.Signal()
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
         # Maps step_number → QStackedWidget page index for fast lookup.
         self._step_to_index: Dict[int, int] = {}
         self._joint_combos: List[QtWidgets.QComboBox] = []
+        # M6 / T602 — track the active CharacterMode so the inspector
+        # can swap between the legacy face-rig stubs and the Head
+        # facial-bone palette without rebuilding the whole stack.
+        self._active_mode = None
+        # Widget references populated by _populate_rig_page for the
+        # face-rig page — needed by ``set_active_mode`` to toggle.
+        self._face_legacy_widgets: List[QtWidgets.QWidget] = []
+        self._head_face_palette: Optional[QtWidgets.QGroupBox] = None
+        self._head_face_buttons: Dict[str, QtWidgets.QPushButton] = {}
+        # M6 / T603 — Viseme test panel (16 LIPShape buttons keyed by
+        # the integer viseme index).  Only visible while the inspector
+        # is in HEAD mode; toggled by :meth:`set_active_mode`.
+        self._head_viseme_panel: Optional[QtWidgets.QGroupBox] = None
+        self._head_viseme_buttons: Dict[int, QtWidgets.QPushButton] = {}
+        # M6 / T604 — Phoneme calibration panel (8 phoneme→viseme combos).
+        # Same visibility rule as the viseme panel.
+        self._head_phoneme_panel: Optional[QtWidgets.QGroupBox] = None
+        self._head_phoneme_combos: Dict[str, QtWidgets.QComboBox] = {}
         self._build()
 
     # ── UI construction ──────────────────────────────────────────────────
@@ -321,9 +349,20 @@ class QtInspectorPanel(QtWidgets.QWidget):
         # Placement" stub on the body / hand rig pages.  The body page
         # now drives masking via :func:`generate_skeleton`, and the
         # hand page replaces the row with the per-finger checkbox
-        # GroupBox below.  The face step keeps the legacy controls
-        # until M5/T506 retires them too.
+        # GroupBox below.  The face step keeps the legacy controls for
+        # Creature/Supermodel rigs, but M6 / T602 wraps them in a
+        # *legacy* container that :meth:`set_active_mode` hides when
+        # the active mode is HEAD — that mode shows the dedicated Head
+        # Facial Palette below instead.
         if step == _STEP_RIG_FACE:
+            legacy_box = QtWidgets.QGroupBox("Legacy face-rig controls")
+            legacy_box.setToolTip(
+                "AcuRig-style mask + midpoint placement.  Hidden in "
+                "Head mode (replaced by the Head Facial Palette).")
+            legacy_layout = QtWidgets.QVBoxLayout(legacy_box)
+            legacy_layout.setContentsMargins(6, 6, 6, 6)
+            legacy_layout.setSpacing(4)
+
             mask_row = QtWidgets.QHBoxLayout()
             mask_cb = QtWidgets.QCheckBox("Mask")
             mask_cb.setToolTip("Limit bone-influence painting to the masked "
@@ -334,13 +373,45 @@ class QtInspectorPanel(QtWidgets.QWidget):
             mask_row.addWidget(mask_cb)
             mask_row.addWidget(reset_btn)
             mask_row.addStretch(1)
-            layout.addLayout(mask_row)
+            legacy_layout.addLayout(mask_row)
 
             midpoint_btn = QtWidgets.QPushButton("Midpoint Placement")
             midpoint_btn.setToolTip("Snap the active pin to the volume centroid "
                                     "(accurig.midpoint_placement).")
             midpoint_btn.clicked.connect(self.midpointPlacementRequested.emit)
-            layout.addWidget(midpoint_btn)
+            legacy_layout.addWidget(midpoint_btn)
+
+            layout.addWidget(legacy_box)
+            # Track so :meth:`set_active_mode` can hide for HEAD.
+            self._face_legacy_widgets.append(legacy_box)
+
+            # ── M6 / T602 — Head Facial Palette ────────────────────
+            # Hidden by default; revealed by ``set_active_mode(HEAD)``.
+            # Maps every canonical KotOR facial bone to a clickable
+            # button that emits ``headFacialBoneSelected(name)`` so the
+            # Character Builder window can route the click to the M4
+            # joint-dot HUD highlight.
+            head_palette = self._build_head_facial_palette()
+            layout.addWidget(head_palette)
+            head_palette.setVisible(False)
+            self._head_face_palette = head_palette
+
+            # ── M6 / T603 — Viseme Test Panel ──────────────────────
+            # 16 LIPShape buttons in a 4×4 grid.  Same visibility rule
+            # as the facial palette: HEAD mode only.
+            viseme_panel = self._build_viseme_panel()
+            layout.addWidget(viseme_panel)
+            viseme_panel.setVisible(False)
+            self._head_viseme_panel = viseme_panel
+
+            # ── M6 / T604 — Phoneme Calibration Panel ───────────────
+            # Eight phoneme rows (label + viseme combo + apply btn).
+            # HEAD-mode visibility, same toggle path as the palette
+            # and viseme panel.
+            phoneme_panel = self._build_phoneme_panel()
+            layout.addWidget(phoneme_panel)
+            phoneme_panel.setVisible(False)
+            self._head_phoneme_panel = phoneme_panel
 
         # Hemisphere mesh probe (Whole / Front).
         hemi_group = QtWidgets.QGroupBox("Mesh Probe")
@@ -857,6 +928,433 @@ class QtInspectorPanel(QtWidgets.QWidget):
         label.setStyleSheet(f"color:{colour}; font-size:8pt;")
         label.setText(message)
 
+    # ── M6 / T602 — Head Facial Palette helpers ──────────────────────────
+
+    def _build_head_facial_palette(self) -> QtWidgets.QGroupBox:
+        """Build the Head Facial Palette GroupBox (M6 / T602).
+
+        Lays out three rows of bone buttons:
+
+          * **Required** (red trim)      — head_g, f_jaw_g, f_um_g
+          * **Recommended** (amber trim) — necklwr_g, neck_g, lip corners,
+            mask/goggle hooks
+          * **Face Rig** (gold trim)     — f_jaw_g, f_um_g, eye / lid /
+            lip-corner bones from ``head_workflow.FACE_RIG_BONES``
+
+        Each button emits :sig:`headFacialBoneSelected` with the bone
+        name; the Character Builder window forwards that to the
+        viewport's joint-dot HUD so the matching dot lights up.
+
+        The bone name lists are imported from
+        :mod:`src.core.head_workflow` to keep this UI in lock-step with
+        the M6/T601 workflow service.  Import failure (e.g. during
+        ``pytest`` runs that bypass ``src.core.__init__``) is tolerated:
+        the palette renders empty but still draws a header so the user
+        sees the page is HEAD-mode aware.
+        """
+        # Lazy-import the constants — same fallback ordering the
+        # workflow modules use so the panel works regardless of how
+        # ``src/`` was placed onto ``sys.path``.  Falls back to a
+        # direct-file load when ``core/__init__`` would pull in
+        # PyKotor (which isn't installed in lightweight test envs).
+        hw = None                                             # type: ignore
+        try:
+            from src.core import head_workflow as hw          # type: ignore
+        except Exception:
+            try:
+                from core import head_workflow as hw          # type: ignore
+            except Exception:
+                try:                                          # pragma: no cover
+                    import importlib.util as _u
+                    import pathlib as _pl
+                    _here = _pl.Path(__file__).resolve().parents[1]
+                    _hw_path = _here / "core" / "head_workflow.py"
+                    if _hw_path.is_file():
+                        _spec = _u.spec_from_file_location(
+                            "_gr_head_workflow_inline", str(_hw_path),
+                        )
+                        _mod = _u.module_from_spec(_spec)
+                        import sys as _sys
+                        _sys.modules[_spec.name] = _mod
+                        _spec.loader.exec_module(_mod)
+                        hw = _mod
+                except Exception:
+                    hw = None                                 # type: ignore
+
+        box = QtWidgets.QGroupBox("Head Facial Palette")
+        box.setToolTip(
+            "Click a bone to highlight its joint dot in the viewport.\n"
+            "Required (red) bones must be present for rigging; "
+            "recommended (amber) bones improve lip-sync fidelity."
+        )
+        outer = QtWidgets.QVBoxLayout(box)
+        outer.setContentsMargins(6, 6, 6, 6)
+        outer.setSpacing(4)
+
+        if hw is None:                                        # pragma: no cover
+            outer.addWidget(QtWidgets.QLabel(
+                "(head_workflow unavailable — palette disabled)"
+            ))
+            return box
+
+        # ── Step button row ────────────────────────────────────────
+        step_row = QtWidgets.QHBoxLayout()
+        rig_head_btn = QtWidgets.QPushButton("Rig Head")
+        rig_head_btn.setToolTip(
+            "Run the neck-chain + jaw skeleton step "
+            "(head_workflow.rig_head).")
+        rig_head_btn.clicked.connect(self.rigHeadRequested.emit)
+        rig_face_btn = QtWidgets.QPushButton("Rig Face")
+        rig_face_btn.setProperty("accent", True)
+        rig_face_btn.setToolTip(
+            "Activate the face-rig palette knobs "
+            "(head_workflow.rig_face).")
+        rig_face_btn.clicked.connect(self.rigFaceRequested.emit)
+        # M6 / T605 — Reset to the canonical Head camera framing.
+        reset_cam_btn = QtWidgets.QPushButton("Reset Head Camera")
+        reset_cam_btn.setToolTip(
+            "Apply the canonical Head camera framing "
+            "(head_workflow.head_camera_preset).")
+        reset_cam_btn.clicked.connect(self.headCameraPresetRequested.emit)
+        self._reset_head_camera_btn = reset_cam_btn
+        step_row.addWidget(rig_head_btn)
+        step_row.addWidget(rig_face_btn)
+        step_row.addWidget(reset_cam_btn)
+        step_row.addStretch(1)
+        outer.addLayout(step_row)
+
+        # ── Bone-button grids ──────────────────────────────────────
+        # Required bones (red trim).
+        outer.addWidget(self._build_bone_group(
+            "Required",
+            hw.REQUIRED_HEAD_BONES.keys(),
+            descriptions=hw.REQUIRED_HEAD_BONES,
+            colour="#ff6b6b",
+        ))
+        # Recommended bones (amber trim).
+        outer.addWidget(self._build_bone_group(
+            "Recommended",
+            hw.RECOMMENDED_HEAD_BONES.keys(),
+            descriptions=hw.RECOMMENDED_HEAD_BONES,
+            colour="#ffd166",
+        ))
+        # Face-rig bones (gold trim).  Use a static "(face rig knob)"
+        # description since the constants list is just a tuple.
+        outer.addWidget(self._build_bone_group(
+            "Face rig",
+            hw.FACE_RIG_BONES,
+            descriptions={b: "Face rig knob" for b in hw.FACE_RIG_BONES},
+            colour=C.get("gold", "#FFD700"),
+        ))
+
+        return box
+
+    def _build_bone_group(
+        self,
+        title: str,
+        bones,
+        *,
+        descriptions: Dict[str, str],
+        colour: str,
+    ) -> QtWidgets.QGroupBox:
+        """Build a sub-group of bone-buttons for the Head Facial Palette."""
+        group = QtWidgets.QGroupBox(title)
+        group.setStyleSheet(
+            f"QGroupBox {{ color:{colour}; }}"
+        )
+        grid = QtWidgets.QGridLayout(group)
+        grid.setContentsMargins(6, 6, 6, 6)
+        grid.setHorizontalSpacing(4)
+        grid.setVerticalSpacing(2)
+        for idx, bone in enumerate(bones):
+            row, col = divmod(idx, 2)
+            btn = QtWidgets.QPushButton(bone)
+            btn.setProperty("compact", True)
+            btn.setToolTip(descriptions.get(bone, bone))
+            # Capture ``bone`` via default-arg to dodge late binding.
+            btn.clicked.connect(
+                lambda _checked=False, b=bone:
+                    self.headFacialBoneSelected.emit(b)
+            )
+            grid.addWidget(btn, row, col)
+            self._head_face_buttons[bone] = btn
+        return group
+
+    def _build_viseme_panel(self) -> QtWidgets.QGroupBox:
+        """Build the Viseme Test Panel GroupBox (M6 / T603).
+
+        Renders 16 buttons, one per :class:`lip_reader.LIPShape` index,
+        laid out in a 4×4 grid.  Each button emits
+        :sig:`applyVisemeRequested` with the integer viseme index; the
+        Character Builder window forwards that to
+        :func:`head_workflow.apply_viseme` which snaps the head's
+        facial bones into the matching pose by evaluating the head's
+        ``talk`` animation at the right keyframe.
+
+        The viseme list is pulled from
+        :func:`head_workflow.available_visemes` so the panel and the
+        runtime always agree on indices.  When ``head_workflow`` cannot
+        be imported (lightweight test envs) we fall back to a 16-button
+        grid labelled by index only — the buttons still emit, but
+        callers may reject out-of-range indices.
+        """
+        # Lazy-import — same fallback ordering as the facial palette so
+        # the panel survives both ``src.``-prefixed and bare ``core``
+        # paths, plus a direct-file load for envs where ``core``
+        # would eagerly pull in PyKotor.
+        hw = None                                             # type: ignore
+        try:
+            from src.core import head_workflow as hw          # type: ignore
+        except Exception:
+            try:
+                from core import head_workflow as hw          # type: ignore
+            except Exception:
+                try:                                          # pragma: no cover
+                    import importlib.util as _u
+                    import pathlib as _pl
+                    _here = _pl.Path(__file__).resolve().parents[1]
+                    _hw_path = _here / "core" / "head_workflow.py"
+                    if _hw_path.is_file():
+                        _spec = _u.spec_from_file_location(
+                            "_gr_head_workflow_inline_t603", str(_hw_path),
+                        )
+                        _mod = _u.module_from_spec(_spec)
+                        import sys as _sys
+                        _sys.modules[_spec.name] = _mod
+                        _spec.loader.exec_module(_mod)
+                        hw = _mod
+                except Exception:
+                    hw = None                                 # type: ignore
+
+        box = QtWidgets.QGroupBox("Viseme Test")
+        box.setToolTip(
+            "Click a viseme to snap the head's facial bones to its pose.\n"
+            "Indices correspond to lip_reader.LIPShape (0..15)."
+        )
+        outer = QtWidgets.QVBoxLayout(box)
+        outer.setContentsMargins(6, 6, 6, 6)
+        outer.setSpacing(4)
+
+        # Pull canonical (index, name) tuples; fall back to a placeholder
+        # list when the workflow service is unavailable.
+        visemes: tuple = tuple()
+        if hw is not None:
+            try:
+                visemes = tuple(hw.available_visemes())
+            except Exception:                                 # pragma: no cover
+                visemes = tuple()
+
+        if not visemes:                                       # pragma: no cover
+            outer.addWidget(QtWidgets.QLabel(
+                "(lip_reader unavailable — viseme panel disabled)"
+            ))
+            return box
+
+        # 4×4 grid of viseme buttons.  Button text is the LIPShape
+        # name (e.g. "PP", "AA", "EH") with the index as a leading
+        # tag so the user can correlate to the LIP file format.
+        grid = QtWidgets.QGridLayout()
+        grid.setHorizontalSpacing(3)
+        grid.setVerticalSpacing(3)
+        for slot, (idx, name) in enumerate(visemes):
+            row, col = divmod(slot, 4)
+            label = f"{idx:>2}  {name}"
+            btn = QtWidgets.QPushButton(label)
+            btn.setProperty("compact", True)
+            btn.setToolTip(
+                f"Apply LIPShape {idx} ({name}) to the head's facial bones."
+            )
+            # Capture ``idx`` via default-arg to dodge late binding.
+            btn.clicked.connect(
+                lambda _checked=False, i=int(idx):
+                    self.applyVisemeRequested.emit(i)
+            )
+            grid.addWidget(btn, row, col)
+            self._head_viseme_buttons[int(idx)] = btn
+        outer.addLayout(grid)
+
+        # Status line — updated by :meth:`set_viseme_status`.
+        self._viseme_status = QtWidgets.QLabel(
+            "Click a viseme to test the head's talk animation."
+        )
+        self._viseme_status.setStyleSheet(
+            f"color:{C.get('text2', '#888')}; font-size:8pt; font-style:italic;"
+        )
+        self._viseme_status.setWordWrap(True)
+        outer.addWidget(self._viseme_status)
+
+        return box
+
+    def set_viseme_status(self, message: str, *, kind: str = "info") -> None:
+        """Update the viseme panel's status line (M6 / T603).
+
+        *kind* is one of ``"info"``, ``"ok"``, ``"warning"``, ``"error"``;
+        anything else is treated as ``info``.  Safe to call before the
+        panel has been built — silently no-ops in that case.
+        """
+        if not hasattr(self, "_viseme_status") or self._viseme_status is None:
+            return                                           # pragma: no cover
+        colour = {
+            "ok":      "#7cd87c",
+            "warning": "#ffd166",
+            "error":   "#ff6b6b",
+        }.get(str(kind).lower(), C.get("text2", "#888"))
+        self._viseme_status.setText(str(message))
+        self._viseme_status.setStyleSheet(
+            f"color:{colour}; font-size:8pt; font-style:italic;"
+        )
+
+    def _build_phoneme_panel(self) -> QtWidgets.QGroupBox:
+        """Build the Phoneme Calibration Panel GroupBox (M6 / T604).
+
+        Renders one row per entry in :data:`head_workflow.PHONEME_POSES`
+        (eight rows):
+
+            ┌──────────────────────────────────────────────────────┐
+            │ AH (open vowel)   [▼ 1  EE          ] [Apply]        │
+            │ EH (mid vowel)    [▼ 2  EH          ] [Apply]        │
+            │ …                                                    │
+            └──────────────────────────────────────────────────────┘
+
+        The combo is pre-populated with every entry from
+        :func:`head_workflow.available_visemes` (16 LIPShape values),
+        with the canonical viseme index for each phoneme pre-selected.
+        Clicking the row's *Apply* button emits
+        :sig:`calibratePhonemeRequested(label, viseme_index)` carrying
+        the combo's currently-selected viseme.
+
+        Falls back to a stub label when ``head_workflow`` is unavailable.
+        """
+        # Lazy-import — same fallback chain as the other M6 panels.
+        hw = None                                             # type: ignore
+        try:
+            from src.core import head_workflow as hw          # type: ignore
+        except Exception:
+            try:
+                from core import head_workflow as hw          # type: ignore
+            except Exception:
+                try:                                          # pragma: no cover
+                    import importlib.util as _u
+                    import pathlib as _pl
+                    _here = _pl.Path(__file__).resolve().parents[1]
+                    _hw_path = _here / "core" / "head_workflow.py"
+                    if _hw_path.is_file():
+                        _spec = _u.spec_from_file_location(
+                            "_gr_head_workflow_inline_t604", str(_hw_path),
+                        )
+                        _mod = _u.module_from_spec(_spec)
+                        import sys as _sys
+                        _sys.modules[_spec.name] = _mod
+                        _spec.loader.exec_module(_mod)
+                        hw = _mod
+                except Exception:
+                    hw = None                                 # type: ignore
+
+        box = QtWidgets.QGroupBox("Phoneme Calibration")
+        box.setToolTip(
+            "Map each canonical phoneme to a LIPShape viseme.\n"
+            "These mappings drive lip-sync generation when KotOR\n"
+            "renders dialog from a .wav + .lip pair."
+        )
+        outer = QtWidgets.QVBoxLayout(box)
+        outer.setContentsMargins(6, 6, 6, 6)
+        outer.setSpacing(4)
+
+        phonemes: tuple = tuple()
+        visemes: tuple = tuple()
+        if hw is not None:
+            try:
+                phonemes = tuple(hw.PHONEME_POSES)
+            except Exception:                                 # pragma: no cover
+                phonemes = tuple()
+            try:
+                visemes = tuple(hw.available_visemes())
+            except Exception:                                 # pragma: no cover
+                visemes = tuple()
+
+        if not phonemes or not visemes:                       # pragma: no cover
+            outer.addWidget(QtWidgets.QLabel(
+                "(head_workflow unavailable — phoneme panel disabled)"
+            ))
+            return box
+
+        # Build the rows.
+        grid = QtWidgets.QGridLayout()
+        grid.setHorizontalSpacing(4)
+        grid.setVerticalSpacing(2)
+        grid.setColumnStretch(1, 1)                           # combo column grows
+        for row, (label, default_idx) in enumerate(phonemes):
+            name_lbl = QtWidgets.QLabel(label)
+            name_lbl.setToolTip(
+                f"{label} — canonical mapping: viseme {default_idx}"
+            )
+
+            combo = QtWidgets.QComboBox()
+            for idx, vname in visemes:
+                combo.addItem(f"{int(idx):>2}  {vname}", int(idx))
+            # Pre-select the canonical viseme; tolerate visemes that
+            # don't include the canonical index (e.g. truncated test
+            # data) by leaving the combo on the first item.
+            default_pos = combo.findData(int(default_idx))
+            if default_pos >= 0:
+                combo.setCurrentIndex(default_pos)
+            combo.setToolTip(
+                f"Pick the LIPShape viseme that best represents "
+                f"the '{label}' mouth shape."
+            )
+
+            apply_btn = QtWidgets.QPushButton("Apply")
+            apply_btn.setProperty("compact", True)
+            apply_btn.setToolTip(
+                f"Calibrate '{label}' to the selected viseme "
+                f"(head_workflow.calibrate_phoneme)."
+            )
+            # Capture ``label`` + ``combo`` via default-arg to dodge
+            # late binding across loop iterations.
+            apply_btn.clicked.connect(
+                lambda _checked=False, _label=label, _combo=combo:
+                    self.calibratePhonemeRequested.emit(
+                        _label, int(_combo.currentData() or 0)
+                    )
+            )
+
+            grid.addWidget(name_lbl,  row, 0)
+            grid.addWidget(combo,     row, 1)
+            grid.addWidget(apply_btn, row, 2)
+            self._head_phoneme_combos[label] = combo
+        outer.addLayout(grid)
+
+        # Status line — updated by :meth:`set_phoneme_status`.
+        self._phoneme_status = QtWidgets.QLabel(
+            "Choose a viseme per phoneme, then click Apply to calibrate."
+        )
+        self._phoneme_status.setStyleSheet(
+            f"color:{C.get('text2', '#888')}; font-size:8pt; font-style:italic;"
+        )
+        self._phoneme_status.setWordWrap(True)
+        outer.addWidget(self._phoneme_status)
+
+        return box
+
+    def set_phoneme_status(self, message: str, *, kind: str = "info") -> None:
+        """Update the phoneme panel's status line (M6 / T604).
+
+        *kind* is one of ``"info"``, ``"ok"``, ``"warning"``, ``"error"``;
+        anything else is treated as ``info``.  Safe to call before the
+        panel has been built — silently no-ops in that case.
+        """
+        if not hasattr(self, "_phoneme_status") or self._phoneme_status is None:
+            return                                            # pragma: no cover
+        colour = {
+            "ok":      "#7cd87c",
+            "warning": "#ffd166",
+            "error":   "#ff6b6b",
+        }.get(str(kind).lower(), C.get("text2", "#888"))
+        self._phoneme_status.setText(str(message))
+        self._phoneme_status.setStyleSheet(
+            f"color:{colour}; font-size:8pt; font-style:italic;"
+        )
+
     # ── Small reusable bits ──────────────────────────────────────────────
 
     def _make_unit_slider(self) -> QtWidgets.QSlider:
@@ -930,6 +1428,84 @@ class QtInspectorPanel(QtWidgets.QWidget):
                     combo.setCurrentIndex(unique.index(current))
             finally:
                 combo.blockSignals(False)
+
+    # ── M6 / T602 — mode-aware page composition ──────────────────────────
+
+    def set_active_mode(self, mode) -> None:
+        """Swap the Face-Rig page between legacy and Head-Palette layouts.
+
+        Parameters
+        ----------
+        mode : :class:`CharacterMode` (or ``None``).  When the value is
+               ``CharacterMode.HEAD`` the legacy mask / midpoint controls
+               are hidden and the Head Facial Palette becomes visible;
+               every other value (including ``None``) restores the
+               legacy layout.
+
+        This is the M5-invariant #4 (Inspector page rewrite retires
+        legacy stubs) applied to the Face-Rig page for HEAD mode.  The
+        widget tree is built once in ``_build`` ; this method only
+        toggles visibility so re-applying the same mode is cheap.
+        """
+        self._active_mode = mode
+
+        # HEAD-mode detection is duck-typed: we accept any object whose
+        # ``.value`` or ``.name`` equals the canonical HEAD string.
+        # Loading ``CharacterMode`` directly would tie this widget to
+        # the pykotor-importing ``core`` package and break unit tests
+        # that load the inspector in isolation.
+        mode_value = (getattr(mode, "value", None)
+                      or getattr(mode, "name", "")
+                      or str(mode or "")).lower()
+        is_head = mode_value == "head"
+
+        # Toggle the legacy stubs.
+        for widget in self._face_legacy_widgets:
+            widget.setVisible(not is_head)
+
+        # Toggle the Head Facial Palette.
+        if self._head_face_palette is not None:
+            self._head_face_palette.setVisible(is_head)
+
+        # M6 / T603 — Toggle the Viseme Test Panel alongside the palette.
+        if self._head_viseme_panel is not None:
+            self._head_viseme_panel.setVisible(is_head)
+
+        # M6 / T604 — Toggle the Phoneme Calibration Panel as well.
+        if self._head_phoneme_panel is not None:
+            self._head_phoneme_panel.setVisible(is_head)
+
+    def active_mode(self):
+        """Return the most recently applied :class:`CharacterMode` (or ``None``)."""
+        return self._active_mode
+
+    def head_facial_bone_buttons(self) -> Dict[str, QtWidgets.QPushButton]:
+        """Expose the Head Facial Palette buttons (M6 / T602).
+
+        Returned dict is keyed by bone name so callers (and tests) can
+        introspect / drive individual buttons without reaching into
+        the private widget tree.
+        """
+        return dict(self._head_face_buttons)
+
+    def head_viseme_buttons(self) -> Dict[int, QtWidgets.QPushButton]:
+        """Expose the Viseme Test Panel buttons (M6 / T603).
+
+        Returned dict is keyed by the integer LIPShape index.  The dict
+        is a shallow copy so callers cannot mutate the inspector's
+        internal mapping by accident.
+        """
+        return dict(self._head_viseme_buttons)
+
+    def head_phoneme_combos(self) -> Dict[str, QtWidgets.QComboBox]:
+        """Expose the Phoneme Calibration combos (M6 / T604).
+
+        Returned dict is keyed by phoneme label (the canonical entries
+        from :data:`head_workflow.PHONEME_POSES`).  Shallow copy —
+        callers can introspect each combo's current viseme index via
+        ``combo.currentData()`` without binding to private attrs.
+        """
+        return dict(self._head_phoneme_combos)
 
 
 __all__ = ["QtInspectorPanel"]
