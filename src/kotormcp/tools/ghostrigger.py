@@ -285,6 +285,53 @@ def get_tools() -> List[Dict[str, Any]]:
                 "required": ["transfer_metadata_path", "unity_summary"],
             },
         },
+        {
+            "name": "ghostrigger_run_malak_unity_smoke",
+            "description": (
+                "Run the repeatable Malak main-menu Unity MCP smoke test. Opens the "
+                "menu test scene, refreshes the fresh GhostRigger FBX, verifies the "
+                "menu instance/Animator, captures before/after screenshots, and "
+                "writes an optional launch-readiness report."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "unity_project": {
+                        "type": "string",
+                        "description": "Absolute Unity project root",
+                    },
+                    "host": {
+                        "type": "string",
+                        "default": "127.0.0.1",
+                    },
+                    "port": {
+                        "type": "integer",
+                        "default": 6400,
+                    },
+                    "scene_path": {
+                        "type": "string",
+                        "description": "Unity scene asset path",
+                    },
+                    "asset_path": {
+                        "type": "string",
+                        "description": "Fresh GhostRigger FBX asset path",
+                    },
+                    "instance_name": {
+                        "type": "string",
+                        "description": "Expected Malak menu GameObject instance name",
+                    },
+                    "output_path": {
+                        "type": "string",
+                        "description": "Optional report JSON path",
+                    },
+                    "screenshot_delay": {
+                        "type": "number",
+                        "default": 1.0,
+                    },
+                },
+                "required": ["unity_project"],
+            },
+        },
     ]
 
 
@@ -675,6 +722,44 @@ async def handle_validate_unity_import(arguments: Dict[str, Any]) -> Dict[str, A
         return json_content(manifest)
     except Exception as exc:
         return json_content({"error": f"Unity import validation failed: {exc}"})
+
+
+async def handle_run_malak_unity_smoke(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """Run the Unity MCP Malak main-menu smoke test."""
+    unity_project_raw = str(arguments.get("unity_project", "") or "").strip()
+    if not unity_project_raw:
+        return json_content({"error": "unity_project is required."})
+
+    try:
+        try:
+            from src.core.unity_malak_smoke import (  # noqa: PLC0415
+                DEFAULT_ASSET_PATH,
+                DEFAULT_INSTANCE_NAME,
+                DEFAULT_SCENE_PATH,
+                run_malak_main_menu_smoke,
+            )
+        except ImportError:  # pragma: no cover - MCP path shim
+            from core.unity_malak_smoke import (  # type: ignore  # noqa: PLC0415
+                DEFAULT_ASSET_PATH,
+                DEFAULT_INSTANCE_NAME,
+                DEFAULT_SCENE_PATH,
+                run_malak_main_menu_smoke,
+            )
+
+        output_raw = str(arguments.get("output_path", "") or "").strip()
+        report = run_malak_main_menu_smoke(
+            unity_project=Path(unity_project_raw),
+            host=str(arguments.get("host") or "127.0.0.1"),
+            port=int(arguments.get("port") or 6400),
+            scene_path=str(arguments.get("scene_path") or DEFAULT_SCENE_PATH),
+            asset_path=str(arguments.get("asset_path") or DEFAULT_ASSET_PATH),
+            instance_name=str(arguments.get("instance_name") or DEFAULT_INSTANCE_NAME),
+            output_path=Path(output_raw) if output_raw else None,
+            screenshot_delay=float(arguments.get("screenshot_delay") or 1.0),
+        )
+        return json_content(report)
+    except Exception as exc:
+        return json_content({"error": f"Malak Unity smoke failed: {exc}"})
 
 
 # ── Backward-compatible helper ────────────────────────────────────────────────

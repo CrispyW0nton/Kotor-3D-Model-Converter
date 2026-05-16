@@ -21,9 +21,10 @@ Tool manifest (v3.6 — 70 total):
   Installation   (3): detectInstallations, loadInstallation, kotor_installation_info
   Discovery      (4): listResources, describeResource, kotor_find_resource, kotor_search_resources
   Game data      (3): journalOverview, kotor_lookup_2da, kotor_lookup_tlk
-  GhostRigger    (7): ghostrigger_open_model, ghostrigger_render_model, ghostrigger_model_info,
+  GhostRigger    (8): ghostrigger_open_model, ghostrigger_render_model, ghostrigger_model_info,
                       ghostrigger_list_game_models, ghostrigger_audit,
-                      ghostrigger_export_model_for_unity, ghostrigger_validate_unity_import
+                      ghostrigger_export_model_for_unity, ghostrigger_validate_unity_import,
+                      ghostrigger_run_malak_unity_smoke
   DebugSkinning (25): ghostrigger_debug_launch_app, ghostrigger_debug_close_app,
                       ghostrigger_debug_get_runtime_status, ghostrigger_debug_set_game_library_path,
                       ghostrigger_debug_verify_game_library, ghostrigger_debug_load_model,
@@ -134,6 +135,8 @@ async def handle_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         return await ghostrigger.handle_export_model_for_unity(arguments)
     if name == "ghostrigger_validate_unity_import":
         return await ghostrigger.handle_validate_unity_import(arguments)
+    if name == "ghostrigger_run_malak_unity_smoke":
+        return await ghostrigger.handle_run_malak_unity_smoke(arguments)
 
     # ── Module tools ──────────────────────────────────────────────────────────
     if name == "kotor_list_modules":

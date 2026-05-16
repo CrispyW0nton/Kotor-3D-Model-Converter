@@ -58,6 +58,7 @@ game_data/
 !/tests/test_motion_assignment_wiring.py
 !/tests/test_launch_workflow.py
 !/tests/test_unity_export_bridge.py
+!/tests/test_unity_malak_smoke.py
 test_assets/
 pytest.ini
 .pytest_cache/
@@ -156,6 +157,7 @@ scripts/
 !/scripts/full_scan.py
 !/scripts/analyze_scan.py
 !/scripts/export_kotor_model_for_unity.py
+!/scripts/run_malak_unity_smoke.py
 exports/
 !/exports/
 !/exports/scan_manifest.json
