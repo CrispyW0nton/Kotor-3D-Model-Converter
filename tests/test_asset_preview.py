@@ -14,8 +14,22 @@ from src.core import model_data as md
 
 
 class _Model:
-    def __init__(self, name):
+    def __init__(self, name, nodes=None):
         self.name = name
+        self._nodes = list(nodes or [])
+
+    def all_nodes(self):
+        return list(self._nodes)
+
+
+class _Node:
+    def __init__(self, name, position=(0.0, 0.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0)):
+        self.name = name
+        self.position = position
+        self.rotation = rotation
+
+    def world_transform(self):
+        return self.position, self.rotation
 
 
 @dataclass
@@ -44,7 +58,16 @@ class _CompositeWorkflow:
     @staticmethod
     def load_composite(scene, **kwargs):
         _CompositeWorkflow.calls.append(kwargs)
-        body = _Model(Path(kwargs["body_path"]).stem)
+        body = _Model(
+            Path(kwargs["body_path"]).stem,
+            nodes=[
+                _Node("rootdummy"),
+                _Node("rhand", (1.0, 2.0, 3.0)),
+                _Node("lhand", (-1.0, 2.0, 3.0)),
+                _Node("LightsaberHook", (0.2, 0.4, 0.6)),
+                _Node("DeflectHook", (0.0, 0.0, 1.0)),
+            ],
+        )
         head = _Model(Path(kwargs["head_path"]).stem)
         scene.assign(md.PartSlot.HEADLESS_BODY, body, resref=body.name, source_path=kwargs["body_path"])
         scene.assign(md.PartSlot.HEAD_SHELL, head, resref=head.name, source_path=kwargs["head_path"])
@@ -131,3 +154,84 @@ def test_t1401_refresh_character_preview_recomputes_snap(monkeypatch):
     assert result.preview_model.name == "refreshed"
     assert _CompositeWorkflow.refresh_calls == [{"build_preview": False}]
     assert scene.metadata["asset_preview"]["code"] == "snapped"
+
+
+def test_t1402_available_attachment_sockets_lists_body_hooks(monkeypatch):
+    _install(monkeypatch)
+    spec = ap.CharacterPreviewSpec(body_path="body.mdl", head_path="head.mdl")
+    result = ap.load_character_preview(spec)
+
+    sockets = ap.available_attachment_sockets(result.scene)
+
+    assert sockets == ["DeflectHook", "lhand", "LightsaberHook", "rhand"]
+
+
+def test_t1402_attach_item_to_right_hand_records_scene_metadata(monkeypatch):
+    _install(monkeypatch)
+    result = ap.load_character_preview(ap.CharacterPreviewSpec(body_path="body.mdl", head_path="head.mdl"))
+    item = _Model("w_blstrpstl_001", nodes=[_Node("bullethook")])
+
+    attach = ap.attach_item_to_preview(
+        result.scene,
+        ap.AttachmentSpec(
+            item_model=item,
+            item_path="C:/kotor/w_blstrpstl_001.mdl",
+            item_resref="w_blstrpstl_001",
+            socket="right_hand",
+            attachment_type="weapon",
+        ),
+    )
+
+    assert attach.ok is True
+    assert attach.socket_name == "rhand"
+    assert attach.item_local_offset[0][3] == 1.0
+    assert attach.item_local_offset[1][3] == 2.0
+    assert attach.item_local_offset[2][3] == 3.0
+    assert item.preview_parent_socket == "rhand"
+    assert item.preview_attachment_type == "weapon"
+    assert result.scene.get_model(md.PartSlot.ACCESSORY) is item
+    metadata = result.scene.metadata["asset_preview"]["attachments"][0]
+    assert metadata["item_resref"] == "w_blstrpstl_001"
+    assert metadata["socket"] == "rhand"
+
+
+def test_t1402_attach_lightsaber_prefers_lightsaber_hook(monkeypatch):
+    _install(monkeypatch)
+    result = ap.load_character_preview(ap.CharacterPreviewSpec(body_path="body.mdl", head_path="head.mdl"))
+    saber = _Model("w_lghtsbr_001")
+
+    attach = ap.attach_item_to_preview(
+        result.scene,
+        ap.AttachmentSpec(item_model=saber, item_resref="w_lghtsbr_001", socket="lightsaber"),
+    )
+
+    assert attach.ok is True
+    assert attach.socket_name == "LightsaberHook"
+    assert saber.preview_socket_alias == "lightsaber"
+
+
+def test_t1402_attach_reports_missing_socket(monkeypatch):
+    _install(monkeypatch)
+    result = ap.load_character_preview(ap.CharacterPreviewSpec(body_path="body.mdl", head_path="head.mdl"))
+
+    attach = ap.attach_item_to_preview(
+        result.scene,
+        ap.AttachmentSpec(item_model=_Model("mask"), socket="maskhook"),
+    )
+
+    assert attach.ok is False
+    assert attach.code == "socket_missing"
+    assert "DeflectHook" in attach.warnings[0]
+
+
+def test_t1402_attach_requires_preview_body(monkeypatch):
+    _install(monkeypatch)
+    scene = md.CharacterScene(game_version="K1")
+
+    attach = ap.attach_item_to_preview(
+        scene,
+        ap.AttachmentSpec(item_model=_Model("w_blstrpstl_001"), socket="right_hand"),
+    )
+
+    assert attach.ok is False
+    assert attach.code == "preview_body_missing"
