@@ -110,6 +110,71 @@ class AttachmentResult:
     code: str = "not_attached"
 
 
+@dataclass(frozen=True)
+class PreviewAnimationClip:
+    """Animation clip exposed by the Asset Viewer workbench."""
+
+    name: str
+    group: str
+    source: str = "model"
+    source_model: str = ""
+    label: str = ""
+    length: float = 0.0
+    loop: bool = True
+    inherited: bool = False
+
+
+@dataclass
+class AnimationWorkbenchResult:
+    """Grouped preview-animation catalog for the Asset Viewer."""
+
+    ok: bool = False
+    clips: list[PreviewAnimationClip] = field(default_factory=list)
+    groups: dict[str, list[PreviewAnimationClip]] = field(default_factory=dict)
+    selected: Optional[PreviewAnimationClip] = None
+    warnings: list[str] = field(default_factory=list)
+    message: str = ""
+    code: str = "not_listed"
+
+
+@dataclass
+class PreviewPlaybackState:
+    """Current play/scrub state for a preview animation clip."""
+
+    ok: bool = False
+    clip: Optional[PreviewAnimationClip] = None
+    clip_name: str = ""
+    group: str = ""
+    source: str = ""
+    source_model: str = ""
+    time: float = 0.0
+    duration: float = 0.0
+    loop: bool = True
+    playing: bool = False
+    message: str = ""
+    code: str = "not_playing"
+
+
+ANIMATION_GROUP_ORDER: tuple[str, ...] = (
+    "idle",
+    "locomotion",
+    "talk",
+    "combat",
+    "item",
+    "rom",
+    "other",
+)
+
+DEFAULT_PREVIEW_PRIORITY: tuple[str, ...] = (
+    "pause1",
+    "pause2",
+    "listen",
+    "walk",
+    "run",
+    "tlknorm",
+)
+
+
 def _scene_metadata(scene: Any) -> dict[str, Any]:
     metadata = getattr(scene, "metadata", None)
     if metadata is None:
@@ -194,6 +259,155 @@ def _resolve_socket(body_model: Any, socket: str, socket_name: str = "") -> tupl
         if node is not None:
             return node, _node_name(node), alias
     return None, "", alias
+
+
+def _model_identity(model: Any, fallback: str = "") -> str:
+    for attr in ("name", "resref", "model_name"):
+        value = str(getattr(model, attr, "") or "").strip()
+        if value:
+            return value
+    return fallback
+
+
+def _animation_name(anim: Any) -> str:
+    if isinstance(anim, str):
+        return anim.strip()
+    if isinstance(anim, dict):
+        for key in ("name", "anim_name", "clip", "animation"):
+            value = str(anim.get(key, "") or "").strip()
+            if value:
+                return value
+        return ""
+    for attr in ("name", "anim_name", "clip", "animation"):
+        value = str(getattr(anim, attr, "") or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _animation_length(anim: Any) -> float:
+    if isinstance(anim, dict):
+        values = (anim.get("length"), anim.get("duration"), anim.get("end_time"))
+    else:
+        values = (
+            getattr(anim, "length", None),
+            getattr(anim, "duration", None),
+            getattr(anim, "end_time", None),
+        )
+    for value in values:
+        try:
+            length = float(value)
+        except (TypeError, ValueError):
+            continue
+        if length > 0.0:
+            return length
+    return 0.0
+
+
+def _model_animations(model: Any) -> list[Any]:
+    for attr in ("animations", "anims", "animation_list"):
+        value = getattr(model, attr, None)
+        if value is None:
+            continue
+        try:
+            return list(value)
+        except Exception:
+            return []
+    return []
+
+
+def _animation_group(name: str, source: str = "") -> str:
+    lower = (name or "").lower()
+    if lower.startswith("pause") or lower in {"idle", "listen", "ready"}:
+        return "idle"
+    if lower in {"walk", "walkss", "run", "runss", "turnleft", "turnright"}:
+        return "locomotion"
+    if lower.startswith("tlk") or lower.startswith("kdtlk") or "talk" in lower:
+        return "talk"
+    if lower in {"powered", "off", "powerup", "powerdown", "throwout", "throwback"}:
+        return "item"
+    if lower in {"generated_rom", "rom"} or source == "generated_rom":
+        return "rom"
+    combat_prefixes = ("c", "f", "g", "kd", "nw", "pa", "ph", "ta", "sp")
+    combat_names = {
+        "cast",
+        "damage",
+        "dead",
+        "die",
+        "dodge",
+        "parry",
+        "taunt",
+        "choke",
+        "fear",
+        "horror",
+        "whirlwind",
+    }
+    if lower in combat_names or lower.startswith(combat_prefixes):
+        return "combat"
+    return "other"
+
+
+def _clip_loop_default(group: str) -> bool:
+    return group in {"idle", "locomotion", "talk", "item", "rom"}
+
+
+def _motion_assignment(scene: Any) -> dict[str, Any]:
+    state = getattr(scene, "motion_assignment", None)
+    if isinstance(state, dict):
+        return dict(state)
+    return {}
+
+
+def _add_clip(
+    clips: list[PreviewAnimationClip],
+    seen: set[tuple[str, str, str]],
+    *,
+    name: str,
+    source: str,
+    source_model: str = "",
+    length: float = 0.0,
+    inherited: bool = False,
+) -> None:
+    name = (name or "").strip()
+    if not name:
+        return
+    group = _animation_group(name, source)
+    key = (name.lower(), source, source_model.lower())
+    if key in seen:
+        return
+    seen.add(key)
+    clips.append(
+        PreviewAnimationClip(
+            name=name,
+            group=group,
+            source=source,
+            source_model=source_model,
+            label=name.replace("_", " ").title(),
+            length=length,
+            loop=_clip_loop_default(group),
+            inherited=inherited,
+        )
+    )
+
+
+def _group_clips(clips: list[PreviewAnimationClip]) -> dict[str, list[PreviewAnimationClip]]:
+    grouped: dict[str, list[PreviewAnimationClip]] = {}
+    order = {name: index for index, name in enumerate(ANIMATION_GROUP_ORDER)}
+    for clip in sorted(
+        clips,
+        key=lambda c: (order.get(c.group, len(order)), c.name.lower(), c.source),
+    ):
+        grouped.setdefault(clip.group, []).append(clip)
+    return grouped
+
+
+def _default_clip(clips: list[PreviewAnimationClip]) -> Optional[PreviewAnimationClip]:
+    by_name = {clip.name.lower(): clip for clip in clips}
+    for name in DEFAULT_PREVIEW_PRIORITY:
+        clip = by_name.get(name)
+        if clip is not None:
+            return clip
+    return clips[0] if clips else None
 
 
 def _write_preview_metadata(
@@ -284,6 +498,10 @@ def load_character_preview(
         message=str(getattr(composite, "message", "") or ""),
         code=str(getattr(composite, "code", "") or "loaded"),
     )
+    try:
+        setattr(preview_scene, "preview_model", result.preview_model)
+    except Exception:
+        pass
 
     if spec.outfit_path:
         slot = getattr(preview_scene, "get", lambda _slot: None)(md.PartSlot.HEADLESS_BODY)
@@ -324,6 +542,10 @@ def refresh_character_preview(
         message=str(getattr(snap, "message", "") or ""),
         code=str(getattr(snap, "code", "") or "not_snapped"),
     )
+    try:
+        setattr(scene, "preview_model", result.preview_model)
+    except Exception:
+        pass
     _write_preview_metadata(scene, spec, result)
     return result
 
@@ -423,3 +645,227 @@ def attach_item_to_preview(scene: Any, spec: AttachmentSpec) -> AttachmentResult
     attachments.append(attachment_payload)
     metadata["active_attachment"] = attachment_payload
     return result
+
+
+def build_animation_workbench(scene: Any) -> AnimationWorkbenchResult:
+    """Catalog Asset Viewer preview clips by practical modder workflow group.
+
+    The workbench intentionally includes local model clips, attached item
+    clips, imported/generated assignments, and inherited supermodel motions.
+    That lets the UI explain why a clip is playable even when it lives on a
+    KOTOR supermodel instead of the body MDL the user imported.
+    """
+
+    md = _import_model_data()
+    body = _slot_model(scene, md.PartSlot.HEADLESS_BODY)
+    head = _slot_model(scene, md.PartSlot.HEAD_SHELL)
+    accessory = _slot_model(scene, md.PartSlot.ACCESSORY)
+    metadata = _scene_metadata(scene)
+    preview_metadata = metadata.setdefault("asset_preview", {})
+
+    clips: list[PreviewAnimationClip] = []
+    seen: set[tuple[str, str, str]] = set()
+    warnings: list[str] = []
+
+    sources = (
+        (getattr(scene, "preview_model", None), "preview", "preview"),
+        (body, "model", "body"),
+        (head, "head", "head"),
+        (accessory, "item", "accessory"),
+    )
+    for model, source, fallback in sources:
+        if model is None:
+            continue
+        source_model = _model_identity(model, fallback)
+        for anim in _model_animations(model):
+            _add_clip(
+                clips,
+                seen,
+                name=_animation_name(anim),
+                source=source,
+                source_model=source_model,
+                length=_animation_length(anim),
+            )
+
+    motion = _motion_assignment(scene)
+    motion_source = str(motion.get("source") or "").strip()
+    supermodel = str(motion.get("supermodel") or getattr(body, "supermodel", "") or "").strip()
+    if motion_source == "inherited_supermodel" and supermodel:
+        for name in DEFAULT_PREVIEW_PRIORITY + ("tlkangry", "c2a1", "c2a2"):
+            _add_clip(
+                clips,
+                seen,
+                name=name,
+                source="inherited_supermodel",
+                source_model=supermodel,
+                inherited=True,
+            )
+    imported = motion.get("imported_clips") or motion.get("clips") or []
+    for anim in imported:
+        _add_clip(
+            clips,
+            seen,
+            name=_animation_name(anim),
+            source="imported",
+            source_model=str(motion.get("imported_source") or "imported"),
+            length=_animation_length(anim),
+        )
+    if motion_source == "generated_rom" or motion.get("generated"):
+        _add_clip(
+            clips,
+            seen,
+            name="generated_rom",
+            source="generated_rom",
+            source_model="GhostRigger",
+            length=float(motion.get("length") or 4.0),
+        )
+
+    if body is None:
+        warnings.append("Load a character body before previewing animations.")
+    if body is not None and not clips:
+        warnings.append(
+            "No preview animations found. Assign inherited, imported, or generated motions before export testing."
+        )
+
+    grouped = _group_clips(clips)
+    selected = _default_clip(clips)
+    payload = {
+        "ok": bool(clips),
+        "code": "listed" if clips else "no_animations",
+        "selected": selected.name if selected is not None else "",
+        "groups": {
+            group: [
+                {
+                    "name": clip.name,
+                    "source": clip.source,
+                    "source_model": clip.source_model,
+                    "length": clip.length,
+                    "inherited": clip.inherited,
+                }
+                for clip in values
+            ]
+            for group, values in grouped.items()
+        },
+        "warnings": list(warnings),
+    }
+    preview_metadata["animation_workbench"] = payload
+
+    return AnimationWorkbenchResult(
+        ok=bool(clips),
+        clips=clips,
+        groups=grouped,
+        selected=selected,
+        warnings=warnings,
+        message=(
+            f"{len(clips)} preview animation clip(s) available."
+            if clips
+            else "No preview animation clips are available."
+        ),
+        code="listed" if clips else "no_animations",
+    )
+
+
+def _find_workbench_clip(
+    workbench: AnimationWorkbenchResult,
+    clip_name: str = "",
+    *,
+    group: str = "",
+) -> Optional[PreviewAnimationClip]:
+    target = (clip_name or "").strip().lower()
+    if target:
+        for clip in workbench.clips:
+            if clip.name.lower() == target:
+                return clip
+        return None
+    if group:
+        values = workbench.groups.get(group, [])
+        if values:
+            return values[0]
+    return workbench.selected
+
+
+def play_preview_animation(
+    scene: Any,
+    clip_name: str = "",
+    *,
+    group: str = "",
+    loop: Optional[bool] = None,
+    time: float = 0.0,
+) -> PreviewPlaybackState:
+    """Select an Asset Viewer animation clip for playback."""
+
+    workbench = build_animation_workbench(scene)
+    clip = _find_workbench_clip(workbench, clip_name, group=group)
+    if clip is None:
+        requested = clip_name or group or "default"
+        return PreviewPlaybackState(
+            message=f"Preview animation '{requested}' is not available.",
+            code="clip_missing",
+        )
+
+    duration = max(0.0, float(clip.length or 0.0))
+    start = max(0.0, float(time or 0.0))
+    should_loop = clip.loop if loop is None else bool(loop)
+    if duration > 0.0:
+        if should_loop:
+            start = start % duration
+        else:
+            start = min(start, duration)
+
+    state = PreviewPlaybackState(
+        ok=True,
+        clip=clip,
+        clip_name=clip.name,
+        group=clip.group,
+        source=clip.source,
+        source_model=clip.source_model,
+        time=start,
+        duration=duration,
+        loop=should_loop,
+        playing=True,
+        message=f"Playing {clip.name} from {clip.source_model or clip.source}.",
+        code="playing",
+    )
+    metadata = _scene_metadata(scene)
+    preview = metadata.setdefault("asset_preview", {})
+    preview["playback"] = {
+        "ok": True,
+        "code": state.code,
+        "clip": state.clip_name,
+        "group": state.group,
+        "source": state.source,
+        "source_model": state.source_model,
+        "time": state.time,
+        "duration": state.duration,
+        "loop": state.loop,
+        "playing": state.playing,
+        "inherited": clip.inherited,
+    }
+    return state
+
+
+def scrub_preview_animation(scene: Any, time: float) -> PreviewPlaybackState:
+    """Move the active preview clip to a specific timestamp."""
+
+    metadata = _scene_metadata(scene)
+    current = metadata.get("asset_preview", {}).get("playback", {})
+    clip_name = str(current.get("clip") or "")
+    if not clip_name:
+        return PreviewPlaybackState(
+            message="No preview animation is selected for scrubbing.",
+            code="not_playing",
+        )
+    state = play_preview_animation(
+        scene,
+        clip_name,
+        loop=bool(current.get("loop", True)),
+        time=time,
+    )
+    if state.ok:
+        state.playing = bool(current.get("playing", True))
+        state.code = "scrubbed"
+        state.message = f"Scrubbed {state.clip_name} to {state.time:.3f}s."
+        metadata["asset_preview"]["playback"]["code"] = "scrubbed"
+        metadata["asset_preview"]["playback"]["time"] = state.time
+        metadata["asset_preview"]["playback"]["playing"] = state.playing
+    return state

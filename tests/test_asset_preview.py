@@ -14,12 +14,19 @@ from src.core import model_data as md
 
 
 class _Model:
-    def __init__(self, name, nodes=None):
+    def __init__(self, name, nodes=None, animations=None):
         self.name = name
         self._nodes = list(nodes or [])
+        self.animations = list(animations or [])
 
     def all_nodes(self):
         return list(self._nodes)
+
+
+class _Anim:
+    def __init__(self, name, length=1.0):
+        self.name = name
+        self.length = length
 
 
 class _Node:
@@ -235,3 +242,98 @@ def test_t1402_attach_requires_preview_body(monkeypatch):
 
     assert attach.ok is False
     assert attach.code == "preview_body_missing"
+
+
+def test_t1403_animation_workbench_groups_body_and_item_clips(monkeypatch):
+    _install(monkeypatch)
+    result = ap.load_character_preview(ap.CharacterPreviewSpec(body_path="body.mdl", head_path="head.mdl"))
+    body = result.scene.get_model(md.PartSlot.HEADLESS_BODY)
+    body.animations = [
+        _Anim("pause1", 3.0),
+        _Anim("walk", 1.2),
+        _Anim("tlknorm", 2.0),
+        _Anim("c2a1", 0.9),
+    ]
+    saber = _Model("w_lghtsbr_001", animations=[_Anim("powered", 1.0), _Anim("off", 1.0)])
+    ap.attach_item_to_preview(
+        result.scene,
+        ap.AttachmentSpec(item_model=saber, item_resref="w_lghtsbr_001", socket="lightsaber"),
+    )
+
+    workbench = ap.build_animation_workbench(result.scene)
+
+    assert workbench.ok is True
+    assert workbench.selected.name == "pause1"
+    assert [clip.name for clip in workbench.groups["idle"]] == ["pause1"]
+    assert [clip.name for clip in workbench.groups["locomotion"]] == ["walk"]
+    assert [clip.name for clip in workbench.groups["talk"]] == ["tlknorm"]
+    assert [clip.name for clip in workbench.groups["combat"]] == ["c2a1"]
+    assert [clip.name for clip in workbench.groups["item"]] == ["off", "powered"]
+    assert result.scene.metadata["asset_preview"]["animation_workbench"]["groups"]["item"][0]["source"] == "item"
+
+
+def test_t1403_animation_workbench_shows_inherited_supermodel_source(monkeypatch):
+    _install(monkeypatch)
+    result = ap.load_character_preview(ap.CharacterPreviewSpec(body_path="body.mdl", head_path="head.mdl"))
+    result.scene.motion_assignment = {
+        "source": "inherited_supermodel",
+        "supermodel": "S_Female02",
+    }
+
+    workbench = ap.build_animation_workbench(result.scene)
+
+    inherited = [clip for clip in workbench.clips if clip.inherited]
+    assert workbench.ok is True
+    assert inherited
+    assert {clip.source_model for clip in inherited} == {"S_Female02"}
+    assert "walk" in {clip.name for clip in workbench.groups["locomotion"]}
+    assert "tlknorm" in {clip.name for clip in workbench.groups["talk"]}
+    assert result.scene.metadata["asset_preview"]["animation_workbench"]["groups"]["idle"][0]["inherited"] is True
+
+
+def test_t1403_play_preview_animation_records_source_and_time(monkeypatch):
+    _install(monkeypatch)
+    result = ap.load_character_preview(ap.CharacterPreviewSpec(body_path="body.mdl", head_path="head.mdl"))
+    body = result.scene.get_model(md.PartSlot.HEADLESS_BODY)
+    body.animations = [_Anim("walk", 1.25)]
+
+    state = ap.play_preview_animation(result.scene, "walk", time=2.75)
+
+    assert state.ok is True
+    assert state.code == "playing"
+    assert state.clip_name == "walk"
+    assert state.group == "locomotion"
+    assert state.source_model == "body"
+    assert state.time == 0.25
+    playback = result.scene.metadata["asset_preview"]["playback"]
+    assert playback["clip"] == "walk"
+    assert playback["source"] == "model"
+    assert playback["duration"] == 1.25
+
+
+def test_t1403_scrub_preview_animation_updates_existing_state(monkeypatch):
+    _install(monkeypatch)
+    result = ap.load_character_preview(ap.CharacterPreviewSpec(body_path="body.mdl", head_path="head.mdl"))
+    body = result.scene.get_model(md.PartSlot.HEADLESS_BODY)
+    body.animations = [_Anim("pause1", 3.0)]
+    ap.play_preview_animation(result.scene, "pause1")
+
+    state = ap.scrub_preview_animation(result.scene, 4.25)
+
+    assert state.ok is True
+    assert state.code == "scrubbed"
+    assert state.time == 1.25
+    assert result.scene.metadata["asset_preview"]["playback"]["code"] == "scrubbed"
+    assert result.scene.metadata["asset_preview"]["playback"]["time"] == 1.25
+
+
+def test_t1403_play_reports_missing_clip(monkeypatch):
+    _install(monkeypatch)
+    result = ap.load_character_preview(ap.CharacterPreviewSpec(body_path="body.mdl", head_path="head.mdl"))
+    body = result.scene.get_model(md.PartSlot.HEADLESS_BODY)
+    body.animations = [_Anim("pause1", 3.0)]
+
+    state = ap.play_preview_animation(result.scene, "run")
+
+    assert state.ok is False
+    assert state.code == "clip_missing"
