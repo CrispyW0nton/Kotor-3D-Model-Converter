@@ -333,13 +333,63 @@ def test_character_scene_json_round_trip_preserves_mode():
     scene.set_mode(CharacterMode.HEADLESS_BODY, locked=True)
 
     payload = scene.to_dict()
+    assert payload["ghostrig_version"] == 2
+    assert payload["schema_version"] == 2
     assert payload["mode"] == "headless_body"
+    assert payload["character_mode"] == "headless_body"
     assert payload["mode_locked"] is True
 
     restored = CharacterScene.from_dict(payload)
     assert restored.mode == CharacterMode.HEADLESS_BODY
     assert restored.mode_locked is True
     assert restored.character_name == "Revan"
+
+
+def test_t1002_sceneio_v2_sidecar_includes_export_metadata_and_hooks():
+    scene = CharacterScene(game_version="K1", character_name="LaunchBody")
+    body = _build_model(
+        name="pfbcm", supermodel="S_Female03",
+        nodes=("pfbcm", "headhook", "rhand", "lhand_g", "impact_bolt"),
+    )
+    scene.assign(PartSlot.HEADLESS_BODY, body, resref="pfbcm")
+    scene.metadata["validation_report"] = {
+        "ok": True,
+        "code": "clean",
+        "error_count": 0,
+    }
+    scene.metadata["export_results"] = [
+        {"format": "kotor", "ok": True, "code": "exported"},
+    ]
+    scene.metadata["export_timestamps"] = {
+        "last_export_at": "2026-05-16T00:00:00Z",
+    }
+    scene.saved_at = "2026-05-16T00:00:01Z"
+
+    payload = scene.to_dict()
+
+    assert payload["schema_version"] == 2
+    assert payload["source_asset_ids"]["headless_body"].startswith("gr:PFBCM")
+    assert payload["supermodel_chain"]["headless_body"]["supermodel"] == "S_Female03"
+    assert "headhook" in {n.lower() for n in payload["hook_list"]["headless_body"]}
+    assert payload["validation_report"]["code"] == "clean"
+    assert payload["export_results"][0]["format"] == "kotor"
+    assert payload["export_timestamps"]["last_export_at"] == "2026-05-16T00:00:00Z"
+
+
+def test_t1002_sceneio_v2_round_trips_bit_identical():
+    scene = CharacterScene(game_version="K1", character_name="Stable")
+    body = _build_model(
+        name="pfbcm", supermodel="S_Female03",
+        nodes=("pfbcm", "headhook", "rhand", "lhand_g"),
+    )
+    scene.assign(PartSlot.HEADLESS_BODY, body, resref="pfbcm")
+    scene.saved_at = "2026-05-16T01:02:03Z"
+    payload = scene.to_dict()
+
+    restored = CharacterScene.from_dict(payload)
+    roundtrip = restored.to_dict()
+
+    assert roundtrip == payload
 
 
 def test_character_scene_from_dict_tolerates_missing_mode_keys():
@@ -356,6 +406,7 @@ def test_character_scene_from_dict_tolerates_missing_mode_keys():
     restored = CharacterScene.from_dict(legacy_payload)
     assert restored.mode == CharacterMode.AMBIGUOUS
     assert restored.mode_locked is False
+    assert restored.to_dict()["schema_version"] == 2
 
 
 def test_character_scene_from_dict_handles_unknown_mode_value():

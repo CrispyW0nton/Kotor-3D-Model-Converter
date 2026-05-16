@@ -1471,6 +1471,9 @@ class SceneSlot:
     game_version: 'K1' or 'K2'.
     source_path : Absolute file path (for user-imported OBJ/FBX/MDL files).
                   Empty string when loaded from BIF/ERF archives.
+    supermodel  : Cached supermodel string for metadata-only sidecar reloads.
+    hooks       : Cached hook nodes for metadata-only sidecar reloads.
+    facial_bones: Cached facial nodes for metadata-only sidecar reloads.
     dirty       : True when the slot has been modified since last export.
     """
     slot:         PartSlot
@@ -1479,11 +1482,16 @@ class SceneSlot:
     asset_id:     str                                = ""
     game_version: str                                = "K1"
     source_path:  str                                = ""
+    supermodel:   str                                = ""
+    hooks:        List[str]                          = field(default_factory=list)
+    facial_bones: List[str]                          = field(default_factory=list)
     dirty:        bool                               = False
 
     def __post_init__(self) -> None:
         if not self.asset_id and self.resref:
             self.asset_id = _make_asset_id(self.resref, self.game_version)
+        if self.model is not None and not self.supermodel:
+            self.supermodel = str(getattr(self.model, "supermodel", "") or "")
 
 
 @dataclass
@@ -1524,6 +1532,7 @@ class CharacterScene:
     character_name: str                          = ""
     slots:          Dict[PartSlot, SceneSlot]    = field(default_factory=dict)
     supermodel:     str                          = ""
+    saved_at:       str                          = ""
     dirty:          bool                         = False
     metadata:       Dict[str, Any]               = field(default_factory=dict)
     # ── Mode taxonomy (M1 / T103) ────────────────────────────────────────────
@@ -1653,6 +1662,9 @@ class CharacterScene:
             resref=resref.lower(),
             game_version=gv,
             source_path=source_path,
+            supermodel=str(getattr(model, "supermodel", "") or ""),
+            hooks=self._hook_list_for(model),
+            facial_bones=self._facial_bone_list_for(model),
             dirty=True,
         )
         self.slots[slot] = entry
@@ -1725,7 +1737,45 @@ class CharacterScene:
 
     # File format version written into every .ghostrig.json.
     # Increment when the schema changes in a breaking way.
-    SCENE_FORMAT_VERSION: int = 1
+    SCENE_FORMAT_VERSION: int = 2
+
+    @staticmethod
+    def _node_names(model: Optional[KotorModel]) -> List[str]:
+        if model is None:
+            return []
+        try:
+            return [
+                str(getattr(node, "name", "") or "")
+                for node in model.all_nodes()
+                if str(getattr(node, "name", "") or "")
+            ]
+        except Exception:
+            return []
+
+    @classmethod
+    def _hook_list_for(cls, model: Optional[KotorModel]) -> List[str]:
+        hook_names = []
+        for name in cls._node_names(model):
+            nl = name.lower()
+            if "hook" in nl or nl in {
+                "headhook", "rhand", "lhand", "lhand_g",
+                "impact_bolt", "handconjure", "headconjure",
+                "chestconjure", "talkdummy",
+            }:
+                hook_names.append(name)
+        return sorted(dict.fromkeys(hook_names), key=str.lower)
+
+    @classmethod
+    def _facial_bone_list_for(cls, model: Optional[KotorModel]) -> List[str]:
+        facial = []
+        for name in cls._node_names(model):
+            nl = name.lower()
+            if nl.startswith("f_") or nl in {
+                "talkdummy", "head_g", "neck_g", "necklwr_g",
+                "maskhook", "gogglehook", "eyelid", "eyerid",
+            }:
+                facial.append(name)
+        return sorted(dict.fromkeys(facial), key=str.lower)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialise the scene to a plain JSON-compatible dictionary.
@@ -1758,29 +1808,84 @@ class CharacterScene:
             }
         """
         import datetime as _dt
+        saved_at = self.saved_at or _dt.datetime.now(
+            _dt.timezone.utc).isoformat().replace("+00:00", "Z")
         slot_list = []
         for slot, entry in self.slots.items():
+            model = entry.model
+            slot_supermodel = (
+                str(getattr(model, "supermodel", "") or "")
+                if model is not None else entry.supermodel
+            )
+            slot_hooks = self._hook_list_for(model) if model is not None else list(entry.hooks)
+            slot_facial = (
+                self._facial_bone_list_for(model)
+                if model is not None else list(entry.facial_bones)
+            )
             slot_list.append({
                 "slot":         slot.value,
                 "resref":       entry.resref,
                 "asset_id":     entry.asset_id,
                 "game_version": entry.game_version,
                 "source_path":  entry.source_path,
+                "supermodel":   slot_supermodel,
+                "hooks":        slot_hooks,
+                "facial_bones": slot_facial,
             })
+        mode_value = (self.mode.value if isinstance(self.mode, CharacterMode)
+                      else CharacterMode.AMBIGUOUS.value)
+        source_asset_ids = {
+            slot.value: entry.asset_id
+            for slot, entry in self.slots.items()
+            if entry.asset_id
+        }
+        supermodel_chain = {
+            slot.value: {
+                "resref": entry.resref,
+                "supermodel": (
+                    str(getattr(entry.model, "supermodel", "") or "")
+                    if entry.model is not None else entry.supermodel
+                ),
+            }
+            for slot, entry in self.slots.items()
+        }
+        validation_report = dict(self.metadata.get("validation_report", {}) or {})
+        export_results = list(self.metadata.get("export_results", []) or [])
+        export_timestamps = dict(self.metadata.get("export_timestamps", {}) or {})
         return {
             "ghostrig_version": self.SCENE_FORMAT_VERSION,
+            "schema_version":   self.SCENE_FORMAT_VERSION,
             "scene_id":         self.scene_id,
             "game_version":     self.game_version,
             "character_name":   self.character_name,
             "supermodel":       self.supermodel,
-            "saved_at":         _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+            "saved_at":         saved_at,
             "metadata":         dict(self.metadata),
+            "source_asset_ids": source_asset_ids,
+            "supermodel_chain": supermodel_chain,
+            "hook_list":        {
+                slot.value: (
+                    self._hook_list_for(entry.model)
+                    if entry.model is not None else list(entry.hooks)
+                )
+                for slot, entry in self.slots.items()
+            },
+            "facial_bone_list": {
+                slot.value: (
+                    self._facial_bone_list_for(entry.model)
+                    if entry.model is not None else list(entry.facial_bones)
+                )
+                for slot, entry in self.slots.items()
+            },
+            "validation_report": validation_report,
+            "export_timestamps": export_timestamps,
+            "export_results":    export_results,
             "slots":            slot_list,
             # Mode taxonomy (M1 / T103) — persisted as the enum *value*
             # string (e.g. "headless_body") so the file format stays
             # human-readable and tolerant to future enum additions.
-            "mode":             (self.mode.value if isinstance(self.mode, CharacterMode)
-                                 else CharacterMode.AMBIGUOUS.value),
+            "mode":             mode_value,
+            "character_mode":   mode_value,
             "mode_locked":      bool(self.mode_locked),
         }
 
@@ -1813,7 +1918,7 @@ class CharacterScene:
         ValueError  : If ``data`` is missing required keys or has an
                       unsupported ``ghostrig_version``.
         """
-        ver = data.get("ghostrig_version", 0)
+        ver = data.get("schema_version", data.get("ghostrig_version", 0))
         if ver > cls.SCENE_FORMAT_VERSION:
             raise ValueError(
                 f"CharacterScene.from_dict: file version {ver} is newer than "
@@ -1827,6 +1932,7 @@ class CharacterScene:
             supermodel     = data.get("supermodel", ""),
             metadata       = dict(data.get("metadata", {})),
         )
+        scene.saved_at = data.get("saved_at", "")
         # Preserve the original scene_id so references stay stable
         saved_id = data.get("scene_id", "")
         if saved_id:
@@ -1836,7 +1942,7 @@ class CharacterScene:
         # Read both the mode and its lock state; tolerate missing fields
         # (older .ghostrig.json files written before M1) and unknown enum
         # values (forward compatibility — fall back to AMBIGUOUS).
-        saved_mode = data.get("mode", "")
+        saved_mode = data.get("character_mode", data.get("mode", ""))
         if saved_mode:
             try:
                 scene.mode = CharacterMode(saved_mode)
@@ -1859,6 +1965,9 @@ class CharacterScene:
             asset_id     = slot_data.get("asset_id", "")
             game_version = slot_data.get("game_version", scene.game_version)
             source_path  = slot_data.get("source_path", "")
+            supermodel   = slot_data.get("supermodel", "")
+            hooks        = list(slot_data.get("hooks", []) or [])
+            facial_bones = list(slot_data.get("facial_bones", []) or [])
 
             model = None
             if load_models and source_path:
@@ -1883,6 +1992,9 @@ class CharacterScene:
                 asset_id     = asset_id or _make_asset_id(resref, game_version),
                 game_version = game_version,
                 source_path  = source_path,
+                supermodel   = supermodel,
+                hooks        = hooks,
+                facial_bones = facial_bones,
                 dirty        = False,
             )
             scene.slots[slot] = entry
@@ -1931,6 +2043,7 @@ class SceneIO:
     """
 
     EXTENSION = ".ghostrig.json"
+    SCHEMA_VERSION = CharacterScene.SCENE_FORMAT_VERSION
 
     @staticmethod
     def save(scene: "CharacterScene", path: str) -> None:
@@ -1951,6 +2064,10 @@ class SceneIO:
         import json as _json
         import os as _os
         _os.makedirs(_os.path.dirname(_os.path.abspath(path)), exist_ok=True)
+        if not scene.saved_at:
+            import datetime as _dt
+            scene.saved_at = _dt.datetime.now(
+                _dt.timezone.utc).isoformat().replace("+00:00", "Z")
         with open(path, "w", encoding="utf-8") as fh:
             _json.dump(scene.to_dict(), fh, indent=2, ensure_ascii=False)
             fh.write("\n")

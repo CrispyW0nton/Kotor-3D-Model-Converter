@@ -1872,6 +1872,23 @@ EXPORT_FORMATS: Tuple[Tuple[str, str, Tuple[str, ...]], ...] = (
 )
 
 
+def default_export_formats_for_mode(scene_or_mode: Any) -> Tuple[str, ...]:
+    """Return M10/T1004 export defaults for a Character Builder mode."""
+    mode = getattr(scene_or_mode, "mode", scene_or_mode)
+    value = (
+        getattr(mode, "value", None)
+        or getattr(mode, "name", "")
+        or str(mode or "")
+    ).lower()
+    if value == "head":
+        return ("kotor", "fbx", "gltf")
+    if value == "supermodel":
+        return ("fbx", "gltf")
+    if value in ("headless_body", "creature"):
+        return ("kotor", "fbx", "gltf", "obj")
+    return ("kotor",)
+
+
 @dataclass
 class ValidateForExportResult:
     """Result of :func:`validate_for_export`.
@@ -2449,6 +2466,7 @@ def export_scene(
             code="no_formats",
         )
 
+    gate: Optional[ValidateForExportResult] = None
     # Optional pre-flight validation gate.
     if not skip_validation:
         gate = validate_for_export(scene, strict=True)
@@ -2493,6 +2511,44 @@ def export_scene(
                 label_by_key[fmt_key], out_dir, resref,
             )
         )
+
+    # Sidecar v2 metadata. Stored on the scene before SceneIO writes so the
+    # .ghostrig.json records exactly what this export attempt produced.
+    try:
+        import datetime as _dt
+        export_stamp = _dt.datetime.now(
+            _dt.timezone.utc).isoformat().replace("+00:00", "Z")
+        metadata = getattr(scene, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            setattr(scene, "metadata", metadata)
+        metadata["export_results"] = [
+            {
+                "format": row.key,
+                "label": row.label,
+                "ok": bool(row.ok),
+                "path": row.path,
+                "code": row.code,
+                "message": row.message,
+            }
+            for row in rows
+        ]
+        metadata["export_timestamps"] = {
+            **dict(metadata.get("export_timestamps", {}) or {}),
+            "last_export_at": export_stamp,
+        }
+        if gate is not None:
+            metadata["validation_report"] = {
+                "ok": bool(gate.ok),
+                "code": gate.code,
+                "error_count": gate.error_count,
+                "warning_count": gate.warning_count,
+                "info_count": gate.info_count,
+                "blocking_codes": list(gate.blocking_codes),
+            }
+    except Exception:                                      # pragma: no cover
+        log.debug("export_scene: could not attach sidecar v2 metadata",
+                  exc_info=True)
 
     # Sidecar JSON — written last so even partial-failure exports
     # leave a valid scene-definition file behind.
@@ -2570,6 +2626,7 @@ __all__ = [
     "assign_motion_source",
     "available_preview_animations",
     "check_model",
+    "default_export_formats_for_mode",
     "export_scene",
     "generate_skeleton",
     "load_body",

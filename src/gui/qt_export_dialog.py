@@ -79,8 +79,8 @@ class QtExportDialog(QtWidgets.QDialog):
         hint = QtWidgets.QLabel(
             "Pick one or more output formats for the rigged body, an\n"
             "output folder, and whether to write the .ghostrig.json\n"
-            "scene-definition sidecar.  Writers without a backend yet\n"
-            "are still listed — they'll report 'pending' on export."
+            "scene-definition sidecar. Defaults follow the active\n"
+            "Character Builder mode."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color:#aaa; font-size:8pt; font-style:italic;")
@@ -128,9 +128,8 @@ class QtExportDialog(QtWidgets.QDialog):
         )
         self._sidecar_cb.setChecked(bool(initial_write_sidecar))
         self._sidecar_cb.setToolTip(
-            "Recommended.  The sidecar is the only fully-implemented\n"
-            "output for M5; it stores all slot metadata so the scene\n"
-            "can be reloaded later via SceneIO.load()."
+            "Recommended.  The sidecar stores schema-v2 export metadata\n"
+            "so the scene can be reloaded later via SceneIO.load()."
         )
         layout.addWidget(self._sidecar_cb)
 

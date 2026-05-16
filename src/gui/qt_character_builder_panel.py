@@ -1355,7 +1355,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             self,
             default_dir=getattr(self, "_last_export_dir", ""),
             initial_resref=initial_resref,
-            initial_formats=("kotor",),
+            initial_formats=_wf.default_export_formats_for_mode(self.scene),
             initial_write_sidecar=True,
         )
         if dlg.exec() != QtWidgets.QDialog.Accepted:

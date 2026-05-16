@@ -1749,6 +1749,49 @@ def test_t506_export_scene_per_format_rows_returned_in_request_order(
     assert (tmp_path / "pfbcm.obj").exists()
 
 
+def test_t1002_export_scene_records_sidecar_v2_format_results(
+    monkeypatch, tmp_path,
+):
+    _install_fake_scene_io(monkeypatch)
+    _install_fake_exporters(monkeypatch)
+    _make_check_service(monkeypatch, issues=[])
+    scene, _body = _scene_with_body()
+
+    result = wf.export_scene(
+        scene,
+        formats=["kotor", "fbx"],
+        out_dir=str(tmp_path),
+        write_sidecar=True,
+    )
+
+    assert result.ok is True
+    rows = scene.metadata["export_results"]
+    assert [row["format"] for row in rows] == ["kotor", "fbx"]
+    assert all(row["code"] == "exported" for row in rows)
+    assert scene.metadata["validation_report"]["code"] == "clean"
+    assert "last_export_at" in scene.metadata["export_timestamps"]
+
+
+def test_t1004_default_export_formats_are_mode_aware():
+    class _Mode:
+        def __init__(self, value):
+            self.value = value
+
+    scene = _make_scene("K1")
+
+    scene.mode = _Mode("headless_body")
+    assert wf.default_export_formats_for_mode(scene) == ("kotor", "fbx", "gltf", "obj")
+
+    scene.mode = _Mode("head")
+    assert wf.default_export_formats_for_mode(scene) == ("kotor", "fbx", "gltf")
+
+    scene.mode = _Mode("supermodel")
+    assert wf.default_export_formats_for_mode(scene) == ("fbx", "gltf")
+
+    scene.mode = _Mode("creature")
+    assert wf.default_export_formats_for_mode(scene) == ("kotor", "fbx", "gltf", "obj")
+
+
 def test_t506_export_scene_unknown_format_is_marked_failed(monkeypatch, tmp_path):
     """Unknown format keys are NOT silently dropped — they get a row
     with the ``failed`` code so the UI can flag them."""
