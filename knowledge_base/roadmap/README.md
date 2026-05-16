@@ -40,7 +40,7 @@ This folder contains the post-Qt-migration roadmap for GhostRigger, derived from
 | M12 External Mesh Launch Path | ✅ done locally | awaiting review/PR |
 | M11 Visual regression | 🟡 infra ready | ~2 d |
 | M13 Unity MCP transfer | 🟡 started | ~4 d |
-| M14 Asset Viewer | 🔴 gap | ~5 d |
+| M14 Asset Viewer | 🟡 started | ~5 d |
 | M15 Module Editor | 🔴 gap | ~8 d |
 | M16 Map Builder | 🔴 gap | ~8 d |
 | **Character Builder launch remaining** | | **~8 d** |
