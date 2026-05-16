@@ -622,6 +622,45 @@ class QtViewportWidget(QtWidgets.QWidget):
     def set_model(self, model) -> None:
         self.load_model(model)
 
+    def set_external_skeleton(
+        self,
+        model,
+        offset=(0.0, 0.0, 0.0),
+    ) -> None:
+        """Preview a reference skeleton over the active model (M12/T1202)."""
+        self._renderer._ext_skeleton = model
+        try:
+            self._renderer._ext_skel_offset = [
+                float(offset[0]),
+                float(offset[1]),
+                float(offset[2]),
+            ]
+        except Exception:
+            self._renderer._ext_skel_offset = [0.0, 0.0, 0.0]
+        self._request_render()
+
+    def clear_external_skeleton(self) -> None:
+        """Remove the reference-skeleton preview overlay."""
+        self._renderer._ext_skeleton = None
+        self._renderer._ext_skel_offset = [0.0, 0.0, 0.0]
+        self._request_render()
+
+    def set_acurig_guides(self, guides: dict) -> None:
+        """Display live AcuRig guide positions over the body rig view."""
+        if hasattr(self._renderer, "set_acurig_guides"):
+            self._renderer.set_acurig_guides(guides or {})
+        else:                                             # pragma: no cover
+            self._renderer._acurig_guides_overlay = guides or {}
+        self._request_render()
+
+    def clear_acurig_guides(self) -> None:
+        """Remove the AcuRig guide overlay."""
+        if hasattr(self._renderer, "set_acurig_guides"):
+            self._renderer.set_acurig_guides({})
+        else:                                             # pragma: no cover
+            self._renderer._acurig_guides_overlay = {}
+        self._request_render()
+
     def set_dual_viewport_mode(self, enabled: bool) -> None:
         self._dual_viewport_mode = bool(enabled)
 

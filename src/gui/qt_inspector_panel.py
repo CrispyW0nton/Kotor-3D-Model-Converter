@@ -29,7 +29,8 @@ Public surface
     - ``hemisphereModeChanged(str)``      — 'whole' / 'front'.
     - ``jointOpacityChanged(float)``      — 0..1.
     - ``jointSizeChanged(float)``         — 0..1.
-    - ``addMotionsRequested()``           — opens Animation Library.
+    - ``addMotionsRequested()``           — legacy Animation Library hook.
+    - ``assignMotionsRequested()``        — applies selected motion source.
     - ``exportRequested()``               — opens Export panel.
 * Methods:
     - ``set_step(step_number)``           — programmatic page switch.
@@ -98,6 +99,9 @@ class QtInspectorPanel(QtWidgets.QWidget):
     jointOpacityChanged       = QtCore.Signal(float)      # 0..1
     jointSizeChanged          = QtCore.Signal(float)      # 0..1
     addMotionsRequested       = QtCore.Signal()
+    assignMotionsRequested    = QtCore.Signal()
+    motionSourceChanged       = QtCore.Signal(str)
+    motionSupermodelChanged   = QtCore.Signal(str)
     exportRequested           = QtCore.Signal()
     loadRequested             = QtCore.Signal()
     validateRequested         = QtCore.Signal()
@@ -106,6 +110,9 @@ class QtInspectorPanel(QtWidgets.QWidget):
     # M5 / T503 — body-rig generation
     placeGuidesRequested      = QtCore.Signal()
     generateSkeletonRequested = QtCore.Signal()
+    # M12 / T1202 — KOTOR skeleton template selection for imported meshes.
+    skeletonTemplateSelected  = QtCore.Signal(str)        # (option_key,)
+    applySkeletonTemplateRequested = QtCore.Signal()
     # M5 / T504 — Hand-rig step.
     placeHandGuidesRequested  = QtCore.Signal()
     handMaskChanged           = QtCore.Signal(str, bool)  # (bone, masked?)
@@ -147,6 +154,14 @@ class QtInspectorPanel(QtWidgets.QWidget):
         # Same visibility rule as the viseme panel.
         self._head_phoneme_panel: Optional[QtWidgets.QGroupBox] = None
         self._head_phoneme_combos: Dict[str, QtWidgets.QComboBox] = {}
+        # M12 / T1202 — AccuRig-style skeleton picker on the body-rig HUD.
+        self._skeleton_template_combo: Optional[QtWidgets.QComboBox] = None
+        self._skeleton_template_status: Optional[QtWidgets.QLabel] = None
+        self._apply_skeleton_template_btn: Optional[QtWidgets.QPushButton] = None
+        # M12 / T1204 — mode-aware motion assignment.
+        self._motion_source_combo: Optional[QtWidgets.QComboBox] = None
+        self._motion_supermodel_combo: Optional[QtWidgets.QComboBox] = None
+        self._motion_assignment_status: Optional[QtWidgets.QLabel] = None
         self._build()
 
     # ── UI construction ──────────────────────────────────────────────────
@@ -468,6 +483,46 @@ class QtInspectorPanel(QtWidgets.QWidget):
 
         # ── M5 / T503 — Body-rig action buttons (body step only) ─────
         if step == _STEP_RIG_BODY:
+            template_group = QtWidgets.QGroupBox("KOTOR Skeleton")
+            template_layout = QtWidgets.QVBoxLayout(template_group)
+            template_layout.setSpacing(4)
+
+            template_row = QtWidgets.QHBoxLayout()
+            template_row.addWidget(QtWidgets.QLabel("Template:"))
+            self._skeleton_template_combo = QtWidgets.QComboBox()
+            self._skeleton_template_combo.setEditable(False)
+            self._skeleton_template_combo.setMinimumWidth(160)
+            self._skeleton_template_combo.setToolTip(
+                "Choose the KOTOR skeleton to preview over this mesh."
+            )
+            self._skeleton_template_combo.currentIndexChanged.connect(
+                self._on_skeleton_template_index_changed
+            )
+            template_row.addWidget(self._skeleton_template_combo, 1)
+            template_layout.addLayout(template_row)
+
+            self._apply_skeleton_template_btn = QtWidgets.QPushButton(
+                "Use Skeleton"
+            )
+            self._apply_skeleton_template_btn.setToolTip(
+                "Attach the selected template skeleton to the loaded body "
+                "before guide placement and weight generation."
+            )
+            self._apply_skeleton_template_btn.clicked.connect(
+                self.applySkeletonTemplateRequested.emit
+            )
+            template_layout.addWidget(self._apply_skeleton_template_btn)
+
+            self._skeleton_template_status = QtWidgets.QLabel(
+                "Load a body mesh to choose a KOTOR skeleton."
+            )
+            self._skeleton_template_status.setStyleSheet(
+                f"color:{C.get('text2', '#888')}; font-size:8pt;"
+            )
+            self._skeleton_template_status.setWordWrap(True)
+            template_layout.addWidget(self._skeleton_template_status)
+            layout.addWidget(template_group)
+
             actions = QtWidgets.QGroupBox("Rig Body")
             actions_layout = QtWidgets.QVBoxLayout(actions)
             actions_layout.setSpacing(4)
@@ -621,6 +676,90 @@ class QtInspectorPanel(QtWidgets.QWidget):
         label.setStyleSheet(f"color:{colour}; font-size:8pt;")
         label.setText(message)
 
+    def set_skeleton_template_options(self, options: Iterable[object]) -> None:
+        """Populate the body-rig skeleton-template picker (M12 / T1202)."""
+        combo = getattr(self, "_skeleton_template_combo", None)
+        if combo is None:                                  # pragma: no cover
+            return
+
+        def _field(option: object, name: str, default: object = "") -> object:
+            if isinstance(option, dict):
+                return option.get(name, default)
+            return getattr(option, name, default)
+
+        combo.blockSignals(True)
+        try:
+            combo.clear()
+            for option in options or ():
+                key = str(_field(option, "key", "") or "")
+                if not key:
+                    continue
+                try:
+                    from core.skeleton_template_picker import option_summary
+                except Exception:                          # pragma: no cover
+                    try:
+                        from src.core.skeleton_template_picker import option_summary
+                    except Exception:
+                        option_summary = None              # type: ignore
+                if option_summary is not None:
+                    try:
+                        label = option_summary(option)      # type: ignore[arg-type]
+                    except Exception:
+                        label = ""
+                else:
+                    label = ""
+                if not label:
+                    label = str(_field(option, "name", "") or key)
+                combo.addItem(label, key)
+                idx = combo.count() - 1
+                tooltip_bits = [
+                    str(_field(option, "description", "") or ""),
+                    str(_field(option, "path", "") or ""),
+                ]
+                warnings = _field(option, "warnings", []) or []
+                if warnings:
+                    tooltip_bits.append("Warnings: " + "; ".join(map(str, warnings)))
+                tooltip = "\n".join(bit for bit in tooltip_bits if bit)
+                if tooltip:
+                    combo.setItemData(idx, tooltip, QtCore.Qt.ToolTipRole)
+        finally:
+            combo.blockSignals(False)
+
+        has_options = combo.count() > 0
+        combo.setEnabled(has_options)
+        if self._apply_skeleton_template_btn is not None:
+            self._apply_skeleton_template_btn.setEnabled(has_options)
+        if has_options:
+            combo.setCurrentIndex(0)
+            self.skeletonTemplateSelected.emit(str(combo.currentData() or ""))
+        else:
+            self.set_skeleton_template_status(
+                "No skeleton templates found for this game/mode.",
+                kind="warning",
+            )
+
+    def selected_skeleton_template_key(self) -> str:
+        combo = getattr(self, "_skeleton_template_combo", None)
+        if combo is None:
+            return ""
+        return str(combo.currentData() or "")
+
+    def set_skeleton_template_status(
+        self, message: str, *, kind: str = "info"
+    ) -> None:
+        label = getattr(self, "_skeleton_template_status", None)
+        if label is None:                                  # pragma: no cover
+            return
+        palette = {
+            "info":    "#888888",
+            "ok":      "#7ed957",
+            "warning": "#ffd166",
+            "error":   "#ff6b6b",
+        }
+        colour = palette.get(kind, palette["info"])
+        label.setStyleSheet(f"color:{colour}; font-size:8pt;")
+        label.setText(message)
+
     def _populate_check_actor_page(self, layout: QtWidgets.QVBoxLayout) -> None:
         """M5 / T505 — Check-Actor step: preview-animation player.
 
@@ -755,45 +894,123 @@ class QtInspectorPanel(QtWidgets.QWidget):
         label.setText(message)
 
     def _populate_motions_page(self, layout: QtWidgets.QVBoxLayout) -> None:
-        """M5 / T505 — Add Motions step: shares the preview-animation
-        player UI with the Check-Actor step.
-
-        The legacy ``Open Animation Library…`` stub is retired here —
-        the actual full animation library lives behind ``addMotionsRequested``
-        and is M11 work.  For M5 we surface the same preview-clip dropdown
-        + Play / Stop / Refresh controls so the user can sanity-check
-        animations from this step too.
-        """
+        """M12 / T1204 — assign KOTOR motion source for export."""
         layout.addWidget(QtWidgets.QLabel(
-            "Attach KOTOR motions (idle / walk / talk / combat) to this\n"
-            "character.  Use the preview controls below to verify a clip\n"
-            "before opening the full library."
+            "Choose how this character gets KOTOR animation clips."
         ))
-        # Re-use the same widget identifiers — the inspector's current
-        # ``step`` selector swaps which page is visible, so reusing the
-        # private attribute name keeps T505 logic simple.  However, on
-        # the motions page we add a *secondary* status label so we can
-        # show preview state without overwriting check-actor's state.
-        # (We deliberately don't recreate the combo — the user uses the
-        # one on the check-actor page; this page is purely informational
-        # until M11.)
-        info_btn = QtWidgets.QPushButton("Open Animation Library…")
-        info_btn.setToolTip(
-            "Opens the full animation-library dialog (M11 work).\n"
-            "For preview playback, use the Check Actor step."
-        )
-        info_btn.clicked.connect(self.addMotionsRequested.emit)
-        layout.addWidget(info_btn)
 
-        info = QtWidgets.QLabel(
-            "Tip: head to step 6 (Check Actor) to preview walk / idle /\n"
-            "talk clips on the rigged body."
+        source_box = QtWidgets.QGroupBox("Motion Source")
+        source_layout = QtWidgets.QFormLayout(source_box)
+        source_layout.setContentsMargins(8, 8, 8, 8)
+        source_layout.setSpacing(6)
+
+        self._motion_source_combo = QtWidgets.QComboBox()
+        for label, key in [
+            ("Inherit PC supermodel", "inherited_supermodel"),
+            ("Use model clips", "model"),
+            ("Imported clips", "imported"),
+            ("Generated ROM", "generated_rom"),
+        ]:
+            self._motion_source_combo.addItem(label, key)
+        self._motion_source_combo.setToolTip(
+            "Pick whether export should inherit a KOTOR supermodel, "
+            "use clips already stored on the model, imported clips, or ROM."
         )
-        info.setStyleSheet(
-            f"color:{C.get('text2', '#888')}; font-size:8pt; font-style:italic;"
+        self._motion_source_combo.currentIndexChanged.connect(
+            lambda _i: self.motionSourceChanged.emit(
+                str(self._motion_source_combo.currentData() or "")
+            )
         )
-        info.setWordWrap(True)
-        layout.addWidget(info)
+        source_layout.addRow("Source:", self._motion_source_combo)
+
+        self._motion_supermodel_combo = QtWidgets.QComboBox()
+        self._motion_supermodel_combo.setEditable(True)
+        for label, value in [
+            ("K1 Female PC - S_Female02", "S_Female02"),
+            ("K1 Female PC ext - S_Female03", "S_Female03"),
+            ("K1 Male PC - S_Male02", "S_Male02"),
+            ("K1 Male PC ext - S_Male03", "S_Male03"),
+            ("K2 Female PC - S_Female02", "S_Female02"),
+            ("K2 Female PC ext - S_Female03", "S_Female03"),
+            ("K2 Male PC - S_Male02", "S_Male02"),
+            ("K2 Male PC ext - S_Male03", "S_Male03"),
+        ]:
+            self._motion_supermodel_combo.addItem(label, value)
+        self._motion_supermodel_combo.setToolTip(
+            "KOTOR supermodel written to the body MDL when inheriting motions."
+        )
+        self._motion_supermodel_combo.currentTextChanged.connect(
+            lambda text: self.motionSupermodelChanged.emit(str(text or ""))
+        )
+        source_layout.addRow("Supermodel:", self._motion_supermodel_combo)
+        layout.addWidget(source_box)
+
+        btn_row = QtWidgets.QHBoxLayout()
+        assign_btn = QtWidgets.QPushButton("Assign Motions")
+        assign_btn.setProperty("accent", True)
+        assign_btn.clicked.connect(self.assignMotionsRequested.emit)
+        btn_row.addWidget(assign_btn)
+
+        refresh_btn = QtWidgets.QPushButton("Refresh Preview")
+        refresh_btn.clicked.connect(self.refreshPreviewAnimationsRequested.emit)
+        btn_row.addWidget(refresh_btn)
+        btn_row.addStretch(1)
+        layout.addLayout(btn_row)
+
+        self._motion_assignment_status = QtWidgets.QLabel(
+            "Motion assignment not set."
+        )
+        self._motion_assignment_status.setStyleSheet(
+            f"color:{C.get('text2', '#888')}; font-size:8pt;"
+        )
+        self._motion_assignment_status.setWordWrap(True)
+        layout.addWidget(self._motion_assignment_status)
+
+    def selected_motion_source(self) -> str:
+        combo = getattr(self, "_motion_source_combo", None)
+        if combo is None:
+            return "model"
+        return str(combo.currentData() or "model")
+
+    def selected_motion_supermodel(self) -> str:
+        combo = getattr(self, "_motion_supermodel_combo", None)
+        if combo is None:
+            return ""
+        data = combo.currentData()
+        text = combo.currentText()
+        if text and text != combo.itemText(combo.currentIndex()):
+            return str(text).strip()
+        return str(data or text or "").strip()
+
+    def set_motion_assignment_status(self, message: str, *, kind: str = "info") -> None:
+        label = getattr(self, "_motion_assignment_status", None)
+        if label is None:                                   # pragma: no cover
+            return
+        palette = {
+            "info":    "#888888",
+            "ok":      "#7ed957",
+            "warning": "#ffd166",
+            "error":   "#ff6b6b",
+        }
+        label.setStyleSheet(
+            f"color:{palette.get(kind, palette['info'])}; font-size:8pt;"
+        )
+        label.setText(message)
+
+    def set_motion_assignment(self, *, source: str = "", supermodel: str = "") -> None:
+        source_combo = getattr(self, "_motion_source_combo", None)
+        if source_combo is not None and source:
+            for i in range(source_combo.count()):
+                if str(source_combo.itemData(i) or "") == source:
+                    source_combo.setCurrentIndex(i)
+                    break
+        sm_combo = getattr(self, "_motion_supermodel_combo", None)
+        if sm_combo is not None and supermodel:
+            for i in range(sm_combo.count()):
+                if str(sm_combo.itemData(i) or "").lower() == supermodel.lower():
+                    sm_combo.setCurrentIndex(i)
+                    return
+            sm_combo.setEditText(supermodel)
 
     def _populate_validate_page(self, layout: QtWidgets.QVBoxLayout) -> None:
         """M5 / T506 — Validate + Export step.
@@ -1380,6 +1597,11 @@ class QtInspectorPanel(QtWidgets.QWidget):
                 combo.blockSignals(False)
         if name:
             self.jointSelected.emit(name)
+
+    def _on_skeleton_template_index_changed(self, _index: int) -> None:
+        key = self.selected_skeleton_template_key()
+        if key:
+            self.skeletonTemplateSelected.emit(key)
 
     # ── Public API ───────────────────────────────────────────────────────
 

@@ -63,6 +63,14 @@ def _import_validation_service():                           # pragma: no cover -
     return _vs
 
 
+def _import_character_builder():                            # pragma: no cover - import shim
+    try:
+        from src.core import character_builder as _cb      # type: ignore
+    except ImportError:
+        from core import character_builder as _cb          # type: ignore
+    return _cb
+
+
 # ──────────────────────────────────────────────────────────────────────
 #  Supported input formats
 # ──────────────────────────────────────────────────────────────────────
@@ -538,9 +546,385 @@ class BodyRigGenerateResult:
     code:              str        = "generated"
 
 
+@dataclass
+class BodyGuideEditResult:
+    """Result of persisting a manual HUD joint/guide edit (M12/T1203)."""
+
+    ok:             bool           = False
+    guide_name:     str            = ""
+    position:       Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    guides:         Dict[str, Any] = field(default_factory=dict)
+    acurig:         Optional[Any]  = None
+    updated_guides: List[str]      = field(default_factory=list)
+    before_positions: Dict[str, Tuple[float, float, float]] = field(default_factory=dict)
+    after_positions:  Dict[str, Tuple[float, float, float]] = field(default_factory=dict)
+    can_undo:      bool           = False
+    can_redo:      bool           = False
+    message:        str            = ""
+    code:           str            = "updated"
+
+
+@dataclass
+class BodyGuideEditCommand:
+    """One undoable body-guide edit command."""
+
+    guide_name: str = ""
+    before: Dict[str, Tuple[float, float, float]] = field(default_factory=dict)
+    after:  Dict[str, Tuple[float, float, float]] = field(default_factory=dict)
+
+
+@dataclass
+class BodyGuideEditHistory:
+    """Undo/redo stack for AccuRig guide edits."""
+
+    undo_stack: List[BodyGuideEditCommand] = field(default_factory=list)
+    redo_stack: List[BodyGuideEditCommand] = field(default_factory=list)
+    limit: int = 50
+
+    @property
+    def can_undo(self) -> bool:
+        return bool(self.undo_stack)
+
+    @property
+    def can_redo(self) -> bool:
+        return bool(self.redo_stack)
+
+
 def _get_body_model(scene: Any) -> Optional[Any]:
     md = _import_model_data()
     return scene.get_model(md.PartSlot.HEADLESS_BODY)
+
+
+def _coerce_position3(position: Any) -> Optional[Tuple[float, float, float]]:
+    try:
+        values = tuple(position)
+    except Exception:
+        return None
+    if len(values) < 3:
+        return None
+    try:
+        return (float(values[0]), float(values[1]), float(values[2]))
+    except (TypeError, ValueError):
+        return None
+
+
+def _snapshot_guide_positions(guides: Dict[str, Any]) -> Dict[str, Tuple[float, float, float]]:
+    positions: Dict[str, Tuple[float, float, float]] = {}
+    for name, guide in (guides or {}).items():
+        pos = _coerce_position3(getattr(guide, "position", None))
+        if pos is not None:
+            positions[str(name)] = pos
+    return positions
+
+
+def _history_flags(history: Optional[BodyGuideEditHistory]) -> Tuple[bool, bool]:
+    if history is None:
+        return False, False
+    return bool(history.can_undo), bool(history.can_redo)
+
+
+def update_body_guide(
+    acurig: Any,
+    guide_name: str,
+    position: Any,
+    *,
+    auto_mirror: bool = False,
+) -> BodyGuideEditResult:
+    """Persist a manual body guide edit into the live AcuRig instance.
+
+    T1203's UX rule is simple: when a user drags an AccuRig-style
+    joint dot, the next :func:`generate_skeleton` call must use that
+    position.  AcuRig already models this via ``move_guide`` +
+    ``locked=True``; this adapter normalizes names/positions and
+    returns a status object that the Qt layer can surface.
+    """
+    name = (guide_name or "").strip().lower()
+    if acurig is None:
+        return BodyGuideEditResult(
+            guide_name=name,
+            message="No AcuRig guide state yet. Click Place Body Guides first.",
+            code="no_acurig",
+        )
+    if not name:
+        return BodyGuideEditResult(
+            acurig=acurig,
+            message="No guide name supplied.",
+            code="no_name",
+        )
+
+    pos = _coerce_position3(position)
+    if pos is None:
+        return BodyGuideEditResult(
+            acurig=acurig,
+            guide_name=name,
+            message=f"Guide '{name}' has no valid 3D position.",
+            code="bad_position",
+        )
+
+    before = {}
+    if hasattr(acurig, "get_all_guides"):
+        try:
+            before = dict(acurig.get_all_guides() or {})
+        except Exception:
+            before = {}
+    if before and name not in before:
+        return BodyGuideEditResult(
+            acurig=acurig,
+            guide_name=name,
+            position=pos,
+            guides=before,
+            message=f"'{name}' is not a body guide for the current AcuRig profile.",
+            code="unknown_guide",
+        )
+    before_positions = {
+        gname: getattr(guide, "position", None)
+        for gname, guide in before.items()
+    }
+    before_snapshot = _snapshot_guide_positions(before)
+
+    try:
+        if hasattr(acurig, "move_guide"):
+            acurig.move_guide(name, pos, auto_mirror=auto_mirror)
+        elif before and name in before:                    # pragma: no cover
+            guide = before[name]
+            guide.position = pos
+            guide.locked = True
+        else:                                              # pragma: no cover
+            return BodyGuideEditResult(
+                acurig=acurig,
+                guide_name=name,
+                position=pos,
+                message="AcuRig guide state does not support manual edits.",
+                code="unsupported",
+            )
+    except Exception as exc:                               # pragma: no cover
+        log.exception("update_body_guide: AcuRig guide update failed")
+        return BodyGuideEditResult(
+            acurig=acurig,
+            guide_name=name,
+            position=pos,
+            message=f"Guide update failed: {exc}",
+            code="failed",
+        )
+
+    after = {}
+    if hasattr(acurig, "get_all_guides"):
+        try:
+            after = dict(acurig.get_all_guides() or {})
+        except Exception:                                  # pragma: no cover
+            after = {}
+
+    changed: List[str] = []
+    for gname, guide in after.items():
+        old_pos = before_positions.get(gname)
+        new_pos = getattr(guide, "position", None)
+        if gname not in before_positions or old_pos != new_pos:
+            changed.append(str(gname))
+    if name not in changed:
+        changed.insert(0, name)
+    after_snapshot_all = _snapshot_guide_positions(after)
+    before_changed = {
+        gname: before_snapshot[gname]
+        for gname in changed
+        if gname in before_snapshot
+    }
+    after_changed = {
+        gname: after_snapshot_all[gname]
+        for gname in changed
+        if gname in after_snapshot_all
+    }
+
+    return BodyGuideEditResult(
+        ok=True,
+        acurig=acurig,
+        guide_name=name,
+        position=pos,
+        guides=after,
+        updated_guides=changed,
+        before_positions=before_changed,
+        after_positions=after_changed,
+        message=f"Guide '{name}' locked at ({pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}).",
+        code="updated",
+    )
+
+
+def update_body_guide_from_node(
+    acurig: Any,
+    node: Any,
+    *,
+    auto_mirror: bool = False,
+) -> BodyGuideEditResult:
+    """Persist a moved viewport node as an AcuRig guide edit."""
+    name = getattr(node, "name", "") or ""
+    position = getattr(node, "position", None)
+    return update_body_guide(
+        acurig,
+        str(name),
+        position,
+        auto_mirror=auto_mirror,
+    )
+
+
+def record_body_guide_edit(
+    history: Optional[BodyGuideEditHistory],
+    result: BodyGuideEditResult,
+) -> BodyGuideEditHistory:
+    """Record a successful guide edit as an undoable command."""
+    if history is None:
+        history = BodyGuideEditHistory()
+    if not getattr(result, "ok", False):
+        return history
+    before = dict(getattr(result, "before_positions", {}) or {})
+    after = dict(getattr(result, "after_positions", {}) or {})
+    if not before or not after or before == after:
+        return history
+    history.undo_stack.append(BodyGuideEditCommand(
+        guide_name=getattr(result, "guide_name", ""),
+        before=before,
+        after=after,
+    ))
+    history.redo_stack.clear()
+    if history.limit > 0 and len(history.undo_stack) > history.limit:
+        del history.undo_stack[0:len(history.undo_stack) - history.limit]
+    return history
+
+
+def apply_body_guide_positions(
+    acurig: Any,
+    positions: Dict[str, Any],
+) -> BodyGuideEditResult:
+    """Apply exact guide positions without auto-mirroring."""
+    if acurig is None:
+        return BodyGuideEditResult(
+            message="No AcuRig guide state yet. Click Place Body Guides first.",
+            code="no_acurig",
+        )
+    normalized: Dict[str, Tuple[float, float, float]] = {}
+    for name, pos in (positions or {}).items():
+        coerced = _coerce_position3(pos)
+        if coerced is not None:
+            normalized[str(name).lower()] = coerced
+    if not normalized:
+        return BodyGuideEditResult(
+            acurig=acurig,
+            message="No guide positions supplied.",
+            code="no_positions",
+        )
+
+    before = {}
+    if hasattr(acurig, "get_all_guides"):
+        try:
+            before = dict(acurig.get_all_guides() or {})
+        except Exception:
+            before = {}
+    before_snapshot = _snapshot_guide_positions(before)
+
+    try:
+        for name, pos in normalized.items():
+            if hasattr(acurig, "move_guide"):
+                acurig.move_guide(name, pos, auto_mirror=False)
+            elif before and name in before:                # pragma: no cover
+                before[name].position = pos
+                before[name].locked = True
+            else:                                          # pragma: no cover
+                return BodyGuideEditResult(
+                    acurig=acurig,
+                    guide_name=name,
+                    position=pos,
+                    message="AcuRig guide state does not support manual edits.",
+                    code="unsupported",
+                )
+    except Exception as exc:                               # pragma: no cover
+        log.exception("apply_body_guide_positions: AcuRig guide update failed")
+        return BodyGuideEditResult(
+            acurig=acurig,
+            message=f"Guide position apply failed: {exc}",
+            code="failed",
+        )
+
+    after = {}
+    if hasattr(acurig, "get_all_guides"):
+        try:
+            after = dict(acurig.get_all_guides() or {})
+        except Exception:
+            after = {}
+    after_snapshot = _snapshot_guide_positions(after)
+    updated = [
+        name for name, pos in normalized.items()
+        if before_snapshot.get(name) != after_snapshot.get(name)
+    ] or list(normalized.keys())
+    return BodyGuideEditResult(
+        ok=True,
+        acurig=acurig,
+        guide_name=updated[0] if updated else "",
+        position=normalized.get(updated[0], (0.0, 0.0, 0.0)) if updated else (0.0, 0.0, 0.0),
+        guides=after,
+        updated_guides=updated,
+        before_positions={k: before_snapshot[k] for k in updated if k in before_snapshot},
+        after_positions={k: after_snapshot[k] for k in updated if k in after_snapshot},
+        message=f"Applied {len(updated)} guide position(s).",
+        code="applied",
+    )
+
+
+def undo_body_guide_edit(
+    acurig: Any,
+    history: Optional[BodyGuideEditHistory],
+) -> BodyGuideEditResult:
+    """Undo the latest recorded body guide edit."""
+    can_undo, can_redo = _history_flags(history)
+    if history is None or not can_undo:
+        return BodyGuideEditResult(
+            acurig=acurig,
+            can_undo=False,
+            can_redo=can_redo,
+            message="No guide edit to undo.",
+            code="no_undo",
+        )
+    command = history.undo_stack.pop()
+    result = apply_body_guide_positions(acurig, command.before)
+    if not result.ok:
+        history.undo_stack.append(command)
+        result.can_undo = history.can_undo
+        result.can_redo = history.can_redo
+        return result
+    history.redo_stack.append(command)
+    result.guide_name = command.guide_name
+    result.can_undo = history.can_undo
+    result.can_redo = history.can_redo
+    result.message = f"Undid guide edit: {command.guide_name}."
+    result.code = "undone"
+    return result
+
+
+def redo_body_guide_edit(
+    acurig: Any,
+    history: Optional[BodyGuideEditHistory],
+) -> BodyGuideEditResult:
+    """Redo the latest undone body guide edit."""
+    can_undo, can_redo = _history_flags(history)
+    if history is None or not can_redo:
+        return BodyGuideEditResult(
+            acurig=acurig,
+            can_undo=can_undo,
+            can_redo=False,
+            message="No guide edit to redo.",
+            code="no_redo",
+        )
+    command = history.redo_stack.pop()
+    result = apply_body_guide_positions(acurig, command.after)
+    if not result.ok:
+        history.redo_stack.append(command)
+        result.can_undo = history.can_undo
+        result.can_redo = history.can_redo
+        return result
+    history.undo_stack.append(command)
+    result.guide_name = command.guide_name
+    result.can_undo = history.can_undo
+    result.can_redo = history.can_redo
+    result.message = f"Redid guide edit: {command.guide_name}."
+    result.code = "redone"
+    return result
 
 
 def place_body_guides(
@@ -948,6 +1332,45 @@ PREVIEW_ANIMATIONS: Tuple[Tuple[str, str], ...] = (
     ("Dodge", "dodge"),
 )
 
+MOTION_SOURCE_MODEL = "model"
+MOTION_SOURCE_INHERITED = "inherited_supermodel"
+MOTION_SOURCE_IMPORTED = "imported"
+MOTION_SOURCE_ROM = "generated_rom"
+
+MOTION_SOURCE_LABELS: Dict[str, str] = {
+    MOTION_SOURCE_INHERITED: "Inherit PC supermodel",
+    MOTION_SOURCE_MODEL: "Use model clips",
+    MOTION_SOURCE_IMPORTED: "Imported clips",
+    MOTION_SOURCE_ROM: "Generated ROM",
+}
+
+PC_SUPERMODEL_OPTIONS: Tuple[Tuple[str, str, str], ...] = (
+    ("K1 Female PC", "S_Female02", "K1"),
+    ("K1 Female PC extended", "S_Female03", "K1"),
+    ("K1 Male PC", "S_Male02", "K1"),
+    ("K1 Male PC extended", "S_Male03", "K1"),
+    ("K2 Female PC", "S_Female02", "K2"),
+    ("K2 Female PC extended", "S_Female03", "K2"),
+    ("K2 Male PC", "S_Male02", "K2"),
+    ("K2 Male PC extended", "S_Male03", "K2"),
+)
+
+
+@dataclass
+class MotionAssignmentResult:
+    """Result of M12/T1204 motion assignment.
+
+    The state is stored on ``scene.motion_assignment`` as a plain dict so
+    older CharacterScene versions can participate without a schema bump.
+    """
+    ok:         bool                              = False
+    source:     str                               = MOTION_SOURCE_MODEL
+    supermodel: str                               = ""
+    available:  List[Tuple[str, str]]             = field(default_factory=list)
+    missing:    List[Tuple[str, str]]             = field(default_factory=list)
+    message:    str                               = ""
+    code:       str                               = "motion_assignment"
+
 
 @dataclass
 class CheckActorResult:
@@ -975,6 +1398,143 @@ class CheckActorResult:
     length:     float                             = 0.0
     message:    str                               = ""
     code:       str                               = "listed"
+
+
+def _motion_assignment_state(scene: Any) -> Dict[str, Any]:
+    state = getattr(scene, "motion_assignment", None)
+    if isinstance(state, dict):
+        return dict(state)
+    return {}
+
+
+def _write_motion_assignment_state(scene: Any, state: Dict[str, Any]) -> None:
+    try:
+        setattr(scene, "motion_assignment", dict(state))
+        setattr(scene, "dirty", True)
+    except Exception:                                      # pragma: no cover
+        log.debug("Could not persist motion assignment on scene", exc_info=True)
+
+
+def _is_null_supermodel(value: str) -> bool:
+    return (value or "").strip().upper() in {"", "NULL", "NONE"}
+
+
+def _body_supermodel(body: Any) -> str:
+    return str(getattr(body, "supermodel", "") or "").strip()
+
+
+def motion_assignment_options(scene: Any) -> MotionAssignmentResult:
+    """Return the currently selected motion source and preview split."""
+    body = _get_body_model(scene)
+    if body is None:
+        return MotionAssignmentResult(
+            message="No body model loaded. Load a body before assigning motions.",
+            code="no_body",
+        )
+
+    state = _motion_assignment_state(scene)
+    source = str(state.get("source") or MOTION_SOURCE_MODEL)
+    supermodel = str(state.get("supermodel") or _body_supermodel(body))
+    preview = available_preview_animations(scene)
+    return MotionAssignmentResult(
+        ok=True,
+        source=source,
+        supermodel=supermodel,
+        available=list(preview.available),
+        missing=list(preview.missing),
+        message=preview.message,
+        code="listed",
+    )
+
+
+def _normalise_imported_clips(imported_clips: Optional[Any]) -> List[str]:
+    if imported_clips is None:
+        return []
+    names: List[str] = []
+    for item in imported_clips:
+        if isinstance(item, str):
+            name = item
+        else:
+            name = str(getattr(item, "name", "") or getattr(item, "anim_name", ""))
+        name = name.strip()
+        if name:
+            names.append(name)
+    return names
+
+
+def assign_motion_source(
+    scene: Any,
+    source: str,
+    *,
+    supermodel: str = "",
+    imported_clips: Optional[Any] = None,
+) -> MotionAssignmentResult:
+    """M12/T1204: assign how this body obtains animation clips.
+
+    ``inherited_supermodel`` mirrors normal KOTOR body behavior: the
+    body MDL stores a supermodel string while the engine resolves clips
+    from that parent at runtime.
+    """
+    body = _get_body_model(scene)
+    if body is None:
+        return MotionAssignmentResult(
+            source=source or MOTION_SOURCE_MODEL,
+            message="No body model loaded. Load a body before assigning motions.",
+            code="no_body",
+        )
+
+    source = (source or MOTION_SOURCE_MODEL).strip()
+    if source not in MOTION_SOURCE_LABELS:
+        return MotionAssignmentResult(
+            source=source,
+            message=f"Unknown motion source '{source}'.",
+            code="unknown_source",
+        )
+
+    clips = _normalise_imported_clips(imported_clips)
+    state: Dict[str, Any] = {"source": source}
+
+    if source == MOTION_SOURCE_INHERITED:
+        selected = (supermodel or _body_supermodel(body) or "S_Female02").strip()
+        if _is_null_supermodel(selected):
+            selected = "S_Female02"
+        setattr(body, "supermodel", selected)
+        state["supermodel"] = selected
+        message = (
+            f"Motions will inherit from {selected}; KOTOR will resolve "
+            "idle, walk, talk, and combat clips through the supermodel."
+        )
+        code = "inherited"
+    elif source == MOTION_SOURCE_MODEL:
+        state["supermodel"] = _body_supermodel(body)
+        message = "Motions will use animation clips stored on this model."
+        code = "model_clips"
+    elif source == MOTION_SOURCE_IMPORTED:
+        state["imported_clips"] = clips
+        state["supermodel"] = _body_supermodel(body)
+        message = (
+            f"{len(clips)} imported clip(s) assigned."
+            if clips else
+            "Imported-clips source selected; import clips before export."
+        )
+        code = "imported_clips" if clips else "imported_empty"
+    else:
+        state["supermodel"] = _body_supermodel(body)
+        state["generated"] = True
+        message = "Generated ROM clip assigned for range-of-motion preview."
+        code = "generated_rom"
+
+    _write_motion_assignment_state(scene, state)
+    preview = available_preview_animations(scene)
+    return MotionAssignmentResult(
+        ok=True,
+        source=source,
+        supermodel=str(state.get("supermodel") or ""),
+        available=list(preview.available),
+        missing=list(preview.missing),
+        message=message,
+        code=code,
+    )
 
 
 def _iter_model_animations(model: Any) -> List[Any]:
@@ -1005,6 +1565,57 @@ def available_preview_animations(scene: Any) -> CheckActorResult:
         return CheckActorResult(
             message="No body model loaded.  Load a body first.",
             code="no_body",
+        )
+
+    motion_state = _motion_assignment_state(scene)
+    motion_source = str(motion_state.get("source") or "")
+    if motion_source == MOTION_SOURCE_INHERITED:
+        supermodel = str(motion_state.get("supermodel") or _body_supermodel(body))
+        if not _is_null_supermodel(supermodel):
+            return CheckActorResult(
+                ok=True,
+                available=list(PREVIEW_ANIMATIONS),
+                missing=[],
+                message=(
+                    f"Preview clips inherit from {supermodel}; "
+                    f"{len(PREVIEW_ANIMATIONS)} standard KOTOR clips available."
+                ),
+                code="inherited",
+            )
+    if motion_source == MOTION_SOURCE_IMPORTED:
+        imported = {
+            name.lower()
+            for name in _normalise_imported_clips(
+                motion_state.get("imported_clips") or []
+            )
+        }
+        available = [
+            (label, anim_name)
+            for label, anim_name in PREVIEW_ANIMATIONS
+            if anim_name.lower() in imported
+        ]
+        missing = [
+            (label, anim_name)
+            for label, anim_name in PREVIEW_ANIMATIONS
+            if anim_name.lower() not in imported
+        ]
+        return CheckActorResult(
+            ok=True,
+            available=available,
+            missing=missing,
+            message=(
+                f"{len(available)} imported preview clip(s) assigned; "
+                f"{len(missing)} standard clip(s) still missing."
+            ),
+            code=("listed" if available else "no_animations"),
+        )
+    if motion_source == MOTION_SOURCE_ROM:
+        return CheckActorResult(
+            ok=True,
+            available=[("ROM Test", "generated_rom")],
+            missing=list(PREVIEW_ANIMATIONS),
+            message="Generated ROM is assigned; standard locomotion clips are still missing.",
+            code="generated_rom",
         )
 
     anims = _iter_model_animations(body)
@@ -1094,6 +1705,35 @@ def play_preview_animation(
             break
 
     if chosen is None:
+        motion_state = _motion_assignment_state(scene)
+        motion_source = str(motion_state.get("source") or "")
+        if motion_source == MOTION_SOURCE_INHERITED:
+            requested = {name.lower(): label for label, name in PREVIEW_ANIMATIONS}
+            if target in requested:
+                supermodel = str(
+                    motion_state.get("supermodel") or _body_supermodel(body)
+                )
+                return CheckActorResult(
+                    ok=True,
+                    available=list(PREVIEW_ANIMATIONS),
+                    playing=anim_name,
+                    length=0.0,
+                    message=(
+                        f"'{anim_name}' is inherited from {supermodel}. "
+                        "Export will reference the supermodel; exact playback "
+                        "requires loading the supermodel clip."
+                    ),
+                    code="inherited_preview",
+                )
+        if motion_source == MOTION_SOURCE_ROM and target == "generated_rom":
+            return CheckActorResult(
+                ok=True,
+                available=[("ROM Test", "generated_rom")],
+                playing="generated_rom",
+                length=4.0,
+                message="Generated ROM preview selected.",
+                code="generated_rom",
+            )
         return CheckActorResult(
             message=f"Animation '{anim_name}' is not present on this model.",
             code="anim_missing",
@@ -1153,6 +1793,62 @@ def stop_preview_animation(viewport: Optional[Any] = None) -> CheckActorResult:
     )
 
 
+@dataclass
+class _WorkflowSeverity:
+    value: str
+
+
+@dataclass
+class _WorkflowIssue:
+    severity: _WorkflowSeverity
+    code: str
+    message: str
+    slot: Any = None
+    node: str = ""
+
+
+def _motion_assignment_issues(scene: Any) -> List[Any]:
+    """Pre-export motion checks for the external-mesh launch path."""
+    body = _get_body_model(scene)
+    if body is None:
+        return []
+
+    state = _motion_assignment_state(scene)
+    source = str(state.get("source") or "")
+    supermodel = str(state.get("supermodel") or _body_supermodel(body))
+    local_anims = _iter_model_animations(body)
+
+    if source == MOTION_SOURCE_INHERITED:
+        if not _is_null_supermodel(supermodel):
+            return []
+        return [_WorkflowIssue(
+            _WorkflowSeverity("error"),
+            "MOTIONS_MISSING",
+            "Inherited motions selected, but no KOTOR supermodel is assigned.",
+        )]
+
+    if source == MOTION_SOURCE_IMPORTED:
+        clips = _normalise_imported_clips(state.get("imported_clips") or [])
+        if clips:
+            return []
+        return [_WorkflowIssue(
+            _WorkflowSeverity("error"),
+            "MOTIONS_MISSING",
+            "Imported motion source selected, but no imported clips are assigned.",
+        )]
+
+    if local_anims:
+        return []
+    if not _is_null_supermodel(supermodel):
+        return []
+
+    return [_WorkflowIssue(
+        _WorkflowSeverity("error"),
+        "MOTIONS_MISSING",
+        "No model clips or inherited KOTOR supermodel motions are assigned.",
+    )]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  T506 ▸ Validate + Export step
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1162,13 +1858,10 @@ def stop_preview_animation(viewport: Optional[Any] = None) -> CheckActorResult:
 # the scene out to one or more of KOTOR (MDL/MDX) / FBX / glTF / OBJ
 # next to a ``.ghostrig.json`` sidecar (via :class:`SceneIO`).
 #
-# The actual binary writers are still partly stubs (KOTOR MDL writer
-# lives in a future M, the FBX/glTF/OBJ exporters are scattered across
-# helper modules) — so :func:`export_scene` returns a stable
-# ``not_implemented`` code per format that the UI can present as a
-# friendly skip rather than a crash.  The ``.ghostrig.json`` sidecar
-# *is* fully implemented via :func:`SceneIO.write_sidecar`, so the
-# workflow always has at least one deliverable.
+# M10/T1001 wires the already-present MDL/MDX, FBX, glTF/GLB, and OBJ
+# writers through this service so the Qt export dialog can produce real
+# files.  The ``.ghostrig.json`` sidecar remains an optional recovery and
+# round-trip artifact written beside the selected export formats.
 
 EXPORT_FORMATS: Tuple[Tuple[str, str, Tuple[str, ...]], ...] = (
     # (key,    display label,         extensions for the output file)
@@ -1248,10 +1941,318 @@ class ExportResult:
     code:         str                             = "exported"
 
 
+@dataclass
+class LaunchWorkflowResult:
+    """End-to-end external-mesh launch proof result (M12/T1205)."""
+
+    ok:               bool                       = False
+    load_result:      Optional[LoadResult]        = None
+    apply_result:     Dict[str, Any]              = field(default_factory=dict)
+    guide_result:     Optional[BodyRigGuidesResult] = None
+    generate_result:  Optional[BodyRigGenerateResult] = None
+    motion_result:    Optional[MotionAssignmentResult] = None
+    export_result:    Optional[ExportResult]      = None
+    reloaded_model:   Optional[Any]               = None
+    mdl_path:         str                         = ""
+    mdx_path:         str                         = ""
+    hooks:            List[str]                   = field(default_factory=list)
+    mesh_count:       int                         = 0
+    skin_node_count:  int                         = 0
+    supermodel:       str                         = ""
+    message:          str                         = ""
+    code:             str                         = "launch_workflow"
+
+
 def _import_scene_io():                                     # pragma: no cover - import shim
     """Defer the SceneIO import to keep the module pykotor-free at import time."""
-    from src.core.model_data import SceneIO  # type: ignore[import-untyped]
+    try:
+        from src.core.model_data import SceneIO  # type: ignore[import-untyped]
+    except ImportError:
+        from core.model_data import SceneIO      # type: ignore[import-untyped]
     return SceneIO
+
+
+def _import_mdl_binary_writer():                            # pragma: no cover - import shim
+    """Defer the KOTOR MDL/MDX writer until export time."""
+    try:
+        from src.core.mdl_writer import MDLBinaryWriter  # type: ignore
+    except ImportError:
+        from core.mdl_writer import MDLBinaryWriter      # type: ignore
+    return MDLBinaryWriter
+
+
+def _import_mesh_exporters():                                # pragma: no cover - import shim
+    """Defer interchange exporters until export time."""
+    try:
+        from src.converters.mesh_converter import (       # type: ignore
+            FBXExporter,
+            GLTFExporter,
+            OBJExporter,
+        )
+    except ImportError:
+        from converters.mesh_converter import (           # type: ignore
+            FBXExporter,
+            GLTFExporter,
+            OBJExporter,
+        )
+    return FBXExporter, GLTFExporter, OBJExporter
+
+
+def _load_exported_kotor_model(mdl_path: str) -> Optional[Any]:
+    """Reload an exported MDL/MDX pair through GhostRigger's KOTOR loader."""
+    try:
+        from src.core.kotor_loader import load_model_from_file
+    except ImportError:                                     # pragma: no cover
+        from core.kotor_loader import load_model_from_file  # type: ignore
+    mdx_path = os.path.splitext(mdl_path)[0] + ".mdx"
+    return load_model_from_file(mdl_path, mdx_path if os.path.isfile(mdx_path) else "")
+
+
+def _model_nodes(model: Any) -> List[Any]:
+    try:
+        return list(model.all_nodes())
+    except Exception:
+        root = getattr(model, "root_node", None)
+        if root is None:
+            return []
+        out: List[Any] = []
+
+        def _walk(node: Any) -> None:
+            out.append(node)
+            for child in list(getattr(node, "children", []) or []):
+                _walk(child)
+
+        _walk(root)
+        return out
+
+
+def _verify_launch_reloaded_model(
+    model: Any,
+    *,
+    expected_supermodel: str = "",
+) -> Tuple[bool, List[str], int, int, str, str]:
+    """Check the KOTOR-critical facts after reloading an exported body."""
+    if model is None:
+        return False, [], 0, 0, "", "Reloaded model is empty."
+
+    nodes = _model_nodes(model)
+    names = [str(getattr(n, "name", "") or "") for n in nodes]
+    names_lower = {n.lower() for n in names}
+    hooks = [n for n in names if n.lower() in {"headhook", "rhand", "lhand_g"}]
+    mesh_count = sum(
+        1 for n in nodes
+        if bool(getattr(n, "is_mesh", False))
+        or bool(getattr(n, "vertices", None))
+    )
+    skin_count = sum(
+        1 for n in nodes
+        if bool(getattr(n, "is_skin", False))
+        or bool(getattr(n, "skin_data", None))
+    )
+    supermodel = str(getattr(model, "supermodel", "") or "")
+    problems: List[str] = []
+    for required in ("headhook", "rhand"):
+        if required not in names_lower:
+            problems.append(f"Missing required hook/node: {required}")
+    if mesh_count <= 0:
+        problems.append("Reloaded export has no mesh nodes.")
+    if skin_count <= 0:
+        problems.append("Reloaded export has no skinned mesh data.")
+    if expected_supermodel and supermodel.lower() != expected_supermodel.lower():
+        problems.append(
+            f"Supermodel mismatch: expected {expected_supermodel}, got {supermodel or 'NULL'}."
+        )
+    return (not problems), hooks, mesh_count, skin_count, supermodel, "; ".join(problems)
+
+
+def run_external_mesh_launch_workflow(
+    mesh_path: str,
+    *,
+    scene: Optional[Any] = None,
+    game_version: str = "K1",
+    out_dir: str = "",
+    template_part: str = "body",
+    motion_supermodel: str = "S_Female02",
+    formats: Optional[List[str]] = None,
+) -> LaunchWorkflowResult:
+    """M12/T1205: one-shot external mesh to reloadable KOTOR export.
+
+    This is the automation equivalent of the launch workflow a modder
+    expects: load external mesh, apply a KOTOR template, generate/bind,
+    inherit PC motions, export MDL/MDX, then reload the result and verify
+    hooks, supermodel, mesh count, and skin data.
+    """
+    md = _import_model_data()
+    if scene is None:
+        scene = md.CharacterScene(game_version=game_version)
+    if not out_dir:
+        return LaunchWorkflowResult(
+            message="No output directory supplied for launch workflow.",
+            code="no_out_dir",
+        )
+
+    load = load_body(
+        mesh_path,
+        scene,
+        game_version=game_version,
+        allow_mode_correction=True,
+    )
+    if not load.ok or load.model is None:
+        return LaunchWorkflowResult(
+            load_result=load,
+            message=f"Launch workflow stopped at load: {load.message}",
+            code=load.code or "load_failed",
+        )
+
+    try:
+        cb = _import_character_builder()
+        template = cb.load_template(game=game_version, part=template_part)
+        applied = cb.apply_template_rig(load.model, template, game=game_version)
+    except Exception as exc:
+        log.exception("run_external_mesh_launch_workflow: template apply failed")
+        return LaunchWorkflowResult(
+            load_result=load,
+            message=f"Template rig apply failed: {exc}",
+            code="template_failed",
+        )
+    if not bool(applied.get("ok")):
+        return LaunchWorkflowResult(
+            load_result=load,
+            apply_result=applied,
+            message=str(applied.get("message") or "Template rig apply failed."),
+            code="template_failed",
+        )
+
+    rigged_model = applied.get("model")
+    scene.assign(
+        md.PartSlot.HEADLESS_BODY,
+        rigged_model,
+        resref=load.resref or _resref_from_path(mesh_path),
+        game_version=game_version,
+        source_path=mesh_path,
+    )
+
+    guides = place_body_guides(scene)
+    if not guides.ok:
+        return LaunchWorkflowResult(
+            load_result=load,
+            apply_result=applied,
+            guide_result=guides,
+            message=f"Launch workflow stopped at guide placement: {guides.message}",
+            code=getattr(guides, "code", "") or "guides_failed",
+        )
+
+    generated = generate_skeleton(
+        scene,
+        acurig=guides.acurig,
+        guides=guides.guides,
+    )
+    if not generated.ok:
+        return LaunchWorkflowResult(
+            load_result=load,
+            apply_result=applied,
+            guide_result=guides,
+            generate_result=generated,
+            message=f"Launch workflow stopped at skeleton generation: {generated.message}",
+            code=generated.code or "generate_failed",
+        )
+
+    motion = assign_motion_source(
+        scene,
+        MOTION_SOURCE_INHERITED,
+        supermodel=motion_supermodel,
+    )
+    if not motion.ok:
+        return LaunchWorkflowResult(
+            load_result=load,
+            apply_result=applied,
+            guide_result=guides,
+            generate_result=generated,
+            motion_result=motion,
+            message=f"Launch workflow stopped at motion assignment: {motion.message}",
+            code=motion.code or "motion_failed",
+        )
+
+    exported = export_scene(
+        scene,
+        formats=list(formats or ["kotor"]),
+        out_dir=out_dir,
+        write_sidecar=True,
+    )
+    if not exported.ok:
+        return LaunchWorkflowResult(
+            load_result=load,
+            apply_result=applied,
+            guide_result=guides,
+            generate_result=generated,
+            motion_result=motion,
+            export_result=exported,
+            message=f"Launch workflow stopped at export: {exported.message}",
+            code=exported.code or "export_failed",
+        )
+
+    mdl_path = ""
+    for row in exported.formats:
+        if row.key == "kotor" and row.ok:
+            mdl_path = row.path
+            break
+    if not mdl_path:
+        return LaunchWorkflowResult(
+            load_result=load,
+            apply_result=applied,
+            guide_result=guides,
+            generate_result=generated,
+            motion_result=motion,
+            export_result=exported,
+            message="KOTOR export did not produce an MDL path.",
+            code="no_mdl_export",
+        )
+
+    try:
+        reloaded = _load_exported_kotor_model(mdl_path)
+    except Exception as exc:
+        log.exception("run_external_mesh_launch_workflow: reload failed")
+        return LaunchWorkflowResult(
+            load_result=load,
+            apply_result=applied,
+            guide_result=guides,
+            generate_result=generated,
+            motion_result=motion,
+            export_result=exported,
+            mdl_path=mdl_path,
+            mdx_path=os.path.splitext(mdl_path)[0] + ".mdx",
+            message=f"Exported MDL reload failed: {exc}",
+            code="reload_failed",
+        )
+
+    ok, hooks, mesh_count, skin_count, supermodel, problems = (
+        _verify_launch_reloaded_model(
+            reloaded,
+            expected_supermodel=motion.supermodel or motion_supermodel,
+        )
+    )
+    return LaunchWorkflowResult(
+        ok=ok,
+        load_result=load,
+        apply_result=applied,
+        guide_result=guides,
+        generate_result=generated,
+        motion_result=motion,
+        export_result=exported,
+        reloaded_model=reloaded,
+        mdl_path=mdl_path,
+        mdx_path=os.path.splitext(mdl_path)[0] + ".mdx",
+        hooks=hooks,
+        mesh_count=mesh_count,
+        skin_node_count=skin_count,
+        supermodel=supermodel,
+        message=(
+            "Launch workflow proof passed."
+            if ok else
+            f"Launch workflow reload verification failed: {problems}"
+        ),
+        code="launch_verified" if ok else "verification_failed",
+    )
 
 
 def validate_for_export(
@@ -1276,6 +2277,7 @@ def validate_for_export(
     try:
         service = svc_mod.ValidationService(scene, strict=strict)
         issues = list(service.validate() or [])
+        issues.extend(_motion_assignment_issues(scene))
     except Exception as exc:                                # pragma: no cover
         log.exception("validate_for_export: ValidationService raised")
         return ValidateForExportResult(
@@ -1339,16 +2341,15 @@ def _export_single_format(
 ) -> ExportFormatResult:
     """Dispatch one format.  Returns a structured per-format row.
 
-    The KOTOR / FBX / glTF / OBJ writers are still being assembled
-    across the codebase (M10 work), so this function deliberately
-    returns ``not_implemented`` with a friendly message rather than
-    raising — the UI can grey out / inform per format.
+    M10/T1001 wires the already-present writers into the workflow service
+    so the export dialog can produce real files instead of sidecar-only
+    placeholders.
     """
     # Resolve output path candidate (caller is responsible for the dir).
     primary_ext = {
         "kotor": ".mdl",
         "fbx":   ".fbx",
-        "gltf":  ".gltf",
+        "gltf":  ".glb",
         "obj":   ".obj",
     }.get(fmt_key, "")
     if not primary_ext:
@@ -1360,16 +2361,37 @@ def _export_single_format(
 
     out_path = os.path.join(out_dir, f"{resref}{primary_ext}")
 
-    # ── Per-format writer dispatch (M5: all are still not_implemented). ──
-    # When the real writers land (M10), each branch becomes a call into
-    # the dedicated module — the surrounding scaffolding stays the same.
+    try:
+        if fmt_key == "kotor":
+            writer_cls = _import_mdl_binary_writer()
+            writer_cls().write_files(body, out_path)
+        elif fmt_key == "fbx":
+            fbx_cls, _gltf_cls, _obj_cls = _import_mesh_exporters()
+            ok = fbx_cls().export(body, out_path)
+            if ok is False:
+                raise RuntimeError("FBX exporter returned False")
+        elif fmt_key == "gltf":
+            _fbx_cls, gltf_cls, _obj_cls = _import_mesh_exporters()
+            ok = gltf_cls().export(body, out_path, binary=True)
+            if ok is False:
+                raise RuntimeError("glTF exporter returned False")
+        elif fmt_key == "obj":
+            _fbx_cls, _gltf_cls, obj_cls = _import_mesh_exporters()
+            ok = obj_cls().export(body, out_path)
+            if ok is False:
+                raise RuntimeError("OBJ exporter returned False")
+    except Exception as exc:
+        log.exception("export_scene: %s writer failed", fmt_key)
+        return ExportFormatResult(
+            key=fmt_key, label=label, ok=False, path=out_path,
+            message=f"{label} export failed: {exc}",
+            code="failed",
+        )
+
     return ExportFormatResult(
-        key=fmt_key, label=label, ok=False,
-        path=out_path,
-        message=(f"{label} writer not yet implemented — would have "
-                 f"written to {out_path}.  Use the .ghostrig.json "
-                 "sidecar for the scene definition until M10."),
-        code="not_implemented",
+        key=fmt_key, label=label, ok=True, path=out_path,
+        message=f"{label} exported to {out_path}.",
+        code="exported",
     )
 
 
@@ -1399,10 +2421,9 @@ def export_scene(
 
     Notes
     -----
-    The KOTOR / FBX / glTF / OBJ binary writers are M10 work — every
-    selected format currently returns the ``not_implemented`` code
-    with a friendly message pointing the user at the sidecar JSON.
-    The sidecar itself *is* fully written.
+    M10/T1001 routes the selected formats to the real in-tree writers.
+    The sidecar is written last so a failed interchange export can still
+    leave a recoverable GhostRigger scene definition behind.
     """
     md = _import_model_data()
     entry = scene.get(md.PartSlot.HEADLESS_BODY)
@@ -1500,14 +2521,10 @@ def export_scene(
 
     # Build summary message.
     ok_count = sum(1 for r in rows if r.ok)
-    ni_count = sum(1 for r in rows if r.code == "not_implemented")
-    fail_count = sum(1 for r in rows
-                     if not r.ok and r.code != "not_implemented")
+    fail_count = sum(1 for r in rows if not r.ok)
     parts = []
     if ok_count:
         parts.append(f"{ok_count} written")
-    if ni_count:
-        parts.append(f"{ni_count} pending (M10)")
     if fail_count:
         parts.append(f"{fail_count} failed")
     if sidecar_path:
@@ -1525,6 +2542,9 @@ def export_scene(
 
 
 __all__ = [
+    "BodyGuideEditResult",
+    "BodyGuideEditCommand",
+    "BodyGuideEditHistory",
     "BodyRigGenerateResult",
     "BodyRigGuidesResult",
     "CheckActorResult",
@@ -1534,20 +2554,37 @@ __all__ = [
     "ExportResult",
     "HAND_BONES",
     "HandRigResult",
+    "LaunchWorkflowResult",
     "LoadResult",
+    "MOTION_SOURCE_IMPORTED",
+    "MOTION_SOURCE_INHERITED",
+    "MOTION_SOURCE_LABELS",
+    "MOTION_SOURCE_MODEL",
+    "MOTION_SOURCE_ROM",
+    "MotionAssignmentResult",
+    "PC_SUPERMODEL_OPTIONS",
     "PREVIEW_ANIMATIONS",
     "ValidateForExportResult",
+    "apply_body_guide_positions",
     "apply_hand_masks",
+    "assign_motion_source",
     "available_preview_animations",
     "check_model",
     "export_scene",
     "generate_skeleton",
     "load_body",
     "load_file_filter",
+    "motion_assignment_options",
     "place_body_guides",
     "place_hand_guides",
     "play_preview_animation",
+    "record_body_guide_edit",
+    "redo_body_guide_edit",
+    "run_external_mesh_launch_workflow",
     "stop_preview_animation",
+    "undo_body_guide_edit",
     "supported_load_extensions",
+    "update_body_guide",
+    "update_body_guide_from_node",
     "validate_for_export",
 ]

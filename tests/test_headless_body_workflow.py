@@ -483,9 +483,10 @@ def test_t502_check_model_strict_passes_through_to_service(monkeypatch):
 class _FakeGuide:
     """Minimal stand-in for ``accurig.RigGuide``."""
 
-    def __init__(self, name, position=(0.0, 0.0, 0.0)):
+    def __init__(self, name, position=(0.0, 0.0, 0.0), locked=False):
         self.name = name
         self.position = position
+        self.locked = locked
 
 
 class _FakeAcuRig:
@@ -514,6 +515,19 @@ class _FakeAcuRig:
         self.place_raises: Exception | None = None
         self.generate_raises: Exception | None = None
         self.skin_raises: Exception | None = None
+
+    def move_guide(self, name, position, auto_mirror=True):
+        key = str(name).lower()
+        if key not in self._guides:
+            self._guides[key] = _FakeGuide(key, position, locked=True)
+        else:
+            self._guides[key].position = position
+            self._guides[key].locked = True
+        if auto_mirror and key.startswith("l"):
+            partner = "r" + key[1:]
+            if partner in self._guides and not self._guides[partner].locked:
+                x, y, z = position
+                self._guides[partner].position = (-x, y, z)
 
     def place_guides(self, model, *, profile=None, snap_to_bones=True):
         self.place_calls.append({
@@ -784,6 +798,126 @@ def test_t503_generate_skeleton_smooth_iterations_defaults_to_two(monkeypatch):
     wf.generate_skeleton(scene)
 
     assert fake.skin_calls[0]["smooth_iterations"] == 2
+
+
+# ── T1203 ▸ manual guide override persistence ──────────────────────────────
+def test_t1203_update_body_guide_requires_acurig():
+    result = wf.update_body_guide(None, "lhand", (1, 2, 3))
+
+    assert result.ok is False
+    assert result.code == "no_acurig"
+
+
+def test_t1203_update_body_guide_locks_existing_guide(monkeypatch):
+    fake = _install_fake_accurig(monkeypatch)
+
+    result = wf.update_body_guide(fake, "lhand", (1.25, 2.5, 3.75))
+
+    assert result.ok is True
+    assert result.code == "updated"
+    assert result.guide_name == "lhand"
+    assert fake._guides["lhand"].position == (1.25, 2.5, 3.75)
+    assert fake._guides["lhand"].locked is True
+    assert "lhand" in result.updated_guides
+
+
+def test_t1203_update_body_guide_rejects_unknown_nodes(monkeypatch):
+    fake = _install_fake_accurig(monkeypatch)
+
+    result = wf.update_body_guide(fake, "random_mesh", (1, 2, 3))
+
+    assert result.ok is False
+    assert result.code == "unknown_guide"
+    assert "random_mesh" in result.message
+
+
+def test_t1203_update_body_guide_from_node_reads_name_and_position(monkeypatch):
+    fake = _install_fake_accurig(monkeypatch)
+
+    class _Node:
+        name = "hip"
+        position = (0.0, 0.5, 1.0)
+
+    result = wf.update_body_guide_from_node(fake, _Node())
+
+    assert result.ok is True
+    assert result.guide_name == "hip"
+    assert fake._guides["hip"].position == (0.0, 0.5, 1.0)
+
+
+def test_t1203_update_body_guide_can_auto_mirror_when_requested(monkeypatch):
+    fake = _install_fake_accurig(monkeypatch)
+
+    result = wf.update_body_guide(fake, "lhand", (-0.8, 0.1, 0.2),
+                                  auto_mirror=True)
+
+    assert result.ok is True
+    assert fake._guides["rhand"].position == (0.8, 0.1, 0.2)
+    assert {"lhand", "rhand"}.issubset(set(result.updated_guides))
+
+
+def test_t1203_update_body_guide_captures_undo_redo_positions(monkeypatch):
+    fake = _install_fake_accurig(monkeypatch)
+
+    result = wf.update_body_guide(fake, "lhand", (1.0, 2.0, 3.0))
+
+    assert result.before_positions["lhand"] == (0.0, 0.0, 0.0)
+    assert result.after_positions["lhand"] == (1.0, 2.0, 3.0)
+
+
+def test_t1203_body_guide_history_records_undo_and_redo(monkeypatch):
+    fake = _install_fake_accurig(monkeypatch)
+    history = wf.BodyGuideEditHistory()
+    edit = wf.update_body_guide(fake, "lhand", (1.0, 2.0, 3.0))
+
+    wf.record_body_guide_edit(history, edit)
+    undo = wf.undo_body_guide_edit(fake, history)
+    redo = wf.redo_body_guide_edit(fake, history)
+
+    assert undo.ok is True
+    assert undo.code == "undone"
+    assert fake._guides["lhand"].position == (1.0, 2.0, 3.0)
+    assert redo.ok is True
+    assert redo.code == "redone"
+    assert fake._guides["lhand"].position == (1.0, 2.0, 3.0)
+
+
+def test_t1203_body_guide_undo_restores_previous_position(monkeypatch):
+    fake = _install_fake_accurig(monkeypatch)
+    history = wf.BodyGuideEditHistory()
+    edit = wf.update_body_guide(fake, "lhand", (1.0, 2.0, 3.0))
+    wf.record_body_guide_edit(history, edit)
+
+    result = wf.undo_body_guide_edit(fake, history)
+
+    assert result.ok is True
+    assert fake._guides["lhand"].position == (0.0, 0.0, 0.0)
+    assert history.can_undo is False
+    assert history.can_redo is True
+
+
+def test_t1203_body_guide_redo_reapplies_position(monkeypatch):
+    fake = _install_fake_accurig(monkeypatch)
+    history = wf.BodyGuideEditHistory()
+    edit = wf.update_body_guide(fake, "lhand", (1.0, 2.0, 3.0))
+    wf.record_body_guide_edit(history, edit)
+    wf.undo_body_guide_edit(fake, history)
+
+    result = wf.redo_body_guide_edit(fake, history)
+
+    assert result.ok is True
+    assert fake._guides["lhand"].position == (1.0, 2.0, 3.0)
+    assert history.can_undo is True
+    assert history.can_redo is False
+
+
+def test_t1203_body_guide_undo_empty_stack_is_structured(monkeypatch):
+    fake = _install_fake_accurig(monkeypatch)
+
+    result = wf.undo_body_guide_edit(fake, wf.BodyGuideEditHistory())
+
+    assert result.ok is False
+    assert result.code == "no_undo"
 
 
 # ── T504 ▸ place_hand_guides / apply_hand_masks ────────────────────────────
@@ -1197,6 +1331,87 @@ def test_t505_play_preview_animation_case_insensitive_lookup():
     assert result.playing == "Walk"  # original-case name preserved
 
 
+# ── M12 / T1204 ▸ motion assignment ────────────────────────────────────────
+def test_t1204_assign_inherited_supermodel_sets_body_and_preview_list():
+    scene, body = _scene_with_animated_body()
+    body.supermodel = "NULL"
+
+    result = wf.assign_motion_source(
+        scene,
+        wf.MOTION_SOURCE_INHERITED,
+        supermodel="S_Female03",
+    )
+    preview = wf.available_preview_animations(scene)
+
+    assert result.ok is True
+    assert result.code == "inherited"
+    assert body.supermodel == "S_Female03"
+    assert scene.motion_assignment["source"] == wf.MOTION_SOURCE_INHERITED
+    assert preview.code == "inherited"
+    assert preview.available == list(wf.PREVIEW_ANIMATIONS)
+    assert preview.missing == []
+
+
+def test_t1204_play_inherited_preview_succeeds_without_local_clip():
+    scene, body = _scene_with_animated_body()
+    body.supermodel = "NULL"
+    wf.assign_motion_source(
+        scene,
+        wf.MOTION_SOURCE_INHERITED,
+        supermodel="S_Female03",
+    )
+
+    result = wf.play_preview_animation(scene, "walk")
+
+    assert result.ok is True
+    assert result.code == "inherited_preview"
+    assert result.playing == "walk"
+    assert "S_Female03" in result.message
+
+
+def test_t1204_imported_motion_assignment_reflects_preview_subset():
+    scene, _body = _scene_with_animated_body()
+
+    result = wf.assign_motion_source(
+        scene,
+        wf.MOTION_SOURCE_IMPORTED,
+        imported_clips=["walk", "tlknorm", "attack1"],
+    )
+    preview = wf.available_preview_animations(scene)
+
+    assert result.ok is True
+    assert result.code == "imported_clips"
+    assert {name for _label, name in preview.available} == {"walk", "tlknorm"}
+    assert "attack1" not in {name for _label, name in preview.available}
+    assert "pause1" in {name for _label, name in preview.missing}
+
+
+def test_t1204_generated_rom_assignment_adds_rom_preview_entry():
+    scene, _body = _scene_with_animated_body()
+
+    result = wf.assign_motion_source(scene, wf.MOTION_SOURCE_ROM)
+    preview = wf.available_preview_animations(scene)
+    play = wf.play_preview_animation(scene, "generated_rom")
+
+    assert result.ok is True
+    assert result.code == "generated_rom"
+    assert preview.available == [("ROM Test", "generated_rom")]
+    assert play.ok is True
+    assert play.code == "generated_rom"
+
+
+def test_t1204_export_validation_blocks_body_with_no_motion_source(monkeypatch):
+    _make_check_service(monkeypatch, issues=[])
+    scene, body = _scene_with_animated_body()
+    body.supermodel = "NULL"
+
+    result = wf.validate_for_export(scene)
+
+    assert result.ok is False
+    assert result.code == "blocked"
+    assert "MOTIONS_MISSING" in result.blocking_codes
+
+
 # ── T505 ▸ stop_preview_animation ──────────────────────────────────────────
 def test_t505_stop_preview_animation_dispatches_none_to_viewport():
     viewport = _FakeViewport()
@@ -1237,6 +1452,68 @@ def _install_fake_scene_io(monkeypatch):
     _FakeSceneIO.written = []             # reset history
     monkeypatch.setattr(wf, "_import_scene_io", lambda: _FakeSceneIO)
     return _FakeSceneIO
+
+
+class _FakeMDLBinaryWriter:
+    calls: list = []
+
+    def write_files(self, model, mdl_path):
+        from pathlib import Path
+        _FakeMDLBinaryWriter.calls.append((model, mdl_path))
+        p = Path(mdl_path)
+        p.write_bytes(b"fake mdl")
+        p.with_suffix(".mdx").write_bytes(b"fake mdx")
+
+
+class _FakeFBXExporter:
+    calls: list = []
+
+    def export(self, model, path, *args, **kwargs):
+        from pathlib import Path
+        _FakeFBXExporter.calls.append((model, path, args, kwargs))
+        Path(path).write_text("; fake fbx\n", encoding="utf-8")
+        return True
+
+
+class _FakeGLTFExporter:
+    calls: list = []
+
+    def export(self, model, path, *args, **kwargs):
+        from pathlib import Path
+        _FakeGLTFExporter.calls.append((model, path, args, kwargs))
+        Path(path).write_bytes(b"fake glb")
+        return True
+
+
+class _FakeOBJExporter:
+    calls: list = []
+
+    def export(self, model, path, *args, **kwargs):
+        from pathlib import Path
+        _FakeOBJExporter.calls.append((model, path, args, kwargs))
+        Path(path).write_text("# fake obj\n", encoding="utf-8")
+        return True
+
+
+def _install_fake_exporters(monkeypatch):
+    """Rebind real writers so export_scene can be tested with fake models."""
+    _FakeMDLBinaryWriter.calls = []
+    _FakeFBXExporter.calls = []
+    _FakeGLTFExporter.calls = []
+    _FakeOBJExporter.calls = []
+    monkeypatch.setattr(wf, "_import_mdl_binary_writer",
+                        lambda: _FakeMDLBinaryWriter)
+    monkeypatch.setattr(
+        wf,
+        "_import_mesh_exporters",
+        lambda: (_FakeFBXExporter, _FakeGLTFExporter, _FakeOBJExporter),
+    )
+    return {
+        "mdl": _FakeMDLBinaryWriter,
+        "fbx": _FakeFBXExporter,
+        "gltf": _FakeGLTFExporter,
+        "obj": _FakeOBJExporter,
+    }
 
 
 # ── T506 ▸ validate_for_export ─────────────────────────────────────────────
@@ -1382,6 +1659,7 @@ def test_t506_export_scene_blocks_when_validation_has_errors(
 def test_t506_export_scene_skip_validation_bypasses_gate(monkeypatch, tmp_path):
     """``skip_validation=True`` must bypass the strict gate."""
     _install_fake_scene_io(monkeypatch)
+    writers = _install_fake_exporters(monkeypatch)
     _make_check_service(monkeypatch, issues=[
         _FakeIssue("error", "BONE_MISSING", message="root missing"),
     ])
@@ -1394,6 +1672,9 @@ def test_t506_export_scene_skip_validation_bypasses_gate(monkeypatch, tmp_path):
 
     assert result.ok is True
     assert result.code == "exported"
+    assert writers["mdl"].calls
+    assert (tmp_path / "pfbcm.mdl").exists()
+    assert (tmp_path / "pfbcm.mdx").exists()
     # Sidecar must have been written even though validation would have blocked.
     assert len(_FakeSceneIO.written) == 1
 
@@ -1440,28 +1721,39 @@ def test_t506_export_scene_per_format_rows_returned_in_request_order(
 ):
     """Per-format rows preserve the order the caller asked for."""
     _install_fake_scene_io(monkeypatch)
+    writers = _install_fake_exporters(monkeypatch)
     _make_check_service(monkeypatch, issues=[])
     scene, _body = _scene_with_body()
 
     result = wf.export_scene(
-        scene, formats=["fbx", "kotor", "gltf"], out_dir=str(tmp_path),
+        scene, formats=["fbx", "kotor", "gltf", "obj"], out_dir=str(tmp_path),
         write_sidecar=False,
     )
 
     keys = [row.key for row in result.formats]
-    assert keys == ["fbx", "kotor", "gltf"]
-    # All three are not_implemented for M5 (the binary writers are M10).
+    assert keys == ["fbx", "kotor", "gltf", "obj"]
+    assert result.ok is True
     for row in result.formats:
-        assert row.code == "not_implemented"
-        assert row.ok is False
+        assert row.code == "exported"
+        assert row.ok is True
         # Each row's proposed path lives in out_dir.
         assert str(tmp_path) in row.path
+    assert writers["fbx"].calls
+    assert writers["mdl"].calls
+    assert writers["gltf"].calls
+    assert writers["obj"].calls
+    assert (tmp_path / "pfbcm.fbx").exists()
+    assert (tmp_path / "pfbcm.mdl").exists()
+    assert (tmp_path / "pfbcm.mdx").exists()
+    assert (tmp_path / "pfbcm.glb").exists()
+    assert (tmp_path / "pfbcm.obj").exists()
 
 
 def test_t506_export_scene_unknown_format_is_marked_failed(monkeypatch, tmp_path):
     """Unknown format keys are NOT silently dropped — they get a row
     with the ``failed`` code so the UI can flag them."""
     _install_fake_scene_io(monkeypatch)
+    _install_fake_exporters(monkeypatch)
     _make_check_service(monkeypatch, issues=[])
     scene, _body = _scene_with_body()
 
@@ -1472,14 +1764,43 @@ def test_t506_export_scene_unknown_format_is_marked_failed(monkeypatch, tmp_path
 
     keys = [row.key for row in result.formats]
     assert "blender" in keys
+    assert next(r for r in result.formats if r.key == "kotor").ok is True
     blender = next(r for r in result.formats if r.key == "blender")
     assert blender.ok is False
     assert blender.code == "failed"
 
 
+def test_t506_export_scene_writer_failure_returns_failed_row(monkeypatch, tmp_path):
+    """A writer exception should not crash the workflow service."""
+    _install_fake_scene_io(monkeypatch)
+    _make_check_service(monkeypatch, issues=[])
+
+    class _BrokenFBXExporter:
+        def export(self, model, path, *args, **kwargs):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(
+        wf,
+        "_import_mesh_exporters",
+        lambda: (_BrokenFBXExporter, _FakeGLTFExporter, _FakeOBJExporter),
+    )
+    scene, _body = _scene_with_body()
+
+    result = wf.export_scene(
+        scene, formats=["fbx"], out_dir=str(tmp_path), write_sidecar=False,
+    )
+
+    assert result.ok is False
+    assert result.code == "all_failed"
+    assert result.formats[0].ok is False
+    assert result.formats[0].code == "failed"
+    assert "boom" in result.formats[0].message
+
+
 def test_t506_export_scene_sanitises_resref_for_filenames(monkeypatch, tmp_path):
     """A resref containing path separators / spaces must be sanitised."""
     _install_fake_scene_io(monkeypatch)
+    _install_fake_exporters(monkeypatch)
     _make_check_service(monkeypatch, issues=[])
     scene = _make_scene("K1")
     body = _FakeBodyModel("../weird name!")
