@@ -46,6 +46,11 @@ game_data/
 !/tests/test_character_mode.py
 !/tests/test_joint_dot_overlay.py
 !/tests/test_headless_body_workflow.py
+!/tests/test_head_workflow.py
+!/tests/test_head_inspector.py
+!/tests/test_head_viseme_panel.py
+!/tests/test_head_phoneme_panel.py
+!/tests/test_head_camera_preset.py
 test_assets/
 pytest.ini
 .pytest_cache/

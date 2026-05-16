@@ -720,6 +720,80 @@ class QtViewportWidget(QtWidgets.QWidget):
             self.camera.frame_bounds(bb_min, bb_max, reset_view=True)
         self._request_render()
 
+    # ── M6 / T605 — Head-mode camera preset ──────────────────────────
+    def apply_head_camera_preset(self) -> tuple:
+        """Apply :data:`head_workflow.HEAD_CAMERA_PRESET` to the camera.
+
+        Pulls the canonical ``(eye, target, up, fov_deg, clip)`` framing
+        for Head mode from :func:`head_workflow.head_camera_preset` and
+        converts the eye→target vector into the :class:`ArcBallCamera`'s
+        spherical state ``(target, distance, azimuth, elevation)``,
+        then sets ``fov``, ``_near`` and ``_far`` to match.  Triggers a
+        single render request on success.
+
+        Returns
+        -------
+        (ok, message) : Tuple[bool, str]
+            ``ok=False`` is returned when ``head_workflow`` is
+            unavailable or the preset payload is malformed.  Callers
+            (M6 / T605 mode-switch glue) can surface ``message`` via
+            the bottom strip / status bar.
+        """
+        # Lazy-import the workflow service — same fallback chain the
+        # other M6 UI hooks use so we don't bind to a particular
+        # ``sys.path`` layout.
+        hw = None
+        try:
+            from src.core import head_workflow as hw       # type: ignore
+        except Exception:
+            try:
+                from core import head_workflow as hw      # type: ignore
+            except Exception:
+                try:                                      # pragma: no cover
+                    import importlib.util as _u
+                    import pathlib as _pl
+                    _here = _pl.Path(__file__).resolve().parents[1]
+                    _hw_path = _here / "core" / "head_workflow.py"
+                    if _hw_path.is_file():
+                        _spec = _u.spec_from_file_location(
+                            "_gr_head_workflow_inline_t605", str(_hw_path),
+                        )
+                        _mod = _u.module_from_spec(_spec)
+                        import sys as _sys
+                        _sys.modules[_spec.name] = _mod
+                        _spec.loader.exec_module(_mod)
+                        hw = _mod
+                except Exception:
+                    hw = None
+        if hw is None:                                    # pragma: no cover
+            return False, "head_workflow unavailable; head camera preset skipped."
+
+        try:
+            sph = hw.head_camera_spherical()
+        except ValueError as exc:
+            return False, f"Head camera preset malformed: {exc}"
+        except Exception as exc:                          # pragma: no cover
+            return False, f"head_camera_spherical() raised: {exc}"
+
+        cam = self.camera
+        cam.target    = [sph["target_x"], sph["target_y"], sph["target_z"]]
+        cam.distance  = sph["distance"]
+        cam.azimuth   = sph["azimuth"]
+        cam.elevation = sph["elevation"]
+        cam.fov       = sph["fov"]
+        cam._near     = sph["near"]
+        cam._far      = sph["far"]
+
+        try:
+            self._request_render()
+        except Exception:                                 # pragma: no cover
+            pass
+
+        return True, (
+            f"Head camera preset applied (fov={cam.fov:.1f}°, "
+            f"dist={cam.distance:.2f})."
+        )
+
     # ── T403: Mini-thumbnail inset wiring ──────────────────────────────
     def _reposition_thumbnail(self) -> None:
         """Pin the thumbnail to the top-right corner of the canvas."""
