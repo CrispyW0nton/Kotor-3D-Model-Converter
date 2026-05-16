@@ -60,6 +60,7 @@ game_data/
 !/tests/test_unity_export_bridge.py
 !/tests/test_unity_malak_smoke.py
 !/tests/test_asset_preview.py
+!/tests/test_module_hydration.py
 test_assets/
 pytest.ini
 .pytest_cache/
