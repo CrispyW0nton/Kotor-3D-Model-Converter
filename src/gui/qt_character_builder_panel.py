@@ -26,7 +26,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from .qt_bottom_strip import QtBottomStrip
 from .qt_inspector_panel import QtInspectorPanel
 from .qt_properties_panel import QtPropertiesPanel
-from .qt_theme import C, heading
+from .qt_theme import C, apply_theme, heading
 from .qt_workflow_rail import QtWorkflowRail
 
 log = logging.getLogger(__name__)
@@ -233,6 +233,12 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         super().__init__(parent)
         CharacterScene = _import_model_data()
         self.scene = CharacterScene(game_version="K1")
+        if _CHARACTER_MODE_AVAILABLE and CharacterMode is not None:
+            try:
+                self.scene.mode = CharacterMode.HEADLESS_BODY
+                self.scene.mode_locked = False
+            except Exception:                              # pragma: no cover
+                log.debug("Could not seed initial CharacterMode", exc_info=True)
         self._scene_path = ""
         # ``_mode_actions`` maps CharacterMode → QAction so the toolbar
         # can be driven both by user clicks AND programmatic updates
@@ -249,6 +255,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self.setObjectName("QtCharacterBuilderWindow")
         self.setWindowTitle("GhostRigger - Character Builder")
         self.resize(1280, 800)
+        apply_theme(self)
 
         self._build_toolbars()
         self._build_central()
@@ -270,6 +277,15 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self.addToolBar(QtCore.Qt.TopToolBarArea, toolbar)
         self._toolbar = toolbar
 
+        brand = QtWidgets.QLabel("  GHOSTRIGGER AUTORIG  ")
+        brand.setObjectName("CharacterBuilderToolbarBrand")
+        brand.setStyleSheet(
+            f"color:{C.get('accent', '#00FF7A')}; "
+            "font-weight:800; font-size:10pt; letter-spacing:0px;"
+        )
+        toolbar.addWidget(brand)
+
+        toolbar.addSeparator()
         toolbar.addWidget(QtWidgets.QLabel(" Mode: "))
 
         # Four exclusive QToolButtons wired to CharacterMode (T205).
@@ -359,7 +375,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         # Left rail (T202).
         self.rail = QtWorkflowRail(self)
-        self.rail.setMinimumWidth(200)
+        self.rail.setMinimumWidth(220)
         splitter.addWidget(self.rail)
 
         # Centre — viewport stack so future modes can swap previews
@@ -410,7 +426,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setStretchFactor(2, 0)
-        splitter.setSizes([220, 720, 320])
+        splitter.setSizes([240, 700, 340])
 
         self._splitter = splitter
         self.setCentralWidget(splitter)

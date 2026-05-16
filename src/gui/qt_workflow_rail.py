@@ -29,7 +29,7 @@ from typing import Dict, List, Optional, Tuple
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from .qt_theme import C, heading
+from .qt_theme import C, icon
 
 # ── CharacterMode wiring (lazy / pykotor-safe) ──────────────────────────────
 # src.core.__init__ eagerly imports the pykotor-backed loader stack, which
@@ -54,13 +54,13 @@ except Exception:                                       # pragma: no cover
 # tools without monkey-patching the widget.
 
 _STEPS_HEADLESS_BODY: List[Tuple[int, str]] = [
-    (1, "Load Body"),
-    (2, "Check Model (T-pose, scale)"),
-    (3, "Body Rig (humanoid pins)"),
-    (4, "Hand Rig (fingers)"),
-    (6, "Check Actor (idle/walk/talk)"),
+    (1, "Load Character"),
+    (2, "Check Model"),
+    (3, "Rig Body"),
+    (4, "Rig Hand"),
+    (6, "Check Actor"),
     (7, "Add Motions"),
-    (8, "Validate + Export"),
+    (8, "Upload & Save"),
 ]
 
 _STEPS_HEAD: List[Tuple[int, str]] = [
@@ -74,14 +74,14 @@ _STEPS_HEAD: List[Tuple[int, str]] = [
 ]
 
 _STEPS_SUPERMODEL: List[Tuple[int, str]] = [
-    (1, "Load Body + Load Head"),
-    (2, "Check both, fit at headhook"),
-    (3, "Body Rig"),
-    (4, "Hand Rig"),
-    (5, "Face Rig"),
-    (6, "Check Actor + Face"),
+    (1, "Load Body + Head"),
+    (2, "Check Headhook"),
+    (3, "Rig Body"),
+    (4, "Rig Hand"),
+    (5, "Rig Face"),
+    (6, "Check Actor"),
     (7, "Add Motions"),
-    (8, "Validate + Export"),
+    (8, "Upload & Save"),
 ]
 
 _STEPS_CREATURE: List[Tuple[int, str]] = [
@@ -126,6 +126,17 @@ def _steps_for_mode(mode) -> List[Tuple[int, str]]:
 _ROLE_STEP_NUMBER = QtCore.Qt.UserRole + 1
 _ROLE_GATE_REASON = QtCore.Qt.UserRole + 2
 
+_ICON_FOR_STEP = {
+    1: "loadmodel",
+    2: "diag",
+    3: "skeleton",
+    4: "rig",
+    5: "head",
+    6: "anims",
+    7: "library",
+    8: "export",
+}
+
 
 class QtWorkflowRail(QtWidgets.QWidget):
     """Mode-aware numbered step list (left rail of Character Builder).
@@ -153,14 +164,40 @@ class QtWorkflowRail(QtWidgets.QWidget):
 
     def _build(self) -> None:
         layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(4)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
 
-        layout.addWidget(heading("Workflow"))
+        brand = QtWidgets.QFrame()
+        brand.setObjectName("GuidedRigRailBrand")
+        brand_layout = QtWidgets.QVBoxLayout(brand)
+        brand_layout.setContentsMargins(10, 8, 10, 8)
+        brand_layout.setSpacing(0)
+        title = QtWidgets.QLabel("GHOSTRIGGER")
+        title.setObjectName("GuidedRigRailTitle")
+        subtitle = QtWidgets.QLabel("KOTOR AUTO-RIG")
+        subtitle.setObjectName("GuidedRigRailSubtitle")
+        brand_layout.addWidget(title)
+        brand_layout.addWidget(subtitle)
+        brand.setStyleSheet(
+            "QFrame#GuidedRigRailBrand { "
+            f"background:{C.get('panel', '#111916')}; "
+            f"border:1px solid {C.get('border', '#1B2A22')}; "
+            "border-radius:4px; "
+            "}"
+            "QLabel#GuidedRigRailTitle { "
+            f"color:{C.get('accent', '#00FF7A')}; "
+            "font-size:11pt; font-weight:800; letter-spacing:0px; "
+            "}"
+            "QLabel#GuidedRigRailSubtitle { "
+            f"color:{C.get('text2', '#7A9A88')}; "
+            "font-size:8pt; font-weight:600; letter-spacing:0px; "
+            "}"
+        )
+        layout.addWidget(brand)
 
         self._mode_label = QtWidgets.QLabel("(no mode)")
         self._mode_label.setStyleSheet(
-            f"color:{C.get('text2', '#888')}; font-size:9pt; font-style:italic;"
+            f"color:{C.get('text2', '#888')}; font-size:8pt; padding-left:2px;"
         )
         layout.addWidget(self._mode_label)
 
@@ -169,20 +206,33 @@ class QtWorkflowRail(QtWidgets.QWidget):
         self._list.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self._list.setUniformItemSizes(True)
         self._list.setFocusPolicy(QtCore.Qt.StrongFocus)
+        self._list.setIconSize(QtCore.QSize(22, 22))
+        self._list.setSpacing(7)
         self._list.setStyleSheet(
             "QListWidget { "
-            f"background:{C.get('bg2', '#1a1a1a')}; "
+            f"background:{C.get('panel', '#111916')}; "
             f"color:{C.get('text', '#e0e0e0')}; "
-            "border:1px solid #2a2a2a; "
+            "border:0; "
             "outline:0; "
             "}"
-            "QListWidget::item { padding:6px 8px; }"
+            "QListWidget::item { "
+            f"background:{C.get('panel2', '#151D1A')}; "
+            f"border:1px solid {C.get('accent', '#00FF7A')}; "
+            "border-radius:5px; "
+            "padding:10px 10px; "
+            "min-height:32px; "
+            "}"
+            "QListWidget::item:hover { "
+            f"background:{C.get('hover', '#183428')}; "
+            "}"
             "QListWidget::item:selected { "
-            f"background:{C.get('accent', '#00FF7A')}; "
-            "color:#000000; "
+            f"background:{C.get('hover', '#183428')}; "
+            f"color:{C.get('accent', '#00FF7A')}; "
             "font-weight:bold; "
             "}"
-            "QListWidget::item:disabled { color:#666666; }"
+            "QListWidget::item:disabled { "
+            "color:#55665B; border-color:#324438; background:#101713; "
+            "}"
         )
         self._list.itemClicked.connect(self._on_item_clicked)
         self._list.currentRowChanged.connect(self._on_current_row_changed)
@@ -212,7 +262,9 @@ class QtWorkflowRail(QtWidgets.QWidget):
         self._list.clear()
         for step_no, label in steps:
             item = QtWidgets.QListWidgetItem(f"{step_no}. {label}")
+            item.setIcon(icon(_ICON_FOR_STEP.get(int(step_no), "charbuilder"), 24))
             item.setData(_ROLE_STEP_NUMBER, int(step_no))
+            item.setSizeHint(QtCore.QSize(172, 46))
             # Re-apply persisted gate (if any).
             enabled, reason = self._gates.get(int(step_no), (True, ""))
             self._apply_gate_to_item(item, enabled, reason)

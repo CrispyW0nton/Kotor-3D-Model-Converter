@@ -219,7 +219,8 @@ class QtInspectorPanel(QtWidgets.QWidget):
             "Load the source MDL / FBX / OBJ for this character mode.\n"
             "Auto-detection will pick a CharacterMode after load."
         ))
-        btn = QtWidgets.QPushButton("Load Model…")
+        btn = QtWidgets.QPushButton("Load Character…")
+        btn.setProperty("accent", True)
         btn.clicked.connect(self.loadRequested.emit)
         layout.addWidget(btn)
 
@@ -236,7 +237,8 @@ class QtInspectorPanel(QtWidgets.QWidget):
             "issues from the validation service appear in the table below\n"
             "(and a banner summary in the bottom strip)."
         ))
-        btn = QtWidgets.QPushButton("Run Model Check")
+        btn = QtWidgets.QPushButton("Check Model")
+        btn.setProperty("accent", True)
         btn.clicked.connect(self.checkModelRequested.emit)
         layout.addWidget(btn)
 
@@ -466,11 +468,11 @@ class QtInspectorPanel(QtWidgets.QWidget):
 
         # ── M5 / T503 — Body-rig action buttons (body step only) ─────
         if step == _STEP_RIG_BODY:
-            actions = QtWidgets.QGroupBox("AcuRig actions")
+            actions = QtWidgets.QGroupBox("Rig Body")
             actions_layout = QtWidgets.QVBoxLayout(actions)
             actions_layout.setSpacing(4)
 
-            self._place_guides_btn = QtWidgets.QPushButton("Place Guides")
+            self._place_guides_btn = QtWidgets.QPushButton("Place Body Guides")
             self._place_guides_btn.setToolTip(
                 "Snap AcuRig humanoid guide pins onto the body model.\n"
                 "Use the joint-dot HUD to fine-tune positions; drag with\n"
@@ -479,9 +481,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
             self._place_guides_btn.clicked.connect(self.placeGuidesRequested.emit)
             actions_layout.addWidget(self._place_guides_btn)
 
-            self._generate_skeleton_btn = QtWidgets.QPushButton(
-                "Generate Skeleton"
-            )
+            self._generate_skeleton_btn = QtWidgets.QPushButton("Rig Body")
             self._generate_skeleton_btn.setProperty("accent", True)
             self._generate_skeleton_btn.setToolTip(
                 "Build bones from the current guides + run heat-map\n"
@@ -503,13 +503,11 @@ class QtInspectorPanel(QtWidgets.QWidget):
 
         # ── M5 / T504 — Hand-rig action group (hands step only) ──────
         if step == _STEP_RIG_HANDS:
-            hand_actions = QtWidgets.QGroupBox("Hand-rig actions")
+            hand_actions = QtWidgets.QGroupBox("Rig Hand")
             hand_layout = QtWidgets.QVBoxLayout(hand_actions)
             hand_layout.setSpacing(4)
 
-            self._place_hand_guides_btn = QtWidgets.QPushButton(
-                "Place Hand Guides"
-            )
+            self._place_hand_guides_btn = QtWidgets.QPushButton("Rig Hand")
             self._place_hand_guides_btn.setToolTip(
                 "Re-snap wrist + finger guide pins onto the body model.\n"
                 "Run this *after* Generate Skeleton so AcuRig knows the\n"

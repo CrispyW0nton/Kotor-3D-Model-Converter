@@ -482,3 +482,26 @@ def test_t702_character_builder_check_button_routes_supermodel_to_composite():
     )
     assert 'self._is_scene_mode("supermodel")' in source
     assert "check_composite" in source
+
+
+def test_launch_hud_defaults_to_accurig_like_body_workflow():
+    source = (_SRC_DIR / "gui" / "qt_character_builder_panel.py").read_text(
+        encoding="utf-8"
+    )
+    assert "apply_theme(self)" in source
+    assert "CharacterMode.HEADLESS_BODY" in source
+    assert "CharacterBuilderToolbarBrand" in source
+    assert "GHOSTRIGGER AUTORIG" in source
+
+
+def test_workflow_rail_uses_accurig_step_language_and_button_styling():
+    source = (_SRC_DIR / "gui" / "qt_workflow_rail.py").read_text(
+        encoding="utf-8"
+    )
+    assert "Load Character" in source
+    assert "Rig Body" in source
+    assert "Rig Hand" in source
+    assert "Check Actor" in source
+    assert "Upload & Save" in source
+    assert "GuidedRigRailBrand" in source
+    assert "border:1px solid {C.get('accent'" in source
