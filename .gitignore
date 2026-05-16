@@ -69,6 +69,7 @@ game_data/
 !/tests/test_map_snap_tools.py
 !/tests/test_vis_editor.py
 !/tests/test_area_wok_integration.py
+!/tests/test_custom_module_packager.py
 test_assets/
 pytest.ini
 .pytest_cache/

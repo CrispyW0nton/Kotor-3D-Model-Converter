@@ -61,6 +61,7 @@ RESTYPE_IDS: dict[str, int] = {
     "ini": 7,
     "txt": 10,
     "mdl": 2002,
+    "mdx": 2003,
     "nss": 2009,
     "ncs": 2010,
     "mod": 2011,
