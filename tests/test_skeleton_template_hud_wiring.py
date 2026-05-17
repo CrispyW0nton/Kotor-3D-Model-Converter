@@ -119,3 +119,14 @@ def test_external_dcc_imports_disable_kotor_uv_seam_repair() -> None:
     assert "_face_has_u_seam = False" in viewport
     assert "_face_has_v_seam = False" in viewport
 
+
+def test_gpu_renderer_clamps_single_tile_character_atlases_like_cpu_renderer() -> None:
+    viewport = _read("src/gui/viewport_core.py")
+
+    assert "FIX-EDGEBLEED (CPU)" in viewport
+    assert "FIX-EDGEBLEED (GPU)" in viewport
+    assert "_has_no_repeat_features" in viewport
+    assert "_accel_clamp_s = True" in viewport
+    assert "_accel_clamp_t = True" in viewport
+    assert "0.0 <= u <= 1.0 and 0.0 <= v <= 1.0" in viewport
+

@@ -5468,6 +5468,26 @@ class FrameRenderer:
             # This makes the accel path match the PIL path for clamped textures.
             _accel_clamp_s = bool(getattr(node, 'txi_clamp_s', False))
             _accel_clamp_t = bool(getattr(node, 'txi_clamp_t', False))
+            # FIX-EDGEBLEED (GPU): Keep the accelerated path in lockstep with the
+            # CPU/PIL path for single-tile atlas meshes.  Custom override MDLs often
+            # use normal 0..1 character atlases without TXI clamp flags; wrapping
+            # those UVs makes armor panels sample the opposite edge of the atlas.
+            # Nodes with true tiled UVs or animated/procedural TXI still use repeat.
+            if not _accel_clamp_s or not _accel_clamp_t:
+                _has_no_repeat_features = bool(
+                    getattr(node, 'txi_blending', 0) == 0
+                    and getattr(node, 'txi_proceduretype', '') == ''
+                    and not getattr(node, 'animate_uv', False)
+                )
+                if _has_no_repeat_features and node.uvs:
+                    _sample = node.uvs[:min(30, len(node.uvs))]
+                    _uv_in_range = all(
+                        0.0 <= u <= 1.0 and 0.0 <= v <= 1.0
+                        for u, v in _sample
+                    )
+                    if _uv_in_range:
+                        _accel_clamp_s = True
+                        _accel_clamp_t = True
             # UV animation (animate_uv): add time-based scroll offset.
             _accel_animate_uv = bool(getattr(node, 'animate_uv', False))
             _accel_uv_scroll_u = 0.0
