@@ -30,8 +30,12 @@ import io
 import json
 import logging
 import math
+import os
+import shutil
+import subprocess
 import struct
 import base64
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -728,7 +732,8 @@ class FBXFallbackImporter:
 
     This is the Phase 8.2 FBX import improvement — uses pure-Python trimesh
     so that ``libassimp`` is not required.  FBX ASCII 7.4 and FBX binary 7.4
-    are both supported by trimesh ≥ 4.0.
+    support varies by trimesh build, so binary FBX files can also fall back to
+    a local Blender background conversion when Blender is installed.
 
     Usage::
 
@@ -756,7 +761,18 @@ class FBXFallbackImporter:
             import trimesh as tm
             scene_or_mesh = tm.load(path, force='mesh', process=False)
         except Exception as e:
-            log.error("FBXFallbackImporter: trimesh load failed: %s", e)
+            log.warning("FBXFallbackImporter: trimesh load failed: %s", e)
+            if Path(path).suffix.lower() == ".fbx":
+                blender_model = self._load_via_blender(
+                    path,
+                    model_name=model_name,
+                    game_version=game_version,
+                    supermodel=supermodel,
+                    classification=classification,
+                )
+                if blender_model is not None:
+                    return blender_model
+            log.error("FBXFallbackImporter: no importer could load %s", path)
             return None
 
         model = KotorModel(
@@ -794,6 +810,147 @@ class FBXFallbackImporter:
 
         model.compute_bounds()
         return model
+
+    def _load_via_blender(
+        self,
+        path: str,
+        *,
+        model_name: str,
+        game_version: GameVersion,
+        supermodel: str,
+        classification: str,
+    ) -> Optional[KotorModel]:
+        """Convert FBX to GLB through Blender, then use the normal GLB importer."""
+        for blender in _candidate_blender_executables():
+            try:
+                with tempfile.TemporaryDirectory(prefix="ghostrigger_fbx_") as tmp:
+                    glb_path = Path(tmp) / f"{model_name}.glb"
+                    _convert_fbx_to_glb_with_blender(
+                        blender,
+                        Path(path),
+                        glb_path,
+                    )
+                    if not glb_path.exists() or glb_path.stat().st_size <= 0:
+                        raise RuntimeError("Blender did not produce a GLB file")
+                    model = GLTFImporter().import_file(
+                        str(glb_path),
+                        model_name=model_name,
+                        game_version=game_version,
+                        supermodel=supermodel,
+                        classification=classification,
+                    )
+                    if model is not None:
+                        log.info(
+                            "FBXFallbackImporter: imported %s via Blender fallback %s",
+                            path,
+                            blender,
+                        )
+                        return model
+            except Exception as exc:  # noqa: BLE001 - each Blender version may differ
+                log.warning(
+                    "FBXFallbackImporter: Blender fallback failed with %s: %s",
+                    blender,
+                    exc,
+                )
+        return None
+
+
+def _candidate_blender_executables() -> List[str]:
+    """Return plausible Blender executables, preferring stable 4.x builds."""
+    seen: set[str] = set()
+    candidates: List[str] = []
+
+    def add(path: str | os.PathLike[str] | None) -> None:
+        if not path:
+            return
+        resolved = str(Path(path))
+        key = resolved.lower()
+        if key in seen:
+            return
+        if Path(resolved).is_file():
+            seen.add(key)
+            candidates.append(resolved)
+
+    add(os.environ.get("GHOSTRIGGER_BLENDER_PATH"))
+    add(shutil.which("blender"))
+
+    if os.name == "nt":
+        for root in (
+            Path(os.environ.get("PROGRAMFILES", r"C:\Program Files")),
+            Path(os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")),
+        ):
+            blender_root = root / "Blender Foundation"
+            if blender_root.is_dir():
+                versioned = sorted(
+                    blender_root.glob("Blender */blender.exe"),
+                    key=lambda p: _blender_sort_key(p),
+                )
+                for path in versioned:
+                    add(path)
+    else:
+        for path in (
+            "/usr/bin/blender",
+            "/usr/local/bin/blender",
+            "/snap/bin/blender",
+            "/Applications/Blender.app/Contents/MacOS/Blender",
+        ):
+            add(path)
+    return candidates
+
+
+def _blender_sort_key(path: Path) -> tuple[int, int, int, str]:
+    """Prefer Blender 4.x LTS/current builds before newer unstable majors."""
+    import re
+
+    match = re.search(r"Blender\s+(\d+)(?:\.(\d+))?", str(path), re.IGNORECASE)
+    major = int(match.group(1)) if match else 0
+    minor = int(match.group(2) or 0) if match else 0
+    major_penalty = 1 if major >= 5 else 0
+    return (major_penalty, -major, -minor, str(path).lower())
+
+
+def _convert_fbx_to_glb_with_blender(
+    blender_exe: str,
+    fbx_path: Path,
+    glb_path: Path,
+) -> None:
+    """Run Blender headless to convert one FBX file to GLB."""
+    script_path = glb_path.with_suffix(".py")
+    script_path.write_text(
+        "\n".join([
+            "import bpy",
+            "from pathlib import Path",
+            "bpy.ops.object.select_all(action='SELECT')",
+            "bpy.ops.object.delete()",
+            f"bpy.ops.import_scene.fbx(filepath={str(fbx_path)!r})",
+            "for obj in list(bpy.context.scene.objects):",
+            "    if obj.type in {'CAMERA', 'LIGHT'}:",
+            "        bpy.data.objects.remove(obj, do_unlink=True)",
+            f"Path({str(glb_path)!r}).parent.mkdir(parents=True, exist_ok=True)",
+            "bpy.ops.export_scene.gltf(",
+            f"    filepath={str(glb_path)!r},",
+            "    export_format='GLB',",
+            "    export_yup=False,",
+            ")",
+        ]),
+        encoding="utf-8",
+    )
+    proc = subprocess.run(
+        [
+            blender_exe,
+            "--background",
+            "--factory-startup",
+            "--python",
+            str(script_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip()
+        raise RuntimeError(detail[-2000:] or f"Blender exited with {proc.returncode}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

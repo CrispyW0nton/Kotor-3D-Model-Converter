@@ -318,6 +318,20 @@ def load_body(
             code="loaded",
         )
 
+    # Custom OBJ/FBX/glTF bodies often arrive from Blender without KOTOR hook
+    # names yet.  That is exactly the M12 skeleton-template workflow: load the
+    # external mesh first, then let the user apply a known-good KOTOR skeleton.
+    if detected == md.CharacterMode.AMBIGUOUS and (ext in _GLTF_EXTS or ext in _FBX_EXTS):
+        return LoadResult(
+            ok=True, model=model, detected_mode=detected,
+            source_path=path, resref=resref,
+            message=(
+                f"Loaded external mesh: {resref} ({Path(path).name}). "
+                "Choose a KOTOR skeleton template before rigging."
+            ),
+            code="loaded",
+        )
+
     # Mode mismatch — surface the suggested mode so the UI can offer to
     # switch.  When the caller opted into mode correction, we treat the
     # load as successful (the scene already has the slot assigned).

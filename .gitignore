@@ -73,6 +73,7 @@ game_data/
 !/tests/test_live_validation.py
 !/tests/test_regression_export.py
 !/tests/test_regression_screens.py
+!/tests/test_fbx_blender_fallback.py
 !/tests/golden/
 !/tests/golden/export_hashes.json
 !/tests/golden/screens/

@@ -117,6 +117,21 @@ class _FakeHeadModel:
         return list(self._nodes)
 
 
+class _FakeAmbiguousExternalModel:
+    """External mesh before a KOTOR skeleton/template has been applied."""
+
+    def __init__(self, name: str = "bendak"):
+        self.name = name
+        self.supermodel = "NULL"
+        self.model_type = int(md.ModelClassification.CHARACTER)
+        self._nodes = [
+            _FakeNode("bendak"),
+        ]
+
+    def all_nodes(self):
+        return list(self._nodes)
+
+
 def _make_scene(game_version: str = "K1"):
     return md.CharacterScene(game_version=game_version)
 
@@ -271,6 +286,25 @@ def test_t501_load_body_dispatches_gltf_to_auto_importer(tmp_path, monkeypatch):
     result = wf.load_body(str(glb), scene)
     assert called == [str(glb)]
     assert result.ok is True
+
+
+def test_t501_load_body_accepts_ambiguous_external_mesh_for_template_flow(
+    tmp_path,
+    monkeypatch,
+):
+    fake = _FakeAmbiguousExternalModel("bendak")
+    fbx = tmp_path / "Bendak.fbx"
+    fbx.write_bytes(b"fbx stub")
+    monkeypatch.setattr(wf, "_load_gltf_or_mesh", lambda path, gv: fake)
+
+    scene = _make_scene("K1")
+    result = wf.load_body(str(fbx), scene)
+
+    assert result.ok is True
+    assert result.code == "loaded"
+    assert result.detected_mode == md.CharacterMode.AMBIGUOUS
+    assert "KOTOR skeleton template" in result.message
+    assert scene.get(md.PartSlot.HEADLESS_BODY).resref == "bendak"
 
 
 def test_t501_load_body_resref_is_lowercase_basename(tmp_path, monkeypatch):
