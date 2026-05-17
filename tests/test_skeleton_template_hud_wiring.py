@@ -22,10 +22,15 @@ def test_inspector_exposes_skeleton_template_picker_controls() -> None:
     src = _read("src/gui/qt_inspector_panel.py")
 
     assert "skeletonTemplateSelected" in src
+    assert "browseSkeletonTemplateRequested" in src
     assert "applySkeletonTemplateRequested" in src
     assert 'QtWidgets.QGroupBox("KOTOR Base Skeleton")' in src
+    assert "setEditable(True)" in src
+    assert "MatchContains" in src
+    assert "Browse MDL..." in src
     assert "set_skeleton_template_options" in src
     assert "selected_skeleton_template_key" in src
+    assert "set_selected_skeleton_template_key" in src
     assert "set_skeleton_template_status" in src
 
 
@@ -34,6 +39,9 @@ def test_builder_wires_template_selection_to_preview_and_apply() -> None:
 
     assert "skeletonTemplateSelected.connect" in src
     assert "_on_skeleton_template_selected" in src
+    assert "browseSkeletonTemplateRequested.connect" in src
+    assert "_on_browse_skeleton_template_requested" in src
+    assert '"Choose KOTOR base skeleton MDL"' in src
     assert "applySkeletonTemplateRequested.connect" in src
     assert "_on_apply_skeleton_template_requested" in src
     assert "skeleton_template_picker" in src

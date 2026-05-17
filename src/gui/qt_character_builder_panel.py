@@ -407,6 +407,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         # M12 / T1202 — selected KOTOR skeleton template for imported
         # OBJ/FBX bodies.  Options are provided by the Qt-free picker
         # service and mirrored into the right inspector.
+        self._skeleton_template_options: list[Any] = []
         self._skeleton_template_options_by_key: dict[str, Any] = {}
         self._selected_skeleton_template_key = ""
         self._selected_skeleton_template_model: Optional[Any] = None
@@ -706,6 +707,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if hasattr(self.inspector, "skeletonTemplateSelected"):
             self.inspector.skeletonTemplateSelected.connect(
                 self._on_skeleton_template_selected)
+        if hasattr(self.inspector, "browseSkeletonTemplateRequested"):
+            self.inspector.browseSkeletonTemplateRequested.connect(
+                self._on_browse_skeleton_template_requested)
         if hasattr(self.inspector, "applySkeletonTemplateRequested"):
             self.inspector.applySkeletonTemplateRequested.connect(
                 self._on_apply_skeleton_template_requested)
@@ -1468,6 +1472,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             getattr(self.scene, "game_version", "K1")
         result = _picker.list_skeleton_templates(game=game, part="body")
         options = list(getattr(result, "options", []) or [])
+        self._skeleton_template_options = options
         self._skeleton_template_options_by_key = {
             str(self._option_field(option, "key", "")): option
             for option in options
@@ -1489,6 +1494,60 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 self.inspector.set_skeleton_template_options(options)
             except Exception:                               # pragma: no cover
                 log.exception("inspector.set_skeleton_template_options failed")
+
+    @QtCore.Slot()
+    def _on_browse_skeleton_template_requested(self) -> None:
+        """Let the user select a specific KOTOR MDL as the base skeleton."""
+        game = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
+            getattr(self.scene, "game_version", "K1")
+        initial_dir = ""
+        try:
+            try:
+                from core import character_builder as _cb
+            except ImportError:                              # pragma: no cover
+                from src.core import character_builder as _cb  # type: ignore
+            initial_dir = str(_cb._detect_game_dir(game) or "")
+        except Exception:
+            initial_dir = ""
+
+        path, _selected = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Choose KOTOR base skeleton MDL",
+            initial_dir,
+            "KOTOR model (*.mdl);;All files (*.*)",
+        )
+        if not path:
+            return
+
+        abs_path = os.path.abspath(path)
+        name = Path(abs_path).stem.lower()
+        key = f"file:{os.path.normcase(abs_path)}"
+        option = {
+            "key": key,
+            "source": "file",
+            "game": str(game or "K1"),
+            "part": "body",
+            "name": name,
+            "resref": name,
+            "source_resref": name,
+            "path": abs_path,
+            "description": "User-selected KOTOR MDL base skeleton.",
+            "warnings": [],
+        }
+
+        self._skeleton_template_options_by_key[key] = option
+        self._skeleton_template_options = [
+            opt for opt in self._skeleton_template_options
+            if str(self._option_field(opt, "key", "")) != key
+        ]
+        self._skeleton_template_options.insert(0, option)
+        if hasattr(self.inspector, "set_skeleton_template_options"):
+            self.inspector.set_skeleton_template_options(
+                self._skeleton_template_options
+            )
+        if hasattr(self.inspector, "set_selected_skeleton_template_key"):
+            self.inspector.set_selected_skeleton_template_key(key, emit=False)
+        self._on_skeleton_template_selected(key)
 
     @QtCore.Slot(str)
     def _on_skeleton_template_selected(self, key: str) -> None:

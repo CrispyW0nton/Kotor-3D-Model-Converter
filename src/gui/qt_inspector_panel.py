@@ -114,6 +114,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
     generateSkeletonRequested = QtCore.Signal()
     # M12 / T1202 — KOTOR skeleton template selection for imported meshes.
     skeletonTemplateSelected  = QtCore.Signal(str)        # (option_key,)
+    browseSkeletonTemplateRequested = QtCore.Signal()
     applySkeletonTemplateRequested = QtCore.Signal()
     # M5 / T504 — Hand-rig step.
     placeHandGuidesRequested  = QtCore.Signal()
@@ -309,7 +310,9 @@ class QtInspectorPanel(QtWidgets.QWidget):
         template_row = QtWidgets.QHBoxLayout()
         template_row.addWidget(QtWidgets.QLabel("Base:"))
         self._skeleton_template_combo = QtWidgets.QComboBox()
-        self._skeleton_template_combo.setEditable(False)
+        self._skeleton_template_combo.setEditable(True)
+        self._skeleton_template_combo.setInsertPolicy(QtWidgets.QComboBox.NoInsert)
+        self._skeleton_template_combo.setMaxVisibleItems(18)
         self._skeleton_template_combo.setMinimumWidth(160)
         self._skeleton_template_combo.setToolTip(
             "Pick the shipped KOTOR body/creature model that the imported mesh "
@@ -318,8 +321,22 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._skeleton_template_combo.currentIndexChanged.connect(
             self._on_skeleton_template_index_changed
         )
+        if self._skeleton_template_combo.lineEdit() is not None:
+            self._skeleton_template_combo.lineEdit().setPlaceholderText(
+                "Search resref, e.g. pmbam or n_sithsoldier"
+            )
+            self._skeleton_template_combo.lineEdit().returnPressed.connect(
+                self._emit_skeleton_template_from_text
+            )
         template_row.addWidget(self._skeleton_template_combo, 1)
         template_layout.addLayout(template_row)
+
+        browse_btn = QtWidgets.QPushButton("Browse MDL...")
+        browse_btn.setToolTip(
+            "Choose any body/creature MDL from your KOTOR install or Override folder."
+        )
+        browse_btn.clicked.connect(self.browseSkeletonTemplateRequested.emit)
+        template_layout.addWidget(browse_btn)
 
         self._apply_skeleton_template_btn = QtWidgets.QPushButton("Use Skeleton")
         self._apply_skeleton_template_btn.setToolTip(
@@ -788,6 +805,9 @@ class QtInspectorPanel(QtWidgets.QWidget):
 
         has_options = combo.count() > 0
         combo.setEnabled(has_options)
+        if combo.completer() is not None:
+            combo.completer().setFilterMode(QtCore.Qt.MatchContains)
+            combo.completer().setCaseSensitivity(QtCore.Qt.CaseInsensitive)
         if self._apply_skeleton_template_btn is not None:
             self._apply_skeleton_template_btn.setEnabled(has_options)
         if has_options:
@@ -803,7 +823,38 @@ class QtInspectorPanel(QtWidgets.QWidget):
         combo = getattr(self, "_skeleton_template_combo", None)
         if combo is None:
             return ""
-        return str(combo.currentData() or "")
+        current = str(combo.currentData() or "")
+        if current:
+            return current
+        typed = combo.currentText().strip().lower()
+        if typed:
+            for idx in range(combo.count()):
+                label = combo.itemText(idx).strip().lower()
+                data = str(combo.itemData(idx) or "").strip().lower()
+                if typed == label or typed == data or typed in label or typed in data:
+                    return str(combo.itemData(idx) or "")
+        return ""
+
+    def set_selected_skeleton_template_key(
+        self,
+        key: str,
+        *,
+        emit: bool = True,
+    ) -> bool:
+        combo = getattr(self, "_skeleton_template_combo", None)
+        if combo is None:
+            return False
+        idx = combo.findData(str(key or ""))
+        if idx < 0:
+            return False
+        combo.blockSignals(not emit)
+        try:
+            combo.setCurrentIndex(idx)
+        finally:
+            combo.blockSignals(False)
+        if emit:
+            self.skeletonTemplateSelected.emit(str(key or ""))
+        return True
 
     def set_skeleton_template_status(
         self, message: str, *, kind: str = "info"
@@ -1671,6 +1722,17 @@ class QtInspectorPanel(QtWidgets.QWidget):
         key = self.selected_skeleton_template_key()
         if key:
             self.skeletonTemplateSelected.emit(key)
+
+    def _emit_skeleton_template_from_text(self) -> None:
+        key = self.selected_skeleton_template_key()
+        if not key:
+            self.set_skeleton_template_status(
+                "No skeleton option matches that search. Use Browse MDL... for a specific game file.",
+                kind="warning",
+            )
+            return
+        self.set_selected_skeleton_template_key(key, emit=False)
+        self.skeletonTemplateSelected.emit(key)
 
     def _emit_fit_adjustment(self, *_args) -> None:
         scale = (
