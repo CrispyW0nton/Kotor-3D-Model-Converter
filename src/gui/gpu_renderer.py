@@ -373,6 +373,25 @@ def _first_vbo_uv_pairs(vdata, start: int, limit: int = 8) -> List[List[float]]:
         return []
 
 
+def _node_uses_single_tile_atlas(node) -> bool:
+    """Return True for ordinary 0..1 character atlases that should not repeat."""
+    if bool(getattr(node, 'txi_clamp_s', False) and getattr(node, 'txi_clamp_t', False)):
+        return True
+    if bool(getattr(node, 'animate_uv', False)):
+        return False
+    if str(getattr(node, 'txi_proceduretype', '') or '').strip():
+        return False
+    if int(getattr(node, 'txi_blending', 0) or 0) != 0:
+        return False
+    uvs = getattr(node, 'uvs', []) or []
+    if not uvs:
+        return False
+    try:
+        return all(0.0 <= float(u) <= 1.0 and 0.0 <= float(v) <= 1.0 for u, v in uvs)
+    except Exception:
+        return False
+
+
 def _texture_content_stats(img) -> Optional[dict]:
     if img is None or not _PIL:
         return None
@@ -5141,6 +5160,10 @@ class GpuRenderer:
                     tex_name = ''
                 diff_img = textures.get(tex_name) if tex_name else None
                 gl_diff = self._tex_cache.get(diff_img) if diff_img else None
+                _tex_gpu_v_flip = bool(getattr(diff_img, '_gr_gpu_uv_v_flip', True))
+                _u['u_uv_v_flip'].value = (
+                    1.0 if bool(getattr(node, 'uv_v_flip', True)) and _tex_gpu_v_flip else 0.0
+                )
 
                 if gl_diff:
                     # FIX-TEXWRAP: Apply per-node TXI clamp mode (GL_CLAMP_TO_EDGE)
@@ -5151,6 +5174,13 @@ class GpuRenderer:
                     # here for nodes that require clamping (head decals, UI overlays).
                     _node_clamp_s = bool(getattr(node, 'txi_clamp_s', False))
                     _node_clamp_t = bool(getattr(node, 'txi_clamp_t', False))
+                    if not (_node_clamp_s and _node_clamp_t) and _node_uses_single_tile_atlas(node):
+                        # Match the CPU renderer for custom character atlases.
+                        # Override MDLs like n_mandalorian01-03 use 0..1 body/helmet
+                        # sheets without TXI clamp flags; GL_REPEAT samples the
+                        # opposite atlas edge along armor-panel UV borders.
+                        _node_clamp_s = True
+                        _node_clamp_t = True
                     gl_diff.repeat_x = not _node_clamp_s
                     gl_diff.repeat_y = not _node_clamp_t
                     gl_diff.use(location=0)

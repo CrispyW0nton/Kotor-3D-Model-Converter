@@ -645,6 +645,7 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
             pass
         # FIX-TXI-ATTR: Attach TXI string so GPU renderer can apply blending modes
         img._txi_str = _txi  # type: ignore[attr-defined]
+        img._gr_gpu_uv_v_flip = True  # type: ignore[attr-defined]
         # Also store raw data so legacy _extract_txi path works as fallback
         img._tpc_raw = data   # type: ignore[attr-defined]
         # FIX-ALPHATEST: Attach alpha_test from TPC header for punchthrough threshold
@@ -662,6 +663,8 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
     # ── Legacy software decoder (fallback when pykotor is unavailable) ────────
     # _load_tpc_bytes_legacy already attaches _txi_str, _tpc_raw, _txi_alpha_test.
     img = _load_tpc_bytes_legacy(data)
+    if img is not None:
+        img._gr_gpu_uv_v_flip = True  # type: ignore[attr-defined]
     return img
 
 
@@ -2090,6 +2093,16 @@ class TextureCache:
         return None
 
     @staticmethod
+    def _copy_texture_attrs(src: 'Image.Image', dst: 'Image.Image') -> 'Image.Image':
+        for attr in ('_gr_gpu_uv_v_flip', '_txi_str', '_tpc_raw', '_txi_alpha_test'):
+            if hasattr(src, attr):
+                try:
+                    setattr(dst, attr, getattr(src, attr))
+                except Exception:
+                    pass
+        return dst
+
+    @staticmethod
     def _apply_kotor_alpha(raw_bytes: bytes, img: 'Image.Image',
                            txi_meta: dict) -> 'Image.Image':
         """
@@ -2129,7 +2142,7 @@ class TextureCache:
                 arr = np.array(img)
                 if arr[:, :, 3].min() < 255:
                     arr[:, :, 3] = 255
-                    return Image.fromarray(arr, 'RGBA')
+                    return TextureCache._copy_texture_attrs(img, Image.fromarray(arr, 'RGBA'))
             elif has_env:
                 # Case 2: env map — alpha = blend weight between surface and env map.
                 # PRESERVE the alpha channel (do NOT force to 255).
@@ -2153,7 +2166,7 @@ class TextureCache:
                     alpha = arr[:, :, 3]
                     if not (np.all(alpha >= threshold) or np.all(alpha < threshold)):
                         arr[:, :, 3] = np.where(alpha >= threshold, 255, 0).astype(np.uint8)
-                        return Image.fromarray(arr, 'RGBA')
+                        return TextureCache._copy_texture_attrs(img, Image.fromarray(arr, 'RGBA'))
             elif blending == 1:
                 # Case 4: additive blend — keep alpha for additive particle effects
                 pass
@@ -2164,7 +2177,7 @@ class TextureCache:
                 arr = np.array(img)
                 if arr[:, :, 3].min() < 255:
                     arr[:, :, 3] = 255
-                    return Image.fromarray(arr, 'RGBA')
+                    return TextureCache._copy_texture_attrs(img, Image.fromarray(arr, 'RGBA'))
         except Exception as e:
             log.debug(f"_apply_kotor_alpha error: {e}")
         return img
@@ -2178,7 +2191,8 @@ class TextureCache:
                 # Maintain aspect ratio
                 scale = self.MAX_SIZE / max(w, h)
                 nw, nh = max(1, int(w * scale)), max(1, int(h * scale))
-                img = img.resize((nw, nh), Image.LANCZOS)
+                original = img
+                img = self._copy_texture_attrs(original, img.resize((nw, nh), Image.LANCZOS))
                 log.debug(f"Texture '{name}' downscaled {w}x{h} → {nw}x{nh}")
         except MemoryError:
             log.warning(f"Texture '{name}': MemoryError during resize — using original")
@@ -2200,7 +2214,10 @@ class TextureCache:
         if not _PIL:
             return None
         if _is_tpc_data(raw):
-            return _load_tpc_bytes(raw)
+            img = _load_tpc_bytes(raw)
+            if img is not None:
+                img._gr_gpu_uv_v_flip = True  # type: ignore[attr-defined]
+            return img
         try:
             import io
             img = Image.open(io.BytesIO(raw)).convert('RGBA')
@@ -2217,6 +2234,7 @@ class TextureCache:
             # preserved the bottom-up layout), causing them to remain top-down
             # and render upside-down.
             img = img.transpose(Image.FLIP_TOP_BOTTOM)
+            img._gr_gpu_uv_v_flip = False  # type: ignore[attr-defined]
             return img
         except Exception:
             return None
@@ -2242,7 +2260,10 @@ class TextureCache:
             return None
 
         if _is_tpc_data(raw):
-            return _load_tpc_bytes(raw)
+            img = _load_tpc_bytes(raw)
+            if img is not None:
+                img._gr_gpu_uv_v_flip = True  # type: ignore[attr-defined]
+            return img
 
         # Fall back to Pillow for real TGA / PNG / DDS
         if _PIL:
@@ -2254,6 +2275,7 @@ class TextureCache:
                 # TGA variants to top-down during Image.open().  Flip ALL images
                 # to bottom-up so the renderer's V-flip formula works correctly.
                 img = img.transpose(Image.FLIP_TOP_BOTTOM)
+                img._gr_gpu_uv_v_flip = False  # type: ignore[attr-defined]
                 return img
             except Exception:
                 pass
@@ -5792,6 +5814,8 @@ class FrameRenderer:
                                     sr_arr[g_sl], sg_arr[g_sl], sb_arr[g_sl],
                                     alpha_arr[g_sl],
                                     visible[g_sl],
+                                    clamp_s=_accel_clamp_s,
+                                    clamp_t=_accel_clamp_t,
                                 )
                             else:
                                 # No texture for this group — render as flat-shade

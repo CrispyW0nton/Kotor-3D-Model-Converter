@@ -55,6 +55,7 @@ game_data/
 !/tests/test_composite_workflow.py
 !/tests/test_skeleton_template_picker.py
 !/tests/test_skeleton_template_hud_wiring.py
+!/tests/test_accel_texture_clamp.py
 !/tests/test_guide_edit_persistence_wiring.py
 !/tests/test_motion_assignment_wiring.py
 !/tests/test_launch_workflow.py

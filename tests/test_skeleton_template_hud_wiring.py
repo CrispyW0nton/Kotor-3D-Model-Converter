@@ -122,6 +122,7 @@ def test_external_dcc_imports_disable_kotor_uv_seam_repair() -> None:
 
 def test_gpu_renderer_clamps_single_tile_character_atlases_like_cpu_renderer() -> None:
     viewport = _read("src/gui/viewport_core.py")
+    gpu = _read("src/gui/gpu_renderer.py")
 
     assert "FIX-EDGEBLEED (CPU)" in viewport
     assert "FIX-EDGEBLEED (GPU)" in viewport
@@ -129,4 +130,9 @@ def test_gpu_renderer_clamps_single_tile_character_atlases_like_cpu_renderer() -
     assert "_accel_clamp_s = True" in viewport
     assert "_accel_clamp_t = True" in viewport
     assert "0.0 <= u <= 1.0 and 0.0 <= v <= 1.0" in viewport
+    assert "def _node_uses_single_tile_atlas" in gpu
+    assert "_node_uses_single_tile_atlas(node)" in gpu
+    assert "gl_diff.repeat_x = not _node_clamp_s" in gpu
+    assert "_gr_gpu_uv_v_flip" in gpu
+    assert "img._gr_gpu_uv_v_flip = False" in viewport
 
