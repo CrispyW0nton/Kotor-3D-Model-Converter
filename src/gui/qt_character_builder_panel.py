@@ -721,6 +721,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if hasattr(self.inspector, "assignMotionsRequested"):
             self.inspector.assignMotionsRequested.connect(
                 self._on_assign_motions_requested)
+        if hasattr(self.inspector, "romTestRequested"):
+            self.inspector.romTestRequested.connect(
+                self._on_run_rom_test_requested)
         # M6 / T602 — Head Facial Palette.
         if hasattr(self.inspector, "headFacialBoneSelected"):
             self.inspector.headFacialBoneSelected.connect(
@@ -1994,6 +1997,74 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             self._on_refresh_preview_animations_requested()
             self._update_title()
             self._schedule_live_validation("motions_assigned")
+
+    @QtCore.Slot()
+    def _on_run_rom_test_requested(self) -> None:
+        """Assign and run the generated range-of-motion preview."""
+        try:
+            _wf = self._workflow_module()
+        except Exception as exc:                            # pragma: no cover
+            log.exception("Could not import headless_body_workflow")
+            self.bottom_strip.set_validation(
+                "error", "ROM_UNAVAILABLE",
+                issues=[f"ROM workflow unavailable: {exc}"],
+            )
+            return
+
+        viewport = getattr(self, "viewport", None)
+        result = _wf.run_rom_test(self.scene, viewport=viewport)
+        kind = "ok" if result.ok else "error"
+
+        if hasattr(self.inspector, "set_motion_assignment"):
+            try:
+                self.inspector.set_motion_assignment(
+                    source=getattr(_wf, "MOTION_SOURCE_ROM", "generated_rom"),
+                    supermodel="",
+                )
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_motion_assignment failed")
+        if hasattr(self.inspector, "set_motion_assignment_status"):
+            try:
+                self.inspector.set_motion_assignment_status(
+                    result.message,
+                    kind=kind,
+                )
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_motion_assignment_status failed")
+
+        preview = _wf.available_preview_animations(self.scene)
+        if hasattr(self.inspector, "set_preview_animations"):
+            try:
+                self.inspector.set_preview_animations(
+                    preview.available,
+                    preview.missing,
+                )
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_preview_animations failed")
+        if hasattr(self.inspector, "set_preview_status"):
+            try:
+                self.inspector.set_preview_status(result.message, kind=kind)
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_preview_status failed")
+
+        if result.ok:
+            frames = max(1, int(round((result.length or 4.0) * 30)))
+            try:
+                self.bottom_strip.set_frame_range(0, frames)
+                self.bottom_strip.set_current_frame(0)
+                self.bottom_strip.set_playing(True)
+            except Exception:                               # pragma: no cover
+                log.exception("bottom_strip ROM scrubber update failed")
+
+        self.bottom_strip.set_validation(
+            "info" if result.ok else "error",
+            "ROM_RUNNING" if result.ok else (result.code or "rom").upper(),
+            issues=[result.message],
+        )
+        self.statusBar().showMessage(result.message, 5000)
+        if result.ok:
+            self._refresh_motion_assignment_state()
+            self._schedule_live_validation("rom_test")
 
     # ── M5 / T505 — Check-Actor step slots ───────────────────────────────
 

@@ -1775,6 +1775,51 @@ def play_preview_animation(
     )
 
 
+def run_rom_test(scene: Any, *, viewport: Optional[Any] = None) -> CheckActorResult:
+    """M9/T903 — assign and start the generated ROM preview.
+
+    This is the launch-path bridge until M8's full Stewart Jones ROM
+    generator lands.  It records the generated-ROM motion source on the
+    scene, exposes a ``generated_rom`` preview clip, and nudges the
+    viewport/bottom strip into a four-second ROM playback state.
+    """
+    assigned = assign_motion_source(scene, MOTION_SOURCE_ROM)
+    if not assigned.ok:
+        return CheckActorResult(
+            message=assigned.message,
+            code=assigned.code,
+        )
+
+    result = play_preview_animation(scene, "generated_rom", viewport=None)
+    if viewport is not None and hasattr(viewport, "set_animation_pose"):
+        try:
+            viewport.set_animation_pose(
+                None,
+                name="generated_rom",
+                time=0.0,
+                length=result.length or 4.0,
+            )
+        except Exception as exc:                            # pragma: no cover
+            log.exception("run_rom_test: viewport dispatch raised")
+            return CheckActorResult(
+                available=result.available,
+                playing="",
+                length=result.length or 4.0,
+                message=f"Generated ROM assigned but viewport dispatch failed: {exc}",
+                code="anim_missing",
+            )
+
+    return CheckActorResult(
+        ok=result.ok,
+        available=[("ROM Test", "generated_rom")],
+        missing=list(PREVIEW_ANIMATIONS),
+        playing="generated_rom",
+        length=result.length or 4.0,
+        message="Running generated ROM test for range-of-motion validation.",
+        code="generated_rom",
+    )
+
+
 def stop_preview_animation(viewport: Optional[Any] = None) -> CheckActorResult:
     """Workflow Step 5c — stop the currently-playing preview animation.
 
@@ -2704,6 +2749,7 @@ __all__ = [
     "record_body_guide_edit",
     "redo_body_guide_edit",
     "run_external_mesh_launch_workflow",
+    "run_rom_test",
     "stop_preview_animation",
     "undo_body_guide_edit",
     "supported_load_extensions",

@@ -35,7 +35,7 @@ This folder contains the post-Qt-migration roadmap for GhostRigger, derived from
 | M0–M6 | ✅ DONE (7 of 12) | shipped |
 | M7 Supermodel | 🟡 partial | ~3 d |
 | M8 Creature | 🔴 greenfield | ~7 d |
-| M9 Live validation | 🟡 partial | T901-T902 done locally; T903-T904 remain |
+| M9 Live validation | 🟡 partial | T901-T903 done locally; T904 remains |
 | M10 Export polish | ✅ done locally | awaiting review/PR |
 | M12 External Mesh Launch Path | ✅ done locally | awaiting review/PR |
 | M11 Visual regression | 🟡 infra ready | ~2 d |

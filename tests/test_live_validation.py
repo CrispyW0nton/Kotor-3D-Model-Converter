@@ -81,3 +81,36 @@ def test_t902_report_rows_show_issue_fields_and_jump_to_node() -> None:
     assert "def _find_viewport_node" in src
     assert "viewport.set_selected_node(node)" in src
     assert "Selected validation target" in src
+
+
+def test_t903_inspector_exposes_mode_aware_run_rom_button() -> None:
+    src = _read("src/gui/qt_inspector_panel.py")
+
+    assert "romTestRequested" in src
+    assert "self._rom_test_btn = QtWidgets.QPushButton(\"Run ROM\")" in src
+    assert "self._rom_test_btn.clicked.connect(self.romTestRequested.emit)" in src
+    assert "\"Run Body ROM\"" in src
+    assert "\"Run Head ROM\"" in src
+    assert "\"Run Composite ROM\"" in src
+    assert "\"Run Creature ROM\"" in src
+
+
+def test_t903_builder_wires_run_rom_to_workflow_preview_and_validation() -> None:
+    src = _read("src/gui/qt_character_builder_panel.py")
+
+    assert "self.inspector.romTestRequested.connect(" in src
+    assert "self._on_run_rom_test_requested" in src
+    assert "result = _wf.run_rom_test(self.scene, viewport=viewport)" in src
+    assert "self.bottom_strip.set_frame_range(0, frames)" in src
+    assert "self.bottom_strip.set_playing(True)" in src
+    assert "self._schedule_live_validation(\"rom_test\")" in src
+
+
+def test_t903_workflow_exposes_run_rom_test_bridge() -> None:
+    src = _read("src/core/headless_body_workflow.py")
+
+    assert "def run_rom_test(" in src
+    assert "assign_motion_source(scene, MOTION_SOURCE_ROM)" in src
+    assert "play_preview_animation(scene, \"generated_rom\"" in src
+    assert "viewport.set_animation_pose(" in src
+    assert "\"run_rom_test\"" in src

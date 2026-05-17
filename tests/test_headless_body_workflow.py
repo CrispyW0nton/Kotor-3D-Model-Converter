@@ -1400,6 +1400,31 @@ def test_t1204_generated_rom_assignment_adds_rom_preview_entry():
     assert play.code == "generated_rom"
 
 
+def test_t903_run_rom_test_assigns_generated_rom_and_dispatches_viewport():
+    scene, _body = _scene_with_animated_body()
+
+    class _Viewport:
+        calls = []
+
+        def set_animation_pose(self, pose, **kwargs):
+            self.calls.append((pose, kwargs))
+
+    viewport = _Viewport()
+
+    result = wf.run_rom_test(scene, viewport=viewport)
+    preview = wf.available_preview_animations(scene)
+
+    assert result.ok is True
+    assert result.code == "generated_rom"
+    assert result.playing == "generated_rom"
+    assert result.length == 4.0
+    assert scene.motion_assignment["source"] == wf.MOTION_SOURCE_ROM
+    assert preview.available == [("ROM Test", "generated_rom")]
+    assert viewport.calls == [
+        (None, {"name": "generated_rom", "time": 0.0, "length": 4.0})
+    ]
+
+
 def test_t1204_export_validation_blocks_body_with_no_motion_source(monkeypatch):
     _make_check_service(monkeypatch, issues=[])
     scene, body = _scene_with_animated_body()

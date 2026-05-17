@@ -162,6 +162,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._motion_source_combo: Optional[QtWidgets.QComboBox] = None
         self._motion_supermodel_combo: Optional[QtWidgets.QComboBox] = None
         self._motion_assignment_status: Optional[QtWidgets.QLabel] = None
+        self._rom_test_btn: Optional[QtWidgets.QPushButton] = None
         self._build()
 
     # ── UI construction ──────────────────────────────────────────────────
@@ -954,6 +955,14 @@ class QtInspectorPanel(QtWidgets.QWidget):
         refresh_btn = QtWidgets.QPushButton("Refresh Preview")
         refresh_btn.clicked.connect(self.refreshPreviewAnimationsRequested.emit)
         btn_row.addWidget(refresh_btn)
+
+        self._rom_test_btn = QtWidgets.QPushButton("Run ROM")
+        self._rom_test_btn.setProperty("accent", True)
+        self._rom_test_btn.setToolTip(
+            "Assign the generated range-of-motion clip and start the ROM preview."
+        )
+        self._rom_test_btn.clicked.connect(self.romTestRequested.emit)
+        btn_row.addWidget(self._rom_test_btn)
         btn_row.addStretch(1)
         layout.addLayout(btn_row)
 
@@ -1694,6 +1703,15 @@ class QtInspectorPanel(QtWidgets.QWidget):
         # M6 / T604 — Toggle the Phoneme Calibration Panel as well.
         if self._head_phoneme_panel is not None:
             self._head_phoneme_panel.setVisible(is_head)
+
+        if self._rom_test_btn is not None:
+            labels = {
+                "headless_body": "Run Body ROM",
+                "head": "Run Head ROM",
+                "supermodel": "Run Composite ROM",
+                "creature": "Run Creature ROM",
+            }
+            self._rom_test_btn.setText(labels.get(mode_value, "Run ROM"))
 
     def active_mode(self):
         """Return the most recently applied :class:`CharacterMode` (or ``None``)."""
