@@ -69,6 +69,29 @@ def test_complete_character_load_and_texture_folder_prompt_are_wired() -> None:
     assert "texture_resolution_report(model, dirs)" in builder
 
 
+def test_manual_import_fit_controls_are_wired() -> None:
+    inspector = _read("src/gui/qt_inspector_panel.py")
+    builder = _read("src/gui/qt_character_builder_panel.py")
+    viewport = _read("src/gui/qt_viewport.py")
+    workflow = _read("src/core/headless_body_workflow.py")
+
+    assert "fitAdjustmentChanged" in inspector
+    assert 'QtWidgets.QGroupBox("Import Fit")' in inspector
+    assert "set_fit_adjustment" in inspector
+    assert "_on_fit_adjustment_changed" in builder
+    assert "apply_external_model_fit_adjustment" in builder
+    assert "refresh_model_geometry" in viewport
+    assert "def apply_external_model_fit_adjustment" in workflow
+
+
+def test_shift_snaps_viewport_rotation_gimbal_to_ten_degrees() -> None:
+    viewport = _read("src/gui/qt_viewport.py")
+
+    assert "QtCore.Qt.ShiftModifier" in viewport
+    assert "round(math.degrees(angle) / 10.0) * 10.0" in viewport
+    assert "self._gimbal_node_start_rot" in viewport
+
+
 def test_viewport_preloads_textures_for_skin_nodes() -> None:
     viewport = _read("src/gui/qt_viewport.py")
 

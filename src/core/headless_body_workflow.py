@@ -31,6 +31,7 @@ Roadmap reference: knowledge_base/roadmap/02_roadmap_2026_05.md M5/T501-T506.
 from __future__ import annotations
 
 import logging
+import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -285,6 +286,65 @@ def _axis_map_to_kotor_z(point: Tuple[float, float, float], vertical_axis: int) 
     return (x, y, z)
 
 
+def _quat_from_axis_angle(axis: str, radians_value: float) -> Tuple[float, float, float, float]:
+    half = radians_value * 0.5
+    s = math.sin(half)
+    c = math.cos(half)
+    if axis == "x":
+        return (s, 0.0, 0.0, c)
+    if axis == "y":
+        return (0.0, s, 0.0, c)
+    return (0.0, 0.0, s, c)
+
+
+def _quat_mul(
+    a: Tuple[float, float, float, float],
+    b: Tuple[float, float, float, float],
+) -> Tuple[float, float, float, float]:
+    ax, ay, az, aw = a
+    bx, by, bz, bw = b
+    out = (
+        aw * bx + ax * bw + ay * bz - az * by,
+        aw * by - ax * bz + ay * bw + az * bx,
+        aw * bz + ax * by - ay * bx + az * bw,
+        aw * bw - ax * bx - ay * by - az * bz,
+    )
+    length = math.sqrt(sum(v * v for v in out))
+    if length <= 1e-9:
+        return (0.0, 0.0, 0.0, 1.0)
+    return tuple(v / length for v in out)  # type: ignore[return-value]
+
+
+def _rotate_point_xyz(
+    point: Tuple[float, float, float],
+    radians_xyz: Tuple[float, float, float],
+) -> Tuple[float, float, float]:
+    x, y, z = point
+    rx, ry, rz = radians_xyz
+    if abs(rx) > 1e-12:
+        c, s = math.cos(rx), math.sin(rx)
+        y, z = y * c - z * s, y * s + z * c
+    if abs(ry) > 1e-12:
+        c, s = math.cos(ry), math.sin(ry)
+        x, z = x * c + z * s, -x * s + z * c
+    if abs(rz) > 1e-12:
+        c, s = math.cos(rz), math.sin(rz)
+        x, y = x * c - y * s, x * s + y * c
+    return (x, y, z)
+
+
+def _manual_fit_pivot(model: Any) -> Tuple[float, float, float]:
+    bounds = _vertex_bounds(model)
+    if bounds is None:
+        return (0.0, 0.0, 0.0)
+    bb_min, bb_max = bounds
+    return (
+        (bb_min[0] + bb_max[0]) * 0.5,
+        (bb_min[1] + bb_max[1]) * 0.5,
+        bb_min[2],
+    )
+
+
 def _transform_point_for_kotor(
     point: Tuple[float, float, float],
     *,
@@ -298,6 +358,126 @@ def _transform_point_for_kotor(
         mapped[1] * scale + offset[1],
         mapped[2] * scale + offset[2],
     )
+
+
+def apply_external_model_fit_adjustment(
+    model: Any,
+    *,
+    rotation_delta_degrees: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+    scale_delta: float = 1.0,
+) -> Dict[str, Any]:
+    """Apply a manual post-auto-fit adjustment to an imported model.
+
+    This is intentionally model-level rather than guide-level: it lets a user
+    correct a Blender/FBX axis or unit mismatch after the automatic KOTOR base
+    fit has run, before guide placement and binding.
+    """
+    if model is None:
+        return {"ok": False, "code": "no_model", "message": "No model loaded."}
+
+    scale = max(0.01, min(100.0, float(scale_delta or 1.0)))
+    radians_xyz = tuple(math.radians(float(v or 0.0)) for v in rotation_delta_degrees)
+    pivot = _manual_fit_pivot(model)
+    changed = False
+
+    def transform_point(point: Tuple[float, float, float]) -> Tuple[float, float, float]:
+        rel = (
+            (point[0] - pivot[0]) * scale,
+            (point[1] - pivot[1]) * scale,
+            (point[2] - pivot[2]) * scale,
+        )
+        rot = _rotate_point_xyz(rel, radians_xyz)
+        return (rot[0] + pivot[0], rot[1] + pivot[1], rot[2] + pivot[2])
+
+    for node in _iter_model_nodes(model):
+        pos = getattr(node, "position", None)
+        if pos is not None and len(pos) >= 3:
+            try:
+                node.position = transform_point((float(pos[0]), float(pos[1]), float(pos[2])))
+                changed = True
+            except Exception:
+                pass
+
+        external_wp = getattr(node, "external_world_position", None)
+        if external_wp is not None and len(external_wp) >= 3:
+            try:
+                node.external_world_position = transform_point((
+                    float(external_wp[0]),
+                    float(external_wp[1]),
+                    float(external_wp[2]),
+                ))
+                changed = True
+            except Exception:
+                pass
+
+        verts = list(getattr(node, "vertices", []) or [])
+        if verts:
+            new_verts = []
+            for vert in verts:
+                try:
+                    new_verts.append(transform_point((float(vert[0]), float(vert[1]), float(vert[2]))))
+                except Exception:
+                    new_verts.append(vert)
+            node.vertices = new_verts
+            changed = True
+            try:
+                node.compute_bounds()
+            except Exception:
+                pass
+
+        normals = list(getattr(node, "normals", []) or [])
+        if normals and any(abs(v) > 1e-12 for v in radians_xyz):
+            new_normals = []
+            for normal in normals:
+                try:
+                    new_normals.append(_rotate_point_xyz((
+                        float(normal[0]),
+                        float(normal[1]),
+                        float(normal[2]),
+                    ), radians_xyz))
+                except Exception:
+                    new_normals.append(normal)
+            node.normals = new_normals
+
+        rot = getattr(node, "rotation", None)
+        if rot is not None and len(rot) >= 4 and any(abs(v) > 1e-12 for v in radians_xyz):
+            try:
+                delta_q = (0.0, 0.0, 0.0, 1.0)
+                for axis, angle in zip(("x", "y", "z"), radians_xyz):
+                    if abs(angle) > 1e-12:
+                        delta_q = _quat_mul(_quat_from_axis_angle(axis, angle), delta_q)
+                node.rotation = _quat_mul(delta_q, tuple(float(v) for v in rot[:4]))
+            except Exception:
+                pass
+
+    try:
+        model.compute_bounds()
+    except Exception:
+        b = _vertex_bounds(model)
+        if b is not None:
+            model.bb_min, model.bb_max = b
+
+    metadata = getattr(model, "metadata", None)
+    if not isinstance(metadata, dict):
+        metadata = {}
+        setattr(model, "metadata", metadata)
+    state = dict(metadata.get("manual_fit_adjustment") or {})
+    old_scale = float(state.get("scale", 1.0) or 1.0)
+    old_rot = tuple(float(v) for v in state.get("rotation_degrees", (0.0, 0.0, 0.0)))
+    state["scale"] = old_scale * scale
+    state["rotation_degrees"] = tuple(
+        old_rot[i] + float(rotation_delta_degrees[i] or 0.0)
+        for i in range(3)
+    )
+    metadata["manual_fit_adjustment"] = state
+    return {
+        "ok": changed,
+        "code": "adjusted" if changed else "unchanged",
+        "message": "Manual fit adjustment applied." if changed else "Nothing to adjust.",
+        "scale_delta": scale,
+        "rotation_delta_degrees": tuple(float(v or 0.0) for v in rotation_delta_degrees),
+        "pivot": pivot,
+    }
 
 
 def normalize_external_model_for_kotor(
@@ -3168,6 +3348,7 @@ __all__ = [
     "apply_hand_masks",
     "assign_motion_source",
     "available_preview_animations",
+    "apply_external_model_fit_adjustment",
     "check_model",
     "default_export_formats_for_mode",
     "export_scene",

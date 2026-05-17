@@ -2167,6 +2167,41 @@ def test_external_model_normalization_fits_selected_reference_height():
     assert model.bb_max[2] == pytest.approx(1.75)
 
 
+def test_manual_fit_adjustment_scales_about_ground_center():
+    model = _FakeExternalMeshModel([
+        (-1.0, -1.0, 0.0),
+        (1.0, 1.0, 2.0),
+    ])
+
+    result = wf.apply_external_model_fit_adjustment(
+        model,
+        scale_delta=0.5,
+    )
+
+    assert result["ok"] is True
+    assert model.bb_min == pytest.approx((-0.5, -0.5, 0.0))
+    assert model.bb_max == pytest.approx((0.5, 0.5, 1.0))
+    assert model.metadata["manual_fit_adjustment"]["scale"] == pytest.approx(0.5)
+
+
+def test_manual_fit_adjustment_rotates_vertices_after_auto_fit():
+    model = _FakeExternalMeshModel([
+        (-1.0, -1.0, 0.0),
+        (1.0, 1.0, 0.0),
+    ])
+
+    result = wf.apply_external_model_fit_adjustment(
+        model,
+        rotation_delta_degrees=(0.0, 0.0, 90.0),
+    )
+
+    assert result["ok"] is True
+    verts = model._nodes[0].vertices
+    assert verts[0] == pytest.approx((1.0, -1.0, 0.0))
+    assert verts[1] == pytest.approx((-1.0, 1.0, 0.0))
+    assert model.metadata["manual_fit_adjustment"]["rotation_degrees"] == pytest.approx((0.0, 0.0, 90.0))
+
+
 def test_external_world_position_drives_bone_world_position():
     node = md.ModelNode(name="Head")
     node.position = (99.0, 99.0, 99.0)

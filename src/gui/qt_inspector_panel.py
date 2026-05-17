@@ -104,6 +104,8 @@ class QtInspectorPanel(QtWidgets.QWidget):
     motionSupermodelChanged   = QtCore.Signal(str)
     exportRequested           = QtCore.Signal()
     loadRequested             = QtCore.Signal()
+    fitAdjustmentChanged      = QtCore.Signal(float, float, float, float)
+    fitAdjustmentResetRequested = QtCore.Signal()
     validateRequested         = QtCore.Signal()
     checkModelRequested       = QtCore.Signal()
     romTestRequested          = QtCore.Signal()
@@ -158,6 +160,11 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._skeleton_template_combo: Optional[QtWidgets.QComboBox] = None
         self._skeleton_template_status: Optional[QtWidgets.QLabel] = None
         self._apply_skeleton_template_btn: Optional[QtWidgets.QPushButton] = None
+        self._fit_scale_spin: Optional[QtWidgets.QDoubleSpinBox] = None
+        self._fit_rot_x_spin: Optional[QtWidgets.QDoubleSpinBox] = None
+        self._fit_rot_y_spin: Optional[QtWidgets.QDoubleSpinBox] = None
+        self._fit_rot_z_spin: Optional[QtWidgets.QDoubleSpinBox] = None
+        self._fit_adjust_status: Optional[QtWidgets.QLabel] = None
         # M12 / T1204 — mode-aware motion assignment.
         self._motion_source_combo: Optional[QtWidgets.QComboBox] = None
         self._motion_supermodel_combo: Optional[QtWidgets.QComboBox] = None
@@ -239,6 +246,58 @@ class QtInspectorPanel(QtWidgets.QWidget):
         btn.setProperty("accent", True)
         btn.clicked.connect(self.loadRequested.emit)
         layout.addWidget(btn)
+
+        fit_group = QtWidgets.QGroupBox("Import Fit")
+        fit_layout = QtWidgets.QGridLayout(fit_group)
+        fit_layout.setContentsMargins(8, 8, 8, 8)
+        fit_layout.setHorizontalSpacing(6)
+        fit_layout.setVerticalSpacing(4)
+
+        self._fit_scale_spin = QtWidgets.QDoubleSpinBox()
+        self._fit_scale_spin.setRange(1.0, 1000.0)
+        self._fit_scale_spin.setValue(100.0)
+        self._fit_scale_spin.setSingleStep(1.0)
+        self._fit_scale_spin.setSuffix("%")
+        self._fit_scale_spin.setToolTip("Manual scale after auto-fit.")
+        fit_layout.addWidget(QtWidgets.QLabel("Scale"), 0, 0)
+        fit_layout.addWidget(self._fit_scale_spin, 0, 1, 1, 3)
+
+        spin_specs = [
+            ("Rot X", "_fit_rot_x_spin"),
+            ("Rot Y", "_fit_rot_y_spin"),
+            ("Rot Z", "_fit_rot_z_spin"),
+        ]
+        for row, (label, attr) in enumerate(spin_specs, start=1):
+            spin = QtWidgets.QDoubleSpinBox()
+            spin.setRange(-180.0, 180.0)
+            spin.setDecimals(1)
+            spin.setSingleStep(1.0)
+            spin.setSuffix(" deg")
+            spin.setToolTip("Manual orientation after auto-fit. Viewport rotation drags snap to 10 deg while Shift is held.")
+            setattr(self, attr, spin)
+            fit_layout.addWidget(QtWidgets.QLabel(label), row, 0)
+            fit_layout.addWidget(spin, row, 1, 1, 3)
+
+        reset_btn = QtWidgets.QPushButton("Reset Fit")
+        reset_btn.clicked.connect(self.fitAdjustmentResetRequested.emit)
+        fit_layout.addWidget(reset_btn, 4, 0, 1, 2)
+
+        self._fit_adjust_status = QtWidgets.QLabel("Auto-fit can be fine-tuned after import.")
+        self._fit_adjust_status.setWordWrap(True)
+        self._fit_adjust_status.setStyleSheet(
+            f"color:{C.get('text2', '#888')}; font-size:8pt;"
+        )
+        fit_layout.addWidget(self._fit_adjust_status, 4, 2, 1, 2)
+
+        for spin in (
+            self._fit_scale_spin,
+            self._fit_rot_x_spin,
+            self._fit_rot_y_spin,
+            self._fit_rot_z_spin,
+        ):
+            if spin is not None:
+                spin.valueChanged.connect(self._emit_fit_adjustment)
+        layout.addWidget(fit_group)
 
     def _populate_check_model_page(self, layout: QtWidgets.QVBoxLayout) -> None:
         """Check-Model inspector page (M5 / T502).
@@ -1612,6 +1671,16 @@ class QtInspectorPanel(QtWidgets.QWidget):
         if key:
             self.skeletonTemplateSelected.emit(key)
 
+    def _emit_fit_adjustment(self, *_args) -> None:
+        scale = (
+            float(self._fit_scale_spin.value()) / 100.0
+            if self._fit_scale_spin is not None else 1.0
+        )
+        rx = float(self._fit_rot_x_spin.value()) if self._fit_rot_x_spin is not None else 0.0
+        ry = float(self._fit_rot_y_spin.value()) if self._fit_rot_y_spin is not None else 0.0
+        rz = float(self._fit_rot_z_spin.value()) if self._fit_rot_z_spin is not None else 0.0
+        self.fitAdjustmentChanged.emit(scale, rx, ry, rz)
+
     # ── Public API ───────────────────────────────────────────────────────
 
     def set_step(self, step_number: int) -> bool:
@@ -1638,6 +1707,50 @@ class QtInspectorPanel(QtWidgets.QWidget):
             if idx == current_idx:
                 return step
         return _STEP_LOAD                                    # pragma: no cover
+
+    def set_fit_adjustment(
+        self,
+        *,
+        scale: float = 1.0,
+        rotation_degrees=(0.0, 0.0, 0.0),
+        emit: bool = False,
+    ) -> None:
+        """Set the manual import-fit widgets from scene state."""
+        spins = [
+            self._fit_scale_spin,
+            self._fit_rot_x_spin,
+            self._fit_rot_y_spin,
+            self._fit_rot_z_spin,
+        ]
+        for spin in spins:
+            if spin is not None:
+                spin.blockSignals(not emit)
+        try:
+            if self._fit_scale_spin is not None:
+                self._fit_scale_spin.setValue(float(scale or 1.0) * 100.0)
+            values = tuple(float(v or 0.0) for v in rotation_degrees)
+            for spin, value in zip(
+                (self._fit_rot_x_spin, self._fit_rot_y_spin, self._fit_rot_z_spin),
+                values,
+            ):
+                if spin is not None:
+                    spin.setValue(value)
+        finally:
+            for spin in spins:
+                if spin is not None:
+                    spin.blockSignals(False)
+
+    def set_fit_adjustment_status(self, message: str, *, kind: str = "info") -> None:
+        label = getattr(self, "_fit_adjust_status", None)
+        if label is None:
+            return
+        colour = {
+            "ok": "#7cd87c",
+            "warning": "#ffd166",
+            "error": "#ff6b6b",
+        }.get(str(kind).lower(), C.get("text2", "#888"))
+        label.setText(str(message))
+        label.setStyleSheet(f"color:{colour}; font-size:8pt;")
 
     def populate_joints(self, names: Iterable[str]) -> None:
         """Fill every rig-page joint dropdown with *names*.

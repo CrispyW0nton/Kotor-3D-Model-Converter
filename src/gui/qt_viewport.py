@@ -626,6 +626,28 @@ class QtViewportWidget(QtWidgets.QWidget):
     def set_model(self, model) -> None:
         self.load_model(model)
 
+    def refresh_model_geometry(self) -> None:
+        """Refresh bounds/caches after in-place model vertex transforms."""
+        if self.model is None:
+            return
+        try:
+            self._compute_bb(self.model)
+        except Exception:
+            pass
+        try:
+            self._renderer._wt_cache.clear()
+            self._renderer._frame_view = None
+            self._renderer._frame_verts_cache = {}
+            self._renderer._frame_norms_cache = {}
+        except Exception:
+            pass
+        if self._gpu_renderer is not None:
+            try:
+                self._gpu_renderer.clear_caches()
+            except Exception:
+                pass
+        self._request_render(fast=True)
+
     def set_external_skeleton(
         self,
         model,
@@ -2605,11 +2627,14 @@ class QtViewportWidget(QtWidgets.QWidget):
                 node.position = (start[0] + d1[0] + d2[0], start[1] + d1[1] + d2[1], start[2] + d1[2] + d2[2])
         elif self._renderer.gimbal_mode == 2:
             angle = dx_screen * 0.01
+            if QtWidgets.QApplication.keyboardModifiers() & QtCore.Qt.ShiftModifier:
+                deg = round(math.degrees(angle) / 10.0) * 10.0
+                angle = math.radians(deg)
             ha = angle * 0.5
             c, s = math.cos(ha), math.sin(ha)
             rq = {"X": (s, 0.0, 0.0, c), "Y": (0.0, s, 0.0, c)}.get(axis, (0.0, 0.0, s, c))
             ax, ay, az, aw = rq
-            bx, by, bz, bw = node.rotation
+            bx, by, bz, bw = self._gimbal_node_start_rot
             new_rot = (
                 aw * bx + ax * bw + ay * bz - az * by,
                 aw * by - ax * bz + ay * bw + az * bx,

@@ -410,6 +410,8 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._skeleton_template_options_by_key: dict[str, Any] = {}
         self._selected_skeleton_template_key = ""
         self._selected_skeleton_template_model: Optional[Any] = None
+        self._manual_fit_scale: float = 1.0
+        self._manual_fit_rotation: tuple[float, float, float] = (0.0, 0.0, 0.0)
         # M9 / T901 — live validation is intentionally debounced so
         # guide drags and slider-like controls do not spam the workflow
         # service while still refreshing the export banner promptly.
@@ -679,6 +681,12 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self.rail.stepSelected.connect(self.inspector.set_step)
         self.inspector.exportRequested.connect(self._on_export_requested)
         self.inspector.loadRequested.connect(self._on_load_model_requested)
+        if hasattr(self.inspector, "fitAdjustmentChanged"):
+            self.inspector.fitAdjustmentChanged.connect(
+                self._on_fit_adjustment_changed)
+        if hasattr(self.inspector, "fitAdjustmentResetRequested"):
+            self.inspector.fitAdjustmentResetRequested.connect(
+                self._on_fit_adjustment_reset_requested)
         self.inspector.validateRequested.connect(self._on_validate_requested)
         self.inspector.checkModelRequested.connect(self._on_check_model_requested)
         self.bottom_strip.bannerClicked.connect(self._on_validation_banner_clicked)
@@ -1202,10 +1210,109 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._body_guides = {}
         self._body_guide_history = None
         self._refresh_body_guide_undo_actions()
+        self._manual_fit_scale = 1.0
+        self._manual_fit_rotation = (0.0, 0.0, 0.0)
+        if hasattr(self.inspector, "set_fit_adjustment"):
+            try:
+                self.inspector.set_fit_adjustment(
+                    scale=1.0,
+                    rotation_degrees=(0.0, 0.0, 0.0),
+                    emit=False,
+                )
+            except Exception:
+                log.exception("inspector.set_fit_adjustment failed")
         self._refresh_skeleton_template_options()
         self._refresh_motion_assignment_state()
         self._update_title()
         self._schedule_live_validation("model_loaded")
+
+    def _body_model_for_fit_adjustment(self) -> tuple[Any, Any]:
+        try:
+            from core import model_data as _md
+        except ImportError:                                 # pragma: no cover
+            from src.core import model_data as _md           # type: ignore
+        entry = self.scene.get(_md.PartSlot.HEADLESS_BODY)
+        model = getattr(entry, "model", None) if entry is not None else None
+        return entry, model
+
+    @QtCore.Slot(float, float, float, float)
+    def _on_fit_adjustment_changed(
+        self,
+        scale: float,
+        rx: float,
+        ry: float,
+        rz: float,
+    ) -> None:
+        """Apply manual scale/orientation correction after auto-fit."""
+        _entry, model = self._body_model_for_fit_adjustment()
+        if model is None:
+            if hasattr(self.inspector, "set_fit_adjustment_status"):
+                self.inspector.set_fit_adjustment_status(
+                    "Load a custom mesh before adjusting fit.",
+                    kind="warning",
+                )
+            return
+
+        old_scale = max(0.01, float(self._manual_fit_scale or 1.0))
+        new_scale = max(0.01, float(scale or 1.0))
+        old_rot = tuple(float(v or 0.0) for v in self._manual_fit_rotation)
+        new_rot = (float(rx or 0.0), float(ry or 0.0), float(rz or 0.0))
+        delta_rot = tuple(new_rot[i] - old_rot[i] for i in range(3))
+        delta_scale = new_scale / old_scale
+        if abs(delta_scale - 1.0) < 1e-6 and all(abs(v) < 1e-6 for v in delta_rot):
+            return
+
+        try:
+            from core import headless_body_workflow as _wf
+        except ImportError:                                 # pragma: no cover
+            from src.core import headless_body_workflow as _wf  # type: ignore
+
+        result = _wf.apply_external_model_fit_adjustment(
+            model,
+            rotation_delta_degrees=delta_rot,
+            scale_delta=delta_scale,
+        )
+        if not bool(result.get("ok")):
+            if hasattr(self.inspector, "set_fit_adjustment_status"):
+                self.inspector.set_fit_adjustment_status(
+                    str(result.get("message") or "Fit adjustment did not apply."),
+                    kind="warning",
+                )
+            return
+
+        self._manual_fit_scale = new_scale
+        self._manual_fit_rotation = new_rot
+        viewport = getattr(self, "viewport", None)
+        if viewport is not None and hasattr(viewport, "refresh_model_geometry"):
+            viewport.refresh_model_geometry()
+        try:
+            self.scene.dirty = True
+        except Exception:
+            pass
+        if hasattr(self.inspector, "set_fit_adjustment_status"):
+            self.inspector.set_fit_adjustment_status(
+                f"Fit adjusted: {new_scale * 100:.0f}%, rot {new_rot[0]:.1f}/{new_rot[1]:.1f}/{new_rot[2]:.1f}.",
+                kind="ok",
+            )
+        self._update_title()
+        self._schedule_live_validation("manual_fit_adjusted")
+
+    @QtCore.Slot()
+    def _on_fit_adjustment_reset_requested(self) -> None:
+        """Reset the manual-fit controls for the next imported mesh."""
+        self._manual_fit_scale = 1.0
+        self._manual_fit_rotation = (0.0, 0.0, 0.0)
+        if hasattr(self.inspector, "set_fit_adjustment"):
+            self.inspector.set_fit_adjustment(
+                scale=1.0,
+                rotation_degrees=(0.0, 0.0, 0.0),
+                emit=False,
+            )
+        if hasattr(self.inspector, "set_fit_adjustment_status"):
+            self.inspector.set_fit_adjustment_status(
+                "Fit controls reset. Reload the mesh to discard applied corrections.",
+                kind="info",
+            )
 
     def _load_model_in_viewport_with_textures(
         self,
