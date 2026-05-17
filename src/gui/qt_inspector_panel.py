@@ -839,6 +839,9 @@ class QtInspectorPanel(QtWidgets.QWidget):
                 data = str(combo.itemData(idx) or "").strip().lower()
                 if typed == label or typed == data or typed in label or typed in data:
                     return str(combo.itemData(idx) or "")
+            clean = "".join(ch for ch in typed if ch.isalnum() or ch == "_")
+            if clean == typed and 0 < len(typed) <= 16:
+                return f"typed:{typed}"
         current = str(combo.currentData() or "")
         if current:
             return current
@@ -1740,7 +1743,13 @@ class QtInspectorPanel(QtWidgets.QWidget):
                 kind="warning",
             )
             return
-        self.set_selected_skeleton_template_key(key, emit=False)
+        if not key.startswith("typed:"):
+            self.set_selected_skeleton_template_key(key, emit=False)
+        else:
+            self.set_skeleton_template_status(
+                f"Looking for installed model '{key[6:]}'...",
+                kind="info",
+            )
         self.skeletonTemplateSelected.emit(key)
 
     def _emit_fit_adjustment(self, *_args) -> None:

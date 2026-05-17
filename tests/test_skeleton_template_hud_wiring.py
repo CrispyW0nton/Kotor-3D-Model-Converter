@@ -40,6 +40,7 @@ def test_inspector_search_text_can_override_current_combo_selection() -> None:
     assert "typed = combo.currentText().strip().lower()" in src
     assert "current_label = (" in src
     assert "typed in label or typed in data" in src
+    assert 'return f"typed:{typed}"' in src
     assert "current = str(combo.currentData() or \"\")" in src
 
 
@@ -48,6 +49,7 @@ def test_builder_wires_template_selection_to_preview_and_apply() -> None:
 
     assert "skeletonTemplateSelected.connect" in src
     assert "_on_skeleton_template_selected" in src
+    assert "_typed_skeleton_template_option" in src
     assert "browseSkeletonTemplateRequested.connect" in src
     assert "_on_browse_skeleton_template_requested" in src
     assert '"Choose KOTOR base skeleton MDL"' in src

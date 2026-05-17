@@ -1490,6 +1490,37 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             return _cb.load_game_skeleton_source(resref, game=game)
         return None
 
+    def _typed_skeleton_template_option(self, key: str) -> Optional[dict[str, Any]]:
+        """Build a temporary installed-model option from a typed resref."""
+        raw = str(key or "")
+        if not raw.startswith("typed:"):
+            return None
+        resref = raw[6:].strip().lower()
+        clean = "".join(ch for ch in resref if ch.isalnum() or ch == "_")
+        if not clean or clean != resref or len(resref) > 16:
+            return None
+        game = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
+            getattr(self.scene, "game_version", "K1")
+        option = {
+            "key": f"game:{str(game).lower()}:{resref}:typed",
+            "source": "installation",
+            "game": str(game or "K1"),
+            "part": "body",
+            "name": resref,
+            "resref": resref,
+            "source_resref": resref,
+            "path": f"installation:{resref}.mdl",
+            "description": "Typed KOTOR model resref from the configured installation.",
+            "warnings": [],
+        }
+        self._skeleton_template_options_by_key[str(option["key"])] = option
+        if not any(
+            str(self._option_field(opt, "key", "")) == option["key"]
+            for opt in self._skeleton_template_options
+        ):
+            self._skeleton_template_options.insert(0, option)
+        return option
+
     def _refresh_skeleton_template_options(self) -> None:
         """Refresh the body-rig template picker for the current game."""
         try:
@@ -1601,6 +1632,14 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             self._selected_skeleton_template_key
         )
         if option is None:
+            option = self._typed_skeleton_template_option(
+                self._selected_skeleton_template_key
+            )
+            if option is not None:
+                self._selected_skeleton_template_key = str(
+                    self._option_field(option, "key", "")
+                )
+        if option is None:
             return
 
         label = str(self._option_field(option, "name", "") or key)
@@ -1637,6 +1676,12 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if not key and hasattr(self.inspector, "selected_skeleton_template_key"):
             key = self.inspector.selected_skeleton_template_key()
         option = self._skeleton_template_options_by_key.get(str(key or ""))
+        if option is None:
+            option = self._typed_skeleton_template_option(str(key or ""))
+            if option is not None:
+                key = str(self._option_field(option, "key", ""))
+                self._selected_skeleton_template_key = key
+                self._selected_skeleton_template_model = None
         if option is None:
             message = "Choose a KOTOR skeleton template before applying."
             if hasattr(self.inspector, "set_skeleton_template_status"):
