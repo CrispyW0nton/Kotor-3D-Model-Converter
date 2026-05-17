@@ -38,7 +38,7 @@ This folder contains the post-Qt-migration roadmap for GhostRigger, derived from
 | M9 Live validation | ✅ done locally | T901-T904 done locally |
 | M10 Export polish | ✅ done locally | awaiting review/PR |
 | M12 External Mesh Launch Path | ✅ done locally | awaiting review/PR |
-| M11 Visual regression | 🟡 infra ready | ~2 d |
+| M11 Visual regression | 🟡 started | T1103 done locally |
 | M13 Unity MCP transfer | 🟡 started | ~4 d |
 | M14 Asset Viewer | ✅ done locally | awaiting review/PR |
 | M15 Module Editor | ✅ done locally | T1501-T1505 done locally |
