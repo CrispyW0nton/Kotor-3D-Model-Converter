@@ -528,6 +528,26 @@ def test_external_import_joint_dots_use_preserved_gltf_world_positions():
     assert "return external_wp" in source
 
 
+def test_external_template_skeleton_overlay_is_scaled_and_uncluttered():
+    source = (_REPO_ROOT / "src" / "gui" / "viewport_core.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "_ext_skel_scale" in source
+    assert "p[0]*scale+ox" in source
+    assert "if is_sel:" in source
+
+
+def test_viewport_texture_cache_loads_common_external_dcc_images():
+    source = (_REPO_ROOT / "src" / "gui" / "viewport_core.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "'.jpg'" in source
+    assert "'.jpeg'" in source
+    assert "'.JPEG'" in source
+
+
 def test_t404_snap_view_hidden_when_canvas_too_narrow():
     """If the canvas is narrower than the bar, the bar hides cleanly."""
     app, w = _make_widget()

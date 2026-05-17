@@ -633,6 +633,7 @@ class QtViewportWidget(QtWidgets.QWidget):
     ) -> None:
         """Preview a reference skeleton over the active model (M12/T1202)."""
         self._renderer._ext_skeleton = model
+        self._renderer._ext_skel_scale = 1.0
         try:
             self._renderer._ext_skel_offset = [
                 float(offset[0]),
@@ -641,13 +642,56 @@ class QtViewportWidget(QtWidgets.QWidget):
             ]
         except Exception:
             self._renderer._ext_skel_offset = [0.0, 0.0, 0.0]
+        if offset == (0.0, 0.0, 0.0):
+            self._fit_external_skeleton_overlay(model)
         self._request_render()
 
     def clear_external_skeleton(self) -> None:
         """Remove the reference-skeleton preview overlay."""
         self._renderer._ext_skeleton = None
         self._renderer._ext_skel_offset = [0.0, 0.0, 0.0]
+        self._renderer._ext_skel_scale = 1.0
         self._request_render()
+
+    def _fit_external_skeleton_overlay(self, skeleton) -> None:
+        """Fit a KOTOR template skeleton preview to the active source mesh."""
+        if self.model is None or skeleton is None:
+            return
+        try:
+            target_min = tuple(float(v) for v in getattr(self.model, "bb_min"))
+            target_max = tuple(float(v) for v in getattr(self.model, "bb_max"))
+        except Exception:
+            return
+        if len(target_min) != 3 or len(target_max) != 3:
+            return
+        points = []
+        try:
+            nodes = list(skeleton.all_nodes()) if hasattr(skeleton, "all_nodes") else []
+        except Exception:
+            nodes = []
+        for node in nodes:
+            try:
+                if getattr(node, "is_skin", False):
+                    continue
+                p = tuple(float(v) for v in node.bone_world_position())
+            except Exception:
+                continue
+            if len(p) == 3:
+                points.append(p)
+        if not points:
+            return
+        skel_min = tuple(min(p[i] for p in points) for i in range(3))
+        skel_max = tuple(max(p[i] for p in points) for i in range(3))
+        target_h = max(target_max[2] - target_min[2], 1e-6)
+        skel_h = max(skel_max[2] - skel_min[2], 1e-6)
+        scale = max(0.05, min(50.0, target_h / skel_h))
+        target_center = tuple((target_min[i] + target_max[i]) * 0.5 for i in range(3))
+        skel_center = tuple((skel_min[i] + skel_max[i]) * 0.5 for i in range(3))
+        self._renderer._ext_skel_scale = scale
+        self._renderer._ext_skel_offset = [
+            target_center[i] - skel_center[i] * scale
+            for i in range(3)
+        ]
 
     def set_acurig_guides(self, guides: dict) -> None:
         """Display live AcuRig guide positions over the body rig view."""

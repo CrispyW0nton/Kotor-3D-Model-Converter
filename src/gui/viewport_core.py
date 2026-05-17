@@ -1975,8 +1975,12 @@ class TextureCache:
 
         # ── 1. Search on-disk directories first (override folder wins) ──────
         for search_dir in search_dirs:
-            # Priority: .tga first (may be TPC), then .tpc, then .png/.dds
-            for ext in ('.tga', '.TGA', '.tpc', '.TPC', '.png', '.PNG', '.dds', '.DDS'):
+            # Priority: .tga first (may be TPC), then common DCC image formats.
+            for ext in (
+                '.tga', '.TGA', '.tpc', '.TPC', '.png', '.PNG',
+                '.dds', '.DDS', '.jpg', '.JPG', '.jpeg', '.JPEG',
+                '.bmp', '.BMP', '.tif', '.TIF', '.tiff', '.TIFF',
+            ):
                 path = os.path.join(search_dir, name + ext)
                 if not os.path.exists(path):
                     continue
@@ -3424,6 +3428,7 @@ class FrameRenderer:
         # External skeleton overlay (ghost from another model)
         self._ext_skeleton = None               # KotorModel or None
         self._ext_skel_offset: List[float] = [0.0, 0.0, 0.0]
+        self._ext_skel_scale: float = 1.0
         # ── Walkmesh overlay (Phase 9 / Phase 16.1) ───────────────────────────
         # Loaded separately via load_walkmesh() (co-load with MDL when WOK found).
         # show_walkmesh toggles visibility; show_walkmesh_nonwalk shows blockers.
@@ -7307,6 +7312,7 @@ class FrameRenderer:
         if not self._ext_skeleton or not self._ext_skeleton.root_node:
             return
         ox, oy, oz = self._ext_skel_offset
+        scale = float(getattr(self, '_ext_skel_scale', 1.0) or 1.0)
         EXT_DOT  = (180,  80, 255)
         EXT_LINE = (130,  50, 200)
         EXT_SEL  = (255, 200,  80)
@@ -7314,7 +7320,7 @@ class FrameRenderer:
 
         def _bp(node):
             p = node.bone_world_position()
-            return (p[0]+ox, p[1]+oy, p[2]+oz)
+            return (p[0]*scale+ox, p[1]*scale+oy, p[2]*scale+oz)
 
         def _draw_ext_bone(node):
             """Draw one ext-skeleton bone node."""
@@ -7326,11 +7332,12 @@ class FrameRenderer:
                 r = 5 if is_sel else 3
                 draw.ellipse([sp[0]-r, sp[1]-r, sp[0]+r, sp[1]+r],
                               fill=col, outline=None)
-                try:
-                    draw.text((sp[0]+4, sp[1]-6), node.name,
-                               fill=(160, 100, 220))
-                except Exception:
-                    pass
+                if is_sel:
+                    try:
+                        draw.text((sp[0]+4, sp[1]-6), node.name,
+                                   fill=(160, 100, 220))
+                    except Exception:
+                        pass
             if node.parent:
                 pp2 = _bp(node.parent)
                 spp = self._proj(*pp2, W, H)

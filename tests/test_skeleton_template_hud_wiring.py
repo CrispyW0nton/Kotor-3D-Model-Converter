@@ -51,6 +51,8 @@ def test_template_selection_previews_external_skeleton_overlay() -> None:
     assert "clear_external_skeleton" in builder
     assert "def set_external_skeleton" in viewport
     assert "self._renderer._ext_skeleton = model" in viewport
+    assert "_fit_external_skeleton_overlay" in viewport
+    assert "self._renderer._ext_skel_scale = scale" in viewport
     assert "def clear_external_skeleton" in viewport
 
 
