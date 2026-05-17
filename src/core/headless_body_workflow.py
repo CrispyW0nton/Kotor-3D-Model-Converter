@@ -365,6 +365,7 @@ def apply_external_model_fit_adjustment(
     *,
     rotation_delta_degrees: Tuple[float, float, float] = (0.0, 0.0, 0.0),
     scale_delta: float = 1.0,
+    translation_delta: Tuple[float, float, float] = (0.0, 0.0, 0.0),
 ) -> Dict[str, Any]:
     """Apply a manual post-auto-fit adjustment to an imported model.
 
@@ -377,6 +378,7 @@ def apply_external_model_fit_adjustment(
 
     scale = max(0.01, min(100.0, float(scale_delta or 1.0)))
     radians_xyz = tuple(math.radians(float(v or 0.0)) for v in rotation_delta_degrees)
+    translation = tuple(float(v or 0.0) for v in translation_delta)
     pivot = _manual_fit_pivot(model)
     changed = False
 
@@ -387,7 +389,11 @@ def apply_external_model_fit_adjustment(
             (point[2] - pivot[2]) * scale,
         )
         rot = _rotate_point_xyz(rel, radians_xyz)
-        return (rot[0] + pivot[0], rot[1] + pivot[1], rot[2] + pivot[2])
+        return (
+            rot[0] + pivot[0] + translation[0],
+            rot[1] + pivot[1] + translation[1],
+            rot[2] + pivot[2] + translation[2],
+        )
 
     for node in _iter_model_nodes(model):
         pos = getattr(node, "position", None)
@@ -464,11 +470,13 @@ def apply_external_model_fit_adjustment(
     state = dict(metadata.get("manual_fit_adjustment") or {})
     old_scale = float(state.get("scale", 1.0) or 1.0)
     old_rot = tuple(float(v) for v in state.get("rotation_degrees", (0.0, 0.0, 0.0)))
+    old_translation = tuple(float(v) for v in state.get("translation", (0.0, 0.0, 0.0)))
     state["scale"] = old_scale * scale
     state["rotation_degrees"] = tuple(
         old_rot[i] + float(rotation_delta_degrees[i] or 0.0)
         for i in range(3)
     )
+    state["translation"] = tuple(old_translation[i] + translation[i] for i in range(3))
     metadata["manual_fit_adjustment"] = state
     return {
         "ok": changed,
@@ -476,6 +484,7 @@ def apply_external_model_fit_adjustment(
         "message": "Manual fit adjustment applied." if changed else "Nothing to adjust.",
         "scale_delta": scale,
         "rotation_delta_degrees": tuple(float(v or 0.0) for v in rotation_delta_degrees),
+        "translation_delta": translation,
         "pivot": pivot,
     }
 

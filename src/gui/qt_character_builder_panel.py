@@ -414,6 +414,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._selected_skeleton_template_model: Optional[Any] = None
         self._manual_fit_scale: float = 1.0
         self._manual_fit_rotation: tuple[float, float, float] = (0.0, 0.0, 0.0)
+        self._manual_fit_translation: tuple[float, float, float] = (0.0, 0.0, 0.0)
         # M9 / T901 — live validation is intentionally debounced so
         # guide drags and slider-like controls do not spam the workflow
         # service while still refreshing the export banner promptly.
@@ -1241,11 +1242,13 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._refresh_body_guide_undo_actions()
         self._manual_fit_scale = 1.0
         self._manual_fit_rotation = (0.0, 0.0, 0.0)
+        self._manual_fit_translation = (0.0, 0.0, 0.0)
         if hasattr(self.inspector, "set_fit_adjustment"):
             try:
                 self.inspector.set_fit_adjustment(
                     scale=1.0,
                     rotation_degrees=(0.0, 0.0, 0.0),
+                    translation=(0.0, 0.0, 0.0),
                     emit=False,
                 )
             except Exception:
@@ -1264,15 +1267,18 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         model = getattr(entry, "model", None) if entry is not None else None
         return entry, model
 
-    @QtCore.Slot(float, float, float, float)
+    @QtCore.Slot(float, float, float, float, float, float, float)
     def _on_fit_adjustment_changed(
         self,
         scale: float,
         rx: float,
         ry: float,
         rz: float,
+        tx: float,
+        ty: float,
+        tz: float,
     ) -> None:
-        """Apply manual scale/orientation correction after auto-fit."""
+        """Apply manual scale/orientation/translation correction after auto-fit."""
         _entry, model = self._body_model_for_fit_adjustment()
         if model is None:
             if hasattr(self.inspector, "set_fit_adjustment_status"):
@@ -1287,8 +1293,15 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         old_rot = tuple(float(v or 0.0) for v in self._manual_fit_rotation)
         new_rot = (float(rx or 0.0), float(ry or 0.0), float(rz or 0.0))
         delta_rot = tuple(new_rot[i] - old_rot[i] for i in range(3))
+        old_translation = tuple(float(v or 0.0) for v in self._manual_fit_translation)
+        new_translation = (float(tx or 0.0), float(ty or 0.0), float(tz or 0.0))
+        delta_translation = tuple(new_translation[i] - old_translation[i] for i in range(3))
         delta_scale = new_scale / old_scale
-        if abs(delta_scale - 1.0) < 1e-6 and all(abs(v) < 1e-6 for v in delta_rot):
+        if (
+            abs(delta_scale - 1.0) < 1e-6
+            and all(abs(v) < 1e-6 for v in delta_rot)
+            and all(abs(v) < 1e-6 for v in delta_translation)
+        ):
             return
 
         try:
@@ -1300,6 +1313,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             model,
             rotation_delta_degrees=delta_rot,
             scale_delta=delta_scale,
+            translation_delta=delta_translation,
         )
         if not bool(result.get("ok")):
             if hasattr(self.inspector, "set_fit_adjustment_status"):
@@ -1311,6 +1325,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         self._manual_fit_scale = new_scale
         self._manual_fit_rotation = new_rot
+        self._manual_fit_translation = new_translation
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "refresh_model_geometry"):
             viewport.refresh_model_geometry()
@@ -1322,7 +1337,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             pass
         if hasattr(self.inspector, "set_fit_adjustment_status"):
             self.inspector.set_fit_adjustment_status(
-                f"Fit adjusted: {new_scale * 100:.0f}%, rot {new_rot[0]:.1f}/{new_rot[1]:.1f}/{new_rot[2]:.1f}.",
+                f"Fit adjusted: {new_scale * 100:.0f}%, pos {new_translation[0]:.3f}/{new_translation[1]:.3f}/{new_translation[2]:.3f}, rot {new_rot[0]:.1f}/{new_rot[1]:.1f}/{new_rot[2]:.1f}.",
                 kind="ok",
             )
         self._update_title()
@@ -1333,10 +1348,12 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         """Reset the manual-fit controls for the next imported mesh."""
         self._manual_fit_scale = 1.0
         self._manual_fit_rotation = (0.0, 0.0, 0.0)
+        self._manual_fit_translation = (0.0, 0.0, 0.0)
         if hasattr(self.inspector, "set_fit_adjustment"):
             self.inspector.set_fit_adjustment(
                 scale=1.0,
                 rotation_degrees=(0.0, 0.0, 0.0),
+                translation=(0.0, 0.0, 0.0),
                 emit=False,
             )
         if hasattr(self.inspector, "set_fit_adjustment_status"):

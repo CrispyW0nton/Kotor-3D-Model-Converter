@@ -620,6 +620,12 @@ class QtViewportWidget(QtWidgets.QWidget):
         # independent (its render path uses a private ArcBallCamera).
         self._refresh_thumbnail_safe()
         self.modelChanged.emit(model)
+        try:
+            root_node = getattr(model, "root_node", None)
+            if root_node is not None:
+                self.set_selected_node(root_node)
+        except Exception:
+            log.debug("Could not select imported model root", exc_info=True)
         self._request_render()
         self._queue_post_load_gpu_refresh()
 
@@ -1047,7 +1053,37 @@ class QtViewportWidget(QtWidgets.QWidget):
             ren.show_wireframe = False
             if hasattr(ren, "_anim_pose"):
                 ren._anim_pose = None
-            img = ren.render(int(w), int(h))
+            img = None
+            if self._use_gpu and self.model is not None and ren.show_texture:
+                try:
+                    if self._gpu_renderer is None:
+                        self._gpu_renderer = GpuRenderer()
+                    self._preload_gpu_textures()
+                    tex_cache = getattr(ren, "tex_cache", None)
+                    textures = {
+                        key: value
+                        for key, value in getattr(tex_cache, "_cache", {}).items()
+                        if value is not None
+                    }
+                    self._gpu_renderer.interactive = False
+                    self._gpu_renderer.show_wireframe = False
+                    self._gpu_renderer.show_grid = True
+                    self._gpu_renderer.cull_faces = False
+                    img = self._gpu_renderer.render(
+                        self.model,
+                        thumb_cam,
+                        int(w),
+                        int(h),
+                        textures=textures,
+                        anim_pose=None,
+                        anim_time=0.0,
+                        anim_base_pose=None,
+                    )
+                except Exception as exc:
+                    log.debug("Thumbnail GPU render failed: %s", exc)
+                    img = None
+            if img is None:
+                img = ren.render(int(w), int(h))
         finally:
             ren.cam = main_cam
             ren.show_bones = snap["show_bones"]

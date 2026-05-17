@@ -2202,6 +2202,23 @@ def test_manual_fit_adjustment_rotates_vertices_after_auto_fit():
     assert model.metadata["manual_fit_adjustment"]["rotation_degrees"] == pytest.approx((0.0, 0.0, 90.0))
 
 
+def test_manual_fit_adjustment_translates_vertices_after_auto_fit():
+    model = _FakeExternalMeshModel([
+        (-1.0, -1.0, 0.0),
+        (1.0, 1.0, 2.0),
+    ])
+
+    result = wf.apply_external_model_fit_adjustment(
+        model,
+        translation_delta=(0.25, -0.5, 0.75),
+    )
+
+    assert result["ok"] is True
+    assert model.bb_min == pytest.approx((-0.75, -1.5, 0.75))
+    assert model.bb_max == pytest.approx((1.25, 0.5, 2.75))
+    assert model.metadata["manual_fit_adjustment"]["translation"] == pytest.approx((0.25, -0.5, 0.75))
+
+
 def test_external_world_position_drives_bone_world_position():
     node = md.ModelNode(name="Head")
     node.position = (99.0, 99.0, 99.0)

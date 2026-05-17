@@ -104,7 +104,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
     motionSupermodelChanged   = QtCore.Signal(str)
     exportRequested           = QtCore.Signal()
     loadRequested             = QtCore.Signal()
-    fitAdjustmentChanged      = QtCore.Signal(float, float, float, float)
+    fitAdjustmentChanged      = QtCore.Signal(float, float, float, float, float, float, float)
     fitAdjustmentResetRequested = QtCore.Signal()
     validateRequested         = QtCore.Signal()
     checkModelRequested       = QtCore.Signal()
@@ -165,6 +165,9 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._fit_rot_x_spin: Optional[QtWidgets.QDoubleSpinBox] = None
         self._fit_rot_y_spin: Optional[QtWidgets.QDoubleSpinBox] = None
         self._fit_rot_z_spin: Optional[QtWidgets.QDoubleSpinBox] = None
+        self._fit_pos_x_spin: Optional[QtWidgets.QDoubleSpinBox] = None
+        self._fit_pos_y_spin: Optional[QtWidgets.QDoubleSpinBox] = None
+        self._fit_pos_z_spin: Optional[QtWidgets.QDoubleSpinBox] = None
         self._fit_adjust_status: Optional[QtWidgets.QLabel] = None
         # M12 / T1204 — mode-aware motion assignment.
         self._motion_source_combo: Optional[QtWidgets.QComboBox] = None
@@ -258,18 +261,36 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._fit_scale_spin = QtWidgets.QDoubleSpinBox()
         self._fit_scale_spin.setRange(1.0, 1000.0)
         self._fit_scale_spin.setValue(100.0)
-        self._fit_scale_spin.setSingleStep(1.0)
+        self._fit_scale_spin.setDecimals(2)
+        self._fit_scale_spin.setSingleStep(5.0)
+        self._fit_scale_spin.setAccelerated(True)
         self._fit_scale_spin.setSuffix("%")
-        self._fit_scale_spin.setToolTip("Manual scale after auto-fit.")
+        self._fit_scale_spin.setToolTip("Manual scale after auto-fit. Use the arrow keys or type an exact percentage.")
         fit_layout.addWidget(QtWidgets.QLabel("Scale"), 0, 0)
         fit_layout.addWidget(self._fit_scale_spin, 0, 1, 1, 3)
+
+        pos_specs = [
+            ("Pos X", "_fit_pos_x_spin"),
+            ("Pos Y", "_fit_pos_y_spin"),
+            ("Pos Z", "_fit_pos_z_spin"),
+        ]
+        for row, (label, attr) in enumerate(pos_specs, start=1):
+            spin = QtWidgets.QDoubleSpinBox()
+            spin.setRange(-50.0, 50.0)
+            spin.setDecimals(3)
+            spin.setSingleStep(0.025)
+            spin.setAccelerated(True)
+            spin.setToolTip("Manual translation after auto-fit, in KOTOR world units.")
+            setattr(self, attr, spin)
+            fit_layout.addWidget(QtWidgets.QLabel(label), row, 0)
+            fit_layout.addWidget(spin, row, 1, 1, 3)
 
         spin_specs = [
             ("Rot X", "_fit_rot_x_spin"),
             ("Rot Y", "_fit_rot_y_spin"),
             ("Rot Z", "_fit_rot_z_spin"),
         ]
-        for row, (label, attr) in enumerate(spin_specs, start=1):
+        for row, (label, attr) in enumerate(spin_specs, start=4):
             spin = QtWidgets.QDoubleSpinBox()
             spin.setRange(-180.0, 180.0)
             spin.setDecimals(1)
@@ -282,17 +303,20 @@ class QtInspectorPanel(QtWidgets.QWidget):
 
         reset_btn = QtWidgets.QPushButton("Reset Fit")
         reset_btn.clicked.connect(self.fitAdjustmentResetRequested.emit)
-        fit_layout.addWidget(reset_btn, 4, 0, 1, 2)
+        fit_layout.addWidget(reset_btn, 7, 0, 1, 2)
 
         self._fit_adjust_status = QtWidgets.QLabel("Auto-fit can be fine-tuned after import.")
         self._fit_adjust_status.setWordWrap(True)
         self._fit_adjust_status.setStyleSheet(
             f"color:{C.get('text2', '#888')}; font-size:8pt;"
         )
-        fit_layout.addWidget(self._fit_adjust_status, 4, 2, 1, 2)
+        fit_layout.addWidget(self._fit_adjust_status, 7, 2, 1, 2)
 
         for spin in (
             self._fit_scale_spin,
+            self._fit_pos_x_spin,
+            self._fit_pos_y_spin,
+            self._fit_pos_z_spin,
             self._fit_rot_x_spin,
             self._fit_rot_y_spin,
             self._fit_rot_z_spin,
@@ -1760,7 +1784,10 @@ class QtInspectorPanel(QtWidgets.QWidget):
         rx = float(self._fit_rot_x_spin.value()) if self._fit_rot_x_spin is not None else 0.0
         ry = float(self._fit_rot_y_spin.value()) if self._fit_rot_y_spin is not None else 0.0
         rz = float(self._fit_rot_z_spin.value()) if self._fit_rot_z_spin is not None else 0.0
-        self.fitAdjustmentChanged.emit(scale, rx, ry, rz)
+        tx = float(self._fit_pos_x_spin.value()) if self._fit_pos_x_spin is not None else 0.0
+        ty = float(self._fit_pos_y_spin.value()) if self._fit_pos_y_spin is not None else 0.0
+        tz = float(self._fit_pos_z_spin.value()) if self._fit_pos_z_spin is not None else 0.0
+        self.fitAdjustmentChanged.emit(scale, rx, ry, rz, tx, ty, tz)
 
     # ── Public API ───────────────────────────────────────────────────────
 
@@ -1794,11 +1821,15 @@ class QtInspectorPanel(QtWidgets.QWidget):
         *,
         scale: float = 1.0,
         rotation_degrees=(0.0, 0.0, 0.0),
+        translation=(0.0, 0.0, 0.0),
         emit: bool = False,
     ) -> None:
         """Set the manual import-fit widgets from scene state."""
         spins = [
             self._fit_scale_spin,
+            self._fit_pos_x_spin,
+            self._fit_pos_y_spin,
+            self._fit_pos_z_spin,
             self._fit_rot_x_spin,
             self._fit_rot_y_spin,
             self._fit_rot_z_spin,
@@ -1809,6 +1840,13 @@ class QtInspectorPanel(QtWidgets.QWidget):
         try:
             if self._fit_scale_spin is not None:
                 self._fit_scale_spin.setValue(float(scale or 1.0) * 100.0)
+            pos_values = tuple(float(v or 0.0) for v in translation)
+            for spin, value in zip(
+                (self._fit_pos_x_spin, self._fit_pos_y_spin, self._fit_pos_z_spin),
+                pos_values,
+            ):
+                if spin is not None:
+                    spin.setValue(value)
             values = tuple(float(v or 0.0) for v in rotation_degrees)
             for spin, value in zip(
                 (self._fit_rot_x_spin, self._fit_rot_y_spin, self._fit_rot_z_spin),

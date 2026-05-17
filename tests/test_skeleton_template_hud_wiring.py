@@ -98,12 +98,15 @@ def test_manual_import_fit_controls_are_wired() -> None:
 
     assert "fitAdjustmentChanged" in inspector
     assert 'QtWidgets.QGroupBox("Import Fit")' in inspector
+    assert "_fit_pos_x_spin" in inspector
+    assert "translation_delta" in builder
     assert "set_fit_adjustment" in inspector
     assert "_on_fit_adjustment_changed" in builder
     assert "apply_external_model_fit_adjustment" in builder
     assert "refresh_model_geometry" in viewport
     assert "viewport.frame_all()" in builder
     assert "def apply_external_model_fit_adjustment" in workflow
+    assert "translation_delta" in workflow
 
 
 def test_gpu_viewport_draws_external_reference_skeleton_overlay() -> None:
