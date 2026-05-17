@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "generated": "2026-05-16T00:00:00Z",
+  "description": "M11/T1101 deterministic export hashes for representative K1 character-builder outputs.",
+  "writers": {
+    "fbx": "FBXExporter._export_fbx_ascii",
+    "glb": "GLTFExporter._export_manual(binary=True)"
+  },
+  "cases": [
+    {
+      "id": "k1_pmbam_headless_body",
+      "kind": "single",
+      "game": "K1",
+      "resref": "pmbam",
+      "mode": "HEADLESS_BODY",
+      "formats": {
+        "fbx": {
+          "bytes": 346776,
+          "sha256": "692984e10363132c9542d3572f6132b0eb37c6ed672d5daa624f6cbf84175f86"
+        },
+        "glb": {
+          "bytes": 140928,
+          "sha256": "f72aa9b3661a1e54ab577589f7f7019aa9576385ddde0440db3a881389e28633"
+        }
+      }
+    },
+    {
+      "id": "k1_pmhc01_head",
+      "kind": "single",
+      "game": "K1",
+      "resref": "pmhc01",
+      "mode": "HEAD",
+      "formats": {
+        "fbx": {
+          "bytes": 193739,
+          "sha256": "d8ead2ffac832955f1e5a363b978c558644ad5dddf7640858ff7ae14de08c8be"
+        },
+        "glb": {
+          "bytes": 90632,
+          "sha256": "f47ca52c15f773515fb207818ab1c67885570b64f3c74f039b5f3a0c68da26d1"
+        }
+      }
+    },
+    {
+      "id": "k1_c_bantha_creature",
+      "kind": "single",
+      "game": "K1",
+      "resref": "c_bantha",
+      "mode": "CREATURE",
+      "formats": {
+        "fbx": {
+          "bytes": 1519986,
+          "sha256": "12788d4aa628b31d7ab8e372ff3f10313de687f6c53ce81aa862ebb809f928b0"
+        },
+        "glb": {
+          "bytes": 295448,
+          "sha256": "93dbb79ba840e12c4acaea95404a741f9ab7b5bdaaf9777a71392f877acb7f4e"
+        }
+      }
+    },
+    {
+      "id": "k1_pfbcm_pfhc01_composite",
+      "kind": "composite",
+      "game": "K1",
+      "body_resref": "pfbcm",
+      "head_resref": "pfhc01",
+      "mode": "SUPERMODEL",
+      "formats": {
+        "fbx": {
+          "bytes": 608835,
+          "sha256": "edb450dc0c35d916955c94aad8ab2742864f1e0d0e76b8ad43c4a6f60f4919f3"
+        },
+        "glb": {
+          "bytes": 282616,
+          "sha256": "190d1b29a6437abadbb754b63e910c81d696e518d6571c55e396e58388ccefc1"
+        }
+      }
+    }
+  ]
+}

@@ -71,6 +71,9 @@ game_data/
 !/tests/test_area_wok_integration.py
 !/tests/test_custom_module_packager.py
 !/tests/test_live_validation.py
+!/tests/test_regression_export.py
+!/tests/golden/
+!/tests/golden/export_hashes.json
 test_assets/
 pytest.ini
 .pytest_cache/

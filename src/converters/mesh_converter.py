@@ -1329,8 +1329,6 @@ class FBXExporter:
                 _base_skel_node_by_name[_bsn.name.lower()] = _bsn
             log.debug(f"FBX export: base_skeleton_model '{base_skeleton_model.name}' "
                       f"loaded with {len(_base_skel_node_by_name)} nodes")
-        from datetime import datetime
-
         lines: List[str] = []
         w = lines.append
 
@@ -1338,7 +1336,16 @@ class FBXExporter:
         mesh_nodes_list = _renderable_mesh_nodes(model)
 
         # ── Header ────────────────────────────────────────────────────
-        now = datetime.now()
+        # Keep ASCII FBX output reproducible so golden-file regression tests
+        # identify real exporter drift instead of wall-clock noise.
+        export_time = {
+            "year": 2026,
+            "month": 1,
+            "day": 1,
+            "hour": 0,
+            "minute": 0,
+            "second": 0,
+        }
         w('; FBX 7.4.0 project file')
         w('; Created by GhostRigger-K1-K2')
         w(f'; Model: {model.name}')
@@ -1348,12 +1355,12 @@ class FBXExporter:
         w('\tFBXVersion: 7400')
         w(f'\tCreationTimeStamp:  {{')
         w(f'\t\tVersion: 1000')
-        w(f'\t\tYear: {now.year}')
-        w(f'\t\tMonth: {now.month}')
-        w(f'\t\tDay: {now.day}')
-        w(f'\t\tHour: {now.hour}')
-        w(f'\t\tMinute: {now.minute}')
-        w(f'\t\tSecond: {now.second}')
+        w(f'\t\tYear: {export_time["year"]}')
+        w(f'\t\tMonth: {export_time["month"]}')
+        w(f'\t\tDay: {export_time["day"]}')
+        w(f'\t\tHour: {export_time["hour"]}')
+        w(f'\t\tMinute: {export_time["minute"]}')
+        w(f'\t\tSecond: {export_time["second"]}')
         w(f'\t\tMillisecond: 0')
         w('\t}')
         w(f'\tCreator: "GhostRigger-K1-K2 FBX Exporter"')
