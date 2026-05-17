@@ -165,6 +165,19 @@ def test_viewport_supports_multi_joint_marquee_and_group_drag() -> None:
     assert "Gimbal Multi-Joint Translate" in viewport
 
 
+def test_external_template_skeleton_is_selectable_and_symmetry_aware() -> None:
+    viewport = _read("src/gui/qt_viewport.py")
+    core = _read("src/gui/viewport_core.py")
+
+    assert "_ext_bone_screen_positions" in core
+    assert "self._ext_bone_screen_positions.append" in core
+    assert "def _joint_hit_positions" in viewport
+    assert "ext_positions + bone_positions" in viewport
+    assert "def _is_external_skeleton_node" in viewport
+    assert "_external_world_delta_to_local" in viewport
+    assert "lcollar_dum/rcollar_dum" in viewport
+
+
 def test_selected_imported_mesh_outline_uses_projected_mesh_hull_not_bbox() -> None:
     viewport = _read("src/gui/qt_viewport.py")
 

@@ -3452,6 +3452,7 @@ class FrameRenderer:
         self._ext_skeleton = None               # KotorModel or None
         self._ext_skel_offset: List[float] = [0.0, 0.0, 0.0]
         self._ext_skel_scale: float = 1.0
+        self._ext_bone_screen_positions: List[Tuple] = []
         # ── Walkmesh overlay (Phase 9 / Phase 16.1) ───────────────────────────
         # Loaded separately via load_walkmesh() (co-load with MDL when WOK found).
         # show_walkmesh toggles visibility; show_walkmesh_nonwalk shows blockers.
@@ -7240,7 +7241,22 @@ class FrameRenderer:
         node = self.selected_node
         if not node:
             return
-        if self.model is not None and node is getattr(self.model, 'root_node', None):
+        ext_skel = getattr(self, "_ext_skeleton", None)
+        ext_node_ids = set()
+        if ext_skel is not None:
+            try:
+                ext_node_ids = {id(_n) for _n in ext_skel.all_nodes()}
+            except Exception:
+                ext_node_ids = set()
+        if ext_skel is not None and id(node) in ext_node_ids:
+            try:
+                ox, oy, oz = self._ext_skel_offset
+                scale = float(getattr(self, "_ext_skel_scale", 1.0) or 1.0)
+                p = node.bone_world_position()
+                wp = (p[0] * scale + ox, p[1] * scale + oy, p[2] * scale + oz)
+            except Exception:
+                wp, _, _ = self._node_world_transform(node)
+        elif self.model is not None and node is getattr(self.model, 'root_node', None):
             try:
                 bb_min, bb_max = self._get_render_bounds()
                 wp = (
@@ -7418,6 +7434,7 @@ class FrameRenderer:
         Used for the 'Load External Skeleton' rigging workflow.
         """
         if not self._ext_skeleton or not self._ext_skeleton.root_node:
+            self._ext_bone_screen_positions = []
             return
         ox, oy, oz = self._ext_skel_offset
         scale = float(getattr(self, '_ext_skel_scale', 1.0) or 1.0)
@@ -7425,6 +7442,8 @@ class FrameRenderer:
         EXT_LINE = (130,  50, 200)
         EXT_SEL  = (255, 200,  80)
         ext_selected = getattr(self, '_ext_skel_selected_node', None)
+        ext_selected_ids = set(getattr(self, "_ext_skel_selected_ids", set()) or set())
+        self._ext_bone_screen_positions = []
 
         def _bp(node):
             p = node.bone_world_position()
@@ -7437,10 +7456,13 @@ class FrameRenderer:
             is_sel = (node is ext_selected)
             col = EXT_SEL if is_sel else EXT_DOT
             if sp:
-                r = 5 if is_sel else 3
+                self._ext_bone_screen_positions.append((sp[0], sp[1], sp[2], node))
+                is_multi_sel = is_sel or id(node) in ext_selected_ids
+                r = 5 if is_multi_sel else 3
+                col = EXT_SEL if is_multi_sel else EXT_DOT
                 draw.ellipse([sp[0]-r, sp[1]-r, sp[0]+r, sp[1]+r],
                               fill=col, outline=None)
-                if is_sel:
+                if is_multi_sel:
                     try:
                         draw.text((sp[0]+4, sp[1]-6), node.name,
                                    fill=(160, 100, 220))

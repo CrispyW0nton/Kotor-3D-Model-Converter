@@ -339,6 +339,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gimbal_node_start_pos = (0.0, 0.0, 0.0)
         self._gimbal_node_start_rot = (0.0, 0.0, 0.0, 1.0)
         self._gimbal_joint_start_positions: dict[int, tuple[float, float, float]] = {}
+        self._gimbal_joint_mirror_nodes: list = []
         self._gimbal_model_applied_translation = (0.0, 0.0, 0.0)
         self._gimbal_model_applied_rotation = 0.0
         self._gimbal_model_applied_scale = 1.0
@@ -373,6 +374,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._joint_drag_node = None              # primary node under cursor
         self._joint_drag_mirror_node = None       # MIRROR_PAIRS partner, if any
         self._joint_drag_nodes: list = []
+        self._joint_drag_mirror_nodes: list = []
         self._joint_drag_start_positions: dict[int, tuple[float, float, float]] = {}
         self._joint_drag_start_screen = (0, 0)
         self._joint_drag_start_pos = (0.0, 0.0, 0.0)
@@ -672,6 +674,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         """Preview a reference skeleton over the active model (M12/T1202)."""
         self._renderer._ext_skeleton = model
         self._renderer._ext_skel_scale = 1.0
+        self._renderer._ext_skel_selected_node = None
+        self._renderer._ext_skel_selected_ids = set()
         try:
             self._renderer._ext_skel_offset = [
                 float(offset[0]),
@@ -689,6 +693,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._renderer._ext_skeleton = None
         self._renderer._ext_skel_offset = [0.0, 0.0, 0.0]
         self._renderer._ext_skel_scale = 1.0
+        self._renderer._ext_bone_screen_positions = []
+        self._renderer._ext_skel_selected_node = None
+        self._renderer._ext_skel_selected_ids = set()
         self._request_render()
 
     def _fit_external_skeleton_overlay(self, skeleton) -> None:
@@ -1131,12 +1138,22 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._renderer.selected_node = node
         if node is None:
             self._selected_joint_nodes = []
+            self._renderer._ext_skel_selected_node = None
+            self._renderer._ext_skel_selected_ids = set()
         elif self._is_selected_model_root(node):
             self._selected_joint_nodes = []
+            self._renderer._ext_skel_selected_node = None
+            self._renderer._ext_skel_selected_ids = set()
         elif not self._is_selected_model_root(node):
             known = {id(n) for n in self._selected_joint_nodes}
             if id(node) not in known:
                 self._selected_joint_nodes = [node]
+            if self._is_external_skeleton_node(node):
+                self._renderer._ext_skel_selected_node = node
+                self._renderer._ext_skel_selected_ids = {id(n) for n in self._selected_joint_nodes}
+            else:
+                self._renderer._ext_skel_selected_node = None
+                self._renderer._ext_skel_selected_ids = set()
         if self._uv_viewer is not None:
             self._uv_viewer.set_selected_node(node)
         self.nodeSelected.emit(node)
@@ -1156,6 +1173,12 @@ class QtViewportWidget(QtWidgets.QWidget):
             selected.append(node)
         self._selected_joint_nodes = selected
         self._renderer.selected_node = primary if primary is not None else (selected[-1] if selected else None)
+        if self._selection_targets_external_skeleton(selected or [self._renderer.selected_node]):
+            self._renderer._ext_skel_selected_node = self._renderer.selected_node
+            self._renderer._ext_skel_selected_ids = {id(n) for n in selected}
+        else:
+            self._renderer._ext_skel_selected_node = None
+            self._renderer._ext_skel_selected_ids = set()
         if self._uv_viewer is not None:
             self._uv_viewer.set_selected_node(self._renderer.selected_node)
         self.nodeSelected.emit(self._renderer.selected_node)
@@ -1174,7 +1197,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._set_selected_joint_nodes(selected, primary=node)
 
     def _joint_nodes_in_rect(self, x0: int, y0: int, x1: int, y1: int) -> list:
-        positions = getattr(self._renderer, "_bone_screen_positions", None) or []
+        positions = self._joint_hit_positions()
         if not positions:
             return []
         lx, hx = sorted((int(x0), int(x1)))
@@ -1191,6 +1214,39 @@ class QtViewportWidget(QtWidgets.QWidget):
                 seen.add(id(node))
                 nodes.append(node)
         return nodes
+
+    def _external_skeleton_node_ids(self) -> set[int]:
+        skel = getattr(self._renderer, "_ext_skeleton", None)
+        if skel is None:
+            return set()
+        try:
+            return {id(node) for node in skel.all_nodes()}
+        except Exception:
+            return set()
+
+    def _is_external_skeleton_node(self, node) -> bool:
+        return node is not None and id(node) in self._external_skeleton_node_ids()
+
+    def _selection_targets_external_skeleton(self, nodes: list) -> bool:
+        ext_ids = self._external_skeleton_node_ids()
+        if not ext_ids:
+            return False
+        return any(node is not None and id(node) in ext_ids for node in nodes or [])
+
+    def _joint_hit_positions(self) -> list:
+        ext_positions = list(getattr(self._renderer, "_ext_bone_screen_positions", None) or [])
+        bone_positions = list(getattr(self._renderer, "_bone_screen_positions", None) or [])
+        return ext_positions + bone_positions
+
+    def _external_overlay_world_position(self, node) -> tuple[float, float, float]:
+        ox, oy, oz = getattr(self._renderer, "_ext_skel_offset", [0.0, 0.0, 0.0])
+        scale = float(getattr(self._renderer, "_ext_skel_scale", 1.0) or 1.0)
+        p = node.bone_world_position()
+        return (p[0] * scale + ox, p[1] * scale + oy, p[2] * scale + oz)
+
+    def _external_world_delta_to_local(self, delta: tuple[float, float, float]) -> tuple[float, float, float]:
+        scale = max(1e-6, float(getattr(self._renderer, "_ext_skel_scale", 1.0) or 1.0))
+        return (delta[0] / scale, delta[1] / scale, delta[2] / scale)
 
     def refresh_node_transform(self, node=None) -> None:
         if node is not None:
@@ -2204,7 +2260,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         """
         if not self._joint_dot_enabled:
             return None
-        positions = getattr(self._renderer, "_bone_screen_positions", None)
+        positions = self._joint_hit_positions()
         if not positions:
             return None
         # 4 px slack so the cursor can be slightly outside the painted disc.
@@ -2242,7 +2298,12 @@ class QtViewportWidget(QtWidgets.QWidget):
         """
         if node is None or not self._joint_symmetry_enabled:
             return None
-        if not self.model:
+        search_model = (
+            getattr(self._renderer, "_ext_skeleton", None)
+            if self._is_external_skeleton_node(node)
+            else self.model
+        )
+        if not search_model:
             return None
         name = (getattr(node, "name", "") or "").lower()
         if not name:
@@ -2267,12 +2328,39 @@ class QtViewportWidget(QtWidgets.QWidget):
                 if rn == name:
                     partner_name = ln
                     break
-        if partner_name is None:
-            return None
-        try:
-            return self.model.find_node(partner_name)
-        except Exception:
-            return None
+        if partner_name is not None:
+            try:
+                found = search_model.find_node(partner_name)
+                if found is not None:
+                    return found
+            except Exception:
+                pass
+
+        # KOTOR skeletons include useful l*/r* pairs that are not all in
+        # AcuRig's compact guide table, for example lcollar_dum/rcollar_dum.
+        candidates = []
+        if name.startswith("l"):
+            candidates.append("r" + name[1:])
+        elif name.startswith("r"):
+            candidates.append("l" + name[1:])
+        candidates.extend([
+            name.replace("_l", "_r"),
+            name.replace("_r", "_l"),
+            name.replace(".l", ".r"),
+            name.replace(".r", ".l"),
+            name.replace("left", "right"),
+            name.replace("right", "left"),
+        ])
+        for candidate in candidates:
+            if not candidate or candidate == name:
+                continue
+            try:
+                found = search_model.find_node(candidate)
+                if found is not None:
+                    return found
+            except Exception:
+                continue
+        return None
 
     def set_joint_symmetry(self, enabled: bool) -> None:
         """Toggle MIRROR_PAIRS-based symmetry for joint-dot drags."""
@@ -2463,6 +2551,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._joint_drag_node = None
         self._joint_drag_mirror_node = None
         self._joint_drag_nodes = []
+        self._joint_drag_mirror_nodes = []
         self._joint_drag_start_positions = {}
         self._joint_marquee_selecting = False
         self._joint_marquee_start = (x, y)
@@ -2484,12 +2573,24 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._gimbal_node_start_pos = tuple(self._renderer.selected_node.position)
                 self._gimbal_node_start_rot = tuple(self._renderer.selected_node.rotation)
                 self._gimbal_joint_start_positions = {}
+                self._gimbal_joint_mirror_nodes = []
                 if any(n is self._renderer.selected_node for n in self._selected_joint_nodes):
+                    selected_ids = {id(n) for n in self._selected_joint_nodes}
                     for sel_node in self._selected_joint_nodes:
                         try:
                             self._gimbal_joint_start_positions[id(sel_node)] = tuple(sel_node.position)
                         except Exception:
                             self._gimbal_joint_start_positions[id(sel_node)] = (0.0, 0.0, 0.0)
+                        if self._joint_symmetry_enabled:
+                            partner = self._joint_mirror_partner(sel_node)
+                            if partner is not None and id(partner) not in selected_ids:
+                                selected_ids.add(id(partner))
+                                self._gimbal_joint_mirror_nodes.append(partner)
+                    for mirror_node in self._gimbal_joint_mirror_nodes:
+                        try:
+                            self._gimbal_joint_start_positions[id(mirror_node)] = tuple(mirror_node.position)
+                        except Exception:
+                            self._gimbal_joint_start_positions[id(mirror_node)] = (0.0, 0.0, 0.0)
                 self._gimbal_model_applied_translation = (0.0, 0.0, 0.0)
                 self._gimbal_model_applied_rotation = 0.0
                 self._gimbal_model_applied_scale = 1.0
@@ -2513,12 +2614,23 @@ class QtViewportWidget(QtWidgets.QWidget):
                     self._request_render()
                     return
                 self._joint_drag_node = joint_node
-                if any(n is joint_node for n in self._selected_joint_nodes):
+                if len(self._selected_joint_nodes) > 1 and any(n is joint_node for n in self._selected_joint_nodes):
                     self._joint_drag_nodes = list(self._selected_joint_nodes)
                     self._joint_drag_mirror_node = None
                 else:
                     self._joint_drag_nodes = [joint_node]
-                    self._joint_drag_mirror_node = self._joint_mirror_partner(joint_node)
+                selected_ids = {id(n) for n in self._joint_drag_nodes}
+                self._joint_drag_mirror_nodes = []
+                if self._joint_symmetry_enabled:
+                    for drag_node in self._joint_drag_nodes:
+                        partner = self._joint_mirror_partner(drag_node)
+                        if partner is not None and id(partner) not in selected_ids:
+                            selected_ids.add(id(partner))
+                            self._joint_drag_mirror_nodes.append(partner)
+                self._joint_drag_mirror_node = (
+                    self._joint_drag_mirror_nodes[0]
+                    if self._joint_drag_mirror_nodes else None
+                )
                 self._joint_drag_start_screen = (x, y)
                 try:
                     self._joint_drag_start_pos = tuple(joint_node.position)
@@ -2531,12 +2643,17 @@ class QtViewportWidget(QtWidgets.QWidget):
                     except Exception:
                         self._joint_drag_start_positions[id(drag_node)] = (0.0, 0.0, 0.0)
                 if self._joint_drag_mirror_node is not None:
-                    try:
-                        self._joint_drag_mirror_start_pos = tuple(
-                            self._joint_drag_mirror_node.position
-                        )
-                    except Exception:
-                        self._joint_drag_mirror_start_pos = (0.0, 0.0, 0.0)
+                    for mirror_node in self._joint_drag_mirror_nodes:
+                        try:
+                            self._joint_drag_start_positions[id(mirror_node)] = tuple(
+                                mirror_node.position
+                            )
+                        except Exception:
+                            self._joint_drag_start_positions[id(mirror_node)] = (0.0, 0.0, 0.0)
+                    self._joint_drag_mirror_start_pos = self._joint_drag_start_positions.get(
+                        id(self._joint_drag_mirror_node),
+                        (0.0, 0.0, 0.0),
+                    )
                 else:
                     self._joint_drag_mirror_start_pos = (0.0, 0.0, 0.0)
                 # Cache the screen→world conversion factor at the joint's
@@ -2545,7 +2662,10 @@ class QtViewportWidget(QtWidgets.QWidget):
                 try:
                     w = self.canvas.width() or 800
                     h = self.canvas.height() or 600
-                    wp, _, _ = self._renderer._node_world_transform(joint_node)
+                    if self._is_external_skeleton_node(joint_node):
+                        wp = self._external_overlay_world_position(joint_node)
+                    else:
+                        wp, _, _ = self._renderer._node_world_transform(joint_node)
                     proj = self._renderer._proj(*wp, w, h)
                     dist = max(0.5, proj[2] if proj else 1.0)
                     self._joint_drag_world_per_px = (
@@ -2639,6 +2759,20 @@ class QtViewportWidget(QtWidgets.QWidget):
                             "Gimbal Multi-Joint Translate",
                         )
                         self._notify_node_moved(sel_node)
+                    for mirror_node in self._gimbal_joint_mirror_nodes:
+                        before_pos = self._gimbal_joint_start_positions.get(
+                            id(mirror_node),
+                            tuple(mirror_node.position),
+                        )
+                        self._commit_node_transform(
+                            mirror_node,
+                            before_pos,
+                            tuple(mirror_node.rotation),
+                            tuple(mirror_node.position),
+                            tuple(mirror_node.rotation),
+                            "Gimbal Multi-Joint Translate (mirror)",
+                        )
+                        self._notify_node_moved(mirror_node)
                 elif not self._is_selected_model_root(node):
                     self._commit_node_transform(
                         node,
@@ -2649,6 +2783,20 @@ class QtViewportWidget(QtWidgets.QWidget):
                         "Gimbal Transform",
                     )
                     self._notify_node_moved(node)
+                    for mirror_node in self._gimbal_joint_mirror_nodes:
+                        before_pos = self._gimbal_joint_start_positions.get(
+                            id(mirror_node),
+                            tuple(mirror_node.position),
+                        )
+                        self._commit_node_transform(
+                            mirror_node,
+                            before_pos,
+                            tuple(mirror_node.rotation),
+                            tuple(mirror_node.position),
+                            tuple(mirror_node.rotation),
+                            "Gimbal Transform (mirror)",
+                        )
+                        self._notify_node_moved(mirror_node)
             self._request_render()
             return
 
@@ -2661,6 +2809,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         if self._joint_drag_node is not None:
             joint = self._joint_drag_node
             mirror = self._joint_drag_mirror_node
+            mirror_nodes = list(self._joint_drag_mirror_nodes)
             was_dragging = self._joint_dragging
             self._joint_dragging = False
             self._renderer.is_interactive = False
@@ -2681,10 +2830,14 @@ class QtViewportWidget(QtWidgets.QWidget):
                             "Joint Translate",
                         )
                         self._notify_node_moved(moved)
-                    if mirror is not None:
+                    for mirror in mirror_nodes:
+                        mirror_start = self._joint_drag_start_positions.get(
+                            id(mirror),
+                            self._joint_drag_mirror_start_pos,
+                        )
                         self._commit_node_transform(
                             mirror,
-                            self._joint_drag_mirror_start_pos,
+                            mirror_start,
                             tuple(mirror.rotation),
                             tuple(mirror.position),
                             tuple(mirror.rotation),
@@ -2696,6 +2849,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._joint_drag_node = None
             self._joint_drag_mirror_node = None
             self._joint_drag_nodes = []
+            self._joint_drag_mirror_nodes = []
             self._joint_drag_start_positions = {}
             # Click-or-drag: always finish by selecting the joint so the
             # inspector reflects the user's intent.
@@ -2816,19 +2970,32 @@ class QtViewportWidget(QtWidgets.QWidget):
             dwz = (dx_screen * right[2] + (-dy_screen) * up[2]) * wpp
             drag_nodes = self._joint_drag_nodes or [node]
             for drag_node in drag_nodes:
+                delta = (
+                    self._external_world_delta_to_local((dwx, dwy, dwz))
+                    if self._is_external_skeleton_node(drag_node)
+                    else (dwx, dwy, dwz)
+                )
                 sp = self._joint_drag_start_positions.get(
                     id(drag_node),
                     self._joint_drag_start_pos if drag_node is node else tuple(drag_node.position),
                 )
-                drag_node.position = (sp[0] + dwx, sp[1] + dwy, sp[2] + dwz)
+                drag_node.position = (sp[0] + delta[0], sp[1] + delta[1], sp[2] + delta[2])
                 self._evict_transform_cache(drag_node)
 
-            mirror = self._joint_drag_mirror_node
-            if mirror is not None and self._joint_symmetry_enabled:
-                msp = self._joint_drag_mirror_start_pos
+            mirror_nodes = list(self._joint_drag_mirror_nodes)
+            for mirror in mirror_nodes:
+                msp = self._joint_drag_start_positions.get(
+                    id(mirror),
+                    self._joint_drag_mirror_start_pos,
+                )
+                mdx, mdy, mdz = (
+                    self._external_world_delta_to_local((dwx, dwy, dwz))
+                    if self._is_external_skeleton_node(mirror)
+                    else (dwx, dwy, dwz)
+                )
                 # Mirror across the X axis: negate the X component of the
                 # translation delta so the partner moves symmetrically.
-                mirror.position = (msp[0] - dwx, msp[1] + dwy, msp[2] + dwz)
+                mirror.position = (msp[0] - mdx, msp[1] + mdy, msp[2] + mdz)
                 self._evict_transform_cache(mirror)
         except Exception as exc:
             log.debug("Joint-drag translation failed: %s", exc)
@@ -2842,7 +3009,10 @@ class QtViewportWidget(QtWidgets.QWidget):
         dy_screen = my - sy0
         w = self.canvas.width() or 800
         h = self.canvas.height() or 600
-        wp, _, _ = self._renderer._node_world_transform(node)
+        if self._is_external_skeleton_node(node):
+            wp = self._external_overlay_world_position(node)
+        else:
+            wp, _, _ = self._renderer._node_world_transform(node)
         proj = self._renderer._proj(*wp, w, h)
         dist = max(0.5, proj[2] if proj else 1.0)
         world_per_px = (2.0 * dist * math.tan(math.radians(self.camera.fov) * 0.5)) / max(h, 1)
@@ -2879,10 +3049,25 @@ class QtViewportWidget(QtWidgets.QWidget):
             if any(n is node for n in self._selected_joint_nodes) and len(self._selected_joint_nodes) > 1:
                 for sel_node in self._selected_joint_nodes:
                     sp = self._gimbal_joint_start_positions.get(id(sel_node), tuple(sel_node.position))
-                    sel_node.position = (sp[0] + d[0], sp[1] + d[1], sp[2] + d[2])
+                    delta = (
+                        self._external_world_delta_to_local(d)
+                        if self._is_external_skeleton_node(sel_node)
+                        else d
+                    )
+                    sel_node.position = (sp[0] + delta[0], sp[1] + delta[1], sp[2] + delta[2])
                     self._evict_transform_cache(sel_node)
             else:
-                node.position = (start[0] + d[0], start[1] + d[1], start[2] + d[2])
+                delta = self._external_world_delta_to_local(d) if self._is_external_skeleton_node(node) else d
+                node.position = (start[0] + delta[0], start[1] + delta[1], start[2] + delta[2])
+            for mirror_node in self._gimbal_joint_mirror_nodes:
+                sp = self._gimbal_joint_start_positions.get(id(mirror_node), tuple(mirror_node.position))
+                delta = (
+                    self._external_world_delta_to_local(d)
+                    if self._is_external_skeleton_node(mirror_node)
+                    else d
+                )
+                mirror_node.position = (sp[0] - delta[0], sp[1] + delta[1], sp[2] + delta[2])
+                self._evict_transform_cache(mirror_node)
         elif self._renderer.gimbal_mode == 2:
             angle = dx_screen * 0.01
             if QtWidgets.QApplication.keyboardModifiers() & QtCore.Qt.ShiftModifier:
