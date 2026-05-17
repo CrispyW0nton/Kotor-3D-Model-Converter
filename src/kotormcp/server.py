@@ -129,7 +129,8 @@ class _FallbackHTTPServer:
 
             elif path == "/resources/list":
                 resources = await mcp_resources.list_resources()
-                response_body = {"resources": resources}
+                templates = await mcp_resources.list_resource_templates()
+                response_body = {"resources": resources, "resourceTemplates": templates}
 
             elif path == "/resources/read":
                 uri = body.get("uri", "")
@@ -195,7 +196,29 @@ def _build_mcp_server():
 
     @SERVER.list_resources()
     async def list_res():
-        return await mcp_resources.list_resources()
+        resources_raw = await mcp_resources.list_resources()
+        return [
+            mcp_types.Resource(
+                uri=r["uri"],
+                name=r["name"],
+                description=r.get("description"),
+                mimeType=r.get("mimeType"),
+            )
+            for r in resources_raw
+        ]
+
+    @SERVER.list_resource_templates()
+    async def list_res_templates():
+        templates_raw = await mcp_resources.list_resource_templates()
+        return [
+            mcp_types.ResourceTemplate(
+                uriTemplate=r["uriTemplate"],
+                name=r["name"],
+                description=r.get("description"),
+                mimeType=r.get("mimeType"),
+            )
+            for r in templates_raw
+        ]
 
     @SERVER.read_resource()
     async def read_res(uri: str):
