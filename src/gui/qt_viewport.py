@@ -338,6 +338,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gimbal_drag_start = (0, 0)
         self._gimbal_node_start_pos = (0.0, 0.0, 0.0)
         self._gimbal_node_start_rot = (0.0, 0.0, 0.0, 1.0)
+        self._gimbal_model_applied_translation = (0.0, 0.0, 0.0)
+        self._gimbal_model_applied_rotation = 0.0
+        self._gimbal_model_applied_scale = 1.0
         self._undo_limit = 250
         self._undo_stack: list[dict] = []
         self._redo_stack: list[dict] = []
@@ -830,12 +833,17 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._request_render()
 
     def cycle_gimbal_mode(self) -> None:
-        self.set_gimbal_mode(2 if self._renderer.gimbal_mode == 1 else 1)
+        current = int(getattr(self._renderer, "gimbal_mode", 1) or 1)
+        self.set_gimbal_mode(1 if current >= 3 else current + 1)
         self._request_render()
 
     def set_gimbal_mode(self, mode: int) -> None:
-        self._renderer.gimbal_mode = 2 if mode == 2 else 1
-        mode_label = "Rotate" if self._renderer.gimbal_mode == 2 else "Translate"
+        self._renderer.gimbal_mode = 3 if mode == 3 else (2 if mode == 2 else 1)
+        mode_label = {
+            1: "Translate",
+            2: "Rotate",
+            3: "Scale",
+        }.get(self._renderer.gimbal_mode, "Translate")
         self.gimbal_mode_button.setText(f"[{mode_label}]")
 
     def frame_all(self) -> None:
@@ -1876,6 +1884,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                     self._renderer.show_solid = old_solid
             if self._renderer.show_gimbal:
                 self._renderer._draw_gimbal(draw, w, h)
+            self._draw_selected_model_outline(draw, w, h)
             self._renderer._draw_axes(draw, w, h)
             self._renderer._draw_stats(draw, w, h)
             return img
@@ -2379,6 +2388,9 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._gimbal_drag_start = (x, y)
                 self._gimbal_node_start_pos = tuple(self._renderer.selected_node.position)
                 self._gimbal_node_start_rot = tuple(self._renderer.selected_node.rotation)
+                self._gimbal_model_applied_translation = (0.0, 0.0, 0.0)
+                self._gimbal_model_applied_rotation = 0.0
+                self._gimbal_model_applied_scale = 1.0
                 self._renderer.gimbal_active_axis = axis
                 self._request_render()
                 return
@@ -2473,14 +2485,15 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._renderer._wt_cache.clear()
             node = self._renderer.selected_node
             if node is not None:
-                self._commit_node_transform(
-                    node,
-                    self._gimbal_node_start_pos,
-                    self._gimbal_node_start_rot,
-                    tuple(node.position),
-                    tuple(node.rotation),
-                    "Gimbal Transform",
-                )
+                if not self._is_selected_model_root(node):
+                    self._commit_node_transform(
+                        node,
+                        self._gimbal_node_start_pos,
+                        self._gimbal_node_start_rot,
+                        tuple(node.position),
+                        tuple(node.rotation),
+                        "Gimbal Transform",
+                    )
                 self._notify_node_moved(node)
             self._request_render()
             return
@@ -2553,6 +2566,12 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self.set_selected_node(node)
                 if self.on_bone_selected:
                     self.on_bone_selected(node)
+                return
+        if self._hit_test_model_bounds(x, y):
+            root_node = getattr(self.model, "root_node", None)
+            if root_node is not None:
+                self.set_selected_node(root_node)
+                self._request_render()
                 return
         self.set_selected_node(None)
         if self.on_bone_selected:
@@ -2642,6 +2661,14 @@ class QtViewportWidget(QtWidgets.QWidget):
         world_per_px = (2.0 * dist * math.tan(math.radians(self.camera.fov) * 0.5)) / max(h, 1)
         axis = self._gimbal_axis
         start = self._gimbal_node_start_pos
+        if self._is_selected_model_root(node):
+            self._apply_model_gimbal_drag(
+                dx_screen,
+                dy_screen,
+                world_per_px,
+                axis,
+            )
+            return
 
         if self._renderer.gimbal_mode == 1:
             right, up, _fwd, _eye = self.camera._view_matrix()
@@ -2684,6 +2711,153 @@ class QtViewportWidget(QtWidgets.QWidget):
                 node.rotation = tuple(v / ll for v in new_rot)
 
         self._evict_transform_cache(node)
+
+    def _is_selected_model_root(self, node) -> bool:
+        return bool(self.model is not None and node is getattr(self.model, "root_node", None))
+
+    def _model_gimbal_axis_delta(
+        self,
+        axis_name: str,
+        dx_screen: float,
+        dy_screen: float,
+        world_per_px: float,
+    ) -> tuple[float, float, float]:
+        right, up, _fwd, _eye = self.camera._view_matrix()
+        w_dir = {"X": (1.0, 0.0, 0.0), "Y": (0.0, 1.0, 0.0)}.get(
+            axis_name,
+            (0.0, 0.0, 1.0),
+        )
+        sc_x = w_dir[0] * right[0] + w_dir[1] * right[1] + w_dir[2] * right[2]
+        sc_y = w_dir[0] * up[0] + w_dir[1] * up[1] + w_dir[2] * up[2]
+        ll = math.sqrt(sc_x * sc_x + sc_y * sc_y)
+        if ll < 1e-6:
+            return (0.0, 0.0, 0.0)
+        delta = ((dx_screen * sc_x + (-dy_screen) * sc_y) / ll) * world_per_px
+        return (delta * w_dir[0], delta * w_dir[1], delta * w_dir[2])
+
+    def _apply_model_gimbal_drag(
+        self,
+        dx_screen: float,
+        dy_screen: float,
+        world_per_px: float,
+        axis: str,
+    ) -> None:
+        if self.model is None:
+            return
+        mode = int(getattr(self._renderer, "gimbal_mode", 1) or 1)
+        translation_delta = (0.0, 0.0, 0.0)
+        rotation_delta = (0.0, 0.0, 0.0)
+        scale_delta = 1.0
+
+        if mode == 1:
+            if len(axis) == 1:
+                target = self._model_gimbal_axis_delta(
+                    axis,
+                    dx_screen,
+                    dy_screen,
+                    world_per_px,
+                )
+            else:
+                d1 = self._model_gimbal_axis_delta(axis[0], dx_screen, dy_screen, world_per_px)
+                d2 = self._model_gimbal_axis_delta(axis[1], dx_screen, dy_screen, world_per_px)
+                target = (d1[0] + d2[0], d1[1] + d2[1], d1[2] + d2[2])
+            prev = self._gimbal_model_applied_translation
+            translation_delta = tuple(target[i] - prev[i] for i in range(3))
+            self._gimbal_model_applied_translation = target
+        elif mode == 2:
+            angle = dx_screen * 0.01
+            if QtWidgets.QApplication.keyboardModifiers() & QtCore.Qt.ShiftModifier:
+                deg = round(math.degrees(angle) / 10.0) * 10.0
+                angle = math.radians(deg)
+            delta_angle = angle - float(self._gimbal_model_applied_rotation or 0.0)
+            self._gimbal_model_applied_rotation = angle
+            deg_delta = math.degrees(delta_angle)
+            if axis == "X":
+                rotation_delta = (deg_delta, 0.0, 0.0)
+            elif axis == "Y":
+                rotation_delta = (0.0, deg_delta, 0.0)
+            else:
+                rotation_delta = (0.0, 0.0, deg_delta)
+        elif mode == 3:
+            target_scale = max(0.01, min(100.0, math.exp(dx_screen * 0.006)))
+            prev_scale = max(0.01, float(self._gimbal_model_applied_scale or 1.0))
+            scale_delta = target_scale / prev_scale
+            self._gimbal_model_applied_scale = target_scale
+
+        if (
+            abs(scale_delta - 1.0) < 1e-6
+            and all(abs(v) < 1e-6 for v in translation_delta)
+            and all(abs(v) < 1e-6 for v in rotation_delta)
+        ):
+            return
+        try:
+            try:
+                from core import headless_body_workflow as _wf
+            except ImportError:                              # pragma: no cover
+                from src.core import headless_body_workflow as _wf  # type: ignore
+            result = _wf.apply_external_model_fit_adjustment(
+                self.model,
+                rotation_delta_degrees=rotation_delta,
+                scale_delta=scale_delta,
+                translation_delta=translation_delta,
+            )
+            if bool(result.get("ok")):
+                self.refresh_model_geometry()
+                root_node = getattr(self.model, "root_node", None)
+                if root_node is not None:
+                    self._renderer.selected_node = root_node
+        except Exception as exc:
+            log.debug("Model gimbal transform failed: %s", exc)
+
+    def _hit_test_model_bounds(self, sx: int, sy: int) -> bool:
+        if self.model is None:
+            return False
+        try:
+            bb_min, bb_max = self._renderer._get_render_bounds()
+            w = self.canvas.width() or 800
+            h = self.canvas.height() or 600
+            points = []
+            for x in (bb_min[0], bb_max[0]):
+                for y in (bb_min[1], bb_max[1]):
+                    for z in (bb_min[2], bb_max[2]):
+                        sp = self._renderer._proj(float(x), float(y), float(z), w, h)
+                        if sp is not None:
+                            points.append(sp)
+            if not points:
+                return False
+            min_x = min(p[0] for p in points) - 12
+            max_x = max(p[0] for p in points) + 12
+            min_y = min(p[1] for p in points) - 12
+            max_y = max(p[1] for p in points) + 12
+            return min_x <= sx <= max_x and min_y <= sy <= max_y
+        except Exception:
+            return False
+
+    def _draw_selected_model_outline(self, draw, w: int, h: int) -> None:
+        if not self._is_selected_model_root(getattr(self._renderer, "selected_node", None)):
+            return
+        try:
+            bb_min, bb_max = self._renderer._get_render_bounds()
+            corners = {}
+            for ix, x in enumerate((bb_min[0], bb_max[0])):
+                for iy, y in enumerate((bb_min[1], bb_max[1])):
+                    for iz, z in enumerate((bb_min[2], bb_max[2])):
+                        sp = self._renderer._proj(float(x), float(y), float(z), w, h)
+                        if sp is not None:
+                            corners[(ix, iy, iz)] = (sp[0], sp[1])
+            edges = (
+                ((0, 0, 0), (1, 0, 0)), ((0, 1, 0), (1, 1, 0)),
+                ((0, 0, 1), (1, 0, 1)), ((0, 1, 1), (1, 1, 1)),
+                ((0, 0, 0), (0, 1, 0)), ((1, 0, 0), (1, 1, 0)),
+                ((0, 0, 1), (0, 1, 1)), ((1, 0, 1), (1, 1, 1)),
+                ((0, 0, 0), (0, 0, 1)), ((1, 0, 0), (1, 0, 1)),
+                ((0, 1, 0), (0, 1, 1)), ((1, 1, 0), (1, 1, 1)),
+            )
+            for a, b in edges:
+                if a in corners and b in corners:
+                    draw.line([corners[a], corners[b]], fill=(255, 212, 0, 190), width=2)
+        except Exception as exc:
+            log.debug("Selected model outline draw failed: %s", exc)
 
     def _evict_transform_cache(self, node) -> None:
         self._renderer._wt_cache.pop(id(node), None)

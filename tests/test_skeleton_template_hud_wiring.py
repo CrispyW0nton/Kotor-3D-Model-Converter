@@ -131,6 +131,22 @@ def test_shift_snaps_viewport_rotation_gimbal_to_ten_degrees() -> None:
     assert "self._gimbal_node_start_rot" in viewport
 
 
+def test_import_root_gimbal_transforms_whole_mesh_and_supports_scale() -> None:
+    viewport = _read("src/gui/qt_viewport.py")
+    core = _read("src/gui/viewport_core.py")
+
+    assert "self.set_gimbal_mode(1 if current >= 3 else current + 1)" in viewport
+    assert "3: \"Scale\"" in viewport
+    assert "def _apply_model_gimbal_drag" in viewport
+    assert "apply_external_model_fit_adjustment" in viewport
+    assert "translation_delta=translation_delta" in viewport
+    assert "scale_delta=scale_delta" in viewport
+    assert "def _hit_test_model_bounds" in viewport
+    assert "def _draw_selected_model_outline" in viewport
+    assert "gimbal_mode: 0=none, 1=translate, 2=rotate, 3=scale" in core
+    assert "elif self.gimbal_mode == 3" in core
+
+
 def test_viewport_preloads_textures_for_skin_nodes() -> None:
     viewport = _read("src/gui/qt_viewport.py")
 

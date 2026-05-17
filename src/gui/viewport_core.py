@@ -3442,7 +3442,7 @@ class FrameRenderer:
         self._dangly_last_time: float = 0.0   # wall-clock time of last sim step
 
         # ── Gimbal / transform overlay ────────────────────────────────
-        # gimbal_mode: 0=none, 1=translate, 2=rotate
+        # gimbal_mode: 0=none, 1=translate, 2=rotate, 3=scale
         self.gimbal_mode: int = 1
         self.show_gimbal: bool = True
         self.gimbal_active_axis = None          # axis being dragged ('X','Y','Z',etc.) or None
@@ -7229,6 +7229,8 @@ class FrameRenderer:
           - Yellow/Cyan/Magenta square plane handles (XY, XZ, YZ)
         Rotate mode (gimbal_mode==2):
           - Colour-coded arc rings around each axis
+        Scale mode (gimbal_mode==3):
+          - White/yellow cube handles; imported root meshes scale uniformly
 
         Handle screen positions are stored in self._gimbal_handles for
         ViewportWidget hit-testing.
@@ -7237,7 +7239,18 @@ class FrameRenderer:
         node = self.selected_node
         if not node:
             return
-        wp, _, _ = self._node_world_transform(node)
+        if self.model is not None and node is getattr(self.model, 'root_node', None):
+            try:
+                bb_min, bb_max = self._get_render_bounds()
+                wp = (
+                    (float(bb_min[0]) + float(bb_max[0])) * 0.5,
+                    (float(bb_min[1]) + float(bb_max[1])) * 0.5,
+                    (float(bb_min[2]) + float(bb_max[2])) * 0.5,
+                )
+            except Exception:
+                wp, _, _ = self._node_world_transform(node)
+        else:
+            wp, _, _ = self._node_world_transform(node)
         cp = self._proj(*wp, W, H)
         if cp is None:
             return
@@ -7332,11 +7345,28 @@ class FrameRenderer:
                 sp = self._proj(*tip, W, H)
                 if sp:
                     self._gimbal_handles.append((sp[0], sp[1], name))
+        elif self.gimbal_mode == 3:   # ── Scale ──────────────────────
+            for name, col in axis_colors.items():
+                dx = arm if name == 'X' else 0.0
+                dy = arm if name == 'Y' else 0.0
+                dz = arm if name == 'Z' else 0.0
+                sp = self._proj(wp[0]+dx, wp[1]+dy, wp[2]+dz, W, H)
+                if sp is None:
+                    continue
+                sx, sy, _ = sp
+                draw_col = (255, 255, 80) if active == name else col
+                draw.line([cx, cy, sx, sy], fill=draw_col, width=2)
+                draw.rectangle([sx-6, sy-6, sx+6, sy+6],
+                               fill=draw_col, outline=(255, 255, 255))
+                self._gimbal_handles.append((sx, sy, name))
+            draw.rectangle([cx-7, cy-7, cx+7, cy+7],
+                           fill=(255, 255, 255), outline=(255, 212, 0))
+            self._gimbal_handles.append((cx, cy, 'S'))
 
         # Centre dot
         draw.ellipse([cx-4, cy-4, cx+4, cy+4],
                       fill=(255, 255, 255), outline=(150, 150, 150))
-        mode_lbl = "Translate" if self.gimbal_mode == 1 else "Rotate"
+        mode_lbl = {1: "Translate", 2: "Rotate", 3: "Scale"}.get(self.gimbal_mode, "Translate")
         try:
             draw.text((cx+6, cy-14), f"[{mode_lbl}] {node.name}",
                        fill=(200, 200, 200))
