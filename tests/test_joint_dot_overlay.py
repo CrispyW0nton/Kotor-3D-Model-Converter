@@ -518,6 +518,16 @@ def test_t404_ortho_button_label_tracks_state():
         w.deleteLater()
 
 
+def test_external_import_joint_dots_use_preserved_gltf_world_positions():
+    """External FBX/glTF skeleton overlays should not use KotOR-only bind math."""
+    source = (_REPO_ROOT / "src" / "gui" / "viewport_core.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "external_world_position" in source
+    assert "return external_wp" in source
+
+
 def test_t404_snap_view_hidden_when_canvas_too_narrow():
     """If the canvas is narrower than the bar, the bar hides cleanly."""
     app, w = _make_widget()

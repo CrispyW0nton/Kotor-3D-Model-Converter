@@ -6912,6 +6912,9 @@ class FrameRenderer:
             if self._anim_pose is not None:
                 wp, _, _ = self._node_world_transform(node)
                 return wp
+            external_wp = getattr(node, 'external_world_position', None)
+            if external_wp is not None:
+                return external_wp
             return node.bone_world_position()
 
         def _process_bone_node(node):

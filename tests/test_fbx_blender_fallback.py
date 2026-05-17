@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import pathlib
 import sys
 from types import SimpleNamespace
@@ -90,3 +91,86 @@ def test_candidate_blender_executables_honors_env_path(tmp_path, monkeypatch):
     candidates = gi._candidate_blender_executables()
 
     assert candidates[0] == str(blender)
+
+
+def test_gltf_import_preserves_bone_hierarchy_for_external_skeletons():
+    """UE/Blender skeletons must not flatten every joint under the model root."""
+    gltf = {
+        "asset": {"version": "2.0"},
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [
+            {"name": "Armature", "translation": [0.0, 0.0, 1.0], "children": [1]},
+            {"name": "Pelvis", "translation": [0.0, 0.0, 2.0], "children": [2]},
+            {"name": "Head", "translation": [0.0, 0.0, 3.0]},
+        ],
+    }
+
+    model = gi.GLTFImporter().import_bytes(
+        json.dumps(gltf).encode("utf-8"),
+        model_name="hierarchy",
+    )
+
+    assert model is not None
+    armature = model.find_node("Armature")
+    pelvis = model.find_node("Pelvis")
+    head = model.find_node("Head")
+    assert armature is not None
+    assert pelvis is not None
+    assert head is not None
+    assert armature.parent is model.root_node
+    assert pelvis.parent is armature
+    assert head.parent is pelvis
+    assert head.bone_world_position() == (0.0, 0.0, 6.0)
+
+
+def test_gltf_import_uses_parentless_nodes_when_scene_roots_are_absent():
+    gltf = {
+        "asset": {"version": "2.0"},
+        "nodes": [
+            {"name": "Root", "children": [1]},
+            {"name": "Child", "translation": [1.0, 2.0, 3.0]},
+        ],
+    }
+
+    model = gi.GLTFImporter().import_bytes(
+        json.dumps(gltf).encode("utf-8"),
+        model_name="fallback_roots",
+    )
+
+    assert model is not None
+    root = model.find_node("Root")
+    child = model.find_node("Child")
+    assert root is not None
+    assert child is not None
+    assert root.parent is model.root_node
+    assert child.parent is root
+
+
+def test_gltf_import_bakes_parent_scale_into_bone_offsets():
+    """Blender FBX->GLB keeps UE armature scale on the parent node."""
+    gltf = {
+        "asset": {"version": "2.0"},
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [
+            {
+                "name": "Armature",
+                "scale": [10.0, 10.0, 10.0],
+                "children": [1],
+            },
+            {"name": "Head", "translation": [0.0, 0.0, 0.8]},
+        ],
+    }
+
+    model = gi.GLTFImporter().import_bytes(
+        json.dumps(gltf).encode("utf-8"),
+        model_name="scaled_armature",
+    )
+
+    assert model is not None
+    head = model.find_node("Head")
+    assert head is not None
+    assert head.parent is model.find_node("Armature")
+    assert head.bone_world_position() == (0.0, 0.0, 8.0)
+    assert head.external_world_position == (0.0, 0.0, 8.0)

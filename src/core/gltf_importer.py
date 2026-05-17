@@ -50,11 +50,13 @@ try:
     from .model_data import (
         KotorModel, ModelNode, NodeFlags, GameVersion,
         Animation, AnimEvent, BoneWeight, VertexSkinData,
+        _quat_mul, _quat_normalize, _quat_rotate,
     )
 except ImportError:
     from model_data import (  # type: ignore[no-redef]
         KotorModel, ModelNode, NodeFlags, GameVersion,
         Animation, AnimEvent, BoneWeight, VertexSkinData,
+        _quat_mul, _quat_normalize, _quat_rotate,
     )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -259,6 +261,164 @@ def _resolve_buffers(
     return resolved
 
 
+def _matrix_to_trs(matrix: Any) -> Tuple[
+    Tuple[float, float, float],
+    Tuple[float, float, float, float],
+]:
+    """Extract translation + rotation from a glTF column-major node matrix."""
+    if not matrix or len(matrix) < 16:
+        return (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)
+    m = [float(v) for v in matrix[:16]]
+    tx, ty, tz = m[12], m[13], m[14]
+
+    # glTF stores matrices column-major. Strip scale from the three basis
+    # columns before converting to a quaternion.
+    c0 = [m[0], m[1], m[2]]
+    c1 = [m[4], m[5], m[6]]
+    c2 = [m[8], m[9], m[10]]
+    for col in (c0, c1, c2):
+        length = math.sqrt(col[0] * col[0] + col[1] * col[1] + col[2] * col[2])
+        if length > 1e-9:
+            col[0] /= length
+            col[1] /= length
+            col[2] /= length
+
+    r00, r01, r02 = c0[0], c1[0], c2[0]
+    r10, r11, r12 = c0[1], c1[1], c2[1]
+    r20, r21, r22 = c0[2], c1[2], c2[2]
+    trace = r00 + r11 + r22
+    if trace > 0.0:
+        s = math.sqrt(trace + 1.0) * 2.0
+        qw = 0.25 * s
+        qx = (r21 - r12) / s
+        qy = (r02 - r20) / s
+        qz = (r10 - r01) / s
+    elif r00 > r11 and r00 > r22:
+        s = math.sqrt(max(0.0, 1.0 + r00 - r11 - r22)) * 2.0
+        qw = (r21 - r12) / s if s else 1.0
+        qx = 0.25 * s
+        qy = (r01 + r10) / s if s else 0.0
+        qz = (r02 + r20) / s if s else 0.0
+    elif r11 > r22:
+        s = math.sqrt(max(0.0, 1.0 + r11 - r00 - r22)) * 2.0
+        qw = (r02 - r20) / s if s else 1.0
+        qx = (r01 + r10) / s if s else 0.0
+        qy = 0.25 * s
+        qz = (r12 + r21) / s if s else 0.0
+    else:
+        s = math.sqrt(max(0.0, 1.0 + r22 - r00 - r11)) * 2.0
+        qw = (r10 - r01) / s if s else 1.0
+        qx = (r02 + r20) / s if s else 0.0
+        qy = (r12 + r21) / s if s else 0.0
+        qz = 0.25 * s
+    return (tx, ty, tz), (qx, qy, qz, qw)
+
+
+def _node_trs_from_mapping(node: Dict[str, Any]) -> Tuple[
+    Tuple[float, float, float],
+    Tuple[float, float, float, float],
+]:
+    matrix = node.get("matrix")
+    if matrix:
+        return _matrix_to_trs(matrix)
+    trans = node.get("translation", [0.0, 0.0, 0.0])
+    rot = node.get("rotation", [0.0, 0.0, 0.0, 1.0])
+    return (
+        (float(trans[0]), float(trans[1]), float(trans[2])),
+        (float(rot[0]), float(rot[1]), float(rot[2]), float(rot[3])),
+    )
+
+
+def _node_scale_from_mapping(node: Dict[str, Any]) -> Tuple[float, float, float]:
+    matrix = node.get("matrix")
+    if matrix and len(matrix) >= 16:
+        m = [float(v) for v in matrix[:16]]
+        return (
+            math.sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]),
+            math.sqrt(m[4] * m[4] + m[5] * m[5] + m[6] * m[6]),
+            math.sqrt(m[8] * m[8] + m[9] * m[9] + m[10] * m[10]),
+        )
+    scale = node.get("scale") or [1.0, 1.0, 1.0]
+    return (float(scale[0]), float(scale[1]), float(scale[2]))
+
+
+def _node_trs_from_object(node: Any) -> Tuple[
+    Tuple[float, float, float],
+    Tuple[float, float, float, float],
+]:
+    matrix = getattr(node, "matrix", None)
+    if matrix:
+        return _matrix_to_trs(matrix)
+    trans = getattr(node, "translation", None) or [0.0, 0.0, 0.0]
+    rot = getattr(node, "rotation", None) or [0.0, 0.0, 0.0, 1.0]
+    return (
+        (float(trans[0]), float(trans[1]), float(trans[2])),
+        (float(rot[0]), float(rot[1]), float(rot[2]), float(rot[3])),
+    )
+
+
+def _node_scale_from_object(node: Any) -> Tuple[float, float, float]:
+    matrix = getattr(node, "matrix", None)
+    if matrix and len(matrix) >= 16:
+        return _node_scale_from_mapping({"matrix": matrix})
+    scale = getattr(node, "scale", None) or [1.0, 1.0, 1.0]
+    return (float(scale[0]), float(scale[1]), float(scale[2]))
+
+
+def _mul_scale(
+    a: Tuple[float, float, float],
+    b: Tuple[float, float, float],
+) -> Tuple[float, float, float]:
+    return (a[0] * b[0], a[1] * b[1], a[2] * b[2])
+
+
+def _apply_scale_to_pos(
+    pos: Tuple[float, float, float],
+    scale: Tuple[float, float, float],
+) -> Tuple[float, float, float]:
+    return (pos[0] * scale[0], pos[1] * scale[1], pos[2] * scale[2])
+
+
+def _compose_gltf_world(
+    local_pos: Tuple[float, float, float],
+    local_rot: Tuple[float, float, float, float],
+    parent_world: Tuple[float, float, float],
+    parent_rot: Tuple[float, float, float, float],
+    parent_scale: Tuple[float, float, float],
+) -> Tuple[
+    Tuple[float, float, float],
+    Tuple[float, float, float, float],
+]:
+    scaled = _apply_scale_to_pos(local_pos, parent_scale)
+    rx, ry, rz = _quat_rotate(parent_rot, scaled)
+    world = (parent_world[0] + rx, parent_world[1] + ry, parent_world[2] + rz)
+    rotation = tuple(_quat_mul(parent_rot, _quat_normalize(local_rot)))
+    return world, rotation
+
+
+def _gltf_root_indices(nodes: List[Any], scenes: Any = None, scene_idx: Any = None) -> List[int]:
+    """Return scene root node indices, falling back to parentless nodes."""
+    if scenes:
+        try:
+            idx = int(scene_idx or 0)
+            scene = scenes[idx] if 0 <= idx < len(scenes) else scenes[0]
+            roots = getattr(scene, "nodes", None)
+            if roots is None and isinstance(scene, dict):
+                roots = scene.get("nodes")
+            if roots:
+                return [int(i) for i in roots]
+        except Exception:
+            pass
+    referenced: set[int] = set()
+    for node in nodes:
+        children = getattr(node, "children", None)
+        if children is None and isinstance(node, dict):
+            children = node.get("children")
+        for child in list(children or []):
+            referenced.add(int(child))
+    return [i for i in range(len(nodes)) if i not in referenced]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  Main importer
 # ─────────────────────────────────────────────────────────────────────────────
@@ -380,9 +540,19 @@ class GLTFImporter:
                 result.append(row[0] if nc == 1 else tuple(row))
             return result
 
-        # ── Process mesh nodes ────────────────────────────────────────────────
-        for gnode in (gltf.nodes or []):
-            self._process_gltf_node_pygltflib(gltf, gnode, root, _acc)
+        # ── Process node hierarchy ───────────────────────────────────────────
+        roots = _gltf_root_indices(
+            list(gltf.nodes or []),
+            scenes=list(gltf.scenes or []),
+            scene_idx=getattr(gltf, "scene", 0),
+        )
+        visited: set[int] = set()
+        for node_idx in roots:
+            self._process_gltf_node_pygltflib(
+                gltf, int(node_idx), root, _acc, visited,
+                (1.0, 1.0, 1.0),
+                (0.0, 0.0, 0.0),
+                (0.0, 0.0, 0.0, 1.0))
 
         # ── Import animations ─────────────────────────────────────────────────
         for ganim in (gltf.animations or []):
@@ -393,20 +563,34 @@ class GLTFImporter:
         model.compute_bounds()
         return model
 
-    def _process_gltf_node_pygltflib(self, gltf, gnode, parent_node, acc_fn):
+    def _process_gltf_node_pygltflib(
+        self, gltf, node_idx, parent_node, acc_fn,
+        visited: Optional[set[int]] = None,
+        parent_scale: Tuple[float, float, float] = (1.0, 1.0, 1.0),
+        parent_world: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+        parent_rot: Tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0),
+    ):
         """Convert one GLTF node (and its mesh primitives) into ModelNode(s)."""
+        if visited is None:
+            visited = set()
+        node_idx = int(node_idx)
+        if node_idx in visited or node_idx < 0 or node_idx >= len(gltf.nodes or []):
+            return None
+        visited.add(node_idx)
+        gnode = gltf.nodes[node_idx]
         nm = (gnode.name or "node")[:_MAX_NAME]
-        tx, ty, tz = (0.0, 0.0, 0.0)
-        if gnode.translation:
-            tx, ty, tz = float(gnode.translation[0]), float(gnode.translation[1]), float(gnode.translation[2])
-        qx, qy, qz, qw = (0.0, 0.0, 0.0, 1.0)
-        if gnode.rotation:
-            qx, qy, qz, qw = (float(gnode.rotation[0]), float(gnode.rotation[1]),
-                               float(gnode.rotation[2]), float(gnode.rotation[3]))
+        local_pos, local_rot = _node_trs_from_object(gnode)
+        world_pos, world_rot = _compose_gltf_world(
+            local_pos, local_rot, parent_world, parent_rot, parent_scale)
+        tx, ty, tz = _apply_scale_to_pos(local_pos, parent_scale)
+        qx, qy, qz, qw = local_rot
+        child_scale = _mul_scale(parent_scale, _node_scale_from_object(gnode))
 
         node = ModelNode(
             name=nm, flags=int(NodeFlags.HEADER),
             position=(tx, ty, tz), rotation=(qx, qy, qz, qw), parent=parent_node)
+        node.external_world_position = world_pos
+        node.external_world_rotation = world_rot
         parent_node.children.append(node)
 
         if gnode.mesh is not None:
@@ -417,9 +601,16 @@ class GLTFImporter:
                     name=pnm,
                     flags=int(NodeFlags.HEADER | NodeFlags.MESH),
                     parent=node)
+                mnode.external_world_position = world_pos
+                mnode.external_world_rotation = world_rot
                 attrs = prim.attributes
                 self._fill_mesh_node_pygltflib(gltf, prim, attrs, gnode, mnode, acc_fn)
                 node.children.append(mnode)
+        for child_idx in list(getattr(gnode, "children", None) or []):
+            self._process_gltf_node_pygltflib(
+                gltf, int(child_idx), node, acc_fn, visited, child_scale,
+                world_pos, world_rot)
+        return node
 
     def _fill_mesh_node_pygltflib(self, gltf, prim, attrs, gnode, mnode, acc_fn):
         """Populate mesh geometry + skin weights for one GLTF primitive."""
@@ -546,10 +737,19 @@ class GLTFImporter:
         gltf_images    = gltf_dict.get('images', [])
         gltf_anims     = gltf_dict.get('animations', [])
 
-        for gnode_dict in gltf_nodes:
+        roots = _gltf_root_indices(
+            gltf_nodes,
+            scenes=gltf_dict.get('scenes', []),
+            scene_idx=gltf_dict.get('scene', 0),
+        )
+        visited: set[int] = set()
+        for node_idx in roots:
             self._process_gltf_node_builtin(
-                gnode_dict, gltf_meshes, gltf_skins, gltf_materials,
-                gltf_textures, gltf_images, gltf_nodes, root, _acc)
+                int(node_idx), gltf_meshes, gltf_skins, gltf_materials,
+                gltf_textures, gltf_images, gltf_nodes, root, _acc,
+                visited, (1.0, 1.0, 1.0),
+                (0.0, 0.0, 0.0),
+                (0.0, 0.0, 0.0, 1.0))
 
         for ganim_dict in gltf_anims:
             anim = self._import_animation_builtin(ganim_dict, gltf_nodes, _acc)
@@ -560,19 +760,34 @@ class GLTFImporter:
         return model
 
     def _process_gltf_node_builtin(
-        self, gnode_dict, gltf_meshes, gltf_skins, gltf_materials,
+        self, node_idx, gltf_meshes, gltf_skins, gltf_materials,
         gltf_textures, gltf_images, gltf_nodes, parent_node, acc_fn,
+        visited: Optional[set[int]] = None,
+        parent_scale: Tuple[float, float, float] = (1.0, 1.0, 1.0),
+        parent_world: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+        parent_rot: Tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0),
     ):
+        if visited is None:
+            visited = set()
+        node_idx = int(node_idx)
+        if node_idx in visited or node_idx < 0 or node_idx >= len(gltf_nodes):
+            return None
+        visited.add(node_idx)
+        gnode_dict = gltf_nodes[node_idx]
         nm   = (gnode_dict.get('name') or "node")[:_MAX_NAME]
-        trans = gnode_dict.get('translation', [0.0, 0.0, 0.0])
-        rot   = gnode_dict.get('rotation',    [0.0, 0.0, 0.0, 1.0])
-        tx, ty, tz = float(trans[0]), float(trans[1]), float(trans[2])
-        qx, qy, qz, qw = float(rot[0]), float(rot[1]), float(rot[2]), float(rot[3])
+        local_pos, local_rot = _node_trs_from_mapping(gnode_dict)
+        world_pos, world_rot = _compose_gltf_world(
+            local_pos, local_rot, parent_world, parent_rot, parent_scale)
+        tx, ty, tz = _apply_scale_to_pos(local_pos, parent_scale)
+        qx, qy, qz, qw = local_rot
+        child_scale = _mul_scale(parent_scale, _node_scale_from_mapping(gnode_dict))
 
         node = ModelNode(
             name=nm, flags=int(NodeFlags.HEADER),
             position=(tx, ty, tz), rotation=(qx, qy, qz, qw),
             parent=parent_node)
+        node.external_world_position = world_pos
+        node.external_world_rotation = world_rot
         parent_node.children.append(node)
 
         mesh_idx = gnode_dict.get('mesh')
@@ -585,10 +800,18 @@ class GLTFImporter:
                     name=pnm,
                     flags=int(NodeFlags.HEADER | NodeFlags.MESH),
                     parent=node)
+                mnode.external_world_position = world_pos
+                mnode.external_world_rotation = world_rot
                 self._fill_mesh_node_builtin(
                     prim, gltf_skins, gltf_materials, gltf_textures, gltf_images,
                     gltf_nodes, skin_idx, mnode, acc_fn)
                 node.children.append(mnode)
+        for child_idx in list(gnode_dict.get('children', []) or []):
+            self._process_gltf_node_builtin(
+                int(child_idx), gltf_meshes, gltf_skins, gltf_materials,
+                gltf_textures, gltf_images, gltf_nodes, node, acc_fn,
+                visited, child_scale, world_pos, world_rot)
+        return node
 
     def _fill_mesh_node_builtin(
         self, prim, gltf_skins, gltf_materials, gltf_textures, gltf_images,
