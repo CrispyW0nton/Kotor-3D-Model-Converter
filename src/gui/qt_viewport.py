@@ -1827,6 +1827,8 @@ class QtViewportWidget(QtWidgets.QWidget):
                 # editing.  Cheap (one pass over `_bone_screen_positions`).
                 if self._joint_dot_enabled:
                     self._draw_joint_dots(img, w, h)
+            if getattr(self._renderer, "_ext_skeleton", None) is not None:
+                self._renderer._draw_ext_skeleton(draw, w, h)
             if self._renderer.show_walkmesh:
                 self._renderer._draw_walkmesh_overlay(draw, w, h)
             if self._renderer.show_wireframe:

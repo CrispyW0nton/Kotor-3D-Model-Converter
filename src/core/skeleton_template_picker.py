@@ -239,7 +239,7 @@ def _infer_part(resref: str, metadata: Mapping[str, Any]) -> str:
         return explicit
 
     r = (resref or "").lower()
-    if r.startswith(("pfbc", "pmbc", "pfbam", "pmbam")):
+    if r.startswith(("pfbc", "pmbc", "pfbam", "pmbam", "n_")):
         return "body"
     if r.startswith(("pfhc", "pmhc", "p_h")) or "head" in r:
         return "head"

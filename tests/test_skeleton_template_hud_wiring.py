@@ -34,6 +34,15 @@ def test_inspector_exposes_skeleton_template_picker_controls() -> None:
     assert "set_skeleton_template_status" in src
 
 
+def test_inspector_search_text_can_override_current_combo_selection() -> None:
+    src = _read("src/gui/qt_inspector_panel.py")
+
+    assert "typed = combo.currentText().strip().lower()" in src
+    assert "current_label = (" in src
+    assert "typed in label or typed in data" in src
+    assert "current = str(combo.currentData() or \"\")" in src
+
+
 def test_builder_wires_template_selection_to_preview_and_apply() -> None:
     src = _read("src/gui/qt_character_builder_panel.py")
 
@@ -45,7 +54,9 @@ def test_builder_wires_template_selection_to_preview_and_apply() -> None:
     assert "applySkeletonTemplateRequested.connect" in src
     assert "_on_apply_skeleton_template_requested" in src
     assert "skeleton_template_picker" in src
-    assert "list_skeleton_templates(game=game, part=\"body\")" in src
+    assert "_installed_skeleton_template_rows(game)" in src
+    assert "game_models=game_models" in src
+    assert "max_results=8000" in src
     assert "_load_skeleton_template_model" in src
     assert "load_game_skeleton_source" in src
     assert "apply_template_rig(mesh_model, template_model, game=game)" in src
@@ -89,7 +100,22 @@ def test_manual_import_fit_controls_are_wired() -> None:
     assert "_on_fit_adjustment_changed" in builder
     assert "apply_external_model_fit_adjustment" in builder
     assert "refresh_model_geometry" in viewport
+    assert "viewport.frame_all()" in builder
     assert "def apply_external_model_fit_adjustment" in workflow
+
+
+def test_gpu_viewport_draws_external_reference_skeleton_overlay() -> None:
+    viewport = _read("src/gui/qt_viewport.py")
+
+    assert 'getattr(self._renderer, "_ext_skeleton", None)' in viewport
+    assert "self._renderer._draw_ext_skeleton(draw, w, h)" in viewport
+
+
+def test_gpu_skinning_guards_external_parent_cycles() -> None:
+    skinning = _read("src/core/gpu_skinning.py")
+
+    assert "parent cycle detected" in skinning
+    assert "ignoring self-parent cycle" in skinning
 
 
 def test_shift_snaps_viewport_rotation_gimbal_to_ten_degrees() -> None:

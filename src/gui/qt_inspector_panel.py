@@ -823,16 +823,25 @@ class QtInspectorPanel(QtWidgets.QWidget):
         combo = getattr(self, "_skeleton_template_combo", None)
         if combo is None:
             return ""
-        current = str(combo.currentData() or "")
-        if current:
-            return current
         typed = combo.currentText().strip().lower()
         if typed:
+            current_idx = combo.currentIndex()
+            current_label = (
+                combo.itemText(current_idx).strip().lower()
+                if current_idx >= 0 else ""
+            )
+            if typed == current_label:
+                current = str(combo.currentData() or "")
+                if current:
+                    return current
             for idx in range(combo.count()):
                 label = combo.itemText(idx).strip().lower()
                 data = str(combo.itemData(idx) or "").strip().lower()
                 if typed == label or typed == data or typed in label or typed in data:
                     return str(combo.itemData(idx) or "")
+        current = str(combo.currentData() or "")
+        if current:
+            return current
         return ""
 
     def set_selected_skeleton_template_key(

@@ -409,6 +409,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         # service and mirrored into the right inspector.
         self._skeleton_template_options: list[Any] = []
         self._skeleton_template_options_by_key: dict[str, Any] = {}
+        self._installed_skeleton_template_rows_by_game: dict[str, list[dict[str, str]]] = {}
         self._selected_skeleton_template_key = ""
         self._selected_skeleton_template_model: Optional[Any] = None
         self._manual_fit_scale: float = 1.0
@@ -1313,6 +1314,8 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "refresh_model_geometry"):
             viewport.refresh_model_geometry()
+            if hasattr(viewport, "frame_all"):
+                viewport.frame_all()
         try:
             self.scene.dirty = True
         except Exception:
@@ -1422,6 +1425,41 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             return option.get(name, default)
         return getattr(option, name, default)
 
+    def _installed_skeleton_template_rows(self, game: str) -> list[dict[str, str]]:
+        """Return installed KOTOR MDLs for the base-skeleton picker."""
+        game_key = str(game or "K1").upper()
+        cached = self._installed_skeleton_template_rows_by_game.get(game_key)
+        if cached is not None:
+            return list(cached)
+
+        rows: list[dict[str, str]] = []
+        try:
+            try:
+                from core import character_builder as _cb
+                from core.kotor_install import KotorInstallation  # type: ignore
+            except ImportError:                                  # pragma: no cover
+                from src.core import character_builder as _cb      # type: ignore
+                from src.core.kotor_install import KotorInstallation  # type: ignore
+
+            root = _cb._detect_game_dir(game_key)
+            if root and os.path.isdir(root):
+                inst = KotorInstallation(root)
+                for resref in inst.list_models():
+                    name = str(resref or "").strip().lower()
+                    if not name:
+                        continue
+                    rows.append({
+                        "resref": name,
+                        "name": name,
+                        "source": "installation",
+                        "path": f"installation:{name}.mdl",
+                    })
+        except Exception:
+            log.debug("Could not scan installed skeleton template rows", exc_info=True)
+
+        self._installed_skeleton_template_rows_by_game[game_key] = rows
+        return list(rows)
+
     def _load_skeleton_template_model(self, option: Any) -> Optional[Any]:
         """Load the selected KOTOR skeleton reference from game data."""
         try:
@@ -1470,7 +1508,13 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         game = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
             getattr(self.scene, "game_version", "K1")
-        result = _picker.list_skeleton_templates(game=game, part="body")
+        game_models = self._installed_skeleton_template_rows(game)
+        result = _picker.list_skeleton_templates(
+            game=game,
+            part="body",
+            game_models=game_models,
+            max_results=8000,
+        )
         options = list(getattr(result, "options", []) or [])
         self._skeleton_template_options = options
         self._skeleton_template_options_by_key = {

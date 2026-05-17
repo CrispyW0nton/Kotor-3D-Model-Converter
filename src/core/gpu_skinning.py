@@ -470,22 +470,39 @@ class MatrixPaletteUploader:
             parent = getattr(node, 'parent', None)
             if parent is not None:
                 parent_name = getattr(parent, 'name', '')
-                if parent_name:
-                    self._node_parent[name_lower] = parent_name.lower()
+                parent_lower = str(parent_name or '').lower()
+                if parent_lower and parent_lower != name_lower:
+                    self._node_parent[name_lower] = parent_lower
+                elif parent_lower == name_lower:
+                    log.warning(
+                        "MatrixPaletteUploader: ignoring self-parent cycle on %s",
+                        name,
+                    )
 
         # Compute world-space bind matrices by walking parent chains.
         # Cache computed world bind matrices to avoid redundant chain walks.
         _world_bind_cache: Dict[str, List[List[float]]] = {}
+        _world_bind_active: set[str] = set()
 
         def _get_world_bind(bone_name_lower: str) -> List[List[float]]:
             """Recursively compute the world-space bind matrix for a bone."""
             if bone_name_lower in _world_bind_cache:
                 return _world_bind_cache[bone_name_lower]
+            if bone_name_lower in _world_bind_active:
+                log.warning(
+                    "MatrixPaletteUploader: parent cycle detected at %s",
+                    bone_name_lower,
+                )
+                m = _mat4_identity_py()
+                _world_bind_cache[bone_name_lower] = m
+                return m
+            _world_bind_active.add(bone_name_lower)
 
             node = self._node_lookup.get(bone_name_lower)
             if node is None:
                 m = _mat4_identity_py()
                 _world_bind_cache[bone_name_lower] = m
+                _world_bind_active.discard(bone_name_lower)
                 return m
 
             # Local bind transform: T(pos) × R(quat)
@@ -514,6 +531,7 @@ class MatrixPaletteUploader:
                 world_m = local_m
 
             _world_bind_cache[bone_name_lower] = world_m
+            _world_bind_active.discard(bone_name_lower)
             return world_m
 
         count = 0
@@ -582,10 +600,20 @@ class MatrixPaletteUploader:
         pose_nodes = {k.lower(): v for k, v in raw.items()}
 
         _world_base_cache: Dict[str, List[List[float]]] = {}
+        _world_base_active: set[str] = set()
 
         def _get_world_base(bone_name_lower: str) -> List[List[float]]:
             if bone_name_lower in _world_base_cache:
                 return _world_base_cache[bone_name_lower]
+            if bone_name_lower in _world_base_active:
+                log.warning(
+                    "MatrixPaletteUploader: base-pose parent cycle detected at %s",
+                    bone_name_lower,
+                )
+                m = _mat4_identity_py()
+                _world_base_cache[bone_name_lower] = m
+                return m
+            _world_base_active.add(bone_name_lower)
 
             pn = pose_nodes.get(bone_name_lower)
             if pn is not None:
@@ -599,6 +627,7 @@ class MatrixPaletteUploader:
                 else:
                     m = _mat4_identity_py()
                     _world_base_cache[bone_name_lower] = m
+                    _world_base_active.discard(bone_name_lower)
                     return m
 
             qx, qy, qz, qw = float(q[0]), float(q[1]), float(q[2]), float(q[3])
@@ -620,6 +649,7 @@ class MatrixPaletteUploader:
                 world_m = local_m
 
             _world_base_cache[bone_name_lower] = world_m
+            _world_base_active.discard(bone_name_lower)
             return world_m
 
         inv_bind_anim: Dict[str, List[List[float]]] = {}
@@ -638,10 +668,22 @@ class MatrixPaletteUploader:
         return count
 
     def _world_pose_matrix(self, bone_name_lower: str, pose_nodes: Dict[str, object],
-                           cache: Dict[str, List[List[float]]]) -> List[List[float]]:
+                           cache: Dict[str, List[List[float]]],
+                           _active: Optional[set[str]] = None) -> List[List[float]]:
         """Return world-space pose matrix for one bone, using pose overrides."""
         if bone_name_lower in cache:
             return cache[bone_name_lower]
+        if _active is None:
+            _active = set()
+        if bone_name_lower in _active:
+            log.warning(
+                "MatrixPaletteUploader: pose parent cycle detected at %s",
+                bone_name_lower,
+            )
+            m = _mat4_identity_py()
+            cache[bone_name_lower] = m
+            return m
+        _active.add(bone_name_lower)
 
         pn = pose_nodes.get(bone_name_lower)
         if pn is not None:
@@ -655,6 +697,7 @@ class MatrixPaletteUploader:
             else:
                 m = _mat4_identity_py()
                 cache[bone_name_lower] = m
+                _active.discard(bone_name_lower)
                 return m
 
         qx, qy, qz, qw = float(q[0]), float(q[1]), float(q[2]), float(q[3])
@@ -670,10 +713,11 @@ class MatrixPaletteUploader:
         )
         parent_name = self._node_parent.get(bone_name_lower)
         if parent_name is not None:
-            world_m = _mat4_mul_py(self._world_pose_matrix(parent_name, pose_nodes, cache), local_m)
+            world_m = _mat4_mul_py(self._world_pose_matrix(parent_name, pose_nodes, cache, _active), local_m)
         else:
             world_m = local_m
         cache[bone_name_lower] = world_m
+        _active.discard(bone_name_lower)
         return world_m
 
     @staticmethod
@@ -1039,11 +1083,21 @@ class MatrixPaletteUploader:
 
         # Build world-space animated pose matrices by walking the parent chain.
         _world_anim_cache: Dict[str, List[List[float]]] = {}
+        _world_anim_active: set[str] = set()
 
         def _get_world_anim(bone_name_lower: str) -> List[List[float]]:
             """Recursively compute the world-space animated transform for a bone."""
             if bone_name_lower in _world_anim_cache:
                 return _world_anim_cache[bone_name_lower]
+            if bone_name_lower in _world_anim_active:
+                log.warning(
+                    "MatrixPaletteUploader: animated parent cycle detected at %s",
+                    bone_name_lower,
+                )
+                m = _mat4_identity_py()
+                _world_anim_cache[bone_name_lower] = m
+                return m
+            _world_anim_active.add(bone_name_lower)
 
             # Get animated or bind-pose local transform
             pn = pose_nodes.get(bone_name_lower)
@@ -1058,6 +1112,7 @@ class MatrixPaletteUploader:
                 else:
                     m = _mat4_identity_py()
                     _world_anim_cache[bone_name_lower] = m
+                    _world_anim_active.discard(bone_name_lower)
                     return m
 
             qx, qy, qz, qw = float(q[0]), float(q[1]), float(q[2]), float(q[3])
@@ -1080,6 +1135,7 @@ class MatrixPaletteUploader:
                 world_m = local_m
 
             _world_anim_cache[bone_name_lower] = world_m
+            _world_anim_active.discard(bone_name_lower)
             return world_m
 
         for idx, bname in enumerate(self._bone_order):

@@ -124,6 +124,23 @@ def test_t1201_game_model_rows_become_picker_options():
     assert opt.warnings == []
 
 
+def test_t1201_installed_npc_models_are_body_skeleton_candidates():
+    result = picker.list_skeleton_templates(
+        game="k1",
+        part="body",
+        include_canonical=False,
+        include_bundled=False,
+        game_models=[
+            {"resref": "n_mandalorian03", "source": "installation"},
+            {"resref": "c_bantha", "source": "installation"},
+        ],
+    )
+
+    assert result.ok is True
+    assert [opt.resref for opt in result.options] == ["n_mandalorian03"]
+    assert result.options[0].part == "body"
+
+
 def test_t1201_game_rows_warn_when_metadata_missing():
     result = picker.list_skeleton_templates(
         game="k1",
