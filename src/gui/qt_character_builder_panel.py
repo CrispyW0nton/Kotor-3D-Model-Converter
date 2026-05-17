@@ -258,6 +258,14 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         # service and mirrored into the right inspector.
         self._skeleton_template_options_by_key: dict[str, Any] = {}
         self._selected_skeleton_template_key = ""
+        # M9 / T901 — live validation is intentionally debounced so
+        # guide drags and slider-like controls do not spam the workflow
+        # service while still refreshing the export banner promptly.
+        self._live_validation_timer = QtCore.QTimer(self)
+        self._live_validation_timer.setSingleShot(True)
+        self._live_validation_timer.setInterval(200)
+        self._live_validation_timer.timeout.connect(self._run_live_validation)
+        self._last_validation_result: Optional[Any] = None
 
         self.setObjectName("QtCharacterBuilderWindow")
         self.setWindowTitle("GhostRigger - Character Builder")
@@ -614,6 +622,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self.scene.dirty = True
         self._refresh_skeleton_template_options()
         self._update_title()
+        self._schedule_live_validation("game_changed")
 
     @QtCore.Slot(object)
     def _on_properties_mode_changed(self, mode) -> None:
@@ -623,6 +632,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             if hasattr(self.scene, "unlock_mode"):
                 self.scene.unlock_mode()
             self._sync_from_scene()
+            self._schedule_live_validation("mode_unlocked")
             return
         self._apply_mode(mode, locked=True, source="properties")
 
@@ -724,6 +734,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self.statusBar().showMessage(result.message, 4000)
         self._refresh_body_guide_undo_actions()
         self._update_title()
+        self._schedule_live_validation("body_guide_history")
 
     @QtCore.Slot()
     def _on_undo_body_guide_requested(self) -> None:
@@ -782,6 +793,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             pass
         self._refresh_body_guide_undo_actions()
         self._update_title()
+        self._schedule_live_validation("viewport_node_moved")
 
     # ── Inspector slots ──────────────────────────────────────────────────
 
@@ -970,6 +982,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         except Exception:                                    # pragma: no cover
             log.exception("Failed to push composite preview into viewport")
         self._update_title()
+        self._schedule_live_validation("composite_loaded")
 
     def _on_model_loaded_into_scene(self, result) -> None:
         """Post-load housekeeping shared by every load branch.
@@ -996,6 +1009,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._refresh_skeleton_template_options()
         self._refresh_motion_assignment_state()
         self._update_title()
+        self._schedule_live_validation("model_loaded")
 
     # ── M12 / T1202 — KOTOR skeleton template picker ────────────────────
 
@@ -1191,6 +1205,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         )
         self.statusBar().showMessage(message, 6000)
         self._update_title()
+        self._schedule_live_validation("skeleton_template_applied")
 
     @QtCore.Slot()
     def _on_validate_requested(self) -> None:
@@ -1200,17 +1215,37 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         pushes the result into the inspector's validation tally + the
         bottom-strip banner.  Replaces the M2 synthetic-clean stub.
         """
+        self._run_validation(reason="manual", update_status=True)
+
+    def _schedule_live_validation(self, reason: str = "") -> None:
+        """Debounce validation after scene mutations (M9 / T901)."""
+        timer = getattr(self, "_live_validation_timer", None)
+        if timer is None:
+            return
+        timer.setProperty("reason", reason or "scene_mutation")
+        timer.start()
+
+    @QtCore.Slot()
+    def _run_live_validation(self) -> None:
+        """Timer callback for live export-readiness validation."""
+        timer = getattr(self, "_live_validation_timer", None)
+        reason = str(timer.property("reason") if timer is not None else "live")
+        self._run_validation(reason=reason or "live", update_status=False)
+
+    def _run_validation(self, *, reason: str, update_status: bool) -> Any:
+        """Run the workflow validation service and refresh UI surfaces."""
         try:
-            from core import headless_body_workflow as _wf
+            _wf = self._workflow_module()
         except Exception as exc:                            # pragma: no cover
             log.exception("Could not import headless_body_workflow")
             self.bottom_strip.set_validation(
                 "error", "VALIDATE_UNAVAILABLE",
                 issues=[f"Workflow service unavailable: {exc}"],
             )
-            return
+            return None
 
         result = _wf.validate_for_export(self.scene, strict=True)
+        self._last_validation_result = result
 
         # Push detailed tally + Export-button-enable state into the
         # inspector's validate page.
@@ -1232,7 +1267,11 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             severity, result.code.upper(),
             issues=result.issues,
         )
-        self.statusBar().showMessage(result.message, 6000)
+        if update_status:
+            self.statusBar().showMessage(result.message, 6000)
+        else:
+            log.debug("Live validation refreshed after %s: %s", reason, result.code)
+        return result
 
     @QtCore.Slot()
     def _on_check_model_requested(self) -> None:
@@ -1548,6 +1587,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         )
         self.statusBar().showMessage(result.message, 5000)
         self._update_title()
+        self._schedule_live_validation("skeleton_generated")
 
     # ── M5 / T504 — Hand-rig step slots ──────────────────────────────────
 
@@ -1671,6 +1711,8 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 self.inspector.set_hand_masked_bones(result.masked_bones)
             except Exception:                               # pragma: no cover
                 log.exception("inspector.set_hand_masked_bones failed")
+        if result.ok:
+            self._schedule_live_validation("hand_mask_changed")
 
     # ── M12 / T1204 — Motion assignment ────────────────────────────────
 
@@ -1744,6 +1786,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if result.ok:
             self._on_refresh_preview_animations_requested()
             self._update_title()
+            self._schedule_live_validation("motions_assigned")
 
     # ── M5 / T505 — Check-Actor step slots ───────────────────────────────
 
@@ -1898,6 +1941,8 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         except Exception:                                   # pragma: no cover
             log.exception("bottom_strip.set_validation failed for rig_head")
         self.statusBar().showMessage(result.message, 5000)
+        if result.ok:
+            self._schedule_live_validation("head_rigged")
 
     @QtCore.Slot()
     def _on_rig_face_requested(self) -> None:
@@ -1916,6 +1961,8 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         except Exception:                                   # pragma: no cover
             log.exception("bottom_strip.set_validation failed for rig_face")
         self.statusBar().showMessage(result.message, 5000)
+        if result.ok:
+            self._schedule_live_validation("face_rigged")
 
     @QtCore.Slot(int)
     def _on_apply_viseme_requested(self, viseme_index: int) -> None:
@@ -1960,6 +2007,8 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             self.statusBar().showMessage(message, 5000)
         except Exception:                                   # pragma: no cover
             pass
+        if ok:
+            self._schedule_live_validation("phoneme_calibrated")
 
     @QtCore.Slot(str, int)
     def _on_calibrate_phoneme_requested(
@@ -2092,6 +2141,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._reflect_mode_in_toolbar(mode)
         self.modeChanged.emit(mode)
         self._update_title()
+        self._schedule_live_validation(f"mode_{source}")
         log.info("Character Builder mode → %s (source=%s, locked=%s)",
                  getattr(mode, "name", mode), source, locked)
 
