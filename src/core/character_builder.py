@@ -200,6 +200,71 @@ def load_template(game: str = "K1", part: str = "body") -> Optional["KotorModel"
         return None
 
 
+def _detect_game_dir(game: str) -> Optional[str]:
+    """Return the configured KOTOR install path for *game*, if available."""
+    try:
+        try:
+            from resources.game_detector import detect_kotor_dirs  # type: ignore
+        except ImportError:
+            from src.resources.game_detector import detect_kotor_dirs  # type: ignore
+        k1_dir, k2_dir = detect_kotor_dirs(prefer_config=True)
+        return k2_dir if str(game).upper().endswith("2") else k1_dir
+    except Exception as exc:
+        log.debug("character_builder._detect_game_dir failed: %s", exc)
+        return None
+
+
+def load_game_skeleton_source(
+    resref: str,
+    *,
+    game: str = "K1",
+    game_dir: Optional[str] = None,
+) -> Optional["KotorModel"]:
+    """Load a real KOTOR MDL/MDX by resref for use as a rig reference.
+
+    This is the preferred source for Character Builder skeleton fitting.  It
+    keeps the modder's chosen base body/supermodel tied to the actual installed
+    game files instead of the older generated ``templates/gr_*`` MDLs.
+    """
+    name = str(resref or "").strip().lower()
+    if not name:
+        return None
+
+    try:
+        try:
+            from core.kotor_install import KotorInstallation  # type: ignore
+            from core.kotor_loader import load_model_from_bytes  # type: ignore
+            from core.model_data import GameVersion  # type: ignore
+        except ImportError:
+            from src.core.kotor_install import KotorInstallation  # type: ignore
+            from src.core.kotor_loader import load_model_from_bytes  # type: ignore
+            from src.core.model_data import GameVersion  # type: ignore
+    except Exception as exc:
+        log.error("load_game_skeleton_source: import error: %s", exc)
+        return None
+
+    root = game_dir or _detect_game_dir(game)
+    if not root:
+        log.warning("load_game_skeleton_source: no KOTOR %s install configured", game)
+        return None
+
+    try:
+        inst = KotorInstallation(root)
+        mdl_bytes = inst.get_mdl(name)
+        mdx_bytes = inst.get_mdx(name) or b""
+        if not mdl_bytes:
+            log.warning("load_game_skeleton_source: %s not found in %s", name, root)
+            return None
+        gv = GameVersion.K2 if str(game).upper().endswith("2") else GameVersion.K1
+        model = load_model_from_bytes(mdl_bytes, mdx_bytes, game_version=gv)
+        if model is not None:
+            model.name = getattr(model, "name", None) or name
+        return model
+    except Exception as exc:
+        log.error("load_game_skeleton_source: failed for %s/%s: %s", game, name, exc)
+        return None
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  v7.1 Head Attachment (Finding 3.3 — KotorBlender armature.py cross-ref)
 # ═══════════════════════════════════════════════════════════════════════════════

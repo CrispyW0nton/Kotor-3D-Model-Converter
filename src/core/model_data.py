@@ -776,6 +776,17 @@ class ModelNode:
 
         Use this instead of world_position() when placing bone gizmos/dots.
         """
+        external_wp = getattr(self, "external_world_position", None)
+        if external_wp is not None:
+            try:
+                return (
+                    float(external_wp[0]),
+                    float(external_wp[1]),
+                    float(external_wp[2]),
+                )
+            except Exception:
+                pass
+
         chain: List['ModelNode'] = []
         n = self
         _visited2: set = set()

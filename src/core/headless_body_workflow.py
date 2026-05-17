@@ -82,6 +82,7 @@ _GLTF_EXTS = (".gltf", ".glb")
 _FBX_EXTS  = (".fbx", ".obj", ".ply", ".stl")
 _UTC_EXTS  = (".utc",)
 _TEXTURE_EXTS = (".tga", ".tpc", ".png", ".dds", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff")
+_DEFAULT_KOTOR_HUMANOID_HEIGHT = 2.01345
 
 
 def supported_load_extensions() -> Tuple[str, ...]:
@@ -176,6 +177,246 @@ def _load_gltf_or_mesh(path: str, game_version: str) -> Optional[Any]:
                        game_version=gv)
 
 
+def _iter_model_nodes(model: Any) -> List[Any]:
+    try:
+        return list(model.all_nodes())
+    except Exception:
+        root = getattr(model, "root_node", None)
+        if root is None:
+            return []
+        out: List[Any] = []
+        stack = [root]
+        seen: set[int] = set()
+        while stack:
+            node = stack.pop()
+            if node is None:
+                continue
+            nid = id(node)
+            if nid in seen:
+                continue
+            seen.add(nid)
+            out.append(node)
+            stack.extend(reversed(list(getattr(node, "children", []) or [])))
+        return out
+
+
+def _vertex_bounds(model: Any) -> Optional[Tuple[Tuple[float, float, float], Tuple[float, float, float]]]:
+    mins = [float("inf"), float("inf"), float("inf")]
+    maxs = [float("-inf"), float("-inf"), float("-inf")]
+    found = False
+    for node in _iter_model_nodes(model):
+        for vert in list(getattr(node, "vertices", []) or []):
+            if len(vert) < 3:
+                continue
+            try:
+                x, y, z = float(vert[0]), float(vert[1]), float(vert[2])
+            except Exception:
+                continue
+            mins[0] = min(mins[0], x); mins[1] = min(mins[1], y); mins[2] = min(mins[2], z)
+            maxs[0] = max(maxs[0], x); maxs[1] = max(maxs[1], y); maxs[2] = max(maxs[2], z)
+            found = True
+    if not found:
+        return None
+    return (tuple(mins), tuple(maxs))  # type: ignore[return-value]
+
+
+def _model_bone_bounds(model: Any) -> Optional[Tuple[Tuple[float, float, float], Tuple[float, float, float]]]:
+    mins = [float("inf"), float("inf"), float("inf")]
+    maxs = [float("-inf"), float("-inf"), float("-inf")]
+    found = False
+    for node in _iter_model_nodes(model):
+        try:
+            if hasattr(node, "bone_world_position"):
+                pos = node.bone_world_position()
+            else:
+                pos = getattr(node, "position", None)
+            if pos is None or len(pos) < 3:
+                continue
+            x, y, z = float(pos[0]), float(pos[1]), float(pos[2])
+        except Exception:
+            continue
+        mins[0] = min(mins[0], x); mins[1] = min(mins[1], y); mins[2] = min(mins[2], z)
+        maxs[0] = max(maxs[0], x); maxs[1] = max(maxs[1], y); maxs[2] = max(maxs[2], z)
+        found = True
+    if not found:
+        return None
+    return (tuple(mins), tuple(maxs))  # type: ignore[return-value]
+
+
+def _height_from_bounds(bounds: Optional[Tuple[Tuple[float, float, float], Tuple[float, float, float]]]) -> float:
+    if bounds is None:
+        return 0.0
+    bb_min, bb_max = bounds
+    try:
+        return max(0.0, float(bb_max[2]) - float(bb_min[2]))
+    except Exception:
+        return 0.0
+
+
+def reference_model_height(reference_model: Any) -> float:
+    """Return the KOTOR-space height of a selected base skeleton/model."""
+    mesh_height = _height_from_bounds(_vertex_bounds(reference_model))
+    if mesh_height > 0.01:
+        return mesh_height
+    bone_height = _height_from_bounds(_model_bone_bounds(reference_model))
+    if bone_height > 0.01:
+        return bone_height
+    return 0.0
+
+
+def _kotor_template_humanoid_height(game_version: str) -> float:
+    """Fallback KOTOR humanoid height when no selected base model is loaded."""
+    try:
+        gv = str(game_version).upper()
+        if gv in {"K1", "KOTOR1", "1", "K2", "TSL", "KOTOR2", "2"}:
+            return _DEFAULT_KOTOR_HUMANOID_HEIGHT
+    except Exception:
+        pass
+    return _DEFAULT_KOTOR_HUMANOID_HEIGHT
+
+
+def _axis_map_to_kotor_z(point: Tuple[float, float, float], vertical_axis: int) -> Tuple[float, float, float]:
+    """Map the detected source up-axis to KOTOR Z-up while keeping handedness."""
+    x, y, z = point
+    if vertical_axis == 1:  # Y-up external model -> KOTOR Z-up
+        return (x, z, y)
+    if vertical_axis == 0:  # X-up external model -> KOTOR Z-up
+        return (y, z, x)
+    return (x, y, z)
+
+
+def _transform_point_for_kotor(
+    point: Tuple[float, float, float],
+    *,
+    vertical_axis: int,
+    scale: float,
+    offset: Tuple[float, float, float],
+) -> Tuple[float, float, float]:
+    mapped = _axis_map_to_kotor_z(point, vertical_axis)
+    return (
+        mapped[0] * scale + offset[0],
+        mapped[1] * scale + offset[1],
+        mapped[2] * scale + offset[2],
+    )
+
+
+def normalize_external_model_for_kotor(
+    model: Any,
+    *,
+    game_version: str = "K1",
+    target_height: Optional[float] = None,
+    reference_model: Optional[Any] = None,
+    reference_label: str = "",
+) -> Dict[str, Any]:
+    """Scale and orient an imported external mesh into KOTOR humanoid space.
+
+    External FBX/glTF files often arrive in DCC/game-engine units, e.g. Unreal
+    Manny at ~8.9 units tall.  The best fitting target is the user-selected
+    KOTOR base model/supermodel; when one is unavailable we fall back to the
+    canonical humanoid height so guide placement still lands in Odyssey space.
+    """
+    bounds = _vertex_bounds(model)
+    if bounds is None:
+        return {"ok": False, "code": "no_vertices", "message": "No vertex bounds."}
+
+    bb_min, bb_max = bounds
+    extents = tuple(max(0.0, bb_max[i] - bb_min[i]) for i in range(3))
+    vertical_axis = max(range(3), key=lambda i: extents[i])
+    source_height = max(extents[vertical_axis], 1e-6)
+    reference_height = reference_model_height(reference_model) if reference_model is not None else 0.0
+    target = float(target_height or reference_height or _kotor_template_humanoid_height(game_version))
+    scale = target / source_height if source_height > 1e-6 else 1.0
+
+    mapped_min = _axis_map_to_kotor_z(bb_min, vertical_axis)
+    mapped_max = _axis_map_to_kotor_z(bb_max, vertical_axis)
+    norm_min = tuple(min(mapped_min[i], mapped_max[i]) for i in range(3))
+    norm_max = tuple(max(mapped_min[i], mapped_max[i]) for i in range(3))
+    center_x = (norm_min[0] + norm_max[0]) * 0.5
+    center_y = (norm_min[1] + norm_max[1]) * 0.5
+    offset = (-center_x * scale, -center_y * scale, -norm_min[2] * scale)
+
+    for node in _iter_model_nodes(model):
+        pos = getattr(node, "position", None)
+        if pos is not None and len(pos) >= 3:
+            try:
+                node.position = _transform_point_for_kotor(
+                    (float(pos[0]), float(pos[1]), float(pos[2])),
+                    vertical_axis=vertical_axis,
+                    scale=scale,
+                    offset=(0.0, 0.0, 0.0),
+                )
+            except Exception:
+                pass
+
+        external_wp = getattr(node, "external_world_position", None)
+        if external_wp is not None and len(external_wp) >= 3:
+            try:
+                node.external_world_position = _transform_point_for_kotor(
+                    (float(external_wp[0]), float(external_wp[1]), float(external_wp[2])),
+                    vertical_axis=vertical_axis,
+                    scale=scale,
+                    offset=offset,
+                )
+            except Exception:
+                pass
+
+        verts = list(getattr(node, "vertices", []) or [])
+        if verts:
+            new_verts = []
+            for vert in verts:
+                try:
+                    new_verts.append(_transform_point_for_kotor(
+                        (float(vert[0]), float(vert[1]), float(vert[2])),
+                        vertical_axis=vertical_axis,
+                        scale=scale,
+                        offset=offset,
+                    ))
+                except Exception:
+                    new_verts.append(vert)
+            node.vertices = new_verts
+            try:
+                node.compute_bounds()
+            except Exception:
+                pass
+
+        normals = list(getattr(node, "normals", []) or [])
+        if normals and vertical_axis != 2:
+            new_normals = []
+            for normal in normals:
+                try:
+                    new_normals.append(_axis_map_to_kotor_z(
+                        (float(normal[0]), float(normal[1]), float(normal[2])),
+                        vertical_axis,
+                    ))
+                except Exception:
+                    new_normals.append(normal)
+            node.normals = new_normals
+
+    try:
+        model.compute_bounds()
+    except Exception:
+        b = _vertex_bounds(model)
+        if b is not None:
+            model.bb_min, model.bb_max = b
+
+    metadata = getattr(model, "metadata", None)
+    if not isinstance(metadata, dict):
+        metadata = {}
+        setattr(model, "metadata", metadata)
+    result = {
+        "ok": True,
+        "code": "normalized",
+        "scale": scale,
+        "source_height": source_height,
+        "target_height": target,
+        "reference": reference_label or getattr(reference_model, "name", "") or "",
+        "vertical_axis": ("x", "y", "z")[vertical_axis],
+        "offset": offset,
+    }
+    metadata["kotor_normalization"] = result
+    return result
+
+
 def _load_utc(path: str, game_version: str) -> Optional[Any]:
     """Resolve a UTC's appearance and load the resulting body MDL.
 
@@ -215,6 +456,8 @@ def load_body(
     *,
     game_version: Optional[str] = None,
     allow_mode_correction: bool = False,
+    fit_reference_model: Optional[Any] = None,
+    fit_reference_label: str = "",
 ) -> LoadResult:
     """Load a body model from *path* and assign it to *scene*.
 
@@ -246,6 +489,10 @@ def load_body(
     allow_mode_correction : When True, a mode mismatch is *not* a
                             failure — the slot is assigned and the
                             caller can react to ``detected_mode``.
+    fit_reference_model   : Optional real KOTOR model/skeleton chosen by
+                            the user before import.  External meshes are
+                            scaled/oriented to this reference instead of a
+                            generic humanoid fallback.
     """
     if not path:
         return LoadResult(message="No file path given.", code="empty_path")
@@ -295,6 +542,15 @@ def load_body(
             code="load_failed",
         )
 
+    normalization: Dict[str, Any] = {}
+    if ext in _GLTF_EXTS or ext in _FBX_EXTS:
+        normalization = normalize_external_model_for_kotor(
+            model,
+            game_version=gv,
+            reference_model=fit_reference_model,
+            reference_label=fit_reference_label,
+        )
+
     # ── Detect mode ─────────────────────────────────────────────────
     try:
         detected = md.detect_character_mode(model)
@@ -323,12 +579,19 @@ def load_body(
     # names yet.  That is exactly the M12 skeleton-template workflow: load the
     # external mesh first, then let the user apply a known-good KOTOR skeleton.
     if detected == md.CharacterMode.AMBIGUOUS and (ext in _GLTF_EXTS or ext in _FBX_EXTS):
+        scale_msg = ""
+        if normalization.get("ok"):
+            scale_msg = (
+                f" Fit to {normalization.get('reference') or 'KOTOR scale'} "
+                f"({float(normalization.get('scale', 1.0)):.3f}x)."
+            )
         return LoadResult(
             ok=True, model=model, detected_mode=detected,
             source_path=path, resref=resref,
             message=(
                 f"Loaded external mesh: {resref} ({Path(path).name}). "
-                "Choose a KOTOR skeleton template before rigging."
+                "Choose a KOTOR base skeleton before rigging."
+                f"{scale_msg}"
             ),
             code="loaded",
         )
@@ -2912,9 +3175,11 @@ __all__ = [
     "load_body",
     "load_file_filter",
     "motion_assignment_options",
+    "normalize_external_model_for_kotor",
     "place_body_guides",
     "place_hand_guides",
     "play_preview_animation",
+    "reference_model_height",
     "record_body_guide_edit",
     "redo_body_guide_edit",
     "run_external_mesh_launch_workflow",

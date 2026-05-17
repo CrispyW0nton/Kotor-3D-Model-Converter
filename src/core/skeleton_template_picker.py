@@ -7,10 +7,10 @@ Qt-free service for the Character Builder's external-mesh launch path.
 The picker answers a practical rigging question before any binding happens:
 "Which known-good KOTOR skeleton should this imported OBJ/FBX/glTF use?"
 
-Bundled options come from the stripped template manifests under ``templates/``.
-Game-install options are accepted as plain dictionaries so the GUI/MCP bridge
-can feed in ``ghostrigger_list_game_models`` / model-info results without
-coupling this core module to a running MCP transport.
+Canonical options name the real KOTOR models/supermodels a modder should use
+as rig references. Game-install options are accepted as plain dictionaries so
+the GUI/MCP bridge can feed in ``ghostrigger_list_game_models`` / model-info
+results without coupling this core module to a running MCP transport.
 """
 
 from __future__ import annotations
@@ -24,6 +24,134 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 _VALID_GAMES = {"K1", "K2"}
 _VALID_PARTS = {"body", "head", "supermodel", "creature", "unknown"}
+
+
+# Grounded in KOTOR modding guidance: humanoids inherit most animation data
+# from the stock supermodel chain S_Female03 -> S_Female02 -> S_Female01 ->
+# S_Male02 -> S_Male01. Body model references are real game MDLs with hooks,
+# while supermodel rows expose the animation source a user may want to preview.
+_CANONICAL_SKELETONS: Sequence[Mapping[str, Any]] = (
+    {
+        "game": "K1",
+        "part": "body",
+        "resref": "pmbam",
+        "supermodel": "S_Male02",
+        "classification": "character",
+        "description": "K1 male player armor/body reference with headhook and hand hooks.",
+    },
+    {
+        "game": "K1",
+        "part": "body",
+        "resref": "pfbcm",
+        "supermodel": "S_Female03",
+        "classification": "character",
+        "description": "K1 female commoner/body reference for female animation inheritance.",
+    },
+    {
+        "game": "K1",
+        "part": "body",
+        "resref": "n_sithsoldier",
+        "supermodel": "S_Female02",
+        "classification": "character",
+        "description": "K1 full-body Sith soldier example for helmeted/all-in-one humanoids.",
+    },
+    {
+        "game": "K1",
+        "part": "head",
+        "resref": "pmhc01",
+        "supermodel": "S_Male02",
+        "classification": "character",
+        "description": "K1 male head reference with facial/talk hooks.",
+    },
+    {
+        "game": "K1",
+        "part": "head",
+        "resref": "pfhc01",
+        "supermodel": "S_Female03",
+        "classification": "character",
+        "description": "K1 female head reference with facial/talk hooks.",
+    },
+    {
+        "game": "K1",
+        "part": "supermodel",
+        "resref": "s_female02",
+        "supermodel": "S_Female01",
+        "classification": "character",
+        "description": "K1 stock male/full-body humanoid animation inheritance source.",
+    },
+    {
+        "game": "K1",
+        "part": "supermodel",
+        "resref": "s_female03",
+        "supermodel": "S_Female02",
+        "classification": "character",
+        "description": "K1 stock female animation inheritance source.",
+    },
+    {
+        "game": "K2",
+        "part": "body",
+        "resref": "pmbam",
+        "supermodel": "S_Male02",
+        "classification": "character",
+        "description": "K2 male player armor/body reference with headhook and hand hooks.",
+    },
+    {
+        "game": "K2",
+        "part": "body",
+        "resref": "pfbcm",
+        "supermodel": "S_Female03",
+        "classification": "character",
+        "description": "K2 female commoner/body reference for female animation inheritance.",
+    },
+    {
+        "game": "K2",
+        "part": "body",
+        "resref": "c_female02",
+        "supermodel": "S_Female02",
+        "classification": "character",
+        "description": "K2 clean biped/commoner rig reference used for many humanoid NPCs.",
+    },
+    {
+        "game": "K2",
+        "part": "body",
+        "resref": "n_sithsoldier",
+        "supermodel": "S_Female02",
+        "classification": "character",
+        "description": "K2 full-body Sith soldier example for helmeted/all-in-one humanoids.",
+    },
+    {
+        "game": "K2",
+        "part": "head",
+        "resref": "pmhc01",
+        "supermodel": "S_Male02",
+        "classification": "character",
+        "description": "K2 male head reference with facial/talk hooks.",
+    },
+    {
+        "game": "K2",
+        "part": "head",
+        "resref": "pfhc01",
+        "supermodel": "S_Female03",
+        "classification": "character",
+        "description": "K2 female head reference with facial/talk hooks.",
+    },
+    {
+        "game": "K2",
+        "part": "supermodel",
+        "resref": "s_female02",
+        "supermodel": "S_Female01",
+        "classification": "character",
+        "description": "K2 stock male/full-body humanoid animation inheritance source.",
+    },
+    {
+        "game": "K2",
+        "part": "supermodel",
+        "resref": "s_female03",
+        "supermodel": "S_Female02",
+        "classification": "character",
+        "description": "K2 stock female animation inheritance source.",
+    },
+)
 
 
 @dataclass(frozen=True)
@@ -159,7 +287,11 @@ def list_bundled_templates(
     part: Optional[str] = None,
     query: str = "",
 ) -> List[SkeletonTemplateOption]:
-    """Return bundled skeleton-only templates from ``templates/``."""
+    """Return legacy bundled skeleton-only templates from ``templates/``.
+
+    Deprecated: the launch path now defaults to real game-resref skeletons.
+    This function remains as a compatibility shim for older scenes/tests.
+    """
 
     cb = _import_character_builder()
     game_filter = _norm_game(game)
@@ -206,6 +338,50 @@ def list_bundled_templates(
         if _matches_query(option, query):
             options.append(option)
 
+    return options
+
+
+def list_canonical_skeleton_sources(
+    *,
+    game: Optional[str] = None,
+    part: Optional[str] = None,
+    query: str = "",
+) -> List[SkeletonTemplateOption]:
+    """Return vetted KOTOR game-resref skeleton/supermodel sources."""
+
+    game_filter = _norm_game(game)
+    part_filter = _norm_part(part)
+    options: List[SkeletonTemplateOption] = []
+    for raw in _CANONICAL_SKELETONS:
+        row_game = _norm_game(str(raw.get("game") or "")) or ""
+        row_part = _norm_part(str(raw.get("part") or "")) or "unknown"
+        if game_filter and row_game != game_filter:
+            continue
+        if part_filter and row_part != part_filter:
+            continue
+
+        resref = str(raw.get("resref") or "").lower()
+        option = SkeletonTemplateOption(
+            key=f"canonical:{row_game.lower()}:{row_part}:{resref}",
+            source="canonical",
+            game=row_game,
+            part=row_part,
+            name=resref,
+            resref=resref,
+            path=f"installation:{resref}.mdl",
+            exists=True,
+            source_resref=resref,
+            supermodel=str(raw.get("supermodel") or ""),
+            classification=str(raw.get("classification") or ""),
+            node_count=int(raw.get("node_count") or 0),
+            description=str(raw.get("description") or ""),
+            warnings=[
+                "Loads from your configured KOTOR installation; no generated template file is used."
+            ],
+            metadata=dict(raw),
+        )
+        if _matches_query(option, query):
+            options.append(option)
     return options
 
 
@@ -279,7 +455,8 @@ def list_skeleton_templates(
     game: Optional[str] = None,
     part: Optional[str] = None,
     query: str = "",
-    include_bundled: bool = True,
+    include_bundled: bool = False,
+    include_canonical: bool = True,
     game_models: Optional[Sequence[Mapping[str, Any]]] = None,
     metadata_by_resref: Optional[Mapping[str, Mapping[str, Any]]] = None,
     max_results: int = 50,
@@ -304,6 +481,15 @@ def list_skeleton_templates(
         )
 
     options: List[SkeletonTemplateOption] = []
+    if include_canonical:
+        options.extend(
+            list_canonical_skeleton_sources(
+                game=game_filter,
+                part=part_filter,
+                query=query,
+            )
+        )
+
     if include_bundled:
         options.extend(
             list_bundled_templates(game=game_filter, part=part_filter, query=query)
@@ -358,6 +544,7 @@ __all__ = [
     "SkeletonTemplateOption",
     "SkeletonTemplateQueryResult",
     "build_game_template_options",
+    "list_canonical_skeleton_sources",
     "list_bundled_templates",
     "list_skeleton_templates",
     "option_summary",

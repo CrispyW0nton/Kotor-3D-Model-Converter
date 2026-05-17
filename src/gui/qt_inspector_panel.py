@@ -489,12 +489,12 @@ class QtInspectorPanel(QtWidgets.QWidget):
             template_layout.setSpacing(4)
 
             template_row = QtWidgets.QHBoxLayout()
-            template_row.addWidget(QtWidgets.QLabel("Template:"))
+            template_row.addWidget(QtWidgets.QLabel("Base:"))
             self._skeleton_template_combo = QtWidgets.QComboBox()
             self._skeleton_template_combo.setEditable(False)
             self._skeleton_template_combo.setMinimumWidth(160)
             self._skeleton_template_combo.setToolTip(
-                "Choose the KOTOR skeleton to preview over this mesh."
+                "Choose the KOTOR base model/supermodel before importing or binding."
             )
             self._skeleton_template_combo.currentIndexChanged.connect(
                 self._on_skeleton_template_index_changed
@@ -506,7 +506,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
                 "Use Skeleton"
             )
             self._apply_skeleton_template_btn.setToolTip(
-                "Attach the selected template skeleton to the loaded body "
+                "Attach the selected KOTOR base skeleton to the loaded body "
                 "before guide placement and weight generation."
             )
             self._apply_skeleton_template_btn.clicked.connect(
@@ -515,7 +515,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
             template_layout.addWidget(self._apply_skeleton_template_btn)
 
             self._skeleton_template_status = QtWidgets.QLabel(
-                "Load a body mesh to choose a KOTOR skeleton."
+                "Choose a KOTOR base skeleton, then load the custom mesh to fit it."
             )
             self._skeleton_template_status.setStyleSheet(
                 f"color:{C.get('text2', '#888')}; font-size:8pt;"

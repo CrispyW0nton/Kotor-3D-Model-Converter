@@ -1,8 +1,9 @@
 """
 tests/test_skeleton_template_picker.py - M12/T1201 picker service tests.
 
-The service stays Qt-free and MCP-free: bundled templates come from local
-manifests, and game-install rows are passed in as simple dictionaries.
+The service stays Qt-free and MCP-free: canonical KOTOR resrefs are listed
+without touching the GUI, and game-install rows are passed in as simple
+dictionaries.
 """
 
 from __future__ import annotations
@@ -41,40 +42,39 @@ except Exception as exc:  # pragma: no cover
                 allow_module_level=True)
 
 
-def test_t1201_bundled_templates_include_all_games_and_parts():
+def test_t1201_canonical_sources_include_common_game_bases():
     result = picker.list_skeleton_templates()
 
     assert result.ok is True
     keys = {opt.key for opt in result.options}
-    assert "bundled:k1:body" in keys
-    assert "bundled:k1:head" in keys
-    assert "bundled:k2:body" in keys
-    assert "bundled:k2:head" in keys
+    assert "canonical:k1:body:pmbam" in keys
+    assert "canonical:k1:body:n_sithsoldier" in keys
+    assert "canonical:k2:body:c_female02" in keys
+    assert "canonical:k2:supermodel:s_female03" in keys
     assert all(opt.exists for opt in result.options)
 
 
-def test_t1201_bundled_body_option_uses_manifest_metadata():
+def test_t1201_canonical_body_option_uses_real_game_resref():
     result = picker.list_skeleton_templates(game="k1", part="body")
 
     assert result.ok is True
-    assert len(result.options) == 1
-    opt = result.options[0]
+    by_resref = {opt.resref: opt for opt in result.options}
+    opt = by_resref["pmbam"]
     assert opt.game == "K1"
     assert opt.part == "body"
-    assert opt.resref == "gr_body_k1"
-    assert opt.source_resref == "pfbcm"
-    assert opt.supermodel == "S_Female03"
-    assert opt.node_count == 76
+    assert opt.source == "canonical"
+    assert opt.source_resref == "pmbam"
+    assert opt.supermodel == "S_Male02"
     assert opt.classification == "character"
-    assert opt.path.endswith("gr_body_k1.mdl")
+    assert opt.path == "installation:pmbam.mdl"
 
 
-def test_t1201_query_filters_bundled_templates():
-    result = picker.list_skeleton_templates(query="pfhc", part="head")
+def test_t1201_query_filters_canonical_sources():
+    result = picker.list_skeleton_templates(query="sith", part="body")
 
     assert result.ok is True
-    assert {opt.source_resref for opt in result.options} == {"pfhc01"}
-    assert all(opt.part == "head" for opt in result.options)
+    assert {opt.source_resref for opt in result.options} == {"n_sithsoldier"}
+    assert all(opt.part == "body" for opt in result.options)
 
 
 def test_t1201_invalid_game_returns_structured_error():
@@ -106,6 +106,7 @@ def test_t1201_game_model_rows_become_picker_options():
     result = picker.list_skeleton_templates(
         game="k1",
         part="body",
+        include_canonical=False,
         include_bundled=False,
         game_models=rows,
         metadata_by_resref=metadata,
@@ -126,6 +127,7 @@ def test_t1201_game_model_rows_become_picker_options():
 def test_t1201_game_rows_warn_when_metadata_missing():
     result = picker.list_skeleton_templates(
         game="k1",
+        include_canonical=False,
         include_bundled=False,
         game_models=[{"resref": "weird_custom", "source": "override"}],
     )
@@ -147,6 +149,7 @@ def test_t1201_dedupes_duplicate_game_rows():
 
     result = picker.list_skeleton_templates(
         game="k1",
+        include_canonical=False,
         include_bundled=False,
         game_models=rows,
     )
@@ -165,5 +168,5 @@ def test_t1201_option_summary_is_compact_for_ui():
 
     assert "K1" in summary
     assert "body" in summary
-    assert "gr_body_k1" in summary
-    assert "76 nodes" in summary
+    assert "pmbam" in summary
+    assert "super=S_Male02" in summary

@@ -118,7 +118,7 @@ class _FakeHeadModel:
 
 
 class _FakeAmbiguousExternalModel:
-    """External mesh before a KOTOR skeleton/template has been applied."""
+    """External mesh before a KOTOR base skeleton has been applied."""
 
     def __init__(self, name: str = "bendak"):
         self.name = name
@@ -147,6 +147,30 @@ class _FakeTexturedSkinModel:
 
     def all_nodes(self):
         return list(self._nodes)
+
+
+class _FakeExternalMeshModel:
+    """Minimal external mesh with a non-KOTOR source scale."""
+
+    def __init__(self, vertices):
+        self.name = "external"
+        self.metadata = {}
+        mesh = _FakeNode("mesh")
+        mesh.is_mesh = True
+        mesh.is_skin = False
+        mesh.vertices = list(vertices)
+        mesh.normals = [(0.0, 0.0, 1.0) for _ in mesh.vertices]
+        self._nodes = [mesh]
+        self.root_node = mesh
+        self.compute_bounds()
+
+    def all_nodes(self):
+        return list(self._nodes)
+
+    def compute_bounds(self):
+        verts = self._nodes[0].vertices
+        self.bb_min = tuple(min(v[i] for v in verts) for i in range(3))
+        self.bb_max = tuple(max(v[i] for v in verts) for i in range(3))
 
 
 def _make_scene(game_version: str = "K1"):
@@ -320,7 +344,7 @@ def test_t501_load_body_accepts_ambiguous_external_mesh_for_template_flow(
     assert result.ok is True
     assert result.code == "loaded"
     assert result.detected_mode == md.CharacterMode.AMBIGUOUS
-    assert "KOTOR skeleton template" in result.message
+    assert "KOTOR base skeleton" in result.message
     assert scene.get(md.PartSlot.HEADLESS_BODY).resref == "bendak"
 
 
@@ -2080,3 +2104,72 @@ def test_external_texture_export_writes_game_tga_for_skinned_mesh(tmp_path):
     assert pathlib.Path(result["written"][0]).name == "BendakStarkiller_basecolor.tga"
     assert pathlib.Path(result["written"][0]).is_file()
     assert scene.metadata["external_texture_exports"] == result
+
+
+def test_external_model_normalization_scales_to_kotor_humanoid_height():
+    model = _FakeExternalMeshModel([
+        (-1.0, -2.0, 0.0),
+        (1.0, 2.0, 10.0),
+    ])
+
+    result = wf.normalize_external_model_for_kotor(
+        model,
+        game_version="K1",
+        target_height=2.0,
+    )
+
+    assert result["ok"] is True
+    assert result["vertical_axis"] == "z"
+    assert abs(result["scale"] - 0.2) < 1e-6
+    assert model.bb_min == pytest.approx((-0.2, -0.4, 0.0))
+    assert model.bb_max == pytest.approx((0.2, 0.4, 2.0))
+    assert model.metadata["kotor_normalization"]["target_height"] == 2.0
+
+
+def test_external_model_normalization_maps_y_up_to_kotor_z():
+    model = _FakeExternalMeshModel([
+        (-1.0, 0.0, -0.25),
+        (1.0, 10.0, 0.25),
+    ])
+
+    result = wf.normalize_external_model_for_kotor(
+        model,
+        game_version="K1",
+        target_height=2.0,
+    )
+
+    assert result["ok"] is True
+    assert result["vertical_axis"] == "y"
+    assert model.bb_min[2] == pytest.approx(0.0)
+    assert model.bb_max[2] == pytest.approx(2.0)
+
+
+def test_external_model_normalization_fits_selected_reference_height():
+    model = _FakeExternalMeshModel([
+        (0.0, 0.0, 0.0),
+        (0.0, 0.0, 10.0),
+    ])
+    reference = _FakeExternalMeshModel([
+        (-0.5, -0.5, 0.0),
+        (0.5, 0.5, 1.75),
+    ])
+
+    result = wf.normalize_external_model_for_kotor(
+        model,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="pmbam",
+    )
+
+    assert result["ok"] is True
+    assert result["reference"] == "pmbam"
+    assert result["target_height"] == pytest.approx(1.75)
+    assert model.bb_max[2] == pytest.approx(1.75)
+
+
+def test_external_world_position_drives_bone_world_position():
+    node = md.ModelNode(name="Head")
+    node.position = (99.0, 99.0, 99.0)
+    node.external_world_position = (1.0, 2.0, 3.0)
+
+    assert node.bone_world_position() == (1.0, 2.0, 3.0)

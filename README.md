@@ -334,13 +334,15 @@ python scripts/visual_review.py [--report PATH] [--output PATH] \
                                 [--include-minor] [--delay 2.0]
 ```
 
-### 5.7 Template builder
+### 5.7 Character Builder skeleton bases
 
 ```bash
-python build_game_templates.py            # regenerates templates/gr_body_*.mdl and gr_head_*.mdl
+python main.py                            # Character Builder loads real KOTOR base MDLs from the configured game install
 ```
 
-These templates back the Character Builder's "new body" / "new head" actions.
+The Character Builder no longer ships generated `templates/gr_*` skeleton-only
+MDLs. Pick a real game base model or supermodel first, then import the custom
+OBJ/FBX/glTF mesh so it is fit to that selected KOTOR skeleton.
 
 ### 5.8 At-a-glance index
 
@@ -354,7 +356,7 @@ Every CLI surface in the repo, by category:
 | **Diagnostics** | `python scripts/diagnose_bonemap.py` · `diagnose_k2_geometry.py` · `diagnose_transforms.py` |
 | **Skinning audit** | `python scripts/dump_qbone_byte_parity.py` · `dump_qbone_consumption_replay.py` · `dump_qbone_single_vertex_replay.py` · `dump_qbone_full_vertex_replay_3j4.py` · `dump_qbone_renderer_parity_3j4.py` · `regen_skin_3i_step6_dump.py` · `reduce_skin_3i_step6.py` · `skin_3i_step7_visual_gate.py` |
 | **Visual QA** | `python scripts/render_baseline.py --generate\|--compare` · `visual_audit_k2.py` · `visual_review.py` |
-| **Template builder** | `python build_game_templates.py` |
+| **Character Builder bases** | Real KOTOR install resrefs such as `pmbam`, `pfbcm`, `n_sithsoldier`, `s_female02`, `s_female03` |
 | **Tests** | `pytest tests/ -m "not slow"` · `pytest tests/test_mcp_full_scan.py` · `pytest tests/test_regression.py -k SUBSTR` |
 | **Build** | `build.bat` (Windows) · `python -m PyInstaller GhostRigger-K1-K2.spec --clean --noconfirm` |
 
@@ -431,7 +433,7 @@ Kotor-3D-Model-Converter/
 ├── main.py                       # entry point (logging, Tk root, exception hooks)
 ├── build.bat                     # one-command Windows installer + PyInstaller build
 ├── GhostRigger-K1-K2.spec        # PyInstaller spec (hiddenimports, Assimp DLL bundling)
-├── build_game_templates.py       # regenerates templates/gr_body_*.mdl, gr_head_*.mdl
+├── build_game_templates.py       # legacy helper; generated template MDLs are no longer shipped
 ├── pyproject.toml                # PEP 621 metadata + optional dep groups
 ├── requirements.txt              # pinned runtime deps for `pip install -r`
 ├── AGENTS.md                     # MCP-driven workflow rules for AI contributors
@@ -452,7 +454,7 @@ Kotor-3D-Model-Converter/
 │   │   ├── resource_manager.py          # K1/K2 install detection, KEY/BIF + Override scanning
 │   │   ├── creature_appearance.py       # head/body assembly via headhook
 │   │   ├── diagnostics.py               # session-start diagnostics
-│   │   └── template_builder.py          # gr_body / gr_head template builder
+│   │   └── template_builder.py          # legacy generated-template helper
 │   ├── gui/
 │   │   ├── main_window.py               # five-pillar Tk UI (~10 k lines)
 │   │   ├── viewport.py                  # CPU PIL renderer + camera + LBS skinning

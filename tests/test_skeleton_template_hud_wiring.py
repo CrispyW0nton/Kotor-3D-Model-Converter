@@ -38,7 +38,8 @@ def test_builder_wires_template_selection_to_preview_and_apply() -> None:
     assert "_on_apply_skeleton_template_requested" in src
     assert "skeleton_template_picker" in src
     assert "list_skeleton_templates(game=game, part=\"body\")" in src
-    assert "load_template(game=game, part=part)" in src
+    assert "_load_skeleton_template_model" in src
+    assert "load_game_skeleton_source" in src
     assert "apply_template_rig(mesh_model, template_model, game=game)" in src
     assert "scene.assign" in src
 
@@ -48,6 +49,7 @@ def test_template_selection_previews_external_skeleton_overlay() -> None:
     viewport = _read("src/gui/qt_viewport.py")
 
     assert "viewport.set_external_skeleton(template_model)" in builder
+    assert "fit_reference_model=self._selected_skeleton_template_model" in builder
     assert "clear_external_skeleton" in builder
     assert "def set_external_skeleton" in viewport
     assert "self._renderer._ext_skeleton = model" in viewport

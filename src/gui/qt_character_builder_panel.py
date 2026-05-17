@@ -409,6 +409,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         # service and mirrored into the right inspector.
         self._skeleton_template_options_by_key: dict[str, Any] = {}
         self._selected_skeleton_template_key = ""
+        self._selected_skeleton_template_model: Optional[Any] = None
         # M9 / T901 — live validation is intentionally debounced so
         # guide drags and slider-like controls do not spam the workflow
         # service while still refreshing the export banner promptly.
@@ -1014,7 +1015,23 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         gv = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
              getattr(self.scene, "game_version", "K1")
-        result = _wf.load_body(path, self.scene, game_version=gv)
+        selected_option = self._skeleton_template_options_by_key.get(
+            str(self._selected_skeleton_template_key or "")
+        )
+        fit_label = ""
+        if selected_option is not None:
+            fit_label = str(
+                self._option_field(selected_option, "resref", "")
+                or self._option_field(selected_option, "name", "")
+                or ""
+            )
+        result = _wf.load_body(
+            path,
+            self.scene,
+            game_version=gv,
+            fit_reference_model=self._selected_skeleton_template_model,
+            fit_reference_label=fit_label,
+        )
 
         # ── Mode mismatch — offer to switch ──────────────────────────
         if result.code == "mode_mismatch" and result.detected_mode is not None:
@@ -1270,6 +1287,36 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             return option.get(name, default)
         return getattr(option, name, default)
 
+    def _load_skeleton_template_model(self, option: Any) -> Optional[Any]:
+        """Load the selected KOTOR skeleton reference from game data."""
+        try:
+            from core import character_builder as _cb
+        except ImportError:                                 # pragma: no cover
+            from src.core import character_builder as _cb    # type: ignore
+
+        source = str(self._option_field(option, "source", ""))
+        game = str(self._option_field(option, "game", "") or
+                   getattr(self.scene, "game_version", "K1"))
+        part = str(self._option_field(option, "part", "body") or "body")
+        resref = str(self._option_field(option, "resref", "") or
+                     self._option_field(option, "source_resref", "") or
+                     self._option_field(option, "name", "") or "")
+        path = str(self._option_field(option, "path", "") or "")
+
+        if source == "bundled":
+            return _cb.load_template(game=game, part=part)
+
+        if path and not path.startswith("installation:") and os.path.isfile(path):
+            try:
+                from core.kotor_loader import load_model_from_file  # type: ignore
+            except ImportError:                                  # pragma: no cover
+                from src.core.kotor_loader import load_model_from_file  # type: ignore
+            return load_model_from_file(path)
+
+        if resref:
+            return _cb.load_game_skeleton_source(resref, game=game)
+        return None
+
     def _refresh_skeleton_template_options(self) -> None:
         """Refresh the body-rig template picker for the current game."""
         try:
@@ -1322,34 +1369,19 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if option is None:
             return
 
-        source = str(self._option_field(option, "source", ""))
-        game = str(self._option_field(option, "game", "") or
-                   getattr(self.scene, "game_version", "K1"))
-        part = str(self._option_field(option, "part", "body") or "body")
         label = str(self._option_field(option, "name", "") or key)
 
-        if source != "bundled":
+        template_model = self._load_skeleton_template_model(option)
+        if template_model is None:
+            self._selected_skeleton_template_model = None
             if hasattr(self.inspector, "set_skeleton_template_status"):
                 self.inspector.set_skeleton_template_status(
-                    "Game-directory skeletons are listed for audit; "
-                    "bundled KOTOR templates are the apply path in T1202.",
+                    f"Could not load {label} from the configured KOTOR install. "
+                    "Set the game directory or choose an installed MDL path.",
                     kind="warning",
                 )
             return
-
-        try:
-            from core import character_builder as _cb
-        except ImportError:                                 # pragma: no cover
-            from src.core import character_builder as _cb    # type: ignore
-
-        template_model = _cb.load_template(game=game, part=part)
-        if template_model is None:
-            if hasattr(self.inspector, "set_skeleton_template_status"):
-                self.inspector.set_skeleton_template_status(
-                    f"Could not load template skeleton: {label}",
-                    kind="error",
-                )
-            return
+        self._selected_skeleton_template_model = template_model
 
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "set_external_skeleton"):
@@ -1360,7 +1392,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         if hasattr(self.inspector, "set_skeleton_template_status"):
             self.inspector.set_skeleton_template_status(
-                f"Previewing {label}. Click Use Skeleton to bind it.",
+                f"Using {label} as the base skeleton. Imported meshes will fit to it.",
                 kind="ok",
             )
 
@@ -1373,13 +1405,6 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         option = self._skeleton_template_options_by_key.get(str(key or ""))
         if option is None:
             message = "Choose a KOTOR skeleton template before applying."
-            if hasattr(self.inspector, "set_skeleton_template_status"):
-                self.inspector.set_skeleton_template_status(message, kind="warning")
-            self.statusBar().showMessage(message, 5000)
-            return
-
-        if str(self._option_field(option, "source", "")) != "bundled":
-            message = "Only bundled KOTOR skeleton templates can be applied in T1202."
             if hasattr(self.inspector, "set_skeleton_template_status"):
                 self.inspector.set_skeleton_template_status(message, kind="warning")
             self.statusBar().showMessage(message, 5000)
@@ -1406,8 +1431,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         game = str(self._option_field(option, "game", "") or
                    getattr(self.scene, "game_version", "K1"))
-        part = str(self._option_field(option, "part", "body") or "body")
-        template_model = _cb.load_template(game=game, part=part)
+        template_model = self._selected_skeleton_template_model
+        if template_model is None:
+            template_model = self._load_skeleton_template_model(option)
+            self._selected_skeleton_template_model = template_model
         result = _cb.apply_template_rig(mesh_model, template_model, game=game)
 
         if not bool(result.get("ok")):
