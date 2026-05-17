@@ -1427,6 +1427,81 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             log.debug("Live validation refreshed after %s: %s", reason, result.code)
         return result
 
+    def _format_validation_issue_lines(
+        self,
+        issues: list[Any],
+        limit: int = 12,
+    ) -> list[str]:
+        """Build concise issue lines for modal details panes."""
+        lines: list[str] = []
+        for issue in list(issues or [])[:max(0, int(limit))]:
+            if isinstance(issue, str):
+                lines.append(issue)
+                continue
+            sev = _issue_field(issue, "severity").upper() or "ISSUE"
+            code = _issue_field(issue, "code") or "VALIDATION"
+            node = _issue_field(issue, "node")
+            message = _issue_field(issue, "message")
+            target = f" [{node}]" if node else ""
+            lines.append(f"{sev} {code}{target}: {message}")
+        remaining = len(list(issues or [])) - len(lines)
+        if remaining > 0:
+            lines.append(f"... plus {remaining} more issue(s).")
+        return lines
+
+    def _confirm_pre_export_validation(self) -> tuple[bool, bool]:
+        """T904 gate: block errors; ask before exporting with warnings."""
+        result = self._run_validation(reason="pre_export_gate", update_status=False)
+        if result is None:
+            return False, False
+
+        if (
+            int(getattr(result, "error_count", 0) or 0) > 0
+            or not bool(getattr(result, "ok", False))
+        ):
+            message = getattr(result, "message", "Export blocked by validation.")
+            if hasattr(self.inspector, "set_export_status"):
+                try:
+                    self.inspector.set_export_status(message, kind="error")
+                except Exception:                           # pragma: no cover
+                    log.exception("inspector.set_export_status failed")
+            self.statusBar().showMessage(message, 6000)
+            return False, False
+
+        warnings = int(getattr(result, "warning_count", 0) or 0)
+        if warnings <= 0:
+            return True, False
+
+        box = QtWidgets.QMessageBox(self)
+        box.setIcon(QtWidgets.QMessageBox.Warning)
+        box.setWindowTitle("Export Warnings")
+        box.setText(f"Validation found {warnings} warning(s).")
+        box.setInformativeText(
+            "Warnings may still produce a usable MDL, but they are worth "
+            "reviewing before testing in KOTOR."
+        )
+        details = "\n".join(
+            self._format_validation_issue_lines(
+                list(getattr(result, "issues", []) or [])
+            )
+        )
+        if details:
+            box.setDetailedText(details)
+        export_btn = box.addButton(
+            "Export anyway",
+            QtWidgets.QMessageBox.AcceptRole,
+        )
+        box.addButton("Cancel", QtWidgets.QMessageBox.RejectRole)
+        box.setDefaultButton(export_btn)
+        box.exec()
+        if box.clickedButton() is not export_btn:
+            self.statusBar().showMessage(
+                "Export cancelled; warnings left for review.",
+                5000,
+            )
+            return False, False
+        return True, True
+
     @QtCore.Slot()
     def _on_validation_banner_clicked(self) -> None:
         """Open the full validation report from the bottom-strip banner."""
@@ -1616,6 +1691,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         write_sidecar = dlg.write_sidecar()
         # Remember the chosen folder for the next invocation.
         self._last_export_dir = out_dir
+        can_export, skip_validation = self._confirm_pre_export_validation()
+        if not can_export:
+            return
 
         if self._is_scene_mode("supermodel"):
             try:
@@ -1627,7 +1705,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 formats=formats,
                 out_dir=out_dir,
                 write_sidecar=write_sidecar,
-                skip_validation=False,
+                skip_validation=skip_validation,
             )
         else:
             result = _wf.export_scene(
@@ -1635,7 +1713,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 formats=formats,
                 out_dir=out_dir,
                 write_sidecar=write_sidecar,
-                skip_validation=False,
+                skip_validation=skip_validation,
             )
 
         # Inspector status line + bottom-strip banner.

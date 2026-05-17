@@ -114,3 +114,25 @@ def test_t903_workflow_exposes_run_rom_test_bridge() -> None:
     assert "play_preview_animation(scene, \"generated_rom\"" in src
     assert "viewport.set_animation_pose(" in src
     assert "\"run_rom_test\"" in src
+
+
+def test_t904_pre_export_gate_blocks_errors_and_prompts_warnings() -> None:
+    src = _read("src/gui/qt_character_builder_panel.py")
+
+    assert "def _confirm_pre_export_validation" in src
+    assert 'self._run_validation(reason="pre_export_gate", update_status=False)' in src
+    assert "Export Warnings" in src
+    assert "Export anyway" in src
+    assert "QtWidgets.QMessageBox.Warning" in src
+    assert "box.addButton(\"Cancel\", QtWidgets.QMessageBox.RejectRole)" in src
+    assert "return True, True" in src
+    assert "return False, False" in src
+
+
+def test_t904_export_uses_warning_acknowledged_skip_validation_path() -> None:
+    src = _read("src/gui/qt_character_builder_panel.py")
+
+    assert "can_export, skip_validation = self._confirm_pre_export_validation()" in src
+    assert "if not can_export:" in src
+    assert "skip_validation=skip_validation" in src
+    assert "def _format_validation_issue_lines" in src

@@ -35,7 +35,7 @@ This folder contains the post-Qt-migration roadmap for GhostRigger, derived from
 | M0–M6 | ✅ DONE (7 of 12) | shipped |
 | M7 Supermodel | 🟡 partial | ~3 d |
 | M8 Creature | 🔴 greenfield | ~7 d |
-| M9 Live validation | 🟡 partial | T901-T903 done locally; T904 remains |
+| M9 Live validation | ✅ done locally | T901-T904 done locally |
 | M10 Export polish | ✅ done locally | awaiting review/PR |
 | M12 External Mesh Launch Path | ✅ done locally | awaiting review/PR |
 | M11 Visual regression | 🟡 infra ready | ~2 d |
@@ -48,8 +48,8 @@ This folder contains the post-Qt-migration roadmap for GhostRigger, derived from
 
 ## Critical path remaining
 
-`M13 → M14 → M9 → M11`, with M8 Creature work deferred until the humanoid/head pipeline polish is locked.
+`M13 → M14 → M11`, with M8 Creature work deferred until the humanoid/head pipeline polish is locked.
 
-Shortest path to feature-complete v7 Character Builder: **M9**, then M11 regression lock-in. A public modder beta also needs M13/M14 so exported characters can be transferred and previewed outside the game. M8 ships after unless Creature is explicitly prioritized.
+Shortest path to feature-complete v7 Character Builder is now **M11 regression lock-in** for the humanoid/head launch lane. A public modder beta also needs M13/M14 so exported characters can be transferred and previewed outside the game. M8 ships after unless Creature is explicitly prioritized.
 
 Supersedes `knowledge_base/reference/ROADMAP_legacy_2026_04.md` for the Qt branch. The older roadmap is kept for historical reference only.
