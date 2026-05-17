@@ -597,10 +597,14 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._on_shade_change(self.shade_combo.currentText())
 
         search_dirs = []
+        seen_dirs: set[str] = set()
         if texture_dir and os.path.isdir(texture_dir):
+            seen_dirs.add(os.path.normcase(os.path.abspath(texture_dir)))
             search_dirs.append(texture_dir)
         for directory in extra_texture_dirs or []:
-            if directory and os.path.isdir(directory) and directory not in search_dirs:
+            key = os.path.normcase(os.path.abspath(directory)) if directory else ""
+            if directory and os.path.isdir(directory) and key not in seen_dirs:
+                seen_dirs.add(key)
                 search_dirs.append(directory)
         if search_dirs:
             self._renderer.tex_cache.set_search_dirs(search_dirs)
@@ -2218,7 +2222,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         try:
             nodes = list(model.all_nodes()) if hasattr(model, "all_nodes") else []
             for node in nodes:
-                if not getattr(node, "is_mesh", False):
+                if not (getattr(node, "is_mesh", False) or getattr(node, "is_skin", False)):
                     continue
                 names = [
                     getattr(node, "texture", ""),
@@ -2620,11 +2624,27 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def _prewarm_textures(self, model) -> None:
         try:
-            tex_names = list({
-                node.texture_clean
-                for node in model.mesh_nodes()
-                if getattr(node, "texture_clean", "") and node.texture_clean.upper() not in ("NULL", "")
-            })
+            nodes = (
+                list(model.all_nodes())
+                if hasattr(model, "all_nodes") else
+                list(model.mesh_nodes())
+            )
+            tex_names = []
+            seen = set()
+            for node in nodes:
+                if not (getattr(node, "is_mesh", False)
+                        or getattr(node, "is_skin", False)):
+                    continue
+                name = str(
+                    getattr(node, "texture_clean", "")
+                    or getattr(node, "texture", "")
+                ).strip()
+                if not name or name.upper() == "NULL":
+                    continue
+                key = name.lower()
+                if key not in seen:
+                    seen.add(key)
+                    tex_names.append(name)
         except Exception:
             return
         if not tex_names:

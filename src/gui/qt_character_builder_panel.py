@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from typing import Any, Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -969,8 +970,28 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             in the banner).
         """
         if self._is_scene_mode("supermodel"):
-            self._on_load_composite_requested()
-            return
+            answer = QtWidgets.QMessageBox.question(
+                self,
+                "Complete character?",
+                "Supermodel mode is for KOTOR's separate body + head preview "
+                "workflow.\n\nIs this file a complete all-in-one character "
+                "mesh with the head already attached?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No,
+            )
+            if answer == QtWidgets.QMessageBox.No:
+                self._on_load_composite_requested()
+                return
+            if _CHARACTER_MODE_AVAILABLE and CharacterMode is not None:
+                try:
+                    self._apply_mode(
+                        CharacterMode.HEADLESS_BODY,
+                        locked=True,
+                        source="supermodel_complete_character_load",
+                    )
+                except Exception:                          # pragma: no cover
+                    log.debug("Could not switch complete character load mode",
+                              exc_info=True)
 
         try:
             from ..core import headless_body_workflow as _wf
@@ -1152,7 +1173,11 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             if (result.model is not None
                     and hasattr(self, "viewport")
                     and hasattr(self.viewport, "load_model")):
-                self.viewport.load_model(result.model)
+                self._load_model_in_viewport_with_textures(
+                    result.model,
+                    source_path=str(getattr(result, "source_path", "") or ""),
+                    prompt=True,
+                )
                 if hasattr(self.viewport, "clear_acurig_guides"):
                     self.viewport.clear_acurig_guides()
         except Exception:                                    # pragma: no cover
@@ -1164,6 +1189,78 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._refresh_motion_assignment_state()
         self._update_title()
         self._schedule_live_validation("model_loaded")
+
+    def _load_model_in_viewport_with_textures(
+        self,
+        model: Any,
+        *,
+        source_path: str = "",
+        prompt: bool = False,
+    ) -> None:
+        """Load a model and resolve external texture folders for OBJ/FBX/glTF."""
+        dirs = self._resolve_external_texture_dirs(model, source_path, prompt=prompt)
+        self.viewport.load_model(model, extra_texture_dirs=dirs)
+
+    def _resolve_external_texture_dirs(
+        self,
+        model: Any,
+        source_path: str,
+        *,
+        prompt: bool,
+    ) -> list[str]:
+        try:
+            from core import headless_body_workflow as _wf
+        except ImportError:                                 # pragma: no cover
+            from src.core import headless_body_workflow as _wf  # type: ignore
+
+        metadata = getattr(self.scene, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            setattr(self.scene, "metadata", metadata)
+        stored = [
+            str(path)
+            for path in list(metadata.get("external_texture_dirs", []) or [])
+            if path and os.path.isdir(str(path))
+        ]
+        candidates = _wf.candidate_texture_dirs(source_path)
+        dirs: list[str] = []
+        seen_dirs: set[str] = set()
+        for directory in stored + candidates:
+            key = os.path.normcase(os.path.abspath(directory)) if directory else ""
+            if directory and os.path.isdir(directory) and key not in seen_dirs:
+                seen_dirs.add(key)
+                dirs.append(directory)
+
+        report = _wf.texture_resolution_report(model, dirs)
+        names = list(report.get("expected", []) or [])
+        missing = list(report.get("missing", []) or [])
+        if names and missing and prompt:
+            chosen = QtWidgets.QFileDialog.getExistingDirectory(
+                self,
+                "Locate texture folder",
+                str(Path(source_path).resolve().parent) if source_path else "",
+                QtWidgets.QFileDialog.ShowDirsOnly,
+            )
+            if chosen and os.path.isdir(chosen):
+                chosen_key = os.path.normcase(os.path.abspath(chosen))
+                if chosen_key not in seen_dirs:
+                    seen_dirs.add(chosen_key)
+                    dirs.insert(0, chosen)
+                report = _wf.texture_resolution_report(model, dirs)
+                missing = list(report.get("missing", []) or [])
+
+        metadata["external_texture_dirs"] = dirs
+        metadata["external_texture_report"] = report
+        if names:
+            if missing:
+                self.bottom_strip.set_log_tail(
+                    f"missing texture(s): {', '.join(missing[:3])}"
+                )
+            elif report.get("found_count"):
+                self.bottom_strip.set_log_tail(
+                    f"textures: {int(report.get('found_count', 0))} found"
+                )
+        return dirs
 
     # ── M12 / T1202 — KOTOR skeleton template picker ────────────────────
 
@@ -1340,7 +1437,11 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "load_model"):
             try:
-                viewport.load_model(rigged_model)
+                self._load_model_in_viewport_with_textures(
+                    rigged_model,
+                    source_path=source_path,
+                    prompt=False,
+                )
                 if hasattr(viewport, "clear_external_skeleton"):
                     viewport.clear_external_skeleton()
                 if hasattr(viewport, "clear_acurig_guides"):

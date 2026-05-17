@@ -53,3 +53,23 @@ def test_template_selection_previews_external_skeleton_overlay() -> None:
     assert "self._renderer._ext_skeleton = model" in viewport
     assert "def clear_external_skeleton" in viewport
 
+
+def test_complete_character_load_and_texture_folder_prompt_are_wired() -> None:
+    builder = _read("src/gui/qt_character_builder_panel.py")
+
+    assert '"Complete character?"' in builder
+    assert "supermodel_complete_character_load" in builder
+    assert "CharacterMode.HEADLESS_BODY" in builder
+    assert '"Locate texture folder"' in builder
+    assert "_load_model_in_viewport_with_textures" in builder
+    assert "texture_resolution_report(model, dirs)" in builder
+
+
+def test_viewport_preloads_textures_for_skin_nodes() -> None:
+    viewport = _read("src/gui/qt_viewport.py")
+
+    assert "def _preload_gpu_textures" in viewport
+    assert "def _prewarm_textures" in viewport
+    assert 'getattr(node, "is_skin", False)' in viewport
+    assert "model.all_nodes()" in viewport
+

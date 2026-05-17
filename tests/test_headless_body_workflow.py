@@ -132,6 +132,23 @@ class _FakeAmbiguousExternalModel:
         return list(self._nodes)
 
 
+class _FakeTexturedSkinModel:
+    """External skinned mesh with a Blender-style material texture stem."""
+
+    def __init__(self, texture: str = "BendakStarkiller_basecolor"):
+        self.name = "bendak"
+        skin = _FakeNode("Bendak")
+        skin.is_skin = True
+        skin.is_mesh = False
+        skin.texture = texture
+        skin.texture_names = []
+        skin.vertices = [(0.0, 0.0, 0.0)]
+        self._nodes = [skin]
+
+    def all_nodes(self):
+        return list(self._nodes)
+
+
 def _make_scene(game_version: str = "K1"):
     return md.CharacterScene(game_version=game_version)
 
@@ -2022,3 +2039,44 @@ def test_t506_export_formats_constant_exposes_all_four_targets():
         assert label, f"format {key!r} has no display label"
         assert exts and all(e.startswith(".") for e in exts), \
             f"format {key!r} extensions look wrong: {exts}"
+
+
+def test_external_texture_resolution_includes_skinned_fbx_meshes(tmp_path):
+    """Bendak-style FBX skins expose textures on skin nodes, not rigid meshes."""
+    model = _FakeTexturedSkinModel()
+    fbx = tmp_path / "Bendak.fbx"
+    fbx.write_bytes(b"fbx")
+    tex_dir = tmp_path / "Texture"
+    tex_dir.mkdir()
+    tex = tex_dir / "BendakStarkiller_basecolor.png"
+    tex.write_bytes(b"stub")
+
+    dirs = wf.candidate_texture_dirs(str(fbx))
+    report = wf.texture_resolution_report(model, dirs)
+
+    assert str(tex_dir) in dirs
+    assert wf.model_texture_names(model) == ["BendakStarkiller_basecolor"]
+    assert report["found_count"] == 1
+    assert report["missing"] == []
+    assert report["found"]["BendakStarkiller_basecolor"] == str(tex)
+
+
+def test_external_texture_export_writes_game_tga_for_skinned_mesh(tmp_path):
+    Image = pytest.importorskip("PIL.Image")
+
+    model = _FakeTexturedSkinModel()
+    tex_dir = tmp_path / "Texture"
+    tex_dir.mkdir()
+    src = tex_dir / "BendakStarkiller_basecolor.png"
+    Image.new("RGBA", (2, 2), (255, 0, 0, 255)).save(src)
+    scene = _make_scene("K1")
+    scene.metadata["external_texture_dirs"] = [str(tex_dir)]
+
+    result = wf.export_external_textures(scene, model, str(tmp_path / "export"))
+
+    assert result["ok"] is True
+    assert result["missing"] == []
+    assert len(result["written"]) == 1
+    assert pathlib.Path(result["written"][0]).name == "BendakStarkiller_basecolor.tga"
+    assert pathlib.Path(result["written"][0]).is_file()
+    assert scene.metadata["external_texture_exports"] == result

@@ -81,6 +81,7 @@ _MDL_EXTS  = (".mdl",)
 _GLTF_EXTS = (".gltf", ".glb")
 _FBX_EXTS  = (".fbx", ".obj", ".ply", ".stl")
 _UTC_EXTS  = (".utc",)
+_TEXTURE_EXTS = (".tga", ".tpc", ".png", ".dds", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff")
 
 
 def supported_load_extensions() -> Tuple[str, ...]:
@@ -2167,6 +2168,149 @@ def _model_nodes(model: Any) -> List[Any]:
         return out
 
 
+def model_texture_names(model: Any) -> List[str]:
+    """Return unique diffuse/aux texture names referenced by a model."""
+    names: List[str] = []
+    seen: set[str] = set()
+    fields = (
+        "texture",
+        "lightmap",
+        "txi_envmaptexture",
+        "txi_specularcolour",
+        "txi_bumpmaptexture",
+    )
+    for node in _model_nodes(model):
+        if not (
+            bool(getattr(node, "is_mesh", False))
+            or bool(getattr(node, "is_skin", False))
+            or bool(getattr(node, "vertices", None))
+        ):
+            continue
+        raw_names: List[Any] = [getattr(node, field, "") for field in fields]
+        raw_names.extend(list(getattr(node, "texture_names", []) or []))
+        for raw in raw_names:
+            clean = Path(str(raw or "").strip()).stem
+            if not clean or clean.upper() in {"NULL", "NONE"}:
+                continue
+            key = clean.lower()
+            if key not in seen:
+                seen.add(key)
+                names.append(clean[:32])
+    return names
+
+
+def candidate_texture_dirs(source_path: str) -> List[str]:
+    """Likely folders beside an imported FBX/OBJ/glTF that hold textures."""
+    if not source_path:
+        return []
+    base = Path(source_path).resolve().parent
+    names = ("", "Texture", "Textures", "texture", "textures", "Materials", "materials")
+    out: List[str] = []
+    seen: set[str] = set()
+    for name in names:
+        path = base / name if name else base
+        if path.is_dir():
+            resolved = str(path)
+            key = os.path.normcase(os.path.abspath(resolved))
+            if key not in seen:
+                seen.add(key)
+                out.append(resolved)
+    return out
+
+
+def texture_file_for_name(name: str, dirs: List[str]) -> str:
+    """Return the first matching on-disk texture path for *name*."""
+    stem = Path(str(name or "").strip()).stem
+    if not stem:
+        return ""
+    for directory in dirs:
+        if not directory or not os.path.isdir(directory):
+            continue
+        for ext in _TEXTURE_EXTS:
+            direct = Path(directory) / f"{stem}{ext}"
+            if direct.is_file():
+                return str(direct)
+        try:
+            for child in Path(directory).iterdir():
+                if child.is_file() and child.stem.lower() == stem.lower():
+                    return str(child)
+        except OSError:
+            continue
+    return ""
+
+
+def texture_resolution_report(
+    model: Any,
+    dirs: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Report which referenced textures are found in the supplied folders."""
+    dirs = list(dirs or [])
+    found: Dict[str, str] = {}
+    missing: List[str] = []
+    for name in model_texture_names(model):
+        path = texture_file_for_name(name, dirs)
+        if path:
+            found[name] = path
+        else:
+            missing.append(name)
+    return {
+        "expected": model_texture_names(model),
+        "found": found,
+        "missing": missing,
+        "found_count": len(found),
+        "missing_count": len(missing),
+        "dirs": dirs,
+    }
+
+
+def export_external_textures(
+    scene: Any,
+    model: Any,
+    out_dir: str,
+) -> Dict[str, Any]:
+    """Convert externally supplied texture images to game-side TGA files."""
+    metadata = getattr(scene, "metadata", None)
+    if not isinstance(metadata, dict):
+        return {"ok": True, "written": [], "missing": [], "message": "No metadata."}
+    dirs = [
+        str(path)
+        for path in list(metadata.get("external_texture_dirs", []) or [])
+        if path and os.path.isdir(str(path))
+    ]
+    if not dirs:
+        return {"ok": True, "written": [], "missing": [], "message": "No external texture dirs."}
+    try:
+        from PIL import Image
+    except Exception as exc:  # pragma: no cover - Pillow is available in supported builds
+        return {"ok": False, "written": [], "missing": [], "message": f"Pillow unavailable: {exc}"}
+
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    written: List[str] = []
+    missing: List[str] = []
+    for name in model_texture_names(model):
+        src = texture_file_for_name(name, dirs)
+        if not src:
+            missing.append(name)
+            continue
+        target = out / f"{Path(name).stem[:32]}.tga"
+        try:
+            img = Image.open(src).convert("RGBA")
+            img.save(target, format="TGA")
+            written.append(str(target))
+        except Exception as exc:
+            log.warning("Could not export texture %s from %s: %s", name, src, exc)
+            missing.append(name)
+    result = {
+        "ok": not missing,
+        "written": written,
+        "missing": missing,
+        "message": f"{len(written)} texture(s) written; {len(missing)} missing.",
+    }
+    metadata["external_texture_exports"] = result
+    return result
+
+
 def _verify_launch_reloaded_model(
     model: Any,
     *,
@@ -2636,6 +2780,17 @@ def export_scene(
                 label_by_key[fmt_key], out_dir, resref,
             )
         )
+
+    tex_export = export_external_textures(scene, body, out_dir)
+    if tex_export.get("written") or tex_export.get("missing"):
+        rows.append(ExportFormatResult(
+            key="textures",
+            label="External texture TGAs",
+            ok=bool(tex_export.get("ok")),
+            path=out_dir,
+            message=str(tex_export.get("message", "")),
+            code="exported" if tex_export.get("ok") else "failed",
+        ))
 
     # Sidecar v2 metadata. Stored on the scene before SceneIO writes so the
     # .ghostrig.json records exactly what this export attempt produced.
