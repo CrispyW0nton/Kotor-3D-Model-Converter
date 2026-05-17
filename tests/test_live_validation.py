@@ -56,3 +56,28 @@ def test_t901_scene_mutation_paths_schedule_live_validation() -> None:
     ]:
         assert f'self._schedule_live_validation("{reason}")' in src
     assert 'self._schedule_live_validation(f"mode_{source}")' in src
+
+
+def test_t902_validation_banner_opens_full_report_dialog() -> None:
+    src = _read("src/gui/qt_character_builder_panel.py")
+
+    assert "class _ValidationIssueTableModel" in src
+    assert "class QtValidationReportDialog" in src
+    assert "self.bottom_strip.bannerClicked.connect(self._on_validation_banner_clicked)" in src
+    assert "def _on_validation_banner_clicked" in src
+    assert "dialog = QtValidationReportDialog(issues, self)" in src
+    assert "dialog.jumpRequested.connect(self._on_validation_report_jump_requested)" in src
+    assert "dialog.exec()" in src
+
+
+def test_t902_report_rows_show_issue_fields_and_jump_to_node() -> None:
+    src = _read("src/gui/qt_character_builder_panel.py")
+
+    for field in ["Severity", "Code", "Message", "Slot", "Node"]:
+        assert field in src
+    assert "self._jump_btn = QtWidgets.QPushButton(\"Jump to Bone\")" in src
+    assert "jumpRequested = QtCore.Signal(str)" in src
+    assert "def _on_validation_report_jump_requested" in src
+    assert "def _find_viewport_node" in src
+    assert "viewport.set_selected_node(node)" in src
+    assert "Selected validation target" in src

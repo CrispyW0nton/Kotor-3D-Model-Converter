@@ -32,6 +32,156 @@ from .qt_workflow_rail import QtWorkflowRail
 log = logging.getLogger(__name__)
 
 
+def _issue_field(issue: Any, field: str, default: str = "") -> str:
+    """Return one display field from a ValidationIssue-like object."""
+    if isinstance(issue, dict):
+        value = issue.get(field, default)
+    else:
+        value = getattr(issue, field, default)
+    if field == "severity":
+        value = getattr(value, "value", value)
+    if value is None:
+        return default
+    return str(value)
+
+
+def _issue_slot_text(issue: Any) -> str:
+    value = (
+        issue.get("slot", "")
+        if isinstance(issue, dict) else
+        getattr(issue, "slot", "")
+    )
+    value = getattr(value, "value", value)
+    return "" if value is None else str(value)
+
+
+class _ValidationIssueTableModel(QtCore.QAbstractTableModel):
+    """Small table model for the M9/T902 validation report dialog."""
+
+    HEADERS = ("Severity", "Code", "Message", "Slot", "Node")
+
+    def __init__(self, issues: list[Any], parent: Optional[QtCore.QObject] = None):
+        super().__init__(parent)
+        self._issues = list(issues or [])
+
+    def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
+        return 0 if parent.isValid() else len(self._issues)
+
+    def columnCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
+        return 0 if parent.isValid() else len(self.HEADERS)
+
+    def headerData(
+        self,
+        section: int,
+        orientation: QtCore.Qt.Orientation,
+        role: int = QtCore.Qt.DisplayRole,
+    ):
+        if role != QtCore.Qt.DisplayRole or orientation != QtCore.Qt.Horizontal:
+            return None
+        if 0 <= section < len(self.HEADERS):
+            return self.HEADERS[section]
+        return None
+
+    def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole):
+        if not index.isValid() or not (0 <= index.row() < len(self._issues)):
+            return None
+        issue = self._issues[index.row()]
+        if role == QtCore.Qt.UserRole:
+            return issue
+        if role != QtCore.Qt.DisplayRole:
+            return None
+        if isinstance(issue, str):
+            return issue if index.column() == 2 else ""
+        columns = (
+            _issue_field(issue, "severity"),
+            _issue_field(issue, "code"),
+            _issue_field(issue, "message"),
+            _issue_slot_text(issue),
+            _issue_field(issue, "node"),
+        )
+        if 0 <= index.column() < len(columns):
+            return columns[index.column()]
+        return None
+
+    def issue_at(self, row: int) -> Any:
+        if 0 <= row < len(self._issues):
+            return self._issues[row]
+        return None
+
+
+class QtValidationReportDialog(QtWidgets.QDialog):
+    """Full validation report dialog with a jump-to-node action."""
+
+    jumpRequested = QtCore.Signal(str)
+
+    def __init__(self, issues: list[Any], parent: Optional[QtWidgets.QWidget] = None):
+        super().__init__(parent)
+        self.setWindowTitle("Validation Report")
+        self.resize(780, 420)
+        self._model = _ValidationIssueTableModel(issues, self)
+        self._build()
+
+    def _build(self) -> None:
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+
+        self._table = QtWidgets.QTableView(self)
+        self._table.setModel(self._model)
+        self._table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self._table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self._table.setAlternatingRowColors(True)
+        self._table.setSortingEnabled(False)
+        self._table.horizontalHeader().setStretchLastSection(True)
+        self._table.horizontalHeader().setSectionResizeMode(
+            2,
+            QtWidgets.QHeaderView.Stretch,
+        )
+        self._table.doubleClicked.connect(lambda _idx: self._emit_jump())
+        layout.addWidget(self._table, 1)
+
+        if self._model.rowCount() > 0:
+            self._table.selectRow(0)
+        else:
+            self._table.setToolTip("No validation issues have been reported.")
+
+        button_row = QtWidgets.QHBoxLayout()
+        self._jump_btn = QtWidgets.QPushButton("Jump to Bone")
+        self._jump_btn.setToolTip("Select the issue's node in the viewport.")
+        self._jump_btn.clicked.connect(self._emit_jump)
+        button_row.addWidget(self._jump_btn)
+        button_row.addStretch(1)
+        close_btn = QtWidgets.QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        button_row.addWidget(close_btn)
+        layout.addLayout(button_row)
+
+        selection = self._table.selectionModel()
+        if selection is not None:
+            selection.selectionChanged.connect(lambda *_args: self._refresh_jump_state())
+        self._refresh_jump_state()
+
+    def _selected_issue(self) -> Any:
+        selection = self._table.selectionModel()
+        if selection is None:
+            return None
+        rows = selection.selectedRows()
+        if not rows:
+            return None
+        return self._model.issue_at(rows[0].row())
+
+    def _selected_node(self) -> str:
+        return _issue_field(self._selected_issue(), "node")
+
+    def _refresh_jump_state(self) -> None:
+        self._jump_btn.setEnabled(bool(self._selected_node()))
+
+    def _emit_jump(self) -> None:
+        node = self._selected_node()
+        if node:
+            self.jumpRequested.emit(node)
+
+
 # ── CharacterMode wiring (pykotor-safe) ─────────────────────────────────────
 # ``src.core.__init__`` eagerly imports the loader stack (pykotor).  We
 # isolate the failure so the window still loads when those deps are
@@ -529,6 +679,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self.inspector.loadRequested.connect(self._on_load_model_requested)
         self.inspector.validateRequested.connect(self._on_validate_requested)
         self.inspector.checkModelRequested.connect(self._on_check_model_requested)
+        self.bottom_strip.bannerClicked.connect(self._on_validation_banner_clicked)
         # M4 HUD QoL: wire the inspector's overlay controls to the
         # viewport instead of leaving them as passive surface widgets.
         self.inspector.symmetryToggled.connect(self._on_joint_symmetry_toggled)
@@ -1272,6 +1423,62 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         else:
             log.debug("Live validation refreshed after %s: %s", reason, result.code)
         return result
+
+    @QtCore.Slot()
+    def _on_validation_banner_clicked(self) -> None:
+        """Open the full validation report from the bottom-strip banner."""
+        issues = self.bottom_strip.issues()
+        if not issues:
+            result = self._last_validation_result or self._run_validation(
+                reason="banner_clicked",
+                update_status=False,
+            )
+            issues = (
+                list(getattr(result, "issues", []) or [])
+                if result is not None else
+                []
+            )
+
+        dialog = QtValidationReportDialog(issues, self)
+        dialog.jumpRequested.connect(self._on_validation_report_jump_requested)
+        dialog.exec()
+
+    @QtCore.Slot(str)
+    def _on_validation_report_jump_requested(self, node_name: str) -> None:
+        """Select the validation issue target node in the viewport."""
+        node_name = str(node_name or "").strip()
+        if not node_name:
+            return
+        viewport = getattr(self, "viewport", None)
+        node = self._find_viewport_node(node_name)
+        if viewport is not None and node is not None and hasattr(viewport, "set_selected_node"):
+            try:
+                viewport.set_selected_node(node)
+                self.statusBar().showMessage(
+                    f"Selected validation target: {node_name}",
+                    4000,
+                )
+                return
+            except Exception:                               # pragma: no cover
+                log.exception("viewport.set_selected_node failed for %s", node_name)
+        self.statusBar().showMessage(f"Validation target not visible: {node_name}", 5000)
+
+    def _find_viewport_node(self, node_name: str) -> Any:
+        """Best-effort node lookup against the currently previewed model."""
+        needle = str(node_name or "").strip().lower()
+        if not needle:
+            return None
+        model = getattr(getattr(self, "viewport", None), "model", None)
+        if model is None:
+            return None
+        try:
+            nodes = model.all_nodes() if hasattr(model, "all_nodes") else []
+        except Exception:                                  # pragma: no cover
+            nodes = []
+        for node in list(nodes or []):
+            if str(getattr(node, "name", "") or "").lower() == needle:
+                return node
+        return None
 
     @QtCore.Slot()
     def _on_check_model_requested(self) -> None:
