@@ -65,13 +65,13 @@ _STEP_VALIDATE      = 8
 # "Head Rig", the inspector page still says "Rig").  Detailed mode-
 # specific copy can be layered in later via a setter.
 _PAGE_TITLES: Dict[int, str] = {
-    _STEP_LOAD:        "1. Load",
-    _STEP_CHECK_MODEL: "2. Check Model",
-    _STEP_RIG_BODY:    "3. Rig — Skeleton & Pins",
-    _STEP_RIG_HANDS:   "4. Rig — Hands / Limbs",
-    _STEP_RIG_FACE:    "5. Rig — Face / Special",
-    _STEP_CHECK_ACTOR: "6. Check Actor / ROM",
-    _STEP_MOTIONS:     "7. Add Motions",
+    _STEP_LOAD:        "1. Choose Base + Load Mesh",
+    _STEP_CHECK_MODEL: "2. Check Fit",
+    _STEP_RIG_BODY:    "3. Create Skeleton",
+    _STEP_RIG_HANDS:   "4. Align Bones",
+    _STEP_RIG_FACE:    "5. Preview Attachments",
+    _STEP_CHECK_ACTOR: "6. Preview Animations",
+    _STEP_MOTIONS:     "7. Assign Motions",
     _STEP_VALIDATE:    "8. Validate + Export",
 }
 
@@ -247,7 +247,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
             "custom MDL / FBX / OBJ mesh that should fit that rig."
         ))
         self._add_skeleton_template_picker(layout)
-        btn = QtWidgets.QPushButton("Load Character…")
+        btn = QtWidgets.QPushButton("Load Custom Mesh…")
         btn.setProperty("accent", True)
         btn.clicked.connect(self.loadRequested.emit)
         layout.addWidget(btn)
@@ -610,12 +610,12 @@ class QtInspectorPanel(QtWidgets.QWidget):
 
         # Step-specific hint banner so users know which sub-page they're on.
         if step == _STEP_RIG_BODY:
-            hint = "Place humanoid pelvis / spine / limb pins."
+            hint = "Create the KOTOR skeleton from the selected base model and current fit."
         elif step == _STEP_RIG_HANDS:
-            hint = "Fine-tune finger / wrist pins (or limbs for Creature mode)."
+            hint = "Drag one bone, shift/ctrl-click several, or drag a box around bones to align them."
         else:  # _STEP_RIG_FACE
-            hint = ("Place facial bones (f_jaw_g, f_um_g, lip corners) or "
-                    "Spline-IK CVs for tails / wings / tentacles.")
+            hint = ("Preview attachments: weapons for hand sockets, heads for headless bodies, "
+                    "or bodies for head meshes.")
         hint_label = QtWidgets.QLabel(hint)
         hint_label.setStyleSheet(
             f"color:{C.get('text2', '#888')}; font-size:8pt; font-style:italic;"
@@ -625,7 +625,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
 
         # ── M5 / T503 — Body-rig action buttons (body step only) ─────
         if step == _STEP_RIG_BODY:
-            actions = QtWidgets.QGroupBox("Rig Body")
+            actions = QtWidgets.QGroupBox("Create Skeleton")
             actions_layout = QtWidgets.QVBoxLayout(actions)
             actions_layout.setSpacing(4)
 
@@ -638,7 +638,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
             self._place_guides_btn.clicked.connect(self.placeGuidesRequested.emit)
             actions_layout.addWidget(self._place_guides_btn)
 
-            self._generate_skeleton_btn = QtWidgets.QPushButton("Rig Body")
+            self._generate_skeleton_btn = QtWidgets.QPushButton("Create New Skeleton")
             self._generate_skeleton_btn.setProperty("accent", True)
             self._generate_skeleton_btn.setToolTip(
                 "Build bones from the current guides + run heat-map\n"
@@ -660,11 +660,11 @@ class QtInspectorPanel(QtWidgets.QWidget):
 
         # ── M5 / T504 — Hand-rig action group (hands step only) ──────
         if step == _STEP_RIG_HANDS:
-            hand_actions = QtWidgets.QGroupBox("Rig Hand")
+            hand_actions = QtWidgets.QGroupBox("Align Bones")
             hand_layout = QtWidgets.QVBoxLayout(hand_actions)
             hand_layout.setSpacing(4)
 
-            self._place_hand_guides_btn = QtWidgets.QPushButton("Rig Hand")
+            self._place_hand_guides_btn = QtWidgets.QPushButton("Rebuild Hand Guides")
             self._place_hand_guides_btn.setToolTip(
                 "Re-snap wrist + finger guide pins onto the body model.\n"
                 "Run this *after* Generate Skeleton so AcuRig knows the\n"

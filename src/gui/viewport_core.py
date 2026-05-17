@@ -3447,6 +3447,7 @@ class FrameRenderer:
         self.show_gimbal: bool = True
         self.gimbal_active_axis = None          # axis being dragged ('X','Y','Z',etc.) or None
         self._gimbal_handles: List[Tuple] = []  # [(sx,sy,axis), ...] from last draw
+        self._gimbal_handle_lines: List[Tuple] = []  # [(x0,y0,x1,y1,axis), ...] from last draw
         # External skeleton overlay (ghost from another model)
         self._ext_skeleton = None               # KotorModel or None
         self._ext_skel_offset: List[float] = [0.0, 0.0, 0.0]
@@ -7256,6 +7257,7 @@ class FrameRenderer:
             return
         cx, cy, cz = cp
         self._gimbal_handles = []
+        self._gimbal_handle_lines = []
 
         # Gimbal arm in world units (constant screen size regardless of distance)
         HANDLE_PX = 80
@@ -7334,6 +7336,13 @@ class FrameRenderer:
                         draw.line([pts[i][0], pts[i][1],
                                    pts[i+1][0], pts[i+1][1]],
                                   fill=ring_col, width=lw)
+                        self._gimbal_handle_lines.append((
+                            pts[i][0],
+                            pts[i][1],
+                            pts[i+1][0],
+                            pts[i+1][1],
+                            name,
+                        ))
                 # Handle dot at 90 deg for click detection
                 c90, s90 = _gm.cos(_gm.pi / 2), _gm.sin(_gm.pi / 2)
                 if name == 'X':
@@ -7381,6 +7390,22 @@ class FrameRenderer:
             d2 = (hx - sx)**2 + (hy - sy)**2
             if d2 < best_d2:
                 best_d2 = d2
+                best_axis = axis
+        line_radius2 = best_d2 if best_axis is not None else (radius + 4) * (radius + 4)
+        for x0, y0, x1, y1, axis in getattr(self, "_gimbal_handle_lines", []) or []:
+            vx = x1 - x0
+            vy = y1 - y0
+            seg_len2 = vx * vx + vy * vy
+            if seg_len2 <= 1e-6:
+                continue
+            t = ((sx - x0) * vx + (sy - y0) * vy) / seg_len2
+            if t < 0.0 or t > 1.0:
+                continue
+            px = x0 + t * vx
+            py = y0 + t * vy
+            d2 = (px - sx) ** 2 + (py - sy) ** 2
+            if d2 < line_radius2:
+                line_radius2 = d2
                 best_axis = axis
         return best_axis
 

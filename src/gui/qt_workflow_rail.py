@@ -53,50 +53,35 @@ except Exception:                                       # pragma: no cover
 # These are module-level so they can be unit-tested and overridden by
 # tools without monkey-patching the widget.
 
+_STEPS_UNIFIED_CHARACTER_BUILDER: List[Tuple[int, str]] = [
+    (1, "Choose Base + Load Mesh"),
+    (2, "Check Fit"),
+    (3, "Create Skeleton"),
+    (4, "Align Bones"),
+    (5, "Preview Attachments"),
+    (6, "Preview Animations"),
+    (7, "Assign Motions"),
+    (8, "Validate + Export"),
+]
+
 _STEPS_HEADLESS_BODY: List[Tuple[int, str]] = [
-    (1, "Load Character"),
-    (2, "Check Model"),
-    (3, "Rig Body"),
-    (4, "Rig Hand"),
-    (6, "Check Actor"),
-    (7, "Add Motions"),
-    (8, "Upload & Save"),
+    *_STEPS_UNIFIED_CHARACTER_BUILDER,
 ]
 
 _STEPS_HEAD: List[Tuple[int, str]] = [
-    (1, "Load Head"),
-    (2, "Check Model"),
-    (3, "Head Rig (head/neck/jaw)"),
-    (4, "Face Rig (lids, lip corners)"),
-    (5, "LIP & Phoneme Test"),
-    (6, "Check Face (jaw/blink/visemes)"),
-    (8, "Validate + Export"),
+    *_STEPS_UNIFIED_CHARACTER_BUILDER,
 ]
 
 _STEPS_SUPERMODEL: List[Tuple[int, str]] = [
-    (1, "Load Body + Head"),
-    (2, "Check Headhook"),
-    (3, "Rig Body"),
-    (4, "Rig Hand"),
-    (5, "Rig Face"),
-    (6, "Check Actor"),
-    (7, "Add Motions"),
-    (8, "Upload & Save"),
+    *_STEPS_UNIFIED_CHARACTER_BUILDER,
 ]
 
 _STEPS_CREATURE: List[Tuple[int, str]] = [
-    (1, "Load Creature"),
-    (2, "Check Model"),
-    (3, "Profile Pick (humanoid / quadruped / droid / prop)"),
-    (4, "Limb Rig (per profile)"),
-    (5, "Special: Tail / Wing / Tentacle Spline-IK"),
-    (6, "ROM Test (Stewart Jones range-of-motion)"),
-    (7, "Add Motions"),
-    (8, "Validate + Export"),
+    *_STEPS_UNIFIED_CHARACTER_BUILDER,
 ]
 
 _STEPS_FALLBACK: List[Tuple[int, str]] = [
-    (1, "Load Model"),
+    (1, "Choose Base + Load Mesh"),
     (8, "Validate + Export"),
 ]
 

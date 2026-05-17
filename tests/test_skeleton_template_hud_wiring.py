@@ -147,6 +147,36 @@ def test_import_root_gimbal_transforms_whole_mesh_and_supports_scale() -> None:
     assert "elif self.gimbal_mode == 3" in core
 
 
+def test_rotation_gimbal_rings_are_hit_testable() -> None:
+    core = _read("src/gui/viewport_core.py")
+
+    assert "_gimbal_handle_lines" in core
+    assert "self._gimbal_handle_lines.append" in core
+    assert "for x0, y0, x1, y1, axis in getattr(self, \"_gimbal_handle_lines\"" in core
+
+
+def test_viewport_supports_multi_joint_marquee_and_group_drag() -> None:
+    viewport = _read("src/gui/qt_viewport.py")
+
+    assert "_selected_joint_nodes" in viewport
+    assert "_joint_marquee_selecting" in viewport
+    assert "def _joint_nodes_in_rect" in viewport
+    assert "def _set_selected_joint_nodes" in viewport
+    assert "Gimbal Multi-Joint Translate" in viewport
+
+
+def test_selected_imported_mesh_outline_uses_projected_mesh_hull_not_bbox() -> None:
+    viewport = _read("src/gui/qt_viewport.py")
+
+    outline_start = viewport.index("def _draw_selected_model_outline")
+    outline_end = viewport.index("def _evict_transform_cache", outline_start)
+    outline_src = viewport[outline_start:outline_end]
+
+    assert "mesh_nodes()" in outline_src
+    assert "hull = lower[:-1] + upper[:-1]" in outline_src
+    assert "_get_render_bounds()" not in outline_src
+
+
 def test_viewport_preloads_textures_for_skin_nodes() -> None:
     viewport = _read("src/gui/qt_viewport.py")
 

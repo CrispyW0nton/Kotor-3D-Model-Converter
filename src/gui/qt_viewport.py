@@ -338,6 +338,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gimbal_drag_start = (0, 0)
         self._gimbal_node_start_pos = (0.0, 0.0, 0.0)
         self._gimbal_node_start_rot = (0.0, 0.0, 0.0, 1.0)
+        self._gimbal_joint_start_positions: dict[int, tuple[float, float, float]] = {}
         self._gimbal_model_applied_translation = (0.0, 0.0, 0.0)
         self._gimbal_model_applied_rotation = 0.0
         self._gimbal_model_applied_scale = 1.0
@@ -371,10 +372,16 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._joint_dragging: bool = False
         self._joint_drag_node = None              # primary node under cursor
         self._joint_drag_mirror_node = None       # MIRROR_PAIRS partner, if any
+        self._joint_drag_nodes: list = []
+        self._joint_drag_start_positions: dict[int, tuple[float, float, float]] = {}
         self._joint_drag_start_screen = (0, 0)
         self._joint_drag_start_pos = (0.0, 0.0, 0.0)
         self._joint_drag_mirror_start_pos = (0.0, 0.0, 0.0)
         self._joint_drag_world_per_px = 1.0
+        self._selected_joint_nodes: list = []
+        self._joint_marquee_selecting: bool = False
+        self._joint_marquee_start = (0, 0)
+        self._joint_marquee_current = (0, 0)
         # ── T405: Weight heat-map overlay state ─────────────────────────
         # When enabled, every vertex of every skin mesh is painted with a
         # color from `_weight_to_heatmap_color` based on the *selected*
@@ -1122,10 +1129,68 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def set_selected_node(self, node) -> None:
         self._renderer.selected_node = node
+        if node is None:
+            self._selected_joint_nodes = []
+        elif self._is_selected_model_root(node):
+            self._selected_joint_nodes = []
+        elif not self._is_selected_model_root(node):
+            known = {id(n) for n in self._selected_joint_nodes}
+            if id(node) not in known:
+                self._selected_joint_nodes = [node]
         if self._uv_viewer is not None:
             self._uv_viewer.set_selected_node(node)
         self.nodeSelected.emit(node)
         self._request_render()
+
+    def _set_selected_joint_nodes(self, nodes: list, *, primary=None) -> None:
+        """Replace the current bone selection with an ordered de-duplicated list."""
+        seen = set()
+        selected = []
+        for node in nodes or []:
+            if node is None:
+                continue
+            nid = id(node)
+            if nid in seen:
+                continue
+            seen.add(nid)
+            selected.append(node)
+        self._selected_joint_nodes = selected
+        self._renderer.selected_node = primary if primary is not None else (selected[-1] if selected else None)
+        if self._uv_viewer is not None:
+            self._uv_viewer.set_selected_node(self._renderer.selected_node)
+        self.nodeSelected.emit(self._renderer.selected_node)
+        self._request_render()
+
+    def _toggle_selected_joint_node(self, node) -> None:
+        if node is None:
+            return
+        selected = list(self._selected_joint_nodes)
+        for i, existing in enumerate(selected):
+            if existing is node:
+                selected.pop(i)
+                self._set_selected_joint_nodes(selected)
+                return
+        selected.append(node)
+        self._set_selected_joint_nodes(selected, primary=node)
+
+    def _joint_nodes_in_rect(self, x0: int, y0: int, x1: int, y1: int) -> list:
+        positions = getattr(self._renderer, "_bone_screen_positions", None) or []
+        if not positions:
+            return []
+        lx, hx = sorted((int(x0), int(x1)))
+        ly, hy = sorted((int(y0), int(y1)))
+        nodes = []
+        seen = set()
+        for entry in positions:
+            if not entry or len(entry) < 4:
+                continue
+            sx, sy, _depth, node = entry[0], entry[1], entry[2], entry[3]
+            if sx is None or sy is None or node is None:
+                continue
+            if lx <= sx <= hx and ly <= sy <= hy and id(node) not in seen:
+                seen.add(id(node))
+                nodes.append(node)
+        return nodes
 
     def refresh_node_transform(self, node=None) -> None:
         if node is not None:
@@ -1885,6 +1950,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             if self._renderer.show_gimbal:
                 self._renderer._draw_gimbal(draw, w, h)
             self._draw_selected_model_outline(draw, w, h)
+            self._draw_joint_marquee(draw)
             self._renderer._draw_axes(draw, w, h)
             self._renderer._draw_stats(draw, w, h)
             return img
@@ -1893,6 +1959,20 @@ class QtViewportWidget(QtWidgets.QWidget):
             return img
 
     # ── T401: Joint-dot overlay ────────────────────────────────────────
+    def _draw_joint_marquee(self, draw) -> None:
+        if not self._joint_marquee_selecting:
+            return
+        try:
+            x0, y0 = self._joint_marquee_start
+            x1, y1 = self._joint_marquee_current
+            if abs(x1 - x0) < self._drag_threshold and abs(y1 - y0) < self._drag_threshold:
+                return
+            left, right = sorted((int(x0), int(x1)))
+            top, bottom = sorted((int(y0), int(y1)))
+            draw.rectangle([left, top, right, bottom], fill=(255, 212, 0, 38), outline=(255, 212, 0, 210), width=1)
+        except Exception as exc:
+            log.debug("Joint marquee draw failed: %s", exc)
+
     def _draw_joint_dots(self, img, w: int, h: int) -> None:
         """Paint AccuRig-style color-coded joint dots over the mesh.
 
@@ -1934,6 +2014,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 # Selected node gets a brighter outline so the user can
                 # still see selection state through the dot.
                 sel_node = getattr(self._renderer, "selected_node", None)
+                selected_ids = {id(n) for n in self._selected_joint_nodes}
                 outline_pen = QtGui.QPen(QtGui.QColor(0, 0, 0, alpha), 1.0)
                 sel_pen = QtGui.QPen(QtGui.QColor(255, 255, 255, alpha), 2.0)
                 for entry in positions:
@@ -1946,7 +2027,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                     color = QtGui.QColor(_classify_joint_color(name))
                     color.setAlpha(alpha)
                     painter.setBrush(QtGui.QBrush(color))
-                    painter.setPen(sel_pen if node is sel_node else outline_pen)
+                    painter.setPen(sel_pen if node is sel_node or id(node) in selected_ids else outline_pen)
                     painter.drawEllipse(
                         QtCore.QPointF(float(sx), float(sy)),
                         float(radius),
@@ -2091,6 +2172,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             from PIL import ImageDraw
             draw = ImageDraw.Draw(img, "RGBA")
             sel_node = getattr(self._renderer, "selected_node", None)
+            selected_ids = {id(n) for n in self._selected_joint_nodes}
             for entry in positions:
                 if not entry or len(entry) < 4:
                     continue
@@ -2100,12 +2182,13 @@ class QtViewportWidget(QtWidgets.QWidget):
                 name = getattr(node, "name", "") or ""
                 qc = _classify_joint_color(name)
                 fill = (qc.red(), qc.green(), qc.blue(), alpha)
-                outline = (255, 255, 255, alpha) if node is sel_node else (0, 0, 0, alpha)
+                is_selected = node is sel_node or id(node) in selected_ids
+                outline = (255, 255, 255, alpha) if is_selected else (0, 0, 0, alpha)
                 draw.ellipse(
                     [sx - radius, sy - radius, sx + radius, sy + radius],
                     fill=fill,
                     outline=outline,
-                    width=2 if node is sel_node else 1,
+                    width=2 if is_selected else 1,
                 )
         except Exception as exc:
             log.debug("Joint-dot PIL fallback failed: %s", exc)
@@ -2379,8 +2462,20 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._joint_dragging = False
         self._joint_drag_node = None
         self._joint_drag_mirror_node = None
+        self._joint_drag_nodes = []
+        self._joint_drag_start_positions = {}
+        self._joint_marquee_selecting = False
+        self._joint_marquee_start = (x, y)
+        self._joint_marquee_current = (x, y)
 
-        if self._renderer.show_gimbal and self._renderer.selected_node and self._renderer._gimbal_handles:
+        if (
+            self._renderer.show_gimbal
+            and self._renderer.selected_node
+            and (
+                self._renderer._gimbal_handles
+                or getattr(self._renderer, "_gimbal_handle_lines", None)
+            )
+        ):
             axis = self._renderer.hit_test_gimbal(x, y)
             if axis:
                 self._gimbal_dragging = True
@@ -2388,6 +2483,13 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._gimbal_drag_start = (x, y)
                 self._gimbal_node_start_pos = tuple(self._renderer.selected_node.position)
                 self._gimbal_node_start_rot = tuple(self._renderer.selected_node.rotation)
+                self._gimbal_joint_start_positions = {}
+                if any(n is self._renderer.selected_node for n in self._selected_joint_nodes):
+                    for sel_node in self._selected_joint_nodes:
+                        try:
+                            self._gimbal_joint_start_positions[id(sel_node)] = tuple(sel_node.position)
+                        except Exception:
+                            self._gimbal_joint_start_positions[id(sel_node)] = (0.0, 0.0, 0.0)
                 self._gimbal_model_applied_translation = (0.0, 0.0, 0.0)
                 self._gimbal_model_applied_rotation = 0.0
                 self._gimbal_model_applied_scale = 1.0
@@ -2404,13 +2506,30 @@ class QtViewportWidget(QtWidgets.QWidget):
         if self._renderer.show_bones and self._joint_dot_enabled:
             joint_node = self._joint_dot_hit_test(x, y)
             if joint_node is not None:
+                modifiers = event.modifiers()
+                if modifiers & (QtCore.Qt.ControlModifier | QtCore.Qt.ShiftModifier):
+                    self._toggle_selected_joint_node(joint_node)
+                    self._renderer._hovered_bone = joint_node
+                    self._request_render()
+                    return
                 self._joint_drag_node = joint_node
-                self._joint_drag_mirror_node = self._joint_mirror_partner(joint_node)
+                if any(n is joint_node for n in self._selected_joint_nodes):
+                    self._joint_drag_nodes = list(self._selected_joint_nodes)
+                    self._joint_drag_mirror_node = None
+                else:
+                    self._joint_drag_nodes = [joint_node]
+                    self._joint_drag_mirror_node = self._joint_mirror_partner(joint_node)
                 self._joint_drag_start_screen = (x, y)
                 try:
                     self._joint_drag_start_pos = tuple(joint_node.position)
                 except Exception:
                     self._joint_drag_start_pos = (0.0, 0.0, 0.0)
+                self._joint_drag_start_positions = {}
+                for drag_node in self._joint_drag_nodes:
+                    try:
+                        self._joint_drag_start_positions[id(drag_node)] = tuple(drag_node.position)
+                    except Exception:
+                        self._joint_drag_start_positions[id(drag_node)] = (0.0, 0.0, 0.0)
                 if self._joint_drag_mirror_node is not None:
                     try:
                         self._joint_drag_mirror_start_pos = tuple(
@@ -2443,6 +2562,13 @@ class QtViewportWidget(QtWidgets.QWidget):
             if node:
                 self._renderer._hovered_bone = node
                 self._request_render()
+                return
+
+        if self._renderer.show_bones and self._joint_dot_enabled:
+            self._joint_marquee_selecting = True
+            self._joint_marquee_start = (x, y)
+            self._joint_marquee_current = (x, y)
+            self._request_render()
 
     def _drag_lmb(self, event) -> None:
         x, y = int(event.position().x()), int(event.position().y())
@@ -2469,6 +2595,14 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._request_render(fast=True)
             return
 
+        if self._joint_marquee_selecting:
+            self._joint_marquee_current = (x, y)
+            if not self._is_dragging:
+                if abs(x - self._press_x) > self._drag_threshold or abs(y - self._press_y) > self._drag_threshold:
+                    self._is_dragging = True
+            self._request_render(fast=True)
+            return
+
         if not self._is_dragging:
             if abs(x - self._press_x) > self._drag_threshold or abs(y - self._press_y) > self._drag_threshold:
                 self._is_dragging = True
@@ -2485,7 +2619,27 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._renderer._wt_cache.clear()
             node = self._renderer.selected_node
             if node is not None:
-                if not self._is_selected_model_root(node):
+                if (
+                    not self._is_selected_model_root(node)
+                    and len(self._selected_joint_nodes) > 1
+                    and any(n is node for n in self._selected_joint_nodes)
+                    and self._renderer.gimbal_mode == 1
+                ):
+                    for sel_node in self._selected_joint_nodes:
+                        before_pos = self._gimbal_joint_start_positions.get(
+                            id(sel_node),
+                            tuple(sel_node.position),
+                        )
+                        self._commit_node_transform(
+                            sel_node,
+                            before_pos,
+                            tuple(sel_node.rotation),
+                            tuple(sel_node.position),
+                            tuple(sel_node.rotation),
+                            "Gimbal Multi-Joint Translate",
+                        )
+                        self._notify_node_moved(sel_node)
+                elif not self._is_selected_model_root(node):
                     self._commit_node_transform(
                         node,
                         self._gimbal_node_start_pos,
@@ -2494,7 +2648,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                         tuple(node.rotation),
                         "Gimbal Transform",
                     )
-                self._notify_node_moved(node)
+                    self._notify_node_moved(node)
             self._request_render()
             return
 
@@ -2513,15 +2667,20 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._renderer._wt_cache.clear()
             if was_dragging:
                 try:
-                    self._commit_node_transform(
-                        joint,
-                        self._joint_drag_start_pos,
-                        tuple(joint.rotation),
-                        tuple(joint.position),
-                        tuple(joint.rotation),
-                        "Joint Translate",
-                    )
-                    self._notify_node_moved(joint)
+                    for moved in self._joint_drag_nodes or [joint]:
+                        start_pos = self._joint_drag_start_positions.get(
+                            id(moved),
+                            self._joint_drag_start_pos if moved is joint else tuple(moved.position),
+                        )
+                        self._commit_node_transform(
+                            moved,
+                            start_pos,
+                            tuple(moved.rotation),
+                            tuple(moved.position),
+                            tuple(moved.rotation),
+                            "Joint Translate",
+                        )
+                        self._notify_node_moved(moved)
                     if mirror is not None:
                         self._commit_node_transform(
                             mirror,
@@ -2536,14 +2695,37 @@ class QtViewportWidget(QtWidgets.QWidget):
                     log.debug("Joint-drag commit failed: %s", exc)
             self._joint_drag_node = None
             self._joint_drag_mirror_node = None
+            self._joint_drag_nodes = []
+            self._joint_drag_start_positions = {}
             # Click-or-drag: always finish by selecting the joint so the
             # inspector reflects the user's intent.
-            self.set_selected_node(joint)
+            if was_dragging and self._selected_joint_nodes:
+                self._set_selected_joint_nodes(self._selected_joint_nodes, primary=joint)
+            else:
+                self.set_selected_node(joint)
             if self.on_bone_selected:
                 self.on_bone_selected(joint)
             self._renderer._hovered_bone = None
             self._request_render()
             return
+
+        if self._joint_marquee_selecting:
+            self._joint_marquee_selecting = False
+            self._renderer.is_interactive = False
+            if self._is_dragging:
+                nodes = self._joint_nodes_in_rect(
+                    self._joint_marquee_start[0],
+                    self._joint_marquee_start[1],
+                    x,
+                    y,
+                )
+                self._set_selected_joint_nodes(nodes)
+                if self.on_bone_selected:
+                    self.on_bone_selected(self._renderer.selected_node)
+                self._is_dragging = False
+                self._request_render()
+                return
+            self._request_render()
 
         self._renderer._hovered_bone = None
         self._renderer.is_interactive = False
@@ -2632,9 +2814,14 @@ class QtViewportWidget(QtWidgets.QWidget):
             dwx = (dx_screen * right[0] + (-dy_screen) * up[0]) * wpp
             dwy = (dx_screen * right[1] + (-dy_screen) * up[1]) * wpp
             dwz = (dx_screen * right[2] + (-dy_screen) * up[2]) * wpp
-            sp = self._joint_drag_start_pos
-            node.position = (sp[0] + dwx, sp[1] + dwy, sp[2] + dwz)
-            self._evict_transform_cache(node)
+            drag_nodes = self._joint_drag_nodes or [node]
+            for drag_node in drag_nodes:
+                sp = self._joint_drag_start_positions.get(
+                    id(drag_node),
+                    self._joint_drag_start_pos if drag_node is node else tuple(drag_node.position),
+                )
+                drag_node.position = (sp[0] + dwx, sp[1] + dwy, sp[2] + dwz)
+                self._evict_transform_cache(drag_node)
 
             mirror = self._joint_drag_mirror_node
             if mirror is not None and self._joint_symmetry_enabled:
@@ -2685,11 +2872,17 @@ class QtViewportWidget(QtWidgets.QWidget):
 
             if len(axis) == 1:
                 d = axis_delta(axis)
-                node.position = (start[0] + d[0], start[1] + d[1], start[2] + d[2])
             else:
                 d1 = axis_delta(axis[0])
                 d2 = axis_delta(axis[1])
-                node.position = (start[0] + d1[0] + d2[0], start[1] + d1[1] + d2[1], start[2] + d1[2] + d2[2])
+                d = (d1[0] + d2[0], d1[1] + d2[1], d1[2] + d2[2])
+            if any(n is node for n in self._selected_joint_nodes) and len(self._selected_joint_nodes) > 1:
+                for sel_node in self._selected_joint_nodes:
+                    sp = self._gimbal_joint_start_positions.get(id(sel_node), tuple(sel_node.position))
+                    sel_node.position = (sp[0] + d[0], sp[1] + d[1], sp[2] + d[2])
+                    self._evict_transform_cache(sel_node)
+            else:
+                node.position = (start[0] + d[0], start[1] + d[1], start[2] + d[2])
         elif self._renderer.gimbal_mode == 2:
             angle = dx_screen * 0.01
             if QtWidgets.QApplication.keyboardModifiers() & QtCore.Qt.ShiftModifier:
@@ -2837,25 +3030,45 @@ class QtViewportWidget(QtWidgets.QWidget):
         if not self._is_selected_model_root(getattr(self._renderer, "selected_node", None)):
             return
         try:
-            bb_min, bb_max = self._renderer._get_render_bounds()
-            corners = {}
-            for ix, x in enumerate((bb_min[0], bb_max[0])):
-                for iy, y in enumerate((bb_min[1], bb_max[1])):
-                    for iz, z in enumerate((bb_min[2], bb_max[2])):
-                        sp = self._renderer._proj(float(x), float(y), float(z), w, h)
-                        if sp is not None:
-                            corners[(ix, iy, iz)] = (sp[0], sp[1])
-            edges = (
-                ((0, 0, 0), (1, 0, 0)), ((0, 1, 0), (1, 1, 0)),
-                ((0, 0, 1), (1, 0, 1)), ((0, 1, 1), (1, 1, 1)),
-                ((0, 0, 0), (0, 1, 0)), ((1, 0, 0), (1, 1, 0)),
-                ((0, 0, 1), (0, 1, 1)), ((1, 0, 1), (1, 1, 1)),
-                ((0, 0, 0), (0, 0, 1)), ((1, 0, 0), (1, 0, 1)),
-                ((0, 1, 0), (0, 1, 1)), ((1, 1, 0), (1, 1, 1)),
-            )
-            for a, b in edges:
-                if a in corners and b in corners:
-                    draw.line([corners[a], corners[b]], fill=(255, 212, 0, 190), width=2)
+            points = []
+            nodes = self.model.mesh_nodes() if hasattr(self.model, "mesh_nodes") else []
+            for node in nodes:
+                verts = getattr(node, "vertices", None) or []
+                if not verts:
+                    continue
+                try:
+                    wp, _wo, _ = self._renderer._node_world_transform(node)
+                except Exception:
+                    wp = (0.0, 0.0, 0.0)
+                stride = max(1, len(verts) // 800)
+                for vx, vy, vz in verts[::stride]:
+                    sp = self._renderer._proj(vx + wp[0], vy + wp[1], vz + wp[2], w, h)
+                    if sp is not None:
+                        sx, sy, _depth = sp
+                        if -40 <= sx <= w + 40 and -40 <= sy <= h + 40:
+                            points.append((float(sx), float(sy)))
+            if len(points) < 3:
+                return
+
+            def _cross(o, a, b):
+                return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+            unique = sorted(set((round(px, 1), round(py, 1)) for px, py in points))
+            if len(unique) < 3:
+                return
+            lower = []
+            for p in unique:
+                while len(lower) >= 2 and _cross(lower[-2], lower[-1], p) <= 0:
+                    lower.pop()
+                lower.append(p)
+            upper = []
+            for p in reversed(unique):
+                while len(upper) >= 2 and _cross(upper[-2], upper[-1], p) <= 0:
+                    upper.pop()
+                upper.append(p)
+            hull = lower[:-1] + upper[:-1]
+            if len(hull) >= 3:
+                draw.line(hull + [hull[0]], fill=(255, 212, 0, 230), width=2)
         except Exception as exc:
             log.debug("Selected model outline draw failed: %s", exc)
 
