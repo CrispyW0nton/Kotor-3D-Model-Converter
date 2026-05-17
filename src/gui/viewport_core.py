@@ -6421,41 +6421,50 @@ class FrameRenderer:
                 #   Both sets are empty.  The SAFE fast-path inside _paste_textured_triangle
                 #   (all UVs in [0.05, 0.95]) covers >80% of faces cheaply.
                 #   Only the <20% with seam-crossing UVs are checked by _edge_has_seam.
-                _any_u_found = bool(_node_u_seam_verts)
-                _any_v_found = bool(_node_v_seam_verts)
-                # Was the analysis actually meaningful? (ran on a mesh with uvs+verts)
-                # We use the presence of either set as evidence that analysis ran and
-                # found at least one axis' worth of duplicates.
-                _analysis_ran = bool(_any_u_found or _any_v_found)
-
-                if _any_u_found:
-                    # Seam analysis found u-duplicates: gate to faces touching a seam vert
-                    _face_has_u_seam = (vi0 in _node_u_seam_verts or
-                                        vi1 in _node_u_seam_verts or
-                                        vi2 in _node_u_seam_verts)
-                else:
-                    # Either no u-duplicates found, or analysis found only v-duplicates.
-                    # If analysis ran (v-seam found), there are genuinely no u-seam
-                    # duplicates → we still need to allow _paste_textured_triangle's
-                    # own seam detection for meshes that have seam faces without
-                    # positional-duplicate verts (e.g. non-skin area meshes).
-                    # Allow seam detection to run (True = don't skip).
-                    _face_has_u_seam = True
-
-                if _any_v_found:
-                    # Seam analysis found v-duplicates: gate to faces touching a seam vert
-                    _face_has_v_seam = (vi0 in _node_v_seam_verts or
-                                        vi1 in _node_v_seam_verts or
-                                        vi2 in _node_v_seam_verts)
-                elif _analysis_ran:
-                    # Analysis ran (u-seam found) but no v-seam duplicates exist.
-                    # This means the mesh genuinely has no V-axis seam faces
-                    # (e.g. bthair: u-seam at attachment points but continuous V).
-                    # DISABLE v-seam fix to preserve hair-strand black-tip fix (v10.4b).
+                if bool(getattr(node, "_external_imported", False)):
+                    # External FBX/OBJ/glTF texture atlases are authored in DCC
+                    # tools and normally keep every UV island inside 0..1.
+                    # KotOR's wrap-seam repair can mistake atlas island borders
+                    # for repeating texture seams and smear the wrong part of
+                    # the sheet across armor panels, so skip it for imports.
+                    _face_has_u_seam = False
                     _face_has_v_seam = False
                 else:
-                    # Analysis found nothing in either axis: allow both axes to run.
-                    _face_has_v_seam = True
+                    _any_u_found = bool(_node_u_seam_verts)
+                    _any_v_found = bool(_node_v_seam_verts)
+                    # Was the analysis actually meaningful? (ran on a mesh with uvs+verts)
+                    # We use the presence of either set as evidence that analysis ran and
+                    # found at least one axis' worth of duplicates.
+                    _analysis_ran = bool(_any_u_found or _any_v_found)
+
+                    if _any_u_found:
+                        # Seam analysis found u-duplicates: gate to faces touching a seam vert
+                        _face_has_u_seam = (vi0 in _node_u_seam_verts or
+                                            vi1 in _node_u_seam_verts or
+                                            vi2 in _node_u_seam_verts)
+                    else:
+                        # Either no u-duplicates found, or analysis found only v-duplicates.
+                        # If analysis ran (v-seam found), there are genuinely no u-seam
+                        # duplicates → we still need to allow _paste_textured_triangle's
+                        # own seam detection for meshes that have seam faces without
+                        # positional-duplicate verts (e.g. non-skin area meshes).
+                        # Allow seam detection to run (True = don't skip).
+                        _face_has_u_seam = True
+
+                    if _any_v_found:
+                        # Seam analysis found v-duplicates: gate to faces touching a seam vert
+                        _face_has_v_seam = (vi0 in _node_v_seam_verts or
+                                            vi1 in _node_v_seam_verts or
+                                            vi2 in _node_v_seam_verts)
+                    elif _analysis_ran:
+                        # Analysis ran (u-seam found) but no v-seam duplicates exist.
+                        # This means the mesh genuinely has no V-axis seam faces
+                        # (e.g. bthair: u-seam at attachment points but continuous V).
+                        # DISABLE v-seam fix to preserve hair-strand black-tip fix (v10.4b).
+                        _face_has_v_seam = False
+                    else:
+                        # Analysis found nothing in either axis: allow both axes to run.
+                        _face_has_v_seam = True
 
                 # Two-pass tier: opaque=0, transparent/additive/semi=1.
                 # Tier is the PRIMARY sort dimension — all opaque tris are drawn

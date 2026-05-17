@@ -1012,6 +1012,23 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             )
             return
 
+        if not self._selected_skeleton_template_model:
+            message = (
+                "Choose a KOTOR base skeleton before loading the custom mesh. "
+                "GhostRigger uses that base to auto-scale and orient the import."
+            )
+            if hasattr(self.inspector, "set_skeleton_template_status"):
+                self.inspector.set_skeleton_template_status(message, kind="warning")
+            self.bottom_strip.set_validation(
+                "warning", "BASE_SKELETON_REQUIRED", issues=[message]
+            )
+            self.statusBar().showMessage(message, 7000)
+            try:
+                self.inspector.set_step(1)
+            except Exception:
+                pass
+            return
+
         path, _selected = QtWidgets.QFileDialog.getOpenFileName(
             self,
             "Load Body Model",
@@ -1203,6 +1220,13 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                     source_path=str(getattr(result, "source_path", "") or ""),
                     prompt=True,
                 )
+                if (
+                    self._selected_skeleton_template_model is not None
+                    and hasattr(self.viewport, "set_external_skeleton")
+                ):
+                    self.viewport.set_external_skeleton(
+                        self._selected_skeleton_template_model
+                    )
                 if hasattr(self.viewport, "clear_acurig_guides"):
                     self.viewport.clear_acurig_guides()
         except Exception:                                    # pragma: no cover

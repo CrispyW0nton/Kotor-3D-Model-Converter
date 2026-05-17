@@ -597,6 +597,21 @@ def normalize_external_model_for_kotor(
     return result
 
 
+def _mark_external_import(model: Any, source_path: str) -> None:
+    """Tag external DCC meshes so the viewport treats their UV atlas plainly."""
+    metadata = getattr(model, "metadata", None)
+    if not isinstance(metadata, dict):
+        metadata = {}
+        setattr(model, "metadata", metadata)
+    metadata["external_import"] = {
+        "source_path": str(source_path or ""),
+        "disable_kotor_uv_seam_fix": True,
+    }
+    for node in list(getattr(model, "all_nodes", lambda: [])() or []):
+        if getattr(node, "vertices", None) and getattr(node, "uvs", None):
+            setattr(node, "_external_imported", True)
+
+
 def _load_utc(path: str, game_version: str) -> Optional[Any]:
     """Resolve a UTC's appearance and load the resulting body MDL.
 
@@ -724,6 +739,7 @@ def load_body(
 
     normalization: Dict[str, Any] = {}
     if ext in _GLTF_EXTS or ext in _FBX_EXTS:
+        _mark_external_import(model, path)
         normalization = normalize_external_model_for_kotor(
             model,
             game_version=gv,

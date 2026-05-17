@@ -239,9 +239,10 @@ class QtInspectorPanel(QtWidgets.QWidget):
 
     def _populate_load_page(self, layout: QtWidgets.QVBoxLayout) -> None:
         layout.addWidget(QtWidgets.QLabel(
-            "Load the source MDL / FBX / OBJ for this character mode.\n"
-            "Auto-detection will pick a CharacterMode after load."
+            "Choose the KOTOR base model/skeleton first, then load the\n"
+            "custom MDL / FBX / OBJ mesh that should fit that rig."
         ))
+        self._add_skeleton_template_picker(layout)
         btn = QtWidgets.QPushButton("Load Character…")
         btn.setProperty("accent", True)
         btn.clicked.connect(self.loadRequested.emit)
@@ -298,6 +299,46 @@ class QtInspectorPanel(QtWidgets.QWidget):
             if spin is not None:
                 spin.valueChanged.connect(self._emit_fit_adjustment)
         layout.addWidget(fit_group)
+
+    def _add_skeleton_template_picker(self, layout: QtWidgets.QVBoxLayout) -> None:
+        """AccuRig-style base-skeleton picker shown before custom import."""
+        template_group = QtWidgets.QGroupBox("KOTOR Base Skeleton")
+        template_layout = QtWidgets.QVBoxLayout(template_group)
+        template_layout.setSpacing(4)
+
+        template_row = QtWidgets.QHBoxLayout()
+        template_row.addWidget(QtWidgets.QLabel("Base:"))
+        self._skeleton_template_combo = QtWidgets.QComboBox()
+        self._skeleton_template_combo.setEditable(False)
+        self._skeleton_template_combo.setMinimumWidth(160)
+        self._skeleton_template_combo.setToolTip(
+            "Pick the shipped KOTOR body/creature model that the imported mesh "
+            "should match for scale, orientation, hooks, and animation retargeting."
+        )
+        self._skeleton_template_combo.currentIndexChanged.connect(
+            self._on_skeleton_template_index_changed
+        )
+        template_row.addWidget(self._skeleton_template_combo, 1)
+        template_layout.addLayout(template_row)
+
+        self._apply_skeleton_template_btn = QtWidgets.QPushButton("Use Skeleton")
+        self._apply_skeleton_template_btn.setToolTip(
+            "Attach this KOTOR skeleton to the loaded mesh after checking fit."
+        )
+        self._apply_skeleton_template_btn.clicked.connect(
+            self.applySkeletonTemplateRequested.emit
+        )
+        template_layout.addWidget(self._apply_skeleton_template_btn)
+
+        self._skeleton_template_status = QtWidgets.QLabel(
+            "Pick a KOTOR base first. The custom mesh will auto-fit to this preview."
+        )
+        self._skeleton_template_status.setStyleSheet(
+            f"color:{C.get('text2', '#888')}; font-size:8pt;"
+        )
+        self._skeleton_template_status.setWordWrap(True)
+        template_layout.addWidget(self._skeleton_template_status)
+        layout.addWidget(template_group)
 
     def _populate_check_model_page(self, layout: QtWidgets.QVBoxLayout) -> None:
         """Check-Model inspector page (M5 / T502).
@@ -543,46 +584,6 @@ class QtInspectorPanel(QtWidgets.QWidget):
 
         # ── M5 / T503 — Body-rig action buttons (body step only) ─────
         if step == _STEP_RIG_BODY:
-            template_group = QtWidgets.QGroupBox("KOTOR Skeleton")
-            template_layout = QtWidgets.QVBoxLayout(template_group)
-            template_layout.setSpacing(4)
-
-            template_row = QtWidgets.QHBoxLayout()
-            template_row.addWidget(QtWidgets.QLabel("Base:"))
-            self._skeleton_template_combo = QtWidgets.QComboBox()
-            self._skeleton_template_combo.setEditable(False)
-            self._skeleton_template_combo.setMinimumWidth(160)
-            self._skeleton_template_combo.setToolTip(
-                "Choose the KOTOR base model/supermodel before importing or binding."
-            )
-            self._skeleton_template_combo.currentIndexChanged.connect(
-                self._on_skeleton_template_index_changed
-            )
-            template_row.addWidget(self._skeleton_template_combo, 1)
-            template_layout.addLayout(template_row)
-
-            self._apply_skeleton_template_btn = QtWidgets.QPushButton(
-                "Use Skeleton"
-            )
-            self._apply_skeleton_template_btn.setToolTip(
-                "Attach the selected KOTOR base skeleton to the loaded body "
-                "before guide placement and weight generation."
-            )
-            self._apply_skeleton_template_btn.clicked.connect(
-                self.applySkeletonTemplateRequested.emit
-            )
-            template_layout.addWidget(self._apply_skeleton_template_btn)
-
-            self._skeleton_template_status = QtWidgets.QLabel(
-                "Choose a KOTOR base skeleton, then load the custom mesh to fit it."
-            )
-            self._skeleton_template_status.setStyleSheet(
-                f"color:{C.get('text2', '#888')}; font-size:8pt;"
-            )
-            self._skeleton_template_status.setWordWrap(True)
-            template_layout.addWidget(self._skeleton_template_status)
-            layout.addWidget(template_group)
-
             actions = QtWidgets.QGroupBox("Rig Body")
             actions_layout = QtWidgets.QVBoxLayout(actions)
             actions_layout.setSpacing(4)

@@ -15,8 +15,9 @@ This is the dedicated Phase 8 importer module extracted and extended from
   • ``FBXFallbackImporter`` wrapper that calls trimesh for FBX/OBJ/PLY files
   • ``auto_import(path)`` factory function
 
-KotOR UV convention: V is stored bottom-up (OpenGL).  GLTF stores V top-down
-(DirectX / DX-style), so we flip on import:  v_kotor = 1.0 - v_gltf.
+KotOR UV convention: V is stored bottom-up (OpenGL). GLTF stores (0, 0)
+at the image's upper-left, so we flip on import to match the viewport's
+internal texture convention: v_kotor = 1.0 - v_gltf.
 
 References:
   GLTF 2.0 specification: https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html

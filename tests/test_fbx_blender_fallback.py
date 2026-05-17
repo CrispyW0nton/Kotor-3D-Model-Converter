@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import pathlib
+import base64
 import sys
+import struct
 from types import SimpleNamespace
 
 import pytest
@@ -174,3 +176,84 @@ def test_gltf_import_bakes_parent_scale_into_bone_offsets():
     assert head.parent is model.find_node("Armature")
     assert head.bone_world_position() == (0.0, 0.0, 8.0)
     assert head.external_world_position == (0.0, 0.0, 8.0)
+
+
+def test_gltf_import_flips_texture_coordinates_to_viewport_convention():
+    """glTF UVs are upper-left-origin; GhostRigger stores bottom-left V."""
+    positions = struct.pack(
+        "<9f",
+        0.0, 0.0, 0.0,
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+    )
+    uvs = struct.pack(
+        "<6f",
+        0.125, 0.25,
+        0.875, 0.5,
+        0.25, 0.75,
+    )
+    indices = struct.pack("<3H", 0, 1, 2)
+    blob = positions + uvs + indices
+    gltf = {
+        "asset": {"version": "2.0"},
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "buffers": [{
+            "byteLength": len(blob),
+            "uri": "data:application/octet-stream;base64,"
+            + base64.b64encode(blob).decode("ascii"),
+        }],
+        "bufferViews": [
+            {"buffer": 0, "byteOffset": 0, "byteLength": len(positions)},
+            {"buffer": 0, "byteOffset": len(positions), "byteLength": len(uvs)},
+            {
+                "buffer": 0,
+                "byteOffset": len(positions) + len(uvs),
+                "byteLength": len(indices),
+            },
+        ],
+        "accessors": [
+            {
+                "bufferView": 0,
+                "componentType": 5126,
+                "count": 3,
+                "type": "VEC3",
+            },
+            {
+                "bufferView": 1,
+                "componentType": 5126,
+                "count": 3,
+                "type": "VEC2",
+            },
+            {
+                "bufferView": 2,
+                "componentType": 5123,
+                "count": 3,
+                "type": "SCALAR",
+            },
+        ],
+        "meshes": [{
+            "name": "uv_mesh",
+            "primitives": [{
+                "attributes": {"POSITION": 0, "TEXCOORD_0": 1},
+                "indices": 2,
+            }],
+        }],
+        "nodes": [{"name": "Root", "mesh": 0}],
+    }
+
+    model = gi.GLTFImporter()._import_builtin_bytes(
+        json.dumps(gltf).encode("utf-8"),
+        name="uv_test",
+        gv=gi.GameVersion.K1,
+        sm="NULL",
+        cl="character",
+    )
+
+    mesh = model.find_node("uv_mesh")
+    assert mesh is not None
+    assert mesh.uvs == pytest.approx([
+        (0.125, 0.75),
+        (0.875, 0.5),
+        (0.25, 0.25),
+    ])

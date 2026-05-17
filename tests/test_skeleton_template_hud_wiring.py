@@ -23,7 +23,7 @@ def test_inspector_exposes_skeleton_template_picker_controls() -> None:
 
     assert "skeletonTemplateSelected" in src
     assert "applySkeletonTemplateRequested" in src
-    assert 'QtWidgets.QGroupBox("KOTOR Skeleton")' in src
+    assert 'QtWidgets.QGroupBox("KOTOR Base Skeleton")' in src
     assert "set_skeleton_template_options" in src
     assert "selected_skeleton_template_key" in src
     assert "set_skeleton_template_status" in src
@@ -99,4 +99,15 @@ def test_viewport_preloads_textures_for_skin_nodes() -> None:
     assert "def _prewarm_textures" in viewport
     assert 'getattr(node, "is_skin", False)' in viewport
     assert "model.all_nodes()" in viewport
+
+
+def test_external_dcc_imports_disable_kotor_uv_seam_repair() -> None:
+    workflow = _read("src/core/headless_body_workflow.py")
+    viewport = _read("src/gui/viewport_core.py")
+
+    assert "def _mark_external_import" in workflow
+    assert 'setattr(node, "_external_imported", True)' in workflow
+    assert 'getattr(node, "_external_imported", False)' in viewport
+    assert "_face_has_u_seam = False" in viewport
+    assert "_face_has_v_seam = False" in viewport
 
