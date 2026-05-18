@@ -2060,6 +2060,33 @@ def available_preview_animations(scene: Any) -> CheckActorResult:
     if motion_source == MOTION_SOURCE_INHERITED:
         supermodel = str(motion_state.get("supermodel") or _body_supermodel(body))
         if not _is_null_supermodel(supermodel):
+            game_tag = str(getattr(scene, "game_version", "") or getattr(body, "game_version", "") or "K1")
+            available: List[Tuple[str, str]] = []
+            missing: List[Tuple[str, str]] = []
+            try:
+                from src.core.animation_engine import SuperModelResolver
+            except ImportError:                             # pragma: no cover
+                from core.animation_engine import SuperModelResolver  # type: ignore
+            if getattr(SuperModelResolver, "_resource_manager", None) is not None:
+                for label, anim_name in PREVIEW_ANIMATIONS:
+                    anim, _scale = SuperModelResolver.resolve_animation(
+                        body, anim_name, game_tag,
+                    )
+                    if anim is not None:
+                        available.append((label, anim_name))
+                    else:
+                        missing.append((label, anim_name))
+                if available or missing:
+                    return CheckActorResult(
+                        ok=True,
+                        available=available,
+                        missing=missing,
+                        message=(
+                            f"{len(available)} preview clip(s) resolved through "
+                            f"{supermodel}; {len(missing)} missing."
+                        ),
+                        code=("inherited" if available else "no_animations"),
+                    )
             return CheckActorResult(
                 ok=True,
                 available=list(PREVIEW_ANIMATIONS),
@@ -2145,6 +2172,58 @@ def available_preview_animations(scene: Any) -> CheckActorResult:
         missing=missing,
         message=(f"{len(available)} preview clip(s) available; "
                  f"{len(missing)} missing."),
+        code="listed",
+    )
+
+
+def available_animation_library(scene: Any) -> CheckActorResult:
+    """Enumerate every animation available to the current body.
+
+    This includes local clips and inherited supermodel clips when the
+    Character Builder has configured :class:`SuperModelResolver` with the
+    game resource manager.
+    """
+    body = _get_body_model(scene)
+    if body is None:
+        return CheckActorResult(
+            message="No body model loaded. Load and build the character first.",
+            code="no_body",
+        )
+
+    game_tag = str(getattr(scene, "game_version", "") or getattr(body, "game_version", "") or "K1")
+    try:
+        from src.core.animation_engine import SuperModelResolver
+    except ImportError:                                     # pragma: no cover
+        from core.animation_engine import SuperModelResolver  # type: ignore
+
+    entries: List[Tuple[str, str]] = []
+    try:
+        for name, source_model, _scale in SuperModelResolver.list_all_animations(body, game_tag):
+            label = f"{name} [{source_model}]"
+            entries.append((label, name))
+    except Exception:
+        entries = []
+
+    if not entries:
+        for anim in _iter_model_animations(body):
+            name = str(getattr(anim, "name", "") or "")
+            if name:
+                entries.append((f"{name} [{getattr(body, 'name', 'model')}]", name))
+
+    if not entries:
+        return CheckActorResult(
+            ok=True,
+            available=[],
+            missing=[],
+            message="No animations are available from the body or its supermodel chain.",
+            code="no_animations",
+        )
+
+    return CheckActorResult(
+        ok=True,
+        available=entries,
+        missing=[],
+        message=f"{len(entries)} animation clip(s) available.",
         code="listed",
     )
 
@@ -3372,6 +3451,7 @@ __all__ = [
     "apply_body_guide_positions",
     "apply_hand_masks",
     "assign_motion_source",
+    "available_animation_library",
     "available_preview_animations",
     "apply_external_model_fit_adjustment",
     "check_model",

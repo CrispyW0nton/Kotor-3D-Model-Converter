@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -54,6 +55,19 @@ def _issue_slot_text(issue: Any) -> str:
     )
     value = getattr(value, "value", value)
     return "" if value is None else str(value)
+
+
+def _attachment_type_from_resref(resref: str) -> str:
+    name = str(resref or "").lower()
+    if "lghtsbr" in name or "saber" in name:
+        return "lightsaber"
+    if name.startswith(("w_blstr", "w_rfl", "w_bow")):
+        return "blaster"
+    if name.startswith("w_"):
+        return "weapon"
+    if name.startswith(("i_mask", "ia_", "g_i_mask")):
+        return "headgear"
+    return "item"
 
 
 class _ValidationIssueTableModel(QtCore.QAbstractTableModel):
@@ -413,6 +427,14 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._manual_fit_scale: float = 1.0
         self._manual_fit_rotation: tuple[float, float, float] = (0.0, 0.0, 0.0)
         self._manual_fit_translation: tuple[float, float, float] = (0.0, 0.0, 0.0)
+        self._resource_manager: Optional[Any] = None
+        self._resource_manager_games: set[str] = set()
+        self._preview_attachment_path: str = ""
+        self._animation_engine: Optional[Any] = None
+        self._animation_last_tick: Optional[float] = None
+        self._animation_timer = QtCore.QTimer(self)
+        self._animation_timer.setInterval(16)
+        self._animation_timer.timeout.connect(self._tick_preview_animation)
         # M9 / T901 — live validation is intentionally debounced so
         # guide drags and slider-like controls do not spam the workflow
         # service while still refreshing the export banner promptly.
@@ -732,6 +754,12 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if hasattr(self.inspector, "refreshPreviewAnimationsRequested"):
             self.inspector.refreshPreviewAnimationsRequested.connect(
                 self._on_refresh_preview_animations_requested)
+        if hasattr(self.inspector, "browsePreviewAttachmentRequested"):
+            self.inspector.browsePreviewAttachmentRequested.connect(
+                self._on_browse_preview_attachment_requested)
+        if hasattr(self.inspector, "attachPreviewAttachmentRequested"):
+            self.inspector.attachPreviewAttachmentRequested.connect(
+                self._on_attach_preview_attachment_requested)
         # M12 / T1204 — mode-aware motion assignment replaces the
         # placeholder Add Motions action.
         if hasattr(self.inspector, "assignMotionsRequested"):
@@ -1433,6 +1461,55 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                     f"textures: {int(report.get('found_count', 0))} found"
                 )
         return dirs
+
+    def _ensure_game_resource_manager(self, game: str = "") -> Optional[Any]:
+        """Index the configured game install and wire it to animation/texture systems."""
+        game_key = str(game or getattr(self.scene, "game_version", "K1") or "K1").upper()
+        if game_key.endswith("2"):
+            game_key = "K2"
+        else:
+            game_key = "K1"
+        if self._resource_manager is None:
+            try:
+                from src.core.resource_manager import get_manager
+            except ImportError:                             # pragma: no cover
+                from core.resource_manager import get_manager  # type: ignore
+            self._resource_manager = get_manager()
+
+        if game_key not in self._resource_manager_games:
+            try:
+                from src.resources.game_detector import detect_kotor_dirs
+            except ImportError:                             # pragma: no cover
+                from resources.game_detector import detect_kotor_dirs  # type: ignore
+            k1_dir, k2_dir = detect_kotor_dirs(prefer_config=True)
+            if game_key == "K1" and k1_dir:
+                if self._resource_manager.set_k1_dir(k1_dir):
+                    self._resource_manager_games.add("K1")
+            elif game_key == "K2" and k2_dir:
+                if self._resource_manager.set_k2_dir(k2_dir):
+                    self._resource_manager_games.add("K2")
+
+        try:
+            from src.core.animation_engine import SuperModelResolver
+        except ImportError:                                 # pragma: no cover
+            from core.animation_engine import SuperModelResolver  # type: ignore
+        SuperModelResolver.configure(self._resource_manager)
+
+        viewport = getattr(self, "viewport", None)
+        if viewport is not None and hasattr(viewport, "set_resource_manager"):
+            try:
+                viewport.set_resource_manager(self._resource_manager, game_key)
+            except Exception:                               # pragma: no cover
+                log.debug("viewport.set_resource_manager failed", exc_info=True)
+        return self._resource_manager
+
+    def _body_model_for_preview(self) -> Optional[Any]:
+        try:
+            from src.core.model_data import PartSlot
+        except ImportError:                                 # pragma: no cover
+            from core.model_data import PartSlot  # type: ignore
+        entry = self.scene.get(PartSlot.HEADLESS_BODY)
+        return getattr(entry, "model", None) if entry is not None else None
 
     # ── M12 / T1202 — KOTOR skeleton template picker ────────────────────
 
@@ -2587,7 +2664,14 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         """
         from core import headless_body_workflow as _wf
 
+        self._ensure_game_resource_manager()
+
         result = _wf.available_preview_animations(self.scene)
+        library = (
+            _wf.available_animation_library(self.scene)
+            if hasattr(_wf, "available_animation_library")
+            else result
+        )
 
         if hasattr(self.inspector, "set_preview_animations"):
             try:
@@ -2596,6 +2680,13 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 )
             except Exception:                               # pragma: no cover
                 log.exception("inspector.set_preview_animations failed")
+        if hasattr(self.inspector, "set_animation_library"):
+            try:
+                self.inspector.set_animation_library(
+                    library.available, library.missing,
+                )
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_animation_library failed")
 
         # Pick the status kind based on the workflow code.
         if result.code == "no_body":
@@ -2611,7 +2702,8 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             except Exception:                               # pragma: no cover
                 log.exception("inspector.set_preview_status failed")
 
-        self.statusBar().showMessage(result.message, 5000)
+        msg = library.message if library.available else result.message
+        self.statusBar().showMessage(msg, 5000)
 
     @QtCore.Slot(str)
     def _on_play_preview_animation_requested(self, anim_name: str) -> None:
@@ -2624,10 +2716,11 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         """
         from core import headless_body_workflow as _wf
 
-        viewport = getattr(self, "viewport", None)
-        result = _wf.play_preview_animation(
-            self.scene, anim_name, viewport=viewport,
-        )
+        result = self._start_preview_animation(anim_name)
+        if result is None:
+            result = _wf.play_preview_animation(
+                self.scene, anim_name, viewport=None,
+            )
 
         if hasattr(self.inspector, "set_preview_status"):
             try:
@@ -2663,6 +2756,16 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         from core import headless_body_workflow as _wf
 
         viewport = getattr(self, "viewport", None)
+        timer = getattr(self, "_animation_timer", None)
+        if timer is not None:
+            timer.stop()
+        self._animation_last_tick = None
+        engine = getattr(self, "_animation_engine", None)
+        if engine is not None:
+            try:
+                engine.stop()
+            except Exception:
+                pass
         result = _wf.stop_preview_animation(viewport=viewport)
 
         if hasattr(self.inspector, "set_preview_status"):
@@ -2674,6 +2777,182 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 log.exception("inspector.set_preview_status failed")
 
         self.statusBar().showMessage(result.message, 4000)
+
+    def _start_preview_animation(self, anim_name: str) -> Optional[Any]:
+        """Start real AnimationEngine playback for local or inherited clips."""
+        body = self._body_model_for_preview()
+        if body is None:
+            return None
+        self._ensure_game_resource_manager()
+        try:
+            from src.core.animation_engine import AnimationEngine
+        except ImportError:                                 # pragma: no cover
+            from core.animation_engine import AnimationEngine  # type: ignore
+        engine = AnimationEngine(body)
+        if not engine.play(str(anim_name or ""), loop=True, blend=False):
+            return None
+        self._animation_engine = engine
+        self._animation_last_tick = None
+        anim = engine.current_animation
+        length = float(getattr(anim, "length", 0.0) or 0.0) if anim else 0.0
+        pose = engine.evaluate(0.0)
+        viewport = getattr(self, "viewport", None)
+        if viewport is not None and hasattr(viewport, "set_animation_pose"):
+            viewport.set_animation_pose(
+                pose,
+                name=str(getattr(anim, "name", anim_name) if anim else anim_name),
+                time=0.0,
+                length=length,
+            )
+        self._animation_timer.start()
+        from core.headless_body_workflow import CheckActorResult
+        return CheckActorResult(
+            ok=True,
+            playing=str(getattr(anim, "name", anim_name) if anim else anim_name),
+            length=length,
+            message=f"Playing '{getattr(anim, 'name', anim_name)}' ({length:.2f}s).",
+            code="playing",
+        )
+
+    def _tick_preview_animation(self) -> None:
+        engine = getattr(self, "_animation_engine", None)
+        if engine is None or not getattr(engine, "is_playing", False):
+            self._animation_timer.stop()
+            self._animation_last_tick = None
+            return
+        now = time.perf_counter()
+        if self._animation_last_tick is None:
+            dt = 1.0 / 30.0
+        else:
+            dt = max(1.0 / 60.0, min(now - self._animation_last_tick, 0.25))
+        self._animation_last_tick = now
+        still_playing = engine.advance(dt)
+        anim = engine.current_animation
+        pose = engine.evaluate()
+        length = float(getattr(anim, "length", 0.0) or 0.0) if anim else 0.0
+        name = str(getattr(anim, "name", "") or "")
+        viewport = getattr(self, "viewport", None)
+        if viewport is not None and hasattr(viewport, "set_animation_pose"):
+            viewport.set_animation_pose(
+                pose,
+                name=name,
+                time=engine.current_time,
+                length=length,
+            )
+        if length > 0:
+            try:
+                frame = int(max(0.0, min(engine.current_time / length, 1.0)) * length * 30)
+                self.bottom_strip.set_current_frame(frame)
+                self.bottom_strip.set_playing(True)
+            except Exception:
+                pass
+        if not still_playing:
+            self._animation_timer.stop()
+            self._animation_last_tick = None
+
+    @QtCore.Slot()
+    def _on_browse_preview_attachment_requested(self) -> None:
+        path, _selected = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Choose KOTOR weapon or equipment MDL",
+            "",
+            "KOTOR model (*.mdl);;All files (*.*)",
+        )
+        if not path:
+            return
+        self._preview_attachment_path = os.path.abspath(path)
+        if hasattr(self.inspector, "set_preview_attachment_source"):
+            self.inspector.set_preview_attachment_source(
+                path=self._preview_attachment_path,
+            )
+        if hasattr(self.inspector, "set_preview_attachment_status"):
+            self.inspector.set_preview_attachment_status(
+                f"Selected {Path(path).name}. Click Attach Preview.",
+                kind="ok",
+            )
+
+    @QtCore.Slot(str, str, str)
+    def _on_attach_preview_attachment_requested(
+        self,
+        socket: str,
+        resref: str,
+        path: str,
+    ) -> None:
+        try:
+            from core import asset_preview as _ap
+        except ImportError:                                 # pragma: no cover
+            from src.core import asset_preview as _ap        # type: ignore
+
+        game = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
+            getattr(self.scene, "game_version", "K1")
+        manager = self._ensure_game_resource_manager(game)
+        item_model = None
+        item_path = str(path or self._preview_attachment_path or "")
+        clean_resref = str(resref or "").strip()
+        if item_path and os.path.isfile(item_path):
+            try:
+                from core.kotor_loader import load_model_from_file
+            except ImportError:                              # pragma: no cover
+                from src.core.kotor_loader import load_model_from_file  # type: ignore
+            item_model = load_model_from_file(item_path)
+            clean_resref = clean_resref or Path(item_path).stem
+        elif manager is not None and clean_resref:
+            item_model = manager.load_model(clean_resref, str(game or "K1").upper())
+
+        spec = _ap.AttachmentSpec(
+            item_model=item_model,
+            item_resref=clean_resref,
+            item_path=item_path,
+            socket=str(socket or "rhand"),
+            attachment_type=_attachment_type_from_resref(clean_resref),
+        )
+        result = _ap.attach_item_to_preview(self.scene, spec)
+        kind = "ok" if result.ok else "error"
+        if hasattr(self.inspector, "set_preview_attachment_status"):
+            self.inspector.set_preview_attachment_status(result.message, kind=kind)
+        self.bottom_strip.set_validation(
+            "info" if result.ok else "warning",
+            (result.code or "attachment").upper(),
+            issues=[result.message] + list(getattr(result, "warnings", []) or []),
+        )
+        self.statusBar().showMessage(result.message, 6000)
+        if result.ok:
+            self._show_attachment_preview_model(
+                body=getattr(result, "body_model", None),
+                item=getattr(result, "item_model", None),
+                socket_world_transform=getattr(result, "socket_world_transform", None),
+            )
+            self._schedule_live_validation("preview_attachment")
+
+    def _show_attachment_preview_model(
+        self,
+        *,
+        body: Any,
+        item: Any,
+        socket_world_transform: Any,
+    ) -> None:
+        if body is None or item is None or not socket_world_transform:
+            return
+        try:
+            import copy
+            preview = copy.deepcopy(body)
+            item_copy = copy.deepcopy(item)
+            body_root = getattr(preview, "root_node", None)
+            item_root = getattr(item_copy, "root_node", None)
+            if body_root is None or item_root is None:
+                return
+            position, rotation = socket_world_transform
+            item_root.parent = body_root
+            item_root.position = tuple(position)
+            item_root.rotation = tuple(rotation)
+            body_root.children.append(item_root)
+            preview.name = f"{getattr(body, 'name', 'body')}_preview"
+            setattr(self.scene, "preview_model", preview)
+            viewport = getattr(self, "viewport", None)
+            if viewport is not None and hasattr(viewport, "load_model"):
+                viewport.load_model(preview)
+        except Exception:                                  # pragma: no cover
+            log.exception("Could not build attachment preview model")
 
     # ── M6 / T602 — Head Facial Palette slots ────────────────────────────
 

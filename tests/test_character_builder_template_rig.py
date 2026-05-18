@@ -94,3 +94,38 @@ def test_apply_template_rig_preserves_adjusted_template_scale_in_manual_mode() -
     assert math.isclose(rigged_hand.position[1], 0.5)
     assert math.isclose(rigged_hand.position[2], 0.75)
     assert result["scale"] == 1.0
+
+
+def test_apply_template_rig_preserves_kotor_helper_mesh_skeleton_hooks() -> None:
+    src_root = _node("import_root")
+    mesh = _node("body_mesh", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=src_root)
+    mesh.vertices = [(0.0, 0.0, 0.0)]
+    mesh.faces = [(0, 0, 0)]
+    mesh_model = KotorModel(name="body", root_node=src_root)
+
+    kotor_root = _node("PMBAM")
+    rootdummy = _node("rootdummy", parent=kotor_root)
+    torso = _node("torsoUpr_g", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=rootdummy)
+    torso.vertices = [(0.0, 0.0, 1.0)]
+    torso.faces = [(0, 0, 0)]
+    headhook = _node("headhook", parent=torso)
+    arm = _node("Rhand_g", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=torso)
+    arm.vertices = [(1.0, 0.0, 1.0)]
+    arm.faces = [(0, 0, 0)]
+    _node("rhand", parent=arm)
+    render_skin = _node("Torso", flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN), parent=kotor_root)
+    render_skin.vertices = [(0.0, 0.0, 0.0)]
+    render_skin.faces = [(0, 0, 0)]
+    template = KotorModel(name="pmbam", root_node=kotor_root)
+
+    result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual")
+
+    assert result["ok"] is True
+    rigged = result["model"]
+    assert rigged.find_node("headhook") is not None
+    assert rigged.find_node("rhand") is not None
+    assert rigged.find_node("torsoUpr_g") is not None
+    assert rigged.find_node("Rhand_g") is not None
+    assert rigged.find_node("Torso") is None
+    assert rigged.find_node("torsoUpr_g").is_mesh is False
+    assert rigged.find_node("Rhand_g").is_mesh is False

@@ -128,6 +128,8 @@ class QtInspectorPanel(QtWidgets.QWidget):
     playPreviewAnimationRequested = QtCore.Signal(str)    # (anim_name,)
     stopPreviewAnimationRequested = QtCore.Signal()
     refreshPreviewAnimationsRequested = QtCore.Signal()
+    browsePreviewAttachmentRequested = QtCore.Signal()
+    attachPreviewAttachmentRequested = QtCore.Signal(str, str, str)  # socket, resref, path
     # M6 / T602 — Head-mode facial-bone palette.
     headFacialBoneSelected    = QtCore.Signal(str)        # (bone_name,)
     rigHeadRequested          = QtCore.Signal()           # Head Rig step (M6/T601)
@@ -179,6 +181,10 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._motion_source_combo: Optional[QtWidgets.QComboBox] = None
         self._motion_supermodel_combo: Optional[QtWidgets.QComboBox] = None
         self._motion_assignment_status: Optional[QtWidgets.QLabel] = None
+        self._animation_library_combo: Optional[QtWidgets.QComboBox] = None
+        self._preview_attachment_resref_combo: Optional[QtWidgets.QComboBox] = None
+        self._preview_attachment_path: str = ""
+        self._preview_attachment_status: Optional[QtWidgets.QLabel] = None
         self._rom_test_btn: Optional[QtWidgets.QPushButton] = None
         self._build()
 
@@ -425,6 +431,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
         attach_layout.setVerticalSpacing(4)
 
         socket_combo = QtWidgets.QComboBox()
+        self._preview_attachment_socket_combo = socket_combo
         for label, value in [
             ("Right hand / weapon", "rhand"),
             ("Left hand", "lhand"),
@@ -438,23 +445,44 @@ class QtInspectorPanel(QtWidgets.QWidget):
         attach_layout.addWidget(socket_combo, 0, 1)
 
         item_combo = QtWidgets.QComboBox()
+        item_combo.setEditable(True)
+        self._preview_attachment_resref_combo = item_combo
         for label, value in [
-            ("None", ""),
-            ("Blaster", "blaster"),
-            ("Sword", "sword"),
-            ("Lightsaber", "lightsaber"),
-            ("Head model", "head"),
-            ("Headgear", "headgear"),
-            ("Belt", "belt"),
+            ("Blaster pistol - w_blstrpstl_001", "w_blstrpstl_001"),
+            ("Blaster rifle - w_blstrcrbn_001", "w_blstrcrbn_001"),
+            ("Short sword - w_vbroshort_001", "w_vbroshort_001"),
+            ("Lightsaber - w_lghtsbr_001", "w_lghtsbr_001"),
+            ("Vibroblade - w_vbroblade_001", "w_vbroblade_001"),
         ]:
             item_combo.addItem(label, value)
-        attach_layout.addWidget(QtWidgets.QLabel("Item:"), 1, 0)
+        attach_layout.addWidget(QtWidgets.QLabel("Model:"), 1, 0)
         attach_layout.addWidget(item_combo, 1, 1)
 
+        browse_btn = QtWidgets.QPushButton("Browse MDL...")
+        browse_btn.clicked.connect(self.browsePreviewAttachmentRequested.emit)
+        attach_layout.addWidget(browse_btn, 2, 0)
+
         attach_btn = QtWidgets.QPushButton("Attach Preview")
-        attach_btn.setEnabled(False)
-        attach_btn.setToolTip("Socket preview loading is staged for the next polish pass.")
+        attach_btn.setProperty("accent", True)
+        attach_btn.setToolTip("Load the selected KOTOR weapon/item model and attach it to the chosen socket.")
+
+        def _emit_attach():
+            socket = str(socket_combo.currentData() or socket_combo.currentText() or "")
+            resref = str(item_combo.currentData() or item_combo.currentText() or "")
+            self.attachPreviewAttachmentRequested.emit(
+                socket,
+                resref.strip(),
+                str(getattr(self, "_preview_attachment_path", "") or ""),
+            )
+
+        attach_btn.clicked.connect(_emit_attach)
         attach_layout.addWidget(attach_btn, 2, 1)
+
+        status = QtWidgets.QLabel("Choose a socket and a KOTOR item model.")
+        status.setStyleSheet(f"color:{C.get('text2', '#888')}; font-size:8pt;")
+        status.setWordWrap(True)
+        self._preview_attachment_status = status
+        attach_layout.addWidget(status, 3, 0, 1, 2)
         layout.addWidget(attach_group)
 
         # Head/facial preview panels remain HEAD-mode only, but now live under
@@ -1223,6 +1251,43 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._motion_assignment_status.setWordWrap(True)
         layout.addWidget(self._motion_assignment_status)
 
+        library_group = QtWidgets.QGroupBox("Animation Library")
+        library_layout = QtWidgets.QVBoxLayout(library_group)
+        library_layout.setContentsMargins(8, 8, 8, 8)
+        library_layout.setSpacing(6)
+        self._animation_library_combo = QtWidgets.QComboBox()
+        self._animation_library_combo.setMinimumWidth(220)
+        self._animation_library_combo.setToolTip(
+            "All clips available from the body model and its KOTOR supermodel chain."
+        )
+        library_layout.addWidget(self._animation_library_combo)
+
+        library_buttons = QtWidgets.QHBoxLayout()
+        refresh_library_btn = QtWidgets.QPushButton("Load Library")
+        refresh_library_btn.clicked.connect(self.refreshPreviewAnimationsRequested.emit)
+        library_buttons.addWidget(refresh_library_btn)
+
+        play_library_btn = QtWidgets.QPushButton("Play Selected")
+        play_library_btn.setProperty("accent", True)
+
+        def _emit_library_play():
+            combo = getattr(self, "_animation_library_combo", None)
+            if combo is None:
+                return
+            name = str(combo.currentData() or combo.currentText() or "")
+            if name:
+                self.playPreviewAnimationRequested.emit(name)
+
+        play_library_btn.clicked.connect(_emit_library_play)
+        library_buttons.addWidget(play_library_btn)
+
+        stop_library_btn = QtWidgets.QPushButton("Stop")
+        stop_library_btn.clicked.connect(self.stopPreviewAnimationRequested.emit)
+        library_buttons.addWidget(stop_library_btn)
+        library_buttons.addStretch(1)
+        library_layout.addLayout(library_buttons)
+        layout.addWidget(library_group)
+
     def selected_motion_source(self) -> str:
         combo = getattr(self, "_motion_source_combo", None)
         if combo is None:
@@ -1268,6 +1333,44 @@ class QtInspectorPanel(QtWidgets.QWidget):
                     sm_combo.setCurrentIndex(i)
                     return
             sm_combo.setEditText(supermodel)
+
+    def set_animation_library(self, available, missing=None) -> None:
+        combo = getattr(self, "_animation_library_combo", None)
+        if combo is None:
+            return
+        with QtCore.QSignalBlocker(combo):
+            combo.clear()
+            for label, name in (available or []):
+                combo.addItem(str(label), userData=str(name))
+            for label, name in (missing or []):
+                combo.addItem(f"{label} ({name}) - missing", userData="")
+        if available:
+            combo.setCurrentIndex(0)
+
+    def set_preview_attachment_source(self, *, resref: str = "", path: str = "") -> None:
+        self._preview_attachment_path = str(path or "")
+        combo = getattr(self, "_preview_attachment_resref_combo", None)
+        if combo is not None and resref:
+            combo.setEditText(str(resref))
+        if path and not resref:
+            stem = QtCore.QFileInfo(path).baseName()
+            if combo is not None:
+                combo.setEditText(stem)
+
+    def set_preview_attachment_status(self, message: str, *, kind: str = "info") -> None:
+        label = getattr(self, "_preview_attachment_status", None)
+        if label is None:
+            return
+        palette = {
+            "info":    "#888888",
+            "ok":      "#7ed957",
+            "warning": "#ffd166",
+            "error":   "#ff6b6b",
+        }
+        label.setStyleSheet(
+            f"color:{palette.get(kind, palette['info'])}; font-size:8pt;"
+        )
+        label.setText(message)
 
     def _populate_validate_page(self, layout: QtWidgets.QVBoxLayout) -> None:
         """M5 / T506 — Validate + Export step.

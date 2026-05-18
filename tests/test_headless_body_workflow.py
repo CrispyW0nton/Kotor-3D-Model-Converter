@@ -1427,6 +1427,46 @@ def test_t1204_assign_inherited_supermodel_sets_body_and_preview_list():
     assert preview.missing == []
 
 
+def test_t1204_animation_library_lists_real_supermodel_chain(monkeypatch):
+    scene, body = _scene_with_animated_body()
+    body.supermodel = "S_Male02"
+    body.anim_scale = 1.0
+    wf.assign_motion_source(
+        scene,
+        wf.MOTION_SOURCE_INHERITED,
+        supermodel="S_Male02",
+    )
+
+    super_model = _FakeBodyModel("S_Male02")
+    super_model.supermodel = "NULL"
+    super_model.anim_scale = 1.0
+    super_model.animations = [
+        _FakeAnimation("pause1", 1.0),
+        _FakeAnimation("walk", 1.2),
+        _FakeAnimation("run", 0.8),
+    ]
+
+    class _RM:
+        def load_model(self, resref, game="K1"):
+            return super_model if str(resref).lower() == "s_male02" else None
+
+    from src.core.animation_engine import SuperModelResolver
+
+    SuperModelResolver.clear_cache()
+    SuperModelResolver.configure(_RM())
+    try:
+        preview = wf.available_preview_animations(scene)
+        library = wf.available_animation_library(scene)
+    finally:
+        SuperModelResolver.clear_cache()
+        SuperModelResolver.configure(None)
+
+    assert preview.code == "inherited"
+    assert {name for _label, name in preview.available} == {"pause1", "walk", "run"}
+    assert "tlknorm" in {name for _label, name in preview.missing}
+    assert {name for _label, name in library.available} >= {"pause1", "walk", "run"}
+
+
 def test_t1204_play_inherited_preview_succeeds_without_local_clip():
     scene, body = _scene_with_animated_body()
     body.supermodel = "NULL"

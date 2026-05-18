@@ -977,20 +977,72 @@ def _is_mesh_payload_node(node: Any) -> bool:
 
 
 def _strip_render_geometry_from_skeleton(node: Any) -> int:
-    """Remove mesh/skin children from a copied template skeleton tree."""
+    """Remove visible reference meshes from a copied template skeleton tree.
+
+    KotOR character rigs are unusual: many deformation joints are stored as
+    tiny trimesh helper nodes (``pelvis_g``, ``Rhand_g``) with children below
+    them.  Deleting every mesh node destroys the actual skeleton and loses
+    hooks such as ``rhand``/``headhook``.  Keep helper-style mesh nodes as
+    empty dummies and only drop leaf render payloads such as ``Torso``/``LArm``.
+    """
     if node is None:
         return 0
     removed = 0
     kept = []
     for child in list(getattr(node, "children", []) or []):
         if _is_mesh_payload_node(child):
-            removed += 1
-            continue
+            if _is_template_skeleton_helper(child):
+                _clear_template_render_payload(child)
+            else:
+                removed += 1
+                continue
         removed += _strip_render_geometry_from_skeleton(child)
         child.parent = node
         kept.append(child)
     node.children = kept
     return removed
+
+
+def _is_template_skeleton_helper(node: Any) -> bool:
+    """Return True for KotOR deformation-helper mesh nodes to preserve."""
+    name = str(getattr(node, "name", "") or "").strip().lower()
+    if name.endswith(("_g", "_dum")):
+        return True
+    if name in {"rootdummy", "cutscenedummy", "talkdummy"}:
+        return True
+    # Any mesh node that parents other nodes is part of the transform chain.
+    return bool(getattr(node, "children", None))
+
+
+def _clear_template_render_payload(node: Any) -> None:
+    """Turn a reference mesh/helper into an empty transform node."""
+    try:
+        from core.model_data import NodeFlags  # type: ignore
+    except ImportError:                         # pragma: no cover
+        from src.core.model_data import NodeFlags  # type: ignore
+
+    for attr in (
+        "vertices", "normals", "tangents", "uvs", "uvs_lm", "uvs_2", "uvs_3",
+        "faces", "face_mats", "face_uvs", "skin_data", "bone_map",
+        "bone_map_floats", "qbone_list", "tbone_list", "dangly_constraints",
+    ):
+        try:
+            setattr(node, attr, [])
+        except Exception:
+            pass
+    try:
+        flags = int(getattr(node, "flags", 0))
+        strip = (
+            int(NodeFlags.MESH)
+            | int(NodeFlags.SKIN)
+            | int(NodeFlags.DANGLY)
+            | int(NodeFlags.AABB)
+            | int(NodeFlags.SABER)
+        )
+        node.flags = int((flags | int(NodeFlags.HEADER)) & ~strip)
+    except Exception:
+        pass
+    node.render = False
 
 
 def _clean_mesh_payload_node(node: Any) -> Any:
