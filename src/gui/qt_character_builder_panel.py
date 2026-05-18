@@ -525,7 +525,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         # Tool toggles.
         self._symmetry_action = QtGui.QAction("Symmetry", self)
         self._symmetry_action.setCheckable(True)
+        self._symmetry_action.setChecked(True)
         self._symmetry_action.setToolTip("Mirror placement across X")
+        self._symmetry_action.toggled.connect(self._on_joint_symmetry_toggled)
         toolbar.addAction(self._symmetry_action)
 
         self._snap_action = QtGui.QAction("Snap", self)

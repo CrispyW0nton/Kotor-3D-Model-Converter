@@ -497,8 +497,9 @@ class QtInspectorPanel(QtWidgets.QWidget):
         # Symmetry checkbox.
         symmetry_row = QtWidgets.QHBoxLayout()
         symmetry_cb = QtWidgets.QCheckBox("Symmetry")
+        symmetry_cb.setChecked(True)
         symmetry_cb.setToolTip("Mirror placement across the X axis "
-                               "(driven by grig.SymmetryEngine).")
+                               "(driven by the viewport mirror-pair map).")
         symmetry_cb.toggled.connect(self.symmetryToggled.emit)
         symmetry_row.addWidget(symmetry_cb)
         symmetry_row.addStretch(1)

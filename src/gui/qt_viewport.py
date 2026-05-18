@@ -343,6 +343,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gimbal_model_applied_translation = (0.0, 0.0, 0.0)
         self._gimbal_model_applied_rotation = 0.0
         self._gimbal_model_applied_scale = 1.0
+        self._snap_key_down: bool = False
         self._undo_limit = 250
         self._undo_stack: list[dict] = []
         self._redo_stack: list[dict] = []
@@ -638,6 +639,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self.set_selected_node(root_node)
         except Exception:
             log.debug("Could not select imported model root", exc_info=True)
+        self.auto_snap_external_skeleton_to_imported_unreal()
         self._request_render()
         self._queue_post_load_gpu_refresh()
 
@@ -676,6 +678,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._renderer._ext_skel_scale = 1.0
         self._renderer._ext_skel_selected_node = None
         self._renderer._ext_skel_selected_ids = set()
+        self._selected_joint_nodes = []
         try:
             self._renderer._ext_skel_offset = [
                 float(offset[0]),
@@ -686,6 +689,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._renderer._ext_skel_offset = [0.0, 0.0, 0.0]
         if offset == (0.0, 0.0, 0.0):
             self._fit_external_skeleton_overlay(model)
+        self.auto_snap_external_skeleton_to_imported_unreal()
         self._request_render()
 
     def clear_external_skeleton(self) -> None:
@@ -1248,6 +1252,247 @@ class QtViewportWidget(QtWidgets.QWidget):
         scale = max(1e-6, float(getattr(self._renderer, "_ext_skel_scale", 1.0) or 1.0))
         return (delta[0] / scale, delta[1] / scale, delta[2] / scale)
 
+    @staticmethod
+    def _snap_normalize_name(name: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "", str(name or "").lower())
+
+    def _all_model_nodes(self, model) -> list:
+        if model is None:
+            return []
+        try:
+            return list(model.all_nodes())
+        except Exception:
+            root = getattr(model, "root_node", None)
+            if root is None:
+                return []
+            nodes = []
+            stack = [root]
+            seen = set()
+            while stack:
+                node = stack.pop()
+                if id(node) in seen:
+                    continue
+                seen.add(id(node))
+                nodes.append(node)
+                stack.extend(getattr(node, "children", []) or [])
+            return nodes
+
+    def _find_node_by_alias(self, model, aliases: list[str]):
+        nodes = self._all_model_nodes(model)
+        by_norm = {self._snap_normalize_name(getattr(node, "name", "")): node for node in nodes}
+        for alias in aliases:
+            found = by_norm.get(self._snap_normalize_name(alias))
+            if found is not None:
+                return found
+        return None
+
+    def _node_overlay_world_position(self, node) -> tuple[float, float, float]:
+        if self._is_external_skeleton_node(node):
+            return self._external_overlay_world_position(node)
+        try:
+            return tuple(float(v) for v in node.bone_world_position())
+        except Exception:
+            try:
+                wp, _wo, _ = self._renderer._node_world_transform(node)
+                return tuple(float(v) for v in wp)
+            except Exception:
+                return tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0)))
+
+    def _move_external_node_to_overlay_world(self, node, target_world: tuple[float, float, float]) -> bool:
+        if node is None or not self._is_external_skeleton_node(node):
+            return False
+        current_world = self._external_overlay_world_position(node)
+        delta_world = (
+            float(target_world[0]) - current_world[0],
+            float(target_world[1]) - current_world[1],
+            float(target_world[2]) - current_world[2],
+        )
+        delta_local = self._external_world_delta_to_local(delta_world)
+        try:
+            pos = tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0)))
+            node.position = (
+                pos[0] + delta_local[0],
+                pos[1] + delta_local[1],
+                pos[2] + delta_local[2],
+            )
+            self._evict_transform_cache(node)
+            return True
+        except Exception:
+            return False
+
+    _UE_AUTO_SNAP_MAP = {
+        "rhand": ["RForearmTwist02_end", "r_forearmtwist02_end", "R_Hand", "hand_r"],
+        "rhandg": ["RForearmTwist02_end", "r_forearmtwist02_end", "R_Hand", "hand_r"],
+        "rforearm": ["R_ForearmTwist01", "RForearmTwist01", "lowerarm_r"],
+        "rforearmg": ["R_ForearmTwist01", "RForearmTwist01", "lowerarm_r"],
+        "rbiceplg": ["R_UpperarmTwist02", "RUpperarmTwist02", "upperarm_twist_02_r"],
+        "rbicepg": ["R_UpperarmTwist01", "RUpperarmTwist01", "upperarm_r"],
+        "rcollar": ["R_Clavicle", "clavicle_r"],
+        "rcollarg": ["R_Clavicle", "clavicle_r"],
+        "rcollardum": ["R_Clavicle", "clavicle_r"],
+        "lhand": ["LForearmTwist02_end", "l_forearmtwist02_end", "L_Hand", "hand_l"],
+        "lhandg": ["LForearmTwist02_end", "l_forearmtwist02_end", "L_Hand", "hand_l"],
+        "lforearm": ["L_ForearmTwist01", "LForearmTwist01", "lowerarm_l"],
+        "lforearmg": ["L_ForearmTwist01", "LForearmTwist01", "lowerarm_l"],
+        "lbiceplg": ["L_UpperarmTwist02", "LUpperarmTwist02", "upperarm_twist_02_l"],
+        "lbicepg": ["L_UpperarmTwist01", "LUpperarmTwist01", "upperarm_l"],
+        "lcollar": ["L_Clavicle", "clavicle_l"],
+        "lcollarg": ["L_Clavicle", "clavicle_l"],
+        "lcollardum": ["L_Clavicle", "clavicle_l"],
+        "head": ["head", "Head"],
+        "headg": ["head", "Head"],
+        "pelvis": ["pelvis", "Pelvis", "root"],
+        "rootdummy": ["pelvis", "Pelvis", "root"],
+    }
+
+    def _imported_model_has_unreal_skeleton(self) -> bool:
+        nodes = self._all_model_nodes(self.model)
+        normalized = {self._snap_normalize_name(getattr(node, "name", "")) for node in nodes}
+        return any(
+            name in normalized
+            for name in (
+                "rforearmtwist02end",
+                "lforearmtwist02end",
+                "rforearmtwist01",
+                "lforearmtwist01",
+                "rupperarmtwist01",
+                "lupperarmtwist01",
+                "rupperarmtwist02",
+                "lupperarmtwist02",
+                "rclavicle",
+                "lclavicle",
+                "upperarmr",
+                "upperarml",
+                "lowerarmr",
+                "lowerarml",
+                "handr",
+                "handl",
+                "clavicler",
+                "claviclel",
+                "pelvis",
+            )
+        )
+
+    def auto_snap_external_skeleton_to_imported_unreal(self) -> int:
+        """Snap known KOTOR reference bones to matching UE mannequin bones."""
+        ext_model = getattr(self._renderer, "_ext_skeleton", None)
+        if ext_model is None or self.model is None or not self._imported_model_has_unreal_skeleton():
+            return 0
+        moved = 0
+        for ext_node in self._all_model_nodes(ext_model):
+            key = self._snap_normalize_name(getattr(ext_node, "name", ""))
+            aliases = self._UE_AUTO_SNAP_MAP.get(key)
+            if not aliases:
+                continue
+            src_node = self._find_node_by_alias(self.model, aliases)
+            if src_node is None:
+                continue
+            if self._move_external_node_to_overlay_world(ext_node, self._node_overlay_world_position(src_node)):
+                moved += 1
+        if moved:
+            self._renderer._wt_cache.clear()
+            self._request_render(fast=True)
+        return moved
+
+    def _nearest_imported_bone_at(self, sx: int, sy: int, radius: int = 18):
+        if self.model is None:
+            return None
+        w = self.canvas.width() or 800
+        h = self.canvas.height() or 600
+        best_node = None
+        best_d2 = radius * radius
+        for node in self._all_model_nodes(self.model):
+            if getattr(node, "is_mesh", False) or getattr(node, "is_skin", False):
+                continue
+            name = getattr(node, "name", "") or ""
+            if not name:
+                continue
+            try:
+                wp = self._node_overlay_world_position(node)
+                sp = self._renderer._proj(wp[0], wp[1], wp[2], w, h)
+            except Exception:
+                sp = None
+            if sp is None:
+                continue
+            d2 = (float(sp[0]) - float(sx)) ** 2 + (float(sp[1]) - float(sy)) ** 2
+            if d2 < best_d2:
+                best_d2 = d2
+                best_node = node
+        return best_node
+
+    def _snap_selected_external_bones_to_imported_at_cursor(self, sx: int, sy: int) -> bool:
+        target = self._nearest_imported_bone_at(sx, sy)
+        if target is None:
+            return False
+        selected = [
+            node for node in (self._selected_joint_nodes or [self._renderer.selected_node])
+            if self._is_external_skeleton_node(node)
+        ]
+        if not selected:
+            return False
+        target_world = self._node_overlay_world_position(target)
+        moved = False
+        for node in selected:
+            moved = self._move_external_node_to_overlay_world(node, target_world) or moved
+        if moved:
+            self._request_render(fast=True)
+        return moved
+
+    @staticmethod
+    def _gimbal_world_axis(axis_name: str) -> tuple[float, float, float]:
+        return {"X": (1.0, 0.0, 0.0), "Y": (0.0, 1.0, 0.0)}.get(
+            axis_name,
+            (0.0, 0.0, 1.0),
+        )
+
+    def _projected_axis_delta(
+        self,
+        axis_name: str,
+        origin_world: tuple[float, float, float],
+        dx_screen: float,
+        dy_screen: float,
+        world_per_px: float,
+    ) -> tuple[float, float, float]:
+        """Return a world delta that follows the visible gimbal axis on screen."""
+        w_dir = self._gimbal_world_axis(axis_name)
+        arm = max(float(world_per_px) * 120.0, 0.01)
+        w = self.canvas.width() or 800
+        h = self.canvas.height() or 600
+        try:
+            start_sp = self._renderer._proj(
+                origin_world[0],
+                origin_world[1],
+                origin_world[2],
+                w,
+                h,
+            )
+            end_sp = self._renderer._proj(
+                origin_world[0] + w_dir[0] * arm,
+                origin_world[1] + w_dir[1] * arm,
+                origin_world[2] + w_dir[2] * arm,
+                w,
+                h,
+            )
+        except Exception:
+            start_sp = end_sp = None
+        if start_sp is not None and end_sp is not None:
+            sx = float(end_sp[0]) - float(start_sp[0])
+            sy = float(end_sp[1]) - float(start_sp[1])
+            length = math.sqrt(sx * sx + sy * sy)
+            if length >= 1e-6:
+                pixels_along = (float(dx_screen) * sx + float(dy_screen) * sy) / length
+                delta = (pixels_along / length) * arm
+                return (delta * w_dir[0], delta * w_dir[1], delta * w_dir[2])
+
+        right, up, _fwd, _eye = self.camera._view_matrix()
+        sc_x = w_dir[0] * right[0] + w_dir[1] * right[1] + w_dir[2] * right[2]
+        sc_y = w_dir[0] * up[0] + w_dir[1] * up[1] + w_dir[2] * up[2]
+        ll = math.sqrt(sc_x * sc_x + sc_y * sc_y)
+        if ll < 1e-6:
+            return (0.0, 0.0, 0.0)
+        delta = ((float(dx_screen) * sc_x + (-float(dy_screen)) * sc_y) / ll) * world_per_px
+        return (delta * w_dir[0], delta * w_dir[1], delta * w_dir[2])
+
     def refresh_node_transform(self, node=None) -> None:
         if node is not None:
             before = getattr(node, "_gr_undo_before_transform", None)
@@ -1397,6 +1642,9 @@ class QtViewportWidget(QtWidgets.QWidget):
                 # T404: keep the snap-view bar pinned top-center.
                 self._reposition_snap_view()
                 return False
+            if et == QtCore.QEvent.FocusOut:
+                self._snap_key_down = False
+                return False
             if et == QtCore.QEvent.MouseButtonPress:
                 self.canvas.setFocus()
                 action = self._navigation_action(event.button(), event.modifiers())
@@ -1428,6 +1676,9 @@ class QtViewportWidget(QtWidgets.QWidget):
                 return True
             if et == QtCore.QEvent.KeyPress:
                 key = event.key()
+                if key == QtCore.Qt.Key_V and not event.isAutoRepeat():
+                    self._snap_key_down = True
+                    return True
                 modifiers = event.modifiers()
                 no_modifiers = not (
                     modifiers
@@ -1462,6 +1713,10 @@ class QtViewportWidget(QtWidgets.QWidget):
                     self.xray_button.click()
                     return True
                 if self._handle_view_key(event):
+                    return True
+            if et == QtCore.QEvent.KeyRelease:
+                if event.key() == QtCore.Qt.Key_V and not event.isAutoRepeat():
+                    self._snap_key_down = False
                     return True
         return super().eventFilter(obj, event)
 
@@ -2693,6 +2948,16 @@ class QtViewportWidget(QtWidgets.QWidget):
     def _drag_lmb(self, event) -> None:
         x, y = int(event.position().x()), int(event.position().y())
         if self._gimbal_dragging and self._renderer.selected_node:
+            if (
+                self._snap_key_down
+                and self._renderer.gimbal_mode == 1
+                and self._selection_targets_external_skeleton(
+                    self._selected_joint_nodes or [self._renderer.selected_node]
+                )
+                and self._snap_selected_external_bones_to_imported_at_cursor(x, y)
+            ):
+                self._request_render(fast=True)
+                return
             self._apply_gimbal_drag(x, y)
             self._request_render(fast=True)
             return
@@ -3024,21 +3289,19 @@ class QtViewportWidget(QtWidgets.QWidget):
                 dy_screen,
                 world_per_px,
                 axis,
+                wp,
             )
             return
 
         if self._renderer.gimbal_mode == 1:
-            right, up, _fwd, _eye = self.camera._view_matrix()
-
             def axis_delta(axis_name: str):
-                w_dir = {"X": (1.0, 0.0, 0.0), "Y": (0.0, 1.0, 0.0)}.get(axis_name, (0.0, 0.0, 1.0))
-                sc_x = w_dir[0] * right[0] + w_dir[1] * right[1] + w_dir[2] * right[2]
-                sc_y = w_dir[0] * up[0] + w_dir[1] * up[1] + w_dir[2] * up[2]
-                ll = math.sqrt(sc_x * sc_x + sc_y * sc_y)
-                if ll < 1e-6:
-                    return (0.0, 0.0, 0.0)
-                delta = ((dx_screen * sc_x + (-dy_screen) * sc_y) / ll) * world_per_px
-                return (delta * w_dir[0], delta * w_dir[1], delta * w_dir[2])
+                return self._projected_axis_delta(
+                    axis_name,
+                    wp,
+                    dx_screen,
+                    dy_screen,
+                    world_per_px,
+                )
 
             if len(axis) == 1:
                 d = axis_delta(axis)
@@ -3099,12 +3362,18 @@ class QtViewportWidget(QtWidgets.QWidget):
         dx_screen: float,
         dy_screen: float,
         world_per_px: float,
+        origin_world: tuple[float, float, float] | None = None,
     ) -> tuple[float, float, float]:
+        if origin_world is not None:
+            return self._projected_axis_delta(
+                axis_name,
+                origin_world,
+                dx_screen,
+                dy_screen,
+                world_per_px,
+            )
         right, up, _fwd, _eye = self.camera._view_matrix()
-        w_dir = {"X": (1.0, 0.0, 0.0), "Y": (0.0, 1.0, 0.0)}.get(
-            axis_name,
-            (0.0, 0.0, 1.0),
-        )
+        w_dir = self._gimbal_world_axis(axis_name)
         sc_x = w_dir[0] * right[0] + w_dir[1] * right[1] + w_dir[2] * right[2]
         sc_y = w_dir[0] * up[0] + w_dir[1] * up[1] + w_dir[2] * up[2]
         ll = math.sqrt(sc_x * sc_x + sc_y * sc_y)
@@ -3119,6 +3388,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         dy_screen: float,
         world_per_px: float,
         axis: str,
+        origin_world: tuple[float, float, float] | None = None,
     ) -> None:
         if self.model is None:
             return
@@ -3134,10 +3404,23 @@ class QtViewportWidget(QtWidgets.QWidget):
                     dx_screen,
                     dy_screen,
                     world_per_px,
+                    origin_world,
                 )
             else:
-                d1 = self._model_gimbal_axis_delta(axis[0], dx_screen, dy_screen, world_per_px)
-                d2 = self._model_gimbal_axis_delta(axis[1], dx_screen, dy_screen, world_per_px)
+                d1 = self._model_gimbal_axis_delta(
+                    axis[0],
+                    dx_screen,
+                    dy_screen,
+                    world_per_px,
+                    origin_world,
+                )
+                d2 = self._model_gimbal_axis_delta(
+                    axis[1],
+                    dx_screen,
+                    dy_screen,
+                    world_per_px,
+                    origin_world,
+                )
                 target = (d1[0] + d2[0], d1[1] + d2[1], d1[2] + d2[2])
             prev = self._gimbal_model_applied_translation
             translation_delta = tuple(target[i] - prev[i] for i in range(3))

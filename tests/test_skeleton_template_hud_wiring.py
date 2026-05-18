@@ -168,6 +168,8 @@ def test_viewport_supports_multi_joint_marquee_and_group_drag() -> None:
 def test_external_template_skeleton_is_selectable_and_symmetry_aware() -> None:
     viewport = _read("src/gui/qt_viewport.py")
     core = _read("src/gui/viewport_core.py")
+    builder = _read("src/gui/qt_character_builder_panel.py")
+    inspector = _read("src/gui/qt_inspector_panel.py")
 
     assert "_ext_bone_screen_positions" in core
     assert "self._ext_bone_screen_positions.append" in core
@@ -176,6 +178,9 @@ def test_external_template_skeleton_is_selectable_and_symmetry_aware() -> None:
     assert "def _is_external_skeleton_node" in viewport
     assert "_external_world_delta_to_local" in viewport
     assert "lcollar_dum/rcollar_dum" in viewport
+    assert "self._symmetry_action.toggled.connect(self._on_joint_symmetry_toggled)" in builder
+    assert "symmetry_cb.setChecked(True)" in inspector
+    assert "def set_joint_symmetry" in viewport
 
 
 def test_selected_imported_mesh_outline_uses_projected_mesh_hull_not_bbox() -> None:
@@ -225,4 +230,33 @@ def test_gpu_renderer_clamps_single_tile_character_atlases_like_cpu_renderer() -
     assert "gl_diff.repeat_x = not _node_clamp_s" in gpu
     assert "_gr_gpu_uv_v_flip" in gpu
     assert "img._gr_gpu_uv_v_flip = False" in viewport
+
+
+def test_unreal_skeleton_auto_snap_and_v_key_snap_are_wired() -> None:
+    viewport = _read("src/gui/qt_viewport.py")
+
+    assert "_UE_AUTO_SNAP_MAP" in viewport
+    assert '"rhandg": ["RForearmTwist02_end"' in viewport
+    assert '"rforearmg": ["R_ForearmTwist01"' in viewport
+    assert '"rbiceplg": ["R_UpperarmTwist02"' in viewport
+    assert '"rcollardum": ["R_Clavicle"' in viewport
+    assert "def _imported_model_has_unreal_skeleton" in viewport
+    assert "def auto_snap_external_skeleton_to_imported_unreal" in viewport
+    assert "self.auto_snap_external_skeleton_to_imported_unreal()" in viewport
+    assert "def _nearest_imported_bone_at" in viewport
+    assert "def _snap_selected_external_bones_to_imported_at_cursor" in viewport
+    assert "self._snap_key_down = True" in viewport
+    assert "self._snap_key_down = False" in viewport
+    assert "_snap_selected_external_bones_to_imported_at_cursor(x, y)" in viewport
+
+
+def test_gimbal_translation_uses_projected_visible_axis_direction() -> None:
+    viewport = _read("src/gui/qt_viewport.py")
+
+    assert "def _projected_axis_delta" in viewport
+    assert "start_sp = self._renderer._proj" in viewport
+    assert "end_sp = self._renderer._proj" in viewport
+    assert "pixels_along = (float(dx_screen) * sx + float(dy_screen) * sy) / length" in viewport
+    assert "return self._projected_axis_delta(" in viewport
+    assert "origin_world" in viewport
 
