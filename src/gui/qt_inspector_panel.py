@@ -362,9 +362,9 @@ class QtInspectorPanel(QtWidgets.QWidget):
         browse_btn.clicked.connect(self.browseSkeletonTemplateRequested.emit)
         template_layout.addWidget(browse_btn)
 
-        self._apply_skeleton_template_btn = QtWidgets.QPushButton("Use Skeleton")
+        self._apply_skeleton_template_btn = QtWidgets.QPushButton("Build KOTOR Skeleton")
         self._apply_skeleton_template_btn.setToolTip(
-            "Attach this KOTOR skeleton to the loaded mesh after checking fit."
+            "Replace any imported armature with this adjusted KOTOR skeleton."
         )
         self._apply_skeleton_template_btn.clicked.connect(
             self.applySkeletonTemplateRequested.emit
@@ -372,7 +372,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
         template_layout.addWidget(self._apply_skeleton_template_btn)
 
         self._skeleton_template_status = QtWidgets.QLabel(
-            "Pick a KOTOR base first. The custom mesh will auto-fit to this preview."
+            "Pick a KOTOR base first, align the mesh, then build the final skeleton."
         )
         self._skeleton_template_status.setStyleSheet(
             f"color:{C.get('text2', '#888')}; font-size:8pt;"

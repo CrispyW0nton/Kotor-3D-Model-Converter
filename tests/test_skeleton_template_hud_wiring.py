@@ -25,6 +25,7 @@ def test_inspector_exposes_skeleton_template_picker_controls() -> None:
     assert "browseSkeletonTemplateRequested" in src
     assert "applySkeletonTemplateRequested" in src
     assert 'QtWidgets.QGroupBox("KOTOR Base Skeleton")' in src
+    assert 'QtWidgets.QPushButton("Build KOTOR Skeleton")' in src
     assert "setEditable(True)" in src
     assert "MatchContains" in src
     assert "Browse MDL..." in src
@@ -61,7 +62,8 @@ def test_builder_wires_template_selection_to_preview_and_apply() -> None:
     assert "max_results=8000" in src
     assert "_load_skeleton_template_model" in src
     assert "load_game_skeleton_source" in src
-    assert "apply_template_rig(mesh_model, template_model, game=game)" in src
+    assert "apply_template_rig(" in src
+    assert 'scale_mode="manual"' in src
     assert "scene.assign" in src
 
 

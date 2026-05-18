@@ -1733,7 +1733,13 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if template_model is None:
             template_model = self._load_skeleton_template_model(option)
             self._selected_skeleton_template_model = template_model
-        result = _cb.apply_template_rig(mesh_model, template_model, game=game)
+        result = _cb.apply_template_rig(
+            mesh_model,
+            template_model,
+            game=game,
+            scale_mode="manual",
+            scale_factor=1.0,
+        )
 
         if not bool(result.get("ok")):
             message = str(result.get("message") or "Template skeleton apply failed.")
