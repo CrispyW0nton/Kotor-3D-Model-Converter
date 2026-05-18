@@ -2,14 +2,14 @@
 src/gui/qt_inspector_panel.py — Right-side contextual inspector (M2 / T203)
 
 The Character Builder's right inspector is a :class:`QStackedWidget`
-whose pages are keyed by **step number** (1..8) — the same numbering
+whose pages are keyed by **step number** (1..5) — the same numbering
 used by :class:`QtWorkflowRail` (T202).  Selecting a step in the rail
 swaps the inspector to the matching page.
 
-Each page hosts the AccuRig-equivalent control bundle for that step
-(audit §4.3): joint-name combo, symmetry toggle, mask controls,
-midpoint-placement push-pin, hemisphere mesh probe, joint opacity /
-size sliders, and the trailing 'Add Motions' / 'Export' actions.
+Each page hosts the controls for the practical KOTOR modding path:
+choose a base skeleton and import mesh, assign the cleaned KOTOR
+skeleton, assign animations, preview equipment/attachments, and export
+a game-ready MDL.
 
 The widgets here are **placeholders wired to signals** — they expose
 the surface that downstream milestones (M4 joint-dot HUD, M5/M6/M7/M8
@@ -51,14 +51,22 @@ from .qt_theme import C, heading
 
 
 # Canonical step numbers (must stay aligned with qt_workflow_rail.py).
-_STEP_LOAD          = 1
-_STEP_CHECK_MODEL   = 2
-_STEP_RIG_BODY      = 3
-_STEP_RIG_HANDS     = 4
-_STEP_RIG_FACE      = 5
-_STEP_CHECK_ACTOR   = 6
-_STEP_MOTIONS       = 7
-_STEP_VALIDATE      = 8
+_STEP_LOAD              = 1
+_STEP_ASSIGN_SKELETON   = 2
+_STEP_ASSIGN_ANIMATIONS = 3
+_STEP_PREVIEW           = 4
+_STEP_EXPORT_MDL        = 5
+
+# Backward-compatible internal aliases.  Older M5/M6 slot names still describe
+# parts of the implementation, but the visible rail is now the five-step launch
+# workflow above.
+_STEP_CHECK_MODEL = _STEP_ASSIGN_SKELETON
+_STEP_RIG_BODY = _STEP_ASSIGN_SKELETON
+_STEP_RIG_HANDS = _STEP_ASSIGN_SKELETON
+_STEP_RIG_FACE = _STEP_PREVIEW
+_STEP_CHECK_ACTOR = _STEP_PREVIEW
+_STEP_MOTIONS = _STEP_ASSIGN_ANIMATIONS
+_STEP_VALIDATE = _STEP_EXPORT_MDL
 
 # Default page title per step (used by every mode — the rail decides
 # which steps appear, but if a mode reuses step 3 for "Body Rig" or
@@ -66,13 +74,10 @@ _STEP_VALIDATE      = 8
 # specific copy can be layered in later via a setter.
 _PAGE_TITLES: Dict[int, str] = {
     _STEP_LOAD:        "1. Choose Base + Load Mesh",
-    _STEP_CHECK_MODEL: "2. Check Fit",
-    _STEP_RIG_BODY:    "3. Create Skeleton",
-    _STEP_RIG_HANDS:   "4. Align Bones",
-    _STEP_RIG_FACE:    "5. Preview Attachments",
-    _STEP_CHECK_ACTOR: "6. Preview Animations",
-    _STEP_MOTIONS:     "7. Assign Motions",
-    _STEP_VALIDATE:    "8. Validate + Export",
+    _STEP_ASSIGN_SKELETON: "2. Assign Skeleton",
+    _STEP_ASSIGN_ANIMATIONS: "3. Assign Animations",
+    _STEP_PREVIEW: "4. Preview",
+    _STEP_EXPORT_MDL: "5. Export MDL",
 }
 
 
@@ -160,6 +165,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
         # M12 / T1202 — AccuRig-style skeleton picker on the body-rig HUD.
         self._skeleton_template_combo: Optional[QtWidgets.QComboBox] = None
         self._skeleton_template_status: Optional[QtWidgets.QLabel] = None
+        self._skeleton_template_status_labels: List[QtWidgets.QLabel] = []
         self._apply_skeleton_template_btn: Optional[QtWidgets.QPushButton] = None
         self._fit_scale_spin: Optional[QtWidgets.QDoubleSpinBox] = None
         self._fit_rot_x_spin: Optional[QtWidgets.QDoubleSpinBox] = None
@@ -197,11 +203,10 @@ class QtInspectorPanel(QtWidgets.QWidget):
         )
         root.addWidget(self._stack, 1)
 
-        # Build one page per canonical step.  Order matters: index 0 is
-        # step 1 (Load), ..., index 7 is step 8 (Validate+Export).
-        for step in (_STEP_LOAD, _STEP_CHECK_MODEL, _STEP_RIG_BODY,
-                     _STEP_RIG_HANDS, _STEP_RIG_FACE, _STEP_CHECK_ACTOR,
-                     _STEP_MOTIONS, _STEP_VALIDATE):
+        # Build one page per canonical launch step.
+        for step in (_STEP_LOAD, _STEP_ASSIGN_SKELETON,
+                     _STEP_ASSIGN_ANIMATIONS, _STEP_PREVIEW,
+                     _STEP_EXPORT_MDL):
             page = self._build_page_for_step(step)
             idx = self._stack.addWidget(page)
             self._step_to_index[step] = idx
@@ -223,15 +228,13 @@ class QtInspectorPanel(QtWidgets.QWidget):
 
         if step == _STEP_LOAD:
             self._populate_load_page(layout)
-        elif step == _STEP_CHECK_MODEL:
-            self._populate_check_model_page(layout)
-        elif step in (_STEP_RIG_BODY, _STEP_RIG_HANDS, _STEP_RIG_FACE):
-            self._populate_rig_page(layout, step)
-        elif step == _STEP_CHECK_ACTOR:
-            self._populate_check_actor_page(layout)
-        elif step == _STEP_MOTIONS:
+        elif step == _STEP_ASSIGN_SKELETON:
+            self._populate_assign_skeleton_page(layout)
+        elif step == _STEP_ASSIGN_ANIMATIONS:
             self._populate_motions_page(layout)
-        elif step == _STEP_VALIDATE:
+        elif step == _STEP_PREVIEW:
+            self._populate_preview_page(layout)
+        elif step == _STEP_EXPORT_MDL:
             self._populate_validate_page(layout)
         else:                                                # pragma: no cover
             layout.addWidget(QtWidgets.QLabel(f"(no page for step {step})"))
@@ -362,24 +365,116 @@ class QtInspectorPanel(QtWidgets.QWidget):
         browse_btn.clicked.connect(self.browseSkeletonTemplateRequested.emit)
         template_layout.addWidget(browse_btn)
 
+        picker_status = QtWidgets.QLabel(
+            "Pick a KOTOR base first. Align the imported mesh to this skeleton in the viewport."
+        )
+        picker_status.setStyleSheet(
+            f"color:{C.get('text2', '#888')}; font-size:8pt;"
+        )
+        picker_status.setWordWrap(True)
+        self._skeleton_template_status_labels.append(picker_status)
+        template_layout.addWidget(picker_status)
+        layout.addWidget(template_group)
+
+    def _populate_assign_skeleton_page(self, layout: QtWidgets.QVBoxLayout) -> None:
+        """Step 2 — commit the adjusted KOTOR skeleton to the imported mesh."""
+        layout.addWidget(QtWidgets.QLabel(
+            "Confirm the adjusted KOTOR skeleton and replace any armature that came\n"
+            "from the imported FBX/OBJ source."
+        ))
+
+        build_group = QtWidgets.QGroupBox("Build Skeleton")
+        build_layout = QtWidgets.QVBoxLayout(build_group)
+        build_layout.setContentsMargins(8, 8, 8, 8)
+        build_layout.setSpacing(6)
+
         self._apply_skeleton_template_btn = QtWidgets.QPushButton("Build KOTOR Skeleton")
+        self._apply_skeleton_template_btn.setProperty("accent", True)
         self._apply_skeleton_template_btn.setToolTip(
-            "Replace any imported armature with this adjusted KOTOR skeleton."
+            "Replace any imported armature with the adjusted KOTOR skeleton."
         )
         self._apply_skeleton_template_btn.clicked.connect(
             self.applySkeletonTemplateRequested.emit
         )
-        template_layout.addWidget(self._apply_skeleton_template_btn)
+        build_layout.addWidget(self._apply_skeleton_template_btn)
 
-        self._skeleton_template_status = QtWidgets.QLabel(
-            "Pick a KOTOR base first, align the mesh, then build the final skeleton."
+        build_status = QtWidgets.QLabel(
+            "No skeleton has been built for this mesh yet."
         )
-        self._skeleton_template_status.setStyleSheet(
+        build_status.setStyleSheet(
             f"color:{C.get('text2', '#888')}; font-size:8pt;"
         )
-        self._skeleton_template_status.setWordWrap(True)
-        template_layout.addWidget(self._skeleton_template_status)
-        layout.addWidget(template_group)
+        build_status.setWordWrap(True)
+        self._skeleton_template_status = build_status
+        self._skeleton_template_status_labels.append(build_status)
+        build_layout.addWidget(build_status)
+        layout.addWidget(build_group)
+
+        self._populate_check_model_page(layout)
+
+    def _populate_preview_page(self, layout: QtWidgets.QVBoxLayout) -> None:
+        """Step 4 — preview sockets, equipment, and animations."""
+        layout.addWidget(QtWidgets.QLabel(
+            "Preview the built character with KOTOR sockets, equipment, and animations."
+        ))
+
+        attach_group = QtWidgets.QGroupBox("Attachment Preview")
+        attach_layout = QtWidgets.QGridLayout(attach_group)
+        attach_layout.setContentsMargins(8, 8, 8, 8)
+        attach_layout.setHorizontalSpacing(6)
+        attach_layout.setVerticalSpacing(4)
+
+        socket_combo = QtWidgets.QComboBox()
+        for label, value in [
+            ("Right hand / weapon", "rhand"),
+            ("Left hand", "lhand"),
+            ("Lightsaber hook", "LightsaberHook"),
+            ("Head hook", "headhook"),
+            ("Camera hook", "camerahook"),
+            ("Impact bolt", "impact_bolt"),
+        ]:
+            socket_combo.addItem(label, value)
+        attach_layout.addWidget(QtWidgets.QLabel("Socket:"), 0, 0)
+        attach_layout.addWidget(socket_combo, 0, 1)
+
+        item_combo = QtWidgets.QComboBox()
+        for label, value in [
+            ("None", ""),
+            ("Blaster", "blaster"),
+            ("Sword", "sword"),
+            ("Lightsaber", "lightsaber"),
+            ("Head model", "head"),
+            ("Headgear", "headgear"),
+            ("Belt", "belt"),
+        ]:
+            item_combo.addItem(label, value)
+        attach_layout.addWidget(QtWidgets.QLabel("Item:"), 1, 0)
+        attach_layout.addWidget(item_combo, 1, 1)
+
+        attach_btn = QtWidgets.QPushButton("Attach Preview")
+        attach_btn.setEnabled(False)
+        attach_btn.setToolTip("Socket preview loading is staged for the next polish pass.")
+        attach_layout.addWidget(attach_btn, 2, 1)
+        layout.addWidget(attach_group)
+
+        # Head/facial preview panels remain HEAD-mode only, but now live under
+        # the broader Preview step instead of the old Face Rig page.
+        head_palette = self._build_head_facial_palette()
+        layout.addWidget(head_palette)
+        head_palette.setVisible(False)
+        self._head_face_palette = head_palette
+
+        viseme_panel = self._build_viseme_panel()
+        layout.addWidget(viseme_panel)
+        viseme_panel.setVisible(False)
+        self._head_viseme_panel = viseme_panel
+
+        phoneme_panel = self._build_phoneme_panel()
+        layout.addWidget(phoneme_panel)
+        phoneme_panel.setVisible(False)
+        self._head_phoneme_panel = phoneme_panel
+
+        self._populate_check_actor_page(layout)
 
     def _populate_check_model_page(self, layout: QtWidgets.QVBoxLayout) -> None:
         """Check-Model inspector page (M5 / T502).
@@ -896,8 +991,12 @@ class QtInspectorPanel(QtWidgets.QWidget):
     def set_skeleton_template_status(
         self, message: str, *, kind: str = "info"
     ) -> None:
-        label = getattr(self, "_skeleton_template_status", None)
-        if label is None:                                  # pragma: no cover
+        labels = list(getattr(self, "_skeleton_template_status_labels", []) or [])
+        if not labels:
+            label = getattr(self, "_skeleton_template_status", None)
+            if label is not None:
+                labels = [label]
+        if not labels:                                     # pragma: no cover
             return
         palette = {
             "info":    "#888888",
@@ -906,8 +1005,9 @@ class QtInspectorPanel(QtWidgets.QWidget):
             "error":   "#ff6b6b",
         }
         colour = palette.get(kind, palette["info"])
-        label.setStyleSheet(f"color:{colour}; font-size:8pt;")
-        label.setText(message)
+        for label in labels:
+            label.setStyleSheet(f"color:{colour}; font-size:8pt;")
+            label.setText(message)
 
     def _populate_check_actor_page(self, layout: QtWidgets.QVBoxLayout) -> None:
         """M5 / T505 — Check-Actor step: preview-animation player.
@@ -1095,7 +1195,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
         layout.addWidget(source_box)
 
         btn_row = QtWidgets.QHBoxLayout()
-        assign_btn = QtWidgets.QPushButton("Assign Motions")
+        assign_btn = QtWidgets.QPushButton("Assign Animations")
         assign_btn.setProperty("accent", True)
         assign_btn.clicked.connect(self.assignMotionsRequested.emit)
         btn_row.addWidget(assign_btn)

@@ -632,10 +632,9 @@ def test_workflow_rail_uses_accurig_step_language_and_button_styling():
         encoding="utf-8"
     )
     assert "Choose Base + Load Mesh" in source
-    assert "Create Skeleton" in source
-    assert "Align Bones" in source
-    assert "Preview Attachments" in source
-    assert "Preview Animations" in source
-    assert "Assign Motions" in source
+    assert "Assign Skeleton" in source
+    assert "Assign Animations" in source
+    assert "Preview" in source
+    assert "Export MDL" in source
     assert "GuidedRigRailBrand" in source
     assert "border:1px solid {C.get('accent'" in source

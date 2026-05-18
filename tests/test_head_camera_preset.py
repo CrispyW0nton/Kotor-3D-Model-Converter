@@ -85,7 +85,7 @@ def qapp():
 @pytest.fixture
 def inspector(qapp):
     ip = QtInspectorPanel()
-    ip.set_step(5)
+    ip.set_step(4)
     yield ip
     ip.deleteLater()
 

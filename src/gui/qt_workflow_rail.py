@@ -2,9 +2,9 @@
 src/gui/qt_workflow_rail.py — Left-rail workflow widget (M2 / T202)
 
 The Character Builder's left-rail step list, ported from the AccuRig HUD
-reference (audit §4.2).  The rail is **mode-aware**: the visible step
-sequence changes when the user switches CharacterMode in the toolbar,
-but step numbering stays consistent.
+reference (audit §4.2).  The rail is mode-aware for status text and future
+gates, but the visible sequence is intentionally unified around the practical
+KOTOR modder path.
 
 Public surface
 --------------
@@ -45,23 +45,20 @@ except Exception:                                       # pragma: no cover
 
 # ── Step lists per mode (audit §4.2) ────────────────────────────────────────
 #
-# Each entry is (step_number, label).  Step numbering is intentionally
-# *consistent* across modes so the inspector pages line up 1:1 (see T203);
-# a step that doesn't apply to a mode is simply absent from that mode's
-# list rather than renumbered.
+# Each entry is (step_number, label).  The Character Builder now follows the
+# practical modder path instead of the older milestone/task list:
+# pick a KOTOR base, import and align the mesh, commit the skeleton, assign
+# animations, preview attachments/animation, then export a game-ready MDL.
 #
 # These are module-level so they can be unit-tested and overridden by
 # tools without monkey-patching the widget.
 
 _STEPS_UNIFIED_CHARACTER_BUILDER: List[Tuple[int, str]] = [
     (1, "Choose Base + Load Mesh"),
-    (2, "Check Fit"),
-    (3, "Create Skeleton"),
-    (4, "Align Bones"),
-    (5, "Preview Attachments"),
-    (6, "Preview Animations"),
-    (7, "Assign Motions"),
-    (8, "Validate + Export"),
+    (2, "Assign Skeleton"),
+    (3, "Assign Animations"),
+    (4, "Preview"),
+    (5, "Export MDL"),
 ]
 
 _STEPS_HEADLESS_BODY: List[Tuple[int, str]] = [
@@ -82,16 +79,19 @@ _STEPS_CREATURE: List[Tuple[int, str]] = [
 
 _STEPS_FALLBACK: List[Tuple[int, str]] = [
     (1, "Choose Base + Load Mesh"),
-    (8, "Validate + Export"),
+    (2, "Assign Skeleton"),
+    (3, "Assign Animations"),
+    (4, "Preview"),
+    (5, "Export MDL"),
 ]
 
 
 def _steps_for_mode(mode) -> List[Tuple[int, str]]:
     """Return the (step_number, label) list for the given CharacterMode.
 
-    Tolerates ``None`` (empty rail) and the AMBIGUOUS / UNSUPPORTED
-    fallbacks (single-step "Load" + "Export" hint so the user always
-    has somewhere to start).
+    Tolerates ``None`` and the AMBIGUOUS / UNSUPPORTED fallbacks by keeping
+    the same five-step launch workflow visible so the user always has a clear
+    path forward.
     """
     if mode is None or not _CHARACTER_MODE_AVAILABLE:
         return list(_STEPS_FALLBACK)
@@ -113,13 +113,10 @@ _ROLE_GATE_REASON = QtCore.Qt.UserRole + 2
 
 _ICON_FOR_STEP = {
     1: "loadmodel",
-    2: "diag",
-    3: "skeleton",
-    4: "rig",
-    5: "head",
-    6: "anims",
-    7: "library",
-    8: "export",
+    2: "skeleton",
+    3: "library",
+    4: "anims",
+    5: "export",
 }
 
 
@@ -133,7 +130,7 @@ class QtWorkflowRail(QtWidgets.QWidget):
     """
 
     # Emitted when the user clicks an *enabled* step.  Payload: 1-based
-    # step number (1..8 in the canonical list).
+    # step number (1..5 in the canonical launch list).
     stepSelected = QtCore.Signal(int)
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):

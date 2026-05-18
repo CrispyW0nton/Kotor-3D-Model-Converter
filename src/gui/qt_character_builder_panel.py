@@ -284,15 +284,15 @@ class QtCharacterBuilderPanel(QtWidgets.QWidget):
         blurb = QtWidgets.QLabel(
             "The full Character Builder opens in its own window.  It hosts the\n"
             "AccuRig-style HUD (joint dots, mini-thumbnail, snap-view, weight\n"
-            "heat-map) and the seven-step mode-aware workflow rail."
+            "heat-map) and the five-step KOTOR character export workflow."
         )
         blurb.setWordWrap(True)
         blurb.setStyleSheet(f"color:{C.get('text2', '#888')}; padding:2px 0;")
         root.addWidget(blurb)
 
-        # The seven workflow steps as a read-only summary so the user
+        # The five workflow steps as a read-only summary so the user
         # can see what the builder will guide them through.
-        steps_label = QtWidgets.QLabel("Headless-Body workflow (M5):")
+        steps_label = QtWidgets.QLabel("Character Builder workflow:")
         steps_label.setStyleSheet(
             f"color:{C.get('gold', '#FFD700')}; font-weight:bold; padding-top:6px;"
         )
@@ -308,13 +308,11 @@ class QtCharacterBuilderPanel(QtWidgets.QWidget):
             f"               border:1px solid {C.get('bg3', '#222')}; }}"
         )
         for i, label in enumerate([
-            "1. Load Body",
-            "2. Check Model",
-            "3. Body Rig",
-            "4. Hand Rig",
-            "5. Check Actor",
-            "6. Add Motions",
-            "7. Validate + Export",
+            "1. Choose Base + Load Mesh",
+            "2. Assign Skeleton",
+            "3. Assign Animations",
+            "4. Preview",
+            "5. Export MDL",
         ], start=1):
             QtWidgets.QListWidgetItem(label, steps_list)
         root.addWidget(steps_list, 1)
