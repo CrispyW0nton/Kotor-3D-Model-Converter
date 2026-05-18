@@ -232,17 +232,12 @@ def test_gpu_renderer_clamps_single_tile_character_atlases_like_cpu_renderer() -
     assert "img._gr_gpu_uv_v_flip = False" in viewport
 
 
-def test_unreal_skeleton_auto_snap_and_v_key_snap_are_wired() -> None:
+def test_manual_v_key_bone_snap_is_wired_without_auto_snap() -> None:
     viewport = _read("src/gui/qt_viewport.py")
 
-    assert "_UE_AUTO_SNAP_MAP" in viewport
-    assert '"rhandg": ["RForearmTwist02_end"' in viewport
-    assert '"rforearmg": ["R_ForearmTwist01"' in viewport
-    assert '"rbiceplg": ["R_UpperarmTwist02"' in viewport
-    assert '"rcollardum": ["R_Clavicle"' in viewport
-    assert "def _imported_model_has_unreal_skeleton" in viewport
-    assert "def auto_snap_external_skeleton_to_imported_unreal" in viewport
-    assert "self.auto_snap_external_skeleton_to_imported_unreal()" in viewport
+    assert "_UE_AUTO_SNAP_MAP" not in viewport
+    assert "def auto_snap_external_skeleton_to_imported_unreal" not in viewport
+    assert "self.auto_snap_external_skeleton_to_imported_unreal()" not in viewport
     assert "def _nearest_imported_bone_at" in viewport
     assert "def _snap_selected_external_bones_to_imported_at_cursor" in viewport
     assert "self._snap_key_down = True" in viewport

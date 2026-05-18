@@ -639,7 +639,6 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self.set_selected_node(root_node)
         except Exception:
             log.debug("Could not select imported model root", exc_info=True)
-        self.auto_snap_external_skeleton_to_imported_unreal()
         self._request_render()
         self._queue_post_load_gpu_refresh()
 
@@ -689,7 +688,6 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._renderer._ext_skel_offset = [0.0, 0.0, 0.0]
         if offset == (0.0, 0.0, 0.0):
             self._fit_external_skeleton_overlay(model)
-        self.auto_snap_external_skeleton_to_imported_unreal()
         self._request_render()
 
     def clear_external_skeleton(self) -> None:
@@ -1252,10 +1250,6 @@ class QtViewportWidget(QtWidgets.QWidget):
         scale = max(1e-6, float(getattr(self._renderer, "_ext_skel_scale", 1.0) or 1.0))
         return (delta[0] / scale, delta[1] / scale, delta[2] / scale)
 
-    @staticmethod
-    def _snap_normalize_name(name: str) -> str:
-        return re.sub(r"[^a-z0-9]+", "", str(name or "").lower())
-
     def _all_model_nodes(self, model) -> list:
         if model is None:
             return []
@@ -1276,15 +1270,6 @@ class QtViewportWidget(QtWidgets.QWidget):
                 nodes.append(node)
                 stack.extend(getattr(node, "children", []) or [])
             return nodes
-
-    def _find_node_by_alias(self, model, aliases: list[str]):
-        nodes = self._all_model_nodes(model)
-        by_norm = {self._snap_normalize_name(getattr(node, "name", "")): node for node in nodes}
-        for alias in aliases:
-            found = by_norm.get(self._snap_normalize_name(alias))
-            if found is not None:
-                return found
-        return None
 
     def _node_overlay_world_position(self, node) -> tuple[float, float, float]:
         if self._is_external_skeleton_node(node):
@@ -1319,80 +1304,6 @@ class QtViewportWidget(QtWidgets.QWidget):
             return True
         except Exception:
             return False
-
-    _UE_AUTO_SNAP_MAP = {
-        "rhand": ["RForearmTwist02_end", "r_forearmtwist02_end", "R_Hand", "hand_r"],
-        "rhandg": ["RForearmTwist02_end", "r_forearmtwist02_end", "R_Hand", "hand_r"],
-        "rforearm": ["R_ForearmTwist01", "RForearmTwist01", "lowerarm_r"],
-        "rforearmg": ["R_ForearmTwist01", "RForearmTwist01", "lowerarm_r"],
-        "rbiceplg": ["R_UpperarmTwist02", "RUpperarmTwist02", "upperarm_twist_02_r"],
-        "rbicepg": ["R_UpperarmTwist01", "RUpperarmTwist01", "upperarm_r"],
-        "rcollar": ["R_Clavicle", "clavicle_r"],
-        "rcollarg": ["R_Clavicle", "clavicle_r"],
-        "rcollardum": ["R_Clavicle", "clavicle_r"],
-        "lhand": ["LForearmTwist02_end", "l_forearmtwist02_end", "L_Hand", "hand_l"],
-        "lhandg": ["LForearmTwist02_end", "l_forearmtwist02_end", "L_Hand", "hand_l"],
-        "lforearm": ["L_ForearmTwist01", "LForearmTwist01", "lowerarm_l"],
-        "lforearmg": ["L_ForearmTwist01", "LForearmTwist01", "lowerarm_l"],
-        "lbiceplg": ["L_UpperarmTwist02", "LUpperarmTwist02", "upperarm_twist_02_l"],
-        "lbicepg": ["L_UpperarmTwist01", "LUpperarmTwist01", "upperarm_l"],
-        "lcollar": ["L_Clavicle", "clavicle_l"],
-        "lcollarg": ["L_Clavicle", "clavicle_l"],
-        "lcollardum": ["L_Clavicle", "clavicle_l"],
-        "head": ["head", "Head"],
-        "headg": ["head", "Head"],
-        "pelvis": ["pelvis", "Pelvis", "root"],
-        "rootdummy": ["pelvis", "Pelvis", "root"],
-    }
-
-    def _imported_model_has_unreal_skeleton(self) -> bool:
-        nodes = self._all_model_nodes(self.model)
-        normalized = {self._snap_normalize_name(getattr(node, "name", "")) for node in nodes}
-        return any(
-            name in normalized
-            for name in (
-                "rforearmtwist02end",
-                "lforearmtwist02end",
-                "rforearmtwist01",
-                "lforearmtwist01",
-                "rupperarmtwist01",
-                "lupperarmtwist01",
-                "rupperarmtwist02",
-                "lupperarmtwist02",
-                "rclavicle",
-                "lclavicle",
-                "upperarmr",
-                "upperarml",
-                "lowerarmr",
-                "lowerarml",
-                "handr",
-                "handl",
-                "clavicler",
-                "claviclel",
-                "pelvis",
-            )
-        )
-
-    def auto_snap_external_skeleton_to_imported_unreal(self) -> int:
-        """Snap known KOTOR reference bones to matching UE mannequin bones."""
-        ext_model = getattr(self._renderer, "_ext_skeleton", None)
-        if ext_model is None or self.model is None or not self._imported_model_has_unreal_skeleton():
-            return 0
-        moved = 0
-        for ext_node in self._all_model_nodes(ext_model):
-            key = self._snap_normalize_name(getattr(ext_node, "name", ""))
-            aliases = self._UE_AUTO_SNAP_MAP.get(key)
-            if not aliases:
-                continue
-            src_node = self._find_node_by_alias(self.model, aliases)
-            if src_node is None:
-                continue
-            if self._move_external_node_to_overlay_world(ext_node, self._node_overlay_world_position(src_node)):
-                moved += 1
-        if moved:
-            self._renderer._wt_cache.clear()
-            self._request_render(fast=True)
-        return moved
 
     def _nearest_imported_bone_at(self, sx: int, sy: int, radius: int = 18):
         if self.model is None:
