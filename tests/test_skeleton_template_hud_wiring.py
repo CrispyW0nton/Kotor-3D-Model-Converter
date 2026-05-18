@@ -111,6 +111,33 @@ def test_manual_import_fit_controls_are_wired() -> None:
     assert "translation_delta" in workflow
 
 
+def test_open_scene_rehydrates_saved_source_models_for_viewport() -> None:
+    builder = _read("src/gui/qt_character_builder_panel.py")
+
+    assert "def _load_scene_from_path" in builder
+    assert "SceneIO.load(path, load_models=False)" in builder
+    assert "def _rehydrate_scene_models_from_sources" in builder
+    assert "_body_wf.load_body(" in builder
+    assert "_head_wf.load_head(" in builder
+    assert "def _load_primary_scene_model_in_viewport" in builder
+    assert "_load_model_in_viewport_with_textures(" in builder
+    assert "prompt=False" in builder
+    assert "SCENE_LOADED" in builder
+
+
+def test_scene_save_persists_manual_fit_metadata_for_reload() -> None:
+    builder = _read("src/gui/qt_character_builder_panel.py")
+
+    assert "def _capture_scene_session_metadata" in builder
+    assert 'metadata["manual_fit_adjustment"]' in builder
+    assert "def _restore_manual_fit_from_metadata" in builder
+    assert "apply_external_model_fit_adjustment(" in builder
+    assert "rotation_delta_degrees=rotation" in builder
+    assert "scale_delta=scale" in builder
+    assert "translation_delta=translation" in builder
+    assert "self._capture_scene_session_metadata()" in builder
+
+
 def test_gpu_viewport_draws_external_reference_skeleton_overlay() -> None:
     viewport = _read("src/gui/qt_viewport.py")
 

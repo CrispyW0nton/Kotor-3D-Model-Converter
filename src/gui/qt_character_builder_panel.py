@@ -2992,6 +2992,254 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 self._game_combo.blockSignals(False)
         self._refresh_motion_assignment_state()
 
+    def _capture_scene_session_metadata(self) -> None:
+        """Persist UI-only rigging state before SceneIO serialises metadata."""
+        metadata = getattr(self.scene, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            setattr(self.scene, "metadata", metadata)
+        if self._selected_skeleton_template_key:
+            metadata["skeleton_template_key"] = self._selected_skeleton_template_key
+
+        _entry, model = self._body_model_for_fit_adjustment()
+        model_metadata = getattr(model, "metadata", {}) if model is not None else {}
+        manual_state = (
+            model_metadata.get("manual_fit_adjustment")
+            if isinstance(model_metadata, dict) else None
+        )
+        if not manual_state:
+            manual_state = {
+                "scale": float(self._manual_fit_scale or 1.0),
+                "rotation_degrees": tuple(float(v or 0.0) for v in self._manual_fit_rotation),
+                "translation": tuple(float(v or 0.0) for v in self._manual_fit_translation),
+            }
+        if (
+            abs(float(manual_state.get("scale", 1.0) or 1.0) - 1.0) > 1e-6
+            or any(abs(float(v or 0.0)) > 1e-6 for v in manual_state.get("rotation_degrees", ()))
+            or any(abs(float(v or 0.0)) > 1e-6 for v in manual_state.get("translation", ()))
+        ):
+            metadata["manual_fit_adjustment"] = {
+                "scale": float(manual_state.get("scale", 1.0) or 1.0),
+                "rotation_degrees": [
+                    float(v or 0.0)
+                    for v in list(manual_state.get("rotation_degrees", (0.0, 0.0, 0.0)))[:3]
+                ],
+                "translation": [
+                    float(v or 0.0)
+                    for v in list(manual_state.get("translation", (0.0, 0.0, 0.0)))[:3]
+                ],
+            }
+
+    def _rehydrate_scene_models_from_sources(self) -> list[str]:
+        """Reload saved source files so opening a .ghostrig scene is visible."""
+        try:
+            from core import model_data as _md
+        except ImportError:                                 # pragma: no cover
+            from src.core import model_data as _md           # type: ignore
+
+        messages: list[str] = []
+        saved_entries = list(getattr(self.scene, "slots", {}).items())
+        for slot, entry in saved_entries:
+            source_path = str(getattr(entry, "source_path", "") or "")
+            if not source_path:
+                continue
+            source_path = os.path.abspath(os.path.expanduser(source_path))
+            slot_label = getattr(slot, "value", str(slot))
+            if not os.path.isfile(source_path):
+                messages.append(f"{slot_label}: source missing ({source_path})")
+                continue
+            gv = str(
+                getattr(entry, "game_version", "")
+                or getattr(self.scene, "game_version", "K1")
+                or "K1"
+            )
+            try:
+                if slot == _md.PartSlot.HEAD_SHELL:
+                    try:
+                        from core import head_workflow as _head_wf
+                    except ImportError:                      # pragma: no cover
+                        from src.core import head_workflow as _head_wf  # type: ignore
+                    result = _head_wf.load_head(
+                        source_path,
+                        self.scene,
+                        game_version=gv,
+                        allow_mode_correction=True,
+                    )
+                elif slot == _md.PartSlot.HEADLESS_BODY:
+                    try:
+                        from core import headless_body_workflow as _body_wf
+                    except ImportError:                      # pragma: no cover
+                        from src.core import headless_body_workflow as _body_wf  # type: ignore
+                    result = _body_wf.load_body(
+                        source_path,
+                        self.scene,
+                        game_version=gv,
+                        allow_mode_correction=True,
+                    )
+                else:
+                    result = self._load_generic_scene_slot_model(slot, entry, source_path, gv)
+            except Exception as exc:                         # pragma: no cover - loader-specific
+                log.exception("Scene restore failed for %s", source_path)
+                messages.append(f"{slot_label}: load failed ({exc})")
+                continue
+
+            ok = bool(getattr(result, "ok", False))
+            model = getattr(result, "model", None)
+            if ok or model is not None:
+                messages.append(str(getattr(result, "message", "") or f"{slot_label}: loaded"))
+            else:
+                messages.append(str(getattr(result, "message", "") or f"{slot_label}: not loaded"))
+        return messages
+
+    def _load_generic_scene_slot_model(
+        self,
+        slot: Any,
+        entry: Any,
+        source_path: str,
+        game_version: str,
+    ) -> Any:
+        """Reload non-body/non-head slots from direct MDL-style sources."""
+        try:
+            from core.kotor_loader import load_model_from_file
+        except ImportError:                                 # pragma: no cover
+            from src.core.kotor_loader import load_model_from_file  # type: ignore
+
+        model = load_model_from_file(source_path)
+        resref = str(getattr(entry, "resref", "") or Path(source_path).stem)
+        self.scene.assign(
+            slot,
+            model,
+            resref=resref,
+            game_version=game_version,
+            source_path=source_path,
+        )
+
+        return type("SceneSlotLoadResult", (), {
+            "ok": True,
+            "code": "loaded",
+            "model": model,
+            "message": f"Loaded {resref} ({Path(source_path).name})",
+        })()
+
+    def _restore_manual_fit_from_metadata(self) -> None:
+        """Apply saved import fit to a freshly reloaded source mesh."""
+        metadata = getattr(self.scene, "metadata", {}) or {}
+        state = metadata.get("manual_fit_adjustment") if isinstance(metadata, dict) else None
+        if not isinstance(state, dict):
+            self._manual_fit_scale = 1.0
+            self._manual_fit_rotation = (0.0, 0.0, 0.0)
+            self._manual_fit_translation = (0.0, 0.0, 0.0)
+            if hasattr(self.inspector, "set_fit_adjustment"):
+                self.inspector.set_fit_adjustment(
+                    scale=1.0,
+                    rotation_degrees=(0.0, 0.0, 0.0),
+                    translation=(0.0, 0.0, 0.0),
+                    emit=False,
+                )
+            return
+        scale = float(state.get("scale", 1.0) or 1.0)
+        rotation = tuple(
+            float(v or 0.0)
+            for v in list(state.get("rotation_degrees", (0.0, 0.0, 0.0)))[:3]
+        )
+        translation = tuple(
+            float(v or 0.0)
+            for v in list(state.get("translation", (0.0, 0.0, 0.0)))[:3]
+        )
+        rotation = (rotation + (0.0, 0.0, 0.0))[:3]
+        translation = (translation + (0.0, 0.0, 0.0))[:3]
+
+        _entry, model = self._body_model_for_fit_adjustment()
+        if model is not None and (
+            abs(scale - 1.0) > 1e-6
+            or any(abs(v) > 1e-6 for v in rotation)
+            or any(abs(v) > 1e-6 for v in translation)
+        ):
+            try:
+                from core import headless_body_workflow as _wf
+            except ImportError:                             # pragma: no cover
+                from src.core import headless_body_workflow as _wf  # type: ignore
+            _wf.apply_external_model_fit_adjustment(
+                model,
+                rotation_delta_degrees=rotation,
+                scale_delta=scale,
+                translation_delta=translation,
+            )
+        self._manual_fit_scale = scale
+        self._manual_fit_rotation = rotation
+        self._manual_fit_translation = translation
+        if hasattr(self.inspector, "set_fit_adjustment"):
+            self.inspector.set_fit_adjustment(
+                scale=scale,
+                rotation_degrees=rotation,
+                translation=translation,
+                emit=False,
+            )
+
+    def _primary_scene_entry_for_viewport(self) -> Optional[Any]:
+        """Return the best loaded scene slot to show after opening a scene."""
+        try:
+            from core import model_data as _md
+        except ImportError:                                 # pragma: no cover
+            from src.core import model_data as _md           # type: ignore
+        slots = getattr(self.scene, "slots", {}) or {}
+        for slot in (
+            _md.PartSlot.HEADLESS_BODY,
+            _md.PartSlot.HEAD_SHELL,
+            _md.PartSlot.BODY_VARIANT,
+            _md.PartSlot.OTHER,
+        ):
+            entry = slots.get(slot)
+            if entry is not None and getattr(entry, "model", None) is not None:
+                return entry
+        for entry in slots.values():
+            if getattr(entry, "model", None) is not None:
+                return entry
+        return None
+
+    def _load_primary_scene_model_in_viewport(self) -> bool:
+        """Display the primary rehydrated model after File -> Open Scene."""
+        entry = self._primary_scene_entry_for_viewport()
+        if entry is None:
+            return False
+        model = getattr(entry, "model", None)
+        if model is None:
+            return False
+        try:
+            self._load_model_in_viewport_with_textures(
+                model,
+                source_path=str(getattr(entry, "source_path", "") or ""),
+                prompt=False,
+            )
+            if hasattr(self.viewport, "frame_all"):
+                self.viewport.frame_all()
+            return True
+        except Exception:                                  # pragma: no cover
+            log.exception("Failed to display restored scene model")
+            return False
+
+    def _load_scene_from_path(self, path: str) -> list[str]:
+        """Load a .ghostrig file, rehydrate models, and update the builder."""
+        SceneIO = _import_scene_io()
+        self.scene = SceneIO.load(path, load_models=False)
+        self._scene_path = path
+        messages = self._rehydrate_scene_models_from_sources()
+        self._restore_manual_fit_from_metadata()
+        self._sync_from_scene()
+        shown = self._load_primary_scene_model_in_viewport()
+        self._refresh_skeleton_template_options()
+        self._body_guides = {}
+        self._body_guide_history = None
+        self._refresh_body_guide_undo_actions()
+        if hasattr(self.scene, "mark_clean"):
+            self.scene.mark_clean()
+        else:
+            self.scene.dirty = False
+        self._update_title()
+        if not shown:
+            messages.append("No renderable source model could be restored.")
+        return messages
+
     # ── Scene I/O (preserved from pre-M2) ────────────────────────────────
 
     def _confirm_discard_or_save(self, prompt: str) -> bool:
@@ -3044,11 +3292,14 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if not path:
             return
         try:
-            self.scene = SceneIO.load(path, load_models=False)
-            self._scene_path = path
+            messages = self._load_scene_from_path(path)
             self.statusBar().showMessage(f"Scene loaded: {os.path.basename(path)}", 4000)
-            self._sync_from_scene()
-            self._update_title()
+            if messages:
+                self.bottom_strip.set_validation(
+                    "info",
+                    "SCENE_LOADED",
+                    issues=messages[:6],
+                )
         except Exception as exc:
             QtWidgets.QMessageBox.critical(self, "Open Failed", str(exc))
 
@@ -3068,6 +3319,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             if not path.endswith(SceneIO.EXTENSION):
                 path += SceneIO.EXTENSION
         try:
+            self._capture_scene_session_metadata()
             SceneIO.save(self.scene, path)
             self._scene_path = path
             self.statusBar().showMessage(f"Scene saved: {os.path.basename(path)}", 4000)
