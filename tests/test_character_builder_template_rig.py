@@ -3,7 +3,16 @@ from __future__ import annotations
 import math
 
 from src.core.character_builder import apply_template_rig
-from src.core.model_data import BoneWeight, KotorModel, ModelNode, NodeFlags, VertexSkinData
+from src.core.model_data import (
+    BoneWeight,
+    CharacterScene,
+    KotorModel,
+    ModelNode,
+    NodeFlags,
+    PartSlot,
+    VertexSkinData,
+)
+from src.core.validation_service import ValidationService
 
 
 def _node(name: str, flags: int = int(NodeFlags.HEADER), parent: ModelNode | None = None) -> ModelNode:
@@ -61,15 +70,21 @@ def test_apply_template_rig_strips_imported_armature_and_clears_old_skin() -> No
     assert rigged_mesh.parent is rigged.root_node
     assert rigged_mesh.children == []
     assert rigged_mesh.is_mesh is True
-    assert rigged_mesh.is_skin is False
-    assert rigged_mesh.bone_map == []
-    assert rigged_mesh.skin_data == []
-    assert rigged_mesh.qbone_list == []
-    assert rigged_mesh.tbone_list == []
+    assert rigged_mesh.is_skin is True
+    assert rigged_mesh.bone_map == ["rootdummy"]
+    assert rigged_mesh.bone_map_floats
+    assert len(rigged_mesh.skin_data) == len(rigged_mesh.vertices)
+    assert len(rigged_mesh.skin_data[0].influences) == 1
+    assert rigged_mesh.skin_data[0].influences[0].bone_index == 0
+    assert math.isclose(rigged_mesh.skin_data[0].influences[0].weight, 1.0)
+    assert len(rigged_mesh.qbone_list) == len(rigged_mesh.bone_map)
+    assert len(rigged_mesh.tbone_list) == len(rigged_mesh.bone_map)
     assert rigged_mesh.position == (0.0, 0.0, 0.0)
     assert rigged_mesh.rotation == (0.0, 0.0, 0.0, 1.0)
     assert rigged_mesh.vertices[0] == (11.0, 2.0, 3.0)
     assert "KOTOR skeleton built" in result["message"]
+    assert result["skinned_meshes"] == 1
+    assert result["weighted_vertices"] == 1
     assert result["removed_import_nodes"] >= 3
 
 
@@ -129,3 +144,41 @@ def test_apply_template_rig_preserves_kotor_helper_mesh_skeleton_hooks() -> None
     assert rigged.find_node("Torso") is None
     assert rigged.find_node("torsoUpr_g").is_mesh is False
     assert rigged.find_node("Rhand_g").is_mesh is False
+
+    rigged_mesh = rigged.find_node("body_mesh")
+    assert rigged_mesh is not None
+    assert rigged_mesh.is_skin is True
+    assert "torsoUpr_g" in rigged_mesh.bone_map
+    assert "Rhand_g" in rigged_mesh.bone_map
+    assert "rhand" in rigged_mesh.bone_map
+    assert "headhook" not in rigged_mesh.bone_map
+    assert len(rigged_mesh.skin_data) == 1
+    total = sum(inf.weight for inf in rigged_mesh.skin_data[0].influences)
+    assert math.isclose(total, 1.0)
+
+
+def test_apply_template_rig_skin_data_satisfies_weight_validator() -> None:
+    src_root = _node("import_root")
+    mesh = _node("body_mesh", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=src_root)
+    mesh.vertices = [(0.0, 0.0, 0.0), (0.5, 0.0, 0.0)]
+    mesh.faces = [(0, 1, 1)]
+    mesh_model = KotorModel(name="body", root_node=src_root)
+
+    kotor_root = _node("PMBAM")
+    rootdummy = _node("rootdummy", parent=kotor_root)
+    torso = _node("torso_g", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=rootdummy)
+    torso.position = (0.0, 0.0, 1.0)
+    _node("headhook", parent=torso)
+    _node("rhand", parent=torso)
+    _node("lhand", parent=torso)
+    template = KotorModel(name="pmbam", root_node=kotor_root)
+
+    result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual")
+
+    assert result["ok"] is True
+    scene = CharacterScene(game_version="K1")
+    scene.assign(PartSlot.HEADLESS_BODY, result["model"], resref="bendak")
+    issues = ValidationService(scene).validate()
+    assert "SKIN_MESH_UNRIGGED" not in {issue.code for issue in issues}
+    assert "WEIGHT_ZERO_SUM" not in {issue.code for issue in issues}
+    assert "WEIGHT_UNNORMALIZED" not in {issue.code for issue in issues}

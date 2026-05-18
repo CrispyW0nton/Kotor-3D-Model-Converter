@@ -808,7 +808,8 @@ def apply_template_rig(
     payload nodes are copied from ``mesh_model``; their current displayed
     transforms are baked into vertex positions, previous skin/bone influence
     tables are cleared, and the cleaned mesh nodes are parented under the chosen
-    KOTOR skeleton.  Skin binding/weight painting is a later workflow step.
+    KOTOR skeleton.  The imported meshes are then converted to KOTOR skin nodes
+    with bone-map, QBones/TBones, and per-vertex influence rows.
 
     Parameters
     ----------
@@ -905,11 +906,34 @@ def apply_template_rig(
         result_model.root_node = skel_root
         result_model.animations = list(template_model.animations)
 
+        try:
+            try:
+                from .skeleton_builder import bind_imported_meshes_to_skeleton
+            except ImportError:  # pragma: no cover
+                from skeleton_builder import bind_imported_meshes_to_skeleton  # type: ignore
+            bind_report = bind_imported_meshes_to_skeleton(
+                result_model,
+                mesh_nodes=mesh_payloads,
+            )
+            if not bind_report.ok:
+                return {"ok": False, "model": None,
+                        "message": bind_report.message or "Skeleton skin binding failed.",
+                        "warnings": warnings + list(bind_report.warnings or []),
+                        "scale": applied_scale}
+            warnings.extend(bind_report.warnings or [])
+        except Exception as exc:
+            log.error("apply_template_rig skin bind failed: %s", exc, exc_info=True)
+            return {"ok": False, "model": None,
+                    "message": f"Skeleton skin binding failed: {exc}",
+                    "warnings": warnings, "scale": applied_scale}
+
         log.info(
             "apply_template_rig: success  game=%s  scale=%.3f  "
-            "skel_bones=%d  anims=%d",
+            "skel_bones=%d  skinned=%d  weighted=%d  anims=%d",
             game, applied_scale,
             template_model.node_count(),
+            bind_report.skinned_meshes,
+            bind_report.weighted_vertices,
             len(result_model.animations),
         )
         return {
@@ -919,11 +943,16 @@ def apply_template_rig(
                 f"KOTOR skeleton built ({game}).  "
                 f"Scale: {applied_scale:.3f}.  "
                 f"Meshes: {len(mesh_payloads)}.  "
+                f"Skinned: {bind_report.skinned_meshes}.  "
+                f"Bone slots: {bind_report.bone_count}.  "
                 f"Anims: {len(result_model.animations)}"
             ),
             "warnings": warnings,
             "scale": applied_scale,
             "meshes": len(mesh_payloads),
+            "skinned_meshes": bind_report.skinned_meshes,
+            "weighted_vertices": bind_report.weighted_vertices,
+            "bone_slots": bind_report.bone_count,
             "removed_import_nodes": removed_import_nodes,
         }
     except Exception as exc:
