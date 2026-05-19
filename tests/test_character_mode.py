@@ -137,6 +137,11 @@ def _build_model(
 # Each tuple = (description, kwargs for _build_model, expected CharacterMode).
 # These exercise every branch of the §3.1 detection rules.
 _SYNTHETIC_CASES: List[Tuple[str, dict, "CharacterMode"]] = [
+    ("s_male02",
+                dict(name="s_male02", supermodel="S_MALE01",
+                     nodes=("s_male02", "talkdummy", "head_g", "f_jaw_g", "pelvis_g")),
+     "SUPERMODEL"),
+
     # ── HEADLESS_BODY — body mesh, no facial bones ──────────────────────────
     ("pmbam",  dict(name="pmbam",  supermodel="S_MALE02",
                     nodes=("pmbam", "headhook", "rhand", "pelvis_g", "spine")),
@@ -162,6 +167,19 @@ _SYNTHETIC_CASES: List[Tuple[str, dict, "CharacterMode"]] = [
                 dict(name="p_hk47head", supermodel="NULL",
                      nodes=("p_hk47head", "talkdummy")),
      "HEAD"),
+
+    # ── HUMANOID — full humanoid body with its own head/facial rig ──────────
+    ("n_bith",
+                dict(name="n_bith", supermodel="S_MALE02",
+                     nodes=("n_bith", "talkdummy", "head_g", "f_jaw_g",
+                            "pelvis_g", "torso_g", "rhand", "lhand_g",
+                            "lfoot_g", "rfoot_g")),
+     "HUMANOID"),
+    ("n_calonord",
+                dict(name="n_calonord", supermodel="S_MALE02",
+                     nodes=("n_calonord", "talkdummy", "head_g", "f_jaw_g",
+                            "pelvis_g", "spine", "rhand", "lhand_g")),
+     "HUMANOID"),
 
     # ── CREATURE — c_* prefix OR n_* w/ creature supermodel OR creature hooks
     ("c_bantha", dict(name="c_bantha", supermodel="C_BANTHA",
@@ -219,7 +237,7 @@ def test_detect_character_mode_synthetic(label, builder_kwargs, expected_name):
 def test_character_mode_has_required_members():
     """The enum exposes the four real modes plus two fallbacks."""
     names = {m.name for m in CharacterMode}
-    expected = {"HEADLESS_BODY", "HEAD", "SUPERMODEL", "CREATURE",
+    expected = {"HEADLESS_BODY", "HEAD", "HUMANOID", "SUPERMODEL", "CREATURE",
                 "AMBIGUOUS", "UNSUPPORTED"}
     assert names == expected, f"unexpected CharacterMode members: {names}"
 

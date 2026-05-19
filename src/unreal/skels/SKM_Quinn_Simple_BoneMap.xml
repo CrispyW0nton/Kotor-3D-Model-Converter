@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<BoneMap name="SKM_Quinn_Simple" source="SKM_Quinn_Simple.FBX" formatVersion="1.1" layout="fbx-order" pythonParser="xml.etree.ElementTree">
+    <Metadata>
+        <Description>FBX-derived SKM_Quinn_Simple skeleton bone list. Only FBX Root/LimbNode bones are included.</Description>
+        <Notes>The FBX hierarchy is authoritative for viewport rig display and retargeting. IK/control bones are preserved as data but filtered from the deformation skeleton overlay.</Notes>
+        <BoneCount>89</BoneCount>
+    </Metadata>
+    <Bones count="89">
+        <Bone index="0" name="root" side="center" group="body" role="root"/>
+        <Bone index="1" name="pelvis" side="center" group="body" role="deform"/>
+        <Bone index="2" name="spine_01" side="center" group="body" role="deform"/>
+        <Bone index="3" name="spine_02" side="center" group="body" role="deform"/>
+        <Bone index="4" name="spine_03" side="center" group="body" role="deform"/>
+        <Bone index="5" name="spine_04" side="center" group="body" role="deform"/>
+        <Bone index="6" name="spine_05" side="center" group="body" role="deform"/>
+        <Bone index="7" name="neck_01" side="center" group="body" role="deform"/>
+        <Bone index="8" name="neck_02" side="center" group="body" role="deform"/>
+        <Bone index="9" name="head" side="center" group="body" role="deform"/>
+        <Bone index="10" name="clavicle_l" side="left" group="arm" role="deform"/>
+        <Bone index="11" name="upperarm_l" side="left" group="arm" role="deform"/>
+        <Bone index="12" name="lowerarm_l" side="left" group="arm" role="deform"/>
+        <Bone index="13" name="lowerarm_twist_02_l" side="left" group="arm" role="twist"/>
+        <Bone index="14" name="lowerarm_twist_01_l" side="left" group="arm" role="twist"/>
+        <Bone index="15" name="hand_l" side="left" group="arm" role="deform"/>
+        <Bone index="16" name="middle_metacarpal_l" side="left" group="hand" role="deform"/>
+        <Bone index="17" name="middle_01_l" side="left" group="hand" role="deform"/>
+        <Bone index="18" name="middle_02_l" side="left" group="hand" role="deform"/>
+        <Bone index="19" name="middle_03_l" side="left" group="hand" role="deform"/>
+        <Bone index="20" name="pinky_metacarpal_l" side="left" group="hand" role="deform"/>
+        <Bone index="21" name="pinky_01_l" side="left" group="hand" role="deform"/>
+        <Bone index="22" name="pinky_02_l" side="left" group="hand" role="deform"/>
+        <Bone index="23" name="pinky_03_l" side="left" group="hand" role="deform"/>
+        <Bone index="24" name="ring_metacarpal_l" side="left" group="hand" role="deform"/>
+        <Bone index="25" name="ring_01_l" side="left" group="hand" role="deform"/>
+        <Bone index="26" name="ring_02_l" side="left" group="hand" role="deform"/>
+        <Bone index="27" name="ring_03_l" side="left" group="hand" role="deform"/>
+        <Bone index="28" name="thumb_01_l" side="left" group="hand" role="deform"/>
+        <Bone index="29" name="thumb_02_l" side="left" group="hand" role="deform"/>
+        <Bone index="30" name="thumb_03_l" side="left" group="hand" role="deform"/>
+        <Bone index="31" name="index_metacarpal_l" side="left" group="hand" role="deform"/>
+        <Bone index="32" name="index_01_l" side="left" group="hand" role="deform"/>
+        <Bone index="33" name="index_02_l" side="left" group="hand" role="deform"/>
+        <Bone index="34" name="index_03_l" side="left" group="hand" role="deform"/>
+        <Bone index="35" name="upperarm_twist_01_l" side="left" group="arm" role="twist"/>
+        <Bone index="36" name="upperarm_twist_02_l" side="left" group="arm" role="twist"/>
+        <Bone index="37" name="clavicle_r" side="right" group="arm" role="deform"/>
+        <Bone index="38" name="upperarm_r" side="right" group="arm" role="deform"/>
+        <Bone index="39" name="lowerarm_r" side="right" group="arm" role="deform"/>
+        <Bone index="40" name="lowerarm_twist_02_r" side="right" group="arm" role="twist"/>
+        <Bone index="41" name="lowerarm_twist_01_r" side="right" group="arm" role="twist"/>
+        <Bone index="42" name="hand_r" side="right" group="arm" role="deform"/>
+        <Bone index="43" name="middle_metacarpal_r" side="right" group="hand" role="deform"/>
+        <Bone index="44" name="middle_01_r" side="right" group="hand" role="deform"/>
+        <Bone index="45" name="middle_02_r" side="right" group="hand" role="deform"/>
+        <Bone index="46" name="middle_03_r" side="right" group="hand" role="deform"/>
+        <Bone index="47" name="pinky_metacarpal_r" side="right" group="hand" role="deform"/>
+        <Bone index="48" name="pinky_01_r" side="right" group="hand" role="deform"/>
+        <Bone index="49" name="pinky_02_r" side="right" group="hand" role="deform"/>
+        <Bone index="50" name="pinky_03_r" side="right" group="hand" role="deform"/>
+        <Bone index="51" name="ring_metacarpal_r" side="right" group="hand" role="deform"/>
+        <Bone index="52" name="ring_01_r" side="right" group="hand" role="deform"/>
+        <Bone index="53" name="ring_02_r" side="right" group="hand" role="deform"/>
+        <Bone index="54" name="ring_03_r" side="right" group="hand" role="deform"/>
+        <Bone index="55" name="thumb_01_r" side="right" group="hand" role="deform"/>
+        <Bone index="56" name="thumb_02_r" side="right" group="hand" role="deform"/>
+        <Bone index="57" name="thumb_03_r" side="right" group="hand" role="deform"/>
+        <Bone index="58" name="index_metacarpal_r" side="right" group="hand" role="deform"/>
+        <Bone index="59" name="index_01_r" side="right" group="hand" role="deform"/>
+        <Bone index="60" name="index_02_r" side="right" group="hand" role="deform"/>
+        <Bone index="61" name="index_03_r" side="right" group="hand" role="deform"/>
+        <Bone index="62" name="upperarm_twist_01_r" side="right" group="arm" role="twist"/>
+        <Bone index="63" name="upperarm_twist_02_r" side="right" group="arm" role="twist"/>
+        <Bone index="64" name="thigh_r" side="right" group="leg" role="deform"/>
+        <Bone index="65" name="calf_r" side="right" group="leg" role="deform"/>
+        <Bone index="66" name="foot_r" side="right" group="leg" role="deform"/>
+        <Bone index="67" name="ball_r" side="right" group="leg" role="deform"/>
+        <Bone index="68" name="calf_twist_02_r" side="right" group="leg" role="twist"/>
+        <Bone index="69" name="calf_twist_01_r" side="right" group="leg" role="twist"/>
+        <Bone index="70" name="thigh_twist_01_r" side="right" group="leg" role="twist"/>
+        <Bone index="71" name="thigh_twist_02_r" side="right" group="leg" role="twist"/>
+        <Bone index="72" name="thigh_l" side="left" group="leg" role="deform"/>
+        <Bone index="73" name="calf_l" side="left" group="leg" role="deform"/>
+        <Bone index="74" name="foot_l" side="left" group="leg" role="deform"/>
+        <Bone index="75" name="ball_l" side="left" group="leg" role="deform"/>
+        <Bone index="76" name="calf_twist_02_l" side="left" group="leg" role="twist"/>
+        <Bone index="77" name="calf_twist_01_l" side="left" group="leg" role="twist"/>
+        <Bone index="78" name="thigh_twist_01_l" side="left" group="leg" role="twist"/>
+        <Bone index="79" name="thigh_twist_02_l" side="left" group="leg" role="twist"/>
+        <Bone index="80" name="ik_foot_root" side="center" group="control" role="ik_control"/>
+        <Bone index="81" name="ik_foot_l" side="left" group="control" role="ik_control"/>
+        <Bone index="82" name="ik_foot_r" side="right" group="control" role="ik_control"/>
+        <Bone index="83" name="ik_hand_root" side="center" group="control" role="ik_control"/>
+        <Bone index="84" name="ik_hand_gun" side="center" group="control" role="ik_control"/>
+        <Bone index="85" name="ik_hand_l" side="left" group="control" role="ik_control"/>
+        <Bone index="86" name="ik_hand_r" side="right" group="control" role="ik_control"/>
+        <Bone index="87" name="interaction" side="center" group="control" role="control"/>
+        <Bone index="88" name="center_of_mass" side="center" group="control" role="control"/>
+    </Bones>
+</BoneMap>

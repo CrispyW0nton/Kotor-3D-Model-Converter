@@ -65,7 +65,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6 import QtCore, QtWidgets                        # noqa: E402
 
 try:
-    from gui.qt_inspector_panel import QtInspectorPanel
+    from src.gui.qt_lib.panels.qt_inspector_panel import QtInspectorPanel
 except Exception as exc:                                     # pragma: no cover
     pytest.skip(f"QtInspectorPanel unavailable: {exc}",
                 allow_module_level=True)

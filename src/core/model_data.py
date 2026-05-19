@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 # Must be kept in sync with FrameRenderer._BASE_SKELETONS in viewport.py.
 KOTOR_BASE_SKELETONS: frozenset = frozenset({
     # Standard PC/NPC humanoid base skeletons (K1 + K2)
-    'S_FEMALE02', 'S_MALE02', 'S_FEMALE03', 'S_MALE03',
+    'S_FEMALE01', 'S_MALE01', 'S_FEMALE02', 'S_MALE02', 'S_FEMALE03', 'S_MALE03',
     # Creature / quadruped models – self-contained, never accessories
     'C_BANTHA', 'C_BRITH', 'C_DEWBACK', 'C_DURASTEEL',
     'C_KINRATH', 'C_KATH', 'C_RANCOR', 'C_WRAID', 'C_IRIAZ',
@@ -30,6 +30,20 @@ KOTOR_BASE_SKELETONS: frozenset = frozenset({
     # Null / self-contained (no supermodel)
     'NULL', '', 'NONE',
 })
+
+
+def is_animation_supermodel(model: object) -> bool:
+    """Return True for stock Odyssey animation supermodel resources."""
+    name = str(getattr(model, "name", "") or "").strip().upper()
+    if not name.startswith("S_"):
+        return False
+    try:
+        classification = int(getattr(model, "model_type", int(ModelClassification.CHARACTER)))
+    except (TypeError, ValueError):
+        classification = int(ModelClassification.CHARACTER)
+    if classification != int(ModelClassification.CHARACTER):
+        return False
+    return bool(getattr(model, "animations", None)) or name in KOTOR_BASE_SKELETONS
 
 class NodeFlags(IntFlag):
     HEADER    = 0x0001
@@ -141,8 +155,8 @@ PART_SLOT_LABELS: Dict[PartSlot, str] = {
 class CharacterMode(_Enum):
     """Top-level classification of a KotOR character model.
 
-    Every KotOR character/creature MDL falls into exactly one of four
-    "real" modes (HEADLESS_BODY / HEAD / SUPERMODEL / CREATURE) which
+    Every KotOR character/creature MDL falls into exactly one real mode
+    (HEADLESS_BODY / HEAD / HUMANOID / SUPERMODEL / CREATURE) which
     drive the Character Builder UI workflow, asset compatibility rules,
     and the rigging / animation pipeline that should be applied.
 
@@ -159,6 +173,7 @@ class CharacterMode(_Enum):
     # ── Real character modes ────────────────────────────────────────────
     HEADLESS_BODY = "headless_body"   # pfbc*, pmbc*, n_* body meshes — needs head attached at headhook
     HEAD          = "head"            # pfhc*, pmhc*, p_hk47 — head-only model, attaches to a body
+    HUMANOID      = "humanoid"        # Full humanoid NPC/body with its own head and humanoid skeleton
     SUPERMODEL    = "supermodel"      # Animation-bearing parent skeleton (s_male01, etc.)
     CREATURE      = "creature"        # Self-contained non-humanoid (c_bantha, c_rancor, …)
 
@@ -186,6 +201,7 @@ class CharacterMode(_Enum):
 _CHARACTER_MODE_DISPLAY_NAMES: Dict["CharacterMode", str] = {
     CharacterMode.HEADLESS_BODY: "Headless Body",
     CharacterMode.HEAD:          "Head",
+    CharacterMode.HUMANOID:      "Humanoid",
     CharacterMode.SUPERMODEL:    "Supermodel",
     CharacterMode.CREATURE:      "Creature",
     CharacterMode.AMBIGUOUS:     "Ambiguous",
@@ -196,6 +212,7 @@ _CHARACTER_MODE_DISPLAY_NAMES: Dict["CharacterMode", str] = {
 _CHARACTER_MODE_ICON_KEYS: Dict["CharacterMode", str] = {
     CharacterMode.HEADLESS_BODY: "mode_headless_body",
     CharacterMode.HEAD:          "mode_head",
+    CharacterMode.HUMANOID:      "mode_humanoid",
     CharacterMode.SUPERMODEL:    "mode_supermodel",
     CharacterMode.CREATURE:      "mode_creature",
     CharacterMode.AMBIGUOUS:     "mode_ambiguous",
@@ -215,6 +232,13 @@ _HEAD_GEOM_NAMES: frozenset = frozenset({
 _BODY_HOOK_NAMES: frozenset = frozenset({
     "headhook", "rhand", "lhand_g", "camerahook",
     "chestconjure", "handconjure", "impact_bolt",
+})
+_HUMANOID_BODY_BONE_NAMES: frozenset = frozenset({
+    "pelvis_g", "spine", "spine_g", "torso_g", "torsoupr_g",
+    "lthigh_g", "rthigh_g", "lshin_g", "rshin_g",
+    "lfoot_g", "rfoot_g", "lfoott_g", "rfoott_g",
+    "lforearm_g", "rforearm_g", "lhand_g", "rhand_g",
+    "lhand", "rhand",
 })
 _CREATURE_HOOK_NAMES: frozenset = frozenset({
     "cameramaster", "impact_head", "impact_chest",
@@ -267,6 +291,9 @@ def detect_character_mode(model: "KotorModel") -> "CharacterMode":
                               int(ModelClassification.FLYER)):
         return CharacterMode.UNSUPPORTED
 
+    if is_animation_supermodel(model):
+        return CharacterMode.SUPERMODEL
+
     has_facial = bool(_FACIAL_BONE_NAMES & nodes)
     has_head_geom = "head_g" in nodes
     has_pelvis = "pelvis_g" in nodes
@@ -274,6 +301,8 @@ def detect_character_mode(model: "KotorModel") -> "CharacterMode":
     has_rhand = "rhand" in nodes
     has_talkdummy = "talkdummy" in nodes
     has_creature_hook = bool(_CREATURE_HOOK_NAMES & nodes)
+    has_body_skeleton = has_pelvis or bool(_HUMANOID_BODY_BONE_NAMES & nodes)
+    has_visible_head = has_head_geom or has_facial or has_talkdummy
 
     # ── Step 1 — Creature ────────────────────────────────────────────────
     #   • ``c_*`` prefix is the canonical signal.
@@ -296,7 +325,12 @@ def detect_character_mode(model: "KotorModel") -> "CharacterMode":
         return CharacterMode.CREATURE
 
     # ── Step 2 — Head ────────────────────────────────────────────────────
-    if has_talkdummy or (has_head_geom and has_facial and not has_pelvis):
+    # Full humanoid NPC/body: Bith, Calo Nord, and similar n_* models
+    # have facial/head nodes but also a real humanoid body skeleton.
+    if has_body_skeleton and has_visible_head:
+        return CharacterMode.HUMANOID
+
+    if has_talkdummy or (has_head_geom and has_facial and not has_body_skeleton):
         return CharacterMode.HEAD
 
     # ── Step 3 — Headless body ───────────────────────────────────────────
@@ -1282,6 +1316,23 @@ class KotorModel:
 
         Falls back to compute_bounds() values if no UV nodes are found.
         """
+        if is_animation_supermodel(self):
+            points = []
+            for node in self.all_nodes():
+                try:
+                    points.append(node.world_position())
+                except Exception:
+                    continue
+            if points:
+                xs = [p[0] for p in points]
+                ys = [p[1] for p in points]
+                zs = [p[2] for p in points]
+                pad = 0.05
+                return (
+                    (min(xs) - pad, min(ys) - pad, min(zs) - pad),
+                    (max(xs) + pad, max(ys) + pad, max(zs) + pad),
+                )
+
         def _is_render_helper(n):
             """Mirror of FrameRenderer._is_deformation_helper() in viewport.py."""
             # OBJ / FBX imported nodes: always renderable — skip all heuristics
@@ -1595,6 +1646,7 @@ class CharacterScene:
         # Priority order: most specific first.
         _PRIORITY = (
             CharacterMode.CREATURE,
+            CharacterMode.HUMANOID,
             CharacterMode.HEAD,
             CharacterMode.HEADLESS_BODY,
             CharacterMode.SUPERMODEL,

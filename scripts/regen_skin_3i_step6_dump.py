@@ -46,7 +46,7 @@ TARGETS: Tuple[Tuple[str, str, str], ...] = (
 def _dump_one(rm, resref: str, game: str, out_path: Path) -> int:
     from src.core.animation_engine import AnimationEngine
     from src.core.gpu_skinning import MatrixPaletteUploader
-    from src.gui.gpu_renderer import _build_skin_dump_record
+    from src.gui.qt_lib.rendering.gpu_renderer import _build_skin_dump_record
 
     model = rm.load_model(resref, game)
     if model is None:

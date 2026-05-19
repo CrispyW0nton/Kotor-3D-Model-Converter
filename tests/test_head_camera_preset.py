@@ -30,7 +30,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 from PySide6 import QtCore, QtWidgets
 
-from src.gui.qt_inspector_panel import QtInspectorPanel
+from src.gui.qt_lib.panels.qt_inspector_panel import QtInspectorPanel
 
 
 # ── Direct-file head_workflow load (sidestep core/__init__) ──────────
@@ -252,7 +252,7 @@ def test_t605_apply_method_exists_on_viewport_class():
     the source via :mod:`importlib.util` to confirm it's defined
     without booting OpenGL.
     """
-    text = pathlib.Path("src/gui/qt_viewport.py").read_text()
+    text = pathlib.Path("src/gui/viewports/qt_viewport.py").read_text()
     assert "def apply_head_camera_preset" in text, (
         "QtViewportWidget.apply_head_camera_preset is missing"
     )

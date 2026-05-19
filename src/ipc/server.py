@@ -181,8 +181,8 @@ class GhostRiggerIPCServer:
                 body = {}
 
             targets = body.get("modules", [
-                "src.gui.viewport",
-                "src.gui.gpu_renderer",
+                "src.gui.qt_lib.rendering.viewport_core",
+                "src.gui.qt_lib.rendering.gpu_renderer",
                 "src.core.kotor_loader",
             ])
             reloaded: list[str] = []

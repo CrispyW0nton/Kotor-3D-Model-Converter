@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import os
 import pathlib
 import sys
 
@@ -51,8 +52,8 @@ _GUI_DIR = _REPO_ROOT / "src" / "gui"
 # Files that MUST remain Tk-free.
 #   * Every qt_*.py — the canonical Qt UI subtree.
 #   * viewport_core.py — the Tk-free rendering split from T001.
-_QT_FILES = sorted(_GUI_DIR.glob("qt_*.py"))
-_VIEWPORT_CORE = _GUI_DIR / "viewport_core.py"
+_QT_FILES = sorted(_GUI_DIR.rglob("qt_*.py"))
+_VIEWPORT_CORE = _GUI_DIR / "rendering" / "viewport_core.py"
 
 # Files that are EXPECTED to import tkinter — empty after M3/T302.
 #
@@ -63,6 +64,29 @@ _VIEWPORT_CORE = _GUI_DIR / "viewport_core.py"
 # tree is now Qt-only, so the roster is empty and the cross-check tests
 # below assert that nothing in src/gui/ imports tkinter any more.
 _FROZEN_TK_FILES: set[pathlib.Path] = set()
+
+
+def test_log_panel_embeds_python_terminal():
+    """The bottom output area should split log output and a live Python console."""
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    pytest.importorskip("PySide6")
+    from PySide6 import QtWidgets
+    from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel, QtPythonTerminalPanel
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtLogPanel()
+    try:
+        assert panel.content_splitter.count() == 2
+        assert isinstance(panel.terminal, QtPythonTerminalPanel)
+        assert panel.save_button.parent().objectName() == "LogFooter"
+        assert panel.terminal.run_button.parent().objectName() == "PythonTerminalFooter"
+        panel.log("left side still logs", "info")
+        assert "left side still logs" in panel.get_text()
+        panel.terminal.input.setText("1 + 2")
+        panel.terminal._execute_input()
+        assert "3" in panel.terminal.output.toPlainText()
+    finally:
+        panel.deleteLater()
 
 
 def _collect_tkinter_imports(path: pathlib.Path) -> list[tuple[int, str]]:
@@ -144,7 +168,7 @@ def test_legacy_tk_modules_are_deleted():
 def test_no_gui_module_imports_tkinter():
     """Post-M3, no file under src/gui/ may import tkinter."""
     offenders: list[tuple[pathlib.Path, list[tuple[int, str]]]] = []
-    for path in sorted(_GUI_DIR.glob("*.py")):
+    for path in sorted(_GUI_DIR.rglob("*.py")):
         hits = _collect_tkinter_imports(path)
         if hits:
             offenders.append((path, hits))
@@ -158,6 +182,19 @@ def test_no_gui_module_imports_tkinter():
     )
 
 
+def test_gui_root_only_keeps_central_qt_lib():
+    """Root src/gui should not fill back up with compatibility shims."""
+    allowed = {"__init__.py", "qt_lib.py"}
+    extra = [
+        path.name
+        for path in sorted(_GUI_DIR.glob("*.py"))
+        if path.name not in allowed
+    ]
+    assert not extra, (
+        "Move GUI modules into category folders and route imports through "
+        "src.gui.qt_lib instead of root src/gui shims: " + ", ".join(extra)
+    )
+
 # ──────────────────────────────────────────────────────────────────────────
 #  Layer 2 — live import probe (skipped when third-party deps missing)
 # ──────────────────────────────────────────────────────────────────────────
@@ -165,6 +202,155 @@ def test_no_gui_module_imports_tkinter():
 # The Qt modules pull in PySide6 plus the rest of the GhostRigger backend
 # (pykotor, moderngl, numpy, PIL, ...). When any of those are unavailable
 # (e.g. a slim CI image) we skip the live probe and rely on Layer 1.
+
+
+
+def test_application_imports_use_central_qt_lib():
+    """Runnable code should not import deleted root GUI modules."""
+    old_roots = {
+        "accel",
+        "gpu_renderer",
+        "qt_accel",
+        "qt_animation_panel",
+        "qt_blueprint_editor",
+        "qt_bottom_strip",
+        "qt_character_builder_panel",
+        "qt_character_builder_window",
+        "qt_common_panels",
+        "qt_diagnostics_panel",
+        "qt_dialogs",
+        "qt_export_dialog",
+        "qt_gpu_renderer",
+        "qt_icon_manager",
+        "qt_inspector_panel",
+        "qt_library_panel",
+        "qt_log_panel",
+        "qt_main_window",
+        "qt_matrix_background",
+        "qt_modular_panel",
+        "qt_normal_map_panel",
+        "qt_properties_panel",
+        "qt_resource_panel",
+        "qt_retarget_window",
+        "qt_rig_panel",
+        "qt_settings_dialog",
+        "qt_tex_atlas",
+        "qt_texture_panel",
+        "qt_theme",
+        "qt_tpc_render_utils",
+        "qt_unreal_animator",
+        "qt_uv_viewer",
+        "qt_viewport",
+        "qt_workflow_rail",
+        "tex_atlas",
+        "tpc_render_utils",
+        "viewport",
+        "viewport_core",
+        "viewport_navigation",
+    }
+    scan_roots = [
+        _REPO_ROOT / "main.py",
+        _REPO_ROOT / "scripts",
+        _REPO_ROOT / "src",
+        _REPO_ROOT / "tests",
+    ]
+    offenders: list[tuple[pathlib.Path, int, str]] = []
+    for root in scan_roots:
+        paths = [root] if root.is_file() else sorted(root.rglob("*.py"))
+        for path in paths:
+            if any(part == "__pycache__" for part in path.parts):
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    mod = node.module or ""
+                    if mod == "qt_lib" or mod.startswith(("qt_lib.", "gui.")):
+                        offenders.append((path, node.lineno, f"from {mod} import ..."))
+                    if mod.startswith("src.gui."):
+                        root_name = mod.removeprefix("src.gui.").split(".", 1)[0]
+                        if root_name in old_roots:
+                            offenders.append((path, node.lineno, f"from {mod} import ..."))
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        name = alias.name
+                        if name == "qt_lib" or name.startswith(("qt_lib.", "gui.")):
+                            offenders.append((path, node.lineno, f"import {name}"))
+                        if name.startswith("src.gui."):
+                            root_name = name.removeprefix("src.gui.").split(".", 1)[0]
+                            if root_name in old_roots:
+                                offenders.append((path, node.lineno, f"import {name}"))
+    assert not offenders, (
+        "Use src.gui.qt_lib.<category>.<module> instead of deleted root GUI imports:\n  "
+        + "\n  ".join(
+            f"{path.relative_to(_REPO_ROOT)}:{lineno}: {stmt}"
+            for path, lineno, stmt in offenders
+        )
+    )
+
+
+def test_qt_icon_paths_resolve_after_gui_grouping():
+    """Moved Qt modules should still point at shared src/gui/icons assets."""
+    theme = importlib.import_module("src.gui.qt_lib.assets.qt_theme")
+    icon_manager = importlib.import_module("src.gui.qt_lib.assets.qt_icon_manager")
+    main_window = importlib.import_module("src.gui.qt_lib.windows.qt_main_window")
+
+    expected = _GUI_DIR / "icons"
+    assert pathlib.Path(theme._QT_ICON_DIR) == expected
+    assert pathlib.Path(main_window._QT_ICON_DIR) == expected
+    assert icon_manager.ICONS_DIR == expected
+    assert (expected / "tab_left.svg").exists()
+    assert (expected / "tab_right.svg").exists()
+
+
+def test_matrix_background_uses_bundled_aurebesh_font_dir():
+    """Matrix rain should load AurebeshAF from shared src/gui/fonts."""
+    matrix = importlib.import_module("src.gui.qt_lib.assets.qt_matrix_background")
+
+    expected = _GUI_DIR / "fonts" / "AurebeshAF"
+    assert matrix._FONT_DIR == expected
+    assert (expected / "AurebeshAF-CanonTech.otf").exists()
+    assert (expected / "AurebeshAF-LegendsTech.otf").exists()
+
+
+def test_grouped_gui_modules_use_qt_lib_imports():
+    """Implementation files should cross-import through qt_lib, not root shims."""
+    grouped_dirs = [
+        _GUI_DIR / "assets",
+        _GUI_DIR / "dialogs",
+        _GUI_DIR / "panels",
+        _GUI_DIR / "rendering",
+        _GUI_DIR / "textures",
+        _GUI_DIR / "viewports",
+        _GUI_DIR / "windows",
+    ]
+    offenders: list[tuple[pathlib.Path, int, str]] = []
+    for folder in grouped_dirs:
+        for path in sorted(folder.glob("*.py")):
+            if path.name == "__init__.py":
+                continue
+            for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+                stripped = line.strip()
+                if stripped.startswith(("from qt_lib.", "import qt_lib.", "from gui.", "import gui.")):
+                    offenders.append((path, lineno, stripped))
+    assert not offenders, (
+        "Grouped GUI implementation modules should use src.gui.qt_lib.* imports:\n  "
+        + "\n  ".join(
+            f"{path.relative_to(_REPO_ROOT)}:{lineno}: {line}"
+            for path, lineno, line in offenders
+        )
+    )
+
+
+def test_qt_lib_facade_imports_grouped_modules():
+    """The stable qt_lib facade supports category imports used by GUI modules."""
+    common = importlib.import_module("src.gui.qt_lib.panels.qt_common_panels")
+    viewport = importlib.import_module("src.gui.qt_lib.viewports.qt_viewport")
+    renderer = importlib.import_module("src.gui.qt_lib.rendering.gpu_renderer")
+
+    assert hasattr(common, "QtToolPanel")
+    assert hasattr(viewport, "QtViewportWidget")
+    assert hasattr(renderer, "GpuRenderer")
+
 
 def _runtime_deps_available() -> bool:
     for name in ("PySide6", "pykotor", "moderngl", "numpy", "PIL"):
@@ -188,14 +374,20 @@ def test_qt_main_window_imports_without_tkinter(monkeypatch):
     # Drop any previously-imported Qt / viewport modules so the import
     # chain re-runs from scratch under the tkinter ban.
     for mod_name in list(sys.modules):
-        if (mod_name.startswith("src.gui.qt_")
-                or mod_name == "src.gui.viewport_core"
-                or mod_name == "src.gui.qt_main_window"):
+        if (mod_name.startswith("src.gui.qt_lib")
+                or mod_name.startswith("src.gui.panels.")
+                or mod_name.startswith("src.gui.windows.")
+                or mod_name.startswith("src.gui.viewports.")
+                or mod_name.startswith("src.gui.rendering.")
+                or mod_name.startswith("src.gui.dialogs.")
+                or mod_name.startswith("src.gui.assets.")
+                or mod_name.startswith("src.gui.textures.")
+                or mod_name == "src.gui.qt_lib"):
             sys.modules.pop(mod_name, None)
 
     # The actual probe — if any qt_*.py path imports tkinter this raises
     # ImportError("import of tkinter halted; None in sys.modules").
-    importlib.import_module("src.gui.qt_main_window")
+    importlib.import_module("src.gui.qt_lib.windows.qt_main_window")
 
 
 @pytest.mark.skipif(
@@ -206,7 +398,8 @@ def test_viewport_core_imports_without_tkinter(monkeypatch):
     """The Tk-free rendering core must import cleanly with tkinter banned."""
     monkeypatch.setitem(sys.modules, "tkinter", None)
     monkeypatch.setitem(sys.modules, "tkinter.ttk", None)
-    sys.modules.pop("src.gui.viewport_core", None)
-    sys.modules.pop("src.gui.viewport", None)
-    sys.modules.pop("src.gui.viewport_tk", None)
-    importlib.import_module("src.gui.viewport_core")
+    for mod_name in list(sys.modules):
+        if mod_name == "src.gui.qt_lib" or mod_name.startswith("src.gui.qt_lib."):
+            sys.modules.pop(mod_name, None)
+    sys.modules.pop("src.gui.rendering.viewport_core", None)
+    importlib.import_module("src.gui.qt_lib.rendering.viewport_core")

@@ -39,12 +39,14 @@ pytest.importorskip("PySide6")
 pytest.importorskip("PIL")
 
 try:
-    from gui.qt_viewport import (
+    from src.gui.qt_lib.viewports.qt_viewport import (
         JOINT_DOT_COLOR_CENTER,
         JOINT_DOT_COLOR_CENTER_SPINE,
+        JOINT_DOT_COLOR_KEY,
         JOINT_DOT_COLOR_LEFT,
         JOINT_DOT_COLOR_RIGHT,
         _classify_joint_color,
+        _is_key_joint_name,
     )
 except ModuleNotFoundError as exc:
     pytest.skip(f"qt_viewport dependency unavailable: {exc}", allow_module_level=True)
@@ -57,14 +59,15 @@ def test_t401_color_constants_match_spec():
     assert JOINT_DOT_COLOR_CENTER_SPINE.name().lower() == "#00d7b5"
     assert JOINT_DOT_COLOR_LEFT.name().lower()         == "#ff4040"
     assert JOINT_DOT_COLOR_RIGHT.name().lower()        == "#00ff7a"
+    assert JOINT_DOT_COLOR_KEY.name().lower()          == "#3a96ff"
 
 
 # ── T401 ▸ AccuRig MIRROR_PAIRS-shaped names ────────────────────────────────
 @pytest.mark.parametrize(
     "name",
     [
-        "lshoulder", "lforearm", "lhand", "lfinger01", "lfinger02",
-        "lthigh", "lcalf", "lankle", "ltoebase", "lleg", "lfoot",
+        "larm", "lfinger01", "lfinger02",
+        "lankle", "ltoebase", "lleg",
     ],
 )
 def test_t401_accurig_left_names_classify_red(name):
@@ -74,8 +77,8 @@ def test_t401_accurig_left_names_classify_red(name):
 @pytest.mark.parametrize(
     "name",
     [
-        "rshoulder", "rforearm", "rhand", "rfinger01", "rfinger02",
-        "rthigh", "rcalf", "rankle", "rtoebase", "rleg", "rfoot",
+        "rarm", "rfinger01", "rfinger02",
+        "rankle", "rtoebase", "rleg",
     ],
 )
 def test_t401_accurig_right_names_classify_green(name):
@@ -86,8 +89,8 @@ def test_t401_accurig_right_names_classify_green(name):
 @pytest.mark.parametrize(
     "name,expected_hex",
     [
-        ("upperarm_L", "#ff4040"),
-        ("upperarm_R", "#00ff7a"),
+        ("armExtra_L", "#ff4040"),
+        ("armExtra_R", "#00ff7a"),
         ("L_clavicle", "#ff4040"),
         ("R_clavicle", "#00ff7a"),
         ("bone.l",     "#ff4040"),
@@ -101,7 +104,7 @@ def test_t401_tokenised_side_naming(name, expected_hex):
 # ── T401 ▸ Center-spine names ───────────────────────────────────────────────
 @pytest.mark.parametrize(
     "name",
-    ["chest", "spine", "spine01", "spine02", "torso", "ribcage", "back", "sternum"],
+    ["chest", "spine01", "spine02", "torso", "ribcage", "back", "sternum"],
 )
 def test_t401_center_spine_names_classify_cyan(name):
     assert _classify_joint_color(name).name().lower() == "#00d7b5", name
@@ -110,7 +113,7 @@ def test_t401_center_spine_names_classify_cyan(name):
 # ── T401 ▸ Generic center (default) names ───────────────────────────────────
 @pytest.mark.parametrize(
     "name",
-    ["root", "hip", "stomach", "head", "neck", "aurorabase", "pelvis", "jaw", "tongue", ""],
+    ["stomach", "aurorabase", "jaw", "tongue", ""],
 )
 def test_t401_default_center_classification(name):
     """Anything that doesn't match L/R/spine falls back to yellow center."""
@@ -123,6 +126,57 @@ def test_t401_hip_is_center_not_side():
     assert _classify_joint_color("hip").name().lower() == "#ffd400"
 
 
+@pytest.mark.parametrize(
+    "name,expected_hex",
+    [
+        ("head", "#ffd400"),
+        ("head_g", "#ffd400"),
+        ("neck_g", "#ffd400"),
+        ("spine_01", "#00d7b5"),
+        ("torso_g", "#00d7b5"),
+        ("lshoulder", "#ff4040"),
+        ("clavicle_r", "#00ff7a"),
+        ("lforearm_g", "#ff4040"),
+        ("hand_l", "#ff4040"),
+        ("rhand", "#00ff7a"),
+        ("lshin_g", "#ff4040"),
+        ("foot_r", "#00ff7a"),
+        ("lfoott_g", "#ff4040"),
+    ],
+)
+def test_t401_key_joints_keep_original_fill_palette(name, expected_hex):
+    assert _classify_joint_color(name).name().lower() == expected_hex, name
+    assert _is_key_joint_name(name), name
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "head", "head_g", "neck_g", "spine_01", "torso_g",
+        "lshoulder", "clavicle_r", "lforearm_g", "hand_l",
+        "rhand", "lshin_g", "foot_r", "lfoott_g",
+    ],
+)
+def test_t401_key_joint_names_are_marked_for_blue_accent(name):
+    assert _is_key_joint_name(name), name
+
+
+@pytest.mark.parametrize(
+    "name,expected_hex",
+    [
+        ("root", "#ffd400"),
+        ("pelvis_g", "#ffd400"),
+        ("lfinger01", "#ff4040"),
+        ("rfinger01", "#00ff7a"),
+        ("lthigh_g", "#ff4040"),
+        ("rthigh_g", "#00ff7a"),
+    ],
+)
+def test_t401_non_key_joints_keep_original_palette(name, expected_hex):
+    assert _classify_joint_color(name).name().lower() == expected_hex, name
+    assert not _is_key_joint_name(name), name
+
+
 # ── T401 ▸ Public setter contract on QtViewportWidget ───────────────────────
 def _make_widget():
     """Build a QtViewportWidget under offscreen Qt for setter contract tests."""
@@ -133,7 +187,7 @@ def _make_widget():
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     # Lazily import to give pykotor-missing environments a chance to skip
     try:
-        from gui.qt_viewport import QtViewportWidget
+        from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
     except Exception as exc:
         pytest.skip(f"QtViewportWidget unavailable: {exc}", allow_module_level=False)
     w = QtViewportWidget()
@@ -145,20 +199,20 @@ def test_t401_setter_defaults():
     app, w = _make_widget()
     try:
         assert w.joint_dot_enabled is True
-        assert 2 <= w.joint_dot_size <= 16
+        assert 1 <= w.joint_dot_size <= 8
         assert 0.0 <= w.joint_dot_opacity <= 1.0
     finally:
         w.deleteLater()
 
 
 def test_t401_setter_size_clamping():
-    """Joint-dot size clamps to the [2, 16] range."""
+    """Joint-dot size clamps to the [1, 8] range."""
     app, w = _make_widget()
     try:
         w.set_joint_dot_size(1)
-        assert w.joint_dot_size == 2
+        assert w.joint_dot_size == 1
         w.set_joint_dot_size(99)
-        assert w.joint_dot_size == 16
+        assert w.joint_dot_size == 8
         w.set_joint_dot_size(8)
         assert w.joint_dot_size == 8
     finally:
@@ -325,9 +379,44 @@ def test_t402_mirror_partner_disabled_when_symmetry_off():
 
 
 # ── T403 ▸ Mini-thumbnail inset ─────────────────────────────────────────────
+def test_t403_thumbnail_visibility_is_opt_in():
+    """Generic viewports keep the mini-thumbnail hidden unless explicitly enabled."""
+    app, generic = _make_widget()
+    from src.gui.qt_lib.viewports.qt_viewport import (
+        QtCharacterBuilderViewportWidget,
+        QtMainViewportWidget,
+        QtRetargetViewportWidget,
+        QtUnrealAnimatorViewportWidget,
+    )
+
+    main = QtMainViewportWidget()
+    builder = QtCharacterBuilderViewportWidget()
+    retarget = QtRetargetViewportWidget()
+    unreal = QtUnrealAnimatorViewportWidget()
+    try:
+        assert generic._thumbnail_visible_setting is False
+        assert generic.viewport_role == "base"
+        assert generic._compact_controls is False
+        assert main._thumbnail_visible_setting is False
+        assert main.viewport_role == "main"
+        assert builder._thumbnail_visible_setting is True
+        assert builder.viewport_role == "character_builder"
+        assert retarget._thumbnail_visible_setting is False
+        assert retarget.viewport_role == "retarget"
+        assert unreal._thumbnail_visible_setting is False
+        assert unreal.viewport_role == "unreal_animator"
+        assert unreal._compact_controls is True
+    finally:
+        generic.deleteLater()
+        main.deleteLater()
+        builder.deleteLater()
+        retarget.deleteLater()
+        unreal.deleteLater()
+
+
 def test_t403_thumbnail_widget_constructed_at_correct_size():
     """The inset widget is a QGraphicsView pinned at 220×280 px."""
-    from gui.qt_viewport import (
+    from src.gui.qt_lib.viewports.qt_viewport import (
         THUMBNAIL_HEIGHT_PX,
         THUMBNAIL_WIDTH_PX,
         _MiniThumbnailWidget,
@@ -410,7 +499,7 @@ def test_t403_set_thumbnail_none_clears_pixmap():
 # ── T404 ▸ Snap-view button cluster ─────────────────────────────────────────
 def test_t404_snap_view_widget_exists():
     """The viewport hosts a floating snap-view bar with 6 view buttons + ortho."""
-    from gui.qt_viewport import _FloatingSnapViewWidget
+    from src.gui.qt_lib.viewports.qt_viewport import _FloatingSnapViewWidget
     app, w = _make_widget()
     try:
         bar = w._snap_view_widget
@@ -535,7 +624,7 @@ def test_t404_snap_view_button_signals():
 # ── T405 ▸ Weight heat-map gradient ─────────────────────────────────────────
 def test_t405_gradient_endpoints():
     """Weight=0 → pure blue, weight=1 → pure red, weight=0.5 → pure green."""
-    from gui.qt_viewport import _weight_to_heatmap_color
+    from src.gui.qt_lib.viewports.qt_viewport import _weight_to_heatmap_color
     assert _weight_to_heatmap_color(0.0) == (0,   0, 255)
     assert _weight_to_heatmap_color(0.5) == (0, 255,   0)
     assert _weight_to_heatmap_color(1.0) == (255, 0,   0)
@@ -543,14 +632,14 @@ def test_t405_gradient_endpoints():
 
 def test_t405_gradient_clamps_out_of_range():
     """Weights outside [0, 1] clamp rather than wrapping."""
-    from gui.qt_viewport import _weight_to_heatmap_color
+    from src.gui.qt_lib.viewports.qt_viewport import _weight_to_heatmap_color
     assert _weight_to_heatmap_color(-0.5) == (0,   0, 255)
     assert _weight_to_heatmap_color( 2.0) == (255, 0,   0)
 
 
 def test_t405_gradient_intermediate_quarter_points():
     """Quarter-weights interpolate linearly inside their gradient segment."""
-    from gui.qt_viewport import _weight_to_heatmap_color
+    from src.gui.qt_lib.viewports.qt_viewport import _weight_to_heatmap_color
     # 0.25 → halfway through Blue → Green segment
     r, g, b = _weight_to_heatmap_color(0.25)
     assert r == 0
@@ -757,3 +846,57 @@ def test_t406_body_modes_reset_canonical_front():
         assert abs(w.camera.elevation - w.camera.DEFAULT_ELEVATION) < 1e-6
     finally:
         w.deleteLater()
+
+
+def _mesh_node_t407(name: str, texture: str = "pmha01"):
+    from core.model_data import ModelNode, NodeFlags
+
+    node = ModelNode()
+    node.name = name
+    node.flags = int(NodeFlags.MESH)
+    node.render = True
+    node.texture = texture
+    node.texture_names = [texture]
+    node.vertices = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
+    node.uvs = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]
+    node.faces = [(0, 1, 2)]
+    return node
+
+
+def _model_t407(name: str, child):
+    from core.model_data import KotorModel, ModelClassification, ModelNode
+
+    model = KotorModel()
+    model.name = name
+    model.model_type = int(ModelClassification.CHARACTER)
+    root = ModelNode()
+    root.name = name
+    root.children = [child]
+    child.parent = root
+    model.root_node = root
+    return model
+
+
+def test_t407_animation_supermodel_mesh_helpers_are_not_visible():
+    from core.model_data import is_animation_supermodel
+    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
+
+    model = _model_t407("s_male02", _mesh_node_t407("eyeRA"))
+    model.animations = [object()]
+
+    renderer = FrameRenderer(ArcBallCamera())
+    renderer.set_model(model)
+
+    assert is_animation_supermodel(model)
+    assert list(renderer._iter_visible_mesh_nodes()) == []
+
+
+def test_t407_normal_head_inner_geometry_still_renders():
+    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
+
+    model = _model_t407("pmhc01", _mesh_node_t407("eyeRA"))
+
+    renderer = FrameRenderer(ArcBallCamera())
+    renderer.set_model(model)
+
+    assert [node.name for node in renderer._iter_visible_mesh_nodes()] == ["eyeRA"]
