@@ -11,6 +11,9 @@ For each completed change, add a dated entry with:
 
 ## 2026-05-19
 
+- Added `CHEETSHEET.md` as the maintained reference for useful embedded Python terminal commands, starting with selected-model inspection, animation playback, animation override, viewport, and log examples. Updated `AGENTS.md` so future terminal helper changes also update the cheatsheet.
+  Affected areas: `CHEETSHEET.md`, `AGENTS.md`, `CHANGES.md`.
+  Verification: documentation-only change; reviewed the new cheatsheet commands against the current terminal helper bindings.
 - Added Python terminal helper bindings for the main window's selected model and animation controls. The embedded terminal now exposes `window`, `main_window`, `viewport()`, `model()`, `selected_model()`, `animation_names()`, `select_animation(name)`, `play_animation(name, loop=None)`, `stop_animation()`, `seek_animation(percent)`, and `override_animation(target_name, source_name="", source_model=None)`.
   Affected areas: `src/gui/windows/qt_main_window.py`, `tests/test_core_contracts.py`.
   Verification: `pytest tests/test_core_contracts.py::test_main_window_exposes_animation_helpers_to_python_terminal tests/test_core_contracts.py::test_main_window_bottom_area_is_resizable_splitter -q`; `python -m compileall -q src\gui\windows\qt_main_window.py tests\test_core_contracts.py`.

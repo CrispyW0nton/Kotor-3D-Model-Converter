@@ -34,6 +34,13 @@ a concise summary of the change, the affected files or subsystem, and the
 verification performed. Keep entries factual so future agents can avoid repeating
 completed work.
 
+## Python terminal cheatsheet
+
+When adding, changing, or discovering useful commands for the embedded Python
+terminal, update `CHEETSHEET.md`. Keep it focused on commands a user can paste
+into the terminal, especially helpers exposed by the GUI such as selected-model,
+viewport, animation, export, diagnostic, or debugging commands.
+
 ## Commit format:
 fix(scope): short description
 feat(scope): short description  
