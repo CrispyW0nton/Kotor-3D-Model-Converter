@@ -41,7 +41,7 @@ def _validate_model(game: str, resref: str) -> dict[str, Any]:
         }
 
     try:
-        from src.gui.viewport import ArcBallCamera, FrameRenderer
+        from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
 
         renderer = FrameRenderer(ArcBallCamera())
         renderer.set_model(model)

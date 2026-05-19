@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 # Must be kept in sync with FrameRenderer._BASE_SKELETONS in viewport.py.
 KOTOR_BASE_SKELETONS: frozenset = frozenset({
     # Standard PC/NPC humanoid base skeletons (K1 + K2)
-    'S_FEMALE02', 'S_MALE02', 'S_FEMALE03', 'S_MALE03',
+    'S_FEMALE01', 'S_MALE01', 'S_FEMALE02', 'S_MALE02', 'S_FEMALE03', 'S_MALE03',
     # Creature / quadruped models – self-contained, never accessories
     'C_BANTHA', 'C_BRITH', 'C_DEWBACK', 'C_DURASTEEL',
     'C_KINRATH', 'C_KATH', 'C_RANCOR', 'C_WRAID', 'C_IRIAZ',
@@ -30,6 +30,20 @@ KOTOR_BASE_SKELETONS: frozenset = frozenset({
     # Null / self-contained (no supermodel)
     'NULL', '', 'NONE',
 })
+
+
+def is_animation_supermodel(model: object) -> bool:
+    """Return True for stock Odyssey animation supermodel resources."""
+    name = str(getattr(model, "name", "") or "").strip().upper()
+    if not name.startswith("S_"):
+        return False
+    try:
+        classification = int(getattr(model, "model_type", int(ModelClassification.CHARACTER)))
+    except (TypeError, ValueError):
+        classification = int(ModelClassification.CHARACTER)
+    if classification != int(ModelClassification.CHARACTER):
+        return False
+    return bool(getattr(model, "animations", None)) or name in KOTOR_BASE_SKELETONS
 
 class NodeFlags(IntFlag):
     HEADER    = 0x0001
@@ -150,6 +164,7 @@ class ModelTaxonomy(_Enum):
     SUPERMODEL          = "supermodel"
     MODULAR_BODY        = "modular_body"
     FULL_BODY_CHARACTER = "full_body_character"
+    HUMANOID            = "humanoid"
     HEAD                = "head"
     CREATURE            = "creature"
     DROID               = "droid"
@@ -171,6 +186,7 @@ _MODEL_TAXONOMY_DISPLAY_NAMES: Dict["ModelTaxonomy", str] = {
     ModelTaxonomy.SUPERMODEL:          "Supermodel",
     ModelTaxonomy.MODULAR_BODY:        "Modular Body",
     ModelTaxonomy.FULL_BODY_CHARACTER: "Full-Body Character",
+    ModelTaxonomy.HUMANOID:            "Humanoid",
     ModelTaxonomy.HEAD:                "Head",
     ModelTaxonomy.CREATURE:            "Creature",
     ModelTaxonomy.DROID:               "Droid",
@@ -191,8 +207,8 @@ class ModelTaxonomyResult:
 
     ``category`` answers "what kind of KOTOR model is this?" while
     ``character_mode`` answers "which current Character Builder workflow can
-    handle it?".  Full-body characters and droids currently route to the
-    self-contained workflow until the builder gets a dedicated full-body mode.
+    handle it?".  Full-body humanoids and droids route to the HUMANOID
+    workflow; non-humanoid creatures stay in CREATURE.
     """
 
     category: "ModelTaxonomy"
@@ -209,8 +225,8 @@ class ModelTaxonomyResult:
 class CharacterMode(_Enum):
     """Top-level classification of a KotOR character model.
 
-    Every KotOR character/creature MDL falls into exactly one of four
-    "real" modes (HEADLESS_BODY / HEAD / SUPERMODEL / CREATURE) which
+    Every KotOR character/creature MDL falls into exactly one real mode
+    (HEADLESS_BODY / HEAD / HUMANOID / SUPERMODEL / CREATURE) which
     drive the Character Builder UI workflow, asset compatibility rules,
     and the rigging / animation pipeline that should be applied.
 
@@ -227,6 +243,7 @@ class CharacterMode(_Enum):
     # ── Real character modes ────────────────────────────────────────────
     HEADLESS_BODY = "headless_body"   # pfbc*, pmbc*, n_* body meshes — needs head attached at headhook
     HEAD          = "head"            # pfhc*, pmhc*, p_hk47 — head-only model, attaches to a body
+    HUMANOID      = "humanoid"        # Full humanoid NPC/body with its own head and humanoid skeleton
     SUPERMODEL    = "supermodel"      # Animation-bearing parent skeleton (s_male01, etc.)
     CREATURE      = "creature"        # Self-contained non-humanoid (c_bantha, c_rancor, …)
 
@@ -254,6 +271,7 @@ class CharacterMode(_Enum):
 _CHARACTER_MODE_DISPLAY_NAMES: Dict["CharacterMode", str] = {
     CharacterMode.HEADLESS_BODY: "Headless Body",
     CharacterMode.HEAD:          "Head",
+    CharacterMode.HUMANOID:      "Humanoid",
     CharacterMode.SUPERMODEL:    "Supermodel",
     CharacterMode.CREATURE:      "Creature",
     CharacterMode.AMBIGUOUS:     "Ambiguous",
@@ -264,6 +282,7 @@ _CHARACTER_MODE_DISPLAY_NAMES: Dict["CharacterMode", str] = {
 _CHARACTER_MODE_ICON_KEYS: Dict["CharacterMode", str] = {
     CharacterMode.HEADLESS_BODY: "mode_headless_body",
     CharacterMode.HEAD:          "mode_head",
+    CharacterMode.HUMANOID:      "mode_humanoid",
     CharacterMode.SUPERMODEL:    "mode_supermodel",
     CharacterMode.CREATURE:      "mode_creature",
     CharacterMode.AMBIGUOUS:     "mode_ambiguous",
@@ -284,6 +303,13 @@ _BODY_HOOK_NAMES: frozenset = frozenset({
     "headhook", "rhand", "lhand_g", "camerahook",
     "chestconjure", "handconjure", "impact_bolt",
 })
+_HUMANOID_BODY_BONE_NAMES: frozenset = frozenset({
+    "pelvis_g", "spine", "spine_g", "torso_g", "torsoupr_g",
+    "lthigh_g", "rthigh_g", "lshin_g", "rshin_g",
+    "lfoot_g", "rfoot_g", "lfoott_g", "rfoott_g",
+    "lforearm_g", "rforearm_g", "lhand_g", "rhand_g",
+    "lhand", "rhand",
+})
 _CREATURE_HOOK_NAMES: frozenset = frozenset({
     "cameramaster", "impact_head", "impact_chest",
 })
@@ -300,6 +326,9 @@ _FULL_BODY_PREFIX_HINTS: Tuple[str, ...] = (
 _DROID_NAME_HINTS: Tuple[str, ...] = (
     "drd", "droid", "hk47", "t3m4", "g0t0", "warbot", "wardroid",
 )
+_CREATURE_SUPERMODEL_NAMES: frozenset = frozenset({
+    "WARDROID", "N_WARDROID",
+})
 
 
 def classify_kotor_model(model: "KotorModel") -> ModelTaxonomyResult:
@@ -348,6 +377,8 @@ def classify_kotor_model(model: "KotorModel") -> ModelTaxonomyResult:
     has_head_socket = bool(_HEAD_SOCKET_NAMES & nodes)
     has_body_socket = bool(_BODY_SOCKET_NAMES & nodes)
     has_creature_hook = bool(_CREATURE_HOOK_NAMES & nodes)
+    has_body_skeleton = has_pelvis or bool(_HUMANOID_BODY_BONE_NAMES & nodes)
+    has_visible_head = has_head_geom or has_facial or has_talkdummy
     anim_count = len(getattr(model, "animations", []) or [])
 
     def result(category: "ModelTaxonomy", mode: Optional["CharacterMode"],
@@ -361,7 +392,7 @@ def classify_kotor_model(model: "KotorModel") -> ModelTaxonomyResult:
         )
 
     # Non-character/functional prefixes first: these are not appearance bodies.
-    if name.startswith(("s_male", "s_female")) or (
+    if is_animation_supermodel(model) or name.startswith(("s_male", "s_female")) or (
         name.startswith("s_") and anim_count > 10
     ):
         return result(ModelTaxonomy.SUPERMODEL, CharacterMode.SUPERMODEL,
@@ -400,7 +431,10 @@ def classify_kotor_model(model: "KotorModel") -> ModelTaxonomyResult:
         return result(ModelTaxonomy.MODULAR_BODY, CharacterMode.HEADLESS_BODY,
                       "high", "appearance.2da modeltype B")
     if modeltype in {"F", "S"}:
-        return result(ModelTaxonomy.FULL_BODY_CHARACTER, CharacterMode.CREATURE,
+        if name.startswith("c_") or supermodel.startswith("C_") or has_creature_hook:
+            return result(ModelTaxonomy.CREATURE, CharacterMode.CREATURE,
+                          "high", f"appearance.2da modeltype {modeltype} creature")
+        return result(ModelTaxonomy.FULL_BODY_CHARACTER, CharacterMode.HUMANOID,
                       "high", f"appearance.2da modeltype {modeltype}")
     if modeltype == "L":
         return result(ModelTaxonomy.CREATURE, CharacterMode.CREATURE,
@@ -417,13 +451,21 @@ def classify_kotor_model(model: "KotorModel") -> ModelTaxonomyResult:
         return result(ModelTaxonomy.HEAD, CharacterMode.HEAD,
                       "high", "head naming or head-only nodes")
 
-    if any(hint in name for hint in _DROID_NAME_HINTS):
-        return result(ModelTaxonomy.DROID, CharacterMode.CREATURE,
-                      "medium", "droid naming convention")
-
     if name.startswith("c_") or supermodel.startswith("C_") or has_creature_hook:
         return result(ModelTaxonomy.CREATURE, CharacterMode.CREATURE,
                       "high", "creature prefix/supermodel/hook")
+
+    if name.startswith("n_") and supermodel in _CREATURE_SUPERMODEL_NAMES:
+        return result(ModelTaxonomy.CREATURE, CharacterMode.CREATURE,
+                      "high", "N_* creature supermodel")
+
+    if any(hint in name for hint in _DROID_NAME_HINTS):
+        return result(ModelTaxonomy.DROID, CharacterMode.HUMANOID,
+                      "medium", "droid naming convention")
+
+    if has_body_skeleton and has_visible_head:
+        return result(ModelTaxonomy.HUMANOID, CharacterMode.HUMANOID,
+                      "medium", "humanoid body skeleton with visible head")
 
     # N_* helmeted/generic NPCs are usually full-body F-style models.  This
     # prevents talkdummy on models such as n_mandalorian03 from being mistaken
@@ -431,7 +473,7 @@ def classify_kotor_model(model: "KotorModel") -> ModelTaxonomyResult:
     if name.startswith("n_") and (
         has_body_socket or has_talkdummy or any(name.startswith(p) for p in _FULL_BODY_PREFIX_HINTS)
     ):
-        return result(ModelTaxonomy.FULL_BODY_CHARACTER, CharacterMode.CREATURE,
+        return result(ModelTaxonomy.FULL_BODY_CHARACTER, CharacterMode.HUMANOID,
                       "medium", "N_* full-body character heuristic")
 
     if has_headhook and (has_rhand or has_lhand) and not has_facial:
@@ -1462,6 +1504,23 @@ class KotorModel:
 
         Falls back to compute_bounds() values if no UV nodes are found.
         """
+        if is_animation_supermodel(self):
+            points = []
+            for node in self.all_nodes():
+                try:
+                    points.append(node.world_position())
+                except Exception:
+                    continue
+            if points:
+                xs = [p[0] for p in points]
+                ys = [p[1] for p in points]
+                zs = [p[2] for p in points]
+                pad = 0.05
+                return (
+                    (min(xs) - pad, min(ys) - pad, min(zs) - pad),
+                    (max(xs) + pad, max(ys) + pad, max(zs) + pad),
+                )
+
         def _is_render_helper(n):
             """Mirror of FrameRenderer._is_deformation_helper() in viewport.py."""
             # OBJ / FBX imported nodes: always renderable — skip all heuristics
@@ -1784,6 +1843,7 @@ class CharacterScene:
         # Priority order: most specific first.
         _PRIORITY = (
             CharacterMode.CREATURE,
+            CharacterMode.HUMANOID,
             CharacterMode.HEAD,
             CharacterMode.HEADLESS_BODY,
             CharacterMode.SUPERMODEL,

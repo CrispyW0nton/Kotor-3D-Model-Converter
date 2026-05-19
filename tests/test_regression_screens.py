@@ -146,10 +146,10 @@ class _ScreenshotViewport(QtWidgets.QWidget):
 
 
 def _make_screenshot_shell(mode_name: str, step: int) -> QtWidgets.QWidget:
-    from src.gui.qt_bottom_strip import QtBottomStrip
-    from src.gui.qt_inspector_panel import QtInspectorPanel
-    from src.gui.qt_theme import apply_theme
-    from src.gui.qt_workflow_rail import QtWorkflowRail
+    from src.gui.qt_lib.panels.qt_bottom_strip import QtBottomStrip
+    from src.gui.qt_lib.panels.qt_inspector_panel import QtInspectorPanel
+    from src.gui.qt_lib.assets.qt_theme import apply_theme
+    from src.gui.qt_lib.panels.qt_workflow_rail import QtWorkflowRail
 
     shell = QtWidgets.QWidget()
     shell.setObjectName("ScreenshotCharacterBuilderShell")

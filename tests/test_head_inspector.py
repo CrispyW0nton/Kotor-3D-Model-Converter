@@ -65,7 +65,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6 import QtCore, QtWidgets                        # noqa: E402
 
 try:
-    from gui.qt_inspector_panel import QtInspectorPanel
+    from src.gui.qt_lib.panels.qt_inspector_panel import QtInspectorPanel
 except Exception as exc:                                     # pragma: no cover
     pytest.skip(f"QtInspectorPanel unavailable: {exc}",
                 allow_module_level=True)
@@ -88,11 +88,10 @@ def inspector(qapp):
 #  T602 ▸ Mode-aware page composition
 # ──────────────────────────────────────────────────────────────────────
 
-def test_t602_inspector_starts_with_legacy_face_layout(inspector):
-    """Without set_active_mode, the legacy face controls are visible."""
+def test_t602_inspector_starts_with_launch_preview_layout(inspector):
+    """The five-step launch UI starts without legacy face-rig stubs."""
     assert inspector.active_mode() is None
-    assert inspector._face_legacy_widgets, "expected at least one legacy widget"
-    assert not inspector._face_legacy_widgets[0].isHidden()
+    assert inspector._face_legacy_widgets == []
     # Head palette is built but hidden by default.
     assert inspector._head_face_palette is not None
     assert inspector._head_face_palette.isHidden()

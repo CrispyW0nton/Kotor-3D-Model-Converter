@@ -195,8 +195,8 @@ def _render_under_formula(
     restores its prior value on exit.  A fresh ``GpuRenderer`` is built
     per call so that no skin uploader state leaks between formulas.
     """
-    from src.gui.gpu_renderer import GpuRenderer
-    from src.gui.viewport import ArcBallCamera
+    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
+    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera
     from src.core.resource_manager import resolve_model_textures
 
     prior = os.environ.get("GHOSTRIGGER_SKIN_FORMULA")

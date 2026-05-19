@@ -219,6 +219,55 @@ class GhostRiggerMDLBinaryReader(_iom.MDLBinaryReader):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._gr_bin_nodes: Dict[int, GhostRiggerNode] = {}
+        self._gr_node_order_seen: set[int] = set()
+
+    def _get_node_order(self, startnode: int) -> None:
+        """Collect node order using the reader's logical MDL offset space.
+
+        PyKotor's current implementation adds the binary MDL 12-byte prefix
+        again even though ``MDLBinaryReader`` has already installed that prefix
+        as the ``BinaryReader`` base offset.  Some stock supermodels, including
+        K1 ``S_Male02``, then read controller metadata as child offsets and walk
+        out of bounds before GhostRigger's safer node reader can recover.
+        """
+        if startnode in (0, 0xFFFFFFFF) or startnode in self._gr_node_order_seen:
+            return
+        if startnode < 0 or startnode + _iom._NodeHeader.SIZE > self._reader.size():
+            return
+
+        self._gr_node_order_seen.add(startnode)
+
+        try:
+            self._reader.seek(startnode + 4)
+            name_index: int = self._reader.read_uint16()
+            self._order2nameindex.append(name_index)
+
+            self._reader.seek(startnode + 44)
+            child_array_offset: int = self._reader.read_uint32()
+            child_array_length: int = self._reader.read_uint32()
+        except OSError:
+            return
+
+        if child_array_length <= 0 or child_array_offset in (0, 0xFFFFFFFF):
+            return
+        if child_array_length > 0x7FFFFFFF:
+            return
+        if child_array_offset < 0:
+            return
+        if child_array_offset + (child_array_length * 4) > self._reader.size():
+            return
+
+        try:
+            self._reader.seek(child_array_offset)
+            child_offsets = [
+                self._reader.read_uint32()
+                for _ in range(child_array_length)
+            ]
+        except OSError:
+            return
+
+        for child_offset in child_offsets:
+            self._get_node_order(child_offset)
 
     def _load_node(self, offset: int, parent):
         previous = _ACTIVE_READERS.get(id(self._reader))
@@ -268,4 +317,3 @@ class GhostRiggerMDLBinaryReader(_iom.MDLBinaryReader):
             self._reader_ext.seek(saved_pos)
 
         mesh.vertex_positions = positions
-

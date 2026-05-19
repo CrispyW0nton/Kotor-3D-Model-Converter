@@ -956,6 +956,14 @@ class MatrixPaletteUploader:
         bone_map = list(getattr(skin_node, 'bone_map', []) or [])
         qbones = list(getattr(skin_node, 'qbone_list', []) or [])
         tbones = list(getattr(skin_node, 'tbone_list', []) or [])
+        if active_formula == _SKIN_FORMULA_G5 and (not qbones or not tbones):
+            # Imported FBX skin meshes, such as the Unreal Animator Quinn target,
+            # have normal bone maps and skin weights but no KotOR qBone/tBone
+            # arrays. G5 would otherwise use identity inverse-bind matrices and
+            # stretch the mesh by applying raw world poses to bind-space vertices.
+            active_formula = _SKIN_FORMULA_F1
+            self._skin_palette_formula = f"{_SKIN_FORMULA_F1}:hierarchy_bind_no_qbone"
+            self._skin_inverse_bind_source = "hierarchy_inverse_bind_no_qbone"
 
         # 3j Step 4 — under G5_FULL_REF, qBone/tBone are indexed by the
         # bone's GLOBAL DFS NODE INDEX in the model (parallel to the
@@ -989,11 +997,13 @@ class MatrixPaletteUploader:
             else:
                 inv_bind = (
                     self.qbone_inverse_bind_matrix(qbones[idx], tbones[idx])
-                    if idx < len(qbones) and idx < len(tbones) else _mat4_identity_py()
+                    if idx < len(qbones) and idx < len(tbones)
+                    else self._inv_bind.get(bkey, _mat4_identity_py())
                 )
                 direct_bind = (
                     self.qbone_direct_bind_matrix(qbones[idx], tbones[idx])
-                    if idx < len(qbones) and idx < len(tbones) else _mat4_identity_py()
+                    if idx < len(qbones) and idx < len(tbones)
+                    else _mat4_invert_py(inv_bind)
                 )
             self._skin_local_inv_bind_by_slot[idx] = inv_bind
             self._skin_local_direct_bind_by_slot[idx] = direct_bind

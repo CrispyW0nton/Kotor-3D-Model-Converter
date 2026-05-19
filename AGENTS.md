@@ -26,6 +26,14 @@ If you get an ImportError, fix the import path — don't ask the user to open Gh
 - `pytest tests/ -m "not slow"` to skip full-scan tests
 - `pytest tests/test_mcp_full_scan.py` for the complete 6,078-model validation
 
+## Change log
+
+After any fix or software change is successfully completed, update `CHANGES.md`
+with a dated entry. Include the relevant `T###` roadmap task ID when one applies,
+a concise summary of the change, the affected files or subsystem, and the
+verification performed. Keep entries factual so future agents can avoid repeating
+completed work.
+
 ## Commit format:
 fix(scope): short description
 feat(scope): short description  
@@ -53,16 +61,21 @@ only in git history (commit `838831f` is the last ref before deletion):
 - `src/gui/viewport_tk.py`              — Tk widgets split out of viewport.py (T001)
 - `src/gui/viewport.py`                 — backward-compat shim that re-exported both
 
-All UI work now happens under `src/gui/qt_*.py` and `src/gui/viewport_core.py`.
+All UI work now happens under the grouped `src/gui/` category folders and is
+imported through the central `src/gui/qt_lib.py` facade. The `src/gui` package
+root should contain only `qt_lib.py`, `__init__.py`, and documentation.
 `tests/test_qt_only_imports.py` includes guards (`test_legacy_tk_modules_are_deleted`,
-`test_no_gui_module_imports_tkinter`) that fail CI if any of the eight files
-return or if a new file under `src/gui/` imports tkinter.
+`test_no_gui_module_imports_tkinter`, `test_gui_root_only_keeps_central_qt_lib`)
+that fail CI if any of the eight files return, if a new root shim appears, or
+if a new file under `src/gui/` imports tkinter.
 
 ## Qt imports
 
-- `src.gui.viewport_core` — Tk-free rendering core. Use everywhere.
-- `src.gui.qt_*`          — the canonical Qt UI subtree.
+- `src.gui.qt_lib.rendering.viewport_core` - Tk-free rendering core.
+- `src.gui.qt_lib.viewports.qt_viewport` - Qt viewport widgets.
+- `src.gui.qt_lib.windows.qt_main_window` - Qt main window entry point.
+- `src.gui.qt_lib.<category>.<module>` - canonical Qt GUI import route.
 
 Do not add `from .viewport import ...` anywhere; that shim no longer exists.
 Import `FrameRenderer`, `ArcBallCamera`, `_load_tpc_bytes`, `_is_tpc_data`,
-`_clean_tex_name`, etc. from `src.gui.viewport_core` directly.
+`_clean_tex_name`, etc. through `src.gui.qt_lib.rendering.viewport_core`.

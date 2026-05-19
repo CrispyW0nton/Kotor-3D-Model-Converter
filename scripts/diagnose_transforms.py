@@ -81,7 +81,7 @@ def main() -> int:
     parser.add_argument("--resref", default="c_bantha")
     args = parser.parse_args()
 
-    from src.gui.viewport import ArcBallCamera, FrameRenderer
+    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
 
     model = load_ghostrigger_model(args.game, args.resref)
     renderer = FrameRenderer(ArcBallCamera())

@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UnrealBoneMap schema="UnrealPythonBoneMap" schemaVersion="1.0" engine="Unreal Engine 5.6+" target="MetaHuman" skeletonAsset="metahuman_base_skel" scope="BodyBaseSkeleton" hierarchyMode="flat" generated="2026-05-19">
+    <!--Parser-safe MetaHuman body/base skeleton map. This file does not claim to be a full facial DNA/RigLogic joint dump.-->
+    <Description>Flat XML bone map for a MetaHuman body skeletal mesh using the documented MetaHuman base skeleton asset pattern.</Description>
+    <SourceHints>
+        <Source type="EpicDocumentation" name="MetaHuman Assets Overview" note="MetaHuman characters are assembled from separate head and body skeletal meshes."/>
+        <Source type="EpicDocumentation" name="MetaHuman DNA / Rig Definition" note="MetaHuman facial/body rigs may be DNA-driven; exact per-character facial joint data should be exported from DNA."/>
+        <Source type="UnrealAssetConvention" name="metahuman_base_skel" note="Common base skeleton used by MetaHuman body assets."/>
+    </SourceHints>
+    <Components>
+        <Component name="Body" included="true" skeletonAsset="metahuman_base_skel" commonMalePreviewMesh="m_med_nrw_body" commonFemalePreviewMesh="f_med_nrw_body"/>
+        <Component name="HeadFace" included="false" reason="MetaHuman facial skeleton/joint data is high-density and DNA/RigLogic driven; export from the character DNA for exact per-character data."/>
+        <Component name="IKRig" included="false" assetHint="IK_MetaHuman" reason="IK rig goals/chains are control data, not treated here as body deform bones."/>
+    </Components>
+    <RetargetChains>
+        <Chain name="Root" start="root" end="root"/>
+        <Chain name="Pelvis" start="pelvis" end="pelvis"/>
+        <Chain name="Spine" start="pelvis" end="spine_05"/>
+        <Chain name="NeckHead" start="neck_01" end="head"/>
+        <Chain name="Clavicle_L" start="clavicle_l" end="clavicle_l"/>
+        <Chain name="Arm_L" start="upperarm_l" end="hand_l"/>
+        <Chain name="Fingers_L" start="thumb_01_l" end="pinky_03_l"/>
+        <Chain name="Leg_L" start="thigh_l" end="ball_l"/>
+        <Chain name="Clavicle_R" start="clavicle_r" end="clavicle_r"/>
+        <Chain name="Arm_R" start="upperarm_r" end="hand_r"/>
+        <Chain name="Fingers_R" start="thumb_01_r" end="pinky_03_r"/>
+        <Chain name="Leg_R" start="thigh_r" end="ball_r"/>
+    </RetargetChains>
+    <Bones count="150">
+        <Bone index="0" name="root" side="center" group="root" role="root"/>
+        <Bone index="1" name="pelvis" side="center" group="pelvis" role="primary"/>
+        <Bone index="2" name="spine_01" side="center" group="spine" role="primary"/>
+        <Bone index="3" name="spine_02" side="center" group="spine" role="primary"/>
+        <Bone index="4" name="spine_03" side="center" group="spine" role="primary"/>
+        <Bone index="5" name="spine_04" side="center" group="spine" role="primary"/>
+        <Bone index="6" name="spine_05" side="center" group="spine" role="primary"/>
+        <Bone index="7" name="clavicle_l" side="left" group="upper_body" role="primary"/>
+        <Bone index="8" name="clavicle_out_l" side="left" group="upper_body" role="corrective"/>
+        <Bone index="9" name="clavicle_scap_l" side="left" group="upper_body" role="corrective"/>
+        <Bone index="10" name="upperarm_l" side="left" group="upper_body" role="primary"/>
+        <Bone index="11" name="lowerarm_l" side="left" group="upper_body" role="primary"/>
+        <Bone index="12" name="hand_l" side="left" group="upper_body" role="primary"/>
+        <Bone index="13" name="index_metacarpal_l" side="left" group="hand_digits" role="metacarpal" digit="index"/>
+        <Bone index="14" name="index_01_l" side="left" group="hand_digits" role="finger" digit="index"/>
+        <Bone index="15" name="index_02_l" side="left" group="hand_digits" role="finger" digit="index"/>
+        <Bone index="16" name="index_03_l" side="left" group="hand_digits" role="finger" digit="index"/>
+        <Bone index="17" name="middle_metacarpal_l" side="left" group="hand_digits" role="metacarpal" digit="middle"/>
+        <Bone index="18" name="middle_01_l" side="left" group="hand_digits" role="finger" digit="middle"/>
+        <Bone index="19" name="middle_02_l" side="left" group="hand_digits" role="finger" digit="middle"/>
+        <Bone index="20" name="middle_03_l" side="left" group="hand_digits" role="finger" digit="middle"/>
+        <Bone index="21" name="pinky_metacarpal_l" side="left" group="hand_digits" role="metacarpal" digit="pinky"/>
+        <Bone index="22" name="pinky_01_l" side="left" group="hand_digits" role="finger" digit="pinky"/>
+        <Bone index="23" name="pinky_02_l" side="left" group="hand_digits" role="finger" digit="pinky"/>
+        <Bone index="24" name="pinky_03_l" side="left" group="hand_digits" role="finger" digit="pinky"/>
+        <Bone index="25" name="ring_metacarpal_l" side="left" group="hand_digits" role="metacarpal" digit="ring"/>
+        <Bone index="26" name="ring_01_l" side="left" group="hand_digits" role="finger" digit="ring"/>
+        <Bone index="27" name="ring_02_l" side="left" group="hand_digits" role="finger" digit="ring"/>
+        <Bone index="28" name="ring_03_l" side="left" group="hand_digits" role="finger" digit="ring"/>
+        <Bone index="29" name="thumb_01_l" side="left" group="hand_digits" role="finger" digit="thumb"/>
+        <Bone index="30" name="thumb_02_l" side="left" group="hand_digits" role="finger" digit="thumb"/>
+        <Bone index="31" name="thumb_03_l" side="left" group="hand_digits" role="finger" digit="thumb"/>
+        <Bone index="32" name="wrist_inner_l" side="left" group="upper_body" role="secondary"/>
+        <Bone index="33" name="wrist_outer_l" side="left" group="upper_body" role="secondary"/>
+        <Bone index="34" name="lowerarm_correctiveRoot_l" side="left" group="upper_body" role="corrective"/>
+        <Bone index="35" name="lowerarm_bck_l" side="left" group="upper_body" role="corrective"/>
+        <Bone index="36" name="lowerarm_fwd_l" side="left" group="upper_body" role="corrective"/>
+        <Bone index="37" name="lowerarm_in_l" side="left" group="upper_body" role="corrective"/>
+        <Bone index="38" name="lowerarm_out_l" side="left" group="upper_body" role="corrective"/>
+        <Bone index="39" name="lowerarm_twist_01_l" side="left" group="upper_body" role="twist"/>
+        <Bone index="40" name="lowerarm_twist_02_l" side="left" group="upper_body" role="twist"/>
+        <Bone index="41" name="upperarm_correctiveRoot_l" side="left" group="upper_body" role="corrective"/>
+        <Bone index="42" name="upperarm_bck_l" side="left" group="upper_body" role="corrective"/>
+        <Bone index="43" name="upperarm_fwd_l" side="left" group="upper_body" role="corrective"/>
+        <Bone index="44" name="upperarm_in_l" side="left" group="upper_body" role="corrective"/>
+        <Bone index="45" name="upperarm_out_l" side="left" group="upper_body" role="corrective"/>
+        <Bone index="46" name="upperarm_twist_01_l" side="left" group="upper_body" role="twist"/>
+        <Bone index="47" name="upperarm_twistCor_01_l" side="left" group="upper_body" role="corrective"/>
+        <Bone index="48" name="upperarm_twist_02_l" side="left" group="upper_body" role="twist"/>
+        <Bone index="49" name="upperarm_bicep_l" side="left" group="upper_body" role="corrective"/>
+        <Bone index="50" name="upperarm_tricep_l" side="left" group="upper_body" role="corrective"/>
+        <Bone index="51" name="upperarm_twistCor_02_l" side="left" group="upper_body" role="corrective"/>
+        <Bone index="52" name="clavicle_pec_l" side="left" group="upper_body" role="corrective"/>
+        <Bone index="53" name="clavicle_pec_r" side="right" group="upper_body" role="corrective"/>
+        <Bone index="54" name="clavicle_r" side="right" group="upper_body" role="primary"/>
+        <Bone index="55" name="clavicle_out_r" side="right" group="upper_body" role="corrective"/>
+        <Bone index="56" name="clavicle_scap_r" side="right" group="upper_body" role="corrective"/>
+        <Bone index="57" name="upperarm_r" side="right" group="upper_body" role="primary"/>
+        <Bone index="58" name="lowerarm_r" side="right" group="upper_body" role="primary"/>
+        <Bone index="59" name="hand_r" side="right" group="upper_body" role="primary"/>
+        <Bone index="60" name="index_metacarpal_r" side="right" group="hand_digits" role="metacarpal" digit="index"/>
+        <Bone index="61" name="index_01_r" side="right" group="hand_digits" role="finger" digit="index"/>
+        <Bone index="62" name="index_02_r" side="right" group="hand_digits" role="finger" digit="index"/>
+        <Bone index="63" name="index_03_r" side="right" group="hand_digits" role="finger" digit="index"/>
+        <Bone index="64" name="middle_metacarpal_r" side="right" group="hand_digits" role="metacarpal" digit="middle"/>
+        <Bone index="65" name="middle_01_r" side="right" group="hand_digits" role="finger" digit="middle"/>
+        <Bone index="66" name="middle_02_r" side="right" group="hand_digits" role="finger" digit="middle"/>
+        <Bone index="67" name="middle_03_r" side="right" group="hand_digits" role="finger" digit="middle"/>
+        <Bone index="68" name="pinky_metacarpal_r" side="right" group="hand_digits" role="metacarpal" digit="pinky"/>
+        <Bone index="69" name="pinky_01_r" side="right" group="hand_digits" role="finger" digit="pinky"/>
+        <Bone index="70" name="pinky_02_r" side="right" group="hand_digits" role="finger" digit="pinky"/>
+        <Bone index="71" name="pinky_03_r" side="right" group="hand_digits" role="finger" digit="pinky"/>
+        <Bone index="72" name="ring_metacarpal_r" side="right" group="hand_digits" role="metacarpal" digit="ring"/>
+        <Bone index="73" name="ring_01_r" side="right" group="hand_digits" role="finger" digit="ring"/>
+        <Bone index="74" name="ring_02_r" side="right" group="hand_digits" role="finger" digit="ring"/>
+        <Bone index="75" name="ring_03_r" side="right" group="hand_digits" role="finger" digit="ring"/>
+        <Bone index="76" name="thumb_01_r" side="right" group="hand_digits" role="finger" digit="thumb"/>
+        <Bone index="77" name="thumb_02_r" side="right" group="hand_digits" role="finger" digit="thumb"/>
+        <Bone index="78" name="thumb_03_r" side="right" group="hand_digits" role="finger" digit="thumb"/>
+        <Bone index="79" name="wrist_inner_r" side="right" group="upper_body" role="secondary"/>
+        <Bone index="80" name="wrist_outer_r" side="right" group="upper_body" role="secondary"/>
+        <Bone index="81" name="lowerarm_correctiveRoot_r" side="right" group="upper_body" role="corrective"/>
+        <Bone index="82" name="lowerarm_bck_r" side="right" group="upper_body" role="corrective"/>
+        <Bone index="83" name="lowerarm_fwd_r" side="right" group="upper_body" role="corrective"/>
+        <Bone index="84" name="lowerarm_in_r" side="right" group="upper_body" role="corrective"/>
+        <Bone index="85" name="lowerarm_out_r" side="right" group="upper_body" role="corrective"/>
+        <Bone index="86" name="lowerarm_twist_01_r" side="right" group="upper_body" role="twist"/>
+        <Bone index="87" name="lowerarm_twist_02_r" side="right" group="upper_body" role="twist"/>
+        <Bone index="88" name="upperarm_correctiveRoot_r" side="right" group="upper_body" role="corrective"/>
+        <Bone index="89" name="upperarm_bck_r" side="right" group="upper_body" role="corrective"/>
+        <Bone index="90" name="upperarm_fwd_r" side="right" group="upper_body" role="corrective"/>
+        <Bone index="91" name="upperarm_in_r" side="right" group="upper_body" role="corrective"/>
+        <Bone index="92" name="upperarm_out_r" side="right" group="upper_body" role="corrective"/>
+        <Bone index="93" name="upperarm_twist_01_r" side="right" group="upper_body" role="twist"/>
+        <Bone index="94" name="upperarm_twistCor_01_r" side="right" group="upper_body" role="corrective"/>
+        <Bone index="95" name="upperarm_twist_02_r" side="right" group="upper_body" role="twist"/>
+        <Bone index="96" name="upperarm_bicep_r" side="right" group="upper_body" role="corrective"/>
+        <Bone index="97" name="upperarm_tricep_r" side="right" group="upper_body" role="corrective"/>
+        <Bone index="98" name="upperarm_twistCor_02_r" side="right" group="upper_body" role="corrective"/>
+        <Bone index="99" name="neck_01" side="center" group="head" role="primary"/>
+        <Bone index="100" name="neck_02" side="center" group="head" role="primary"/>
+        <Bone index="101" name="head" side="center" group="head" role="primary"/>
+        <Bone index="102" name="spine_04_latissimus_l" side="left" group="spine" role="primary"/>
+        <Bone index="103" name="spine_04_latissimus_r" side="right" group="spine" role="primary"/>
+        <Bone index="104" name="thigh_l" side="left" group="lower_body" role="primary"/>
+        <Bone index="105" name="calf_l" side="left" group="lower_body" role="primary"/>
+        <Bone index="106" name="calf_correctiveRoot_l" side="left" group="lower_body" role="corrective"/>
+        <Bone index="107" name="calf_kneeBack_l" side="left" group="lower_body" role="corrective"/>
+        <Bone index="108" name="calf_knee_l" side="left" group="lower_body" role="corrective"/>
+        <Bone index="109" name="calf_twist_01_l" side="left" group="lower_body" role="twist"/>
+        <Bone index="110" name="calf_twist_02_l" side="left" group="lower_body" role="twist"/>
+        <Bone index="111" name="calf_twistCor_02_l" side="left" group="lower_body" role="corrective"/>
+        <Bone index="112" name="foot_l" side="left" group="lower_body" role="primary"/>
+        <Bone index="113" name="ankle_bck_l" side="left" group="lower_body" role="corrective"/>
+        <Bone index="114" name="ankle_fwd_l" side="left" group="lower_body" role="corrective"/>
+        <Bone index="115" name="ball_l" side="left" group="lower_body" role="primary"/>
+        <Bone index="116" name="thigh_correctiveRoot_l" side="left" group="lower_body" role="corrective"/>
+        <Bone index="117" name="thigh_bck_l" side="left" group="lower_body" role="corrective"/>
+        <Bone index="118" name="thigh_bck_lwr_l" side="left" group="lower_body" role="corrective"/>
+        <Bone index="119" name="thigh_fwd_l" side="left" group="lower_body" role="corrective"/>
+        <Bone index="120" name="thigh_fwd_lwr_l" side="left" group="lower_body" role="corrective"/>
+        <Bone index="121" name="thigh_in_l" side="left" group="lower_body" role="corrective"/>
+        <Bone index="122" name="thigh_out_l" side="left" group="lower_body" role="corrective"/>
+        <Bone index="123" name="thigh_twist_01_l" side="left" group="lower_body" role="twist"/>
+        <Bone index="124" name="thigh_twistCor_01_l" side="left" group="lower_body" role="corrective"/>
+        <Bone index="125" name="thigh_twist_02_l" side="left" group="lower_body" role="twist"/>
+        <Bone index="126" name="thigh_twistCor_02_l" side="left" group="lower_body" role="corrective"/>
+        <Bone index="127" name="thigh_r" side="right" group="lower_body" role="primary"/>
+        <Bone index="128" name="calf_r" side="right" group="lower_body" role="primary"/>
+        <Bone index="129" name="calf_correctiveRoot_r" side="right" group="lower_body" role="corrective"/>
+        <Bone index="130" name="calf_kneeBack_r" side="right" group="lower_body" role="corrective"/>
+        <Bone index="131" name="calf_knee_r" side="right" group="lower_body" role="corrective"/>
+        <Bone index="132" name="calf_twist_01_r" side="right" group="lower_body" role="twist"/>
+        <Bone index="133" name="calf_twist_02_r" side="right" group="lower_body" role="twist"/>
+        <Bone index="134" name="calf_twistCor_02_r" side="right" group="lower_body" role="corrective"/>
+        <Bone index="135" name="foot_r" side="right" group="lower_body" role="primary"/>
+        <Bone index="136" name="ankle_bck_r" side="right" group="lower_body" role="corrective"/>
+        <Bone index="137" name="ankle_fwd_r" side="right" group="lower_body" role="corrective"/>
+        <Bone index="138" name="ball_r" side="right" group="lower_body" role="primary"/>
+        <Bone index="139" name="thigh_correctiveRoot_r" side="right" group="lower_body" role="corrective"/>
+        <Bone index="140" name="thigh_bck_lwr_r" side="right" group="lower_body" role="corrective"/>
+        <Bone index="141" name="thigh_bck_r" side="right" group="lower_body" role="corrective"/>
+        <Bone index="142" name="thigh_fwd_lwr_r" side="right" group="lower_body" role="corrective"/>
+        <Bone index="143" name="thigh_fwd_r" side="right" group="lower_body" role="corrective"/>
+        <Bone index="144" name="thigh_in_r" side="right" group="lower_body" role="corrective"/>
+        <Bone index="145" name="thigh_out_r" side="right" group="lower_body" role="corrective"/>
+        <Bone index="146" name="thigh_twist_01_r" side="right" group="lower_body" role="twist"/>
+        <Bone index="147" name="thigh_twistCor_01_r" side="right" group="lower_body" role="corrective"/>
+        <Bone index="148" name="thigh_twist_02_r" side="right" group="lower_body" role="twist"/>
+        <Bone index="149" name="thigh_twistCor_02_r" side="right" group="lower_body" role="corrective"/>
+    </Bones>
+</UnrealBoneMap>

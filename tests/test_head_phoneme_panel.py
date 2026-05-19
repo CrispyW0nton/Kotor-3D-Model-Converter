@@ -23,7 +23,7 @@ import sys as _sys
 import pytest
 from PySide6 import QtCore, QtWidgets
 
-from src.gui.qt_inspector_panel import QtInspectorPanel
+from src.gui.qt_lib.panels.qt_inspector_panel import QtInspectorPanel
 
 
 # ── Direct-file load of head_workflow (sidestep core/__init__) ────────

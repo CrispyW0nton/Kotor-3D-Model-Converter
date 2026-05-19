@@ -159,8 +159,8 @@ def _foreground_metrics(path: Path, background: tuple[int, int, int]) -> dict[st
 
 
 def _render_png(model: Any, game: str, resref: str, out_dir: Path) -> dict[str, Any]:
-    import src.gui.viewport as viewport_mod
-    from src.gui.viewport import ArcBallCamera, FrameRenderer
+    import src.gui.qt_lib.rendering.viewport_core as viewport_mod
+    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
 
     old_bg = getattr(viewport_mod, "_BG", (18, 18, 40, 255))
     viewport_mod._BG = (0, 0, 0, 255)
@@ -204,7 +204,7 @@ def _select_models(limit: int) -> list[str]:
 
 
 def audit_model(resref: str, out_dir: Path) -> dict[str, Any]:
-    from src.gui.viewport import ArcBallCamera, FrameRenderer
+    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
 
     result: dict[str, Any] = {"game": "k2", "resref": resref}
     try:

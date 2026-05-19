@@ -229,7 +229,7 @@ def main(argv: list[str] | None = None):
         log.debug(f"diagnostics.log_session_start failed: {_diag_err}")
 
     try:
-        from src.gui.qt_main_window import run as _run_qt
+        from src.gui.qt_lib.windows.qt_main_window import run as _run_qt
 
         log.info("Qt main window starting.")
         rc = _run_qt(_APP_DIR, startup_input=vars(args))

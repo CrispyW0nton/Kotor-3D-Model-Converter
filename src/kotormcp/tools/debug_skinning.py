@@ -101,7 +101,7 @@ class _DebugSession:
         self._start_time = time.time()
         # Lazy-init renderer
         try:
-            from src.gui.gpu_renderer import GpuRenderer
+            from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
             self.renderer = GpuRenderer()
         except Exception as e:
             log.warning(f"DebugSession: GpuRenderer init failed: {e}")
@@ -440,7 +440,7 @@ class _DebugSession:
             return {"ok": False, "error": "No renderer available"}
 
         try:
-            from src.gui.viewport_core import ArcBallCamera
+            from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera
             camera = ArcBallCamera()
             camera.azimuth = self.camera_azimuth
             camera.elevation = self.camera_elevation

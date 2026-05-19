@@ -45,7 +45,7 @@ def _nodes_by_name(model) -> dict[str, object]:
 
 
 def test_bug_c_composite_offset_applies_to_skin_nodes() -> None:
-    from src.gui.gpu_renderer import _build_vbo_data
+    from src.gui.qt_lib.rendering.gpu_renderer import _build_vbo_data
 
     node = SimpleNamespace(
         name="head_skin",
@@ -73,7 +73,7 @@ def test_bug_c_composite_offset_applies_to_skin_nodes() -> None:
 
 
 def test_skin_bind_pose_vbo_applies_node_local_transform() -> None:
-    from src.gui.gpu_renderer import _build_vbo_data
+    from src.gui.qt_lib.rendering.gpu_renderer import _build_vbo_data
 
     node = SimpleNamespace(
         name="body_skin",
@@ -100,7 +100,7 @@ def test_skin_bind_pose_vbo_applies_node_local_transform() -> None:
 
 
 def test_animated_skin_vbo_can_keep_authored_input_coordinates() -> None:
-    from src.gui.gpu_renderer import _build_vbo_data
+    from src.gui.qt_lib.rendering.gpu_renderer import _build_vbo_data
 
     node = SimpleNamespace(
         name="body_skin",
@@ -136,7 +136,7 @@ def test_ad_saul_binary_skin_bind_matches_ascii_fixture() -> None:
 
     from src.core.kotor_loader import load_model_from_file
     from src.core.mdl_parser import MDLAsciiParser
-    from src.gui.gpu_renderer import _build_vbo_data
+    from src.gui.qt_lib.rendering.gpu_renderer import _build_vbo_data
 
     fixture_root = Path(__file__).parent / "modeltests" / "kotor_tool_1.0.3.4"
     ascii_path = fixture_root / "mdlops_ascii" / "ad_saul" / "ad_saul-ascii.mdl"
@@ -170,7 +170,7 @@ def test_ad_saul_binary_skin_bind_matches_ascii_fixture() -> None:
 
 
 def test_gpu_skin_bone_id_attribute_contract_is_integer() -> None:
-    from src.gui.gpu_renderer import (
+    from src.gui.qt_lib.rendering.gpu_renderer import (
         _VBO_BONE_IDS_FORMAT,
         _VBO_MAIN_FORMAT,
         _VERT_SRC,
@@ -184,7 +184,7 @@ def test_gpu_skin_bone_id_attribute_contract_is_integer() -> None:
 
 
 def test_gpu_skin_bone_ids_split_to_int32_buffer() -> None:
-    from src.gui.gpu_renderer import _build_vbo_data, _split_vbo_attributes_for_gpu
+    from src.gui.qt_lib.rendering.gpu_renderer import _build_vbo_data, _split_vbo_attributes_for_gpu
 
     node = SimpleNamespace(
         name="body_skin",
@@ -296,6 +296,51 @@ def test_skin_node_palette_restores_3f_qbone_tbone_path(monkeypatch) -> None:
     assert uploader._skin_palette_formula == "F1_current_TR_inverse"
     assert uploader._skin_inverse_bind_source == "qBone_tBone_inverse_TR"
     assert uploader._skin_bind_matrix[0][3] == pytest.approx(10.0)
+    assert palette[0, 0, 3] == pytest.approx(2.0)
+
+
+def test_skin_node_palette_without_qbones_uses_hierarchy_bind(monkeypatch) -> None:
+    """Imported FBX skins have weights but no KotOR qBone/tBone arrays."""
+    import pytest
+
+    from src.core.gpu_skinning import MatrixPaletteUploader
+
+    root = SimpleNamespace(
+        name="Root",
+        parent=None,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    arm = SimpleNamespace(
+        name="Arm",
+        parent=root,
+        position=(1.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    skin_node = SimpleNamespace(
+        name="SkinMesh",
+        parent=None,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        bone_map=["Arm"],
+        qbone_list=[],
+        tbone_list=[],
+    )
+    model = SimpleNamespace(all_nodes=lambda: [root, arm, skin_node])
+    pose = SimpleNamespace(nodes={
+        "arm": SimpleNamespace(
+            position=(3.0, 0.0, 0.0),
+            rotation=(0.0, 0.0, 0.0, 1.0),
+        )
+    })
+    monkeypatch.delenv("GHOSTRIGGER_SKIN_FORMULA", raising=False)
+    uploader = MatrixPaletteUploader(max_bones=4)
+
+    uploader.build_inverse_bind_pose(model)
+    uploader.compute_skin_node_palette(skin_node, pose)
+    palette = uploader.as_numpy_array()
+
+    assert uploader._skin_inverse_bind_source == "hierarchy_inverse_bind_no_qbone"
     assert palette[0, 0, 3] == pytest.approx(2.0)
 
 
@@ -445,9 +490,9 @@ def test_skin_node_palette_env_switch_unknown_value_falls_back_to_G5(
         parent=None,
         position=(0.0, 0.0, 0.0),
         rotation=(0.0, 0.0, 0.0, 1.0),
-        bone_map=[],
-        qbone_list=[],
-        tbone_list=[],
+        bone_map=["Root"],
+        qbone_list=[(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0)],
+        tbone_list=[(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)],
     )
     model = SimpleNamespace(all_nodes=lambda: [root, skin_node])
 
@@ -957,7 +1002,7 @@ def test_skin_node_palette_env_switch_G5_cpu_to_uploaded_bytes_parity(
 def test_gpu_renderer_uploads_skin_node_local_palette() -> None:
     import inspect
 
-    from src.gui.gpu_renderer import GpuRenderer
+    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
 
     source = inspect.getsource(GpuRenderer._render_gpu)
 
@@ -966,7 +1011,7 @@ def test_gpu_renderer_uploads_skin_node_local_palette() -> None:
 
 
 def test_cpu_skin_bind_pose_applies_node_local_transform() -> None:
-    from src.gui.viewport_core import ArcBallCamera, FrameRenderer
+    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
 
     node = SimpleNamespace(
         name="body_skin",
@@ -989,7 +1034,7 @@ def test_cpu_skin_bind_pose_applies_node_local_transform() -> None:
 
 
 def test_non_skin_node_local_vbo_still_applies_world_transform() -> None:
-    from src.gui.gpu_renderer import _build_vbo_data
+    from src.gui.qt_lib.rendering.gpu_renderer import _build_vbo_data
 
     node = SimpleNamespace(
         name="rigid_mesh",
@@ -1058,7 +1103,7 @@ def test_is_skin_getattr_default_handles_missing_attribute() -> None:
 
 
 def test_gl_state_trace_path_is_env_gated(monkeypatch, tmp_path) -> None:
-    from src.gui.gpu_renderer import GpuRenderer, _gl_state_trace_path, _lm_data_dump_path, _skin_dump_path
+    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer, _gl_state_trace_path, _lm_data_dump_path, _skin_dump_path
 
     monkeypatch.delenv("GHOSTRIGGER_GL_STATE_TRACE", raising=False)
     monkeypatch.delenv("GHOSTRIGGER_LM_DATA_DUMP", raising=False)
@@ -1088,7 +1133,7 @@ def test_gl_state_trace_path_is_env_gated(monkeypatch, tmp_path) -> None:
 
 
 def test_debug_visualize_mode_is_env_gated(monkeypatch) -> None:
-    from src.gui.gpu_renderer import _debug_visualize_mode, _lm_composite_mode
+    from src.gui.qt_lib.rendering.gpu_renderer import _debug_visualize_mode, _lm_composite_mode
 
     monkeypatch.delenv("GHOSTRIGGER_DEBUG_VIZ", raising=False)
     monkeypatch.delenv("GHOSTRIGGER_LM_COMPOSITE_MODE", raising=False)
@@ -1121,14 +1166,14 @@ def test_debug_visualize_mode_is_env_gated(monkeypatch) -> None:
 
 
 def test_gpu_shader_keeps_lightmap_uv_channel_independent() -> None:
-    from src.gui.gpu_renderer import _VERT_SRC
+    from src.gui.qt_lib.rendering.gpu_renderer import _VERT_SRC
 
     assert "v_uv_lm  = vec2(in_uv_lm.x, 1.0 - in_uv_lm.y);" in _VERT_SRC
     assert "v_uv_lm  = vec2(in_uv_lm.x, 1.0 - in_uv.y);" not in _VERT_SRC
 
 
 def test_gpu_shader_exposes_lightmap_composite_modes() -> None:
-    from src.gui.gpu_renderer import _FRAG_SRC
+    from src.gui.qt_lib.rendering.gpu_renderer import _FRAG_SRC
 
     assert "uniform int   u_lm_composite_mode;" in _FRAG_SRC
     assert "u_lm_composite_mode == 1" in _FRAG_SRC
@@ -1140,7 +1185,7 @@ def test_gpu_shader_exposes_lightmap_composite_modes() -> None:
 
 
 def test_gl_state_trace_record_captures_node_and_state() -> None:
-    from src.gui.gpu_renderer import _build_gl_state_trace_record
+    from src.gui.qt_lib.rendering.gpu_renderer import _build_gl_state_trace_record
 
     ctx = SimpleNamespace(
         depth_func="<=",
@@ -1207,7 +1252,7 @@ def test_gl_state_trace_record_captures_node_and_state() -> None:
 
 
 def test_gl_state_trace_record_tolerates_unsupported_context_getters() -> None:
-    from src.gui.gpu_renderer import _build_gl_state_trace_record
+    from src.gui.qt_lib.rendering.gpu_renderer import _build_gl_state_trace_record
 
     class UnsupportedDepthFunc:
         @property
@@ -1239,7 +1284,7 @@ def test_gl_state_trace_record_tolerates_unsupported_context_getters() -> None:
 
 
 def test_lightmap_data_dump_record_schema() -> None:
-    from src.gui.gpu_renderer import _build_lm_data_dump_record
+    from src.gui.qt_lib.rendering.gpu_renderer import _build_lm_data_dump_record
 
     node = SimpleNamespace(
         name="mesh640",
@@ -1300,7 +1345,7 @@ def test_lightmap_data_dump_record_schema() -> None:
 
 
 def test_skin_dump_record_schema() -> None:
-    from src.gui.gpu_renderer import _build_skin_dump_record
+    from src.gui.qt_lib.rendering.gpu_renderer import _build_skin_dump_record
 
     node = SimpleNamespace(
         name="SkinMesh",
@@ -1400,7 +1445,7 @@ def test_skin_dump_record_schema() -> None:
 
 
 def test_skin_dump_records_live_empty_bone_slots() -> None:
-    from src.gui.gpu_renderer import _build_skin_dump_record
+    from src.gui.qt_lib.rendering.gpu_renderer import _build_skin_dump_record
 
     node = SimpleNamespace(
         name="SkinMesh",
@@ -1445,7 +1490,7 @@ def test_skin_dump_records_live_empty_bone_slots() -> None:
 
 
 def test_skin_dump_records_3g_candidate_formula_probe() -> None:
-    from src.gui.gpu_renderer import _build_skin_dump_record
+    from src.gui.qt_lib.rendering.gpu_renderer import _build_skin_dump_record
 
     head = SimpleNamespace(
         name="head_g",
@@ -1548,7 +1593,7 @@ def test_skin_dump_records_3g_candidate_formula_probe() -> None:
 
 
 def test_gl_context_backend_candidates_are_platform_aware(monkeypatch) -> None:
-    from src.gui.gpu_renderer import _gl_context_backend_candidates
+    from src.gui.qt_lib.rendering.gpu_renderer import _gl_context_backend_candidates
 
     monkeypatch.delenv("GHOSTRIGGER_GL_BACKEND", raising=False)
 
@@ -1627,7 +1672,7 @@ def test_k2_rgba_lightmap_txi_starts_at_clean_boundary(caplog) -> None:
     import logging
 
     from src.core.resource_manager import RES_TPC, _tpc_uncompressed_txi
-    from src.gui.viewport_core import _parse_txi_string
+    from src.gui.qt_lib.rendering.viewport_core import _parse_txi_string
 
     manager = _resource_manager()
     raw = manager.get("101peras_lm0", RES_TPC, "K2")
@@ -1693,6 +1738,18 @@ def test_read_mdl_safe_k1_control_model() -> None:
     assert model.name.lower() == "m03aa_05a"
     assert len(model.all_nodes()) == 24
     assert any(node.mesh and node.mesh.vertex_positions for node in model.all_nodes())
+
+
+@pytest.mark.skipif(not K1_PATH.exists(), reason="K1 install not available")
+def test_read_mdl_safe_k1_supermodel_node_order_uses_logical_offsets() -> None:
+    from src.core.mdl_reader_wrapper import read_mdl_safe
+
+    mdl, mdx = _raw_model("k1", "s_male02")
+    model = read_mdl_safe(mdl, source_ext=mdx)
+
+    assert model.name.lower() == "s_male02"
+    assert len(model.all_nodes()) == 96
+    assert len(model.anims) == 166
 
 
 @pytest.mark.skipif(not K2_PATH.exists(), reason="K2 install not available")
