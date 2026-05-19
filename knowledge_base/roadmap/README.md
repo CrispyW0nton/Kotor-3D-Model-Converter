@@ -14,6 +14,7 @@ This folder contains the post-Qt-migration roadmap for GhostRigger, derived from
 |------|---------|
 | `01_qt_branch_audit.md` | Audit of the current Qt branch: Tk-vs-Qt status, module map, KOTOR model-type taxonomy, HUD design notes, Stewart Jones takeaways, gaps |
 | `02_roadmap_2026_05.md` | Live launch roadmap with task IDs, hours, acceptance criteria, commit-message templates. **Last revised 2026-05-16** after M12/M10 local Character Builder launch work plus the broader product-pillar audit for Unity MCP transfer, Asset Viewer, Module Editor, and Map Builder |
+| `03_character_builder_native_kotor_pipeline.md` | Native KOTOR Character Builder correction: mesh-objects-as-bones, exact Odyssey node DAG preservation, skin binding, supermodel animation assignment, hook preview, and export-readiness gates. **Use this as the next Character Builder execution plan.** |
 
 ## Headline
 
@@ -50,6 +51,11 @@ This folder contains the post-Qt-migration roadmap for GhostRigger, derived from
 
 `M13 → M14 → M11`, with M8 Creature work deferred until the humanoid/head pipeline polish is locked.
 
-Shortest path to feature-complete v7 Character Builder is now **M11 regression lock-in** for the humanoid/head launch lane. A public modder beta also needs M13/M14 so exported characters can be transferred and previewed outside the game. M8 ships after unless Creature is explicitly prioritized.
+Shortest path to feature-complete v7 Character Builder now starts with
+`03_character_builder_native_kotor_pipeline.md` M17, because the Build Skeleton
+step must preserve KOTOR's native mesh-object-as-bone DAG before animation,
+preview, and export polish can be trusted. A public modder beta also needs
+M13/M14 so exported characters can be transferred and previewed outside the
+game. M8 ships after unless Creature is explicitly prioritized.
 
 Supersedes `knowledge_base/reference/ROADMAP_legacy_2026_04.md` for the Qt branch. The older roadmap is kept for historical reference only.

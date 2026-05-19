@@ -80,8 +80,10 @@ try:
     CharacterScene       = _model_data.CharacterScene
     KotorModel           = _model_data.KotorModel
     ModelClassification  = _model_data.ModelClassification
+    ModelTaxonomy        = _model_data.ModelTaxonomy
     ModelNode            = _model_data.ModelNode
     PartSlot             = _model_data.PartSlot
+    classify_kotor_model = _model_data.classify_kotor_model
     detect_character_mode = _model_data.detect_character_mode
     _MODEL_DATA_AVAILABLE = True
     _MODEL_DATA_IMPORT_ERROR: str = ""
@@ -92,8 +94,10 @@ except Exception as exc:                                # pragma: no cover
     CharacterScene = None       # type: ignore[assignment]
     KotorModel = None           # type: ignore[assignment]
     ModelClassification = None  # type: ignore[assignment]
+    ModelTaxonomy = None        # type: ignore[assignment]
     ModelNode = None            # type: ignore[assignment]
     PartSlot = None             # type: ignore[assignment]
+    classify_kotor_model = None  # type: ignore[assignment]
     detect_character_mode = None  # type: ignore[assignment]
 
 
@@ -111,6 +115,8 @@ def _build_model(
     supermodel: str = "NULL",
     classification = None,                       # ModelClassification
     nodes: Tuple[str, ...] = (),
+    metadata: dict | None = None,
+    animations: Tuple[str, ...] = (),
 ) -> "KotorModel":
     """Construct a minimal :class:`KotorModel` with a flat node tree."""
     if classification is None:
@@ -129,6 +135,12 @@ def _build_model(
         node_objs[i].children.append(node_objs[i + 1])
     if node_objs:
         model.root_node = node_objs[0]
+    if metadata is not None:
+        model.metadata = dict(metadata)
+    model.animations = [
+        _model_data.Animation(name=name)
+        for name in animations
+    ]
     return model
 
 
@@ -147,7 +159,7 @@ _SYNTHETIC_CASES: List[Tuple[str, dict, "CharacterMode"]] = [
     ("n_darthrevan",
                 dict(name="n_darthrevan", supermodel="S_MALE02",
                      nodes=("n_darthrevan", "headhook", "rhand", "spine")),
-     "HEADLESS_BODY"),
+     "CREATURE"),
 
     # ── HEAD — talkdummy or head_g+f_jaw_g, no pelvis ───────────────────────
     ("pmhc01", dict(name="pmhc01", supermodel="S_MALE02",
@@ -239,6 +251,95 @@ def test_character_mode_properties_unique_and_non_empty():
         "display_name values must be unique"
     assert len(set(icon_keys.values())) == len(icon_keys), \
         "icon_key values must be unique"
+
+
+_TAXONOMY_CASES: List[Tuple[str, dict, str, str]] = [
+    (
+        "supermodel",
+        dict(name="s_male02", supermodel="S_MALE01",
+             classification=ModelClassification.CHARACTER if ModelClassification else None,
+             nodes=("S_Male02", "rootdummy", "headhook", "rhand"),
+             animations=("walk", "run", "pause1", "g1a1", "g1a2", "dead", "talk", "listen", "bow", "victory", "salute")),
+        "SUPERMODEL",
+        "SUPERMODEL",
+    ),
+    (
+        "modular_body_by_modeltype",
+        dict(name="pmbam", supermodel="S_FEMALE02",
+             nodes=("PMBAM", "rootdummy", "headhook", "rhand", "lhand"),
+             metadata={"appearance_modeltype": "B"}),
+        "MODULAR_BODY",
+        "HEADLESS_BODY",
+    ),
+    (
+        "full_body_n_mandalorian",
+        dict(name="n_mandalorian03", supermodel="S_FEMALE02",
+             nodes=("N_Mandalorian", "rootdummy", "talkdummy", "headhook", "rhand", "lhand"),
+             metadata={"appearance_modeltype": "F"}),
+        "FULL_BODY_CHARACTER",
+        "CREATURE",
+    ),
+    (
+        "head",
+        dict(name="pmhc01", supermodel="S_FEMALE02",
+             nodes=("PMHC01", "rootdummy", "talkdummy", "MaskHook", "GoggleHook", "head_g")),
+        "HEAD",
+        "HEAD",
+    ),
+    (
+        "creature",
+        dict(name="c_rancor", supermodel="NULL",
+             nodes=("c_rancor", "rootdummy", "talkdummy", "impact")),
+        "CREATURE",
+        "CREATURE",
+    ),
+    (
+        "droid",
+        dict(name="p_hk47", supermodel="S_MALE02",
+             nodes=("P_HK47", "rootdummy", "rhand", "lhand")),
+        "DROID",
+        "CREATURE",
+    ),
+    (
+        "weapon",
+        dict(name="w_lghtsbr_001",
+             classification=ModelClassification.LIGHTSABER if ModelClassification else None,
+             nodes=("w_Lghtsbr_001", "impact")),
+        "WEAPON",
+        "UNSUPPORTED",
+    ),
+    (
+        "placeable",
+        dict(name="plc_footlker",
+             classification=ModelClassification.PLACEABLE if ModelClassification else None,
+             nodes=("PLC_FootLker", "lookathook")),
+        "PLACEABLE",
+        "UNSUPPORTED",
+    ),
+    (
+        "area",
+        dict(name="m12aa_01",
+             classification=ModelClassification.EFFECT if ModelClassification else None,
+             nodes=("m12aa_01", "walkmesh")),
+        "AREA",
+        "UNSUPPORTED",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "label,builder_kwargs,expected_taxonomy,expected_mode",
+    _TAXONOMY_CASES,
+    ids=[c[0] for c in _TAXONOMY_CASES],
+)
+def test_classify_kotor_model_taxonomy(label, builder_kwargs, expected_taxonomy, expected_mode):
+    model = _build_model(**builder_kwargs)
+    result = classify_kotor_model(model)
+    assert result.category == ModelTaxonomy[expected_taxonomy], (
+        f"classify_kotor_model({label}) -> {result.category.name}, "
+        f"expected {expected_taxonomy}; reasons={result.reasons}"
+    )
+    assert result.character_mode == CharacterMode[expected_mode]
 
 
 # ── Layer 2: CharacterScene mode tracking & round-trip ──────────────────────

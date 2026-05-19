@@ -135,6 +135,74 @@ PART_SLOT_LABELS: Dict[PartSlot, str] = {
 
 
 # ──────────────────────────────────────────────────────────────
+#  Complete Model Taxonomy
+# ──────────────────────────────────────────────────────────────
+
+class ModelTaxonomy(_Enum):
+    """Functional model categories used by library/search/UI filtering.
+
+    This is intentionally broader than :class:`CharacterMode`.  KOTOR's
+    ``appearance.2da`` ``modeltype`` column only describes character bodies;
+    weapons, heads, placeables, supermodels, and area models need a separate
+    functional taxonomy.
+    """
+
+    SUPERMODEL          = "supermodel"
+    MODULAR_BODY        = "modular_body"
+    FULL_BODY_CHARACTER = "full_body_character"
+    HEAD                = "head"
+    CREATURE            = "creature"
+    DROID               = "droid"
+    WEAPON              = "weapon"
+    WEARABLE            = "wearable"
+    PLACEABLE           = "placeable"
+    DOOR                = "door"
+    AREA                = "area"
+    EFFECT              = "effect"
+    OTHER               = "other"
+    AMBIGUOUS           = "ambiguous"
+
+    @property
+    def display_name(self) -> str:
+        return _MODEL_TAXONOMY_DISPLAY_NAMES[self]
+
+
+_MODEL_TAXONOMY_DISPLAY_NAMES: Dict["ModelTaxonomy", str] = {
+    ModelTaxonomy.SUPERMODEL:          "Supermodel",
+    ModelTaxonomy.MODULAR_BODY:        "Modular Body",
+    ModelTaxonomy.FULL_BODY_CHARACTER: "Full-Body Character",
+    ModelTaxonomy.HEAD:                "Head",
+    ModelTaxonomy.CREATURE:            "Creature",
+    ModelTaxonomy.DROID:               "Droid",
+    ModelTaxonomy.WEAPON:              "Weapon",
+    ModelTaxonomy.WEARABLE:            "Wearable",
+    ModelTaxonomy.PLACEABLE:           "Placeable",
+    ModelTaxonomy.DOOR:                "Door",
+    ModelTaxonomy.AREA:                "Area",
+    ModelTaxonomy.EFFECT:              "Effect",
+    ModelTaxonomy.OTHER:               "Other",
+    ModelTaxonomy.AMBIGUOUS:           "Ambiguous",
+}
+
+
+@dataclass(frozen=True)
+class ModelTaxonomyResult:
+    """Result returned by :func:`classify_kotor_model`.
+
+    ``category`` answers "what kind of KOTOR model is this?" while
+    ``character_mode`` answers "which current Character Builder workflow can
+    handle it?".  Full-body characters and droids currently route to the
+    self-contained workflow until the builder gets a dedicated full-body mode.
+    """
+
+    category: "ModelTaxonomy"
+    character_mode: Optional["CharacterMode"]
+    confidence: str = "medium"
+    reasons: Tuple[str, ...] = ()
+    modeltype: str = ""
+
+
+# ──────────────────────────────────────────────────────────────
 #  Character Builder — Mode Taxonomy  (M1 / T101)
 # ──────────────────────────────────────────────────────────────
 
@@ -219,6 +287,163 @@ _BODY_HOOK_NAMES: frozenset = frozenset({
 _CREATURE_HOOK_NAMES: frozenset = frozenset({
     "cameramaster", "impact_head", "impact_chest",
 })
+_HEAD_SOCKET_NAMES: frozenset = frozenset({
+    "maskhook", "gogglehook",
+})
+_BODY_SOCKET_NAMES: frozenset = frozenset({
+    "headhook", "rhand", "lhand", "lhand_g", "impact", "impact_bolt",
+})
+_FULL_BODY_PREFIX_HINTS: Tuple[str, ...] = (
+    "n_mandalorian", "n_sith", "n_repsold", "n_comm", "n_fatcomm",
+    "n_darthrevan", "p_malak", "n_duel", "n_paz",
+)
+_DROID_NAME_HINTS: Tuple[str, ...] = (
+    "drd", "droid", "hk47", "t3m4", "g0t0", "warbot", "wardroid",
+)
+
+
+def classify_kotor_model(model: "KotorModel") -> ModelTaxonomyResult:
+    """Classify a KOTOR model by functional taxonomy.
+
+    The detector combines the engine classification byte, filename/resref
+    conventions, optional appearance metadata, and node/hook facts.  It keeps
+    the broader model category separate from the current Character Builder mode
+    so the UI can say "full-body character" instead of forcing everything into
+    the old "creature" bucket.
+    """
+    name = (getattr(model, "name", "") or "").strip().lower()
+    supermodel = (getattr(model, "supermodel", "") or "").strip().upper()
+    metadata = getattr(model, "metadata", None)
+    if not isinstance(metadata, dict):
+        metadata = {}
+    appearance_meta = metadata.get("appearance", {})
+    if not isinstance(appearance_meta, dict):
+        appearance_meta = {}
+    modeltype = str(
+        metadata.get("appearance_modeltype")
+        or metadata.get("modeltype")
+        or appearance_meta.get("modeltype", "")
+    ).strip().upper()
+
+    try:
+        node_iter = model.all_nodes()
+    except Exception:                                     # pragma: no cover
+        node_iter = []
+    nodes = {(getattr(n, "name", "") or "").lower() for n in node_iter}
+
+    try:
+        classification = int(getattr(model, "model_type",
+                                     int(ModelClassification.CHARACTER)))
+    except (TypeError, ValueError):
+        classification = int(ModelClassification.CHARACTER)
+
+    reasons: List[str] = []
+    has_facial = bool(_FACIAL_BONE_NAMES & nodes)
+    has_head_geom = "head_g" in nodes
+    has_pelvis = "pelvis_g" in nodes
+    has_headhook = "headhook" in nodes
+    has_rhand = "rhand" in nodes
+    has_lhand = "lhand" in nodes or "lhand_g" in nodes
+    has_talkdummy = "talkdummy" in nodes
+    has_head_socket = bool(_HEAD_SOCKET_NAMES & nodes)
+    has_body_socket = bool(_BODY_SOCKET_NAMES & nodes)
+    has_creature_hook = bool(_CREATURE_HOOK_NAMES & nodes)
+    anim_count = len(getattr(model, "animations", []) or [])
+
+    def result(category: "ModelTaxonomy", mode: Optional["CharacterMode"],
+               confidence: str, *why: str) -> ModelTaxonomyResult:
+        return ModelTaxonomyResult(
+            category=category,
+            character_mode=mode,
+            confidence=confidence,
+            reasons=tuple(why or reasons),
+            modeltype=modeltype,
+        )
+
+    # Non-character/functional prefixes first: these are not appearance bodies.
+    if name.startswith(("s_male", "s_female")) or (
+        name.startswith("s_") and anim_count > 10
+    ):
+        return result(ModelTaxonomy.SUPERMODEL, CharacterMode.SUPERMODEL,
+                      "high", "supermodel naming/animation library")
+    if classification == int(ModelClassification.DOOR) or name.startswith("dor_"):
+        return result(ModelTaxonomy.DOOR, CharacterMode.UNSUPPORTED,
+                      "high", "door classification/prefix")
+    if classification == int(ModelClassification.LIGHTSABER) or name.startswith(("w_", "iw_")):
+        return result(ModelTaxonomy.WEAPON, CharacterMode.UNSUPPORTED,
+                      "high", "weapon/lightsaber classification or prefix")
+    if name.startswith(("i_", "g_i", "gi_", "g_w", "g_a")):
+        return result(ModelTaxonomy.WEARABLE, CharacterMode.UNSUPPORTED,
+                      "medium", "item/wearable naming convention")
+    if classification == int(ModelClassification.PLACEABLE) or name.startswith("plc_"):
+        return result(ModelTaxonomy.PLACEABLE, CharacterMode.UNSUPPORTED,
+                      "high", "placeable classification/prefix")
+    if name.startswith("m") and len(name) >= 3 and name[1:3].isdigit():
+        return result(ModelTaxonomy.AREA, CharacterMode.UNSUPPORTED,
+                      "medium", "module/area naming convention")
+    if classification in (int(ModelClassification.EFFECT),
+                          int(ModelClassification.EFFECTS),
+                          int(ModelClassification.TILE)):
+        return result(ModelTaxonomy.EFFECT, CharacterMode.UNSUPPORTED,
+                      "medium", "non-character engine classification")
+
+    is_characterish = classification in (
+        int(ModelClassification.CHARACTER),
+        int(ModelClassification.FLYER),
+    )
+    if not is_characterish:
+        return result(ModelTaxonomy.OTHER, CharacterMode.UNSUPPORTED,
+                      "medium", "unsupported engine classification")
+
+    # Character-space categories.
+    if modeltype == "B":
+        return result(ModelTaxonomy.MODULAR_BODY, CharacterMode.HEADLESS_BODY,
+                      "high", "appearance.2da modeltype B")
+    if modeltype in {"F", "S"}:
+        return result(ModelTaxonomy.FULL_BODY_CHARACTER, CharacterMode.CREATURE,
+                      "high", f"appearance.2da modeltype {modeltype}")
+    if modeltype == "L":
+        return result(ModelTaxonomy.CREATURE, CharacterMode.CREATURE,
+                      "high", "appearance.2da modeltype L")
+
+    # Heads commonly have talkdummy/mask/goggle hooks but lack body sockets.
+    if (
+        name.startswith(("pmh", "pfh"))
+        or name.endswith("head")
+        or (has_head_socket and not has_body_socket)
+        or (has_talkdummy and not has_body_socket and not has_pelvis)
+        or (has_head_geom and has_facial and not has_pelvis and not has_body_socket)
+    ):
+        return result(ModelTaxonomy.HEAD, CharacterMode.HEAD,
+                      "high", "head naming or head-only nodes")
+
+    if any(hint in name for hint in _DROID_NAME_HINTS):
+        return result(ModelTaxonomy.DROID, CharacterMode.CREATURE,
+                      "medium", "droid naming convention")
+
+    if name.startswith("c_") or supermodel.startswith("C_") or has_creature_hook:
+        return result(ModelTaxonomy.CREATURE, CharacterMode.CREATURE,
+                      "high", "creature prefix/supermodel/hook")
+
+    # N_* helmeted/generic NPCs are usually full-body F-style models.  This
+    # prevents talkdummy on models such as n_mandalorian03 from being mistaken
+    # for a standalone head.
+    if name.startswith("n_") and (
+        has_body_socket or has_talkdummy or any(name.startswith(p) for p in _FULL_BODY_PREFIX_HINTS)
+    ):
+        return result(ModelTaxonomy.FULL_BODY_CHARACTER, CharacterMode.CREATURE,
+                      "medium", "N_* full-body character heuristic")
+
+    if has_headhook and (has_rhand or has_lhand) and not has_facial:
+        return result(ModelTaxonomy.MODULAR_BODY, CharacterMode.HEADLESS_BODY,
+                      "medium", "body sockets without facial controls")
+
+    if has_talkdummy:
+        return result(ModelTaxonomy.HEAD, CharacterMode.HEAD,
+                      "low", "talkdummy fallback")
+
+    return result(ModelTaxonomy.AMBIGUOUS, CharacterMode.AMBIGUOUS,
+                  "low", "no taxonomy rule matched")
 
 
 def detect_character_mode(model: "KotorModel") -> "CharacterMode":
@@ -247,64 +472,8 @@ def detect_character_mode(model: "KotorModel") -> "CharacterMode":
     :param model:  Fully-loaded ``KotorModel`` instance.
     :return:       The detected :class:`CharacterMode` value.
     """
-    # Defensive: a stub / partial model still gets a sensible answer.
-    name = (getattr(model, "name", "") or "").lower()
-    supermodel = (getattr(model, "supermodel", "") or "").upper()
-
-    try:
-        node_iter = model.all_nodes()
-    except Exception:                                     # pragma: no cover
-        node_iter = []
-    nodes = {(getattr(n, "name", "") or "").lower() for n in node_iter}
-
-    # ── Step 0 — Classification gate ─────────────────────────────────────
-    try:
-        classification = int(getattr(model, "model_type",
-                                     int(ModelClassification.CHARACTER)))
-    except (TypeError, ValueError):
-        classification = int(ModelClassification.CHARACTER)
-    if classification not in (int(ModelClassification.CHARACTER),
-                              int(ModelClassification.FLYER)):
-        return CharacterMode.UNSUPPORTED
-
-    has_facial = bool(_FACIAL_BONE_NAMES & nodes)
-    has_head_geom = "head_g" in nodes
-    has_pelvis = "pelvis_g" in nodes
-    has_headhook = "headhook" in nodes
-    has_rhand = "rhand" in nodes
-    has_talkdummy = "talkdummy" in nodes
-    has_creature_hook = bool(_CREATURE_HOOK_NAMES & nodes)
-
-    # ── Step 1 — Creature ────────────────────────────────────────────────
-    #   • ``c_*`` prefix is the canonical signal.
-    #   • ``n_*`` prefix is shared with humanoid NPCs, so require either a
-    #     creature-style supermodel (C_*, N_WARDROID, WARDROID) OR a
-    #     creature-only hook to flip the verdict to CREATURE.
-    #   • Standalone creature-hook nodes (impact_head, cameramaster …)
-    #     without humanoid signals are also creatures.
-    _CREATURE_SUPERMODEL_PREFIXES = ("C_",)
-    _CREATURE_SUPERMODEL_NAMES = {"WARDROID", "N_WARDROID"}
-    is_creature_supermodel = (
-        any(supermodel.startswith(p) for p in _CREATURE_SUPERMODEL_PREFIXES)
-        or supermodel in _CREATURE_SUPERMODEL_NAMES
-    )
-    if name.startswith("c_"):
-        return CharacterMode.CREATURE
-    if name.startswith("n_") and is_creature_supermodel:
-        return CharacterMode.CREATURE
-    if has_creature_hook and not has_headhook and not has_facial:
-        return CharacterMode.CREATURE
-
-    # ── Step 2 — Head ────────────────────────────────────────────────────
-    if has_talkdummy or (has_head_geom and has_facial and not has_pelvis):
-        return CharacterMode.HEAD
-
-    # ── Step 3 — Headless body ───────────────────────────────────────────
-    if has_headhook and has_rhand and not has_facial:
-        return CharacterMode.HEADLESS_BODY
-
-    # ── Step 4 — Fall-through ────────────────────────────────────────────
-    return CharacterMode.AMBIGUOUS
+    result = classify_kotor_model(model)
+    return result.character_mode or CharacterMode.AMBIGUOUS
 
 
 # ──────────────────────────────────────────────────────────────
