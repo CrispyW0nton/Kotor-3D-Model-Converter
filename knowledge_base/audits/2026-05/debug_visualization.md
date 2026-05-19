@@ -1,6 +1,6 @@
 # Debug Visualization Audit - 2026-05-06
 
-This is the Work item 2c-prep shader discriminator following `docs/gl_state_recorder_audit_2026_05.md`.
+This is the Work item 2c-prep shader discriminator following `knowledge_base/audits/2026-05/gl_state_recorder.md`.
 
 ## Scope
 

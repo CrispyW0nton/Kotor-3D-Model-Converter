@@ -67,7 +67,11 @@ from .cloth_rig import (
     ClothRigger,
     ClothRigExporter,
     ClothRigSimulator,
-    ClothRigPanel,
+    # M3/T301 — Qt-or-headless cloth preset chooser (replaces the deleted
+    # Tk ``ClothRigPanel`` class).
+    ClothPresetChoice,
+    run_cloth_preset_dialog,
+    confirm_cloth_action,
 )
 
 __all__ = [
@@ -87,5 +91,7 @@ __all__ = [
     "GRigBrush", "GRigSymmetry", "GRigPanelState", "VertexInfluence",
     # Cloth rigging system (K1/K2)
     "ClothRigConfig", "ClothRigPreset", "ClothConstraintPainter",
-    "ClothRigger", "ClothRigExporter", "ClothRigSimulator", "ClothRigPanel",
+    "ClothRigger", "ClothRigExporter", "ClothRigSimulator",
+    # M3/T301 — Qt-or-headless dialog helpers (replaces ClothRigPanel)
+    "ClothPresetChoice", "run_cloth_preset_dialog", "confirm_cloth_action",
 ]

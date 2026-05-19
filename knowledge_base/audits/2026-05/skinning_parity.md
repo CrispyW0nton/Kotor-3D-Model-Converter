@@ -168,7 +168,7 @@ The first reduction that does fire is current inverse bind versus the skin node'
 - `lowerbody` max `inverse_bind_vs_qbone_max_abs` is approximately `3.410`, worst on `Tailbone3`.
 - Both visible skin nodes have a non-identity skin-node bind transform: position approximately `(0, -1.25, 0.72)`, rotation approximately `(0, 0, 1, 0)`.
 
-This matches the older `docs/k2_skin_transform_audit.md` finding: reference renderers keep raw skin vertices and resolve the final position through skinning math using skin-node bind transforms and qBone/tBone inverse-bind data. GhostRigger's current GPU palette path still builds inverse bind from the animation first-frame hierarchy, not from the per-skin qBone/tBone bind data.
+This matches the older `knowledge_base/audits/k2_skin_transform.md` finding: reference renderers keep raw skin vertices and resolve the final position through skinning math using skin-node bind transforms and qBone/tBone inverse-bind data. GhostRigger's current GPU palette path still builds inverse bind from the animation first-frame hierarchy, not from the per-skin qBone/tBone bind data.
 
 ## 3a-v2 Classification
 
@@ -267,7 +267,7 @@ Extend `GHOSTRIGGER_SKIN_DUMP` for tagged probe vertices with:
 
 ### 3g Acceptance Criteria
 
-- `docs/skinning_parity_audit_2026_05.md` records which candidate convention best restores `c_drexlf` head and forelimb placement.
+- `knowledge_base/audits/2026-05/skinning_parity.md` records which candidate convention best restores `c_drexlf` head and forelimb placement.
 - The same convention is tested on `c_brith` and `c_bomabeast`.
 - If all three improve, scope `3g-fix` around that convention and add regression tests for tagged vertex final positions.
 - If `c_drexlf` improves but either prior audit creature does not, keep the class open and split the remaining model-specific issue into a follow-up.

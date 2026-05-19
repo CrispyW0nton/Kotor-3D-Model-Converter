@@ -17,34 +17,35 @@
 | `MANDATORY_CHECKLIST.md` | Pre-task protocol | ALWAYS, before any task |
 | `cross_reference_map.md` | Feature-to-repo-to-book mapping | When implementing any feature |
 | `book_extracts.md` | Key principles from 3 reference books | When making architecture/algorithm decisions |
-| `ROADMAP.md` (parent dir) | Full iteration roadmap with tasks | When planning work order |
+| `../roadmap/02_roadmap_2026_05.md` | Current Qt-branch roadmap (M0–M11) | When planning work order |
+| `ROADMAP_legacy_2026_04.md` | Pre-Qt iteration roadmap (historical) | Background context only |
 
-### Deliverable Knowledge Files
+### Deliverable Knowledge Files (in `deliverables/`)
 | File | Deliverable | Key Files Modified |
 |------|------------|-------------------|
-| `d1_fbx_export.md` | FBX Export Fix | `src/converters/mesh_converter.py` |
-| `d2_texture_wrapping.md` | Texture Wrapping Fix | `src/gui/viewport.py` |
-| `d3_gpu_renderer.md` | GPU Renderer Foundation | `src/gui/gpu_renderer.py`, `src/gui/viewport.py` |
-| `d4_character_builder.md` | Character Builder Window | `src/gui/character_builder_window.py` |
-| `d5_performance.md` | Performance & Memory | `src/resources/resource_manager.py` |
-| `d6_module_scene.md` | Module Editor & Scene | `src/core/scene_manager.py` |
+| `deliverables/d1_fbx_export.md` | FBX Export Fix | `src/converters/mesh_converter.py` |
+| `deliverables/d2_texture_wrapping.md` | Texture Wrapping Fix | `src/gui/viewport.py` |
+| `deliverables/d3_gpu_renderer.md` | GPU Renderer Foundation | `src/gui/gpu_renderer.py`, `src/gui/viewport.py` |
+| `deliverables/d4_character_builder.md` | Character Builder Window | `src/gui/character_builder_window.py` |
+| `deliverables/d5_performance.md` | Performance & Memory | `src/resources/resource_manager.py` |
+| `deliverables/d6_module_scene.md` | Module Editor & Scene | `src/core/scene_manager.py` |
 
-### Source Documentation (from handoff bundle)
+### Source Documentation (from handoff bundle, in `specs/`)
 | File | Content |
 |------|---------|
-| `../docs/ghostrigger_dev_prompt.md` | Master developer brief (Iteration 1 scope) |
-| `../docs/character_builder_spec.md` | Character Builder redesign spec |
-| `../docs/build_guide.md` | Architecture audit with 6-phase roadmap |
-| `../docs/architecture_audit.html` | Detailed codebase audit |
-| `../docs/README_manifest.txt` | Bundle manifest with all URLs |
+| `specs/ghostrigger_dev_prompt.md` | Master developer brief (Iteration 1 scope) |
+| `specs/character_builder_spec.md` | Character Builder redesign spec |
+| `specs/build_guide.md` | Architecture audit with 6-phase roadmap |
+| `specs/architecture_audit.html` | Detailed codebase audit |
+| `specs/README_manifest.txt` | Bundle manifest with all URLs |
 
-### Spreadsheets (from handoff bundle)
+### Spreadsheets (from handoff bundle, gitignored binary assets)
 | File | Content |
 |------|---------|
-| `../spreadsheets/feature_mapping.xlsx` | 26-row feature cross-reference matrix + bug fix guide |
-| `../spreadsheets/roadmap.xlsx` | 54-task breakdown, dependency graph, effort estimates |
+| `spreadsheets/feature_mapping.xlsx` | 26-row feature cross-reference matrix + bug fix guide |
+| `spreadsheets/roadmap.xlsx` | 54-task breakdown, dependency graph, effort estimates |
 
-### Reference Books (PDFs in `../books/`)
+### Reference Books (PDFs in `books/`, gitignored)
 | Book | Author | Pages | Key Chapters for GhostRigger |
 |------|--------|-------|------------------------------|
 | `hayes_opengl_2025.pdf` | Wilson Hayes | ~300 | Ch 4 (VBO/VAO), Ch 7 (Textures), Ch 9 (Real-time), Ch 13 (Framebuffers) |

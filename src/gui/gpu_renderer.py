@@ -5554,7 +5554,7 @@ class GpuRenderer:
         if not _PIL:
             return None
         try:
-            from .viewport import FrameRenderer, ArcBallCamera
+            from .viewport_core import FrameRenderer, ArcBallCamera
             renderer = FrameRenderer(camera)
             renderer.model = model
             renderer.show_texture = True

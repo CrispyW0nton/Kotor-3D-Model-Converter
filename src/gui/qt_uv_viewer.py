@@ -6,7 +6,7 @@ from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from .viewport import _clean_tex_name
+from .viewport_core import _clean_tex_name
 
 
 class QtUVViewerWindow(QtWidgets.QMainWindow):

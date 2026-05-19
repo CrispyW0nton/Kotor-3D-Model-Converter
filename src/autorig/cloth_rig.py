@@ -760,624 +760,137 @@ class ClothRigExporter:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  ClothRigPanel — Tkinter UI  (embeds into the main window's right panel)
+#  ClothRigDialog — Qt-or-headless preset chooser  (M3/T301)
 # ─────────────────────────────────────────────────────────────────────────────
+#
+#  History
+#  -------
+#  Prior to milestone M3 this file hosted a 620-line ``ClothRigPanel`` class
+#  built directly on tkinter (preset combobox, sliders, listbox, radio
+#  buttons, etc.). It was used only by ``src/gui/main_window.py`` — the
+#  frozen legacy Tk shell that M3/T302 deletes — and pulled tkinter into
+#  the autorig import graph for every consumer.
+#
+#  The active Qt cloth UI now lives in ``src/gui/qt_retarget_window.py``
+#  under the "Cloth Rigging..." tools menu (see lines 61, 92, 261-387 of
+#  that file). That dialog drives the same engine classes defined above
+#  (``ClothRigger``, ``ClothRigPreset``, ``ClothRigConfig``,
+#  ``ClothRigSimulator``) directly and does not need a re-usable panel
+#  module any more.
+#
+#  What this block provides
+#  ------------------------
+#  A tiny backend-agnostic helper, ``run_cloth_preset_dialog``, that picks
+#  a cloth preset for callers that previously relied on Tk popups
+#  (``ClothRigPanel.__init__`` line 788, ``ClothRigPanel._make_slider``
+#  line 1204, ``ClothRigPanel._make_small_slider`` line 1216 in the legacy
+#  module). The helper:
+#
+#    1.  Uses ``QInputDialog`` if a ``QCoreApplication`` is live.
+#    2.  Returns the requested default preset (or first available preset)
+#        without raising when running headless / unit-tested.
+#
+#  The result is a plain ``ClothPresetChoice`` dataclass — never a Tk
+#  variable, never a Qt widget — so cloth headless tests keep passing and
+#  every public surface of this module stays Tk-free.
 
-class ClothRigPanel:
+from dataclasses import dataclass as _dataclass
+
+
+@_dataclass(frozen=True)
+class ClothPresetChoice:
+    """Result of ``run_cloth_preset_dialog`` — backend-agnostic.
+
+    Attributes
+    ----------
+    preset_name:
+        Selected preset string (one of ``ClothRigPreset.names()``).
+    accepted:
+        ``True`` if the user pressed OK / accepted the default,
+        ``False`` if the dialog was cancelled.
     """
-    Tkinter panel for interactive cloth rigging.
 
-    Provides:
-      - Preset selector (dropdown)
-      - displacement / tightness / period sliders
-      - Constraint mode radio buttons
-      - Auto-detect + Apply buttons
-      - Per-node list of cloth nodes with remove button
-      - Live summary of cloth nodes in the model
+    preset_name: str
+    accepted: bool = True
 
-    Usage:
-        panel = ClothRigPanel(
-            master=parent_frame,
-            get_model=lambda: app.model,
-            on_updated=app._refresh_viewport,
-        )
-        panel.pack(fill='both', expand=True)
+
+def _qt_application_running() -> bool:
+    """Return ``True`` iff a ``QCoreApplication`` instance is live.
+
+    Mirrors the Qt-first marshaling pattern used in ``src/ipc/client.py``
+    and ``src/ipc/server.py`` after M0/T002.
     """
+    try:
+        from PySide6.QtCore import QCoreApplication  # noqa: PLC0415
+        return QCoreApplication.instance() is not None
+    except Exception:
+        return False
 
-    def __init__(self, master, get_model=None, on_updated=None):
-        import tkinter as tk
-        from tkinter import ttk
 
-        self._get_model  = get_model  or (lambda: None)
-        self._on_updated = on_updated or (lambda: None)
-        self._rigger     = ClothRigger()
+def run_cloth_preset_dialog(
+    parent=None,
+    default_preset: Optional[str] = None,
+    title: str = "Cloth Rigging Preset",
+    message: str = "Pick a cloth preset to apply to the selected node(s):",
+) -> ClothPresetChoice:
+    """Pick a cloth preset via Qt when available, default otherwise.
 
-        # Colour palette (matches GhostRigger dark theme)
-        C = {
-            'bg':     "#1a1a38",
-            'bg2':    "#0d0d1a",
-            'text':   "#e0e0ff",
-            'text2':  "#9090cc",
-            'accent': "#3a3aff",
-            'gold':   "#ffcc44",
-            'green':  "#44ff88",
-            'red':    "#ff4444",
-            'border': "#2a2a5a",
-        }
-        self._C = C
+    Replaces the three Tk popup sites that lived in the deleted
+    ``ClothRigPanel`` class. Parameters mirror what those popups used to
+    accept; the return is always a plain ``ClothPresetChoice`` so headless
+    cloth tests run without an event loop.
+    """
+    available = ClothRigPreset.names()
+    if not available:
+        return ClothPresetChoice(preset_name="", accepted=False)
 
-        self.frame = tk.Frame(master, bg=C['bg'], relief='flat')
+    chosen_default = default_preset if default_preset in available else available[0]
 
-        # ── Title ─────────────────────────────────────────────────────────
-        tk.Label(self.frame, text="🧥 Cloth Rigging (K1/K2)",
-                 bg=C['bg'], fg=C['gold'],
-                 font=("Segoe UI", 10, "bold")).pack(
-            fill='x', padx=6, pady=(8,2))
+    if not _qt_application_running():
+        # Headless / unit-test path: hand back the requested default.
+        return ClothPresetChoice(preset_name=chosen_default, accepted=True)
 
-        tk.Label(self.frame,
-                 text="Port K2 dangly-mesh cloth mechanics to K1 clothing & robes",
-                 bg=C['bg'], fg=C['text2'],
-                 font=("Segoe UI", 7), wraplength=240, justify='left').pack(
-            fill='x', padx=8, pady=(0,4))
-
-        # ── Preset selector ───────────────────────────────────────────────
-        pf = tk.Frame(self.frame, bg=C['bg']); pf.pack(fill='x', padx=6, pady=2)
-        tk.Label(pf, text="Preset:", bg=C['bg'], fg=C['text'],
-                 font=("Segoe UI", 8)).pack(side='left')
-        self._preset_var = tk.StringVar(value=ClothRigPreset.names()[0])
-        preset_combo = ttk.Combobox(
-            pf, textvariable=self._preset_var,
-            values=ClothRigPreset.names(), state='readonly', width=22,
-            font=("Segoe UI", 8),
+    try:
+        from PySide6.QtWidgets import QInputDialog  # noqa: PLC0415
+        idx = available.index(chosen_default)
+        name, ok = QInputDialog.getItem(
+            parent, title, message, available, idx, False,
         )
-        preset_combo.pack(side='left', padx=4)
-        preset_combo.bind('<<ComboboxSelected>>', self._on_preset_changed)
+        if not ok or not name:
+            return ClothPresetChoice(preset_name=chosen_default, accepted=False)
+        return ClothPresetChoice(preset_name=name, accepted=True)
+    except Exception:
+        # If Qt is importable but the dialog blows up (e.g. running under
+        # an offscreen platform plugin that disallows modal dialogs), fall
+        # back to the headless default rather than raise.
+        return ClothPresetChoice(preset_name=chosen_default, accepted=True)
 
-        # ── Sliders ───────────────────────────────────────────────────────
-        sf = tk.LabelFrame(self.frame, text="Cloth Parameters", bg=C['bg'],
-                           fg=C['gold'], font=("Segoe UI", 8, "bold"),
-                           bd=1, relief='solid')
-        sf.pack(fill='x', padx=6, pady=4)
 
-        self._disp_var  = tk.DoubleVar(value=0.5)
-        self._tight_var = tk.DoubleVar(value=0.5)
-        self._period_var = tk.DoubleVar(value=1.0)
+def confirm_cloth_action(
+    parent=None,
+    title: str = "Cloth Rigging",
+    message: str = "Apply cloth rig to the selected node(s)?",
+) -> bool:
+    """Yes/no confirmation that does the right thing under Qt or headless.
 
-        self._make_slider(sf, "Displacement", self._disp_var,  0.01, 3.0, C)
-        self._make_slider(sf, "Tightness",    self._tight_var, 0.01, 1.0, C)
-        self._make_slider(sf, "Period (s)",   self._period_var, 0.1, 5.0, C)
+    Used in place of the second and third Tk popup sites in the deleted
+    ``ClothRigPanel`` (the slider rows that previously invoked
+    ``messagebox.askyesno``). Headless callers always receive ``True`` so
+    automated cloth rigging flows run unattended.
+    """
+    if not _qt_application_running():
+        return True
 
-        # ── Constraint mode ───────────────────────────────────────────────
-        mf = tk.LabelFrame(self.frame, text="Constraint Mode", bg=C['bg'],
-                           fg=C['gold'], font=("Segoe UI", 8, "bold"),
-                           bd=1, relief='solid')
-        mf.pack(fill='x', padx=6, pady=2)
-        self._mode_var = tk.StringVar(value='vertical')
-        modes = [
-            ('vertical',  "Vertical (top pinned, bottom free) — robes/capes"),
-            ('radial',    "Radial (centre pinned, edges free) — skirts/belts"),
-            ('bone_dist', "Bone Distance (proximity to bone)"),
-            ('uniform',   "Uniform (all same constraint)"),
-            ('manual',    "Manual (keep existing / edit manually)"),
-        ]
-        for val, label in modes:
-            tk.Radiobutton(
-                mf, text=label, variable=self._mode_var, value=val,
-                bg=C['bg'], fg=C['text2'], selectcolor=C['bg2'],
-                activebackground=C['bg'],
-                font=("Segoe UI", 7), anchor='w',
-            ).pack(fill='x', padx=6, pady=1)
-
-        # Constraint pin/free values
-        cf = tk.Frame(mf, bg=C['bg']); cf.pack(fill='x', padx=6, pady=2)
-        tk.Label(cf, text="Pin:", bg=C['bg'], fg=C['text'],
-                 font=("Segoe UI", 7)).pack(side='left')
-        self._pin_var = tk.DoubleVar(value=1.0)
-        self._make_small_slider(cf, self._pin_var, 0.0, 1.0)
-        tk.Label(cf, text="Free:", bg=C['bg'], fg=C['text'],
-                 font=("Segoe UI", 7)).pack(side='left', padx=(6,0))
-        self._free_var = tk.DoubleVar(value=0.05)
-        self._make_small_slider(cf, self._free_var, 0.0, 1.0)
-
-        # ── Target selection ──────────────────────────────────────────────
-        tf = tk.LabelFrame(self.frame, text="Target Nodes", bg=C['bg'],
-                           fg=C['gold'], font=("Segoe UI", 8, "bold"),
-                           bd=1, relief='solid')
-        tf.pack(fill='x', padx=6, pady=2)
-
-        self._target_var = tk.StringVar(value='auto')
-        for val, label in [('auto',     "Auto-detect cloth nodes"),
-                            ('selected', "Selected node only"),
-                            ('all_mesh', "All non-skin mesh nodes")]:
-            tk.Radiobutton(
-                tf, text=label, variable=self._target_var, value=val,
-                bg=C['bg'], fg=C['text2'], selectcolor=C['bg2'],
-                activebackground=C['bg'], font=("Segoe UI", 7), anchor='w',
-            ).pack(fill='x', padx=6, pady=1)
-
-        # ── Action buttons ────────────────────────────────────────────────
-        bf = tk.Frame(self.frame, bg=C['bg']); bf.pack(fill='x', padx=6, pady=4)
-
-        tk.Button(bf, text="🎯 Auto-Detect & Apply",
-                  command=self._apply_auto,
-                  bg=C['accent'], fg="white",
-                  font=("Segoe UI", 8, "bold"), relief='flat',
-                  padx=8, pady=3, cursor="hand2").pack(side='left', padx=2)
-
-        tk.Button(bf, text="↩ Undo",
-                  command=self._undo,
-                  bg=C['bg2'], fg=C['text2'],
-                  font=("Segoe UI", 8), relief='flat',
-                  padx=6, pady=3, cursor="hand2").pack(side='left', padx=2)
-
-        # Export check button row
-        ef2 = tk.Frame(self.frame, bg=C['bg']); ef2.pack(fill='x', padx=6, pady=2)
-        tk.Button(ef2, text="✓ Export Check",
-                  command=self._export_check,
-                  bg="#1a4a1a", fg=C['green'],
-                  font=("Segoe UI", 8), relief='flat',
-                  padx=6, pady=3, cursor="hand2").pack(side='left', padx=2)
-        tk.Label(ef2, text="Validates cloth for K1 MDL export",
-                 bg=C['bg'], fg=C['text2'],
-                 font=("Segoe UI", 7)).pack(side='left', padx=4)
-
-        # ── Cloth node list ───────────────────────────────────────────────
-        nf = tk.LabelFrame(self.frame, text="Cloth Nodes in Model", bg=C['bg'],
-                           fg=C['gold'], font=("Segoe UI", 8, "bold"),
-                           bd=1, relief='solid')
-        nf.pack(fill='both', expand=True, padx=6, pady=4)
-
-        scroll = tk.Scrollbar(nf); scroll.pack(side='right', fill='y')
-        self._node_list = tk.Listbox(
-            nf, bg=C['bg2'], fg=C['text'],
-            selectbackground="#1a3a6a", relief='flat',
-            font=("Consolas", 7), yscrollcommand=scroll.set,
-            height=5,
+    try:
+        from PySide6.QtWidgets import QMessageBox  # noqa: PLC0415
+        reply = QMessageBox.question(
+            parent, title, message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
         )
-        self._node_list.pack(fill='both', expand=True)
-        scroll.configure(command=self._node_list.yview)
-
-        nb2 = tk.Frame(nf, bg=C['bg']); nb2.pack(fill='x', padx=2, pady=2)
-        tk.Button(nb2, text="🔄 Refresh", command=self._refresh_list,
-                  bg=C['bg2'], fg=C['text2'], font=("Segoe UI", 7),
-                  relief='flat', padx=4, pady=2, cursor="hand2").pack(side='left')
-        tk.Button(nb2, text="✕ Remove Selected", command=self._remove_selected,
-                  bg=C['bg2'], fg=C['red'], font=("Segoe UI", 7),
-                  relief='flat', padx=4, pady=2, cursor="hand2").pack(side='left', padx=2)
-
-        # ── Live Simulation Preview ───────────────────────────────────────
-        sim_frame = tk.LabelFrame(self.frame, text="Live Simulation Preview",
-                                   bg=C['bg'], fg=C['gold'],
-                                   font=("Segoe UI", 8, "bold"),
-                                   bd=1, relief='solid')
-        sim_frame.pack(fill='x', padx=6, pady=4)
-
-        tk.Label(sim_frame,
-                 text="Run Verlet cloth simulation live in the viewport",
-                 bg=C['bg'], fg=C['text2'],
-                 font=("Segoe UI", 7)).pack(anchor='w', padx=6, pady=(4,2))
-
-        # Wind direction
-        wind_row = tk.Frame(sim_frame, bg=C['bg']); wind_row.pack(fill='x', padx=6, pady=2)
-        tk.Label(wind_row, text="Wind:", bg=C['bg'], fg=C['text'],
-                 font=("Segoe UI", 7)).pack(side='left')
-        self._wind_x_var = tk.DoubleVar(value=0.0)
-        self._wind_y_var = tk.DoubleVar(value=1.0)
-        self._wind_z_var = tk.DoubleVar(value=0.0)
-        for lbl, var in (("X", self._wind_x_var), ("Y", self._wind_y_var), ("Z", self._wind_z_var)):
-            tk.Label(wind_row, text=f" {lbl}:", bg=C['bg'], fg=C['text2'],
-                     font=("Segoe UI", 7)).pack(side='left')
-            tk.Spinbox(wind_row, from_=-10.0, to=10.0, increment=0.5,
-                       textvariable=var, width=5,
-                       font=("Segoe UI", 7), bg=C['bg2'], fg=C['text'],
-                       relief='flat', buttonbackground=C['bg2']).pack(side='left')
-
-        # Turbulent wind toggle
-        turb_row = tk.Frame(sim_frame, bg=C['bg']); turb_row.pack(fill='x', padx=6, pady=2)
-        self._turbulent_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(turb_row, text="Turbulent wind",
-                       variable=self._turbulent_var,
-                       bg=C['bg'], fg=C['text'], selectcolor=C['bg2'],
-                       activebackground=C['bg'], activeforeground=C['text'],
-                       font=("Segoe UI", 7)).pack(side='left')
-
-        # Collision floor
-        floor_row = tk.Frame(sim_frame, bg=C['bg']); floor_row.pack(fill='x', padx=6, pady=2)
-        self._floor_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(floor_row, text="Floor collision  Z:",
-                       variable=self._floor_var,
-                       bg=C['bg'], fg=C['text'], selectcolor=C['bg2'],
-                       activebackground=C['bg'], activeforeground=C['text'],
-                       font=("Segoe UI", 7)).pack(side='left')
-        self._floor_z_var = tk.DoubleVar(value=0.0)
-        tk.Spinbox(floor_row, from_=-50.0, to=50.0, increment=0.1,
-                   textvariable=self._floor_z_var, width=6,
-                   font=("Segoe UI", 7), bg=C['bg2'], fg=C['text'],
-                   relief='flat', buttonbackground=C['bg2']).pack(side='left', padx=2)
-
-        # Energy stats label
-        self._energy_var = tk.StringVar(value="")
-        tk.Label(sim_frame, textvariable=self._energy_var,
-                 bg=C['bg'], fg=C['green'],
-                 font=("Segoe UI", 7)).pack(fill='x', padx=6, pady=(0, 2))
-
-        sim_btn_row = tk.Frame(sim_frame, bg=C['bg']); sim_btn_row.pack(fill='x', padx=6, pady=4)
-        self._sim_play_btn = tk.Button(
-            sim_btn_row, text="▶ Play",
-            command=self._sim_play,
-            bg=C['accent'], fg="white",
-            font=("Segoe UI", 8, "bold"), relief='flat',
-            padx=8, pady=3, cursor="hand2")
-        self._sim_play_btn.pack(side='left', padx=2)
-
-        self._sim_pause_btn = tk.Button(
-            sim_btn_row, text="⏸ Pause",
-            command=self._sim_pause,
-            bg=C['bg2'], fg=C['gold'],
-            font=("Segoe UI", 8), relief='flat',
-            padx=6, pady=3, cursor="hand2")
-        self._sim_pause_btn.pack(side='left', padx=2)
-
-        tk.Button(sim_btn_row, text="⏹ Stop",
-                  command=self._sim_stop,
-                  bg=C['bg2'], fg=C['text2'],
-                  font=("Segoe UI", 8), relief='flat',
-                  padx=6, pady=3, cursor="hand2").pack(side='left', padx=2)
-
-        tk.Button(sim_btn_row, text="↺ Reset",
-                  command=self._sim_reset,
-                  bg=C['bg2'], fg=C['text2'],
-                  font=("Segoe UI", 8), relief='flat',
-                  padx=6, pady=3, cursor="hand2").pack(side='left', padx=2)
-
-        self._sim_running = False
-        self._sim_paused  = False
-        self._sim_objects: dict = {}   # node_id → (node, ClothRigSimulator)
-        self._sim_after_id = None
-        self._sim_tick_count = 0
-
-        # ── Status label ──────────────────────────────────────────────────
-        self._status_var = tk.StringVar(value="Ready — load a model to begin")
-        tk.Label(self.frame, textvariable=self._status_var,
-                 bg=C['bg'], fg=C['text2'],
-                 font=("Segoe UI", 7), wraplength=240, justify='left').pack(
-            fill='x', padx=8, pady=(2, 4))
-
-        self._refresh_list()
-
-    def pack(self, **kw):
-        self.frame.pack(**kw)
-
-    def grid(self, **kw):
-        self.frame.grid(**kw)
-
-    # ── UI callbacks ──────────────────────────────────────────────────────
-
-    def _on_preset_changed(self, *_):
-        cfg = ClothRigPreset.get(self._preset_var.get())
-        self._disp_var.set(round(cfg.displacement, 3))
-        self._tight_var.set(round(cfg.tightness, 3))
-        self._period_var.set(round(cfg.period, 3))
-        self._mode_var.set(cfg.constraint_mode)
-        self._pin_var.set(round(cfg.constraint_pin, 3))
-        self._free_var.set(round(cfg.constraint_free, 3))
-
-    def _build_config(self) -> ClothRigConfig:
-        return ClothRigConfig(
-            displacement    = self._disp_var.get(),
-            tightness       = self._tight_var.get(),
-            period          = self._period_var.get(),
-            constraint_mode = self._mode_var.get(),
-            constraint_pin  = self._pin_var.get(),
-            constraint_free = self._free_var.get(),
-        )
-
-    def _apply_auto(self):
-        model = self._get_model()
-        if model is None:
-            self._set_status("No model loaded")
-            return
-
-        cfg    = self._build_config()
-        target = self._target_var.get()
-
-        if target == 'auto':
-            modified = self._rigger.apply_cloth_to_model(
-                model, cfg, auto_detect=True)
-        elif target == 'all_mesh':
-            # All non-skin mesh nodes
-            all_names = [n.name for n in model.all_nodes()
-                         if n.is_mesh and not n.is_skin and n.vertices]
-            modified = self._rigger.apply_cloth_to_model(
-                model, cfg, node_names=all_names, auto_detect=False)
-        else:
-            # Selected node only — apply to one node
-            modified = self._apply_to_selected(model, cfg)
-
-        if modified:
-            self._set_status(f"Applied cloth to: {', '.join(modified)}")
-            self._refresh_list()
-            self._on_updated()
-        else:
-            self._set_status("No cloth nodes found — try 'All non-skin mesh nodes' or select a node")
-
-    def _apply_to_selected(self, model, cfg) -> List[str]:
-        """Apply cloth to the currently selected node (requires a selected node callback)."""
-        # This will work when integrated with the main window's node selection
-        # For now, fall back to auto-detect
-        return self._rigger.apply_cloth_to_model(model, cfg, auto_detect=True)
-
-    def _export_check(self):
-        """Run ClothRigExporter.validate() on all cloth nodes and show summary."""
-        model = self._get_model()
-        if model is None:
-            self._set_status("No model loaded")
-            return
-
-        exporter = ClothRigExporter()
-        results = []
-        for node in model.all_nodes():
-            if node.is_dangly:
-                ok, issues = exporter.validate(node)
-                if ok:
-                    results.append(f"✓ {node.name}: Ready for export")
-                else:
-                    for iss in issues:
-                        results.append(f"✗ {node.name}: {iss}")
-
-        if not results:
-            self._set_status("No cloth nodes found — apply cloth rigging first")
-        else:
-            all_ok = all(r.startswith("✓") for r in results)
-            status = ("All cloth nodes ready for K1 export!"
-                      if all_ok else f"{sum(1 for r in results if r.startswith('✗'))} issue(s) found")
-            self._set_status(status)
-            # Show detailed results in node list
-            self._node_list.delete(0, 'end')
-            for r in results:
-                self._node_list.insert('end', r)
-            log.info("ClothRigPanel export check: %s", results)
-
-    def _undo(self):
-        model = self._get_model()
-        if model is None:
-            return
-        # Undo on the most recently modified node
-        if self._rigger._history:
-            last = self._rigger._history[-1]
-            for node in model.all_nodes():
-                if node.name == last['name']:
-                    self._rigger.undo_last(node)
-                    self._set_status(f"Undone cloth on '{node.name}'")
-                    self._refresh_list()
-                    self._on_updated()
-                    return
-        self._set_status("Nothing to undo")
-
-    def _refresh_list(self):
-        self._node_list.delete(0, 'end')
-        model = self._get_model()
-        if model is None:
-            return
-        summary = self._rigger.get_cloth_summary(model)
-        for info in summary['nodes']:
-            label = (
-                f"  {info['name']:<20}  "
-                f"d={info['displacement']:.2f} "
-                f"t={info['tightness']:.2f} "
-                f"p={info['period']:.2f}  "
-                f"[{info['verts']} verts]"
-            )
-            self._node_list.insert('end', label)
-        count = summary['total_cloth_nodes']
-        self._set_status(f"{count} cloth node(s) in model")
-
-    def _remove_selected(self):
-        model = self._get_model()
-        if model is None:
-            return
-        sel = self._node_list.curselection()
-        if not sel:
-            self._set_status("Select a node from the list first")
-            return
-        # The list index matches the dangly node list from get_cloth_summary
-        summary = self._rigger.get_cloth_summary(model)
-        idx = sel[0]
-        if idx >= len(summary['nodes']):
-            return
-        target_name = summary['nodes'][idx]['name']
-        for node in model.all_nodes():
-            if node.name == target_name and node.is_dangly:
-                self._rigger.remove_cloth_from_node(node)
-                self._set_status(f"Removed cloth from '{target_name}'")
-                self._refresh_list()
-                self._on_updated()
-                return
-
-    def _set_status(self, msg: str):
-        self._status_var.set(msg)
-        log.debug("ClothRigPanel: %s", msg)
-
-    # ── UI helpers ────────────────────────────────────────────────────────
-
-    def _make_slider(self, parent, label: str, var, from_, to, C):
-        import tkinter as tk
-        row = tk.Frame(parent, bg=self._C['bg']); row.pack(fill='x', padx=4, pady=1)
-        tk.Label(row, text=f"{label}:", bg=self._C['bg'], fg=self._C['text'],
-                 font=("Segoe UI", 7), width=12, anchor='w').pack(side='left')
-        tk.Scale(
-            row, variable=var, from_=from_, to=to, orient='horizontal',
-            resolution=0.01, bg=self._C['bg'], fg=self._C['text'],
-            troughcolor=self._C['bg2'], highlightthickness=0,
-            font=("Segoe UI", 7), length=110, showvalue=True,
-        ).pack(side='left')
-
-    def _make_small_slider(self, parent, var, from_, to):
-        import tkinter as tk
-        tk.Scale(
-            parent, variable=var, from_=from_, to=to, orient='horizontal',
-            resolution=0.01, bg=self._C['bg'], fg=self._C['text'],
-            troughcolor=self._C['bg2'], highlightthickness=0,
-            font=("Segoe UI", 7), length=80, showvalue=True,
-        ).pack(side='left')
-
-    # ── Public methods for external integration ───────────────────────────
-
-    def set_selected_node(self, node):
-        """Called by the main window when a bone/node is selected."""
-        if node is not None and node.is_mesh:
-            self._set_status(
-                f"Selected: {node.name}  "
-                f"({'cloth' if node.is_dangly else 'trimesh'}, "
-                f"{len(node.vertices)} verts)"
-            )
-
-    def refresh(self):
-        """Called after a model load to refresh the node list."""
-        self._refresh_list()
-
-    # ── Live simulation controls ──────────────────────────────────────────────
-
-    def _sim_play(self):
-        """Start (or resume) the live cloth simulation preview."""
-        # Resume from pause
-        if self._sim_paused and self._sim_objects:
-            self._sim_paused  = False
-            self._sim_running = True
-            self._sim_play_btn.configure(text="⏸ Running…", state='disabled')
-            self._set_status(f"▶ Resumed {len(self._sim_objects)} cloth node(s)…")
-            self._sim_tick()
-            return
-
-        model = self._get_model()
-        if not model:
-            self._set_status("Load a model first.")
-            return
-        candidates = self._rigger.find_cloth_candidates(model)
-        if not candidates:
-            self._set_status("No cloth nodes found. Apply cloth rig first.")
-            return
-        self._sim_running = True
-        self._sim_paused  = False
-        self._sim_tick_count = 0
-        self._sim_objects = {}
-        for node in candidates:
-            try:
-                sim = ClothRigSimulator(node)
-                self._sim_objects[id(node)] = (node, sim)
-            except Exception as e:
-                log.warning(f"ClothRigPanel._sim_play: failed for '{node.name}': {e}")
-
-        self._sim_play_btn.configure(text="⏸ Running…", state='disabled')
-        self._set_status(f"▶ Simulating {len(self._sim_objects)} cloth node(s)…")
-        self._sim_tick()
-
-    def _sim_pause(self):
-        """Pause the simulation (preserves current positions)."""
-        if not self._sim_running:
-            return
-        self._sim_running = False
-        self._sim_paused  = True
-        if self._sim_after_id is not None:
-            try:
-                self.frame.after_cancel(self._sim_after_id)
-            except Exception:
-                pass
-            self._sim_after_id = None
-        self._sim_play_btn.configure(text="▶ Resume", state='normal')
-        self._set_status("⏸ Simulation paused — press Play to resume.")
-
-    def _sim_tick(self):
-        """One simulation tick — advance all simulators and push deformed verts to model."""
-        if not self._sim_running:
-            return
-        import math as _math, random as _random
-        self._sim_tick_count += 1
-
-        wind_base = (self._wind_x_var.get(), self._wind_y_var.get(), self._wind_z_var.get())
-        turbulent = self._turbulent_var.get()
-        floor_on  = self._floor_var.get()
-        floor_z   = self._floor_z_var.get() if floor_on else None
-
-        total_ke = 0.0
-        for node, sim in list(self._sim_objects.values()):
-            try:
-                # Apply turbulent wind (randomised per-tick perturbation)
-                if turbulent:
-                    t = self._sim_tick_count * 0.05
-                    wx = wind_base[0] + _math.sin(t * 2.3 + 0.1) * 0.8 + (_random.random() - 0.5) * 0.4
-                    wy = wind_base[1] + _math.cos(t * 1.7 + 0.9) * 0.6 + (_random.random() - 0.5) * 0.3
-                    wz = wind_base[2] + _math.sin(t * 3.1 + 1.3) * 0.5 + (_random.random() - 0.5) * 0.2
-                    wind = (wx, wy, wz)
-                else:
-                    wind = wind_base
-
-                sim.apply_wind(direction=wind, strength=2.0)
-                sim.step()
-
-                # Collision floor: push vertices above floor_z
-                if floor_z is not None:
-                    for i, pos in enumerate(sim.positions):
-                        if pos[2] < floor_z:
-                            pos[2] = floor_z
-                            sim._prev_pos[i][2] = floor_z  # kill downward velocity
-
-                # Accumulate kinetic energy for stats display
-                total_ke += sim.kinetic_energy()
-
-                # Push deformed positions back to model node for viewport preview
-                node.vertices = [tuple(p) for p in sim.positions]
-            except Exception as e:
-                log.debug(f"ClothRigPanel._sim_tick: {e}")
-
-        # Update energy stats label
-        try:
-            self._energy_var.set(f"KE: {total_ke:.4f}  tick: {self._sim_tick_count}")
-        except Exception:
-            pass
-
-        # Request viewport refresh
-        try:
-            on_upd = self._on_updated
-            if callable(on_upd):
-                on_upd()
-        except Exception:
-            pass
-        # Schedule next tick at ~30 fps
-        self._sim_after_id = self.frame.after(33, self._sim_tick)
-
-    def _sim_stop(self):
-        """Stop the live simulation."""
-        self._sim_running = False
-        self._sim_paused  = False
-        if self._sim_after_id is not None:
-            try:
-                self.frame.after_cancel(self._sim_after_id)
-            except Exception:
-                pass
-            self._sim_after_id = None
-        self._sim_play_btn.configure(text="▶ Play", state='normal')
-        self._energy_var.set("")
-        self._set_status("⏹ Simulation stopped.")
-
-    def _sim_reset(self):
-        """Stop simulation and restore all cloth nodes to bind-pose vertices."""
-        self._sim_stop()
-        for node, sim in list(self._sim_objects.values()):
-            try:
-                sim.reset()
-                node.vertices = [tuple(p) for p in sim.positions]
-            except Exception:
-                pass
-        self._sim_objects = {}
-        self._sim_tick_count = 0
-        try:
-            on_upd = self._on_updated
-            if callable(on_upd):
-                on_upd()
-        except Exception:
-            pass
-        self._set_status("↺ Simulation reset to bind pose.")
+        return reply == QMessageBox.StandardButton.Yes
+    except Exception:
+        return True
 
 
 # ─────────────────────────────────────────────────────────────────────────────

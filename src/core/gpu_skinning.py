@@ -103,7 +103,7 @@ log = logging.getLogger(__name__)
 # authored extents while the legacy F1 path expands them several meters.
 #
 # The F1 and F11 switches remain for audit/visual-gate work. See
-# ``docs/skinning_parity_audit_2026_05.md`` 3i Step 7 and 3j Steps 3-5
+# ``knowledge_base/audits/2026-05/skinning_parity.md`` 3i Step 7 and 3j Steps 3-5
 # for the decision rule that gates promoting either formula to the default.
 _SKIN_FORMULA_ENV = 'GHOSTRIGGER_SKIN_FORMULA'
 _SKIN_FORMULA_F1 = 'F1_current_TR_inverse'
@@ -751,7 +751,7 @@ class MatrixPaletteUploader:
         DFS-indexed lookup plus this builder, ``bone_world * inv_bind``
         equals ``skin_world`` to <= 1e-6 on every probed bone --- the
         textbook bind-pose collapse for an LBS chain over NODE_LOCAL
-        vertices. See ``docs/skinning_parity_audit_2026_05.md`` 3j Step 3.
+        vertices. See ``knowledge_base/audits/2026-05/skinning_parity.md`` 3j Step 3.
         """
         try:
             qw_disk = float(qbone[0])

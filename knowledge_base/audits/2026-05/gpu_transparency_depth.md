@@ -1,6 +1,6 @@
 # GPU Transparency And Depth Audit - 2026-05-06
 
-This is a findings-first audit for Work item 2 from `docs/visual_performance_audit_2026_05.md`. No production renderer code was changed.
+This is a findings-first audit for Work item 2 from `knowledge_base/audits/2026-05/visual_performance.md`. No production renderer code was changed.
 
 ## Targets
 

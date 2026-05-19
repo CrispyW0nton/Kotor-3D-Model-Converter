@@ -42,6 +42,15 @@ game_data/
 !/tests/test_mcp_full_scan.py
 !/tests/test_mcp_textures.py
 !/tests/test_mcp_skinning.py
+!/tests/test_qt_only_imports.py
+!/tests/test_character_mode.py
+!/tests/test_joint_dot_overlay.py
+!/tests/test_headless_body_workflow.py
+!/tests/test_head_workflow.py
+!/tests/test_head_inspector.py
+!/tests/test_head_viseme_panel.py
+!/tests/test_head_phoneme_panel.py
+!/tests/test_head_camera_preset.py
 test_assets/
 pytest.ini
 .pytest_cache/
@@ -104,9 +113,9 @@ kotorblender_src/
 .reference_repos/
 
 # ── Reference knowledge base (books/images/spreadsheets too large for git) ───
-.ghostrigger_reference/books/
-.ghostrigger_reference/images/
-.ghostrigger_reference/spreadsheets/
+knowledge_base/reference/books/
+knowledge_base/reference/images/
+knowledge_base/reference/spreadsheets/
 
 # ── Demo / capture artefacts ──────────────────────────────────────────────────
 *.mp4

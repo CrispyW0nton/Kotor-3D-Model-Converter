@@ -230,7 +230,7 @@ class LibraryBatchExportWorker(QtCore.QObject):
                         MDLAsciiWriter().write(model, os.path.join(self.out_dir, f"{resref}.mdl"))
                         ok += 1
                     elif self.fmt == "tga":
-                        from src.gui.viewport import _load_tpc_bytes
+                        from src.gui.viewport_core import _load_tpc_bytes
 
                         tex_names = {
                             str(getattr(node, "texture", "") or "").strip()
@@ -1196,7 +1196,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.critical(self, "Extract", str(exc))
 
     def _extract_model_resource(self, row: dict, out_dir: str) -> list[str]:
-        from src.gui.viewport import _is_tpc_data
+        from src.gui.viewport_core import _is_tpc_data
 
         mgr = self._get_resource_manager()
         if mgr is None:
@@ -3464,6 +3464,17 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._log(f"Could not launch legacy Tk workbench: {exc}", "error")
 
     def _open_qt_character_builder_window(self):
+        """Open (or raise) the M2 AccuRig-style Character Builder window.
+
+        Entry points (all wired here per M2/T206):
+          * Tools → Character Builder (New Window)…
+          * Main toolbar Character Builder button
+          * Keyboard shortcut Ctrl+B
+
+        The window is created lazily on first access and reused for the
+        rest of the session — closing it merely hides it so QSettings
+        (T207) persists window/dock state between opens.
+        """
         if self._character_builder_window is None:
             self._character_builder_window = QtCharacterBuilderWindow(self)
         self._character_builder_window.show()

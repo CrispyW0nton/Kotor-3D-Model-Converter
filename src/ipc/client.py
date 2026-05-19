@@ -80,6 +80,41 @@ def ipc_call(
         return False, {"status": "error", "message": str(exc)}
 
 
+def _marshal_to_gui_thread(cb, *args) -> None:
+    """
+    T002 — Qt-first callback marshaling (M3/T304: Tk fallback removed).
+
+    Schedule ``cb(*args)`` on the main GUI thread:
+
+      1. If a Qt application is running (``QCoreApplication.instance()`` is
+         not None) use ``QTimer.singleShot(0, ...)`` to defer onto the Qt
+         event loop. This is the production path.
+      2. Otherwise (headless / unit tests / no event loop) invoke the
+         callback directly in the worker thread.
+
+    The legacy Tk fallback (``tk._default_root.after(0, ...)``) was
+    deleted in M3/T304 along with the rest of the Tk codepath.
+
+    All marshaling exceptions are swallowed; the direct-call fallback runs
+    so the callback never silently disappears.
+    """
+    # ── 1. Qt path ────────────────────────────────────────────────────
+    try:
+        from PySide6.QtCore import QCoreApplication, QTimer  # noqa: PLC0415
+        app = QCoreApplication.instance()
+        if app is not None:
+            QTimer.singleShot(0, lambda: cb(*args))
+            return
+    except Exception:
+        pass
+
+    # ── 2. Headless fallback ──────────────────────────────────────────
+    try:
+        cb(*args)
+    except Exception as exc:
+        log.error("IPC async callback direct-call error: %s", exc)
+
+
 def ipc_call_async(
     port: int,
     action: str,
@@ -89,21 +124,13 @@ def ipc_call_async(
 ):
     """
     Non-blocking IPC call — runs in a daemon thread.
-    on_result(success, response) is called on the calling thread via Tkinter
-    after() if available, otherwise in the worker thread.
+    ``on_result(success, response)`` is marshaled back to the GUI main
+    thread via :func:`_marshal_to_gui_thread` (Qt → Tk → direct fallback).
     """
     def _worker():
         ok, resp = ipc_call(port, action, payload, sender)
         if on_result is not None:
-            try:
-                import tkinter as tk
-                root = tk._default_root  # type: ignore[attr-defined]
-                if root is not None:
-                    root.after(0, on_result, ok, resp)
-                    return
-            except Exception:
-                pass
-            on_result(ok, resp)
+            _marshal_to_gui_thread(on_result, ok, resp)
 
     t = threading.Thread(target=_worker, daemon=True,
                          name=f"IPC-{action}-{port}")
