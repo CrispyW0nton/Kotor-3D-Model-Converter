@@ -29,6 +29,7 @@ offset arrays from scratch.  The strategy used here is:
 import struct
 import math
 import logging
+import copy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Dict, Tuple, Any
@@ -1137,8 +1138,10 @@ class MDLBinaryWriter:
         fp1 = FP1_K2 if is_k2 else FP1_K1
         fp2 = FP2_K2 if is_k2 else FP2_K1
 
-        # Collect anim nodes (if any)
-        anim_nodes = list(getattr(anim, 'nodes', None) or [])
+        # Collect anim nodes (if any) and rebuild their hierarchy from the
+        # geometry model. Retarget/bake tools keep animation nodes flat in
+        # memory, but binary MDL animation blocks must be a reachable tree.
+        anim_nodes = self._animation_nodes_with_hierarchy(anim, all_nodes)
 
         # ── Build anim node tree stubs ────────────────────────────────────────
         # Each anim node is a base node header (80 bytes) + controller data.
@@ -1192,13 +1195,132 @@ class MDLBinaryWriter:
         anim_hdr = bytearray(88)
         struct.pack_into('<f', anim_hdr, 0, float(anim.length or 0.0))
         struct.pack_into('<f', anim_hdr, 4, float(anim.transition_time or 0.25))
-        nm2 = (anim.anim_root or "").encode('ascii', 'replace')[:32].ljust(32, b'\x00')
+        root_name = getattr(anim_nodes[0], 'name', '') if anim_nodes else (anim.anim_root or "")
+        nm2 = (anim.anim_root or root_name or "").encode('ascii', 'replace')[:32].ljust(32, b'\x00')
         anim_hdr[8:40] = nm2
         # events array (not serialized — write zero count/offset)
         # +40: events_off, +44: events_cnt, +48: events_cnt2
         struct.pack_into('<III', anim_hdr, 40, 0, 0, 0)
 
         return bytes(geo) + bytes(anim_hdr) + anim_node_data
+
+    def _animation_nodes_with_hierarchy(self, anim, all_nodes: list) -> list:
+        """Return animation nodes as a model-hierarchy tree.
+
+        The workbench may create flat animation-node lists because in-memory
+        playback resolves poses by node name. Binary MDL stores animation nodes
+        as a tree, and readers only walk descendants of the root animation node.
+        Add controllerless ancestor stubs as needed so every animated target node
+        is reachable after export/reimport.
+        """
+        source_nodes = list(getattr(anim, 'nodes', None) or [])
+        if not source_nodes:
+            return []
+
+        geom_by_name = {
+            str(getattr(node, 'name', '') or '').lower(): node
+            for node in (all_nodes or [])
+            if getattr(node, 'name', '')
+        }
+        order_by_name = {
+            str(getattr(node, 'name', '') or '').lower(): index
+            for index, node in enumerate(all_nodes or [])
+            if getattr(node, 'name', '')
+        }
+        local_by_name: Dict[str, object] = {}
+
+        def clone_anim_node(node):
+            cloned = copy.copy(node)
+            cloned.children = []
+            cloned.parent = None
+            cloned.controllers = list(getattr(node, 'controllers', []) or [])
+            return cloned
+
+        def clone_stub_node(node):
+            if hasattr(node, 'clone_shallow'):
+                cloned = node.clone_shallow()
+            else:
+                cloned = copy.copy(node)
+            cloned.children = []
+            cloned.parent = None
+            cloned.controllers = []
+            return cloned
+
+        for node in source_nodes:
+            key = str(getattr(node, 'name', '') or '').lower()
+            if key:
+                local_by_name[key] = clone_anim_node(node)
+
+        for key in list(local_by_name):
+            geom = geom_by_name.get(key)
+            parent = getattr(geom, 'parent', None) if geom is not None else None
+            while parent is not None:
+                parent_key = str(getattr(parent, 'name', '') or '').lower()
+                if parent_key and parent_key not in local_by_name:
+                    local_by_name[parent_key] = clone_stub_node(parent)
+                parent = getattr(parent, 'parent', None)
+
+        for node in local_by_name.values():
+            node.children = []
+            node.parent = None
+
+        roots = []
+        for key, node in local_by_name.items():
+            geom = geom_by_name.get(key)
+            parent = getattr(geom, 'parent', None) if geom is not None else None
+            linked = False
+            while parent is not None:
+                parent_key = str(getattr(parent, 'name', '') or '').lower()
+                parent_node = local_by_name.get(parent_key)
+                if parent_node is not None:
+                    node.parent = parent_node
+                    parent_node.children.append(node)
+                    linked = True
+                    break
+                parent = getattr(parent, 'parent', None)
+            if not linked:
+                roots.append(node)
+
+        root_key = str(getattr(anim, 'anim_root', '') or '').lower()
+        root_node = local_by_name.get(root_key) if root_key else None
+        if root_node is None and roots:
+            root_node = min(
+                roots,
+                key=lambda node: order_by_name.get(str(getattr(node, 'name', '') or '').lower(), 1_000_000),
+            )
+        if root_node is not None:
+            for node in list(roots):
+                if node is root_node:
+                    continue
+                node.parent = root_node
+                root_node.children.append(node)
+
+        ordered = []
+        seen = set()
+
+        def visit(node):
+            nid = id(node)
+            if nid in seen:
+                return
+            seen.add(nid)
+            ordered.append(node)
+            node.children.sort(
+                key=lambda child: order_by_name.get(
+                    str(getattr(child, 'name', '') or '').lower(),
+                    1_000_000,
+                )
+            )
+            for child in node.children:
+                visit(child)
+
+        if root_node is not None:
+            visit(root_node)
+        for node in sorted(
+            local_by_name.values(),
+            key=lambda item: order_by_name.get(str(getattr(item, 'name', '') or '').lower(), 1_000_000),
+        ):
+            visit(node)
+        return ordered
 
     def _build_anim_node(self, node, all_anim_nodes: list,
                          is_k2: bool, node_off_rel: int) -> bytes:
@@ -1220,8 +1342,13 @@ class MDLBinaryWriter:
         ctrl_data_off_rel  = ctrl_off_rel + 16 * ctrl_cnt
 
         hdr = bytearray(80)
-        flags = node.flags or 0x0001  # HEADER
-        struct.pack_into('<H', hdr, 0, int(flags) & 0xFFFF)
+        # Animation nodes are controller stubs only. They must always be DUMMY
+        # nodes, even when they animate a mesh/skin geometry node with the same
+        # name. If mesh flags leak in here, readers expect a mesh sub-header
+        # after this 80-byte base node and the following controller data is
+        # misread as geometry, which mangles the exported model on reimport.
+        anim_flags = 0x0001
+        struct.pack_into('<H', hdr, 0, anim_flags)
         struct.pack_into('<H', hdr, 2, node_idx & 0xFFFF)    # node_number
         struct.pack_into('<H', hdr, 4, node_idx & 0xFFFF)    # name_index
         # +8, +12: off_root / off_parent — fixed up by caller

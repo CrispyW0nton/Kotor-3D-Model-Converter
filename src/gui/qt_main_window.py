@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 import subprocess
@@ -1722,13 +1723,15 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if not path:
             return
         try:
-            from src.core.mdl_porter import MDLBinaryWriter
+            from src.core.mdl_writer import MDLBinaryWriter
             from src.core.model_data import GameVersion
 
             mdl = copy.deepcopy(model)
             mdl.game_version = GameVersion.K2 if chosen_gv == "K2" else GameVersion.K1
             mdx_path = str(Path(path).with_suffix(".mdx"))
-            MDLBinaryWriter().write(mdl, path, mdx_path)
+            mdl_bytes, mdx_bytes = MDLBinaryWriter().write(mdl)
+            Path(path).write_bytes(mdl_bytes)
+            Path(mdx_path).write_bytes(mdx_bytes)
             self._log(
                 f"Exported binary MDL ({chosen_gv}) -> {Path(path).name} (+ {Path(mdx_path).name})",
                 "success",
@@ -1831,11 +1834,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return
         try:
             from src.core.template_builder import build_humanoid_template, save_template_manifest
-            from src.core.mdl_porter import MDLBinaryWriter
+            from src.core.mdl_writer import MDLBinaryWriter
 
             model = build_humanoid_template(game_version=chosen_gv, name=Path(path).stem)
             mdx_path = str(Path(path).with_suffix(".mdx"))
-            MDLBinaryWriter().write(model, path, mdx_path)
+            mdl_bytes, mdx_bytes = MDLBinaryWriter().write(model)
+            Path(path).write_bytes(mdl_bytes)
+            Path(mdx_path).write_bytes(mdx_bytes)
             manifest_path = save_template_manifest(model, str(Path(path).parent))
             self._log(
                 f"Exported Humanoid Template ({chosen_gv}) -> {Path(path).name} (+ {Path(mdx_path).name})",
@@ -2129,6 +2134,36 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._log(f"Retarget preview error: {exc}", "error")
             QtWidgets.QMessageBox.critical(self, "Retarget", str(exc))
 
+    def _retarget_target_label(self) -> str:
+        model = self._retarget_target_model
+        if model is None:
+            return ""
+        path = str(getattr(model, "mdl_path", "") or "").strip()
+        if path:
+            return path
+        retarget_panel = getattr(self, "animation_retarget_panel", None)
+        game = str(
+            getattr(retarget_panel, "_target_game", "")
+            or self._current_game
+            or self._infer_game_from_model(model)
+        ).upper()
+        name = str(getattr(model, "name", "") or "target").strip() or "target"
+        return f"{game}:{name}"
+
+    def _activate_retarget_target_model(self, selected_anim: str) -> None:
+        model = self._retarget_target_model
+        if model is None:
+            return
+        if self._current_model is not model:
+            self._set_model_internal(model, self._retarget_target_label())
+        else:
+            if hasattr(self, "animations_panel"):
+                self.animations_panel.load_model(model)
+        self._populate_animation_library_from_current_model()
+        if hasattr(self, "animations_panel"):
+            self.animations_panel.select_animation(selected_anim)
+        self._show_right_tab("Animations")
+
     def _retarget_apply(self, anim_name: str):
         if not anim_name:
             QtWidgets.QMessageBox.information(self, "Retarget", "Select a source animation first.")
@@ -2178,15 +2213,17 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                         break
             if not replaced:
                 target_anims.append(new_anim)
-            if self._current_model is self._retarget_target_model and hasattr(self, "animations_panel"):
-                self.animations_panel.load_model(self._retarget_target_model)
-                self._populate_animation_library_from_current_model()
+            self._activate_retarget_target_model(new_anim.name)
             if hasattr(self, "animation_retarget_panel") and hasattr(self.animation_retarget_panel, "panel"):
                 self.animation_retarget_panel.panel.set_target_model(self._retarget_target_model)
             self.animation_retarget_panel.set_mapping_report(report)
+            self.statusBar().showMessage(
+                f"{'Replaced' if replaced else 'Added'} animation {new_anim.name} on "
+                f"{getattr(self._retarget_target_model, 'name', 'target')}"
+            )
             self._log(
                 f"{'Replaced' if replaced else 'Added'} retargeted animation {new_anim.name} "
-                f"from {anim_name} ({report.matched_count} bones)",
+                f"from {anim_name} to target animation list ({report.matched_count} bones)",
                 "success",
             )
         except Exception as exc:
@@ -2279,6 +2316,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         model = self._require_model("Animations")
         if model is None:
             return
+        if action == "Export Binary MDL":
+            self._export_mdl_binary()
+            return
         animations = getattr(model, "animations", []) or []
         if not animations:
             QtWidgets.QMessageBox.information(self, "Animations", "No animations available on this model.")
@@ -2318,9 +2358,212 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self.animations_panel.info.setPlainText(f"Loop {'on' if self._animation_loop else 'off'}.")
             elif action == "Export":
                 self._export_selected_animation(anim_name)
+            elif action == "Bake Animation":
+                self._bake_selected_animation(anim_name)
         except Exception as exc:
             self._log(f"Animation action error: {exc}", "error")
             QtWidgets.QMessageBox.critical(self, "Animations", str(exc))
+
+    def _request_bake_animation_options(self, anim_name: str) -> Optional[dict]:
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("Bake Animation")
+        layout = QtWidgets.QVBoxLayout(dialog)
+        form = QtWidgets.QFormLayout()
+        name_edit = QtWidgets.QLineEdit(anim_name)
+        fps_spin = QtWidgets.QSpinBox()
+        fps_spin.setRange(1, 120)
+        fps_spin.setValue(30)
+        replace_box = QtWidgets.QCheckBox("Replace animation with same name")
+        replace_box.setChecked(True)
+        form.addRow("Name:", name_edit)
+        form.addRow("FPS:", fps_spin)
+        layout.addLayout(form)
+        layout.addWidget(replace_box)
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QtWidgets.QDialog.Accepted:
+            return None
+        name = name_edit.text().strip()
+        if not name:
+            QtWidgets.QMessageBox.information(self, "Bake Animation", "Enter an animation name.")
+            return None
+        return {"name": name, "fps": int(fps_spin.value()), "replace": replace_box.isChecked()}
+
+    def _bake_selected_animation(self, anim_name: str):
+        model = self._require_model("Bake Animation")
+        if model is None:
+            return
+        options = self._request_bake_animation_options(anim_name)
+        if options is None:
+            return
+        baked = self._build_baked_animation(
+            model,
+            anim_name,
+            str(options["name"]),
+            fps=int(options["fps"]),
+        )
+        animations = getattr(model, "animations", None)
+        if animations is None:
+            model.animations = []
+            animations = model.animations
+        replaced = False
+        if options.get("replace"):
+            needle = baked.name.lower()
+            for index, existing in enumerate(list(animations)):
+                if str(getattr(existing, "name", "") or "").lower() == needle:
+                    animations[index] = baked
+                    replaced = True
+                    break
+        if not replaced:
+            animations.append(baked)
+        self._animation_engine = None
+        if hasattr(self, "animations_panel"):
+            self.animations_panel.load_model(model, select_name=baked.name)
+            self.animations_panel.info.setPlainText(
+                f"Baked {anim_name} -> {baked.name}\n"
+                f"{len(getattr(baked, 'nodes', []) or [])} nodes @ {int(options['fps'])} fps"
+            )
+        self._populate_animation_library_from_current_model()
+        self.statusBar().showMessage(f"Baked animation {baked.name}")
+        self._log(
+            f"{'Replaced' if replaced else 'Added'} baked animation {baked.name} "
+            f"from {anim_name}",
+            "success",
+        )
+
+    def _build_baked_animation(self, model, anim_name: str, output_name: str, fps: int = 30):
+        from src.core.animation_engine import AnimationEngine
+        from src.core.model_data import Animation
+
+        fps = max(1, int(fps or 30))
+        engine = AnimationEngine(model)
+        if not engine.play(anim_name, loop=False, blend=False):
+            raise ValueError(f"Animation not found: {anim_name}")
+        source_anim = engine.current_animation
+        if source_anim is None:
+            raise ValueError(f"Animation not found: {anim_name}")
+        length = max(0.0, float(getattr(source_anim, "length", 0.0) or 0.0))
+        frame_count = max(1, int(math.ceil(length * fps))) if length > 0.0 else 1
+        times = [min(length, i / float(fps)) for i in range(frame_count + 1)]
+        if not times:
+            times = [0.0]
+
+        base_nodes = {
+            str(getattr(node, "name", "") or "").lower(): node
+            for node in (list(model.all_nodes()) if hasattr(model, "all_nodes") else [])
+            if getattr(node, "name", "")
+        }
+        sampled_poses = [(t, engine.evaluate(t)) for t in times]
+        baked = Animation(
+            name=output_name,
+            length=length,
+            transition_time=float(getattr(source_anim, "transition_time", 0.25) or 0.25),
+            anim_root=str(getattr(source_anim, "anim_root", "") or ""),
+            events=copy.deepcopy(getattr(source_anim, "events", []) or []),
+            nodes=[],
+        )
+        ctrl_names = {
+            8: "position",
+            20: "orientation",
+            36: "scale",
+            100: "selfillumcolor",
+            128: "alpha",
+            132: "alpha",
+        }
+
+        for source_node in getattr(source_anim, "nodes", []) or []:
+            key = str(getattr(source_node, "name", "") or "").lower()
+            if not key:
+                continue
+            source_types = {
+                int(ctrl.get("type", -1))
+                for ctrl in (getattr(source_node, "controllers", []) or [])
+                if isinstance(ctrl, dict)
+            }
+            if not source_types:
+                continue
+            base_node = base_nodes.get(key)
+            if base_node is not None and hasattr(base_node, "clone_shallow"):
+                baked_node = base_node.clone_shallow()
+            elif hasattr(source_node, "clone_shallow"):
+                baked_node = source_node.clone_shallow()
+            else:
+                baked_node = copy.copy(source_node)
+            baked_node.name = str(getattr(base_node or source_node, "name", key) or key)
+            baked_node.children = []
+            baked_node.parent = None
+            baked_node.controllers = []
+            base_pos = tuple(getattr(base_node, "position", (0.0, 0.0, 0.0)) if base_node else (0.0, 0.0, 0.0))
+
+            def _samples_for_node():
+                for sample_time, pose in sampled_poses:
+                    node_pose = getattr(pose, "nodes", {}).get(key)
+                    if node_pose is not None:
+                        yield sample_time, node_pose
+
+            node_samples = list(_samples_for_node())
+            if not node_samples:
+                continue
+            node_times = [sample_time for sample_time, _node_pose in node_samples]
+            poses = [node_pose for _sample_time, node_pose in node_samples]
+            if 8 in source_types:
+                baked_node.controllers.append({
+                    "type": 8,
+                    "name": ctrl_names[8],
+                    "columns": 3,
+                    "times": node_times,
+                    "values": [
+                        [
+                            float(node_pose.position[0]) - float(base_pos[0]),
+                            float(node_pose.position[1]) - float(base_pos[1]),
+                            float(node_pose.position[2]) - float(base_pos[2]),
+                        ]
+                        for node_pose in poses
+                    ],
+                })
+            if 20 in source_types:
+                baked_node.controllers.append({
+                    "type": 20,
+                    "name": ctrl_names[20],
+                    "columns": 4,
+                    "times": node_times,
+                    "values": [[float(v) for v in node_pose.rotation[:4]] for node_pose in poses],
+                })
+            if 36 in source_types:
+                baked_node.controllers.append({
+                    "type": 36,
+                    "name": ctrl_names[36],
+                    "columns": 1,
+                    "times": node_times,
+                    "values": [[float(node_pose.scale)] for node_pose in poses],
+                })
+            alpha_type = 132 if 132 in source_types else 128 if 128 in source_types else None
+            if alpha_type is not None:
+                baked_node.controllers.append({
+                    "type": alpha_type,
+                    "name": ctrl_names[alpha_type],
+                    "columns": 1,
+                    "times": node_times,
+                    "values": [[float(node_pose.alpha if node_pose.alpha is not None else 1.0)] for node_pose in poses],
+                })
+            if 100 in source_types:
+                baked_node.controllers.append({
+                    "type": 100,
+                    "name": ctrl_names[100],
+                    "columns": 3,
+                    "times": node_times,
+                    "values": [
+                        [float(v) for v in (node_pose.selfillum or (0.0, 0.0, 0.0))[:3]]
+                        for node_pose in poses
+                    ],
+                })
+            if baked_node.controllers:
+                baked.nodes.append(baked_node)
+        return baked
 
     def _handle_animation_seek(self, percent: int):
         model = self._current_model
