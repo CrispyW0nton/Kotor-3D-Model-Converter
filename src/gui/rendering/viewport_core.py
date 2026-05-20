@@ -3343,6 +3343,7 @@ class FrameRenderer:
         self.show_solid     = True
         self.show_grid      = True
         self.show_texture   = False   # Toggle textured rendering
+        self.render_mode    = "realistic"
         self.is_interactive = False   # True while mouse dragged (enable LOD)
         # FIX (v10.4): Explicitly declare _lq_tex_mode in __init__ so that
         # getattr(self, '_lq_tex_mode', False) is never needed; the attribute
@@ -6758,6 +6759,8 @@ class FrameRenderer:
         if is_animation_supermodel(self.model):
             return
         for n in self._iter_mesh_nodes():
+            if getattr(n, '_gr_hidden', False):
+                continue
             # Skip nodes explicitly marked non-renderable by the MDL author.
             # The render flag is set to False for collision boxes, occluders, and
             # internal engine helpers.  Always respect it regardless of other flags.

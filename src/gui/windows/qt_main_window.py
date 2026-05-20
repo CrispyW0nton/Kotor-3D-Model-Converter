@@ -1267,7 +1267,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport_label = self.viewport.canvas
         self.skeleton_panel.nodeSelected.connect(self.viewport.set_selected_node)
         self.viewport.nodeSelected.connect(self.properties_panel.show_node)
+        self.viewport.nodeSelected.connect(self.properties_panel.select_module_mesh)
+        self.viewport.meshSelectionChanged.connect(self.properties_panel.select_module_meshes)
         self.viewport.nodeMoved.connect(self.properties_panel.show_node)
+        self.viewport.meshVisibilityChanged.connect(self.properties_panel.refresh_module_mesh_rows)
+        self.properties_panel.moduleMeshesSelected.connect(self.viewport.set_selected_meshes)
+        self.properties_panel.moduleMeshVisibilityChanged.connect(self.viewport.refresh_view)
         self.properties_panel.positionApplied.connect(
             lambda node, _x, _y, _z: self.viewport.refresh_node_transform(node)
         )

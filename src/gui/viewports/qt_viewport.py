@@ -340,6 +340,8 @@ class QtViewportWidget(QtWidgets.QWidget):
     modelChanged = QtCore.Signal(object)
     nodeSelected = QtCore.Signal(object)
     nodeMoved = QtCore.Signal(object)
+    meshSelectionChanged = QtCore.Signal(list)
+    meshVisibilityChanged = QtCore.Signal()
     _texturePrewarmFinished = QtCore.Signal(object)
 
     def __init__(
@@ -367,6 +369,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._press_x = self._press_y = 0
         self._drag_threshold = 4
         self._is_dragging = False
+        self._mesh_box_start = None
+        self._mesh_box_selecting = False
+        self._selected_meshes: list = []
         self._pan_dragging = False
         self._nav_dragging = ""
         self._nav_button = QtCore.Qt.NoButton
@@ -443,6 +448,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._post_load_refresh_model_id = 0
         self._texturePrewarmFinished.connect(self._on_texture_prewarm_finished)
         self._build()
+        self._selection_rubber_band = QtWidgets.QRubberBand(QtWidgets.QRubberBand.Rectangle, self.canvas)
+        self._selection_rubber_band.hide()
 
     @property
     def navigation_profile(self) -> str:
@@ -542,6 +549,14 @@ class QtViewportWidget(QtWidgets.QWidget):
             "QComboBox QAbstractItemView { background:#24272c; color:#d7dde6; selection-background-color:#3d5f8a; }"
         )
         row.addWidget(self.shade_combo)
+        self.render_mode_combo = QtWidgets.QComboBox()
+        self.render_mode_combo.addItems(["Realistic", "Shaded", "Flat"])
+        self.render_mode_combo.setFixedHeight(22)
+        if self._compact_controls:
+            self.render_mode_combo.setFixedWidth(76)
+        self.render_mode_combo.setStyleSheet(self.shade_combo.styleSheet())
+        self.render_mode_combo.setToolTip("GPU render mode")
+        row.addWidget(self.render_mode_combo)
         row.addWidget(self._button(self._toolbar_text("Frame  F", "F"), self.frame_all, tooltip="Frame all (F)"))
         row.addWidget(self._button(self._toolbar_text("Camera  R", "R"), self.reset_camera, tooltip="Reset camera (R)"))
         self.walkmesh_button = self._button(
@@ -585,9 +600,11 @@ class QtViewportWidget(QtWidgets.QWidget):
         )
         self.canvas.installEventFilter(self)
         self.shade_combo.currentTextChanged.connect(self._on_shade_change)
+        self.render_mode_combo.currentTextChanged.connect(self._on_render_mode_change)
         self._renderer.show_bones = self.bones_button.isChecked()
         self._renderer.show_texture = self.texture_button.isChecked()
         self._renderer.show_wireframe = self.wire_button.isChecked()
+        self._renderer.render_mode = self.render_mode_combo.currentText().lower()
 
         if self._compact_controls:
             toolbar_scroll = QtWidgets.QScrollArea()
@@ -1083,10 +1100,90 @@ class QtViewportWidget(QtWidgets.QWidget):
     def set_selected_node(self, node) -> None:
         if node is not None and self._renderer.is_hidden_bone_name(getattr(node, "name", "")):
             node = None
+        if node is not None and self._is_selectable_mesh_node(node):
+            self.set_selected_meshes([node])
+            return
+        self._clear_mesh_selection_flags()
+        self._selected_meshes = []
         self._renderer.selected_node = node
         if self._uv_viewer is not None:
             self._uv_viewer.set_selected_node(node)
         self.nodeSelected.emit(node)
+        self.meshSelectionChanged.emit([])
+        self._request_render()
+
+    def _clear_mesh_selection_flags(self) -> None:
+        for node in self._selected_meshes:
+            try:
+                setattr(node, "_gr_selected", False)
+            except Exception:
+                pass
+
+    @staticmethod
+    def _is_selectable_mesh_node(node) -> bool:
+        verts = getattr(node, "vertices", getattr(node, "verts", [])) or []
+        faces = getattr(node, "faces", []) or []
+        return bool(verts and faces)
+
+    def set_selected_meshes(self, nodes: list) -> None:
+        clean_nodes = []
+        seen = set()
+        for node in nodes or []:
+            if node is None or not self._is_selectable_mesh_node(node):
+                continue
+            if getattr(node, "_gr_hidden", False):
+                continue
+            node_id = id(node)
+            if node_id in seen:
+                continue
+            seen.add(node_id)
+            clean_nodes.append(node)
+        self._clear_mesh_selection_flags()
+        self._selected_meshes = clean_nodes
+        for node in clean_nodes:
+            setattr(node, "_gr_selected", True)
+        active = clean_nodes[0] if clean_nodes else None
+        self._renderer.selected_node = active
+        if self._uv_viewer is not None:
+            self._uv_viewer.set_selected_node(active)
+        self.nodeSelected.emit(active)
+        self.meshSelectionChanged.emit(list(clean_nodes))
+        self._request_render()
+
+    def select_all_meshes(self) -> None:
+        if self.model is None:
+            self.set_selected_meshes([])
+            return
+        try:
+            nodes = list(self._renderer._iter_visible_mesh_nodes())
+        except Exception:
+            nodes = self._all_geometry_nodes()
+        self.set_selected_meshes([node for node in nodes if not getattr(node, "_gr_hidden", False)])
+
+    def _all_geometry_nodes(self) -> list:
+        if self.model is None:
+            return []
+        sources = []
+        if hasattr(self.model, "mesh_nodes"):
+            sources.append(self.model.mesh_nodes() or [])
+        if hasattr(self.model, "all_nodes"):
+            sources.append(self.model.all_nodes() or [])
+        result = []
+        seen = set()
+        for source in sources:
+            for node in source:
+                if node is None or id(node) in seen:
+                    continue
+                if not self._is_selectable_mesh_node(node):
+                    continue
+                seen.add(id(node))
+                result.append(node)
+        return result
+
+    def refresh_view(self) -> None:
+        self._renderer._wt_cache.clear()
+        if self._gpu_renderer is not None:
+            self._gpu_renderer.invalidate_node_cache()
         self._request_render()
 
     def refresh_node_transform(self, node=None) -> None:
@@ -1244,6 +1341,9 @@ class QtViewportWidget(QtWidgets.QWidget):
                 if action:
                     self._press_navigation(event, action)
                     return True
+                if event.button() == QtCore.Qt.RightButton:
+                    self._show_mesh_context_menu(event)
+                    return True
                 if event.button() == QtCore.Qt.LeftButton:
                     self._press_lmb(event)
                     return True
@@ -1298,6 +1398,9 @@ class QtViewportWidget(QtWidgets.QWidget):
                     return True
                 if key == QtCore.Qt.Key_Y and (event.modifiers() & QtCore.Qt.ControlModifier):
                     self.redo()
+                    return True
+                if key == QtCore.Qt.Key_A and (event.modifiers() & QtCore.Qt.ControlModifier):
+                    self.select_all_meshes()
                     return True
                 if key == QtCore.Qt.Key_X and (event.modifiers() & QtCore.Qt.AltModifier):
                     self.xray_button.click()
@@ -1788,6 +1891,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gpu_renderer.show_solid = bool(self._renderer.show_solid)
         self._gpu_renderer.show_texture = bool(self._renderer.show_texture)
         self._gpu_renderer.show_wireframe = bool(self._renderer.show_wireframe)
+        self._gpu_renderer.render_mode = str(getattr(self._renderer, "render_mode", "realistic") or "realistic")
+        self._gpu_renderer.selected_node = getattr(self._renderer, "selected_node", None)
+        self._gpu_renderer.selected_nodes = list(getattr(self, "_selected_meshes", []) or [])
         self._gpu_renderer.show_grid = True
         self._gpu_renderer.cull_faces = False
         return self._gpu_renderer.render(
@@ -2294,7 +2400,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         try:
             nodes = list(model.all_nodes()) if hasattr(model, "all_nodes") else []
             for node in nodes:
-                if not getattr(node, "is_mesh", False):
+                if not self._is_selectable_mesh_node(node):
                     continue
                 names = [
                     getattr(node, "texture", ""),
@@ -2329,6 +2435,264 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.wire_button.blockSignals(False)
         self._request_render()
 
+    def _on_render_mode_change(self, text: str) -> None:
+        mode = (text or "Realistic").strip().lower()
+        if mode not in {"realistic", "shaded", "flat"}:
+            mode = "realistic"
+        self._renderer.render_mode = mode
+        self.toggle_gpu_renderer(True)
+        self._request_render(fast=True)
+
+    @staticmethod
+    def _point_in_triangle(px: float, py: float, a, b, c) -> bool:
+        denom = ((b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]))
+        if abs(denom) < 1e-6:
+            return False
+        w1 = ((b[1] - c[1]) * (px - c[0]) + (c[0] - b[0]) * (py - c[1])) / denom
+        w2 = ((c[1] - a[1]) * (px - c[0]) + (a[0] - c[0]) * (py - c[1])) / denom
+        w3 = 1.0 - w1 - w2
+        return w1 >= -0.001 and w2 >= -0.001 and w3 >= -0.001
+
+    def _front_facing_score(self, world_verts, face) -> float:
+        try:
+            i0, i1, i2 = int(face[0]), int(face[1]), int(face[2])
+            p0, p1, p2 = world_verts[i0], world_verts[i1], world_verts[i2]
+            ux, uy, uz = p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]
+            vx, vy, vz = p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]
+            nx = uy * vz - uz * vy
+            ny = uz * vx - ux * vz
+            nz = ux * vy - uy * vx
+            cx = (p0[0] + p1[0] + p2[0]) / 3.0
+            cy = (p0[1] + p1[1] + p2[1]) / 3.0
+            cz = (p0[2] + p1[2] + p2[2]) / 3.0
+            eye_getter = getattr(self.camera, "eye", (0.0, 0.0, 0.0))
+            eye = eye_getter() if callable(eye_getter) else eye_getter
+            to_eye = (eye[0] - cx, eye[1] - cy, eye[2] - cz)
+            dot = nx * to_eye[0] + ny * to_eye[1] + nz * to_eye[2]
+            normal_len = max(1e-6, math.sqrt(nx * nx + ny * ny + nz * nz))
+            view_len = max(1e-6, math.sqrt(to_eye[0] * to_eye[0] + to_eye[1] * to_eye[1] + to_eye[2] * to_eye[2]))
+            return dot / (normal_len * view_len)
+        except Exception:
+            return 0.0
+
+    def _projected_mesh_bounds(self, node, width: int, height: int):
+        world_verts = self._renderer._get_world_verts_for_node(node)
+        if not world_verts:
+            return None
+        projected = self._renderer._proj_batch(world_verts, width, height)
+        visible = [p for p in projected if p is not None]
+        if not visible:
+            return None
+        xs = [p[0] for p in visible]
+        ys = [p[1] for p in visible]
+        return (min(xs) - 4, min(ys) - 4, max(xs) + 4, max(ys) + 4, world_verts, projected)
+
+    def _mesh_hit_test(self, sx: int, sy: int):
+        if self.model is None:
+            return None
+        width = max(1, self.canvas.width())
+        height = max(1, self.canvas.height())
+        try:
+            self._renderer._last_W = width
+            self._renderer._last_H = height
+            self._renderer._frame_view = self._renderer._cam_view_matrix()
+        except Exception:
+            pass
+        best = None
+        best_score = float("inf")
+        try:
+            nodes = list(self._renderer._iter_visible_mesh_nodes())
+        except Exception:
+            nodes = []
+        for node in nodes:
+            if getattr(node, "_gr_hidden", False):
+                continue
+            try:
+                bounds = self._projected_mesh_bounds(node, width, height)
+                if bounds is None:
+                    continue
+                min_x, min_y, max_x, max_y, world_verts, projected = bounds
+                if sx < min_x or sx > max_x or sy < min_y or sy > max_y:
+                    continue
+                face_hit = False
+                best_face_depth = float("inf")
+                best_facing = -1.0
+                for face in getattr(node, "faces", []) or []:
+                    try:
+                        i0, i1, i2 = int(face[0]), int(face[1]), int(face[2])
+                        p0, p1, p2 = projected[i0], projected[i1], projected[i2]
+                        if p0 is None or p1 is None or p2 is None:
+                            continue
+                        if not self._point_in_triangle(sx, sy, p0, p1, p2):
+                            continue
+                        facing = self._front_facing_score(world_verts, face)
+                        if facing < -0.05:
+                            continue
+                        face_hit = True
+                        depth = (p0[2] + p1[2] + p2[2]) / 3.0
+                        if facing > best_facing or (abs(facing - best_facing) < 0.001 and depth < best_face_depth):
+                            best_facing = facing
+                            best_face_depth = depth
+                    except Exception:
+                        continue
+                area = max(1, (max_x - min_x) * (max_y - min_y))
+                cx = (min_x + max_x) * 0.5
+                cy = (min_y + max_y) * 0.5
+                dist2 = (sx - cx) * (sx - cx) + (sy - cy) * (sy - cy)
+                if face_hit:
+                    score = best_face_depth - (best_facing * 1000.0) + area * 0.001
+                else:
+                    score = area + dist2 * 0.1 + 100000.0
+                if score < best_score:
+                    best_score = score
+                    best = node
+            except Exception:
+                continue
+        return best
+
+    def _set_mesh_hidden(self, node, hidden: bool) -> None:
+        if node is None:
+            return
+        setattr(node, "_gr_hidden", bool(hidden))
+        if hidden and self._renderer.selected_node is node:
+            self.set_selected_node(None)
+        if self._gpu_renderer is not None:
+            self._gpu_renderer.invalidate_node_cache()
+        self.meshVisibilityChanged.emit()
+        self._request_render()
+
+    def _set_selected_meshes_hidden(self, hidden: bool) -> None:
+        nodes = list(self._selected_meshes)
+        if not nodes:
+            return
+        changed = False
+        for node in nodes:
+            before = bool(getattr(node, "_gr_hidden", False))
+            setattr(node, "_gr_hidden", bool(hidden))
+            changed = changed or before != bool(hidden)
+        if changed:
+            if self._gpu_renderer is not None:
+                self._gpu_renderer.invalidate_node_cache()
+            self.meshVisibilityChanged.emit()
+            self._request_render()
+
+    def _hide_unselected_meshes(self) -> None:
+        selected_ids = {id(node) for node in self._selected_meshes}
+        changed = False
+        try:
+            nodes = list(self._renderer._iter_visible_mesh_nodes())
+        except Exception:
+            nodes = []
+        for node in nodes:
+            if id(node) in selected_ids:
+                continue
+            if not getattr(node, "_gr_hidden", False):
+                setattr(node, "_gr_hidden", True)
+                changed = True
+        if changed:
+            if self._gpu_renderer is not None:
+                self._gpu_renderer.invalidate_node_cache()
+            self.meshVisibilityChanged.emit()
+            self._request_render()
+
+    def _unhide_all_meshes(self) -> None:
+        changed = False
+        for node in self._all_geometry_nodes():
+            if getattr(node, "_gr_hidden", False):
+                setattr(node, "_gr_hidden", False)
+                changed = True
+        if changed:
+            if self._gpu_renderer is not None:
+                self._gpu_renderer.invalidate_node_cache()
+            self.meshVisibilityChanged.emit()
+            self._request_render()
+
+    def _store_selected_mesh_names(self, attr: str, title: str) -> None:
+        nodes = [node for node in self._selected_meshes if self._is_selectable_mesh_node(node)]
+        if self.model is None or not nodes:
+            return
+        name, ok = QtWidgets.QInputDialog.getText(self, title, "Name:")
+        if not ok or not name.strip():
+            return
+        store = getattr(self.model, attr, None)
+        if store is None:
+            store = {}
+            setattr(self.model, attr, store)
+        group_name = name.strip()
+        store[group_name] = [str(getattr(node, "name", "") or "<mesh>") for node in nodes]
+        if attr == "_gr_mesh_groups":
+            for node in nodes:
+                setattr(node, "_gr_mesh_group", group_name)
+            self.meshVisibilityChanged.emit()
+
+    def _mesh_nodes_in_rect(self, rect: QtCore.QRect) -> list:
+        if self.model is None:
+            return []
+        width = max(1, self.canvas.width())
+        height = max(1, self.canvas.height())
+        try:
+            self._renderer._last_W = width
+            self._renderer._last_H = height
+            self._renderer._frame_view = self._renderer._cam_view_matrix()
+            nodes = list(self._renderer._iter_visible_mesh_nodes())
+        except Exception:
+            nodes = []
+        selected = []
+        norm_rect = rect.normalized()
+        for node in nodes:
+            if getattr(node, "_gr_hidden", False):
+                continue
+            try:
+                bounds = self._projected_mesh_bounds(node, width, height)
+                if bounds is None:
+                    continue
+                min_x, min_y, max_x, max_y, _world_verts, _projected = bounds
+                mesh_rect = QtCore.QRect(
+                    QtCore.QPoint(int(min_x), int(min_y)),
+                    QtCore.QPoint(int(max_x), int(max_y)),
+                ).normalized()
+                if norm_rect.intersects(mesh_rect):
+                    selected.append(node)
+            except Exception:
+                continue
+        return selected
+
+    def _show_mesh_context_menu(self, event) -> None:
+        x, y = int(event.position().x()), int(event.position().y())
+        node = self._mesh_hit_test(x, y)
+        selected_ids = {id(mesh) for mesh in self._selected_meshes}
+        if node is not None and id(node) not in selected_ids:
+            return
+        menu = QtWidgets.QMenu(self)
+        multi = len(self._selected_meshes) > 1
+        hide_action = menu.addAction("Hide Selected" if multi else "Hide Mesh")
+        unhide_action = menu.addAction("Unhide Selected" if multi else "Unhide Mesh")
+        menu.addSeparator()
+        hide_unselected_action = menu.addAction("Hide Unselected")
+        unhide_all_action = menu.addAction("Unhide All")
+        menu.addSeparator()
+        selection_set_action = menu.addAction("Create Selection Set...")
+        mesh_group_action = menu.addAction("Create Mesh Group...")
+        hide_action.setEnabled(any(not getattr(mesh, "_gr_hidden", False) for mesh in self._selected_meshes))
+        unhide_action.setEnabled(any(getattr(mesh, "_gr_hidden", False) for mesh in self._selected_meshes))
+        hide_unselected_action.setEnabled(self.model is not None)
+        unhide_all_action.setEnabled(self.model is not None)
+        selection_set_action.setEnabled(bool(self._selected_meshes))
+        mesh_group_action.setEnabled(bool(self._selected_meshes))
+        chosen = menu.exec(event.globalPosition().toPoint())
+        if chosen is hide_action:
+            self._set_selected_meshes_hidden(True)
+        elif chosen is unhide_action:
+            self._set_selected_meshes_hidden(False)
+        elif chosen is hide_unselected_action:
+            self._hide_unselected_meshes()
+        elif chosen is unhide_all_action:
+            self._unhide_all_meshes()
+        elif chosen is selection_set_action:
+            self._store_selected_mesh_names("_gr_selection_sets", "Selection Set")
+        elif chosen is mesh_group_action:
+            self._store_selected_mesh_names("_gr_mesh_groups", "Mesh Group")
+
     def _press_lmb(self, event) -> None:
         x, y = int(event.position().x()), int(event.position().y())
         self._mx = self._press_x = x
@@ -2338,6 +2702,10 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._joint_dragging = False
         self._joint_drag_node = None
         self._joint_drag_mirror_node = None
+        self._mesh_box_start = None
+        self._mesh_box_selecting = False
+        if hasattr(self, "_selection_rubber_band"):
+            self._selection_rubber_band.hide()
 
         if self._renderer.show_gimbal and self._renderer.selected_node and self._renderer._gimbal_handles:
             axis = self._renderer.hit_test_gimbal(x, y)
@@ -2399,6 +2767,8 @@ class QtViewportWidget(QtWidgets.QWidget):
             if node:
                 self._renderer._hovered_bone = node
                 self._request_render()
+                return
+        self._mesh_box_start = QtCore.QPoint(x, y)
 
     def _drag_lmb(self, event) -> None:
         x, y = int(event.position().x()), int(event.position().y())
@@ -2431,6 +2801,11 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._renderer._hovered_bone = None
         if self._is_dragging:
             self._mx, self._my = x, y
+            if self._mesh_box_start is not None:
+                self._mesh_box_selecting = True
+                rect = QtCore.QRect(self._mesh_box_start, QtCore.QPoint(x, y)).normalized()
+                self._selection_rubber_band.setGeometry(rect)
+                self._selection_rubber_band.show()
 
     def _release_lmb(self, event) -> None:
         x, y = int(event.position().x()), int(event.position().y())
@@ -2503,6 +2878,22 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._renderer._hovered_bone = None
         self._renderer.is_interactive = False
         if self._is_dragging:
+            if self._mesh_box_selecting and self._mesh_box_start is not None:
+                rect = QtCore.QRect(self._mesh_box_start, QtCore.QPoint(x, y)).normalized()
+                self._selection_rubber_band.hide()
+                nodes = self._mesh_nodes_in_rect(rect)
+                if event.modifiers() & (QtCore.Qt.ControlModifier | QtCore.Qt.ShiftModifier):
+                    current_ids = {id(node) for node in self._selected_meshes}
+                    nodes = list(self._selected_meshes) + [node for node in nodes if id(node) not in current_ids]
+                self.set_selected_meshes(nodes)
+                self._mesh_box_start = None
+                self._mesh_box_selecting = False
+                self._is_dragging = False
+                return
+            if hasattr(self, "_selection_rubber_band"):
+                self._selection_rubber_band.hide()
+            self._mesh_box_start = None
+            self._mesh_box_selecting = False
             self._is_dragging = False
             self._request_render()
             return
@@ -2522,6 +2913,12 @@ class QtViewportWidget(QtWidgets.QWidget):
                 if self.on_bone_selected:
                     self.on_bone_selected(node)
                 return
+        mesh_node = self._mesh_hit_test(x, y)
+        if mesh_node is not None:
+            self.set_selected_node(mesh_node)
+            if self.on_bone_selected:
+                self.on_bone_selected(None)
+            return
         self.set_selected_node(None)
         if self.on_bone_selected:
             self.on_bone_selected(None)

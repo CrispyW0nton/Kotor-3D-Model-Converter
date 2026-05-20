@@ -158,11 +158,227 @@ def test_gpu_renderer_supports_texture_off_and_wireframe_modes() -> None:
     assert "self.show_texture: bool = True" in init_source
     assert "self.show_solid: bool = True" in init_source
     assert "self.wire_color: tuple[float, float, float] = (0.18, 0.62, 0.95)" in init_source
-    assert "self.show_texture and gl_diff" in render_source
+    assert "_texture_allowed = bool(self.show_texture)" in render_source
     assert "ctx.wireframe = bool(self.show_wireframe and not self.show_solid)" in render_source
     assert "if self.show_solid and self.show_wireframe" in render_source
     assert "u_wireframe_enabled" in render_source
     assert "u_wire_color" in render_source
+
+
+def test_gpu_renderer_exposes_module_render_modes_and_selection_tint() -> None:
+    import inspect
+
+    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer, _FRAG_SRC
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    init_source = inspect.getsource(GpuRenderer.__init__)
+    render_source = inspect.getsource(GpuRenderer._render_gpu)
+    viewport_source = inspect.getsource(QtViewportWidget._render_gpu_frame)
+
+    assert 'self.render_mode: str = "realistic"' in init_source
+    assert "uniform int   u_render_mode" in _FRAG_SRC
+    assert "uniform int   u_selected" in _FRAG_SRC
+    assert "u_render_mode == 1" in _FRAG_SRC
+    assert "u_render_mode == 2" in _FRAG_SRC
+    assert "soft_shade" in _FRAG_SRC
+    assert "0.76 + max(dot(N, u_light_dir), 0.0) * 0.24" in _FRAG_SRC
+    assert "mix(lit_color, vec3(1.0, 0.78, 0.12), 0.45)" in _FRAG_SRC
+    assert "getattr(node, '_gr_hidden', False)" in render_source
+    assert "_detail_texture_allowed = bool(_texture_allowed and _render_mode_int == 0)" in render_source
+    assert "if _gpu_is_module and _render_mode_int in (1, 2)" in render_source
+    assert "render_mode = str(getattr(self._renderer" in viewport_source
+    assert "selected_node = getattr(self._renderer" in viewport_source
+    assert "selected_nodes = list(getattr(self, \"_selected_meshes\"" in viewport_source
+    assert "_texture_allowed = bool(self.show_texture)" in render_source
+
+
+def test_module_mesh_properties_panel_lists_selects_and_hides_meshes() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtPropertiesPanel()
+    mesh_a = SimpleNamespace(
+        name="room_a",
+        is_mesh=True,
+        vertices=[(0, 0, 0), (1, 0, 0), (0, 1, 0)],
+        faces=[(0, 1, 2)],
+        texture="wall01",
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    mesh_b = SimpleNamespace(
+        name="room_b",
+        is_mesh=True,
+        vertices=[(0, 0, 0)],
+        faces=[],
+        texture="greybox",
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    model = SimpleNamespace(
+        name="m01aa_01a",
+        game_version="K1",
+        supermodel="NULL",
+        classification="tile",
+        animations=[],
+        mesh_nodes=lambda: [mesh_a, mesh_b],
+        all_nodes=lambda: [mesh_a, mesh_b],
+        bone_nodes=lambda: [],
+        texture_list=lambda: ["wall01", "greybox"],
+    )
+
+    selected = []
+    panel.moduleMeshSelected.connect(selected.append)
+    panel.show_model(model)
+
+    assert panel.module_mesh_tree.topLevelItemCount() == 2
+    panel.module_mesh_tree.setCurrentItem(panel.module_mesh_tree.topLevelItem(0))
+    assert selected[-1] is mesh_a
+
+    panel._set_selected_meshes_hidden(True)
+    assert mesh_a._gr_hidden is True
+    assert panel.module_mesh_tree.topLevelItem(0).text(4) == "no"
+
+    panel.module_mesh_tree.topLevelItem(0).setSelected(True)
+    panel._hide_unselected_module_meshes()
+    assert mesh_b._gr_hidden is True
+
+
+def test_module_mesh_properties_panel_supports_multi_select_all() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtPropertiesPanel()
+    meshes = [
+        SimpleNamespace(
+            name=f"mesh_{index}",
+            is_mesh=True,
+            vertices=[(0, 0, 0)],
+            faces=[(0, 0, 0)],
+            texture="tex",
+            position=(0.0, 0.0, 0.0),
+            rotation=(0.0, 0.0, 0.0, 1.0),
+        )
+        for index in range(3)
+    ]
+    model = SimpleNamespace(
+        name="m01aa_01a",
+        game_version="K1",
+        supermodel="NULL",
+        classification="tile",
+        animations=[],
+        mesh_nodes=lambda: meshes,
+        all_nodes=lambda: meshes,
+        bone_nodes=lambda: [],
+        texture_list=lambda: ["tex"],
+    )
+    selected_batches = []
+    panel.moduleMeshesSelected.connect(selected_batches.append)
+
+    panel.show_model(model)
+    panel.select_all_module_meshes()
+
+    assert len(panel._selected_module_meshes()) == 3
+    assert selected_batches[-1] == meshes
+
+
+def test_module_mesh_properties_panel_splits_meshes_and_walkmeshes() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtPropertiesPanel()
+    regular_mesh = SimpleNamespace(
+        name="regular_mesh",
+        is_mesh=True,
+        vertices=[(0, 0, 0)],
+        faces=[(0, 0, 0)],
+        texture="wall",
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    grey_geometry = SimpleNamespace(
+        name="walkmesh_12",
+        is_mesh=False,
+        vertex_space=2,
+        vertices=[(0, 0, 0), (1, 0, 0), (0, 1, 0)],
+        faces=[(0, 1, 2)],
+        texture="",
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    model = SimpleNamespace(
+        name="m01aa_01a",
+        game_version="K1",
+        supermodel="NULL",
+        classification="tile",
+        animations=[],
+        mesh_nodes=lambda: [regular_mesh],
+        all_nodes=lambda: [regular_mesh, grey_geometry],
+        bone_nodes=lambda: [],
+        texture_list=lambda: ["wall"],
+    )
+
+    panel.show_model(model)
+
+    mesh_names = [
+        panel.module_mesh_tree.topLevelItem(index).text(0)
+        for index in range(panel.module_mesh_tree.topLevelItemCount())
+    ]
+    walkmesh_names = [
+        panel.module_walkmesh_tree.topLevelItem(index).text(0)
+        for index in range(panel.module_walkmesh_tree.topLevelItemCount())
+    ]
+    assert mesh_names == ["regular_mesh"]
+    assert walkmesh_names == ["walkmesh_12"]
+    assert panel.module_browser_tabs.tabText(1) == "Walkmeshes"
+
+
+def test_qt_viewport_exposes_mesh_multiselect_box_and_ctrl_a() -> None:
+    import inspect
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    source = inspect.getsource(QtViewportWidget)
+
+    assert "meshSelectionChanged = QtCore.Signal(list)" in source
+    assert "def set_selected_meshes" in source
+    assert "def select_all_meshes" in source
+    assert "QtCore.Qt.Key_A" in source
+    assert "def _mesh_nodes_in_rect" in source
+    assert "def _all_geometry_nodes" in source
+    assert "def _is_selectable_mesh_node" in source
+    assert "QtWidgets.QRubberBand" in source
+    assert "def _front_facing_score" in source
+    assert "def _point_in_triangle" in source
+
+
+def test_qt_viewport_context_menu_does_not_pick_on_right_click() -> None:
+    import inspect
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    source = inspect.getsource(QtViewportWidget._show_mesh_context_menu)
+    hide_source = inspect.getsource(QtViewportWidget._set_selected_meshes_hidden)
+
+    assert "self.set_selected_node(node)" not in source
+    assert "if not self._selected_meshes" not in source
+    assert "node is not None and id(node) not in selected_ids" in source
+    assert "Hide Selected" in source
+    assert "unhide_all_action.setEnabled(self.model is not None)" in source
+    assert "_set_selected_meshes_hidden(True)" in source
+    assert "self.set_selected_meshes([])" not in hide_source
 
 
 def test_qt_gpu_viewport_disables_gpu_culling_for_cpu_parity() -> None:
