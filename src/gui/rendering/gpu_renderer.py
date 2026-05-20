@@ -392,6 +392,20 @@ def _node_uses_single_tile_atlas(node) -> bool:
         return False
 
 
+def _should_auto_clamp_diffuse(node, *, is_module: bool = False) -> bool:
+    """Return True when GhostRigger should clamp a diffuse atlas without TXI flags.
+
+    Module/area models often use ordinary-looking 0..1 UV islands alongside tiled
+    room textures and baked lightmaps.  Their diffuse textures should keep the
+    engine default repeat mode unless the TXI explicitly requests clamping.  The
+    heuristic clamp exists for character/item atlases such as custom Mandalorian
+    bodies, not for area geometry.
+    """
+    if is_module:
+        return False
+    return _node_uses_single_tile_atlas(node)
+
+
 def _texture_content_stats(img) -> Optional[dict]:
     if img is None or not _PIL:
         return None
@@ -5395,7 +5409,10 @@ class GpuRenderer:
                     # here for nodes that require clamping (head decals, UI overlays).
                     _node_clamp_s = bool(getattr(node, 'txi_clamp_s', False))
                     _node_clamp_t = bool(getattr(node, 'txi_clamp_t', False))
-                    if not (_node_clamp_s and _node_clamp_t) and _node_uses_single_tile_atlas(node):
+                    if not (_node_clamp_s and _node_clamp_t) and _should_auto_clamp_diffuse(
+                        node,
+                        is_module=_gpu_is_module,
+                    ):
                         # Match the CPU renderer for custom character atlases.
                         # Override MDLs like n_mandalorian01-03 use 0..1 body/helmet
                         # sheets without TXI clamp flags; GL_REPEAT samples the
