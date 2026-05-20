@@ -192,6 +192,136 @@ def test_gpu_renderer_exposes_module_render_modes_and_selection_tint() -> None:
     assert "_texture_allowed = bool(self.show_texture)" in render_source
 
 
+def test_gpu_static_mesh_prebuild_uses_ram_and_chunked_uploads() -> None:
+    import inspect
+
+    from src.core.model_data import KotorModel, ModelNode
+    from src.gui.qt_lib.rendering import gpu_renderer
+    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
+    from src.gui.qt_lib.rendering.viewport_core import FrameRenderer
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    node = ModelNode(
+        name="tri",
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+        faces=[(0, 1, 2)],
+        texture="test",
+    )
+    model = KotorModel(name="prebuild", root_node=node)
+
+    assert gpu_renderer.prebuild_static_gpu_mesh_data(model) == 1
+    entry = getattr(node, "_gr_gpu_prebuilt_static_mesh")
+    assert entry["model_id"] == id(model)
+    assert entry["vdata"].shape[0] == 3
+    assert getattr(model, "_gr_bounds_prepared") is True
+    assert getattr(model, "_gr_render_bounds") == ((0.0, 0.0, 0.0), (1.0, 1.0, 0.0))
+    assert gpu_renderer.clear_prebuilt_static_gpu_model_data(model) == 1
+    assert not hasattr(node, "_gr_gpu_prebuilt_static_mesh")
+
+    init_source = inspect.getsource(GpuRenderer.__init__)
+    render_source = inspect.getsource(GpuRenderer._render_gpu)
+    renderer_set_model_source = inspect.getsource(FrameRenderer.set_model)
+    load_source = inspect.getsource(QtViewportWidget.load_model)
+    viewport_source = inspect.getsource(QtViewportWidget._render_gpu_frame)
+
+    assert "self.max_new_mesh_uploads_per_frame: int = 64" in init_source
+    assert "self.deferred_mesh_uploads = True" in render_source
+    assert "_prebuilt_static_gpu_mesh_data" in render_source
+    assert "prepared_bounds = getattr(m, \"_gr_render_bounds\", None)" in renderer_set_model_source
+    assert "getattr(m, \"_gr_defer_txi_metadata\", False)" in renderer_set_model_source
+    assert "clear_prebuilt_static_gpu_model_data(old_model)" in load_source
+    assert "self._gpu_renderer.clear_caches()" in load_source
+    assert "if not getattr(model, \"_gr_bounds_prepared\", False)" in load_source
+    assert "self._start_deferred_txi_metadata(model)" in load_source
+    assert "gpuUploadProgress.emit" in viewport_source
+    assert "_request_render(fast=True)" in viewport_source
+
+
+def test_model_load_worker_uses_single_read_and_gpu_prebuild() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows.qt_main_window import (
+        ModelLoadWorker,
+        QtGhostRiggerMainWindow,
+        QtProgressToast,
+        ResourceModelLoadWorker,
+    )
+
+    file_source = inspect.getsource(ModelLoadWorker.run)
+    toast_source = inspect.getsource(QtProgressToast)
+    window_source = inspect.getsource(QtGhostRiggerMainWindow)
+    get_resource_manager_source = inspect.getsource(QtGhostRiggerMainWindow._get_resource_manager)
+    resource_source = inspect.getsource(ResourceModelLoadWorker.run)
+    viewport_preload_source = inspect.getsource(__import__(
+        "src.gui.qt_lib.viewports.qt_viewport",
+        fromlist=["QtViewportWidget"],
+    ).QtViewportWidget._preload_gpu_textures)
+
+    assert "progress = QtCore.Signal(str, int, int)" in inspect.getsource(ModelLoadWorker)
+    assert "progress = QtCore.Signal(str, int, int)" in inspect.getsource(ResourceModelLoadWorker)
+    assert "raw = path.read_bytes()" in file_source
+    assert 'raw.decode("utf-8", errors="replace")' in file_source
+    assert "load_model_from_bytes" in file_source
+    assert "load_model_from_file" not in file_source
+    assert "self.progress.emit" in file_source
+    assert "_prebuild_gpu_mesh_data_for_model(model)" in file_source
+    assert "self.progress.emit" in resource_source
+    assert "_prebuild_gpu_mesh_data_for_model(model)" in resource_source
+    assert "def update_progress" in toast_source
+    assert "worker.progress.connect(self._on_model_load_progress)" in window_source
+    assert "gpuUploadProgress.connect(self._on_viewport_gpu_upload_progress)" in window_source
+    assert "existing is not None" in get_resource_manager_source
+    assert "_resource_manager_dirs" in get_resource_manager_source
+    assert "tex_cache.get" not in viewport_preload_source
+
+
+def test_qt_realistic_texture_prewarm_loads_detail_textures_without_paint_stall() -> None:
+    import inspect
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    node = SimpleNamespace(
+        vertices=[(0.0, 0.0, 0.0)],
+        texture_clean="LMA_wall01.tga",
+        texture="LMA_wall01",
+        lightmap="LMA_wall01_lm",
+        txi_envmaptexture="CM_Baremetal",
+        txi_specularcolour="metal_spec",
+        txi_bumpmaptexture="stone_bump",
+        texture_names=["trim01", "NULL", "****", "None", "lma_wall01"],
+    )
+    helper = SimpleNamespace(
+        vertices=[],
+        texture_clean="should_not_load",
+        lightmap="should_not_load_lm",
+    )
+    model = SimpleNamespace(
+        all_nodes=lambda: [node, helper],
+        mesh_nodes=lambda: [],
+    )
+
+    names = QtViewportWidget._texture_names_for_prewarm(model)
+
+    assert names == [
+        "lma_wall01",
+        "lma_wall01_lm",
+        "cm_baremetal",
+        "metal_spec",
+        "stone_bump",
+        "trim01",
+    ]
+
+    prewarm_source = inspect.getsource(QtViewportWidget._prewarm_textures)
+    deferred_txi_source = inspect.getsource(QtViewportWidget._on_deferred_txi_finished)
+
+    assert "_texture_names_for_prewarm(model)" in prewarm_source
+    assert "_texturePrewarmFinished.emit(model_id)" in prewarm_source
+    assert "time_module.sleep(0.35)" not in prewarm_source
+    assert "self._prewarm_textures(self.model)" in deferred_txi_source
+
+
 def test_module_mesh_properties_panel_lists_selects_and_hides_meshes() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -214,7 +344,7 @@ def test_module_mesh_properties_panel_lists_selects_and_hides_meshes() -> None:
         name="room_b",
         is_mesh=True,
         vertices=[(0, 0, 0)],
-        faces=[],
+        faces=[(0, 0, 0)],
         texture="greybox",
         position=(0.0, 0.0, 0.0),
         rotation=(0.0, 0.0, 0.0, 1.0),
@@ -290,7 +420,7 @@ def test_module_mesh_properties_panel_supports_multi_select_all() -> None:
     assert selected_batches[-1] == meshes
 
 
-def test_module_mesh_properties_panel_splits_meshes_and_walkmeshes() -> None:
+def test_module_mesh_properties_panel_splits_meshes_nulls_and_walkmeshes() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
     from PySide6 import QtWidgets
@@ -318,14 +448,23 @@ def test_module_mesh_properties_panel_splits_meshes_and_walkmeshes() -> None:
         position=(0.0, 0.0, 0.0),
         rotation=(0.0, 0.0, 0.0, 1.0),
     )
+    null_mesh = SimpleNamespace(
+        name="external_null",
+        is_mesh=True,
+        vertices=[(0, 0, 0), (1, 0, 0), (0, 1, 0)],
+        faces=[(0, 1, 2)],
+        texture="NULL",
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
     model = SimpleNamespace(
         name="m01aa_01a",
         game_version="K1",
         supermodel="NULL",
         classification="tile",
         animations=[],
-        mesh_nodes=lambda: [regular_mesh],
-        all_nodes=lambda: [regular_mesh, grey_geometry],
+        mesh_nodes=lambda: [regular_mesh, null_mesh],
+        all_nodes=lambda: [regular_mesh, null_mesh, grey_geometry],
         bone_nodes=lambda: [],
         texture_list=lambda: ["wall"],
     )
@@ -340,9 +479,15 @@ def test_module_mesh_properties_panel_splits_meshes_and_walkmeshes() -> None:
         panel.module_walkmesh_tree.topLevelItem(index).text(0)
         for index in range(panel.module_walkmesh_tree.topLevelItemCount())
     ]
+    null_names = [
+        panel.module_null_mesh_tree.topLevelItem(index).text(0)
+        for index in range(panel.module_null_mesh_tree.topLevelItemCount())
+    ]
     assert mesh_names == ["regular_mesh"]
+    assert null_names == ["external_null"]
     assert walkmesh_names == ["walkmesh_12"]
-    assert panel.module_browser_tabs.tabText(1) == "Walkmeshes"
+    assert panel.module_browser_tabs.tabText(1) == "NULL Meshes"
+    assert panel.module_browser_tabs.tabText(2) == "Walkmeshes"
 
 
 def test_qt_viewport_exposes_mesh_multiselect_box_and_ctrl_a() -> None:
@@ -388,6 +533,41 @@ def test_qt_gpu_viewport_disables_gpu_culling_for_cpu_parity() -> None:
 
     source = inspect.getsource(QtViewportWidget._render_gpu_frame)
     assert "cull_faces = False" in source
+
+
+def test_qt_viewport_selection_becomes_orbit_and_z_frame_pivot() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    import pytest
+    from PySide6 import QtWidgets
+
+    from src.core.model_data import ModelNode
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    viewport = QtViewportWidget()
+    viewport.camera.target = [0.0, 0.0, 0.0]
+    viewport.camera.distance = 10.0
+    viewport.camera.azimuth = 90.0
+    viewport.camera.elevation = 0.0
+    old_eye = viewport.camera.eye()
+
+    mesh = ModelNode(
+        name="selected_face",
+        vertices=[(10.0, 0.0, 0.0), (12.0, 0.0, 0.0), (10.0, 2.0, 0.0)],
+        faces=[(0, 1, 2)],
+    )
+    face_bounds = ((10.0, 0.0, 0.0), (12.0, 2.0, 0.0))
+
+    viewport.set_selected_node(mesh, orbit_bounds=face_bounds)
+
+    assert viewport.camera.target == pytest.approx([11.0, 1.0, 0.0])
+    assert viewport.camera.eye() == pytest.approx(old_eye)
+
+    viewport.camera.target = [0.0, 0.0, 0.0]
+    viewport.frame_selection_or_all()
+
+    assert viewport.camera.target == pytest.approx([11.0, 1.0, 0.0])
 
 
 def test_viewport_navigation_profiles_are_available() -> None:
@@ -498,6 +678,68 @@ def test_main_window_moves_rig_panel_to_modules_window() -> None:
     assert "window.raise_()" in open_source
     assert QtRigWindow.__name__ == "QtRigWindow"
     assert hasattr(QtRigWindow, "rigActionRequested")
+
+
+def test_main_window_exposes_module_meshes_as_detachable_dock() -> None:
+    import inspect
+
+    from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    actions_source = inspect.getsource(QtGhostRiggerMainWindow._build_actions)
+    menu_source = inspect.getsource(QtGhostRiggerMainWindow._build_menu)
+    refresh_source = inspect.getsource(QtGhostRiggerMainWindow._refresh_all)
+
+    assert "self.properties_panel = QtPropertiesPanel(self, module_browser_enabled=False)" in layout_source
+    assert "self.module_geometry_panel = QtPropertiesPanel(self)" in layout_source
+    assert "self.module_geometry_panel.set_module_browser_only(True)" in layout_source
+    assert '"module_meshes"' in layout_source
+    assert "self.module_meshes_panel_action" in actions_source
+    assert "modules_menu.addAction(self.module_meshes_panel_action)" in menu_source
+    assert "self.module_geometry_panel.show_model(model)" in refresh_source
+    assert hasattr(QtPropertiesPanel, "set_module_browser_only")
+
+
+def test_regular_properties_panel_can_omit_module_mesh_tab() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtPropertiesPanel(module_browser_enabled=False)
+    tab_names = [panel.tabs.tabText(index) for index in range(panel.tabs.count())]
+
+    assert tab_names == ["General"]
+    assert panel.module_tab is None
+    panel.select_module_meshes([])
+    panel.refresh_module_mesh_rows()
+
+
+def test_module_mesh_panel_can_request_detachable_window() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    import inspect
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtPropertiesPanel()
+    requests = []
+    panel.moduleMeshesWindowRequested.connect(lambda: requests.append(True))
+
+    panel.open_module_meshes_window_button.click()
+
+    assert requests == [True]
+    panel_source = inspect.getsource(QtPropertiesPanel._show_module_browser_context_menu)
+    layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    assert "Open Module Meshes Window" in panel_source
+    assert "moduleMeshesWindowRequested.connect(lambda: self._show_detachable_panel(\"module_meshes\"))" in layout_source
 
 
 def test_main_window_moves_utility_tabs_to_tools_windows() -> None:

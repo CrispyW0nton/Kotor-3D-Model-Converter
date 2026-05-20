@@ -193,6 +193,17 @@ _SYNTHETIC_CASES: List[Tuple[str, dict, "CharacterMode"]] = [
                         nodes=("n_wardroid", "spine", "head_g")),
      "CREATURE"),
 
+    ("m01aa_01a",
+                dict(name="m01aa_01a", supermodel="NULL",
+                     classification=ModelClassification.TILE if ModelClassification else None,
+                     nodes=("m01aa_01a", "walkmesh_12")),
+     "MODULE"),
+    ("m02aa_01a_effect",
+                dict(name="m02aa_01a", supermodel="NULL",
+                     classification=ModelClassification.EFFECT if ModelClassification else None,
+                     nodes=("m02aa_01a", "Object01")),
+     "MODULE"),
+
     # ── UNSUPPORTED — non-character classifications ─────────────────────────
     ("dor_door",
                 dict(name="dor_door", supermodel="NULL",
@@ -237,7 +248,7 @@ def test_detect_character_mode_synthetic(label, builder_kwargs, expected_name):
 def test_character_mode_has_required_members():
     """The enum exposes the four real modes plus two fallbacks."""
     names = {m.name for m in CharacterMode}
-    expected = {"HEADLESS_BODY", "HEAD", "HUMANOID", "SUPERMODEL", "CREATURE",
+    expected = {"HEADLESS_BODY", "HEAD", "HUMANOID", "SUPERMODEL", "CREATURE", "MODULE",
                 "AMBIGUOUS", "UNSUPPORTED"}
     assert names == expected, f"unexpected CharacterMode members: {names}"
 

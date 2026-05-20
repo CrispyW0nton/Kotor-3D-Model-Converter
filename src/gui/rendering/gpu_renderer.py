@@ -3319,6 +3319,145 @@ class _GlTexCache:
 #  Mesh geometry builder
 # ─────────────────────────────────────────────────────────────────────────────
 
+_PREBUILT_STATIC_MESH_ATTR = "_gr_gpu_prebuilt_static_mesh"
+
+
+def clear_prebuilt_static_gpu_mesh_data(node) -> None:
+    """Drop RAM-cached static GPU mesh data for a node and its descendants."""
+    stack = [node]
+    seen = set()
+    while stack:
+        cur = stack.pop()
+        if cur is None:
+            continue
+        cid = id(cur)
+        if cid in seen:
+            continue
+        seen.add(cid)
+        try:
+            if hasattr(cur, _PREBUILT_STATIC_MESH_ATTR):
+                delattr(cur, _PREBUILT_STATIC_MESH_ATTR)
+        except Exception:
+            pass
+        try:
+            stack.extend(getattr(cur, "children", []) or [])
+        except Exception:
+            pass
+
+
+def clear_prebuilt_static_gpu_model_data(model) -> int:
+    """Drop all RAM-cached static GPU mesh data attached to a model."""
+    if model is None:
+        return 0
+    try:
+        nodes = list(model.all_nodes())
+    except Exception:
+        root = getattr(model, "root_node", None)
+        nodes = [root] if root is not None else []
+    cleared = 0
+    for node in nodes:
+        try:
+            if hasattr(node, _PREBUILT_STATIC_MESH_ATTR):
+                delattr(node, _PREBUILT_STATIC_MESH_ATTR)
+                cleared += 1
+        except Exception:
+            pass
+    try:
+        setattr(model, "_gr_gpu_prebuilt_mesh_count", 0)
+    except Exception:
+        pass
+    return cleared
+
+
+def _prebuilt_static_gpu_mesh_data(node, model_id: int, skin_bind_transform: bool):
+    try:
+        entry = getattr(node, _PREBUILT_STATIC_MESH_ATTR, None)
+    except Exception:
+        return None
+    if not entry:
+        return None
+    if entry.get("model_id") != model_id:
+        return None
+    if bool(entry.get("skin_bind_transform")) != bool(skin_bind_transform):
+        return None
+    vdata = entry.get("vdata")
+    if vdata is None:
+        return None
+    return vdata, entry.get("idx_arr")
+
+
+def prebuild_static_gpu_mesh_data(model) -> int:
+    """Build static mesh VBO arrays and viewport bounds before GUI render."""
+    if model is None or not _NUMPY:
+        return 0
+    try:
+        nodes = list(model.all_nodes())
+    except Exception:
+        return 0
+    model_id = id(model)
+    model_cls = (str(getattr(model, "classification", "character") or "character")).lower()
+    model_type_raw = getattr(model, "model_type", None)
+    try:
+        model_type = int(model_type_raw) if model_type_raw is not None else 4
+    except Exception:
+        model_type = 4
+    is_module = model_cls in ("effect", "tile", "other") or model_type in (0, 2)
+    built = 0
+    bounds_min = np.array([np.inf, np.inf, np.inf], dtype=np.float64)
+    bounds_max = np.array([-np.inf, -np.inf, -np.inf], dtype=np.float64)
+    for node in nodes:
+        try:
+            if not (getattr(node, "vertices", None) and getattr(node, "faces", None)):
+                continue
+            wp, wo = node.world_transform()
+            skin_bind_transform = bool(getattr(node, "is_skin", False))
+            vdata, idx_arr = _build_vbo_data(
+                node,
+                wp,
+                wo,
+                anim_pose_node=None,
+                is_module=is_module,
+                bone_index_remap=None,
+                apply_skin_node_transform_for_bind=skin_bind_transform,
+            )
+            if vdata is None:
+                continue
+            try:
+                pos = vdata[:, 0:3].astype(np.float64, copy=False)
+                if pos.size:
+                    bounds_min = np.minimum(bounds_min, pos.min(axis=0))
+                    bounds_max = np.maximum(bounds_max, pos.max(axis=0))
+            except Exception:
+                pass
+            setattr(
+                node,
+                _PREBUILT_STATIC_MESH_ATTR,
+                {
+                    "model_id": model_id,
+                    "skin_bind_transform": skin_bind_transform,
+                    "vdata": vdata,
+                    "idx_arr": idx_arr,
+                },
+            )
+            built += 1
+        except Exception:
+            continue
+    try:
+        setattr(model, "_gr_gpu_prebuilt_mesh_count", built)
+        if built > 128 or is_module:
+            setattr(model, "_gr_defer_txi_metadata", True)
+        if built and np.isfinite(bounds_min).all() and np.isfinite(bounds_max).all():
+            bb_min = tuple(float(v) for v in bounds_min.tolist())
+            bb_max = tuple(float(v) for v in bounds_max.tolist())
+            setattr(model, "_gr_render_bounds", (bb_min, bb_max))
+            setattr(model, "_gr_bounds_prepared", True)
+            model.bb_min = bb_min
+            model.bb_max = bb_max
+    except Exception:
+        pass
+    return built
+
+
 def _quat_rotate_batch(q: np.ndarray, pts: np.ndarray) -> np.ndarray:
     """
     Vectorized quaternion rotation for Nx3 points using quaternion q = (x,y,z,w).
@@ -3887,6 +4026,8 @@ class GpuRenderer:
         self._wireframe_pass: bool = False
         self.show_grid: bool = True
         self.cull_faces: bool = True
+        self.max_new_mesh_uploads_per_frame: int = 64
+        self.deferred_mesh_uploads: bool = False
         # ── Phase A: GPU Skinning state ──────────────────────────────────────────
         # MatrixPaletteUploader instance, created per model when skin nodes exist.
         # Caches inverse bind-pose matrices and computes per-frame bone palettes.
@@ -4191,6 +4332,8 @@ class GpuRenderer:
             return None
         if not _NUMPY or not _PIL:
             return None
+        self.deferred_mesh_uploads = False
+        _new_mesh_uploads_this_frame = 0
 
         # PERF-SCALE: Interactive preview skips MSAA below, but stays at full
         # resolution by default.  Lower interactive_render_scale only when the
@@ -4814,7 +4957,7 @@ class GpuRenderer:
                     (for per-material-slot sub-mesh drawing).
                 override_tri_count: triangle count for the override VAO.
                 """
-                nonlocal total_tris
+                nonlocal total_tris, _new_mesh_uploads_this_frame
                 # Use world-space transform (full parent-chain walk) for correct
                 # positioning of all mesh nodes, not just local node.position.
                 wp, wo = _get_world_transform(node)
@@ -4870,15 +5013,29 @@ class GpuRenderer:
                         != _skin_bind_transform
                     )
                 if is_animated or node_id not in self._mesh_cache or _skin_vbo_mode_changed:
+                    if anim_pose is None and not is_animated:
+                        upload_budget = int(getattr(self, "max_new_mesh_uploads_per_frame", 0) or 0)
+                        if upload_budget > 0 and _new_mesh_uploads_this_frame >= upload_budget:
+                            self.deferred_mesh_uploads = True
+                            return
+                        _new_mesh_uploads_this_frame += 1
                     # FIX-SKIN-QBONE: Skin nodes now use a per-draw local palette
                     # in bone_map order.  Keep authored bone IDs local so slot k in
                     # vertex influences addresses qBone[k]/tBone[k] for this skin.
                     _bone_remap = None
-                    vdata, idx_arr = _build_vbo_data(node, wp, wo,
-                                                     anim_pose_node=None,
-                                                     is_module=_gpu_is_module,
-                                                     bone_index_remap=_bone_remap,
-                                                     apply_skin_node_transform_for_bind=_skin_bind_transform)
+                    _prebuilt_vbo = None
+                    if anim_pose is None and not is_animated:
+                        _prebuilt_vbo = _prebuilt_static_gpu_mesh_data(
+                            node, _cur_model_id, _skin_bind_transform
+                        )
+                    if _prebuilt_vbo is not None:
+                        vdata, idx_arr = _prebuilt_vbo
+                    else:
+                        vdata, idx_arr = _build_vbo_data(node, wp, wo,
+                                                         anim_pose_node=None,
+                                                         is_module=_gpu_is_module,
+                                                         bone_index_remap=_bone_remap,
+                                                         apply_skin_node_transform_for_bind=_skin_bind_transform)
                     if vdata is None:
                         return
                     if node_id in self._mesh_cache:

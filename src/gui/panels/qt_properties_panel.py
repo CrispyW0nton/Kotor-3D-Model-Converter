@@ -28,6 +28,7 @@ _CHARACTER_MODE_BADGE_COLORS = {
     "mode_headless_body": "#3FA9F5",   # blue
     "mode_head":          "#F5A623",   # amber
     "mode_humanoid":      "#00A8A8",   # teal
+    "mode_module":        "#2E86DE",   # blue
     "mode_supermodel":    "#9B59B6",   # purple
     "mode_creature":      "#27AE60",   # green
     "mode_ambiguous":     "#7F8C8D",   # grey
@@ -173,6 +174,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
     moduleMeshSelected = QtCore.Signal(object)
     moduleMeshesSelected = QtCore.Signal(list)
     moduleMeshVisibilityChanged = QtCore.Signal()
+    moduleMeshesWindowRequested = QtCore.Signal()
     # Emitted whenever the user manually overrides the CharacterMode via
     # the override QComboBox.  Payload: the new :class:`CharacterMode`
     # value (or ``None`` when the enum isn't importable).  The Character
@@ -180,13 +182,15 @@ class QtPropertiesPanel(QtWidgets.QWidget):
     # ``scene.set_mode(mode, locked=True)`` to honour the choice.
     characterModeChanged = QtCore.Signal(object)
 
-    def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
-        super().__init__(parent)
-        self._current_node = None
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None, *, module_browser_enabled: bool = True):
+        QtWidgets.QWidget.__init__(self, parent)
         self._current_model = None
         self._mesh_items: dict[QtWidgets.QTreeWidgetItem, object] = {}
         self._walkmesh_items: dict[QtWidgets.QTreeWidgetItem, object] = {}
+        self._null_mesh_items: dict[QtWidgets.QTreeWidgetItem, object] = {}
         self._suppress_mesh_signal = False
+        self._module_browser_enabled = bool(module_browser_enabled)
+        self._current_node = None
         self._suppress_mode_signal = False
         self._build()
 
@@ -194,7 +198,8 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(6, 6, 6, 6)
         root.setSpacing(6)
-        root.addWidget(heading("Properties"))
+        self.properties_heading = heading("Properties")
+        root.addWidget(self.properties_heading)
 
         # ── CharacterMode badge + override (M1 / T105) ────────────────────
         self._build_character_mode_row(root)
@@ -204,13 +209,15 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         self.text.setReadOnly(True)
         self.text.setPlainText("No model loaded.")
         self.tabs.addTab(self.text, "General")
-        self.module_tab = self._build_module_mesh_tab()
-        self.tabs.addTab(self.module_tab, "Module Meshes")
+        self.module_tab = None
+        if self._module_browser_enabled:
+            self.module_tab = self._build_module_mesh_tab()
+            self.tabs.addTab(self.module_tab, "Module Meshes")
         root.addWidget(self.tabs, 1)
 
-        transform = QtWidgets.QGroupBox("Node Transform (editable)")
-        transform.setStyleSheet(f"QGroupBox {{ color:{C['gold']}; }}")
-        form = QtWidgets.QGridLayout(transform)
+        self.transform_group = QtWidgets.QGroupBox("Node Transform (editable)")
+        self.transform_group.setStyleSheet(f"QGroupBox {{ color:{C['gold']}; }}")
+        form = QtWidgets.QGridLayout(self.transform_group)
         form.addWidget(QtWidgets.QLabel("Pos:"), 0, 0)
         self.x_spin = self._spin()
         self.y_spin = self._spin()
@@ -223,13 +230,37 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         apply_button = QtWidgets.QPushButton("Apply Position")
         apply_button.clicked.connect(self._apply_transform)
         form.addWidget(apply_button, 1, 0, 1, 4)
-        root.addWidget(transform)
+        root.addWidget(self.transform_group)
+
+    def set_module_browser_only(self, enabled: bool = True) -> None:
+        if not self._module_browser_enabled or self.module_tab is None:
+            return
+        self.properties_heading.setText("Module Geometry")
+        self.properties_heading.setVisible(not enabled)
+        if hasattr(self, "character_mode_group"):
+            self.character_mode_group.setVisible(not enabled)
+        self.transform_group.setVisible(not enabled)
+        general_index = self.tabs.indexOf(self.text)
+        if enabled and general_index >= 0:
+            self.tabs.removeTab(general_index)
+        elif not enabled and general_index < 0:
+            self.tabs.insertTab(0, self.text, "General")
+        self.tabs.setCurrentWidget(self.module_tab)
 
     def _build_module_mesh_tab(self) -> QtWidgets.QWidget:
         page = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(page)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
+
+        header = QtWidgets.QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.addStretch(1)
+        self.open_module_meshes_window_button = QtWidgets.QPushButton("Open Window")
+        self.open_module_meshes_window_button.setToolTip("Open Module Meshes as a detachable dock window")
+        self.open_module_meshes_window_button.clicked.connect(self.moduleMeshesWindowRequested.emit)
+        header.addWidget(self.open_module_meshes_window_button)
+        layout.addLayout(header)
 
         self.module_browser_tabs = QtWidgets.QTabWidget()
         mesh_page = QtWidgets.QWidget()
@@ -250,12 +281,41 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         self.module_mesh_tree.setHeaderLabels(["Mesh", "Verts", "Faces", "Texture", "Visible", "Group"])
         self.module_mesh_tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         self.module_mesh_tree.itemSelectionChanged.connect(self._on_module_mesh_selection_changed)
+        self.module_mesh_tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.module_mesh_tree.customContextMenuRequested.connect(self._show_module_browser_context_menu)
         self.module_mesh_tree.setRootIsDecorated(False)
         self.module_mesh_tree.setAlternatingRowColors(True)
         mesh_layout.addWidget(self.module_mesh_tree, 1)
         select_all_shortcut = QtGui.QShortcut(QtGui.QKeySequence.SelectAll, self.module_mesh_tree)
         select_all_shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
         select_all_shortcut.activated.connect(self.select_all_module_meshes)
+
+        null_page = QtWidgets.QWidget()
+        null_layout = QtWidgets.QVBoxLayout(null_page)
+        null_layout.setContentsMargins(2, 2, 2, 2)
+        null_layout.setSpacing(4)
+        self.module_null_mesh_count = QtWidgets.QLabel("No NULL meshes.")
+        self.module_null_mesh_count.setStyleSheet(f"color:{C['text2']};")
+        null_layout.addWidget(self.module_null_mesh_count)
+
+        self.module_null_mesh_filter = QtWidgets.QLineEdit()
+        self.module_null_mesh_filter.setPlaceholderText("Filter NULL meshes")
+        self.module_null_mesh_filter.textChanged.connect(self._filter_module_meshes)
+        null_layout.addWidget(self.module_null_mesh_filter)
+
+        self.module_null_mesh_tree = QtWidgets.QTreeWidget()
+        self.module_null_mesh_tree.setColumnCount(6)
+        self.module_null_mesh_tree.setHeaderLabels(["NULL Mesh", "Verts", "Faces", "Texture", "Visible", "Group"])
+        self.module_null_mesh_tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
+        self.module_null_mesh_tree.itemSelectionChanged.connect(self._on_module_mesh_selection_changed)
+        self.module_null_mesh_tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.module_null_mesh_tree.customContextMenuRequested.connect(self._show_module_browser_context_menu)
+        self.module_null_mesh_tree.setRootIsDecorated(False)
+        self.module_null_mesh_tree.setAlternatingRowColors(True)
+        null_layout.addWidget(self.module_null_mesh_tree, 1)
+        select_all_null_shortcut = QtGui.QShortcut(QtGui.QKeySequence.SelectAll, self.module_null_mesh_tree)
+        select_all_null_shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        select_all_null_shortcut.activated.connect(self.select_all_module_meshes)
 
         walk_page = QtWidgets.QWidget()
         walk_layout = QtWidgets.QVBoxLayout(walk_page)
@@ -275,6 +335,8 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         self.module_walkmesh_tree.setHeaderLabels(["Walkmesh", "Verts", "Faces", "Texture", "Visible", "Group"])
         self.module_walkmesh_tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         self.module_walkmesh_tree.itemSelectionChanged.connect(self._on_module_mesh_selection_changed)
+        self.module_walkmesh_tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.module_walkmesh_tree.customContextMenuRequested.connect(self._show_module_browser_context_menu)
         self.module_walkmesh_tree.setRootIsDecorated(False)
         self.module_walkmesh_tree.setAlternatingRowColors(True)
         walk_layout.addWidget(self.module_walkmesh_tree, 1)
@@ -283,6 +345,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         select_all_walk_shortcut.activated.connect(self.select_all_module_meshes)
 
         self.module_browser_tabs.addTab(mesh_page, "Meshes")
+        self.module_browser_tabs.addTab(null_page, "NULL Meshes")
         self.module_browser_tabs.addTab(walk_page, "Walkmeshes")
         layout.addWidget(self.module_browser_tabs, 1)
 
@@ -313,6 +376,34 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         layout.addLayout(actions)
         return page
 
+    def _show_module_browser_context_menu(self, pos: QtCore.QPoint) -> None:
+        tree = self.sender()
+        if not isinstance(tree, QtWidgets.QTreeWidget):
+            return
+        menu = QtWidgets.QMenu(tree)
+        open_action = menu.addAction("Open Module Meshes Window")
+        menu.addSeparator()
+        hide_action = menu.addAction("Hide Selected")
+        unhide_action = menu.addAction("Unhide Selected")
+        hide_unselected_action = menu.addAction("Hide Unselected")
+        unhide_all_action = menu.addAction("Unhide All")
+        has_selection = bool(self._selected_module_meshes())
+        hide_action.setEnabled(has_selection)
+        unhide_action.setEnabled(has_selection)
+        hide_unselected_action.setEnabled(bool(self._mesh_items or self._null_mesh_items or self._walkmesh_items))
+        unhide_all_action.setEnabled(bool(self._mesh_items or self._null_mesh_items or self._walkmesh_items))
+        chosen = menu.exec(tree.viewport().mapToGlobal(pos))
+        if chosen is open_action:
+            self.moduleMeshesWindowRequested.emit()
+        elif chosen is hide_action:
+            self._set_selected_meshes_hidden(True)
+        elif chosen is unhide_action:
+            self._set_selected_meshes_hidden(False)
+        elif chosen is hide_unselected_action:
+            self._hide_unselected_module_meshes()
+        elif chosen is unhide_all_action:
+            self._unhide_all_module_meshes()
+
     def _spin(self) -> QtWidgets.QDoubleSpinBox:
         spin = QtWidgets.QDoubleSpinBox()
         spin.setRange(-100000.0, 100000.0)
@@ -334,9 +425,9 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         user pin a different mode; selecting "(Auto)" clears the lock
         and emits :attr:`characterModeChanged` with ``None``.
         """
-        group = QtWidgets.QGroupBox("Character Mode")
-        group.setStyleSheet(f"QGroupBox {{ color:{C['gold']}; }}")
-        grid = QtWidgets.QGridLayout(group)
+        self.character_mode_group = QtWidgets.QGroupBox("Character Mode")
+        self.character_mode_group.setStyleSheet(f"QGroupBox {{ color:{C['gold']}; }}")
+        grid = QtWidgets.QGridLayout(self.character_mode_group)
         grid.setContentsMargins(6, 6, 6, 6)
         grid.setHorizontalSpacing(6)
 
@@ -376,7 +467,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         grid.addWidget(QtWidgets.QLabel("Override:"), 1, 0)
         grid.addWidget(self.character_mode_combo, 1, 1)
 
-        parent_layout.addWidget(group)
+        parent_layout.addWidget(self.character_mode_group)
 
     def _update_character_mode_badge(self, mode) -> None:
         """Refresh the badge label + colour to reflect *mode*.
@@ -477,7 +568,8 @@ class QtPropertiesPanel(QtWidgets.QWidget):
             self._current_model = None
             self._current_node = None
             self.text.setPlainText("No model loaded.")
-            self._populate_module_meshes([])
+            if self._module_browser_enabled:
+                self._populate_module_meshes([])
             self._update_character_mode_badge(None)
             self._suppress_mode_signal = True
             try:
@@ -510,7 +602,6 @@ class QtPropertiesPanel(QtWidgets.QWidget):
                     self._suppress_mode_signal = False
         mesh_nodes = model.mesh_nodes() if hasattr(model, "mesh_nodes") else []
         all_nodes = model.all_nodes() if hasattr(model, "all_nodes") else []
-        module_mesh_nodes = self._module_mesh_candidates(model, mesh_nodes, all_nodes)
         bone_nodes = model.bone_nodes() if hasattr(model, "bone_nodes") else []
         textures = model.texture_list() if hasattr(model, "texture_list") else []
         total_verts = sum(len(getattr(node, "vertices", []) or []) for node in mesh_nodes)
@@ -536,7 +627,9 @@ class QtPropertiesPanel(QtWidgets.QWidget):
             *[f"  {tex}" for tex in textures],
         ]
         self.text.setPlainText("\n".join(lines))
-        self._populate_module_meshes(module_mesh_nodes)
+        if self._module_browser_enabled:
+            module_mesh_nodes = self._module_mesh_candidates(model, mesh_nodes, all_nodes)
+            self._populate_module_meshes(module_mesh_nodes)
 
     def show_node(self, node) -> None:
         self._current_node = node
@@ -569,7 +662,6 @@ class QtPropertiesPanel(QtWidgets.QWidget):
                 f"Texture: {getattr(node, 'texture', '')}",
             ]
         self.text.setPlainText("\n".join(lines))
-        self.select_module_mesh(node)
 
     def _mesh_label(self, node) -> str:
         return str(getattr(node, "name", "") or getattr(node, "id", "") or "<mesh>")
@@ -588,6 +680,10 @@ class QtPropertiesPanel(QtWidgets.QWidget):
             or bool(getattr(node, "is_aabb", False))
             or bool(flags & 0x0200)
         )
+
+    def _is_null_mesh_candidate(self, node) -> bool:
+        texture = str(getattr(node, "texture", "") or "").strip().lower()
+        return texture in {"", "null", "none", "****"}
 
     def _module_mesh_candidates(self, model, mesh_nodes=None, all_nodes=None) -> list:
         candidates = []
@@ -608,12 +704,16 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         return candidates
 
     def _populate_module_meshes(self, mesh_nodes) -> None:
+        if not self._module_browser_enabled:
+            return
         self._suppress_mesh_signal = True
         try:
             self.module_mesh_tree.clear()
             self.module_walkmesh_tree.clear()
+            self.module_null_mesh_tree.clear()
             self._mesh_items.clear()
             self._walkmesh_items.clear()
+            self._null_mesh_items.clear()
             for node in mesh_nodes or []:
                 if not self._is_module_mesh_candidate(node):
                     continue
@@ -634,23 +734,35 @@ class QtPropertiesPanel(QtWidgets.QWidget):
                 if visible == "no":
                     for column in range(self.module_mesh_tree.columnCount()):
                         item.setForeground(column, QtGui.QBrush(QtGui.QColor(C["text2"])))
-                tree = self.module_walkmesh_tree if self._is_walkmesh_candidate(node) else self.module_mesh_tree
-                items = self._walkmesh_items if tree is self.module_walkmesh_tree else self._mesh_items
+                if self._is_walkmesh_candidate(node):
+                    tree = self.module_walkmesh_tree
+                    items = self._walkmesh_items
+                elif self._is_null_mesh_candidate(node):
+                    tree = self.module_null_mesh_tree
+                    items = self._null_mesh_items
+                else:
+                    tree = self.module_mesh_tree
+                    items = self._mesh_items
                 tree.addTopLevelItem(item)
                 items[item] = node
-            for tree in (self.module_mesh_tree, self.module_walkmesh_tree):
+            for tree in (self.module_mesh_tree, self.module_null_mesh_tree, self.module_walkmesh_tree):
                 for column in range(tree.columnCount()):
                     tree.resizeColumnToContents(column)
             count = self.module_mesh_tree.topLevelItemCount()
             self.module_mesh_count.setText(f"{count:,} module mesh(es)" if count else "No module meshes.")
+            null_count = self.module_null_mesh_tree.topLevelItemCount()
+            self.module_null_mesh_count.setText(f"{null_count:,} NULL mesh(es)" if null_count else "No NULL meshes.")
             walk_count = self.module_walkmesh_tree.topLevelItemCount()
             self.module_walkmesh_count.setText(f"{walk_count:,} walkmesh(es)" if walk_count else "No walkmeshes.")
         finally:
             self._suppress_mesh_signal = False
 
     def _filter_module_meshes(self, text: str) -> None:
+        if not self._module_browser_enabled:
+            return
         for edit, items in (
             (self.module_mesh_filter, self._mesh_items),
+            (self.module_null_mesh_filter, self._null_mesh_items),
             (self.module_walkmesh_filter, self._walkmesh_items),
         ):
             needle = (edit.text() or "").strip().lower()
@@ -663,9 +775,12 @@ class QtPropertiesPanel(QtWidgets.QWidget):
                 item.setHidden(needle not in haystack)
 
     def _selected_module_meshes(self) -> list:
+        if not self._module_browser_enabled:
+            return []
         selected = []
         for tree, items in (
             (self.module_mesh_tree, self._mesh_items),
+            (self.module_null_mesh_tree, self._null_mesh_items),
             (self.module_walkmesh_tree, self._walkmesh_items),
         ):
             selected.extend(items[item] for item in tree.selectedItems() if item in items)
@@ -684,18 +799,20 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         self.select_module_meshes([node] if node is not None else [])
 
     def select_module_meshes(self, nodes: list) -> None:
-        if self._suppress_mesh_signal:
+        if not self._module_browser_enabled or self.module_tab is None or self._suppress_mesh_signal:
             return
         node_ids = {id(node) for node in nodes if node is not None and self._is_module_mesh_candidate(node)}
         self._suppress_mesh_signal = True
         try:
             self.module_mesh_tree.clearSelection()
+            self.module_null_mesh_tree.clearSelection()
             self.module_walkmesh_tree.clearSelection()
             if not node_ids:
                 return
             for tree, items, tab in (
                 (self.module_mesh_tree, self._mesh_items, 0),
-                (self.module_walkmesh_tree, self._walkmesh_items, 1),
+                (self.module_null_mesh_tree, self._null_mesh_items, 1),
+                (self.module_walkmesh_tree, self._walkmesh_items, 2),
             ):
                 for item, candidate in items.items():
                     if id(candidate) in node_ids:
@@ -707,14 +824,21 @@ class QtPropertiesPanel(QtWidgets.QWidget):
             self._suppress_mesh_signal = False
 
     def select_all_module_meshes(self) -> None:
+        if not self._module_browser_enabled:
+            return
         if self.module_browser_tabs.currentWidget() is self.module_browser_tabs.widget(1):
+            self.module_null_mesh_tree.selectAll()
+        elif self.module_browser_tabs.currentWidget() is self.module_browser_tabs.widget(2):
             self.module_walkmesh_tree.selectAll()
         else:
             self.module_mesh_tree.selectAll()
 
     def _refresh_module_mesh_rows(self) -> None:
+        if not self._module_browser_enabled:
+            return
         for tree, items in (
             (self.module_mesh_tree, self._mesh_items),
+            (self.module_null_mesh_tree, self._null_mesh_items),
             (self.module_walkmesh_tree, self._walkmesh_items),
         ):
             for item, node in items.items():
@@ -747,13 +871,22 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         selected = {id(node) for node in self._selected_module_meshes()}
         nodes = [
             node
-            for node in list(self._mesh_items.values()) + list(self._walkmesh_items.values())
+            for node in (
+                list(self._mesh_items.values())
+                + list(self._null_mesh_items.values())
+                + list(self._walkmesh_items.values())
+            )
             if id(node) not in selected
         ]
         self._set_meshes_hidden(nodes, True)
 
     def _unhide_all_module_meshes(self) -> None:
-        self._set_meshes_hidden(list(self._mesh_items.values()) + list(self._walkmesh_items.values()), False)
+        self._set_meshes_hidden(
+            list(self._mesh_items.values())
+            + list(self._null_mesh_items.values())
+            + list(self._walkmesh_items.values()),
+            False,
+        )
 
     def _create_selection_set_from_panel(self) -> None:
         nodes = self._selected_module_meshes()

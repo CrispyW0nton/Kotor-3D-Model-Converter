@@ -176,6 +176,7 @@ class CharacterMode(_Enum):
     HUMANOID      = "humanoid"        # Full humanoid NPC/body with its own head and humanoid skeleton
     SUPERMODEL    = "supermodel"      # Animation-bearing parent skeleton (s_male01, etc.)
     CREATURE      = "creature"        # Self-contained non-humanoid (c_bantha, c_rancor, …)
+    MODULE        = "module"          # Area/module/tile/effect geometry, not a character rig
 
     # ── Fallback / sentinel values ──────────────────────────────────────
     AMBIGUOUS     = "ambiguous"       # Detection rules conflict — user input required
@@ -204,6 +205,7 @@ _CHARACTER_MODE_DISPLAY_NAMES: Dict["CharacterMode", str] = {
     CharacterMode.HUMANOID:      "Humanoid",
     CharacterMode.SUPERMODEL:    "Supermodel",
     CharacterMode.CREATURE:      "Creature",
+    CharacterMode.MODULE:        "Module",
     CharacterMode.AMBIGUOUS:     "Ambiguous",
     CharacterMode.UNSUPPORTED:   "Unsupported",
 }
@@ -215,6 +217,7 @@ _CHARACTER_MODE_ICON_KEYS: Dict["CharacterMode", str] = {
     CharacterMode.HUMANOID:      "mode_humanoid",
     CharacterMode.SUPERMODEL:    "mode_supermodel",
     CharacterMode.CREATURE:      "mode_creature",
+    CharacterMode.MODULE:        "mode_module",
     CharacterMode.AMBIGUOUS:     "mode_ambiguous",
     CharacterMode.UNSUPPORTED:   "mode_unsupported",
 }
@@ -287,6 +290,11 @@ def detect_character_mode(model: "KotorModel") -> "CharacterMode":
                                      int(ModelClassification.CHARACTER)))
     except (TypeError, ValueError):
         classification = int(ModelClassification.CHARACTER)
+    if classification in (int(ModelClassification.EFFECT),
+                          int(ModelClassification.EFFECTS),
+                          int(ModelClassification.TILE)):
+        return CharacterMode.MODULE
+
     if classification not in (int(ModelClassification.CHARACTER),
                               int(ModelClassification.FLYER)):
         return CharacterMode.UNSUPPORTED

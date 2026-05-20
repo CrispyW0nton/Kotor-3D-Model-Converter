@@ -73,7 +73,17 @@ _GUI_DIR = Path(__file__).resolve().parents[1]
 _QT_ICON_DIR = (_GUI_DIR / "icons").as_posix()
 
 
+def _prebuild_gpu_mesh_data_for_model(model) -> None:
+    try:
+        from src.gui.qt_lib.rendering.gpu_renderer import prebuild_static_gpu_mesh_data
+
+        prebuild_static_gpu_mesh_data(model)
+    except Exception:
+        log.debug("Static GPU mesh prebuild failed", exc_info=True)
+
+
 class ModelLoadWorker(QtCore.QObject):
+    progress = QtCore.Signal(str, int, int)
     finished = QtCore.Signal(object, str, str)
 
     def __init__(self, path: str, mdx_path: str = "", game: str = ""):
@@ -86,6 +96,7 @@ class ModelLoadWorker(QtCore.QObject):
     def run(self):
         try:
             path = Path(self.path)
+            self.progress.emit("Reading model into RAM", 1, 5)
             raw = path.read_bytes()
             first16 = raw[:16]
             printable_count = sum(
@@ -100,26 +111,42 @@ class ModelLoadWorker(QtCore.QObject):
             if is_ascii_mdl:
                 from src.core.mdl_parser import MDLAsciiParser
 
-                lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+                self.progress.emit("Parsing ASCII MDL", 2, 5)
+                lines = raw.decode("utf-8", errors="replace").splitlines()
                 model = MDLAsciiParser().parse(lines)
                 model.mdl_path = str(path)
                 model.mdx_path = ""
             else:
-                from src.core.kotor_loader import load_model_from_file
+                from src.core.kotor_loader import load_model_from_bytes
+                from src.core.model_data import GameVersion
 
-                model = load_model_from_file(self.path, self.mdx_path)
+                self.progress.emit("Reading MDX bytes", 2, 5)
+                mdx_path = Path(self.mdx_path) if self.mdx_path else path.with_suffix(".mdx")
+                mdx = mdx_path.read_bytes() if mdx_path.exists() else b""
+                game_version = None
+                if self.game:
+                    game_version = GameVersion.K2 if self.game == "K2" else GameVersion.K1
+                self.progress.emit("Parsing binary MDL/MDX", 3, 5)
+                model = load_model_from_bytes(raw, mdx, game_version=game_version)
+                if model is not None:
+                    model.mdl_path = str(path)
+                    model.mdx_path = str(mdx_path) if mdx else ""
             if model is None:
                 raise RuntimeError(f"Could not parse {path.name}")
             if self.game:
                 from src.core.model_data import GameVersion
 
                 model.game_version = GameVersion.K2 if self.game == "K2" else GameVersion.K1
+            self.progress.emit("Preparing GPU mesh buffers in RAM", 4, 5)
+            _prebuild_gpu_mesh_data_for_model(model)
+            self.progress.emit("Handing model to viewport", 5, 5)
             self.finished.emit(model, self.path, "")
         except Exception:
             self.finished.emit(None, self.path, traceback.format_exc())
 
 
 class ResourceModelLoadWorker(QtCore.QObject):
+    progress = QtCore.Signal(str, int, int)
     finished = QtCore.Signal(object, str, str)
 
     def __init__(self, resref: str, game: str, k1_dir: str = "", k2_dir: str = ""):
@@ -142,15 +169,21 @@ class ResourceModelLoadWorker(QtCore.QObject):
             if self.k2_dir:
                 mgr.set_k2_dir(self.k2_dir)
 
+            self.progress.emit("Reading model resource into RAM", 1, 5)
             mdl = mgr.get_mdl(self.resref, self.game)
             if not mdl:
                 raise FileNotFoundError(f"{self.game}:{self.resref}.mdl")
+            self.progress.emit("Reading MDX resource", 2, 5)
             mdx = mgr.get_mdx(self.resref, self.game) or b""
             game_version = GameVersion.K2 if self.game == "K2" else GameVersion.K1
+            self.progress.emit("Parsing binary MDL/MDX", 3, 5)
             model = load_model_from_bytes(mdl, mdx, game_version=game_version)
             if model is None:
                 raise RuntimeError(f"Could not parse {self.game}:{self.resref}.mdl")
             model.game_version = game_version
+            self.progress.emit("Preparing GPU mesh buffers in RAM", 4, 5)
+            _prebuild_gpu_mesh_data_for_model(model)
+            self.progress.emit("Handing model to viewport", 5, 5)
             self.finished.emit(model, f"{self.game}:{self.resref}", "")
         except Exception:
             self.finished.emit(None, f"{self.game}:{self.resref}", traceback.format_exc())
@@ -452,6 +485,19 @@ class QtProgressToast(QtWidgets.QFrame):
         self.show()
         self.raise_()
 
+    def update_progress(self, title: str, detail: str, value: int, total: int):
+        self._close_timer.stop()
+        self.title_label.setText(title)
+        self.detail_label.setText(detail)
+        if total > 0:
+            self.progress.setRange(0, total)
+            self.progress.setValue(max(0, min(value, total)))
+        else:
+            self.progress.setRange(0, 0)
+        self._reposition()
+        self.show()
+        self.raise_()
+
     def finish(self, title: str, detail: str, delay_ms: int = 2200):
         self.title_label.setText(title)
         self.detail_label.setText(detail)
@@ -498,7 +544,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._model_path = ""
         self._current_game = ""
         self._resource_manager = None
+        self._resource_manager_dirs: tuple[str, str] = ("", "")
         self._progress_toast: Optional[QtProgressToast] = None
+        self._pending_gpu_upload_model_id = 0
+        self._pending_gpu_upload_total = 0
         self._texture_dir = ""
         self._animation_engine = None
         self._animation_loop = False
@@ -801,6 +850,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.twoda_panel_action.triggered.connect(lambda: self._show_detachable_panel("2das"))
         self.resources_panel_action = QtGui.QAction(self._icon("resources"), "Open Resource Browser", self)
         self.resources_panel_action.triggered.connect(lambda: self._show_detachable_panel("resources"))
+        self.module_meshes_panel_action = QtGui.QAction(self._icon("props"), "Open Module Meshes", self)
+        self.module_meshes_panel_action.triggered.connect(lambda: self._show_detachable_panel("module_meshes"))
         self.set_mdlops_action = QtGui.QAction("Set MDLOps Path...", self)
         self.set_mdlops_action.triggered.connect(self._set_mdlops)
         self.compile_action = QtGui.QAction("Compile ASCII MDL to Binary", self)
@@ -899,6 +950,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         modules_menu.addAction(self.unreal_animator_action)
         modules_menu.addSeparator()
         modules_menu.addAction(self.nodes_panel_action)
+        modules_menu.addAction(self.module_meshes_panel_action)
         modules_menu.addAction(self.twoda_panel_action)
         modules_menu.addAction(self.resources_panel_action)
         modules_menu.addSeparator()
@@ -1190,7 +1242,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         right_tabs.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         self.right_tabs = right_tabs
         self.skeleton_panel = QtSkeletonPanel(self)
-        self.properties_panel = QtPropertiesPanel(self)
+        self.properties_panel = QtPropertiesPanel(self, module_browser_enabled=False)
+        self.module_geometry_panel = QtPropertiesPanel(self)
+        self.module_geometry_panel.set_module_browser_only(True)
         self.skeleton_panel.nodeSelected.connect(self.properties_panel.show_node)
         self.rig_window = QtRigWindow(self)
         self.rig_window.rigActionRequested.connect(self._handle_rig_action)
@@ -1249,10 +1303,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._detachable_panels: dict[str, QtWidgets.QDockWidget] = {}
         self._detachable_panel_sizes = {
             "nodes": (620, 700),
+            "module_meshes": (620, 720),
             "2das": (980, 640),
             "resources": (980, 640),
         }
         self._create_detachable_panel("nodes", "Nodes", self.skeleton_panel, QtCore.Qt.LeftDockWidgetArea)
+        self._create_detachable_panel("module_meshes", "Module Meshes", self.module_geometry_panel, QtCore.Qt.RightDockWidgetArea)
         self._create_detachable_panel("2das", "2DA Browser", self.twoda_panel, QtCore.Qt.LeftDockWidgetArea)
         self._create_detachable_panel("resources", "Resource Browser", self.resource_panel, QtCore.Qt.LeftDockWidgetArea)
         left_tabs.addTab(self.modular_panel, self._icon("modular", 16), "Modules")
@@ -1267,12 +1323,16 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport_label = self.viewport.canvas
         self.skeleton_panel.nodeSelected.connect(self.viewport.set_selected_node)
         self.viewport.nodeSelected.connect(self.properties_panel.show_node)
-        self.viewport.nodeSelected.connect(self.properties_panel.select_module_mesh)
-        self.viewport.meshSelectionChanged.connect(self.properties_panel.select_module_meshes)
+        self.viewport.nodeSelected.connect(self.module_geometry_panel.show_node)
+        self.viewport.nodeSelected.connect(self.module_geometry_panel.select_module_mesh)
+        self.viewport.meshSelectionChanged.connect(self.module_geometry_panel.select_module_meshes)
         self.viewport.nodeMoved.connect(self.properties_panel.show_node)
-        self.viewport.meshVisibilityChanged.connect(self.properties_panel.refresh_module_mesh_rows)
-        self.properties_panel.moduleMeshesSelected.connect(self.viewport.set_selected_meshes)
-        self.properties_panel.moduleMeshVisibilityChanged.connect(self.viewport.refresh_view)
+        self.viewport.nodeMoved.connect(self.module_geometry_panel.show_node)
+        self.viewport.meshVisibilityChanged.connect(self.module_geometry_panel.refresh_module_mesh_rows)
+        self.viewport.gpuUploadProgress.connect(self._on_viewport_gpu_upload_progress)
+        self.module_geometry_panel.moduleMeshesSelected.connect(self.viewport.set_selected_meshes)
+        self.module_geometry_panel.moduleMeshVisibilityChanged.connect(self.viewport.refresh_view)
+        self.module_geometry_panel.moduleMeshesWindowRequested.connect(lambda: self._show_detachable_panel("module_meshes"))
         self.properties_panel.positionApplied.connect(
             lambda node, _x, _y, _z: self.viewport.refresh_node_transform(node)
         )
@@ -1315,6 +1375,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         except Exception as exc:
             self._log(f"Could not save game directories: {exc}", "warning")
         self._resource_manager = None
+        self._resource_manager_dirs = ("", "")
         self.library_panel.set_status("Game directories updated")
         self._log("Game directories updated. Run Scan to refresh the library.", "success")
 
@@ -1323,10 +1384,43 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._progress_toast = QtProgressToast(self)
         self._progress_toast.show_busy(title, detail)
 
+    def _update_progress_toast(self, title: str, detail: str, value: int, total: int):
+        if self._progress_toast is None:
+            self._progress_toast = QtProgressToast(self)
+        self._progress_toast.update_progress(title, detail, value, total)
+
     def _finish_progress_toast(self, title: str, detail: str):
         if self._progress_toast is None:
             self._progress_toast = QtProgressToast(self)
         self._progress_toast.finish(title, detail)
+
+    @QtCore.Slot(str, int, int)
+    def _on_model_load_progress(self, detail: str, value: int, total: int):
+        self._update_progress_toast("Loading model", detail, value, total)
+        self.statusBar().showMessage(detail)
+
+    @QtCore.Slot(int, int)
+    def _on_viewport_gpu_upload_progress(self, uploaded: int, total: int):
+        if total <= 0:
+            return
+        self._pending_gpu_upload_total = total
+        self._update_progress_toast(
+            "Uploading mesh buffers",
+            f"Moving mesh buffers into GPU memory ({uploaded}/{total})...",
+            uploaded,
+            total,
+        )
+        if uploaded >= total:
+            self._pending_gpu_upload_model_id = 0
+            self._pending_gpu_upload_total = 0
+            self._finish_progress_toast("Model ready", "Mesh buffers are resident in GPU memory.")
+
+    def _finish_model_load_toast_if_pending(self, model_id: int):
+        if self._pending_gpu_upload_model_id != model_id:
+            return
+        self._pending_gpu_upload_model_id = 0
+        self._pending_gpu_upload_total = 0
+        self._finish_progress_toast("Model ready", "Model loaded; GPU upload will continue on demand.")
 
     def _auto_detect_dirs(self):
         if self._auto_detect_worker_is_running():
@@ -1527,6 +1621,16 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def _set_model_internal(self, model, path: str = ""):
         if model is None:
+            old_model = self._current_model
+            if old_model is not None:
+                try:
+                    from src.gui.qt_lib.rendering.gpu_renderer import clear_prebuilt_static_gpu_model_data
+
+                    clear_prebuilt_static_gpu_model_data(old_model)
+                except Exception:
+                    log.debug("Model RAM buffer cleanup failed", exc_info=True)
+            self._pending_gpu_upload_model_id = 0
+            self._pending_gpu_upload_total = 0
             self._animation_timer.stop()
             self._retarget_timer.stop()
             self._animation_engine = None
@@ -1545,6 +1649,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self.skeleton_panel.load_model(None)
             if hasattr(self, "properties_panel"):
                 self.properties_panel.show_model(None)
+            if hasattr(self, "module_geometry_panel"):
+                self.module_geometry_panel.show_model(None)
             if hasattr(self, "animations_panel"):
                 self.animations_panel.load_model(None)
             if hasattr(self, "animation_retarget_panel"):
@@ -1598,6 +1704,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def _clear_model(self):
         self._set_model_internal(None)
+        self._finish_progress_toast("Model cleared", "GPU buffers and RAM-side mesh buffers were released.")
         self._log("Model cleared.", "info")
 
     def _set_texture_dir(self):
@@ -1621,6 +1728,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.skeleton_panel.load_model(model)
         if hasattr(self, "properties_panel"):
             self.properties_panel.show_model(model)
+        if hasattr(self, "module_geometry_panel"):
+            self.module_geometry_panel.show_model(model)
         if hasattr(self, "animations_panel"):
             self.animations_panel.load_model(model)
         if hasattr(self, "animation_retarget_panel"):
@@ -3075,10 +3184,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                             }
                         )
             self._resource_manager = manager
+            self._resource_manager_dirs = (k1_dir, k2_dir)
         except Exception as exc:
             self._log(f"Resource scan error: {exc}", "error")
             rows = []
             self._resource_manager = None
+            self._resource_manager_dirs = ("", "")
 
         if not rows:
             for row in self._library_rows:
@@ -3152,6 +3263,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             install = manager.get_k1() if game == "K1" else manager.get_k2()
             names = sorted(install.list_resrefs(rm.RES_2DA)) if install is not None else []
             self._resource_manager = manager
+            self._resource_manager_dirs = (k1_dir, k2_dir)
             self.twoda_panel.listbox.addItems(names)
             self._log(f"2DA list refreshed: {len(names)} tables for {game}", "success")
         except Exception as exc:
@@ -3174,6 +3286,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 if k2_dir:
                     manager.set_k2_dir(k2_dir)
                 self._resource_manager = manager
+                self._resource_manager_dirs = (k1_dir, k2_dir)
             raw = manager.get(name, rm.RES_2DA, game)
             if not raw:
                 self._log(f"2DA not found: {game}:{name}", "warning")
@@ -3602,6 +3715,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             try:
                 from src.core.template_builder import build_humanoid_template
 
+                self._show_progress_toast("Loading model", f"Building template {game}:{resref}...")
                 game_tag = game.upper() if game else "K1"
                 model = build_humanoid_template(game_version=game_tag, name=resref)
                 self._current_game = game_tag
@@ -3611,6 +3725,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return
         self._log(f"Loading {game}:{resref} ...")
         self.statusBar().showMessage(f"Loading {game}:{resref}...")
+        self._show_progress_toast("Loading model", f"Loading {game}:{resref} from game resources...")
         self._current_game = game.upper()
 
         worker = ResourceModelLoadWorker(
@@ -3622,6 +3737,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         thread = QtCore.QThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
+        worker.progress.connect(self._on_model_load_progress)
         worker.finished.connect(self._on_model_loaded)
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
@@ -3679,12 +3795,14 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._texture_dir = texture_dir or str(mdl.parent)
         self._log(f"Loading {mdl} ...")
         self.statusBar().showMessage("Loading model...")
+        self._show_progress_toast("Loading model", f"Loading {mdl.name}...")
         self._current_game = game.upper()
 
         worker = ModelLoadWorker(str(mdl), mdx_path, self._current_game)
         thread = QtCore.QThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
+        worker.progress.connect(self._on_model_load_progress)
         worker.finished.connect(self._on_model_loaded)
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
@@ -3700,7 +3818,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if error:
             self._log(f"Model load failed:\n{error}", "error")
             self.statusBar().showMessage("Model load failed")
+            self._pending_gpu_upload_model_id = 0
+            self._pending_gpu_upload_total = 0
+            self._finish_progress_toast("Model load failed", "Check the output log for details.")
             return
+        self._update_progress_toast("Loading model", "Updating viewport and panels...", 5, 6)
         self._animation_timer.stop()
         self._animation_engine = None
         self._animation_last_tick = None
@@ -3735,6 +3857,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.skeleton_panel.load_model(model)
         if hasattr(self, "properties_panel"):
             self.properties_panel.show_model(model)
+        if hasattr(self, "module_geometry_panel"):
+            self.module_geometry_panel.show_model(model)
         if hasattr(self, "animations_panel"):
             self.animations_panel.load_model(model)
         if hasattr(self, "animation_retarget_panel"):
@@ -3758,7 +3882,31 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 ]
             )
         )
-        self._log(f"Loaded {name} ({mesh_count} mesh, {node_count} nodes)", "success")
+        prebuilt_meshes = int(getattr(model, "_gr_gpu_prebuilt_mesh_count", 0) or 0)
+        if prebuilt_meshes:
+            self._pending_gpu_upload_model_id = id(model)
+            self._pending_gpu_upload_total = prebuilt_meshes
+            self._update_progress_toast(
+                "Uploading mesh buffers",
+                f"Moving mesh buffers into GPU memory (0/{prebuilt_meshes})...",
+                0,
+                prebuilt_meshes,
+            )
+            QtCore.QTimer.singleShot(
+                5000,
+                lambda model_id=id(model): self._finish_model_load_toast_if_pending(model_id),
+            )
+        else:
+            self._pending_gpu_upload_model_id = 0
+            self._pending_gpu_upload_total = 0
+            self._finish_progress_toast("Model ready", f"{name} loaded.")
+        if prebuilt_meshes:
+            self._log(
+                f"Loaded {name} ({mesh_count} mesh, {node_count} nodes; {prebuilt_meshes} GPU buffers prepared in RAM)",
+                "success",
+            )
+        else:
+            self._log(f"Loaded {name} ({mesh_count} mesh, {node_count} nodes)", "success")
         self.statusBar().showMessage(f"Loaded {name}")
 
     def _infer_game_from_model(self, model) -> str:
@@ -3779,6 +3927,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         k1_dir, k2_dir = self._configured_game_dirs()
         if not (k1_dir or k2_dir):
             return None
+        existing = getattr(self, "_resource_manager", None)
+        if existing is not None and getattr(self, "_resource_manager_dirs", ("", "")) == (k1_dir, k2_dir):
+            return existing
         try:
             from src.core.resource_manager import ResourceManager
 
@@ -3788,6 +3939,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             if k2_dir:
                 mgr.set_k2_dir(k2_dir)
             self._resource_manager = mgr
+            self._resource_manager_dirs = (k1_dir, k2_dir)
             return mgr
         except Exception as exc:
             self._log(f"Resource manager unavailable: {exc}", "warning")
