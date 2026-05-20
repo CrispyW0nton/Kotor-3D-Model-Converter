@@ -4358,6 +4358,35 @@ class GpuRenderer:
 
     # ── Main render entry ─────────────────────────────────────────────────────
 
+    def reset_framebuffers(self) -> None:
+        """Release cached offscreen render targets while keeping the GL context alive."""
+
+        def _release_fbo(fbo) -> None:
+            if fbo is None:
+                return
+            try:
+                for attachment in getattr(fbo, "color_attachments", []) or []:
+                    if attachment is not None:
+                        attachment.release()
+                depth = getattr(fbo, "depth_attachment", None)
+                if depth is not None:
+                    depth.release()
+                fbo.release()
+            except Exception:
+                pass
+
+        _release_fbo(self._fbo)
+        _release_fbo(self._fbo_resolve)
+        _release_fbo(self._fbo_simple)
+        self._fbo = None
+        self._fbo_resolve = None
+        self._fbo_simple = None
+        self._fbo_w = 0
+        self._fbo_h = 0
+        self._fbo_simple_w = 0
+        self._fbo_simple_h = 0
+        self._fbo_msaa = False
+
     def _ensure_grid_vao(self):
         if not (_NUMPY and self._ctx is not None and self._grid_prog is not None):
             return None

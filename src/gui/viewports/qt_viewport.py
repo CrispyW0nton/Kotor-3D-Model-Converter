@@ -764,6 +764,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gpu_tex_preload_model_id = 0
         if self._gpu_renderer is not None:
             self._gpu_renderer.clear_caches()
+            self._gpu_renderer.reset_framebuffers()
         if model is None:
             self._transform_gizmo.clear_selection()
             self._gpu_upload_total = 0
@@ -818,7 +819,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         if self._thumbnail_visible_setting:
             self._refresh_thumbnail_safe()
         self.modelChanged.emit(model)
-        self._request_render()
+        self._request_render(fast=True)
         self._queue_post_load_gpu_refresh()
 
     def set_model(self, model) -> None:

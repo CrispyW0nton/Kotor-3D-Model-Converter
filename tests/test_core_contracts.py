@@ -147,6 +147,21 @@ def test_qt_gpu_viewport_keeps_gpu_for_wire_and_texture_off_modes() -> None:
     assert "show_wireframe = bool(self._renderer.show_wireframe)" in gpu_source
 
 
+def test_qt_gpu_viewport_resets_render_targets_on_model_load() -> None:
+    import inspect
+
+    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    gpu_source = inspect.getsource(GpuRenderer.reset_framebuffers)
+    load_source = inspect.getsource(QtViewportWidget.load_model)
+
+    assert "self._fbo = None" in gpu_source
+    assert "self._fbo_simple = None" in gpu_source
+    assert "reset_framebuffers()" in load_source
+    assert "self._request_render(fast=True)" in load_source
+
+
 def test_gpu_renderer_supports_texture_off_and_wireframe_modes() -> None:
     import inspect
 
