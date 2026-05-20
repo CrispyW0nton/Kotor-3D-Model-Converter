@@ -262,6 +262,30 @@ def test_gpu_skin_bone_ids_split_to_int32_buffer() -> None:
     assert main_vbo[0, 14:18].tolist() == [0.25, 0.75, 0.0, 0.0]
 
 
+def test_vbo_expanded_path_uses_per_face_lightmap_uvs() -> None:
+    from src.gui.qt_lib.rendering.gpu_renderer import _build_vbo_data
+
+    node = SimpleNamespace(
+        name="lightmapped_seam_quad",
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (0.75, 0.25)],
+        uvs_lm=[(0.1, 0.1), (0.2, 0.2), (0.3, 0.3), (0.9, 0.8)],
+        faces=[(0, 1, 2)],
+        face_uvs=[(0, 3, 2)],
+        is_skin=False,
+        vertex_space=1,
+        skin_data=[],
+    )
+
+    vbo, indices = _build_vbo_data(node, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0))
+
+    assert indices is None
+    assert vbo is not None
+    assert vbo[1, 6:8].tolist() == pytest.approx([0.75, 0.25])
+    assert vbo[1, 8:10].tolist() == pytest.approx([0.9, 0.8])
+
+
 def test_qbone_inverse_bind_matrix_uses_skin_slot_data() -> None:
     from src.core.gpu_skinning import MatrixPaletteUploader
 
@@ -1225,7 +1249,11 @@ def test_gpu_shader_exposes_lightmap_composite_modes() -> None:
     assert "u_lm_composite_mode == 2" in _FRAG_SRC
     assert "diffuse_samp.rgb * lm_samp.rgb * 2.0;" in _FRAG_SRC
     assert "u_lm_composite_mode == 3" in _FRAG_SRC
-    assert "diffuse_samp.rgb * (lm_samp.rgb * 2.5 + vec3(0.03));" in _FRAG_SRC
+    assert "uniform float u_lightmap_intensity" in _FRAG_SRC
+    assert "uniform int   u_lightmap_mode" in _FRAG_SRC
+    assert "vec3 baked_light = mix(vec3(1.0), lm_samp.rgb * 2.0" in _FRAG_SRC
+    assert "u_lightmap_mode == 2" in _FRAG_SRC
+    assert "baked_light + dynamic_light" not in _FRAG_SRC
 
 
 def test_gl_state_trace_record_captures_node_and_state() -> None:
@@ -1843,3 +1871,19 @@ def test_c_drexlf_texture_alias_resolves_shipped_diffuse() -> None:
     textures = resolve_model_textures(model, manager=manager, game="K2")
 
     assert "c_drex01" in textures
+
+
+@pytest.mark.skipif(not K1_PATH.exists(), reason="K1 install not available")
+def test_k1_aurora_light_controllers_populate_runtime_light_fields() -> None:
+    from src.core.kotor_loader import load_model_from_bytes
+
+    mdl, mdx = _raw_model("k1", "m01aa_04a")
+    model = load_model_from_bytes(mdl, mdx)
+    lights = {node.name: node for node in model.all_nodes() if node.is_light}
+
+    light = lights["AuroraLight254"]
+    assert light.light_radius == pytest.approx(12.0)
+    assert light.light_multiplier == pytest.approx(2.0)
+    assert light.light_color == pytest.approx((0.921571, 0.964708, 1.0))
+    assert light.light_kind == "point"
+    assert light.light_enabled is True

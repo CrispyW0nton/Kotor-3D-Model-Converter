@@ -53,6 +53,9 @@ Features
 import math, os, logging, struct, threading, time as _time_mod
 # (Tk import removed in T001 split; viewport_tk.py itself was deleted in M3/T302.)
 
+from src.measurement.grid_measurement import GridMeasurement
+from src.measurement.unit_system import UnitSystem
+
 _GR_VIEWPORT_PROBE = os.environ.get('GHOSTRIGGER_VIEWPORT_PROBE', '').strip().lower() in ('1', 'true', 'yes', 'on')
 _GR_VIEWPORT_PROBE_SEEN: set = set()
 
@@ -3368,8 +3371,21 @@ class FrameRenderer:
         self.show_wireframe = False
         self.show_solid     = True
         self.show_grid      = True
+        self.unit_system    = UnitSystem()
+        self.grid_measurement = GridMeasurement(self.unit_system)
         self.show_texture   = False   # Toggle textured rendering
         self.render_mode    = "realistic"
+        self.show_diffuse_map: bool = True
+        self.show_lightmap_map: bool = False
+        self.show_environment_map: bool = True
+        self.show_specular_map: bool = True
+        self.show_normal_map: bool = True
+        self.lightmap_intensity: float = 0.55
+        self.lightmap_mode: str = "disabled"
+        self.lighting_mode: str = "scene"
+        self.shader_complexity_mode: str = "off"
+        self.show_light_gizmos: bool = True
+        self.show_light_radius_volumes: bool = False
         self.is_interactive = False   # True while mouse dragged (enable LOD)
         # FIX (v10.4): Explicitly declare _lq_tex_mode in __init__ so that
         # getattr(self, '_lq_tex_mode', False) is never needed; the attribute
@@ -4223,34 +4239,39 @@ class FrameRenderer:
         return to_screen(c0), to_screen(c1)
 
     def _draw_grid(self, draw: 'ImageDraw.Draw', W: int, H: int):
-        step = 1.0
-        major_every = 5
-        extent = 20.0
+        grid = getattr(self, "grid_measurement", None)
+        step = float(getattr(grid, "minor_spacing", 1.0) or 1.0)
+        major_every = int(getattr(grid, "major_every", 5) or 5)
+        extent = max(step * 20.0, float(getattr(grid, "major_spacing", step * major_every)) * 4.0)
         try:
             if self.model is not None:
                 bb_min, bb_max = self._get_render_bounds()
-                size_x = abs(float(bb_max[0]) - float(bb_min[0]))
-                size_y = abs(float(bb_max[1]) - float(bb_min[1]))
-                centre_x = (float(bb_min[0]) + float(bb_max[0])) * 0.5
-                centre_y = (float(bb_min[1]) + float(bb_max[1])) * 0.5
-                radius = max(
-                    size_x,
-                    size_y,
-                    abs(centre_x) + size_x * 0.5,
-                    abs(centre_y) + size_y * 0.5,
-                    8.0,
-                ) * 1.5
-                extent = max(16.0, min(60.0, math.ceil(radius / major_every) * major_every))
+                if grid is not None:
+                    extent = grid.extent_for_bounds((bb_min, bb_max))
+                else:
+                    size_x = abs(float(bb_max[0]) - float(bb_min[0]))
+                    size_y = abs(float(bb_max[1]) - float(bb_min[1]))
+                    centre_x = (float(bb_min[0]) + float(bb_max[0])) * 0.5
+                    centre_y = (float(bb_min[1]) + float(bb_max[1])) * 0.5
+                    radius = max(
+                        size_x,
+                        size_y,
+                        abs(centre_x) + size_x * 0.5,
+                        abs(centre_y) + size_y * 0.5,
+                        8.0,
+                    ) * 1.5
+                    extent = max(16.0, min(60.0, math.ceil(radius / major_every) * major_every))
         except Exception:
             pass
-        x0 = -int(extent)
-        x1 = int(extent)
-        y0 = -int(extent)
-        y1 = int(extent)
+        x0 = math.floor(-extent / step)
+        x1 = math.ceil(extent / step)
+        y0 = math.floor(-extent / step)
+        y1 = math.ceil(extent / step)
         minor = _GRID[:3]
         major = (82, 90, 102)
         x_axis = (118, 54, 54)
         y_axis = (62, 112, 68)
+        label_points = []
         for i in range(y0, y1 + 1):
             y = i * step
             segment = self._project_clipped_line((x0 * step, y, 0.0), (x1 * step, y, 0.0), W, H)
@@ -4258,6 +4279,8 @@ class FrameRenderer:
                 p1, p2 = segment
                 col = x_axis if i == 0 else major if i % major_every == 0 else minor
                 draw.line([p1[0], p1[1], p2[0], p2[1]], fill=col, width=1)
+                if i != 0 and i % major_every == 0:
+                    label_points.append((i, y, p1, p2))
         for i in range(x0, x1 + 1):
             x = i * step
             segment = self._project_clipped_line((x, y0 * step, 0.0), (x, y1 * step, 0.0), W, H)
@@ -4265,6 +4288,33 @@ class FrameRenderer:
                 p1, p2 = segment
                 col = y_axis if i == 0 else major if i % major_every == 0 else minor
                 draw.line([p1[0], p1[1], p2[0], p2[1]], fill=col, width=1)
+                if i != 0 and i % major_every == 0:
+                    label_points.append((i, x, p1, p2))
+        if grid is None or not getattr(grid, "show_labels", True):
+            return
+        try:
+            major_px = 80.0
+            origin = self._proj(0.0, 0.0, 0.0, W, H)
+            major_proj = self._proj(float(getattr(grid, "major_spacing", step * major_every)), 0.0, 0.0, W, H)
+            if origin is not None and major_proj is not None:
+                major_px = abs(float(major_proj[0]) - float(origin[0]))
+            stride = grid.label_stride(major_px)
+            drawn = 0
+            for idx, value, p1, p2 in label_points:
+                major_idx = int(round(idx / max(major_every, 1)))
+                if major_idx % stride != 0:
+                    continue
+                mx = int((p1[0] + p2[0]) * 0.5)
+                my = int((p1[1] + p2[1]) * 0.5)
+                if mx < 12 or mx > W - 80 or my < 12 or my > H - 20:
+                    continue
+                label = grid.format_label(float(value))
+                draw.text((mx + 4, my + 4), label, fill=(174, 184, 198, 205))
+                drawn += 1
+                if drawn >= 16:
+                    break
+        except Exception:
+            return
 
     # ── Texture loading helper ─────────────────────────────────────────
 
@@ -4317,6 +4367,22 @@ class FrameRenderer:
                         pass
                 self.textures[key] = img
         return img
+
+    def _get_image_by_path(self, path: str, cache_name: str = "") -> Optional['Image.Image']:
+        if not path or not _PIL:
+            return None
+        key = (cache_name or path).lower()
+        img = self.textures.get(key)
+        if img is not None:
+            return img
+        try:
+            if not os.path.isfile(path):
+                return None
+            img = Image.open(path).convert('RGBA')
+            self.textures[key] = img
+            return img
+        except Exception:
+            return None
 
     def _get_tex_for_face(self, node: ModelNode, face_idx: int) -> Optional['Image.Image']:
         """Return the correct texture image for a specific face index.
@@ -5989,11 +6055,15 @@ class FrameRenderer:
             # NOTE: _node_has_lm was already computed above (FIX-LMROUTE-V2)
             # for the multitex check.  No need to re-compute here.
             _lm_tex_name   = str(getattr(node, 'lightmap', ''))
+            _lm_override_path = str(getattr(node, '_gr_baked_lightmap_preview_path', '') or getattr(node, '_gr_baked_lightmap_path', '') or '')
+            _lm_override_name = str(getattr(node, '_gr_baked_lightmap_preview_name', '') or '')
             _uvs_lm        = getattr(node, 'uvs_lm', [])
             _n_uvs_lm      = len(_uvs_lm)
             _has_lm_uvs    = (_n_uvs_lm > 0)
             lm_img = None
-            if _node_has_lm and _lm_tex_name and _has_lm_uvs:
+            if _lm_override_path and _has_lm_uvs:
+                lm_img = self._get_image_by_path(_lm_override_path, _lm_override_name)
+            elif _node_has_lm and _lm_tex_name and _has_lm_uvs:
                 lm_img = self._get_tex_by_name(_lm_tex_name)
 
             # ── Environment map setup (TXI envmaptexture) ──────────────────

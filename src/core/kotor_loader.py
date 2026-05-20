@@ -85,7 +85,10 @@ _TYPE_FLAGS: Dict[int, int] = {
 _CT_POS    = int(MDLControllerType.POSITION)     # 8
 _CT_ORI    = int(MDLControllerType.ORIENTATION)  # 20
 _CT_SCALE  = int(MDLControllerType.SCALE)        # 36
+_CT_COLOR  = int(MDLControllerType.COLOR)        # 76
+_CT_RADIUS = int(MDLControllerType.RADIUS)       # 88
 _CT_ALPHA  = int(MDLControllerType.ALPHA)        # 132
+_CT_MULT   = int(MDLControllerType.MULTIPLIER)   # 140
 _CT_ILLUM  = int(MDLControllerType.SELFILLUMCOLOR)  # 100
 
 
@@ -529,6 +532,9 @@ def _convert_node(pk_node, parent: Optional[ModelNode],
         if skin_obj is not None:
             _read_skin_textures(skin_obj, gr)       # texture overrides from skin
             _read_skin_weights(skin_obj, gr, id_to_pknode)
+
+    if ntype == int(MDLNodeType.LIGHT):
+        _read_light(pk_node, gr)
 
     # Recurse children
     for child_pk in (pk_node.children or []):
@@ -1064,17 +1070,36 @@ def _read_dangly(mesh, gr: ModelNode) -> None:
 # ── Controllers ───────────────────────────────────────────────────────────────
 
 # Controller type ID → name mapping (subset; extended mapping in MDLBinaryParser._parse_controllers)
+def _read_light(pk_node, gr: ModelNode) -> None:
+    """Read binary Aurora light-header flags exposed by PyKotor."""
+    light = getattr(pk_node, 'light', None)
+    if light is None:
+        return
+    gr.light_ambient_only = bool(getattr(light, 'ambient_only', 0))
+    gr.light_dynamic = int(getattr(light, 'dynamic_type', 0) or 0)
+    gr.light_shadow = bool(getattr(light, 'shadow', 0))
+    gr.light_flare = bool(getattr(light, 'flare', 0))
+    gr.light_fading = bool(getattr(light, 'fading_light', 0))
+    flare_radius = float(getattr(light, 'flare_radius', 0.0) or 0.0)
+    if flare_radius > 0.0 and gr.light_radius <= 0.0:
+        gr.light_radius = flare_radius
+
+
 _CT_NAMES: Dict[int, str] = {
     8:   'position',
     20:  'orientation',
     36:  'scale',
+    76:  'color',
+    88:  'radius',
+    96:  'shadow_radius',
     100: 'selfillum_color',
     128: 'alpha',
     132: 'alpha',
+    140: 'multiplier',
 }
 # Canonical column counts per controller type
 _CT_COLS: Dict[int, int] = {
-    8: 3, 20: 4, 36: 1, 100: 3, 128: 1, 132: 1,
+    8: 3, 20: 4, 36: 1, 76: 3, 88: 1, 96: 1, 100: 3, 128: 1, 132: 1, 140: 1,
 }
 
 
@@ -1103,8 +1128,17 @@ def _read_controllers(pk_node, gr: ModelNode) -> None:
         elif ct == _CT_SCALE:
             gr.controllers.append({'type': _CT_SCALE, 'name': name, 'columns': 1,
                                    'times': times, 'values': [[v[0]] for v in values]})
+        elif ct == _CT_COLOR and len(first) >= 3:
+            gr.controllers.append({'type': _CT_COLOR, 'name': name, 'columns': 3,
+                                   'times': times, 'values': [v[:3] for v in values]})
+        elif ct == _CT_RADIUS:
+            gr.controllers.append({'type': _CT_RADIUS, 'name': name, 'columns': 1,
+                                   'times': times, 'values': [[v[0]] for v in values]})
         elif ct == _CT_ALPHA:
             gr.controllers.append({'type': _CT_ALPHA, 'name': name, 'columns': 1,
+                                   'times': times, 'values': [[v[0]] for v in values]})
+        elif ct == _CT_MULT:
+            gr.controllers.append({'type': _CT_MULT, 'name': name, 'columns': 1,
                                    'times': times, 'values': [[v[0]] for v in values]})
         elif ct == _CT_ILLUM and len(first) >= 3:
             gr.controllers.append({'type': _CT_ILLUM, 'name': name, 'columns': 3,
@@ -1256,6 +1290,12 @@ def _apply_bind_pose(model: KotorModel) -> None:
             elif ct == 100 and len(v0) >= 3:
                 # ctype == 100: selfillum_color (CTRL_MESH_SELFILLUMCOLOR)
                 node.selfillum = tuple(v0[:3])
+            elif ct == _CT_COLOR and len(v0) >= 3 and node.is_light:
+                node.light_color = tuple(max(0.0, float(x)) for x in v0[:3])
+            elif ct == _CT_RADIUS and len(v0) >= 1 and node.is_light:
+                node.light_radius = max(0.0, float(v0[0]))
+            elif ct == _CT_MULT and len(v0) >= 1 and node.is_light:
+                node.light_multiplier = max(0.0, float(v0[0]))
             elif ct == 132 and len(v0) >= 1:
                 # ctype == 132: alpha (CTRL_MESH_ALPHA)
                 node.alpha = float(v0[0])
