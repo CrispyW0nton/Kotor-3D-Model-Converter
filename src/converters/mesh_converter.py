@@ -844,6 +844,7 @@ class OBJExporter:
         # Copy/save texture files alongside the OBJ when tex_cache is available
         if tex_cache is not None:
             self._export_textures_to_dir(model, out_dir, tex_cache)
+        self._export_baked_lightmaps_to_dir(model, out_dir)
 
         # Export rigging + animations into a dedicated subfolder
         if export_rigging:
@@ -881,6 +882,36 @@ class OBJExporter:
                 log.debug(f"Could not save texture '{tex_name}': {e}")
         if saved:
             log.info(f"Saved {saved} texture(s) alongside export in {out_dir}")
+        return saved
+
+    @staticmethod
+    def _export_baked_lightmaps_to_dir(model: KotorModel, out_dir: Path) -> int:
+        """Copy generated lightmap assets next to exported scene files."""
+        saved = 0
+        seen: set[str] = set()
+        for node in model.mesh_nodes():
+            path = str(getattr(node, "_gr_baked_lightmap_path", "") or "")
+            if not path or path.lower() in seen:
+                continue
+            seen.add(path.lower())
+            try:
+                source = Path(path)
+                if not source.is_file():
+                    continue
+                target = out_dir / source.name
+                if source.resolve() != target.resolve():
+                    target.write_bytes(source.read_bytes())
+                saved += 1
+            except Exception as exc:
+                log.debug(f"Could not copy baked lightmap '{path}': {exc}")
+        if saved:
+            try:
+                from src.gui.lighting.lightmap_export_bridge import export_baked_lightmap_manifest
+
+                export_baked_lightmap_manifest(model, out_dir)
+            except Exception as exc:
+                log.debug(f"Could not write baked lightmap export metadata: {exc}")
+            log.info(f"Copied {saved} baked lightmap asset(s) alongside export in {out_dir}")
         return saved
 
 
@@ -1170,6 +1201,8 @@ class FBXExporter:
         out_dir = Path(fbx_path).parent
         if ok and tex_cache is not None:
             OBJExporter._export_textures_to_dir(model, out_dir, tex_cache)
+        if ok:
+            OBJExporter._export_baked_lightmaps_to_dir(model, out_dir)
 
         # Export rigging + animations into a dedicated subfolder
         if ok and export_rigging:

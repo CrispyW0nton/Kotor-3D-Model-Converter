@@ -43,6 +43,7 @@ from src.gui.qt_lib.windows.qt_blueprint_editor import QtBlueprintEditorWindow
 from src.gui.qt_lib.panels.qt_character_builder_panel import QtCharacterBuilderWindow
 from src.gui.qt_lib.panels.qt_diagnostics_panel import QtDiagnosticsWindow
 from src.gui.qt_lib.dialogs.qt_dialogs import show_about, show_format_reference, show_ipc_info, show_viewport_navigation_reference
+from src.gui.qt_lib.dialogs.qt_lightmap_baker_dialog import QtLightmapBakerDialog
 from src.gui.qt_lib.panels.qt_modular_panel import QtModularModePanel
 from src.gui.qt_lib.panels.qt_resource_panel import QtResourceBrowserPanel, QtTwoDaBrowserPanel
 from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
@@ -1346,6 +1347,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.lighting_panel.helperVisibilityChanged.connect(self.viewport.set_light_helper_visibility)
         self.lighting_panel.lightChanged.connect(self.viewport.refresh_lighting)
         self.lighting_panel.lightSelected.connect(self.viewport.set_selected_node)
+        self.lighting_panel.lightmapBakeRequested.connect(self._open_lightmap_baker)
         self.viewport.nodeSelected.connect(self.lighting_panel.select_light)
         self.module_geometry_panel.moduleMeshesSelected.connect(self.viewport.set_selected_meshes)
         self.module_geometry_panel.moduleMeshVisibilityChanged.connect(self.viewport.refresh_view)
@@ -1706,6 +1708,41 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def _get_tex_cache_for_export(self):
         return None
+
+    def _open_lightmap_baker(self) -> None:
+        if self._current_model is None:
+            QtWidgets.QMessageBox.information(self, "Lightmap Baker", "Load a model or module before baking lightmaps.")
+            return
+        dialog = QtLightmapBakerDialog(
+            self,
+            model=self._current_model,
+            lights=list(self.lighting_panel.manager.all_lights()) if hasattr(self, "lighting_panel") else [],
+            selected_meshes=self.viewport.get_selected_meshes() if hasattr(self.viewport, "get_selected_meshes") else [],
+            visible_meshes=self.viewport.get_visible_meshes() if hasattr(self.viewport, "get_visible_meshes") else [],
+            texture_cache=self._get_tex_cache_for_export(),
+            default_output_dir=str((Path.cwd() / "exports" / "lightmaps").resolve()),
+        )
+        dialog.previewRequested.connect(self._preview_baked_lightmaps)
+        dialog.applyRequested.connect(self._apply_baked_lightmaps)
+        dialog.revertRequested.connect(self._revert_baked_lightmaps)
+        self._lightmap_baker_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _preview_baked_lightmaps(self, result) -> None:
+        assignments = result.preview_assignments() if result is not None and hasattr(result, "preview_assignments") else {}
+        self.viewport.set_baked_lightmap_assignments(assignments, preview=True)
+        self._log(f"Previewing {len(assignments)} baked lightmap(s).", "success")
+
+    def _apply_baked_lightmaps(self, result) -> None:
+        assignments = result.preview_assignments() if result is not None and hasattr(result, "preview_assignments") else {}
+        self.viewport.set_baked_lightmap_assignments(assignments, preview=False)
+        self._log(f"Applied {len(assignments)} baked lightmap assignment(s) to the current scene state.", "success")
+
+    def _revert_baked_lightmaps(self) -> None:
+        self.viewport.revert_baked_lightmaps()
+        self._log("Reverted baked lightmap preview/apply overrides.", "info")
 
     def _call_viewport(self, method_name: str):
         viewport = getattr(self, "viewport", None)

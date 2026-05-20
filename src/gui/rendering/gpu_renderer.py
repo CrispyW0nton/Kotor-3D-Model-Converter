@@ -5834,8 +5834,8 @@ class GpuRenderer:
                     _u['u_tex'].value = 0
                     _u['u_has_tex'].value = 0
 
-                has_lm_flag = bool(getattr(node, 'has_lightmap', False))
-                lm_name     = str(getattr(node, 'lightmap', '')).strip().lower()
+                has_lm_flag = bool(getattr(node, 'has_lightmap', False) or getattr(node, '_gr_baked_lightmap_preview_name', ''))
+                lm_name     = str(getattr(node, '_gr_baked_lightmap_preview_name', '') or getattr(node, 'lightmap', '')).strip().lower()
                 uvs_lm      = getattr(node, 'uvs_lm', [])
                 # FIX-LMROLE-V2 (Phase D10): Infer lightmap when texture_2 is present
                 # with valid lightmap UVs.  The KotOR texture model is: texture_1 =

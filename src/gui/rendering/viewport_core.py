@@ -4339,6 +4339,22 @@ class FrameRenderer:
                 self.textures[key] = img
         return img
 
+    def _get_image_by_path(self, path: str, cache_name: str = "") -> Optional['Image.Image']:
+        if not path or not _PIL:
+            return None
+        key = (cache_name or path).lower()
+        img = self.textures.get(key)
+        if img is not None:
+            return img
+        try:
+            if not os.path.isfile(path):
+                return None
+            img = Image.open(path).convert('RGBA')
+            self.textures[key] = img
+            return img
+        except Exception:
+            return None
+
     def _get_tex_for_face(self, node: ModelNode, face_idx: int) -> Optional['Image.Image']:
         """Return the correct texture image for a specific face index.
 
@@ -5988,11 +6004,15 @@ class FrameRenderer:
             # NOTE: _node_has_lm was already computed above (FIX-LMROUTE-V2)
             # for the multitex check.  No need to re-compute here.
             _lm_tex_name   = str(getattr(node, 'lightmap', ''))
+            _lm_override_path = str(getattr(node, '_gr_baked_lightmap_preview_path', '') or getattr(node, '_gr_baked_lightmap_path', '') or '')
+            _lm_override_name = str(getattr(node, '_gr_baked_lightmap_preview_name', '') or '')
             _uvs_lm        = getattr(node, 'uvs_lm', [])
             _n_uvs_lm      = len(_uvs_lm)
             _has_lm_uvs    = (_n_uvs_lm > 0)
             lm_img = None
-            if _node_has_lm and _lm_tex_name and _has_lm_uvs:
+            if _lm_override_path and _has_lm_uvs:
+                lm_img = self._get_image_by_path(_lm_override_path, _lm_override_name)
+            elif _node_has_lm and _lm_tex_name and _has_lm_uvs:
                 lm_img = self._get_tex_by_name(_lm_tex_name)
 
             # ── Environment map setup (TXI envmaptexture) ──────────────────

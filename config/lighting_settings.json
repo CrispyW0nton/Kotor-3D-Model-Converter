@@ -10,9 +10,9 @@
     "radius",
     "intensity"
   ],
-  "lightmap_intensity": 0.65,
+  "lightmap_intensity": 0.7000000000000002,
   "lightmap_map": false,
-  "lightmap_mode": "dynamic_preview",
+  "lightmap_mode": "disabled",
   "normal_map": true,
   "scene_lighting_mode": "scene",
   "selected_lighting_rig_preset": "kotor_original",

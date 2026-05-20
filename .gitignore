@@ -51,6 +51,7 @@ game_data/
 !/tests/test_head_viseme_panel.py
 !/tests/test_head_phoneme_panel.py
 !/tests/test_head_camera_preset.py
+!/tests/test_lightmap_baker.py
 test_assets/
 pytest.ini
 .pytest_cache/

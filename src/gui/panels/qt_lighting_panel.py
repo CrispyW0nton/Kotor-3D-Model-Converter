@@ -27,6 +27,7 @@ class QtLightingPanel(QtWidgets.QWidget):
     helperVisibilityChanged = QtCore.Signal(bool, bool)
     lightChanged = QtCore.Signal()
     lightSelected = QtCore.Signal(object)
+    lightmapBakeRequested = QtCore.Signal()
 
     _TYPE_LABELS = ("Point", "Spot", "Directional", "Area", "Ambient", "AuroraPoint", "AuroraAmbient", "AuroraUnknown")
     _TYPE_VALUES = ("point", "spot", "directional", "area", "ambient", "aurora_point", "aurora_ambient", "aurora_unknown")
@@ -125,6 +126,14 @@ class QtLightingPanel(QtWidgets.QWidget):
         self.lightmap_mode_combo.currentIndexChanged.connect(lambda _index=0: self._emit_lightmap_settings())
         maps_layout.addWidget(self.lightmap_mode_combo, 3, 1, 1, 2)
         root.addWidget(maps)
+
+        bake_row = QtWidgets.QHBoxLayout()
+        self.bake_lightmaps_button = QtWidgets.QPushButton("Bake Lightmaps...")
+        self.bake_lightmaps_button.setToolTip("Generate replacement lightmap textures from the current scene lighting.")
+        self.bake_lightmaps_button.clicked.connect(self.lightmapBakeRequested.emit)
+        bake_row.addWidget(self.bake_lightmaps_button)
+        bake_row.addStretch(1)
+        root.addLayout(bake_row)
 
         self.tree = QtWidgets.QTreeWidget()
         self.tree.setHeaderLabels(list(self._COLUMNS))

@@ -8,6 +8,7 @@ import os
 import re
 import threading
 import time as time_module
+from pathlib import Path
 from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -1582,6 +1583,64 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._sync_transform_typein_bar()
         self._request_render()
 
+    def get_selected_meshes(self) -> list:
+        return [node for node in getattr(self, "_selected_meshes", []) if self._is_selectable_mesh_node(node)]
+
+    def get_visible_meshes(self) -> list:
+        try:
+            return [node for node in self._renderer._iter_visible_mesh_nodes() if not getattr(node, "_gr_hidden", False)]
+        except Exception:
+            return []
+
+    def set_baked_lightmap_assignments(self, assignments: dict, *, preview: bool = True) -> None:
+        model = self.model
+        if model is None:
+            return
+        by_name = {str(name): str(path) for name, path in (assignments or {}).items() if path}
+        nodes = model.all_nodes() if hasattr(model, "all_nodes") else []
+        for node in nodes:
+            name = str(getattr(node, "name", ""))
+            if name not in by_name:
+                continue
+            if not hasattr(node, "_gr_original_lightmap_assignment"):
+                setattr(node, "_gr_original_lightmap_assignment", getattr(node, "lightmap", ""))
+                setattr(node, "_gr_original_has_lightmap", bool(getattr(node, "has_lightmap", False)))
+            path = by_name[name]
+            setattr(node, "_gr_baked_lightmap_path", path)
+            setattr(node, "_gr_baked_lightmap_preview_path", path if preview else "")
+            setattr(node, "_gr_baked_lightmap_preview_name", Path(path).stem.lower())
+            if not preview:
+                setattr(node, "lightmap", Path(path).stem.lower())
+                setattr(node, "has_lightmap", True)
+        setattr(model, "_gr_baked_lightmap_assignments", dict(by_name))
+        setattr(model, "_gr_baked_lightmap_preview_enabled", bool(preview))
+        self._renderer.textures.clear()
+        if self._gpu_renderer is not None:
+            self._gpu_renderer.clear_caches()
+        self._request_render()
+
+    def revert_baked_lightmaps(self) -> None:
+        model = self.model
+        if model is None:
+            return
+        nodes = model.all_nodes() if hasattr(model, "all_nodes") else []
+        for node in nodes:
+            if hasattr(node, "_gr_original_lightmap_assignment"):
+                setattr(node, "lightmap", getattr(node, "_gr_original_lightmap_assignment", ""))
+                setattr(node, "has_lightmap", bool(getattr(node, "_gr_original_has_lightmap", False)))
+            for attr in ("_gr_baked_lightmap_preview_path", "_gr_baked_lightmap_preview_name"):
+                if hasattr(node, attr):
+                    delattr(node, attr)
+        setattr(model, "_gr_baked_lightmap_preview_enabled", False)
+        self._renderer.textures.clear()
+        if self._gpu_renderer is not None:
+            self._gpu_renderer.clear_caches()
+        self._request_render()
+
+    def get_baked_lightmap_assignments(self) -> dict:
+        model = self.model
+        return dict(getattr(model, "_gr_baked_lightmap_assignments", {}) or {}) if model is not None else {}
+
     def _clear_mesh_selection_flags(self) -> None:
         for node in self._selected_meshes:
             try:
@@ -2581,6 +2640,17 @@ class QtViewportWidget(QtWidgets.QWidget):
             for key, value in getattr(tex_cache, "_cache", {}).items()
             if value is not None
         }
+        try:
+            from PIL import Image
+
+            nodes = self.model.all_nodes() if hasattr(self.model, "all_nodes") else []
+            for node in nodes:
+                override_path = str(getattr(node, "_gr_baked_lightmap_preview_path", "") or getattr(node, "_gr_baked_lightmap_path", "") or "")
+                override_name = str(getattr(node, "_gr_baked_lightmap_preview_name", "") or "")
+                if override_path and override_name and os.path.isfile(override_path):
+                    textures[override_name.lower()] = Image.open(override_path).convert("RGBA")
+        except Exception:
+            pass
         self._gpu_renderer.interactive = bool(
             self._renderer.is_interactive
             or self._pan_dragging
