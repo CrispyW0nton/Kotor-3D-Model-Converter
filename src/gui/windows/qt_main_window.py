@@ -1342,6 +1342,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.lighting_panel.lightingModeChanged.connect(self.viewport.set_lighting_mode)
         self.lighting_panel.mapToggled.connect(self.viewport.set_texture_map_enabled)
         self.lighting_panel.lightmapSettingsChanged.connect(self.viewport.set_lightmap_settings)
+        self.lighting_panel.shaderComplexityChanged.connect(self.viewport.set_shader_complexity_mode)
+        self.lighting_panel.helperVisibilityChanged.connect(self.viewport.set_light_helper_visibility)
         self.lighting_panel.lightChanged.connect(self.viewport.refresh_lighting)
         self.lighting_panel.lightSelected.connect(self.viewport.set_selected_node)
         self.viewport.nodeSelected.connect(self.lighting_panel.select_light)

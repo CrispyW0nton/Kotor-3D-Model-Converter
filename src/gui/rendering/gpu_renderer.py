@@ -180,6 +180,17 @@ import struct
 import time
 from typing import Dict, List, Optional, Tuple
 
+from src.gui.lighting.light_gizmo_renderer import (
+    LIGHT_HELPER_AREA_SIZE,
+    LIGHT_HELPER_COLORS,
+    LIGHT_HELPER_DIRECTION_LENGTH,
+    LIGHT_HELPER_MARKER_RADIUS,
+    LIGHT_HELPER_POINT_RADIUS,
+    LIGHT_HELPER_SELECTED_BOOST,
+    LIGHT_HELPER_SPOT_CAP_MAX_RADIUS,
+    LIGHT_HELPER_SPOT_LENGTH,
+)
+
 _GR_GPU_PROBE = os.environ.get('GHOSTRIGGER_VIEWPORT_PROBE', '').strip().lower() in ('1', 'true', 'yes', 'on')
 _GR_GPU_PROBE_SEEN: set = set()
 
@@ -4145,8 +4156,10 @@ class GpuRenderer:
         self.lightmap_intensity: float = 0.55
         self.lightmap_mode: str = "baked"
         self.lighting_mode: str = "scene"
+        self.shader_complexity_mode: str = "off"
         self.scene_ambient: float = 0.06
         self.show_light_gizmos: bool = True
+        self.show_light_radius_volumes: bool = False
         self.show_wireframe: bool = False
         self.render_mode: str = "realistic"
         self.selected_node = None
@@ -4477,8 +4490,11 @@ class GpuRenderer:
 
         rows = []
         selected = getattr(self, "selected_node", None)
+        draw_volumes = bool(getattr(self, "show_light_radius_volumes", True))
         for node in nodes:
             if not bool(getattr(node, "is_light", False)):
+                continue
+            if bool(getattr(node, "_gr_light_hidden", False)) or bool(getattr(node, "_gr_light_deleted", False)):
                 continue
             try:
                 pos, orient = get_world_transform(node)
@@ -4486,54 +4502,62 @@ class GpuRenderer:
                 pos = getattr(node, "position", (0.0, 0.0, 0.0))
                 orient = getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))
             kind = str(getattr(node, "light_kind", "point") or "point").lower()
+            helper_kind = kind.replace("aurora_", "")
             enabled = bool(getattr(node, "light_enabled", True))
-            radius = max(0.15, min(float(getattr(node, "light_radius", 5.0) or 5.0), 50.0))
-            area = max(0.2, float(getattr(node, "light_area_size", 1.0) or 1.0))
             cone = max(1.0, min(179.0, float(getattr(node, "light_cone_degrees", 45.0) or 45.0)))
             direction = self._rotate_vec_by_quat((0.0, 0.0, -1.0), orient)
             forward, right, up = _basis(direction)
-            base = {
-                "point": (1.0, 0.86, 0.28),
-                "spot": (0.45, 0.86, 1.0),
-                "directional": (0.56, 1.0, 0.52),
-                "area": (1.0, 0.62, 0.42),
-            }.get(kind, (1.0, 0.86, 0.28))
+            base = LIGHT_HELPER_COLORS.get(helper_kind, LIGHT_HELPER_COLORS["point"])
             if not enabled:
                 base = tuple(c * 0.38 for c in base)
-            if node is selected:
-                base = (1.0, 1.0, 1.0)
+            if bool(getattr(node, "_gr_light_selected", False)):
+                base = tuple(min(1.0, c * LIGHT_HELPER_SELECTED_BOOST) for c in base)
+            if node is selected or bool(getattr(node, "_gr_light_metadata", {}).get("active_selection", False)):
+                base = (0.90, 0.95, 1.0)
 
-            marker = min(max(radius * 0.06, 0.08), 0.35)
-            _ring(rows, pos, right, up, marker, base, steps=16)
-            if kind == "area":
-                half = area * 0.5
+            _ring(rows, pos, right, up, LIGHT_HELPER_MARKER_RADIUS, base, steps=16)
+            if helper_kind == "ambient":
+                continue
+            if helper_kind == "area":
+                half = LIGHT_HELPER_AREA_SIZE * 0.5
                 c0 = _v_add(pos, _v_add(_v_mul(right, -half), _v_mul(up, -half)))
                 c1 = _v_add(pos, _v_add(_v_mul(right, half), _v_mul(up, -half)))
                 c2 = _v_add(pos, _v_add(_v_mul(right, half), _v_mul(up, half)))
                 c3 = _v_add(pos, _v_add(_v_mul(right, -half), _v_mul(up, half)))
                 for a, b in ((c0, c1), (c1, c2), (c2, c3), (c3, c0)):
                     _add_line(rows, a, b, base)
-                _add_line(rows, pos, _v_add(pos, _v_mul(forward, radius * 0.35)), base)
-            elif kind == "directional":
-                target = _v_add(pos, _v_mul(forward, min(radius, 8.0)))
+                _add_line(rows, pos, _v_add(pos, _v_mul(forward, LIGHT_HELPER_DIRECTION_LENGTH * 0.6)), base)
+            elif helper_kind == "directional":
+                target = _v_add(pos, _v_mul(forward, LIGHT_HELPER_DIRECTION_LENGTH))
                 _add_line(rows, pos, target, base)
-                head = min(radius * 0.12, 0.75)
+                head = LIGHT_HELPER_DIRECTION_LENGTH * 0.22
                 _add_line(rows, target, _v_add(_v_sub(target, _v_mul(forward, head)), _v_mul(right, head * 0.45)), base)
                 _add_line(rows, target, _v_add(_v_sub(target, _v_mul(forward, head)), _v_mul(right, -head * 0.45)), base)
                 _add_line(rows, _v_add(target, _v_mul(right, -head * 0.35)), _v_add(target, _v_mul(right, head * 0.35)), base)
                 _add_line(rows, _v_add(target, _v_mul(up, -head * 0.35)), _v_add(target, _v_mul(up, head * 0.35)), base)
-            elif kind == "spot":
-                length = min(radius, 12.0)
-                cap_radius = math.tan(math.radians(cone * 0.5)) * length
+            elif helper_kind == "spot":
+                if not draw_volumes:
+                    _add_line(rows, pos, _v_add(pos, _v_mul(forward, LIGHT_HELPER_SPOT_LENGTH)), base)
+                    continue
+                length = LIGHT_HELPER_SPOT_LENGTH
+                cap_radius = min(
+                    math.tan(math.radians(cone * 0.5)) * length,
+                    LIGHT_HELPER_SPOT_CAP_MAX_RADIUS,
+                )
                 cap = _v_add(pos, _v_mul(forward, length))
-                _ring(rows, cap, right, up, cap_radius, base, steps=32)
+                _ring(rows, cap, right, up, cap_radius, base, steps=20)
                 for sx, sy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
                     edge = _v_add(cap, _v_add(_v_mul(right, cap_radius * sx), _v_mul(up, cap_radius * sy)))
                     _add_line(rows, pos, edge, base)
             else:
-                _ring(rows, pos, (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), radius, base, steps=48)
-                _ring(rows, pos, (1.0, 0.0, 0.0), (0.0, 0.0, 1.0), radius, base, steps=48)
-                _ring(rows, pos, (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), radius, base, steps=48)
+                if not draw_volumes:
+                    continue
+                display_radius = LIGHT_HELPER_POINT_RADIUS
+                if node is selected or bool(getattr(node, "_gr_light_selected", False)):
+                    display_radius = LIGHT_HELPER_POINT_RADIUS * 1.2
+                _ring(rows, pos, (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), display_radius, base, steps=28)
+                _ring(rows, pos, (1.0, 0.0, 0.0), (0.0, 0.0, 1.0), display_radius, base, steps=28)
+                _ring(rows, pos, (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), display_radius, base, steps=28)
 
         if not rows:
             return
@@ -4547,7 +4571,7 @@ class GpuRenderer:
             ctx.disable(moderngl.BLEND)
             ctx.depth_mask = False
             try:
-                ctx.line_width = 1.5
+                ctx.line_width = 1.0
             except Exception:
                 pass
             vao.render(moderngl.LINES)
@@ -4561,6 +4585,7 @@ class GpuRenderer:
     @staticmethod
     def _light_kind_int(node) -> int:
         kind = str(getattr(node, "light_kind", "point") or "point").strip().lower()
+        kind = kind.replace("aurora_", "")
         if kind == "directional":
             return 1
         if kind == "spot":
@@ -4592,6 +4617,8 @@ class GpuRenderer:
                 continue
             if not bool(getattr(node, "light_enabled", True)):
                 continue
+            if bool(getattr(node, "_gr_light_hidden", False)) or bool(getattr(node, "_gr_light_deleted", False)):
+                continue
             try:
                 world_pos, world_orient = get_world_transform(node)
             except Exception:
@@ -4620,7 +4647,12 @@ class GpuRenderer:
     def _upload_scene_lights(self, prog, uniforms, records: list[dict]) -> None:
         count = len(records)
         mode = str(getattr(self, "lighting_mode", "scene") or "scene").lower()
-        lighting_int = 0 if mode == "unlit" else 2 if (mode == "scene" and count > 0) else 1
+        if mode in {"unlit", "fullbright", "diffuse_only", "normal_only", "specular_only", "environment_only", "lightmap_preview", "shader_complexity"}:
+            lighting_int = 0
+        elif mode in {"scene", "photoreal_preview"} and count > 0:
+            lighting_int = 2
+        else:
+            lighting_int = 1
         if "u_scene_lighting" in uniforms:
             uniforms["u_scene_lighting"].value = lighting_int
         if "u_scene_ambient" in uniforms:
@@ -4909,7 +4941,7 @@ class GpuRenderer:
                 _u['u_lightmap_intensity'].value = float(getattr(self, 'lightmap_intensity', 0.55))
             if 'u_lightmap_mode' in _u:
                 _lm_mode = str(getattr(self, 'lightmap_mode', 'baked') or 'baked').lower()
-                _u['u_lightmap_mode'].value = 1 if _lm_mode == 'phong' else 2 if _lm_mode == 'emissive' else 0
+                _u['u_lightmap_mode'].value = 2 if _lm_mode in {'emissive', 'debug'} else 1 if _lm_mode in {'phong', 'dynamic_preview', 'hybrid'} else 0
             _u['u_has_env'].value    = 0
             if 'u_scene_lighting' in _u:
                 _u['u_scene_lighting'].value = 1

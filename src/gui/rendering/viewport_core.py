@@ -3349,6 +3349,17 @@ class FrameRenderer:
         self.grid_measurement = GridMeasurement(self.unit_system)
         self.show_texture   = False   # Toggle textured rendering
         self.render_mode    = "realistic"
+        self.show_diffuse_map: bool = True
+        self.show_lightmap_map: bool = True
+        self.show_environment_map: bool = True
+        self.show_specular_map: bool = True
+        self.show_normal_map: bool = True
+        self.lightmap_intensity: float = 0.55
+        self.lightmap_mode: str = "baked"
+        self.lighting_mode: str = "scene"
+        self.shader_complexity_mode: str = "off"
+        self.show_light_gizmos: bool = True
+        self.show_light_radius_volumes: bool = False
         self.is_interactive = False   # True while mouse dragged (enable LOD)
         # FIX (v10.4): Explicitly declare _lq_tex_mode in __init__ so that
         # getattr(self, '_lq_tex_mode', False) is never needed; the attribute

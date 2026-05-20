@@ -30,6 +30,7 @@ from src.gui.qt_lib.gizmo.transform_controller import TransformController
 from src.gui.qt_lib.gizmo.transform_gizmo import TransformGizmo
 from src.gui.qt_lib.gizmo.transform_math import multiply_quaternions, ray_from_mouse
 from src.gui.qt_lib.viewports.qt_transform_typein_bar import QtTransformTypeInBar
+from src.gui.lighting.light_picker import LightPicker
 from src.measurement.angle_snap import AngleSnap
 from src.measurement.dimension_calculator import DimensionCalculator
 from src.measurement.grid_measurement import GridMeasurement
@@ -409,6 +410,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._transform_gizmo = TransformGizmo(
             TransformController(self._evict_transform_cache, self.angle_snap, self.percent_snap)
         )
+        self._light_picker = LightPicker()
         self._transform_gizmo_dragging = False
         self._undo_limit = 250
         self._undo_stack: list[dict] = []
@@ -888,7 +890,20 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def set_lighting_mode(self, mode: str) -> None:
         mode = str(mode or "scene").strip().lower()
-        if mode not in {"scene", "unlit", "studio"}:
+        allowed = {
+            "scene",
+            "unlit",
+            "studio",
+            "fullbright",
+            "lightmap_preview",
+            "diffuse_only",
+            "normal_only",
+            "specular_only",
+            "environment_only",
+            "shader_complexity",
+            "photoreal_preview",
+        }
+        if mode not in allowed:
             mode = "scene"
         setattr(self._renderer, "lighting_mode", mode)
         if self._gpu_renderer is not None:
@@ -918,13 +933,33 @@ class QtViewportWidget(QtWidgets.QWidget):
         except (TypeError, ValueError):
             intensity_value = 0.55
         mode_value = str(mode or "baked").strip().lower()
-        if mode_value not in {"baked", "phong", "emissive"}:
+        if mode_value not in {"disabled", "baked", "dynamic_preview", "hybrid", "debug", "phong", "emissive"}:
             mode_value = "baked"
         setattr(self._renderer, "lightmap_intensity", intensity_value)
         setattr(self._renderer, "lightmap_mode", mode_value)
         if self._gpu_renderer is not None:
             self._gpu_renderer.lightmap_intensity = intensity_value
             self._gpu_renderer.lightmap_mode = mode_value
+        self._request_render()
+
+    def set_shader_complexity_mode(self, mode: str) -> None:
+        value = str(mode or "off").strip().lower()
+        if value not in {"off", "basic", "overdraw", "texture_cost", "lighting_cost", "full_complexity"}:
+            value = "off"
+        setattr(self._renderer, "shader_complexity_mode", value)
+        if self._gpu_renderer is not None:
+            setattr(self._gpu_renderer, "shader_complexity_mode", value)
+        if value != "off":
+            self.set_lighting_mode("shader_complexity")
+        else:
+            self._request_render()
+
+    def set_light_helper_visibility(self, helpers: bool, volumes: bool) -> None:
+        for target in (self._renderer, self._gpu_renderer):
+            if target is None:
+                continue
+            setattr(target, "show_light_gizmos", bool(helpers))
+            setattr(target, "show_light_radius_volumes", bool(volumes))
         self._request_render()
 
     def refresh_lighting(self) -> None:
@@ -3294,31 +3329,16 @@ class QtViewportWidget(QtWidgets.QWidget):
             nodes = list(self.model.all_nodes()) if hasattr(self.model, "all_nodes") else []
         except Exception:
             nodes = []
-        best_node = None
-        best_dist2 = radius * radius
-        best_depth = float("inf")
-        for node in nodes:
-            if not bool(getattr(node, "is_light", False)):
-                continue
-            try:
-                wp, _wo, _is_id = self._renderer._node_world_transform(node)
-            except Exception:
-                wp = getattr(node, "position", (0.0, 0.0, 0.0))
-            try:
-                proj = self._renderer._proj(float(wp[0]), float(wp[1]), float(wp[2]), width, height)
-            except Exception:
-                proj = None
-            if proj is None:
-                continue
-            dx = float(proj[0]) - float(sx)
-            dy = float(proj[1]) - float(sy)
-            dist2 = dx * dx + dy * dy
-            depth = float(proj[2])
-            if dist2 <= best_dist2 and depth < best_depth:
-                best_node = node
-                best_dist2 = dist2
-                best_depth = depth
-        return best_node
+        self._light_picker.max_screen_distance = int(radius)
+        return self._light_picker.hit_test(
+            nodes,
+            sx,
+            sy,
+            width,
+            height,
+            self._renderer._proj,
+            self._renderer._node_world_transform,
+        )
 
     def _set_mesh_hidden(self, node, hidden: bool) -> None:
         if node is None:
