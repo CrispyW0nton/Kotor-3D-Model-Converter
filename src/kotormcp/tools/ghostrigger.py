@@ -436,12 +436,62 @@ async def handle_render_model(arguments: Dict[str, Any]) -> Dict[str, Any]:
         # the project root (parent of src/) to be on sys.path so that
         # "src.gui" and "src.core" are addressable as proper sub-packages.
         import sys  # noqa: PLC0415
-        _project_root = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
+        _project_root = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
         if _project_root not in sys.path:
             sys.path.insert(0, _project_root)
 
-        from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer, render_model_autoframe  # noqa: PLC0415
-        from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, _load_tpc_bytes, _is_tpc_data  # noqa: PLC0415
+        # MCP servers are long-lived, so they can retain stale qt_lib alias
+        # modules from before the GUI package was grouped under src.gui.rendering.
+        # Drop only those known aliases before importing the canonical modules.
+        for _mod_name in (
+            "src.gui.rendering.gpu_renderer",
+            "src.gui.rendering.viewport_core",
+            "src.gui.rendering",
+            "src.gui.qt_lib.rendering.gpu_renderer",
+            "src.gui.qt_lib.rendering.viewport_core",
+            "src.gui.qt_lib.rendering",
+        ):
+            _mod = sys.modules.get(_mod_name)
+            _target = str(getattr(_mod, "_target", "") or "")
+            if _target.startswith("src.gui.") or (
+                _mod_name == "src.gui.rendering" and getattr(_mod, "__path__", None) == []
+            ):
+                sys.modules.pop(_mod_name, None)
+        _qt_lib = sys.modules.get("src.gui.qt_lib")
+        _aliases = getattr(_qt_lib, "_ALIASES", None)
+        if isinstance(_aliases, dict):
+            for _alias in list(_aliases):
+                if _alias.startswith("src.gui.rendering."):
+                    _aliases.pop(_alias, None)
+
+        import importlib.util as _importlib_util  # noqa: PLC0415
+
+        def _load_gui_module(_name: str, _rel_path: str):
+            _path = os.path.join(_project_root, _rel_path)
+            _spec = _importlib_util.spec_from_file_location(_name, _path)
+            if _spec is None or _spec.loader is None:
+                raise ImportError(f"Could not load {_name} from {_path}")
+            _module = _importlib_util.module_from_spec(_spec)
+            sys.modules[_name] = _module
+            _spec.loader.exec_module(_module)
+            return _module
+
+        _viewport_core = _load_gui_module(
+            "src.gui.rendering.viewport_core",
+            os.path.join("src", "gui", "rendering", "viewport_core.py"),
+        )
+        sys.modules["src.gui.viewport_core"] = _viewport_core
+        _gpu_renderer = _load_gui_module(
+            "src.gui.rendering.gpu_renderer",
+            os.path.join("src", "gui", "rendering", "gpu_renderer.py"),
+        )
+        sys.modules["src.gui.gpu_renderer"] = _gpu_renderer
+
+        GpuRenderer = _gpu_renderer.GpuRenderer
+        render_model_autoframe = _gpu_renderer.render_model_autoframe
+        ArcBallCamera = _viewport_core.ArcBallCamera
+        _load_tpc_bytes = _viewport_core._load_tpc_bytes
+        _is_tpc_data = _viewport_core._is_tpc_data
 
         # ── Build texture dict from model nodes + game library ─────────────────
         # Collect all texture names referenced by the model

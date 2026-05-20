@@ -2,7 +2,7 @@
 tests/test_joint_dot_overlay.py — M4/T401 joint-dot overlay tests
 
 Covers the bone-name → color classifier and the public setter contract
-introduced by T401 in ``src/gui/qt_viewport.py``.
+introduced by T401 in ``src/gui/viewports/qt_viewport.py``.
 
 The classifier is a pure-Python regex helper and is exercised without
 instantiating ``QtViewportWidget`` (which requires a full Qt event loop

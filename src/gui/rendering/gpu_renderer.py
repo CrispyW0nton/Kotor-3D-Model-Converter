@@ -5825,7 +5825,7 @@ class GpuRenderer:
         if not _PIL:
             return None
         try:
-            from src.gui.qt_lib.rendering.viewport_core import FrameRenderer, ArcBallCamera
+            from src.gui.rendering.viewport_core import FrameRenderer, ArcBallCamera
             renderer = FrameRenderer(camera)
             renderer.model = model
             renderer.show_texture = True
@@ -6085,7 +6085,7 @@ def _apply_txi_from_textures_to_model(model, textures: dict) -> None:
     _extract_txi_from_tpc = None
     _parse_txi_string = None
     _apply_txi_to_node = None
-    for _import_path in ('src.gui.qt_lib.rendering.viewport_core',):
+    for _import_path in ('src.gui.rendering.viewport_core', 'src.gui.qt_lib.rendering.viewport_core'):
         try:
             import importlib as _il
             _m = _il.import_module(_import_path)

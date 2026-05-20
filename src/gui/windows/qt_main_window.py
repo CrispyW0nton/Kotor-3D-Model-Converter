@@ -1734,13 +1734,17 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.animations_panel.load_model(model)
         if hasattr(self, "animation_retarget_panel"):
             self.animation_retarget_panel.set_texture_dir(self._texture_dir)
-            mgr = self._get_resource_manager()
             game = (self._current_game or self._infer_game_from_model(model)).upper()
-            if mgr is not None:
-                self.animation_retarget_panel.set_target_resource_context(mgr, game)
-            self._retarget_target_model = model
             self._retarget_mapping_report = None
-            self.animation_retarget_panel.set_target_model(model, game)
+            if self._supports_animation_retarget_target(model):
+                mgr = self._get_resource_manager()
+                if mgr is not None:
+                    self.animation_retarget_panel.set_target_resource_context(mgr, game)
+                self._retarget_target_model = model
+                self.animation_retarget_panel.set_target_model(model, game)
+            else:
+                self._retarget_target_model = None
+                self.animation_retarget_panel.set_target_model(None, game)
         self._animation_engine = None
         self._animation_timer.stop()
         self._animation_last_tick = None
@@ -3863,11 +3867,16 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.animations_panel.load_model(model)
         if hasattr(self, "animation_retarget_panel"):
             self.animation_retarget_panel.set_texture_dir(self._texture_dir)
-            mgr = self._get_resource_manager()
             game = (self._current_game or self._infer_game_from_model(model)).upper()
-            if mgr is not None:
-                self.animation_retarget_panel.set_target_resource_context(mgr, game)
-            self.animation_retarget_panel.set_target_model(model, game)
+            if self._supports_animation_retarget_target(model):
+                mgr = self._get_resource_manager()
+                if mgr is not None:
+                    self.animation_retarget_panel.set_target_resource_context(mgr, game)
+                self.animation_retarget_panel.set_target_model(model, game)
+            else:
+                self._retarget_target_model = None
+                self._retarget_mapping_report = None
+                self.animation_retarget_panel.set_target_model(None, game)
         if hasattr(self, "diagnostics_panel"):
             self.diagnostics_panel.run_diagnostics(model)
         self.props_text.setPlainText(
@@ -3944,6 +3953,21 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         except Exception as exc:
             self._log(f"Resource manager unavailable: {exc}", "warning")
             return None
+
+    @staticmethod
+    def _supports_animation_retarget_target(model) -> bool:
+        if model is None:
+            return True
+        try:
+            return int(getattr(model, "model_type", 0)) == 4
+        except Exception:
+            pass
+        return str(getattr(model, "classification", "") or "").lower() in {
+            "character",
+            "creature",
+            "headless_body",
+            "head",
+        }
 
     def _configure_viewport_resources(self):
         viewport = getattr(self, "viewport", None)

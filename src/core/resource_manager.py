@@ -32,6 +32,7 @@ UTC  = 2023   .utc  creature template
 ARE  = 2012   .are  area data
 IFO  = 2013   .ifo  module info
 DLG  = 2029   .dlg  dialog tree
+WOK  = 2016   .wok  room walkmesh (BWM)
 LYT  = 3005   .lyt  area layout
 VIS  = 3006   .vis  area visibility
 2DA  = 2017   .2da  two-dimensional array
@@ -77,7 +78,7 @@ RES_VIS  = 3006
 RES_2DA  = 2017
 RES_GIT  = 2015
 RES_MOD  = 3011  # module reference
-RES_WOK  = 3003  # walkmesh
+RES_WOK  = 2016  # WOK/BWM room walkmesh (confirmed from KEY/RIM resources)
 
 # Extension ↔ type tables
 EXT_TO_TYPE: Dict[str, int] = {

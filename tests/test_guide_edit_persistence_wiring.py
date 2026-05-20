@@ -30,7 +30,7 @@ def test_workflow_exposes_guide_edit_adapter() -> None:
 
 
 def test_builder_connects_viewport_moves_to_acurig_guides() -> None:
-    src = _read("src/gui/qt_character_builder_panel.py")
+    src = _read("src/gui/panels/qt_character_builder_panel.py")
 
     assert "self._body_guides" in src
     assert "self._body_guide_history" in src
@@ -43,7 +43,7 @@ def test_builder_connects_viewport_moves_to_acurig_guides() -> None:
 
 
 def test_builder_exposes_toolbar_undo_redo_for_guides() -> None:
-    src = _read("src/gui/qt_character_builder_panel.py")
+    src = _read("src/gui/panels/qt_character_builder_panel.py")
 
     assert "self._undo_guide_action" in src
     assert "self._redo_guide_action" in src
@@ -54,7 +54,7 @@ def test_builder_exposes_toolbar_undo_redo_for_guides() -> None:
 
 
 def test_viewport_exposes_acurig_guide_overlay_methods() -> None:
-    src = _read("src/gui/qt_viewport.py")
+    src = _read("src/gui/viewports/qt_viewport.py")
 
     assert "def set_acurig_guides" in src
     assert "self._renderer.set_acurig_guides(guides or {})" in src

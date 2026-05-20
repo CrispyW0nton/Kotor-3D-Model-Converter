@@ -351,7 +351,7 @@ _TAXONOMY_CASES: List[Tuple[str, dict, str, str]] = [
              classification=ModelClassification.EFFECT if ModelClassification else None,
              nodes=("m12aa_01", "walkmesh")),
         "AREA",
-        "UNSUPPORTED",
+        "MODULE",
     ),
 ]
 

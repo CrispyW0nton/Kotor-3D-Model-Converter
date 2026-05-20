@@ -131,6 +131,50 @@ def test_animated_skin_vbo_can_keep_authored_input_coordinates() -> None:
     ]
 
 
+def test_gpu_vbo_handles_module_mesh_without_uvs() -> None:
+    from src.gui.qt_lib.rendering.gpu_renderer import _build_vbo_data
+
+    node = SimpleNamespace(
+        name="area_piece",
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[],
+        uvs_lm=[],
+        faces=[(0, 1, 2)],
+        face_uvs=[],
+        is_skin=False,
+        vertex_space=0,
+    )
+
+    vbo, indices = _build_vbo_data(node, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0), is_module=True)
+
+    assert vbo is not None
+    assert indices is not None
+    assert indices.tolist() == [0, 1, 2]
+    assert vbo[:, 6:8].tolist() == [[0.5, 0.5], [0.5, 0.5], [0.5, 0.5]]
+
+
+def test_k1_m02aa_01a_module_model_loads_and_renders_without_crashing() -> None:
+    from src.core.kotor_loader import load_model_from_bytes
+    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
+
+    mdl, mdx = _raw_model("k1", "m02aa_01a")
+    model = load_model_from_bytes(mdl, mdx)
+
+    assert model is not None
+    assert model.node_count() == 127
+    assert len(model.mesh_nodes()) == 56
+    assert getattr(model, "classification", None) == "effect"
+
+    renderer = FrameRenderer(ArcBallCamera())
+    renderer.set_model(model)
+    renderer.show_texture = True
+    image = renderer.render(320, 240)
+
+    assert image is not None
+    assert image.size == (320, 240)
+
+
 def test_ad_saul_binary_skin_bind_matches_ascii_fixture() -> None:
     import numpy as np
 

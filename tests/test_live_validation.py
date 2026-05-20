@@ -13,7 +13,7 @@ def _read(relpath: str) -> str:
 
 
 def test_t901_builder_owns_debounced_live_validation_timer() -> None:
-    src = _read("src/gui/qt_character_builder_panel.py")
+    src = _read("src/gui/panels/qt_character_builder_panel.py")
 
     assert "self._live_validation_timer = QtCore.QTimer(self)" in src
     assert "self._live_validation_timer.setSingleShot(True)" in src
@@ -24,7 +24,7 @@ def test_t901_builder_owns_debounced_live_validation_timer() -> None:
 
 
 def test_t901_manual_and_live_validation_share_runner() -> None:
-    src = _read("src/gui/qt_character_builder_panel.py")
+    src = _read("src/gui/panels/qt_character_builder_panel.py")
 
     assert "def _on_validate_requested" in src
     assert 'self._run_validation(reason="manual", update_status=True)' in src
@@ -37,7 +37,7 @@ def test_t901_manual_and_live_validation_share_runner() -> None:
 
 
 def test_t901_scene_mutation_paths_schedule_live_validation() -> None:
-    src = _read("src/gui/qt_character_builder_panel.py")
+    src = _read("src/gui/panels/qt_character_builder_panel.py")
 
     for reason in [
         "game_changed",
@@ -59,7 +59,7 @@ def test_t901_scene_mutation_paths_schedule_live_validation() -> None:
 
 
 def test_t902_validation_banner_opens_full_report_dialog() -> None:
-    src = _read("src/gui/qt_character_builder_panel.py")
+    src = _read("src/gui/panels/qt_character_builder_panel.py")
 
     assert "class _ValidationIssueTableModel" in src
     assert "class QtValidationReportDialog" in src
@@ -71,7 +71,7 @@ def test_t902_validation_banner_opens_full_report_dialog() -> None:
 
 
 def test_t902_report_rows_show_issue_fields_and_jump_to_node() -> None:
-    src = _read("src/gui/qt_character_builder_panel.py")
+    src = _read("src/gui/panels/qt_character_builder_panel.py")
 
     for field in ["Severity", "Code", "Message", "Slot", "Node"]:
         assert field in src
@@ -84,7 +84,7 @@ def test_t902_report_rows_show_issue_fields_and_jump_to_node() -> None:
 
 
 def test_t903_inspector_exposes_mode_aware_run_rom_button() -> None:
-    src = _read("src/gui/qt_inspector_panel.py")
+    src = _read("src/gui/panels/qt_inspector_panel.py")
 
     assert "romTestRequested" in src
     assert "self._rom_test_btn = QtWidgets.QPushButton(\"Run ROM\")" in src
@@ -96,7 +96,7 @@ def test_t903_inspector_exposes_mode_aware_run_rom_button() -> None:
 
 
 def test_t903_builder_wires_run_rom_to_workflow_preview_and_validation() -> None:
-    src = _read("src/gui/qt_character_builder_panel.py")
+    src = _read("src/gui/panels/qt_character_builder_panel.py")
 
     assert "self.inspector.romTestRequested.connect(" in src
     assert "self._on_run_rom_test_requested" in src
@@ -117,7 +117,7 @@ def test_t903_workflow_exposes_run_rom_test_bridge() -> None:
 
 
 def test_t904_pre_export_gate_blocks_errors_and_prompts_warnings() -> None:
-    src = _read("src/gui/qt_character_builder_panel.py")
+    src = _read("src/gui/panels/qt_character_builder_panel.py")
 
     assert "def _confirm_pre_export_validation" in src
     assert 'self._run_validation(reason="pre_export_gate", update_status=False)' in src
@@ -130,7 +130,7 @@ def test_t904_pre_export_gate_blocks_errors_and_prompts_warnings() -> None:
 
 
 def test_t904_export_uses_warning_acknowledged_skip_validation_path() -> None:
-    src = _read("src/gui/qt_character_builder_panel.py")
+    src = _read("src/gui/panels/qt_character_builder_panel.py")
 
     assert "can_export, skip_validation = self._confirm_pre_export_validation()" in src
     assert "if not can_export:" in src

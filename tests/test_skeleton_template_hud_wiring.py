@@ -19,7 +19,7 @@ def _read(relpath: str) -> str:
 
 
 def test_inspector_exposes_skeleton_template_picker_controls() -> None:
-    src = _read("src/gui/qt_inspector_panel.py")
+    src = _read("src/gui/panels/qt_inspector_panel.py")
 
     assert "skeletonTemplateSelected" in src
     assert "browseSkeletonTemplateRequested" in src
@@ -36,7 +36,7 @@ def test_inspector_exposes_skeleton_template_picker_controls() -> None:
 
 
 def test_inspector_search_text_can_override_current_combo_selection() -> None:
-    src = _read("src/gui/qt_inspector_panel.py")
+    src = _read("src/gui/panels/qt_inspector_panel.py")
 
     assert "typed = combo.currentText().strip().lower()" in src
     assert "current_label = (" in src
@@ -46,7 +46,7 @@ def test_inspector_search_text_can_override_current_combo_selection() -> None:
 
 
 def test_builder_wires_template_selection_to_preview_and_apply() -> None:
-    src = _read("src/gui/qt_character_builder_panel.py")
+    src = _read("src/gui/panels/qt_character_builder_panel.py")
 
     assert "skeletonTemplateSelected.connect" in src
     assert "_on_skeleton_template_selected" in src
@@ -68,8 +68,8 @@ def test_builder_wires_template_selection_to_preview_and_apply() -> None:
 
 
 def test_template_selection_previews_external_skeleton_overlay() -> None:
-    builder = _read("src/gui/qt_character_builder_panel.py")
-    viewport = _read("src/gui/qt_viewport.py")
+    builder = _read("src/gui/panels/qt_character_builder_panel.py")
+    viewport = _read("src/gui/viewports/qt_viewport.py")
 
     assert "viewport.set_external_skeleton(template_model)" in builder
     assert "fit_reference_model=self._selected_skeleton_template_model" in builder
@@ -82,7 +82,7 @@ def test_template_selection_previews_external_skeleton_overlay() -> None:
 
 
 def test_complete_character_load_and_texture_folder_prompt_are_wired() -> None:
-    builder = _read("src/gui/qt_character_builder_panel.py")
+    builder = _read("src/gui/panels/qt_character_builder_panel.py")
 
     assert '"Complete character?"' in builder
     assert "supermodel_complete_character_load" in builder
@@ -93,9 +93,9 @@ def test_complete_character_load_and_texture_folder_prompt_are_wired() -> None:
 
 
 def test_manual_import_fit_controls_are_wired() -> None:
-    inspector = _read("src/gui/qt_inspector_panel.py")
-    builder = _read("src/gui/qt_character_builder_panel.py")
-    viewport = _read("src/gui/qt_viewport.py")
+    inspector = _read("src/gui/panels/qt_inspector_panel.py")
+    builder = _read("src/gui/panels/qt_character_builder_panel.py")
+    viewport = _read("src/gui/viewports/qt_viewport.py")
     workflow = _read("src/core/headless_body_workflow.py")
 
     assert "fitAdjustmentChanged" in inspector
@@ -112,7 +112,7 @@ def test_manual_import_fit_controls_are_wired() -> None:
 
 
 def test_open_scene_rehydrates_saved_source_models_for_viewport() -> None:
-    builder = _read("src/gui/qt_character_builder_panel.py")
+    builder = _read("src/gui/panels/qt_character_builder_panel.py")
 
     assert "def _load_scene_from_path" in builder
     assert "SceneIO.load(path, load_models=False)" in builder
@@ -126,7 +126,7 @@ def test_open_scene_rehydrates_saved_source_models_for_viewport() -> None:
 
 
 def test_scene_save_persists_manual_fit_metadata_for_reload() -> None:
-    builder = _read("src/gui/qt_character_builder_panel.py")
+    builder = _read("src/gui/panels/qt_character_builder_panel.py")
 
     assert "def _capture_scene_session_metadata" in builder
     assert 'metadata["manual_fit_adjustment"]' in builder
@@ -139,7 +139,7 @@ def test_scene_save_persists_manual_fit_metadata_for_reload() -> None:
 
 
 def test_gpu_viewport_draws_external_reference_skeleton_overlay() -> None:
-    viewport = _read("src/gui/qt_viewport.py")
+    viewport = _read("src/gui/viewports/qt_viewport.py")
 
     assert 'getattr(self._renderer, "_ext_skeleton", None)' in viewport
     assert "self._renderer._draw_ext_skeleton(draw, w, h)" in viewport
@@ -153,7 +153,7 @@ def test_gpu_skinning_guards_external_parent_cycles() -> None:
 
 
 def test_shift_snaps_viewport_rotation_gimbal_to_ten_degrees() -> None:
-    viewport = _read("src/gui/qt_viewport.py")
+    viewport = _read("src/gui/viewports/qt_viewport.py")
 
     assert "QtCore.Qt.ShiftModifier" in viewport
     assert "round(math.degrees(angle) / 10.0) * 10.0" in viewport
@@ -161,7 +161,7 @@ def test_shift_snaps_viewport_rotation_gimbal_to_ten_degrees() -> None:
 
 
 def test_import_root_gimbal_transforms_whole_mesh_and_supports_scale() -> None:
-    viewport = _read("src/gui/qt_viewport.py")
+    viewport = _read("src/gui/viewports/qt_viewport.py")
     core = _read("src/gui/viewport_core.py")
 
     assert "self.set_gimbal_mode(1 if current >= 3 else current + 1)" in viewport
@@ -185,7 +185,7 @@ def test_rotation_gimbal_rings_are_hit_testable() -> None:
 
 
 def test_viewport_supports_multi_joint_marquee_and_group_drag() -> None:
-    viewport = _read("src/gui/qt_viewport.py")
+    viewport = _read("src/gui/viewports/qt_viewport.py")
 
     assert "_selected_joint_nodes" in viewport
     assert "_joint_marquee_selecting" in viewport
@@ -195,10 +195,10 @@ def test_viewport_supports_multi_joint_marquee_and_group_drag() -> None:
 
 
 def test_external_template_skeleton_is_selectable_and_symmetry_aware() -> None:
-    viewport = _read("src/gui/qt_viewport.py")
+    viewport = _read("src/gui/viewports/qt_viewport.py")
     core = _read("src/gui/viewport_core.py")
-    builder = _read("src/gui/qt_character_builder_panel.py")
-    inspector = _read("src/gui/qt_inspector_panel.py")
+    builder = _read("src/gui/panels/qt_character_builder_panel.py")
+    inspector = _read("src/gui/panels/qt_inspector_panel.py")
 
     assert "_ext_bone_screen_positions" in core
     assert "self._ext_bone_screen_positions.append" in core
@@ -213,7 +213,7 @@ def test_external_template_skeleton_is_selectable_and_symmetry_aware() -> None:
 
 
 def test_selected_imported_mesh_outline_uses_projected_mesh_hull_not_bbox() -> None:
-    viewport = _read("src/gui/qt_viewport.py")
+    viewport = _read("src/gui/viewports/qt_viewport.py")
 
     outline_start = viewport.index("def _draw_selected_model_outline")
     outline_end = viewport.index("def _evict_transform_cache", outline_start)
@@ -225,7 +225,7 @@ def test_selected_imported_mesh_outline_uses_projected_mesh_hull_not_bbox() -> N
 
 
 def test_viewport_preloads_textures_for_skin_nodes() -> None:
-    viewport = _read("src/gui/qt_viewport.py")
+    viewport = _read("src/gui/viewports/qt_viewport.py")
 
     assert "def _preload_gpu_textures" in viewport
     assert "def _prewarm_textures" in viewport
@@ -262,7 +262,7 @@ def test_gpu_renderer_clamps_single_tile_character_atlases_like_cpu_renderer() -
 
 
 def test_manual_v_key_bone_snap_is_wired_without_auto_snap() -> None:
-    viewport = _read("src/gui/qt_viewport.py")
+    viewport = _read("src/gui/viewports/qt_viewport.py")
 
     assert "_UE_AUTO_SNAP_MAP" not in viewport
     assert "def auto_snap_external_skeleton_to_imported_unreal" not in viewport
@@ -275,7 +275,7 @@ def test_manual_v_key_bone_snap_is_wired_without_auto_snap() -> None:
 
 
 def test_gimbal_translation_uses_projected_visible_axis_direction() -> None:
-    viewport = _read("src/gui/qt_viewport.py")
+    viewport = _read("src/gui/viewports/qt_viewport.py")
 
     assert "def _projected_axis_delta" in viewport
     assert "start_sp = self._renderer._proj" in viewport

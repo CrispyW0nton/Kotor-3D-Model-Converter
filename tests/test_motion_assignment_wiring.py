@@ -13,7 +13,7 @@ def _read(path: str) -> str:
 
 
 def test_t1204_inspector_replaces_animation_library_stub():
-    source = _read("src/gui/qt_inspector_panel.py")
+    source = _read("src/gui/panels/qt_inspector_panel.py")
 
     assert "assignMotionsRequested" in source
     assert "selected_motion_source" in source
@@ -22,7 +22,7 @@ def test_t1204_inspector_replaces_animation_library_stub():
 
 
 def test_t1204_character_builder_connects_assignment_signal_to_workflow():
-    source = _read("src/gui/qt_character_builder_panel.py")
+    source = _read("src/gui/panels/qt_character_builder_panel.py")
 
     assert "assignMotionsRequested.connect" in source
     assert "_on_assign_motions_requested" in source

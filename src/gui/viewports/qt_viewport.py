@@ -2443,7 +2443,20 @@ class QtViewportWidget(QtWidgets.QWidget):
         w = max(8, self.canvas.width())
         h = max(8, self.canvas.height())
         t0 = time_module.perf_counter()
-        img = self._render_frame(w, h)
+        try:
+            img = self._render_frame(w, h)
+        except Exception as exc:
+            log.warning("Viewport render failed for %s: %s", getattr(self.model, "name", "model"), exc, exc_info=True)
+            img = None
+            if self._use_gpu:
+                try:
+                    self._use_gpu = False
+                    self.renderer_button.setChecked(False)
+                    self.renderer_button.setText("CPU")
+                    img = self._renderer.render(w, h)
+                except Exception:
+                    log.warning("Viewport CPU fallback also failed", exc_info=True)
+                    img = None
         self._last_render_ms = (time_module.perf_counter() - t0) * 1000.0
         self._last_render_wall = time_module.perf_counter()
         if img is None:

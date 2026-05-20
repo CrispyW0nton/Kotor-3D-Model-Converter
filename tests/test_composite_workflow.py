@@ -591,7 +591,7 @@ def test_t703_known_pc_supermodel_constant_is_uppercase():
 
 
 def test_t701_character_builder_load_button_routes_supermodel_to_composite():
-    source = (_SRC_DIR / "gui" / "qt_character_builder_panel.py").read_text(
+    source = (_SRC_DIR / "gui" / "panels" / "qt_character_builder_panel.py").read_text(
         encoding="utf-8"
     )
     assert 'self._is_scene_mode("supermodel")' in source
@@ -602,7 +602,7 @@ def test_t701_character_builder_load_button_routes_supermodel_to_composite():
 
 
 def test_t702_character_builder_check_button_routes_supermodel_to_composite():
-    source = (_SRC_DIR / "gui" / "qt_character_builder_panel.py").read_text(
+    source = (_SRC_DIR / "gui" / "panels" / "qt_character_builder_panel.py").read_text(
         encoding="utf-8"
     )
     assert 'self._is_scene_mode("supermodel")' in source
@@ -610,7 +610,7 @@ def test_t702_character_builder_check_button_routes_supermodel_to_composite():
 
 
 def test_t1003_character_builder_export_routes_supermodel_to_composite():
-    source = (_SRC_DIR / "gui" / "qt_character_builder_panel.py").read_text(
+    source = (_SRC_DIR / "gui" / "panels" / "qt_character_builder_panel.py").read_text(
         encoding="utf-8"
     )
     assert 'self._is_scene_mode("supermodel")' in source
@@ -618,7 +618,7 @@ def test_t1003_character_builder_export_routes_supermodel_to_composite():
 
 
 def test_launch_hud_defaults_to_accurig_like_body_workflow():
-    source = (_SRC_DIR / "gui" / "qt_character_builder_panel.py").read_text(
+    source = (_SRC_DIR / "gui" / "panels" / "qt_character_builder_panel.py").read_text(
         encoding="utf-8"
     )
     assert "apply_theme(self)" in source
@@ -628,7 +628,7 @@ def test_launch_hud_defaults_to_accurig_like_body_workflow():
 
 
 def test_workflow_rail_uses_accurig_step_language_and_button_styling():
-    source = (_SRC_DIR / "gui" / "qt_workflow_rail.py").read_text(
+    source = (_SRC_DIR / "gui" / "panels" / "qt_workflow_rail.py").read_text(
         encoding="utf-8"
     )
     assert "Choose Base + Load Mesh" in source
