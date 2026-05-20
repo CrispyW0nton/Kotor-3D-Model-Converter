@@ -25,6 +25,9 @@ from src.gui.qt_lib.rendering.viewport_navigation import (
     normalize_viewport_navigation_profile,
     viewport_profile_label,
 )
+from src.gui.qt_lib.gizmo.gizmo_mode import GizmoMode
+from src.gui.qt_lib.gizmo.transform_controller import TransformController
+from src.gui.qt_lib.gizmo.transform_gizmo import TransformGizmo
 
 log = logging.getLogger(__name__)
 
@@ -386,6 +389,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gimbal_drag_start = (0, 0)
         self._gimbal_node_start_pos = (0.0, 0.0, 0.0)
         self._gimbal_node_start_rot = (0.0, 0.0, 0.0, 1.0)
+        self._transform_gizmo = TransformGizmo(TransformController(self._evict_transform_cache))
+        self._transform_gizmo_dragging = False
         self._undo_limit = 250
         self._undo_stack: list[dict] = []
         self._redo_stack: list[dict] = []
@@ -486,8 +491,11 @@ class QtViewportWidget(QtWidgets.QWidget):
         }.get(label, label[:4])
 
     def _gimbal_mode_button_text(self) -> str:
-        if self._renderer.gimbal_mode == 2:
+        mode = self._transform_gizmo.mode
+        if mode == GizmoMode.ROTATE:
             return "[R]" if self._compact_controls else "[Rotate]"
+        if mode == GizmoMode.SCALE:
+            return "[S]" if self._compact_controls else "[Scale]"
         return "[T]" if self._compact_controls else "[Translate]"
 
     def _navigation_tooltip(self) -> str:
@@ -716,6 +724,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         if self._gpu_renderer is not None:
             self._gpu_renderer.clear_caches()
         if model is None:
+            self._transform_gizmo.clear_selection()
             self._gpu_upload_total = 0
             self._gpu_upload_model_id = 0
             self._pixmap = None
@@ -835,6 +844,52 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.texture_button.blockSignals(False)
         self._request_render()
 
+    def set_lighting_mode(self, mode: str) -> None:
+        mode = str(mode or "scene").strip().lower()
+        if mode not in {"scene", "unlit", "studio"}:
+            mode = "scene"
+        setattr(self._renderer, "lighting_mode", mode)
+        if self._gpu_renderer is not None:
+            self._gpu_renderer.lighting_mode = mode
+        self._request_render()
+
+    def set_texture_map_enabled(self, map_name: str, enabled: bool) -> None:
+        key = str(map_name or "").strip().lower()
+        attr = {
+            "diffuse": "show_diffuse_map",
+            "lightmap": "show_lightmap_map",
+            "environment": "show_environment_map",
+            "env": "show_environment_map",
+            "specular": "show_specular_map",
+            "normal": "show_normal_map",
+        }.get(key)
+        if not attr:
+            return
+        setattr(self._renderer, attr, bool(enabled))
+        if self._gpu_renderer is not None:
+            setattr(self._gpu_renderer, attr, bool(enabled))
+        self._request_render()
+
+    def set_lightmap_settings(self, intensity: float, mode: str) -> None:
+        try:
+            intensity_value = max(0.0, min(float(intensity), 4.0))
+        except (TypeError, ValueError):
+            intensity_value = 0.55
+        mode_value = str(mode or "baked").strip().lower()
+        if mode_value not in {"baked", "phong", "emissive"}:
+            mode_value = "baked"
+        setattr(self._renderer, "lightmap_intensity", intensity_value)
+        setattr(self._renderer, "lightmap_mode", mode_value)
+        if self._gpu_renderer is not None:
+            self._gpu_renderer.lightmap_intensity = intensity_value
+            self._gpu_renderer.lightmap_mode = mode_value
+        self._request_render()
+
+    def refresh_lighting(self) -> None:
+        if self._gpu_renderer is not None:
+            self._gpu_renderer.clear_caches()
+        self._request_render()
+
     def toggle_gpu_renderer(self, checked: Optional[bool] = None) -> None:
         self._use_gpu = bool(checked) if checked is not None else not self._use_gpu
         self.renderer_button.setChecked(self._use_gpu)
@@ -867,16 +922,28 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def toggle_gimbal(self, checked: Optional[bool] = None) -> None:
         self._renderer.show_gimbal = bool(checked) if checked is not None else not self._renderer.show_gimbal
+        self._transform_gizmo.visible = bool(self._renderer.show_gimbal)
         self.gimbal_button.setChecked(self._renderer.show_gimbal)
         self._request_render()
 
     def cycle_gimbal_mode(self) -> None:
-        self.set_gimbal_mode(2 if self._renderer.gimbal_mode == 1 else 1)
+        self._transform_gizmo.cycle_mode()
+        self._sync_legacy_gimbal_mode()
+        self.gimbal_mode_button.setText(self._gimbal_mode_button_text())
         self._request_render()
 
     def set_gimbal_mode(self, mode: int) -> None:
-        self._renderer.gimbal_mode = 2 if mode == 2 else 1
+        if mode == 2:
+            self._transform_gizmo.set_mode(GizmoMode.ROTATE)
+        elif mode == 3:
+            self._transform_gizmo.set_mode(GizmoMode.SCALE)
+        else:
+            self._transform_gizmo.set_mode(GizmoMode.TRANSLATE)
+        self._sync_legacy_gimbal_mode()
         self.gimbal_mode_button.setText(self._gimbal_mode_button_text())
+
+    def _sync_legacy_gimbal_mode(self) -> None:
+        self._renderer.gimbal_mode = 2 if self._transform_gizmo.mode == GizmoMode.ROTATE else 1
 
     def frame_all(self) -> None:
         if self.model:
@@ -1141,12 +1208,14 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._selected_meshes = []
         self._set_selection_orbit_bounds(node, orbit_bounds)
         self._renderer.selected_node = node
+        if node is None:
+            self._transform_gizmo.clear_selection()
+        else:
+            self._transform_gizmo.set_selected_object(node)
         if self._uv_viewer is not None:
             self._uv_viewer.set_selected_node(node)
         self.nodeSelected.emit(node)
         self.meshSelectionChanged.emit([])
-        if node is not None:
-            self._focus_camera_on_selection()
         self._request_render()
 
     def _clear_mesh_selection_flags(self) -> None:
@@ -1182,12 +1251,14 @@ class QtViewportWidget(QtWidgets.QWidget):
         active = clean_nodes[0] if clean_nodes else None
         self._set_selection_orbit_bounds(active, orbit_bounds if len(clean_nodes) == 1 else None)
         self._renderer.selected_node = active
+        if active is None:
+            self._transform_gizmo.clear_selection()
+        else:
+            self._transform_gizmo.set_selected_object(active)
         if self._uv_viewer is not None:
             self._uv_viewer.set_selected_node(active)
         self.nodeSelected.emit(active)
         self.meshSelectionChanged.emit(list(clean_nodes))
-        if clean_nodes:
-            self._focus_camera_on_selection()
         self._request_render()
 
     def _set_selection_orbit_bounds(self, node, bounds) -> None:
@@ -1360,17 +1431,31 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._redo_stack.clear()
 
     @staticmethod
-    def _state_changed(before_pos, before_rot, after_pos, after_rot) -> bool:
+    def _state_changed(before_pos, before_rot, after_pos, after_rot, before_vertices=None, after_vertices=None) -> bool:
         values = tuple(before_pos) + tuple(before_rot) + tuple(after_pos) + tuple(after_rot)
         if any(not math.isfinite(float(v)) for v in values):
             return False
+        if before_vertices is not None or after_vertices is not None:
+            if before_vertices != after_vertices:
+                return True
         return (
             any(abs(float(a) - float(b)) > 1e-7 for a, b in zip(before_pos, after_pos))
             or any(abs(float(a) - float(b)) > 1e-7 for a, b in zip(before_rot, after_rot))
         )
 
-    def _commit_node_transform(self, node, before_pos, before_rot, after_pos, after_rot, label: str) -> None:
-        if node is None or not self._state_changed(before_pos, before_rot, after_pos, after_rot):
+    def _commit_node_transform(
+        self,
+        node,
+        before_pos,
+        before_rot,
+        after_pos,
+        after_rot,
+        label: str,
+        *,
+        before_vertices=None,
+        after_vertices=None,
+    ) -> None:
+        if node is None or not self._state_changed(before_pos, before_rot, after_pos, after_rot, before_vertices, after_vertices):
             return
         self._undo_stack.append(
             {
@@ -1379,6 +1464,8 @@ class QtViewportWidget(QtWidgets.QWidget):
                 "before_rot": tuple(before_rot),
                 "after_pos": tuple(after_pos),
                 "after_rot": tuple(after_rot),
+                "before_vertices": before_vertices,
+                "after_vertices": after_vertices,
                 "label": label,
             }
         )
@@ -1392,6 +1479,12 @@ class QtViewportWidget(QtWidgets.QWidget):
             return
         node.position = action["after_pos"] if use_after else action["before_pos"]
         node.rotation = action["after_rot"] if use_after else action["before_rot"]
+        vertices = action.get("after_vertices") if use_after else action.get("before_vertices")
+        if vertices is not None:
+            node.vertices = [tuple(v) for v in vertices]
+            compute_bounds = getattr(node, "compute_bounds", None)
+            if callable(compute_bounds):
+                compute_bounds()
         self._evict_transform_cache(node)
         self._notify_node_moved(node)
         self._request_render()
@@ -1500,6 +1593,8 @@ class QtViewportWidget(QtWidgets.QWidget):
                 if event.buttons() & QtCore.Qt.LeftButton:
                     self._drag_lmb(event)
                     return True
+                self._update_gizmo_hover(event)
+                return False
             if et == QtCore.QEvent.MouseButtonRelease:
                 if self._nav_dragging and event.button() == self._nav_button:
                     self._release_navigation(event)
@@ -1538,6 +1633,12 @@ class QtViewportWidget(QtWidgets.QWidget):
                     self.gimbal_button.click(); return True
                 if key == QtCore.Qt.Key_Tab and no_modifiers:
                     self.cycle_gimbal_mode(); return True
+                if key == QtCore.Qt.Key_Space and no_modifiers:
+                    self.cycle_gimbal_mode(); return True
+                if key == QtCore.Qt.Key_Escape and no_modifiers:
+                    if self._transform_gizmo_dragging:
+                        self._cancel_transform_gizmo_drag()
+                        return True
                 if key == QtCore.Qt.Key_Z and (event.modifiers() & QtCore.Qt.ControlModifier):
                     if event.modifiers() & QtCore.Qt.ShiftModifier:
                         self.redo()
@@ -2024,9 +2125,15 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._set_renderer_badge(True)
                 return self._draw_cpu_overlays(img, w, h, gpu_base=True)
         self._set_renderer_badge(False)
-        img = self._renderer.render(w, h)
+        old_show_gimbal = getattr(self._renderer, "show_gimbal", False)
+        try:
+            self._renderer.show_gimbal = False
+            img = self._renderer.render(w, h)
+        finally:
+            self._renderer.show_gimbal = old_show_gimbal
         if self._xray_mode:
             img = self._draw_xray_grid_overlay(img, w, h)
+        img = self._draw_transform_gizmo_overlay(img, w, h)
         return img
 
     def _draw_xray_grid_overlay(self, img, w: int, h: int):
@@ -2062,6 +2169,16 @@ class QtViewportWidget(QtWidgets.QWidget):
         )
         self._gpu_renderer.show_solid = bool(self._renderer.show_solid)
         self._gpu_renderer.show_texture = bool(self._renderer.show_texture)
+        self._gpu_renderer.show_diffuse_map = bool(getattr(self._renderer, "show_diffuse_map", True))
+        self._gpu_renderer.show_lightmap_map = bool(getattr(self._renderer, "show_lightmap_map", True))
+        self._gpu_renderer.show_environment_map = bool(getattr(self._renderer, "show_environment_map", True))
+        self._gpu_renderer.show_specular_map = bool(getattr(self._renderer, "show_specular_map", True))
+        self._gpu_renderer.show_normal_map = bool(getattr(self._renderer, "show_normal_map", True))
+        self._gpu_renderer.lighting_mode = str(getattr(self._renderer, "lighting_mode", "scene") or "scene")
+        self._gpu_renderer.scene_ambient = float(getattr(self._renderer, "scene_ambient", 0.06))
+        self._gpu_renderer.lightmap_intensity = float(getattr(self._renderer, "lightmap_intensity", 0.55))
+        self._gpu_renderer.lightmap_mode = str(getattr(self._renderer, "lightmap_mode", "baked") or "baked")
+        self._gpu_renderer.show_light_gizmos = bool(getattr(self._renderer, "show_light_gizmos", True))
         self._gpu_renderer.show_wireframe = bool(self._renderer.show_wireframe)
         self._gpu_renderer.render_mode = str(getattr(self._renderer, "render_mode", "realistic") or "realistic")
         self._gpu_renderer.selected_node = getattr(self._renderer, "selected_node", None)
@@ -2137,13 +2254,44 @@ class QtViewportWidget(QtWidgets.QWidget):
                 finally:
                     self._renderer.show_solid = old_solid
             if self._renderer.show_gimbal:
-                self._renderer._draw_gimbal(draw, w, h)
+                self._draw_transform_gizmo(draw, w, h)
             self._renderer._draw_axes(draw, w, h)
             self._renderer._draw_stats(draw, w, h)
             return img
         except Exception as exc:
             log.debug("Qt GPU overlay draw failed: %s", exc)
             return img
+
+    def _draw_transform_gizmo_overlay(self, img, w: int, h: int):
+        if img is None:
+            return None
+        try:
+            from PIL import ImageDraw
+
+            if img.mode != "RGBA":
+                img = img.convert("RGBA")
+            self._renderer._last_W = w
+            self._renderer._last_H = h
+            self._renderer._frame_view = self._renderer._cam_view_matrix()
+            self._draw_transform_gizmo(ImageDraw.Draw(img, "RGBA"), w, h)
+            return img
+        except Exception as exc:
+            log.debug("Transform gizmo overlay draw failed: %s", exc)
+            return img
+
+    def _draw_transform_gizmo(self, draw, w: int, h: int) -> None:
+        if not self._renderer.show_gimbal:
+            return
+        self._transform_gizmo.visible = True
+        node = getattr(self._renderer, "selected_node", None)
+        if node is not None:
+            try:
+                wp, _wo, _is_id = self._renderer._node_world_transform(node)
+                setattr(node, "_gr_gizmo_world_position", wp)
+            except Exception:
+                pass
+        self._transform_gizmo.set_selected_object(node)
+        self._transform_gizmo.draw(draw, self.camera, self._renderer._proj, w, h)
 
     # ── T401: Joint-dot overlay ────────────────────────────────────────
     def _draw_joint_dots(self, img, w: int, h: int) -> None:
@@ -2737,6 +2885,47 @@ class QtViewportWidget(QtWidgets.QWidget):
             return None
         return best, best_face_bounds
 
+    def _light_hit_test(self, sx: int, sy: int, radius: int = 12):
+        if self.model is None:
+            return None
+        width = max(1, self.canvas.width())
+        height = max(1, self.canvas.height())
+        try:
+            self._renderer._last_W = width
+            self._renderer._last_H = height
+            self._renderer._frame_view = self._renderer._cam_view_matrix()
+        except Exception:
+            pass
+        try:
+            nodes = list(self.model.all_nodes()) if hasattr(self.model, "all_nodes") else []
+        except Exception:
+            nodes = []
+        best_node = None
+        best_dist2 = radius * radius
+        best_depth = float("inf")
+        for node in nodes:
+            if not bool(getattr(node, "is_light", False)):
+                continue
+            try:
+                wp, _wo, _is_id = self._renderer._node_world_transform(node)
+            except Exception:
+                wp = getattr(node, "position", (0.0, 0.0, 0.0))
+            try:
+                proj = self._renderer._proj(float(wp[0]), float(wp[1]), float(wp[2]), width, height)
+            except Exception:
+                proj = None
+            if proj is None:
+                continue
+            dx = float(proj[0]) - float(sx)
+            dy = float(proj[1]) - float(sy)
+            dist2 = dx * dx + dy * dy
+            depth = float(proj[2])
+            if dist2 <= best_dist2 and depth < best_depth:
+                best_node = node
+                best_dist2 = dist2
+                best_depth = depth
+        return best_node
+
     def _set_mesh_hidden(self, node, hidden: bool) -> None:
         if node is None:
             return
@@ -2880,6 +3069,60 @@ class QtViewportWidget(QtWidgets.QWidget):
         elif chosen is mesh_group_action:
             self._store_selected_mesh_names("_gr_mesh_groups", "Mesh Group")
 
+    def _update_gizmo_hover(self, event) -> None:
+        if not self._renderer.show_gimbal or getattr(self._renderer, "selected_node", None) is None:
+            return
+        x, y = int(event.position().x()), int(event.position().y())
+        before = self._transform_gizmo.hovered_handle
+        handle = self._transform_gizmo.hit_test((x, y), self.camera)
+        if handle != before:
+            self._request_render(fast=True)
+
+    def _begin_transform_gizmo_drag(self, x: int, y: int) -> bool:
+        if not self._renderer.show_gimbal or getattr(self._renderer, "selected_node", None) is None:
+            return False
+        try:
+            wp, _wo, _is_id = self._renderer._node_world_transform(self._renderer.selected_node)
+            setattr(self._renderer.selected_node, "_gr_gizmo_world_position", wp)
+        except Exception:
+            pass
+        self._transform_gizmo.set_selected_object(self._renderer.selected_node)
+        handle = self._transform_gizmo.hit_test((x, y), self.camera)
+        if not handle:
+            return False
+        self._transform_gizmo_dragging = True
+        self._gimbal_dragging = False
+        self._transform_gizmo.begin_drag(handle, (x, y), self.camera)
+        self._renderer.is_interactive = True
+        self._request_render(fast=True)
+        return True
+
+    def _cancel_transform_gizmo_drag(self) -> None:
+        self._transform_gizmo.cancel_drag()
+        self._transform_gizmo_dragging = False
+        self._renderer.is_interactive = False
+        self._renderer._wt_cache.clear()
+        self._request_render()
+
+    def _commit_transform_gizmo_drag(self) -> None:
+        before, after, node = self._transform_gizmo.end_drag()
+        self._transform_gizmo_dragging = False
+        self._renderer.is_interactive = False
+        self._renderer._wt_cache.clear()
+        if node is not None and before is not None and after is not None:
+            self._commit_node_transform(
+                node,
+                before.position,
+                before.rotation,
+                after.position,
+                after.rotation,
+                f"Gizmo {self._transform_gizmo.mode.value.title()}",
+                before_vertices=before.vertices,
+                after_vertices=after.vertices,
+            )
+            self._notify_node_moved(node)
+        self._request_render()
+
     def _press_lmb(self, event) -> None:
         x, y = int(event.position().x()), int(event.position().y())
         self._mx = self._press_x = x
@@ -2894,17 +3137,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         if hasattr(self, "_selection_rubber_band"):
             self._selection_rubber_band.hide()
 
-        if self._renderer.show_gimbal and self._renderer.selected_node and self._renderer._gimbal_handles:
-            axis = self._renderer.hit_test_gimbal(x, y)
-            if axis:
-                self._gimbal_dragging = True
-                self._gimbal_axis = axis
-                self._gimbal_drag_start = (x, y)
-                self._gimbal_node_start_pos = tuple(self._renderer.selected_node.position)
-                self._gimbal_node_start_rot = tuple(self._renderer.selected_node.rotation)
-                self._renderer.gimbal_active_axis = axis
-                self._request_render()
-                return
+        if self._begin_transform_gizmo_drag(x, y):
+            return
 
         # ── T402: Prefer joint-dot click over plain bone hit-test ──────
         # The dots are painted on top of the bone markers, so a click
@@ -2959,6 +3193,10 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def _drag_lmb(self, event) -> None:
         x, y = int(event.position().x()), int(event.position().y())
+        if self._transform_gizmo_dragging:
+            self._transform_gizmo.drag((x, y), self.camera, self.canvas.height())
+            self._request_render(fast=True)
+            return
         if self._gimbal_dragging and self._renderer.selected_node:
             self._apply_gimbal_drag(x, y)
             self._request_render(fast=True)
@@ -2996,6 +3234,9 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def _release_lmb(self, event) -> None:
         x, y = int(event.position().x()), int(event.position().y())
+        if self._transform_gizmo_dragging:
+            self._commit_transform_gizmo_drag()
+            return
         if self._gimbal_dragging:
             self._gimbal_dragging = False
             self._renderer.gimbal_active_axis = None
@@ -3100,6 +3341,12 @@ class QtViewportWidget(QtWidgets.QWidget):
                 if self.on_bone_selected:
                     self.on_bone_selected(node)
                 return
+        light_node = self._light_hit_test(x, y)
+        if light_node is not None:
+            self.set_selected_node(light_node)
+            if self.on_bone_selected:
+                self.on_bone_selected(None)
+            return
         mesh_hit = self._mesh_hit_test_detail(x, y)
         if mesh_hit is not None:
             mesh_node, face_bounds = mesh_hit
@@ -3330,6 +3577,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 getattr(node, "texture_clean", ""),
                 getattr(node, "texture", ""),
                 getattr(node, "lightmap", ""),
+                getattr(node, "bump_map", ""),
                 getattr(node, "txi_envmaptexture", ""),
                 getattr(node, "txi_specularcolour", ""),
                 getattr(node, "txi_bumpmaptexture", ""),

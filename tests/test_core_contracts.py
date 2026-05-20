@@ -158,7 +158,18 @@ def test_gpu_renderer_supports_texture_off_and_wireframe_modes() -> None:
     assert "self.show_texture: bool = True" in init_source
     assert "self.show_solid: bool = True" in init_source
     assert "self.wire_color: tuple[float, float, float] = (0.18, 0.62, 0.95)" in init_source
-    assert "_texture_allowed = bool(self.show_texture)" in render_source
+    assert "self.show_diffuse_map: bool = True" in init_source
+    assert "self.show_lightmap_map: bool = True" in init_source
+    assert "self.show_environment_map: bool = True" in init_source
+    assert "self.show_specular_map: bool = True" in init_source
+    assert "self.lightmap_intensity: float = 0.55" in init_source
+    assert "self.lightmap_mode: str = \"baked\"" in init_source
+    assert "self.show_light_gizmos: bool = True" in init_source
+    assert "_texture_allowed = bool(self.show_texture and self.show_diffuse_map)" in render_source
+    assert "bool(self.show_lightmap_map)" in render_source
+    assert "bool(self.show_environment_map)" in render_source
+    assert "bool(self.show_specular_map)" in render_source
+    assert "_draw_light_gizmos" in render_source
     assert "ctx.wireframe = bool(self.show_wireframe and not self.show_solid)" in render_source
     assert "if self.show_solid and self.show_wireframe" in render_source
     assert "u_wireframe_enabled" in render_source
@@ -184,12 +195,18 @@ def test_gpu_renderer_exposes_module_render_modes_and_selection_tint() -> None:
     assert "0.76 + max(dot(N, u_light_dir), 0.0) * 0.24" in _FRAG_SRC
     assert "mix(lit_color, vec3(1.0, 0.78, 0.12), 0.45)" in _FRAG_SRC
     assert "getattr(node, '_gr_hidden', False)" in render_source
-    assert "_detail_texture_allowed = bool(_texture_allowed and _render_mode_int == 0)" in render_source
+    assert "_detail_texture_allowed = bool(self.show_texture and _render_mode_int == 0)" in render_source
+    assert "u_bump_tex" in _FRAG_SRC
+    assert "u_has_bump" in _FRAG_SRC
+    assert "u_lightmap_intensity" in _FRAG_SRC
+    assert "u_lightmap_mode" in _FRAG_SRC
     assert "if _gpu_is_module and _render_mode_int in (1, 2)" in render_source
     assert "render_mode = str(getattr(self._renderer" in viewport_source
+    assert "lightmap_intensity = float(getattr(self._renderer" in viewport_source
+    assert "lightmap_mode = str(getattr(self._renderer" in viewport_source
     assert "selected_node = getattr(self._renderer" in viewport_source
     assert "selected_nodes = list(getattr(self, \"_selected_meshes\"" in viewport_source
-    assert "_texture_allowed = bool(self.show_texture)" in render_source
+    assert "_texture_allowed = bool(self.show_texture and self.show_diffuse_map)" in render_source
 
 
 def test_gpu_static_mesh_prebuild_uses_ram_and_chunked_uploads() -> None:
@@ -287,6 +304,7 @@ def test_qt_realistic_texture_prewarm_loads_detail_textures_without_paint_stall(
         texture_clean="LMA_wall01.tga",
         texture="LMA_wall01",
         lightmap="LMA_wall01_lm",
+        bump_map="mdl_bump",
         txi_envmaptexture="CM_Baremetal",
         txi_specularcolour="metal_spec",
         txi_bumpmaptexture="stone_bump",
@@ -307,6 +325,7 @@ def test_qt_realistic_texture_prewarm_loads_detail_textures_without_paint_stall(
     assert names == [
         "lma_wall01",
         "lma_wall01_lm",
+        "mdl_bump",
         "cm_baremetal",
         "metal_spec",
         "stone_bump",
@@ -535,7 +554,89 @@ def test_qt_gpu_viewport_disables_gpu_culling_for_cpu_parity() -> None:
     assert "cull_faces = False" in source
 
 
-def test_qt_viewport_selection_becomes_orbit_and_z_frame_pivot() -> None:
+def test_transform_gizmo_controller_applies_translate_rotate_scale_and_cancel() -> None:
+    from types import SimpleNamespace
+
+    import pytest
+
+    from src.gui.qt_lib.gizmo.gizmo_mode import GizmoMode
+    from src.gui.qt_lib.gizmo.transform_controller import TransformController
+    from src.gui.qt_lib.gizmo.transform_gizmo import TransformGizmo
+
+    class _Camera:
+        fov = 45.0
+
+        def _view_matrix(self):
+            return (
+                (1.0, 0.0, 0.0),
+                (0.0, 0.0, 1.0),
+                (0.0, -1.0, 0.0),
+                (0.0, 10.0, 0.0),
+            )
+
+    camera = _Camera()
+    node = SimpleNamespace(
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        vertices=[(1.0, 2.0, 3.0)],
+        compute_bounds=lambda: None,
+    )
+    controller = TransformController()
+
+    controller.begin_drag(node, GizmoMode.TRANSLATE, "TRANSLATE_X", (100, 100), camera, depth=5.0)
+    controller.drag((120, 100), camera, 500)
+    assert node.position[0] > 0.0
+    controller.cancel()
+    assert node.position == pytest.approx((0.0, 0.0, 0.0))
+
+    controller.begin_drag(node, GizmoMode.ROTATE, "ROTATE_Z", (100, 100), camera, depth=5.0)
+    controller.drag((140, 100), camera, 500)
+    assert node.rotation[2] < 0.0
+    before, after, changed = controller.end_drag()
+    assert changed is node
+    assert before is not None and after is not None
+    assert after.rotation != pytest.approx(before.rotation)
+
+    controller.begin_drag(node, GizmoMode.SCALE, "SCALE_UNIFORM", (100, 100), camera, depth=5.0)
+    controller.drag((120, 90), camera, 500)
+    assert node.vertices[0][0] > 1.0
+    assert node.vertices[0][1] > 2.0
+
+    gizmo = TransformGizmo()
+    assert gizmo.mode == GizmoMode.TRANSLATE
+    assert gizmo.cycle_mode() == GizmoMode.ROTATE
+    assert gizmo.cycle_mode() == GizmoMode.SCALE
+    assert gizmo.cycle_mode() == GizmoMode.TRANSLATE
+
+
+def test_gizmo_picker_hits_projected_rotation_polylines() -> None:
+    from src.gui.qt_lib.gizmo.gizmo_picker import GizmoPicker
+
+    picker = GizmoPicker()
+    handle = {
+        "name": "ROTATE_Z",
+        "kind": "polyline",
+        "points": [(10, 10), (50, 10), (50, 50)],
+        "radius": 8,
+    }
+
+    assert picker.hit_test((30, 14), [handle]) == "ROTATE_Z"
+    assert picker.hit_test((30, 30), [handle]) is None
+
+
+def test_gizmo_picker_prioritizes_uniform_scale_center_handle() -> None:
+    from src.gui.qt_lib.gizmo.gizmo_picker import GizmoPicker
+
+    picker = GizmoPicker()
+    handles = [
+        {"name": "SCALE_X", "kind": "segment", "start": (50, 50), "end": (100, 50), "radius": 10},
+        {"name": "SCALE_UNIFORM", "kind": "point", "pos": (50, 50), "radius": 14, "priority": 10},
+    ]
+
+    assert picker.hit_test((50, 50), handles) == "SCALE_UNIFORM"
+
+
+def test_qt_viewport_selection_does_not_auto_recenter_but_z_frames_selection() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
     import pytest
@@ -561,13 +662,112 @@ def test_qt_viewport_selection_becomes_orbit_and_z_frame_pivot() -> None:
 
     viewport.set_selected_node(mesh, orbit_bounds=face_bounds)
 
-    assert viewport.camera.target == pytest.approx([11.0, 1.0, 0.0])
+    assert viewport.camera.target == pytest.approx([0.0, 0.0, 0.0])
     assert viewport.camera.eye() == pytest.approx(old_eye)
 
     viewport.camera.target = [0.0, 0.0, 0.0]
     viewport.frame_selection_or_all()
 
     assert viewport.camera.target == pytest.approx([11.0, 1.0, 0.0])
+
+
+def test_qt_lighting_panel_editor_refresh_preserves_selected_light() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtCore, QtWidgets
+
+    from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    first = SimpleNamespace(
+        name="AuroraLight001",
+        is_light=True,
+        light_kind="point",
+        light_radius=1.5,
+        light_enabled=True,
+        light_multiplier=1.0,
+        light_cone_degrees=45.0,
+        light_area_size=1.0,
+        light_ambient_only=False,
+    )
+    second = SimpleNamespace(
+        name="AuroraLight223",
+        is_light=True,
+        light_kind="point",
+        light_radius=11.75,
+        light_enabled=True,
+        light_multiplier=1.0,
+        light_cone_degrees=45.0,
+        light_area_size=1.0,
+        light_ambient_only=False,
+    )
+    panel = QtLightingPanel()
+    panel.set_model(SimpleNamespace(all_nodes=lambda: [first, second]))
+    panel.tree.setCurrentItem(panel.tree.topLevelItem(1))
+
+    panel.radius_spin.setValue(12.25)
+
+    assert panel._selected is second
+    assert second.light_radius == 12.25
+    assert first.light_radius == 1.5
+    assert panel.tree.currentItem().data(0, QtCore.Qt.UserRole) is second
+
+
+def test_qt_viewport_can_pick_light_gizmos() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    light = SimpleNamespace(
+        name="AuroraLight223",
+        is_light=True,
+        position=(1.0, 2.0, 3.0),
+    )
+    mesh = SimpleNamespace(
+        name="room_mesh",
+        is_light=False,
+        position=(0.0, 0.0, 0.0),
+    )
+    viewport = QtViewportWidget()
+    viewport.model = SimpleNamespace(all_nodes=lambda: [mesh, light])
+    viewport._renderer._node_world_transform = lambda node: (node.position, (0.0, 0.0, 0.0, 1.0), True)
+    viewport._renderer._proj = lambda _x, _y, _z, _w, _h: (100, 120, 5.0)
+
+    assert viewport._light_hit_test(104, 123) is light
+    assert viewport._light_hit_test(140, 160) is None
+
+
+def test_qt_lighting_panel_select_light_syncs_from_viewport_without_emitting() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtCore, QtWidgets
+
+    from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    first = SimpleNamespace(name="AuroraLight001", is_light=True, light_kind="point", light_radius=1.5)
+    second = SimpleNamespace(name="AuroraLight223", is_light=True, light_kind="point", light_radius=11.75)
+    panel = QtLightingPanel()
+    emitted = []
+    panel.lightSelected.connect(emitted.append)
+    panel.set_model(SimpleNamespace(all_nodes=lambda: [first, second]))
+    emitted.clear()
+
+    panel.select_light(second)
+
+    assert emitted == []
+    assert panel._selected is second
+    assert panel.tree.currentItem().data(0, QtCore.Qt.UserRole) is second
+    assert panel.radius_spin.value() == 11.75
+
+    panel.select_light(None)
+
+    assert emitted == []
+    assert panel._selected is None
+    assert panel.tree.selectedItems() == []
 
 
 def test_viewport_navigation_profiles_are_available() -> None:

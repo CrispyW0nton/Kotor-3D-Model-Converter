@@ -27,6 +27,14 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "qt_export_dialog",
         "qt_settings_dialog",
     ),
+    "gizmo": (
+        "gizmo_mode",
+        "gizmo_picker",
+        "gizmo_renderer",
+        "transform_controller",
+        "transform_gizmo",
+        "transform_math",
+    ),
     "panels": (
         "qt_animation_panel",
         "qt_bottom_strip",
@@ -35,6 +43,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "qt_diagnostics_panel",
         "qt_inspector_panel",
         "qt_library_panel",
+        "qt_lighting_panel",
         "qt_log_panel",
         "qt_modular_panel",
         "qt_normal_map_panel",

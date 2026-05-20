@@ -224,6 +224,7 @@ def test_application_imports_use_central_qt_lib():
         "qt_icon_manager",
         "qt_inspector_panel",
         "qt_library_panel",
+        "qt_lighting_panel",
         "qt_log_panel",
         "qt_main_window",
         "qt_matrix_background",

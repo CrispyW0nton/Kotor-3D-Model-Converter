@@ -2718,10 +2718,12 @@ uniform sampler2D u_tex;        // diffuse texture (unit 0)
 uniform sampler2D u_lm_tex;     // lightmap texture (unit 1)
 uniform sampler2D u_env_tex;    // environment map texture (unit 2)
 uniform sampler2D u_spec_tex;   // FIX-SPECMAP: specular colour map (unit 3)
+uniform sampler2D u_bump_tex;   // bump/normal map texture (unit 4)
 uniform int       u_has_tex;    // 1 = diffuse texture bound
 uniform int       u_has_lm;     // 1 = lightmap bound
 uniform int       u_has_env;    // 1 = env map bound (TXI envmaptexture / bumpyshinytexture)
 uniform int       u_has_spec;   // FIX-SPECMAP: 1 = specular map bound (TXI specularcolour)
+uniform int       u_has_bump;   // 1 = bump/normal map bound
 uniform int       u_features;   // v7.1: packed bitmask of FEAT_* flags
 
 // Material
@@ -2737,6 +2739,21 @@ uniform float u_ambient;        // ambient intensity
 uniform float u_specular;       // specular intensity scalar (used when u_has_spec==0)
 uniform float u_shininess;      // Phong shininess exponent (overridden per-node)
 uniform int   u_lm_shade;       // FIX-LMSHADE: 1 = lightmap-only shading (skip Phong)
+uniform float u_lightmap_intensity;
+uniform int   u_lightmap_mode;  // 0 baked multiply, 1 Phong modulate, 2 emissive add
+uniform int   u_scene_lighting; // 0 unlit, 1 studio, 2 Aurora scene lights
+uniform float u_scene_ambient;
+uniform int   u_scene_light_count;
+uniform int   u_scene_light_enabled[16];
+uniform int   u_scene_light_kind[16]; // 0 point, 1 directional, 2 spot, 3 area
+uniform int   u_scene_light_ambient_only[16];
+uniform vec3  u_scene_light_pos[16];
+uniform vec3  u_scene_light_dir[16];
+uniform vec3  u_scene_light_color[16];
+uniform float u_scene_light_radius[16];
+uniform float u_scene_light_intensity[16];
+uniform float u_scene_light_cone_cos[16];
+uniform float u_scene_light_area_size[16];
 
 // Blend / material flags
 uniform int   u_blend_mode;     // 0=normal, 1=additive, 2=punchthrough
@@ -2768,6 +2785,68 @@ in vec2  v_uv_lm;
 in vec4  v_color;
 
 out vec4 frag_color;
+
+vec3 sceneLightShade(vec3 N, vec3 V, vec3 world_pos, float spec_intensity, float shininess) {
+    vec3 accum = vec3(u_scene_ambient);
+    for (int i = 0; i < 16; ++i) {
+        if (i >= u_scene_light_count) break;
+        if (u_scene_light_enabled[i] == 0) continue;
+
+        int kind = u_scene_light_kind[i];
+        vec3 color = u_scene_light_color[i] * u_scene_light_intensity[i];
+        vec3 L = vec3(0.0, 0.0, 1.0);
+        float attenuation = 1.0;
+
+        if (kind == 1) {
+            L = normalize(-u_scene_light_dir[i]);
+        } else {
+            vec3 delta = u_scene_light_pos[i] - world_pos;
+            float dist = length(delta);
+            float radius = max(u_scene_light_radius[i], 0.001);
+            if (dist > radius) continue;
+            L = delta / max(dist, 0.0001);
+            float falloff = clamp(1.0 - (dist / radius), 0.0, 1.0);
+            attenuation = falloff * falloff;
+            if (kind == 3) {
+                attenuation = mix(attenuation, falloff, clamp(u_scene_light_area_size[i] * 0.25, 0.0, 0.6));
+            }
+            if (kind == 2) {
+                vec3 spot_dir = normalize(u_scene_light_dir[i]);
+                float cone = dot(normalize(world_pos - u_scene_light_pos[i]), spot_dir);
+                float edge0 = u_scene_light_cone_cos[i];
+                float spot = smoothstep(edge0, min(1.0, edge0 + 0.18), cone);
+                attenuation *= spot;
+            }
+        }
+
+        if (u_scene_light_ambient_only[i] == 1) {
+            accum += color * attenuation;
+        } else {
+            float ndotl = max(dot(N, L), 0.0);
+            vec3 R = reflect(-L, N);
+            float spec = pow(max(dot(V, R), 0.0), max(shininess, 1.0)) * spec_intensity;
+            accum += color * attenuation * (ndotl + spec);
+        }
+    }
+    return clamp(accum, 0.0, 2.0);
+}
+
+vec3 perturbNormalFromMap(vec3 N, vec3 world_pos, vec2 uv) {
+    vec3 sampled = texture(u_bump_tex, uv).xyz * 2.0 - 1.0;
+    vec3 dp1 = dFdx(world_pos);
+    vec3 dp2 = dFdy(world_pos);
+    vec2 duv1 = dFdx(uv);
+    vec2 duv2 = dFdy(uv);
+    vec3 T = dp1 * duv2.y - dp2 * duv1.y;
+    vec3 B = -dp1 * duv2.x + dp2 * duv1.x;
+    float t_len = length(T);
+    float b_len = length(B);
+    if (t_len < 0.0001 || b_len < 0.0001) {
+        return N;
+    }
+    mat3 TBN = mat3(normalize(T), normalize(B), normalize(N));
+    return normalize(TBN * sampled);
+}
 
 void main() {
     if (u_wireframe_enabled == 1) {
@@ -2829,6 +2908,9 @@ void main() {
 
     // -- Lighting
     vec3 N = normalize(v_world_norm);
+    if (u_has_bump == 1) {
+        N = perturbNormalFromMap(N, v_world_pos, final_uv);
+    }
     vec3 V = normalize(u_cam_pos - v_world_pos);
     vec3 lit_color;
 
@@ -2870,7 +2952,20 @@ void main() {
         // ── Lightmap-only path (module/area geometry) ─────────────────
         vec4 lm_samp = texture(u_lm_tex, v_uv_lm);
         debug_lightmap_rgb = lm_samp.rgb;
-        if (u_lm_composite_mode == 1) {
+        float lm_strength = clamp(u_lightmap_intensity, 0.0, 4.0);
+        vec3 baked_light = mix(vec3(1.0), lm_samp.rgb * 2.0, clamp(lm_strength, 0.0, 1.0));
+        if (u_lightmap_mode == 1) {
+            float ndotl  = max(dot(N, u_light_dir),  0.0);
+            float ndotl2 = max(dot(N, u_light_dir2), 0.0);
+            vec3 R = reflect(-u_light_dir, N);
+            float spec = pow(max(dot(V, R), 0.0), max(u_shininess, 1.0)) * u_specular;
+            float shade = u_ambient + ndotl * (1.0 - u_ambient) * 0.85
+                                    + ndotl2 * (1.0 - u_ambient) * 0.15
+                                    + spec;
+            lit_color = diffuse_samp.rgb * clamp(shade, 0.0, 1.5) * baked_light;
+        } else if (u_lightmap_mode == 2) {
+            lit_color = diffuse_samp.rgb + lm_samp.rgb * lm_strength;
+        } else if (u_lm_composite_mode == 1) {
             // Diagnostic: pure multiply, no overbright and no ambient floor.
             lit_color = diffuse_samp.rgb * lm_samp.rgb;
         } else if (u_lm_composite_mode == 2) {
@@ -2878,7 +2973,7 @@ void main() {
             lit_color = diffuse_samp.rgb * lm_samp.rgb * 2.0;
         } else {
             // FIX-LMBRIGHT: Raised overbright 2.0 → 2.5 + ambient floor 0.03
-            lit_color = diffuse_samp.rgb * (lm_samp.rgb * 2.5 + vec3(0.03));
+            lit_color = diffuse_samp.rgb * baked_light;
             if (u_lm_composite_mode == 3) {
                 lit_color = clamp(lit_color, 0.0, 1.0);
             }
@@ -2914,11 +3009,15 @@ void main() {
         }
         float eff_shininess = max(u_shininess, 1.0);  // FIX-SHININESS: clamp to avoid pow(0,0)
         float spec = pow(max(dot(V, R), 0.0), eff_shininess) * spec_intensity;
-        float shade = u_ambient + ndotl * (1.0 - u_ambient) * 0.85
-                                + ndotl2 * (1.0 - u_ambient) * 0.15
-                                + spec;
-        shade = clamp(shade, 0.0, 1.5);
-        lit_color = diffuse_samp.rgb * shade;
+        if (u_scene_lighting == 2 && u_scene_light_count > 0) {
+            lit_color = diffuse_samp.rgb * sceneLightShade(N, V, v_world_pos, spec_intensity, eff_shininess);
+        } else {
+            float shade = u_ambient + ndotl * (1.0 - u_ambient) * 0.85
+                                    + ndotl2 * (1.0 - u_ambient) * 0.15
+                                    + spec;
+            shade = clamp(shade, 0.0, 1.5);
+            lit_color = diffuse_samp.rgb * shade;
+        }
 
         // -- Environment map compositing (TXI envmaptexture / bumpyshinytexture)
         // KotOR Odyssey engine algorithm (xoreos renderGeometryEnvMappedOver +
@@ -2957,18 +3056,25 @@ void main() {
         if (u_has_lm == 1) {
             vec4 lm_samp = texture(u_lm_tex, v_uv_lm);
             debug_lightmap_rgb = lm_samp.rgb;
-            if (u_lm_composite_mode == 1) {
+            float lm_strength = clamp(u_lightmap_intensity, 0.0, 4.0);
+            vec3 baked_light = mix(vec3(1.0), lm_samp.rgb * 2.0, clamp(lm_strength, 0.0, 1.0));
+            if (u_lightmap_mode == 2) {
+                lit_color += lm_samp.rgb * lm_strength;
+            } else if (u_lm_composite_mode == 1) {
                 lit_color *= lm_samp.rgb;
             } else if (u_lm_composite_mode == 2) {
                 lit_color *= lm_samp.rgb * 2.0;
             } else {
-                // FIX-LMBRIGHT: Match the raised overbright factor (2.5)
-                lit_color *= lm_samp.rgb * 2.5;
+                lit_color *= baked_light;
                 if (u_lm_composite_mode == 3) {
                     lit_color = clamp(lit_color, 0.0, 1.0);
                 }
             }
         }
+    }
+
+    if (u_scene_lighting == 0) {
+        lit_color = diffuse_samp.rgb + u_selfillum;
     }
 
     if (u_render_mode == 1) {
@@ -3664,22 +3770,25 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
         uv_arr = np.full((n_verts, 2), 0.5, dtype=np.float32)
         n_uvs = n_verts  # for consistent indexing below
 
+    # UV1/lightmap coordinates follow the same texture-vertex indexing rules as
+    # UV0. Keep the full array for expanded per-face lookup; slice/pad only when
+    # filling the vertex-indexed fast-path VBO.
     n_uvs_lm = len(uvs_lm)
     if n_uvs_lm > 0:
         try:
-            uv_lm_arr = np.asarray(uvs_lm[:n_verts], dtype=np.float32)
-            if uv_lm_arr.ndim != 2 or uv_lm_arr.shape[1] < 2:
-                uv_lm_arr = np.full((n_verts, 2), 0.5, dtype=np.float32)
-            elif len(uv_lm_arr) < n_verts:
-                pad = np.full((n_verts - len(uv_lm_arr), 2), 0.5, dtype=np.float32)
-                uv_lm_arr = np.vstack([uv_lm_arr, pad])
+            uv_lm_src_arr = np.asarray(uvs_lm, dtype=np.float32)
+            if uv_lm_src_arr.ndim != 2 or uv_lm_src_arr.shape[1] < 2:
+                uv_lm_src_arr = np.full((n_uvs_lm, 2), 0.5, dtype=np.float32)
+            elif uv_lm_src_arr.shape[1] > 2:
+                uv_lm_src_arr = uv_lm_src_arr[:, :2]
         except (ValueError, TypeError):
-            uv_lm_arr = np.full((n_verts, 2), 0.5, dtype=np.float32)
-        bad_lm = ~np.all(np.isfinite(uv_lm_arr), axis=1)
+            uv_lm_src_arr = np.full((n_uvs_lm, 2), 0.5, dtype=np.float32)
+        bad_lm = ~np.all(np.isfinite(uv_lm_src_arr), axis=1)
         if np.any(bad_lm):
-            uv_lm_arr[bad_lm] = 0.5
+            uv_lm_src_arr[bad_lm] = 0.5
     else:
-        uv_lm_arr = np.full((n_verts, 2), 0.5, dtype=np.float32)
+        uv_lm_src_arr = np.full((n_verts, 2), 0.5, dtype=np.float32)
+        n_uvs_lm = n_verts
 
     # ── Assemble interleaved vertex buffer (N × 22) ──────────────────────────
     # Phase A: Extended VBO layout includes bone_ids (4f) + bone_weights (4f)
@@ -3703,8 +3812,10 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     vdata[:, 3:6] = n_arr.astype(np.float32)
     _uv_for_vdata = uv_arr[:n_verts] if len(uv_arr) >= n_verts else np.vstack(
         [uv_arr, np.full((n_verts - len(uv_arr), 2), 0.5, dtype=np.float32)])
+    _uv_lm_for_vdata = uv_lm_src_arr[:n_verts] if len(uv_lm_src_arr) >= n_verts else np.vstack(
+        [uv_lm_src_arr, np.full((n_verts - len(uv_lm_src_arr), 2), 0.5, dtype=np.float32)])
     vdata[:, 6:8]  = _uv_for_vdata[:, :2]
-    vdata[:, 8:10] = uv_lm_arr[:, :2]
+    vdata[:, 8:10] = _uv_lm_for_vdata[:, :2]
     vdata[:, 10:14] = 1.0  # white vertex colour + alpha 1
 
     # ── Phase A: Populate bone_ids and weights for skin nodes ────────────────
@@ -3831,6 +3942,7 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     expanded_rows = []
     expanded_source_indices = []
     n_uv_arr = len(uv_arr)   # sanitized UV array (already seam-healed)
+    n_uv_lm_arr = len(uv_lm_src_arr)  # sanitized UV1/lightmap array
     for fi, face in enumerate(faces):
         if len(face) < 3:
             continue
@@ -3855,6 +3967,13 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
                 row[6] = uv_arr[vi, 0]
                 row[7] = uv_arr[vi, 1]
             # else: keep row's UV from vdata[vi] (already set from uv_arr[vi])
+            if 0 <= ti < n_uv_lm_arr:
+                row[8] = uv_lm_src_arr[ti, 0]
+                row[9] = uv_lm_src_arr[ti, 1]
+            elif 0 <= vi < n_uv_lm_arr:
+                row[8] = uv_lm_src_arr[vi, 0]
+                row[9] = uv_lm_src_arr[vi, 1]
+            # else: keep row's UV1 from vdata[vi]
             expanded_rows.append(row)
             expanded_source_indices.append(int(vi))
 
@@ -4018,6 +4137,16 @@ class GpuRenderer:
         self.interactive_render_scale: float = 1.0
         self.show_solid: bool = True
         self.show_texture: bool = True
+        self.show_diffuse_map: bool = True
+        self.show_lightmap_map: bool = True
+        self.show_environment_map: bool = True
+        self.show_specular_map: bool = True
+        self.show_normal_map: bool = True
+        self.lightmap_intensity: float = 0.55
+        self.lightmap_mode: str = "baked"
+        self.lighting_mode: str = "scene"
+        self.scene_ambient: float = 0.06
+        self.show_light_gizmos: bool = True
         self.show_wireframe: bool = False
         self.render_mode: str = "realistic"
         self.selected_node = None
@@ -4078,15 +4207,22 @@ class GpuRenderer:
                 'u_mvp', 'u_model', 'u_normal_mat', 'u_cam_pos',
                 'u_light_dir', 'u_light_dir2', 'u_ambient', 'u_specular',
                 'u_shininess', 'u_alpha_test', 'u_decal', 'u_wateralpha',
-                'u_has_spec', 'u_alpha', 'u_node_alpha', 'u_blend_mode',
-                'u_has_tex', 'u_has_lm', 'u_lm_shade', 'u_has_env',
+                'u_has_spec', 'u_has_bump', 'u_alpha', 'u_node_alpha', 'u_blend_mode',
+                'u_has_tex', 'u_has_lm', 'u_lm_shade', 'u_lightmap_intensity',
+                'u_lightmap_mode', 'u_has_env',
                 'u_lm_composite_mode',
+                'u_scene_lighting', 'u_scene_ambient', 'u_scene_light_count',
+                'u_scene_light_enabled', 'u_scene_light_kind',
+                'u_scene_light_ambient_only', 'u_scene_light_pos',
+                'u_scene_light_dir', 'u_scene_light_color',
+                'u_scene_light_radius', 'u_scene_light_intensity',
+                'u_scene_light_cone_cos', 'u_scene_light_area_size',
                 'u_diffuse', 'u_selfillum', 'u_uv_scroll', 'u_rotate_tex',
                 'u_uv_v_flip', 'u_flipbook_off', 'u_flipbook_size', 'u_features',
                 'u_water_time', 'u_proc_type', 'u_dangly_enabled',
                 'u_dangly_displacement', 'u_dangly_time',
                 'u_saber_enabled', 'u_saber_displacement', 'u_saber_length',
-                'u_oit_enabled', 'u_tex', 'u_lm_tex', 'u_env_tex', 'u_spec_tex',
+                'u_oit_enabled', 'u_tex', 'u_lm_tex', 'u_env_tex', 'u_spec_tex', 'u_bump_tex',
                 'u_debug_visualize', 'u_wireframe_enabled', 'u_wire_color',
                 'u_render_mode', 'u_selected',
                 # Phase A: GPU Skinning uniforms
@@ -4271,6 +4407,244 @@ class GpuRenderer:
             vao.render(moderngl.LINES)
         finally:
             ctx.depth_mask = True
+
+    def _draw_light_gizmos(self, ctx, mvp, nodes, get_world_transform) -> None:
+        if not bool(getattr(self, "show_light_gizmos", True)):
+            return
+        if not (_NUMPY and self._grid_prog is not None and nodes):
+            return
+
+        def _add_line(rows, a, b, color):
+            rows.append((float(a[0]), float(a[1]), float(a[2]), *color))
+            rows.append((float(b[0]), float(b[1]), float(b[2]), *color))
+
+        def _v_add(a, b): return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
+        def _v_sub(a, b): return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+        def _v_mul(a, s): return (a[0] * s, a[1] * s, a[2] * s)
+        def _v_cross(a, b):
+            return (a[1] * b[2] - a[2] * b[1],
+                    a[2] * b[0] - a[0] * b[2],
+                    a[0] * b[1] - a[1] * b[0])
+        def _v_norm(a):
+            ln = math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]) or 1.0
+            return (a[0] / ln, a[1] / ln, a[2] / ln)
+
+        def _basis(direction):
+            forward = _v_norm(direction)
+            seed = (0.0, 0.0, 1.0) if abs(forward[2]) < 0.92 else (0.0, 1.0, 0.0)
+            right = _v_norm(_v_cross(seed, forward))
+            up = _v_norm(_v_cross(forward, right))
+            return forward, right, up
+
+        def _ring(rows, center, axis_a, axis_b, radius, color, steps=32):
+            prev = None
+            for i in range(steps + 1):
+                t = (i / steps) * math.tau
+                pt = _v_add(center, _v_add(_v_mul(axis_a, math.cos(t) * radius),
+                                           _v_mul(axis_b, math.sin(t) * radius)))
+                if prev is not None:
+                    _add_line(rows, prev, pt, color)
+                prev = pt
+
+        rows = []
+        selected = getattr(self, "selected_node", None)
+        for node in nodes:
+            if not bool(getattr(node, "is_light", False)):
+                continue
+            try:
+                pos, orient = get_world_transform(node)
+            except Exception:
+                pos = getattr(node, "position", (0.0, 0.0, 0.0))
+                orient = getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))
+            kind = str(getattr(node, "light_kind", "point") or "point").lower()
+            enabled = bool(getattr(node, "light_enabled", True))
+            radius = max(0.15, min(float(getattr(node, "light_radius", 5.0) or 5.0), 50.0))
+            area = max(0.2, float(getattr(node, "light_area_size", 1.0) or 1.0))
+            cone = max(1.0, min(179.0, float(getattr(node, "light_cone_degrees", 45.0) or 45.0)))
+            direction = self._rotate_vec_by_quat((0.0, 0.0, -1.0), orient)
+            forward, right, up = _basis(direction)
+            base = {
+                "point": (1.0, 0.86, 0.28),
+                "spot": (0.45, 0.86, 1.0),
+                "directional": (0.56, 1.0, 0.52),
+                "area": (1.0, 0.62, 0.42),
+            }.get(kind, (1.0, 0.86, 0.28))
+            if not enabled:
+                base = tuple(c * 0.38 for c in base)
+            if node is selected:
+                base = (1.0, 1.0, 1.0)
+
+            marker = min(max(radius * 0.06, 0.08), 0.35)
+            _ring(rows, pos, right, up, marker, base, steps=16)
+            if kind == "area":
+                half = area * 0.5
+                c0 = _v_add(pos, _v_add(_v_mul(right, -half), _v_mul(up, -half)))
+                c1 = _v_add(pos, _v_add(_v_mul(right, half), _v_mul(up, -half)))
+                c2 = _v_add(pos, _v_add(_v_mul(right, half), _v_mul(up, half)))
+                c3 = _v_add(pos, _v_add(_v_mul(right, -half), _v_mul(up, half)))
+                for a, b in ((c0, c1), (c1, c2), (c2, c3), (c3, c0)):
+                    _add_line(rows, a, b, base)
+                _add_line(rows, pos, _v_add(pos, _v_mul(forward, radius * 0.35)), base)
+            elif kind == "directional":
+                target = _v_add(pos, _v_mul(forward, min(radius, 8.0)))
+                _add_line(rows, pos, target, base)
+                head = min(radius * 0.12, 0.75)
+                _add_line(rows, target, _v_add(_v_sub(target, _v_mul(forward, head)), _v_mul(right, head * 0.45)), base)
+                _add_line(rows, target, _v_add(_v_sub(target, _v_mul(forward, head)), _v_mul(right, -head * 0.45)), base)
+                _add_line(rows, _v_add(target, _v_mul(right, -head * 0.35)), _v_add(target, _v_mul(right, head * 0.35)), base)
+                _add_line(rows, _v_add(target, _v_mul(up, -head * 0.35)), _v_add(target, _v_mul(up, head * 0.35)), base)
+            elif kind == "spot":
+                length = min(radius, 12.0)
+                cap_radius = math.tan(math.radians(cone * 0.5)) * length
+                cap = _v_add(pos, _v_mul(forward, length))
+                _ring(rows, cap, right, up, cap_radius, base, steps=32)
+                for sx, sy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    edge = _v_add(cap, _v_add(_v_mul(right, cap_radius * sx), _v_mul(up, cap_radius * sy)))
+                    _add_line(rows, pos, edge, base)
+            else:
+                _ring(rows, pos, (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), radius, base, steps=48)
+                _ring(rows, pos, (1.0, 0.0, 0.0), (0.0, 0.0, 1.0), radius, base, steps=48)
+                _ring(rows, pos, (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), radius, base, steps=48)
+
+        if not rows:
+            return
+        data = np.asarray(rows, dtype=np.float32)
+        vbo = ctx.buffer(data.tobytes())
+        vao = ctx.vertex_array(self._grid_prog, [(vbo, '3f 3f', 'in_pos', 'in_color')])
+        self._grid_prog['u_mvp'].write(_mat4_tobytes(mvp))
+        depth_was_enabled = True
+        try:
+            ctx.disable(moderngl.DEPTH_TEST)
+            ctx.disable(moderngl.BLEND)
+            ctx.depth_mask = False
+            try:
+                ctx.line_width = 1.5
+            except Exception:
+                pass
+            vao.render(moderngl.LINES)
+        finally:
+            ctx.depth_mask = True
+            if depth_was_enabled:
+                ctx.enable(moderngl.DEPTH_TEST)
+            vao.release()
+            vbo.release()
+
+    @staticmethod
+    def _light_kind_int(node) -> int:
+        kind = str(getattr(node, "light_kind", "point") or "point").strip().lower()
+        if kind == "directional":
+            return 1
+        if kind == "spot":
+            return 2
+        if kind == "area":
+            return 3
+        return 0
+
+    @staticmethod
+    def _rotate_vec_by_quat(v, q) -> tuple[float, float, float]:
+        try:
+            x, y, z = float(v[0]), float(v[1]), float(v[2])
+            qx, qy, qz, qw = (float(q[0]), float(q[1]), float(q[2]), float(q[3]))
+            tx = 2.0 * (qy * z - qz * y)
+            ty = 2.0 * (qz * x - qx * z)
+            tz = 2.0 * (qx * y - qy * x)
+            rx = x + qw * tx + (qy * tz - qz * ty)
+            ry = y + qw * ty + (qz * tx - qx * tz)
+            rz = z + qw * tz + (qx * ty - qy * tx)
+            ln = math.sqrt(rx * rx + ry * ry + rz * rz) or 1.0
+            return (rx / ln, ry / ln, rz / ln)
+        except Exception:
+            return (0.0, 0.0, -1.0)
+
+    def _scene_light_records(self, nodes, get_world_transform) -> list[dict]:
+        records: list[dict] = []
+        for node in nodes:
+            if not bool(getattr(node, "is_light", False)):
+                continue
+            if not bool(getattr(node, "light_enabled", True)):
+                continue
+            try:
+                world_pos, world_orient = get_world_transform(node)
+            except Exception:
+                world_pos = getattr(node, "position", (0.0, 0.0, 0.0))
+                world_orient = getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))
+            color = getattr(node, "light_color", (1.0, 1.0, 1.0)) or (1.0, 1.0, 1.0)
+            radius = max(0.001, float(getattr(node, "light_radius", 5.0) or 5.0))
+            intensity = max(0.0, float(getattr(node, "light_multiplier", 1.0) or 1.0))
+            cone_deg = max(1.0, min(179.0, float(getattr(node, "light_cone_degrees", 45.0) or 45.0)))
+            records.append({
+                "enabled": 1,
+                "kind": self._light_kind_int(node),
+                "ambient_only": 1 if bool(getattr(node, "light_ambient_only", False)) else 0,
+                "pos": tuple(float(x) for x in world_pos[:3]),
+                "dir": self._rotate_vec_by_quat((0.0, 0.0, -1.0), world_orient),
+                "color": tuple(max(0.0, float(x)) for x in color[:3]),
+                "radius": radius,
+                "intensity": intensity,
+                "cone_cos": math.cos(math.radians(cone_deg * 0.5)),
+                "area_size": max(0.0, float(getattr(node, "light_area_size", 1.0) or 1.0)),
+                "score": radius * max(0.01, intensity),
+            })
+        records.sort(key=lambda item: item["score"], reverse=True)
+        return records[:16]
+
+    def _upload_scene_lights(self, prog, uniforms, records: list[dict]) -> None:
+        count = len(records)
+        mode = str(getattr(self, "lighting_mode", "scene") or "scene").lower()
+        lighting_int = 0 if mode == "unlit" else 2 if (mode == "scene" and count > 0) else 1
+        if "u_scene_lighting" in uniforms:
+            uniforms["u_scene_lighting"].value = lighting_int
+        if "u_scene_ambient" in uniforms:
+            uniforms["u_scene_ambient"].value = float(getattr(self, "scene_ambient", 0.06))
+        if "u_scene_light_count" in uniforms:
+            uniforms["u_scene_light_count"].value = count
+        if count <= 0 or not _NUMPY:
+            return
+
+        enabled = np.zeros(16, dtype="i4")
+        kind = np.zeros(16, dtype="i4")
+        ambient_only = np.zeros(16, dtype="i4")
+        pos = np.zeros((16, 3), dtype="f4")
+        direction = np.zeros((16, 3), dtype="f4")
+        color = np.ones((16, 3), dtype="f4")
+        radius = np.ones(16, dtype="f4")
+        intensity = np.ones(16, dtype="f4")
+        cone_cos = np.full(16, math.cos(math.radians(22.5)), dtype="f4")
+        area_size = np.ones(16, dtype="f4")
+        for idx, rec in enumerate(records):
+            enabled[idx] = int(rec["enabled"])
+            kind[idx] = int(rec["kind"])
+            ambient_only[idx] = int(rec["ambient_only"])
+            pos[idx] = rec["pos"]
+            direction[idx] = rec["dir"]
+            color[idx] = rec["color"]
+            radius[idx] = float(rec["radius"])
+            intensity[idx] = float(rec["intensity"])
+            cone_cos[idx] = float(rec["cone_cos"])
+            area_size[idx] = float(rec["area_size"])
+
+        for name, data in (
+            ("u_scene_light_enabled", enabled),
+            ("u_scene_light_kind", kind),
+            ("u_scene_light_ambient_only", ambient_only),
+            ("u_scene_light_pos", pos),
+            ("u_scene_light_dir", direction),
+            ("u_scene_light_color", color),
+            ("u_scene_light_radius", radius),
+            ("u_scene_light_intensity", intensity),
+            ("u_scene_light_cone_cos", cone_cos),
+            ("u_scene_light_area_size", area_size),
+        ):
+            uniform = uniforms.get(name)
+            if uniform is None:
+                try:
+                    uniform = prog[f"{name}[0]"]
+                except Exception:
+                    continue
+            try:
+                uniform.write(data.tobytes())
+            except Exception:
+                log.debug("GpuRenderer: failed to upload %s", name, exc_info=True)
 
     def render(self,
                model,
@@ -4494,6 +4868,7 @@ class GpuRenderer:
             _u['u_decal'].value      = 0
             _u['u_wateralpha'].value = 1.0
             _u['u_has_spec'].value   = 0
+            _u['u_has_bump'].value   = 0
             _u['u_alpha'].value      = 1.0
             _u['u_node_alpha'].value = 1.0
             _u['u_blend_mode'].value = 0
@@ -4501,7 +4876,18 @@ class GpuRenderer:
             _u['u_has_lm'].value     = 0
             _u['u_lm_shade'].value   = 0
             _u['u_lm_composite_mode'].value = _lm_composite_mode()
+            if 'u_lightmap_intensity' in _u:
+                _u['u_lightmap_intensity'].value = float(getattr(self, 'lightmap_intensity', 0.55))
+            if 'u_lightmap_mode' in _u:
+                _lm_mode = str(getattr(self, 'lightmap_mode', 'baked') or 'baked').lower()
+                _u['u_lightmap_mode'].value = 1 if _lm_mode == 'phong' else 2 if _lm_mode == 'emissive' else 0
             _u['u_has_env'].value    = 0
+            if 'u_scene_lighting' in _u:
+                _u['u_scene_lighting'].value = 1
+            if 'u_scene_ambient' in _u:
+                _u['u_scene_ambient'].value = float(getattr(self, 'scene_ambient', 0.06))
+            if 'u_scene_light_count' in _u:
+                _u['u_scene_light_count'].value = 0
             _u['u_diffuse'].value    = (1.0, 1.0, 1.0)
             _u['u_selfillum'].value  = (0.0, 0.0, 0.0)
             _u['u_uv_scroll'].value  = (0.0, 0.0)
@@ -4786,6 +5172,8 @@ class GpuRenderer:
             _gpu_model_type  = int(_gpu_model_type_raw) if _gpu_model_type_raw is not None else 4
             _gpu_is_module   = (_gpu_model_cls in ('effect', 'tile', 'other') or
                                 _gpu_model_type in (0, 2))
+            _scene_lights = self._scene_light_records(nodes, _get_world_transform)
+            self._upload_scene_lights(prog, _u, _scene_lights)
 
             def _is_deform_helper(nd) -> bool:
                 """Return True if nd is a bone-proxy/deformation-helper that must not render."""
@@ -5361,8 +5749,8 @@ class GpuRenderer:
                 diff_img = textures.get(tex_name) if tex_name else None
                 gl_diff = self._tex_cache.get(diff_img) if diff_img else None
 
-                _texture_allowed = bool(self.show_texture)
-                _detail_texture_allowed = bool(_texture_allowed and _render_mode_int == 0)
+                _texture_allowed = bool(self.show_texture and self.show_diffuse_map)
+                _detail_texture_allowed = bool(self.show_texture and _render_mode_int == 0)
                 if _texture_allowed and gl_diff:
                     # FIX-TEXWRAP: Apply per-node TXI clamp mode (GL_CLAMP_TO_EDGE)
                     # vs. default GL_REPEAT before each draw call.
@@ -5403,7 +5791,7 @@ class GpuRenderer:
                 lm_img      = textures.get(lm_name) if (lm_name and has_lm_flag
                                                          and len(uvs_lm) > 0) else None
                 gl_lm = self._tex_cache.get(lm_img) if lm_img else None
-                if _detail_texture_allowed and gl_lm:
+                if _detail_texture_allowed and bool(self.show_lightmap_map) and gl_lm:
                     # FIX-LMWRAP: Lightmap textures must use CLAMP_TO_EDGE
                     # (not GL_REPEAT) because lightmap UVs are always in [0,1]
                     # and wrap-around causes visible seam lines at texel boundaries.
@@ -5438,7 +5826,7 @@ class GpuRenderer:
                 # alpha applied as transparency), which is wrong — the surface
                 # should remain opaque with a slight metallic tint.
                 env_name = str(getattr(node, 'txi_envmaptexture', '')).strip().lower()
-                if _detail_texture_allowed and env_name:
+                if _detail_texture_allowed and bool(self.show_environment_map) and env_name:
                     env_img  = textures.get(env_name)
                     gl_env   = self._tex_cache.get(env_img) if env_img else None
                     if gl_env is None:
@@ -5463,7 +5851,7 @@ class GpuRenderer:
                 #            KotOR.js ShaderOdysseyModel.ts specularColor;
                 #            xoreos modelnode.cpp _specularColour field.
                 spec_name = str(getattr(node, 'txi_specularcolour', '')).strip().lower()
-                if _detail_texture_allowed and spec_name:
+                if _detail_texture_allowed and bool(self.show_specular_map) and spec_name:
                     spec_img = textures.get(spec_name)
                     gl_spec  = self._tex_cache.get(spec_img) if spec_img else None
                     if gl_spec is not None:
@@ -5475,6 +5863,23 @@ class GpuRenderer:
                 else:
                     _u['u_has_spec'].value = 0
 
+                bump_name = str(
+                    getattr(node, 'txi_bumpmaptexture', '')
+                    or getattr(node, 'bump_map', '')
+                    or ''
+                ).strip().lower()
+                if _detail_texture_allowed and bool(self.show_normal_map) and bump_name:
+                    bump_img = textures.get(bump_name)
+                    gl_bump = self._tex_cache.get(bump_img) if bump_img else None
+                    if gl_bump is not None:
+                        gl_bump.use(location=4)
+                        _u['u_bump_tex'].value = 4
+                        _u['u_has_bump'].value = 1
+                    else:
+                        _u['u_has_bump'].value = 0
+                else:
+                    _u['u_has_bump'].value = 0
+
                 # v7.1/7.2: Build feature bitmask for this node (Finding 5.2)
                 # FIX-FEATMASK-ORDER: Moved AFTER texture binding so that
                 # gl_diff, diff_img, gl_lm, env_name, spec_name are all
@@ -5482,9 +5887,10 @@ class GpuRenderer:
                 # on the first draw call, silently falling back to CPU.
                 _feat_mask = 0
                 if gl_diff and diff_img: _feat_mask |= (1 << 0)   # FEAT_TEXTURE
-                if _detail_texture_allowed and gl_lm: _feat_mask |= (1 << 1)   # FEAT_LIGHTMAP
-                if _detail_texture_allowed and env_name: _feat_mask |= (1 << 2)   # FEAT_ENVMAP
-                if _detail_texture_allowed and spec_name: _feat_mask |= (1 << 3)   # FEAT_SPECMAP
+                if _detail_texture_allowed and bool(self.show_lightmap_map) and gl_lm: _feat_mask |= (1 << 1)   # FEAT_LIGHTMAP
+                if _detail_texture_allowed and bool(self.show_environment_map) and env_name: _feat_mask |= (1 << 2)   # FEAT_ENVMAP
+                if _detail_texture_allowed and bool(self.show_specular_map) and spec_name: _feat_mask |= (1 << 3)   # FEAT_SPECMAP
+                if _detail_texture_allowed and bool(self.show_normal_map) and bump_name: _feat_mask |= (1 << 4)   # FEAT_BUMPMAP
                 if _is_dangly:          _feat_mask |= (1 << 6)   # FEAT_DANGLY
                 if _is_saber:           _feat_mask |= (1 << 7)   # FEAT_SABER
                 if txi_decal:           _feat_mask |= (1 << 11)  # FEAT_DECAL
@@ -5711,6 +6117,7 @@ class GpuRenderer:
             except Exception:
                 pass
             self._wireframe_pass = False
+            self._draw_light_gizmos(ctx, mvp, nodes, _get_world_transform)
 
             self.perf['draw_ms'] = (time.perf_counter() - t_draw) * 1000
             self.perf['tri_count'] = total_tris

@@ -30,6 +30,7 @@ except ImportError as exc:  # pragma: no cover - import gate for Tk fallback
 
 from src.gui.qt_lib.panels.qt_library_panel import QtLibraryPanel, enrich_library_rows
 from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel
+from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
 from src.gui.qt_lib.assets.qt_matrix_background import QtMatrixEngine, QtMatrixLabel, QtMatrixPanel
 from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel, QtSkeletonPanel
 from src.gui.qt_lib.viewports.qt_viewport import QtMainViewportWidget
@@ -846,6 +847,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.blueprint_editor_action.triggered.connect(self._open_blueprint_editor_window)
         self.nodes_panel_action = QtGui.QAction(self._icon("skeleton"), "Open Nodes Panel", self)
         self.nodes_panel_action.triggered.connect(lambda: self._show_detachable_panel("nodes"))
+        self.lighting_panel_action = QtGui.QAction("Open Lighting Panel", self)
+        self.lighting_panel_action.triggered.connect(lambda: self._show_detachable_panel("lighting"))
         self.twoda_panel_action = QtGui.QAction(self._icon("twoda"), "Open 2DA Browser", self)
         self.twoda_panel_action.triggered.connect(lambda: self._show_detachable_panel("2das"))
         self.resources_panel_action = QtGui.QAction(self._icon("resources"), "Open Resource Browser", self)
@@ -950,6 +953,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         modules_menu.addAction(self.unreal_animator_action)
         modules_menu.addSeparator()
         modules_menu.addAction(self.nodes_panel_action)
+        modules_menu.addAction(self.lighting_panel_action)
         modules_menu.addAction(self.module_meshes_panel_action)
         modules_menu.addAction(self.twoda_panel_action)
         modules_menu.addAction(self.resources_panel_action)
@@ -1111,6 +1115,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._tool_button("Settings  F2", self.settings_action, "settings", compact=True))
         layout.addWidget(self._separator())
         layout.addWidget(self._tool_button("Anims  Ctrl+A", self.anims_action, "anims", compact=True))
+        layout.addWidget(self._tool_button("Lights", self.lighting_panel_action, "", compact=True))
         layout.addWidget(self._tool_button("Diag  Ctrl+D", self.diag_action, "diag", compact=True))
         return bar
 
@@ -1242,6 +1247,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         right_tabs.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         self.right_tabs = right_tabs
         self.skeleton_panel = QtSkeletonPanel(self)
+        self.lighting_panel = QtLightingPanel(self)
         self.properties_panel = QtPropertiesPanel(self, module_browser_enabled=False)
         self.module_geometry_panel = QtPropertiesPanel(self)
         self.module_geometry_panel.set_module_browser_only(True)
@@ -1303,11 +1309,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._detachable_panels: dict[str, QtWidgets.QDockWidget] = {}
         self._detachable_panel_sizes = {
             "nodes": (620, 700),
+            "lighting": (420, 620),
             "module_meshes": (620, 720),
             "2das": (980, 640),
             "resources": (980, 640),
         }
         self._create_detachable_panel("nodes", "Nodes", self.skeleton_panel, QtCore.Qt.LeftDockWidgetArea)
+        self._create_detachable_panel("lighting", "Lighting", self.lighting_panel, QtCore.Qt.RightDockWidgetArea)
         self._create_detachable_panel("module_meshes", "Module Meshes", self.module_geometry_panel, QtCore.Qt.RightDockWidgetArea)
         self._create_detachable_panel("2das", "2DA Browser", self.twoda_panel, QtCore.Qt.LeftDockWidgetArea)
         self._create_detachable_panel("resources", "Resource Browser", self.resource_panel, QtCore.Qt.LeftDockWidgetArea)
@@ -1330,6 +1338,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport.nodeMoved.connect(self.module_geometry_panel.show_node)
         self.viewport.meshVisibilityChanged.connect(self.module_geometry_panel.refresh_module_mesh_rows)
         self.viewport.gpuUploadProgress.connect(self._on_viewport_gpu_upload_progress)
+        self.lighting_panel.lightingModeChanged.connect(self.viewport.set_lighting_mode)
+        self.lighting_panel.mapToggled.connect(self.viewport.set_texture_map_enabled)
+        self.lighting_panel.lightmapSettingsChanged.connect(self.viewport.set_lightmap_settings)
+        self.lighting_panel.lightChanged.connect(self.viewport.refresh_lighting)
+        self.lighting_panel.lightSelected.connect(self.viewport.set_selected_node)
+        self.viewport.nodeSelected.connect(self.lighting_panel.select_light)
         self.module_geometry_panel.moduleMeshesSelected.connect(self.viewport.set_selected_meshes)
         self.module_geometry_panel.moduleMeshVisibilityChanged.connect(self.viewport.refresh_view)
         self.module_geometry_panel.moduleMeshesWindowRequested.connect(lambda: self._show_detachable_panel("module_meshes"))
@@ -1647,6 +1661,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self.viewport.set_model(None)
             if hasattr(self, "skeleton_panel"):
                 self.skeleton_panel.load_model(None)
+            if hasattr(self, "lighting_panel"):
+                self.lighting_panel.set_model(None)
             if hasattr(self, "properties_panel"):
                 self.properties_panel.show_model(None)
             if hasattr(self, "module_geometry_panel"):
@@ -1726,6 +1742,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.viewport.load_model(model, self._texture_dir)
         if hasattr(self, "skeleton_panel"):
             self.skeleton_panel.load_model(model)
+        if hasattr(self, "lighting_panel"):
+            self.lighting_panel.set_model(model)
         if hasattr(self, "properties_panel"):
             self.properties_panel.show_model(model)
         if hasattr(self, "module_geometry_panel"):
@@ -3855,6 +3873,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         )
         if hasattr(self, "skeleton_panel"):
             self.skeleton_panel.load_model(model)
+        if hasattr(self, "lighting_panel"):
+            self.lighting_panel.set_model(model)
         if hasattr(self, "properties_panel"):
             self.properties_panel.show_model(model)
         if hasattr(self, "module_geometry_panel"):

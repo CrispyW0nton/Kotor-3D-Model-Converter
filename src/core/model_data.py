@@ -634,6 +634,10 @@ class ModelNode:
     light_fading:     bool  = False
     light_ambient_only: bool = False
     light_dynamic:    int   = 0
+    light_kind:       str   = "point"   # point, spot, directional, area
+    light_enabled:    bool  = True
+    light_cone_degrees: float = 45.0
+    light_area_size:  float = 1.0
 
     # ── Emitter ──
     emitter_params: Dict[str, Any] = field(default_factory=dict)
@@ -1094,6 +1098,18 @@ class ModelNode:
         n.diffuse  = self.diffuse
         n.ambient  = self.ambient
         n.shininess = self.shininess
+        n.light_radius       = self.light_radius
+        n.light_color        = self.light_color
+        n.light_multiplier   = self.light_multiplier
+        n.light_shadow       = self.light_shadow
+        n.light_flare        = self.light_flare
+        n.light_fading       = self.light_fading
+        n.light_ambient_only = self.light_ambient_only
+        n.light_dynamic      = self.light_dynamic
+        n.light_kind         = self.light_kind
+        n.light_enabled      = self.light_enabled
+        n.light_cone_degrees = self.light_cone_degrees
+        n.light_area_size    = self.light_area_size
         # Phase 3.7 fields
         n.mesh_average_point = self.mesh_average_point
         n.mesh_unknown0      = self.mesh_unknown0
