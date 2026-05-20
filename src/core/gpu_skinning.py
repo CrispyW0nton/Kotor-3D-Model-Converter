@@ -956,7 +956,8 @@ class MatrixPaletteUploader:
         bone_map = list(getattr(skin_node, 'bone_map', []) or [])
         qbones = list(getattr(skin_node, 'qbone_list', []) or [])
         tbones = list(getattr(skin_node, 'tbone_list', []) or [])
-        if active_formula == _SKIN_FORMULA_G5 and (not qbones or not tbones):
+        formula_env_raw = os.environ.get(_SKIN_FORMULA_ENV, '').strip()
+        if active_formula == _SKIN_FORMULA_G5 and not formula_env_raw and (not qbones or not tbones):
             # Imported FBX skin meshes, such as the Unreal Animator Quinn target,
             # have normal bone maps and skin weights but no KotOR qBone/tBone
             # arrays. G5 would otherwise use identity inverse-bind matrices and

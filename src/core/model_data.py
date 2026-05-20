@@ -246,6 +246,7 @@ class CharacterMode(_Enum):
     HUMANOID      = "humanoid"        # Full humanoid NPC/body with its own head and humanoid skeleton
     SUPERMODEL    = "supermodel"      # Animation-bearing parent skeleton (s_male01, etc.)
     CREATURE      = "creature"        # Self-contained non-humanoid (c_bantha, c_rancor, …)
+    MODULE        = "module"          # Area/module/tile/effect geometry, not a character rig
 
     # ── Fallback / sentinel values ──────────────────────────────────────
     AMBIGUOUS     = "ambiguous"       # Detection rules conflict — user input required
@@ -274,6 +275,7 @@ _CHARACTER_MODE_DISPLAY_NAMES: Dict["CharacterMode", str] = {
     CharacterMode.HUMANOID:      "Humanoid",
     CharacterMode.SUPERMODEL:    "Supermodel",
     CharacterMode.CREATURE:      "Creature",
+    CharacterMode.MODULE:        "Module",
     CharacterMode.AMBIGUOUS:     "Ambiguous",
     CharacterMode.UNSUPPORTED:   "Unsupported",
 }
@@ -285,6 +287,7 @@ _CHARACTER_MODE_ICON_KEYS: Dict["CharacterMode", str] = {
     CharacterMode.HUMANOID:      "mode_humanoid",
     CharacterMode.SUPERMODEL:    "mode_supermodel",
     CharacterMode.CREATURE:      "mode_creature",
+    CharacterMode.MODULE:        "mode_module",
     CharacterMode.AMBIGUOUS:     "mode_ambiguous",
     CharacterMode.UNSUPPORTED:   "mode_unsupported",
 }
@@ -410,12 +413,12 @@ def classify_kotor_model(model: "KotorModel") -> ModelTaxonomyResult:
         return result(ModelTaxonomy.PLACEABLE, CharacterMode.UNSUPPORTED,
                       "high", "placeable classification/prefix")
     if name.startswith("m") and len(name) >= 3 and name[1:3].isdigit():
-        return result(ModelTaxonomy.AREA, CharacterMode.UNSUPPORTED,
+        return result(ModelTaxonomy.AREA, CharacterMode.MODULE,
                       "medium", "module/area naming convention")
     if classification in (int(ModelClassification.EFFECT),
                           int(ModelClassification.EFFECTS),
                           int(ModelClassification.TILE)):
-        return result(ModelTaxonomy.EFFECT, CharacterMode.UNSUPPORTED,
+        return result(ModelTaxonomy.EFFECT, CharacterMode.MODULE,
                       "medium", "non-character engine classification")
 
     is_characterish = classification in (

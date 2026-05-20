@@ -3369,6 +3369,7 @@ class FrameRenderer:
         self.show_solid     = True
         self.show_grid      = True
         self.show_texture   = False   # Toggle textured rendering
+        self.render_mode    = "realistic"
         self.is_interactive = False   # True while mouse dragged (enable LOD)
         # FIX (v10.4): Explicitly declare _lq_tex_mode in __init__ so that
         # getattr(self, '_lq_tex_mode', False) is never needed; the attribute
@@ -3598,7 +3599,11 @@ class FrameRenderer:
         if m:
             # Use render_bounds (visible nodes only) for camera framing so that
             # deformation-helper skeleton meshes don't push the camera too far back.
-            rbb_min, rbb_max = m.render_bounds()
+            prepared_bounds = getattr(m, "_gr_render_bounds", None)
+            if prepared_bounds:
+                rbb_min, rbb_max = prepared_bounds
+            else:
+                rbb_min, rbb_max = m.render_bounds()
             # Cache the result immediately so _draw_stats() doesn't recompute it
             self._render_bounds_cache = (rbb_min, rbb_max)
             self.cam.frame_bounds(rbb_min, rbb_max)
@@ -3607,7 +3612,10 @@ class FrameRenderer:
             # Load and apply TXI metadata for all mesh nodes
             # This populates txi_blending, txi_cube, txi_proceduretype, etc.
             # so that the renderer can apply flipbook / additive blending / clamp modes.
-            self._load_txi_metadata_for_model(m)
+            if getattr(m, "_gr_defer_txi_metadata", False):
+                log.debug("Deferring TXI metadata load for %s", getattr(m, "name", "?"))
+            else:
+                self._load_txi_metadata_for_model(m)
             # Trigger Numba JIT warmup in background so the first drag frame is fast
             # (v10.5): warmup_jit() is a no-op if already warmed or if Numba is absent.
             import threading as _t
@@ -6818,6 +6826,8 @@ class FrameRenderer:
         if is_animation_supermodel(self.model):
             return
         for n in self._iter_mesh_nodes():
+            if getattr(n, '_gr_hidden', False):
+                continue
             # Skip nodes explicitly marked non-renderable by the MDL author.
             # The render flag is set to False for collision boxes, occluders, and
             # internal engine helpers.  Always respect it regardless of other flags.

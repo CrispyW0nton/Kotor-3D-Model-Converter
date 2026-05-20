@@ -2776,6 +2776,8 @@ uniform int   u_debug_visualize; // 0 normal, 1 red, 2 alpha, 3 diffuse, 4 light
 uniform int   u_lm_composite_mode; // 0 current, 1 multiply, 2 overbright2, 3 clamp diagnostic
 uniform int   u_wireframe_enabled;
 uniform vec3  u_wire_color;
+uniform int   u_render_mode; // 0 realistic, 1 flat, 2 shaded
+uniform int   u_selected;
 
 // Inputs from vertex shader
 in vec3  v_world_pos;
@@ -2986,6 +2988,18 @@ void main() {
                 }
             }
         }
+    }
+
+    if (u_render_mode == 1) {
+        lit_color = diffuse_samp.rgb;
+    } else if (u_render_mode == 2) {
+        float soft_shade = clamp(0.76 + max(dot(N, u_light_dir), 0.0) * 0.24, 0.70, 1.0);
+        lit_color = diffuse_samp.rgb * soft_shade;
+        diffuse_samp.a = 1.0;
+    }
+
+    if (u_selected == 1) {
+        lit_color = mix(lit_color, vec3(1.0, 0.78, 0.12), 0.45);
     }
 
     lit_color = clamp(lit_color, 0.0, 1.0);
@@ -3323,6 +3337,145 @@ class _GlTexCache:
 # ─────────────────────────────────────────────────────────────────────────────
 #  Mesh geometry builder
 # ─────────────────────────────────────────────────────────────────────────────
+
+_PREBUILT_STATIC_MESH_ATTR = "_gr_gpu_prebuilt_static_mesh"
+
+
+def clear_prebuilt_static_gpu_mesh_data(node) -> None:
+    """Drop RAM-cached static GPU mesh data for a node and its descendants."""
+    stack = [node]
+    seen = set()
+    while stack:
+        cur = stack.pop()
+        if cur is None:
+            continue
+        cid = id(cur)
+        if cid in seen:
+            continue
+        seen.add(cid)
+        try:
+            if hasattr(cur, _PREBUILT_STATIC_MESH_ATTR):
+                delattr(cur, _PREBUILT_STATIC_MESH_ATTR)
+        except Exception:
+            pass
+        try:
+            stack.extend(getattr(cur, "children", []) or [])
+        except Exception:
+            pass
+
+
+def clear_prebuilt_static_gpu_model_data(model) -> int:
+    """Drop all RAM-cached static GPU mesh data attached to a model."""
+    if model is None:
+        return 0
+    try:
+        nodes = list(model.all_nodes())
+    except Exception:
+        root = getattr(model, "root_node", None)
+        nodes = [root] if root is not None else []
+    cleared = 0
+    for node in nodes:
+        try:
+            if hasattr(node, _PREBUILT_STATIC_MESH_ATTR):
+                delattr(node, _PREBUILT_STATIC_MESH_ATTR)
+                cleared += 1
+        except Exception:
+            pass
+    try:
+        setattr(model, "_gr_gpu_prebuilt_mesh_count", 0)
+    except Exception:
+        pass
+    return cleared
+
+
+def _prebuilt_static_gpu_mesh_data(node, model_id: int, skin_bind_transform: bool):
+    try:
+        entry = getattr(node, _PREBUILT_STATIC_MESH_ATTR, None)
+    except Exception:
+        return None
+    if not entry:
+        return None
+    if entry.get("model_id") != model_id:
+        return None
+    if bool(entry.get("skin_bind_transform")) != bool(skin_bind_transform):
+        return None
+    vdata = entry.get("vdata")
+    if vdata is None:
+        return None
+    return vdata, entry.get("idx_arr")
+
+
+def prebuild_static_gpu_mesh_data(model) -> int:
+    """Build static mesh VBO arrays and viewport bounds before GUI render."""
+    if model is None or not _NUMPY:
+        return 0
+    try:
+        nodes = list(model.all_nodes())
+    except Exception:
+        return 0
+    model_id = id(model)
+    model_cls = (str(getattr(model, "classification", "character") or "character")).lower()
+    model_type_raw = getattr(model, "model_type", None)
+    try:
+        model_type = int(model_type_raw) if model_type_raw is not None else 4
+    except Exception:
+        model_type = 4
+    is_module = model_cls in ("effect", "tile", "other") or model_type in (0, 2)
+    built = 0
+    bounds_min = np.array([np.inf, np.inf, np.inf], dtype=np.float64)
+    bounds_max = np.array([-np.inf, -np.inf, -np.inf], dtype=np.float64)
+    for node in nodes:
+        try:
+            if not (getattr(node, "vertices", None) and getattr(node, "faces", None)):
+                continue
+            wp, wo = node.world_transform()
+            skin_bind_transform = bool(getattr(node, "is_skin", False))
+            vdata, idx_arr = _build_vbo_data(
+                node,
+                wp,
+                wo,
+                anim_pose_node=None,
+                is_module=is_module,
+                bone_index_remap=None,
+                apply_skin_node_transform_for_bind=skin_bind_transform,
+            )
+            if vdata is None:
+                continue
+            try:
+                pos = vdata[:, 0:3].astype(np.float64, copy=False)
+                if pos.size:
+                    bounds_min = np.minimum(bounds_min, pos.min(axis=0))
+                    bounds_max = np.maximum(bounds_max, pos.max(axis=0))
+            except Exception:
+                pass
+            setattr(
+                node,
+                _PREBUILT_STATIC_MESH_ATTR,
+                {
+                    "model_id": model_id,
+                    "skin_bind_transform": skin_bind_transform,
+                    "vdata": vdata,
+                    "idx_arr": idx_arr,
+                },
+            )
+            built += 1
+        except Exception:
+            continue
+    try:
+        setattr(model, "_gr_gpu_prebuilt_mesh_count", built)
+        if built > 128 or is_module:
+            setattr(model, "_gr_defer_txi_metadata", True)
+        if built and np.isfinite(bounds_min).all() and np.isfinite(bounds_max).all():
+            bb_min = tuple(float(v) for v in bounds_min.tolist())
+            bb_max = tuple(float(v) for v in bounds_max.tolist())
+            setattr(model, "_gr_render_bounds", (bb_min, bb_max))
+            setattr(model, "_gr_bounds_prepared", True)
+            model.bb_min = bb_min
+            model.bb_max = bb_max
+    except Exception:
+        pass
+    return built
+
 
 def _quat_rotate_batch(q: np.ndarray, pts: np.ndarray) -> np.ndarray:
     """
@@ -3885,10 +4038,15 @@ class GpuRenderer:
         self.show_solid: bool = True
         self.show_texture: bool = True
         self.show_wireframe: bool = False
+        self.render_mode: str = "realistic"
+        self.selected_node = None
+        self.selected_nodes: list = []
         self.wire_color: tuple[float, float, float] = (0.18, 0.62, 0.95)
         self._wireframe_pass: bool = False
         self.show_grid: bool = True
         self.cull_faces: bool = True
+        self.max_new_mesh_uploads_per_frame: int = 64
+        self.deferred_mesh_uploads: bool = False
         # ── Phase A: GPU Skinning state ──────────────────────────────────────────
         # MatrixPaletteUploader instance, created per model when skin nodes exist.
         # Caches inverse bind-pose matrices and computes per-frame bone palettes.
@@ -3949,6 +4107,7 @@ class GpuRenderer:
                 'u_saber_enabled', 'u_saber_displacement', 'u_saber_length',
                 'u_oit_enabled', 'u_tex', 'u_lm_tex', 'u_env_tex', 'u_spec_tex',
                 'u_debug_visualize', 'u_wireframe_enabled', 'u_wire_color',
+                'u_render_mode', 'u_selected',
                 # Phase A: GPU Skinning uniforms
                 'u_skin_enabled', 'u_bone_count', 'u_bones',
             ):
@@ -4192,6 +4351,8 @@ class GpuRenderer:
             return None
         if not _NUMPY or not _PIL:
             return None
+        self.deferred_mesh_uploads = False
+        _new_mesh_uploads_this_frame = 0
 
         # PERF-SCALE: Interactive preview skips MSAA below, but stays at full
         # resolution by default.  Lower interactive_render_scale only when the
@@ -4375,6 +4536,12 @@ class GpuRenderer:
                 _u['u_wireframe_enabled'].value = 1 if self._wireframe_pass else 0
             if 'u_wire_color' in _u:
                 _u['u_wire_color'].value = tuple(self.wire_color)
+            _render_mode_name = str(getattr(self, 'render_mode', 'realistic') or 'realistic').lower()
+            _render_mode_int = 1 if _render_mode_name == 'flat' else 2 if _render_mode_name == 'shaded' else 0
+            if 'u_render_mode' in _u:
+                _u['u_render_mode'].value = _render_mode_int
+            if 'u_selected' in _u:
+                _u['u_selected'].value = 0
             _u['u_dangly_enabled'].value      = 0.0
             _u['u_dangly_displacement'].value = 0.0
             _u['u_dangly_time'].value         = 0.0
@@ -4725,6 +4892,9 @@ class GpuRenderer:
                 wa = float(getattr(nd, 'txi_wateralpha', 1.0))
                 decal = bool(getattr(nd, 'txi_decal', False))
 
+                if _gpu_is_module and _render_mode_int in (1, 2):
+                    return 1.0, 0, False, False
+
                 # Punchthrough classification (alpha-test discard in shader):
                 # Use cutout pass when the MDL node explicitly requests it
                 # via transparency_hint > 0 (head meshes, hair cards, foliage).
@@ -4760,6 +4930,8 @@ class GpuRenderer:
                 cutout_nodes      = []
                 transparent_nodes = []
                 for node in nodes:
+                    if getattr(node, '_gr_hidden', False):
+                        continue
                     if not getattr(node, 'render', True):
                         continue
                     verts = getattr(node, 'vertices', getattr(node, 'verts', []))
@@ -4804,7 +4976,7 @@ class GpuRenderer:
                     (for per-material-slot sub-mesh drawing).
                 override_tri_count: triangle count for the override VAO.
                 """
-                nonlocal total_tris
+                nonlocal total_tris, _new_mesh_uploads_this_frame
                 # Use world-space transform (full parent-chain walk) for correct
                 # positioning of all mesh nodes, not just local node.position.
                 wp, wo = _get_world_transform(node)
@@ -4819,6 +4991,8 @@ class GpuRenderer:
                             node_alpha = max(0.0, min(1.0, float(_pn.alpha)))
                         if getattr(_pn, 'selfillum', None) is not None:
                             selfillum = _pn.selfillum
+                if _gpu_is_module and _render_mode_int in (1, 2):
+                    node_alpha = 1.0
 
                 node_id = id(node)
                 # FIX-SKIN-ANIM: Skin nodes are NOT considered "animated" for VBO
@@ -4858,15 +5032,29 @@ class GpuRenderer:
                         != _skin_bind_transform
                     )
                 if is_animated or node_id not in self._mesh_cache or _skin_vbo_mode_changed:
+                    if anim_pose is None and not is_animated:
+                        upload_budget = int(getattr(self, "max_new_mesh_uploads_per_frame", 0) or 0)
+                        if upload_budget > 0 and _new_mesh_uploads_this_frame >= upload_budget:
+                            self.deferred_mesh_uploads = True
+                            return
+                        _new_mesh_uploads_this_frame += 1
                     # FIX-SKIN-QBONE: Skin nodes now use a per-draw local palette
                     # in bone_map order.  Keep authored bone IDs local so slot k in
                     # vertex influences addresses qBone[k]/tBone[k] for this skin.
                     _bone_remap = None
-                    vdata, idx_arr = _build_vbo_data(node, wp, wo,
-                                                     anim_pose_node=None,
-                                                     is_module=_gpu_is_module,
-                                                     bone_index_remap=_bone_remap,
-                                                     apply_skin_node_transform_for_bind=_skin_bind_transform)
+                    _prebuilt_vbo = None
+                    if anim_pose is None and not is_animated:
+                        _prebuilt_vbo = _prebuilt_static_gpu_mesh_data(
+                            node, _cur_model_id, _skin_bind_transform
+                        )
+                    if _prebuilt_vbo is not None:
+                        vdata, idx_arr = _prebuilt_vbo
+                    else:
+                        vdata, idx_arr = _build_vbo_data(node, wp, wo,
+                                                         anim_pose_node=None,
+                                                         is_module=_gpu_is_module,
+                                                         bone_index_remap=_bone_remap,
+                                                         apply_skin_node_transform_for_bind=_skin_bind_transform)
                     if vdata is None:
                         return
                     if node_id in self._mesh_cache:
@@ -4993,6 +5181,13 @@ class GpuRenderer:
                     _u['u_wireframe_enabled'].value = 1 if self._wireframe_pass else 0
                 if 'u_wire_color' in _u:
                     _u['u_wire_color'].value = tuple(self.wire_color)
+                if 'u_selected' in _u:
+                    _selected_ids = {id(_n) for _n in (getattr(self, 'selected_nodes', []) or [])}
+                    _u['u_selected'].value = 1 if (
+                        node is getattr(self, 'selected_node', None)
+                        or id(node) in _selected_ids
+                        or bool(getattr(node, '_gr_selected', False))
+                    ) else 0
                 _u['u_diffuse'].value = diff
                 _u['u_selfillum'].value = tuple(
                     max(0.0, min(2.0, float(c))) for c in selfillum[:3])
@@ -5189,7 +5384,9 @@ class GpuRenderer:
                     1.0 if bool(getattr(node, 'uv_v_flip', True)) and _tex_gpu_v_flip else 0.0
                 )
 
-                if self.show_texture and gl_diff:
+                _texture_allowed = bool(self.show_texture)
+                _detail_texture_allowed = bool(_texture_allowed and _render_mode_int == 0)
+                if _texture_allowed and gl_diff:
                     # FIX-TEXWRAP: Apply per-node TXI clamp mode (GL_CLAMP_TO_EDGE)
                     # vs. default GL_REPEAT before each draw call.
                     # txi_clamp_s=True → GL_CLAMP_TO_EDGE on U axis (no horizontal tile)
@@ -5236,7 +5433,7 @@ class GpuRenderer:
                 lm_img      = textures.get(lm_name) if (lm_name and has_lm_flag
                                                          and len(uvs_lm) > 0) else None
                 gl_lm = self._tex_cache.get(lm_img) if lm_img else None
-                if gl_lm:
+                if _detail_texture_allowed and gl_lm:
                     # FIX-LMWRAP: Lightmap textures must use CLAMP_TO_EDGE
                     # (not GL_REPEAT) because lightmap UVs are always in [0,1]
                     # and wrap-around causes visible seam lines at texel boundaries.
@@ -5271,7 +5468,7 @@ class GpuRenderer:
                 # alpha applied as transparency), which is wrong — the surface
                 # should remain opaque with a slight metallic tint.
                 env_name = str(getattr(node, 'txi_envmaptexture', '')).strip().lower()
-                if env_name:
+                if _detail_texture_allowed and env_name:
                     env_img  = textures.get(env_name)
                     gl_env   = self._tex_cache.get(env_img) if env_img else None
                     if gl_env is None:
@@ -5296,7 +5493,7 @@ class GpuRenderer:
                 #            KotOR.js ShaderOdysseyModel.ts specularColor;
                 #            xoreos modelnode.cpp _specularColour field.
                 spec_name = str(getattr(node, 'txi_specularcolour', '')).strip().lower()
-                if spec_name:
+                if _detail_texture_allowed and spec_name:
                     spec_img = textures.get(spec_name)
                     gl_spec  = self._tex_cache.get(spec_img) if spec_img else None
                     if gl_spec is not None:
@@ -5315,9 +5512,9 @@ class GpuRenderer:
                 # on the first draw call, silently falling back to CPU.
                 _feat_mask = 0
                 if gl_diff and diff_img: _feat_mask |= (1 << 0)   # FEAT_TEXTURE
-                if gl_lm:               _feat_mask |= (1 << 1)   # FEAT_LIGHTMAP
-                if env_name:            _feat_mask |= (1 << 2)   # FEAT_ENVMAP
-                if spec_name:           _feat_mask |= (1 << 3)   # FEAT_SPECMAP
+                if _detail_texture_allowed and gl_lm: _feat_mask |= (1 << 1)   # FEAT_LIGHTMAP
+                if _detail_texture_allowed and env_name: _feat_mask |= (1 << 2)   # FEAT_ENVMAP
+                if _detail_texture_allowed and spec_name: _feat_mask |= (1 << 3)   # FEAT_SPECMAP
                 if _is_dangly:          _feat_mask |= (1 << 6)   # FEAT_DANGLY
                 if _is_saber:           _feat_mask |= (1 << 7)   # FEAT_SABER
                 if txi_decal:           _feat_mask |= (1 << 11)  # FEAT_DECAL
@@ -5724,6 +5921,14 @@ class GpuRenderer:
         # Clear persistent world-transform cache; will be rebuilt next render
         self._wt_cache.clear()
         self._wt_model_id = 0
+        self.invalidate_node_cache()
+
+    def invalidate_node_cache(self) -> None:
+        """Force node visibility/pass classification to rebuild next frame."""
+        self._node_cache_model_id = 0
+        self._node_cache_opaque = []
+        self._node_cache_cutout = []
+        self._node_cache_transparent = []
 
     # ── Performance info ──────────────────────────────────────────────────────
 
