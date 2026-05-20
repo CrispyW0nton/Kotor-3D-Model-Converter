@@ -101,7 +101,10 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
         component_group = QtWidgets.QGroupBox("Bake Components")
         component_layout = QtWidgets.QGridLayout(component_group)
         self.direct_check = self._check("Direct lighting", True)
-        self.shadows_check = self._check("Shadows", True)
+        self.gpu_check = self._check("GPU acceleration", True)
+        self.gpu_check.setToolTip("Uses an offscreen ModernGL shader for direct lighting. Shadows still use CPU rays.")
+        self.shadows_check = self._check("Shadows", False)
+        self.shadows_check.setToolTip("Optional CPU shadow rays. Leave off for the GPU direct-light bake path.")
         self.ao_check = self._check("Ambient occlusion", False)
         self.diffuse_check = self._check("Diffuse contribution", True)
         self.normal_check = self._check("Normal map influence", True)
@@ -109,7 +112,7 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
         self.environment_check = self._check("Environment approximation", False)
         self.indirect_check = self._check("Indirect Approximation", False)
         for idx, widget in enumerate((
-            self.direct_check, self.shadows_check, self.ao_check, self.diffuse_check,
+            self.direct_check, self.gpu_check, self.shadows_check, self.ao_check, self.diffuse_check,
             self.normal_check, self.specular_check, self.environment_check, self.indirect_check,
         )):
             component_layout.addWidget(widget, idx // 2, idx % 2)
@@ -235,6 +238,7 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
             include_normal_maps=self.normal_check.isChecked(),
             include_specular=self.specular_check.isChecked(),
             include_environment=self.environment_check.isChecked(),
+            use_gpu_acceleration=self.gpu_check.isChecked(),
             use_shadows=self.shadows_check.isChecked(),
             use_ambient_occlusion=self.ao_check.isChecked(),
             use_direct_lighting=self.direct_check.isChecked(),
@@ -313,6 +317,8 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
         self.bake_btn.setEnabled(True)
         if result.cancelled:
             self._log("Bake cancelled.")
+        for message in getattr(result, "messages", []):
+            self._log(f"Info: {message}")
         for message in result.warnings:
             self._log(f"Warning: {message}")
         for message in result.errors:

@@ -50,6 +50,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "lighting_viewport_controller",
         "lightmap_controller",
         "lightmap_export_bridge",
+        "lightmap_gpu_solver",
         "lightmap_bake_job",
         "lightmap_bake_settings",
         "lightmap_bake_worker",

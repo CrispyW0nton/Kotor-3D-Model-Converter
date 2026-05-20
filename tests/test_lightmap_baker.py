@@ -15,6 +15,7 @@ from src.gui.lighting.lightmap_export_bridge import (
     get_baked_lightmap_assignments,
     resolve_lightmap_for_material,
 )
+from src.gui.lighting.lightmap_gpu_solver import LightmapGpuSolver
 from src.gui.lighting.lightmap_lighting_solver import LightmapLightingSolver
 from src.gui.lighting.lightmap_rasterizer import LightmapRasterizer
 from src.gui.lighting.lightmap_padding import LightmapPadding
@@ -68,6 +69,16 @@ def test_lightmap_bake_defaults_do_not_add_synthetic_ambient() -> None:
     settings = LightmapBakeSettings()
 
     assert settings.include_ambient is False
+    assert settings.use_gpu_acceleration is True
+    assert settings.use_shadows is False
+
+
+def test_gpu_solver_bypasses_to_cpu_when_shadows_are_enabled() -> None:
+    solver = LightmapGpuSolver()
+    settings = LightmapBakeSettings(use_shadows=True)
+
+    assert solver.can_use_gpu(settings, shadow_solver=object()) is False
+    assert "shadow rays" in solver.last_warning
 
 
 def test_uv_validator_prefers_lightmap_uvs_and_warns_for_primary_fallback() -> None:

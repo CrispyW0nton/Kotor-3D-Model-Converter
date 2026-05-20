@@ -28,7 +28,8 @@ class LightmapBakeSettings:
     include_normal_maps: bool = True
     include_specular: bool = False
     include_environment: bool = False
-    use_shadows: bool = True
+    use_gpu_acceleration: bool = True
+    use_shadows: bool = False
     use_ambient_occlusion: bool = False
     use_direct_lighting: bool = True
     use_indirect_approximation: bool = False

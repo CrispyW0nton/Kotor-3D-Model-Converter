@@ -48,6 +48,7 @@ class LightmapBakeResult:
     manifest_path: str = ""
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    messages: list[str] = field(default_factory=list)
     cancelled: bool = False
 
     @property

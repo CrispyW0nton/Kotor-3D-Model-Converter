@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .lightmap_bake_job import BakeableMesh, LightmapBakeJob, LightmapBakeResult, LightmapMeshBake, ordered_unique
+from .lightmap_gpu_solver import LightmapGpuSolver
 from .lightmap_lighting_solver import LightmapLightingSolver
 from .lightmap_manifest import LightmapManifest
 from .lightmap_output import LightmapOutput
@@ -27,7 +28,7 @@ class LightmapBaker:
     ) -> None:
         self.uv_validator = uv_validator or LightmapUVValidator()
         self.rasterizer = rasterizer or LightmapRasterizer()
-        self.lighting_solver = lighting_solver or LightmapLightingSolver()
+        self.lighting_solver = lighting_solver or LightmapGpuSolver(LightmapLightingSolver())
         self.shadow_solver = shadow_solver or LightmapShadowSolver()
         self.padding = padding or LightmapPadding()
         self.output = output or LightmapOutput()
@@ -83,6 +84,12 @@ class LightmapBaker:
                     settings,
                     self.shadow_solver if settings.use_shadows else None,
                 )
+                warning = str(getattr(self.lighting_solver, "last_warning", "") or "")
+                if warning and warning not in result.warnings:
+                    result.warnings.append(warning)
+                message = str(getattr(self.lighting_solver, "last_info", "") or "")
+                if message and message not in result.messages:
+                    result.messages.append(message)
                 self._progress(job, "Dilation/padding", index, total, entry.name)
                 image = self.padding.pad_islands(buffer.baked_rgb, buffer.valid_mask, settings.padding_pixels)
                 image = self.padding.dilate(image, buffer.valid_mask, settings.dilation_passes)
