@@ -15,6 +15,7 @@ from src.gui.lighting.lightmap_export_bridge import (
     get_baked_lightmap_assignments,
     resolve_lightmap_for_material,
 )
+from src.gui.lighting.lightmap_lighting_solver import LightmapLightingSolver
 from src.gui.lighting.lightmap_padding import LightmapPadding
 from src.gui.lighting.lightmap_uv_validator import LightmapUVValidator
 
@@ -72,6 +73,19 @@ def test_uv_validator_prefers_lightmap_uvs_and_warns_for_primary_fallback() -> N
     assert validator.find_best_uv_channel(mesh) == 0
     result = validator.validate_mesh_uvs(mesh, 0)
     assert result.usable
+    assert result.severity == "ok"
+
+
+def test_uv_validation_result_reports_warning_severity_for_risky_bakeable_uvs() -> None:
+    _model, mesh = _model_with_lightmapped_triangle()
+    mesh.uvs_lm = []
+    mesh.uvs = [(0.0, 0.0), (2.0, 0.0), (0.0, 2.0)]
+
+    result = LightmapUVValidator().validate_mesh_uvs(mesh, 0)
+
+    assert result.usable
+    assert result.severity == "warning"
+    assert any("outside the 0-1 range" in message for message in result.warnings)
 
 
 def test_padding_dilates_from_valid_texels() -> None:
@@ -121,6 +135,38 @@ def test_lightmap_baker_writes_png_manifest_and_keeps_original_lightmap(tmp_path
     manifest = json.loads(Path(result.manifest_path).read_text(encoding="utf-8"))
     assert manifest["module"] == "danm13aa"
     assert manifest["bakes"][0]["mesh"] == "floor01"
+
+
+def test_lighting_solver_tone_maps_aurora_light_clusters_instead_of_clipping_white() -> None:
+    solver = LightmapLightingSolver()
+    settings = LightmapBakeSettings(include_diffuse=False, use_shadows=False)
+    texel = {
+        "position": np.asarray((0.0, 0.0, 0.0), dtype=np.float32),
+        "normal": np.asarray((0.0, 0.0, 1.0), dtype=np.float32),
+        "diffuse": np.ones(3, dtype=np.float32),
+        "mesh_id": 1,
+    }
+    lights = [
+        SimpleNamespace(
+            name=f"AuroraLight{idx}",
+            source_type="Aurora",
+            enabled=True,
+            visible=True,
+            type="aurora_point",
+            position=(0.1 * idx, 0.0, 1.0),
+            color=(1.0, 0.95, 0.8),
+            intensity=3.5,
+            radius=4.5,
+            casts_shadows=False,
+        )
+        for idx in range(8)
+    ]
+
+    rgb = solver.solve_texel_lighting(texel, lights, settings)
+
+    assert float(rgb.max()) < 0.98
+    assert float(rgb.min()) > 0.0
+    assert not np.allclose(rgb, np.ones(3), atol=0.02)
 
 
 def test_lightmap_export_bridge_discovers_generated_assignments(tmp_path: Path) -> None:

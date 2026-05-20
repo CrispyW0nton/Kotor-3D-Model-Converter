@@ -65,6 +65,10 @@ class LightmapBaker:
                 break
             self._progress(job, "Rasterizing UVs", index, total, entry.name)
             validation = self.uv_validator.validate_mesh_uvs(entry.node, entry.uv_channel)
+            if entry.uv_channel == 0 and validation.warnings:
+                validation.warnings.append(
+                    "Primary UV fallback has validation warnings; output may be unsuitable for replacement lightmaps."
+                )
             if validation.errors:
                 result.bakes.append(LightmapMeshBake(entry.name, entry.material_name, entry.uv_channel, "", warnings=validation.warnings, errors=validation.errors))
                 continue

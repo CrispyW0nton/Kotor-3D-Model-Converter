@@ -270,7 +270,7 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
             return
         for entry in result:
             validation = baker.uv_validator.validate_mesh_uvs(entry.node, entry.uv_channel)
-            status = "OK" if validation.usable else "BLOCKED"
+            status = "BLOCKED" if validation.severity == "blocked" else "WARN" if validation.severity == "warning" or entry.warnings else "OK"
             self._log(f"{entry.name}: {status}, UV channel {entry.uv_channel}")
             for message in [*entry.warnings, *validation.warnings, *validation.errors]:
                 self._log(f"  {message}")

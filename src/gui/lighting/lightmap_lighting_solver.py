@@ -65,10 +65,13 @@ class LightmapLightingSolver:
         ndotl = max(float(np.dot(normal, ldir)), 0.0)
         if ndotl <= 0.0:
             return np.zeros(3, dtype=np.float32)
-        # Modern inverse-square with a smooth radius cutoff. Aurora lights keep
-        # this readable approximation until exact engine falloff is encoded.
-        attenuation = (1.0 / max(dist * dist, 0.25)) * max(0.0, 1.0 - (dist / radius) ** 2)
-        return _light_color(light) * _intensity(light) * ndotl * attenuation * radius
+        # Bake-friendly falloff. The previous inverse-square * radius term
+        # clipped most Aurora-heavy module bakes to white. Generated lightmaps
+        # need preserved gradients more than photometric brightness, so use a
+        # smooth radius falloff and leave final compression to tone mapping.
+        falloff = max(0.0, 1.0 - (dist / radius))
+        attenuation = falloff * falloff
+        return _light_color(light) * _intensity(light) * ndotl * attenuation * 0.45
 
     def solve_spot_light(self, texel, light, settings) -> np.ndarray:
         base = self.solve_point_light(texel, light, settings)
@@ -96,15 +99,18 @@ class LightmapLightingSolver:
     def solve_area_light_approx(self, texel, light, settings) -> np.ndarray:
         result = self.solve_point_light(texel, light, settings)
         size = max(0.0, float(getattr(light, "area_size", 0.0) or 0.0))
-        return result * (1.0 + min(size, 10.0) * 0.04)
+        return result * (0.75 + min(size, 10.0) * 0.025)
 
     def solve_ambient(self, texel, settings, light: object | None = None) -> np.ndarray:
         if light is not None:
             return _light_color(light) * _intensity(light) * 0.25
-        return np.asarray(getattr(settings, "background_color", (0.0, 0.0, 0.0)), dtype=np.float32) + np.asarray((0.08, 0.08, 0.08), dtype=np.float32)
+        return np.asarray(getattr(settings, "background_color", (0.0, 0.0, 0.0)), dtype=np.float32) + np.asarray((0.035, 0.035, 0.035), dtype=np.float32)
 
     def apply_exposure_gamma(self, rgb, settings) -> np.ndarray:
         value = np.asarray(rgb, dtype=np.float32) * float(settings.exposure)
+        # Reinhard tone mapping keeps intense multi-light rooms from becoming
+        # flat white while still allowing bright highlights to read as bright.
+        value = value / (1.0 + np.maximum(value, 0.0))
         if settings.clamp_output:
             value = np.clip(value, 0.0, 1.0)
         gamma = max(float(settings.gamma), 1.0e-5)

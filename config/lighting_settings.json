@@ -10,7 +10,7 @@
     "radius",
     "intensity"
   ],
-  "lightmap_intensity": 0.7000000000000002,
+  "lightmap_intensity": 0.7,
   "lightmap_map": false,
   "lightmap_mode": "disabled",
   "normal_map": true,

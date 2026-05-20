@@ -17,6 +17,14 @@ class UVValidationResult:
     degenerate_triangles: list[int] = field(default_factory=list)
     texel_density: dict[str, float] = field(default_factory=dict)
 
+    @property
+    def severity(self) -> str:
+        if self.errors:
+            return "blocked"
+        if self.warnings or self.overlaps or self.degenerate_triangles:
+            return "warning"
+        return "ok"
+
 
 class LightmapUVValidator:
     """Inspect existing mesh UVs without modifying them."""
