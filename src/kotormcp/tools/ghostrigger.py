@@ -28,6 +28,7 @@ Changes from v2.9:
 from __future__ import annotations
 
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from kotormcp.ports import (
@@ -207,6 +208,130 @@ def get_tools() -> List[Dict[str, Any]]:
                 "required": ["resref"],
             },
         },
+        {
+            "name": "ghostrigger_export_model_for_unity",
+            "description": (
+                "Export a KotOR MDL/MDX model from game data or a file path into "
+                "a Unity project Assets folder as FBX, with a GhostRigger metadata "
+                "JSON sidecar. Use this for repeatable GhostRigger -> Unity MCP "
+                "asset transfer tests."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "resref": {
+                        "type": "string",
+                        "description": "MDL resource name or absolute file path",
+                    },
+                    "game": {
+                        "type": "string",
+                        "description": "Game alias: k1 or k2",
+                    },
+                    "game_path": {
+                        "type": "string",
+                        "description": "Optional absolute path to KotOR installation",
+                    },
+                    "unity_project": {
+                        "type": "string",
+                        "description": "Absolute Unity project root",
+                    },
+                    "asset_subdir": {
+                        "type": "string",
+                        "default": "Assets/KotorImported/GhostRigger",
+                        "description": "Unity-project-relative output folder",
+                    },
+                    "output_name": {
+                        "type": "string",
+                        "description": "Optional output filename stem; defaults to resref",
+                    },
+                    "format": {
+                        "type": "string",
+                        "enum": ["fbx"],
+                        "default": "fbx",
+                    },
+                    "export_rigging": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "Write rigging JSON sidecars next to the FBX",
+                    },
+                },
+                "required": ["resref", "game", "unity_project"],
+            },
+        },
+        {
+            "name": "ghostrigger_validate_unity_import",
+            "description": (
+                "Build a validation manifest for a GhostRigger-exported Unity asset. "
+                "Pass the GhostRigger transfer metadata sidecar and Unity-side import "
+                "facts (clips, renderer types, material count, skin/bindpose counts) "
+                "to get stable pass/warning/error diagnostics."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "transfer_metadata_path": {
+                        "type": "string",
+                        "description": "Path to the *.ghostrigger.json transfer sidecar",
+                    },
+                    "unity_summary": {
+                        "type": "object",
+                        "description": "Unity import facts: asset_path, clips, renderers, warnings, errors",
+                    },
+                    "output_path": {
+                        "type": "string",
+                        "description": "Optional path to write the validation manifest JSON",
+                    },
+                },
+                "required": ["transfer_metadata_path", "unity_summary"],
+            },
+        },
+        {
+            "name": "ghostrigger_run_malak_unity_smoke",
+            "description": (
+                "Run the repeatable Malak main-menu Unity MCP smoke test. Opens the "
+                "menu test scene, refreshes the fresh GhostRigger FBX, verifies the "
+                "menu instance/Animator, captures before/after screenshots, and "
+                "writes an optional launch-readiness report."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "unity_project": {
+                        "type": "string",
+                        "description": "Absolute Unity project root",
+                    },
+                    "host": {
+                        "type": "string",
+                        "default": "127.0.0.1",
+                    },
+                    "port": {
+                        "type": "integer",
+                        "default": 6400,
+                    },
+                    "scene_path": {
+                        "type": "string",
+                        "description": "Unity scene asset path",
+                    },
+                    "asset_path": {
+                        "type": "string",
+                        "description": "Fresh GhostRigger FBX asset path",
+                    },
+                    "instance_name": {
+                        "type": "string",
+                        "description": "Expected Malak menu GameObject instance name",
+                    },
+                    "output_path": {
+                        "type": "string",
+                        "description": "Optional report JSON path",
+                    },
+                    "screenshot_delay": {
+                        "type": "number",
+                        "default": 1.0,
+                    },
+                },
+                "required": ["unity_project"],
+            },
+        },
     ]
 
 
@@ -227,6 +352,16 @@ def _locate_and_parse(
     path_label, mdl_bytes, mdx_bytes = svc.locator.locate(resref, game, game_path)
     model = svc.parser.parse(mdl_bytes, mdx_bytes, path_label)
     return path_label, model
+
+
+def _export_fbx_for_unity(model: Any, out_path: Path, export_rigging: bool) -> bool:
+    """Small seam for tests around the real FBX exporter."""
+    try:
+        from src.converters.mesh_converter import FBXExporter  # noqa: PLC0415
+    except ImportError:                                      # pragma: no cover - MCP path shim
+        from converters.mesh_converter import FBXExporter     # type: ignore  # noqa: PLC0415
+
+    return FBXExporter().export(model, str(out_path), export_rigging=export_rigging)
 
 
 # ── Handlers ──────────────────────────────────────────────────────────────────
@@ -301,12 +436,62 @@ async def handle_render_model(arguments: Dict[str, Any]) -> Dict[str, Any]:
         # the project root (parent of src/) to be on sys.path so that
         # "src.gui" and "src.core" are addressable as proper sub-packages.
         import sys  # noqa: PLC0415
-        _project_root = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
+        _project_root = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
         if _project_root not in sys.path:
             sys.path.insert(0, _project_root)
 
-        from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer, render_model_autoframe  # noqa: PLC0415
-        from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, _load_tpc_bytes, _is_tpc_data  # noqa: PLC0415
+        # MCP servers are long-lived, so they can retain stale qt_lib alias
+        # modules from before the GUI package was grouped under src.gui.rendering.
+        # Drop only those known aliases before importing the canonical modules.
+        for _mod_name in (
+            "src.gui.rendering.gpu_renderer",
+            "src.gui.rendering.viewport_core",
+            "src.gui.rendering",
+            "src.gui.qt_lib.rendering.gpu_renderer",
+            "src.gui.qt_lib.rendering.viewport_core",
+            "src.gui.qt_lib.rendering",
+        ):
+            _mod = sys.modules.get(_mod_name)
+            _target = str(getattr(_mod, "_target", "") or "")
+            if _target.startswith("src.gui.") or (
+                _mod_name == "src.gui.rendering" and getattr(_mod, "__path__", None) == []
+            ):
+                sys.modules.pop(_mod_name, None)
+        _qt_lib = sys.modules.get("src.gui.qt_lib")
+        _aliases = getattr(_qt_lib, "_ALIASES", None)
+        if isinstance(_aliases, dict):
+            for _alias in list(_aliases):
+                if _alias.startswith("src.gui.rendering."):
+                    _aliases.pop(_alias, None)
+
+        import importlib.util as _importlib_util  # noqa: PLC0415
+
+        def _load_gui_module(_name: str, _rel_path: str):
+            _path = os.path.join(_project_root, _rel_path)
+            _spec = _importlib_util.spec_from_file_location(_name, _path)
+            if _spec is None or _spec.loader is None:
+                raise ImportError(f"Could not load {_name} from {_path}")
+            _module = _importlib_util.module_from_spec(_spec)
+            sys.modules[_name] = _module
+            _spec.loader.exec_module(_module)
+            return _module
+
+        _viewport_core = _load_gui_module(
+            "src.gui.rendering.viewport_core",
+            os.path.join("src", "gui", "rendering", "viewport_core.py"),
+        )
+        sys.modules["src.gui.viewport_core"] = _viewport_core
+        _gpu_renderer = _load_gui_module(
+            "src.gui.rendering.gpu_renderer",
+            os.path.join("src", "gui", "rendering", "gpu_renderer.py"),
+        )
+        sys.modules["src.gui.gpu_renderer"] = _gpu_renderer
+
+        GpuRenderer = _gpu_renderer.GpuRenderer
+        render_model_autoframe = _gpu_renderer.render_model_autoframe
+        ArcBallCamera = _viewport_core.ArcBallCamera
+        _load_tpc_bytes = _viewport_core._load_tpc_bytes
+        _is_tpc_data = _viewport_core._is_tpc_data
 
         # ── Build texture dict from model nodes + game library ─────────────────
         # Collect all texture names referenced by the model
@@ -508,6 +693,123 @@ async def handle_audit(arguments: Dict[str, Any]) -> Dict[str, Any]:
         })
     except Exception as exc:
         return json_content({"error": f"Audit failed: {exc}"})
+
+
+async def handle_export_model_for_unity(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """Export a KotOR model into a Unity project asset folder."""
+    resref = str(arguments.get("resref", "") or "").strip()
+    game = arguments.get("game")
+    game_path = arguments.get("game_path")
+    unity_project_raw = str(arguments.get("unity_project", "") or "").strip()
+    asset_subdir = str(
+        arguments.get("asset_subdir") or "Assets/KotorImported/GhostRigger"
+    )
+    output_name = str(arguments.get("output_name", "") or "").strip() or None
+    fmt = str(arguments.get("format") or "fbx").lower().lstrip(".")
+    export_rigging = bool(arguments.get("export_rigging", True))
+    svc = _get_services()
+
+    if not resref:
+        return json_content({"error": "resref is required."})
+    if not game:
+        return json_content({"error": "game is required."})
+    if not unity_project_raw:
+        return json_content({"error": "unity_project is required."})
+    if fmt != "fbx":
+        return json_content({"error": f"Unsupported Unity transfer format: {fmt}"})
+
+    try:
+        path_label, model = _locate_and_parse(resref, game, game_path, svc)
+    except FileNotFoundError as exc:
+        return json_content({"error": str(exc)})
+    except Exception as exc:
+        return json_content({"error": f"Failed to parse MDL: {exc}"})
+
+    try:
+        try:
+            from src.core.unity_export_bridge import export_model_for_unity  # noqa: PLC0415
+        except ImportError:                                      # pragma: no cover - MCP path shim
+            from core.unity_export_bridge import export_model_for_unity  # type: ignore  # noqa: PLC0415
+
+        result = export_model_for_unity(
+            model,
+            game=str(game).upper(),
+            resref=resref,
+            asset_name=output_name,
+            unity_project=Path(unity_project_raw),
+            asset_subdir=asset_subdir,
+            extension=fmt,
+            export_rigging=export_rigging,
+            exporter=_export_fbx_for_unity,
+            source_path=path_label,
+        )
+        return json_content(result)
+    except Exception as exc:
+        return json_content({"error": f"Unity export failed: {exc}"})
+
+
+async def handle_validate_unity_import(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate Unity-side import facts against a GhostRigger transfer sidecar."""
+    transfer_path = str(arguments.get("transfer_metadata_path", "") or "").strip()
+    unity_summary = arguments.get("unity_summary") or {}
+    output_raw = str(arguments.get("output_path", "") or "").strip()
+    if not transfer_path:
+        return json_content({"error": "transfer_metadata_path is required."})
+    if not isinstance(unity_summary, dict):
+        return json_content({"error": "unity_summary must be an object."})
+
+    try:
+        try:
+            from src.core.unity_import_validator import validate_unity_import_file  # noqa: PLC0415
+        except ImportError:                                      # pragma: no cover - MCP path shim
+            from core.unity_import_validator import validate_unity_import_file  # type: ignore  # noqa: PLC0415
+
+        manifest = validate_unity_import_file(
+            Path(transfer_path),
+            unity_summary,
+            Path(output_raw) if output_raw else None,
+        )
+        return json_content(manifest)
+    except Exception as exc:
+        return json_content({"error": f"Unity import validation failed: {exc}"})
+
+
+async def handle_run_malak_unity_smoke(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """Run the Unity MCP Malak main-menu smoke test."""
+    unity_project_raw = str(arguments.get("unity_project", "") or "").strip()
+    if not unity_project_raw:
+        return json_content({"error": "unity_project is required."})
+
+    try:
+        try:
+            from src.core.unity_malak_smoke import (  # noqa: PLC0415
+                DEFAULT_ASSET_PATH,
+                DEFAULT_INSTANCE_NAME,
+                DEFAULT_SCENE_PATH,
+                run_malak_main_menu_smoke,
+            )
+        except ImportError:  # pragma: no cover - MCP path shim
+            from core.unity_malak_smoke import (  # type: ignore  # noqa: PLC0415
+                DEFAULT_ASSET_PATH,
+                DEFAULT_INSTANCE_NAME,
+                DEFAULT_SCENE_PATH,
+                run_malak_main_menu_smoke,
+            )
+
+        output_raw = str(arguments.get("output_path", "") or "").strip()
+        report = run_malak_main_menu_smoke(
+            unity_project=Path(unity_project_raw),
+            host=str(arguments.get("host") or "127.0.0.1"),
+            port=int(arguments.get("port") or 6400),
+            scene_path=str(arguments.get("scene_path") or DEFAULT_SCENE_PATH),
+            asset_path=str(arguments.get("asset_path") or DEFAULT_ASSET_PATH),
+            instance_name=str(arguments.get("instance_name") or DEFAULT_INSTANCE_NAME),
+            output_path=Path(output_raw) if output_raw else None,
+            screenshot_delay=float(arguments.get("screenshot_delay") or 1.0),
+        )
+        return json_content(report)
+    except Exception as exc:
+        return json_content({"error": f"Malak Unity smoke failed: {exc}"})
 
 
 # ── Backward-compatible helper ────────────────────────────────────────────────

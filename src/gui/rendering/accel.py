@@ -203,6 +203,8 @@ def _rasterize_triangle_numpy(
     u2: float, v2: float,
     shade_r: int, shade_g: int, shade_b: int,
     node_alpha: float = 1.0,
+    clamp_s: bool = False,
+    clamp_t: bool = False,
 ) -> None:
     """
     NumPy-vectorized barycentric triangle rasterizer.
@@ -241,12 +243,17 @@ def _rasterize_triangle_numpy(
     # UV interpolation with V-flip (KotOR MDX: V=0 = bottom of texture)
     u = w0[inside] * u0 + w1[inside] * u1 + w2[inside] * u2
     v_raw = w0[inside] * v0 + w1[inside] * v1 + w2[inside] * v2
-    v = 1.0 - v_raw
-
-    # GL_REPEAT tiling: frac() wrap so large UVs tile correctly
-    # (e.g. pelvis_g UV range [-12.86, +12.86] wraps to [0, 1])
-    u = u - np.floor(u)
-    v = v - np.floor(v)
+    if clamp_s:
+        u = np.clip(u, 0.0, 1.0)
+    else:
+        # GL_REPEAT tiling: frac() wrap so large UVs tile correctly.
+        u = u - np.floor(u)
+    if clamp_t:
+        v_raw = np.clip(v_raw, 0.0, 1.0)
+        v = 1.0 - v_raw
+    else:
+        v = 1.0 - v_raw
+        v = v - np.floor(v)
 
     # Sample texture (nearest-neighbor, with clamp-to-valid-index)
     pu = np.clip((u * TW).astype(np.int32), 0, TW - 1)
@@ -304,6 +311,8 @@ if ACCEL_TIER == 1:
         u0, v0, u1, v1, u2, v2,
         shade_r, shade_g, shade_b,
         node_alpha_i255,  # pre-multiplied int: int(node_alpha * 255)
+        clamp_s,
+        clamp_t,
     ):
         """
         Numba JIT barycentric rasterizer – single triangle.
@@ -330,10 +339,23 @@ if ACCEL_TIER == 1:
                 if w0 < 0.0 or w1 < 0.0 or w2 < 0.0:
                     continue
                 u = w0 * u0 + w1 * u1 + w2 * u2
-                v = 1.0 - (w0 * v0 + w1 * v1 + w2 * v2)  # V-flip
-                # GL_REPEAT tiling: frac() wrap so large UVs tile correctly
-                u = u - math.floor(u)
-                v = v - math.floor(v)
+                v_raw = w0 * v0 + w1 * v1 + w2 * v2
+                if clamp_s:
+                    if u < 0.0:
+                        u = 0.0
+                    elif u > 1.0:
+                        u = 1.0
+                else:
+                    u = u - math.floor(u)
+                if clamp_t:
+                    if v_raw < 0.0:
+                        v_raw = 0.0
+                    elif v_raw > 1.0:
+                        v_raw = 1.0
+                    v = 1.0 - v_raw
+                else:
+                    v = 1.0 - v_raw  # V-flip
+                    v = v - math.floor(v)
                 pu = min(TW - 1, max(0, int(u * TW)))
                 pv = min(TH - 1, max(0, int(v * TH)))
                 ta = int(tex[pv, pu, 3])
@@ -366,6 +388,8 @@ if ACCEL_TIER == 1:
         shade_r, shade_g, shade_b,  # (NF,) int64 shade channels
         node_alpha_i255,            # (NF,) int64 per-face alpha
         visible_mask,               # (NF,) bool frustum-cull mask
+        clamp_s,
+        clamp_t,
     ):
         """
         Numba JIT batch rasterizer – all visible triangles in one JIT call.
@@ -411,10 +435,23 @@ if ACCEL_TIER == 1:
                     if w0 < 0.0 or w1 < 0.0 or w2 < 0.0:
                         continue
                     u = w0 * u0 + w1 * u1 + w2 * u2
-                    v = 1.0 - (w0 * v0 + w1 * v1 + w2 * v2)
-                    # GL_REPEAT tiling: frac() wrap so large UVs tile correctly
-                    u = u - math.floor(u)
-                    v = v - math.floor(v)
+                    v_raw = w0 * v0 + w1 * v1 + w2 * v2
+                    if clamp_s:
+                        if u < 0.0:
+                            u = 0.0
+                        elif u > 1.0:
+                            u = 1.0
+                    else:
+                        u = u - math.floor(u)
+                    if clamp_t:
+                        if v_raw < 0.0:
+                            v_raw = 0.0
+                        elif v_raw > 1.0:
+                            v_raw = 1.0
+                        v = 1.0 - v_raw
+                    else:
+                        v = 1.0 - v_raw
+                        v = v - math.floor(v)
                     pu = min(TW - 1, max(0, int(u * TW)))
                     pv = min(TH - 1, max(0, int(v * TH)))
                     ta = int(tex[pv, pu, 3])
@@ -507,6 +544,7 @@ def warmup_jit() -> None:
             1, 1, 15, 2, 8, 20,
             0.1, 0.1, 0.9, 0.2, 0.5, 0.9,
             255, 255, 255, 255,
+            False, False,
         )
         # Also warm the batch path
         vs_x = np.array([1, 15, 8], dtype=np.int64)
@@ -521,7 +559,7 @@ def warmup_jit() -> None:
         sb = np.array([255], dtype=np.int64)
         na = np.array([255], dtype=np.int64)
         vm = np.array([True], dtype=np.bool_)
-        _rasterize_frame_jit(buf, tex, vs_x, vs_y, uu, vv, f0, f1, f2, sr, sg, sb, na, vm)
+        _rasterize_frame_jit(buf, tex, vs_x, vs_y, uu, vv, f0, f1, f2, sr, sg, sb, na, vm, False, False)
         # Warm flat shade
         fr = np.array([200], dtype=np.uint8)
         fg = np.array([150], dtype=np.uint8)
@@ -542,6 +580,8 @@ def rasterize_triangle(
     u0: float, v0: float, u1: float, v1: float, u2: float, v2: float,
     shade_r: int, shade_g: int, shade_b: int,
     node_alpha: float = 1.0,
+    clamp_s: bool = False,
+    clamp_t: bool = False,
 ) -> None:
     """
     Tier-dispatched single-triangle rasterizer.
@@ -558,6 +598,7 @@ def rasterize_triangle(
             u0, v0, u1, v1, u2, v2,
             shade_r, shade_g, shade_b,
             na255,
+            clamp_s, clamp_t,
         )
     else:
         _rasterize_triangle_numpy(
@@ -566,6 +607,7 @@ def rasterize_triangle(
             u0, v0, u1, v1, u2, v2,
             shade_r, shade_g, shade_b,
             node_alpha,
+            clamp_s, clamp_t,
         )
 
 
@@ -584,6 +626,8 @@ def rasterize_frame(
     shade_b:   np.ndarray,   # (NF,) int64 shade B
     node_alpha: np.ndarray,  # (NF,) float64 per-face alpha [0..1]
     visible:   np.ndarray,   # (NF,) bool frustum-cull mask
+    clamp_s: bool = False,
+    clamp_t: bool = False,
 ) -> None:
     """
     Tier-dispatched batch frame rasterizer.
@@ -600,6 +644,7 @@ def rasterize_frame(
             face_v0, face_v1, face_v2,
             shade_r, shade_g, shade_b,
             na255, visible,
+            clamp_s, clamp_t,
         )
     else:
         # NumPy / PIL fallback: iterate individually
@@ -618,6 +663,7 @@ def rasterize_frame(
                 float(uvs_u[i2]), float(uvs_v[i2]),
                 int(shade_r[fi]), int(shade_g[fi]), int(shade_b[fi]),
                 float(node_alpha[fi]),
+                clamp_s, clamp_t,
             )
 
 

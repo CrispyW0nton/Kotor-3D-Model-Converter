@@ -648,6 +648,7 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
             pass
         # FIX-TXI-ATTR: Attach TXI string so GPU renderer can apply blending modes
         img._txi_str = _txi  # type: ignore[attr-defined]
+        img._gr_gpu_uv_v_flip = True  # type: ignore[attr-defined]
         # Also store raw data so legacy _extract_txi path works as fallback
         img._tpc_raw = data   # type: ignore[attr-defined]
         # FIX-ALPHATEST: Attach alpha_test from TPC header for punchthrough threshold
@@ -665,6 +666,8 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
     # ── Legacy software decoder (fallback when pykotor is unavailable) ────────
     # _load_tpc_bytes_legacy already attaches _txi_str, _tpc_raw, _txi_alpha_test.
     img = _load_tpc_bytes_legacy(data)
+    if img is not None:
+        img._gr_gpu_uv_v_flip = True  # type: ignore[attr-defined]
     return img
 
 
@@ -1978,8 +1981,12 @@ class TextureCache:
 
         # ── 1. Search on-disk directories first (override folder wins) ──────
         for search_dir in search_dirs:
-            # Priority: .tga first (may be TPC), then .tpc, then .png/.dds
-            for ext in ('.tga', '.TGA', '.tpc', '.TPC', '.png', '.PNG', '.dds', '.DDS'):
+            # Priority: .tga first (may be TPC), then common DCC image formats.
+            for ext in (
+                '.tga', '.TGA', '.tpc', '.TPC', '.png', '.PNG',
+                '.dds', '.DDS', '.jpg', '.JPG', '.jpeg', '.JPEG',
+                '.bmp', '.BMP', '.tif', '.TIF', '.tiff', '.TIFF',
+            ):
                 path = os.path.join(search_dir, name + ext)
                 if not os.path.exists(path):
                     continue
@@ -2089,6 +2096,16 @@ class TextureCache:
         return None
 
     @staticmethod
+    def _copy_texture_attrs(src: 'Image.Image', dst: 'Image.Image') -> 'Image.Image':
+        for attr in ('_gr_gpu_uv_v_flip', '_txi_str', '_tpc_raw', '_txi_alpha_test'):
+            if hasattr(src, attr):
+                try:
+                    setattr(dst, attr, getattr(src, attr))
+                except Exception:
+                    pass
+        return dst
+
+    @staticmethod
     def _apply_kotor_alpha(raw_bytes: bytes, img: 'Image.Image',
                            txi_meta: dict) -> 'Image.Image':
         """
@@ -2128,7 +2145,7 @@ class TextureCache:
                 arr = np.array(img)
                 if arr[:, :, 3].min() < 255:
                     arr[:, :, 3] = 255
-                    return Image.fromarray(arr, 'RGBA')
+                    return TextureCache._copy_texture_attrs(img, Image.fromarray(arr, 'RGBA'))
             elif has_env:
                 # Case 2: env map — alpha = blend weight between surface and env map.
                 # PRESERVE the alpha channel (do NOT force to 255).
@@ -2152,7 +2169,7 @@ class TextureCache:
                     alpha = arr[:, :, 3]
                     if not (np.all(alpha >= threshold) or np.all(alpha < threshold)):
                         arr[:, :, 3] = np.where(alpha >= threshold, 255, 0).astype(np.uint8)
-                        return Image.fromarray(arr, 'RGBA')
+                        return TextureCache._copy_texture_attrs(img, Image.fromarray(arr, 'RGBA'))
             elif blending == 1:
                 # Case 4: additive blend — keep alpha for additive particle effects
                 pass
@@ -2163,7 +2180,7 @@ class TextureCache:
                 arr = np.array(img)
                 if arr[:, :, 3].min() < 255:
                     arr[:, :, 3] = 255
-                    return Image.fromarray(arr, 'RGBA')
+                    return TextureCache._copy_texture_attrs(img, Image.fromarray(arr, 'RGBA'))
         except Exception as e:
             log.debug(f"_apply_kotor_alpha error: {e}")
         return img
@@ -2177,7 +2194,8 @@ class TextureCache:
                 # Maintain aspect ratio
                 scale = self.MAX_SIZE / max(w, h)
                 nw, nh = max(1, int(w * scale)), max(1, int(h * scale))
-                img = img.resize((nw, nh), Image.LANCZOS)
+                original = img
+                img = self._copy_texture_attrs(original, img.resize((nw, nh), Image.LANCZOS))
                 log.debug(f"Texture '{name}' downscaled {w}x{h} → {nw}x{nh}")
         except MemoryError:
             log.warning(f"Texture '{name}': MemoryError during resize — using original")
@@ -2199,7 +2217,10 @@ class TextureCache:
         if not _PIL:
             return None
         if _is_tpc_data(raw):
-            return _load_tpc_bytes(raw)
+            img = _load_tpc_bytes(raw)
+            if img is not None:
+                img._gr_gpu_uv_v_flip = True  # type: ignore[attr-defined]
+            return img
         try:
             import io
             img = Image.open(io.BytesIO(raw)).convert('RGBA')
@@ -2216,6 +2237,7 @@ class TextureCache:
             # preserved the bottom-up layout), causing them to remain top-down
             # and render upside-down.
             img = img.transpose(Image.FLIP_TOP_BOTTOM)
+            img._gr_gpu_uv_v_flip = False  # type: ignore[attr-defined]
             return img
         except Exception:
             return None
@@ -2241,7 +2263,10 @@ class TextureCache:
             return None
 
         if _is_tpc_data(raw):
-            return _load_tpc_bytes(raw)
+            img = _load_tpc_bytes(raw)
+            if img is not None:
+                img._gr_gpu_uv_v_flip = True  # type: ignore[attr-defined]
+            return img
 
         # Fall back to Pillow for real TGA / PNG / DDS
         if _PIL:
@@ -2253,6 +2278,7 @@ class TextureCache:
                 # TGA variants to top-down during Image.open().  Flip ALL images
                 # to bottom-up so the renderer's V-flip formula works correctly.
                 img = img.transpose(Image.FLIP_TOP_BOTTOM)
+                img._gr_gpu_uv_v_flip = False  # type: ignore[attr-defined]
                 return img
             except Exception:
                 pass
@@ -3447,14 +3473,17 @@ class FrameRenderer:
         self._dangly_last_time: float = 0.0   # wall-clock time of last sim step
 
         # ── Gimbal / transform overlay ────────────────────────────────
-        # gimbal_mode: 0=none, 1=translate, 2=rotate
+        # gimbal_mode: 0=none, 1=translate, 2=rotate, 3=scale
         self.gimbal_mode: int = 1
         self.show_gimbal: bool = True
         self.gimbal_active_axis = None          # axis being dragged ('X','Y','Z',etc.) or None
         self._gimbal_handles: List[Tuple] = []  # [(sx,sy,axis), ...] from last draw
+        self._gimbal_handle_lines: List[Tuple] = []  # [(x0,y0,x1,y1,axis), ...] from last draw
         # External skeleton overlay (ghost from another model)
         self._ext_skeleton = None               # KotorModel or None
         self._ext_skel_offset: List[float] = [0.0, 0.0, 0.0]
+        self._ext_skel_scale: float = 1.0
+        self._ext_bone_screen_positions: List[Tuple] = []
         # ── Walkmesh overlay (Phase 9 / Phase 16.1) ───────────────────────────
         # Loaded separately via load_walkmesh() (co-load with MDL when WOK found).
         # show_walkmesh toggles visibility; show_walkmesh_nonwalk shows blockers.
@@ -5559,6 +5588,26 @@ class FrameRenderer:
             # This makes the accel path match the PIL path for clamped textures.
             _accel_clamp_s = bool(getattr(node, 'txi_clamp_s', False))
             _accel_clamp_t = bool(getattr(node, 'txi_clamp_t', False))
+            # FIX-EDGEBLEED (GPU): Keep the accelerated path in lockstep with the
+            # CPU/PIL path for single-tile atlas meshes.  Custom override MDLs often
+            # use normal 0..1 character atlases without TXI clamp flags; wrapping
+            # those UVs makes armor panels sample the opposite edge of the atlas.
+            # Nodes with true tiled UVs or animated/procedural TXI still use repeat.
+            if not _accel_clamp_s or not _accel_clamp_t:
+                _has_no_repeat_features = bool(
+                    getattr(node, 'txi_blending', 0) == 0
+                    and getattr(node, 'txi_proceduretype', '') == ''
+                    and not getattr(node, 'animate_uv', False)
+                )
+                if _has_no_repeat_features and node.uvs:
+                    _sample = node.uvs[:min(30, len(node.uvs))]
+                    _uv_in_range = all(
+                        0.0 <= u <= 1.0 and 0.0 <= v <= 1.0
+                        for u, v in _sample
+                    )
+                    if _uv_in_range:
+                        _accel_clamp_s = True
+                        _accel_clamp_t = True
             # UV animation (animate_uv): add time-based scroll offset.
             _accel_animate_uv = bool(getattr(node, 'animate_uv', False))
             _accel_uv_scroll_u = 0.0
@@ -5863,6 +5912,8 @@ class FrameRenderer:
                                     sr_arr[g_sl], sg_arr[g_sl], sb_arr[g_sl],
                                     alpha_arr[g_sl],
                                     visible[g_sl],
+                                    clamp_s=_accel_clamp_s,
+                                    clamp_t=_accel_clamp_t,
                                 )
                             else:
                                 # No texture for this group — render as flat-shade
@@ -6516,41 +6567,50 @@ class FrameRenderer:
                 #   Both sets are empty.  The SAFE fast-path inside _paste_textured_triangle
                 #   (all UVs in [0.05, 0.95]) covers >80% of faces cheaply.
                 #   Only the <20% with seam-crossing UVs are checked by _edge_has_seam.
-                _any_u_found = bool(_node_u_seam_verts)
-                _any_v_found = bool(_node_v_seam_verts)
-                # Was the analysis actually meaningful? (ran on a mesh with uvs+verts)
-                # We use the presence of either set as evidence that analysis ran and
-                # found at least one axis' worth of duplicates.
-                _analysis_ran = bool(_any_u_found or _any_v_found)
-
-                if _any_u_found:
-                    # Seam analysis found u-duplicates: gate to faces touching a seam vert
-                    _face_has_u_seam = (vi0 in _node_u_seam_verts or
-                                        vi1 in _node_u_seam_verts or
-                                        vi2 in _node_u_seam_verts)
-                else:
-                    # Either no u-duplicates found, or analysis found only v-duplicates.
-                    # If analysis ran (v-seam found), there are genuinely no u-seam
-                    # duplicates → we still need to allow _paste_textured_triangle's
-                    # own seam detection for meshes that have seam faces without
-                    # positional-duplicate verts (e.g. non-skin area meshes).
-                    # Allow seam detection to run (True = don't skip).
-                    _face_has_u_seam = True
-
-                if _any_v_found:
-                    # Seam analysis found v-duplicates: gate to faces touching a seam vert
-                    _face_has_v_seam = (vi0 in _node_v_seam_verts or
-                                        vi1 in _node_v_seam_verts or
-                                        vi2 in _node_v_seam_verts)
-                elif _analysis_ran:
-                    # Analysis ran (u-seam found) but no v-seam duplicates exist.
-                    # This means the mesh genuinely has no V-axis seam faces
-                    # (e.g. bthair: u-seam at attachment points but continuous V).
-                    # DISABLE v-seam fix to preserve hair-strand black-tip fix (v10.4b).
+                if bool(getattr(node, "_external_imported", False)):
+                    # External FBX/OBJ/glTF texture atlases are authored in DCC
+                    # tools and normally keep every UV island inside 0..1.
+                    # KotOR's wrap-seam repair can mistake atlas island borders
+                    # for repeating texture seams and smear the wrong part of
+                    # the sheet across armor panels, so skip it for imports.
+                    _face_has_u_seam = False
                     _face_has_v_seam = False
                 else:
-                    # Analysis found nothing in either axis: allow both axes to run.
-                    _face_has_v_seam = True
+                    _any_u_found = bool(_node_u_seam_verts)
+                    _any_v_found = bool(_node_v_seam_verts)
+                    # Was the analysis actually meaningful? (ran on a mesh with uvs+verts)
+                    # We use the presence of either set as evidence that analysis ran and
+                    # found at least one axis' worth of duplicates.
+                    _analysis_ran = bool(_any_u_found or _any_v_found)
+
+                    if _any_u_found:
+                        # Seam analysis found u-duplicates: gate to faces touching a seam vert
+                        _face_has_u_seam = (vi0 in _node_u_seam_verts or
+                                            vi1 in _node_u_seam_verts or
+                                            vi2 in _node_u_seam_verts)
+                    else:
+                        # Either no u-duplicates found, or analysis found only v-duplicates.
+                        # If analysis ran (v-seam found), there are genuinely no u-seam
+                        # duplicates → we still need to allow _paste_textured_triangle's
+                        # own seam detection for meshes that have seam faces without
+                        # positional-duplicate verts (e.g. non-skin area meshes).
+                        # Allow seam detection to run (True = don't skip).
+                        _face_has_u_seam = True
+
+                    if _any_v_found:
+                        # Seam analysis found v-duplicates: gate to faces touching a seam vert
+                        _face_has_v_seam = (vi0 in _node_v_seam_verts or
+                                            vi1 in _node_v_seam_verts or
+                                            vi2 in _node_v_seam_verts)
+                    elif _analysis_ran:
+                        # Analysis ran (u-seam found) but no v-seam duplicates exist.
+                        # This means the mesh genuinely has no V-axis seam faces
+                        # (e.g. bthair: u-seam at attachment points but continuous V).
+                        # DISABLE v-seam fix to preserve hair-strand black-tip fix (v10.4b).
+                        _face_has_v_seam = False
+                    else:
+                        # Analysis found nothing in either axis: allow both axes to run.
+                        _face_has_v_seam = True
 
                 # Two-pass tier: opaque=0, transparent/additive/semi=1.
                 # Tier is the PRIMARY sort dimension — all opaque tris are drawn
@@ -7073,6 +7133,9 @@ class FrameRenderer:
             if self._anim_pose is not None:
                 wp, _, _ = self._node_world_transform(node)
                 return wp
+            external_wp = getattr(node, 'external_world_position', None)
+            if external_wp is not None:
+                return external_wp
             return node.bone_world_position()
 
         def _process_bone_node(node):
@@ -7332,6 +7395,8 @@ class FrameRenderer:
           - Yellow/Cyan/Magenta square plane handles (XY, XZ, YZ)
         Rotate mode (gimbal_mode==2):
           - Colour-coded arc rings around each axis
+        Scale mode (gimbal_mode==3):
+          - White/yellow cube handles; imported root meshes scale uniformly
 
         Handle screen positions are stored in self._gimbal_handles for
         ViewportWidget hit-testing.
@@ -7344,12 +7409,39 @@ class FrameRenderer:
             self.selected_node = None
             self._gimbal_handles = []
             return
-        wp, _, _ = self._node_world_transform(node)
+        ext_skel = getattr(self, "_ext_skeleton", None)
+        ext_node_ids = set()
+        if ext_skel is not None:
+            try:
+                ext_node_ids = {id(_n) for _n in ext_skel.all_nodes()}
+            except Exception:
+                ext_node_ids = set()
+        if ext_skel is not None and id(node) in ext_node_ids:
+            try:
+                ox, oy, oz = self._ext_skel_offset
+                scale = float(getattr(self, "_ext_skel_scale", 1.0) or 1.0)
+                p = node.bone_world_position()
+                wp = (p[0] * scale + ox, p[1] * scale + oy, p[2] * scale + oz)
+            except Exception:
+                wp, _, _ = self._node_world_transform(node)
+        elif self.model is not None and node is getattr(self.model, 'root_node', None):
+            try:
+                bb_min, bb_max = self._get_render_bounds()
+                wp = (
+                    (float(bb_min[0]) + float(bb_max[0])) * 0.5,
+                    (float(bb_min[1]) + float(bb_max[1])) * 0.5,
+                    (float(bb_min[2]) + float(bb_max[2])) * 0.5,
+                )
+            except Exception:
+                wp, _, _ = self._node_world_transform(node)
+        else:
+            wp, _, _ = self._node_world_transform(node)
         cp = self._proj(*wp, W, H)
         if cp is None:
             return
         cx, cy, cz = cp
         self._gimbal_handles = []
+        self._gimbal_handle_lines = []
 
         # Gimbal arm in world units (constant screen size regardless of distance)
         HANDLE_PX = 80
@@ -7424,9 +7516,11 @@ class FrameRenderer:
                     ))
                 return pts
 
-            def _draw_polyline(points, color, width: int) -> None:
+            def _draw_polyline(points, color, width: int, axis_name: Optional[str] = None) -> None:
                 for p0, p1 in zip(points, points[1:]):
                     draw.line([p0[0], p0[1], p1[0], p1[1]], fill=color, width=width)
+                    if axis_name:
+                        self._gimbal_handle_lines.append((p0[0], p0[1], p1[0], p1[1], axis_name))
 
             def _draw_hatch(angle_deg: float, color) -> None:
                 angle = _gm.radians(angle_deg)
@@ -7460,7 +7554,7 @@ class FrameRenderer:
                 shadow = tuple(max(0, c - 90) for c in col)
                 ring_col = (255, 235, 80) if active == name else col
                 _draw_polyline(pts, shadow, 5 if active == name else 4)
-                _draw_polyline(pts, ring_col, 3 if active == name else 2)
+                _draw_polyline(pts, ring_col, 3 if active == name else 2, name)
 
                 hi = int(round(handle_t * (len(pts) - 1))) % (len(pts) - 1)
                 hx, hy = pts[hi]
@@ -7472,10 +7566,28 @@ class FrameRenderer:
                 except Exception:
                     pass
 
+        elif self.gimbal_mode == 3:   # ── Scale ──────────────────────
+            for name, col in axis_colors.items():
+                dx = arm if name == 'X' else 0.0
+                dy = arm if name == 'Y' else 0.0
+                dz = arm if name == 'Z' else 0.0
+                sp = self._proj(wp[0]+dx, wp[1]+dy, wp[2]+dz, W, H)
+                if sp is None:
+                    continue
+                sx, sy, _ = sp
+                draw_col = (255, 255, 80) if active == name else col
+                draw.line([cx, cy, sx, sy], fill=draw_col, width=2)
+                draw.rectangle([sx-6, sy-6, sx+6, sy+6],
+                               fill=draw_col, outline=(255, 255, 255))
+                self._gimbal_handles.append((sx, sy, name))
+            draw.rectangle([cx-7, cy-7, cx+7, cy+7],
+                           fill=(255, 255, 255), outline=(255, 212, 0))
+            self._gimbal_handles.append((cx, cy, 'S'))
+
         # Centre dot
         draw.ellipse([cx-4, cy-4, cx+4, cy+4],
                       fill=(255, 255, 255), outline=(150, 150, 150))
-        mode_lbl = "Translate" if self.gimbal_mode == 1 else "Rotate"
+        mode_lbl = {1: "Translate", 2: "Rotate", 3: "Scale"}.get(self.gimbal_mode, "Translate")
         try:
             draw.text((cx+6, cy-14), f"[{mode_lbl}] {node.name}",
                        fill=(200, 200, 200))
@@ -7491,6 +7603,22 @@ class FrameRenderer:
             if d2 < best_d2:
                 best_d2 = d2
                 best_axis = axis
+        line_radius2 = best_d2 if best_axis is not None else (radius + 4) * (radius + 4)
+        for x0, y0, x1, y1, axis in getattr(self, "_gimbal_handle_lines", []) or []:
+            vx = x1 - x0
+            vy = y1 - y0
+            seg_len2 = vx * vx + vy * vy
+            if seg_len2 <= 1e-6:
+                continue
+            t = ((sx - x0) * vx + (sy - y0) * vy) / seg_len2
+            if t < 0.0 or t > 1.0:
+                continue
+            px = x0 + t * vx
+            py = y0 + t * vy
+            d2 = (px - sx) ** 2 + (py - sy) ** 2
+            if d2 < line_radius2:
+                line_radius2 = d2
+                best_axis = axis
         return best_axis
 
     # ── External skeleton overlay ─────────────────────────────────────
@@ -7502,16 +7630,20 @@ class FrameRenderer:
         Used for the 'Load External Skeleton' rigging workflow.
         """
         if not self._ext_skeleton or not self._ext_skeleton.root_node:
+            self._ext_bone_screen_positions = []
             return
         ox, oy, oz = self._ext_skel_offset
+        scale = float(getattr(self, '_ext_skel_scale', 1.0) or 1.0)
         EXT_DOT  = (180,  80, 255)
         EXT_LINE = (130,  50, 200)
         EXT_SEL  = (255, 200,  80)
         ext_selected = getattr(self, '_ext_skel_selected_node', None)
+        ext_selected_ids = set(getattr(self, "_ext_skel_selected_ids", set()) or set())
+        self._ext_bone_screen_positions = []
 
         def _bp(node):
             p = node.bone_world_position()
-            return (p[0]+ox, p[1]+oy, p[2]+oz)
+            return (p[0]*scale+ox, p[1]*scale+oy, p[2]*scale+oz)
 
         def _draw_ext_bone(node):
             """Draw one ext-skeleton bone node."""
@@ -7520,14 +7652,18 @@ class FrameRenderer:
             is_sel = (node is ext_selected)
             col = EXT_SEL if is_sel else EXT_DOT
             if sp:
-                r = 5 if is_sel else 3
+                self._ext_bone_screen_positions.append((sp[0], sp[1], sp[2], node))
+                is_multi_sel = is_sel or id(node) in ext_selected_ids
+                r = 5 if is_multi_sel else 3
+                col = EXT_SEL if is_multi_sel else EXT_DOT
                 draw.ellipse([sp[0]-r, sp[1]-r, sp[0]+r, sp[1]+r],
                               fill=col, outline=None)
-                try:
-                    draw.text((sp[0]+4, sp[1]-6), node.name,
-                               fill=(160, 100, 220))
-                except Exception:
-                    pass
+                if is_multi_sel:
+                    try:
+                        draw.text((sp[0]+4, sp[1]-6), node.name,
+                                   fill=(160, 100, 220))
+                    except Exception:
+                        pass
             if node.parent:
                 pp2 = _bp(node.parent)
                 spp = self._proj(*pp2, W, H)

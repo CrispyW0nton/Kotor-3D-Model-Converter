@@ -83,6 +83,30 @@ For each completed change, add a dated entry with:
 
 ## 2026-05-19
 
+- Fixed K1 module room loading/render hardening for `m02aa_01a`. The model is
+  valid game data (`effect`, 127 nodes, 56 meshes) but includes module geometry
+  that may not carry ordinary character-style UV arrays, so the viewport render
+  timer now catches render failures and falls back from GPU to CPU instead of
+  letting the Qt event callback take down the app. Also repaired the MCP render
+  helper's grouped-GUI import path so a freshly loaded MCP server can render
+  through the current `src/gui/rendering` layout.
+  Affected areas: `src/gui/viewports/qt_viewport.py`,
+  `src/gui/rendering/gpu_renderer.py`, `src/kotormcp/tools/ghostrigger.py`,
+  `src/kotormcp/tools/debug_materials.py`, `tests/test_regression.py`.
+  Verification: MCP `ghostrigger_model_info`/`ghostrigger_audit` for
+  `k1:m02aa_01a`; `python -m pytest tests/test_regression.py::test_gpu_vbo_handles_module_mesh_without_uvs tests/test_regression.py::test_k1_m02aa_01a_module_model_loads_and_renders_without_crashing -q`;
+  `python -m pytest tests/test_qt_only_imports.py::test_gui_root_only_keeps_central_qt_lib tests/test_qt_only_imports.py::test_qt_lib_facade_imports_grouped_modules -q`;
+  direct local MCP handler render for `k1:m02aa_01a`; `python scripts/full_scan.py --game k1 --tier modules --category modules --max-models 10 --timeout 30`.
+- Added authoritative KOTOR module location labels keyed by module filename and
+  room-model stem, including K1 prefixless room models such as `m02aa_01a` and
+  K2 room stems such as `201tel_01a`. The Game Library Module tab now enriches
+  rows with `module_code`, `location`, `area_name`, and a human-readable
+  `area_label`, uses those labels in the filter dropdown, and shows them in
+  model list rows/tooltips.
+  Affected areas: `src/core/module_categories.py`,
+  `src/gui/panels/qt_library_panel.py`, `tests/test_module_categories.py`.
+  Verification: `pytest tests/test_module_categories.py tests/test_qt_only_imports.py -q`;
+  `python -m py_compile src/core/module_categories.py src/gui/panels/qt_library_panel.py tests/test_module_categories.py`.
 - Added a dedicated `MODULE` Character Mode for area/module/tile/effect models. Module classifications now show a `MODULE` badge instead of `UNSUPPORTED`, with its own UI color and enum display/icon key.
   Affected areas: `src/core/model_data.py`, `src/gui/panels/qt_properties_panel.py`, `tests/test_character_mode.py`.
   Verification: `pytest tests/test_character_mode.py::test_detect_character_mode_synthetic tests/test_character_mode.py::test_character_mode_has_required_members -q`; `python -m py_compile src/core/model_data.py src/gui/panels/qt_properties_panel.py tests/test_character_mode.py`.

@@ -5,6 +5,7 @@ from __future__ import annotations
 from importlib import import_module
 
 _COMPAT_ALIASES = {
+    "accel": "src.gui.rendering.accel",
     "gpu_renderer": "src.gui.qt_lib.rendering.gpu_renderer",
 }
 

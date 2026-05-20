@@ -7,6 +7,7 @@ from typing import Optional
 
 from PySide6 import QtCore, QtWidgets
 
+from src.core.module_categories import get_module_info
 from src.gui.qt_lib.assets.qt_theme import icon, heading
 
 
@@ -43,7 +44,7 @@ def infer_model_category(resref: str, model_class: str = "") -> str:
         )
     ):
         return "Character"
-    if _module_area_key(r):
+    if _module_info_for_row(resref, "") is not None:
         return "Module"
     if any(r.startswith(prefix) for prefix in _ITEM_PREFIXES):
         return "Item/Armor/Weapons"
@@ -63,19 +64,13 @@ def infer_model_category(resref: str, model_class: str = "") -> str:
     return "Other"
 
 
-def _module_area_key(resref: str) -> str:
-    r = (resref or "").lower()
-    if len(r) >= 6 and r[:3].isdigit() and r[3:6].isalpha():
-        return r[:3]
-    for prefix in ("end_", "tar_", "tat_", "kas_", "lev_", "unk_", "sta_", "ebo_", "liv_"):
-        if r.startswith(prefix):
-            return prefix
-    for prefix in ("danm", "manm"):
-        if r.startswith(prefix):
-            return prefix
-    if r.startswith("m") and len(r) >= 3 and r[1:3].isdigit():
-        return r[:3]
-    return ""
+def _module_info_for_row(resref: str, game: str = ""):
+    games = [game] if str(game or "").upper() in {"K1", "K2"} else ["K1", "K2"]
+    for game_key in games:
+        info = get_module_info(resref, game_key)
+        if info is not None:
+            return info
+    return None
 
 
 def enrich_library_rows(rows: list[dict]) -> list[dict]:
@@ -86,10 +81,15 @@ def enrich_library_rows(rows: list[dict]) -> list[dict]:
         item = dict(row)
         resref = str(item.get("resref", ""))
         game = str(item.get("game", ""))
-        item.setdefault("category", infer_model_category(resref, str(item.get("model_class", ""))))
-        area = _module_area_key(resref)
-        if area:
-            item.setdefault("area", area)
+        module_info = _module_info_for_row(resref, game)
+        item.setdefault("category", "Module" if module_info is not None else infer_model_category(resref, str(item.get("model_class", ""))))
+        if module_info is not None:
+            item.setdefault("module_code", module_info.module_code)
+            item.setdefault("location", module_info.location)
+            item.setdefault("area_name", module_info.area_name)
+            item.setdefault("area", module_info.location)
+            item.setdefault("area_label", module_info.label)
+            item.setdefault("location_type", module_info.location_type)
         enriched.append(item)
         seen.add((resref.lower(), game.upper()))
 
@@ -112,7 +112,10 @@ def enrich_library_rows(rows: list[dict]) -> list[dict]:
 
 class QtModelListItem(QtWidgets.QListWidgetItem):
     def __init__(self, row: dict):
-        super().__init__(f"[{row.get('game', '?')}] {row.get('resref', '')}")
+        label = f"[{row.get('game', '?')}] {row.get('resref', '')}"
+        if row.get("area_label"):
+            label = f"{label} - {row.get('area_label')}"
+        super().__init__(label)
         self.row = row
 
 
@@ -347,13 +350,16 @@ class QtLibraryPanel(QtWidgets.QWidget):
             counts[row_cat] = counts.get(row_cat, 0) + 1
 
         for row in self._rows:
-            text = f"[{row.get('game', '?')}] {row.get('resref', '')}"
+            text = " ".join(
+                str(row.get(key, ""))
+                for key in ("game", "resref", "module_code", "location", "area_name", "area_label")
+            )
             if game_filter != "All" and row.get("game") != game_filter:
                 continue
             row_cat = row.get("category") or infer_model_category(str(row.get("resref", "")))
             if category != "All" and row_cat != category:
                 continue
-            if category == "Module" and area_filter not in ("", "All Areas") and row.get("area") != area_filter:
+            if category == "Module" and area_filter not in ("", "All Areas") and row.get("area_label") != area_filter:
                 continue
             if needle and needle not in text.lower():
                 continue
@@ -373,7 +379,7 @@ class QtLibraryPanel(QtWidgets.QWidget):
         current = self.module_area_combo.currentText()
         self.module_area_combo.clear()
         self.module_area_combo.addItem("All Areas")
-        areas = sorted({str(row.get("area", "")) for row in self._rows if row.get("area")})
+        areas = sorted({str(row.get("area_label", "")) for row in self._rows if row.get("area_label")})
         self.module_area_combo.addItems(areas)
         idx = self.module_area_combo.findText(current)
         if idx >= 0:
@@ -385,4 +391,9 @@ class QtLibraryPanel(QtWidgets.QWidget):
             self.thumb_label.setText("")
             return
         source = Path(str(row.get("source", ""))).name if row.get("source") else ""
-        self.thumb_label.setText(f"{row.get('resref', '')}  {row.get('game', '')}  {source}")
+        parts = [str(row.get("resref", "")), str(row.get("game", ""))]
+        if row.get("area_label"):
+            parts.append(str(row.get("area_label")))
+        if source:
+            parts.append(source)
+        self.thumb_label.setText("  ".join(part for part in parts if part))

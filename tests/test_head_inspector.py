@@ -88,11 +88,10 @@ def inspector(qapp):
 #  T602 ▸ Mode-aware page composition
 # ──────────────────────────────────────────────────────────────────────
 
-def test_t602_inspector_starts_with_legacy_face_layout(inspector):
-    """Without set_active_mode, the legacy face controls are visible."""
+def test_t602_inspector_starts_with_launch_preview_layout(inspector):
+    """The five-step launch UI starts without legacy face-rig stubs."""
     assert inspector.active_mode() is None
-    assert inspector._face_legacy_widgets, "expected at least one legacy widget"
-    assert not inspector._face_legacy_widgets[0].isHidden()
+    assert inspector._face_legacy_widgets == []
     # Head palette is built but hidden by default.
     assert inspector._head_face_palette is not None
     assert inspector._head_face_palette.isHidden()

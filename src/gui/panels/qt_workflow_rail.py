@@ -2,9 +2,9 @@
 src/gui/qt_workflow_rail.py — Left-rail workflow widget (M2 / T202)
 
 The Character Builder's left-rail step list, ported from the AccuRig HUD
-reference (audit §4.2).  The rail is **mode-aware**: the visible step
-sequence changes when the user switches CharacterMode in the toolbar,
-but step numbering stays consistent.
+reference (audit §4.2).  The rail is mode-aware for status text and future
+gates, but the visible sequence is intentionally unified around the practical
+KOTOR modder path.
 
 Public surface
 --------------
@@ -29,7 +29,7 @@ from typing import Dict, List, Optional, Tuple
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from src.gui.qt_lib.assets.qt_theme import C, heading
+from src.gui.qt_lib.assets.qt_theme import C, heading, icon
 
 # ── CharacterMode wiring (lazy / pykotor-safe) ──────────────────────────────
 # src.core.__init__ eagerly imports the pykotor-backed loader stack, which
@@ -45,43 +45,32 @@ except Exception:                                       # pragma: no cover
 
 # ── Step lists per mode (audit §4.2) ────────────────────────────────────────
 #
-# Each entry is (step_number, label).  Step numbering is intentionally
-# *consistent* across modes so the inspector pages line up 1:1 (see T203);
-# a step that doesn't apply to a mode is simply absent from that mode's
-# list rather than renumbered.
+# Each entry is (step_number, label).  The Character Builder now follows the
+# practical modder path instead of the older milestone/task list:
+# pick a KOTOR base, import and align the mesh, commit the skeleton, assign
+# animations, preview attachments/animation, then export a game-ready MDL.
 #
 # These are module-level so they can be unit-tested and overridden by
 # tools without monkey-patching the widget.
 
+_STEPS_UNIFIED_CHARACTER_BUILDER: List[Tuple[int, str]] = [
+    (1, "Choose Base + Load Mesh"),
+    (2, "Assign Skeleton"),
+    (3, "Assign Animations"),
+    (4, "Preview"),
+    (5, "Export MDL"),
+]
+
 _STEPS_HEADLESS_BODY: List[Tuple[int, str]] = [
-    (1, "Load Body"),
-    (2, "Check Model (T-pose, scale)"),
-    (3, "Body Rig (humanoid pins)"),
-    (4, "Hand Rig (fingers)"),
-    (6, "Check Actor (idle/walk/talk)"),
-    (7, "Add Motions"),
-    (8, "Validate + Export"),
+    *_STEPS_UNIFIED_CHARACTER_BUILDER,
 ]
 
 _STEPS_HEAD: List[Tuple[int, str]] = [
-    (1, "Load Head"),
-    (2, "Check Model"),
-    (3, "Head Rig (head/neck/jaw)"),
-    (4, "Face Rig (lids, lip corners)"),
-    (5, "LIP & Phoneme Test"),
-    (6, "Check Face (jaw/blink/visemes)"),
-    (8, "Validate + Export"),
+    *_STEPS_UNIFIED_CHARACTER_BUILDER,
 ]
 
 _STEPS_SUPERMODEL: List[Tuple[int, str]] = [
-    (1, "Load Body + Load Head"),
-    (2, "Check both, fit at headhook"),
-    (3, "Body Rig"),
-    (4, "Hand Rig"),
-    (5, "Face Rig"),
-    (6, "Check Actor + Face"),
-    (7, "Add Motions"),
-    (8, "Validate + Export"),
+    *_STEPS_UNIFIED_CHARACTER_BUILDER,
 ]
 
 _STEPS_HUMANOID: List[Tuple[int, str]] = [
@@ -96,28 +85,24 @@ _STEPS_HUMANOID: List[Tuple[int, str]] = [
 ]
 
 _STEPS_CREATURE: List[Tuple[int, str]] = [
-    (1, "Load Creature"),
-    (2, "Check Model"),
-    (3, "Profile Pick (humanoid / quadruped / droid / prop)"),
-    (4, "Limb Rig (per profile)"),
-    (5, "Special: Tail / Wing / Tentacle Spline-IK"),
-    (6, "ROM Test (Stewart Jones range-of-motion)"),
-    (7, "Add Motions"),
-    (8, "Validate + Export"),
+    *_STEPS_UNIFIED_CHARACTER_BUILDER,
 ]
 
 _STEPS_FALLBACK: List[Tuple[int, str]] = [
-    (1, "Load Model"),
-    (8, "Validate + Export"),
+    (1, "Choose Base + Load Mesh"),
+    (2, "Assign Skeleton"),
+    (3, "Assign Animations"),
+    (4, "Preview"),
+    (5, "Export MDL"),
 ]
 
 
 def _steps_for_mode(mode) -> List[Tuple[int, str]]:
     """Return the (step_number, label) list for the given CharacterMode.
 
-    Tolerates ``None`` (empty rail) and the AMBIGUOUS / UNSUPPORTED
-    fallbacks (single-step "Load" + "Export" hint so the user always
-    has somewhere to start).
+    Tolerates ``None`` and the AMBIGUOUS / UNSUPPORTED fallbacks by keeping
+    the same five-step launch workflow visible so the user always has a clear
+    path forward.
     """
     if mode is None or not _CHARACTER_MODE_AVAILABLE:
         return list(_STEPS_FALLBACK)
@@ -139,6 +124,14 @@ def _steps_for_mode(mode) -> List[Tuple[int, str]]:
 _ROLE_STEP_NUMBER = QtCore.Qt.UserRole + 1
 _ROLE_GATE_REASON = QtCore.Qt.UserRole + 2
 
+_ICON_FOR_STEP = {
+    1: "loadmodel",
+    2: "skeleton",
+    3: "library",
+    4: "anims",
+    5: "export",
+}
+
 
 class QtWorkflowRail(QtWidgets.QWidget):
     """Mode-aware numbered step list (left rail of Character Builder).
@@ -150,7 +143,7 @@ class QtWorkflowRail(QtWidgets.QWidget):
     """
 
     # Emitted when the user clicks an *enabled* step.  Payload: 1-based
-    # step number (1..8 in the canonical list).
+    # step number (1..5 in the canonical launch list).
     stepSelected = QtCore.Signal(int)
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
@@ -166,14 +159,40 @@ class QtWorkflowRail(QtWidgets.QWidget):
 
     def _build(self) -> None:
         layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(4)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
 
-        layout.addWidget(heading("Workflow"))
+        brand = QtWidgets.QFrame()
+        brand.setObjectName("GuidedRigRailBrand")
+        brand_layout = QtWidgets.QVBoxLayout(brand)
+        brand_layout.setContentsMargins(10, 8, 10, 8)
+        brand_layout.setSpacing(0)
+        title = QtWidgets.QLabel("GHOSTRIGGER")
+        title.setObjectName("GuidedRigRailTitle")
+        subtitle = QtWidgets.QLabel("KOTOR AUTO-RIG")
+        subtitle.setObjectName("GuidedRigRailSubtitle")
+        brand_layout.addWidget(title)
+        brand_layout.addWidget(subtitle)
+        brand.setStyleSheet(
+            "QFrame#GuidedRigRailBrand { "
+            f"background:{C.get('panel', '#111916')}; "
+            f"border:1px solid {C.get('border', '#1B2A22')}; "
+            "border-radius:4px; "
+            "}"
+            "QLabel#GuidedRigRailTitle { "
+            f"color:{C.get('accent', '#00FF7A')}; "
+            "font-size:11pt; font-weight:800; letter-spacing:0px; "
+            "}"
+            "QLabel#GuidedRigRailSubtitle { "
+            f"color:{C.get('text2', '#7A9A88')}; "
+            "font-size:8pt; font-weight:600; letter-spacing:0px; "
+            "}"
+        )
+        layout.addWidget(brand)
 
         self._mode_label = QtWidgets.QLabel("(no mode)")
         self._mode_label.setStyleSheet(
-            f"color:{C.get('text2', '#888')}; font-size:9pt; font-style:italic;"
+            f"color:{C.get('text2', '#888')}; font-size:8pt; padding-left:2px;"
         )
         layout.addWidget(self._mode_label)
 
@@ -182,20 +201,33 @@ class QtWorkflowRail(QtWidgets.QWidget):
         self._list.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self._list.setUniformItemSizes(True)
         self._list.setFocusPolicy(QtCore.Qt.StrongFocus)
+        self._list.setIconSize(QtCore.QSize(22, 22))
+        self._list.setSpacing(7)
         self._list.setStyleSheet(
             "QListWidget { "
-            f"background:{C.get('bg2', '#1a1a1a')}; "
+            f"background:{C.get('panel', '#111916')}; "
             f"color:{C.get('text', '#e0e0e0')}; "
-            "border:1px solid #2a2a2a; "
+            "border:0; "
             "outline:0; "
             "}"
-            "QListWidget::item { padding:6px 8px; }"
+            "QListWidget::item { "
+            f"background:{C.get('panel2', '#151D1A')}; "
+            f"border:1px solid {C.get('accent', '#00FF7A')}; "
+            "border-radius:5px; "
+            "padding:10px 10px; "
+            "min-height:32px; "
+            "}"
+            "QListWidget::item:hover { "
+            f"background:{C.get('hover', '#183428')}; "
+            "}"
             "QListWidget::item:selected { "
-            f"background:{C.get('accent', '#00FF7A')}; "
-            "color:#000000; "
+            f"background:{C.get('hover', '#183428')}; "
+            f"color:{C.get('accent', '#00FF7A')}; "
             "font-weight:bold; "
             "}"
-            "QListWidget::item:disabled { color:#666666; }"
+            "QListWidget::item:disabled { "
+            "color:#55665B; border-color:#324438; background:#101713; "
+            "}"
         )
         self._list.itemClicked.connect(self._on_item_clicked)
         self._list.currentRowChanged.connect(self._on_current_row_changed)
@@ -225,7 +257,9 @@ class QtWorkflowRail(QtWidgets.QWidget):
         self._list.clear()
         for step_no, label in steps:
             item = QtWidgets.QListWidgetItem(f"{step_no}. {label}")
+            item.setIcon(icon(_ICON_FOR_STEP.get(int(step_no), "charbuilder"), 24))
             item.setData(_ROLE_STEP_NUMBER, int(step_no))
+            item.setSizeHint(QtCore.QSize(172, 46))
             # Re-apply persisted gate (if any).
             enabled, reason = self._gates.get(int(step_no), (True, ""))
             self._apply_gate_to_item(item, enabled, reason)

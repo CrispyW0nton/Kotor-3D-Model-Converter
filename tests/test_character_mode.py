@@ -80,8 +80,10 @@ try:
     CharacterScene       = _model_data.CharacterScene
     KotorModel           = _model_data.KotorModel
     ModelClassification  = _model_data.ModelClassification
+    ModelTaxonomy        = _model_data.ModelTaxonomy
     ModelNode            = _model_data.ModelNode
     PartSlot             = _model_data.PartSlot
+    classify_kotor_model = _model_data.classify_kotor_model
     detect_character_mode = _model_data.detect_character_mode
     _MODEL_DATA_AVAILABLE = True
     _MODEL_DATA_IMPORT_ERROR: str = ""
@@ -92,8 +94,10 @@ except Exception as exc:                                # pragma: no cover
     CharacterScene = None       # type: ignore[assignment]
     KotorModel = None           # type: ignore[assignment]
     ModelClassification = None  # type: ignore[assignment]
+    ModelTaxonomy = None        # type: ignore[assignment]
     ModelNode = None            # type: ignore[assignment]
     PartSlot = None             # type: ignore[assignment]
+    classify_kotor_model = None  # type: ignore[assignment]
     detect_character_mode = None  # type: ignore[assignment]
 
 
@@ -111,6 +115,8 @@ def _build_model(
     supermodel: str = "NULL",
     classification = None,                       # ModelClassification
     nodes: Tuple[str, ...] = (),
+    metadata: dict | None = None,
+    animations: Tuple[str, ...] = (),
 ) -> "KotorModel":
     """Construct a minimal :class:`KotorModel` with a flat node tree."""
     if classification is None:
@@ -129,6 +135,12 @@ def _build_model(
         node_objs[i].children.append(node_objs[i + 1])
     if node_objs:
         model.root_node = node_objs[0]
+    if metadata is not None:
+        model.metadata = dict(metadata)
+    model.animations = [
+        _model_data.Animation(name=name)
+        for name in animations
+    ]
     return model
 
 
@@ -152,7 +164,7 @@ _SYNTHETIC_CASES: List[Tuple[str, dict, "CharacterMode"]] = [
     ("n_darthrevan",
                 dict(name="n_darthrevan", supermodel="S_MALE02",
                      nodes=("n_darthrevan", "headhook", "rhand", "spine")),
-     "HEADLESS_BODY"),
+     "HUMANOID"),
 
     # ── HEAD — talkdummy or head_g+f_jaw_g, no pelvis ───────────────────────
     ("pmhc01", dict(name="pmhc01", supermodel="S_MALE02",
@@ -270,6 +282,95 @@ def test_character_mode_properties_unique_and_non_empty():
         "icon_key values must be unique"
 
 
+_TAXONOMY_CASES: List[Tuple[str, dict, str, str]] = [
+    (
+        "supermodel",
+        dict(name="s_male02", supermodel="S_MALE01",
+             classification=ModelClassification.CHARACTER if ModelClassification else None,
+             nodes=("S_Male02", "rootdummy", "headhook", "rhand"),
+             animations=("walk", "run", "pause1", "g1a1", "g1a2", "dead", "talk", "listen", "bow", "victory", "salute")),
+        "SUPERMODEL",
+        "SUPERMODEL",
+    ),
+    (
+        "modular_body_by_modeltype",
+        dict(name="pmbam", supermodel="S_FEMALE02",
+             nodes=("PMBAM", "rootdummy", "headhook", "rhand", "lhand"),
+             metadata={"appearance_modeltype": "B"}),
+        "MODULAR_BODY",
+        "HEADLESS_BODY",
+    ),
+    (
+        "full_body_n_mandalorian",
+        dict(name="n_mandalorian03", supermodel="S_FEMALE02",
+             nodes=("N_Mandalorian", "rootdummy", "talkdummy", "headhook", "rhand", "lhand"),
+             metadata={"appearance_modeltype": "F"}),
+        "FULL_BODY_CHARACTER",
+        "HUMANOID",
+    ),
+    (
+        "head",
+        dict(name="pmhc01", supermodel="S_FEMALE02",
+             nodes=("PMHC01", "rootdummy", "talkdummy", "MaskHook", "GoggleHook", "head_g")),
+        "HEAD",
+        "HEAD",
+    ),
+    (
+        "creature",
+        dict(name="c_rancor", supermodel="NULL",
+             nodes=("c_rancor", "rootdummy", "talkdummy", "impact")),
+        "CREATURE",
+        "CREATURE",
+    ),
+    (
+        "droid",
+        dict(name="p_hk47", supermodel="S_MALE02",
+             nodes=("P_HK47", "rootdummy", "rhand", "lhand")),
+        "DROID",
+        "HUMANOID",
+    ),
+    (
+        "weapon",
+        dict(name="w_lghtsbr_001",
+             classification=ModelClassification.LIGHTSABER if ModelClassification else None,
+             nodes=("w_Lghtsbr_001", "impact")),
+        "WEAPON",
+        "UNSUPPORTED",
+    ),
+    (
+        "placeable",
+        dict(name="plc_footlker",
+             classification=ModelClassification.PLACEABLE if ModelClassification else None,
+             nodes=("PLC_FootLker", "lookathook")),
+        "PLACEABLE",
+        "UNSUPPORTED",
+    ),
+    (
+        "area",
+        dict(name="m12aa_01",
+             classification=ModelClassification.EFFECT if ModelClassification else None,
+             nodes=("m12aa_01", "walkmesh")),
+        "AREA",
+        "MODULE",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "label,builder_kwargs,expected_taxonomy,expected_mode",
+    _TAXONOMY_CASES,
+    ids=[c[0] for c in _TAXONOMY_CASES],
+)
+def test_classify_kotor_model_taxonomy(label, builder_kwargs, expected_taxonomy, expected_mode):
+    model = _build_model(**builder_kwargs)
+    result = classify_kotor_model(model)
+    assert result.category == ModelTaxonomy[expected_taxonomy], (
+        f"classify_kotor_model({label}) -> {result.category.name}, "
+        f"expected {expected_taxonomy}; reasons={result.reasons}"
+    )
+    assert result.character_mode == CharacterMode[expected_mode]
+
+
 # ── Layer 2: CharacterScene mode tracking & round-trip ──────────────────────
 
 def test_character_scene_starts_ambiguous_when_empty():
@@ -362,13 +463,63 @@ def test_character_scene_json_round_trip_preserves_mode():
     scene.set_mode(CharacterMode.HEADLESS_BODY, locked=True)
 
     payload = scene.to_dict()
+    assert payload["ghostrig_version"] == 2
+    assert payload["schema_version"] == 2
     assert payload["mode"] == "headless_body"
+    assert payload["character_mode"] == "headless_body"
     assert payload["mode_locked"] is True
 
     restored = CharacterScene.from_dict(payload)
     assert restored.mode == CharacterMode.HEADLESS_BODY
     assert restored.mode_locked is True
     assert restored.character_name == "Revan"
+
+
+def test_t1002_sceneio_v2_sidecar_includes_export_metadata_and_hooks():
+    scene = CharacterScene(game_version="K1", character_name="LaunchBody")
+    body = _build_model(
+        name="pfbcm", supermodel="S_Female03",
+        nodes=("pfbcm", "headhook", "rhand", "lhand_g", "impact_bolt"),
+    )
+    scene.assign(PartSlot.HEADLESS_BODY, body, resref="pfbcm")
+    scene.metadata["validation_report"] = {
+        "ok": True,
+        "code": "clean",
+        "error_count": 0,
+    }
+    scene.metadata["export_results"] = [
+        {"format": "kotor", "ok": True, "code": "exported"},
+    ]
+    scene.metadata["export_timestamps"] = {
+        "last_export_at": "2026-05-16T00:00:00Z",
+    }
+    scene.saved_at = "2026-05-16T00:00:01Z"
+
+    payload = scene.to_dict()
+
+    assert payload["schema_version"] == 2
+    assert payload["source_asset_ids"]["headless_body"].startswith("gr:PFBCM")
+    assert payload["supermodel_chain"]["headless_body"]["supermodel"] == "S_Female03"
+    assert "headhook" in {n.lower() for n in payload["hook_list"]["headless_body"]}
+    assert payload["validation_report"]["code"] == "clean"
+    assert payload["export_results"][0]["format"] == "kotor"
+    assert payload["export_timestamps"]["last_export_at"] == "2026-05-16T00:00:00Z"
+
+
+def test_t1002_sceneio_v2_round_trips_bit_identical():
+    scene = CharacterScene(game_version="K1", character_name="Stable")
+    body = _build_model(
+        name="pfbcm", supermodel="S_Female03",
+        nodes=("pfbcm", "headhook", "rhand", "lhand_g"),
+    )
+    scene.assign(PartSlot.HEADLESS_BODY, body, resref="pfbcm")
+    scene.saved_at = "2026-05-16T01:02:03Z"
+    payload = scene.to_dict()
+
+    restored = CharacterScene.from_dict(payload)
+    roundtrip = restored.to_dict()
+
+    assert roundtrip == payload
 
 
 def test_character_scene_from_dict_tolerates_missing_mode_keys():
@@ -385,6 +536,7 @@ def test_character_scene_from_dict_tolerates_missing_mode_keys():
     restored = CharacterScene.from_dict(legacy_payload)
     assert restored.mode == CharacterMode.AMBIGUOUS
     assert restored.mode_locked is False
+    assert restored.to_dict()["schema_version"] == 2
 
 
 def test_character_scene_from_dict_handles_unknown_mode_value():

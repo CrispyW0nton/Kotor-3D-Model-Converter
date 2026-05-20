@@ -553,13 +553,65 @@ class WOKData:
 
     @classmethod
     def from_bytes(cls, data: bytes) -> 'WOKData':
-        wok = cls(raw=data)
         if len(data) < 136:
-            return wok
+            return cls(raw=data)
+        if data[:4] not in (b'BWM ', b'BWM\x20'):
+            log.warning("WOK parse skipped: invalid BWM signature %r", data[:8])
+            return cls(raw=data)
+        try:
+            return cls._from_pykotor_bwm(data)
+        except Exception as exc:
+            log.debug("PyKotor BWM parse unavailable; falling back to legacy WOK parser: %s", exc)
+        wok = cls(raw=data)
         try:
             wok._parse(data)
         except Exception as e:
             log.warning(f"WOK parse error: {e}")
+        return wok
+
+    @classmethod
+    def _from_pykotor_bwm(cls, data: bytes) -> 'WOKData':
+        from pykotor.resource.formats.bwm import read_bwm  # type: ignore
+
+        bwm = read_bwm(data)
+        vertices = list(bwm.vertices())
+        wok = cls(raw=data)
+        wok.verts = [(float(v.x), float(v.y), float(v.z)) for v in vertices]
+        index_by_id = {id(v): i for i, v in enumerate(vertices)}
+        index_by_xyz = {
+            (round(float(v.x), 6), round(float(v.y), 6), round(float(v.z), 6)): i
+            for i, v in enumerate(vertices)
+        }
+        face_by_id = {id(face): i for i, face in enumerate(getattr(bwm, "faces", []) or [])}
+
+        def vertex_index(vertex) -> int:
+            idx = index_by_id.get(id(vertex))
+            if idx is not None:
+                return idx
+            return index_by_xyz.get(
+                (round(float(vertex.x), 6), round(float(vertex.y), 6), round(float(vertex.z), 6)),
+                0,
+            )
+
+        def face_index(value) -> int:
+            if value is None:
+                return -1
+            if isinstance(value, int):
+                return value
+            return face_by_id.get(id(value), -1)
+
+        for face in getattr(bwm, "faces", []) or []:
+            wok.faces.append(
+                WOKFace(
+                    vertex_index(face.v1),
+                    vertex_index(face.v2),
+                    vertex_index(face.v3),
+                    int(getattr(face, "material", 0) or 0),
+                    face_index(getattr(face, "trans1", None)),
+                    face_index(getattr(face, "trans2", None)),
+                    face_index(getattr(face, "trans3", None)),
+                )
+            )
         return wok
 
     @classmethod
@@ -570,8 +622,7 @@ class WOKData:
         # BWM header (136 bytes)
         sig = d[:4]
         if sig not in (b'BWM ', b'BWM\x20'):
-            # Some walkmeshes start differently – try anyway
-            log.debug(f"WOK signature: {sig!r}")
+            raise ValueError(f"Invalid WOK/BWM signature: {sig!r}")
         ver = d[4:8]
 
         vert_count = struct.unpack_from('<I', d, 56)[0]
@@ -580,6 +631,12 @@ class WOKData:
         face_off   = struct.unpack_from('<I', d, 68)[0]
         mat_off    = struct.unpack_from('<I', d, 72)[0]
         adj_off    = struct.unpack_from('<I', d, 76)[0]
+        if vert_count > 1_000_000 or face_count > 1_000_000:
+            raise ValueError(f"Unreasonable WOK counts: verts={vert_count}, faces={face_count}")
+        if vert_off + vert_count * 12 > len(d):
+            raise ValueError("WOK vertex array extends past end of data")
+        if face_off + face_count * 6 > len(d):
+            raise ValueError("WOK face array extends past end of data")
 
         # Vertices (3 floats each)
         for i in range(vert_count):

@@ -39,25 +39,40 @@ def parse_kotor_uri(uri: str) -> Dict[str, Any]:
     return {"game": game, "type": resource_type, "path": path, "uri": uri, "authority": authority}
 
 
-async def list_resources() -> List[Dict[str, Any]]:
-    """Return MCP resource template list."""
+async def list_resource_templates() -> List[Dict[str, Any]]:
+    """Return parameterized MCP resource templates."""
     return [
-        {"uri": "kotor://k1/resource/{resref}.{ext}", "name": "K1 Resource",
+        {"uriTemplate": "kotor://k1/resource/{resref}.{ext}", "name": "K1 Resource",
          "description": "Resolve resource by resref.ext", "mimeType": "application/octet-stream"},
-        {"uri": "kotor://k2/resource/{resref}.{ext}", "name": "K2 Resource",
+        {"uriTemplate": "kotor://k2/resource/{resref}.{ext}", "name": "K2 Resource",
          "description": "Resolve resource by resref.ext", "mimeType": "application/octet-stream"},
-        {"uri": "kotor://k1/2da/{table_name}", "name": "K1 2DA Table",
+        {"uriTemplate": "kotor://k1/2da/{table_name}", "name": "K1 2DA Table",
          "description": "2DA table as JSON", "mimeType": "application/json"},
-        {"uri": "kotor://k2/2da/{table_name}", "name": "K2 2DA Table",
+        {"uriTemplate": "kotor://k2/2da/{table_name}", "name": "K2 2DA Table",
          "description": "2DA table as JSON", "mimeType": "application/json"},
-        {"uri": "kotor://k1/tlk/{strref}", "name": "K1 TLK String",
+        {"uriTemplate": "kotor://k1/tlk/{strref}", "name": "K1 TLK String",
          "description": "TLK string by strref", "mimeType": "text/plain"},
-        {"uri": "kotor://k2/tlk/{strref}", "name": "K2 TLK String",
+        {"uriTemplate": "kotor://k2/tlk/{strref}", "name": "K2 TLK String",
          "description": "TLK string by strref", "mimeType": "text/plain"},
+        {"uriTemplate": "kotor://ghostrigger/model/{resref}", "name": "GhostRigger Model Info",
+         "description": "JSON metadata for a KotOR MDL model", "mimeType": "application/json"},
+    ]
+
+
+async def list_resources() -> List[Dict[str, Any]]:
+    """Return concrete MCP resources.
+
+    Parameterized resources must be exposed through ``list_resource_templates``.
+    Returning templated URIs from ``resources/list`` makes some MCP clients
+    percent-encode the braces and hide the entries entirely.
+    """
+    return [
         {"uri": "kotor://docs/capabilities", "name": "KotorMCP capabilities",
          "description": "Tool index and resolution order for agent onboarding", "mimeType": "text/markdown"},
-        {"uri": "kotor://ghostrigger/model/{resref}", "name": "GhostRigger Model Info",
-         "description": "JSON metadata for a KotOR MDL model", "mimeType": "application/json"},
+        {"uri": "kotor://k1/2da/appearance", "name": "K1 appearance.2da",
+         "description": "Common character/body/head appearance table", "mimeType": "application/json"},
+        {"uri": "kotor://k2/2da/appearance", "name": "K2 appearance.2da",
+         "description": "Common character/body/head appearance table", "mimeType": "application/json"},
     ]
 
 

@@ -49,8 +49,8 @@ def qapp():
 @pytest.fixture
 def inspector(qapp):
     ip = QtInspectorPanel()
-    # Step 5 = Face / LIP-Phoneme test page.
-    ip.set_step(5)
+    # Step 4 = Preview page with HEAD-mode LIP/phoneme tools.
+    ip.set_step(4)
     yield ip
     ip.deleteLater()
 

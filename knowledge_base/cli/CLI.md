@@ -560,20 +560,20 @@ python scripts/visual_review.py --report /tmp/diff.json --output /tmp/verdicts.j
 
 ---
 
-## 9. Template builder
+## 9. Retired template builder
 
 ### 9.1 `python build_game_templates.py`
 
-Regenerate the four template MDLs that back the Character Builder's
-"new body" / "new head" actions. Strips geometry from real KotOR game models
-while preserving the bone hierarchy, node names, positions, rotations, and
-supermodel references.
+Legacy helper for regenerating the old stripped `templates/gr_*` MDLs. The
+Character Builder no longer ships or defaults to those generated template
+files; the base-first workflow now uses real KOTOR install resrefs such as
+`pmbam`, `pfbcm`, `n_sithsoldier`, `s_female02`, and `s_female03`.
 
 | Aspect | Value |
 |--------|-------|
 | **Arguments** | none |
 | **Reads** | `K1_DIR` / `K2_DIR` from the script's hard-coded paths (Steam defaults) |
-| **Writes** | `templates/gr_body_k1.mdl` · `gr_body_k2.mdl` · `gr_head_k1.mdl` · `gr_head_k2.mdl` plus matching `_manifest.json` files plus `templates/README.md` |
+| **Writes** | Deprecated generated files if run manually; these are not tracked as Character Builder launch assets |
 | **Source resrefs** | `pfbcm` (body, both games) · `pfhc01` (head, both games) |
 
 ```bash

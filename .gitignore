@@ -40,6 +40,7 @@ game_data/
 !/tests/test_core_contracts.py
 !/tests/test_regression.py
 !/tests/test_mcp_full_scan.py
+!/tests/test_mcp_resource_exposure.py
 !/tests/test_mcp_textures.py
 !/tests/test_mcp_skinning.py
 !/tests/test_qt_only_imports.py
@@ -55,6 +56,7 @@ game_data/
 test_assets/
 pytest.ini
 .pytest_cache/
+.pytest_tmp*/
 
 # ── Audit / render output (generated artefacts) ───────────────────────────────
 audit_output/
@@ -131,6 +133,7 @@ Thumbs.db
 # Keep PNGs inside assets folder
 !assets/**/*.png
 !src/gui/icons/*.png
+!tests/golden/screens/*.png
 
 # ── Spreadsheets / audit scripts (inessential) ──────────────────────────────
 *.xlsx
@@ -148,6 +151,8 @@ scripts/
 !/scripts/generate_manifest.py
 !/scripts/full_scan.py
 !/scripts/analyze_scan.py
+!/scripts/export_kotor_model_for_unity.py
+!/scripts/run_malak_unity_smoke.py
 exports/
 !/exports/
 !/exports/scan_manifest.json

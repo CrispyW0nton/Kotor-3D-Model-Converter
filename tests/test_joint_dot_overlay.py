@@ -2,7 +2,7 @@
 tests/test_joint_dot_overlay.py — M4/T401 joint-dot overlay tests
 
 Covers the bone-name → color classifier and the public setter contract
-introduced by T401 in ``src/gui/qt_viewport.py``.
+introduced by T401 in ``src/gui/viewports/qt_viewport.py``.
 
 The classifier is a pure-Python regex helper and is exercised without
 instantiating ``QtViewportWidget`` (which requires a full Qt event loop
@@ -241,6 +241,24 @@ def test_t401_setter_enabled_toggle():
         assert w.joint_dot_enabled is False
         w.set_joint_dot_enabled(True)
         assert w.joint_dot_enabled is True
+    finally:
+        w.deleteLater()
+
+
+def test_t401_toolbar_dot_button_tracks_joint_dot_enabled():
+    """The launch HUD exposes a Dots toggle and keeps it synced to the model."""
+    app, w = _make_widget()
+    try:
+        assert hasattr(w, "joint_dot_button")
+        assert w.joint_dot_button.isChecked() is True
+
+        w.joint_dot_button.click()
+        assert w.joint_dot_enabled is False
+        assert w.joint_dot_button.isChecked() is False
+
+        w.set_joint_dot_enabled(True)
+        assert w.joint_dot_enabled is True
+        assert w.joint_dot_button.isChecked() is True
     finally:
         w.deleteLater()
 
@@ -589,6 +607,36 @@ def test_t404_ortho_button_label_tracks_state():
         w.deleteLater()
 
 
+def test_external_import_joint_dots_use_preserved_gltf_world_positions():
+    """External FBX/glTF skeleton overlays should not use KotOR-only bind math."""
+    source = (_REPO_ROOT / "src" / "gui" / "rendering" / "viewport_core.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "external_world_position" in source
+    assert "return external_wp" in source
+
+
+def test_external_template_skeleton_overlay_is_scaled_and_uncluttered():
+    source = (_REPO_ROOT / "src" / "gui" / "rendering" / "viewport_core.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "_ext_skel_scale" in source
+    assert "p[0]*scale+ox" in source
+    assert "if is_sel:" in source
+
+
+def test_viewport_texture_cache_loads_common_external_dcc_images():
+    source = (_REPO_ROOT / "src" / "gui" / "rendering" / "viewport_core.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "'.jpg'" in source
+    assert "'.jpeg'" in source
+    assert "'.JPEG'" in source
+
+
 def test_t404_snap_view_hidden_when_canvas_too_narrow():
     """If the canvas is narrower than the bar, the bar hides cleanly."""
     app, w = _make_widget()
@@ -668,6 +716,24 @@ def test_t405_heatmap_toggle():
         w.deleteLater()
 
 
+def test_t405_toolbar_heat_button_tracks_heatmap_enabled():
+    """The viewport HUD exposes a Heat toggle synced with the heat-map flag."""
+    app, w = _make_widget()
+    try:
+        assert hasattr(w, "heatmap_button")
+        assert w.heatmap_button.isChecked() is False
+
+        w.heatmap_button.click()
+        assert w.weight_heatmap_enabled is True
+        assert w.heatmap_button.isChecked() is True
+
+        w.set_weight_heatmap_enabled(False)
+        assert w.weight_heatmap_enabled is False
+        assert w.heatmap_button.isChecked() is False
+    finally:
+        w.deleteLater()
+
+
 def test_t405_heatmap_dot_size_clamping():
     """Heat-map dot size clamps to [1, 8]."""
     app, w = _make_widget()
@@ -700,6 +766,19 @@ def test_t405_heatmap_noop_when_no_selection():
         assert d.calls == 0
     finally:
         w.deleteLater()
+
+
+def test_hud_inspector_overlay_signals_are_wired_to_viewport():
+    """Builder window routes inspector HUD controls into viewport setters."""
+    source = pathlib.Path("src/gui/panels/qt_character_builder_panel.py").read_text(
+        encoding="utf-8",
+    )
+    assert "symmetryToggled.connect(self._on_joint_symmetry_toggled)" in source
+    assert "jointOpacityChanged.connect(self._on_joint_opacity_changed)" in source
+    assert "jointSizeChanged.connect(self._on_joint_size_changed)" in source
+    assert "viewport.set_joint_symmetry" in source
+    assert "viewport.set_joint_dot_opacity" in source
+    assert "viewport.set_joint_dot_size" in source
 
 
 # ── T406 ▸ Per-mode camera presets ───────────────────────────────────────────

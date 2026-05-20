@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import List, Optional, Tuple, Dict, Set
+from typing import Any, List, Optional, Tuple, Dict, Set
 
 log = logging.getLogger(__name__)
 
@@ -197,6 +197,71 @@ def load_template(game: str = "K1", part: str = "body") -> Optional["KotorModel"
         return model
     except Exception as exc:
         log.error("character_builder.load_template: failed to load '%s': %s", path, exc)
+        return None
+
+
+def _detect_game_dir(game: str) -> Optional[str]:
+    """Return the configured KOTOR install path for *game*, if available."""
+    try:
+        try:
+            from resources.game_detector import detect_kotor_dirs  # type: ignore
+        except ImportError:
+            from src.resources.game_detector import detect_kotor_dirs  # type: ignore
+        k1_dir, k2_dir = detect_kotor_dirs(prefer_config=True)
+        return k2_dir if str(game).upper().endswith("2") else k1_dir
+    except Exception as exc:
+        log.debug("character_builder._detect_game_dir failed: %s", exc)
+        return None
+
+
+def load_game_skeleton_source(
+    resref: str,
+    *,
+    game: str = "K1",
+    game_dir: Optional[str] = None,
+) -> Optional["KotorModel"]:
+    """Load a real KOTOR MDL/MDX by resref for use as a rig reference.
+
+    This is the preferred source for Character Builder skeleton fitting.  It
+    keeps the modder's chosen base body/supermodel tied to the actual installed
+    game files instead of the older generated ``templates/gr_*`` MDLs.
+    """
+    name = str(resref or "").strip().lower()
+    if not name:
+        return None
+
+    try:
+        try:
+            from core.kotor_install import KotorInstallation  # type: ignore
+            from core.kotor_loader import load_model_from_bytes  # type: ignore
+            from core.model_data import GameVersion  # type: ignore
+        except ImportError:
+            from src.core.kotor_install import KotorInstallation  # type: ignore
+            from src.core.kotor_loader import load_model_from_bytes  # type: ignore
+            from src.core.model_data import GameVersion  # type: ignore
+    except Exception as exc:
+        log.error("load_game_skeleton_source: import error: %s", exc)
+        return None
+
+    root = game_dir or _detect_game_dir(game)
+    if not root:
+        log.warning("load_game_skeleton_source: no KOTOR %s install configured", game)
+        return None
+
+    try:
+        inst = KotorInstallation(root)
+        mdl_bytes = inst.get_mdl(name)
+        mdx_bytes = inst.get_mdx(name) or b""
+        if not mdl_bytes:
+            log.warning("load_game_skeleton_source: %s not found in %s", name, root)
+            return None
+        gv = GameVersion.K2 if str(game).upper().endswith("2") else GameVersion.K1
+        model = load_model_from_bytes(mdl_bytes, mdx_bytes, game_version=gv)
+        if model is not None:
+            model.name = getattr(model, "name", None) or name
+        return model
+    except Exception as exc:
+        log.error("load_game_skeleton_source: failed for %s/%s: %s", game, name, exc)
         return None
 
 
@@ -739,6 +804,13 @@ def apply_template_rig(
     """
     Transfer the template skeleton onto an imported mesh model.
 
+    Existing imported armatures are intentionally removed.  Only visible mesh
+    payload nodes are copied from ``mesh_model``; their current displayed
+    transforms are baked into vertex positions, previous skin/bone influence
+    tables are cleared, and the cleaned mesh nodes are parented under the chosen
+    KOTOR skeleton.  The imported meshes are then converted to KOTOR skin nodes
+    with bone-map, QBones/TBones, and per-vertex influence rows.
+
     Parameters
     ----------
     mesh_model      : KotorModel of the imported OBJ/FBX mesh (no rig)
@@ -787,8 +859,8 @@ def apply_template_rig(
                 "message": f"Failed to clone mesh model: {exc}",
                 "warnings": warnings, "scale": applied_scale}
 
-    # Transfer skeleton from template: attach template's root as a skeleton
-    # overlay. The mesh's root node becomes a child of template's Mesh_Root.
+    # Transfer skeleton from template: use the selected KOTOR hierarchy as the
+    # only skeleton, then attach cleaned mesh payload nodes under that root.
     try:
         tmpl_root = template_model.root_node
         if tmpl_root is None:
@@ -804,39 +876,84 @@ def apply_template_rig(
             _scale_skeleton(skel_root, applied_scale)
             warnings.append(f"Skeleton scaled by {applied_scale:.3f} to match mesh height")
 
+        removed_template_meshes = _strip_render_geometry_from_skeleton(skel_root)
+        mesh_payloads = _extract_clean_mesh_payloads(mesh_model)
+        if not mesh_payloads:
+            return {"ok": False, "model": None,
+                    "message": "Imported model has no renderable mesh payload to rig.",
+                    "warnings": warnings, "scale": applied_scale}
+
         # Set supermodel to match game
         sm = "S_Female02" if game.upper() in ("K1", "K2") else "NULL"
         result_model.supermodel = sm
 
-        # Attach mesh nodes under the template skeleton
-        if result_model.root_node is not None:
-            mesh_node = result_model.root_node
-            skel_root.children = [c for c in (getattr(skel_root, "children", []) or [])
-                                   if getattr(c, "is_mesh", False) is False
-                                   and getattr(c, "is_skin", False) is False]
-            skel_root.children.append(mesh_node)
+        # Attach cleaned mesh payloads under the template skeleton root.
+        for mesh_node in mesh_payloads:
             mesh_node.parent = skel_root
+            skel_root.children.append(mesh_node)
+
+        original_nodes = len(mesh_model.all_nodes()) if hasattr(mesh_model, "all_nodes") else 0
+        removed_import_nodes = max(0, original_nodes - len(mesh_payloads))
+        if removed_import_nodes:
+            warnings.append(
+                f"Removed {removed_import_nodes} imported armature/helper node(s)."
+            )
+        if removed_template_meshes:
+            warnings.append(
+                f"Removed {removed_template_meshes} reference mesh node(s) from the base skeleton."
+            )
 
         result_model.root_node = skel_root
         result_model.animations = list(template_model.animations)
 
+        try:
+            try:
+                from .skeleton_builder import bind_imported_meshes_to_skeleton
+            except ImportError:  # pragma: no cover
+                from skeleton_builder import bind_imported_meshes_to_skeleton  # type: ignore
+            bind_report = bind_imported_meshes_to_skeleton(
+                result_model,
+                mesh_nodes=mesh_payloads,
+            )
+            if not bind_report.ok:
+                return {"ok": False, "model": None,
+                        "message": bind_report.message or "Skeleton skin binding failed.",
+                        "warnings": warnings + list(bind_report.warnings or []),
+                        "scale": applied_scale}
+            warnings.extend(bind_report.warnings or [])
+        except Exception as exc:
+            log.error("apply_template_rig skin bind failed: %s", exc, exc_info=True)
+            return {"ok": False, "model": None,
+                    "message": f"Skeleton skin binding failed: {exc}",
+                    "warnings": warnings, "scale": applied_scale}
+
         log.info(
             "apply_template_rig: success  game=%s  scale=%.3f  "
-            "skel_bones=%d  anims=%d",
+            "skel_bones=%d  skinned=%d  weighted=%d  anims=%d",
             game, applied_scale,
             template_model.node_count(),
+            bind_report.skinned_meshes,
+            bind_report.weighted_vertices,
             len(result_model.animations),
         )
         return {
             "ok": True,
             "model": result_model,
             "message": (
-                f"Template rig applied ({game}).  "
+                f"KOTOR skeleton built ({game}).  "
                 f"Scale: {applied_scale:.3f}.  "
+                f"Meshes: {len(mesh_payloads)}.  "
+                f"Skinned: {bind_report.skinned_meshes}.  "
+                f"Bone slots: {bind_report.bone_count}.  "
                 f"Anims: {len(result_model.animations)}"
             ),
             "warnings": warnings,
             "scale": applied_scale,
+            "meshes": len(mesh_payloads),
+            "skinned_meshes": bind_report.skinned_meshes,
+            "weighted_vertices": bind_report.weighted_vertices,
+            "bone_slots": bind_report.bone_count,
+            "removed_import_nodes": removed_import_nodes,
         }
     except Exception as exc:
         log.error("apply_template_rig: %s", exc, exc_info=True)
@@ -847,6 +964,184 @@ def apply_template_rig(
             "warnings": warnings,
             "scale": applied_scale,
         }
+
+
+def _quat_rotate_vec(q, v: Tuple[float, float, float]) -> Tuple[float, float, float]:
+    """Rotate vector ``v`` by xyzw quaternion ``q``."""
+    try:
+        x, y, z, w = (float(q[0]), float(q[1]), float(q[2]), float(q[3]))
+        vx, vy, vz = (float(v[0]), float(v[1]), float(v[2]))
+    except Exception:
+        return v
+    # q * v * q^-1, expanded to avoid adding a numpy dependency here.
+    tx = 2.0 * (y * vz - z * vy)
+    ty = 2.0 * (z * vx - x * vz)
+    tz = 2.0 * (x * vy - y * vx)
+    return (
+        vx + w * tx + (y * tz - z * ty),
+        vy + w * ty + (z * tx - x * tz),
+        vz + w * tz + (x * ty - y * tx),
+    )
+
+
+def _normalize_vec(v: Tuple[float, float, float]) -> Tuple[float, float, float]:
+    try:
+        x, y, z = float(v[0]), float(v[1]), float(v[2])
+    except Exception:
+        return v
+    mag = (x * x + y * y + z * z) ** 0.5
+    if mag <= 1e-9:
+        return (x, y, z)
+    return (x / mag, y / mag, z / mag)
+
+
+def _is_mesh_payload_node(node: Any) -> bool:
+    if node is None:
+        return False
+    return bool(
+        getattr(node, "is_mesh", False)
+        or getattr(node, "is_skin", False)
+        or (getattr(node, "vertices", None) and getattr(node, "faces", None))
+    )
+
+
+def _strip_render_geometry_from_skeleton(node: Any) -> int:
+    """Remove visible reference meshes from a copied template skeleton tree.
+
+    KotOR character rigs are unusual: many deformation joints are stored as
+    tiny trimesh helper nodes (``pelvis_g``, ``Rhand_g``) with children below
+    them.  Deleting every mesh node destroys the actual skeleton and loses
+    hooks such as ``rhand``/``headhook``.  Keep helper-style mesh nodes as
+    empty dummies and only drop leaf render payloads such as ``Torso``/``LArm``.
+    """
+    if node is None:
+        return 0
+    removed = 0
+    kept = []
+    for child in list(getattr(node, "children", []) or []):
+        if _is_mesh_payload_node(child):
+            if _is_template_skeleton_helper(child):
+                _clear_template_render_payload(child)
+            else:
+                removed += 1
+                continue
+        removed += _strip_render_geometry_from_skeleton(child)
+        child.parent = node
+        kept.append(child)
+    node.children = kept
+    return removed
+
+
+def _is_template_skeleton_helper(node: Any) -> bool:
+    """Return True for KotOR deformation-helper mesh nodes to preserve."""
+    name = str(getattr(node, "name", "") or "").strip().lower()
+    if name.endswith(("_g", "_dum")):
+        return True
+    if name in {"rootdummy", "cutscenedummy", "talkdummy"}:
+        return True
+    # Any mesh node that parents other nodes is part of the transform chain.
+    return bool(getattr(node, "children", None))
+
+
+def _clear_template_render_payload(node: Any) -> None:
+    """Turn a reference mesh/helper into an empty transform node."""
+    try:
+        from core.model_data import NodeFlags  # type: ignore
+    except ImportError:                         # pragma: no cover
+        from src.core.model_data import NodeFlags  # type: ignore
+
+    for attr in (
+        "vertices", "normals", "tangents", "uvs", "uvs_lm", "uvs_2", "uvs_3",
+        "faces", "face_mats", "face_uvs", "skin_data", "bone_map",
+        "bone_map_floats", "qbone_list", "tbone_list", "dangly_constraints",
+    ):
+        try:
+            setattr(node, attr, [])
+        except Exception:
+            pass
+    try:
+        flags = int(getattr(node, "flags", 0))
+        strip = (
+            int(NodeFlags.MESH)
+            | int(NodeFlags.SKIN)
+            | int(NodeFlags.DANGLY)
+            | int(NodeFlags.AABB)
+            | int(NodeFlags.SABER)
+        )
+        node.flags = int((flags | int(NodeFlags.HEADER)) & ~strip)
+    except Exception:
+        pass
+    node.render = False
+
+
+def _clean_mesh_payload_node(node: Any) -> Any:
+    import copy
+    try:
+        from core.model_data import NodeFlags  # type: ignore
+    except ImportError:                         # pragma: no cover
+        from src.core.model_data import NodeFlags  # type: ignore
+
+    cleaned = copy.deepcopy(node)
+    try:
+        world_pos, world_rot = node.world_transform()
+    except Exception:
+        world_pos = tuple(getattr(node, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
+        world_rot = tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0))
+
+    baked_vertices = []
+    for vert in list(getattr(node, "vertices", []) or []):
+        try:
+            rx, ry, rz = _quat_rotate_vec(world_rot, (float(vert[0]), float(vert[1]), float(vert[2])))
+            baked_vertices.append((
+                rx + float(world_pos[0]),
+                ry + float(world_pos[1]),
+                rz + float(world_pos[2]),
+            ))
+        except Exception:
+            baked_vertices.append(vert)
+    if baked_vertices:
+        cleaned.vertices = baked_vertices
+
+    baked_normals = []
+    for normal in list(getattr(node, "normals", []) or []):
+        try:
+            baked_normals.append(_normalize_vec(_quat_rotate_vec(world_rot, normal)))
+        except Exception:
+            baked_normals.append(normal)
+    if baked_normals:
+        cleaned.normals = baked_normals
+
+    cleaned.parent = None
+    cleaned.children = []
+    cleaned.position = (0.0, 0.0, 0.0)
+    cleaned.rotation = (0.0, 0.0, 0.0, 1.0)
+    cleaned.flags = int((int(getattr(cleaned, "flags", 0)) | int(NodeFlags.MESH)) & ~int(NodeFlags.SKIN))
+    cleaned.render = True
+    cleaned.skin_data = []
+    cleaned.bone_map = []
+    cleaned.bone_map_floats = []
+    cleaned.qbone_list = []
+    cleaned.tbone_list = []
+    setattr(cleaned, "_external_imported", True)
+    try:
+        cleaned.compute_bounds()
+    except Exception:
+        pass
+    return cleaned
+
+
+def _extract_clean_mesh_payloads(mesh_model: Any) -> List[Any]:
+    payloads: List[Any] = []
+    nodes = mesh_model.all_nodes() if hasattr(mesh_model, "all_nodes") else []
+    for node in nodes:
+        if node is getattr(mesh_model, "root_node", None):
+            continue
+        if not _is_mesh_payload_node(node):
+            continue
+        if not getattr(node, "vertices", None):
+            continue
+        payloads.append(_clean_mesh_payload_node(node))
+    return payloads
 
 
 def _model_height(model) -> float:

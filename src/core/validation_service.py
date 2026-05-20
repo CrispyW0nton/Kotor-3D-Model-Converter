@@ -362,13 +362,23 @@ class ValidationService:
             if not is_skin:
                 continue
 
-            # Check for completely unrigged skin mesh
+            # Check for completely unrigged skin mesh.  New Character Builder
+            # output stores canonical KOTOR rows in skin_data; older imports may
+            # still expose compatibility bone_weights/bone_indices lists.
+            skin_data = getattr(node, "skin_data", None) or []
+            bone_map = getattr(node, "bone_map", None) or []
             bone_indices = getattr(node, "bone_indices", None) or []
             bone_weights = getattr(node, "bone_weights", None) or []
-            if not bone_indices and not bone_weights:
+            if not skin_data and not bone_indices and not bone_weights:
                 self._warn("SKIN_MESH_UNRIGGED",
                            f"Skin mesh '{node.name}' has no bone references. "
                            "It will not deform in-game.",
+                           slot=slot, node=node.name)
+                continue
+            if skin_data and not bone_map:
+                self._warn("SKIN_MESH_UNRIGGED",
+                           f"Skin mesh '{node.name}' has vertex influences but no "
+                           "bone map. It will not deform in-game.",
                            slot=slot, node=node.name)
                 continue
 
@@ -378,11 +388,31 @@ class ValidationService:
                 continue
 
             err_count = 0
-            for vi in range(min(n_verts, len(bone_weights))):
-                weights_row = bone_weights[vi]
-                if not hasattr(weights_row, "__iter__"):
-                    continue
-                wlist = list(weights_row)
+            if skin_data:
+                row_count = min(n_verts, len(skin_data))
+            else:
+                row_count = min(n_verts, len(bone_weights))
+            if row_count < n_verts:
+                for vi in range(row_count, n_verts):
+                    if err_count >= self._max_weight_errors:
+                        break
+                    self._warn("WEIGHT_ZERO_SUM",
+                               f"Vertex {vi} of '{node.name}' has no skin "
+                               "weight row. It will not deform in-game.",
+                               slot=slot, node=node.name)
+                    err_count += 1
+            for vi in range(row_count):
+                if skin_data:
+                    influences = getattr(skin_data[vi], "influences", None) or []
+                    wlist = [
+                        float(getattr(inf, "weight", 0.0))
+                        for inf in influences
+                    ]
+                else:
+                    weights_row = bone_weights[vi]
+                    if not hasattr(weights_row, "__iter__"):
+                        continue
+                    wlist = list(weights_row)
 
                 # WEIGHT_OVERFLOW – more than 4 influences
                 if len(wlist) > 4:

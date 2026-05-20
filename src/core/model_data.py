@@ -149,6 +149,76 @@ PART_SLOT_LABELS: Dict[PartSlot, str] = {
 
 
 # ──────────────────────────────────────────────────────────────
+#  Complete Model Taxonomy
+# ──────────────────────────────────────────────────────────────
+
+class ModelTaxonomy(_Enum):
+    """Functional model categories used by library/search/UI filtering.
+
+    This is intentionally broader than :class:`CharacterMode`.  KOTOR's
+    ``appearance.2da`` ``modeltype`` column only describes character bodies;
+    weapons, heads, placeables, supermodels, and area models need a separate
+    functional taxonomy.
+    """
+
+    SUPERMODEL          = "supermodel"
+    MODULAR_BODY        = "modular_body"
+    FULL_BODY_CHARACTER = "full_body_character"
+    HUMANOID            = "humanoid"
+    HEAD                = "head"
+    CREATURE            = "creature"
+    DROID               = "droid"
+    WEAPON              = "weapon"
+    WEARABLE            = "wearable"
+    PLACEABLE           = "placeable"
+    DOOR                = "door"
+    AREA                = "area"
+    EFFECT              = "effect"
+    OTHER               = "other"
+    AMBIGUOUS           = "ambiguous"
+
+    @property
+    def display_name(self) -> str:
+        return _MODEL_TAXONOMY_DISPLAY_NAMES[self]
+
+
+_MODEL_TAXONOMY_DISPLAY_NAMES: Dict["ModelTaxonomy", str] = {
+    ModelTaxonomy.SUPERMODEL:          "Supermodel",
+    ModelTaxonomy.MODULAR_BODY:        "Modular Body",
+    ModelTaxonomy.FULL_BODY_CHARACTER: "Full-Body Character",
+    ModelTaxonomy.HUMANOID:            "Humanoid",
+    ModelTaxonomy.HEAD:                "Head",
+    ModelTaxonomy.CREATURE:            "Creature",
+    ModelTaxonomy.DROID:               "Droid",
+    ModelTaxonomy.WEAPON:              "Weapon",
+    ModelTaxonomy.WEARABLE:            "Wearable",
+    ModelTaxonomy.PLACEABLE:           "Placeable",
+    ModelTaxonomy.DOOR:                "Door",
+    ModelTaxonomy.AREA:                "Area",
+    ModelTaxonomy.EFFECT:              "Effect",
+    ModelTaxonomy.OTHER:               "Other",
+    ModelTaxonomy.AMBIGUOUS:           "Ambiguous",
+}
+
+
+@dataclass(frozen=True)
+class ModelTaxonomyResult:
+    """Result returned by :func:`classify_kotor_model`.
+
+    ``category`` answers "what kind of KOTOR model is this?" while
+    ``character_mode`` answers "which current Character Builder workflow can
+    handle it?".  Full-body humanoids and droids route to the HUMANOID
+    workflow; non-humanoid creatures stay in CREATURE.
+    """
+
+    category: "ModelTaxonomy"
+    character_mode: Optional["CharacterMode"]
+    confidence: str = "medium"
+    reasons: Tuple[str, ...] = ()
+    modeltype: str = ""
+
+
+# ──────────────────────────────────────────────────────────────
 #  Character Builder — Mode Taxonomy  (M1 / T101)
 # ──────────────────────────────────────────────────────────────
 
@@ -246,6 +316,179 @@ _HUMANOID_BODY_BONE_NAMES: frozenset = frozenset({
 _CREATURE_HOOK_NAMES: frozenset = frozenset({
     "cameramaster", "impact_head", "impact_chest",
 })
+_HEAD_SOCKET_NAMES: frozenset = frozenset({
+    "maskhook", "gogglehook",
+})
+_BODY_SOCKET_NAMES: frozenset = frozenset({
+    "headhook", "rhand", "lhand", "lhand_g", "impact", "impact_bolt",
+})
+_FULL_BODY_PREFIX_HINTS: Tuple[str, ...] = (
+    "n_mandalorian", "n_sith", "n_repsold", "n_comm", "n_fatcomm",
+    "n_darthrevan", "p_malak", "n_duel", "n_paz",
+)
+_DROID_NAME_HINTS: Tuple[str, ...] = (
+    "drd", "droid", "hk47", "t3m4", "g0t0", "warbot", "wardroid",
+)
+_CREATURE_SUPERMODEL_NAMES: frozenset = frozenset({
+    "WARDROID", "N_WARDROID",
+})
+
+
+def classify_kotor_model(model: "KotorModel") -> ModelTaxonomyResult:
+    """Classify a KOTOR model by functional taxonomy.
+
+    The detector combines the engine classification byte, filename/resref
+    conventions, optional appearance metadata, and node/hook facts.  It keeps
+    the broader model category separate from the current Character Builder mode
+    so the UI can say "full-body character" instead of forcing everything into
+    the old "creature" bucket.
+    """
+    name = (getattr(model, "name", "") or "").strip().lower()
+    supermodel = (getattr(model, "supermodel", "") or "").strip().upper()
+    metadata = getattr(model, "metadata", None)
+    if not isinstance(metadata, dict):
+        metadata = {}
+    appearance_meta = metadata.get("appearance", {})
+    if not isinstance(appearance_meta, dict):
+        appearance_meta = {}
+    modeltype = str(
+        metadata.get("appearance_modeltype")
+        or metadata.get("modeltype")
+        or appearance_meta.get("modeltype", "")
+    ).strip().upper()
+
+    try:
+        node_iter = model.all_nodes()
+    except Exception:                                     # pragma: no cover
+        node_iter = []
+    nodes = {(getattr(n, "name", "") or "").lower() for n in node_iter}
+
+    try:
+        classification = int(getattr(model, "model_type",
+                                     int(ModelClassification.CHARACTER)))
+    except (TypeError, ValueError):
+        classification = int(ModelClassification.CHARACTER)
+
+    reasons: List[str] = []
+    has_facial = bool(_FACIAL_BONE_NAMES & nodes)
+    has_head_geom = "head_g" in nodes
+    has_pelvis = "pelvis_g" in nodes
+    has_headhook = "headhook" in nodes
+    has_rhand = "rhand" in nodes
+    has_lhand = "lhand" in nodes or "lhand_g" in nodes
+    has_talkdummy = "talkdummy" in nodes
+    has_head_socket = bool(_HEAD_SOCKET_NAMES & nodes)
+    has_body_socket = bool(_BODY_SOCKET_NAMES & nodes)
+    has_creature_hook = bool(_CREATURE_HOOK_NAMES & nodes)
+    has_body_skeleton = has_pelvis or bool(_HUMANOID_BODY_BONE_NAMES & nodes)
+    has_visible_head = has_head_geom or has_facial or has_talkdummy
+    anim_count = len(getattr(model, "animations", []) or [])
+
+    def result(category: "ModelTaxonomy", mode: Optional["CharacterMode"],
+               confidence: str, *why: str) -> ModelTaxonomyResult:
+        return ModelTaxonomyResult(
+            category=category,
+            character_mode=mode,
+            confidence=confidence,
+            reasons=tuple(why or reasons),
+            modeltype=modeltype,
+        )
+
+    # Non-character/functional prefixes first: these are not appearance bodies.
+    if is_animation_supermodel(model) or name.startswith(("s_male", "s_female")) or (
+        name.startswith("s_") and anim_count > 10
+    ):
+        return result(ModelTaxonomy.SUPERMODEL, CharacterMode.SUPERMODEL,
+                      "high", "supermodel naming/animation library")
+    if classification == int(ModelClassification.DOOR) or name.startswith("dor_"):
+        return result(ModelTaxonomy.DOOR, CharacterMode.UNSUPPORTED,
+                      "high", "door classification/prefix")
+    if classification == int(ModelClassification.LIGHTSABER) or name.startswith(("w_", "iw_")):
+        return result(ModelTaxonomy.WEAPON, CharacterMode.UNSUPPORTED,
+                      "high", "weapon/lightsaber classification or prefix")
+    if name.startswith(("i_", "g_i", "gi_", "g_w", "g_a")):
+        return result(ModelTaxonomy.WEARABLE, CharacterMode.UNSUPPORTED,
+                      "medium", "item/wearable naming convention")
+    if classification == int(ModelClassification.PLACEABLE) or name.startswith("plc_"):
+        return result(ModelTaxonomy.PLACEABLE, CharacterMode.UNSUPPORTED,
+                      "high", "placeable classification/prefix")
+    if name.startswith("m") and len(name) >= 3 and name[1:3].isdigit():
+        return result(ModelTaxonomy.AREA, CharacterMode.MODULE,
+                      "medium", "module/area naming convention")
+    if classification in (int(ModelClassification.EFFECT),
+                          int(ModelClassification.EFFECTS),
+                          int(ModelClassification.TILE)):
+        return result(ModelTaxonomy.EFFECT, CharacterMode.MODULE,
+                      "medium", "non-character engine classification")
+
+    is_characterish = classification in (
+        int(ModelClassification.CHARACTER),
+        int(ModelClassification.FLYER),
+    )
+    if not is_characterish:
+        return result(ModelTaxonomy.OTHER, CharacterMode.UNSUPPORTED,
+                      "medium", "unsupported engine classification")
+
+    # Character-space categories.
+    if modeltype == "B":
+        return result(ModelTaxonomy.MODULAR_BODY, CharacterMode.HEADLESS_BODY,
+                      "high", "appearance.2da modeltype B")
+    if modeltype in {"F", "S"}:
+        if name.startswith("c_") or supermodel.startswith("C_") or has_creature_hook:
+            return result(ModelTaxonomy.CREATURE, CharacterMode.CREATURE,
+                          "high", f"appearance.2da modeltype {modeltype} creature")
+        return result(ModelTaxonomy.FULL_BODY_CHARACTER, CharacterMode.HUMANOID,
+                      "high", f"appearance.2da modeltype {modeltype}")
+    if modeltype == "L":
+        return result(ModelTaxonomy.CREATURE, CharacterMode.CREATURE,
+                      "high", "appearance.2da modeltype L")
+
+    # Heads commonly have talkdummy/mask/goggle hooks but lack body sockets.
+    if (
+        name.startswith(("pmh", "pfh"))
+        or name.endswith("head")
+        or (has_head_socket and not has_body_socket)
+        or (has_talkdummy and not has_body_socket and not has_pelvis)
+        or (has_head_geom and has_facial and not has_pelvis and not has_body_socket)
+    ):
+        return result(ModelTaxonomy.HEAD, CharacterMode.HEAD,
+                      "high", "head naming or head-only nodes")
+
+    if name.startswith("c_") or supermodel.startswith("C_") or has_creature_hook:
+        return result(ModelTaxonomy.CREATURE, CharacterMode.CREATURE,
+                      "high", "creature prefix/supermodel/hook")
+
+    if name.startswith("n_") and supermodel in _CREATURE_SUPERMODEL_NAMES:
+        return result(ModelTaxonomy.CREATURE, CharacterMode.CREATURE,
+                      "high", "N_* creature supermodel")
+
+    if any(hint in name for hint in _DROID_NAME_HINTS):
+        return result(ModelTaxonomy.DROID, CharacterMode.HUMANOID,
+                      "medium", "droid naming convention")
+
+    if has_body_skeleton and has_visible_head:
+        return result(ModelTaxonomy.HUMANOID, CharacterMode.HUMANOID,
+                      "medium", "humanoid body skeleton with visible head")
+
+    # N_* helmeted/generic NPCs are usually full-body F-style models.  This
+    # prevents talkdummy on models such as n_mandalorian03 from being mistaken
+    # for a standalone head.
+    if name.startswith("n_") and (
+        has_body_socket or has_talkdummy or any(name.startswith(p) for p in _FULL_BODY_PREFIX_HINTS)
+    ):
+        return result(ModelTaxonomy.FULL_BODY_CHARACTER, CharacterMode.HUMANOID,
+                      "medium", "N_* full-body character heuristic")
+
+    if has_headhook and (has_rhand or has_lhand) and not has_facial:
+        return result(ModelTaxonomy.MODULAR_BODY, CharacterMode.HEADLESS_BODY,
+                      "medium", "body sockets without facial controls")
+
+    if has_talkdummy:
+        return result(ModelTaxonomy.HEAD, CharacterMode.HEAD,
+                      "low", "talkdummy fallback")
+
+    return result(ModelTaxonomy.AMBIGUOUS, CharacterMode.AMBIGUOUS,
+                  "low", "no taxonomy rule matched")
 
 
 def detect_character_mode(model: "KotorModel") -> "CharacterMode":
@@ -274,79 +517,8 @@ def detect_character_mode(model: "KotorModel") -> "CharacterMode":
     :param model:  Fully-loaded ``KotorModel`` instance.
     :return:       The detected :class:`CharacterMode` value.
     """
-    # Defensive: a stub / partial model still gets a sensible answer.
-    name = (getattr(model, "name", "") or "").lower()
-    supermodel = (getattr(model, "supermodel", "") or "").upper()
-
-    try:
-        node_iter = model.all_nodes()
-    except Exception:                                     # pragma: no cover
-        node_iter = []
-    nodes = {(getattr(n, "name", "") or "").lower() for n in node_iter}
-
-    # ── Step 0 — Classification gate ─────────────────────────────────────
-    try:
-        classification = int(getattr(model, "model_type",
-                                     int(ModelClassification.CHARACTER)))
-    except (TypeError, ValueError):
-        classification = int(ModelClassification.CHARACTER)
-    if classification in (int(ModelClassification.EFFECT),
-                          int(ModelClassification.EFFECTS),
-                          int(ModelClassification.TILE)):
-        return CharacterMode.MODULE
-
-    if classification not in (int(ModelClassification.CHARACTER),
-                              int(ModelClassification.FLYER)):
-        return CharacterMode.UNSUPPORTED
-
-    if is_animation_supermodel(model):
-        return CharacterMode.SUPERMODEL
-
-    has_facial = bool(_FACIAL_BONE_NAMES & nodes)
-    has_head_geom = "head_g" in nodes
-    has_pelvis = "pelvis_g" in nodes
-    has_headhook = "headhook" in nodes
-    has_rhand = "rhand" in nodes
-    has_talkdummy = "talkdummy" in nodes
-    has_creature_hook = bool(_CREATURE_HOOK_NAMES & nodes)
-    has_body_skeleton = has_pelvis or bool(_HUMANOID_BODY_BONE_NAMES & nodes)
-    has_visible_head = has_head_geom or has_facial or has_talkdummy
-
-    # ── Step 1 — Creature ────────────────────────────────────────────────
-    #   • ``c_*`` prefix is the canonical signal.
-    #   • ``n_*`` prefix is shared with humanoid NPCs, so require either a
-    #     creature-style supermodel (C_*, N_WARDROID, WARDROID) OR a
-    #     creature-only hook to flip the verdict to CREATURE.
-    #   • Standalone creature-hook nodes (impact_head, cameramaster …)
-    #     without humanoid signals are also creatures.
-    _CREATURE_SUPERMODEL_PREFIXES = ("C_",)
-    _CREATURE_SUPERMODEL_NAMES = {"WARDROID", "N_WARDROID"}
-    is_creature_supermodel = (
-        any(supermodel.startswith(p) for p in _CREATURE_SUPERMODEL_PREFIXES)
-        or supermodel in _CREATURE_SUPERMODEL_NAMES
-    )
-    if name.startswith("c_"):
-        return CharacterMode.CREATURE
-    if name.startswith("n_") and is_creature_supermodel:
-        return CharacterMode.CREATURE
-    if has_creature_hook and not has_headhook and not has_facial:
-        return CharacterMode.CREATURE
-
-    # ── Step 2 — Head ────────────────────────────────────────────────────
-    # Full humanoid NPC/body: Bith, Calo Nord, and similar n_* models
-    # have facial/head nodes but also a real humanoid body skeleton.
-    if has_body_skeleton and has_visible_head:
-        return CharacterMode.HUMANOID
-
-    if has_talkdummy or (has_head_geom and has_facial and not has_body_skeleton):
-        return CharacterMode.HEAD
-
-    # ── Step 3 — Headless body ───────────────────────────────────────────
-    if has_headhook and has_rhand and not has_facial:
-        return CharacterMode.HEADLESS_BODY
-
-    # ── Step 4 — Fall-through ────────────────────────────────────────────
-    return CharacterMode.AMBIGUOUS
+    result = classify_kotor_model(model)
+    return result.character_mode or CharacterMode.AMBIGUOUS
 
 
 # ──────────────────────────────────────────────────────────────
@@ -822,6 +994,17 @@ class ModelNode:
 
         Use this instead of world_position() when placing bone gizmos/dots.
         """
+        external_wp = getattr(self, "external_world_position", None)
+        if external_wp is not None:
+            try:
+                return (
+                    float(external_wp[0]),
+                    float(external_wp[1]),
+                    float(external_wp[2]),
+                )
+            except Exception:
+                pass
+
         chain: List['ModelNode'] = []
         n = self
         _visited2: set = set()
@@ -1546,6 +1729,9 @@ class SceneSlot:
     game_version: 'K1' or 'K2'.
     source_path : Absolute file path (for user-imported OBJ/FBX/MDL files).
                   Empty string when loaded from BIF/ERF archives.
+    supermodel  : Cached supermodel string for metadata-only sidecar reloads.
+    hooks       : Cached hook nodes for metadata-only sidecar reloads.
+    facial_bones: Cached facial nodes for metadata-only sidecar reloads.
     dirty       : True when the slot has been modified since last export.
     """
     slot:         PartSlot
@@ -1554,11 +1740,16 @@ class SceneSlot:
     asset_id:     str                                = ""
     game_version: str                                = "K1"
     source_path:  str                                = ""
+    supermodel:   str                                = ""
+    hooks:        List[str]                          = field(default_factory=list)
+    facial_bones: List[str]                          = field(default_factory=list)
     dirty:        bool                               = False
 
     def __post_init__(self) -> None:
         if not self.asset_id and self.resref:
             self.asset_id = _make_asset_id(self.resref, self.game_version)
+        if self.model is not None and not self.supermodel:
+            self.supermodel = str(getattr(self.model, "supermodel", "") or "")
 
 
 @dataclass
@@ -1599,6 +1790,7 @@ class CharacterScene:
     character_name: str                          = ""
     slots:          Dict[PartSlot, SceneSlot]    = field(default_factory=dict)
     supermodel:     str                          = ""
+    saved_at:       str                          = ""
     dirty:          bool                         = False
     metadata:       Dict[str, Any]               = field(default_factory=dict)
     # ── Mode taxonomy (M1 / T103) ────────────────────────────────────────────
@@ -1729,6 +1921,9 @@ class CharacterScene:
             resref=resref.lower(),
             game_version=gv,
             source_path=source_path,
+            supermodel=str(getattr(model, "supermodel", "") or ""),
+            hooks=self._hook_list_for(model),
+            facial_bones=self._facial_bone_list_for(model),
             dirty=True,
         )
         self.slots[slot] = entry
@@ -1801,7 +1996,45 @@ class CharacterScene:
 
     # File format version written into every .ghostrig.json.
     # Increment when the schema changes in a breaking way.
-    SCENE_FORMAT_VERSION: int = 1
+    SCENE_FORMAT_VERSION: int = 2
+
+    @staticmethod
+    def _node_names(model: Optional[KotorModel]) -> List[str]:
+        if model is None:
+            return []
+        try:
+            return [
+                str(getattr(node, "name", "") or "")
+                for node in model.all_nodes()
+                if str(getattr(node, "name", "") or "")
+            ]
+        except Exception:
+            return []
+
+    @classmethod
+    def _hook_list_for(cls, model: Optional[KotorModel]) -> List[str]:
+        hook_names = []
+        for name in cls._node_names(model):
+            nl = name.lower()
+            if "hook" in nl or nl in {
+                "headhook", "rhand", "lhand", "lhand_g",
+                "impact_bolt", "handconjure", "headconjure",
+                "chestconjure", "talkdummy",
+            }:
+                hook_names.append(name)
+        return sorted(dict.fromkeys(hook_names), key=str.lower)
+
+    @classmethod
+    def _facial_bone_list_for(cls, model: Optional[KotorModel]) -> List[str]:
+        facial = []
+        for name in cls._node_names(model):
+            nl = name.lower()
+            if nl.startswith("f_") or nl in {
+                "talkdummy", "head_g", "neck_g", "necklwr_g",
+                "maskhook", "gogglehook", "eyelid", "eyerid",
+            }:
+                facial.append(name)
+        return sorted(dict.fromkeys(facial), key=str.lower)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialise the scene to a plain JSON-compatible dictionary.
@@ -1834,29 +2067,84 @@ class CharacterScene:
             }
         """
         import datetime as _dt
+        saved_at = self.saved_at or _dt.datetime.now(
+            _dt.timezone.utc).isoformat().replace("+00:00", "Z")
         slot_list = []
         for slot, entry in self.slots.items():
+            model = entry.model
+            slot_supermodel = (
+                str(getattr(model, "supermodel", "") or "")
+                if model is not None else entry.supermodel
+            )
+            slot_hooks = self._hook_list_for(model) if model is not None else list(entry.hooks)
+            slot_facial = (
+                self._facial_bone_list_for(model)
+                if model is not None else list(entry.facial_bones)
+            )
             slot_list.append({
                 "slot":         slot.value,
                 "resref":       entry.resref,
                 "asset_id":     entry.asset_id,
                 "game_version": entry.game_version,
                 "source_path":  entry.source_path,
+                "supermodel":   slot_supermodel,
+                "hooks":        slot_hooks,
+                "facial_bones": slot_facial,
             })
+        mode_value = (self.mode.value if isinstance(self.mode, CharacterMode)
+                      else CharacterMode.AMBIGUOUS.value)
+        source_asset_ids = {
+            slot.value: entry.asset_id
+            for slot, entry in self.slots.items()
+            if entry.asset_id
+        }
+        supermodel_chain = {
+            slot.value: {
+                "resref": entry.resref,
+                "supermodel": (
+                    str(getattr(entry.model, "supermodel", "") or "")
+                    if entry.model is not None else entry.supermodel
+                ),
+            }
+            for slot, entry in self.slots.items()
+        }
+        validation_report = dict(self.metadata.get("validation_report", {}) or {})
+        export_results = list(self.metadata.get("export_results", []) or [])
+        export_timestamps = dict(self.metadata.get("export_timestamps", {}) or {})
         return {
             "ghostrig_version": self.SCENE_FORMAT_VERSION,
+            "schema_version":   self.SCENE_FORMAT_VERSION,
             "scene_id":         self.scene_id,
             "game_version":     self.game_version,
             "character_name":   self.character_name,
             "supermodel":       self.supermodel,
-            "saved_at":         _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+            "saved_at":         saved_at,
             "metadata":         dict(self.metadata),
+            "source_asset_ids": source_asset_ids,
+            "supermodel_chain": supermodel_chain,
+            "hook_list":        {
+                slot.value: (
+                    self._hook_list_for(entry.model)
+                    if entry.model is not None else list(entry.hooks)
+                )
+                for slot, entry in self.slots.items()
+            },
+            "facial_bone_list": {
+                slot.value: (
+                    self._facial_bone_list_for(entry.model)
+                    if entry.model is not None else list(entry.facial_bones)
+                )
+                for slot, entry in self.slots.items()
+            },
+            "validation_report": validation_report,
+            "export_timestamps": export_timestamps,
+            "export_results":    export_results,
             "slots":            slot_list,
             # Mode taxonomy (M1 / T103) — persisted as the enum *value*
             # string (e.g. "headless_body") so the file format stays
             # human-readable and tolerant to future enum additions.
-            "mode":             (self.mode.value if isinstance(self.mode, CharacterMode)
-                                 else CharacterMode.AMBIGUOUS.value),
+            "mode":             mode_value,
+            "character_mode":   mode_value,
             "mode_locked":      bool(self.mode_locked),
         }
 
@@ -1889,7 +2177,7 @@ class CharacterScene:
         ValueError  : If ``data`` is missing required keys or has an
                       unsupported ``ghostrig_version``.
         """
-        ver = data.get("ghostrig_version", 0)
+        ver = data.get("schema_version", data.get("ghostrig_version", 0))
         if ver > cls.SCENE_FORMAT_VERSION:
             raise ValueError(
                 f"CharacterScene.from_dict: file version {ver} is newer than "
@@ -1903,6 +2191,7 @@ class CharacterScene:
             supermodel     = data.get("supermodel", ""),
             metadata       = dict(data.get("metadata", {})),
         )
+        scene.saved_at = data.get("saved_at", "")
         # Preserve the original scene_id so references stay stable
         saved_id = data.get("scene_id", "")
         if saved_id:
@@ -1912,7 +2201,7 @@ class CharacterScene:
         # Read both the mode and its lock state; tolerate missing fields
         # (older .ghostrig.json files written before M1) and unknown enum
         # values (forward compatibility — fall back to AMBIGUOUS).
-        saved_mode = data.get("mode", "")
+        saved_mode = data.get("character_mode", data.get("mode", ""))
         if saved_mode:
             try:
                 scene.mode = CharacterMode(saved_mode)
@@ -1935,6 +2224,9 @@ class CharacterScene:
             asset_id     = slot_data.get("asset_id", "")
             game_version = slot_data.get("game_version", scene.game_version)
             source_path  = slot_data.get("source_path", "")
+            supermodel   = slot_data.get("supermodel", "")
+            hooks        = list(slot_data.get("hooks", []) or [])
+            facial_bones = list(slot_data.get("facial_bones", []) or [])
 
             model = None
             if load_models and source_path:
@@ -1959,6 +2251,9 @@ class CharacterScene:
                 asset_id     = asset_id or _make_asset_id(resref, game_version),
                 game_version = game_version,
                 source_path  = source_path,
+                supermodel   = supermodel,
+                hooks        = hooks,
+                facial_bones = facial_bones,
                 dirty        = False,
             )
             scene.slots[slot] = entry
@@ -2007,6 +2302,7 @@ class SceneIO:
     """
 
     EXTENSION = ".ghostrig.json"
+    SCHEMA_VERSION = CharacterScene.SCENE_FORMAT_VERSION
 
     @staticmethod
     def save(scene: "CharacterScene", path: str) -> None:
@@ -2027,6 +2323,10 @@ class SceneIO:
         import json as _json
         import os as _os
         _os.makedirs(_os.path.dirname(_os.path.abspath(path)), exist_ok=True)
+        if not scene.saved_at:
+            import datetime as _dt
+            scene.saved_at = _dt.datetime.now(
+                _dt.timezone.utc).isoformat().replace("+00:00", "Z")
         with open(path, "w", encoding="utf-8") as fh:
             _json.dump(scene.to_dict(), fh, indent=2, ensure_ascii=False)
             fh.write("\n")

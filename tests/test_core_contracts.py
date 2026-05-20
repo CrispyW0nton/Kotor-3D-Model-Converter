@@ -356,6 +356,24 @@ def test_qt_realistic_texture_prewarm_loads_detail_textures_without_paint_stall(
     assert "self._prewarm_textures(self.model)" in deferred_txi_source
 
 
+def test_gpu_auto_clamp_diffuse_is_disabled_for_module_geometry() -> None:
+    from types import SimpleNamespace
+
+    from src.gui.qt_lib.rendering.gpu_renderer import _should_auto_clamp_diffuse
+
+    atlas_like_node = SimpleNamespace(
+        txi_clamp_s=False,
+        txi_clamp_t=False,
+        animate_uv=False,
+        txi_proceduretype="",
+        txi_blending=0,
+        uvs=[(0.1, 0.2), (0.9, 0.2), (0.9, 0.8), (0.1, 0.8)],
+    )
+
+    assert _should_auto_clamp_diffuse(atlas_like_node, is_module=False) is True
+    assert _should_auto_clamp_diffuse(atlas_like_node, is_module=True) is False
+
+
 def test_module_mesh_properties_panel_lists_selects_and_hides_meshes() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -2000,7 +2018,7 @@ def test_retarget_animation_bakes_bridge_bones() -> None:
 def test_gpu_vbo_splits_skin_bind_and_animated_input_space() -> None:
     import inspect
 
-    from src.gui import gpu_renderer
+    from src.gui.qt_lib.rendering import gpu_renderer
 
     source = inspect.getsource(gpu_renderer._build_vbo_data)
     assert "apply_skin_node_transform_for_bind" in source
