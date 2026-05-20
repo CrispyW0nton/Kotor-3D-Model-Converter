@@ -11,6 +11,16 @@ For each completed change, add a dated entry with:
 
 ## 2026-05-19
 
+- Added authoritative KOTOR module location labels keyed by module filename and
+  room-model stem, including K1 prefixless room models such as `m02aa_01a` and
+  K2 room stems such as `201tel_01a`. The Game Library Module tab now enriches
+  rows with `module_code`, `location`, `area_name`, and a human-readable
+  `area_label`, uses those labels in the filter dropdown, and shows them in
+  model list rows/tooltips.
+  Affected areas: `src/core/module_categories.py`,
+  `src/gui/panels/qt_library_panel.py`, `tests/test_module_categories.py`.
+  Verification: `pytest tests/test_module_categories.py tests/test_qt_only_imports.py -q`;
+  `python -m py_compile src/core/module_categories.py src/gui/panels/qt_library_panel.py tests/test_module_categories.py`.
 - Added Python terminal helper bindings for the main window's selected model and animation controls. The embedded terminal now exposes `window`, `main_window`, `viewport()`, `model()`, `selected_model()`, `animation_names()`, `select_animation(name)`, `play_animation(name, loop=None)`, `stop_animation()`, `seek_animation(percent)`, and `override_animation(target_name, source_name="", source_model=None)`.
   Affected areas: `src/gui/windows/qt_main_window.py`, `tests/test_core_contracts.py`.
   Verification: `pytest tests/test_core_contracts.py::test_main_window_exposes_animation_helpers_to_python_terminal tests/test_core_contracts.py::test_main_window_bottom_area_is_resizable_splitter -q`; `python -m compileall -q src\gui\windows\qt_main_window.py tests\test_core_contracts.py`.
