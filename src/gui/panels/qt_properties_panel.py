@@ -7,6 +7,10 @@ from typing import Optional
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.gui.qt_lib.assets.qt_theme import C, heading
+from src.measurement.dimension_calculator import DimensionCalculator
+from src.measurement.measurement_formatter import MeasurementFormatter
+from src.measurement.unit_settings import MeasurementSettings
+from src.measurement.unit_system import UNIT_SYMBOLS, UnitSystem
 
 # ── CharacterMode wiring (M1 / T105) ────────────────────────────────────────
 # Imported lazily-safe: ``model_data`` is a pure-Python module but the
@@ -191,6 +195,9 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         self._suppress_mesh_signal = False
         self._module_browser_enabled = bool(module_browser_enabled)
         self._current_node = None
+        self.unit_system = UnitSystem()
+        self.measurement_settings = MeasurementSettings()
+        self.dimension_calculator = DimensionCalculator()
         self._suppress_mode_signal = False
         self._build()
 
@@ -231,6 +238,21 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         apply_button.clicked.connect(self._apply_transform)
         form.addWidget(apply_button, 1, 0, 1, 4)
         root.addWidget(self.transform_group)
+
+    def set_measurement_settings(self, values: dict | MeasurementSettings | None) -> None:
+        settings = values if isinstance(values, MeasurementSettings) else MeasurementSettings.from_dict(values)
+        self.measurement_settings = settings
+        self.unit_system.set_system_unit(settings.system_unit)
+        self.unit_system.set_display_unit(settings.display_unit)
+        symbol = UNIT_SYMBOLS.get(self.unit_system.display_unit, self.unit_system.display_unit)
+        suffix = f" {symbol}"
+        for spin in (self.x_spin, self.y_spin, self.z_spin):
+            spin.setDecimals(settings.distance_precision)
+            spin.setSuffix(suffix)
+        if self._current_node is not None:
+            self.show_node(self._current_node)
+        elif self._current_model is not None:
+            self.show_model(self._current_model)
 
     def set_module_browser_only(self, enabled: bool = True) -> None:
         if not self._module_browser_enabled or self.module_tab is None:
@@ -552,7 +574,9 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         node = self._current_node
         if not node:
             return
-        x, y, z = self.x_spin.value(), self.y_spin.value(), self.z_spin.value()
+        x = self.unit_system.to_system_units(self.x_spin.value())
+        y = self.unit_system.to_system_units(self.y_spin.value())
+        z = self.unit_system.to_system_units(self.z_spin.value())
         try:
             before = (
                 tuple(getattr(node, "position", (0.0, 0.0, 0.0))),
@@ -641,15 +665,46 @@ class QtPropertiesPanel(QtWidgets.QWidget):
             return
         pos = getattr(node, "position", (0.0, 0.0, 0.0))
         rot = getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))
-        self.x_spin.setValue(float(pos[0]))
-        self.y_spin.setValue(float(pos[1]))
-        self.z_spin.setValue(float(pos[2]))
+        self.x_spin.setValue(self.unit_system.to_display_units(float(pos[0])))
+        self.y_spin.setValue(self.unit_system.to_display_units(float(pos[1])))
+        self.z_spin.setValue(self.unit_system.to_display_units(float(pos[2])))
+        formatter = MeasurementFormatter(self.unit_system, self.measurement_settings.distance_precision)
+        dimensions = self.dimension_calculator.calculate(node)
         lines = [
             f"Node:  {getattr(node, 'name', '')}",
             f"Type:  {getattr(node, 'type_label', '')}",
-            f"Pos:   ({pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f})",
+            "",
+            "-- Position --",
+            f"X: {formatter.distance(dimensions.position[0])}",
+            f"Y: {formatter.distance(dimensions.position[1])}",
+            f"Z: {formatter.distance(dimensions.position[2])}",
+            "",
+            "-- Rotation --",
+            f"X: {formatter.angle_degrees(dimensions.rotation_degrees[0])}",
+            f"Y: {formatter.angle_degrees(dimensions.rotation_degrees[1])}",
+            f"Z: {formatter.angle_degrees(dimensions.rotation_degrees[2])}",
+            "",
+            "-- Scale --",
+            f"X: {formatter.scale(dimensions.scale[0])}",
+            f"Y: {formatter.scale(dimensions.scale[1])}",
+            f"Z: {formatter.scale(dimensions.scale[2])}",
             f"Rot:   ({rot[0]:.3f}, {rot[1]:.3f}, {rot[2]:.3f}, {rot[3]:.3f})",
         ]
+        if self.measurement_settings.show_selected_object_dimensions:
+            lines += [
+                "",
+                "-- Dimensions --",
+            ]
+            if dimensions.size is None:
+                lines.append("Unavailable")
+            else:
+                lines.extend(
+                    [
+                        f"Width:  {formatter.distance(dimensions.size[0])}",
+                        f"Depth:  {formatter.distance(dimensions.size[1])}",
+                        f"Height: {formatter.distance(dimensions.size[2])}",
+                    ]
+                )
         parent = getattr(node, "parent", None)
         if parent:
             lines.append(f"Parent:{getattr(parent, 'name', '')}")

@@ -28,6 +28,15 @@ from src.gui.qt_lib.rendering.viewport_navigation import (
 from src.gui.qt_lib.gizmo.gizmo_mode import GizmoMode
 from src.gui.qt_lib.gizmo.transform_controller import TransformController
 from src.gui.qt_lib.gizmo.transform_gizmo import TransformGizmo
+from src.gui.qt_lib.gizmo.transform_math import multiply_quaternions, ray_from_mouse
+from src.gui.qt_lib.viewports.qt_transform_typein_bar import QtTransformTypeInBar
+from src.measurement.angle_snap import AngleSnap
+from src.measurement.dimension_calculator import DimensionCalculator
+from src.measurement.grid_measurement import GridMeasurement
+from src.measurement.measurement_controller import MeasurementController
+from src.measurement.percent_snap import PercentSnap
+from src.measurement.unit_settings import MeasurementSettings
+from src.measurement.unit_system import UnitSystem
 
 log = logging.getLogger(__name__)
 
@@ -349,6 +358,7 @@ class QtViewportWidget(QtWidgets.QWidget):
     nodeMoved = QtCore.Signal(object)
     meshSelectionChanged = QtCore.Signal(list)
     meshVisibilityChanged = QtCore.Signal()
+    measurementSettingsChanged = QtCore.Signal(dict)
     gpuUploadProgress = QtCore.Signal(int, int)
     _texturePrewarmFinished = QtCore.Signal(object)
     _deferredTxiFinished = QtCore.Signal(object)
@@ -389,7 +399,16 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gimbal_drag_start = (0, 0)
         self._gimbal_node_start_pos = (0.0, 0.0, 0.0)
         self._gimbal_node_start_rot = (0.0, 0.0, 0.0, 1.0)
-        self._transform_gizmo = TransformGizmo(TransformController(self._evict_transform_cache))
+        self.unit_system = UnitSystem()
+        self.angle_snap = AngleSnap()
+        self.percent_snap = PercentSnap()
+        self.measurement_settings = MeasurementSettings()
+        self.measurement_controller = MeasurementController(self.unit_system)
+        self.dimension_calculator = DimensionCalculator()
+        self._measurement_mode = False
+        self._transform_gizmo = TransformGizmo(
+            TransformController(self._evict_transform_cache, self.angle_snap, self.percent_snap)
+        )
         self._transform_gizmo_dragging = False
         self._undo_limit = 250
         self._undo_stack: list[dict] = []
@@ -600,6 +619,13 @@ class QtViewportWidget(QtWidgets.QWidget):
             tooltip="Cycle gimbal mode",
         )
         row.addWidget(self.gimbal_mode_button)
+        self.measure_button = self._button(
+            self._toolbar_text("Measure", "Meas"),
+            self.toggle_measurement_mode,
+            checkable=True,
+            tooltip="Distance measurement tool",
+        )
+        row.addWidget(self.measure_button)
         row.addWidget(self._button(self._toolbar_text("UV View", "UV"), self.open_uv_viewer, tooltip="Open UV view"))
         row.addWidget(self._separator())
         self.navigation_button = self._button(self._navigation_button_text(), self._cycle_navigation_profile)
@@ -643,6 +669,21 @@ class QtViewportWidget(QtWidgets.QWidget):
         else:
             root.addWidget(tb)
         root.addWidget(self.canvas, 1)
+        self.transform_typein_bar = QtTransformTypeInBar(self)
+        self.transform_typein_bar.transformValueEdited.connect(self._on_transform_typein_edited)
+        self.transform_typein_bar.gridEdited.connect(self._on_grid_spacing_edited)
+        self.transform_typein_bar.snapToggled.connect(self.toggle_snap)
+        self.transform_typein_bar.angleSnapToggled.connect(self.toggle_angle_snap)
+        self.transform_typein_bar.angleIncrementChanged.connect(self._on_angle_snap_increment_changed)
+        self.transform_typein_bar.percentSnapToggled.connect(self.toggle_percent_snap)
+        self.transform_typein_bar.percentIncrementChanged.connect(self._on_percent_snap_increment_changed)
+        self.angle_snap_button = self.transform_typein_bar.angle_button
+        self.angle_snap_combo = self.transform_typein_bar.angle_combo
+        self.percent_snap_button = self.transform_typein_bar.percent_button
+        self.percent_snap_combo = self.transform_typein_bar.percent_combo
+        self.snap_button = self.transform_typein_bar.snap_button
+        root.addWidget(self.transform_typein_bar)
+        self._sync_transform_typein_bar()
 
         # ── T403: Mini-thumbnail inset (top-right) ────────────────────
         # Built as a child widget of `self.canvas` so it floats over the
@@ -926,10 +967,295 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.gimbal_button.setChecked(self._renderer.show_gimbal)
         self._request_render()
 
+    def toggle_measurement_mode(self, checked: Optional[bool] = None) -> None:
+        self._measurement_mode = bool(checked) if checked is not None else not self._measurement_mode
+        self.measure_button.setChecked(self._measurement_mode)
+        if not self._measurement_mode:
+            self.measurement_controller.active = False
+        self._request_render()
+
+    def toggle_snap(self, checked: Optional[bool] = None) -> None:
+        enabled = bool(checked) if checked is not None else not self.measurement_settings.snap_enabled
+        self.measurement_settings.snap_enabled = enabled
+        self._apply_snap_settings_to_controller()
+        self._emit_measurement_settings_changed()
+        self._sync_transform_typein_bar()
+
+    def toggle_angle_snap(self, checked: Optional[bool] = None) -> None:
+        enabled = bool(checked) if checked is not None else not self.angle_snap.enabled
+        self.angle_snap.set_enabled(enabled)
+        self.measurement_settings.angle_snap_enabled = enabled
+        self._emit_measurement_settings_changed()
+        self._sync_transform_typein_bar()
+        self._request_render(fast=True)
+
+    def toggle_percent_snap(self, checked: Optional[bool] = None) -> None:
+        enabled = bool(checked) if checked is not None else not self.percent_snap.enabled
+        self.percent_snap.set_enabled(enabled)
+        self.measurement_settings.percent_snap_enabled = enabled
+        self._emit_measurement_settings_changed()
+        self._sync_transform_typein_bar()
+        self._request_render(fast=True)
+
+    def _on_angle_snap_increment_changed(self, text: str) -> None:
+        try:
+            value = float(str(text or "").replace("deg", "").replace("°", "").strip())
+        except ValueError:
+            return
+        value = max(1e-6, min(value, 360.0))
+        self.angle_snap.set_increment_degrees(value)
+        self.measurement_settings.angle_snap_increment_degrees = value
+        self._emit_measurement_settings_changed()
+        self._sync_transform_typein_bar()
+
+    def _on_percent_snap_increment_changed(self, text: str) -> None:
+        try:
+            value = float(str(text or "").replace("%", "").strip())
+        except ValueError:
+            return
+        value = max(1e-6, min(value, 1000.0))
+        self.percent_snap.set_increment_percent(value)
+        self.measurement_settings.percent_snap_increment_percent = value
+        self._emit_measurement_settings_changed()
+        self._sync_transform_typein_bar()
+
+    def set_measurement_settings(self, values: dict | MeasurementSettings | None) -> None:
+        settings = values if isinstance(values, MeasurementSettings) else MeasurementSettings.from_dict(values)
+        self.measurement_settings = settings
+        self.unit_system.set_system_unit(settings.system_unit)
+        self.unit_system.set_display_unit(settings.display_unit)
+        self.angle_snap.set_enabled(settings.angle_snap_enabled)
+        self.angle_snap.set_increment_degrees(settings.angle_snap_increment_degrees)
+        self.percent_snap.set_enabled(settings.percent_snap_enabled)
+        self.percent_snap.set_increment_percent(settings.percent_snap_increment_percent)
+        self.measurement_controller.configure(self.unit_system, settings.distance_precision)
+        self._renderer.unit_system = self.unit_system
+        self._renderer.grid_measurement = GridMeasurement(
+            self.unit_system,
+            minor_spacing=settings.minor_grid_spacing,
+            major_spacing=settings.major_grid_spacing,
+            show_labels=settings.show_grid_measurements,
+            precision=settings.distance_precision,
+        )
+        self._apply_snap_settings_to_controller()
+        self._sync_transform_typein_bar()
+        self._request_render()
+
+    def _apply_snap_settings_to_controller(self) -> None:
+        controller = getattr(self._transform_gizmo, "controller", None)
+        if controller is not None and hasattr(controller, "set_position_snap"):
+            controller.set_position_snap(
+                self.measurement_settings.snap_enabled,
+                self.measurement_settings.minor_grid_spacing,
+            )
+
+    def _emit_measurement_settings_changed(self) -> None:
+        self.measurementSettingsChanged.emit({"measurement": self.measurement_settings.to_dict()})
+
+    def _sync_transform_typein_bar(self) -> None:
+        bar = getattr(self, "transform_typein_bar", None)
+        if bar is None:
+            return
+        mode = self._transform_gizmo.mode
+        mode_label = {
+            GizmoMode.TRANSLATE: "MOVE",
+            GizmoMode.ROTATE: "ROTATE",
+            GizmoMode.SCALE: "SCALE",
+        }.get(mode, "MOVE")
+        bar.set_mode_label(mode_label)
+        bar.set_grid_text(self.unit_system.format_distance(
+            self.measurement_settings.minor_grid_spacing,
+            self.measurement_settings.distance_precision,
+        ))
+        bar.set_snap_state(
+            snap=self.measurement_settings.snap_enabled,
+            angle=self.angle_snap.enabled,
+            percent=self.percent_snap.enabled,
+        )
+        bar.set_increment_texts(
+            angle=f"{self.angle_snap.increment_degrees:g}°",
+            percent=f"{self.percent_snap.increment_percent:g}%",
+        )
+        node = getattr(self._renderer, "selected_node", None)
+        bar.set_transform_enabled(node is not None)
+        if node is None:
+            bar.set_transform_values(("", "", ""))
+            return
+        if mode == GizmoMode.ROTATE:
+            rx, ry, rz = self._quat_to_euler_degrees(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+            bar.set_transform_values((f"{rx:.3f}°", f"{ry:.3f}°", f"{rz:.3f}°"))
+        elif mode == GizmoMode.SCALE:
+            sx, sy, sz = self._node_scale(node)
+            bar.set_transform_values((f"{sx:.3f}", f"{sy:.3f}", f"{sz:.3f}"))
+        else:
+            px, py, pz = tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3])
+            p = self.measurement_settings.distance_precision
+            bar.set_transform_values(
+                (
+                    self.unit_system.format_distance(px, p),
+                    self.unit_system.format_distance(py, p),
+                    self.unit_system.format_distance(pz, p),
+                )
+            )
+
+    def _on_grid_spacing_edited(self, text: str) -> None:
+        try:
+            spacing = self.unit_system.parse_distance(text)
+        except ValueError:
+            self._sync_transform_typein_bar()
+            return
+        spacing = max(1e-6, float(spacing))
+        self.measurement_settings.minor_grid_spacing = spacing
+        self.measurement_settings.major_grid_spacing = max(spacing, spacing * 10.0)
+        self.set_measurement_settings(self.measurement_settings)
+        self._emit_measurement_settings_changed()
+
+    def _on_transform_typein_edited(self, axis: str, text: str) -> None:
+        node = getattr(self._renderer, "selected_node", None)
+        if node is None:
+            self._sync_transform_typein_bar()
+            return
+        axis_index = {"X": 0, "Y": 1, "Z": 2}.get(axis)
+        if axis_index is None:
+            return
+        before_pos = tuple(getattr(node, "position", (0.0, 0.0, 0.0)))
+        before_rot = tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        before_vertices = self._snapshot_vertices(node)
+        before_scale = self._node_scale(node)
+        try:
+            if self._transform_gizmo.mode == GizmoMode.ROTATE:
+                self._apply_rotation_typein(node, axis_index, text)
+                label = "Set Rotation"
+            elif self._transform_gizmo.mode == GizmoMode.SCALE:
+                self._apply_scale_typein(node, axis_index, text)
+                label = "Set Scale"
+            else:
+                self._apply_position_typein(node, axis_index, text)
+                label = "Set Position"
+        except ValueError:
+            self._sync_transform_typein_bar()
+            return
+        after_vertices = self._snapshot_vertices(node)
+        self._commit_node_transform(
+            node,
+            before_pos,
+            before_rot,
+            tuple(getattr(node, "position", (0.0, 0.0, 0.0))),
+            tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))),
+            label,
+            before_vertices=before_vertices,
+            after_vertices=after_vertices,
+            before_scale=before_scale,
+            after_scale=self._node_scale(node),
+        )
+        self._evict_transform_cache(node)
+        self._notify_node_moved(node)
+        self._request_render(fast=True)
+
+    def _apply_position_typein(self, node, axis_index: int, text: str) -> None:
+        value = self.unit_system.parse_distance(text)
+        if self.measurement_settings.snap_enabled:
+            inc = self.measurement_settings.minor_grid_spacing
+            value = round(value / inc) * inc
+        position = list(tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3]))
+        position[axis_index] = float(value)
+        node.position = tuple(position)
+
+    def _apply_rotation_typein(self, node, axis_index: int, text: str) -> None:
+        value = float(str(text or "").replace("deg", "").replace("°", "").strip())
+        if self.angle_snap.enabled:
+            value = self.angle_snap.snap_degrees(value)
+        euler = list(self._quat_to_euler_degrees(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))))
+        euler[axis_index] = value
+        node.rotation = self._euler_degrees_to_quat(euler)
+
+    def _apply_scale_typein(self, node, axis_index: int, text: str) -> None:
+        raw = str(text or "").strip()
+        if raw.endswith("%"):
+            value = float(raw[:-1].strip()) / 100.0
+        else:
+            value = float(raw)
+        if self.percent_snap.enabled:
+            value = self.percent_snap.snap_scale_factor(value)
+        value = max(0.001, float(value))
+        scale = list(self._node_scale(node))
+        old_value = max(0.001, scale[axis_index])
+        scale[axis_index] = value
+        ratio = value / old_value
+        verts = getattr(node, "vertices", None)
+        if verts is not None:
+            node.vertices = [
+                tuple(
+                    coord * ratio if idx == axis_index else coord
+                    for idx, coord in enumerate(tuple(vertex[:3]))
+                )
+                for vertex in verts
+            ]
+            compute_bounds = getattr(node, "compute_bounds", None)
+            if callable(compute_bounds):
+                compute_bounds()
+        node._gr_scale = tuple(scale)
+
+    @staticmethod
+    def _snapshot_vertices(node):
+        vertices = getattr(node, "vertices", None)
+        if vertices is None:
+            return None
+        return tuple(tuple(float(c) for c in vertex[:3]) for vertex in vertices)
+
+    @staticmethod
+    def _node_scale(node) -> tuple[float, float, float]:
+        raw = getattr(node, "_gr_scale", getattr(node, "scale", (1.0, 1.0, 1.0)))
+        try:
+            values = tuple(float(v) for v in raw[:3])
+        except Exception:
+            values = (1.0, 1.0, 1.0)
+        return (values + (1.0, 1.0, 1.0))[:3]
+
+    @staticmethod
+    def _quat_to_euler_degrees(q) -> tuple[float, float, float]:
+        try:
+            x, y, z, w = [float(v) for v in q[:4]]
+        except Exception:
+            return (0.0, 0.0, 0.0)
+        length = math.sqrt(x * x + y * y + z * z + w * w)
+        if length <= 1e-9:
+            return (0.0, 0.0, 0.0)
+        x, y, z, w = x / length, y / length, z / length, w / length
+        sinr_cosp = 2.0 * (w * x + y * z)
+        cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
+        roll = math.atan2(sinr_cosp, cosr_cosp)
+        sinp = 2.0 * (w * y - z * x)
+        pitch = math.copysign(math.pi / 2.0, sinp) if abs(sinp) >= 1.0 else math.asin(sinp)
+        siny_cosp = 2.0 * (w * z + x * y)
+        cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+        yaw = math.atan2(siny_cosp, cosy_cosp)
+        return (math.degrees(roll), math.degrees(pitch), math.degrees(yaw))
+
+    @staticmethod
+    def _euler_degrees_to_quat(euler) -> tuple[float, float, float, float]:
+        rx, ry, rz = (math.radians(float(v)) for v in tuple(euler)[:3])
+
+        def axis_quat(axis: str, angle: float) -> tuple[float, float, float, float]:
+            half = angle * 0.5
+            s = math.sin(half)
+            c = math.cos(half)
+            if axis == "X":
+                return (s, 0.0, 0.0, c)
+            if axis == "Y":
+                return (0.0, s, 0.0, c)
+            return (0.0, 0.0, s, c)
+
+        return multiply_quaternions(
+            axis_quat("Z", rz),
+            multiply_quaternions(axis_quat("Y", ry), axis_quat("X", rx)),
+        )
+
     def cycle_gimbal_mode(self) -> None:
         self._transform_gizmo.cycle_mode()
         self._sync_legacy_gimbal_mode()
         self.gimbal_mode_button.setText(self._gimbal_mode_button_text())
+        self._sync_transform_typein_bar()
         self._request_render()
 
     def set_gimbal_mode(self, mode: int) -> None:
@@ -941,6 +1267,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._transform_gizmo.set_mode(GizmoMode.TRANSLATE)
         self._sync_legacy_gimbal_mode()
         self.gimbal_mode_button.setText(self._gimbal_mode_button_text())
+        self._sync_transform_typein_bar()
 
     def _sync_legacy_gimbal_mode(self) -> None:
         self._renderer.gimbal_mode = 2 if self._transform_gizmo.mode == GizmoMode.ROTATE else 1
@@ -1216,6 +1543,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._uv_viewer.set_selected_node(node)
         self.nodeSelected.emit(node)
         self.meshSelectionChanged.emit([])
+        self._sync_transform_typein_bar()
         self._request_render()
 
     def _clear_mesh_selection_flags(self) -> None:
@@ -1259,6 +1587,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._uv_viewer.set_selected_node(active)
         self.nodeSelected.emit(active)
         self.meshSelectionChanged.emit(list(clean_nodes))
+        self._sync_transform_typein_bar()
         self._request_render()
 
     def _set_selection_orbit_bounds(self, node, bounds) -> None:
@@ -1454,6 +1783,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         *,
         before_vertices=None,
         after_vertices=None,
+        before_scale=None,
+        after_scale=None,
     ) -> None:
         if node is None or not self._state_changed(before_pos, before_rot, after_pos, after_rot, before_vertices, after_vertices):
             return
@@ -1466,6 +1797,8 @@ class QtViewportWidget(QtWidgets.QWidget):
                 "after_rot": tuple(after_rot),
                 "before_vertices": before_vertices,
                 "after_vertices": after_vertices,
+                "before_scale": before_scale,
+                "after_scale": after_scale,
                 "label": label,
             }
         )
@@ -1480,6 +1813,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         node.position = action["after_pos"] if use_after else action["before_pos"]
         node.rotation = action["after_rot"] if use_after else action["before_rot"]
         vertices = action.get("after_vertices") if use_after else action.get("before_vertices")
+        scale = action.get("after_scale") if use_after else action.get("before_scale")
+        if scale is not None:
+            node._gr_scale = tuple(scale)
         if vertices is not None:
             node.vertices = [tuple(v) for v in vertices]
             compute_bounds = getattr(node, "compute_bounds", None)
@@ -1511,6 +1847,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         if self.on_node_moved:
             self.on_node_moved(node)
         self.nodeMoved.emit(node)
+        self._sync_transform_typein_bar()
         if self._renderer.rig_edit_mode and self._renderer.on_bone_moved:
             try:
                 self._renderer.on_bone_moved(node.name, node.position)
@@ -1584,11 +1921,17 @@ class QtViewportWidget(QtWidgets.QWidget):
                     self._show_mesh_context_menu(event)
                     return True
                 if event.button() == QtCore.Qt.LeftButton:
+                    if self._measurement_mode:
+                        self._handle_measurement_click(event)
+                        return True
                     self._press_lmb(event)
                     return True
             if et == QtCore.QEvent.MouseMove:
                 if self._nav_dragging:
                     self._drag_navigation(event)
+                    return True
+                if self._measurement_mode and not (event.buttons() & QtCore.Qt.LeftButton):
+                    self._handle_measurement_preview(event)
                     return True
                 if event.buttons() & QtCore.Qt.LeftButton:
                     self._drag_lmb(event)
@@ -1631,6 +1974,12 @@ class QtViewportWidget(QtWidgets.QWidget):
                     self.texture_button.click(); return True
                 if key == QtCore.Qt.Key_G and no_modifiers:
                     self.gimbal_button.click(); return True
+                if key == QtCore.Qt.Key_S and no_modifiers:
+                    self.snap_button.click(); return True
+                if key == QtCore.Qt.Key_A and no_modifiers and self._navigation_profile != "maya":
+                    self.angle_snap_button.click(); return True
+                if key == QtCore.Qt.Key_P and no_modifiers:
+                    self.percent_snap_button.click(); return True
                 if key == QtCore.Qt.Key_Tab and no_modifiers:
                     self.cycle_gimbal_mode(); return True
                 if key == QtCore.Qt.Key_Space and no_modifiers:
@@ -1638,6 +1987,12 @@ class QtViewportWidget(QtWidgets.QWidget):
                 if key == QtCore.Qt.Key_Escape and no_modifiers:
                     if self._transform_gizmo_dragging:
                         self._cancel_transform_gizmo_drag()
+                        return True
+                    if self._measurement_mode:
+                        self.measurement_controller.clear_measurement()
+                        self.measure_button.setChecked(False)
+                        self._measurement_mode = False
+                        self._request_render()
                         return True
                 if key == QtCore.Qt.Key_Z and (event.modifiers() & QtCore.Qt.ControlModifier):
                     if event.modifiers() & QtCore.Qt.ShiftModifier:
@@ -1657,6 +2012,36 @@ class QtViewportWidget(QtWidgets.QWidget):
                 if self._handle_view_key(event):
                     return True
         return super().eventFilter(obj, event)
+
+    def _world_point_from_mouse(self, event) -> tuple[float, float, float]:
+        x = int(event.position().x())
+        y = int(event.position().y())
+        origin, direction = ray_from_mouse((x, y), self.camera, self.canvas.width(), self.canvas.height())
+        dz = float(direction[2])
+        if abs(dz) > 1e-8:
+            t = -float(origin[2]) / dz
+            if t > 0.0:
+                point = origin + direction * t
+                return (float(point[0]), float(point[1]), 0.0)
+        try:
+            target = getattr(self.camera, "target", (0.0, 0.0, 0.0))
+            return (float(target[0]), float(target[1]), float(target[2]))
+        except Exception:
+            return (0.0, 0.0, 0.0)
+
+    def _handle_measurement_click(self, event) -> None:
+        world = self._world_point_from_mouse(event)
+        if self.measurement_controller.point_a is None or self.measurement_controller.point_b is not None:
+            self.measurement_controller.begin_measurement(world)
+        else:
+            self.measurement_controller.finish_measurement(world)
+        self._request_render(fast=True)
+
+    def _handle_measurement_preview(self, event) -> None:
+        if self.measurement_controller.point_a is None or self.measurement_controller.point_b is not None:
+            return
+        self.measurement_controller.update_preview(self._world_point_from_mouse(event))
+        self._request_render(fast=True)
 
     def _navigation_action(self, button, modifiers) -> str:
         alt = has_modifier(modifiers, QtCore.Qt.AltModifier)
@@ -2255,6 +2640,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                     self._renderer.show_solid = old_solid
             if self._renderer.show_gimbal:
                 self._draw_transform_gizmo(draw, w, h)
+            self._draw_measurement_overlay(draw, w, h)
             self._renderer._draw_axes(draw, w, h)
             self._renderer._draw_stats(draw, w, h)
             return img
@@ -2274,6 +2660,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._renderer._last_H = h
             self._renderer._frame_view = self._renderer._cam_view_matrix()
             self._draw_transform_gizmo(ImageDraw.Draw(img, "RGBA"), w, h)
+            self._draw_measurement_overlay(ImageDraw.Draw(img, "RGBA"), w, h)
             return img
         except Exception as exc:
             log.debug("Transform gizmo overlay draw failed: %s", exc)
@@ -2292,6 +2679,12 @@ class QtViewportWidget(QtWidgets.QWidget):
                 pass
         self._transform_gizmo.set_selected_object(node)
         self._transform_gizmo.draw(draw, self.camera, self._renderer._proj, w, h)
+
+    def _draw_measurement_overlay(self, draw, w: int, h: int) -> None:
+        try:
+            self.measurement_controller.draw_overlay(draw, self._renderer._proj, w, h)
+        except Exception as exc:
+            log.debug("Measurement overlay draw failed: %s", exc)
 
     # ── T401: Joint-dot overlay ────────────────────────────────────────
     def _draw_joint_dots(self, img, w: int, h: int) -> None:
@@ -3119,6 +3512,8 @@ class QtViewportWidget(QtWidgets.QWidget):
                 f"Gizmo {self._transform_gizmo.mode.value.title()}",
                 before_vertices=before.vertices,
                 after_vertices=after.vertices,
+                before_scale=before.scale,
+                after_scale=after.scale,
             )
             self._notify_node_moved(node)
         self._request_render()
@@ -3195,10 +3590,14 @@ class QtViewportWidget(QtWidgets.QWidget):
         x, y = int(event.position().x()), int(event.position().y())
         if self._transform_gizmo_dragging:
             self._transform_gizmo.drag((x, y), self.camera, self.canvas.height())
+            node = getattr(self._renderer, "selected_node", None)
+            if node is not None:
+                self._notify_node_moved(node)
             self._request_render(fast=True)
             return
         if self._gimbal_dragging and self._renderer.selected_node:
             self._apply_gimbal_drag(x, y)
+            self._notify_node_moved(self._renderer.selected_node)
             self._request_render(fast=True)
             return
 
@@ -3465,6 +3864,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 node.position = (start[0] + d1[0] + d2[0], start[1] + d1[1] + d2[1], start[2] + d1[2] + d2[2])
         elif self._renderer.gimbal_mode == 2:
             angle = dx_screen * 0.01
+            angle = self.angle_snap.snap_radians(angle)
             ha = angle * 0.5
             c, s = math.cos(ha), math.sin(ha)
             rq = {"X": (s, 0.0, 0.0, c), "Y": (0.0, s, 0.0, c)}.get(axis, (0.0, 0.0, s, c))

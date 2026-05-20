@@ -68,6 +68,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "tpc_render_utils",
     ),
     "viewports": (
+        "qt_transform_typein_bar",
         "qt_uv_viewer",
         "qt_viewport",
     ),

@@ -13,20 +13,32 @@ from .transform_math import (
     multiply_quaternions,
     rotation_angle_from_mouse_delta,
 )
+from src.measurement.angle_snap import AngleSnap
+from src.measurement.percent_snap import PercentSnap
 
 
 @dataclass
 class TransformSnapshot:
     position: tuple[float, float, float]
     rotation: tuple[float, float, float, float]
+    scale: tuple[float, float, float] = (1.0, 1.0, 1.0)
     vertices: tuple[tuple[float, float, float], ...] | None = None
 
 
 class TransformController:
     """Small state machine that applies one active gizmo drag."""
 
-    def __init__(self, invalidate_callback: Optional[Callable[[object], None]] = None):
+    def __init__(
+        self,
+        invalidate_callback: Optional[Callable[[object], None]] = None,
+        angle_snap: AngleSnap | None = None,
+        percent_snap: PercentSnap | None = None,
+    ):
         self.invalidate_callback = invalidate_callback
+        self.angle_snap = angle_snap
+        self.percent_snap = percent_snap
+        self.position_snap_enabled = False
+        self.position_snap_increment = 10.0
         self.object = None
         self.mode: GizmoMode | None = None
         self.handle = ""
@@ -42,8 +54,16 @@ class TransformController:
         return TransformSnapshot(
             position=tuple(float(v) for v in getattr(obj, "position", (0.0, 0.0, 0.0))),
             rotation=tuple(float(v) for v in getattr(obj, "rotation", (0.0, 0.0, 0.0, 1.0))),
+            scale=tuple(float(v) for v in getattr(obj, "_gr_scale", (1.0, 1.0, 1.0))[:3]),
             vertices=vertex_snapshot,
         )
+
+    def set_position_snap(self, enabled: bool, increment: float) -> None:
+        self.position_snap_enabled = bool(enabled)
+        try:
+            self.position_snap_increment = max(1e-6, float(increment))
+        except (TypeError, ValueError):
+            self.position_snap_increment = 10.0
 
     def begin_drag(
         self,
@@ -81,17 +101,28 @@ class TransformController:
         delta = axis_drag_delta(self.start_mouse, mouse_pos, axis, camera, self.start_depth, viewport_height)
         av = AXIS_VECTORS.get(axis, AXIS_VECTORS["X"])
         p = self.original.position
-        self.object.position = (
+        new_position = (
             p[0] + av[0] * delta,
             p[1] + av[1] * delta,
             p[2] + av[2] * delta,
         )
+        if self.position_snap_enabled:
+            inc = self.position_snap_increment
+            if axis == "X":
+                new_position = (round(new_position[0] / inc) * inc, new_position[1], new_position[2])
+            elif axis == "Y":
+                new_position = (new_position[0], round(new_position[1] / inc) * inc, new_position[2])
+            elif axis == "Z":
+                new_position = (new_position[0], new_position[1], round(new_position[2] / inc) * inc)
+        self.object.position = new_position
 
     def _apply_rotate(self, axis: str, mouse_pos) -> None:
         # Screen-space drag angles are clockwise-positive in Qt's y-down
         # coordinate system; world-space quaternion rotation expects the
         # opposite handedness for the viewport gizmo interaction.
         angle = -rotation_angle_from_mouse_delta(self.start_mouse, mouse_pos, self.center_screen)
+        if self.angle_snap is not None:
+            angle = self.angle_snap.snap_radians(angle)
         delta_q = axis_quaternion(axis, angle)
         self.object.rotation = multiply_quaternions(delta_q, self.original.rotation)
 
@@ -101,10 +132,14 @@ class TransformController:
         if axis == "UNIFORM":
             raw = float(mouse_pos[0] - self.start_mouse[0] - (mouse_pos[1] - self.start_mouse[1]))
             factor = max(0.01, 1.0 + raw * 0.01)
+            if self.percent_snap is not None:
+                factor = self.percent_snap.snap_scale_factor(factor)
             sx = sy = sz = factor
         else:
             delta = axis_drag_delta(self.start_mouse, mouse_pos, axis, camera, self.start_depth, viewport_height)
             factor = max(0.01, 1.0 + delta)
+            if self.percent_snap is not None:
+                factor = self.percent_snap.snap_scale_factor(factor)
             sx = sy = sz = 1.0
             if axis == "X":
                 sx = factor
@@ -115,6 +150,12 @@ class TransformController:
         # GhostRigger ModelNode has no persistent scale field; mutating the
         # mesh's local vertices is the durable transform representation.
         self.object.vertices = [(x * sx, y * sy, z * sz) for x, y, z in self.original.vertices]
+        osx, osy, osz = self.original.scale
+        self.object._gr_scale = (
+            max(0.001, osx * sx),
+            max(0.001, osy * sy),
+            max(0.001, osz * sz),
+        )
         compute_bounds = getattr(self.object, "compute_bounds", None)
         if callable(compute_bounds):
             compute_bounds()
@@ -135,6 +176,7 @@ class TransformController:
     def restore(self, obj, snapshot: TransformSnapshot) -> None:
         obj.position = tuple(snapshot.position)
         obj.rotation = tuple(snapshot.rotation)
+        obj._gr_scale = tuple(snapshot.scale)
         if snapshot.vertices is not None:
             obj.vertices = [tuple(v) for v in snapshot.vertices]
             compute_bounds = getattr(obj, "compute_bounds", None)

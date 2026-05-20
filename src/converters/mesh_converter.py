@@ -7,6 +7,11 @@ TGA ↔ TPC texture conversion
 import os, struct, math, logging
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
+
+# Measurement-system note: exporters consume raw KotorModel scene values in the
+# active system unit. UI display-unit formatting is intentionally not read here.
+# Format-specific unit conversion belongs at the exporter boundary only when a
+# target format explicitly requires it.
 try:
     from ..core.model_data import (
         KotorModel, ModelNode, NodeFlags, GameVersion,

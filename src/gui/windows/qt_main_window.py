@@ -51,6 +51,7 @@ from src.gui.qt_lib.dialogs.qt_settings_dialog import QtSettingsDialog, save_set
 from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow
 from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
+from src.measurement.unit_settings import MeasurementSettings
 
 
 C = {
@@ -1350,6 +1351,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.properties_panel.positionApplied.connect(
             lambda node, _x, _y, _z: self.viewport.refresh_node_transform(node)
         )
+        self.viewport.measurementSettingsChanged.connect(self._merge_measurement_settings)
+        self._apply_measurement_settings()
         main_splitter.addWidget(self.viewport)
 
         right_tabs.addTab(self.properties_panel, self._icon("props", 16), "Properties")
@@ -4130,11 +4133,30 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                     values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
                 )
             )
+        self._apply_measurement_settings()
         try:
             save_settings(self.settings_path, values)
             self._log("Settings saved.", "success")
         except Exception as exc:
             self._log(f"Settings save failed: {exc}", "error")
+
+    def _apply_measurement_settings(self) -> None:
+        settings = MeasurementSettings.from_dict(self.settings_data.get("measurement", {}))
+        self.settings_data["measurement"] = settings.to_dict()
+        for widget_name in ("viewport", "properties_panel", "module_geometry_panel"):
+            widget = getattr(self, widget_name, None)
+            apply_settings = getattr(widget, "set_measurement_settings", None)
+            if callable(apply_settings):
+                apply_settings(settings)
+
+    def _merge_measurement_settings(self, values: dict) -> None:
+        measurement = MeasurementSettings.from_dict(values.get("measurement", values)).to_dict()
+        self.settings_data["measurement"] = measurement
+        self._apply_measurement_settings()
+        try:
+            save_settings(self.settings_path, self.settings_data)
+        except Exception as exc:
+            self._log(f"Measurement settings save failed: {exc}", "error")
 
     def closeEvent(self, event: QtGui.QCloseEvent):
         try:
