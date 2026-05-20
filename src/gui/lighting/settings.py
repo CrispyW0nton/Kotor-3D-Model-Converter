@@ -14,9 +14,9 @@ class LightingSettings:
     normal_map: bool = True
     environment_map: bool = True
     specular_map: bool = True
-    lightmap_map: bool = True
+    lightmap_map: bool = False
     lightmap_intensity: float = 0.55
-    lightmap_mode: str = "baked"
+    lightmap_mode: str = "disabled"
     shader_complexity_mode: str = "off"
     show_light_helpers: bool = True
     show_light_radius_volumes: bool = False

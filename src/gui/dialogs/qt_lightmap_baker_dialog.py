@@ -93,7 +93,7 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
         self.aurora_check = self._check("Aurora lights", True)
         self.dynamic_check = self._check("Dynamic lights", True)
         self.rig_check = self._check("Generated rig lights", True)
-        self.ambient_check = self._check("Ambient contribution", True)
+        self.ambient_check = self._check("Ambient contribution", False)
         for idx, widget in enumerate((self.aurora_check, self.dynamic_check, self.rig_check, self.ambient_check)):
             source_layout.addWidget(widget, idx // 2, idx % 2)
         form_root.addWidget(source_group)

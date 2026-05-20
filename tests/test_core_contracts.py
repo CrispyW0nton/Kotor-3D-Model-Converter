@@ -174,11 +174,11 @@ def test_gpu_renderer_supports_texture_off_and_wireframe_modes() -> None:
     assert "self.show_solid: bool = True" in init_source
     assert "self.wire_color: tuple[float, float, float] = (0.18, 0.62, 0.95)" in init_source
     assert "self.show_diffuse_map: bool = True" in init_source
-    assert "self.show_lightmap_map: bool = True" in init_source
+    assert "self.show_lightmap_map: bool = False" in init_source
     assert "self.show_environment_map: bool = True" in init_source
     assert "self.show_specular_map: bool = True" in init_source
     assert "self.lightmap_intensity: float = 0.55" in init_source
-    assert "self.lightmap_mode: str = \"baked\"" in init_source
+    assert "self.lightmap_mode: str = \"disabled\"" in init_source
     assert "self.show_light_gizmos: bool = True" in init_source
     assert "_texture_allowed = bool(self.show_texture and self.show_diffuse_map)" in render_source
     assert "bool(self.show_lightmap_map)" in render_source

@@ -23,7 +23,7 @@ class LightmapBakeSettings:
     include_aurora_lights: bool = True
     include_generated_rig_lights: bool = True
     include_dynamic_lights: bool = True
-    include_ambient: bool = True
+    include_ambient: bool = False
     include_diffuse: bool = True
     include_normal_maps: bool = True
     include_specular: bool = False

@@ -11,6 +11,45 @@ import numpy as np
 class LightmapLightingSolver:
     def solve_buffer(self, buffer, lights: Iterable[object], settings, shadow_solver=None) -> np.ndarray:
         output = np.zeros_like(buffer.baked_rgb, dtype=np.float32)
+        active_lights = [light for light in lights if self._include_light(light, settings)]
+        if not active_lights and not settings.include_ambient and not settings.use_indirect_approximation:
+            return output
+
+        ys, xs = np.nonzero(buffer.valid_mask)
+        if len(ys) == 0:
+            return output
+
+        positions = buffer.world_positions[ys, xs].astype(np.float32, copy=False)
+        normals = _normalized_rows(buffer.world_normals[ys, xs].astype(np.float32, copy=False))
+        diffuse = buffer.base_diffuse[ys, xs].astype(np.float32, copy=False)
+        rgb = np.zeros((len(ys), 3), dtype=np.float32)
+
+        if settings.include_ambient:
+            rgb += self.solve_ambient_batch(len(ys), settings)
+        if settings.use_direct_lighting:
+            mesh_ids = buffer.mesh_ids[ys, xs]
+            for light in active_lights:
+                contribution = self.solve_direct_light_batch(positions, normals, light, settings)
+                if shadow_solver is not None and settings.use_shadows and np.any(contribution > 0.0):
+                    contribution *= self._shadow_factors_batch(
+                        positions,
+                        normals,
+                        mesh_ids,
+                        contribution,
+                        light,
+                        settings,
+                        shadow_solver,
+                    )[:, np.newaxis]
+                rgb += contribution
+        if settings.use_indirect_approximation:
+            rgb += 0.08 * diffuse
+        if settings.include_diffuse:
+            rgb *= diffuse
+        output[ys, xs] = self.apply_exposure_gamma(rgb, settings)
+        return output
+
+    def _solve_buffer_scalar(self, buffer, lights: Iterable[object], settings, shadow_solver=None) -> np.ndarray:
+        output = np.zeros_like(buffer.baked_rgb, dtype=np.float32)
         ys, xs = np.nonzero(buffer.valid_mask)
         active_lights = [light for light in lights if self._include_light(light, settings)]
         for y, x in zip(ys, xs):
@@ -52,6 +91,20 @@ class LightmapLightingSolver:
             return self.solve_area_light_approx(texel, light, settings)
         return self.solve_point_light(texel, light, settings)
 
+    def solve_direct_light_batch(self, positions: np.ndarray, normals: np.ndarray, light: object, settings) -> np.ndarray:
+        kind = str(getattr(light, "type", getattr(light, "light_kind", "point")) or "point").lower()
+        if "ambient" in kind or bool(getattr(light, "ambient_only", False)):
+            return np.repeat(self.solve_ambient({}, settings, light)[np.newaxis, :], len(positions), axis=0)
+        if "spot" in kind:
+            return self.solve_spot_light_batch(positions, normals, light, settings)
+        if "directional" in kind:
+            return self.solve_directional_light_batch(positions, normals, light, settings)
+        if "area" in kind:
+            result = self.solve_point_light_batch(positions, normals, light, settings)
+            size = max(0.0, float(getattr(light, "area_size", 0.0) or 0.0))
+            return result * (0.75 + min(size, 10.0) * 0.025)
+        return self.solve_point_light_batch(positions, normals, light, settings)
+
     def solve_point_light(self, texel, light, settings) -> np.ndarray:
         position = np.asarray(texel["position"], dtype=np.float32)
         normal = _normalized(np.asarray(texel["normal"], dtype=np.float32))
@@ -73,6 +126,20 @@ class LightmapLightingSolver:
         attenuation = falloff * falloff
         return _light_color(light) * _intensity(light) * ndotl * attenuation * 0.45
 
+    def solve_point_light_batch(self, positions: np.ndarray, normals: np.ndarray, light: object, settings) -> np.ndarray:
+        light_pos = np.asarray(getattr(light, "position", (0.0, 0.0, 0.0)), dtype=np.float32)
+        vec = light_pos[np.newaxis, :] - positions
+        dist = np.linalg.norm(vec, axis=1)
+        safe_dist = np.maximum(dist, 1.0e-5)
+        radius = max(float(getattr(light, "radius", getattr(light, "light_radius", 5.0)) or 5.0), 0.001)
+        ldir = vec / safe_dist[:, np.newaxis]
+        ndotl = np.maximum(np.sum(normals * ldir, axis=1), 0.0)
+        falloff = np.maximum(0.0, 1.0 - (safe_dist / radius))
+        attenuation = falloff * falloff
+        active = (dist <= radius) & (ndotl > 0.0)
+        scale = np.where(active, ndotl * attenuation * _intensity(light) * 0.45, 0.0).astype(np.float32)
+        return scale[:, np.newaxis] * _light_color(light)[np.newaxis, :]
+
     def solve_spot_light(self, texel, light, settings) -> np.ndarray:
         base = self.solve_point_light(texel, light, settings)
         if not np.any(base):
@@ -90,11 +157,33 @@ class LightmapLightingSolver:
         spot = 1.0 if dot_val >= inner else (dot_val - outer) / max(inner - outer, 1.0e-5)
         return base * spot
 
+    def solve_spot_light_batch(self, positions: np.ndarray, normals: np.ndarray, light: object, settings) -> np.ndarray:
+        base = self.solve_point_light_batch(positions, normals, light, settings)
+        if not np.any(base):
+            return base
+        light_pos = np.asarray(getattr(light, "position", (0.0, 0.0, 0.0)), dtype=np.float32)
+        to_texel = _normalized_rows(positions - light_pos[np.newaxis, :])
+        direction = _normalized(np.asarray(getattr(light, "direction", (0.0, -1.0, -1.0)), dtype=np.float32))
+        cone = math.radians(max(1.0, min(179.0, float(getattr(light, "cone_angle", 45.0)))))
+        inner = math.cos(cone * 0.5)
+        outer = math.cos(cone * 0.65)
+        dot_val = np.sum(to_texel * direction[np.newaxis, :], axis=1)
+        spot = np.zeros(len(positions), dtype=np.float32)
+        spot[dot_val >= inner] = 1.0
+        fade = (dot_val > outer) & (dot_val < inner)
+        spot[fade] = (dot_val[fade] - outer) / max(inner - outer, 1.0e-5)
+        return base * spot[:, np.newaxis]
+
     def solve_directional_light(self, texel, light, settings) -> np.ndarray:
         normal = _normalized(np.asarray(texel["normal"], dtype=np.float32))
         direction = _normalized(-np.asarray(getattr(light, "direction", (0.0, -1.0, -1.0)), dtype=np.float32))
         ndotl = max(float(np.dot(normal, direction)), 0.0)
         return _light_color(light) * _intensity(light) * ndotl
+
+    def solve_directional_light_batch(self, positions: np.ndarray, normals: np.ndarray, light: object, settings) -> np.ndarray:
+        direction = _normalized(-np.asarray(getattr(light, "direction", (0.0, -1.0, -1.0)), dtype=np.float32))
+        ndotl = np.maximum(np.sum(normals * direction[np.newaxis, :], axis=1), 0.0)
+        return ndotl[:, np.newaxis].astype(np.float32) * _light_color(light)[np.newaxis, :] * _intensity(light)
 
     def solve_area_light_approx(self, texel, light, settings) -> np.ndarray:
         result = self.solve_point_light(texel, light, settings)
@@ -106,6 +195,9 @@ class LightmapLightingSolver:
             return _light_color(light) * _intensity(light) * 0.25
         return np.asarray(getattr(settings, "background_color", (0.0, 0.0, 0.0)), dtype=np.float32) + np.asarray((0.035, 0.035, 0.035), dtype=np.float32)
 
+    def solve_ambient_batch(self, count: int, settings) -> np.ndarray:
+        return np.repeat(self.solve_ambient({}, settings)[np.newaxis, :], int(count), axis=0)
+
     def apply_exposure_gamma(self, rgb, settings) -> np.ndarray:
         value = np.asarray(rgb, dtype=np.float32) * float(settings.exposure)
         # Reinhard tone mapping keeps intense multi-light rooms from becoming
@@ -115,6 +207,18 @@ class LightmapLightingSolver:
             value = np.clip(value, 0.0, 1.0)
         gamma = max(float(settings.gamma), 1.0e-5)
         return np.power(np.clip(value, 0.0, None), 1.0 / gamma)
+
+    def _shadow_factors_batch(self, positions, normals, mesh_ids, contribution, light, settings, shadow_solver) -> np.ndarray:
+        factors = np.ones(len(positions), dtype=np.float32)
+        active = np.nonzero(np.any(contribution > 1.0e-8, axis=1))[0]
+        for idx in active:
+            texel = {
+                "position": positions[idx],
+                "normal": normals[idx],
+                "mesh_id": int(mesh_ids[idx]),
+            }
+            factors[idx] = float(shadow_solver.calculate_shadow_factor(texel, light, settings))
+        return factors
 
     def sample_normal_map(self, material, uv):
         return None
@@ -158,3 +262,12 @@ def _normalized(v: np.ndarray) -> np.ndarray:
     if length <= 1.0e-8:
         return np.asarray((0.0, 0.0, 1.0), dtype=np.float32)
     return v / length
+
+
+def _normalized_rows(values: np.ndarray) -> np.ndarray:
+    lengths = np.linalg.norm(values, axis=1)
+    out = values.copy()
+    valid = lengths > 1.0e-8
+    out[valid] = out[valid] / lengths[valid, np.newaxis]
+    out[~valid] = np.asarray((0.0, 0.0, 1.0), dtype=np.float32)
+    return out

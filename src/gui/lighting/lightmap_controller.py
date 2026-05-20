@@ -8,9 +8,9 @@ from dataclasses import dataclass
 @dataclass
 class LightmapController:
     available: bool = False
-    enabled: bool = True
+    enabled: bool = False
     intensity: float = 0.55
-    mode: str = "baked"
+    mode: str = "disabled"
     warning: str = ""
 
     def inspect_model(self, model: object | None) -> None:
@@ -29,6 +29,6 @@ class LightmapController:
             self.intensity = max(0.0, min(float(intensity), 4.0))
         except (TypeError, ValueError):
             self.intensity = 0.55
-        mode_value = str(mode or "baked").lower()
-        self.mode = mode_value if mode_value in {"disabled", "baked", "dynamic_preview", "hybrid", "debug"} else "baked"
+        mode_value = str(mode or "disabled").lower()
+        self.mode = mode_value if mode_value in {"disabled", "baked", "dynamic_preview", "hybrid", "debug"} else "disabled"
         self.enabled = self.mode != "disabled"

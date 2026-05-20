@@ -16,6 +16,7 @@ from src.gui.lighting.lightmap_export_bridge import (
     resolve_lightmap_for_material,
 )
 from src.gui.lighting.lightmap_lighting_solver import LightmapLightingSolver
+from src.gui.lighting.lightmap_rasterizer import LightmapRasterizer
 from src.gui.lighting.lightmap_padding import LightmapPadding
 from src.gui.lighting.lightmap_uv_validator import LightmapUVValidator
 
@@ -61,6 +62,12 @@ def test_lightmap_settings_validation_is_non_throwing() -> None:
     assert settings.exposure == 1.0
     assert settings.gamma == 2.2
     assert settings.warnings
+
+
+def test_lightmap_bake_defaults_do_not_add_synthetic_ambient() -> None:
+    settings = LightmapBakeSettings()
+
+    assert settings.include_ambient is False
 
 
 def test_uv_validator_prefers_lightmap_uvs_and_warns_for_primary_fallback() -> None:
@@ -167,6 +174,43 @@ def test_lighting_solver_tone_maps_aurora_light_clusters_instead_of_clipping_whi
     assert float(rgb.max()) < 0.98
     assert float(rgb.min()) > 0.0
     assert not np.allclose(rgb, np.ones(3), atol=0.02)
+
+
+def test_lighting_solver_vectorized_buffer_matches_scalar_path() -> None:
+    model, mesh = _model_with_lightmapped_triangle()
+    buffer = LightmapRasterizer().rasterize_mesh(mesh, 1, 16)
+    lights = [
+        SimpleNamespace(
+            name="AuroraLight001",
+            source_type="Aurora",
+            enabled=True,
+            visible=True,
+            type="aurora_point",
+            position=(0.2, 0.2, 1.5),
+            color=(1.0, 0.9, 0.7),
+            intensity=2.0,
+            radius=4.0,
+            casts_shadows=False,
+        ),
+        SimpleNamespace(
+            name="Fill",
+            source_type="Editable",
+            enabled=True,
+            visible=True,
+            type="directional",
+            direction=(0.0, 0.0, -1.0),
+            color=(0.4, 0.5, 1.0),
+            intensity=0.35,
+            casts_shadows=False,
+        ),
+    ]
+    settings = LightmapBakeSettings(include_ambient=False, use_shadows=False)
+    solver = LightmapLightingSolver()
+
+    vector = solver.solve_buffer(buffer, lights, settings)
+    scalar = solver._solve_buffer_scalar(buffer, lights, settings)
+
+    assert np.allclose(vector, scalar, atol=1.0e-5)
 
 
 def test_lightmap_export_bridge_discovers_generated_assignments(tmp_path: Path) -> None:

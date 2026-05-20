@@ -4149,12 +4149,12 @@ class GpuRenderer:
         self.show_solid: bool = True
         self.show_texture: bool = True
         self.show_diffuse_map: bool = True
-        self.show_lightmap_map: bool = True
+        self.show_lightmap_map: bool = False
         self.show_environment_map: bool = True
         self.show_specular_map: bool = True
         self.show_normal_map: bool = True
         self.lightmap_intensity: float = 0.55
-        self.lightmap_mode: str = "baked"
+        self.lightmap_mode: str = "disabled"
         self.lighting_mode: str = "scene"
         self.shader_complexity_mode: str = "off"
         self.scene_ambient: float = 0.06
