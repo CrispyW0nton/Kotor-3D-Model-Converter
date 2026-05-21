@@ -26,7 +26,13 @@ from typing import Any, Optional
 from src.gui.qt_lib.panels.qt_bottom_strip import QtBottomStrip
 from src.gui.qt_lib.panels.qt_inspector_panel import QtInspectorPanel
 from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
-from src.gui.qt_lib.assets.qt_theme import C, heading
+from src.gui.qt_lib.assets.qt_theme import (
+    C,
+    apply_theme,
+    heading,
+    make_horizontal_overflow_area,
+    make_scrollable_panel,
+)
 from src.gui.qt_lib.panels.qt_workflow_rail import QtWorkflowRail
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -462,11 +468,28 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
     def _build_toolbars(self) -> None:
         """Top toolbar — mode switcher (T205) + game + camera presets."""
-        toolbar = QtWidgets.QToolBar("Character Builder Toolbar", self)
-        toolbar.setObjectName("CharacterBuilderToolbar")
+        toolbar_shell = QtWidgets.QToolBar("Character Builder Toolbar", self)
+        toolbar_shell.setObjectName("CharacterBuilderToolbar")
+        toolbar_shell.setMovable(False)
+        toolbar_shell.setFloatable(False)
+        toolbar_shell.setToolButtonStyle(QtCore.Qt.ToolButtonTextOnly)
+
+        toolbar = QtWidgets.QToolBar("Character Builder Toolbar Contents", self)
+        toolbar.setObjectName("CharacterBuilderToolbarContents")
         toolbar.setMovable(False)
+        toolbar.setFloatable(False)
         toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonTextOnly)
-        self.addToolBar(QtCore.Qt.TopToolBarArea, toolbar)
+        toolbar.setFixedHeight(32)
+        toolbar_scroll = make_horizontal_overflow_area(
+            toolbar,
+            "CharacterBuilderToolbarScroll",
+            height=48,
+            parent=toolbar_shell,
+        )
+        toolbar_shell.addWidget(toolbar_scroll)
+        self.addToolBar(QtCore.Qt.TopToolBarArea, toolbar_shell)
+        self._toolbar_shell = toolbar_shell
+        self._toolbar_scroll = toolbar_scroll
         self._toolbar = toolbar
 
         brand = QtWidgets.QLabel("  GHOSTRIGGER AUTORIG  ")
@@ -666,7 +689,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         dock.setObjectName("CharacterBuilderBottomDock")
         dock.setFeatures(QtWidgets.QDockWidget.NoDockWidgetFeatures)
         dock.setTitleBarWidget(QtWidgets.QWidget())     # hide title bar
-        dock.setWidget(self.bottom_strip)
+        dock.setWidget(make_scrollable_panel(self.bottom_strip, "CharacterBuilderBottomDockScroll", dock))
         self.addDockWidget(QtCore.Qt.BottomDockWidgetArea, dock)
         self._bottom_dock = dock
 

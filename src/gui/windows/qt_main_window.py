@@ -33,6 +33,7 @@ from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel
 from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
 from src.gui.qt_lib.panels.qt_camera_panel import QtCameraPanel
 from src.gui.qt_lib.panels.qt_mesh_tools_panel import QtMeshToolsPanel
+from src.gui.qt_lib.assets.qt_theme import make_horizontal_overflow_area, make_scrollable_panel
 from src.gui.qt_lib.assets.qt_matrix_background import QtMatrixEngine, QtMatrixLabel, QtMatrixPanel
 from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel, QtSkeletonPanel
 from src.gui.qt_lib.viewports.qt_viewport import QtMainViewportWidget
@@ -1199,7 +1200,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addLayout(meta_box)
         return header
 
-    def _make_command_bar(self) -> QtWidgets.QFrame:
+    def _make_command_bar(self) -> QtWidgets.QWidget:
         bar = QtMatrixPanel(engine=self._matrix_engine, opacity=0.35)
         bar.setObjectName("CommandBar")
         bar.setFixedHeight(40)
@@ -1251,7 +1252,14 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._tool_button("Lights", self.lighting_panel_action, "", compact=True))
         layout.addWidget(self._tool_button("Cameras", self.camera_panel_action, "", compact=True))
         layout.addWidget(self._tool_button("Diag  Ctrl+D", self.diag_action, "diag", compact=True))
-        return bar
+        self.command_bar = bar
+        self.command_bar_scroll = make_horizontal_overflow_area(
+            bar,
+            "CommandBarScroll",
+            height=56,
+            parent=self,
+        )
+        return self.command_bar_scroll
 
     def _tool_button(
         self,
@@ -1300,7 +1308,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     def _create_detachable_panel(self, key: str, title: str, widget: QtWidgets.QWidget, area) -> QtWidgets.QDockWidget:
         dock = QtWidgets.QDockWidget(title, self)
         dock.setObjectName(f"{key}Dock")
-        dock.setWidget(widget)
+        scroll = make_scrollable_panel(widget, f"{key}DockScroll", dock)
+        dock.setWidget(scroll)
         dock.setAllowedAreas(QtCore.Qt.AllDockWidgetAreas)
         dock.setFeatures(
             QtWidgets.QDockWidget.DockWidgetClosable

@@ -1226,6 +1226,65 @@ def test_module_mesh_panel_can_request_detachable_window() -> None:
     assert "moduleMeshesWindowRequested.connect(lambda: self._show_detachable_panel(\"module_meshes\"))" in layout_source
 
 
+def test_qt_overflow_helpers_scroll_dense_toolbar_rows() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtCore, QtWidgets
+
+    from src.gui.qt_lib.assets.qt_theme import make_horizontal_overflow_area, make_scrollable_panel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    strip = QtWidgets.QWidget()
+    strip.setMinimumWidth(900)
+    strip_scroll = make_horizontal_overflow_area(strip, "TestToolbarScroll", height=40)
+    strip_scroll.resize(240, 40)
+
+    assert strip_scroll.widget() is strip
+    assert strip_scroll.horizontalScrollBarPolicy() == QtCore.Qt.ScrollBarAsNeeded
+    assert strip_scroll.verticalScrollBarPolicy() == QtCore.Qt.ScrollBarAlwaysOff
+    assert strip.minimumWidth() >= 900
+
+    panel = QtWidgets.QWidget()
+    panel_scroll = make_scrollable_panel(panel, "TestDockScroll")
+
+    assert panel_scroll.widget() is panel
+    assert panel_scroll.widgetResizable() is True
+    assert panel_scroll.horizontalScrollBarPolicy() == QtCore.Qt.ScrollBarAsNeeded
+    assert panel_scroll.verticalScrollBarPolicy() == QtCore.Qt.ScrollBarAsNeeded
+
+
+def test_main_window_command_bar_and_docks_are_scrollable() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    command_source = inspect.getsource(QtGhostRiggerMainWindow._make_command_bar)
+    dock_source = inspect.getsource(QtGhostRiggerMainWindow._create_detachable_panel)
+
+    assert "make_horizontal_overflow_area(" in command_source
+    assert '"CommandBarScroll"' in command_source
+    assert "make_scrollable_panel(widget" in dock_source
+    assert 'f"{key}DockScroll"' in dock_source
+
+
+def test_viewport_and_character_builder_toolbars_are_scrollable() -> None:
+    import inspect
+
+    from src.gui.qt_lib.panels.qt_character_builder_panel import QtCharacterBuilderWindow
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    viewport_source = inspect.getsource(QtViewportWidget._build)
+    builder_source = inspect.getsource(QtCharacterBuilderWindow._build_toolbars)
+    bottom_source = inspect.getsource(QtCharacterBuilderWindow._build_bottom_strip)
+
+    assert "make_horizontal_overflow_area(" in viewport_source
+    assert '"ViewportToolbarScroll"' in viewport_source
+    assert "make_horizontal_overflow_area(" in builder_source
+    assert '"CharacterBuilderToolbarScroll"' in builder_source
+    assert "make_scrollable_panel(self.bottom_strip" in bottom_source
+
+
 def test_main_window_moves_utility_tabs_to_tools_windows() -> None:
     import inspect
 

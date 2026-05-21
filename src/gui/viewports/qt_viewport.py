@@ -13,6 +13,7 @@ from typing import Optional, Tuple
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from src.gui.qt_lib.assets.qt_theme import make_horizontal_overflow_area
 from src.gui.qt_lib.rendering.qt_gpu_renderer import (
     GpuRenderer,
     clear_prebuilt_static_gpu_mesh_data,
@@ -745,23 +746,21 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._renderer.show_grid = self.grid_button.isChecked()
         self._renderer.render_mode = self.render_mode_combo.currentText().lower()
 
+        toolbar_scroll = make_horizontal_overflow_area(
+            tb,
+            "ViewportToolbarScroll",
+            height=44,
+            parent=self,
+        )
+        toolbar_scroll.setStyleSheet("QScrollArea { background:#202124; border:0; }")
+        toolbar_scroll.setMinimumWidth(0)
         if self._compact_controls:
-            toolbar_scroll = QtWidgets.QScrollArea()
-            toolbar_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
-            toolbar_scroll.setWidgetResizable(False)
-            toolbar_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
-            toolbar_scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-            toolbar_scroll.setFixedHeight(34)
-            toolbar_scroll.setMinimumWidth(0)
             toolbar_scroll.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
-            toolbar_scroll.setStyleSheet("QScrollArea { background:#202124; border:0; }")
-            tb.adjustSize()
-            toolbar_scroll.setWidget(tb)
             root.addWidget(toolbar_scroll)
             self.setMinimumSize(140, 130)
             self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Expanding)
         else:
-            root.addWidget(tb)
+            root.addWidget(toolbar_scroll)
         root.addWidget(self.canvas, 1)
         self.transform_typein_bar = QtTransformTypeInBar(self)
         self.transform_typein_bar.transformValueEdited.connect(self._on_transform_typein_edited)
