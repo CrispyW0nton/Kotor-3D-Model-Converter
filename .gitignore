@@ -63,6 +63,7 @@ game_data/
 !/tests/test_ue_fbx_source_import.py
 !/tests/test_retarget_mapping_profile.py
 !/tests/test_retarget_reference_pose.py
+!/tests/test_basic_retarget_solver.py
 !/tests/test_sampler.py
 !/tests/test_coordinate_normalizer.py
 !/tests/test_baker.py
