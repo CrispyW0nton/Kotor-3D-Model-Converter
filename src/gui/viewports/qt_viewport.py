@@ -846,7 +846,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         combo_style = (
             f"QComboBox {{ background:{theme.color('input.background')}; "
             f"color:{theme.color('input.text')}; border:1px solid {theme.color('input.border')}; "
-            "padding:2px 18px 2px 7px; }}"
+            "padding:2px 18px 2px 7px; }"
             f"QComboBox:hover {{ border-color:{theme.color('accent.secondary')}; }}"
             "QComboBox::drop-down { border:0; width:16px; }"
             f"QComboBox QAbstractItemView {{ background:{theme.color('panel.altBackground')}; "
