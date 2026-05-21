@@ -58,6 +58,7 @@ game_data/
 !/tests/test_retargeting_test_utils.py
 !/tests/test_animation_slot_resolution.py
 !/tests/test_animation_export_slot_gate.py
+!/tests/test_aurora_animation_controller_semantics.py
 !/tests/test_sampler.py
 !/tests/test_coordinate_normalizer.py
 !/tests/test_baker.py

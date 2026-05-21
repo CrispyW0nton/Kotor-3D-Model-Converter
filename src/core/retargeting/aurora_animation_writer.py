@@ -43,6 +43,10 @@ from src.core.retargeting.coordinate_normalizer import (
     wxyz_to_xyzw,
     xyzw_to_wxyz,
 )
+from src.core.validation.animation_block_validator import (
+    AnimationBlockValidationError,
+    validate_animation_block_against_model,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -314,6 +318,13 @@ class AuroraAnimationWriter:
                 result.errors.append(str(exc))
                 return result
             result.animation_slot = resolved_slot.slot_name
+
+            validation = validate_animation_block_against_model(model, animation, strict=True)
+            try:
+                validation.raise_for_errors(animation.name, getattr(model, "name", "") or "target model")
+            except AnimationBlockValidationError as exc:
+                result.errors.append(str(exc))
+                return result
 
             existing_index = self._find_local_animation_index(model, resolved_slot.slot_name)
             if existing_index is None:

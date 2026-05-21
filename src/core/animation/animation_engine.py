@@ -445,6 +445,147 @@ class AnimPose:
     nodes:  Dict[str, NodePose] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class AuroraTransform:
+    """Parent-local or world-space Aurora transform using GhostRigger XYZW quats."""
+
+    position: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    rotation: Tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
+
+
+@dataclass
+class EvaluatedAuroraPose:
+    """Deterministic headless pose evaluation for animation-controller gates."""
+
+    time: float
+    local_transforms_by_node: Dict[str, AuroraTransform] = field(default_factory=dict)
+    world_transforms_by_node: Dict[str, AuroraTransform] = field(default_factory=dict)
+
+
+def _normalize_quat_xyzw(quat: Tuple[float, float, float, float] | List[float]) -> Tuple[float, float, float, float]:
+    x, y, z, w = (float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3]))
+    mag_sq = x * x + y * y + z * z + w * w
+    if mag_sq <= 1e-12:
+        return (0.0, 0.0, 0.0, 1.0)
+    mag = math.sqrt(mag_sq)
+    return (x / mag, y / mag, z / mag, w / mag)
+
+
+def _controller_matches(ctrl: Dict[str, Any], controller_type: int, controller_name: str) -> bool:
+    raw_type = ctrl.get("type")
+    if raw_type == controller_type:
+        return True
+    return str(ctrl.get("name", "")).lower() == controller_name
+
+
+def _sample_controller_absolute(
+    controllers: List[Dict[str, Any]],
+    controller_type: int,
+    controller_name: str,
+    time_seconds: float,
+    *,
+    clamp: bool,
+) -> Optional[List[float]]:
+    """Sample a controller channel as an absolute parent-local value."""
+
+    for ctrl in controllers:
+        if not _controller_matches(ctrl, controller_type, controller_name):
+            continue
+        times = [float(value) for value in ctrl.get("times", [])]
+        values = [list(value) for value in ctrl.get("values", [])]
+        if not times or not values:
+            return None
+        rows = sorted(zip(times, values), key=lambda item: item[0])
+        times = [row[0] for row in rows]
+        values = [row[1] for row in rows]
+        sample_time = time_seconds
+        if clamp:
+            sample_time = max(times[0], min(times[-1], sample_time))
+        return _interp_channel(times, values, sample_time)
+    return None
+
+
+def _compose_transform(parent: Optional[AuroraTransform], local: AuroraTransform) -> AuroraTransform:
+    """Compose parent and local transforms with parent-first FK semantics."""
+
+    local_rot = _normalize_quat_xyzw(local.rotation)
+    if parent is None:
+        return AuroraTransform(position=local.position, rotation=local_rot)
+
+    parent_rot = _normalize_quat_xyzw(parent.rotation)
+    rotated_pos = _quat_rotate(parent_rot, local.position)
+    world_pos = (
+        parent.position[0] + rotated_pos[0],
+        parent.position[1] + rotated_pos[1],
+        parent.position[2] + rotated_pos[2],
+    )
+    world_rot = _normalize_quat_xyzw(_quat_mul(parent_rot, local_rot))
+    return AuroraTransform(position=world_pos, rotation=world_rot)
+
+
+def evaluate_aurora_animation_pose(
+    model: KotorModel,
+    animation_block: Animation,
+    time_seconds: float,
+    *,
+    clamp: bool = True,
+) -> EvaluatedAuroraPose:
+    """Evaluate one Aurora animation block as absolute parent-local controllers.
+
+    This helper is intentionally independent from viewport playback. It exists
+    as a deterministic validation oracle for export/retargeting gates:
+    orientation and position keys replace the corresponding rest-local component,
+    unkeyed components stay at rest, and parent transforms propagate by FK.
+    """
+
+    anim_nodes = {
+        str(node.name or "").lower(): node
+        for node in getattr(animation_block, "nodes", [])
+        if str(node.name or "").strip()
+    }
+    pose = EvaluatedAuroraPose(time=float(time_seconds))
+
+    for node in model.all_nodes():
+        local_position = tuple(float(value) for value in node.position)
+        local_rotation = _normalize_quat_xyzw(list(node.rotation))
+        anim_node = anim_nodes.get(str(node.name or "").lower())
+
+        if anim_node is not None:
+            sampled_position = _sample_controller_absolute(
+                anim_node.controllers,
+                AnimationEngine.CTRL_POSITION,
+                "position",
+                float(time_seconds),
+                clamp=clamp,
+            )
+            if sampled_position is not None and len(sampled_position) >= 3:
+                local_position = (
+                    float(sampled_position[0]),
+                    float(sampled_position[1]),
+                    float(sampled_position[2]),
+                )
+
+            sampled_rotation = _sample_controller_absolute(
+                anim_node.controllers,
+                AnimationEngine.CTRL_ORIENTATION,
+                "orientation",
+                float(time_seconds),
+                clamp=clamp,
+            )
+            if sampled_rotation is not None and len(sampled_rotation) >= 4:
+                local_rotation = _normalize_quat_xyzw(sampled_rotation[:4])
+
+        local = AuroraTransform(position=local_position, rotation=local_rotation)
+        parent_world = None
+        if node.parent is not None:
+            parent_world = pose.world_transforms_by_node.get(node.parent.name)
+        world = _compose_transform(parent_world, local)
+        pose.local_transforms_by_node[node.name] = local
+        pose.world_transforms_by_node[node.name] = world
+
+    return pose
+
+
 # ─────────────────────────────────────────────────────────────────
 #  Animation Engine
 # ─────────────────────────────────────────────────────────────────
