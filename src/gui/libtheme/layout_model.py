@@ -33,7 +33,7 @@ class ViewportLayout:
     min_width: int = 500
     preferred_width: int = 900
     toolbar_visible: bool = True
-    toolbar_button_mode: str = "text"
+    toolbar_button_mode: str = "textOnly"
     toolbar_compact: bool = False
 
 

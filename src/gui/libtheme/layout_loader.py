@@ -76,9 +76,9 @@ class LayoutLoader:
         viewport = root.find("viewport")
         viewport_region = root.find("./viewport/region")
         viewport_toolbar = root.find("./viewport/toolbar")
-        vp_mode = (viewport_toolbar.get("buttonMode") if viewport_toolbar is not None else "text") or "text"
+        vp_mode = (viewport_toolbar.get("buttonMode") if viewport_toolbar is not None else "textOnly") or "textOnly"
         if vp_mode not in VALID_BUTTON_MODES:
-            vp_mode = "text"
+            vp_mode = "textOnly"
         viewport_layout = ViewportLayout(
             min_width=_int(viewport_region.get("minWidth") if viewport_region is not None else None, 500),
             preferred_width=_int(viewport_region.get("preferredWidth") if viewport_region is not None else None, 900),

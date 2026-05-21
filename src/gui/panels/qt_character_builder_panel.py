@@ -32,6 +32,7 @@ from src.gui.qt_lib.assets.qt_theme import (
     heading,
     make_horizontal_overflow_area,
     make_scrollable_panel,
+    update_legacy_palette,
 )
 from src.gui.qt_lib.panels.qt_workflow_rail import QtWorkflowRail
 
@@ -463,6 +464,37 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._restore_settings()
         self._sync_from_scene()
         self._update_title()
+        theme_manager = getattr(parent, "theme_manager", None)
+        layout_manager = getattr(parent, "layout_manager", None)
+        if theme_manager is not None:
+            theme_manager.register_theme_aware_widget(self)
+            self.apply_ghost_theme(theme_manager.current_theme or theme_manager.get_theme())
+        if layout_manager is not None:
+            self.apply_ghost_layout(layout_manager.current_layout or layout_manager.get_layout())
+
+    def apply_ghost_theme(self, theme) -> None:
+        update_legacy_palette(theme)
+        self.setStyleSheet("")
+        for widget in (getattr(self, "viewport", None), getattr(self, "rail", None), getattr(self, "inspector", None), getattr(self, "properties", None), getattr(self, "bottom_strip", None)):
+            hook = getattr(widget, "apply_ghost_theme", None)
+            if callable(hook):
+                hook(theme)
+
+    def apply_ghost_layout(self, layout) -> None:
+        toolbar = layout.toolbar("main")
+        self._toolbar.setFixedHeight(toolbar.height)
+        self._toolbar.setIconSize(QtCore.QSize(toolbar.icon_size, toolbar.icon_size))
+        self._toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly if toolbar.button_mode == "iconOnly" else QtCore.Qt.ToolButtonTextOnly if toolbar.button_mode == "textOnly" else QtCore.Qt.ToolButtonTextBesideIcon)
+        self._toolbar_scroll.setFixedHeight(max(toolbar.height + 10, toolbar.height))
+        self._splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", 6))
+        self.rail.setMinimumWidth(layout.panel("library").min_width)
+        self._splitter.setSizes([
+            layout.panel("library").preferred_width,
+            max(layout.viewport.preferred_width, layout.viewport.min_width),
+            layout.panel("properties").preferred_width,
+        ])
+        for widget in [*self.findChildren(QtWidgets.QComboBox), *self.findChildren(QtWidgets.QSpinBox), *self.findChildren(QtWidgets.QDoubleSpinBox)]:
+            widget.setMinimumHeight(layout.spacing_value("inputHeight", 24))
 
     # ── UI construction ──────────────────────────────────────────────────
 

@@ -4,9 +4,9 @@ Packaged themes live in `config/themes/themes/`. Packaged layouts live in
 `config/themes/layouts/`. These files are normal XML and are intended to be
 readable by modders.
 
-Themes define colours, fonts, icon provider defaults, and sizing tokens.
+Themes define colours, fonts, icon provider defaults, and visual tokens.
 Layouts define window size, panel widths, splitter proportions, toolbar
-visibility, and button display modes.
+visibility, row heights, control density, and button display modes.
 
 User themes and layouts can be placed in the platform-specific GhostRigger
 config directory:
@@ -18,6 +18,11 @@ If a user file uses the same id as a packaged file, GhostRigger treats it as an
 intentional override and reports that in diagnostics. Invalid XML is ignored
 with a warning; the current theme/layout remains active.
 
+Packaged files are application defaults. Edit them only when changing the
+project defaults. Personal and community variants should be saved through the
+Theme Editor, which writes to the user config directory and creates `.bak`
+backups before overwriting an existing user XML file.
+
 Safe editing tips:
 
 - Keep `id`, `name`, and `version` on the root element.
@@ -26,3 +31,6 @@ Safe editing tips:
   `textBesideIcon`, `textUnderIcon`.
 - Change packaged files only when updating the application defaults. Put
   personal/community variants in the user config directory.
+- Use **Apply Theme** or **Apply Layout** for full-application changes. Theme
+  Editor previews are local until explicitly applied.
+- Run `python tools/validate_themes.py` after editing packaged defaults.

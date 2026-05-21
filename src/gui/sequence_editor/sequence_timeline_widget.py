@@ -32,6 +32,16 @@ class SequenceTimelineWidget(QtWidgets.QWidget):
         self.setMinimumHeight(260)
         self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
 
+    def apply_ghost_theme(self, theme) -> None:
+        self.update()
+
+    def apply_ghost_layout(self, layout) -> None:
+        self.row_height = max(18, layout.spacing_value("tableRowHeight", self.row_height))
+        self.ruler_height = max(22, layout.spacing_value("panelHeaderHeight", self.ruler_height))
+        self.setMinimumHeight(max(180, self.row_height * 8 + self.ruler_height))
+        self._sync_min_width()
+        self.update()
+
     def set_sequence(self, sequence: GhostRiggerLevelSequence | None) -> None:
         self.sequence = sequence
         self._sync_min_width()
@@ -150,7 +160,7 @@ class SequenceTimelineWidget(QtWidgets.QWidget):
                     x1 = self.frame_to_x(cut.start_frame)
                     x2 = self.frame_to_x(cut.end_frame)
                     painter.fillRect(x1, y + 4, max(3, x2 - x1), self.row_height - 8, QtGui.QColor(cut.color))
-                    painter.setPen(QtGui.QColor("#001A0E"))
+                    painter.setPen(QtGui.QColor(C["text"]))
                     painter.drawText(x1 + 6, y + 18, cut.display_name)
             for key in track.keyframes:
                 x = self.frame_to_x(key.frame)
@@ -161,7 +171,7 @@ class SequenceTimelineWidget(QtWidgets.QWidget):
                     QtCore.QPoint(x - 7, y + self.row_height // 2),
                 ]
                 painter.setBrush(QtGui.QColor(C["accent"] if key.selected else track.color))
-                painter.setPen(QtGui.QColor("#D8D8D8" if key.selected else "#0B0F0D"))
+                painter.setPen(QtGui.QColor(C["text"] if key.selected else C["border"]))
                 painter.drawPolygon(QtGui.QPolygon(points))
 
     def _draw_markers(self, painter: QtGui.QPainter) -> None:

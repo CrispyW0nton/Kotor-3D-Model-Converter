@@ -146,6 +146,7 @@ devlog/
 # repo.  Using /tools/* instead of /tools/ so re-inclusion patterns resolve.
 /tools/*
 !/tools/model_inspector.py
+!/tools/validate_themes.py
 scripts/
 !/scripts/
 !/scripts/generate_manifest.py

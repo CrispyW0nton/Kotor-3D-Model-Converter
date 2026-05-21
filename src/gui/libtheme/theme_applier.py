@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import logging
+import time
+
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from .font_manager import FontManager
 from .qt_stylesheet_builder import QtStylesheetBuilder
 from .theme_model import Theme
+
+log = logging.getLogger(__name__)
 
 
 class ThemeApplier(QtCore.QObject):
@@ -17,31 +22,138 @@ class ThemeApplier(QtCore.QObject):
         self.builder = QtStylesheetBuilder()
         self.font_manager = FontManager()
         self._aware_widgets: list[QtWidgets.QWidget] = []
+        self._stylesheet_cache: dict[tuple, str] = {}
+        self._last_applied_key: tuple | None = None
+        self._last_target_id: int | None = None
+        self._pending_theme: Theme | None = None
+        self._pending_target: QtWidgets.QWidget | None = None
+        self._apply_timer = QtCore.QTimer(self)
+        self._apply_timer.setSingleShot(True)
+        self._apply_timer.setInterval(35)
+        self._apply_timer.timeout.connect(self._flush_pending_apply)
+        self._applying = False
 
     def build_stylesheet(self, theme: Theme) -> str:
-        return self.builder.build(theme)
+        key = self._theme_cache_key(theme)
+        cached = self._stylesheet_cache.get(key)
+        if cached is not None:
+            return cached
+        stylesheet = self.builder.build(theme)
+        self._stylesheet_cache[key] = stylesheet
+        return stylesheet
 
     def register_theme_aware_widget(self, widget: QtWidgets.QWidget) -> None:
         if widget not in self._aware_widgets:
             self._aware_widgets.append(widget)
+            widget.destroyed.connect(lambda _obj=None, w=widget: self.unregister_theme_aware_widget(w))
 
-    def apply_theme(self, theme: Theme, target: QtWidgets.QWidget | None = None) -> None:
+    def unregister_theme_aware_widget(self, widget: QtWidgets.QWidget) -> None:
+        try:
+            self._aware_widgets.remove(widget)
+        except ValueError:
+            pass
+
+    def apply_theme(self, theme: Theme, target: QtWidgets.QWidget | None = None, *, immediate: bool = False) -> None:
+        """Queue a theme apply, coalescing rapid requests from settings/hot reload."""
+        key = self._theme_cache_key(theme)
+        target_id = id(target) if target is not None else 0
+        if key == self._last_applied_key and target_id == self._last_target_id:
+            log.debug("Theme apply skipped; theme is unchanged: %s", theme.id)
+            return
+        self._pending_theme = theme
+        self._pending_target = target
+        if immediate or self._last_applied_key is None:
+            self._apply_timer.stop()
+            self._flush_pending_apply()
+            return
+        if not self._apply_timer.isActive():
+            self._apply_timer.start()
+
+    def _flush_pending_apply(self) -> None:
+        if self._pending_theme is None or self._applying:
+            return
+        theme = self._pending_theme
+        target = self._pending_target
+        self._pending_theme = None
+        self._pending_target = None
+        self._apply_theme_now(theme, target)
+
+    def _apply_theme_now(self, theme: Theme, target: QtWidgets.QWidget | None = None) -> None:
         app = QtWidgets.QApplication.instance()
+        key = self._theme_cache_key(theme)
+        target_id = id(target) if target is not None else 0
+        if key == self._last_applied_key and target_id == self._last_target_id:
+            return
+
+        self._applying = True
+        total_start = time.perf_counter()
+        style_start = total_start
         stylesheet = self.build_stylesheet(theme)
-        if app is not None:
-            self.font_manager.apply_application_font(app, theme)
-            app.setStyleSheet(stylesheet)
-            app.setPalette(self._palette(theme))
-        if target is not None:
-            target.setStyleSheet(stylesheet)
-        self.notify_theme_changed(theme)
+        style_ms = (time.perf_counter() - style_start) * 1000.0
+        widget = target or (app.activeWindow() if app is not None else None)
+        updates_disabled = False
+        cursor_set = False
+        try:
+            if app is not None:
+                QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+                cursor_set = True
+            if widget is not None:
+                widget.setUpdatesEnabled(False)
+                updates_disabled = True
+            app_start = time.perf_counter()
+            if app is not None:
+                self.font_manager.apply_application_font(app, theme)
+                app.setPalette(self._palette(theme))
+                app.setStyleSheet(stylesheet)
+            elif target is not None:
+                target.setStyleSheet(stylesheet)
+            app_ms = (time.perf_counter() - app_start) * 1000.0
+
+            notify_start = time.perf_counter()
+            self.notify_theme_changed(theme)
+            notify_ms = (time.perf_counter() - notify_start) * 1000.0
+            total_ms = (time.perf_counter() - total_start) * 1000.0
+            self._last_applied_key = key
+            self._last_target_id = target_id
+            log.info(
+                "Theme apply '%s': stylesheet %.1f ms, QApplication %.1f ms, hooks/icons %.1f ms, total %.1f ms",
+                theme.id,
+                style_ms,
+                app_ms,
+                notify_ms,
+                total_ms,
+            )
+        finally:
+            if updates_disabled and widget is not None:
+                widget.setUpdatesEnabled(True)
+                widget.update()
+            if cursor_set:
+                QtWidgets.QApplication.restoreOverrideCursor()
+            self._applying = False
 
     def notify_theme_changed(self, theme: Theme) -> None:
         for widget in list(self._aware_widgets):
+            if widget is None:
+                continue
             hook = getattr(widget, "apply_ghost_theme", None)
             if callable(hook):
                 hook(theme)
         self.themeChanged.emit(theme)
+
+    @staticmethod
+    def _theme_cache_key(theme: Theme) -> tuple:
+        font_key = tuple(sorted((role, font.family, font.size, font.weight) for role, font in theme.fonts.items()))
+        return (
+            theme.id,
+            theme.version,
+            theme.mode,
+            tuple(sorted(theme.colors.items())),
+            tuple(sorted(theme.metrics.items())),
+            font_key,
+            theme.icons.provider,
+            theme.icons.default_mode,
+            tuple(sorted(theme.icons.sizes.items())),
+        )
 
     @staticmethod
     def _palette(theme: Theme) -> QtGui.QPalette:

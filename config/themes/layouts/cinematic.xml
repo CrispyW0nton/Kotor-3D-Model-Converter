@@ -22,5 +22,16 @@
         <panelSpacing value="4"/>
         <toolbarSpacing value="3"/>
         <splitterHandleWidth value="6"/>
+        <inputHeight value="24"/>
+        <comboHeight value="24"/>
+        <spinboxHeight value="24"/>
+        <tabHeight value="24"/>
+        <tableRowHeight value="21"/>
+        <treeRowHeight value="21"/>
+        <groupboxMargin value="6"/>
+        <groupboxSpacing value="3"/>
+        <panelHeaderHeight value="26"/>
+        <viewportToolbarHeight value="32"/>
+        <transformBarHeight value="28"/>
     </spacing>
 </layout>

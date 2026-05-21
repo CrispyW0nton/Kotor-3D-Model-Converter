@@ -57,3 +57,15 @@ class SequenceTransportBar(QtWidgets.QWidget):
 
     def set_playing(self, playing: bool) -> None:
         self.play_btn.setText("Pause" if playing else "Play")
+
+    def apply_ghost_layout(self, layout) -> None:
+        height = max(22, layout.spacing_value("inputHeight", layout.toolbar("viewport").height - 8))
+        spacing = layout.spacing_value("toolbarSpacing", 4)
+        if self.layout() is not None:
+            self.layout().setSpacing(spacing)
+            self.layout().setContentsMargins(spacing, spacing, spacing, spacing)
+        for button in self.findChildren(QtWidgets.QPushButton):
+            button.setMinimumHeight(height)
+            button.setMaximumHeight(height + 4)
+        for widget in [*self.findChildren(QtWidgets.QSpinBox), *self.findChildren(QtWidgets.QComboBox)]:
+            widget.setMinimumHeight(height)

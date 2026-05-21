@@ -37,6 +37,32 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self._build_menu()
         self._build_statusbar()
         self._build_central()
+        theme_manager = getattr(parent, "theme_manager", None)
+        layout_manager = getattr(parent, "layout_manager", None)
+        if theme_manager is not None:
+            theme_manager.register_theme_aware_widget(self)
+            self.apply_ghost_theme(theme_manager.current_theme or theme_manager.get_theme())
+        if layout_manager is not None:
+            self.apply_ghost_layout(layout_manager.current_layout or layout_manager.get_layout())
+
+    def apply_ghost_theme(self, theme) -> None:
+        for viewport in (getattr(self, "source_viewport", None), getattr(self, "target_viewport", None)):
+            hook = getattr(viewport, "apply_ghost_theme", None)
+            if callable(hook):
+                hook(theme)
+        self.statusBar().setStyleSheet(
+            f"background:{theme.color('toolbar.background')}; color:{theme.color('text.secondary')};"
+        )
+
+    def apply_ghost_layout(self, layout) -> None:
+        self.resize(layout.main_width, layout.main_height)
+        for splitter in self.findChildren(QtWidgets.QSplitter):
+            splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", 6))
+        button_height = max(22, layout.toolbar("viewport").height - 8)
+        for button in self.findChildren(QtWidgets.QPushButton):
+            button.setMinimumHeight(button_height)
+        for widget in [*self.findChildren(QtWidgets.QComboBox), *self.findChildren(QtWidgets.QSpinBox), *self.findChildren(QtWidgets.QDoubleSpinBox)]:
+            widget.setMinimumHeight(layout.spacing_value("inputHeight", 24))
 
     def _build_actions(self) -> None:
         self.close_action = QtGui.QAction("Close", self)

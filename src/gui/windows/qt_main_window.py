@@ -695,7 +695,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         initial_layout = self.layout_manager.get_layout()
         self.resize(initial_layout.main_width, initial_layout.main_height)
         self.setMinimumSize(1100, 700)
-        self._apply_theme()
+        update_legacy_palette(self.theme_manager.get_theme())
         self._build_actions()
         self._build_menu()
         self._build_toolbar()
@@ -889,6 +889,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "apply_ghost_theme"):
             viewport.apply_ghost_theme(theme)
+        for widget in self.findChildren(QtWidgets.QWidget):
+            if widget is viewport:
+                continue
+            hook = getattr(widget, "apply_ghost_theme", None)
+            if callable(hook):
+                hook(theme)
 
     def _on_theme_changed(self, theme) -> None:
         update_legacy_palette(theme)

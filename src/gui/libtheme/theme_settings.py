@@ -15,8 +15,12 @@ class ThemeLayoutSettings:
     selected_layout: str = "default"
     button_mode_override: str = ""
     icon_size_override: int = 0
+    density_override: str = ""
     hot_reload_enabled: bool = False
     last_known_os_theme: str = "dark"
+    last_theme_editor_section: str = "Theme"
+    user_theme_dir: str = ""
+    user_layout_dir: str = ""
     panel_sizes: dict[str, int] = field(default_factory=dict)
     splitter_sizes: dict[str, list[int]] = field(default_factory=dict)
 
@@ -31,8 +35,12 @@ class ThemeLayoutSettings:
             selected_layout=str(raw.get("selected_layout") or "default"),
             button_mode_override=str(raw.get("button_mode_override") or ""),
             icon_size_override=int(raw.get("icon_size_override") or 0),
+            density_override=str(raw.get("density_override") or ""),
             hot_reload_enabled=bool(raw.get("hot_reload_enabled", False)),
             last_known_os_theme=str(raw.get("last_known_os_theme") or "dark"),
+            last_theme_editor_section=str(raw.get("last_theme_editor_section") or "Theme"),
+            user_theme_dir=str(raw.get("user_theme_dir") or ""),
+            user_layout_dir=str(raw.get("user_layout_dir") or ""),
             panel_sizes=dict(raw.get("panel_sizes") or {}),
             splitter_sizes={key: list(value) for key, value in dict(raw.get("splitter_sizes") or {}).items()},
         )

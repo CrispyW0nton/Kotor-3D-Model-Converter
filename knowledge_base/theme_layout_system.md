@@ -69,13 +69,112 @@ layouts.
 
 `ThemeManager` loads packaged themes, then user themes, resolves manual vs
 Follow OS mode through `darkdetect`, persists selected ids, and applies a
-generated Qt stylesheet. `LayoutManager` loads packaged/user layouts, persists
-the selected layout and overrides, and applies real splitter, panel, viewport,
+generated Qt stylesheet. `ThemeApplier` caches generated stylesheets, coalesces
+rapid apply requests, skips unchanged applies, temporarily disables updates on
+the target window during bulk apply, and emits `themeChanged` once per
+successful full apply. Theme-aware widgets must not call back into
+`ThemeManager.apply_current_theme()` from their change handlers.
+
+`LayoutManager` loads packaged/user layouts, persists the selected layout and
+overrides, and applies real splitter, panel, viewport, row-height, input-height,
 and toolbar metrics.
 
 Hot reload uses `watchdog` when enabled in Settings. Theme XML changes are
 reloaded and reapplied. Layout XML changes are reloaded and the user is asked
 before the active UI is rearranged.
+
+## Theme Editor
+
+Open **Settings -> Theme/Layout -> Theme Editor...**. The editor separates:
+
+- Theme values: colours, fonts, icon provider/defaults.
+- Layout values: sizes, density, panel widths, row heights, button mode.
+
+Changing a colour, font, metric, or button mode updates only the editor preview
+pane. Use **Apply Theme** or **Apply Layout** to apply the edited values to the
+whole application. Use **Save** / **Save Theme As** / **Save Layout As** to
+write XML into the user config directory. Existing user XML receives a `.bak`
+backup before overwrite.
+
+Packaged XML should not be overwritten for personal customisation. Duplicate a
+theme or save as a user override instead.
+
+## Token Coverage
+
+Core colour tokens include:
+
+- `window.background`, `window.text`
+- `panel.background`, `panel.backgroundAlt`, `panel.border`,
+  `panel.headerBackground`, `panel.headerText`
+- `groupbox.border`, `groupbox.title`
+- `toolbar.background`, `toolbar.border`
+- `button.background`, `button.text`, `button.hover`, `button.pressed`,
+  `button.checked`, `button.checkedText`, `button.disabledBackground`,
+  `button.disabledText`
+- `input.background`, `input.text`, `input.border`, `input.focusBorder`
+- `tab.background`, `tab.selectedBackground`, `tab.text`,
+  `tab.selectedText`
+- `table.background`, `table.text`, `table.headerBackground`,
+  `table.headerText`, `table.grid`
+- `tree.background`, `tree.text`
+- `scrollbar.background`, `scrollbar.handle`
+- `selection.background`, `selection.text`
+- `viewport.background`, `viewport.gridMajor`, `viewport.gridMinor`,
+  `viewport.text`
+- `transformBar.background`, `transformBar.border`
+- `warning`, `error`, `success`, `info`
+
+Core metric tokens include:
+
+- `window.defaultWidth`, `window.defaultHeight`
+- `toolbar.height`, `toolbar.iconSize`, `toolbar.buttonHeight`,
+  `toolbar.buttonMinWidth`, `toolbar.spacing`
+- `button.height`, `button.minWidth`, `button.paddingX`, `button.paddingY`
+- `input.height`, `combo.height`, `spinbox.height`, `checkbox.spacing`
+- `tab.height`, `table.rowHeight`, `tree.rowHeight`
+- `panel.margin`, `panel.spacing`, `panel.headerHeight`,
+  `panel.minWidth`, `panel.preferredWidth`
+- `leftPanel.preferredWidth`, `rightPanel.preferredWidth`,
+  `farRightPanel.preferredWidth`, `bottomPanel.preferredHeight`
+- `groupbox.margin`, `groupbox.spacing`, `splitter.handleWidth`
+- `statusbar.height`, `viewportToolbar.height`, `transformBar.height`
+
+Font roles are `default`, `monospace`, `heading`, `small`, `viewport`, and
+`terminal`.
+
+## Fixing Widgets
+
+For ordinary controls, prefer the application stylesheet and remove local
+hardcoded stylesheets. For custom-painted widgets, add:
+
+```python
+def apply_ghost_theme(self, theme):
+    self._background = QtGui.QColor(theme.color("viewport.background"))
+    self.update()
+
+def apply_ghost_layout(self, layout):
+    self.row_height = layout.spacing_value("tableRowHeight", 22)
+    self.updateGeometry()
+```
+
+Register standalone windows with the parent `ThemeManager`, or call these hooks
+from the parent when the window is constructed. Do not trigger a full theme
+apply from inside `apply_ghost_theme`.
+
+## Performance Debugging
+
+Theme applies log stylesheet build time, application stylesheet/palette apply
+time, hook/icon refresh time, and total time. Look for repeated apply lines with
+the same theme id: that usually means a widget is creating a loop from
+`themeChanged`. Expensive fixes should happen in the widget hook, not by
+rebuilding the global stylesheet.
+
+Useful checks:
+
+```bash
+python tools/validate_themes.py
+pytest tests/test_theme_layout_loading.py -q
+```
 
 ## Troubleshooting
 

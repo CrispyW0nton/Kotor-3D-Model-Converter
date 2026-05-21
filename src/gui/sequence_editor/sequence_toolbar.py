@@ -52,3 +52,15 @@ class SequenceToolbar(QtWidgets.QWidget):
         row.addWidget(self.add_track_btn)
         row.addWidget(self.auto_key)
         row.addStretch(1)
+
+    def apply_ghost_layout(self, layout) -> None:
+        toolbar = layout.toolbar("viewport")
+        if self.layout() is not None:
+            spacing = layout.spacing_value("toolbarSpacing", 4)
+            self.layout().setSpacing(spacing)
+            self.layout().setContentsMargins(spacing, spacing, spacing, spacing)
+        for button in self.findChildren(QtWidgets.QPushButton):
+            button.setMinimumHeight(max(22, toolbar.height - 8))
+            button.setIconSize(QtCore.QSize(toolbar.icon_size, toolbar.icon_size))
+        for combo in self.findChildren(QtWidgets.QComboBox):
+            combo.setMinimumHeight(layout.spacing_value("comboHeight", max(22, toolbar.height - 10)))

@@ -17,10 +17,14 @@ class QtStylesheetBuilder:
         default_font = theme.font("default")
         heading_font = theme.font("heading")
         radius = m("border.radius", 3)
+        panel_alt = c("panel.backgroundAlt", c("panel.altBackground"))
+        button_padding_x = m("button.paddingX", m("button.paddingH", 10))
+        button_padding_y = m("button.paddingY", m("button.paddingV", 5))
+        input_height = m("input.height", max(18, m("button.height", 28) - 8))
         return f"""
         QMainWindow, QWidget {{
             background: {c('window.background')};
-            color: {c('text.primary')};
+            color: {c('window.text', c('text.primary'))};
             font-family: {default_font.family}, Segoe UI, sans-serif;
             font-size: {default_font.size}pt;
         }}
@@ -35,32 +39,32 @@ class QtStylesheetBuilder:
             color: {c('selection.text')};
         }}
         QListWidget, QTextEdit, QPlainTextEdit, QTreeWidget, QTableWidget, QTabWidget::pane {{
-            background: {c('viewport.background')};
-            color: {c('text.primary')};
+            background: {c('table.background', c('viewport.background'))};
+            color: {c('table.text', c('text.primary'))};
             border: 1px solid {c('panel.border')};
         }}
         QTabWidget::pane {{ top: -1px; }}
         QTabBar::tab {{
-            background: {c('panel.background')};
-            color: {c('text.secondary')};
+            background: {c('tab.background')};
+            color: {c('tab.text')};
             border: 1px solid {c('panel.border')};
             border-bottom-color: {c('panel.border')};
             padding: {max(4, m('panel.spacing', 4) + 2)}px 12px;
             min-width: 78px;
-            min-height: 22px;
+            min-height: {m('tab.height', 26)}px;
         }}
         QTabBar::tab:selected {{
-            background: {c('viewport.background')};
-            color: {c('accent.primary')};
+            background: {c('tab.selectedBackground')};
+            color: {c('tab.selectedText')};
             border-color: {c('accent.secondary')};
-            border-bottom-color: {c('viewport.background')};
+            border-bottom-color: {c('tab.selectedBackground')};
         }}
         QTabBar::tab:hover {{
             color: {c('accent.primary')};
             background: {c('button.hover')};
         }}
         QTabBar QToolButton {{
-            background: {c('panel.altBackground')};
+            background: {panel_alt};
             color: {c('accent.primary')};
             border: 1px solid {c('panel.border')};
             width: 22px;
@@ -80,24 +84,32 @@ class QtStylesheetBuilder:
             height: 24px;
         }}
         QHeaderView::section {{
-            background: {c('panel.altBackground')};
-            color: {c('text.primary')};
-            border: 1px solid {c('panel.border')};
+            background: {c('table.headerBackground')};
+            color: {c('table.headerText')};
+            border: 1px solid {c('table.grid', c('panel.border'))};
             padding: 4px;
+        }}
+        QTreeWidget, QTreeView {{
+            background: {c('tree.background')};
+            color: {c('tree.text')};
+        }}
+        QTableWidget, QTableView {{
+            gridline-color: {c('table.grid')};
+            alternate-background-color: {panel_alt};
         }}
         QRadioButton, QCheckBox, QGroupBox {{
             color: {c('text.primary')};
         }}
         QGroupBox {{
-            border: 1px solid {c('panel.border')};
+            border: 1px solid {c('groupbox.border')};
             border-radius: {radius}px;
-            margin-top: 8px;
-            padding-top: 8px;
+            margin-top: {m('groupbox.margin', 8)}px;
+            padding-top: {m('groupbox.margin', 8)}px;
         }}
         QGroupBox::title {{
             subcontrol-origin: margin;
             left: 8px;
-            color: {c('accent.primary')};
+            color: {c('groupbox.title')};
         }}
         QRadioButton::indicator, QCheckBox::indicator {{
             width: 13px;
@@ -117,10 +129,13 @@ class QtStylesheetBuilder:
             border: 1px solid {c('input.border')};
             border-radius: {radius}px;
             padding: 4px 6px;
-            min-height: {max(18, m('button.height', 28) - 8)}px;
+            min-height: {input_height}px;
+        }}
+        QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus, QSpinBox:focus {{
+            border-color: {c('input.focusBorder')};
         }}
         QComboBox QAbstractItemView {{
-            background: {c('panel.altBackground')};
+            background: {panel_alt};
             color: {c('text.primary')};
             selection-background-color: {c('selection.background')};
             selection-color: {c('selection.text')};
@@ -130,21 +145,25 @@ class QtStylesheetBuilder:
             color: {c('button.text')};
             border: 1px solid {c('panel.border')};
             border-radius: {radius}px;
-            padding: {m('button.paddingV', 5)}px {m('button.paddingH', 10)}px;
+            padding: {button_padding_y}px {button_padding_x}px;
             min-height: {m('button.height', 28)}px;
+            min-width: {m('button.minWidth', 76)}px;
         }}
         QPushButton:hover, QToolButton:hover {{
             background: {c('button.hover')};
             color: {c('accent.primary')};
         }}
+        QPushButton:pressed, QToolButton:pressed {{
+            background: {c('button.pressed')};
+        }}
         QPushButton:checked, QToolButton:checked {{
             background: {c('button.checked')};
-            color: {c('button.accentText')};
+            color: {c('button.checkedText', c('button.accentText'))};
             border-color: {c('accent.primary')};
         }}
         QPushButton:disabled, QToolButton:disabled {{
-            background: {c('panel.background')};
-            color: {c('text.disabled')};
+            background: {c('button.disabledBackground')};
+            color: {c('button.disabledText', c('text.disabled'))};
             border-color: {c('panel.border')};
         }}
         QPushButton[accent="true"], QToolButton[accent="true"] {{
@@ -164,7 +183,8 @@ class QtStylesheetBuilder:
             font-weight: {700 if heading_font.weight.lower() == 'bold' else 400};
         }}
         QFrame#PanelHeader {{
-            background: {c('panel.altBackground')};
+            background: {c('panel.headerBackground')};
+            color: {c('panel.headerText')};
             border-bottom: 1px solid {c('panel.border')};
         }}
         QFrame#HeaderBar, QFrame#CommandBar {{
@@ -199,12 +219,12 @@ class QtStylesheetBuilder:
             font-weight: bold;
         }}
         QScrollBar:vertical, QScrollBar:horizontal {{
-            background: {c('panel.background')};
+            background: {c('scrollbar.background')};
             border: 0;
             margin: 0;
         }}
         QScrollBar::handle:vertical, QScrollBar::handle:horizontal {{
-            background: {c('panel.border')};
+            background: {c('scrollbar.handle')};
             border-radius: {radius}px;
             min-height: 24px;
             min-width: 24px;
@@ -214,6 +234,9 @@ class QtStylesheetBuilder:
         }}
         QSplitter::handle {{
             background: {c('panel.border')};
+        }}
+        QStatusBar {{
+            min-height: {m('statusbar.height', 24)}px;
         }}
         #ViewportToolbar {{
             background: {c('toolbar.background')};

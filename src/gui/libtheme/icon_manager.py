@@ -27,8 +27,23 @@ _QTA_MAP = {
 class ThemeIconManager:
     def __init__(self, icon_dir: Path | None = None) -> None:
         self.icon_dir = icon_dir or Path(__file__).resolve().parents[1] / "icons"
+        self._cache: dict[tuple[str, str, str, int], QtGui.QIcon] = {}
+
+    def clear(self) -> None:
+        self._cache.clear()
 
     def icon(self, name: str, theme: Theme | None = None, size: int = 16) -> QtGui.QIcon:
+        theme_id = theme.id if theme is not None else ""
+        color = theme.color("accent.primary") if theme is not None else ""
+        key = (name, theme_id, color, int(size))
+        cached = self._cache.get(key)
+        if cached is not None:
+            return cached
+        icon = self._build_icon(name, theme, size)
+        self._cache[key] = icon
+        return icon
+
+    def _build_icon(self, name: str, theme: Theme | None = None, size: int = 16) -> QtGui.QIcon:
         if theme is not None and theme.icons.provider == "qtawesome":
             qta_name = _QTA_MAP.get(name)
             if qta_name:

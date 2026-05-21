@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+import time
+
 from PySide6 import QtCore, QtWidgets
 
 from .layout_model import LayoutDefinition, ToolbarLayout
+
+log = logging.getLogger(__name__)
 
 
 _BUTTON_STYLES = {
@@ -24,14 +29,23 @@ class LayoutApplier(QtCore.QObject):
     layoutChanged = QtCore.Signal(object)
 
     def apply_layout(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
-        if not window.isMaximized():
-            window.resize(layout.main_width, layout.main_height)
-        if layout.maximized:
-            window.showMaximized()
-        self._apply_splitters(layout, window)
-        self._apply_panels(layout, window)
-        self._apply_toolbars(layout, window)
+        start = time.perf_counter()
+        window.setUpdatesEnabled(False)
+        try:
+            if not window.isMaximized():
+                window.resize(layout.main_width, layout.main_height)
+            if layout.maximized:
+                window.showMaximized()
+            self._apply_splitters(layout, window)
+            self._apply_panels(layout, window)
+            self._apply_density_metrics(layout, window)
+            self._apply_toolbars(layout, window)
+            self._notify_layout_aware_widgets(layout, window)
+        finally:
+            window.setUpdatesEnabled(True)
+            window.update()
         self.layoutChanged.emit(layout)
+        log.info("Layout apply '%s': total %.1f ms", layout.id, (time.perf_counter() - start) * 1000.0)
 
     def apply_toolbar_button_mode(
         self,
@@ -64,6 +78,8 @@ class LayoutApplier(QtCore.QObject):
                 button.setIconSize(QtCore.QSize(icon_size, icon_size))
             if toolbar.height > 0:
                 button.setMinimumHeight(max(22, toolbar.height - 8))
+                button.setMaximumHeight(max(22, toolbar.height - 4))
+            button.setMinimumWidth(max(button.minimumWidth(), toolbar.icon_size + 14 if mode == "iconOnly" else 0))
 
     def _apply_toolbars(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
         main_toolbar = layout.toolbar("main")
@@ -72,6 +88,10 @@ class LayoutApplier(QtCore.QObject):
             command_bar.setVisible(main_toolbar.visible)
             command_bar.setMinimumHeight(main_toolbar.height)
             command_bar.setMaximumHeight(main_toolbar.height)
+            layout_obj = command_bar.layout()
+            if layout_obj is not None:
+                spacing = layout.spacing_value("toolbarSpacing", layout.spacing_value("toolbar.spacing", 4))
+                layout_obj.setSpacing(spacing)
             self.apply_toolbar_button_mode(
                 command_bar,
                 main_toolbar,
@@ -95,11 +115,11 @@ class LayoutApplier(QtCore.QObject):
             if mesh_tools.visible:
                 right = max(right, mesh_tools.preferred_width)
             center = max(layout.viewport.preferred_width, layout.viewport.min_width)
-            main_splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", 6))
+            main_splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", layout.spacing_value("splitter.handleWidth", 6)))
             main_splitter.setSizes([left, center, right])
         if vertical_splitter is not None:
             bottom = layout.panel("outputLog")
-            vertical_splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", 6))
+            vertical_splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", layout.spacing_value("splitter.handleWidth", 6)))
             vertical_splitter.setSizes([max(500, layout.main_height - bottom.preferred_height), bottom.preferred_height])
 
     def _apply_panels(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
@@ -129,3 +149,40 @@ class LayoutApplier(QtCore.QObject):
         if mesh_dock is not None:
             mesh_dock.setVisible(mesh_panel.visible)
             mesh_dock.resize(mesh_panel.preferred_width, max(520, mesh_panel.preferred_height))
+
+    def _apply_density_metrics(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
+        margin = layout.spacing_value("margin", 4)
+        spacing = layout.spacing_value("panelSpacing", 4)
+        input_height = layout.spacing_value("inputHeight", 0)
+        tab_height = layout.spacing_value("tabHeight", 0)
+        table_row = layout.spacing_value("tableRowHeight", 0)
+        tree_row = layout.spacing_value("treeRowHeight", table_row)
+        group_margin = layout.spacing_value("groupboxMargin", margin + 4)
+        group_spacing = layout.spacing_value("groupboxSpacing", spacing)
+        for child in window.findChildren(QtWidgets.QWidget):
+            child_layout = child.layout()
+            if child_layout is not None:
+                child_layout.setSpacing(spacing)
+                if isinstance(child_layout, (QtWidgets.QVBoxLayout, QtWidgets.QHBoxLayout, QtWidgets.QGridLayout, QtWidgets.QFormLayout)):
+                    child_layout.setContentsMargins(margin, margin, margin, margin)
+                if isinstance(child, QtWidgets.QGroupBox):
+                    child_layout.setContentsMargins(group_margin, group_margin, group_margin, group_margin)
+                    child_layout.setSpacing(group_spacing)
+            if input_height and isinstance(child, (QtWidgets.QLineEdit, QtWidgets.QComboBox, QtWidgets.QSpinBox, QtWidgets.QDoubleSpinBox)):
+                child.setMinimumHeight(input_height)
+                child.setMaximumHeight(max(input_height + 6, input_height))
+            if isinstance(child, (QtWidgets.QTableWidget, QtWidgets.QTableView)) and table_row:
+                child.verticalHeader().setDefaultSectionSize(table_row)
+            if isinstance(child, (QtWidgets.QTreeWidget, QtWidgets.QTreeView)) and tree_row:
+                try:
+                    child.setUniformRowHeights(True)
+                except Exception:
+                    pass
+            if isinstance(child, QtWidgets.QTabWidget) and tab_height:
+                child.tabBar().setMinimumHeight(tab_height)
+
+    def _notify_layout_aware_widgets(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
+        for widget in window.findChildren(QtWidgets.QWidget):
+            hook = getattr(widget, "apply_ghost_layout", None)
+            if callable(hook):
+                hook(layout)

@@ -200,9 +200,10 @@ groups in [`pyproject.toml`](pyproject.toml):
 
 ### 4.4 Themes and layouts
 
-GhostRigger now has XML-driven theme and layout support. The original green
-high-contrast look is preserved as the selectable **Matrix** theme, but it is no
-longer hardcoded as the only application style.
+GhostRigger now has XML-driven theme and layout support across the Qt shell and
+major tool windows. The original green high-contrast look is preserved as the
+selectable **Matrix** theme, but it is no longer hardcoded as the only
+application style.
 
 Packaged themes live in `config/themes/themes/`: `matrix.xml`, `dark.xml`,
 `light.xml`, and `classic.xml`. Packaged layouts live in
@@ -212,9 +213,27 @@ Packaged themes live in `config/themes/themes/`: `matrix.xml`, `dark.xml`,
 Use **Settings -> Theme/Layout** to choose a manual theme, follow the native OS
 light/dark mode through `darkdetect`, select a layout, override toolbar button
 modes, adjust icon sizing, and enable XML hot reload during theme development.
+The Theme tab uses **Apply Theme** for full-application application; lightweight
+preview editing lives in the Theme Editor.
+
+The Theme Editor can duplicate, validate, preview, and save theme colour/font
+tokens and layout density metrics without hand-editing XML. Its preview pane is
+local to the editor until **Apply Theme** or **Apply Layout** is clicked, so
+colour and size experiments do not repeatedly restyle the entire app.
+
+Layouts are:
+
+- **Default**: balanced 1080p/1440p tool layout.
+- **Compact**: tighter margins, shorter rows/buttons, and icon-forward toolbars
+  for more viewport room.
+- **Wide**: wider side panels and viewport proportions for ultrawide displays.
+- **Cinematic**: viewport/camera workspace priority with less surrounding
+  clutter.
+
 Community themes and layouts can be placed in the platform-specific
-GhostRigger user config directory under `themes/` and `layouts/`; user files
-with matching ids intentionally override packaged defaults.
+GhostRigger user config directory under `GhostRigger/themes/` and
+`GhostRigger/layouts/`; user files with matching ids intentionally override
+packaged defaults. The editor writes backups before overwriting user XML.
 
 ---
 

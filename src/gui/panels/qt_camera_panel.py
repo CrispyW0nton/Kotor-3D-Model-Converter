@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.gui.camera.camera_manager import CameraManager
 from src.gui.camera.camera_model import CAMERA_TYPES, GhostRiggerCamera
@@ -167,16 +167,37 @@ class QtCameraPanel(QtWidgets.QWidget):
         form.addRow("", action_row)
         root.addWidget(editor)
 
-        self.setStyleSheet(
-            "QWidget { color:#d7dde6; }"
-            "QGroupBox { color:#d7dde6; border:1px solid #26362e; margin-top:8px; padding-top:7px; }"
-            "QGroupBox::title { subcontrol-origin:margin; left:6px; padding:0 4px; }"
-            "QTreeWidget, QComboBox, QDoubleSpinBox, QSpinBox, QLineEdit { background:#101713; color:#e8f0ec; border:1px solid #26362e; }"
-            "QTreeWidget::item:selected { background:#2e6149; color:#ffffff; }"
-            "QHeaderView::section { background:#151d19; color:#aeb9b3; border:1px solid #26362e; padding:2px; }"
-            "QPushButton { background:#18241e; color:#e8f0ec; border:1px solid #314237; padding:2px 6px; }"
-        )
         self._set_editor_enabled(False)
+
+    def apply_ghost_theme(self, theme) -> None:
+        self.setStyleSheet("")
+        disabled = QtGui.QBrush(QtGui.QColor(theme.color("text.disabled")))
+        for index in range(self.tree.topLevelItemCount()):
+            item = self.tree.topLevelItem(index)
+            camera = self._camera_from_item(item)
+            if camera is not None and (not camera.enabled or not camera.visible):
+                for col in range(self.tree.columnCount()):
+                    item.setForeground(col, disabled)
+
+    def apply_ghost_layout(self, layout) -> None:
+        margin = layout.spacing_value("margin", 4)
+        spacing = layout.spacing_value("panelSpacing", 4)
+        if self.layout() is not None:
+            self.layout().setContentsMargins(margin, margin, margin, margin)
+            self.layout().setSpacing(spacing)
+        row_height = layout.spacing_value("treeRowHeight", 22)
+        self.tree.setUniformRowHeights(True)
+        self.tree.header().setMinimumSectionSize(max(36, row_height + 14))
+        input_height = layout.spacing_value("inputHeight", 24)
+        for widget in [
+            *self.findChildren(QtWidgets.QLineEdit),
+            *self.findChildren(QtWidgets.QComboBox),
+            *self.findChildren(QtWidgets.QSpinBox),
+            *self.findChildren(QtWidgets.QDoubleSpinBox),
+        ]:
+            widget.setMinimumHeight(input_height)
+        for button in self.findChildren(QtWidgets.QPushButton):
+            button.setMinimumHeight(max(22, layout.toolbar("viewport").height - 8))
 
     def set_model(self, model) -> None:
         self._model = model

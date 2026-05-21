@@ -8,7 +8,7 @@ from typing import Any
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from src.gui.assets.qt_theme import C, apply_theme
+from src.gui.assets.qt_theme import C, apply_theme, update_legacy_palette
 from src.sequence.sequence_binding import SequenceTargetType
 from src.sequence.sequence_clipboard import SequenceClipboard
 from src.sequence.sequence_evaluator import SequenceEvaluator, quat_to_euler_degrees
@@ -72,7 +72,17 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self._sync_preview_target()
         self._connect()
         self._install_shortcuts()
-        apply_theme(self)
+        theme_manager = getattr(main_window, "theme_manager", None)
+        layout_manager = getattr(main_window, "layout_manager", None)
+        if theme_manager is not None:
+            theme_manager.register_theme_aware_widget(self)
+            theme = theme_manager.current_theme or theme_manager.get_theme()
+            update_legacy_palette(theme)
+            self.apply_ghost_theme(theme)
+        else:
+            apply_theme(self)
+        if layout_manager is not None:
+            self.apply_ghost_layout(layout_manager.current_layout or layout_manager.get_layout())
         self._new_sequence(initial=True)
         self._load_persisted_settings()
         self._play_timer = QtCore.QTimer(self)
@@ -80,6 +90,30 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self._play_timer.timeout.connect(self._tick_playback)
         if self.source_viewport is not None and hasattr(self.source_viewport, "nodeMoved"):
             self.source_viewport.nodeMoved.connect(self._on_scene_object_changed)
+
+    def apply_ghost_theme(self, theme) -> None:
+        update_legacy_palette(theme)
+        self.status.setStyleSheet(f"color:{theme.color('text.secondary')}; padding:3px 8px;")
+        for widget_name in ("timeline", "curve_editor", "outliner", "properties_panel", "transport", "toolbar"):
+            widget = getattr(self, widget_name, None)
+            hook = getattr(widget, "apply_ghost_theme", None)
+            if callable(hook):
+                hook(theme)
+            elif widget is not None:
+                widget.update()
+
+    def apply_ghost_layout(self, layout) -> None:
+        toolbar = layout.toolbar("viewport")
+        for button in self.findChildren(QtWidgets.QPushButton):
+            button.setMinimumHeight(max(22, toolbar.height - 8))
+            button.setIconSize(QtCore.QSize(toolbar.icon_size, toolbar.icon_size))
+        self.main_splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", 6))
+        self.outliner.setMinimumWidth(layout.panel("animationLibrary").min_width)
+        self.properties_panel.setMinimumWidth(layout.panel("properties").min_width)
+        if hasattr(self.timeline, "apply_ghost_layout"):
+            self.timeline.apply_ghost_layout(layout)
+        if hasattr(self.transport, "apply_ghost_layout"):
+            self.transport.apply_ghost_layout(layout)
 
     def _build_actions(self) -> None:
         self.new_action = QtGui.QAction("New Sequence", self)

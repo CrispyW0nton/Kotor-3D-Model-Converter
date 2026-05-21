@@ -43,6 +43,32 @@ class QtMeshToolsPanel(QtWidgets.QWidget):
         root.addWidget(self.options_widget)
         root.addWidget(self._status_section(), 1)
 
+    def apply_ghost_theme(self, theme) -> None:
+        for value in self._status_labels.values():
+            value.setStyleSheet(f"color:{theme.color('text.secondary')};")
+
+    def apply_ghost_layout(self, layout) -> None:
+        margin = layout.spacing_value("margin", 4)
+        spacing = layout.spacing_value("panelSpacing", 4)
+        if self.layout() is not None:
+            self.layout().setContentsMargins(margin, margin, margin, margin)
+            self.layout().setSpacing(spacing)
+        for group in self.findChildren(QtWidgets.QGroupBox):
+            group_layout = group.layout()
+            if group_layout is not None:
+                group_layout.setContentsMargins(
+                    layout.spacing_value("groupboxMargin", margin + 4),
+                    layout.spacing_value("groupboxMargin", margin + 4),
+                    layout.spacing_value("groupboxMargin", margin + 4),
+                    layout.spacing_value("groupboxMargin", margin + 4),
+                )
+                group_layout.setSpacing(layout.spacing_value("groupboxSpacing", spacing))
+        button_height = max(22, layout.toolbar("viewport").height - 8)
+        for button in self.findChildren(QtWidgets.QPushButton):
+            button.setMinimumHeight(button_height)
+        for widget in [*self.findChildren(QtWidgets.QSpinBox), *self.findChildren(QtWidgets.QDoubleSpinBox), *self.findChildren(QtWidgets.QComboBox)]:
+            widget.setMinimumHeight(layout.spacing_value("inputHeight", 24))
+
     def _selection_tools_section(self) -> QtWidgets.QGroupBox:
         box = QtWidgets.QGroupBox("Selection Tools")
         grid = QtWidgets.QGridLayout(box)

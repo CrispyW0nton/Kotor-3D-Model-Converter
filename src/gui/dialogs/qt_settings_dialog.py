@@ -11,6 +11,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from src.gui.qt_lib.assets.qt_theme import C
 from src.gui.libtheme import LayoutManager, ThemeManager
 from src.gui.libtheme.style_tokens import VALID_BUTTON_MODES
+from src.gui.libtheme.theme_editor_window import ThemeEditorWindow
 from src.gui.libtheme.theme_settings import ThemeLayoutSettings
 from src.gui.qt_lib.rendering.viewport_navigation import (
     DEFAULT_VIEWPORT_NAVIGATION_PROFILE,
@@ -102,13 +103,18 @@ class QtSettingsDialog(QtWidgets.QDialog):
         theme_form.addRow("OS Light Theme:", self.light_theme_combo)
         theme_form.addRow("OS Dark Theme:", self.dark_theme_combo)
         theme_buttons = QtWidgets.QHBoxLayout()
-        preview_theme = QtWidgets.QPushButton("Preview Theme")
+        preview_theme = QtWidgets.QPushButton("Apply Theme")
+        preview_theme.setObjectName("ApplyThemeButton")
+        preview_theme.setToolTip("Apply the selected theme to the application.")
         preview_theme.clicked.connect(self._preview_theme)
+        theme_editor = QtWidgets.QPushButton("Theme Editor...")
+        theme_editor.clicked.connect(self._open_theme_editor)
         validate_themes = QtWidgets.QPushButton("Validate Theme Files")
         validate_themes.clicked.connect(self._show_theme_diagnostics)
         open_themes = QtWidgets.QPushButton("Open Themes Folder")
         open_themes.clicked.connect(lambda: self._open_folder(self.theme_manager.user_theme_dir if self.theme_manager else Path("config/themes/themes")))
         theme_buttons.addWidget(preview_theme)
+        theme_buttons.addWidget(theme_editor)
         theme_buttons.addWidget(validate_themes)
         theme_buttons.addWidget(open_themes)
         theme_form.addRow("", theme_buttons)
@@ -274,8 +280,12 @@ class QtSettingsDialog(QtWidgets.QDialog):
                 "selected_layout": self.layout_combo.currentData(),
                 "button_mode_override": self.button_mode_combo.currentData() or "",
                 "icon_size_override": self.icon_size_spin.value(),
+                "density_override": self.theme_layout_settings.density_override,
                 "hot_reload_enabled": self.hot_reload_check.isChecked(),
                 "last_known_os_theme": self.theme_layout_settings.last_known_os_theme,
+                "last_theme_editor_section": self.theme_layout_settings.last_theme_editor_section,
+                "user_theme_dir": self.theme_layout_settings.user_theme_dir,
+                "user_layout_dir": self.theme_layout_settings.user_layout_dir,
                 "panel_sizes": dict(self.theme_layout_settings.panel_sizes),
                 "splitter_sizes": dict(self.theme_layout_settings.splitter_sizes),
             },
@@ -296,6 +306,17 @@ class QtSettingsDialog(QtWidgets.QDialog):
             self.theme_manager.set_follow_os(True, target=self.parentWidget())
         else:
             self.theme_manager.select_theme(str(self.theme_combo.currentData() or "matrix"), target=self.parentWidget())
+
+    def _open_theme_editor(self) -> None:
+        if self.theme_manager is None or self.layout_manager is None:
+            return
+        editor = getattr(self, "_theme_editor_window", None)
+        if editor is None:
+            editor = ThemeEditorWindow(self.theme_manager, self.layout_manager, self.parentWidget())
+            self._theme_editor_window = editor
+        editor.show()
+        editor.raise_()
+        editor.activateWindow()
 
     def _preview_layout(self) -> None:
         if self.layout_manager is None or not isinstance(self.parentWidget(), QtWidgets.QMainWindow):

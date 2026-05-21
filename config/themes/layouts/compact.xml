@@ -1,8 +1,8 @@
 <layout id="compact" name="Compact" version="1">
     <mainWindow width="1360" height="820" maximized="false"/>
     <toolbars>
-        <toolbar id="main" visible="true" buttonMode="iconOnly" iconSize="18" height="34"/>
-        <toolbar id="viewport" visible="true" buttonMode="iconOnly" iconSize="16" height="30"/>
+        <toolbar id="main" visible="true" buttonMode="iconOnly" iconSize="16" height="30"/>
+        <toolbar id="viewport" visible="true" buttonMode="iconOnly" iconSize="15" height="28"/>
     </toolbars>
     <panels>
         <panel id="library" region="left" visible="true" minWidth="220" preferredWidth="260"/>
@@ -19,8 +19,19 @@
     </viewport>
     <spacing>
         <margin value="2"/>
-        <panelSpacing value="3"/>
+        <panelSpacing value="2"/>
         <toolbarSpacing value="2"/>
         <splitterHandleWidth value="5"/>
+        <inputHeight value="22"/>
+        <comboHeight value="22"/>
+        <spinboxHeight value="22"/>
+        <tabHeight value="22"/>
+        <tableRowHeight value="20"/>
+        <treeRowHeight value="20"/>
+        <groupboxMargin value="5"/>
+        <groupboxSpacing value="2"/>
+        <panelHeaderHeight value="24"/>
+        <viewportToolbarHeight value="28"/>
+        <transformBarHeight value="26"/>
     </spacing>
 </layout>
