@@ -1200,15 +1200,22 @@ class QtViewportWidget(QtWidgets.QWidget):
             except Exception:
                 node = model_root.clone_shallow()
                 node.children = []
-            node.parent = root
-            node.name = f"{instance.name}:{getattr(node, 'name', 'root')}"
-            node.position = tuple(float(v) for v in instance.transform.position[:3])
-            node.rotation = self._euler_degrees_to_quat(instance.transform.rotation)
-            setattr(node, "_gr_scene_object_id", instance.id)
-            setattr(node, "_gr_scene_object_root", True)
-            setattr(node, "_gr_scene_object_name", instance.name)
-            self._tag_scene_object_nodes(node, instance.id, node)
-            root.children.append(node)
+            wrapper_label = str(instance.name or getattr(runtime_model, "name", "Scene Object") or "Scene Object")
+            wrapper = ModelNode(name=f"{wrapper_label}:scene", flags=int(NodeFlags.HEADER))
+            wrapper.parent = root
+            wrapper.position = tuple(float(v) for v in instance.transform.position[:3])
+            wrapper.rotation = self._euler_degrees_to_quat(instance.transform.rotation)
+            setattr(wrapper, "_gr_scene_object_id", instance.id)
+            setattr(wrapper, "_gr_scene_object_root", True)
+            setattr(wrapper, "_gr_scene_object_name", instance.name)
+
+            # Preserve authored MDL node names/transforms under the scene wrapper:
+            # animations, skin bone maps, and qBone/tBone rows refer to them verbatim.
+            node.parent = wrapper
+            wrapper.children.append(node)
+            self._tag_scene_object_nodes(wrapper, instance.id, wrapper)
+            self._tag_scene_source_indices(node, runtime_model)
+            root.children.append(wrapper)
         if not root.children:
             return None
         if first_model is not None:
@@ -1234,6 +1241,33 @@ class QtViewportWidget(QtWidgets.QWidget):
             setattr(current, "_gr_scene_object_id", object_id)
             setattr(current, "_gr_scene_object_root_ref", root_node)
             stack.extend(getattr(current, "children", []) or [])
+
+    def _tag_scene_source_indices(self, copied_root, source_model) -> None:
+        """Preserve original MDL DFS indices on scene copies for qBone lookup."""
+        try:
+            source_nodes = list(source_model.all_nodes()) if hasattr(source_model, "all_nodes") else []
+        except Exception:
+            source_nodes = []
+        if not source_nodes:
+            return
+
+        copied_nodes = []
+        stack = [copied_root]
+        visited = set()
+        while stack:
+            current = stack.pop()
+            if current is None or id(current) in visited:
+                continue
+            visited.add(id(current))
+            copied_nodes.append(current)
+            stack.extend(reversed(getattr(current, "children", []) or []))
+
+        for idx, current in enumerate(copied_nodes):
+            if idx >= len(source_nodes):
+                break
+            setattr(current, "_gr_source_dfs_index", idx)
+            setattr(current, "_gr_source_model_id", id(source_model))
+            setattr(current, "_gr_source_node_name", getattr(source_nodes[idx], "name", ""))
 
     @staticmethod
     def _euler_degrees_to_quat(rotation: tuple[float, float, float]) -> tuple[float, float, float, float]:
@@ -3991,6 +4025,8 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._set_renderer_badge(False)
             return None
         self._set_renderer_badge(True)
+        img = self._draw_gpu_viewport_overlays(img, w, h)
+        img = self._draw_performance_overlay(img, w, h)
         return img
 
     def _draw_xray_grid_overlay(self, img, w: int, h: int):
@@ -4086,7 +4122,14 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._gpu_upload_model_id = 0
         return img
 
-    def _draw_cpu_overlays(self, img, w: int, h: int, *, gpu_base: bool = False):
+    def _draw_gpu_viewport_overlays(self, img, w: int, h: int):
+        """Draw screen-space viewport tools over an already-rendered GPU frame.
+
+        This intentionally does not call FrameRenderer.render() or any CPU mesh
+        rasterizer.  It only restores the interactive overlay layer that lives
+        above the GPU scene: gimbal tools, transform gizmo, HUD stats, axes,
+        selection outlines, measurement/camera helpers, and editor markers.
+        """
         if img is None:
             return None
         try:
@@ -4103,7 +4146,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             except Exception:
                 pass
             draw = ImageDraw.Draw(img, "RGBA")
-            if self._xray_mode or not gpu_base:
+            if self._xray_mode:
                 self._renderer._draw_grid(draw, w, h)
             # T405: weight heat-map runs BEFORE bones so the joint dots
             # stay clearly visible on top of the colored vertex cloud.
@@ -4122,13 +4165,6 @@ class QtViewportWidget(QtWidgets.QWidget):
             if self._renderer.show_walkmesh:
                 self._renderer._draw_walkmesh_overlay(draw, w, h)
             self._draw_camera_helpers(draw, w, h)
-            if self._renderer.show_wireframe and not gpu_base:
-                old_solid = self._renderer.show_solid
-                try:
-                    self._renderer.show_solid = False
-                    self._renderer._draw_mesh_flat(draw, img, w, h)
-                finally:
-                    self._renderer.show_solid = old_solid
             if self._ensure_renderer_gimbal_state():
                 self._draw_transform_gizmo(draw, w, h)
             self._draw_measurement_overlay(draw, w, h)
@@ -4142,6 +4178,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         except Exception as exc:
             log.debug("Qt GPU overlay draw failed: %s", exc)
             return img
+
+    def _draw_cpu_overlays(self, img, w: int, h: int, *, gpu_base: bool = False):
+        return self._draw_gpu_viewport_overlays(img, w, h)
 
     def _draw_transform_gizmo_overlay(self, img, w: int, h: int):
         if img is None:

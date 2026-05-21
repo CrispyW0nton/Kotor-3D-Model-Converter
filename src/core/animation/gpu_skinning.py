@@ -445,7 +445,16 @@ class MatrixPaletteUploader:
         nodes = list(model.all_nodes()) if hasattr(model, 'all_nodes') else []
         self._model_name = str(getattr(model, 'name', '') or '').lower()
         self._model_supermodel = str(getattr(model, 'supermodel', '') or '').lower()
-        self._model_node_count = len(nodes)
+        # KMAX scene composites add wrapper nodes above imported MDLs.  When
+        # present, use the copied MDL's original DFS span for qBone/tBone
+        # layout detection so full source-indexed arrays are not mistaken for
+        # compact bone_map arrays.
+        source_dfs_indices = [
+            int(idx)
+            for idx in (getattr(n, "_gr_source_dfs_index", None) for n in nodes)
+            if isinstance(idx, int) and idx >= 0
+        ]
+        self._model_node_count = (max(source_dfs_indices) + 1) if source_dfs_indices else len(nodes)
         self._skin_species = classify_skinning_species(
             self._model_name,
             self._model_supermodel,
@@ -466,7 +475,11 @@ class MatrixPaletteUploader:
                 continue
             name_lower = name.lower()
             self._node_lookup[name_lower] = node
-            self._name_to_dfs_index[name_lower] = dfs_idx
+            source_dfs_idx = getattr(node, "_gr_source_dfs_index", None)
+            if isinstance(source_dfs_idx, int) and source_dfs_idx >= 0:
+                self._name_to_dfs_index[name_lower] = source_dfs_idx
+            else:
+                self._name_to_dfs_index[name_lower] = dfs_idx
             parent = getattr(node, 'parent', None)
             if parent is not None:
                 parent_name = getattr(parent, 'name', '')

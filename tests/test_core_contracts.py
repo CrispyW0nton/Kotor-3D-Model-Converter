@@ -143,16 +143,47 @@ def test_viewport_render_loop_is_gpu_only() -> None:
     assert "return None" in cpu_hook
 
 
+def test_add_model_to_scene_dialog_stays_compact_under_layout_apply() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.dialogs.add_model_to_scene_dialog import AddModelToSceneDialog
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    dialog = AddModelToSceneDialog("K2:c_drdmktwo")
+    dialog.apply_ghost_layout(SimpleNamespace(dialog_width=1650))
+
+    source = inspect.getsource(QtGhostRiggerMainWindow._choose_model_import_action)
+    assert "apply_current_layout(dialog)" not in source
+    assert "apply_current_theme(dialog)" not in source
+    assert "dialog.apply_ghost_theme(active_theme)" in source
+    assert dialog.width() <= AddModelToSceneDialog.MAX_WIDTH
+    assert dialog.maximumWidth() == AddModelToSceneDialog.MAX_WIDTH
+    assert dialog.minimumWidth() == AddModelToSceneDialog.MAX_WIDTH
+
+
 def test_qt_gpu_viewport_uses_overlay_not_cpu_textured_fallback() -> None:
     import inspect
 
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
-    source = inspect.getsource(QtViewportWidget._draw_cpu_overlays)
+    frame_source = inspect.getsource(QtViewportWidget._render_frame)
+    source = inspect.getsource(QtViewportWidget._draw_gpu_viewport_overlays)
+    legacy_source = inspect.getsource(QtViewportWidget._draw_cpu_overlays)
+
+    assert "_draw_gpu_viewport_overlays" in frame_source
+    assert "_draw_performance_overlay" in frame_source
+    assert "self._renderer.render(" not in frame_source
     assert "_draw_mesh_textured" not in source
-    assert "not gpu_base" in source
+    assert "_draw_mesh_flat" not in source
+    assert "self._xray_mode" in source
     assert "_draw_grid" in source
     assert "_draw_stats" in source
+    assert "_draw_transform_gizmo" in source
+    assert "_draw_axes" in source
+    assert "return self._draw_gpu_viewport_overlays" in legacy_source
 
 
 def test_qt_gpu_viewport_keeps_gpu_for_wire_and_texture_off_modes() -> None:
@@ -330,6 +361,59 @@ def test_gpu_static_mesh_prebuild_uses_ram_and_chunked_uploads() -> None:
     assert "self._start_deferred_txi_metadata(model)" in load_source
     assert "gpuUploadProgress.emit" in viewport_source
     assert "_request_render(fast=True)" in viewport_source
+
+
+def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinning() -> None:
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    root = ModelNode(name="N_Bith", flags=int(NodeFlags.HEADER), position=(9.0, 8.0, 7.0))
+    head_bone = ModelNode(name="head_g", flags=int(NodeFlags.HEADER))
+    skin = ModelNode(name="Head", flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH) | int(NodeFlags.SKIN))
+    skin.bone_map = ["N_Bith", "head_g"]
+    skin.qbone_list = [(1.0, 0.0, 0.0, 0.0)] * 3
+    skin.tbone_list = [(0.0, 0.0, 0.0)] * 3
+    root.children.append(head_bone)
+    head_bone.parent = root
+    root.children.append(skin)
+    skin.parent = root
+    model = KotorModel(name="N_Bith", root_node=root)
+
+    fake_viewport = SimpleNamespace()
+    fake_viewport._tag_scene_object_nodes = MethodType(QtViewportWidget._tag_scene_object_nodes, fake_viewport)
+    fake_viewport._tag_scene_source_indices = MethodType(QtViewportWidget._tag_scene_source_indices, fake_viewport)
+    fake_viewport._euler_degrees_to_quat = QtViewportWidget._euler_degrees_to_quat
+
+    instance = SimpleNamespace(
+        id="scene-object-1",
+        name="Bith Actor",
+        visible=True,
+        metadata={"_runtime_model": model},
+        transform=SimpleNamespace(position=(1.0, 2.0, 3.0), rotation=(0.0, 0.0, 0.0)),
+    )
+
+    composite = QtViewportWidget._build_scene_composite_model(fake_viewport, [instance], "Untitled Scene")
+    scene_wrapper = composite.root_node.children[0]
+    placed_root = scene_wrapper.children[0]
+    placed_skin = placed_root.children[1]
+
+    assert scene_wrapper.name == "Bith Actor:scene"
+    assert scene_wrapper.position == (1.0, 2.0, 3.0)
+    assert placed_root.name == "N_Bith"
+    assert placed_root.position == (9.0, 8.0, 7.0)
+    assert getattr(scene_wrapper, "_gr_scene_object_name") == "Bith Actor"
+    assert placed_skin.bone_map[0] == placed_root.name
+    assert getattr(placed_skin, "_gr_scene_object_id") == "scene-object-1"
+
+    uploader = MatrixPaletteUploader(max_bones=4)
+    uploader.build_inverse_bind_pose(composite)
+    assert uploader._name_to_dfs_index["n_bith"] == 0
+    assert uploader._name_to_dfs_index["head_g"] == 1
+    assert uploader._name_to_dfs_index["head"] == 2
+    assert uploader._model_node_count == 3
+    uploader.compute_skin_node_palette(placed_skin, SimpleNamespace(nodes={}))
+    assert uploader._skin_inverse_bind_source == "qBone_tBone_dfs_indexed_TR_no_invert"
 
 
 def test_model_load_worker_uses_single_read_and_gpu_prebuild() -> None:
@@ -1117,8 +1201,9 @@ def test_qt_viewport_gpu_grid_is_native_and_xray_is_overlay_only() -> None:
     assert "vao.render(moderngl.LINES)" in gpu_source
     render_source = inspect.getsource(GpuRenderer._render_gpu)
     assert "self._draw_grid(ctx, mvp)" in render_source
-    overlay_source = inspect.getsource(QtViewportWidget._draw_cpu_overlays)
-    assert "self._xray_mode or not gpu_base" in overlay_source
+    overlay_source = inspect.getsource(QtViewportWidget._draw_gpu_viewport_overlays)
+    assert "if self._xray_mode" in overlay_source
+    assert "not gpu_base" not in overlay_source
     event_source = inspect.getsource(QtViewportWidget.eventFilter)
     assert "QtCore.Qt.Key_G" in event_source
     assert "self.grid_button.click()" in event_source

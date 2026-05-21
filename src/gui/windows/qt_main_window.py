@@ -4962,8 +4962,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         dialog = AddModelToSceneDialog(model_label, self)
         try:
             self.theme_manager.register_theme_aware_widget(dialog)
-            self.theme_manager.apply_current_theme(dialog)
-            self.layout_manager.apply_current_layout(dialog)
+            active_theme = self.theme_manager.current_theme or self.theme_manager.get_theme()
+            if active_theme.is_native():
+                dialog.setStyleSheet("")
+            else:
+                dialog.apply_ghost_theme(active_theme)
+            active_layout = self.layout_manager.current_layout or self.layout_manager.get_layout()
+            dialog.apply_ghost_layout(active_layout)
         except Exception:
             pass
         if dialog.exec() != QtWidgets.QDialog.Accepted:

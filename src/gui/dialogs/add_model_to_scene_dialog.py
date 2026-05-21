@@ -17,27 +17,37 @@ class AddModelToSceneChoice(str, Enum):
 class AddModelToSceneDialog(QtWidgets.QDialog):
     """Modal dialog with unambiguous scene import choices."""
 
+    MIN_WIDTH = 420
+    DEFAULT_WIDTH = 460
+    MAX_WIDTH = 520
+
     def __init__(self, model_label: str = "model", parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
         self.choice = AddModelToSceneChoice.CANCEL
         self.setWindowTitle("Add Model to Scene")
         self.setModal(True)
+        self.setSizeGripEnabled(False)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         self._build(model_label)
+        self.apply_ghost_layout(None)
 
     def _build(self, model_label: str) -> None:
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(8)
+        root.setSizeConstraint(QtWidgets.QLayout.SetFixedSize)
 
         message = QtWidgets.QLabel(
             "The current scene already contains objects. What would you like to do?"
         )
         message.setWordWrap(True)
+        message.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
         root.addWidget(message)
 
         detail = QtWidgets.QLabel(str(model_label or ""))
         detail.setObjectName("DialogSubtleLabel")
         detail.setWordWrap(True)
+        detail.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
         root.addWidget(detail)
 
         self.remember_check = QtWidgets.QCheckBox("Remember my choice for this session")
@@ -83,5 +93,9 @@ class AddModelToSceneDialog(QtWidgets.QDialog):
         )
 
     def apply_ghost_layout(self, layout) -> None:
-        width = int(getattr(layout, "dialog_width", 420) or 420)
-        self.resize(max(360, width), self.sizeHint().height())
+        requested = int(getattr(layout, "dialog_width", self.DEFAULT_WIDTH) or self.DEFAULT_WIDTH)
+        width = min(self.MAX_WIDTH, max(self.MIN_WIDTH, requested))
+        self.setMinimumWidth(width)
+        self.setMaximumWidth(width)
+        self.adjustSize()
+        self.resize(width, self.sizeHint().height())
