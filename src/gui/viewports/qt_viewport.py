@@ -13,7 +13,7 @@ from typing import Optional, Tuple
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from src.gui.qt_lib.assets.qt_theme import make_horizontal_overflow_area
+from src.gui.qt_lib.assets.qt_theme import QtFlowLayout, make_horizontal_overflow_area
 from src.gui.qt_lib.rendering.qt_gpu_renderer import (
     GpuRenderer,
     clear_prebuilt_static_gpu_mesh_data,
@@ -456,6 +456,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._compact_controls = bool(compact_controls)
         self.camera = ArcBallCamera()
         self._renderer = FrameRenderer(self.camera)
+        self._renderer.show_gimbal = bool(getattr(self._renderer, "show_gimbal", True))
         self.model = None
         self.on_bone_selected = None
         self.on_node_selected = None
@@ -592,6 +593,50 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._selection_rubber_band = QtWidgets.QRubberBand(QtWidgets.QRubberBand.Rectangle, self.canvas)
         self._selection_rubber_band.hide()
 
+    def _ensure_renderer_gimbal_state(self) -> bool:
+        """Keep older/reloaded FrameRenderer instances compatible with the gimbal UI."""
+
+        if not hasattr(self._renderer, "show_gimbal"):
+            self._renderer.show_gimbal = True
+        visible = bool(getattr(self._renderer, "show_gimbal", True))
+        if hasattr(self, "gimbal_button"):
+            self.gimbal_button.blockSignals(True)
+            self.gimbal_button.setChecked(visible)
+            self.gimbal_button.blockSignals(False)
+        return visible
+
+    def _set_renderer_gimbal_visible(self, visible: bool) -> None:
+        self._renderer.show_gimbal = bool(visible)
+        self._transform_gizmo.visible = bool(visible)
+
+    def _active_gizmo_node(self):
+        node = getattr(self._renderer, "selected_node", None)
+        if node is not None:
+            return node
+        root_node = getattr(self.model, "root_node", None) if self.model is not None else None
+        if root_node is not None and not self._renderer.is_hidden_bone_name(getattr(root_node, "name", "")):
+            self._renderer.selected_node = root_node
+            return root_node
+        return None
+
+    def _gizmo_world_position(self, node) -> tuple[float, float, float] | None:
+        if node is None:
+            return None
+        if self._is_external_skeleton_node(node):
+            return self._external_overlay_world_position(node)
+        if self._is_selected_model_root(node):
+            try:
+                bb_min, bb_max = self._renderer._get_render_bounds()
+                return (
+                    (float(bb_min[0]) + float(bb_max[0])) * 0.5,
+                    (float(bb_min[1]) + float(bb_max[1])) * 0.5,
+                    (float(bb_min[2]) + float(bb_max[2])) * 0.5,
+                )
+            except Exception:
+                pass
+        wp, _wo, _is_id = self._renderer._node_world_transform(node)
+        return (float(wp[0]), float(wp[1]), float(wp[2]))
+
     @property
     def navigation_profile(self) -> str:
         return self._navigation_profile
@@ -636,13 +681,19 @@ class QtViewportWidget(QtWidgets.QWidget):
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
+        self._root_layout = root
 
         tb = QtWidgets.QFrame()
         tb.setObjectName("ViewportToolbar")
-        tb.setFixedHeight(30)
-        row = QtWidgets.QHBoxLayout(tb)
+        tb.setMinimumHeight(30)
+        self.viewport_toolbar = tb
+        row = QtFlowLayout(
+            tb,
+            margin=0,
+            hspacing=2 if self._compact_controls else 3,
+            vspacing=2,
+        )
         row.setContentsMargins(4 if self._compact_controls else 5, 3, 4 if self._compact_controls else 5, 3)
-        row.setSpacing(2 if self._compact_controls else 3)
 
         self.wire_button = self._button(
             self._toolbar_text("Wire  W", "W"),
@@ -756,7 +807,6 @@ class QtViewportWidget(QtWidgets.QWidget):
             tooltip="Lock viewport navigation to the active scene camera",
         )
         row.addWidget(self.lock_camera_button)
-        row.addStretch(1)
 
         self.canvas = QtWidgets.QLabel("No model loaded")
         self.canvas.setObjectName("ViewportCanvas")
@@ -834,6 +884,23 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._ortho_mode: bool = False
         self._reposition_snap_view()
 
+    def take_viewport_toolbar(self) -> QtWidgets.QWidget | None:
+        """Detach the viewport tool strip so the application shell can host it."""
+
+        toolbar_scroll = getattr(self, "viewport_toolbar_scroll", None)
+        toolbar = getattr(self, "viewport_toolbar", None)
+        if toolbar_scroll is None:
+            return toolbar
+        layout = getattr(self, "_root_layout", None) or self.layout()
+        if layout is not None and layout.indexOf(toolbar_scroll) >= 0:
+            layout.removeWidget(toolbar_scroll)
+        if toolbar is not None and hasattr(toolbar_scroll, "takeWidget"):
+            toolbar_scroll.takeWidget()
+        toolbar_scroll.setParent(None)
+        toolbar_scroll.deleteLater()
+        self.viewport_toolbar_scroll = None
+        return toolbar
+
     def _button(
         self,
         text: str,
@@ -906,13 +973,61 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._thumbnail_widget.apply_ghost_theme(theme)
         self._request_render(fast=True)
 
+    def apply_native_theme(self) -> None:
+        self._current_theme = None
+        self.setStyleSheet("")
+        for child in self.findChildren(QtWidgets.QWidget):
+            child.setStyleSheet("")
+        self._apply_native_palette_to_renderers()
+        self._ensure_renderer_gimbal_state()
+        self._request_render(fast=True)
+
+    @staticmethod
+    def _palette_rgb(palette: QtGui.QPalette, role: QtGui.QPalette.ColorRole) -> tuple[int, int, int]:
+        color = palette.color(role)
+        return (color.red(), color.green(), color.blue())
+
+    def _apply_native_palette_to_renderers(self) -> None:
+        app = QtWidgets.QApplication.instance()
+        palette = app.palette() if app is not None else self.palette()
+        native_colors = {
+            "window": self._palette_rgb(palette, QtGui.QPalette.ColorRole.Window),
+            "base": self._palette_rgb(palette, QtGui.QPalette.ColorRole.Base),
+            "text": self._palette_rgb(palette, QtGui.QPalette.ColorRole.Text),
+            "button": self._palette_rgb(palette, QtGui.QPalette.ColorRole.Button),
+            "button_text": self._palette_rgb(palette, QtGui.QPalette.ColorRole.ButtonText),
+            "mid": self._palette_rgb(palette, QtGui.QPalette.ColorRole.Mid),
+            "highlight": self._palette_rgb(palette, QtGui.QPalette.ColorRole.Highlight),
+            "highlighted_text": self._palette_rgb(palette, QtGui.QPalette.ColorRole.HighlightedText),
+        }
+        if hasattr(self._renderer, "set_native_palette_colors"):
+            self._renderer.set_native_palette_colors(**native_colors)
+        elif hasattr(self._renderer, "reset_theme_colors"):
+            self._renderer.reset_theme_colors()
+        if self._gpu_renderer is not None:
+            if hasattr(self._gpu_renderer, "set_native_palette_colors"):
+                self._gpu_renderer.set_native_palette_colors(
+                    base=native_colors["base"],
+                    text=native_colors["text"],
+                    highlight=native_colors["highlight"],
+                )
+            elif hasattr(self._gpu_renderer, "reset_theme_colors"):
+                self._gpu_renderer.reset_theme_colors()
+
     def apply_ghost_layout(self, layout) -> None:
         toolbar = self.findChild(QtWidgets.QFrame, "ViewportToolbar")
         toolbar_layout = layout.toolbar("viewport")
         if toolbar is not None:
             toolbar.setVisible(toolbar_layout.visible and layout.viewport.toolbar_visible)
             toolbar.setMinimumHeight(toolbar_layout.height)
-            toolbar.setMaximumHeight(toolbar_layout.height)
+            toolbar.setMaximumHeight(16777215)
+        toolbar_scroll = getattr(self, "viewport_toolbar_scroll", None)
+        if toolbar_scroll is not None:
+            toolbar_scroll.setVisible(toolbar_layout.visible and layout.viewport.toolbar_visible)
+            toolbar_scroll.setFixedHeight(max(toolbar_layout.height + 14, toolbar_layout.height))
+            parent = toolbar_scroll.parentWidget()
+            if parent is not None and parent.objectName() == "ViewportToolbarBand":
+                parent.setFixedHeight(toolbar_scroll.height())
         self._compact_controls = bool(layout.viewport.toolbar_compact)
         mode = getattr(layout.viewport, "toolbar_button_mode", toolbar_layout.button_mode)
         icon_size = toolbar_layout.icon_size
@@ -1167,6 +1282,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         theme = getattr(self, "_current_theme", None)
         if theme is not None and self._gpu_renderer is not None and hasattr(self._gpu_renderer, "set_theme_colors"):
             self._gpu_renderer.set_theme_colors(theme)
+        elif self._gpu_renderer is not None:
+            self._apply_native_palette_to_renderers()
 
     def set_game_library(self, library, game_tag: str = "K1") -> None:
         self._renderer.tex_cache.set_game_library(library, game_tag)
@@ -1508,9 +1625,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._request_render()
 
     def toggle_gimbal(self, checked: Optional[bool] = None) -> None:
-        self._renderer.show_gimbal = bool(checked) if checked is not None else not self._renderer.show_gimbal
-        self._transform_gizmo.visible = bool(self._renderer.show_gimbal)
-        self.gimbal_button.setChecked(self._renderer.show_gimbal)
+        current = self._ensure_renderer_gimbal_state()
+        self._set_renderer_gimbal_visible(bool(checked) if checked is not None else not current)
+        self.gimbal_button.setChecked(self._ensure_renderer_gimbal_state())
         self._request_render()
 
     def toggle_measurement_mode(self, checked: Optional[bool] = None) -> None:
@@ -3756,7 +3873,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._set_renderer_badge(True)
                 return self._draw_cpu_overlays(img, w, h, gpu_base=True)
         self._set_renderer_badge(False)
-        old_show_gimbal = getattr(self._renderer, "show_gimbal", False)
+        old_show_gimbal = self._ensure_renderer_gimbal_state()
         try:
             self._renderer.show_gimbal = False
             img = self._renderer.render(w, h)
@@ -3787,6 +3904,8 @@ class QtViewportWidget(QtWidgets.QWidget):
             theme = getattr(self, "_current_theme", None)
             if theme is not None and hasattr(self._gpu_renderer, "set_theme_colors"):
                 self._gpu_renderer.set_theme_colors(theme)
+            else:
+                self._apply_native_palette_to_renderers()
         self._preload_gpu_textures()
         tex_cache = getattr(self._renderer, "tex_cache", None)
         textures = {
@@ -3901,7 +4020,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                     self._renderer._draw_mesh_flat(draw, img, w, h)
                 finally:
                     self._renderer.show_solid = old_solid
-            if self._renderer.show_gimbal:
+            if self._ensure_renderer_gimbal_state():
                 self._draw_transform_gizmo(draw, w, h)
             self._draw_measurement_overlay(draw, w, h)
             self._draw_selected_model_outline(draw, w, h)
@@ -3936,17 +4055,25 @@ class QtViewportWidget(QtWidgets.QWidget):
             return img
 
     def _draw_transform_gizmo(self, draw, w: int, h: int) -> None:
-        if not self._renderer.show_gimbal:
+        if not self._ensure_renderer_gimbal_state():
             return
         self._transform_gizmo.visible = True
-        node = getattr(self._renderer, "selected_node", None)
+        node = self._active_gizmo_node()
         if node is not None:
             try:
-                wp, _wo, _is_id = self._renderer._node_world_transform(node)
+                wp = self._gizmo_world_position(node)
                 setattr(node, "_gr_gizmo_world_position", wp)
             except Exception:
                 pass
         self._transform_gizmo.set_selected_object(node)
+        self._transform_gizmo.renderer.AXIS_COLORS = {
+            "X": tuple(getattr(self._renderer, "gimbal_x_color", (220, 60, 60)))[:3] + (255,),
+            "Y": tuple(getattr(self._renderer, "gimbal_y_color", (60, 220, 80)))[:3] + (255,),
+            "Z": tuple(getattr(self._renderer, "gimbal_z_color", (70, 135, 240)))[:3] + (255,),
+        }
+        self._transform_gizmo.renderer.HILITE = (
+            tuple(getattr(self._renderer, "gimbal_active_color", (255, 235, 80)))[:3] + (255,)
+        )
         self._transform_gizmo.draw(draw, self.camera, self._renderer._proj, w, h)
 
     def _draw_measurement_overlay(self, draw, w: int, h: int) -> None:
@@ -4975,7 +5102,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._store_selected_mesh_names("_gr_mesh_groups", "Mesh Group")
 
     def _update_gizmo_hover(self, event) -> None:
-        if not self._renderer.show_gimbal or getattr(self._renderer, "selected_node", None) is None:
+        if not self._ensure_renderer_gimbal_state() or self._active_gizmo_node() is None:
             return
         x, y = int(event.position().x()), int(event.position().y())
         before = self._transform_gizmo.hovered_handle
@@ -4984,16 +5111,17 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._request_render(fast=True)
 
     def _begin_transform_gizmo_drag(self, x: int, y: int) -> bool:
-        if not self._renderer.show_gimbal or getattr(self._renderer, "selected_node", None) is None:
+        node = self._active_gizmo_node()
+        if not self._ensure_renderer_gimbal_state() or node is None:
             return False
-        if bool(getattr(self._renderer.selected_node, "_gr_camera_locked", False)):
+        if bool(getattr(node, "_gr_camera_locked", False)):
             return False
         try:
-            wp, _wo, _is_id = self._renderer._node_world_transform(self._renderer.selected_node)
-            setattr(self._renderer.selected_node, "_gr_gizmo_world_position", wp)
+            wp = self._gizmo_world_position(node)
+            setattr(node, "_gr_gizmo_world_position", wp)
         except Exception:
             pass
-        self._transform_gizmo.set_selected_object(self._renderer.selected_node)
+        self._transform_gizmo.set_selected_object(node)
         handle = self._transform_gizmo.hit_test((x, y), self.camera)
         if not handle:
             return False

@@ -12,15 +12,20 @@ class QtStylesheetBuilder:
         self.icon_dir = (Path(__file__).resolve().parents[1] / "icons").as_posix()
 
     def build(self, theme: Theme) -> str:
+        if theme.is_native():
+            return ""
         c = theme.color
         m = theme.metric
         default_font = theme.font("default")
         heading_font = theme.font("heading")
+        mono_font = theme.font("monospace")
         radius = m("border.radius", 3)
         panel_alt = c("panel.backgroundAlt", c("panel.altBackground"))
         button_padding_x = m("button.paddingX", m("button.paddingH", 10))
         button_padding_y = m("button.paddingY", m("button.paddingV", 5))
         input_height = m("input.height", max(18, m("button.height", 28) - 8))
+        spin_button_width = m("spinbox.buttonWidth", 16)
+        spin_button_height = max(8, input_height // 2)
         tab_mode = theme.style("tab.mode", "standard")
         tab_border = f"1px solid {c('panel.border')}"
         tab_selected_border = c("accent.secondary")
@@ -46,6 +51,16 @@ class QtStylesheetBuilder:
         QMenuBar, QMenu, QToolBar, QStatusBar {{
             background: {c('toolbar.background')};
             color: {c('text.primary')};
+            border: 0;
+        }}
+        QToolBar#ReservedTopToolbar {{
+            background: {c('window.background')};
+            border: 0;
+            spacing: 0;
+            padding: 0;
+        }}
+        QWidget#ReservedTopUi {{
+            background: {c('window.background')};
             border: 0;
         }}
         QMenuBar {{ padding: 2px 6px; }}
@@ -150,6 +165,65 @@ class QtStylesheetBuilder:
         QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus, QSpinBox:focus {{
             border-color: {c('input.focusBorder')};
         }}
+        QDoubleSpinBox, QSpinBox {{
+            padding: 3px {spin_button_width + 7}px 3px 6px;
+        }}
+        QDoubleSpinBox::up-button, QSpinBox::up-button {{
+            subcontrol-origin: border;
+            subcontrol-position: top right;
+            width: {spin_button_width}px;
+            height: {spin_button_height}px;
+            margin: 1px 1px 0 0;
+            background: {c('spinbox.buttonBackground')};
+            border-left: 1px solid {c('spinbox.buttonBorder')};
+            border-bottom: 1px solid {c('spinbox.buttonBorder')};
+            border-top-right-radius: {max(0, radius - 1)}px;
+        }}
+        QDoubleSpinBox::down-button, QSpinBox::down-button {{
+            subcontrol-origin: border;
+            subcontrol-position: bottom right;
+            width: {spin_button_width}px;
+            height: {spin_button_height}px;
+            margin: 0 1px 1px 0;
+            background: {c('spinbox.buttonBackground')};
+            border-left: 1px solid {c('spinbox.buttonBorder')};
+            border-top: 1px solid {c('spinbox.buttonBorder')};
+            border-bottom-right-radius: {max(0, radius - 1)}px;
+        }}
+        QDoubleSpinBox::up-button:hover, QSpinBox::up-button:hover,
+        QDoubleSpinBox::down-button:hover, QSpinBox::down-button:hover {{
+            background: {c('spinbox.buttonHover')};
+        }}
+        QDoubleSpinBox::up-button:pressed, QSpinBox::up-button:pressed,
+        QDoubleSpinBox::down-button:pressed, QSpinBox::down-button:pressed {{
+            background: {c('spinbox.buttonPressed')};
+        }}
+        QDoubleSpinBox::up-button:disabled, QSpinBox::up-button:disabled,
+        QDoubleSpinBox::down-button:disabled, QSpinBox::down-button:disabled {{
+            background: {c('button.disabledBackground')};
+            border-color: {c('panel.border')};
+        }}
+        QDoubleSpinBox::up-arrow, QSpinBox::up-arrow {{
+            image: none;
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-bottom: 5px solid {c('spinbox.arrow')};
+        }}
+        QDoubleSpinBox::down-arrow, QSpinBox::down-arrow {{
+            image: none;
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 5px solid {c('spinbox.arrow')};
+        }}
+        QDoubleSpinBox::up-arrow:disabled, QSpinBox::up-arrow:disabled,
+        QDoubleSpinBox::down-arrow:disabled, QSpinBox::down-arrow:disabled {{
+            border-bottom-color: {c('text.disabled')};
+            border-top-color: {c('text.disabled')};
+        }}
         QComboBox QAbstractItemView {{
             background: {panel_alt};
             color: {c('text.primary')};
@@ -214,9 +288,14 @@ class QtStylesheetBuilder:
             border-top: 1px solid {c('toolbar.border')};
             border-bottom: 1px solid {c('panel.border')};
         }}
-        QFrame#LogHeader {{
+        QFrame#LogHeader, QFrame#PythonTerminalHeader {{
             background: {c('window.background')};
-            border-top: 1px solid {c('panel.border')};
+            border: 0;
+        }}
+        QLabel#LogSectionTitle, QLabel#PythonTerminalTitle {{
+            color: {c('accent.primary')};
+            font-family: {mono_font.family};
+            font-size: {max(8, mono_font.size)}pt;
         }}
         QLabel#GhostTitle {{
             color: {c('accent.primary')};
@@ -255,7 +334,7 @@ class QtStylesheetBuilder:
         QStatusBar {{
             min-height: {m('statusbar.height', 24)}px;
         }}
-        #ViewportToolbar {{
+        #ViewportToolbar, #ViewportToolbarBand {{
             background: {c('toolbar.background')};
             border: 0;
             border-bottom: 1px solid {c('toolbar.border')};

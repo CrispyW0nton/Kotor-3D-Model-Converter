@@ -96,6 +96,6 @@ Import `FrameRenderer`, `ArcBallCamera`, `_load_tpc_bytes`, `_is_tpc_data`,
 - New standalone windows and major dock panels should also expose `apply_ghost_layout(layout)` when they own splitter sizes, toolbar density, row heights, or fixed control sizes.
 - New panels should have stable layout ids so community layouts can size, hide, or reposition them.
 - Standalone windows opened from the main shell must register with the active `ThemeManager` when practical, or receive the current theme/layout from their parent during construction.
-- New UI must be checked in Matrix, Dark, Light, and Classic. Classic/Light must not ship low-contrast labels, disabled text, table headers, or input fields.
+- New UI must be checked in Default/native, Matrix, Droid, Dark, Light, and Classic. Classic/Light must not ship low-contrast labels, disabled text, table headers, or input fields.
 - Avoid blocking the UI thread during theme application. Use cached stylesheets/icons, debounce hot-reload or settings-triggered apply calls, and never trigger a second full theme apply from a `themeChanged` handler.
 - When adding visible UI, update `config/themes/README.md` and `knowledge_base/theme_layout_system.md` if new theme tokens, layout ids, or button modes are introduced.

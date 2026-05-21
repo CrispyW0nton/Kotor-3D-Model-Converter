@@ -66,6 +66,11 @@ FALLBACK_COLORS: dict[str, str] = {
     "input.text": LEGACY_MATRIX_COLORS["text"],
     "input.border": LEGACY_MATRIX_COLORS["border"],
     "input.focusBorder": LEGACY_MATRIX_COLORS["accent2"],
+    "spinbox.buttonBackground": "#26312C",
+    "spinbox.buttonHover": LEGACY_MATRIX_COLORS["hover"],
+    "spinbox.buttonPressed": "#102019",
+    "spinbox.buttonBorder": "#3B5147",
+    "spinbox.arrow": LEGACY_MATRIX_COLORS["text"],
     "tab.background": LEGACY_MATRIX_COLORS["panel"],
     "tab.selectedBackground": LEGACY_MATRIX_COLORS["bg2"],
     "tab.inactiveBackground": LEGACY_MATRIX_COLORS["panel"],
@@ -113,6 +118,7 @@ FALLBACK_FONTS: dict[str, dict[str, str | int]] = {
 }
 
 FALLBACK_STYLES: dict[str, str] = {
+    "application.native": "false",
     "tab.mode": "standard",
 }
 
@@ -140,6 +146,7 @@ FALLBACK_METRICS: dict[str, int] = {
     "input.minWidth": 90,
     "combo.height": 24,
     "spinbox.height": 24,
+    "spinbox.buttonWidth": 16,
     "checkbox.spacing": 4,
     "tab.height": 14,
     "tab.width": 78,

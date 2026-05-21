@@ -3481,6 +3481,39 @@ class FrameRenderer:
         # KotOR-accurate lighting (two-light rig matching Odyssey engine)
         # Key light from upper-right, fill from left
         self._light_dir  = _normalize((0.55, 0.40, 0.90))  # main key light (upper right)
+        self._light_dir2 = _normalize((-0.35, -0.20, 0.60)) # fill light (left)
+        self._ambient    = 0.38   # raised v12.14: brighter ambient for low-RGB creature textures
+        self._specular   = 0.10
+        self._shininess  = 20.0
+
+        # Animation pose (set by AnimationsPanel)
+        self._anim_pose = None   # Optional[AnimPose]
+        self._anim_name: str = ""   # current animation name for HUD display
+        self._anim_time: float = 0.0   # current animation time for HUD display
+        self._anim_length: float = 0.0  # current animation length for HUD display
+        self.animation_supermodel_hud_placement: str = "center"
+        self._anim_base_pose = None  # Optional[AnimPose]
+        self._bone_transforms_cache: Optional[Dict] = None
+        self._bone_transforms_pose_id: int = -1
+        self._dangly_sims: Dict[int, 'DanglySimulator'] = {}
+        self._dangly_last_time: float = 0.0
+
+        # Gimbal / transform overlay
+        self.gimbal_mode: int = 1
+        self.show_gimbal: bool = True
+        self.gimbal_active_axis = None
+        self._gimbal_handles: List[Tuple] = []
+        self._gimbal_handle_lines: List[Tuple] = []
+
+        # External skeleton and walkmesh overlays
+        self._ext_skeleton = None
+        self._ext_skel_offset: List[float] = [0.0, 0.0, 0.0]
+        self._ext_skel_scale: float = 1.0
+        self._ext_bone_screen_positions: List[Tuple] = []
+        self.show_walkmesh:       bool = False
+        self.show_walkmesh_walk:  bool = True
+        self.show_walkmesh_block: bool = True
+        self._walkmesh_overlay: Optional['WalkmeshOverlay'] = None
 
     def set_theme_colors(self, theme) -> None:
         self.viewport_background = _hex_to_rgb_tuple(theme.color("viewport.background"), _BG[:3])
@@ -3506,49 +3539,80 @@ class FrameRenderer:
         self.gimbal_plane_xz_color = _hex_to_rgb_tuple(theme.color("info"), (60, 220, 220))
         self.gimbal_plane_yz_color = _hex_to_rgb_tuple(theme.color("accent.primary"), (220, 60, 220))
         self.gimbal_text_color = _hex_to_rgb_tuple(theme.color("viewport.text"), (200, 200, 200))
-        self._light_dir2 = _normalize((-0.35, -0.20, 0.60)) # fill light (left)
-        self._ambient    = 0.38   # raised v12.14: brighter ambient for low-RGB creature textures
-        self._specular   = 0.10
-        self._shininess  = 20.0
 
-        # Animation pose (set by AnimationsPanel)
-        self._anim_pose = None   # Optional[AnimPose]
-        self._anim_name: str = ""   # current animation name for HUD display
-        self._anim_time: float = 0.0   # current animation time for HUD display
-        self._anim_length: float = 0.0  # current animation length for HUD display
-        self.animation_supermodel_hud_placement: str = "center"
-        # FIX-SKIN-ANIM-D3: Base pose (t=0) for GPU skinning bind reference.
-        # When a new animation starts, the caller should set this via
-        # set_anim_base_pose().  The GPU renderer uses it as:
-        #   M_skin = world_anim(t) * inv(world_anim(t=0))
-        self._anim_base_pose = None  # Optional[AnimPose]
-        # Per-pose bone-transform cache: reused across all skin nodes in one frame
-        self._bone_transforms_cache: Optional[Dict] = None
-        self._bone_transforms_pose_id: int = -1
-        # ── Dangly mesh Verlet cloth simulators (Phase 4.6) ────────────────
-        # Maps node id() → DanglySimulator.  Created lazily on first animation tick.
-        self._dangly_sims: Dict[int, 'DanglySimulator'] = {}
-        self._dangly_last_time: float = 0.0   # wall-clock time of last sim step
+    def reset_theme_colors(self) -> None:
+        self.viewport_background = _BG[:3]
+        self.viewport_text = (170, 180, 195)
+        self.grid_minor_color = _GRID[:3]
+        self.grid_major_color = (82, 90, 102)
+        self.grid_x_axis_color = (118, 54, 54)
+        self.grid_y_axis_color = (62, 112, 68)
+        self.grid_label_color = (174, 184, 198, 205)
+        self.hud_fill = (30, 34, 40)
+        self.hud_text = (213, 220, 230)
+        self.hud_outline = (78, 88, 102)
+        self.hud_muted_text = (165, 176, 190)
+        self.hud_success_fill = (25, 43, 37)
+        self.hud_success_text = (138, 230, 178)
+        self.hud_warning_fill = (68, 44, 22)
+        self.hud_warning_text = (255, 190, 95)
+        self.gimbal_x_color = (220, 60, 60)
+        self.gimbal_y_color = (60, 220, 60)
+        self.gimbal_z_color = (60, 120, 220)
+        self.gimbal_active_color = (255, 255, 80)
+        self.gimbal_plane_xy_color = (220, 220, 60)
+        self.gimbal_plane_xz_color = (60, 220, 220)
+        self.gimbal_plane_yz_color = (220, 60, 220)
+        self.gimbal_text_color = (200, 200, 200)
 
-        # ── Gimbal / transform overlay ────────────────────────────────
-        # gimbal_mode: 0=none, 1=translate, 2=rotate, 3=scale
-        self.gimbal_mode: int = 1
-        self.show_gimbal: bool = True
-        self.gimbal_active_axis = None          # axis being dragged ('X','Y','Z',etc.) or None
-        self._gimbal_handles: List[Tuple] = []  # [(sx,sy,axis), ...] from last draw
-        self._gimbal_handle_lines: List[Tuple] = []  # [(x0,y0,x1,y1,axis), ...] from last draw
-        # External skeleton overlay (ghost from another model)
-        self._ext_skeleton = None               # KotorModel or None
-        self._ext_skel_offset: List[float] = [0.0, 0.0, 0.0]
-        self._ext_skel_scale: float = 1.0
-        self._ext_bone_screen_positions: List[Tuple] = []
-        # ── Walkmesh overlay (Phase 9 / Phase 16.1) ───────────────────────────
-        # Loaded separately via load_walkmesh() (co-load with MDL when WOK found).
-        # show_walkmesh toggles visibility; show_walkmesh_nonwalk shows blockers.
-        self.show_walkmesh:       bool = False
-        self.show_walkmesh_walk:  bool = True   # show walkable surfaces
-        self.show_walkmesh_block: bool = True   # show non-walkable blockers
-        self._walkmesh_overlay: Optional['WalkmeshOverlay'] = None
+    @staticmethod
+    def _blend_rgb(a: tuple[int, int, int], b: tuple[int, int, int], t: float) -> tuple[int, int, int]:
+        t = max(0.0, min(1.0, float(t)))
+        return tuple(int(round(float(a[i]) * (1.0 - t) + float(b[i]) * t)) for i in range(3))
+
+    @staticmethod
+    def _relative_luma(color: tuple[int, int, int]) -> float:
+        r, g, b = (max(0, min(255, int(v))) / 255.0 for v in color)
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+    def set_native_palette_colors(
+        self,
+        *,
+        window: tuple[int, int, int],
+        base: tuple[int, int, int],
+        text: tuple[int, int, int],
+        button: tuple[int, int, int],
+        button_text: tuple[int, int, int],
+        mid: tuple[int, int, int],
+        highlight: tuple[int, int, int],
+        highlighted_text: tuple[int, int, int],
+    ) -> None:
+        bg = tuple(int(v) for v in base[:3])
+        fg = tuple(int(v) for v in text[:3])
+        button_bg = tuple(int(v) for v in button[:3])
+        button_fg = tuple(int(v) for v in button_text[:3])
+        mid_color = tuple(int(v) for v in mid[:3])
+        highlight_bg = tuple(int(v) for v in highlight[:3])
+        highlight_fg = tuple(int(v) for v in highlighted_text[:3])
+        is_dark = self._relative_luma(bg) < 0.45
+
+        self.viewport_background = bg
+        self.viewport_text = fg
+        self.grid_minor_color = self._blend_rgb(bg, fg, 0.12 if is_dark else 0.18)
+        self.grid_major_color = self._blend_rgb(bg, fg, 0.22 if is_dark else 0.30)
+        self.grid_x_axis_color = (210, 70, 70) if is_dark else (160, 30, 30)
+        self.grid_y_axis_color = (70, 180, 90) if is_dark else (40, 130, 55)
+        self.grid_label_color = self._blend_rgb(bg, fg, 0.70) + (205,)
+        self.hud_fill = button_bg
+        self.hud_text = button_fg
+        self.hud_outline = mid_color
+        self.hud_muted_text = self._blend_rgb(button_bg, button_fg, 0.68)
+        self.hud_success_fill = highlight_bg
+        self.hud_success_text = highlight_fg
+        self.hud_warning_fill = (214, 151, 42) if is_dark else (255, 223, 133)
+        self.hud_warning_text = (18, 18, 18) if is_dark else (72, 48, 0)
+        self.gimbal_active_color = highlight_bg
+        self.gimbal_text_color = fg
 
     def set_anim_base_pose(self, base_pose):
         """Set the animation's first-frame (t=0) pose for GPU skinning.

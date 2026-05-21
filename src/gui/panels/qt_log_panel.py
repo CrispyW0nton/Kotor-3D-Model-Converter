@@ -67,7 +67,7 @@ class QtPythonTerminalPanel(QtWidgets.QWidget):
         row.setSpacing(4)
 
         label = QtWidgets.QLabel("// Python")
-        label.setStyleSheet(f"color:{C['accent']}; font-family:monospace;")
+        label.setObjectName("PythonTerminalTitle")
         row.addWidget(label)
         row.addStretch(1)
 
@@ -200,23 +200,21 @@ class QtLogPanel(QtWidgets.QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
+        self.log_content = QtWidgets.QWidget()
+        log_layout = QtWidgets.QVBoxLayout(self.log_content)
+        log_layout.setContentsMargins(0, 0, 0, 0)
+        log_layout.setSpacing(0)
+
         header = QtWidgets.QFrame()
         header.setObjectName("LogHeader")
         row = QtWidgets.QHBoxLayout(header)
         row.setContentsMargins(4, 2, 4, 2)
         row.setSpacing(4)
 
-        self.toggle_button = QtWidgets.QToolButton()
-        self.toggle_button.setText("// Output Log")
-        self.toggle_button.setToolButtonStyle(QtCore.Qt.ToolButtonTextOnly)
-        self.toggle_button.clicked.connect(self._toggle_collapse)
-        row.addWidget(self.toggle_button)
+        self.title_label = QtWidgets.QLabel("// Output Log")
+        self.title_label.setObjectName("LogSectionTitle")
+        row.addWidget(self.title_label)
         row.addStretch(1)
-
-        self.log_content = QtWidgets.QWidget()
-        log_layout = QtWidgets.QVBoxLayout(self.log_content)
-        log_layout.setContentsMargins(0, 0, 0, 0)
-        log_layout.setSpacing(0)
 
         self.save_button = QtWidgets.QPushButton("Save")
         self.copy_button = QtWidgets.QPushButton("Copy")
@@ -240,6 +238,7 @@ class QtLogPanel(QtWidgets.QWidget):
             button.setProperty("compact", True)
             footer_row.addWidget(button)
 
+        log_layout.addWidget(header)
         log_layout.addWidget(self.text, 1)
         log_layout.addWidget(footer)
 
@@ -253,7 +252,6 @@ class QtLogPanel(QtWidgets.QWidget):
         self.content_splitter.setStretchFactor(1, 2)
         self.content_splitter.setSizes([900, 520])
 
-        root.addWidget(header)
         root.addWidget(self.content_splitter)
 
     def log(self, msg: str, level: str = "info") -> None:
@@ -273,7 +271,6 @@ class QtLogPanel(QtWidgets.QWidget):
     def _toggle_collapse(self) -> None:
         self._collapsed = not self._collapsed
         self.content_splitter.setVisible(not self._collapsed)
-        self.toggle_button.setText(">> Output Log" if self._collapsed else "// Output Log")
 
     def _render(self) -> None:
         colors = {

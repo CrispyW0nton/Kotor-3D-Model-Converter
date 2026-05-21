@@ -48,6 +48,91 @@ class QtOverflowScrollArea(QtWidgets.QScrollArea):
         widget.setMinimumWidth(max(int(locked_width), widget.sizeHint().width(), self.viewport().width()))
 
 
+class QtFlowLayout(QtWidgets.QLayout):
+    """Simple left-to-right wrapping layout for dense tool rows."""
+
+    def __init__(
+        self,
+        parent: QtWidgets.QWidget | None = None,
+        *,
+        margin: int = 0,
+        hspacing: int = 4,
+        vspacing: int = 3,
+    ) -> None:
+        super().__init__(parent)
+        self._items: list[QtWidgets.QLayoutItem] = []
+        self._hspacing = int(hspacing)
+        self._vspacing = int(vspacing)
+        self.setContentsMargins(margin, margin, margin, margin)
+
+    def addItem(self, item: QtWidgets.QLayoutItem) -> None:  # noqa: N802 - Qt API
+        self._items.append(item)
+
+    def setSpacing(self, spacing: int) -> None:  # noqa: N802 - Qt API
+        self._hspacing = int(spacing)
+        self._vspacing = max(2, int(spacing) // 2)
+        self.invalidate()
+
+    def count(self) -> int:
+        return len(self._items)
+
+    def itemAt(self, index: int) -> QtWidgets.QLayoutItem | None:  # noqa: N802 - Qt API
+        return self._items[index] if 0 <= index < len(self._items) else None
+
+    def takeAt(self, index: int) -> QtWidgets.QLayoutItem | None:  # noqa: N802 - Qt API
+        if 0 <= index < len(self._items):
+            return self._items.pop(index)
+        return None
+
+    def expandingDirections(self) -> QtCore.Qt.Orientations:  # noqa: N802 - Qt API
+        return QtCore.Qt.Orientations(QtCore.Qt.Orientation(0))
+
+    def hasHeightForWidth(self) -> bool:  # noqa: N802 - Qt API
+        return True
+
+    def heightForWidth(self, width: int) -> int:  # noqa: N802 - Qt API
+        return self._do_layout(QtCore.QRect(0, 0, width, 0), test_only=True)
+
+    def setGeometry(self, rect: QtCore.QRect) -> None:  # noqa: N802 - Qt API
+        super().setGeometry(rect)
+        self._do_layout(rect, test_only=False)
+
+    def sizeHint(self) -> QtCore.QSize:  # noqa: N802 - Qt API
+        return self.minimumSize()
+
+    def minimumSize(self) -> QtCore.QSize:  # noqa: N802 - Qt API
+        size = QtCore.QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        left, top, right, bottom = self.getContentsMargins()
+        size += QtCore.QSize(left + right, top + bottom)
+        return size
+
+    def _do_layout(self, rect: QtCore.QRect, *, test_only: bool) -> int:
+        left, top, right, bottom = self.getContentsMargins()
+        effective = rect.adjusted(left, top, -right, -bottom)
+        x = effective.x()
+        y = effective.y()
+        line_height = 0
+        max_x = effective.right()
+        for item in self._items:
+            widget = item.widget()
+            if widget is not None and not widget.isVisible():
+                continue
+            hint = item.sizeHint()
+            next_x = x + hint.width()
+            if x > effective.x() and next_x > max_x:
+                x = effective.x()
+                y += line_height + self._vspacing
+                next_x = x + hint.width()
+                line_height = 0
+            if not test_only:
+                item.setGeometry(QtCore.QRect(QtCore.QPoint(x, y), hint))
+            x = next_x + self._hspacing
+            line_height = max(line_height, hint.height())
+        return y + line_height + bottom - rect.y()
+
+
 def icon(name: str, size: int = 16) -> QtGui.QIcon:
     icons_dir = _GUI_DIR / "icons"
     path = icons_dir / f"{name}_{size}.png"

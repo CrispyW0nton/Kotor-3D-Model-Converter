@@ -35,6 +35,11 @@
         <color name="input.text" value="#1F1E1A"/>
         <color name="input.border" value="#A9A28B"/>
         <color name="input.focusBorder" value="#3F6FA8"/>
+        <color name="spinbox.buttonBackground" value="#D9D3BC"/>
+        <color name="spinbox.buttonHover" value="#C9C0A4"/>
+        <color name="spinbox.buttonPressed" value="#B8AE90"/>
+        <color name="spinbox.buttonBorder" value="#8F8874"/>
+        <color name="spinbox.arrow" value="#1F1E1A"/>
         <color name="tab.background" value="#E6E2D0"/>
         <color name="tab.selectedBackground" value="#F7F5EA"/>
         <color name="tab.inactiveBackground" value="#DED8C3"/>

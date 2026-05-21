@@ -33,7 +33,7 @@ from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel
 from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
 from src.gui.qt_lib.panels.qt_camera_panel import QtCameraPanel
 from src.gui.qt_lib.panels.qt_mesh_tools_panel import QtMeshToolsPanel
-from src.gui.qt_lib.assets.qt_theme import make_horizontal_overflow_area, make_scrollable_panel, update_legacy_palette
+from src.gui.qt_lib.assets.qt_theme import QtFlowLayout, make_scrollable_panel, update_legacy_palette
 from src.gui.qt_lib.assets.qt_matrix_background import QtMatrixEngine, QtMatrixLabel, QtMatrixPanel
 from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel, QtSkeletonPanel
 from src.gui.qt_lib.viewports.qt_viewport import QtMainViewportWidget
@@ -669,6 +669,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.theme_manager = ThemeManager(self.app_root, self.settings_data, self)
         self.layout_manager = LayoutManager(self.app_root, self.settings_data, self)
         self.theme_manager.themeChanged.connect(self._on_theme_changed)
+        self.theme_manager.applier.themeApplyStarted.connect(self._on_theme_apply_started)
+        self.theme_manager.applier.themeApplyProgress.connect(self._on_theme_apply_progress)
+        self.theme_manager.applier.themeApplyFinished.connect(self._on_theme_apply_finished)
+        self.theme_manager.applier.themeApplyFailed.connect(self._on_theme_apply_failed)
         self.layout_manager.layoutChanged.connect(self._on_layout_changed)
         self._theme_watcher: Optional[ThemeLayoutWatcher] = None
         self._button_mode_override = self.layout_manager.settings.button_mode_override
@@ -737,6 +741,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         super().resizeEvent(event)
         if self._progress_toast is not None and self._progress_toast.isVisible():
             self._progress_toast._reposition()
+        self._sync_reserved_top_rows()
 
     def moveEvent(self, event):
         super().moveEvent(event)
@@ -912,8 +917,17 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         )
 
     def apply_ghost_theme(self, theme) -> None:
+        if theme is not None and getattr(theme, "is_native", lambda: False)():
+            self.apply_native_theme()
+            return
         update_legacy_palette(theme)
         self._apply_matrix_theme(theme)
+        toolbar_band = getattr(self, "viewport_toolbar_band", None)
+        if toolbar_band is not None:
+            toolbar_band.setStyleSheet(
+                f"QFrame#ViewportToolbarBand {{ background:{theme.color('toolbar.background')}; "
+                f"border:0; border-bottom:1px solid {theme.color('toolbar.border')}; }}"
+            )
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "apply_ghost_theme"):
             viewport.apply_ghost_theme(theme)
@@ -924,6 +938,21 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             if callable(hook):
                 hook(theme)
 
+    def apply_native_theme(self) -> None:
+        for widget in self.findChildren(QtWidgets.QWidget):
+            widget.setStyleSheet("")
+        self.setStyleSheet("")
+        viewport = getattr(self, "viewport", None)
+        if viewport is not None and hasattr(viewport, "apply_native_theme"):
+            viewport.apply_native_theme()
+        for panel in (getattr(self, "header_bar", None), getattr(self, "command_bar", None)):
+            if panel is not None:
+                panel.set_matrix_config(style="disabled")
+                palette_color = self.palette().window().color()
+                if hasattr(panel, "_background"):
+                    panel._background = palette_color
+                panel.update()
+
     def _on_theme_changed(self, theme) -> None:
         update_legacy_palette(theme)
         self._sync_theme_layout_settings()
@@ -933,6 +962,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def _on_layout_changed(self, layout) -> None:
         self._sync_theme_layout_settings()
+        QtCore.QTimer.singleShot(0, self._sync_reserved_top_rows)
 
     def _sync_theme_layout_settings(self) -> dict:
         theme_values = self.theme_manager.to_settings()
@@ -1348,12 +1378,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     def _make_command_bar(self) -> QtWidgets.QWidget:
         bar = QtMatrixPanel(engine=self._matrix_engine, opacity=0.35)
         bar.setObjectName("CommandBar")
-        bar.setFixedHeight(40)
+        bar.setMinimumHeight(36)
         self.command_bar = bar
 
-        layout = QtWidgets.QHBoxLayout(bar)
+        layout = QtFlowLayout(bar, margin=0, hspacing=5, vspacing=4)
         layout.setContentsMargins(10, 4, 10, 4)
-        layout.setSpacing(5)
 
         layout.addWidget(self._tool_button("Open  Ctrl+O", self.open_model_action, "open"))
         layout.addWidget(self._tool_button("Auto-Rig  R", self.autorig_action, "autorig"))
@@ -1390,7 +1419,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.model_pill.setAlignment(QtCore.Qt.AlignCenter)
         self.model_pill.setToolTip("No model loaded. Ctrl+W clears the current viewport.")
         layout.addWidget(self.model_pill)
-        layout.addStretch(1)
 
         layout.addWidget(self._tool_button("Settings  F2", self.settings_action, "settings", compact=True))
         layout.addWidget(self._separator())
@@ -1399,14 +1427,59 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._tool_button("Lights", self.lighting_panel_action, "", compact=True))
         layout.addWidget(self._tool_button("Cameras", self.camera_panel_action, "", compact=True))
         layout.addWidget(self._tool_button("Diag  Ctrl+D", self.diag_action, "diag", compact=True))
-        self.command_bar_scroll = make_horizontal_overflow_area(
-            bar,
-            "CommandBarScroll",
-            height=56,
-            parent=self,
-        )
+        self.command_bar_scroll = None
         self._apply_matrix_bar_config(bar)
-        return self.command_bar_scroll
+        return bar
+
+    def _make_viewport_toolbar_band(self, toolbar: QtWidgets.QWidget | None) -> QtWidgets.QWidget | None:
+        if toolbar is None:
+            return None
+        band = QtWidgets.QFrame()
+        band.setObjectName("ViewportToolbarBand")
+        band.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        band.setFixedHeight(max(28, toolbar.height()))
+        row = QtWidgets.QHBoxLayout(band)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(0)
+
+        toolbar.setParent(band)
+        toolbar.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+
+        row.addWidget(toolbar, 1)
+        self.viewport_toolbar_band = band
+        self.viewport_toolbar_hosted_scroll = toolbar
+        return band
+
+    def _sync_viewport_toolbar_band(self) -> None:
+        toolbar = getattr(self, "viewport_toolbar_hosted_scroll", None)
+        band = getattr(self, "viewport_toolbar_band", None)
+        if toolbar is not None and band is not None:
+            height = self._height_for_wrapping_widget(toolbar, max(28, toolbar.sizeHint().height()))
+            toolbar.setMinimumHeight(height)
+            toolbar.setMaximumHeight(height)
+            band.setFixedHeight(height)
+
+    def _sync_reserved_top_rows(self) -> None:
+        command_bar = getattr(self, "command_bar", None)
+        if command_bar is not None:
+            height = self._height_for_wrapping_widget(command_bar, max(36, command_bar.sizeHint().height()))
+            command_bar.setMinimumHeight(height)
+            command_bar.setMaximumHeight(height)
+        self._sync_viewport_toolbar_band()
+        top_shell = getattr(self, "reserved_top_shell", None)
+        if top_shell is not None:
+            top_shell.updateGeometry()
+        top_toolbar = getattr(self, "reserved_top_toolbar", None)
+        if top_toolbar is not None:
+            top_toolbar.updateGeometry()
+
+    @staticmethod
+    def _height_for_wrapping_widget(widget: QtWidgets.QWidget, fallback: int) -> int:
+        layout = widget.layout()
+        width = max(1, widget.width())
+        if layout is not None and layout.hasHeightForWidth():
+            return max(1, layout.heightForWidth(width))
+        return max(1, int(fallback))
 
     def _matrix_bar_settings(self) -> dict:
         return dict(self.settings_data.get("matrix_bar", {}))
@@ -1486,12 +1559,15 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         sep.setFixedWidth(1)
         return sep
 
+    def _workspace_dock_areas(self) -> QtCore.Qt.DockWidgetArea:
+        return QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea | QtCore.Qt.BottomDockWidgetArea
+
     def _create_detachable_panel(self, key: str, title: str, widget: QtWidgets.QWidget, area) -> QtWidgets.QDockWidget:
         dock = QtWidgets.QDockWidget(title, self)
         dock.setObjectName(f"{key}Dock")
         scroll = make_scrollable_panel(widget, f"{key}DockScroll", dock)
         dock.setWidget(scroll)
-        dock.setAllowedAreas(QtCore.Qt.AllDockWidgetAreas)
+        dock.setAllowedAreas(self._workspace_dock_areas())
         dock.setFeatures(
             QtWidgets.QDockWidget.DockWidgetClosable
             | QtWidgets.QDockWidget.DockWidgetFloatable
@@ -1500,6 +1576,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.addDockWidget(area, dock)
         dock.hide()
         dock.topLevelChanged.connect(lambda floating, k=key, d=dock: self._remember_detachable_panel_state(k, d))
+        dock.dockLocationChanged.connect(lambda area, k=key, d=dock: self._on_detachable_panel_dock_location_changed(k, d, area))
         dock.visibilityChanged.connect(lambda visible, k=key, d=dock: self._on_detachable_panel_visibility(k, d, visible))
         self._detachable_panels[key] = dock
         return dock
@@ -1541,15 +1618,41 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if dock.isFloating():
             dock.setFloating(False)
 
+    def _on_detachable_panel_dock_location_changed(self, key: str, dock: QtWidgets.QDockWidget, area) -> None:
+        if area != QtCore.Qt.TopDockWidgetArea:
+            self._remember_detachable_panel_state(key, dock)
+            return
+        fallback = QtCore.Qt.LeftDockWidgetArea if key in {"nodes", "2das", "resources"} else QtCore.Qt.RightDockWidgetArea
+        QtCore.QTimer.singleShot(0, lambda d=dock, a=fallback: self.addDockWidget(a, d))
+
     def _build_layout(self):
+        top_shell = QtWidgets.QWidget()
+        top_shell.setObjectName("ReservedTopUi")
+        top_shell.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        top_layout = QtWidgets.QVBoxLayout(top_shell)
+        top_layout.setContentsMargins(3, 0, 3, 0)
+        top_layout.setSpacing(0)
+        top_layout.addWidget(self._make_header())
+        top_layout.addWidget(self._make_command_bar())
+        self.reserved_top_shell = top_shell
+        self.reserved_top_layout = top_layout
+
+        reserved_toolbar = QtWidgets.QToolBar("GhostRigger Top UI", self)
+        reserved_toolbar.setObjectName("ReservedTopToolbar")
+        reserved_toolbar.setMovable(False)
+        reserved_toolbar.setFloatable(False)
+        reserved_toolbar.setAllowedAreas(QtCore.Qt.TopToolBarArea)
+        reserved_toolbar.setContextMenuPolicy(QtCore.Qt.NoContextMenu)
+        reserved_toolbar.setContentsMargins(0, 0, 0, 0)
+        reserved_toolbar.addWidget(top_shell)
+        self.reserved_top_toolbar = reserved_toolbar
+        self.addToolBar(QtCore.Qt.TopToolBarArea, reserved_toolbar)
+
         central = QtWidgets.QWidget()
         root = QtWidgets.QVBoxLayout(central)
         root.setContentsMargins(3, 0, 3, 3)
         root.setSpacing(0)
         self.setCentralWidget(central)
-
-        root.addWidget(self._make_header())
-        root.addWidget(self._make_command_bar())
 
         vertical_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         vertical_splitter.setChildrenCollapsible(False)
@@ -1734,6 +1837,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         main_splitter.setStretchFactor(1, 1)
         main_splitter.setStretchFactor(2, 0)
         main_splitter.setSizes([420, 760, 380])
+        main_splitter.splitterMoved.connect(lambda _pos=0, _index=0: self._sync_viewport_toolbar_band())
+
+        viewport_toolbar_band = self._make_viewport_toolbar_band(self.viewport.take_viewport_toolbar())
+        if viewport_toolbar_band is not None:
+            self.reserved_top_layout.addWidget(viewport_toolbar_band)
+            QtCore.QTimer.singleShot(0, self._sync_reserved_top_rows)
         vertical_splitter.addWidget(main_splitter)
 
         self.log_panel = QtLogPanel(self)
@@ -1785,6 +1894,24 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._progress_toast = QtProgressToast(self)
             self.theme_manager.register_theme_aware_widget(self._progress_toast)
         self._progress_toast.finish(title, detail)
+
+    @QtCore.Slot(object)
+    def _on_theme_apply_started(self, theme) -> None:
+        name = getattr(theme, "name", getattr(theme, "id", "theme"))
+        self._show_progress_toast("Applying theme", f"Preparing {name}...")
+
+    @QtCore.Slot(str, int, int)
+    def _on_theme_apply_progress(self, detail: str, value: int, total: int) -> None:
+        self._update_progress_toast("Applying theme", detail, value, total)
+
+    @QtCore.Slot(object, float)
+    def _on_theme_apply_finished(self, theme, total_ms: float) -> None:
+        name = getattr(theme, "name", getattr(theme, "id", "Theme"))
+        self._finish_progress_toast("Theme applied", f"{name} applied in {total_ms:.0f} ms.")
+
+    @QtCore.Slot(str)
+    def _on_theme_apply_failed(self, detail: str) -> None:
+        self._finish_progress_toast("Theme apply failed", detail[:180])
 
     @QtCore.Slot(str, int, int)
     def _on_model_load_progress(self, detail: str, value: int, total: int):

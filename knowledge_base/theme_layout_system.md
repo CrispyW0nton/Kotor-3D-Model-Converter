@@ -14,6 +14,13 @@ defaults and community customization.
 User files load after packaged defaults. If ids collide, the user file wins and
 the manager records a diagnostic warning.
 
+Packaged theme ids are `default`, `matrix`, `droid`, `dark`, `light`, and
+`classic`. `default` sets `application.native=true`, which tells the theme
+engine to apply no generated GhostRigger stylesheet and restore the Qt platform
+palette. `droid` captures the dark graphite startup-console look: grey panels
+and controls, bright Matrix-green accents, high-contrast text, and the default
+Aurebesh Matrix bar font.
+
 ## Theme XML
 
 Themes define appearance only: colors, fonts, icon provider defaults, icon
@@ -112,6 +119,8 @@ Core colour tokens include:
   `button.checked`, `button.checkedText`, `button.disabledBackground`,
   `button.disabledText`
 - `input.background`, `input.text`, `input.border`, `input.focusBorder`
+- `spinbox.buttonBackground`, `spinbox.buttonHover`,
+  `spinbox.buttonPressed`, `spinbox.buttonBorder`, `spinbox.arrow`
 - `tab.background`, `tab.selectedBackground`, `tab.text`,
   `tab.selectedText`
 - `table.background`, `table.text`, `table.headerBackground`,
@@ -130,7 +139,8 @@ Core metric tokens include:
 - `toolbar.height`, `toolbar.iconSize`, `toolbar.buttonHeight`,
   `toolbar.buttonMinWidth`, `toolbar.spacing`
 - `button.height`, `button.minWidth`, `button.paddingX`, `button.paddingY`
-- `input.height`, `combo.height`, `spinbox.height`, `checkbox.spacing`
+- `input.height`, `combo.height`, `spinbox.height`,
+  `spinbox.buttonWidth`, `checkbox.spacing`
 - `tab.height`, `table.rowHeight`, `tree.rowHeight`
 - `panel.margin`, `panel.spacing`, `panel.headerHeight`,
   `panel.minWidth`, `panel.preferredWidth`

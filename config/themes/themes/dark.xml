@@ -22,6 +22,11 @@
         <color name="input.background" value="#11161D"/>
         <color name="input.text" value="#EEF3F8"/>
         <color name="input.border" value="#3A4654"/>
+        <color name="spinbox.buttonBackground" value="#3B4653"/>
+        <color name="spinbox.buttonHover" value="#46576A"/>
+        <color name="spinbox.buttonPressed" value="#27303A"/>
+        <color name="spinbox.buttonBorder" value="#5D6B7A"/>
+        <color name="spinbox.arrow" value="#EEF3F8"/>
         <color name="selection.background" value="#4FA3FF"/>
         <color name="selection.text" value="#06111E"/>
         <color name="text.primary" value="#EEF3F8"/>

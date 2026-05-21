@@ -4265,6 +4265,72 @@ class GpuRenderer:
             self._grid_vao = None
             self._grid_vbo = None
 
+    def reset_theme_colors(self) -> None:
+        self.wire_color = (0.18, 0.62, 0.95)
+        self.viewport_background = (23 / 255.0, 25 / 255.0, 28 / 255.0)
+        self.grid_minor_color = (58 / 255.0, 64 / 255.0, 72 / 255.0)
+        self.grid_major_color = (82 / 255.0, 90 / 255.0, 102 / 255.0)
+        self.grid_x_axis_color = (118 / 255.0, 54 / 255.0, 54 / 255.0)
+        self.grid_y_axis_color = (62 / 255.0, 112 / 255.0, 68 / 255.0)
+        if self._grid_vao is not None or self._grid_vbo is not None:
+            try:
+                if self._grid_vao is not None:
+                    self._grid_vao.release()
+            except Exception:
+                pass
+            try:
+                if self._grid_vbo is not None:
+                    self._grid_vbo.release()
+            except Exception:
+                pass
+            self._grid_vao = None
+            self._grid_vbo = None
+
+    @staticmethod
+    def _rgb_float(color: tuple[int, int, int]) -> tuple[float, float, float]:
+        return tuple(max(0.0, min(1.0, float(v) / 255.0)) for v in color[:3])
+
+    @staticmethod
+    def _blend_rgb(a: tuple[int, int, int], b: tuple[int, int, int], t: float) -> tuple[int, int, int]:
+        t = max(0.0, min(1.0, float(t)))
+        return tuple(int(round(float(a[i]) * (1.0 - t) + float(b[i]) * t)) for i in range(3))
+
+    @staticmethod
+    def _relative_luma(color: tuple[int, int, int]) -> float:
+        r, g, b = (max(0, min(255, int(v))) / 255.0 for v in color)
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+    def set_native_palette_colors(
+        self,
+        *,
+        base: tuple[int, int, int],
+        text: tuple[int, int, int],
+        highlight: tuple[int, int, int],
+    ) -> None:
+        bg = tuple(int(v) for v in base[:3])
+        fg = tuple(int(v) for v in text[:3])
+        hi = tuple(int(v) for v in highlight[:3])
+        is_dark = self._relative_luma(bg) < 0.45
+        self.viewport_background = self._rgb_float(bg)
+        self.grid_minor_color = self._rgb_float(self._blend_rgb(bg, fg, 0.12 if is_dark else 0.18))
+        self.grid_major_color = self._rgb_float(self._blend_rgb(bg, fg, 0.22 if is_dark else 0.30))
+        self.grid_x_axis_color = self._rgb_float((210, 70, 70) if is_dark else (160, 30, 30))
+        self.grid_y_axis_color = self._rgb_float((70, 180, 90) if is_dark else (40, 130, 55))
+        self.wire_color = self._rgb_float(hi)
+        if self._grid_vao is not None or self._grid_vbo is not None:
+            try:
+                if self._grid_vao is not None:
+                    self._grid_vao.release()
+            except Exception:
+                pass
+            try:
+                if self._grid_vbo is not None:
+                    self._grid_vbo.release()
+            except Exception:
+                pass
+            self._grid_vao = None
+            self._grid_vbo = None
+
     # ── Context management ────────────────────────────────────────────────────
 
     def _ensure_context(self) -> bool:

@@ -1,0 +1,35 @@
+<theme id="default" name="Default" version="1">
+    <metadata>
+        <author>GhostRigger</author>
+        <description>Pure platform/default Qt styling with no generated GhostRigger stylesheet.</description>
+        <mode>native</mode>
+    </metadata>
+    <styles>
+        <style name="application.native" value="true"/>
+    </styles>
+    <fonts>
+        <font role="default" family="Segoe UI" size="9"/>
+        <font role="monospace" family="Consolas" size="9"/>
+        <font role="heading" family="Segoe UI" size="10" weight="bold"/>
+        <font role="matrix" family="Aurebesh AF" size="9"/>
+    </fonts>
+    <icons>
+        <provider>qtawesome</provider>
+        <defaultMode>iconText</defaultMode>
+        <size role="toolbar" value="18"/>
+        <size role="largeToolbar" value="24"/>
+    </icons>
+    <metrics>
+        <metric name="toolbar.height" value="34"/>
+        <metric name="toolbar.iconSize" value="18"/>
+        <metric name="toolbar.spacing" value="4"/>
+        <metric name="button.height" value="16"/>
+        <metric name="button.minWidth" value="64"/>
+        <metric name="button.paddingH" value="6"/>
+        <metric name="button.paddingV" value="1"/>
+        <metric name="panel.margin" value="4"/>
+        <metric name="panel.spacing" value="4"/>
+        <metric name="splitter.handleWidth" value="6"/>
+        <metric name="tab.height" value="14"/>
+    </metrics>
+</theme>

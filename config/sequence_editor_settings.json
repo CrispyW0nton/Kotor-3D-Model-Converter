@@ -4,8 +4,8 @@
   "loop_playback": false,
   "playback_speed": 1.0,
   "recent_sequences": [],
-  "selected_layout_mode": "Camera Cut Review + Viewport",
-  "show_curve_editor": true,
+  "selected_layout_mode": "Timeline Only",
+  "show_curve_editor": false,
   "show_viewport": false,
   "snap_keys_enabled": true,
   "timeline_zoom": 8.0

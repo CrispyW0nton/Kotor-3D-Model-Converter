@@ -205,8 +205,11 @@ major tool windows. The original green high-contrast look is preserved as the
 selectable **Matrix** theme, but it is no longer hardcoded as the only
 application style.
 
-Packaged themes live in `config/themes/themes/`: `matrix.xml`, `dark.xml`,
-`light.xml`, and `classic.xml`. Packaged layouts live in
+Packaged themes live in `config/themes/themes/`: `default.xml`, `matrix.xml`,
+`droid.xml`, `dark.xml`, `light.xml`, and `classic.xml`. **Default** opts out
+of generated GhostRigger QSS so Qt uses platform/native widget styling.
+**Droid** is the dark graphite startup-console look with grey controls and
+Matrix-green accents. Packaged layouts live in
 `config/themes/layouts/`: `default.xml`, `compact.xml`, `wide.xml`, and
 `cinematic.xml`.
 

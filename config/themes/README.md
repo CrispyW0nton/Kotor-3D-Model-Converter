@@ -4,9 +4,23 @@ Packaged themes live in `config/themes/themes/`. Packaged layouts live in
 `config/themes/layouts/`. These files are normal XML and are intended to be
 readable by modders.
 
+Built-in themes are:
+
+- `default.xml`: platform/native Qt styling; no generated GhostRigger QSS.
+- `matrix.xml`: high-contrast GhostRigger Matrix green.
+- `droid.xml`: dark graphite droid console, grey controls, Matrix-green accents.
+- `dark.xml`: quieter professional dark UI.
+- `light.xml`: modern light UI.
+- `classic.xml`: traditional light DCC/tool UI.
+
 Themes define colours, fonts, icon provider defaults, and visual tokens.
 Layouts define window size, panel widths, splitter proportions, toolbar
 visibility, row heights, control density, and button display modes.
+Custom themes should define the `spinbox.*` colour tokens for numeric
+up/down controls: `spinbox.buttonBackground`, `spinbox.buttonHover`,
+`spinbox.buttonPressed`, `spinbox.buttonBorder`, and `spinbox.arrow`.
+These keep themed `QSpinBox` and `QDoubleSpinBox` steppers as legible as the
+native Default theme.
 
 User themes and layouts can be placed in the platform-specific GhostRigger
 config directory:

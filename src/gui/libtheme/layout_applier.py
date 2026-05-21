@@ -87,8 +87,11 @@ class LayoutApplier(QtCore.QObject):
         if command_bar is not None:
             command_bar.setVisible(main_toolbar.visible)
             command_bar.setMinimumHeight(main_toolbar.height)
-            command_bar.setMaximumHeight(main_toolbar.height)
             layout_obj = command_bar.layout()
+            if layout_obj is not None and layout_obj.hasHeightForWidth():
+                command_bar.setMaximumHeight(16777215)
+            else:
+                command_bar.setMaximumHeight(main_toolbar.height)
             if layout_obj is not None:
                 spacing = layout.spacing_value("toolbarSpacing", layout.spacing_value("toolbar.spacing", 4))
                 layout_obj.setSpacing(spacing)

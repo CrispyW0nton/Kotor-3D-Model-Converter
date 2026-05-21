@@ -52,7 +52,10 @@ def main() -> int:
             failures.extend(f"{theme.id}: {warning}" for warning in warnings)
         if missing_tokens:
             failures.append(f"{theme.id}: missing tokens {', '.join(missing_tokens)}")
-        if "QMainWindow" not in stylesheet:
+        if theme.is_native():
+            if stylesheet != "":
+                failures.append(f"{theme.id}: native theme should not build a stylesheet")
+        elif "QMainWindow" not in stylesheet:
             failures.append(f"{theme.id}: stylesheet did not build")
         if theme.id in {"light", "classic"}:
             pairs = [
@@ -60,6 +63,7 @@ def main() -> int:
                 ("text.secondary", "panel.background"),
                 ("input.text", "input.background"),
                 ("button.text", "button.background"),
+                ("spinbox.arrow", "spinbox.buttonBackground"),
                 ("selection.text", "selection.background"),
                 ("table.headerText", "table.headerBackground"),
             ]
