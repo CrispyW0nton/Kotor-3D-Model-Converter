@@ -92,6 +92,7 @@ class QtMatrixPanel(QtWidgets.QFrame):
         self._glyphs = self._GLYPHS
         self._bar_style = "matrix"
         self._image_path = ""
+        self._crop = (0.0, 0.0, 100.0, 100.0)
         self._movie: Optional[QtGui.QMovie] = None
         self._background = QtGui.QColor(C["bg"])
         self._glyph_color = QtGui.QColor(C["accent"])
@@ -122,12 +123,15 @@ class QtMatrixPanel(QtWidgets.QFrame):
         glyphs: str = "",
         font_family: str = "",
         image_path: str = "",
+        crop: tuple[float, float, float, float] | None = None,
     ) -> None:
         self._bar_style = (style or "matrix").strip().lower()
         self._glyphs = glyphs or self._GLYPHS
         if font_family:
             self._font_family = font_family
         self._image_path = image_path or ""
+        if crop is not None:
+            self._crop = self._normalize_crop(crop)
         if self._movie is not None:
             self._movie.stop()
             try:
@@ -140,6 +144,28 @@ class QtMatrixPanel(QtWidgets.QFrame):
             self._movie.frameChanged.connect(lambda _frame=0: self.update())
             self._movie.start()
         self.update()
+
+    @staticmethod
+    def _normalize_crop(crop: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+        try:
+            x, y, w, h = (float(value) for value in crop)
+        except Exception:
+            return (0.0, 0.0, 100.0, 100.0)
+        x = max(0.0, min(99.0, x))
+        y = max(0.0, min(99.0, y))
+        w = max(1.0, min(100.0 - x, w))
+        h = max(1.0, min(100.0 - y, h))
+        return (x, y, w, h)
+
+    def _crop_rect(self, pixmap: QtGui.QPixmap) -> QtCore.QRect:
+        x, y, w, h = self._crop
+        width = max(1, pixmap.width())
+        height = max(1, pixmap.height())
+        left = int(width * x / 100.0)
+        top = int(height * y / 100.0)
+        crop_width = max(1, int(width * w / 100.0))
+        crop_height = max(1, int(height * h / 100.0))
+        return QtCore.QRect(left, top, min(crop_width, width - left), min(crop_height, height - top))
 
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         super().resizeEvent(event)
@@ -159,13 +185,13 @@ class QtMatrixPanel(QtWidgets.QFrame):
         if self._bar_style in {"png", "image"} and self._image_path:
             pix = QtGui.QPixmap(self._image_path)
             if not pix.isNull():
-                painter.drawPixmap(self.rect(), pix)
+                painter.drawPixmap(self.rect(), pix, self._crop_rect(pix))
                 painter.end()
                 return
         if self._bar_style == "gif" and self._movie is not None:
             pix = self._movie.currentPixmap()
             if not pix.isNull():
-                painter.drawPixmap(self.rect(), pix)
+                painter.drawPixmap(self.rect(), pix, self._crop_rect(pix))
                 painter.end()
                 return
         if self._bar_style == "disabled":

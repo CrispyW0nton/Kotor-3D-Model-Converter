@@ -8,6 +8,8 @@ from PySide6 import QtCore, QtWidgets
 class CollapsibleGroupBox(QtWidgets.QGroupBox):
     """QGroupBox with a top-right +/- expander."""
 
+    TOGGLE_SIZE = 16
+
     def __init__(self, title: str, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(title, parent)
         self._collapsed = False
@@ -15,16 +17,19 @@ class CollapsibleGroupBox(QtWidgets.QGroupBox):
         self._expanded_max_height = 16777215
         self._toggle = QtWidgets.QToolButton(self)
         self._toggle.setObjectName("CollapsibleGroupToggle")
+        self._toggle.setProperty("_gr_ignore_layout_button_mode", True)
+        self._toggle.setProperty("collapsibleToggle", True)
         self._toggle.setText("-")
         self._toggle.setToolTip("Collapse section")
         self._toggle.setAutoRaise(True)
         self._toggle.setCursor(QtCore.Qt.PointingHandCursor)
         self._toggle.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         self._toggle.clicked.connect(self.toggle_collapsed)
-        self._toggle.setFixedSize(16, 16)
+        self._enforce_toggle_size()
         self._toggle.setStyleSheet(
             "QToolButton#CollapsibleGroupToggle {"
             "min-width: 16px; max-width: 16px; min-height: 16px; max-height: 16px;"
+            "width: 16px; height: 16px;"
             "padding: 0px; margin: 0px;"
             "}"
         )
@@ -34,6 +39,7 @@ class CollapsibleGroupBox(QtWidgets.QGroupBox):
         layout = self.layout()
         if layout is not None:
             self._reserve_header_space(layout)
+        self._enforce_toggle_size()
         self._toggle.move(max(0, self.width() - self._toggle.width() - 8), 3)
 
     def setLayout(self, layout: QtWidgets.QLayout) -> None:  # noqa: N802
@@ -73,6 +79,12 @@ class CollapsibleGroupBox(QtWidgets.QGroupBox):
 
     def collapsed_height(self) -> int:
         return 24
+
+    def _enforce_toggle_size(self) -> None:
+        size = self.TOGGLE_SIZE
+        self._toggle.setFixedSize(size, size)
+        self._toggle.setMinimumSize(size, size)
+        self._toggle.setMaximumSize(size, size)
 
     @staticmethod
     def _set_layout_visible(layout: QtWidgets.QLayout, visible: bool) -> None:

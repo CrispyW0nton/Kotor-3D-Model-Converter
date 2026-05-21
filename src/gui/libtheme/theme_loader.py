@@ -83,7 +83,7 @@ class ThemeLoader:
             if name:
                 metrics[name] = value
 
-        styles = dict(FALLBACK_STYLES)
+        styles: dict[str, str] = {}
         for entry in root.findall("./styles/style"):
             name = (entry.get("name") or "").strip()
             value = (entry.get("value") or "").strip()

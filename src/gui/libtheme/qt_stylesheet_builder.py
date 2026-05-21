@@ -270,6 +270,17 @@ class QtStylesheetBuilder:
             min-height: {max(16, m('button.height', 16))}px;
             min-width: {m('button.minWidth', 64)}px;
         }}
+        QToolButton#CollapsibleGroupToggle {{
+            min-width: 16px;
+            max-width: 16px;
+            min-height: 16px;
+            max-height: 16px;
+            width: 16px;
+            height: 16px;
+            padding: 0px;
+            margin: 0px;
+            border-radius: {min(radius, 2)}px;
+        }}
         QLabel[heading="true"] {{
             color: {c('accent.primary')};
             font-family: {heading_font.family}, Segoe UI, sans-serif;

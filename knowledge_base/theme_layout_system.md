@@ -41,6 +41,7 @@ Recommended sections:
 - `icons`: provider, default button mode, toolbar icon sizes
 - `metrics`: toolbar height, button height, spacing, panel metrics, splitter
   handle width
+- `styles`: application/native mode, tab mode, Matrix bar mode/glyph/font/image
 
 Widgets should consume colors through the application stylesheet first. Custom
 painted widgets should expose `apply_ghost_theme(theme)` and read tokens with
@@ -95,6 +96,8 @@ before the active UI is rearranged.
 Open **Settings -> Theme/Layout -> Theme Editor...**. The editor separates:
 
 - Theme values: colours, fonts, icon provider/defaults.
+- Matrix Bar values: mode, optional glyph alphabet, optional font override,
+  optional PNG/GIF path, and crop rectangle.
 - Layout values: sizes, density, panel widths, row heights, button mode.
 
 Changing a colour, font, metric, or button mode updates only the editor preview
@@ -150,7 +153,14 @@ Core metric tokens include:
 - `statusbar.height`, `viewportToolbar.height`, `transformBar.height`
 
 Font roles are `default`, `monospace`, `heading`, `small`, `viewport`, and
-`terminal`.
+`terminal`. The Matrix bar uses the `matrix` font role unless
+`matrixBar.fontFamily` is set in the theme styles.
+
+Style tokens include `application.native`, `tab.mode`, `matrixBar.style`,
+`matrixBar.glyphs`, `matrixBar.fontFamily`, `matrixBar.imagePath`,
+`matrixBar.cropX`, `matrixBar.cropY`, `matrixBar.cropW`, and
+`matrixBar.cropH`. Supported `matrixBar.style` values are `matrix`, `png`,
+`gif`, and `disabled`; crop values are percentages.
 
 ## Fixing Widgets
 

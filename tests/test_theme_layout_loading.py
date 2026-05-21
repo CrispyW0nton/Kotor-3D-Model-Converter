@@ -4,12 +4,17 @@ import os
 from pathlib import Path
 
 from src.gui.libtheme.layout_loader import LayoutLoader
-from src.gui.libtheme.layout_applier import button_mode_to_toolbutton_style
+from src.gui.libtheme.collapsible_group import CollapsibleGroupBox
+from src.gui.libtheme.layout_applier import LayoutApplier, button_mode_to_toolbutton_style
+from src.gui.libtheme.layout_model import ToolbarLayout
 from src.gui.libtheme.qt_stylesheet_builder import QtStylesheetBuilder
 from src.gui.libtheme.style_tokens import FALLBACK_COLORS, FALLBACK_METRICS, VALID_BUTTON_MODES
+from src.gui.libtheme.theme_applier import ThemeApplier
+from src.gui.libtheme.theme_editor_window import ThemeEditorWindow
 from src.gui.libtheme.theme_loader import ThemeLoader
 from src.gui.libtheme.theme_manager import ThemeManager
 from src.gui.libtheme.layout_manager import LayoutManager
+from src.gui.qt_lib.dialogs.qt_settings_dialog import QtSettingsDialog
 from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
 from src.gui.qt_lib.viewports.qt_transform_typein_bar import transform_bar_stylesheet
 
@@ -132,6 +137,141 @@ def test_managers_load_packaged_defaults() -> None:
     assert theme_manager.get_theme().id == "matrix"
     assert layout_manager.get_layout().id == "default"
     assert "iconOnly" in VALID_BUTTON_MODES
+
+
+def test_theme_applier_precache_warms_later_instances() -> None:
+    previous_cache = dict(ThemeApplier._global_stylesheet_cache)
+    ThemeApplier._global_stylesheet_cache.clear()
+    try:
+        themes = ThemeLoader().load_dir(ROOT / "config" / "themes" / "themes")
+
+        result = ThemeApplier.precache_stylesheets(themes.values())
+
+        assert result["failed"] == 0
+        assert result["built"] == len(themes)
+        classic = themes["classic"]
+        key = ThemeApplier._theme_cache_key(classic)
+        assert key in ThemeApplier._global_stylesheet_cache
+
+        applier = ThemeApplier()
+        stylesheet = applier.build_stylesheet(classic)
+
+        assert stylesheet == ThemeApplier._global_stylesheet_cache[key]
+        assert applier._stylesheet_cache[key] == stylesheet
+    finally:
+        ThemeApplier._global_stylesheet_cache.clear()
+        ThemeApplier._global_stylesheet_cache.update(previous_cache)
+
+
+def test_collapsible_group_toggle_stays_small_under_theme_and_layout() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtGui, QtWidgets
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    old_stylesheet = app.styleSheet()
+    theme = ThemeLoader().load_file(ROOT / "config" / "themes" / "themes" / "matrix.xml")
+    assert theme is not None
+    container = QtWidgets.QWidget()
+    outer = QtWidgets.QVBoxLayout(container)
+    group = CollapsibleGroupBox("Selection Mode")
+    inner = QtWidgets.QVBoxLayout(group)
+    inner.addWidget(QtWidgets.QPushButton("Object"))
+    outer.addWidget(group)
+    try:
+        app.setStyleSheet(QtStylesheetBuilder().build(theme))
+        LayoutApplier().apply_toolbar_button_mode(
+            container,
+            ToolbarLayout(id="main", button_mode="textOnly", icon_size=22, height=48),
+        )
+        container.resize(320, 140)
+        container.show()
+        app.processEvents()
+
+        toggle = group._toggle
+        assert toggle.property("_gr_ignore_layout_button_mode") is True
+        assert toggle.width() == CollapsibleGroupBox.TOGGLE_SIZE
+        assert toggle.height() == CollapsibleGroupBox.TOGGLE_SIZE
+        assert toggle.maximumWidth() == CollapsibleGroupBox.TOGGLE_SIZE
+        assert toggle.maximumHeight() == CollapsibleGroupBox.TOGGLE_SIZE
+    finally:
+        container.deleteLater()
+        app.setStyleSheet(old_stylesheet)
+
+
+def test_matrix_bar_controls_live_in_theme_editor_not_settings(tmp_path: Path) -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtGui, QtWidgets
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    theme_manager = ThemeManager(ROOT, {"theme_layout": {"selected_theme": "matrix"}})
+    layout_manager = LayoutManager(ROOT, {"theme_layout": {"selected_layout": "default"}})
+    settings_dialog = QtSettingsDialog(
+        {"matrix_background": False, "matrix_bar": {"style": "gif", "glyphs": "ABC"}},
+        theme_manager=theme_manager,
+        layout_manager=layout_manager,
+    )
+    editor = ThemeEditorWindow(
+        theme_manager,
+        layout_manager,
+        matrix_bar_settings={"style": "gif", "glyphs": "ABC", "font_family": "Consolas"},
+        matrix_background_enabled=False,
+    )
+    try:
+        settings_tabs = settings_dialog.findChild(QtWidgets.QTabWidget, "SettingsSectionsTabs")
+        assert settings_tabs is not None
+        assert "Matrix Bar" not in [settings_tabs.tabText(index) for index in range(settings_tabs.count())]
+
+        editor_tabs = next(
+            tabs
+            for tabs in editor.centralWidget().findChildren(QtWidgets.QTabWidget)
+            if "Colours" in [tabs.tabText(index) for index in range(tabs.count())]
+        )
+        assert "Matrix Bar" in [editor_tabs.tabText(index) for index in range(editor_tabs.count())]
+        assert editor.matrix_bar_style.currentData() == "gif"
+        assert editor.matrix_bar_glyphs.text() == "ABC"
+
+        image_path = tmp_path / "matrix_bar.png"
+        image = QtGui.QImage(24, 12, QtGui.QImage.Format_RGB32)
+        image.fill(QtGui.QColor("#FF0044"))
+        assert image.save(str(image_path))
+
+        editor.matrix_bar_style.setCurrentIndex(editor.matrix_bar_style.findData("png"))
+        editor.matrix_bar_image.setText(str(image_path))
+        editor._set_matrix_bar_text_style("matrixBar.imagePath", str(image_path))
+
+        assert editor._theme.styles["matrixBar.style"] == "png"
+        assert editor._theme.styles["matrixBar.imagePath"] == str(image_path)
+        assert not editor.matrix_bar_preview.source_pixmap().isNull()
+        editor._set_matrix_bar_crop_from_preview(10.0, 20.0, 30.0, 40.0)
+        assert editor._theme.styles["matrixBar.cropX"] == "10.0"
+        assert editor._theme.styles["matrixBar.cropH"] == "40.0"
+        assert editor.matrix_bar_preview.maximumHeight() == 240
+        editor.matrix_bar_preview.resize(620, 240)
+        rendered = QtGui.QPixmap(editor.matrix_bar_preview.size())
+        rendered.fill(QtGui.QColor("#000000"))
+        editor.matrix_bar_preview.render(rendered)
+        assert rendered.toImage().pixelColor(310, 120) == QtGui.QColor("#FF0044")
+        assert editor.matrix_bar_preview._crop_rect().width() < editor.matrix_bar_preview._image_rect.width()
+    finally:
+        editor.deleteLater()
+        settings_dialog.deleteLater()
+
+
+def test_matrix_bar_media_is_header_only_and_crop_aware() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    command_source = inspect.getsource(QtGhostRiggerMainWindow._make_command_bar)
+    apply_source = inspect.getsource(QtGhostRiggerMainWindow._apply_matrix_theme)
+    native_source = inspect.getsource(QtGhostRiggerMainWindow.apply_native_theme)
+
+    assert "QtMatrixPanel" not in command_source
+    assert "command_bar" not in apply_source
+    assert "command_bar" not in native_source
+    assert "matrixBar.cropX" in inspect.getsource(QtGhostRiggerMainWindow._matrix_bar_settings)
 
 
 def test_viewport_chrome_and_renderer_use_theme_tokens() -> None:

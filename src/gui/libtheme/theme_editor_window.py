@@ -41,6 +41,7 @@ _PIXEL_TOKEN_HINTS = (
     "row",
     "handle",
 )
+_MATRIX_BAR_STYLE_VALUES = {"matrix", "png", "gif", "disabled"}
 
 
 def _register_bundled_matrix_font() -> None:
@@ -69,6 +70,134 @@ def _metric_unit(token: str) -> str:
     return "px"
 
 
+class MatrixBarImagePreview(QtWidgets.QLabel):
+    cropChanged = QtCore.Signal(float, float, float, float)
+    PREVIEW_SIZE = QtCore.QSize(640, 240)
+
+    def __init__(self, text: str = "", parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(text, parent)
+        self._source = QtGui.QPixmap()
+        self._crop = (0.0, 0.0, 100.0, 100.0)
+        self._image_rect = QtCore.QRectF()
+        self._drag_start: QtCore.QPointF | None = None
+        self.setAlignment(QtCore.Qt.AlignCenter)
+        self.setMouseTracking(True)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
+        self.setMinimumSize(260, self.PREVIEW_SIZE.height())
+        self.setMaximumHeight(self.PREVIEW_SIZE.height())
+
+    def sizeHint(self) -> QtCore.QSize:  # noqa: N802
+        return QtCore.QSize(self.PREVIEW_SIZE)
+
+    def minimumSizeHint(self) -> QtCore.QSize:  # noqa: N802
+        return QtCore.QSize(260, self.PREVIEW_SIZE.height())
+
+    def set_source_pixmap(self, pixmap: QtGui.QPixmap) -> None:
+        self._source = pixmap
+        self.update()
+
+    def set_crop(self, crop: tuple[float, float, float, float]) -> None:
+        self._crop = self._normalize_crop(crop)
+        self.update()
+
+    def source_pixmap(self) -> QtGui.QPixmap:
+        return self._source
+
+    @staticmethod
+    def _normalize_crop(crop: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+        try:
+            x, y, w, h = (float(value) for value in crop)
+        except Exception:
+            return (0.0, 0.0, 100.0, 100.0)
+        x = max(0.0, min(99.0, x))
+        y = max(0.0, min(99.0, y))
+        w = max(1.0, min(100.0 - x, w))
+        h = max(1.0, min(100.0 - y, h))
+        return (x, y, w, h)
+
+    def _point_to_percent(self, point: QtCore.QPointF) -> tuple[float, float]:
+        if self._image_rect.isNull() or not self._image_rect.isValid():
+            return (0.0, 0.0)
+        x = (point.x() - self._image_rect.left()) / max(1.0, self._image_rect.width()) * 100.0
+        y = (point.y() - self._image_rect.top()) / max(1.0, self._image_rect.height()) * 100.0
+        return (max(0.0, min(100.0, x)), max(0.0, min(100.0, y)))
+
+    def _crop_rect(self) -> QtCore.QRectF:
+        x, y, w, h = self._crop
+        return QtCore.QRectF(
+            self._image_rect.left() + self._image_rect.width() * x / 100.0,
+            self._image_rect.top() + self._image_rect.height() * y / 100.0,
+            self._image_rect.width() * w / 100.0,
+            self._image_rect.height() * h / 100.0,
+        )
+
+    def _source_crop_rect(self) -> QtCore.QRectF:
+        if self._source.isNull():
+            return QtCore.QRectF()
+        x, y, w, h = self._crop
+        width = max(1, self._source.width())
+        height = max(1, self._source.height())
+        return QtCore.QRectF(
+            width * x / 100.0,
+            height * y / 100.0,
+            max(1.0, width * w / 100.0),
+            max(1.0, height * h / 100.0),
+        ).intersected(QtCore.QRectF(0, 0, width, height))
+
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802
+        if self._source.isNull():
+            self._image_rect = QtCore.QRectF()
+            super().paintEvent(event)
+            return
+        painter = QtGui.QPainter(self)
+        painter.fillRect(self.rect(), self.palette().window())
+        scaled = self._source.scaled(self.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+        left = (self.width() - scaled.width()) / 2.0
+        top = (self.height() - scaled.height()) / 2.0
+        self._image_rect = QtCore.QRectF(left, top, scaled.width(), scaled.height())
+        painter.drawPixmap(QtCore.QPointF(left, top), scaled)
+        selection = self._crop_rect()
+        pen = QtGui.QPen(QtGui.QColor(0, 255, 122), 2)
+        painter.setPen(pen)
+        painter.drawRect(selection)
+        painter.end()
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
+        if event.button() == QtCore.Qt.LeftButton and not self._source.isNull():
+            self._drag_start = QtCore.QPointF(event.position())
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
+        if self._drag_start is not None:
+            self._update_drag_crop(QtCore.QPointF(event.position()))
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
+        if self._drag_start is not None:
+            self._update_drag_crop(QtCore.QPointF(event.position()))
+            self._drag_start = None
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def _update_drag_crop(self, end: QtCore.QPointF) -> None:
+        if self._drag_start is None:
+            return
+        x1, y1 = self._point_to_percent(self._drag_start)
+        x2, y2 = self._point_to_percent(end)
+        x = min(x1, x2)
+        y = min(y1, y2)
+        w = max(1.0, abs(x2 - x1))
+        h = max(1.0, abs(y2 - y1))
+        self._crop = self._normalize_crop((x, y, w, h))
+        self.cropChanged.emit(*self._crop)
+        self.update()
+
+
 class ThemeEditorWindow(QtWidgets.QMainWindow):
     """Editor with local preview and explicit full-application apply actions."""
 
@@ -79,10 +208,15 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         theme_manager: ThemeManager,
         layout_manager: LayoutManager,
         parent: QtWidgets.QWidget | None = None,
+        *,
+        matrix_bar_settings: dict | None = None,
+        matrix_background_enabled: bool = True,
     ) -> None:
         super().__init__(parent)
         self.theme_manager = theme_manager
         self.layout_manager = layout_manager
+        self._matrix_bar_fallback = dict(matrix_bar_settings or {})
+        self._matrix_background_enabled = bool(matrix_background_enabled)
         self._theme = copy.deepcopy(theme_manager.current_theme or theme_manager.get_theme())
         self._layout = copy.deepcopy(layout_manager.current_layout or layout_manager.get_layout())
         self._dirty = False
@@ -121,6 +255,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         splitter.setSizes([520, 660])
 
         editor_tabs.addTab(self._build_theme_page(), "Theme")
+        editor_tabs.addTab(self._build_matrix_bar_page(), "Matrix Bar")
         editor_tabs.addTab(self._build_color_page(), "Colours")
         editor_tabs.addTab(self._build_font_page(), "Fonts")
         editor_tabs.addTab(self._build_metric_page(), "Metrics")
@@ -161,6 +296,67 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
             button.clicked.connect(slot)
             buttons.addWidget(button)
         root.addLayout(buttons)
+        root.addStretch(1)
+        return page
+
+    def _build_matrix_bar_page(self) -> QtWidgets.QWidget:
+        page = QtWidgets.QWidget()
+        root = QtWidgets.QVBoxLayout(page)
+        form = QtWidgets.QFormLayout()
+        form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+        form.setHorizontalSpacing(8)
+        form.setVerticalSpacing(6)
+        self.matrix_bar_enabled = QtWidgets.QCheckBox("Enable Matrix bar")
+        self.matrix_bar_enabled.toggled.connect(self._set_matrix_bar_enabled)
+        self.matrix_bar_style = QtWidgets.QComboBox()
+        for label, value in (
+            ("Theme matrix", "matrix"),
+            ("PNG image", "png"),
+            ("Animated GIF", "gif"),
+            ("Disabled", "disabled"),
+        ):
+            self.matrix_bar_style.addItem(label, value)
+        self.matrix_bar_style.currentIndexChanged.connect(
+            lambda _=0: self._set_matrix_bar_style(str(self.matrix_bar_style.currentData() or "matrix"))
+        )
+        self.matrix_bar_glyphs = QtWidgets.QLineEdit()
+        self.matrix_bar_glyphs.setPlaceholderText("Optional custom glyph alphabet")
+        self.matrix_bar_glyphs.textEdited.connect(lambda value: self._set_matrix_bar_text_style("matrixBar.glyphs", value))
+        self.matrix_bar_font = QtWidgets.QLineEdit()
+        self.matrix_bar_font.setPlaceholderText("Blank uses the theme's matrix font role")
+        self.matrix_bar_font.textEdited.connect(lambda value: self._set_matrix_bar_text_style("matrixBar.fontFamily", value))
+        self.matrix_bar_image = QtWidgets.QLineEdit()
+        self.matrix_bar_image.textEdited.connect(lambda value: self._set_matrix_bar_text_style("matrixBar.imagePath", value))
+        image_row = QtWidgets.QHBoxLayout()
+        image_row.addWidget(self.matrix_bar_image, 1)
+        image_browse = QtWidgets.QPushButton("Browse")
+        image_browse.clicked.connect(self._browse_matrix_bar_image)
+        image_row.addWidget(image_browse)
+        crop_row = QtWidgets.QHBoxLayout()
+        self.matrix_bar_crop_spins: dict[str, QtWidgets.QDoubleSpinBox] = {}
+        for label, key in (("X", "matrixBar.cropX"), ("Y", "matrixBar.cropY"), ("W", "matrixBar.cropW"), ("H", "matrixBar.cropH")):
+            crop_row.addWidget(QtWidgets.QLabel(label))
+            spin = QtWidgets.QDoubleSpinBox()
+            spin.setRange(0.0, 100.0)
+            spin.setDecimals(1)
+            spin.setSuffix("%")
+            spin.setKeyboardTracking(False)
+            spin.valueChanged.connect(lambda value, style_key=key: self._set_matrix_bar_text_style(style_key, f"{float(value):.1f}"))
+            self.matrix_bar_crop_spins[key] = spin
+            crop_row.addWidget(spin)
+        form.addRow("", self.matrix_bar_enabled)
+        form.addRow("Matrix Bar Style", self.matrix_bar_style)
+        form.addRow("Matrix Glyphs", self.matrix_bar_glyphs)
+        form.addRow("Matrix Font", self.matrix_bar_font)
+        form.addRow("Matrix Image/GIF", image_row)
+        form.addRow("Image Crop", crop_row)
+        root.addLayout(form)
+        self.matrix_bar_preview = MatrixBarImagePreview("GHOSTRIGGER // Odyssey Engine Pipeline")
+        self.matrix_bar_preview.setObjectName("MatrixBarPreview")
+        self.matrix_bar_preview.setAlignment(QtCore.Qt.AlignCenter)
+        self._matrix_bar_preview_movie: QtGui.QMovie | None = None
+        self.matrix_bar_preview.cropChanged.connect(self._set_matrix_bar_crop_from_preview)
+        root.addWidget(self.matrix_bar_preview)
         root.addStretch(1)
         return page
 
@@ -390,6 +586,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self._populate_color_tokens()
         self._populate_fonts()
         self._populate_metric_tokens()
+        self._populate_matrix_bar_controls()
         self._populate_style_controls()
         self._dirty = False
         self._refresh_preview()
@@ -508,6 +705,176 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         index = self.tab_style_mode_combo.findData(mode)
         self.tab_style_mode_combo.setCurrentIndex(max(index, 0))
         self.tab_style_mode_combo.blockSignals(False)
+
+    def _matrix_bar_style_value(self, key: str, default: str = "") -> str:
+        value = self._theme.styles.get(key)
+        if value is not None:
+            return str(value)
+        fallback_key = {
+            "matrixBar.style": "style",
+            "matrixBar.glyphs": "glyphs",
+            "matrixBar.fontFamily": "font_family",
+            "matrixBar.imagePath": "image_path",
+        }.get(key, key)
+        fallback = self._matrix_bar_fallback.get(fallback_key)
+        if key == "matrixBar.style" and not fallback and not self._matrix_background_enabled:
+            return "disabled"
+        return str(fallback if fallback is not None else FALLBACK_STYLES.get(key, default))
+
+    def _populate_matrix_bar_controls(self) -> None:
+        if not hasattr(self, "matrix_bar_style"):
+            return
+        style = self._matrix_bar_style_value("matrixBar.style", "matrix").strip().lower()
+        if style not in _MATRIX_BAR_STYLE_VALUES:
+            style = "matrix"
+        self.matrix_bar_enabled.blockSignals(True)
+        self.matrix_bar_style.blockSignals(True)
+        self.matrix_bar_glyphs.blockSignals(True)
+        self.matrix_bar_font.blockSignals(True)
+        self.matrix_bar_image.blockSignals(True)
+        self.matrix_bar_enabled.setChecked(style != "disabled")
+        index = self.matrix_bar_style.findData(style)
+        self.matrix_bar_style.setCurrentIndex(max(index, 0))
+        self.matrix_bar_glyphs.setText(self._matrix_bar_style_value("matrixBar.glyphs"))
+        self.matrix_bar_font.setText(self._matrix_bar_style_value("matrixBar.fontFamily"))
+        self.matrix_bar_image.setText(self._matrix_bar_style_value("matrixBar.imagePath"))
+        for key, default in (
+            ("matrixBar.cropX", 0.0),
+            ("matrixBar.cropY", 0.0),
+            ("matrixBar.cropW", 100.0),
+            ("matrixBar.cropH", 100.0),
+        ):
+            spin = self.matrix_bar_crop_spins.get(key)
+            if spin is not None:
+                spin.blockSignals(True)
+                try:
+                    spin.setValue(float(self._matrix_bar_style_value(key, str(default))))
+                except ValueError:
+                    spin.setValue(default)
+                spin.blockSignals(False)
+        self.matrix_bar_enabled.blockSignals(False)
+        self.matrix_bar_style.blockSignals(False)
+        self.matrix_bar_glyphs.blockSignals(False)
+        self.matrix_bar_font.blockSignals(False)
+        self.matrix_bar_image.blockSignals(False)
+
+    def _set_matrix_bar_enabled(self, enabled: bool) -> None:
+        if enabled:
+            style = str(self.matrix_bar_style.currentData() or "matrix")
+            if style == "disabled":
+                style = "matrix"
+                index = self.matrix_bar_style.findData(style)
+                self.matrix_bar_style.blockSignals(True)
+                self.matrix_bar_style.setCurrentIndex(max(index, 0))
+                self.matrix_bar_style.blockSignals(False)
+        else:
+            style = "disabled"
+            index = self.matrix_bar_style.findData(style)
+            self.matrix_bar_style.blockSignals(True)
+            self.matrix_bar_style.setCurrentIndex(max(index, 0))
+            self.matrix_bar_style.blockSignals(False)
+        self._theme.styles["matrixBar.style"] = style
+        self._mark_dirty()
+        self._refresh_preview()
+
+    def _set_matrix_bar_style(self, style: str) -> None:
+        style = style if style in _MATRIX_BAR_STYLE_VALUES else "matrix"
+        self._theme.styles["matrixBar.style"] = style
+        self.matrix_bar_enabled.blockSignals(True)
+        self.matrix_bar_enabled.setChecked(style != "disabled")
+        self.matrix_bar_enabled.blockSignals(False)
+        self._mark_dirty()
+        self._refresh_preview()
+
+    def _set_matrix_bar_text_style(self, key: str, value: str) -> None:
+        self._theme.styles[key] = value.strip()
+        self._mark_dirty()
+        self._refresh_preview()
+
+    def _matrix_bar_crop(self) -> tuple[float, float, float, float]:
+        values = []
+        for key, default in (
+            ("matrixBar.cropX", 0.0),
+            ("matrixBar.cropY", 0.0),
+            ("matrixBar.cropW", 100.0),
+            ("matrixBar.cropH", 100.0),
+        ):
+            try:
+                values.append(float(self._matrix_bar_style_value(key, str(default))))
+            except ValueError:
+                values.append(default)
+        return MatrixBarImagePreview._normalize_crop(tuple(values))  # type: ignore[arg-type]
+
+    def _set_matrix_bar_crop_from_preview(self, x: float, y: float, w: float, h: float) -> None:
+        crop = MatrixBarImagePreview._normalize_crop((x, y, w, h))
+        for key, value in (
+            ("matrixBar.cropX", crop[0]),
+            ("matrixBar.cropY", crop[1]),
+            ("matrixBar.cropW", crop[2]),
+            ("matrixBar.cropH", crop[3]),
+        ):
+            self._theme.styles[key] = f"{value:.1f}"
+            spin = self.matrix_bar_crop_spins.get(key)
+            if spin is not None:
+                spin.blockSignals(True)
+                spin.setValue(value)
+                spin.blockSignals(False)
+        if hasattr(self, "matrix_bar_preview"):
+            self.matrix_bar_preview.set_crop(crop)
+        self._mark_dirty()
+
+    def _browse_matrix_bar_image(self) -> None:
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Select Matrix Bar Image",
+            self.matrix_bar_image.text().strip(),
+            "Images (*.png *.jpg *.jpeg *.gif);;All files (*.*)",
+        )
+        if path:
+            self.matrix_bar_image.setText(path)
+            self._set_matrix_bar_text_style("matrixBar.imagePath", path)
+
+    def _clear_matrix_bar_preview_media(self) -> None:
+        movie = getattr(self, "_matrix_bar_preview_movie", None)
+        if movie is not None:
+            movie.stop()
+            self._matrix_bar_preview_movie = None
+        self.matrix_bar_preview.clear()
+        self.matrix_bar_preview.setMovie(None)
+
+    def _refresh_matrix_bar_preview(self) -> None:
+        if not hasattr(self, "matrix_bar_preview"):
+            return
+        style = self._matrix_bar_style_value("matrixBar.style", "matrix").strip().lower()
+        image_path = self._matrix_bar_style_value("matrixBar.imagePath")
+        self._clear_matrix_bar_preview_media()
+        self.matrix_bar_preview.set_source_pixmap(QtGui.QPixmap())
+        self.matrix_bar_preview.set_crop(self._matrix_bar_crop())
+        self.matrix_bar_preview.setText("GHOSTRIGGER // Odyssey Engine Pipeline")
+        matrix_font = self._matrix_bar_style_value("matrixBar.fontFamily") or self._theme.font("matrix").family
+        self.matrix_bar_preview.setStyleSheet(
+            f"background:{self._theme.color('matrixBar.background')}; "
+            f"color:{self._theme.color('matrixBar.text')}; "
+            f"border:1px solid {self._theme.color('toolbar.border')}; "
+            f"font-family:{matrix_font};"
+        )
+        if style in {"png", "image"} and image_path:
+            pixmap = QtGui.QPixmap(image_path)
+            if not pixmap.isNull():
+                self.matrix_bar_preview.set_source_pixmap(pixmap)
+                return
+        if style == "gif" and image_path:
+            movie = QtGui.QMovie(image_path)
+            if movie.isValid():
+                height = max(1, self.matrix_bar_preview.height())
+                width = max(1, self.matrix_bar_preview.width())
+                movie.setScaledSize(QtCore.QSize(width, height))
+                self.matrix_bar_preview.setMovie(movie)
+                self._matrix_bar_preview_movie = movie
+                movie.start()
+                return
+        if style == "disabled":
+            self.matrix_bar_preview.setText("Matrix bar disabled")
 
     def _set_tab_style_mode(self, mode: str) -> None:
         if mode not in VALID_TAB_STYLE_MODES:
@@ -673,6 +1040,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
             f"color:{self._theme.color('viewport.text')}; "
             f"border:1px solid {self._theme.color('transformBar.border')};"
         )
+        self._refresh_matrix_bar_preview()
 
     def _mark_dirty(self, *_args) -> None:
         self._dirty = True
@@ -726,6 +1094,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self._populate_color_tokens()
         self._populate_fonts()
         self._populate_metric_tokens()
+        self._populate_matrix_bar_controls()
         self._populate_style_controls()
         self._refresh_preview()
 

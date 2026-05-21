@@ -13,7 +13,7 @@ Built-in themes are:
 - `light.xml`: modern light UI.
 - `classic.xml`: traditional light DCC/tool UI.
 
-Themes define colours, fonts, icon provider defaults, and visual tokens.
+Themes define colours, fonts, icon provider defaults, Matrix bar style, and visual tokens.
 Layouts define window size, panel widths, splitter proportions, toolbar
 visibility, row heights, control density, and button display modes.
 Custom themes should define the `spinbox.*` colour tokens for numeric
@@ -21,6 +21,12 @@ up/down controls: `spinbox.buttonBackground`, `spinbox.buttonHover`,
 `spinbox.buttonPressed`, `spinbox.buttonBorder`, and `spinbox.arrow`.
 These keep themed `QSpinBox` and `QDoubleSpinBox` steppers as legible as the
 native Default theme.
+The Theme Editor owns Matrix bar appearance. Its Matrix Bar tab writes
+`matrixBar.style`, `matrixBar.glyphs`, `matrixBar.fontFamily`, and
+`matrixBar.imagePath` into the theme `<styles>` section, along with
+`matrixBar.cropX`, `matrixBar.cropY`, `matrixBar.cropW`, and
+`matrixBar.cropH` for selecting the image region. Matrix bar colours remain
+editable as `matrixBar.*` colour tokens.
 
 User themes and layouts can be placed in the platform-specific GhostRigger
 config directory:

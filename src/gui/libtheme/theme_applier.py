@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Iterable
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -40,6 +41,7 @@ class ThemeApplier(QtCore.QObject):
     themeApplyProgress = QtCore.Signal(str, int, int)
     themeApplyFinished = QtCore.Signal(object, float)
     themeApplyFailed = QtCore.Signal(str)
+    _global_stylesheet_cache: dict[tuple, str] = {}
 
     def __init__(self, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent)
@@ -62,12 +64,50 @@ class ThemeApplier(QtCore.QObject):
 
     def build_stylesheet(self, theme: Theme) -> str:
         key = self._theme_cache_key(theme)
-        cached = self._stylesheet_cache.get(key)
+        cached = self._cached_stylesheet(key)
         if cached is not None:
             return cached
         stylesheet = self.builder.build(theme)
-        self._stylesheet_cache[key] = stylesheet
+        self._remember_stylesheet(key, stylesheet)
         return stylesheet
+
+    @classmethod
+    def precache_stylesheets(cls, themes: Iterable[Theme]) -> dict[str, object]:
+        """Build theme stylesheets before the GUI starts so theme switching is warm."""
+        builder = QtStylesheetBuilder()
+        started = time.perf_counter()
+        built = 0
+        cached = 0
+        failed = 0
+        results: list[dict[str, object]] = []
+        for theme in themes:
+            key = cls._theme_cache_key(theme)
+            if key in cls._global_stylesheet_cache:
+                cached += 1
+                results.append({"theme": theme, "status": "cached", "elapsed_ms": 0.0, "message": ""})
+                continue
+            theme_started = time.perf_counter()
+            try:
+                stylesheet = builder.build(theme)
+            except Exception as exc:
+                elapsed_ms = (time.perf_counter() - theme_started) * 1000.0
+                failed += 1
+                message = str(exc)
+                results.append({"theme": theme, "status": "failed", "elapsed_ms": elapsed_ms, "message": message})
+                log.warning("Theme stylesheet precache failed for '%s': %s", theme.id, message)
+                continue
+            elapsed_ms = (time.perf_counter() - theme_started) * 1000.0
+            cls._global_stylesheet_cache[key] = stylesheet
+            built += 1
+            results.append({"theme": theme, "status": "built", "elapsed_ms": elapsed_ms, "message": ""})
+        total_ms = (time.perf_counter() - started) * 1000.0
+        return {
+            "built": built,
+            "cached": cached,
+            "failed": failed,
+            "total_ms": total_ms,
+            "results": results,
+        }
 
     def register_theme_aware_widget(self, widget: QtWidgets.QWidget) -> None:
         if widget not in self._aware_widgets:
@@ -110,7 +150,7 @@ class ThemeApplier(QtCore.QObject):
         target_id = id(target) if target is not None else 0
         if key == self._last_applied_key and target_id == self._last_target_id:
             return
-        cached = self._stylesheet_cache.get(key)
+        cached = self._cached_stylesheet(key)
         self._applying = True
         self.themeApplyStarted.emit(theme)
         self._pump_ui_events()
@@ -138,7 +178,7 @@ class ThemeApplier(QtCore.QObject):
 
     @QtCore.Slot(object, object, str, float)
     def _on_stylesheet_built(self, theme: Theme, key: tuple, stylesheet: str, style_ms: float) -> None:
-        self._stylesheet_cache[key] = stylesheet
+        self._remember_stylesheet(key, stylesheet)
         if self._pending_theme is not None:
             self._applying = False
             self._worker_target = None
@@ -161,6 +201,19 @@ class ThemeApplier(QtCore.QObject):
     def _clear_stylesheet_worker(self) -> None:
         self._worker_thread = None
         self._worker = None
+
+    def _cached_stylesheet(self, key: tuple) -> str | None:
+        cached = self._stylesheet_cache.get(key)
+        if cached is not None:
+            return cached
+        cached = self._global_stylesheet_cache.get(key)
+        if cached is not None:
+            self._stylesheet_cache[key] = cached
+        return cached
+
+    def _remember_stylesheet(self, key: tuple, stylesheet: str) -> None:
+        self._stylesheet_cache[key] = stylesheet
+        self._global_stylesheet_cache[key] = stylesheet
 
     @staticmethod
     def _pump_ui_events() -> None:

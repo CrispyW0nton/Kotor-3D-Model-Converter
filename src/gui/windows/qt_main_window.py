@@ -942,14 +942,16 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         for widget in self.findChildren(QtWidgets.QWidget):
             widget.setStyleSheet("")
         self.setStyleSheet("")
+        theme = self.theme_manager.current_theme or self.theme_manager.get_theme()
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "apply_native_theme"):
             viewport.apply_native_theme()
-        for panel in (getattr(self, "header_bar", None), getattr(self, "command_bar", None)):
+        for panel in (getattr(self, "header_bar", None),):
             if panel is not None:
-                panel.set_matrix_config(style="disabled")
-                palette_color = self.palette().window().color()
-                if hasattr(panel, "_background"):
+                self._apply_matrix_bar_config(panel, theme)
+                panel.apply_ghost_theme(theme)
+                if self._matrix_bar_settings(theme).get("style") == "disabled" and hasattr(panel, "_background"):
+                    palette_color = self.palette().window().color()
                     panel._background = palette_color
                 panel.update()
 
@@ -1376,7 +1378,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         return header
 
     def _make_command_bar(self) -> QtWidgets.QWidget:
-        bar = QtMatrixPanel(engine=self._matrix_engine, opacity=0.35)
+        bar = QtWidgets.QFrame()
         bar.setObjectName("CommandBar")
         bar.setMinimumHeight(36)
         self.command_bar = bar
@@ -1428,7 +1430,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._tool_button("Cameras", self.camera_panel_action, "", compact=True))
         layout.addWidget(self._tool_button("Diag  Ctrl+D", self.diag_action, "diag", compact=True))
         self.command_bar_scroll = None
-        self._apply_matrix_bar_config(bar)
         return bar
 
     def _make_viewport_toolbar_band(self, toolbar: QtWidgets.QWidget | None) -> QtWidgets.QWidget | None:
@@ -1481,23 +1482,54 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return max(1, layout.heightForWidth(width))
         return max(1, int(fallback))
 
-    def _matrix_bar_settings(self) -> dict:
-        return dict(self.settings_data.get("matrix_bar", {}))
+    def _matrix_bar_settings(self, theme=None) -> dict:
+        legacy = dict(self.settings_data.get("matrix_bar", {}))
+        style = ""
+        glyphs = ""
+        font_family = ""
+        image_path = ""
+        if theme is not None:
+            styles = getattr(theme, "styles", {})
+            style = str(styles.get("matrixBar.style", "") or "")
+            glyphs = str(styles.get("matrixBar.glyphs", "") or "")
+            font_family = str(styles.get("matrixBar.fontFamily", "") or "")
+            image_path = str(styles.get("matrixBar.imagePath", "") or "")
+            try:
+                crop = (
+                    float(styles.get("matrixBar.cropX", 0) or 0),
+                    float(styles.get("matrixBar.cropY", 0) or 0),
+                    float(styles.get("matrixBar.cropW", 100) or 100),
+                    float(styles.get("matrixBar.cropH", 100) or 100),
+                )
+            except (TypeError, ValueError):
+                crop = (0.0, 0.0, 100.0, 100.0)
+        else:
+            crop = (0.0, 0.0, 100.0, 100.0)
+        if not style:
+            style = str(legacy.get("style") or ("matrix" if self.settings_data.get("matrix_background", True) else "disabled"))
+        return {
+            "style": style,
+            "glyphs": glyphs or str(legacy.get("glyphs") or ""),
+            "font_family": font_family or str(legacy.get("font_family") or ""),
+            "image_path": image_path or str(legacy.get("image_path") or ""),
+            "crop": crop,
+        }
 
-    def _apply_matrix_bar_config(self, panel: QtMatrixPanel) -> None:
-        cfg = self._matrix_bar_settings()
-        style = str(cfg.get("style") or ("matrix" if self.settings_data.get("matrix_background", True) else "disabled"))
+    def _apply_matrix_bar_config(self, panel: QtMatrixPanel, theme=None) -> None:
+        cfg = self._matrix_bar_settings(theme)
+        style = str(cfg.get("style") or "matrix")
         panel.set_matrix_config(
             style=style,
             glyphs=str(cfg.get("glyphs") or ""),
             font_family=str(cfg.get("font_family") or ""),
             image_path=str(cfg.get("image_path") or ""),
+            crop=cfg.get("crop"),
         )
 
     def _apply_matrix_theme(self, theme) -> None:
-        for panel in (getattr(self, "header_bar", None), getattr(self, "command_bar", None)):
+        for panel in (getattr(self, "header_bar", None),):
             if panel is not None:
-                self._apply_matrix_bar_config(panel)
+                self._apply_matrix_bar_config(panel, theme)
                 panel.apply_ghost_theme(theme)
         if hasattr(self, "header_subtitle"):
             self.header_subtitle.setStyleSheet(
@@ -4803,7 +4835,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     def _open_theme_editor_window(self):
         editor = getattr(self, "_theme_editor_window", None)
         if editor is None:
-            editor = ThemeEditorWindow(self.theme_manager, self.layout_manager, self)
+            editor = ThemeEditorWindow(
+                self.theme_manager,
+                self.layout_manager,
+                self,
+                matrix_bar_settings=self._matrix_bar_settings(self.theme_manager.get_theme()),
+                matrix_background_enabled=bool(self.settings_data.get("matrix_background", True)),
+            )
             editor.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
             editor.destroyed.connect(lambda _obj=None: setattr(self, "_theme_editor_window", None))
             editor.themeApplied.connect(self._persist_theme_layout_settings)

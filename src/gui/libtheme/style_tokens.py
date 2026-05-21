@@ -119,6 +119,14 @@ FALLBACK_FONTS: dict[str, dict[str, str | int]] = {
 
 FALLBACK_STYLES: dict[str, str] = {
     "application.native": "false",
+    "matrixBar.style": "matrix",
+    "matrixBar.glyphs": "",
+    "matrixBar.fontFamily": "",
+    "matrixBar.imagePath": "",
+    "matrixBar.cropX": "0",
+    "matrixBar.cropY": "0",
+    "matrixBar.cropW": "100",
+    "matrixBar.cropH": "100",
     "tab.mode": "standard",
 }
 

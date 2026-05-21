@@ -189,6 +189,60 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _precache_themes(app_dir: str, log: logging.Logger) -> None:
+    """Warm stylesheet cache before the Qt main window starts."""
+    from pathlib import Path
+
+    from src.gui.libtheme.theme_applier import ThemeApplier
+    from src.gui.libtheme.theme_loader import ThemeLoader
+    from src.gui.libtheme.theme_settings import user_config_root
+
+    loader = ThemeLoader()
+    packaged_dir = Path(app_dir) / "config" / "themes" / "themes"
+    packaged_themes = loader.load_dir(packaged_dir)
+    user_themes = loader.load_dir(user_config_root() / "themes")
+    themes = dict(packaged_themes)
+    themes.update(user_themes)
+    ordered = sorted(themes.values(), key=lambda theme: (theme.id != "default", theme.name.lower(), theme.id))
+    if not ordered:
+        print("[GhostRigger] Theme precache: no theme XML files found.", flush=True)
+        log.warning("Theme precache skipped; no theme XML files found in %s", packaged_dir)
+        return
+
+    print(f"[GhostRigger] Precaching {len(ordered)} theme stylesheet(s)...", flush=True)
+    if user_themes:
+        print(f"[GhostRigger] Theme precache includes {len(user_themes)} user theme(s).", flush=True)
+    log.info("Theme precache starting for %d theme(s).", len(ordered))
+    result = ThemeApplier.precache_stylesheets(ordered)
+    for entry in result["results"]:
+        theme = entry["theme"]
+        status = str(entry["status"])
+        elapsed_ms = float(entry["elapsed_ms"])
+        message = str(entry["message"])
+        if status == "failed":
+            print(f"[GhostRigger] Theme precache FAILED {theme.id}: {message}", flush=True)
+        elif status == "cached":
+            print(f"[GhostRigger] Theme precache cached {theme.id}", flush=True)
+        else:
+            print(f"[GhostRigger] Theme precache built {theme.id} in {elapsed_ms:.1f} ms", flush=True)
+    built = int(result["built"])
+    cached = int(result["cached"])
+    failed = int(result["failed"])
+    total_ms = float(result["total_ms"])
+    print(
+        f"[GhostRigger] Theme precache complete: {built} built, {cached} cached, "
+        f"{failed} failed in {total_ms:.1f} ms.",
+        flush=True,
+    )
+    log.info(
+        "Theme precache complete: %d built, %d cached, %d failed in %.1f ms.",
+        built,
+        cached,
+        failed,
+        total_ms,
+    )
+
+
 def main(argv: list[str] | None = None):
     args = _parse_args(sys.argv[1:] if argv is None else argv)
 
@@ -229,6 +283,12 @@ def main(argv: list[str] | None = None):
         log.debug(f"diagnostics.log_session_start failed: {_diag_err}")
 
     try:
+        try:
+            _precache_themes(_APP_DIR, log)
+        except Exception as _theme_err:
+            print(f"[GhostRigger] Theme precache skipped: {_theme_err}", flush=True)
+            log.warning("Theme precache skipped after an unexpected error: %s", _theme_err, exc_info=True)
+
         from src.gui.qt_lib.windows.qt_main_window import run as _run_qt
 
         log.info("Qt main window starting.")

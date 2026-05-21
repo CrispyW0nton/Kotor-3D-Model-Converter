@@ -62,6 +62,8 @@ class LayoutApplier(QtCore.QObject):
             *container.findChildren(QtWidgets.QPushButton),
         ]
         for button in buttons:
+            if button.property("_gr_ignore_layout_button_mode"):
+                continue
             full_text = button.property("_gr_full_text") or button.text()
             button.setToolTip(button.toolTip() or str(full_text))
             if isinstance(button, QtWidgets.QToolButton):
