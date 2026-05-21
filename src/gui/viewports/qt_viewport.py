@@ -1323,17 +1323,22 @@ class QtViewportWidget(QtWidgets.QWidget):
             except Exception:
                 node = model_root.clone_shallow()
                 node.children = []
-            QtViewportWidget._apply_scene_instance_scale(node, getattr(instance.transform, "scale", (1.0, 1.0, 1.0)))
-            wrapper_label = str(instance.name or getattr(runtime_model, "name", "Scene Object") or "Scene Object")
-            wrapper = ModelNode(name=f"{wrapper_label}:scene", flags=int(NodeFlags.HEADER))
-            wrapper.parent = root
-            wrapper.position = tuple(float(v) for v in instance.transform.position[:3])
-            wrapper.rotation = self._euler_degrees_to_quat(instance.transform.rotation)
-            wrapper._gr_scale = tuple(float(v) for v in getattr(instance.transform, "scale", (1.0, 1.0, 1.0))[:3])
-            setattr(wrapper, "_gr_scene_object_id", instance.id)
-            setattr(wrapper, "_gr_scene_object_root", True)
-            setattr(wrapper, "_gr_scene_object_name", instance.name)
-            setattr(wrapper, "_gr_scene_object_locked", bool(getattr(instance, "locked", False)))
+            source_position = tuple(float(v) for v in getattr(model_root, "position", (0.0, 0.0, 0.0))[:3])
+            source_rotation = tuple(float(v) for v in getattr(model_root, "rotation", (0.0, 0.0, 0.0, 1.0))[:4])
+            scene_position = tuple(float(v) for v in instance.transform.position[:3])
+            scene_rotation = self._euler_degrees_to_quat(instance.transform.rotation)
+            scene_scale = tuple(float(v) for v in getattr(instance.transform, "scale", (1.0, 1.0, 1.0))[:3])
+            node.parent = root
+            node.position = scene_position
+            node.rotation = scene_rotation
+            node._gr_scale = scene_scale
+            setattr(node, "_gr_scene_object_id", instance.id)
+            setattr(node, "_gr_scene_object_root", True)
+            setattr(node, "_gr_scene_object_name", instance.name)
+            setattr(node, "_gr_scene_object_locked", bool(getattr(instance, "locked", False)))
+            setattr(node, "_gr_scene_gpu_transform", True)
+            setattr(node, "_gr_scene_source_position", source_position)
+            setattr(node, "_gr_scene_source_rotation", source_rotation)
             pivot_world_fn = getattr(self, "_pivot_world_from_instance", None)
             pivot_world = (
                 pivot_world_fn(instance)
@@ -1342,20 +1347,18 @@ class QtViewportWidget(QtWidgets.QWidget):
             )
             pivot_data = getattr(instance, "pivot", None)
             pivot_local = tuple(float(v) for v in getattr(pivot_data, "position_local", (0.0, 0.0, 0.0))[:3])
-            setattr(wrapper, "_gr_pivot_world", pivot_world)
-            setattr(wrapper, "_gr_pivot_local", pivot_local)
-            setattr(wrapper, "_gr_pivot_world_dirty", False)
-            setattr(wrapper, "_gr_pivot_rotation", self._euler_degrees_to_quat(getattr(pivot_data, "rotation_local", (0.0, 0.0, 0.0))))
-            setattr(wrapper, "_gr_reference_rotation", getattr(wrapper, "_gr_pivot_rotation"))
-            setattr(wrapper, "_gr_pivot_edit_mode", getattr(self, "_pivot_edit_mode", "affect_object_only"))
+            setattr(node, "_gr_pivot_world", pivot_world)
+            setattr(node, "_gr_pivot_local", pivot_local)
+            setattr(node, "_gr_pivot_world_dirty", False)
+            setattr(node, "_gr_pivot_rotation", self._euler_degrees_to_quat(getattr(pivot_data, "rotation_local", (0.0, 0.0, 0.0))))
+            setattr(node, "_gr_reference_rotation", getattr(node, "_gr_pivot_rotation"))
+            setattr(node, "_gr_pivot_edit_mode", getattr(self, "_pivot_edit_mode", "affect_object_only"))
 
-            # Preserve authored MDL node names/transforms under the scene wrapper:
-            # animations, skin bone maps, and qBone/tBone rows refer to them verbatim.
-            node.parent = wrapper
-            wrapper.children.append(node)
-            self._tag_scene_object_nodes(wrapper, instance.id, wrapper)
+            # Preserve authored MDL node names for animations, skin bone maps,
+            # and qBone/tBone rows while keeping scene placement as metadata.
+            self._tag_scene_object_nodes(node, instance.id, node)
             self._tag_scene_source_indices(node, runtime_model)
-            root.children.append(wrapper)
+            root.children.append(node)
         if not root.children:
             return None
         if first_model is not None:
@@ -2205,6 +2208,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         ratio = value / old_value
         if bool(getattr(node, "is_camera", False)):
             node._gr_helper_size = max(0.05, float(getattr(node, "_gr_helper_size", 1.0) or 1.0) * ratio)
+            node._gr_scale = tuple(scale)
+            return
+        if bool(getattr(node, "_gr_scene_object_root", False)):
             node._gr_scale = tuple(scale)
             return
         verts = getattr(node, "vertices", None)

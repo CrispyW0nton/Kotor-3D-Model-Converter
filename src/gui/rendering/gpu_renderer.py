@@ -2580,8 +2580,8 @@ _VERT_SRC = """
 #version 330 core
 
 // Per-vertex inputs
-in vec3  in_pos;       // world-space position (pre-transformed by _build_vbo_data)
-in vec3  in_norm;      // world-space normal
+in vec3  in_pos;       // model/world position from _build_vbo_data; scene placement uses u_model
+in vec3  in_norm;      // matching normal basis for in_pos
 in vec2  in_uv;        // primary UV (UV0) — KotOR D3D convention: V=0 at top
 in vec2  in_uv_lm;     // lightmap UV (UV1)
 in vec4  in_color;     // vertex colour (w = per-vertex alpha, 1.0 if unused)
@@ -2667,8 +2667,8 @@ void main() {
 
     vec4 world_pos = u_model * vec4(final_pos, 1.0);
     v_world_pos  = world_pos.xyz;
-    // Normals are already in world space (pre-transformed); u_normal_mat = I for
-    // world-space verts, but we still normalize to handle precision loss.
+    // Ordinary MDL draws already provide world-space normals; scene-object
+    // placement uses u_normal_mat so rotate/scale stay on the GPU.
     v_world_norm = normalize(u_normal_mat * final_norm);
 
     // BUG-UV FIX: KotOR MDX stores UV with V=0 at top (Direct3D convention).
@@ -3303,6 +3303,88 @@ def _mat3_normal(model_mat: np.ndarray) -> np.ndarray:
         return np.linalg.inv(m33).T.astype(np.float32)
     except np.linalg.LinAlgError:
         return np.eye(3, dtype=np.float32)
+
+
+def _scene_gpu_root_for_node(node):
+    current = node
+    visited = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        if bool(getattr(current, "_gr_scene_object_root", False)) and bool(getattr(current, "_gr_scene_gpu_transform", False)):
+            return current
+        current = getattr(current, "parent", None)
+    return None
+
+
+def _mat4_from_pos_quat_scale(pos, quat, scale) -> np.ndarray:
+    mat = _matrix_from_pos_quat_np(pos, quat)
+    if mat is None:
+        mat = np.eye(4, dtype=np.float64)
+    try:
+        sx, sy, sz = (float(v) for v in tuple(scale or (1.0, 1.0, 1.0))[:3])
+    except Exception:
+        sx, sy, sz = 1.0, 1.0, 1.0
+    scale_mat = np.diag([sx, sy, sz, 1.0]).astype(np.float64)
+    return (mat.reshape(4, 4) @ scale_mat).astype(np.float32)
+
+
+def _scene_gpu_model_matrix(node) -> Optional[np.ndarray]:
+    root = _scene_gpu_root_for_node(node)
+    if root is None:
+        return None
+    return _mat4_from_pos_quat_scale(
+        getattr(root, "position", (0.0, 0.0, 0.0)),
+        getattr(root, "rotation", (0.0, 0.0, 0.0, 1.0)),
+        getattr(root, "_gr_scale", (1.0, 1.0, 1.0)),
+    )
+
+
+def _quat_multiply_xyzw(parent, child) -> tuple[float, float, float, float]:
+    px, py, pz, pw = (float(v) for v in tuple(parent)[:4])
+    cx, cy, cz, cw = (float(v) for v in tuple(child)[:4])
+    return (
+        pw * cx + px * cw + py * cz - pz * cy,
+        pw * cy - px * cz + py * cw + pz * cx,
+        pw * cz + px * cy - py * cx + pz * cw,
+        pw * cw - px * cx - py * cy - pz * cz,
+    )
+
+
+def _scene_authored_world_transform(node):
+    root = _scene_gpu_root_for_node(node)
+    if root is None:
+        return None
+    chain = []
+    current = node
+    visited = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        chain.append(current)
+        if current is root:
+            break
+        current = getattr(current, "parent", None)
+    if not chain or chain[-1] is not root:
+        return None
+    chain.reverse()
+    world_pos = np.array([0.0, 0.0, 0.0], dtype=np.float64)
+    world_rot = (0.0, 0.0, 0.0, 1.0)
+    for current in chain:
+        if current is root:
+            local_pos = getattr(current, "_gr_scene_source_position", getattr(current, "position", (0.0, 0.0, 0.0)))
+            local_rot = getattr(current, "_gr_scene_source_rotation", getattr(current, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        else:
+            local_pos = getattr(current, "position", (0.0, 0.0, 0.0))
+            local_rot = getattr(current, "rotation", (0.0, 0.0, 0.0, 1.0))
+        try:
+            local_vec = np.array([tuple(float(v) for v in tuple(local_pos)[:3])], dtype=np.float64)
+        except Exception:
+            local_vec = np.array([(0.0, 0.0, 0.0)], dtype=np.float64)
+        world_pos = world_pos + _quat_rotate_batch(np.array(world_rot, dtype=np.float64), local_vec)[0]
+        try:
+            world_rot = _quat_multiply_xyzw(world_rot, local_rot)
+        except Exception:
+            pass
+    return (tuple(float(v) for v in world_pos.tolist()), world_rot)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -5546,6 +5628,12 @@ class GpuRenderer:
                 # Use world-space transform (full parent-chain walk) for correct
                 # positioning of all mesh nodes, not just local node.position.
                 wp, wo = _get_world_transform(node)
+                scene_gpu_mat = _scene_gpu_model_matrix(node)
+                vbo_wp, vbo_wo = wp, wo
+                if scene_gpu_mat is not None and anim_pose is None:
+                    authored_transform = _scene_authored_world_transform(node)
+                    if authored_transform is not None:
+                        vbo_wp, vbo_wo = authored_transform
 
                 node_alpha = float(getattr(node, 'alpha', 1.0))
                 node_alpha = max(0.0, min(1.0, node_alpha))
@@ -5609,14 +5697,14 @@ class GpuRenderer:
                     # vertex influences addresses qBone[k]/tBone[k] for this skin.
                     _bone_remap = None
                     _prebuilt_vbo = None
-                    if anim_pose is None and not is_animated:
+                    if anim_pose is None and not is_animated and scene_gpu_mat is None:
                         _prebuilt_vbo = _prebuilt_static_gpu_mesh_data(
                             node, _cur_model_id, _skin_bind_transform
                         )
                     if _prebuilt_vbo is not None:
                         vdata, idx_arr = _prebuilt_vbo
                     else:
-                        vdata, idx_arr = _build_vbo_data(node, wp, wo,
+                        vdata, idx_arr = _build_vbo_data(node, vbo_wp, vbo_wo,
                                                          anim_pose_node=None,
                                                          is_module=_gpu_is_module,
                                                          bone_index_remap=_bone_remap,
@@ -6211,6 +6299,14 @@ class GpuRenderer:
                             ),
                             'Skin parity dump',
                         )
+
+                draw_model_mat = scene_gpu_mat if scene_gpu_mat is not None else model_mat
+                if scene_gpu_mat is not None:
+                    _u['u_model'].write(_mat4_tobytes(draw_model_mat))
+                    _u['u_normal_mat'].write(_mat3_normal(draw_model_mat).T.astype(np.float32).tobytes())
+                else:
+                    _u['u_model'].write(_mat4_tobytes(model_mat))
+                    _u['u_normal_mat'].write(normal_mat.T.astype(np.float32).tobytes())
 
                 _use_vao.render(moderngl.TRIANGLES)
                 total_tris += _use_tris

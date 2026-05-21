@@ -4,6 +4,8 @@ import inspect
 import os
 from types import MethodType, SimpleNamespace
 
+import pytest
+
 
 def test_vertex_space_enum_contract() -> None:
     from src.core.qt_core.geometry.vertex_space import VertexSpace
@@ -394,15 +396,14 @@ def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinnin
     )
 
     composite = QtViewportWidget._build_scene_composite_model(fake_viewport, [instance], "Untitled Scene")
-    scene_wrapper = composite.root_node.children[0]
-    placed_root = scene_wrapper.children[0]
+    placed_root = composite.root_node.children[0]
     placed_skin = placed_root.children[1]
 
-    assert scene_wrapper.name == "Bith Actor:scene"
-    assert scene_wrapper.position == (1.0, 2.0, 3.0)
     assert placed_root.name == "N_Bith"
-    assert placed_root.position == (9.0, 8.0, 7.0)
-    assert getattr(scene_wrapper, "_gr_scene_object_name") == "Bith Actor"
+    assert placed_root.position == (1.0, 2.0, 3.0)
+    assert getattr(placed_root, "_gr_scene_source_position") == (9.0, 8.0, 7.0)
+    assert getattr(placed_root, "_gr_scene_gpu_transform") is True
+    assert getattr(placed_root, "_gr_scene_object_name") == "Bith Actor"
     assert placed_skin.bone_map[0] == placed_root.name
     assert getattr(placed_skin, "_gr_scene_object_id") == "scene-object-1"
 
@@ -414,6 +415,34 @@ def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinnin
     assert uploader._model_node_count == 3
     uploader.compute_skin_node_palette(placed_skin, SimpleNamespace(nodes={}))
     assert uploader._skin_inverse_bind_source == "qBone_tBone_dfs_indexed_TR_no_invert"
+
+
+def test_kmax_scene_gpu_transform_uses_authored_vbo_basis() -> None:
+    from src.gui.rendering.gpu_renderer import _scene_authored_world_transform, _scene_gpu_model_matrix
+
+    child = SimpleNamespace(
+        position=(2.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=None,
+    )
+    root = SimpleNamespace(
+        position=(100.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=None,
+        _gr_scale=(3.0, 3.0, 3.0),
+        _gr_scene_object_root=True,
+        _gr_scene_gpu_transform=True,
+        _gr_scene_source_position=(9.0, 8.0, 7.0),
+        _gr_scene_source_rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    child.parent = root
+
+    authored_pos, _authored_rot = _scene_authored_world_transform(child)
+    scene_mat = _scene_gpu_model_matrix(child)
+
+    assert authored_pos == pytest.approx((11.0, 8.0, 7.0))
+    assert scene_mat[0, 3] == pytest.approx(100.0)
+    assert scene_mat[0, 0] == pytest.approx(3.0)
 
 
 def test_kmax_scene_reload_preserves_selected_object_for_pivot_tools() -> None:

@@ -314,7 +314,7 @@ class TransformController:
         # GhostRigger ModelNode has no universal persistent scale field. Mesh
         # nodes keep scale by mutating local vertices; scene wrappers keep the
         # authored KMAX scale metadata for the owning scene object.
-        if self.original.vertices is not None:
+        if self.original.vertices is not None and not scene_root_scale:
             self.object.vertices = [(x * sx, y * sy, z * sz) for x, y, z in self.original.vertices]
         osx, osy, osz = self.original.scale
         self.object._gr_scale = (

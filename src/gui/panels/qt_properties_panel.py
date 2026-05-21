@@ -659,6 +659,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         self._current_node = None
         transform = getattr(obj, "transform", None)
         source = getattr(obj, "source_ref", None)
+        runtime_model = (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
         position = getattr(transform, "position", (0.0, 0.0, 0.0))
         rotation = getattr(transform, "rotation", (0.0, 0.0, 0.0))
         scale = getattr(transform, "scale", (1.0, 1.0, 1.0))
@@ -682,7 +683,62 @@ class QtPropertiesPanel(QtWidgets.QWidget):
             f"Rotation: {rotation[0]:.3f}, {rotation[1]:.3f}, {rotation[2]:.3f}",
             f"Scale: {scale[0]:.3f}, {scale[1]:.3f}, {scale[2]:.3f}",
         ]
+        stats = self._scene_object_runtime_stats(runtime_model, scale)
+        if stats:
+            formatter = MeasurementFormatter(self.unit_system, self.measurement_settings.distance_precision)
+            lines += [
+                "",
+                "-- Geometry --",
+                f"Nodes: {stats['nodes']:,}",
+                f"Meshes: {stats['meshes']:,}",
+                f"Verts: {stats['verts']:,}",
+                f"Faces: {stats['faces']:,}",
+            ]
+            size = stats.get("size")
+            if size is not None:
+                lines += [
+                    "",
+                    "-- Dimensions --",
+                    f"Width:  {formatter.distance(size[0])}",
+                    f"Depth:  {formatter.distance(size[1])}",
+                    f"Height: {formatter.distance(size[2])}",
+                ]
         self.text.setPlainText("\n".join(lines))
+
+    def _scene_object_runtime_stats(self, model, scale) -> dict | None:
+        if model is None:
+            return None
+        try:
+            mesh_nodes = list(model.mesh_nodes()) if hasattr(model, "mesh_nodes") else []
+        except Exception:
+            mesh_nodes = []
+        try:
+            all_nodes = list(model.all_nodes()) if hasattr(model, "all_nodes") else []
+        except Exception:
+            all_nodes = []
+        verts = sum(len(getattr(node, "vertices", []) or []) for node in mesh_nodes)
+        faces = sum(len(getattr(node, "faces", []) or []) for node in mesh_nodes)
+        size = None
+        try:
+            if hasattr(model, "compute_bounds"):
+                model.compute_bounds()
+            bb_min = tuple(float(v) for v in getattr(model, "bb_min")[:3])
+            bb_max = tuple(float(v) for v in getattr(model, "bb_max")[:3])
+            sx, sy, sz = (abs(float(v)) for v in tuple(scale or (1.0, 1.0, 1.0))[:3])
+            size = (
+                max(0.0, bb_max[0] - bb_min[0]) * sx,
+                max(0.0, bb_max[1] - bb_min[1]) * sy,
+                max(0.0, bb_max[2] - bb_min[2]) * sz,
+            )
+        except Exception:
+            size = None
+        return {
+            "nodes": len(all_nodes),
+            "meshes": len(mesh_nodes),
+            "verts": verts,
+            "faces": faces,
+            "size": size,
+        }
 
     def show_node(self, node) -> None:
         self._current_node = node

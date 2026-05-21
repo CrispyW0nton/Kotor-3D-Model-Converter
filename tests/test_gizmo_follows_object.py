@@ -122,3 +122,25 @@ def test_snapped_translate_moves_gizmo_to_actual_object_position() -> None:
     gizmo.drag((112, 100), DummyCamera(), 500)
 
     assert gizmo.get_gizmo_origin_world()[0] == pytest.approx(node.position[0])
+
+
+def test_scene_root_scale_updates_metadata_without_mutating_vertices() -> None:
+    child = SimpleNamespace(vertices=[(1.0, 2.0, 3.0)])
+    root = SimpleNamespace(
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        vertices=[(4.0, 5.0, 6.0)],
+        children=[child],
+        _gr_scene_object_root=True,
+        _gr_scale=(1.0, 1.0, 1.0),
+    )
+    gizmo = TransformGizmo(TransformController())
+    gizmo.set_selected_object(root)
+    gizmo.set_mode(GizmoMode.SCALE)
+
+    gizmo.begin_drag("SCALE_UNIFORM", (100, 100), DummyCamera())
+    gizmo.drag((130, 90), DummyCamera(), 500)
+
+    assert root._gr_scale[0] > 1.0
+    assert root.vertices == [(4.0, 5.0, 6.0)]
+    assert child.vertices == [(1.0, 2.0, 3.0)]

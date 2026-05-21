@@ -17,7 +17,7 @@
   "scene_lighting_mode": "scene",
   "selected_lighting_rig_preset": "kotor_original",
   "shader_complexity_mode": "basic",
-  "show_light_helpers": false,
+  "show_light_helpers": true,
   "show_light_radius_volumes": true,
   "specular_map": true
 }
