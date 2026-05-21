@@ -55,6 +55,7 @@ from src.gui.qt_lib.panels.qt_rig_panel import QtRigWindow
 from src.gui.qt_lib.dialogs.qt_settings_dialog import QtSettingsDialog, save_settings
 from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow
 from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
+from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditorWindow
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
 from src.measurement.unit_settings import MeasurementSettings
 
@@ -683,6 +684,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._retarget_mapping_report = None
         self._retarget_last_tick: Optional[float] = None
         self._character_builder_window: Optional[QtCharacterBuilderWindow] = None
+        self.sequence_editor_window: Optional[SequenceEditorWindow] = None
+        self.sequence_editor_dock: Optional[QtWidgets.QDockWidget] = None
+        self.sequence_editor_docked_window: Optional[SequenceEditorWindow] = None
         self._matrix_engine = QtMatrixEngine(self, fps=12)
         self._animation_timer = QtCore.QTimer(self)
         self._animation_timer.setInterval(33)
@@ -964,6 +968,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.unreal_animator_action = QtGui.QAction(self._icon("anims"), "Unreal Animator...", self)
         self.unreal_animator_action.setShortcut("Ctrl+Shift+U")
         self.unreal_animator_action.triggered.connect(self._open_unreal_animator_window)
+        self.sequence_editor_action = QtGui.QAction(self._icon("anims"), "Sequence Editor (Dock)", self)
+        self.sequence_editor_action.setShortcut("Ctrl+Shift+S")
+        self.sequence_editor_action.triggered.connect(self._show_sequence_editor_dock)
+        self.sequence_editor_window_action = QtGui.QAction(self._icon("anims"), "Sequence Editor (Window)...", self)
+        self.sequence_editor_window_action.triggered.connect(self._open_sequence_editor_window)
         self.modules_action = QtGui.QAction(self._icon("modular"), "Open Module Editor", self)
         self.modules_action.triggered.connect(self._show_modules_tab)
         self.rig_window_action = QtGui.QAction(self._icon("rig"), "Open Rigging Window", self)
@@ -1083,6 +1092,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         modules_menu.addAction(self.rig_window_action)
         modules_menu.addAction(self.retarget_workbench_action)
         modules_menu.addAction(self.unreal_animator_action)
+        modules_menu.addAction(self.sequence_editor_action)
+        modules_menu.addAction(self.sequence_editor_window_action)
         modules_menu.addSeparator()
         modules_menu.addAction(self.nodes_panel_action)
         modules_menu.addAction(self.lighting_panel_action)
@@ -1249,6 +1260,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._tool_button("Settings  F2", self.settings_action, "settings", compact=True))
         layout.addWidget(self._separator())
         layout.addWidget(self._tool_button("Anims  Ctrl+A", self.anims_action, "anims", compact=True))
+        layout.addWidget(self._tool_button("Sequence", self.sequence_editor_action, "anims", compact=True))
         layout.addWidget(self._tool_button("Lights", self.lighting_panel_action, "", compact=True))
         layout.addWidget(self._tool_button("Cameras", self.camera_panel_action, "", compact=True))
         layout.addWidget(self._tool_button("Diag  Ctrl+D", self.diag_action, "diag", compact=True))
@@ -1990,6 +2002,17 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.camera_panel.set_model(model)
             self.camera_panel.manager = self.viewport.camera_manager
             self.camera_panel.refresh()
+        if getattr(self, "sequence_editor_window", None) is not None:
+            try:
+                self.sequence_editor_window.viewport_panel.sync_from_source()
+                self.sequence_editor_window.set_docked_preview(False, self.viewport)
+            except Exception:
+                pass
+        if getattr(self, "sequence_editor_docked_window", None) is not None:
+            try:
+                self.sequence_editor_docked_window.set_docked_preview(True, self.viewport)
+            except Exception:
+                pass
         if hasattr(self, "properties_panel"):
             self.properties_panel.show_model(model)
         if hasattr(self, "module_geometry_panel"):
@@ -3709,6 +3732,45 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         window.show()
         window.raise_()
         window.activateWindow()
+
+    def _open_sequence_editor_window(self):
+        window = getattr(self, "sequence_editor_window", None)
+        if window is None:
+            window = SequenceEditorWindow(self, getattr(self, "viewport", None), self.app_root, self, docked=False)
+            self.sequence_editor_window = window
+        else:
+            try:
+                window.source_viewport = getattr(self, "viewport", None)
+                window.viewport_panel.source_viewport = window.source_viewport
+                window.set_docked_preview(False, window.source_viewport)
+            except Exception:
+                pass
+        window.show()
+        window.raise_()
+        window.activateWindow()
+
+    def _show_sequence_editor_dock(self):
+        dock = getattr(self, "sequence_editor_dock", None)
+        editor = getattr(self, "sequence_editor_docked_window", None)
+        if dock is None or editor is None:
+            dock = QtWidgets.QDockWidget("GhostRigger Sequence Editor", self)
+            dock.setObjectName("SequenceEditorDock")
+            dock.setAllowedAreas(
+                QtCore.Qt.LeftDockWidgetArea
+                | QtCore.Qt.RightDockWidgetArea
+                | QtCore.Qt.BottomDockWidgetArea
+            )
+            editor = SequenceEditorWindow(self, getattr(self, "viewport", None), self.app_root, dock, docked=True)
+            editor.setWindowFlags(QtCore.Qt.Widget)
+            editor.menuBar().setVisible(False)
+            dock.setWidget(editor)
+            self.addDockWidget(QtCore.Qt.BottomDockWidgetArea, dock)
+            self.sequence_editor_dock = dock
+            self.sequence_editor_docked_window = editor
+        else:
+            editor.set_docked_preview(True, getattr(self, "viewport", None))
+        dock.show()
+        dock.raise_()
 
     def _reload_unreal_animator_window(self) -> None:
         global QtUnrealAnimatorWindow

@@ -125,6 +125,18 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "viewport_core",
         "viewport_navigation",
     ),
+    "sequence_editor": (
+        "sequence_curve_editor",
+        "sequence_dopesheet",
+        "sequence_editor_window",
+        "sequence_outliner",
+        "sequence_property_panel",
+        "sequence_timeline_widget",
+        "sequence_toolbar",
+        "sequence_track_list_widget",
+        "sequence_transport_bar",
+        "sequence_viewport_panel",
+    ),
     "textures": (
         "qt_tex_atlas",
         "qt_tpc_render_utils",
