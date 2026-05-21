@@ -21,6 +21,21 @@ class QtStylesheetBuilder:
         button_padding_x = m("button.paddingX", m("button.paddingH", 10))
         button_padding_y = m("button.paddingY", m("button.paddingV", 5))
         input_height = m("input.height", max(18, m("button.height", 28) - 8))
+        tab_mode = theme.style("tab.mode", "standard")
+        tab_border = f"1px solid {c('panel.border')}"
+        tab_selected_border = c("accent.secondary")
+        tab_selected_extra = f"border-bottom-color: {c('tab.selectedBackground')};"
+        if tab_mode == "flat":
+            tab_border = "0px"
+            tab_selected_extra = f"border-bottom: 2px solid {c('accent.primary')};"
+        elif tab_mode == "beveled":
+            tab_selected_border = c("accent.primary")
+            tab_selected_extra = (
+                f"border-top-color: {c('accent.primary')}; "
+                f"border-left-color: {c('panel.backgroundAlt', c('panel.altBackground'))}; "
+                f"border-right-color: {c('panel.border')}; "
+                f"border-bottom-color: {c('tab.selectedBackground')};"
+            )
         return f"""
         QMainWindow, QWidget {{
             background: {c('window.background')};
@@ -47,17 +62,18 @@ class QtStylesheetBuilder:
         QTabBar::tab {{
             background: {c('tab.background')};
             color: {c('tab.text')};
-            border: 1px solid {c('panel.border')};
+            border: {tab_border};
             border-bottom-color: {c('panel.border')};
-            padding: {max(4, m('panel.spacing', 4) + 2)}px 12px;
-            min-width: 78px;
-            min-height: {m('tab.height', 26)}px;
+            padding: {m('tab.paddingY', m('tab.padding', max(4, m('panel.spacing', 4) + 2)))}px {m('tab.paddingX', 12)}px;
+            margin: {m('tab.marginY', m('tab.margin', 0))}px {m('tab.marginX', m('tab.margin', 0))}px;
+            min-width: {m('tab.width', 78)}px;
+            min-height: {m('tab.height', 14)}px;
         }}
         QTabBar::tab:selected {{
             background: {c('tab.selectedBackground')};
             color: {c('tab.selectedText')};
-            border-color: {c('accent.secondary')};
-            border-bottom-color: {c('tab.selectedBackground')};
+            border-color: {tab_selected_border};
+            {tab_selected_extra}
         }}
         QTabBar::tab:hover {{
             color: {c('accent.primary')};

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from xml.etree import ElementTree as ET
 
-from .style_tokens import FALLBACK_COLORS, FALLBACK_METRICS, VALID_BUTTON_MODES
+from .style_tokens import FALLBACK_COLORS, FALLBACK_METRICS, VALID_BUTTON_MODES, VALID_TAB_STYLE_MODES
 from .theme_model import Theme
 
 _HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$")
@@ -47,6 +47,11 @@ class ThemeValidator:
         mode = (root.findtext("./icons/defaultMode") or "").strip()
         if mode and mode not in VALID_BUTTON_MODES:
             warnings.append(f"Icon defaultMode '{mode}' is not a supported button mode.")
+        for style in root.findall("./styles/style"):
+            name = (style.get("name") or "").strip()
+            value = (style.get("value") or "").strip()
+            if name == "tab.mode" and value not in VALID_TAB_STYLE_MODES:
+                warnings.append(f"Tab style mode '{value}' is not supported.")
         return warnings
 
     def validate_theme(self, theme: Theme) -> list[str]:
@@ -59,4 +64,7 @@ class ThemeValidator:
         for key, value in theme.metrics.items():
             if value < 0:
                 warnings.append(f"Metric '{key}' must not be negative.")
+        tab_mode = theme.styles.get("tab.mode", "")
+        if tab_mode and tab_mode not in VALID_TAB_STYLE_MODES:
+            warnings.append(f"Tab style mode '{tab_mode}' is not supported.")
         return warnings

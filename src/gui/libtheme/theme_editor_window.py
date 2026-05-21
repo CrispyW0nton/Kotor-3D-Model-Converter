@@ -14,7 +14,14 @@ from .layout_applier import button_mode_to_toolbutton_style
 from .layout_manager import LayoutManager
 from .layout_model import LayoutDefinition
 from .qt_stylesheet_builder import QtStylesheetBuilder
-from .style_tokens import FALLBACK_COLORS, FALLBACK_FONTS, FALLBACK_METRICS, VALID_BUTTON_MODES
+from .style_tokens import (
+    FALLBACK_COLORS,
+    FALLBACK_FONTS,
+    FALLBACK_METRICS,
+    FALLBACK_STYLES,
+    VALID_BUTTON_MODES,
+    VALID_TAB_STYLE_MODES,
+)
 from .theme_manager import ThemeManager
 from .theme_model import Theme, ThemeFont
 from .theme_validator import ThemeValidator
@@ -22,6 +29,18 @@ from .theme_validator import ThemeValidator
 _HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 _MATRIX_FONT_DIR = Path(__file__).resolve().parents[1] / "fonts" / "AurebeshAF"
 _REGISTERED_MATRIX_FONT = False
+_PIXEL_TOKEN_HINTS = (
+    "width",
+    "height",
+    "margin",
+    "padding",
+    "spacing",
+    "radius",
+    "border",
+    "size",
+    "row",
+    "handle",
+)
 
 
 def _register_bundled_matrix_font() -> None:
@@ -41,8 +60,19 @@ def _register_bundled_matrix_font() -> None:
     _REGISTERED_MATRIX_FONT = True
 
 
+def _metric_unit(token: str) -> str:
+    lower = token.lower()
+    if lower.endswith(".size") or "fontsize" in lower:
+        return "pt" if "font" in lower else "px"
+    if any(hint in lower for hint in _PIXEL_TOKEN_HINTS):
+        return "px"
+    return "px"
+
+
 class ThemeEditorWindow(QtWidgets.QMainWindow):
     """Editor with local preview and explicit full-application apply actions."""
+
+    themeApplied = QtCore.Signal(str)
 
     def __init__(
         self,
@@ -195,10 +225,19 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self.metric_filter.setPlaceholderText("Search metric tokens")
         self.metric_filter.textChanged.connect(self._populate_metric_tokens)
         root.addWidget(self.metric_filter)
+        style_row = QtWidgets.QFormLayout()
+        self.tab_style_mode_combo = QtWidgets.QComboBox()
+        for mode in ("standard", "flat", "beveled"):
+            if mode in VALID_TAB_STYLE_MODES:
+                self.tab_style_mode_combo.addItem(mode.title(), mode)
+        self.tab_style_mode_combo.currentIndexChanged.connect(
+            lambda _=0: self._set_tab_style_mode(str(self.tab_style_mode_combo.currentData() or "standard"))
+        )
+        style_row.addRow("Tab style mode", self.tab_style_mode_combo)
+        root.addLayout(style_row)
         self.metric_table = QtWidgets.QTableWidget(0, 2)
         self.metric_table.setHorizontalHeaderLabels(["Metric", "Value"])
-        self.metric_table.horizontalHeader().setStretchLastSection(True)
-        self.metric_table.itemChanged.connect(self._metric_item_changed)
+        self._configure_metric_table(self.metric_table, first_column_width=270)
         root.addWidget(self.metric_table)
         return page
 
@@ -219,8 +258,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         root.addLayout(form)
         self.layout_metric_table = QtWidgets.QTableWidget(0, 2)
         self.layout_metric_table.setHorizontalHeaderLabels(["Layout metric", "Value"])
-        self.layout_metric_table.horizontalHeader().setStretchLastSection(True)
-        self.layout_metric_table.itemChanged.connect(self._layout_metric_changed)
+        self._configure_metric_table(self.layout_metric_table, first_column_width=285)
         root.addWidget(self.layout_metric_table, 1)
         buttons = QtWidgets.QHBoxLayout()
         validate = QtWidgets.QPushButton("Validate Layout")
@@ -232,6 +270,57 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         buttons.addStretch(1)
         root.addLayout(buttons)
         return page
+
+    def _configure_metric_table(self, table: QtWidgets.QTableWidget, *, first_column_width: int) -> None:
+        table.verticalHeader().setVisible(False)
+        table.verticalHeader().setDefaultSectionSize(32)
+        table.setShowGrid(True)
+        table.setAlternatingRowColors(True)
+        table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        table.horizontalHeader().setStretchLastSection(True)
+        table.horizontalHeader().setMinimumSectionSize(120)
+        table.setColumnWidth(0, first_column_width)
+
+    def _metric_name_cell(self, token: str) -> QtWidgets.QWidget:
+        label = QtWidgets.QLabel(token)
+        label.setObjectName("MetricTokenLabel")
+        label.setToolTip(token)
+        label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        font = label.font()
+        font.setBold(True)
+        label.setFont(font)
+        label.setContentsMargins(8, 0, 8, 0)
+        wrapper = QtWidgets.QWidget()
+        layout = QtWidgets.QHBoxLayout(wrapper)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(label, 1)
+        return wrapper
+
+    def _metric_value_cell(
+        self,
+        token: str,
+        value: int,
+        *,
+        changed,
+        minimum: int = 0,
+        maximum: int = 5000,
+    ) -> QtWidgets.QWidget:
+        spin = QtWidgets.QSpinBox()
+        spin.setRange(minimum, maximum)
+        spin.setValue(int(value))
+        spin.setAccelerated(True)
+        spin.setKeyboardTracking(False)
+        spin.setSuffix(f" {_metric_unit(token)}")
+        spin.setProperty("metricToken", token)
+        spin.valueChanged.connect(lambda number, key=token: changed(key, int(number)))
+        wrapper = QtWidgets.QWidget()
+        layout = QtWidgets.QHBoxLayout(wrapper)
+        layout.setContentsMargins(8, 2, 8, 2)
+        layout.addWidget(spin, 0)
+        layout.addStretch(1)
+        return wrapper
 
     def _build_preview_area(self) -> QtWidgets.QWidget:
         panel = QtWidgets.QWidget()
@@ -301,6 +390,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self._populate_color_tokens()
         self._populate_fonts()
         self._populate_metric_tokens()
+        self._populate_style_controls()
         self._dirty = False
         self._refresh_preview()
 
@@ -398,15 +488,33 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
 
     def _populate_metric_tokens(self) -> None:
         text = self.metric_filter.text().strip().lower() if hasattr(self, "metric_filter") else ""
-        self.metric_table.blockSignals(True)
         rows = [(k, v) for k, v in sorted(self._theme.metrics.items()) if not text or text in k.lower()]
+        self.metric_table.setUpdatesEnabled(False)
         self.metric_table.setRowCount(len(rows))
         for row, (token, value) in enumerate(rows):
-            key_item = QtWidgets.QTableWidgetItem(token)
-            key_item.setFlags(key_item.flags() & ~QtCore.Qt.ItemIsEditable)
-            self.metric_table.setItem(row, 0, key_item)
-            self.metric_table.setItem(row, 1, QtWidgets.QTableWidgetItem(str(value)))
-        self.metric_table.blockSignals(False)
+            self.metric_table.setCellWidget(row, 0, self._metric_name_cell(token))
+            self.metric_table.setCellWidget(
+                row,
+                1,
+                self._metric_value_cell(token, int(value), changed=self._metric_spin_changed),
+            )
+        self.metric_table.setUpdatesEnabled(True)
+
+    def _populate_style_controls(self) -> None:
+        if not hasattr(self, "tab_style_mode_combo"):
+            return
+        self.tab_style_mode_combo.blockSignals(True)
+        mode = self._theme.styles.get("tab.mode", FALLBACK_STYLES["tab.mode"])
+        index = self.tab_style_mode_combo.findData(mode)
+        self.tab_style_mode_combo.setCurrentIndex(max(index, 0))
+        self.tab_style_mode_combo.blockSignals(False)
+
+    def _set_tab_style_mode(self, mode: str) -> None:
+        if mode not in VALID_TAB_STYLE_MODES:
+            mode = FALLBACK_STYLES["tab.mode"]
+        self._theme.styles["tab.mode"] = mode
+        self._mark_dirty()
+        self._refresh_preview()
 
     def _metric_item_changed(self, item: QtWidgets.QTableWidgetItem) -> None:
         if item.column() != 1:
@@ -419,6 +527,11 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         except ValueError:
             return
         self._theme.metrics[key_item.text()] = value
+        self._mark_dirty()
+        self._refresh_preview()
+
+    def _metric_spin_changed(self, token: str, value: int) -> None:
+        self._theme.metrics[token] = max(0, min(5000, int(value)))
         self._mark_dirty()
         self._refresh_preview()
 
@@ -436,18 +549,27 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
             ("panel.spacing", self._layout.spacing_value("panelSpacing", FALLBACK_METRICS["panel.spacing"])),
             ("input.height", self._layout.spacing_value("inputHeight", FALLBACK_METRICS["input.height"])),
             ("tab.height", self._layout.spacing_value("tabHeight", FALLBACK_METRICS["tab.height"])),
+            ("tab.width", self._layout.spacing_value("tabWidth", FALLBACK_METRICS["tab.width"])),
+            ("tab.padding", self._layout.spacing_value("tabPadding", FALLBACK_METRICS["tab.padding"])),
+            ("tab.paddingX", self._layout.spacing_value("tabPaddingX", FALLBACK_METRICS["tab.paddingX"])),
+            ("tab.paddingY", self._layout.spacing_value("tabPaddingY", FALLBACK_METRICS["tab.paddingY"])),
+            ("tab.margin", self._layout.spacing_value("tabMargin", FALLBACK_METRICS["tab.margin"])),
+            ("tab.marginX", self._layout.spacing_value("tabMarginX", FALLBACK_METRICS["tab.marginX"])),
+            ("tab.marginY", self._layout.spacing_value("tabMarginY", FALLBACK_METRICS["tab.marginY"])),
             ("table.rowHeight", self._layout.spacing_value("tableRowHeight", FALLBACK_METRICS["table.rowHeight"])),
             ("tree.rowHeight", self._layout.spacing_value("treeRowHeight", FALLBACK_METRICS["tree.rowHeight"])),
             ("splitter.handleWidth", self._layout.spacing_value("splitterHandleWidth", FALLBACK_METRICS["splitter.handleWidth"])),
         ]
-        self.layout_metric_table.blockSignals(True)
+        self.layout_metric_table.setUpdatesEnabled(False)
         self.layout_metric_table.setRowCount(len(rows))
         for row, (key, value) in enumerate(rows):
-            key_item = QtWidgets.QTableWidgetItem(key)
-            key_item.setFlags(key_item.flags() & ~QtCore.Qt.ItemIsEditable)
-            self.layout_metric_table.setItem(row, 0, key_item)
-            self.layout_metric_table.setItem(row, 1, QtWidgets.QTableWidgetItem(str(value)))
-        self.layout_metric_table.blockSignals(False)
+            self.layout_metric_table.setCellWidget(row, 0, self._metric_name_cell(key))
+            self.layout_metric_table.setCellWidget(
+                row,
+                1,
+                self._metric_value_cell(key, int(value), changed=self._layout_metric_spin_changed, minimum=0),
+            )
+        self.layout_metric_table.setUpdatesEnabled(True)
 
     def _layout_metric_changed(self, item: QtWidgets.QTableWidgetItem) -> None:
         if item.column() != 1:
@@ -458,6 +580,11 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         except ValueError:
             return
         self._set_layout_metric(key, value)
+        self._mark_dirty()
+        self._refresh_preview()
+
+    def _layout_metric_spin_changed(self, key: str, value: int) -> None:
+        self._set_layout_metric(key, max(0, min(5000, int(value))))
         self._mark_dirty()
         self._refresh_preview()
 
@@ -484,6 +611,13 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
                 "panel.spacing": "panelSpacing",
                 "input.height": "inputHeight",
                 "tab.height": "tabHeight",
+                "tab.width": "tabWidth",
+                "tab.padding": "tabPadding",
+                "tab.paddingX": "tabPaddingX",
+                "tab.paddingY": "tabPaddingY",
+                "tab.margin": "tabMargin",
+                "tab.marginX": "tabMarginX",
+                "tab.marginY": "tabMarginY",
                 "table.rowHeight": "tableRowHeight",
                 "tree.rowHeight": "treeRowHeight",
                 "splitter.handleWidth": "splitterHandleWidth",
@@ -503,7 +637,22 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self._theme.name = self.theme_name.text().strip() or self._theme.name
         self._theme.version = self.theme_version.text().strip() or self._theme.version
         self._theme.description = self.theme_description.toPlainText().strip()
-        self.centralWidget().setStyleSheet(QtStylesheetBuilder().build(self._theme))
+        preview_theme = copy.deepcopy(self._theme)
+        if hasattr(self, "tab_style_mode_combo"):
+            preview_theme.styles["tab.mode"] = str(self.tab_style_mode_combo.currentData() or FALLBACK_STYLES["tab.mode"])
+        for layout_token, metric_token in {
+            "tabHeight": "tab.height",
+            "tabWidth": "tab.width",
+            "tabPadding": "tab.padding",
+            "tabPaddingX": "tab.paddingX",
+            "tabPaddingY": "tab.paddingY",
+            "tabMargin": "tab.margin",
+            "tabMarginX": "tab.marginX",
+            "tabMarginY": "tab.marginY",
+        }.items():
+            if layout_token in self._layout.spacing:
+                preview_theme.metrics[metric_token] = int(self._layout.spacing[layout_token])
+        self.centralWidget().setStyleSheet(QtStylesheetBuilder().build(preview_theme))
         icon_size = self._layout.toolbar("main").icon_size
         self.preview_toolbar.setIconSize(QtCore.QSize(icon_size, icon_size))
         self.preview_toolbar.setToolButtonStyle(button_mode_to_toolbutton_style(self._layout.toolbar("main").button_mode))
@@ -531,8 +680,10 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
     def _apply_theme_to_app(self) -> None:
         self.theme_manager.themes[self._theme.id] = copy.deepcopy(self._theme)
         self.theme_manager.settings.selected_theme = self._theme.id
+        self.theme_manager.settings.theme_mode = "manual"
         self.theme_manager.current_theme = copy.deepcopy(self._theme)
         self.theme_manager.applier.apply_theme(self._theme, self.parentWidget())
+        self.themeApplied.emit(self._theme.id)
 
     def _apply_layout_to_app(self) -> None:
         parent = self.parentWidget()
@@ -551,7 +702,14 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self._mark_dirty()
 
     def _new_theme(self) -> None:
-        self._theme = Theme(id="new_theme", name="New Theme", version="1", colors=dict(FALLBACK_COLORS))
+        self._theme = Theme(
+            id="new_theme",
+            name="New Theme",
+            version="1",
+            colors=dict(FALLBACK_COLORS),
+            metrics=dict(FALLBACK_METRICS),
+            styles=dict(FALLBACK_STYLES),
+        )
         self._load_theme_fields()
 
     def _rename_theme(self) -> None:
@@ -568,6 +726,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self._populate_color_tokens()
         self._populate_fonts()
         self._populate_metric_tokens()
+        self._populate_style_controls()
         self._refresh_preview()
 
     def _reload_theme(self) -> None:
@@ -629,6 +788,9 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         metrics = ET.SubElement(root, "metrics")
         for name, value in sorted(self._theme.metrics.items()):
             ET.SubElement(metrics, "metric", {"name": name, "value": str(max(0, min(5000, int(value))))})
+        styles = ET.SubElement(root, "styles")
+        for name, value in sorted({**FALLBACK_STYLES, **self._theme.styles}.items()):
+            ET.SubElement(styles, "style", {"name": name, "value": value})
         ET.indent(root)
         return ET.ElementTree(root)
 

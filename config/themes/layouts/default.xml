@@ -25,7 +25,14 @@
         <inputHeight value="26"/>
         <comboHeight value="26"/>
         <spinboxHeight value="26"/>
-        <tabHeight value="26"/>
+        <tabHeight value="14"/>
+        <tabWidth value="78"/>
+        <tabPadding value="8"/>
+        <tabPaddingX value="12"/>
+        <tabPaddingY value="6"/>
+        <tabMargin value="0"/>
+        <tabMarginX value="0"/>
+        <tabMarginY value="0"/>
         <tableRowHeight value="23"/>
         <treeRowHeight value="23"/>
         <groupboxMargin value="8"/>

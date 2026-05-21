@@ -149,6 +149,7 @@ class ThemeApplier(QtCore.QObject):
             theme.mode,
             tuple(sorted(theme.colors.items())),
             tuple(sorted(theme.metrics.items())),
+            tuple(sorted(theme.styles.items())),
             font_key,
             theme.icons.provider,
             theme.icons.default_mode,

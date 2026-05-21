@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .style_tokens import FALLBACK_COLORS, FALLBACK_FONTS, FALLBACK_METRICS, color_alias_view
+from .style_tokens import FALLBACK_COLORS, FALLBACK_FONTS, FALLBACK_METRICS, FALLBACK_STYLES, color_alias_view
 
 
 @dataclass(slots=True)
@@ -34,6 +34,7 @@ class Theme:
     fonts: dict[str, ThemeFont] = field(default_factory=dict)
     icons: ThemeIcons = field(default_factory=ThemeIcons)
     metrics: dict[str, int] = field(default_factory=dict)
+    styles: dict[str, str] = field(default_factory=dict)
     high_contrast: bool = False
     source_path: str = ""
     warnings: list[str] = field(default_factory=list)
@@ -47,6 +48,9 @@ class Theme:
             return int(self.metrics.get(token, fallback))
         except (TypeError, ValueError):
             return int(fallback)
+
+    def style(self, token: str, default: str | None = None) -> str:
+        return str(self.styles.get(token, FALLBACK_STYLES.get(token, default or "")))
 
     def font(self, role: str = "default") -> ThemeFont:
         fallback = FALLBACK_FONTS.get(role, FALLBACK_FONTS["default"])

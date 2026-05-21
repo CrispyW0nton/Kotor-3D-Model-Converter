@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from .style_tokens import FALLBACK_COLORS, FALLBACK_FONTS, FALLBACK_METRICS, VALID_BUTTON_MODES
+from .style_tokens import FALLBACK_COLORS, FALLBACK_FONTS, FALLBACK_METRICS, FALLBACK_STYLES, VALID_BUTTON_MODES, VALID_TAB_STYLE_MODES
 from .theme_model import Theme, ThemeFont, ThemeIcons
 from .theme_validator import ThemeValidator
 
@@ -83,6 +83,15 @@ class ThemeLoader:
             if name:
                 metrics[name] = value
 
+        styles = dict(FALLBACK_STYLES)
+        for entry in root.findall("./styles/style"):
+            name = (entry.get("name") or "").strip()
+            value = (entry.get("value") or "").strip()
+            if name == "tab.mode" and value not in VALID_TAB_STYLE_MODES:
+                continue
+            if name and value:
+                styles[name] = value
+
         high_contrast_text = (root.findtext("./metadata/highContrast") or root.get("highContrast") or "false").lower()
         return Theme(
             id=(root.get("id") or path.stem).strip(),
@@ -95,6 +104,7 @@ class ThemeLoader:
             fonts=fonts,
             icons=ThemeIcons(provider=provider, default_mode=default_mode, sizes=sizes),
             metrics=metrics,
+            styles=styles,
             high_contrast=high_contrast_text in {"1", "true", "yes"},
             source_path=str(path),
             warnings=warnings,

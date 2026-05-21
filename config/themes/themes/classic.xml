@@ -82,6 +82,9 @@
         <size role="toolbar" value="18"/>
         <size role="largeToolbar" value="24"/>
     </icons>
+    <styles>
+        <style name="tab.mode" value="beveled"/>
+    </styles>
     <metrics>
         <metric name="toolbar.height" value="38"/>
         <metric name="toolbar.iconSize" value="18"/>

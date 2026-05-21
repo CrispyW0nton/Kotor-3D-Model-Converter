@@ -42,7 +42,8 @@ class QtMeshToolsPanel(QtWidgets.QWidget):
         root.addWidget(self._geometry_tools_section())
         self.options_widget = QtMeshOperationOptionsWidget(self)
         root.addWidget(self.options_widget)
-        root.addWidget(self._status_section(), 1)
+        root.addWidget(self._status_section())
+        root.addStretch(1)
 
     def apply_ghost_theme(self, theme) -> None:
         for value in self._status_labels.values():

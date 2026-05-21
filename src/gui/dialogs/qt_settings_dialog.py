@@ -47,14 +47,27 @@ class QtSettingsDialog(QtWidgets.QDialog):
 
     def _build(self) -> None:
         root = QtWidgets.QVBoxLayout(self)
+        root.setContentsMargins(8, 8, 8, 8)
+        root.setSpacing(6)
+        self.resize(720, 500)
+        self.setMinimumSize(620, 420)
+
+        self.settings_tabs = QtWidgets.QTabWidget()
+        self.settings_tabs.setObjectName("SettingsSectionsTabs")
+        root.addWidget(self.settings_tabs, 1)
+
+        paths_page = QtWidgets.QWidget()
+        paths_root = QtWidgets.QVBoxLayout(paths_page)
+        paths_root.setContentsMargins(8, 8, 8, 8)
+        paths_root.setSpacing(6)
         form = QtWidgets.QFormLayout()
+        form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+        form.setHorizontalSpacing(8)
+        form.setVerticalSpacing(6)
         self.k1_dir = QtWidgets.QLineEdit()
         self.k2_dir = QtWidgets.QLineEdit()
         self.texture_dir = QtWidgets.QLineEdit()
         self.mdlops_path = QtWidgets.QLineEdit()
-        self.viewport_navigation_profile = QtWidgets.QComboBox()
-        for key, profile in VIEWPORT_NAVIGATION_PROFILES.items():
-            self.viewport_navigation_profile.addItem(profile.label, key)
         for label, edit in (
             ("KotOR 1 Directory:", self.k1_dir),
             ("KotOR 2 Directory:", self.k2_dir),
@@ -67,19 +80,44 @@ class QtSettingsDialog(QtWidgets.QDialog):
             browse.clicked.connect(lambda _checked=False, e=edit, l=label: self._browse(e, l))
             row.addWidget(browse)
             form.addRow(label, row)
+        paths_root.addLayout(form)
+        paths_root.addStretch(1)
+        self.settings_tabs.addTab(self._scroll_tab_page(paths_page), "Paths")
+
+        general_page = QtWidgets.QWidget()
+        general_root = QtWidgets.QVBoxLayout(general_page)
+        general_root.setContentsMargins(8, 8, 8, 8)
+        general_root.setSpacing(6)
+        general_form = QtWidgets.QFormLayout()
+        general_form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+        general_form.setHorizontalSpacing(8)
+        general_form.setVerticalSpacing(6)
+        self.viewport_navigation_profile = QtWidgets.QComboBox()
+        for key, profile in VIEWPORT_NAVIGATION_PROFILES.items():
+            self.viewport_navigation_profile.addItem(profile.label, key)
         viewport_controls_row = QtWidgets.QHBoxLayout()
         viewport_controls_row.addWidget(self.viewport_navigation_profile, 1)
         controls_help = QtWidgets.QPushButton("Controls...")
         controls_help.clicked.connect(lambda _checked=False: show_viewport_navigation_reference(self))
         viewport_controls_row.addWidget(controls_help)
-        form.addRow("Viewport Controls:", viewport_controls_row)
-        root.addLayout(form)
+        general_form.addRow("Viewport Controls:", viewport_controls_row)
+        general_root.addLayout(general_form)
 
         self.autoscan_check = QtWidgets.QCheckBox("Scan library on startup")
+        general_root.addWidget(self.autoscan_check)
+        general_root.addStretch(1)
+        self.settings_tabs.addTab(self._scroll_tab_page(general_page), "General")
+
+        matrix_page = QtWidgets.QWidget()
+        matrix_root = QtWidgets.QVBoxLayout(matrix_page)
+        matrix_root.setContentsMargins(8, 8, 8, 8)
+        matrix_root.setSpacing(6)
         self.matrix_check = QtWidgets.QCheckBox("Enable Matrix background")
-        root.addWidget(self.autoscan_check)
-        root.addWidget(self.matrix_check)
+        matrix_root.addWidget(self.matrix_check)
         matrix_form = QtWidgets.QFormLayout()
+        matrix_form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+        matrix_form.setHorizontalSpacing(8)
+        matrix_form.setVerticalSpacing(6)
         self.matrix_style_combo = QtWidgets.QComboBox()
         for label, value in (
             ("Theme matrix", "matrix"),
@@ -102,14 +140,38 @@ class QtSettingsDialog(QtWidgets.QDialog):
         matrix_form.addRow("Matrix Glyphs:", self.matrix_glyphs_edit)
         matrix_form.addRow("Matrix Font:", self.matrix_font_edit)
         matrix_form.addRow("Matrix Image/GIF:", image_row)
-        root.addLayout(matrix_form)
-        self._build_theme_layout_group(root)
-        self._build_measurement_group(root)
+        matrix_root.addLayout(matrix_form)
+        matrix_root.addStretch(1)
+        self.settings_tabs.addTab(self._scroll_tab_page(matrix_page), "Matrix Bar")
+
+        theme_layout_page = QtWidgets.QWidget()
+        theme_layout_root = QtWidgets.QVBoxLayout(theme_layout_page)
+        theme_layout_root.setContentsMargins(8, 8, 8, 8)
+        theme_layout_root.setSpacing(6)
+        self._build_theme_layout_group(theme_layout_root)
+        self.settings_tabs.addTab(self._scroll_tab_page(theme_layout_page), "Theme / Layout")
+
+        measurement_page = QtWidgets.QWidget()
+        measurement_root = QtWidgets.QVBoxLayout(measurement_page)
+        measurement_root.setContentsMargins(8, 8, 8, 8)
+        measurement_root.setSpacing(6)
+        self._build_measurement_group(measurement_root)
+        self.settings_tabs.addTab(self._scroll_tab_page(measurement_page), "Measurement")
 
         buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)
+
+    def _scroll_tab_page(self, page: QtWidgets.QWidget) -> QtWidgets.QScrollArea:
+        scroll = QtWidgets.QScrollArea()
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        page.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
+        scroll.setWidget(page)
+        return scroll
 
     def _build_theme_layout_group(self, root: QtWidgets.QVBoxLayout) -> None:
         tabs = QtWidgets.QTabWidget()
@@ -117,6 +179,9 @@ class QtSettingsDialog(QtWidgets.QDialog):
 
         theme_page = QtWidgets.QWidget()
         theme_form = QtWidgets.QFormLayout(theme_page)
+        theme_form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+        theme_form.setHorizontalSpacing(8)
+        theme_form.setVerticalSpacing(6)
         self.theme_mode_combo = QtWidgets.QComboBox()
         self.theme_mode_combo.addItem("Manual", "manual")
         self.theme_mode_combo.addItem("Follow OS", "follow_os")
@@ -128,7 +193,9 @@ class QtSettingsDialog(QtWidgets.QDialog):
         theme_form.addRow("Theme:", self.theme_combo)
         theme_form.addRow("OS Light Theme:", self.light_theme_combo)
         theme_form.addRow("OS Dark Theme:", self.dark_theme_combo)
-        theme_buttons = QtWidgets.QHBoxLayout()
+        theme_buttons = QtWidgets.QGridLayout()
+        theme_buttons.setHorizontalSpacing(6)
+        theme_buttons.setVerticalSpacing(4)
         preview_theme = QtWidgets.QPushButton("Apply Theme")
         preview_theme.setObjectName("ApplyThemeButton")
         preview_theme.setToolTip("Apply the selected theme to the application.")
@@ -139,15 +206,18 @@ class QtSettingsDialog(QtWidgets.QDialog):
         validate_themes.clicked.connect(self._show_theme_diagnostics)
         open_themes = QtWidgets.QPushButton("Open Themes Folder")
         open_themes.clicked.connect(lambda: self._open_folder(self.theme_manager.user_theme_dir if self.theme_manager else Path("config/themes/themes")))
-        theme_buttons.addWidget(preview_theme)
-        theme_buttons.addWidget(theme_editor)
-        theme_buttons.addWidget(validate_themes)
-        theme_buttons.addWidget(open_themes)
+        theme_buttons.addWidget(preview_theme, 0, 0)
+        theme_buttons.addWidget(theme_editor, 0, 1)
+        theme_buttons.addWidget(validate_themes, 1, 0)
+        theme_buttons.addWidget(open_themes, 1, 1)
         theme_form.addRow("", theme_buttons)
         tabs.addTab(theme_page, "Theme")
 
         layout_page = QtWidgets.QWidget()
         layout_form = QtWidgets.QFormLayout(layout_page)
+        layout_form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+        layout_form.setHorizontalSpacing(8)
+        layout_form.setVerticalSpacing(6)
         self.layout_combo = QtWidgets.QComboBox()
         self._populate_layout_combo()
         self.button_mode_combo = QtWidgets.QComboBox()
@@ -160,22 +230,25 @@ class QtSettingsDialog(QtWidgets.QDialog):
         layout_form.addRow("Layout:", self.layout_combo)
         layout_form.addRow("Button Mode Override:", self.button_mode_combo)
         layout_form.addRow("Icon Size Override:", self.icon_size_spin)
-        layout_buttons = QtWidgets.QHBoxLayout()
+        layout_buttons = QtWidgets.QGridLayout()
+        layout_buttons.setHorizontalSpacing(6)
+        layout_buttons.setVerticalSpacing(4)
         preview_layout = QtWidgets.QPushButton("Apply Layout")
         preview_layout.clicked.connect(self._preview_layout)
         reset_layout = QtWidgets.QPushButton("Reset Layout")
         reset_layout.clicked.connect(self._reset_layout)
-        save_custom_layout = QtWidgets.QPushButton("Save Current Layout as Custom")
+        save_custom_layout = QtWidgets.QPushButton("Save Custom")
+        save_custom_layout.setToolTip("Save the current window sizes as a custom layout.")
         save_custom_layout.clicked.connect(self._save_current_layout_as_custom)
         validate_layouts = QtWidgets.QPushButton("Validate Layout Files")
         validate_layouts.clicked.connect(self._show_layout_diagnostics)
         open_layouts = QtWidgets.QPushButton("Open Layouts Folder")
         open_layouts.clicked.connect(lambda: self._open_folder(self.layout_manager.user_layout_dir if self.layout_manager else Path("config/themes/layouts")))
-        layout_buttons.addWidget(preview_layout)
-        layout_buttons.addWidget(reset_layout)
-        layout_buttons.addWidget(save_custom_layout)
-        layout_buttons.addWidget(validate_layouts)
-        layout_buttons.addWidget(open_layouts)
+        layout_buttons.addWidget(preview_layout, 0, 0)
+        layout_buttons.addWidget(reset_layout, 0, 1)
+        layout_buttons.addWidget(save_custom_layout, 0, 2)
+        layout_buttons.addWidget(validate_layouts, 1, 0)
+        layout_buttons.addWidget(open_layouts, 1, 1)
         layout_form.addRow("", layout_buttons)
         tabs.addTab(layout_page, "Layout")
 
@@ -185,7 +258,7 @@ class QtSettingsDialog(QtWidgets.QDialog):
         advanced_root.addWidget(self.hot_reload_check)
         advanced_root.addStretch(1)
         tabs.addTab(advanced_page, "Advanced")
-        root.addWidget(tabs)
+        root.addWidget(tabs, 1)
 
     def _populate_theme_combos(self) -> None:
         themes = self.theme_manager.available_themes() if self.theme_manager is not None else []
@@ -208,6 +281,9 @@ class QtSettingsDialog(QtWidgets.QDialog):
     def _build_measurement_group(self, root: QtWidgets.QVBoxLayout) -> None:
         self.measurement_group = QtWidgets.QGroupBox("Measurement")
         form = QtWidgets.QFormLayout(self.measurement_group)
+        form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+        form.setHorizontalSpacing(8)
+        form.setVerticalSpacing(6)
         self.system_unit_combo = QtWidgets.QComboBox()
         self.display_unit_combo = QtWidgets.QComboBox()
         for combo in (self.system_unit_combo, self.display_unit_combo):
@@ -340,12 +416,30 @@ class QtSettingsDialog(QtWidgets.QDialog):
     def _preview_theme(self) -> None:
         if self.theme_manager is None:
             return
-        if self.theme_mode_combo.currentData() == "follow_os":
-            self.theme_manager.settings.os_light_theme = str(self.light_theme_combo.currentData() or "light")
-            self.theme_manager.settings.os_dark_theme = str(self.dark_theme_combo.currentData() or "dark")
-            self.theme_manager.set_follow_os(True, target=self.parentWidget())
-        else:
-            self.theme_manager.select_theme(str(self.theme_combo.currentData() or "matrix"), target=self.parentWidget())
+        self.setUpdatesEnabled(False)
+        try:
+            if self.theme_mode_combo.currentData() == "follow_os":
+                self.theme_manager.settings.os_light_theme = str(self.light_theme_combo.currentData() or "light")
+                self.theme_manager.settings.os_dark_theme = str(self.dark_theme_combo.currentData() or "dark")
+                self.theme_manager.set_follow_os(True, target=self)
+            else:
+                self.theme_manager.select_theme(str(self.theme_combo.currentData() or "matrix"), target=self)
+            values = self.values()
+            self.theme_layout_settings = ThemeLayoutSettings.from_settings(values)
+            self.settingsSaved.emit(values)
+        finally:
+            QtCore.QTimer.singleShot(0, self._restore_after_theme_apply)
+            QtCore.QTimer.singleShot(90, self._restore_after_theme_apply)
+
+    def _restore_after_theme_apply(self) -> None:
+        if not self.isVisible():
+            self.show()
+        self.setUpdatesEnabled(True)
+        self.updateGeometry()
+        self.update()
+        self.repaint()
+        self.raise_()
+        self.activateWindow()
 
     def _open_theme_editor(self) -> None:
         if self.theme_manager is None or self.layout_manager is None:

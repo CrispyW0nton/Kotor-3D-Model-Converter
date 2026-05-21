@@ -112,6 +112,16 @@ FALLBACK_FONTS: dict[str, dict[str, str | int]] = {
     "matrix": {"family": "Aurebesh AF", "size": 9, "weight": "normal"},
 }
 
+FALLBACK_STYLES: dict[str, str] = {
+    "tab.mode": "standard",
+}
+
+VALID_TAB_STYLE_MODES = {
+    "standard",
+    "flat",
+    "beveled",
+}
+
 FALLBACK_METRICS: dict[str, int] = {
     "window.defaultWidth": 1650,
     "window.defaultHeight": 920,
@@ -131,7 +141,14 @@ FALLBACK_METRICS: dict[str, int] = {
     "combo.height": 24,
     "spinbox.height": 24,
     "checkbox.spacing": 4,
-    "tab.height": 26,
+    "tab.height": 14,
+    "tab.width": 78,
+    "tab.padding": 8,
+    "tab.paddingX": 12,
+    "tab.paddingY": 6,
+    "tab.margin": 0,
+    "tab.marginX": 0,
+    "tab.marginY": 0,
     "panel.margin": 4,
     "panel.spacing": 4,
     "panel.headerHeight": 28,

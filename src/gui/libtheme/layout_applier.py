@@ -155,6 +155,11 @@ class LayoutApplier(QtCore.QObject):
         spacing = layout.spacing_value("panelSpacing", 4)
         input_height = layout.spacing_value("inputHeight", 0)
         tab_height = layout.spacing_value("tabHeight", 0)
+        tab_width = layout.spacing_value("tabWidth", 0)
+        tab_padding_x = layout.spacing_value("tabPaddingX", layout.spacing_value("tabPadding", 0))
+        tab_padding_y = layout.spacing_value("tabPaddingY", layout.spacing_value("tabPadding", 0))
+        tab_margin_x = layout.spacing_value("tabMarginX", layout.spacing_value("tabMargin", 0))
+        tab_margin_y = layout.spacing_value("tabMarginY", layout.spacing_value("tabMargin", 0))
         table_row = layout.spacing_value("tableRowHeight", 0)
         tree_row = layout.spacing_value("treeRowHeight", table_row)
         group_margin = layout.spacing_value("groupboxMargin", margin + 4)
@@ -180,6 +185,14 @@ class LayoutApplier(QtCore.QObject):
                     pass
             if isinstance(child, QtWidgets.QTabWidget) and tab_height:
                 child.tabBar().setMinimumHeight(tab_height)
+                tab_style_parts = [f"min-height: {tab_height}px;"]
+                if tab_width:
+                    tab_style_parts.append(f"min-width: {tab_width}px;")
+                if tab_padding_x or tab_padding_y:
+                    tab_style_parts.append(f"padding: {tab_padding_y}px {tab_padding_x}px;")
+                if tab_margin_x or tab_margin_y:
+                    tab_style_parts.append(f"margin: {tab_margin_y}px {tab_margin_x}px;")
+                child.tabBar().setStyleSheet("QTabBar::tab {" + " ".join(tab_style_parts) + "}")
 
     def _notify_layout_aware_widgets(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
         for widget in window.findChildren(QtWidgets.QWidget):

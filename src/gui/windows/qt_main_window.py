@@ -926,15 +926,30 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def _on_theme_changed(self, theme) -> None:
         update_legacy_palette(theme)
-        self.settings_data.setdefault("theme_layout", {}).update(self.theme_manager.to_settings())
-        self.settings_data["theme_layout"].update(self.layout_manager.to_settings())
+        self._sync_theme_layout_settings()
         self._refresh_theme_sensitive_icons()
         if self._progress_toast is not None:
             self._progress_toast.apply_ghost_theme(theme)
 
     def _on_layout_changed(self, layout) -> None:
-        self.settings_data.setdefault("theme_layout", {}).update(self.theme_manager.to_settings())
-        self.settings_data["theme_layout"].update(self.layout_manager.to_settings())
+        self._sync_theme_layout_settings()
+
+    def _sync_theme_layout_settings(self) -> dict:
+        theme_values = self.theme_manager.to_settings()
+        layout_values = self.layout_manager.to_settings()
+        merged = self.settings_data.setdefault("theme_layout", {})
+        merged.update(layout_values)
+        for key in (
+            "theme_mode",
+            "selected_theme",
+            "os_light_theme",
+            "os_dark_theme",
+            "last_known_os_theme",
+            "user_theme_dir",
+        ):
+            if key in theme_values:
+                merged[key] = theme_values[key]
+        return merged
 
     def _refresh_theme_sensitive_icons(self) -> None:
         for name, action in (
@@ -4664,10 +4679,19 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             editor = ThemeEditorWindow(self.theme_manager, self.layout_manager, self)
             editor.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
             editor.destroyed.connect(lambda _obj=None: setattr(self, "_theme_editor_window", None))
+            editor.themeApplied.connect(self._persist_theme_layout_settings)
             self._theme_editor_window = editor
         editor.show()
         editor.raise_()
         editor.activateWindow()
+
+    def _persist_theme_layout_settings(self, *_args) -> None:
+        self._sync_theme_layout_settings()
+        try:
+            save_settings(self.settings_path, self.settings_data)
+            self._log("Theme/layout settings saved.", "success")
+        except Exception as exc:
+            self._log(f"Theme/layout settings save failed: {exc}", "error")
 
     def _save_settings_data(self, values: dict):
         self.settings_data = values
