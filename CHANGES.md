@@ -11,6 +11,14 @@ For each completed change, add a dated entry with:
 
 ## 2026-05-21
 
+- Wired strict KOTOR animation slot validation into the Aurora animation override export boundary. Export-ready MDL injection now resolves the requested slot through the target model/supermodel chain before local override mutation or MDL/MDX writing, copies the outgoing animation to the canonical resolved slot name, rejects UE clip names that are not valid KOTOR slots, and returns before creating export files on invalid slots. Roadmap reference: T1403 animation playback workflow.
+  Affected areas: `src/core/retargeting/aurora_animation_writer.py`, `tests/test_animation_export_slot_gate.py`, `.gitignore`.
+  Verification: `python -m pytest tests/test_animation_export_slot_gate.py -q --basetemp .pytest_tmp_slot_export_gate`; `python -m pytest tests/test_animation_slot_resolution.py tests/test_roundtrip_verification.py -q --basetemp .pytest_tmp_retarget_gate`.
+
+- Added KOTOR animation slot and supermodel-chain resolver helpers for the GhostRigger UE-to-Aurora retargeting workflow. The loader now exposes local-first valid slot listing, inherited-slot resolution with local override metadata, and diagnostic supermodel chain metadata so retarget exports can verify a real KOTOR slot before writing an MDL/MDX override. Roadmap reference: T1403 animation playback workflow.
+  Affected areas: `src/core/game/kotor_loader.py`, `src/core/geometry/model_data.py`, `tests/test_animation_slot_resolution.py`.
+  Verification: `python -m pytest tests/test_animation_slot_resolution.py -q --basetemp .pytest_tmp_slot_resolution`.
+
 - Restored the grouped `src.core.diagnostics` compatibility package after syncing LordVader's latest `qt-ghostrigger` reorganization, so `src.core.qt_core` can expose validation and module-reference helpers alongside the moved `animation`, `geometry`, `game`, and `mdl` packages. No roadmap task ID applies; this is repository-sync compatibility work.
   Affected areas: `src/core/diagnostics/`, `src/core/qt_core.py` import surface.
   Verification: `python -m py_compile scripts\verify_roundtrip.py src\core\mdl\mdl_writer.py tests\test_roundtrip_verification.py src\core\validation\viewport_validator.py src\core\retargeting\aurora_animation_writer.py`; focused round-trip/core contract pytest after the sync.

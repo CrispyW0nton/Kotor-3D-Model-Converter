@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import hashlib
+import copy
 import json
 import logging
 import math
@@ -18,9 +19,19 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 
-from src.core.game.kotor_loader import load_model_from_file
+from src.core.game.kotor_loader import (
+    get_valid_animation_slots,
+    load_model_from_file,
+    resolve_animation_slot,
+)
 from src.core.mdl.mdl_writer import MDLBinaryWriter
-from src.core.geometry.model_data import Animation, GameVersion, KotorModel, ModelNode
+from src.core.geometry.model_data import (
+    Animation,
+    GameVersion,
+    KotorModel,
+    ModelNode,
+    ResolvedAnimationSlot,
+)
 from src.core.retargeting.coordinate_converter import aurora_from_ue5_quat
 from src.core.retargeting.coordinate_normalizer import (
     CoordinateNormalizer,
@@ -39,6 +50,10 @@ logger = logging.getLogger(__name__)
 
 CTRL_POSITION = 8
 CTRL_ORIENTATION = 20
+
+
+class InvalidAnimationSlotError(ValueError):
+    """Raised when export tries to write a non-KOTOR animation slot."""
 
 
 def _coerce_matrix3(value: Iterable[Iterable[float]]) -> np.ndarray:
@@ -86,6 +101,72 @@ def conjugate_quat_wxyz(quat_wxyz: Iterable[float], basis_change_matrix: np.ndar
         basis_change_matrix,
     )
     return matrix_to_quat_wxyz(rotated)
+
+
+def _format_slot_suggestions(slots: List[str], *, limit: int = 12) -> str:
+    if not slots:
+        return "(no local or inherited slots resolved)"
+    shown = slots[:limit]
+    suffix = "" if len(slots) <= limit else f", ... ({len(slots) - limit} more)"
+    return ", ".join(shown) + suffix
+
+
+def prepare_local_animation_override_for_export(
+    target_model: KotorModel,
+    animation_block: Animation,
+    requested_slot_name: str,
+    *,
+    game: Optional[object] = None,
+    resource_manager: object | None = None,
+    require_valid_slot: bool = True,
+    replace_existing: bool = True,
+) -> tuple[Animation, ResolvedAnimationSlot]:
+    """Validate and prepare a local animation override before MDL export.
+
+    The caller receives a deep-copied animation block whose name is the
+    canonical KOTOR slot resolved from the target model/supermodel chain. The
+    original animation is not mutated, and no model state or output files are
+    touched by this helper.
+    """
+
+    requested = str(requested_slot_name or "").strip()
+    try:
+        resolved_slot = resolve_animation_slot(
+            target_model,
+            requested,
+            game=game,
+            resource_manager=resource_manager,
+            require_valid=require_valid_slot,
+        )
+    except ValueError as exc:
+        valid_slots = get_valid_animation_slots(
+            target_model,
+            game=game,
+            resource_manager=resource_manager,
+        )
+        target_name = str(getattr(target_model, "name", "") or "target model")
+        raise InvalidAnimationSlotError(
+            f"Invalid animation slot '{requested}' for target '{target_name}'. "
+            "Valid slots are inherited from the target model/supermodel chain. "
+            f"Choose one of: {_format_slot_suggestions(valid_slots)}. "
+            "UE clip names are not KOTOR animation slot names."
+        ) from exc
+
+    prepared = copy.deepcopy(animation_block)
+    prepared.name = resolved_slot.slot_name
+    if resolved_slot.animation is not None:
+        prepared.transition_time = resolved_slot.transtime
+        if resolved_slot.anim_root and not prepared.anim_root:
+            prepared.anim_root = resolved_slot.anim_root
+        if resolved_slot.events and not prepared.events:
+            prepared.events = copy.deepcopy(resolved_slot.events)
+
+    if not replace_existing:
+        wanted = resolved_slot.slot_name.lower()
+        if any(str(anim.name or "").lower() == wanted for anim in getattr(target_model, "animations", [])):
+            raise ValueError(f"Local animation '{resolved_slot.slot_name}' already exists")
+
+    return prepared, resolved_slot
 
 
 @dataclass
@@ -217,7 +298,24 @@ class AuroraAnimationWriter:
             result.duration_seconds = float(animation.length or 0.0)
             result.bone_count_animated = len(animation.nodes)
 
-            existing_index = self._find_local_animation_index(model, request.animation_slot)
+            try:
+                animation, resolved_slot = prepare_local_animation_override_for_export(
+                    model,
+                    animation,
+                    request.animation_slot,
+                    game=request.game,
+                    require_valid_slot=True,
+                    replace_existing=request.overwrite_existing,
+                )
+            except InvalidAnimationSlotError as exc:
+                result.errors.append(str(exc))
+                return result
+            except ValueError as exc:
+                result.errors.append(str(exc))
+                return result
+            result.animation_slot = resolved_slot.slot_name
+
+            existing_index = self._find_local_animation_index(model, resolved_slot.slot_name)
             if existing_index is None:
                 model.animations.append(animation)
                 result.operation = "appended_local_override"
@@ -225,8 +323,8 @@ class AuroraAnimationWriter:
                 model.animations[existing_index] = animation
                 result.operation = "replaced_local"
             else:
-                result.errors.append(f"Local animation '{request.animation_slot}' already exists")
-                return self._finish(result, request)
+                result.errors.append(f"Local animation '{resolved_slot.slot_name}' already exists")
+                return result
 
             MDLBinaryWriter().write_files(model, str(request.output_mdl))
             if not request.output_mdl.exists():
@@ -248,8 +346,8 @@ class AuroraAnimationWriter:
             if reloaded is None:
                 result.errors.append(f"Output MDL failed reload: {request.output_mdl}")
                 return self._finish(result, request)
-            if self._find_local_animation_index(reloaded, request.animation_slot) is None:
-                result.errors.append(f"Animation '{request.animation_slot}' missing after reload")
+            if self._find_local_animation_index(reloaded, resolved_slot.slot_name) is None:
+                result.errors.append(f"Animation '{resolved_slot.slot_name}' missing after reload")
                 return self._finish(result, request)
 
             result.output_mdl_sha256 = self.sha256(request.output_mdl)

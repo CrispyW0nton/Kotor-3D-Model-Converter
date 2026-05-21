@@ -1335,6 +1335,50 @@ class Animation:
     events:          List[AnimEvent]  = field(default_factory=list)
     nodes:           List[ModelNode]  = field(default_factory=list)
 
+
+@dataclass(frozen=True)
+class SupermodelChainEntry:
+    """One step in a model's supermodel inheritance chain."""
+
+    resref: str
+    model_name: str = ""
+    supermodel: str = "NULL"
+    anim_scale: float = 1.0
+    loaded: bool = False
+
+
+@dataclass
+class SupermodelChain:
+    """Resolved supermodel chain metadata for animation-slot diagnostics."""
+
+    root_model_name: str
+    entries: List[SupermodelChainEntry] = field(default_factory=list)
+
+    def loaded_models(self) -> List[str]:
+        """Return names of successfully loaded supermodels in chain order."""
+
+        return [entry.model_name for entry in self.entries if entry.loaded]
+
+
+@dataclass
+class ResolvedAnimationSlot:
+    """Animation slot resolved through local-first supermodel inheritance."""
+
+    slot_name: str
+    animation: Optional[Animation]
+    source_model_name: str = ""
+    inherited: bool = False
+    cumulative_scale: float = 1.0
+    transtime: float = 0.25
+    anim_root: str = ""
+    events: List[AnimEvent] = field(default_factory=list)
+
+    @property
+    def found(self) -> bool:
+        """Whether the slot resolved to an actual animation block."""
+
+        return self.animation is not None
+
 # ──────────────────────────────────────────────────────────────
 #  Full Model
 # ──────────────────────────────────────────────────────────────

@@ -56,6 +56,8 @@ game_data/
 !/tests/test_lightmap_baker.py
 !/tests/test_mcp_retargeting_tools.py
 !/tests/test_retargeting_test_utils.py
+!/tests/test_animation_slot_resolution.py
+!/tests/test_animation_export_slot_gate.py
 !/tests/test_sampler.py
 !/tests/test_coordinate_normalizer.py
 !/tests/test_baker.py
@@ -68,6 +70,13 @@ game_data/
 test_assets/
 pytest.ini
 .pytest_cache/
+
+# Retargeting scratch/probe exports (local diagnostics only)
+/exports/r3_idle_test_axis_probe/
+/exports/r3_idle_test_basis_probe/
+/exports/r3_idle_test_basis_probe2/
+/exports/r3_idle_test_reference_pose_probe/
+/tmp_codex_exports/
 .pytest_tmp*/
 
 # ── Audit / render output (generated artefacts) ───────────────────────────────

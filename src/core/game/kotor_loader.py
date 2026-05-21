@@ -48,7 +48,8 @@ except ImportError:
 # ── GhostRigger model types ───────────────────────────────────────────────────
 from ..geometry.model_data import (
     Animation, AnimEvent, BoneWeight, GameVersion,
-    KotorModel, ModelNode, NodeFlags, VertexSkinData,
+    KotorModel, ModelNode, NodeFlags, ResolvedAnimationSlot,
+    SupermodelChain, SupermodelChainEntry, VertexSkinData,
 )
 
 # ── MDLNodeType → NodeFlags ───────────────────────────────────────────────────
@@ -206,6 +207,155 @@ def load_model_from_file(
     except Exception as exc:
         log.error("load_model_from_file: '%s' — %s", mdl_path, exc, exc_info=True)
         return None
+
+
+def _game_name(game: Optional[object], model: Optional[KotorModel] = None) -> str:
+    """Return the KOTOR game name expected by ResourceManager-style loaders."""
+
+    if game is not None:
+        raw = getattr(game, "value", game)
+    elif model is not None:
+        raw = getattr(getattr(model, "game_version", None), "value", getattr(model, "game_version", "K1"))
+    else:
+        raw = "K1"
+    text = str(raw or "K1").upper()
+    if text in {"2", "K2", "TSL"}:
+        return "K2"
+    return "K1"
+
+
+def _is_null_supermodel(resref: Optional[str]) -> bool:
+    return not resref or str(resref).strip().lower() in {"", "null", "none"}
+
+
+def _configure_supermodel_resource_manager(resource_manager: object | None) -> None:
+    if resource_manager is None:
+        return
+    from ..animation.animation_engine import SuperModelResolver
+
+    SuperModelResolver.configure(resource_manager)
+
+
+def load_supermodel_chain(
+    model: KotorModel,
+    *,
+    game: Optional[object] = None,
+    resource_manager: object | None = None,
+) -> SupermodelChain:
+    """Resolve model.supermodel metadata in chain order.
+
+    This is a read-only diagnostic/API helper for retargeting and export
+    planning. It uses the same :class:`SuperModelResolver` cache and resource
+    manager as viewport animation playback, so local animation slot decisions
+    are made against the same inheritance chain users will preview.
+    """
+
+    from ..animation.animation_engine import SuperModelResolver
+
+    _configure_supermodel_resource_manager(resource_manager)
+    chain = SupermodelChain(root_model_name=str(getattr(model, "name", "") or ""))
+    game_name = _game_name(game, model)
+    visited = {str(getattr(model, "name", "") or "").lower()}
+    super_ref = str(getattr(model, "supermodel", "") or "")
+
+    while not _is_null_supermodel(super_ref):
+        key = super_ref.lower()
+        if key in visited:
+            log.warning("load_supermodel_chain: cycle detected at %r", super_ref)
+            break
+        visited.add(key)
+
+        super_model = SuperModelResolver.load_supermodel(super_ref, game_name)
+        if super_model is None:
+            chain.entries.append(
+                SupermodelChainEntry(resref=super_ref, loaded=False)
+            )
+            break
+
+        chain.entries.append(
+            SupermodelChainEntry(
+                resref=super_ref,
+                model_name=str(getattr(super_model, "name", "") or super_ref),
+                supermodel=str(getattr(super_model, "supermodel", "") or "NULL"),
+                anim_scale=float(getattr(super_model, "anim_scale", 1.0) or 1.0),
+                loaded=True,
+            )
+        )
+        super_ref = str(getattr(super_model, "supermodel", "") or "")
+
+    return chain
+
+
+def get_valid_animation_slots(
+    model: KotorModel,
+    *,
+    game: Optional[object] = None,
+    resource_manager: object | None = None,
+) -> List[str]:
+    """Return local and inherited animation slot names, local overrides first."""
+
+    from ..animation.animation_engine import SuperModelResolver
+
+    _configure_supermodel_resource_manager(resource_manager)
+    return [
+        name
+        for name, _source, _scale in SuperModelResolver.list_all_animations(
+            model,
+            _game_name(game, model),
+        )
+    ]
+
+
+def resolve_animation_slot(
+    model: KotorModel,
+    slot_name: str,
+    *,
+    game: Optional[object] = None,
+    resource_manager: object | None = None,
+    require_valid: bool = False,
+) -> ResolvedAnimationSlot:
+    """Resolve an animation slot through local-first supermodel inheritance.
+
+    A local animation block with the same name as an inherited supermodel slot
+    is reported as ``inherited=False`` and is the selected override. When
+    ``require_valid`` is true, an unresolved slot raises ``ValueError`` so CLI
+    export flows can stop before producing an in-game-invalid patch.
+    """
+
+    from ..animation.animation_engine import SuperModelResolver
+
+    _configure_supermodel_resource_manager(resource_manager)
+    wanted = str(slot_name or "").strip()
+    if not wanted:
+        raise ValueError("Animation slot name cannot be empty")
+
+    game_name = _game_name(game, model)
+    animation, scale = SuperModelResolver.resolve_animation(model, wanted, game_name)
+    source = ""
+    inherited = False
+
+    if animation is not None:
+        wanted_key = wanted.lower()
+        local_names = {anim.name.lower() for anim in getattr(model, "animations", [])}
+        inherited = wanted_key not in local_names
+        for name, source_name, _entry_scale in SuperModelResolver.list_all_animations(model, game_name):
+            if name.lower() == wanted_key:
+                source = source_name
+                break
+        source = source or (getattr(model, "name", "") if not inherited else "")
+    elif require_valid:
+        raise ValueError(f"Animation slot '{wanted}' is not available on {getattr(model, 'name', 'model')}")
+
+    return ResolvedAnimationSlot(
+        slot_name=getattr(animation, "name", wanted) if animation is not None else wanted,
+        animation=animation,
+        source_model_name=str(source or ""),
+        inherited=inherited,
+        cumulative_scale=float(scale or 1.0),
+        transtime=float(getattr(animation, "transition_time", 0.25) if animation is not None else 0.25),
+        anim_root=str(getattr(animation, "anim_root", "") if animation is not None else ""),
+        events=list(getattr(animation, "events", []) if animation is not None else []),
+    )
 
 
 def patch_tpc_header(data: bytes) -> bytes:
