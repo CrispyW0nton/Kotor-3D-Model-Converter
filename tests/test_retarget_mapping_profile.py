@@ -1,0 +1,269 @@
+"""Retarget mapping profile persistence, suggestions, and validation gates."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from src.core.animation.animation_engine import SuperModelResolver
+from src.core.geometry.model_data import Animation, KotorModel, ModelNode
+from src.core.retargeting.fbx_importer import classify_source_node_name
+from src.core.retargeting.retarget_mapping import (
+    detect_side,
+    suggest_source_roles,
+    validate_retarget_profile,
+)
+from src.core.retargeting.retarget_profile import (
+    RetargetMappingEntry,
+    RetargetProfile,
+    load_retarget_profile,
+    save_retarget_profile,
+)
+from src.core.retargeting.source_animation import SourcePose, SourceSkeletonClip, SourceSkeletonNode, Transform
+
+
+def _source_clip(
+    names: list[str],
+    *,
+    parents: dict[str, str | None] | None = None,
+) -> SourceSkeletonClip:
+    parents = parents or {}
+    globals_by_name = {
+        name: Transform(position=(float(index), 0.0, 0.0))
+        for index, name in enumerate(names)
+    }
+    locals_by_name = dict(globals_by_name)
+    pose = SourcePose(time_seconds=0.0, global_transforms=globals_by_name, local_transforms=locals_by_name)
+    nodes = [
+        SourceSkeletonNode(
+            name=name,
+            parent_name=parents.get(name),
+            index=index,
+            rest_local=locals_by_name[name],
+            rest_global=globals_by_name[name],
+            classification=classify_source_node_name(name),
+        )
+        for index, name in enumerate(names)
+    ]
+    return SourceSkeletonClip(
+        source_path="fake.fbx",
+        clip_name="Idle",
+        duration_seconds=0.0,
+        sample_rate=30.0,
+        nodes=nodes,
+        rest_pose=pose,
+        sampled_poses=[pose],
+    )
+
+
+def _target_model(
+    names: list[str],
+    *,
+    parents: dict[str, str | None] | None = None,
+    anims: tuple[str, ...] = (),
+) -> KotorModel:
+    parents = parents or {}
+    nodes = {name: ModelNode(name=name, position=(float(index), 0.0, 0.0)) for index, name in enumerate(names)}
+    for name, node in nodes.items():
+        parent_name = parents.get(name)
+        if parent_name:
+            node.parent = nodes[parent_name]
+            nodes[parent_name].children.append(node)
+    root = nodes[names[0]]
+    return KotorModel(
+        name="target_model",
+        root_node=root,
+        animations=[Animation(name=anim, length=1.0) for anim in anims],
+    )
+
+
+@pytest.fixture(autouse=True)
+def _clear_supermodel_resolver():
+    SuperModelResolver.clear_cache()
+    SuperModelResolver.configure(None)
+    yield
+    SuperModelResolver.clear_cache()
+    SuperModelResolver.configure(None)
+
+
+def test_profile_json_roundtrip_preserves_fields(tmp_path: Path) -> None:
+    profile = RetargetProfile(
+        name="ue5_to_kotor",
+        source_clip_hint="clip.fbx",
+        target_model_hint="pmbam",
+        animation_slot="pause1",
+        source_reference={"mode": "clip_time", "time_seconds": 1.0},
+        target_reference={"mode": "animation_slot_time", "slot": "pause1", "time_seconds": 0.25},
+        mappings=[
+            RetargetMappingEntry(
+                role="forearm",
+                source_node=" lowerarm_l ",
+                target_node=" lforearm_g ",
+                side="left",
+                notes="test note",
+            )
+        ],
+        ignored_source_nodes=["ik_foot_root"],
+        twist_sources={"forearm_l": ["lowerarm_twist_01_l"]},
+        metadata={"custom": {"kept": True}},
+    )
+    path = tmp_path / "profile.json"
+
+    save_retarget_profile(profile, path)
+    loaded = load_retarget_profile(path)
+
+    assert loaded.name == "ue5_to_kotor"
+    assert loaded.mappings[0].source_node == "lowerarm_l"
+    assert loaded.mappings[0].target_node == "lforearm_g"
+    assert loaded.ignored_source_nodes == ["ik_foot_root"]
+    assert loaded.twist_sources == {"forearm_l": ["lowerarm_twist_01_l"]}
+    assert loaded.metadata == {"custom": {"kept": True}}
+
+    bad_path = tmp_path / "bad_profile.json"
+    bad_path.write_text('{"version": 999, "name": "future"}', encoding="utf-8")
+    with pytest.raises(ValueError, match="Unsupported retarget profile version"):
+        load_retarget_profile(bad_path)
+
+
+def test_source_role_suggestions_classify_ue_style_names() -> None:
+    clip = _source_clip(
+        [
+            "root",
+            "pelvis",
+            "spine_01",
+            "spine_03",
+            "clavicle_l",
+            "upperarm_l",
+            "lowerarm_l",
+            "hand_l",
+            "thigh_r",
+            "calf_r",
+            "foot_r",
+            "lowerarm_twist_01_l",
+            "ik_foot_root",
+        ]
+    )
+
+    suggestions = suggest_source_roles(clip)
+
+    assert suggestions["pelvis"] == "pelvis"
+    assert suggestions["spine_01"] == "spine"
+    assert suggestions["spine_03"] == "chest"
+    assert suggestions["upperarm_l"] == "upperarm"
+    assert suggestions["lowerarm_l"] == "forearm"
+    assert suggestions["hand_l"] == "hand"
+    assert suggestions["thigh_r"] == "thigh"
+    assert suggestions["calf_r"] == "calf"
+    assert suggestions["foot_r"] == "foot"
+    assert "lowerarm_twist_01_l" not in suggestions
+    assert "ik_foot_root" not in suggestions
+    assert detect_side("upperarm_l") == "left"
+    assert detect_side("thigh_r") == "right"
+
+
+def test_validation_rejects_unknown_source_node() -> None:
+    clip = _source_clip(["root", "pelvis"])
+    target = _target_model(["root", "pelvis_g"], parents={"pelvis_g": "root"})
+    profile = RetargetProfile(
+        name="ue5_manny_to_kotor_humanoid",
+        mappings=[RetargetMappingEntry(role="pelvis", source_node="UE_UnknownBone", target_node="pelvis_g")],
+    )
+
+    report = validate_retarget_profile(profile, clip, target)
+
+    assert report.success is False
+    assert any("UE_UnknownBone" in error and "does not contain" in error for error in report.errors)
+
+
+def test_validation_rejects_unknown_target_node() -> None:
+    clip = _source_clip(["root", "lowerarm_l"])
+    target = _target_model(["root", "lforearm_g"], parents={"lforearm_g": "root"})
+    profile = RetargetProfile(
+        name="ue5_manny_to_kotor_humanoid",
+        mappings=[
+            RetargetMappingEntry(
+                role="forearm",
+                source_node="lowerarm_l",
+                target_node="UE_Mannequin_lowerarm_l",
+                side="left",
+            )
+        ],
+    )
+
+    report = validate_retarget_profile(profile, clip, target)
+
+    assert report.success is False
+    assert any(
+        "KOTOR controllers must target existing Aurora nodes, not UE skeleton bones" in error
+        for error in report.errors
+    )
+
+
+def test_validation_rejects_duplicate_target_node_for_normal_mappings() -> None:
+    clip = _source_clip(["root", "upperarm_l", "lowerarm_l"])
+    target = _target_model(["root", "larm_g"], parents={"larm_g": "root"})
+    profile = RetargetProfile(
+        name="duplicate_target",
+        mappings=[
+            RetargetMappingEntry(role="upperarm", source_node="upperarm_l", target_node="larm_g", side="left"),
+            RetargetMappingEntry(role="forearm", source_node="lowerarm_l", target_node="larm_g", side="left"),
+        ],
+    )
+
+    report = validate_retarget_profile(profile, clip, target)
+
+    assert report.success is False
+    assert any("mapped by multiple" in error for error in report.errors)
+
+
+def test_twist_helper_source_cannot_be_normal_mapping_by_default() -> None:
+    clip = _source_clip(["root", "lowerarm_twist_01_l"])
+    target = _target_model(["root", "lforearm_g"], parents={"lforearm_g": "root"})
+    profile = RetargetProfile(
+        name="twist_misuse",
+        mappings=[
+            RetargetMappingEntry(
+                role="forearm",
+                source_node="lowerarm_twist_01_l",
+                target_node="lforearm_g",
+                side="left",
+            )
+        ],
+    )
+
+    report = validate_retarget_profile(profile, clip, target)
+
+    assert report.success is False
+    assert any("classified as twist/helper" in error for error in report.errors)
+
+    allowed = RetargetProfile(
+        name="twist_allowed",
+        mappings=[
+            RetargetMappingEntry(
+                role="forearm",
+                source_node="lowerarm_twist_01_l",
+                target_node="lforearm_g",
+                side="left",
+                allow_helper_mapping=True,
+            )
+        ],
+    )
+    allowed_report = validate_retarget_profile(allowed, clip, target)
+    assert allowed_report.success is True
+    assert any("classified as twist/helper" in warning for warning in allowed_report.warnings)
+
+
+def test_animation_slot_in_profile_is_validated() -> None:
+    clip = _source_clip(["root", "pelvis"])
+    target = _target_model(["root", "pelvis_g"], parents={"pelvis_g": "root"}, anims=("pause1",))
+    mapping = [RetargetMappingEntry(role="pelvis", source_node="pelvis", target_node="pelvis_g")]
+
+    valid = RetargetProfile(name="slot_valid", animation_slot="pause1", mappings=mapping)
+    assert validate_retarget_profile(valid, clip, target).success is True
+
+    invalid = RetargetProfile(name="slot_invalid", animation_slot="UE_Run_Fwd", mappings=mapping)
+    report = validate_retarget_profile(invalid, clip, target)
+
+    assert report.success is False
+    assert any("UE clip names are not KOTOR animation slot names" in error for error in report.errors)
