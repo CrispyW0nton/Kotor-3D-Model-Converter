@@ -55,7 +55,7 @@ try:
         KotorModel, ModelNode, NodeFlags, VertexSkinData, BoneWeight
     )
 except ImportError:
-    from core.model_data import (  # type: ignore[no-redef]
+    from core.qt_core.geometry.model_data import (  # type: ignore[no-redef]
         KotorModel, ModelNode, NodeFlags, VertexSkinData, BoneWeight
     )
 

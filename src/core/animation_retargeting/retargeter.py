@@ -12,8 +12,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, Optional
 
-from ..animation_engine import AnimPose, NodePose
-from ..model_data import Animation
+from ..animation.animation_engine import AnimPose, NodePose
+from ..geometry.model_data import Animation
 
 
 _ALIASES: Dict[str, tuple[str, ...]] = {

@@ -1,0 +1,67 @@
+<theme id="matrix" name="Matrix" version="1" highContrast="true">
+    <metadata>
+        <author>GhostRigger</author>
+        <description>Classic high-contrast GhostRigger Matrix green theme.</description>
+        <mode>dark</mode>
+        <highContrast>true</highContrast>
+    </metadata>
+    <colors>
+        <color name="window.background" value="#0B0F0D"/>
+        <color name="panel.background" value="#111916"/>
+        <color name="panel.altBackground" value="#151D1A"/>
+        <color name="panel.border" value="#1B2A22"/>
+        <color name="viewport.background" value="#07100C"/>
+        <color name="viewport.border" value="#34383F"/>
+        <color name="viewport.text" value="#8F9AAA"/>
+        <color name="toolbar.background" value="#111916"/>
+        <color name="toolbar.border" value="#102019"/>
+        <color name="button.background" value="#151D1A"/>
+        <color name="button.hover" value="#183428"/>
+        <color name="button.checked" value="#00FF7A"/>
+        <color name="button.text" value="#E8F0EC"/>
+        <color name="button.accentText" value="#001A0E"/>
+        <color name="input.background" value="#151D1A"/>
+        <color name="input.text" value="#E8F0EC"/>
+        <color name="input.border" value="#1B2A22"/>
+        <color name="selection.background" value="#00FF7A"/>
+        <color name="selection.text" value="#001A0E"/>
+        <color name="text.primary" value="#E8F0EC"/>
+        <color name="text.secondary" value="#7A9A88"/>
+        <color name="text.disabled" value="#55665B"/>
+        <color name="text.gold" value="#D8C66A"/>
+        <color name="accent.primary" value="#00FF7A"/>
+        <color name="accent.secondary" value="#00D7B5"/>
+        <color name="warning" value="#FFAA00"/>
+        <color name="error" value="#FF4444"/>
+        <color name="success" value="#00FF7A"/>
+    </colors>
+    <fonts>
+        <font role="default" family="Consolas" size="9"/>
+        <font role="monospace" family="Consolas" size="9"/>
+        <font role="heading" family="Segoe UI" size="10" weight="bold"/>
+    </fonts>
+    <icons>
+        <provider>qtawesome</provider>
+        <defaultMode>iconText</defaultMode>
+        <size role="toolbar" value="18"/>
+        <size role="largeToolbar" value="24"/>
+    </icons>
+    <metrics>
+        <metric name="toolbar.height" value="38"/>
+        <metric name="toolbar.iconSize" value="18"/>
+        <metric name="toolbar.spacing" value="5"/>
+        <metric name="button.height" value="28"/>
+        <metric name="button.minWidth" value="76"/>
+        <metric name="button.paddingH" value="10"/>
+        <metric name="button.paddingV" value="5"/>
+        <metric name="panel.margin" value="4"/>
+        <metric name="panel.spacing" value="4"/>
+        <metric name="panel.minWidth" value="280"/>
+        <metric name="panel.preferredWidth" value="380"/>
+        <metric name="splitter.handleWidth" value="8"/>
+        <metric name="bottom.preferredHeight" value="220"/>
+        <metric name="bottom.minHeight" value="120"/>
+        <metric name="viewport.minWidth" value="500"/>
+        <metric name="border.radius" value="3"/>
+    </metrics>
+</theme>

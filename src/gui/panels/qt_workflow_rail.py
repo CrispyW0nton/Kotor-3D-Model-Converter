@@ -36,7 +36,7 @@ from src.gui.qt_lib.assets.qt_theme import C, heading, icon
 # is not always available in CI / headless environments.  We isolate the
 # failure so the rail still renders an empty placeholder.
 try:
-    from src.core.model_data import CharacterMode
+    from src.core.qt_core.geometry.model_data import CharacterMode
     _CHARACTER_MODE_AVAILABLE = True
 except Exception:                                       # pragma: no cover
     CharacterMode = None                                # type: ignore[assignment]

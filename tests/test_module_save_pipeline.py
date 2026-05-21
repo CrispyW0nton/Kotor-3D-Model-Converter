@@ -31,7 +31,7 @@ def _load_module_direct(name: str, path: pathlib.Path):
 
 sp = _load_module_direct(
     "ghostrigger_module_save_pipeline_under_test",
-    _SRC_DIR / "core" / "module_save_pipeline.py",
+    _SRC_DIR / "core" / "modules" / "module_save_pipeline.py",
 )
 
 

@@ -928,7 +928,7 @@ def test_t406_body_modes_reset_canonical_front():
 
 
 def _mesh_node_t407(name: str, texture: str = "pmha01"):
-    from core.model_data import ModelNode, NodeFlags
+    from core.qt_core.geometry.model_data import ModelNode, NodeFlags
 
     node = ModelNode()
     node.name = name
@@ -943,7 +943,7 @@ def _mesh_node_t407(name: str, texture: str = "pmha01"):
 
 
 def _model_t407(name: str, child):
-    from core.model_data import KotorModel, ModelClassification, ModelNode
+    from core.qt_core.geometry.model_data import KotorModel, ModelClassification, ModelNode
 
     model = KotorModel()
     model.name = name
@@ -957,7 +957,7 @@ def _model_t407(name: str, child):
 
 
 def test_t407_animation_supermodel_mesh_helpers_are_not_visible():
-    from core.model_data import is_animation_supermodel
+    from core.qt_core.geometry.model_data import is_animation_supermodel
     from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
 
     model = _model_t407("s_male02", _mesh_node_t407("eyeRA"))

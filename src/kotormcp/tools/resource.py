@@ -227,7 +227,7 @@ def _decode_mdl(
 ) -> Any:
     """MDL: return structural summary via GhostRigger ModelAnalyzer."""
     try:
-        from src.core.kotor_loader import load_model_from_bytes  # noqa: PLC0415
+        from src.core.qt_core.game.kotor_loader import load_model_from_bytes  # noqa: PLC0415
         # Try to find .mdx alongside
         mdx = b""
         if installation is not None:

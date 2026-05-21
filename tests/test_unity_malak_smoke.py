@@ -7,7 +7,7 @@ LOCAL_SRC = ROOT / "src"
 if str(LOCAL_SRC) not in sys.path:
     sys.path.insert(0, str(LOCAL_SRC))
 
-from src.core.unity_malak_smoke import (
+from src.core.qt_core.special.unity_malak_smoke import (
     DEFAULT_ASSET_PATH,
     choose_preferred_clip,
     metadata_path_for_asset,

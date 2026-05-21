@@ -1,0 +1,66 @@
+<theme id="dark" name="Dark" version="1">
+    <metadata>
+        <author>GhostRigger</author>
+        <description>Professional dark theme with quieter contrast than Matrix.</description>
+        <mode>dark</mode>
+    </metadata>
+    <colors>
+        <color name="window.background" value="#15181D"/>
+        <color name="panel.background" value="#1E232A"/>
+        <color name="panel.altBackground" value="#242A33"/>
+        <color name="panel.border" value="#3A4654"/>
+        <color name="viewport.background" value="#101318"/>
+        <color name="viewport.border" value="#364151"/>
+        <color name="viewport.text" value="#AAB5C2"/>
+        <color name="toolbar.background" value="#202630"/>
+        <color name="toolbar.border" value="#3A4654"/>
+        <color name="button.background" value="#27303A"/>
+        <color name="button.hover" value="#334151"/>
+        <color name="button.checked" value="#4FA3FF"/>
+        <color name="button.text" value="#EEF3F8"/>
+        <color name="button.accentText" value="#07111F"/>
+        <color name="input.background" value="#11161D"/>
+        <color name="input.text" value="#EEF3F8"/>
+        <color name="input.border" value="#3A4654"/>
+        <color name="selection.background" value="#4FA3FF"/>
+        <color name="selection.text" value="#06111E"/>
+        <color name="text.primary" value="#EEF3F8"/>
+        <color name="text.secondary" value="#AAB5C2"/>
+        <color name="text.disabled" value="#6E7885"/>
+        <color name="text.gold" value="#D6B45D"/>
+        <color name="accent.primary" value="#4FA3FF"/>
+        <color name="accent.secondary" value="#55D6BE"/>
+        <color name="warning" value="#F5B84B"/>
+        <color name="error" value="#F06969"/>
+        <color name="success" value="#69D98F"/>
+    </colors>
+    <fonts>
+        <font role="default" family="Segoe UI" size="9"/>
+        <font role="monospace" family="Consolas" size="9"/>
+        <font role="heading" family="Segoe UI" size="10" weight="bold"/>
+    </fonts>
+    <icons>
+        <provider>qtawesome</provider>
+        <defaultMode>iconText</defaultMode>
+        <size role="toolbar" value="18"/>
+        <size role="largeToolbar" value="24"/>
+    </icons>
+    <metrics>
+        <metric name="toolbar.height" value="40"/>
+        <metric name="toolbar.iconSize" value="18"/>
+        <metric name="toolbar.spacing" value="6"/>
+        <metric name="button.height" value="30"/>
+        <metric name="button.minWidth" value="84"/>
+        <metric name="button.paddingH" value="12"/>
+        <metric name="button.paddingV" value="5"/>
+        <metric name="panel.margin" value="6"/>
+        <metric name="panel.spacing" value="6"/>
+        <metric name="panel.minWidth" value="300"/>
+        <metric name="panel.preferredWidth" value="390"/>
+        <metric name="splitter.handleWidth" value="7"/>
+        <metric name="bottom.preferredHeight" value="230"/>
+        <metric name="bottom.minHeight" value="130"/>
+        <metric name="viewport.minWidth" value="540"/>
+        <metric name="border.radius" value="4"/>
+    </metrics>
+</theme>

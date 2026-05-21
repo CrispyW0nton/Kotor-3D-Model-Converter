@@ -45,7 +45,7 @@ def _load_model_data_module():
     global _MODEL_DATA
     if _MODEL_DATA is not None:
         return _MODEL_DATA
-    path = ROOT / "src" / "core" / "model_data.py"
+    path = ROOT / "src" / "core" / "geometry" / "model_data.py"
     spec = _il_util.spec_from_file_location("ghostrigger_mcp_scan_model_data", str(path))
     if spec is None or spec.loader is None:  # pragma: no cover
         raise ImportError(f"cannot create import spec for {path}")

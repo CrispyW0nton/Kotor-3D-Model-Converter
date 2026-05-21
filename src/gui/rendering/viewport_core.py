@@ -106,26 +106,26 @@ def _gr_probe(tag: str, node, wp, wo, is_id: bool) -> None:
 # (Tk import removed in T001 split; viewport_tk.py itself was deleted in M3/T302.)
 from typing import Optional, Dict, List, Tuple, Iterable
 try:
-    from src.core.model_data import (KotorModel, ModelNode, NodeFlags, _quat_rotate, _quat_conjugate,
+    from src.core.qt_core.geometry.model_data import (KotorModel, ModelNode, NodeFlags, _quat_rotate, _quat_conjugate,
                                    KOTOR_BASE_SKELETONS, is_animation_supermodel)
-    from src.core.animation_engine import DanglySimulator
-    from src.core.walkmesh_renderer import WalkmeshOverlay, WalkmeshLoader, build_draw_list
-    from src.core.render_constants import (
+    from src.core.qt_core.animation.animation_engine import DanglySimulator
+    from src.core.qt_core.walkmesh.walkmesh_renderer import WalkmeshOverlay, WalkmeshLoader, build_draw_list
+    from src.core.qt_core.special.render_constants import (
         INNER_GEO_SUBSTRINGS as _INNER_GEO_SUBSTRINGS,
         FACE_MESH_SUBSTRINGS as _FACE_MESH_SUBSTRINGS,
     )
 except ImportError:
-    from core.model_data import (  # type: ignore[no-redef]  # tests add src/ to sys.path
+    from core.qt_core.geometry.model_data import (  # type: ignore[no-redef]  # tests add src/ to sys.path
         KotorModel, ModelNode, NodeFlags, _quat_rotate, _quat_conjugate,
         KOTOR_BASE_SKELETONS, is_animation_supermodel
     )
-    from core.animation_engine import DanglySimulator  # type: ignore[no-redef]
-    from core.render_constants import (  # type: ignore[no-redef]
+    from core.qt_core.animation.animation_engine import DanglySimulator  # type: ignore[no-redef]
+    from core.qt_core.special.render_constants import (  # type: ignore[no-redef]
         INNER_GEO_SUBSTRINGS as _INNER_GEO_SUBSTRINGS,
         FACE_MESH_SUBSTRINGS as _FACE_MESH_SUBSTRINGS,
     )
     try:
-        from core.walkmesh_renderer import WalkmeshOverlay, WalkmeshLoader, build_draw_list
+        from core.qt_core.walkmesh.walkmesh_renderer import WalkmeshOverlay, WalkmeshLoader, build_draw_list
     except ImportError:
         WalkmeshOverlay = None  # type: ignore
         WalkmeshLoader  = None  # type: ignore
@@ -4530,10 +4530,10 @@ class FrameRenderer:
             return cached
         import math as _math
         try:
-            from src.core.model_data import (_quat_rotate as _qr, _quat_normalize_bind,
+            from src.core.qt_core.geometry.model_data import (_quat_rotate as _qr, _quat_normalize_bind,
                                            _quat_normalize, _quat_mul)
         except ImportError:
-            from core.model_data import (_quat_rotate as _qr, _quat_normalize_bind,  # type: ignore
+            from core.qt_core.geometry.model_data import (_quat_rotate as _qr, _quat_normalize_bind,  # type: ignore
                                          _quat_normalize, _quat_mul)
 
         if self._anim_pose is not None:
@@ -4798,9 +4798,9 @@ class FrameRenderer:
         position (the authored skin bind coordinate).
         """
         try:
-            from src.core.model_data import _quat_rotate as _qr, _quat_conjugate
+            from src.core.qt_core.geometry.model_data import _quat_rotate as _qr, _quat_conjugate
         except ImportError:
-            from core.model_data import _quat_rotate as _qr, _quat_conjugate  # type: ignore
+            from core.qt_core.geometry.model_data import _quat_rotate as _qr, _quat_conjugate  # type: ignore
 
         v = node.vertices[vi]
 
@@ -4981,7 +4981,7 @@ class FrameRenderer:
         vs = getattr(node, 'vertex_space', None)
         if vs is not None:
             try:
-                from src.core.vertex_space import VertexSpace
+                from src.core.qt_core.geometry.vertex_space import VertexSpace
                 if int(vs) == int(VertexSpace.WORLD):
                     return [tuple(v) for v in verts]
             except Exception:
@@ -7915,9 +7915,9 @@ class FrameRenderer:
         uv_mesh  = sum(1 for n in visible_nodes if n.vertices)
         # Game version string
         try:
-            from src.core.model_data import GameVersion
+            from src.core.qt_core.geometry.model_data import GameVersion
         except ImportError:
-            from core.model_data import GameVersion  # type: ignore
+            from core.qt_core.geometry.model_data import GameVersion  # type: ignore
         gv_str = "K1" if self.model.game_version == GameVersion.K1 else "K2"
         model_name = str(getattr(self.model, "name", "model") or "model")
         if len(model_name) > 34:

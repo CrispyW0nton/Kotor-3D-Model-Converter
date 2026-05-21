@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from src.core.model_data import KotorModel, ModelNode, NodeFlags
+from src.core.qt_core.geometry.model_data import KotorModel, ModelNode, NodeFlags
 from src.gui.lighting.lightmap_bake_job import LightmapBakeJob
 from src.gui.lighting.lightmap_bake_settings import LightmapBakeSettings
 from src.gui.lighting.lightmap_baker import LightmapBaker

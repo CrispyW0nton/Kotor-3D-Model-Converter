@@ -28,7 +28,7 @@ def _load_module_direct(name: str, path: pathlib.Path):
 
 lg = _load_module_direct(
     "ghostrigger_lyt_room_graph_under_test",
-    _SRC_DIR / "core" / "lyt_room_graph.py",
+    _SRC_DIR / "core" / "scene" / "lyt_room_graph.py",
 )
 
 

@@ -28,7 +28,7 @@ def _load_module_direct(name: str, path: pathlib.Path):
 
 inspector = _load_module_direct(
     "ghostrigger_module_object_inspector_under_test",
-    _SRC_DIR / "core" / "module_object_inspector.py",
+    _SRC_DIR / "core" / "modules" / "module_object_inspector.py",
 )
 
 

@@ -1,0 +1,26 @@
+<layout id="cinematic" name="Cinematic" version="1">
+    <mainWindow width="1800" height="1000" maximized="false"/>
+    <toolbars>
+        <toolbar id="main" visible="true" buttonMode="iconOnly" iconSize="20" height="38"/>
+        <toolbar id="viewport" visible="true" buttonMode="textOnly" iconSize="16" height="34"/>
+    </toolbars>
+    <panels>
+        <panel id="library" region="left" visible="true" minWidth="240" preferredWidth="300"/>
+        <panel id="modules" region="left" visible="true" minWidth="240" preferredWidth="300"/>
+        <panel id="properties" region="right" visible="true" minWidth="260" preferredWidth="320"/>
+        <panel id="animationLibrary" region="right" visible="true" minWidth="260" preferredWidth="320"/>
+        <panel id="meshTools" region="farRight" visible="false" minWidth="240" preferredWidth="300"/>
+        <panel id="outputLog" region="bottom" visible="true" minHeight="100" preferredHeight="140"/>
+        <panel id="pythonTerminal" region="bottom" visible="true" minHeight="100" preferredHeight="140"/>
+    </panels>
+    <viewport>
+        <region id="mainViewport" minWidth="900" preferredWidth="1160"/>
+        <toolbar visible="true" buttonMode="textOnly" compact="false"/>
+    </viewport>
+    <spacing>
+        <margin value="3"/>
+        <panelSpacing value="4"/>
+        <toolbarSpacing value="3"/>
+        <splitterHandleWidth value="6"/>
+    </spacing>
+</layout>

@@ -96,7 +96,7 @@ def test_manual_import_fit_controls_are_wired() -> None:
     inspector = _read("src/gui/panels/qt_inspector_panel.py")
     builder = _read("src/gui/panels/qt_character_builder_panel.py")
     viewport = _read("src/gui/viewports/qt_viewport.py")
-    workflow = _read("src/core/headless_body_workflow.py")
+    workflow = _read("src/core/characters/headless_body_workflow.py")
 
     assert "fitAdjustmentChanged" in inspector
     assert 'QtWidgets.QGroupBox("Import Fit")' in inspector
@@ -146,7 +146,7 @@ def test_gpu_viewport_draws_external_reference_skeleton_overlay() -> None:
 
 
 def test_gpu_skinning_guards_external_parent_cycles() -> None:
-    skinning = _read("src/core/gpu_skinning.py")
+    skinning = _read("src/core/animation/gpu_skinning.py")
 
     assert "parent cycle detected" in skinning
     assert "ignoring self-parent cycle" in skinning
@@ -234,7 +234,7 @@ def test_viewport_preloads_textures_for_skin_nodes() -> None:
 
 
 def test_external_dcc_imports_disable_kotor_uv_seam_repair() -> None:
-    workflow = _read("src/core/headless_body_workflow.py")
+    workflow = _read("src/core/characters/headless_body_workflow.py")
     viewport = _read("src/gui/viewport_core.py")
 
     assert "def _mark_external_import" in workflow

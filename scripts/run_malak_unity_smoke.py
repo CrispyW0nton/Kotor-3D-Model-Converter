@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.core.unity_malak_smoke import (  # noqa: E402
+from src.core.qt_core.special.unity_malak_smoke import (  # noqa: E402
     DEFAULT_ASSET_PATH,
     DEFAULT_INSTANCE_NAME,
     DEFAULT_SCENE_PATH,

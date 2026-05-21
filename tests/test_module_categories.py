@@ -1,6 +1,6 @@
 """Module location label tests for the game-library browser."""
 
-from src.core.module_categories import (
+from src.core.qt_core.modules.module_categories import (
     get_area_name,
     get_module_info,
     get_modules_by_location,

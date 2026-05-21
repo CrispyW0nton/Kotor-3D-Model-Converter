@@ -259,7 +259,7 @@ def _get_vertex_space_info(node, model) -> dict:
     supermodel = str(getattr(model, 'supermodel', 'NULL') or 'NULL').strip().upper()
 
     try:
-        from core.model_data import KOTOR_BASE_SKELETONS
+        from core.qt_core.geometry.model_data import KOTOR_BASE_SKELETONS
         is_base_skel = supermodel in KOTOR_BASE_SKELETONS
     except ImportError:
         is_base_skel = supermodel in ('NULL', '', 'NONE')
@@ -534,7 +534,7 @@ async def handle_get_supermodel_chain(arguments: Dict[str, Any]) -> Dict[str, An
     model_type = getattr(model, 'model_type', None)
 
     try:
-        from core.model_data import KOTOR_BASE_SKELETONS
+        from core.qt_core.geometry.model_data import KOTOR_BASE_SKELETONS
         is_base = supermodel.strip().upper() in KOTOR_BASE_SKELETONS
     except ImportError:
         is_base = supermodel.strip().upper() in ('NULL', '', 'NONE')

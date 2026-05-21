@@ -28,7 +28,7 @@ def _load_module_direct(name: str, path: pathlib.Path):
 
 mh = _load_module_direct(
     "ghostrigger_module_hydration_under_test",
-    _SRC_DIR / "core" / "module_hydration.py",
+    _SRC_DIR / "core" / "modules" / "module_hydration.py",
 )
 
 

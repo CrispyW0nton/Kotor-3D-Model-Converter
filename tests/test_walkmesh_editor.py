@@ -28,7 +28,7 @@ def _load_module_direct(name: str, path: pathlib.Path):
 
 we = _load_module_direct(
     "ghostrigger_walkmesh_editor_under_test",
-    _SRC_DIR / "core" / "walkmesh_editor.py",
+    _SRC_DIR / "core" / "walkmesh" / "walkmesh_editor.py",
 )
 
 

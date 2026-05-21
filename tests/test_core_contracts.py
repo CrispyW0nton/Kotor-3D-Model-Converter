@@ -5,7 +5,7 @@ from types import MethodType, SimpleNamespace
 
 
 def test_vertex_space_enum_contract() -> None:
-    from src.core.vertex_space import VertexSpace
+    from src.core.qt_core.geometry.vertex_space import VertexSpace
 
     assert list(VertexSpace) == [
         VertexSpace.NODE_LOCAL,
@@ -18,60 +18,60 @@ def test_vertex_space_enum_contract() -> None:
 
 
 def test_compute_vertex_space_aabb_walkmesh() -> None:
-    from src.core.vertex_space import VertexSpace, compute_vertex_space
+    from src.core.qt_core.geometry.vertex_space import VertexSpace, compute_vertex_space
 
     assert compute_vertex_space(SimpleNamespace(flags=0x0200), None) is VertexSpace.AABB_WALK
 
 
 def test_compute_vertex_space_imported_world() -> None:
-    from src.core.vertex_space import VertexSpace, compute_vertex_space
+    from src.core.qt_core.geometry.vertex_space import VertexSpace, compute_vertex_space
 
     node = SimpleNamespace(flags=0, _imported=True)
     assert compute_vertex_space(node, None) is VertexSpace.WORLD
 
 
 def test_compute_vertex_space_default_node_local() -> None:
-    from src.core.vertex_space import VertexSpace, compute_vertex_space
+    from src.core.qt_core.geometry.vertex_space import VertexSpace, compute_vertex_space
 
     assert compute_vertex_space(SimpleNamespace(flags=0), None) is VertexSpace.NODE_LOCAL
 
 
 def test_inner_geometry_name_matching() -> None:
-    from src.core.render_constants import is_inner_geometry_name
+    from src.core.qt_core.special.render_constants import is_inner_geometry_name
 
     for name in ("eyeRA", "teethU", "TongueMesh", "gumskin", "JawSkin", "eyelid"):
         assert is_inner_geometry_name(name)
 
 
 def test_face_mesh_name_matching() -> None:
-    from src.core.render_constants import is_face_mesh_name
+    from src.core.qt_core.special.render_constants import is_face_mesh_name
 
     for name in ("head", "Face_LOD0", "fchead01", "skullcap"):
         assert is_face_mesh_name(name)
 
 
 def test_inner_geometry_does_not_match_non_inner_names() -> None:
-    from src.core.render_constants import is_inner_geometry_name
+    from src.core.qt_core.special.render_constants import is_inner_geometry_name
 
     for name in ("headhook", "model_root", "rootdummy", "random_mesh", ""):
         assert not is_inner_geometry_name(name)
 
 
 def test_read_mdl_safe_importable_and_callable() -> None:
-    from src.core.mdl_reader_wrapper import read_mdl_safe
+    from src.core.qt_core.mdl.mdl_reader_wrapper import read_mdl_safe
 
     assert callable(read_mdl_safe)
 
 
 def test_pykotor_mdl_binary_fixes_are_idempotent() -> None:
-    from src.core.pykotor_mdl_io_fix import ensure_pykotor_mdl_binary_fixes
+    from src.core.qt_core.game.pykotor_mdl_io_fix import ensure_pykotor_mdl_binary_fixes
 
     ensure_pykotor_mdl_binary_fixes()
     ensure_pykotor_mdl_binary_fixes()
 
 
 def test_ascii_mdl_nodes_keep_imported_uv_orientation() -> None:
-    from src.core.mdl_parser import MDLAsciiParser
+    from src.core.qt_core.mdl.mdl_parser import MDLAsciiParser
 
     model = MDLAsciiParser().parse(
         [
@@ -264,7 +264,7 @@ def test_gpu_renderer_exposes_module_render_modes_and_selection_tint() -> None:
 def test_gpu_static_mesh_prebuild_uses_ram_and_chunked_uploads() -> None:
     import inspect
 
-    from src.core.model_data import KotorModel, ModelNode
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
     from src.gui.qt_lib.rendering import gpu_renderer
     from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
     from src.gui.qt_lib.rendering.viewport_core import FrameRenderer
@@ -787,7 +787,7 @@ def test_qt_viewport_selection_does_not_auto_recenter_but_z_frames_selection() -
     import pytest
     from PySide6 import QtWidgets
 
-    from src.core.model_data import ModelNode
+    from src.core.qt_core.geometry.model_data import ModelNode
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -1409,7 +1409,7 @@ def test_main_window_exposes_animation_helpers_to_python_terminal() -> None:
 
 
 def test_qt_main_window_builds_baked_animation_clip() -> None:
-    from src.core.model_data import Animation, KotorModel, ModelNode
+    from src.core.qt_core.geometry.model_data import Animation, KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
     root = ModelNode(name="rootdummy")
@@ -1446,8 +1446,8 @@ def test_qt_main_window_builds_baked_animation_clip() -> None:
 
 
 def test_mdl_porter_animation_nodes_are_serialized_as_dummy_nodes() -> None:
-    from src.core.mdl_porter import MDLBinaryWriter
-    from src.core.model_data import ModelNode, NodeFlags
+    from src.core.qt_core.mdl.mdl_porter import MDLBinaryWriter
+    from src.core.qt_core.geometry.model_data import ModelNode, NodeFlags
 
     anim_node = ModelNode(name="robe", flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN))
     anim_node.controllers = [
@@ -1466,8 +1466,8 @@ def test_mdl_porter_animation_nodes_are_serialized_as_dummy_nodes() -> None:
 
 
 def test_mdl_porter_rebuilds_flat_animation_nodes_as_reachable_tree() -> None:
-    from src.core.mdl_porter import MDLBinaryWriter
-    from src.core.model_data import Animation, ModelNode
+    from src.core.qt_core.mdl.mdl_porter import MDLBinaryWriter
+    from src.core.qt_core.geometry.model_data import Animation, ModelNode
 
     root = ModelNode(name="root")
     pelvis = ModelNode(name="pelvis")
@@ -1498,7 +1498,7 @@ def test_mdl_porter_rebuilds_flat_animation_nodes_as_reachable_tree() -> None:
 
 
 def test_mdl_writer_skin_palette_uses_emitted_node_indices() -> None:
-    from src.core.mdl_writer import MDLBinaryWriter
+    from src.core.qt_core.mdl.mdl_writer import MDLBinaryWriter
 
     writer = MDLBinaryWriter()
     writer._node_index_by_name = {
@@ -1513,8 +1513,8 @@ def test_mdl_writer_skin_palette_uses_emitted_node_indices() -> None:
 
 
 def test_mdl_writer_rebuilds_flat_animation_nodes_as_reachable_tree() -> None:
-    from src.core.mdl_writer import MDLBinaryWriter
-    from src.core.model_data import Animation, ModelNode
+    from src.core.qt_core.mdl.mdl_writer import MDLBinaryWriter
+    from src.core.qt_core.geometry.model_data import Animation, ModelNode
 
     root = ModelNode(name="root")
     pelvis = ModelNode(name="pelvis")
@@ -1551,7 +1551,7 @@ def test_binary_mdl_export_uses_skin_aware_writer() -> None:
 
     source = inspect.getsource(QtGhostRiggerMainWindow._export_mdl_binary)
 
-    assert "from src.core.mdl_writer import MDLBinaryWriter" in source
+    assert "from src.core.qt_core.mdl.mdl_writer import MDLBinaryWriter" in source
 
 
 def test_retarget_apply_promotes_target_model_for_animation_list() -> None:
@@ -1671,7 +1671,7 @@ def test_quinn_control_bones_do_not_enter_viewport_skeleton_overlay() -> None:
 def test_quinn_aliases_map_common_kotor_supermodel_bones() -> None:
     import pytest
 
-    from src.core.model_data import ModelNode
+    from src.core.qt_core.geometry.model_data import ModelNode
     from src.unreal.animation_retargeting import build_bone_map
     from src.unreal.quinn import QUINN_BONE_MAP, load_quinn_skeleton_asset, unreal_skeleton_model
 
@@ -1712,7 +1712,7 @@ def test_quinn_aliases_map_common_kotor_supermodel_bones() -> None:
 
 
 def test_unreal_bone_map_excludes_dummy_and_hook_helpers() -> None:
-    from src.core.model_data import ModelNode
+    from src.core.qt_core.geometry.model_data import ModelNode
     from src.unreal.animation_retargeting import build_bone_map
 
     source = SimpleNamespace(
@@ -1761,7 +1761,7 @@ def test_unreal_viewport_hides_dummy_and_hook_helpers_from_bone_overlay() -> Non
 
     from PIL import Image, ImageDraw
 
-    from src.core.model_data import Animation, KotorModel, ModelNode
+    from src.core.qt_core.geometry.model_data import Animation, KotorModel, ModelNode
     from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
 
     root = ModelNode(name="root")
@@ -1801,7 +1801,7 @@ def test_unreal_viewport_hidden_helper_selection_does_not_draw_gimbal() -> None:
 
     from PIL import Image, ImageDraw
 
-    from src.core.model_data import KotorModel, ModelNode
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
     from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
 
     root = ModelNode(name="root")
@@ -1823,7 +1823,7 @@ def test_unreal_viewport_hidden_helper_selection_does_not_draw_gimbal() -> None:
 
 
 def test_unreal_animator_inserts_synthetic_spine_between_pelvis_and_torso() -> None:
-    from src.core.model_data import KotorModel, ModelNode
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 
     root = ModelNode(name="s_female03")
@@ -1854,7 +1854,7 @@ def test_unreal_animator_inserts_synthetic_spine_between_pelvis_and_torso() -> N
 
 
 def test_unreal_animator_inserts_synthetic_spine_when_pelvis_and_torso_share_rootdummy() -> None:
-    from src.core.model_data import KotorModel, ModelNode
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 
     root = ModelNode(name="s_female03")
@@ -1886,7 +1886,7 @@ def test_unreal_animator_inserts_synthetic_spine_when_pelvis_and_torso_share_roo
 
 
 def test_unreal_animator_repositions_existing_spine_between_pelvis_and_torso() -> None:
-    from src.core.model_data import KotorModel, ModelNode
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 
     root = ModelNode(name="s_female03")
@@ -1921,7 +1921,7 @@ def test_unreal_animator_source_bone_browser_lists_and_selects_spine() -> None:
 
     from PySide6 import QtWidgets
 
-    from src.core.model_data import KotorModel, ModelNode
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -1965,7 +1965,7 @@ def test_unreal_animator_manually_adds_and_deletes_source_synthetic_bones() -> N
 
     from PySide6 import QtWidgets
 
-    from src.core.model_data import KotorModel, ModelNode
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -2065,7 +2065,7 @@ def test_unreal_animator_animation_selection_arms_preview_pose() -> None:
 
     from PySide6 import QtWidgets
 
-    from src.core.model_data import Animation, KotorModel, ModelNode
+    from src.core.qt_core.geometry.model_data import Animation, KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -2105,7 +2105,7 @@ def test_unreal_animator_uses_gpu_during_animation_preview() -> None:
 
     from PySide6 import QtWidgets
 
-    from src.core.model_data import Animation, KotorModel, ModelNode
+    from src.core.qt_core.geometry.model_data import Animation, KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -2143,9 +2143,9 @@ def test_retarget_pose_applies_source_bind_relative_rotation_to_target_bind() ->
 
     import pytest
 
-    from src.core.animation_engine import AnimPose, NodePose
-    from src.core.animation_retargeting import retarget_pose
-    from src.core.model_data import ModelNode
+    from src.core.qt_core.animation.animation_engine import AnimPose, NodePose
+    from src.core.qt_core.animation_retargeting.retargeter import retarget_pose
+    from src.core.qt_core.geometry.model_data import ModelNode
 
     src_bind = (0.0, 0.0, math.sin(math.radians(45.0)), math.cos(math.radians(45.0)))
     target_bind = (0.0, math.sin(math.radians(15.0)), 0.0, math.cos(math.radians(15.0)))
@@ -2159,9 +2159,9 @@ def test_retarget_pose_applies_source_bind_relative_rotation_to_target_bind() ->
 
 
 def test_manual_bone_map_override_drives_retarget_pose() -> None:
-    from src.core.animation_engine import AnimPose, NodePose
-    from src.core.animation_retargeting import build_bone_map, retarget_pose
-    from src.core.model_data import ModelNode
+    from src.core.qt_core.animation.animation_engine import AnimPose, NodePose
+    from src.core.qt_core.animation_retargeting.retargeter import build_bone_map, retarget_pose
+    from src.core.qt_core.geometry.model_data import ModelNode
 
     source = SimpleNamespace(name="source", all_nodes=lambda: [ModelNode(name="source_arm")])
     target = SimpleNamespace(name="target", all_nodes=lambda: [ModelNode(name="target_arm")])
@@ -2182,9 +2182,9 @@ def test_manual_bone_map_override_drives_retarget_pose() -> None:
 def test_preserve_model_scale_scales_position_deltas_by_target_height() -> None:
     import pytest
 
-    from src.core.animation_engine import AnimPose, NodePose
-    from src.core.animation_retargeting import RetargetConfig, retarget_pose
-    from src.core.model_data import KotorModel, ModelNode
+    from src.core.qt_core.animation.animation_engine import AnimPose, NodePose
+    from src.core.qt_core.animation_retargeting.retargeter import RetargetConfig, retarget_pose
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
 
     src_root = ModelNode(name="root")
     src_head = ModelNode(name="head", position=(0.0, 0.0, 10.0))
@@ -2213,7 +2213,7 @@ def test_preserve_model_scale_scales_position_deltas_by_target_height() -> None:
 
 
 def test_bone_map_reports_interpolated_target_bridge_bones() -> None:
-    from src.core.model_data import ModelNode
+    from src.core.qt_core.geometry.model_data import ModelNode
     from src.unreal.animation_retargeting import build_bone_map
 
     src_a = ModelNode(name="a")
@@ -2243,8 +2243,8 @@ def test_retarget_pose_bridges_dense_target_chain() -> None:
 
     import pytest
 
-    from src.core.animation_engine import AnimPose, NodePose
-    from src.core.model_data import KotorModel, ModelNode
+    from src.core.qt_core.animation.animation_engine import AnimPose, NodePose
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
     from src.unreal.animation_retargeting import retarget_pose
 
     source = KotorModel(name="source")
@@ -2287,7 +2287,7 @@ def test_retarget_pose_bridges_dense_target_chain() -> None:
 def test_retarget_animation_bakes_bridge_bones() -> None:
     import math
 
-    from src.core.model_data import Animation, KotorModel, ModelNode
+    from src.core.qt_core.geometry.model_data import Animation, KotorModel, ModelNode
     from src.unreal.animation_retargeting import retarget_animation
 
     source = KotorModel(name="source")

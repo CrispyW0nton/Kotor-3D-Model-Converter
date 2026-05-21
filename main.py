@@ -223,7 +223,7 @@ def main(argv: list[str] | None = None):
 
     # Log detailed session-start diagnostics (PIL, NumPy, platform)
     try:
-        from src.core.diagnostics import log_session_start
+        from src.core.qt_core.diagnostics.diagnostics import log_session_start
         log_session_start(_APP_DIR, logfile or "(no log file)")
     except Exception as _diag_err:
         log.debug(f"diagnostics.log_session_start failed: {_diag_err}")

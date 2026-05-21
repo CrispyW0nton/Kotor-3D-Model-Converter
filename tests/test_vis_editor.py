@@ -28,11 +28,11 @@ def _load_module_direct(name: str, path: pathlib.Path):
 
 lg = _load_module_direct(
     "ghostrigger_lyt_room_graph_for_vis_tests",
-    _SRC_DIR / "core" / "lyt_room_graph.py",
+    _SRC_DIR / "core" / "scene" / "lyt_room_graph.py",
 )
 ve = _load_module_direct(
     "ghostrigger_vis_editor_under_test",
-    _SRC_DIR / "core" / "vis_editor.py",
+    _SRC_DIR / "core" / "scene" / "vis_editor.py",
 )
 
 

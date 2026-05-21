@@ -53,7 +53,7 @@ from src.gui.qt_lib.assets.qt_theme import C
 # module directly via importlib so the banner still works in test /
 # headless environments where pykotor isn't installed.
 try:
-    from src.core.validation_service import Severity
+    from src.core.qt_core.diagnostics.validation_service import Severity
     _SEVERITY_AVAILABLE = True
 except Exception:                                       # pragma: no cover
     Severity = None                                     # type: ignore[assignment]

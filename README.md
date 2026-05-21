@@ -198,6 +198,24 @@ groups in [`pyproject.toml`](pyproject.toml):
    kept). Crashes — including Tkinter callback exceptions — are captured by
    the global hook in `main.py`.
 
+### 4.4 Themes and layouts
+
+GhostRigger now has XML-driven theme and layout support. The original green
+high-contrast look is preserved as the selectable **Matrix** theme, but it is no
+longer hardcoded as the only application style.
+
+Packaged themes live in `config/themes/themes/`: `matrix.xml`, `dark.xml`,
+`light.xml`, and `classic.xml`. Packaged layouts live in
+`config/themes/layouts/`: `default.xml`, `compact.xml`, `wide.xml`, and
+`cinematic.xml`.
+
+Use **Settings -> Theme/Layout** to choose a manual theme, follow the native OS
+light/dark mode through `darkdetect`, select a layout, override toolbar button
+modes, adjust icon sizing, and enable XML hot reload during theme development.
+Community themes and layouts can be placed in the platform-specific
+GhostRigger user config directory under `themes/` and `layouts/`; user files
+with matching ids intentionally override packaged defaults.
+
 ---
 
 ## 5. Command-line usage

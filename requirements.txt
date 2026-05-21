@@ -1,14 +1,50 @@
 # GhostRigger KotOR MDL Tool — Python dependencies
 # Install with: pip install -r requirements.txt
+#
+# Target:
+#   Python >= 3.13
+#   Qt 6 / PySide6 editor-style desktop application
+#   KotOR MDL / MDX / texture / lightmap / viewport tooling
 
-# ── Core rendering ──────────────────────────────────────────────────────────
+# ── Core rendering / image processing ───────────────────────────────────────
 Pillow>=10.0
 numpy>=2.0
 imageio
 PyOpenGL>=3.1.0
 PyOpenGL_accelerate>=3.1.0
 moderngl>=5.8.0
-PySide6>=6.6.0
+
+# Keep headless OpenCV because the GUI is handled by Qt/PySide6.
+# This avoids pulling in OpenCV's own GUI/Qt stack.
+opencv-python-headless>=4.8.0
+
+# ── Qt desktop application framework ────────────────────────────────────────
+# PySide6 6.8.1+ is required for proper Python 3.13 support.
+PySide6>=6.8.1,<7
+
+# Qt abstraction layer. Useful if modules later need to remain portable
+# between PySide6 and PyQt6, but PySide6 remains the official binding.
+qtpy>=2.4.0
+
+# Extra high-quality Qt widgets: range sliders, enhanced combo boxes,
+# thread helpers, font-icon support, etc.
+superqt>=0.8.0
+
+# Fast plotting / graphing / editor diagnostics.
+# Useful for animation curves, timeline graphs, UV/lightmap diagnostics,
+# profiler panels, and live data views.
+pyqtgraph>=0.13.0
+
+# Icon fonts for Qt buttons, toolbars, dock panels, and editor actions.
+qtawesome>=1.4.0
+
+# Detect Windows/macOS/Linux light/dark mode for theme auto-selection.
+darkdetect>=0.8.0
+
+# Optional asyncio integration for Qt apps.
+# Useful if the Qt UI needs to cooperate with async servers, MCP tools,
+# background tasks, or websocket-style systems.
+qasync>=0.27.0
 
 # ── KotOR file format library ───────────────────────────────────────────────
 # OldRepublicDevs/PyKotor — battle-tested KotOR MDL/TPC/TXI/ERF/BIF reader+writer
@@ -26,7 +62,7 @@ pygltflib>=1.15.0
 
 # pyassimp>=5.2.0              # FBX importer — OPTIONAL, requires Assimp native DLL
                                 # Not yet compatible with Python 3.14
-                                # Python 3.10-3.12: pip install pyassimp (then install DLL)
+                                # Python 3.10-3.12: pip install pyassimp then install DLL
                                 # Ubuntu/Debian: sudo apt install libassimp-dev
                                 # macOS:         brew install assimp
 
@@ -34,13 +70,18 @@ pygltflib>=1.15.0
 flask>=2.3.0
 requests>=2.28.0
 
-# ── MCP (Model Context Protocol) integration ─────────────────────────────────
+# ── MCP / local service integration ─────────────────────────────────────────
 mcp>=1.0.0
 pydantic>=2.0.0
 uvicorn[standard]>=0.20.0
 
-# ── Animated background ──────────────────────────────────────────────────────
-opencv-python-headless>=4.5.0
+# ── File watching / project tooling ─────────────────────────────────────────
+# Useful for auto-reloading textures, models, scripts, plugins, and project files.
+watchdog>=4.0.0
+
+# Correct OS-specific app data/cache/config folders.
+platformdirs>=4.0.0
 
 # ── Build / packaging ───────────────────────────────────────────────────────
-pyinstaller>=5.0
+# PyInstaller supports Python 3.8–3.14 and bundles PySide6 out of the box.
+pyinstaller>=6.0

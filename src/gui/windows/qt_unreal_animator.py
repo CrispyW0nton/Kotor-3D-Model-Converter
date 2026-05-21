@@ -8,8 +8,8 @@ from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from src.core.animation_engine import AnimationEngine
-from src.core.model_data import ModelNode, NodeFlags, is_animation_supermodel
+from src.core.qt_core.animation.animation_engine import AnimationEngine
+from src.core.qt_core.geometry.model_data import ModelNode, NodeFlags, is_animation_supermodel
 from src.unreal.animation_retargeting import build_bone_map, retarget_animation, retarget_pose
 from src.unreal import UnrealSkeletonAsset, load_quinn_fbx_model, load_quinn_skeleton_asset, unreal_skeleton_model
 

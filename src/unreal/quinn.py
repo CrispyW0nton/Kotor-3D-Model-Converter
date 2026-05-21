@@ -11,7 +11,7 @@ import sys
 import xml.etree.ElementTree as ET
 import zlib
 
-from src.core.model_data import BoneWeight, KotorModel, ModelClassification, ModelNode, NodeFlags, VertexSkinData
+from src.core.qt_core.geometry.model_data import BoneWeight, KotorModel, ModelClassification, ModelNode, NodeFlags, VertexSkinData
 
 
 SKELS_DIR = Path(__file__).resolve().parent / "skels"

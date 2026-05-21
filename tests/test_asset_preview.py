@@ -9,8 +9,8 @@ if str(ROOT) not in sys.path:
 if str(LOCAL_SRC) not in sys.path:
     sys.path.insert(0, str(LOCAL_SRC))
 
-from src.core import asset_preview as ap
-from src.core import model_data as md
+from src.core.qt_core.assets import asset_preview as ap
+from src.core.qt_core.geometry import model_data as md
 
 
 class _Model:

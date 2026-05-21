@@ -7,7 +7,7 @@ from typing import Optional
 
 from PySide6 import QtCore, QtWidgets
 
-from src.core.module_categories import get_module_info
+from src.core.qt_core.modules.module_categories import get_module_info
 from src.gui.qt_lib.assets.qt_theme import icon, heading
 
 

@@ -37,7 +37,7 @@ from src.gui.qt_lib.panels.qt_inspector_panel import QtInspectorPanel
 
 
 def _load_head_workflow_direct():
-    here = pathlib.Path(__file__).resolve().parents[1] / "src" / "core"
+    here = pathlib.Path(__file__).resolve().parents[1] / "src" / "core" / "characters"
     spec = _u.spec_from_file_location(
         "_gr_hw_camera_test", str(here / "head_workflow.py")
     )

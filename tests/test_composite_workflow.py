@@ -38,19 +38,19 @@ def _load_module_direct(name: str, path: pathlib.Path):
 try:
     md = _load_module_direct(
         "ghostrigger_md_for_composite_wf",
-        _SRC_DIR / "core" / "model_data.py",
+        _SRC_DIR / "core" / "geometry" / "model_data.py",
     )
     wb = _load_module_direct(
         "ghostrigger_workflow_base_for_composite_wf",
-        _SRC_DIR / "core" / "_workflow_base.py",
+        _SRC_DIR / "core" / "workflow" / "_workflow_base.py",
     )
     vs = _load_module_direct(
         "ghostrigger_validation_for_composite_wf",
-        _SRC_DIR / "core" / "validation_service.py",
+        _SRC_DIR / "core" / "diagnostics" / "validation_service.py",
     )
     wf = _load_module_direct(
         "ghostrigger_composite_workflow_under_test",
-        _SRC_DIR / "core" / "composite_workflow.py",
+        _SRC_DIR / "core" / "workflow" / "composite_workflow.py",
     )
     wf._import_model_data = lambda: md                       # type: ignore[attr-defined]
     wf._import_workflow_base = lambda: wb                     # type: ignore[attr-defined]

@@ -19,7 +19,7 @@ if str(ROOT) not in sys.path:
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from src.core import gltf_importer as gi  # noqa: E402
+from src.core.qt_core.export import gltf_importer as gi  # noqa: E402
 
 
 def test_fbx_importer_uses_blender_fallback_when_trimesh_rejects_fbx(

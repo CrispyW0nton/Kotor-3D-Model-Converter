@@ -728,6 +728,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         row.addStretch(1)
 
         self.canvas = QtWidgets.QLabel("No model loaded")
+        self.canvas.setObjectName("ViewportCanvas")
         self.canvas.setAlignment(QtCore.Qt.AlignCenter)
         self.canvas.setMinimumSize(120 if self._compact_controls else 180, 100 if self._compact_controls else 140)
         self.canvas.setSizePolicy(QtWidgets.QSizePolicy.Ignored if self._compact_controls else QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
@@ -815,6 +816,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         tooltip: Optional[str] = None,
     ) -> QtWidgets.QPushButton:
         button = QtWidgets.QPushButton(text)
+        button.setProperty("_gr_full_text", text)
         button.setCheckable(checkable)
         button.setChecked(active if checkable else False)
         button.setFixedHeight(22)
@@ -833,6 +835,64 @@ class QtViewportWidget(QtWidgets.QWidget):
             button.setToolTip(tooltip)
         button.clicked.connect(lambda checked=False: callback(checked) if checkable else callback())
         return button
+
+    def apply_ghost_theme(self, theme) -> None:
+        toolbar = self.findChild(QtWidgets.QFrame, "ViewportToolbar")
+        if toolbar is not None:
+            toolbar.setStyleSheet(
+                f"#ViewportToolbar {{ background:{theme.color('toolbar.background')}; "
+                f"border:0; border-bottom:1px solid {theme.color('toolbar.border')}; }}"
+            )
+        combo_style = (
+            f"QComboBox {{ background:{theme.color('input.background')}; "
+            f"color:{theme.color('input.text')}; border:1px solid {theme.color('input.border')}; "
+            "padding:2px 18px 2px 7px; }}"
+            f"QComboBox:hover {{ border-color:{theme.color('accent.secondary')}; }}"
+            "QComboBox::drop-down { border:0; width:16px; }"
+            f"QComboBox QAbstractItemView {{ background:{theme.color('panel.altBackground')}; "
+            f"color:{theme.color('text.primary')}; selection-background-color:{theme.color('selection.background')}; }}"
+        )
+        for combo_name in ("shade_combo", "render_mode_combo", "camera_view_combo"):
+            combo = getattr(self, combo_name, None)
+            if combo is not None:
+                combo.setStyleSheet(combo_style)
+        for button in self.findChildren(QtWidgets.QPushButton):
+            button.setStyleSheet("")
+        for sep in self.findChildren(QtWidgets.QFrame):
+            if sep.frameShape() == QtWidgets.QFrame.VLine:
+                sep.setStyleSheet(f"background:{theme.color('panel.border')};")
+        self.canvas.setStyleSheet(
+            f"background:{theme.color('viewport.background')}; "
+            f"color:{theme.color('viewport.text')}; "
+            f"border:1px solid {theme.color('viewport.border')};"
+        )
+
+    def apply_ghost_layout(self, layout) -> None:
+        toolbar = self.findChild(QtWidgets.QFrame, "ViewportToolbar")
+        toolbar_layout = layout.toolbar("viewport")
+        if toolbar is not None:
+            toolbar.setVisible(toolbar_layout.visible and layout.viewport.toolbar_visible)
+            toolbar.setMinimumHeight(toolbar_layout.height)
+            toolbar.setMaximumHeight(toolbar_layout.height)
+        self._compact_controls = bool(layout.viewport.toolbar_compact)
+        mode = getattr(layout.viewport, "toolbar_button_mode", toolbar_layout.button_mode)
+        icon_size = toolbar_layout.icon_size
+        from src.gui.libtheme.layout_applier import LayoutApplier
+
+        LayoutApplier().apply_toolbar_button_mode(
+            self,
+            toolbar_layout.__class__(
+                id=toolbar_layout.id,
+                visible=toolbar_layout.visible,
+                button_mode=mode,
+                icon_size=icon_size,
+                height=toolbar_layout.height,
+            ),
+        )
+        self.canvas.setMinimumSize(
+            max(120, layout.viewport.min_width // 4 if self._compact_controls else 180),
+            100 if self._compact_controls else 140,
+        )
 
     def _separator(self) -> QtWidgets.QFrame:
         sep = QtWidgets.QFrame()
@@ -1770,10 +1830,10 @@ class QtViewportWidget(QtWidgets.QWidget):
         # ``sys.path`` layout.
         hw = None
         try:
-            from src.core import head_workflow as hw       # type: ignore
+            from src.core.qt_core.characters import head_workflow as hw       # type: ignore
         except Exception:
             try:
-                from core import head_workflow as hw      # type: ignore
+                from core.qt_core.characters import head_workflow as hw      # type: ignore
             except Exception:
                 try:                                      # pragma: no cover
                     import importlib.util as _u
@@ -5614,9 +5674,9 @@ class QtViewportWidget(QtWidgets.QWidget):
             return
         try:
             try:
-                from core import headless_body_workflow as _wf
+                from core.qt_core.characters import headless_body_workflow as _wf
             except ImportError:                              # pragma: no cover
-                from src.core import headless_body_workflow as _wf  # type: ignore
+                from src.core.qt_core.characters import headless_body_workflow as _wf  # type: ignore
             result = _wf.apply_external_model_fit_adjustment(
                 self.model,
                 rotation_delta_degrees=rotation_delta,

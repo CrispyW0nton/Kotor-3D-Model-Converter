@@ -49,15 +49,15 @@ def _load_module_direct(name: str, path: pathlib.Path):
 try:
     md = _load_module_direct(
         "ghostrigger_md_for_head_wf",
-        _SRC_DIR / "core" / "model_data.py",
+        _SRC_DIR / "core" / "geometry" / "model_data.py",
     )
     wb = _load_module_direct(
         "ghostrigger_workflow_base_under_test",
-        _SRC_DIR / "core" / "_workflow_base.py",
+        _SRC_DIR / "core" / "workflow" / "_workflow_base.py",
     )
     wf = _load_module_direct(
         "ghostrigger_head_workflow_under_test",
-        _SRC_DIR / "core" / "head_workflow.py",
+        _SRC_DIR / "core" / "characters" / "head_workflow.py",
     )
     # Rebind the workflow module's lazy-import helpers so the dispatcher
     # uses the same ``model_data`` / ``_workflow_base`` identities the

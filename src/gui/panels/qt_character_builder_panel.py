@@ -208,7 +208,7 @@ class QtValidationReportDialog(QtWidgets.QDialog):
 # isolate the failure so the window still loads when those deps are
 # missing — the mode switcher simply renders with disabled buttons.
 try:
-    from src.core.model_data import CharacterMode
+    from src.core.qt_core.geometry.model_data import CharacterMode
     _CHARACTER_MODE_AVAILABLE = True
 except Exception:                                       # pragma: no cover
     CharacterMode = None                                # type: ignore[assignment]
@@ -230,17 +230,17 @@ except Exception as _vp_exc:                            # pragma: no cover
 
 def _import_model_data():
     try:
-        from src.core.model_data import CharacterScene
+        from src.core.qt_core.geometry.model_data import CharacterScene
     except ImportError:
-        from core.model_data import CharacterScene  # type: ignore
+        from core.qt_core.geometry.model_data import CharacterScene  # type: ignore
     return CharacterScene
 
 
 def _import_scene_io():
     try:
-        from src.core.model_data import SceneIO
+        from src.core.qt_core.geometry.model_data import SceneIO
     except ImportError:
-        from core.model_data import SceneIO  # type: ignore
+        from core.qt_core.geometry.model_data import SceneIO  # type: ignore
     return SceneIO
 
 
@@ -907,9 +907,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
     def _workflow_module(self):
         try:
-            from core import headless_body_workflow as _wf
+            from core.qt_core.characters import headless_body_workflow as _wf
         except ImportError:                                 # pragma: no cover
-            from src.core import headless_body_workflow as _wf  # type: ignore
+            from src.core.qt_core.characters import headless_body_workflow as _wf  # type: ignore
         return _wf
 
     def _ensure_body_guide_history(self):
@@ -1061,7 +1061,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                               exc_info=True)
 
         try:
-            from src.core import headless_body_workflow as _wf
+            from src.core.qt_core.characters import headless_body_workflow as _wf
         except Exception as exc:                            # pragma: no cover
             log.exception("Could not import headless_body_workflow")
             self.bottom_strip.set_validation(
@@ -1180,14 +1180,14 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
     def _on_load_composite_requested(self) -> None:
         """Workflow Step 1 for M7 Supermodel mode: load body + head."""
         try:
-            from core import composite_workflow as _cw
-            from core import head_workflow as _head_wf
-            from core import headless_body_workflow as _body_wf
+            from core.qt_core.workflow import composite_workflow as _cw
+            from core.qt_core.characters import head_workflow as _head_wf
+            from core.qt_core.characters import headless_body_workflow as _body_wf
         except ImportError:                                 # pragma: no cover
             try:
-                from src.core import composite_workflow as _cw       # type: ignore
-                from src.core import head_workflow as _head_wf       # type: ignore
-                from src.core import headless_body_workflow as _body_wf  # type: ignore
+                from src.core.qt_core.workflow import composite_workflow as _cw       # type: ignore
+                from src.core.qt_core.characters import head_workflow as _head_wf       # type: ignore
+                from src.core.qt_core.characters import headless_body_workflow as _body_wf  # type: ignore
             except Exception as exc:
                 log.exception("Could not import composite workflow")
                 self.bottom_strip.set_validation(
@@ -1312,9 +1312,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
     def _body_model_for_fit_adjustment(self) -> tuple[Any, Any]:
         try:
-            from core import model_data as _md
+            from core.qt_core.geometry import model_data as _md
         except ImportError:                                 # pragma: no cover
-            from src.core import model_data as _md           # type: ignore
+            from src.core.qt_core.geometry import model_data as _md           # type: ignore
         entry = self.scene.get(_md.PartSlot.HEADLESS_BODY)
         model = getattr(entry, "model", None) if entry is not None else None
         return entry, model
@@ -1357,9 +1357,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             return
 
         try:
-            from core import headless_body_workflow as _wf
+            from core.qt_core.characters import headless_body_workflow as _wf
         except ImportError:                                 # pragma: no cover
-            from src.core import headless_body_workflow as _wf  # type: ignore
+            from src.core.qt_core.characters import headless_body_workflow as _wf  # type: ignore
 
         result = _wf.apply_external_model_fit_adjustment(
             model,
@@ -1433,9 +1433,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         prompt: bool,
     ) -> list[str]:
         try:
-            from core import headless_body_workflow as _wf
+            from core.qt_core.characters import headless_body_workflow as _wf
         except ImportError:                                 # pragma: no cover
-            from src.core import headless_body_workflow as _wf  # type: ignore
+            from src.core.qt_core.characters import headless_body_workflow as _wf  # type: ignore
 
         metadata = getattr(self.scene, "metadata", None)
         if not isinstance(metadata, dict):
@@ -1495,9 +1495,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             game_key = "K1"
         if self._resource_manager is None:
             try:
-                from src.core.resource_manager import get_manager
+                from src.core.qt_core.assets.resource_manager import get_manager
             except ImportError:                             # pragma: no cover
-                from core.resource_manager import get_manager  # type: ignore
+                from core.qt_core.assets.resource_manager import get_manager  # type: ignore
             self._resource_manager = get_manager()
 
         if game_key not in self._resource_manager_games:
@@ -1514,9 +1514,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                     self._resource_manager_games.add("K2")
 
         try:
-            from src.core.animation_engine import SuperModelResolver
+            from src.core.qt_core.animation.animation_engine import SuperModelResolver
         except ImportError:                                 # pragma: no cover
-            from core.animation_engine import SuperModelResolver  # type: ignore
+            from core.qt_core.animation.animation_engine import SuperModelResolver  # type: ignore
         SuperModelResolver.configure(self._resource_manager)
 
         viewport = getattr(self, "viewport", None)
@@ -1529,9 +1529,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
     def _body_model_for_preview(self) -> Optional[Any]:
         try:
-            from src.core.model_data import PartSlot
+            from src.core.qt_core.geometry.model_data import PartSlot
         except ImportError:                                 # pragma: no cover
-            from core.model_data import PartSlot  # type: ignore
+            from core.qt_core.geometry.model_data import PartSlot  # type: ignore
         entry = self.scene.get(PartSlot.HEADLESS_BODY)
         return getattr(entry, "model", None) if entry is not None else None
 
@@ -1553,11 +1553,11 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         rows: list[dict[str, str]] = []
         try:
             try:
-                from core import character_builder as _cb
-                from core.kotor_install import KotorInstallation  # type: ignore
+                from core.qt_core.characters import character_builder as _cb
+                from core.qt_core.game.kotor_install import KotorInstallation  # type: ignore
             except ImportError:                                  # pragma: no cover
-                from src.core import character_builder as _cb      # type: ignore
-                from src.core.kotor_install import KotorInstallation  # type: ignore
+                from src.core.qt_core.characters import character_builder as _cb      # type: ignore
+                from src.core.qt_core.game.kotor_install import KotorInstallation  # type: ignore
 
             root = _cb._detect_game_dir(game_key)
             if root and os.path.isdir(root):
@@ -1581,9 +1581,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
     def _load_skeleton_template_model(self, option: Any) -> Optional[Any]:
         """Load the selected KOTOR skeleton reference from game data."""
         try:
-            from core import character_builder as _cb
+            from core.qt_core.characters import character_builder as _cb
         except ImportError:                                 # pragma: no cover
-            from src.core import character_builder as _cb    # type: ignore
+            from src.core.qt_core.characters import character_builder as _cb    # type: ignore
 
         source = str(self._option_field(option, "source", ""))
         game = str(self._option_field(option, "game", "") or
@@ -1599,9 +1599,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         if path and not path.startswith("installation:") and os.path.isfile(path):
             try:
-                from core.kotor_loader import load_model_from_file  # type: ignore
+                from core.qt_core.game.kotor_loader import load_model_from_file  # type: ignore
             except ImportError:                                  # pragma: no cover
-                from src.core.kotor_loader import load_model_from_file  # type: ignore
+                from src.core.qt_core.game.kotor_loader import load_model_from_file  # type: ignore
             return load_model_from_file(path)
 
         if resref:
@@ -1642,10 +1642,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
     def _refresh_skeleton_template_options(self) -> None:
         """Refresh the body-rig template picker for the current game."""
         try:
-            from core import skeleton_template_picker as _picker
+            from core.qt_core.animation_retargeting import skeleton_template_picker as _picker
         except ImportError:                                 # pragma: no cover
             try:
-                from src.core import skeleton_template_picker as _picker  # type: ignore
+                from src.core.qt_core.animation_retargeting import skeleton_template_picker as _picker  # type: ignore
             except Exception as exc:
                 log.exception("Could not import skeleton_template_picker")
                 if hasattr(self.inspector, "set_skeleton_template_status"):
@@ -1696,9 +1696,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         initial_dir = ""
         try:
             try:
-                from core import character_builder as _cb
+                from core.qt_core.characters import character_builder as _cb
             except ImportError:                              # pragma: no cover
-                from src.core import character_builder as _cb  # type: ignore
+                from src.core.qt_core.characters import character_builder as _cb  # type: ignore
             initial_dir = str(_cb._detect_game_dir(game) or "")
         except Exception:
             initial_dir = ""
@@ -1808,11 +1808,11 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             return
 
         try:
-            from core import character_builder as _cb
-            from core import model_data as _md
+            from core.qt_core.characters import character_builder as _cb
+            from core.qt_core.geometry import model_data as _md
         except ImportError:                                 # pragma: no cover
-            from src.core import character_builder as _cb    # type: ignore
-            from src.core import model_data as _md           # type: ignore
+            from src.core.qt_core.characters import character_builder as _cb    # type: ignore
+            from src.core.qt_core.geometry import model_data as _md           # type: ignore
 
         entry = self.scene.get(_md.PartSlot.HEADLESS_BODY)
         mesh_model = getattr(entry, "model", None) if entry is not None else None
@@ -2100,10 +2100,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         """
         if self._is_scene_mode("supermodel"):
             try:
-                from core import composite_workflow as _cw
+                from core.qt_core.workflow import composite_workflow as _cw
             except ImportError:                             # pragma: no cover
                 try:
-                    from src.core import composite_workflow as _cw  # type: ignore
+                    from src.core.qt_core.workflow import composite_workflow as _cw  # type: ignore
                 except Exception as exc:
                     log.exception("Could not import composite_workflow")
                     self.bottom_strip.set_validation(
@@ -2127,7 +2127,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             return
 
         try:
-            from src.core import headless_body_workflow as _wf
+            from src.core.qt_core.characters import headless_body_workflow as _wf
         except Exception as exc:                            # pragma: no cover
             log.exception("Could not import headless_body_workflow")
             self.bottom_strip.set_validation(
@@ -2179,7 +2179,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         Supermodel mode uses the composite exporter so FBX/glTF contain
         the head parented under the body's headhook.
         """
-        from core import headless_body_workflow as _wf
+        from core.qt_core.characters import headless_body_workflow as _wf
         try:
             from src.gui.qt_lib.dialogs.qt_export_dialog import QtExportDialog
         except Exception:                                   # pragma: no cover
@@ -2197,7 +2197,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         # dialog's read-only hint label.
         md = None
         try:
-            from core import model_data as md  # noqa: WPS433 - lazy on purpose
+            from core.qt_core.geometry import model_data as md  # noqa: WPS433 - lazy on purpose
         except Exception:                                   # pragma: no cover
             md = None
         initial_resref = ""
@@ -2228,9 +2228,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         if self._is_scene_mode("supermodel"):
             try:
-                from core import composite_workflow as _cw  # noqa: WPS433
+                from core.qt_core.workflow import composite_workflow as _cw  # noqa: WPS433
             except Exception:                               # pragma: no cover
-                from src.core import composite_workflow as _cw  # type: ignore
+                from src.core.qt_core.workflow import composite_workflow as _cw  # type: ignore
             result = _cw.export_composite_scene(
                 self.scene,
                 formats=formats,
@@ -2290,7 +2290,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         subsequent *Generate Skeleton* click reuses it (preserving any
         user-locked guide overrides).
         """
-        from core import headless_body_workflow as _wf
+        from core.qt_core.characters import headless_body_workflow as _wf
 
         result = _wf.place_body_guides(
             self.scene,
@@ -2349,7 +2349,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         respected), pushes status into the inspector + bottom strip, and
         refreshes the viewport with the freshly-rigged model on success.
         """
-        from core import headless_body_workflow as _wf
+        from core.qt_core.characters import headless_body_workflow as _wf
 
         result = _wf.generate_skeleton(
             self.scene,
@@ -2420,7 +2420,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         ``self._acurig`` (shared with T503) so subsequent mask toggles
         and the next body-rig pass keep working on the same instance.
         """
-        from core import headless_body_workflow as _wf
+        from core.qt_core.characters import headless_body_workflow as _wf
 
         result = _wf.place_hand_guides(
             self.scene,
@@ -2481,7 +2481,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         :func:`headless_body_workflow.apply_hand_masks` so AcuRig's
         :class:`BoneMask` mirrors the UI.
         """
-        from core import headless_body_workflow as _wf
+        from core.qt_core.characters import headless_body_workflow as _wf
 
         if self._acurig is None:
             # User toggled a checkbox before clicking *Place Hand Guides*.
@@ -2538,10 +2538,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
     def _refresh_motion_assignment_state(self) -> None:
         """Mirror workflow motion state into the inspector controls."""
         try:
-            from core import headless_body_workflow as _wf
+            from core.qt_core.characters import headless_body_workflow as _wf
         except ImportError:                                 # pragma: no cover
             try:
-                from src.core import headless_body_workflow as _wf  # type: ignore
+                from src.core.qt_core.characters import headless_body_workflow as _wf  # type: ignore
             except Exception:
                 return
 
@@ -2567,9 +2567,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
     def _on_assign_motions_requested(self) -> None:
         """Apply the selected KOTOR motion source to the current body."""
         try:
-            from core import headless_body_workflow as _wf
+            from core.qt_core.characters import headless_body_workflow as _wf
         except ImportError:                                 # pragma: no cover
-            from src.core import headless_body_workflow as _wf  # type: ignore
+            from src.core.qt_core.characters import headless_body_workflow as _wf  # type: ignore
 
         source = "model"
         if hasattr(self.inspector, "selected_motion_source"):
@@ -2686,7 +2686,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         dropdown.  Also surfaces a status banner so the user knows
         whether the standard set (walk / idle / talk) is present.
         """
-        from core import headless_body_workflow as _wf
+        from core.qt_core.characters import headless_body_workflow as _wf
 
         self._ensure_game_resource_manager()
 
@@ -2738,7 +2738,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         ``set_animation_pose`` is invoked on the chosen
         :class:`Animation`.
         """
-        from core import headless_body_workflow as _wf
+        from core.qt_core.characters import headless_body_workflow as _wf
 
         result = self._start_preview_animation(anim_name)
         if result is None:
@@ -2777,7 +2777,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         which dispatches ``viewport.set_animation_pose(None)`` per the
         existing viewport contract.
         """
-        from core import headless_body_workflow as _wf
+        from core.qt_core.characters import headless_body_workflow as _wf
 
         viewport = getattr(self, "viewport", None)
         timer = getattr(self, "_animation_timer", None)
@@ -2809,9 +2809,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             return None
         self._ensure_game_resource_manager()
         try:
-            from src.core.animation_engine import AnimationEngine
+            from src.core.qt_core.animation.animation_engine import AnimationEngine
         except ImportError:                                 # pragma: no cover
-            from core.animation_engine import AnimationEngine  # type: ignore
+            from core.qt_core.animation.animation_engine import AnimationEngine  # type: ignore
         engine = AnimationEngine(body)
         if not engine.play(str(anim_name or ""), loop=True, blend=False):
             return None
@@ -2829,7 +2829,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 length=length,
             )
         self._animation_timer.start()
-        from core.headless_body_workflow import CheckActorResult
+        from core.qt_core.characters.headless_body_workflow import CheckActorResult
         return CheckActorResult(
             ok=True,
             playing=str(getattr(anim, "name", anim_name) if anim else anim_name),
@@ -2903,9 +2903,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         path: str,
     ) -> None:
         try:
-            from core import asset_preview as _ap
+            from core.qt_core.assets import asset_preview as _ap
         except ImportError:                                 # pragma: no cover
-            from src.core import asset_preview as _ap        # type: ignore
+            from src.core.qt_core.assets import asset_preview as _ap        # type: ignore
 
         game = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
             getattr(self.scene, "game_version", "K1")
@@ -2915,9 +2915,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         clean_resref = str(resref or "").strip()
         if item_path and os.path.isfile(item_path):
             try:
-                from core.kotor_loader import load_model_from_file
+                from core.qt_core.game.kotor_loader import load_model_from_file
             except ImportError:                              # pragma: no cover
-                from src.core.kotor_loader import load_model_from_file  # type: ignore
+                from src.core.qt_core.game.kotor_loader import load_model_from_file  # type: ignore
             item_model = load_model_from_file(item_path)
             clean_resref = clean_resref or Path(item_path).stem
         elif manager is not None and clean_resref:
@@ -3015,9 +3015,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
     def _on_rig_head_requested(self) -> None:
         """Run the M6 / T601 Head Rig step from the Inspector palette."""
         try:
-            from core import head_workflow as _hw
+            from core.qt_core.characters import head_workflow as _hw
         except ImportError:                                 # pragma: no cover
-            from src.core import head_workflow as _hw       # type: ignore
+            from src.core.qt_core.characters import head_workflow as _hw       # type: ignore
         # Parent body is None for stand-alone head edits; the
         # supermodel-mode window will pass scene.headless_body model.
         result = _hw.rig_head(self.scene, parent_body=None)
@@ -3037,9 +3037,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
     def _on_rig_face_requested(self) -> None:
         """Run the M6 / T601 Face Rig step from the Inspector palette."""
         try:
-            from core import head_workflow as _hw
+            from core.qt_core.characters import head_workflow as _hw
         except ImportError:                                 # pragma: no cover
-            from src.core import head_workflow as _hw       # type: ignore
+            from src.core.qt_core.characters import head_workflow as _hw       # type: ignore
         result = _hw.rig_face(self.scene)
         kind = "ok" if result.ok else "warning"
         try:
@@ -3064,9 +3064,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         which surface they're watching.
         """
         try:
-            from core import head_workflow as _hw
+            from core.qt_core.characters import head_workflow as _hw
         except ImportError:                                 # pragma: no cover
-            from src.core import head_workflow as _hw       # type: ignore
+            from src.core.qt_core.characters import head_workflow as _hw       # type: ignore
         try:
             ok, message = _hw.apply_viseme(self.scene, int(viseme_index))
         except Exception as exc:                            # pragma: no cover
@@ -3111,9 +3111,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         inspector status, bottom-strip banner, and status bar.
         """
         try:
-            from core import head_workflow as _hw
+            from core.qt_core.characters import head_workflow as _hw
         except ImportError:                                 # pragma: no cover
-            from src.core import head_workflow as _hw       # type: ignore
+            from src.core.qt_core.characters import head_workflow as _hw       # type: ignore
         try:
             ok, message = _hw.calibrate_phoneme(
                 self.scene, str(phoneme_label), int(viseme_index)
@@ -3336,9 +3336,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
     def _rehydrate_scene_models_from_sources(self) -> list[str]:
         """Reload saved source files so opening a .ghostrig scene is visible."""
         try:
-            from core import model_data as _md
+            from core.qt_core.geometry import model_data as _md
         except ImportError:                                 # pragma: no cover
-            from src.core import model_data as _md           # type: ignore
+            from src.core.qt_core.geometry import model_data as _md           # type: ignore
 
         messages: list[str] = []
         saved_entries = list(getattr(self.scene, "slots", {}).items())
@@ -3359,9 +3359,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             try:
                 if slot == _md.PartSlot.HEAD_SHELL:
                     try:
-                        from core import head_workflow as _head_wf
+                        from core.qt_core.characters import head_workflow as _head_wf
                     except ImportError:                      # pragma: no cover
-                        from src.core import head_workflow as _head_wf  # type: ignore
+                        from src.core.qt_core.characters import head_workflow as _head_wf  # type: ignore
                     result = _head_wf.load_head(
                         source_path,
                         self.scene,
@@ -3370,9 +3370,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                     )
                 elif slot == _md.PartSlot.HEADLESS_BODY:
                     try:
-                        from core import headless_body_workflow as _body_wf
+                        from core.qt_core.characters import headless_body_workflow as _body_wf
                     except ImportError:                      # pragma: no cover
-                        from src.core import headless_body_workflow as _body_wf  # type: ignore
+                        from src.core.qt_core.characters import headless_body_workflow as _body_wf  # type: ignore
                     result = _body_wf.load_body(
                         source_path,
                         self.scene,
@@ -3403,9 +3403,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
     ) -> Any:
         """Reload non-body/non-head slots from direct MDL-style sources."""
         try:
-            from core.kotor_loader import load_model_from_file
+            from core.qt_core.game.kotor_loader import load_model_from_file
         except ImportError:                                 # pragma: no cover
-            from src.core.kotor_loader import load_model_from_file  # type: ignore
+            from src.core.qt_core.game.kotor_loader import load_model_from_file  # type: ignore
 
         model = load_model_from_file(source_path)
         resref = str(getattr(entry, "resref", "") or Path(source_path).stem)
@@ -3459,9 +3459,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             or any(abs(v) > 1e-6 for v in translation)
         ):
             try:
-                from core import headless_body_workflow as _wf
+                from core.qt_core.characters import headless_body_workflow as _wf
             except ImportError:                             # pragma: no cover
-                from src.core import headless_body_workflow as _wf  # type: ignore
+                from src.core.qt_core.characters import headless_body_workflow as _wf  # type: ignore
             _wf.apply_external_model_fit_adjustment(
                 model,
                 rotation_delta_degrees=rotation,
@@ -3482,9 +3482,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
     def _primary_scene_entry_for_viewport(self) -> Optional[Any]:
         """Return the best loaded scene slot to show after opening a scene."""
         try:
-            from core import model_data as _md
+            from core.qt_core.geometry import model_data as _md
         except ImportError:                                 # pragma: no cover
-            from src.core import model_data as _md           # type: ignore
+            from src.core.qt_core.geometry import model_data as _md           # type: ignore
         slots = getattr(self.scene, "slots", {}) or {}
         for slot in (
             _md.PartSlot.HEADLESS_BODY,

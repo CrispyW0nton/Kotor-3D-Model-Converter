@@ -62,7 +62,7 @@ def _install_test_font(app: QtWidgets.QApplication) -> None:
 
 
 def _mode_enum(mode_name: str) -> Any:
-    from src.core.model_data import CharacterMode
+    from src.core.qt_core.geometry.model_data import CharacterMode
 
     return CharacterMode[mode_name]
 

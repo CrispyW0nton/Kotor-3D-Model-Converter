@@ -13,7 +13,7 @@ def _read(relpath: str) -> str:
 
 
 def test_workflow_exposes_guide_edit_adapter() -> None:
-    src = _read("src/core/headless_body_workflow.py")
+    src = _read("src/core/characters/headless_body_workflow.py")
 
     assert "class BodyGuideEditResult" in src
     assert "class BodyGuideEditHistory" in src

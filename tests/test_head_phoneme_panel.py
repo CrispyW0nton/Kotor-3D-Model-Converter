@@ -31,7 +31,7 @@ from src.gui.qt_lib.panels.qt_inspector_panel import QtInspectorPanel
 
 def _load_head_workflow_direct():
     """Load ``head_workflow`` via :mod:`importlib.util` to skip ``core/__init__``."""
-    _here = _pl.Path(__file__).resolve().parents[1] / "src" / "core"
+    _here = _pl.Path(__file__).resolve().parents[1] / "src" / "core" / "characters"
     spec = _u.spec_from_file_location(
         "_gr_hw_phoneme_test", str(_here / "head_workflow.py")
     )

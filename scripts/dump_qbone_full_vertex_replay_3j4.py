@@ -345,7 +345,7 @@ def _verdict(g5_agg: Dict[str, Any], f1_agg: Dict[str, Any]) -> str:
 
 
 def _dump_one(rm: Any, resref: str, game: str, out_path: Path) -> int:
-    from src.core.gpu_skinning import (
+    from src.core.qt_core.animation.gpu_skinning import (
         MatrixPaletteUploader,
         _SKIN_FORMULA_ENV,
         _SKIN_FORMULA_F1,
@@ -429,7 +429,7 @@ def _dump_one(rm: Any, resref: str, game: str, out_path: Path) -> int:
 
 
 def main() -> int:
-    from src.core.resource_manager import ResourceManager
+    from src.core.qt_core.assets.resource_manager import ResourceManager
 
     rm = ResourceManager()
     if not rm.set_k1_dir(K1_DIR):

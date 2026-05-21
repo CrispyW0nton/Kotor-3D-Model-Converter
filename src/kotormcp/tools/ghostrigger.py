@@ -727,9 +727,9 @@ async def handle_export_model_for_unity(arguments: Dict[str, Any]) -> Dict[str, 
 
     try:
         try:
-            from src.core.unity_export_bridge import export_model_for_unity  # noqa: PLC0415
+            from src.core.qt_core.export.unity_export_bridge import export_model_for_unity  # noqa: PLC0415
         except ImportError:                                      # pragma: no cover - MCP path shim
-            from core.unity_export_bridge import export_model_for_unity  # type: ignore  # noqa: PLC0415
+            from core.qt_core.export.unity_export_bridge import export_model_for_unity  # type: ignore  # noqa: PLC0415
 
         result = export_model_for_unity(
             model,
@@ -760,9 +760,9 @@ async def handle_validate_unity_import(arguments: Dict[str, Any]) -> Dict[str, A
 
     try:
         try:
-            from src.core.unity_import_validator import validate_unity_import_file  # noqa: PLC0415
+            from src.core.qt_core.export.unity_import_validator import validate_unity_import_file  # noqa: PLC0415
         except ImportError:                                      # pragma: no cover - MCP path shim
-            from core.unity_import_validator import validate_unity_import_file  # type: ignore  # noqa: PLC0415
+            from core.qt_core.export.unity_import_validator import validate_unity_import_file  # type: ignore  # noqa: PLC0415
 
         manifest = validate_unity_import_file(
             Path(transfer_path),
@@ -782,14 +782,14 @@ async def handle_run_malak_unity_smoke(arguments: Dict[str, Any]) -> Dict[str, A
 
     try:
         try:
-            from src.core.unity_malak_smoke import (  # noqa: PLC0415
+            from src.core.qt_core.special.unity_malak_smoke import (  # noqa: PLC0415
                 DEFAULT_ASSET_PATH,
                 DEFAULT_INSTANCE_NAME,
                 DEFAULT_SCENE_PATH,
                 run_malak_main_menu_smoke,
             )
         except ImportError:  # pragma: no cover - MCP path shim
-            from core.unity_malak_smoke import (  # type: ignore  # noqa: PLC0415
+            from core.qt_core.special.unity_malak_smoke import (  # type: ignore  # noqa: PLC0415
                 DEFAULT_ASSET_PATH,
                 DEFAULT_INSTANCE_NAME,
                 DEFAULT_SCENE_PATH,

@@ -58,7 +58,7 @@ try:
     )
     from ..autorig.auto_rigger import AutoRigger, RigExtractor, RigTemplate
 except ImportError:
-    from core.model_data import (                       # type: ignore[no-redef]
+    from core.qt_core.geometry.model_data import (                       # type: ignore[no-redef]
         KotorModel, ModelNode, NodeFlags, BoneWeight,
         Animation, GameVersion,
     )

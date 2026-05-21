@@ -107,7 +107,7 @@ def test_t903_builder_wires_run_rom_to_workflow_preview_and_validation() -> None
 
 
 def test_t903_workflow_exposes_run_rom_test_bridge() -> None:
-    src = _read("src/core/headless_body_workflow.py")
+    src = _read("src/core/characters/headless_body_workflow.py")
 
     assert "def run_rom_test(" in src
     assert "assign_motion_source(scene, MOTION_SOURCE_ROM)" in src

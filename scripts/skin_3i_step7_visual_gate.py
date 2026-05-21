@@ -145,8 +145,8 @@ def _classify(diff_pct: float, falsification_target: bool) -> str:
 
 
 def _setup_resource_manager():
-    from src.core.resource_manager import ResourceManager
-    from src.core.animation_engine import SuperModelResolver
+    from src.core.qt_core.assets.resource_manager import ResourceManager
+    from src.core.qt_core.animation.animation_engine import SuperModelResolver
 
     rm = ResourceManager()
     if not rm.set_k1_dir(K1_DIR):
@@ -161,7 +161,7 @@ def _setup_resource_manager():
 
 def _load_pose(model, name: str, time_s: float):
     """Evaluate ``name`` at ``time_s``; fall back to bind pose on failure."""
-    from src.core.animation_engine import AnimationEngine
+    from src.core.qt_core.animation.animation_engine import AnimationEngine
 
     engine = AnimationEngine(model)
     try:
@@ -197,7 +197,7 @@ def _render_under_formula(
     """
     from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
     from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera
-    from src.core.resource_manager import resolve_model_textures
+    from src.core.qt_core.assets.resource_manager import resolve_model_textures
 
     prior = os.environ.get("GHOSTRIGGER_SKIN_FORMULA")
     if formula == "F1":

@@ -72,6 +72,7 @@ knowledge_base/
 | Understand the current Qt vs Tk state | [`roadmap/01_qt_branch_audit.md`](roadmap/01_qt_branch_audit.md) |
 | Debug skinning / rendering | [`audits/2026-05/skinning_parity.md`](audits/2026-05/skinning_parity.md) |
 | Run the CLI | [`cli/CLI.md`](cli/CLI.md) |
+| Theme/layout customization | [`theme_layout_system.md`](theme_layout_system.md) |
 | Character Builder UI spec (original) | [`reference/specs/character_builder_spec.md`](reference/specs/character_builder_spec.md) |
 | Architecture audit (original) | [`reference/specs/architecture_audit.html`](reference/specs/architecture_audit.html) |
 | Pre-task protocol (legacy iteration-1) | [`reference/MANDATORY_CHECKLIST.md`](reference/MANDATORY_CHECKLIST.md) |

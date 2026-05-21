@@ -34,10 +34,10 @@ except ImportError:
 # ── TPC → PIL via PyKotor (direct) ────────────────────────────────────────────
 _BRIDGE_TPC = None
 try:
-    from src.core.kotor_loader import load_tpc_as_pil as _BRIDGE_TPC
+    from src.core.qt_core.game.kotor_loader import load_tpc_as_pil as _BRIDGE_TPC
 except Exception:
     try:
-        from core.kotor_loader import load_tpc_as_pil as _BRIDGE_TPC  # type: ignore
+        from core.qt_core.game.kotor_loader import load_tpc_as_pil as _BRIDGE_TPC  # type: ignore
     except Exception:
         pass
 

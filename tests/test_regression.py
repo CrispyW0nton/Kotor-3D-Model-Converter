@@ -13,7 +13,7 @@ K2_PATH = Path(os.environ.get("K2_PATH", r"C:\Program Files (x86)\Steam\steamapp
 
 
 def _resource_manager():
-    from src.core.resource_manager import ResourceManager
+    from src.core.qt_core.assets.resource_manager import ResourceManager
 
     manager = ResourceManager()
     if K1_PATH.exists():
@@ -32,7 +32,7 @@ def _raw_model(game: str, resref: str) -> tuple[bytes, bytes]:
 
 
 def _reader_for(game: str, resref: str):
-    from src.core.ghostrigger_mdl_reader import GhostRiggerMDLBinaryReader
+    from src.core.qt_core.mdl.ghostrigger_mdl_reader import GhostRiggerMDLBinaryReader
 
     mdl, mdx = _raw_model(game, resref)
     reader = GhostRiggerMDLBinaryReader(mdl, source_ext=mdx)
@@ -155,7 +155,7 @@ def test_gpu_vbo_handles_module_mesh_without_uvs() -> None:
 
 
 def test_k1_m02aa_01a_module_model_loads_and_renders_without_crashing() -> None:
-    from src.core.kotor_loader import load_model_from_bytes
+    from src.core.qt_core.game.kotor_loader import load_model_from_bytes
     from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
 
     mdl, mdx = _raw_model("k1", "m02aa_01a")
@@ -178,8 +178,8 @@ def test_k1_m02aa_01a_module_model_loads_and_renders_without_crashing() -> None:
 def test_ad_saul_binary_skin_bind_matches_ascii_fixture() -> None:
     import numpy as np
 
-    from src.core.kotor_loader import load_model_from_file
-    from src.core.mdl_parser import MDLAsciiParser
+    from src.core.qt_core.game.kotor_loader import load_model_from_file
+    from src.core.qt_core.mdl.mdl_parser import MDLAsciiParser
     from src.gui.qt_lib.rendering.gpu_renderer import _build_vbo_data
 
     fixture_root = Path(__file__).parent / "modeltests" / "kotor_tool_1.0.3.4"
@@ -287,7 +287,7 @@ def test_vbo_expanded_path_uses_per_face_lightmap_uvs() -> None:
 
 
 def test_qbone_inverse_bind_matrix_uses_skin_slot_data() -> None:
-    from src.core.gpu_skinning import MatrixPaletteUploader
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
 
     inv_bind = MatrixPaletteUploader.qbone_inverse_bind_matrix(
         (0.0, 0.0, 0.0, 1.0),
@@ -303,7 +303,7 @@ def test_qbone_inverse_bind_matrix_uses_skin_slot_data() -> None:
 
 
 def test_qbone_direct_bind_matrix_uses_authored_tr_order() -> None:
-    from src.core.gpu_skinning import MatrixPaletteUploader
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
 
     direct_bind = MatrixPaletteUploader.qbone_direct_bind_matrix(
         (0.0, 0.0, 0.0, 1.0),
@@ -321,7 +321,7 @@ def test_qbone_direct_bind_matrix_uses_authored_tr_order() -> None:
 def test_skin_node_palette_restores_3f_qbone_tbone_path(monkeypatch) -> None:
     import pytest
 
-    from src.core.gpu_skinning import MatrixPaletteUploader
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
 
     root = SimpleNamespace(
         name="Root",
@@ -371,7 +371,7 @@ def test_skin_node_palette_without_qbones_uses_hierarchy_bind(monkeypatch) -> No
     """Imported FBX skins have weights but no KotOR qBone/tBone arrays."""
     import pytest
 
-    from src.core.gpu_skinning import MatrixPaletteUploader
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
 
     root = SimpleNamespace(
         name="Root",
@@ -425,7 +425,7 @@ def test_skin_node_palette_env_switch_F11_rotation_only_wrapper(
     """
     import pytest
 
-    from src.core.gpu_skinning import MatrixPaletteUploader
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
 
     root = SimpleNamespace(
         name="Root",
@@ -490,7 +490,7 @@ def test_skin_node_palette_env_switch_F11_diverges_with_nonidentity_skin_bind(
     import math
     import pytest
 
-    from src.core.gpu_skinning import MatrixPaletteUploader
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
 
     root = SimpleNamespace(
         name="Root",
@@ -545,7 +545,7 @@ def test_skin_node_palette_env_switch_unknown_value_falls_back_to_G5(
     monkeypatch,
 ) -> None:
     """Unknown env values must silently fall back to production G5."""
-    from src.core.gpu_skinning import MatrixPaletteUploader
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
 
     root = SimpleNamespace(
         name="Root",
@@ -576,7 +576,7 @@ def test_skin_node_palette_auto_profile_uses_dfs_qbone_for_full_arrays(
 ) -> None:
     import pytest
 
-    from src.core.gpu_skinning import MatrixPaletteUploader
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
 
     monkeypatch.delenv("GHOSTRIGGER_SKIN_FORMULA", raising=False)
     root = SimpleNamespace(name="Root", parent=None, position=(0, 0, 0), rotation=(0, 0, 0, 1))
@@ -612,7 +612,7 @@ def test_skin_node_palette_auto_profile_uses_compact_qbone_for_local_arrays(
 ) -> None:
     import pytest
 
-    from src.core.gpu_skinning import MatrixPaletteUploader
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
 
     monkeypatch.delenv("GHOSTRIGGER_SKIN_FORMULA", raising=False)
     root = SimpleNamespace(name="Root", parent=None, position=(0, 0, 0), rotation=(0, 0, 0, 1))
@@ -641,7 +641,7 @@ def test_skin_node_palette_auto_profile_uses_compact_qbone_for_local_arrays(
 
 
 def test_skinning_species_classifier_covers_primary_character_families() -> None:
-    from src.core.gpu_skinning import (
+    from src.core.qt_core.animation.gpu_skinning import (
         SKINNING_SPECIES_PROFILES,
         classify_skinning_species,
     )
@@ -663,7 +663,7 @@ def test_skinning_species_classifier_covers_primary_character_families() -> None
 
 
 def test_skin_node_palette_records_species_profile_reason(monkeypatch) -> None:
-    from src.core.gpu_skinning import MatrixPaletteUploader
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
 
     monkeypatch.delenv("GHOSTRIGGER_SKIN_FORMULA", raising=False)
     root = SimpleNamespace(name="Root", parent=None, position=(0, 0, 0), rotation=(0, 0, 0, 1))
@@ -705,7 +705,7 @@ def test_skin_uploader_populates_name_to_dfs_index() -> None:
     address ``qbones[]``/``tbones[]`` by global node order rather than
     by the compact ``bone_map`` slot.
     """
-    from src.core.gpu_skinning import MatrixPaletteUploader
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
 
     root = SimpleNamespace(
         name="Root",
@@ -763,7 +763,7 @@ def test_skin_node_palette_env_switch_G5_uses_dfs_indexed_qbone(
     """
     import pytest
 
-    from src.core.gpu_skinning import MatrixPaletteUploader
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
 
     root = SimpleNamespace(
         name="Root",
@@ -858,7 +858,7 @@ def test_skin_node_palette_env_switch_G5_decodes_quaternion_w_first(
     """
     import pytest
 
-    from src.core.gpu_skinning import MatrixPaletteUploader
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
 
     root = SimpleNamespace(
         name="Root",
@@ -973,7 +973,7 @@ def test_skin_node_palette_env_switch_G5_cpu_to_uploaded_bytes_parity(
     import numpy as np
     import pytest
 
-    from src.core.gpu_skinning import MatrixPaletteUploader
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
 
     root = SimpleNamespace(
         name="Root",
@@ -1129,8 +1129,8 @@ def test_non_skin_node_local_vbo_still_applies_world_transform() -> None:
 
 
 def test_bonemap_overflow_slot_extends_bone_map_without_oob() -> None:
-    from src.core.kotor_loader import _read_skin_weights
-    from src.core.model_data import ModelNode
+    from src.core.qt_core.game.kotor_loader import _read_skin_weights
+    from src.core.qt_core.geometry.model_data import ModelNode
 
     id_to_node = {idx: SimpleNamespace(name=f"bone_{idx}") for idx in range(16)}
     id_to_node[99] = SimpleNamespace(name="rootdummy")
@@ -1679,7 +1679,7 @@ def test_gl_context_backend_candidates_are_platform_aware(monkeypatch) -> None:
 
 
 def test_resource_manager_indexes_override_without_preloading(tmp_path) -> None:
-    from src.core.resource_manager import RES_TPC, _GameInstall, _key
+    from src.core.qt_core.assets.resource_manager import RES_TPC, _GameInstall, _key
 
     override = tmp_path / "Override"
     override.mkdir()
@@ -1702,8 +1702,8 @@ def test_resource_manager_indexes_override_without_preloading(tmp_path) -> None:
 def test_k2_rgba_lightmap_decode_is_not_dxt_noise() -> None:
     from PIL import ImageStat
 
-    from src.core.kotor_loader import patch_tpc_header
-    from src.core.resource_manager import RES_TPC, _decode_texture
+    from src.core.qt_core.game.kotor_loader import patch_tpc_header
+    from src.core.qt_core.assets.resource_manager import RES_TPC, _decode_texture
 
     manager = _resource_manager()
     raw = manager.get("101peras_lm0", RES_TPC, "K2")
@@ -1721,7 +1721,7 @@ def test_k2_rgba_lightmap_decode_is_not_dxt_noise() -> None:
 def test_k1_lightmap_decode_controls_remain_stable() -> None:
     from PIL import ImageStat
 
-    from src.core.resource_manager import RES_TGA, RES_TPC, _decode_texture
+    from src.core.qt_core.assets.resource_manager import RES_TGA, RES_TPC, _decode_texture
 
     manager = _resource_manager()
     baselines = {
@@ -1743,7 +1743,7 @@ def test_k1_lightmap_decode_controls_remain_stable() -> None:
 def test_k2_rgba_lightmap_txi_starts_at_clean_boundary(caplog) -> None:
     import logging
 
-    from src.core.resource_manager import RES_TPC, _tpc_uncompressed_txi
+    from src.core.qt_core.assets.resource_manager import RES_TPC, _tpc_uncompressed_txi
     from src.gui.qt_lib.rendering.viewport_core import _parse_txi_string
 
     manager = _resource_manager()
@@ -1802,7 +1802,7 @@ def test_owned_reader_handles_k2_nonzero_mdx_offsets() -> None:
 
 @pytest.mark.skipif(not K1_PATH.exists(), reason="K1 install not available")
 def test_read_mdl_safe_k1_control_model() -> None:
-    from src.core.mdl_reader_wrapper import read_mdl_safe
+    from src.core.qt_core.mdl.mdl_reader_wrapper import read_mdl_safe
 
     mdl, mdx = _raw_model("k1", "m03aa_05a")
     model = read_mdl_safe(mdl, source_ext=mdx)
@@ -1814,7 +1814,7 @@ def test_read_mdl_safe_k1_control_model() -> None:
 
 @pytest.mark.skipif(not K1_PATH.exists(), reason="K1 install not available")
 def test_read_mdl_safe_k1_supermodel_node_order_uses_logical_offsets() -> None:
-    from src.core.mdl_reader_wrapper import read_mdl_safe
+    from src.core.qt_core.mdl.mdl_reader_wrapper import read_mdl_safe
 
     mdl, mdx = _raw_model("k1", "s_male02")
     model = read_mdl_safe(mdl, source_ext=mdx)
@@ -1826,7 +1826,7 @@ def test_read_mdl_safe_k1_supermodel_node_order_uses_logical_offsets() -> None:
 
 @pytest.mark.skipif(not K2_PATH.exists(), reason="K2 install not available")
 def test_read_mdl_safe_does_not_require_source_inspection(monkeypatch) -> None:
-    from src.core.mdl_reader_wrapper import read_mdl_safe
+    from src.core.qt_core.mdl.mdl_reader_wrapper import read_mdl_safe
 
     def _raise_oserror(_obj):
         raise OSError("could not get source code")
@@ -1841,8 +1841,8 @@ def test_read_mdl_safe_does_not_require_source_inspection(monkeypatch) -> None:
 
 @pytest.mark.skipif(not K2_PATH.exists(), reason="K2 install not available")
 def test_read_mdl_safe_does_not_activate_pykotor_patch_bridge(monkeypatch) -> None:
-    from src.core import pykotor_mdl_io_fix as fix
-    from src.core.mdl_reader_wrapper import read_mdl_safe
+    from src.core.qt_core.game import pykotor_mdl_io_fix as fix
+    from src.core.qt_core.mdl.mdl_reader_wrapper import read_mdl_safe
 
     monkeypatch.setattr(fix, "_applied", False)
     mdl, mdx = _raw_model("k2", "c_brith")
@@ -1855,8 +1855,8 @@ def test_read_mdl_safe_does_not_activate_pykotor_patch_bridge(monkeypatch) -> No
 
 @pytest.mark.skipif(not K2_PATH.exists(), reason="K2 install not available")
 def test_c_drexlf_texture_alias_resolves_shipped_diffuse() -> None:
-    from src.core.kotor_loader import load_model_from_bytes
-    from src.core.resource_manager import resolve_model_textures
+    from src.core.qt_core.game.kotor_loader import load_model_from_bytes
+    from src.core.qt_core.assets.resource_manager import resolve_model_textures
 
     manager = _resource_manager()
     authored = manager.get_texture("c_drex01", "K2")
@@ -1875,7 +1875,7 @@ def test_c_drexlf_texture_alias_resolves_shipped_diffuse() -> None:
 
 @pytest.mark.skipif(not K1_PATH.exists(), reason="K1 install not available")
 def test_k1_aurora_light_controllers_populate_runtime_light_fields() -> None:
-    from src.core.kotor_loader import load_model_from_bytes
+    from src.core.qt_core.game.kotor_loader import load_model_from_bytes
 
     mdl, mdx = _raw_model("k1", "m01aa_04a")
     model = load_model_from_bytes(mdl, mdx)

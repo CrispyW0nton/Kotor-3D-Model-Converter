@@ -86,3 +86,12 @@ if a new file under `src/gui/` imports tkinter.
 Do not add `from .viewport import ...` anywhere; that shim no longer exists.
 Import `FrameRenderer`, `ArcBallCamera`, `_load_tpc_bytes`, `_is_tpc_data`,
 `_clean_tex_name`, etc. through `src.gui.qt_lib.rendering.viewport_core`.
+
+## Theme and layout system
+
+- Do not hardcode new UI colours. Add or consume tokens through `src/gui/libtheme/` and the active `ThemeManager`.
+- Do not hardcode major GUI sizes, splitter proportions, or toolbar density. Add or consume layout metrics through `LayoutManager` and XML files in `config/themes/layouts/`.
+- The Matrix look is a selectable XML theme (`config/themes/themes/matrix.xml`), not a global style constant.
+- New GUI modules should be theme-aware: use application stylesheet tokens where possible, and add an `apply_ghost_theme(theme)` hook for custom painting.
+- New panels should have stable layout ids so community layouts can size, hide, or reposition them.
+- When adding visible UI, update `config/themes/README.md` and `knowledge_base/theme_layout_system.md` if new theme tokens, layout ids, or button modes are introduced.

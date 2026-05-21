@@ -72,9 +72,9 @@ log = logging.getLogger("model_inspector")
 # ── Lazy imports of project modules (keep startup headless-friendly) ───────
 def _import_core():
     """Return (model_data, vertex_space, render_constants) modules."""
-    from src.core import model_data as _md
-    from src.core import vertex_space as _vs
-    from src.core import render_constants as _rc
+    from src.core.qt_core.geometry import model_data as _md
+    from src.core.qt_core.geometry import vertex_space as _vs
+    from src.core.qt_core.special import render_constants as _rc
     return _md, _vs, _rc
 
 
@@ -466,7 +466,7 @@ def format_bones_section(report: Dict[str, Any]) -> str:
 # ── Model loaders ──────────────────────────────────────────────────────────
 def _load_from_files(mdl_path: str, mdx_path: Optional[str] = None):
     """Parse an MDL (+ optional sibling MDX) from disk."""
-    from src.core.kotor_loader import load_model_from_file
+    from src.core.qt_core.game.kotor_loader import load_model_from_file
 
     mp = Path(mdl_path)
     if not mp.exists():
@@ -483,7 +483,7 @@ def _load_from_files(mdl_path: str, mdx_path: Optional[str] = None):
 
 def _load_from_install(game_dir: str, resref: str):
     """Parse a model by resref using a KotOR installation root."""
-    from src.core.kotor_install import KotorInstallation
+    from src.core.qt_core.game.kotor_install import KotorInstallation
 
     if not os.path.isdir(game_dir):
         raise FileNotFoundError(f"Game dir not found: {game_dir}")

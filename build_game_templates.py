@@ -30,9 +30,9 @@ log = logging.getLogger('build_game_templates')
 REPO = Path(__file__).parent
 sys.path.insert(0, str(REPO))
 
-from src.core.kotor_install import KotorInstallation
-from src.core.mdl_parser import MDLBinaryParser, MDLAsciiWriter, MDLAsciiParser
-from src.core.model_data import NodeFlags
+from src.core.qt_core.game.kotor_install import KotorInstallation
+from src.core.qt_core.mdl.mdl_parser import MDLBinaryParser, MDLAsciiWriter, MDLAsciiParser
+from src.core.qt_core.geometry.model_data import NodeFlags
 
 # ── Where to find the game data ───────────────────────────────────────────────
 K1_DIR = str(REPO / 'game_data' / 'k1_extracted')

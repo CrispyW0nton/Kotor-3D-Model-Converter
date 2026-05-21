@@ -2120,10 +2120,10 @@ def _gr_gpu_probe(node, wp, wo, is_id_rot: bool, composite_off=None) -> None:
         pass
 
 try:
-    from core.model_data import KOTOR_BASE_SKELETONS as _KOTOR_BASE_SKELETONS
+    from core.qt_core.geometry.model_data import KOTOR_BASE_SKELETONS as _KOTOR_BASE_SKELETONS
 except ImportError:
     try:
-        from src.core.model_data import KOTOR_BASE_SKELETONS as _KOTOR_BASE_SKELETONS
+        from src.core.qt_core.geometry.model_data import KOTOR_BASE_SKELETONS as _KOTOR_BASE_SKELETONS
     except ImportError:
         # Fallback if model_data not importable (e.g. during testing without src on path)
         _KOTOR_BASE_SKELETONS = frozenset({
@@ -2141,13 +2141,13 @@ except ImportError:
 # rasterizer — mismatched lists caused NPC-head regressions where the CPU
 # path kept inner geometry and the GPU path dropped it (or vice versa).
 try:
-    from core.render_constants import (
+    from core.qt_core.special.render_constants import (
         INNER_GEO_SUBSTRINGS as _INNER_GEO_SUBSTRINGS,
         FACE_MESH_SUBSTRINGS as _FACE_MESH_SUBSTRINGS,
     )
 except ImportError:
     try:
-        from src.core.render_constants import (
+        from src.core.qt_core.special.render_constants import (
             INNER_GEO_SUBSTRINGS as _INNER_GEO_SUBSTRINGS,
             FACE_MESH_SUBSTRINGS as _FACE_MESH_SUBSTRINGS,
         )
@@ -2198,11 +2198,11 @@ from dataclasses import dataclass, field as _field
 # Import MatrixPaletteUploader for real-time skeletal animation in the GPU path.
 # gpu_skinning.py contains the palette builder, SSBO layout, and GLSL snippets.
 try:
-    from core.gpu_skinning import MatrixPaletteUploader, MAX_BONES as _SKIN_MAX_BONES
+    from core.qt_core.animation.gpu_skinning import MatrixPaletteUploader, MAX_BONES as _SKIN_MAX_BONES
     _GPU_SKINNING = True
 except ImportError:
     try:
-        from src.core.gpu_skinning import MatrixPaletteUploader, MAX_BONES as _SKIN_MAX_BONES
+        from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader, MAX_BONES as _SKIN_MAX_BONES
         _GPU_SKINNING = True
     except ImportError:
         _GPU_SKINNING = False

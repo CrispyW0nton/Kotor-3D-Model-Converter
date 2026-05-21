@@ -479,7 +479,7 @@ class MDLBinaryParserAdapter(ModelParserPort):
     def parse(self, mdl: bytes, mdx: bytes, path_label: str) -> Any:
         if self._src_dir not in sys.path:
             sys.path.insert(0, self._src_dir)
-        from core.kotor_loader import load_model_from_bytes  # noqa: PLC0415
+        from core.qt_core.game.kotor_loader import load_model_from_bytes  # noqa: PLC0415
         return load_model_from_bytes(mdl, mdx)
 
 

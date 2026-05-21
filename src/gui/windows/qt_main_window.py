@@ -33,7 +33,7 @@ from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel
 from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
 from src.gui.qt_lib.panels.qt_camera_panel import QtCameraPanel
 from src.gui.qt_lib.panels.qt_mesh_tools_panel import QtMeshToolsPanel
-from src.gui.qt_lib.assets.qt_theme import make_horizontal_overflow_area, make_scrollable_panel
+from src.gui.qt_lib.assets.qt_theme import make_horizontal_overflow_area, make_scrollable_panel, update_legacy_palette
 from src.gui.qt_lib.assets.qt_matrix_background import QtMatrixEngine, QtMatrixLabel, QtMatrixPanel
 from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel, QtSkeletonPanel
 from src.gui.qt_lib.viewports.qt_viewport import QtMainViewportWidget
@@ -57,25 +57,14 @@ from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow
 from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditorWindow
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
+from src.gui.libtheme import LayoutManager, ThemeManager
+from src.gui.libtheme.style_tokens import LEGACY_MATRIX_COLORS
+from src.gui.libtheme.theme_settings import ThemeLayoutSettings
+from src.gui.libtheme.theme_watcher import ThemeLayoutWatcher
 from src.measurement.unit_settings import MeasurementSettings
 
 
-C = {
-    "bg": "#0B0F0D",
-    "bg2": "#07100C",
-    "panel": "#111916",
-    "panel2": "#151D1A",
-    "border": "#1B2A22",
-    "hover": "#183428",
-    "selected": "#00FF7A",
-    "accent": "#00FF7A",
-    "accent2": "#00D7B5",
-    "text": "#E8F0EC",
-    "text2": "#7A9A88",
-    "success": "#00FF7A",
-    "warning": "#FFAA00",
-    "error": "#FF4444",
-}
+C = dict(LEGACY_MATRIX_COLORS)
 
 _GUI_DIR = Path(__file__).resolve().parents[1]
 _QT_ICON_DIR = (_GUI_DIR / "icons").as_posix()
@@ -174,7 +163,7 @@ def _walkmesh_overlay_offset_for_model(model, wok_data, renderer=None) -> tuple[
 
 
 def _walkmesh_overlay_node_from_wok(wok_data, label: str, world_offset=(0.0, 0.0, 0.0)):
-    from src.core.model_data import ModelNode, NodeFlags
+    from src.core.qt_core.geometry.model_data import ModelNode, NodeFlags
 
     ox, oy, oz = (float(world_offset[0]), float(world_offset[1]), float(world_offset[2]))
     raw_name = str(label or "walkmesh").split(":", 1)[-1]
@@ -235,7 +224,7 @@ class ModelLoadWorker(QtCore.QObject):
                 or raw[:2] in (b"#\x20", b"# ")
             )
             if is_ascii_mdl:
-                from src.core.mdl_parser import MDLAsciiParser
+                from src.core.qt_core.mdl.mdl_parser import MDLAsciiParser
 
                 self.progress.emit("Parsing ASCII MDL", 2, 5)
                 lines = raw.decode("utf-8", errors="replace").splitlines()
@@ -243,8 +232,8 @@ class ModelLoadWorker(QtCore.QObject):
                 model.mdl_path = str(path)
                 model.mdx_path = ""
             else:
-                from src.core.kotor_loader import load_model_from_bytes
-                from src.core.model_data import GameVersion
+                from src.core.qt_core.game.kotor_loader import load_model_from_bytes
+                from src.core.qt_core.geometry.model_data import GameVersion
 
                 self.progress.emit("Reading MDX bytes", 2, 5)
                 mdx_path = Path(self.mdx_path) if self.mdx_path else path.with_suffix(".mdx")
@@ -260,7 +249,7 @@ class ModelLoadWorker(QtCore.QObject):
             if model is None:
                 raise RuntimeError(f"Could not parse {path.name}")
             if self.game:
-                from src.core.model_data import GameVersion
+                from src.core.qt_core.geometry.model_data import GameVersion
 
                 model.game_version = GameVersion.K2 if self.game == "K2" else GameVersion.K1
             self.progress.emit("Preparing GPU mesh buffers in RAM", 4, 5)
@@ -285,9 +274,9 @@ class ResourceModelLoadWorker(QtCore.QObject):
     @QtCore.Slot()
     def run(self):
         try:
-            from src.core.kotor_loader import load_model_from_bytes
-            from src.core.model_data import GameVersion
-            from src.core.resource_manager import ResourceManager
+            from src.core.qt_core.game.kotor_loader import load_model_from_bytes
+            from src.core.qt_core.geometry.model_data import GameVersion
+            from src.core.qt_core.assets.resource_manager import ResourceManager
 
             mgr = ResourceManager()
             if self.k1_dir:
@@ -326,7 +315,7 @@ class LibraryScanWorker(QtCore.QObject):
     @QtCore.Slot()
     def run(self):
         try:
-            from src.core.resource_manager import ResourceManager
+            from src.core.qt_core.assets.resource_manager import ResourceManager
 
             mgr = ResourceManager()
             rows = []
@@ -379,7 +368,7 @@ class LibraryBatchExportWorker(QtCore.QObject):
         fail = 0
         total = len(self.rows)
         try:
-            from src.core.resource_manager import ResourceManager
+            from src.core.qt_core.assets.resource_manager import ResourceManager
 
             mgr = ResourceManager()
             if self.k1_dir:
@@ -398,7 +387,7 @@ class LibraryBatchExportWorker(QtCore.QObject):
                         fail += 1
                         continue
 
-                    from src.core.kotor_loader import load_model_from_bytes
+                    from src.core.qt_core.game.kotor_loader import load_model_from_bytes
 
                     model = load_model_from_bytes(mdl, mdx)
                     if self.fmt == "obj":
@@ -407,7 +396,7 @@ class LibraryBatchExportWorker(QtCore.QObject):
                         OBJExporter().export(model, os.path.join(self.out_dir, f"{resref}.obj"))
                         ok += 1
                     elif self.fmt == "ascii":
-                        from src.core.mdl_parser import MDLAsciiWriter
+                        from src.core.qt_core.mdl.mdl_parser import MDLAsciiWriter
 
                         MDLAsciiWriter().write(model, os.path.join(self.out_dir, f"{resref}.mdl"))
                         ok += 1
@@ -656,6 +645,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.startup_input = startup_input or {}
         self.settings_path = self.app_root / "settings.json"
         self.settings_data = self._load_settings()
+        self.theme_manager = ThemeManager(self.app_root, self.settings_data, self)
+        self.layout_manager = LayoutManager(self.app_root, self.settings_data, self)
+        self.theme_manager.themeChanged.connect(self._on_theme_changed)
+        self.layout_manager.layoutChanged.connect(self._on_layout_changed)
+        self._theme_watcher: Optional[ThemeLayoutWatcher] = None
+        self._button_mode_override = self.layout_manager.settings.button_mode_override
+        self._icon_size_override = self.layout_manager.settings.icon_size_override
         self._worker_thread: Optional[QtCore.QThread] = None
         self._model_worker: Optional[QtCore.QObject] = None
         self._scan_thread: Optional[QtCore.QThread] = None
@@ -696,14 +692,20 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._retarget_timer.timeout.connect(self._tick_retarget_animation)
 
         self.setWindowTitle(self.APP_TITLE)
-        self.resize(1600, 950)
+        initial_layout = self.layout_manager.get_layout()
+        self.resize(initial_layout.main_width, initial_layout.main_height)
         self.setMinimumSize(1100, 700)
         self._apply_theme()
         self._build_actions()
         self._build_menu()
         self._build_toolbar()
         self._build_layout()
+        self.theme_manager.register_theme_aware_widget(self)
+        self.theme_manager.register_theme_aware_widget(self.viewport)
+        self.theme_manager.apply_current_theme(self)
+        self.layout_manager.apply_current_layout(self)
         self._build_statusbar()
+        self._configure_theme_watcher()
         self._log("Qt host window ready.", "success")
         QtCore.QTimer.singleShot(0, self._open_startup_inputs)
         QtCore.QTimer.singleShot(250, self._auto_detect_dirs_on_startup)
@@ -727,6 +729,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         return {}
 
     def _apply_theme(self):
+        if hasattr(self, "theme_manager"):
+            theme = self.theme_manager.apply_current_theme(self)
+            update_legacy_palette(theme)
+            return
         self.setStyleSheet(
             f"""
             QMainWindow, QWidget {{
@@ -877,6 +883,72 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             }}
             """
         )
+
+    def apply_ghost_theme(self, theme) -> None:
+        update_legacy_palette(theme)
+        viewport = getattr(self, "viewport", None)
+        if viewport is not None and hasattr(viewport, "apply_ghost_theme"):
+            viewport.apply_ghost_theme(theme)
+
+    def _on_theme_changed(self, theme) -> None:
+        update_legacy_palette(theme)
+        self.settings_data.setdefault("theme_layout", {}).update(self.theme_manager.to_settings())
+        self.settings_data["theme_layout"].update(self.layout_manager.to_settings())
+        self._refresh_theme_sensitive_icons()
+
+    def _on_layout_changed(self, layout) -> None:
+        self.settings_data.setdefault("theme_layout", {}).update(self.theme_manager.to_settings())
+        self.settings_data["theme_layout"].update(self.layout_manager.to_settings())
+
+    def _refresh_theme_sensitive_icons(self) -> None:
+        for name, action in (
+            ("open", getattr(self, "open_model_action", None)),
+            ("settings", getattr(self, "settings_action", None)),
+            ("anims", getattr(self, "anims_action", None)),
+            ("diag", getattr(self, "diag_action", None)),
+        ):
+            if action is not None:
+                action.setIcon(self._icon(name))
+
+    def _configure_theme_watcher(self) -> None:
+        if self._theme_watcher is not None:
+            self._theme_watcher.stop()
+            self._theme_watcher = None
+        if not bool(self.theme_manager.settings.hot_reload_enabled):
+            return
+        watcher = ThemeLayoutWatcher(
+            [
+                self.theme_manager.packaged_theme_dir,
+                self.theme_manager.user_theme_dir,
+                self.layout_manager.packaged_layout_dir,
+                self.layout_manager.user_layout_dir,
+            ],
+            self,
+        )
+        watcher.changed.connect(self._on_theme_layout_file_changed)
+        if watcher.start():
+            self._theme_watcher = watcher
+
+    def _on_theme_layout_file_changed(self, _kind: str, path: str) -> None:
+        lower = path.lower()
+        if "\\themes\\" in lower or "/themes/" in lower:
+            self.theme_manager.reload()
+            self.theme_manager.apply_current_theme(self)
+            self._log(f"Theme file reloaded: {Path(path).name}", "success")
+            return
+        if "\\layouts\\" in lower or "/layouts/" in lower:
+            self.layout_manager.reload()
+            current = self.layout_manager.get_layout()
+            answer = QtWidgets.QMessageBox.question(
+                self,
+                "Apply layout changes?",
+                f"Reload layout '{current.name}' now?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No,
+            )
+            if answer == QtWidgets.QMessageBox.Yes:
+                self.layout_manager.apply_current_layout(self)
+            self._log(f"Layout file reloaded: {Path(path).name}", "success")
 
     def _build_actions(self):
         self.open_model_action = QtGui.QAction(self._icon("open"), "Open MDL (binary)...", self)
@@ -1140,6 +1212,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         pass
 
     def _icon(self, name: str, size: int = 16) -> QtGui.QIcon:
+        if hasattr(self, "theme_manager"):
+            return self.theme_manager.icon(name, size)
         path = _GUI_DIR / "icons" / f"{name}_{size}.png"
         if path.exists():
             return QtGui.QIcon(str(path))
@@ -1282,6 +1356,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         compact: bool = False,
     ) -> QtWidgets.QPushButton:
         button = QtWidgets.QPushButton(text)
+        button.setProperty("_gr_full_text", text)
         if icon_name:
             button.setIcon(self._icon(icon_name, 16))
         button.setProperty("accent", accent)
@@ -1301,6 +1376,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     ) -> QtWidgets.QToolButton:
         button = QtWidgets.QToolButton()
         button.setText(f"{text}  v")
+        button.setProperty("_gr_full_text", text)
         button.setIcon(self._icon(icon_name, 16))
         button.setPopupMode(QtWidgets.QToolButton.InstantPopup)
         menu = QtWidgets.QMenu(button)
@@ -1703,7 +1779,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             written.append(mdx_path)
 
         try:
-            from src.core.kotor_loader import load_model_from_bytes
+            from src.core.qt_core.game.kotor_loader import load_model_from_bytes
 
             model = load_model_from_bytes(mdl, mdx)
             tex_names = {
@@ -1879,7 +1955,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         return None
 
     def _game_version(self):
-        from src.core.model_data import GameVersion
+        from src.core.qt_core.geometry.model_data import GameVersion
 
         default_game = str(self.settings_data.get("default_game") or "K1").upper()
         return GameVersion.K2 if default_game == "K2" else GameVersion.K1
@@ -2234,7 +2310,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if model is None:
             return
         try:
-            from src.core.model_data import NodeFlags
+            from src.core.qt_core.geometry.model_data import NodeFlags
 
             for node in model.mesh_nodes() if hasattr(model, "mesh_nodes") else []:
                 node.flags &= ~int(NodeFlags.SKIN)
@@ -2266,7 +2342,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         ) != QtWidgets.QMessageBox.Yes:
             return
         try:
-            from src.core.model_data import NodeFlags
+            from src.core.qt_core.geometry.model_data import NodeFlags
 
             root = model.root_node
             mesh_nodes = [node for node in model.all_nodes() if getattr(node, "is_mesh", False)]
@@ -2423,8 +2499,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if not path:
             return
         try:
-            from src.core.mdl_parser import MDLAsciiWriter
-            from src.core.model_data import GameVersion
+            from src.core.qt_core.mdl.mdl_parser import MDLAsciiWriter
+            from src.core.qt_core.geometry.model_data import GameVersion
 
             mdl = copy.deepcopy(model)
             mdl.game_version = GameVersion.K2 if chosen_gv == "K2" else GameVersion.K1
@@ -2450,8 +2526,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if not path:
             return
         try:
-            from src.core.mdl_writer import MDLBinaryWriter
-            from src.core.model_data import GameVersion
+            from src.core.qt_core.mdl.mdl_writer import MDLBinaryWriter
+            from src.core.qt_core.geometry.model_data import GameVersion
 
             mdl = copy.deepcopy(model)
             mdl.game_version = GameVersion.K2 if chosen_gv == "K2" else GameVersion.K1
@@ -2560,8 +2636,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if not path:
             return
         try:
-            from src.core.template_builder import build_humanoid_template, save_template_manifest
-            from src.core.mdl_writer import MDLBinaryWriter
+            from src.core.qt_core.templates.template_builder import build_humanoid_template, save_template_manifest
+            from src.core.qt_core.mdl.mdl_writer import MDLBinaryWriter
 
             model = build_humanoid_template(game_version=chosen_gv, name=Path(path).stem)
             mdx_path = str(Path(path).with_suffix(".mdx"))
@@ -2625,7 +2701,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         work_dir.mkdir(parents=True, exist_ok=True)
         ascii_path = work_dir / f"{getattr(model, 'name', 'model')}.mdl"
         try:
-            from src.core.mdl_parser import MDLAsciiWriter
+            from src.core.qt_core.mdl.mdl_parser import MDLAsciiWriter
 
             MDLAsciiWriter().write(model, str(ascii_path))
         except Exception as exc:
@@ -2698,7 +2774,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         ) != QtWidgets.QMessageBox.Yes:
             return
         try:
-            from src.core.mdl_porter import CrossGamePorter
+            from src.core.qt_core.mdl.mdl_porter import CrossGamePorter
 
             ported = CrossGamePorter().port(model, target)
             self._set_model_internal(ported, self._model_path)
@@ -2777,7 +2853,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._log(f"{action} is waiting for deeper Qt module-editor migration.", "warning")
 
     def _retarget_config(self):
-        from src.core.animation_retargeting import RetargetConfig
+        from src.core.qt_core.animation_retargeting.retargeter import RetargetConfig
 
         kwargs = (
             self.animation_retarget_panel.config_kwargs()
@@ -2788,7 +2864,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     def _retarget_refresh_mapping(self):
         if self._retarget_source_model is None or self._retarget_target_model is None:
             return None
-        from src.core.animation_retargeting import build_bone_map
+        from src.core.qt_core.animation_retargeting.retargeter import build_bone_map
 
         manual_mapping = {}
         if hasattr(self.animation_retarget_panel, "panel"):
@@ -2845,7 +2921,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.information(self, "Retarget", "Set both a source and target model.")
             return
         try:
-            from src.core.animation_engine import AnimationEngine
+            from src.core.qt_core.animation.animation_engine import AnimationEngine
 
             self._animation_timer.stop()
             self._animation_engine = None
@@ -2903,7 +2979,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.information(self, "Retarget", "Set both a source and target model.")
             return
         try:
-            from src.core.animation_retargeting import retarget_animation
+            from src.core.qt_core.animation_retargeting.retargeter import retarget_animation
 
             source_anim = next(
                 (
@@ -2991,7 +3067,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         anim_name = getattr(anim, "name", "") if anim else ""
         anim_length = float(getattr(anim, "length", 0.0) or 0.0) if anim else 0.0
         try:
-            from src.core.animation_retargeting import retarget_pose
+            from src.core.qt_core.animation_retargeting.retargeter import retarget_pose
 
             result = retarget_pose(
                 source_pose,
@@ -3058,7 +3134,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.information(self, "Animations", "Select an animation first.")
             return
         try:
-            from src.core.animation_engine import AnimationEngine
+            from src.core.qt_core.animation.animation_engine import AnimationEngine
 
             if self._animation_engine is None or getattr(self._animation_engine, "model", None) is not model:
                 self._animation_engine = AnimationEngine(model)
@@ -3167,8 +3243,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         )
 
     def _build_baked_animation(self, model, anim_name: str, output_name: str, fps: int = 30):
-        from src.core.animation_engine import AnimationEngine
-        from src.core.model_data import Animation
+        from src.core.qt_core.animation.animation_engine import AnimationEngine
+        from src.core.qt_core.geometry.model_data import Animation
 
         fps = max(1, int(fps or 30))
         engine = AnimationEngine(model)
@@ -3302,7 +3378,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if model is None or not anim_name:
             return
         try:
-            from src.core.animation_engine import AnimationEngine
+            from src.core.qt_core.animation.animation_engine import AnimationEngine
 
             if self._animation_engine is None or getattr(self._animation_engine, "model", None) is not model:
                 self._animation_engine = AnimationEngine(model)
@@ -3375,7 +3451,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         )
         if not path:
             return
-        from src.core.animation_engine import AnimationEngine
+        from src.core.qt_core.animation.animation_engine import AnimationEngine
 
         engine = AnimationEngine(model)
         if selected_filter.startswith("BVH") or path.lower().endswith(".bvh"):
@@ -3430,7 +3506,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if not hasattr(self, "resource_panel"):
             return
         try:
-            from src.core import resource_manager as rm
+            from src.core.qt_core.assets import resource_manager as rm
 
             manager = rm.ResourceManager()
             k1_dir = self.k1_dir_edit.text().strip()
@@ -3542,7 +3618,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.twoda_panel.listbox.clear()
         self.twoda_panel.table.clear()
         try:
-            from src.core import resource_manager as rm
+            from src.core.qt_core.assets import resource_manager as rm
 
             manager = rm.ResourceManager()
             k1_dir = self.k1_dir_edit.text().strip()
@@ -3564,8 +3640,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if not name:
             return
         try:
-            from src.core import resource_manager as rm
-            from src.core.twoda import TwoDA
+            from src.core.qt_core.assets import resource_manager as rm
+            from src.core.qt_core.templates.twoda import TwoDA
 
             manager = getattr(self, "_resource_manager", None)
             if manager is None:
@@ -3610,8 +3686,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def _validate_current_character(self):
         try:
-            from src.core.model_data import CharacterScene, PartSlot
-            from src.core.validation_service import ValidationService
+            from src.core.qt_core.geometry.model_data import CharacterScene, PartSlot
+            from src.core.qt_core.diagnostics.validation_service import ValidationService
 
             scene = None
             builder = getattr(self, "_character_builder_window", None)
@@ -4043,7 +4119,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return
         if str(resref).lower().startswith("gr_humanoid"):
             try:
-                from src.core.template_builder import build_humanoid_template
+                from src.core.qt_core.templates.template_builder import build_humanoid_template
 
                 self._show_progress_toast("Loading model", f"Building template {game}:{resref}...")
                 game_tag = game.upper() if game else "K1"
@@ -4272,7 +4348,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if existing is not None and getattr(self, "_resource_manager_dirs", ("", "")) == (k1_dir, k2_dir):
             return existing
         try:
-            from src.core.resource_manager import ResourceManager
+            from src.core.qt_core.assets.resource_manager import ResourceManager
 
             mgr = ResourceManager()
             if k1_dir:
@@ -4370,7 +4446,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         game = (self._current_game or self._infer_game_from_model(model)).upper()
         if mgr is not None:
             try:
-                from src.core.resource_manager import RES_WOK
+                from src.core.qt_core.assets.resource_manager import RES_WOK
 
                 for base in candidates:
                     data = mgr.get(base, RES_WOK, game)
@@ -4381,7 +4457,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def _load_walkmesh_source(self, source, label: str) -> bool:
         try:
-            from src.core.module_format import WOKData
+            from src.core.qt_core.modules.module_format import WOKData
 
             if isinstance(source, (bytes, bytearray)):
                 source = WOKData.from_bytes(bytes(source))
@@ -4459,12 +4535,26 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._character_builder_window.activateWindow()
 
     def _open_settings_dialog(self):
-        dialog = QtSettingsDialog(self.settings_data, self)
+        dialog = QtSettingsDialog(
+            self.settings_data,
+            self,
+            theme_manager=self.theme_manager,
+            layout_manager=self.layout_manager,
+        )
         dialog.settingsSaved.connect(self._save_settings_data)
         dialog.exec()
 
     def _save_settings_data(self, values: dict):
         self.settings_data = values
+        self.theme_manager.settings = ThemeLayoutSettings.from_settings(values)
+        self.layout_manager.settings = ThemeLayoutSettings.from_settings(values)
+        self._button_mode_override = self.layout_manager.settings.button_mode_override
+        self._icon_size_override = self.layout_manager.settings.icon_size_override
+        self.theme_manager.reload()
+        self.layout_manager.reload()
+        self.theme_manager.apply_current_theme(self)
+        self.layout_manager.apply_current_layout(self)
+        self._configure_theme_watcher()
         viewport = getattr(self, "viewport", None)
         if viewport is not None:
             viewport.set_navigation_profile(

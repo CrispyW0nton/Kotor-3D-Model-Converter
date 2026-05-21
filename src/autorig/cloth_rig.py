@@ -83,7 +83,7 @@ def _model_data():
         from ..core.model_data import ModelNode, KotorModel, NodeFlags
         return ModelNode, KotorModel, NodeFlags
     except ImportError:
-        from core.model_data import ModelNode, KotorModel, NodeFlags
+        from core.qt_core.geometry.model_data import ModelNode, KotorModel, NodeFlags
         return ModelNode, KotorModel, NodeFlags
 
 
@@ -672,7 +672,7 @@ class ClothRigExporter:
             try:
                 from ..core.model_data import NodeFlags
             except ImportError:
-                from core.model_data import NodeFlags
+                from core.qt_core.geometry.model_data import NodeFlags
             if not (node.flags & NodeFlags.DANGLY):
                 issues.append("DANGLY flag not set — node is not a danglymesh")
         except Exception:

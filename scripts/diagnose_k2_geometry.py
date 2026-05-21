@@ -113,7 +113,7 @@ def _node_chain(node: Any) -> list[Any]:
 
 
 def _parent_chain_orientation(node: Any) -> list[float]:
-    from src.core.model_data import _quat_mul, _quat_normalize_bind
+    from src.core.qt_core.geometry.model_data import _quat_mul, _quat_normalize_bind
 
     aq: list[float] = [0.0, 0.0, 0.0, 1.0]
     for item in _node_chain(node)[:-1]:
@@ -122,7 +122,7 @@ def _parent_chain_orientation(node: Any) -> list[float]:
 
 
 def _apply_transform(vertex: Any, position: Any, orientation: Any) -> list[float]:
-    from src.core.model_data import _quat_rotate
+    from src.core.qt_core.geometry.model_data import _quat_rotate
 
     v = (float(vertex[0]), float(vertex[1]), float(vertex[2]))
     p = _vec3(position)
@@ -224,7 +224,7 @@ def _summarize_skin_node(node: Any, raw_node: dict[str, Any] | None, skinning_no
 
 def _load_ghostrigger_model(game: str, resref: str) -> Any:
     from kotormcp.tools.ghostrigger_tools import _resource_pair
-    from src.core.kotor_loader import load_model_from_bytes
+    from src.core.qt_core.game.kotor_loader import load_model_from_bytes
 
     _, mdl, mdx = _resource_pair(game, resref)
     model = load_model_from_bytes(mdl.data, mdx.data if mdx is not None else b"")

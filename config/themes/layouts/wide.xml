@@ -1,0 +1,26 @@
+<layout id="wide" name="Wide" version="1">
+    <mainWindow width="2100" height="1040" maximized="false"/>
+    <toolbars>
+        <toolbar id="main" visible="true" buttonMode="iconText" iconSize="20" height="42"/>
+        <toolbar id="viewport" visible="true" buttonMode="textBesideIcon" iconSize="18" height="36"/>
+    </toolbars>
+    <panels>
+        <panel id="library" region="left" visible="true" minWidth="320" preferredWidth="430"/>
+        <panel id="modules" region="left" visible="true" minWidth="320" preferredWidth="430"/>
+        <panel id="properties" region="right" visible="true" minWidth="320" preferredWidth="420"/>
+        <panel id="animationLibrary" region="right" visible="true" minWidth="320" preferredWidth="420"/>
+        <panel id="meshTools" region="farRight" visible="true" minWidth="300" preferredWidth="420"/>
+        <panel id="outputLog" region="bottom" visible="true" minHeight="140" preferredHeight="240"/>
+        <panel id="pythonTerminal" region="bottom" visible="true" minHeight="140" preferredHeight="240"/>
+    </panels>
+    <viewport>
+        <region id="mainViewport" minWidth="820" preferredWidth="1200"/>
+        <toolbar visible="true" buttonMode="textBesideIcon" compact="false"/>
+    </viewport>
+    <spacing>
+        <margin value="6"/>
+        <panelSpacing value="6"/>
+        <toolbarSpacing value="5"/>
+        <splitterHandleWidth value="8"/>
+    </spacing>
+</layout>

@@ -31,11 +31,11 @@ def _load_module_direct(name: str, path: pathlib.Path):
 
 sp = _load_module_direct(
     "ghostrigger_module_save_pipeline_for_packager_test",
-    _SRC_DIR / "core" / "module_save_pipeline.py",
+    _SRC_DIR / "core" / "modules" / "module_save_pipeline.py",
 )
 packager = _load_module_direct(
     "ghostrigger_custom_module_packager_under_test",
-    _SRC_DIR / "core" / "custom_module_packager.py",
+    _SRC_DIR / "core" / "modules" / "custom_module_packager.py",
 )
 
 

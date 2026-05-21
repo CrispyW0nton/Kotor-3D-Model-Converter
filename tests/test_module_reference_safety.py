@@ -28,7 +28,7 @@ def _load_module_direct(name: str, path: pathlib.Path):
 
 rs = _load_module_direct(
     "ghostrigger_module_reference_safety_under_test",
-    _SRC_DIR / "core" / "module_reference_safety.py",
+    _SRC_DIR / "core" / "diagnostics" / "module_reference_safety.py",
 )
 
 

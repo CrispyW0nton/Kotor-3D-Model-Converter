@@ -921,10 +921,10 @@ class QtInspectorPanel(QtWidgets.QWidget):
                 if not key:
                     continue
                 try:
-                    from core.skeleton_template_picker import option_summary
+                    from core.qt_core.animation_retargeting.skeleton_template_picker import option_summary
                 except Exception:                          # pragma: no cover
                     try:
-                        from src.core.skeleton_template_picker import option_summary
+                        from src.core.qt_core.animation_retargeting.skeleton_template_picker import option_summary
                     except Exception:
                         option_summary = None              # type: ignore
                 if option_summary is not None:
@@ -1534,10 +1534,10 @@ class QtInspectorPanel(QtWidgets.QWidget):
         # PyKotor (which isn't installed in lightweight test envs).
         hw = None                                             # type: ignore
         try:
-            from src.core import head_workflow as hw          # type: ignore
+            from src.core.qt_core.characters import head_workflow as hw          # type: ignore
         except Exception:
             try:
-                from core import head_workflow as hw          # type: ignore
+                from core.qt_core.characters import head_workflow as hw          # type: ignore
             except Exception:
                 try:                                          # pragma: no cover
                     import importlib.util as _u
@@ -1679,10 +1679,10 @@ class QtInspectorPanel(QtWidgets.QWidget):
         # would eagerly pull in PyKotor.
         hw = None                                             # type: ignore
         try:
-            from src.core import head_workflow as hw          # type: ignore
+            from src.core.qt_core.characters import head_workflow as hw          # type: ignore
         except Exception:
             try:
-                from core import head_workflow as hw          # type: ignore
+                from core.qt_core.characters import head_workflow as hw          # type: ignore
             except Exception:
                 try:                                          # pragma: no cover
                     import importlib.util as _u
@@ -1803,10 +1803,10 @@ class QtInspectorPanel(QtWidgets.QWidget):
         # Lazy-import — same fallback chain as the other M6 panels.
         hw = None                                             # type: ignore
         try:
-            from src.core import head_workflow as hw          # type: ignore
+            from src.core.qt_core.characters import head_workflow as hw          # type: ignore
         except Exception:
             try:
-                from core import head_workflow as hw          # type: ignore
+                from core.qt_core.characters import head_workflow as hw          # type: ignore
             except Exception:
                 try:                                          # pragma: no cover
                     import importlib.util as _u

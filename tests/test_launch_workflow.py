@@ -31,11 +31,11 @@ def _load_module_direct(name: str, path: pathlib.Path):
 try:
     md = _load_module_direct(
         "ghostrigger_launch_md_under_test",
-        _SRC_DIR / "core" / "model_data.py",
+        _SRC_DIR / "core" / "geometry" / "model_data.py",
     )
     wf = _load_module_direct(
         "ghostrigger_launch_workflow_under_test",
-        _SRC_DIR / "core" / "headless_body_workflow.py",
+        _SRC_DIR / "core" / "characters" / "headless_body_workflow.py",
     )
     wf._import_model_data = lambda: md                       # type: ignore[attr-defined]
 except Exception as exc:                                    # pragma: no cover

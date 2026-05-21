@@ -47,11 +47,11 @@ def _load_module_direct(name: str, path: pathlib.Path):
 try:
     md = _load_module_direct(
         "ghostrigger_md_for_head_inspector",
-        _SRC_DIR / "core" / "model_data.py",
+        _SRC_DIR / "core" / "geometry" / "model_data.py",
     )
     hw = _load_module_direct(
         "ghostrigger_head_workflow_for_inspector",
-        _SRC_DIR / "core" / "head_workflow.py",
+        _SRC_DIR / "core" / "characters" / "head_workflow.py",
     )
 except Exception as exc:                                     # pragma: no cover
     pytest.skip(f"model_data / head_workflow unavailable: {exc}",

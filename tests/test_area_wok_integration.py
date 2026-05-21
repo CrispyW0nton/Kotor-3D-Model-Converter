@@ -28,11 +28,11 @@ def _load_module_direct(name: str, path: pathlib.Path):
 
 lg = _load_module_direct(
     "ghostrigger_lyt_room_graph_for_wok_tests",
-    _SRC_DIR / "core" / "lyt_room_graph.py",
+    _SRC_DIR / "core" / "scene" / "lyt_room_graph.py",
 )
 awi = _load_module_direct(
     "ghostrigger_area_wok_integration_under_test",
-    _SRC_DIR / "core" / "area_wok_integration.py",
+    _SRC_DIR / "core" / "modules" / "area_wok_integration.py",
 )
 
 

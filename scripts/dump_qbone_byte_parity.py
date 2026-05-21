@@ -408,8 +408,8 @@ def _classify_summary(slot_records: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def _dump_one(rm: Any, resref: str, game: str, out_path: Path) -> int:
-    from src.core.ghostrigger_mdl_reader import GhostRiggerMDLBinaryReader
-    from src.core.kotor_loader import load_model_from_bytes
+    from src.core.qt_core.mdl.ghostrigger_mdl_reader import GhostRiggerMDLBinaryReader
+    from src.core.qt_core.game.kotor_loader import load_model_from_bytes
 
     mdl_bytes = rm.get_mdl(resref, game)
     if not mdl_bytes:
@@ -516,7 +516,7 @@ def _dump_one(rm: Any, resref: str, game: str, out_path: Path) -> int:
 
 
 def main() -> int:
-    from src.core.resource_manager import ResourceManager
+    from src.core.qt_core.assets.resource_manager import ResourceManager
 
     rm = ResourceManager()
     if not rm.set_k1_dir(K1_DIR):

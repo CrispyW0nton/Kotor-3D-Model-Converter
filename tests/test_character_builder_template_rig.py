@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import math
 
-from src.core.character_builder import apply_template_rig
-from src.core.model_data import (
+from src.core.qt_core.characters.character_builder import apply_template_rig
+from src.core.qt_core.geometry.model_data import (
     BoneWeight,
     CharacterScene,
     KotorModel,
@@ -12,7 +12,7 @@ from src.core.model_data import (
     PartSlot,
     VertexSkinData,
 )
-from src.core.validation_service import ValidationService
+from src.core.qt_core.diagnostics.validation_service import ValidationService
 
 
 def _node(name: str, flags: int = int(NodeFlags.HEADER), parent: ModelNode | None = None) -> ModelNode:

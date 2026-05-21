@@ -31,7 +31,7 @@ def test_t1204_character_builder_connects_assignment_signal_to_workflow():
 
 
 def test_t1204_workflow_exports_motion_assignment_api():
-    source = _read("src/core/headless_body_workflow.py")
+    source = _read("src/core/characters/headless_body_workflow.py")
 
     assert "MotionAssignmentResult" in source
     assert "MOTION_SOURCE_INHERITED" in source

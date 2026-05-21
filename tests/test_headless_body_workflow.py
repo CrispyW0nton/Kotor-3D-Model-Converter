@@ -49,11 +49,11 @@ def _load_module_direct(name: str, path: pathlib.Path):
 try:
     md = _load_module_direct(
         "ghostrigger_md_under_test",
-        _SRC_DIR / "core" / "model_data.py",
+        _SRC_DIR / "core" / "geometry" / "model_data.py",
     )
     wf = _load_module_direct(
         "ghostrigger_workflow_under_test",
-        _SRC_DIR / "core" / "headless_body_workflow.py",
+        _SRC_DIR / "core" / "characters" / "headless_body_workflow.py",
     )
     # The workflow module's ``_import_model_data()`` helper would
     # normally pull in the full ``core`` package; rebind it to the
@@ -1450,7 +1450,7 @@ def test_t1204_animation_library_lists_real_supermodel_chain(monkeypatch):
         def load_model(self, resref, game="K1"):
             return super_model if str(resref).lower() == "s_male02" else None
 
-    from src.core.animation_engine import SuperModelResolver
+    from src.core.qt_core.animation.animation_engine import SuperModelResolver
 
     SuperModelResolver.clear_cache()
     SuperModelResolver.configure(_RM())
