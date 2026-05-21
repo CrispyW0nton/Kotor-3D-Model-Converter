@@ -91,6 +91,7 @@ diagnostics/
 
 # ── User runtime state (never commit; auto-recreated on first launch) ─────────
 settings.json
+.cursor/mcp.json
 GhostRigger-K1-K2.exe
 /dist/
 /build/
@@ -180,3 +181,4 @@ CONTEXT_SNAPSHOT.md
 RESEARCH_FINDINGS.md
 SYSTEM_DESIGN.md
 TEXTBOOK_RESEARCH_REPORT.md
+/.cursor

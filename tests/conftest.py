@@ -13,17 +13,14 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = ROOT / "exports" / "scan_manifest.json"
 MCP_CONFIG_PATH = ROOT / ".cursor" / "mcp.json"
 
-DEFAULT_K1_PATH = r"C:\Program Files (x86)\Steam\steamapps\common\swkotor"
+DEFAULT_K1_PATH = r"h:\steam\steamapps\common\swkotor"
 DEFAULT_K2_PATH = (
-    r"C:\Program Files (x86)\Steam\steamapps\common\Knights of the Old Republic II"
+    r"h:\steam\steamapps\common\Knights of the Old Republic II"
 )
 
 
 def _configure_mcp_pythonpath() -> None:
     """Mirror the KotorMCP PYTHONPATH from .cursor/mcp.json for pytest runs."""
-    os.environ.setdefault("K1_PATH", DEFAULT_K1_PATH)
-    os.environ.setdefault("K2_PATH", DEFAULT_K2_PATH)
-
     configured = []
     if MCP_CONFIG_PATH.exists():
         data = json.loads(MCP_CONFIG_PATH.read_text(encoding="utf-8"))
@@ -33,14 +30,18 @@ def _configure_mcp_pythonpath() -> None:
                 os.environ.setdefault(key, env[key])
         configured.extend(p for p in str(env.get("PYTHONPATH", "")).split(";") if p)
 
+    os.environ.setdefault("K1_PATH", DEFAULT_K1_PATH)
+    os.environ.setdefault("K2_PATH", DEFAULT_K2_PATH)
+
     if not configured:
         workspaces = ROOT.parent
         configured = [
+            str(ROOT / "src"),
+            str(ROOT),
             str(workspaces / "KotorMCP" / "src"),
             str(workspaces / "PyKotor" / "Libraries" / "PyKotor" / "src"),
             str(workspaces / "PyKotor" / "Libraries" / "PyKotorGL" / "src"),
             str(workspaces / "PyKotor" / "Libraries" / "Utility" / "src"),
-            str(ROOT),
         ]
 
     for item in reversed(configured):

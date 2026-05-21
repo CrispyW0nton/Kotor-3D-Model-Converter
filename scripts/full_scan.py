@@ -20,23 +20,24 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-KOTORMCP_ROOT = Path(r"C:\Users\NewAdmin\Documents\GDeveloper\Workspaces\KotorMCP")
-PYKOTOR_ROOT = Path(r"C:\Users\NewAdmin\Documents\GDeveloper\Workspaces\PyKotor")
-
-PYTHONPATHS = [
-    KOTORMCP_ROOT / "src",
-    PYKOTOR_ROOT / "Libraries" / "PyKotor" / "src",
-    PYKOTOR_ROOT / "Libraries" / "PyKotorGL" / "src",
-    PYKOTOR_ROOT / "Libraries" / "Utility" / "src",
-    ROOT,
-]
+MCP_CONFIG_PATH = ROOT / ".cursor" / "mcp.json"
+PYTHONPATHS = [ROOT / "src", ROOT]
+if MCP_CONFIG_PATH.exists():
+    _mcp_data = json.loads(MCP_CONFIG_PATH.read_text(encoding="utf-8"))
+    _mcp_env = _mcp_data.get("mcpServers", {}).get("kotormcp", {}).get("env", {})
+    if _mcp_env.get("K1_PATH"):
+        os.environ.setdefault("K1_PATH", str(_mcp_env["K1_PATH"]))
+    if _mcp_env.get("K2_PATH"):
+        os.environ.setdefault("K2_PATH", str(_mcp_env["K2_PATH"]))
+    PYTHONPATHS.extend(Path(p) for p in str(_mcp_env.get("PYTHONPATH", "")).split(";") if p)
 for p in PYTHONPATHS:
-    sys.path.insert(0, str(p))
+    if p.exists():
+        sys.path.insert(0, str(p))
 
-os.environ.setdefault("K1_PATH", r"C:\Program Files (x86)\Steam\steamapps\common\swkotor")
+os.environ.setdefault("K1_PATH", r"h:\steam\steamapps\common\swkotor")
 os.environ.setdefault(
     "K2_PATH",
-    r"C:\Program Files (x86)\Steam\steamapps\common\Knights of the Old Republic II",
+    r"h:\steam\steamapps\common\Knights of the Old Republic II",
 )
 
 

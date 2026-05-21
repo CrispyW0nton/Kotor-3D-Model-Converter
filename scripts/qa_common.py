@@ -6,23 +6,29 @@ import argparse
 import asyncio
 import json
 import math
+import os
 import sys
 from pathlib import Path
 from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-KOTORMCP_SRC = Path(r"C:\Users\NewAdmin\Documents\GDeveloper\Workspaces\KotorMCP\src")
-PYKOTOR_SRC = Path(r"C:\Users\NewAdmin\Documents\GDeveloper\Workspaces\PyKotor\Libraries\PyKotor\src")
-PYKOTOR_GL_SRC = Path(r"C:\Users\NewAdmin\Documents\GDeveloper\Workspaces\PyKotor\Libraries\PyKotorGL\src")
-UTILITY_SRC = Path(r"C:\Users\NewAdmin\Documents\GDeveloper\Workspaces\PyKotor\Libraries\Utility\src")
+MCP_CONFIG_PATH = ROOT / ".cursor" / "mcp.json"
 EXPORTS = ROOT / "exports"
 
 
 def configure_paths() -> None:
-    for path in (ROOT, KOTORMCP_SRC, PYKOTOR_SRC, PYKOTOR_GL_SRC, UTILITY_SRC):
+    configured = [ROOT / "src", ROOT]
+    if MCP_CONFIG_PATH.exists():
+        data = json.loads(MCP_CONFIG_PATH.read_text(encoding="utf-8"))
+        env = data.get("mcpServers", {}).get("kotormcp", {}).get("env", {})
+        for key in ("K1_PATH", "K2_PATH"):
+            if env.get(key):
+                os.environ.setdefault(key, env[key])
+        configured.extend(Path(p) for p in str(env.get("PYTHONPATH", "")).split(";") if p)
+    for path in configured:
         text = str(path)
-        if text not in sys.path:
+        if path.exists() and text not in sys.path:
             sys.path.insert(0, text)
 
 
