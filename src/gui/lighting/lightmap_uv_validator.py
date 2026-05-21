@@ -26,8 +26,70 @@ class UVValidationResult:
         return "ok"
 
 
+@dataclass
+class UVChannelInfo:
+    mesh_name: str
+    channel_index: int
+    display_name: str
+    uv_count: int
+    face_count: int
+    has_uvs: bool
+    has_overlaps: bool
+    has_out_of_bounds_uvs: bool
+    coverage_ratio: float
+    recommended_for_lightmap: bool
+    notes: list[str] = field(default_factory=list)
+
+
 class LightmapUVValidator:
     """Inspect existing mesh UVs without modifying them."""
+
+    def inspect_mesh_uv_channels(self, mesh: object, max_channels: int = 3) -> list[UVChannelInfo]:
+        """Return artist-facing UV channel stats for a selected mesh.
+
+        The UI displays UV1/UV2/UV3 while the data model remains zero-indexed.
+        Lightmap bakes normally want UV2/internal channel 1 because diffuse UVs
+        often tile, mirror, or overlap in ways that are valid for materials but
+        invalid for lightmaps.
+        """
+        infos: list[UVChannelInfo] = []
+        highest = max(max_channels, self._highest_existing_channel(mesh) + 1)
+        for channel in range(highest):
+            validation = self.validate_mesh_uvs(mesh, channel)
+            uvs = self._uvs(mesh, channel)
+            notes = [*validation.warnings, *validation.errors]
+            coverage = self.estimate_coverage_ratio(mesh, channel)
+            has_out_of_bounds = any("outside the 0-1 range" in note for note in notes)
+            has_uvs = bool(uvs)
+            recommended = (
+                has_uvs
+                and not validation.errors
+                and not validation.overlaps
+                and not has_out_of_bounds
+                and not validation.degenerate_triangles
+                and coverage >= 0.03
+                and channel != 0
+            )
+            if has_uvs and channel == 0 and (validation.overlaps or has_out_of_bounds or coverage > 0.95):
+                notes.append("UV1 appears to be diffuse/material UVs and may be tiled or stacked.")
+            if has_uvs and coverage < 0.03:
+                notes.append("Atlas coverage is very low; generated lightmap UVs may bake cleaner.")
+            infos.append(
+                UVChannelInfo(
+                    mesh_name=str(getattr(mesh, "name", "mesh") or "mesh"),
+                    channel_index=channel,
+                    display_name=self.display_name(channel),
+                    uv_count=len(uvs),
+                    face_count=len(getattr(mesh, "faces", []) or []),
+                    has_uvs=has_uvs,
+                    has_overlaps=bool(validation.overlaps),
+                    has_out_of_bounds_uvs=has_out_of_bounds,
+                    coverage_ratio=coverage,
+                    recommended_for_lightmap=recommended,
+                    notes=notes,
+                )
+            )
+        return infos
 
     def validate_mesh_uvs(self, mesh: object, uv_channel: int) -> UVValidationResult:
         name = str(getattr(mesh, "name", "mesh") or "mesh")
@@ -79,6 +141,9 @@ class LightmapUVValidator:
         return bool(getattr(mesh, "uvs_lm", None))
 
     def find_best_uv_channel(self, mesh: object) -> int:
+        for info in self.inspect_mesh_uv_channels(mesh, 3):
+            if info.channel_index == 1 and info.recommended_for_lightmap:
+                return 1
         if self.has_lightmap_uvs(mesh):
             return 1
         if getattr(mesh, "uvs", None):
@@ -141,9 +206,33 @@ class LightmapUVValidator:
             return {"min": 0.0, "max": 0.0, "average": 0.0}
         return {"min": min(values), "max": max(values), "average": sum(values) / len(values)}
 
+    def estimate_coverage_ratio(self, mesh: object, uv_channel: int) -> float:
+        area = 0.0
+        for tri in self._face_uv_triangles(mesh, uv_channel):
+            if tri is None:
+                continue
+            area += max(0.0, abs(_area2(tri)) * 0.5)
+        return max(0.0, min(1.0, float(area)))
+
+    def is_safe_for_baking(self, mesh: object, uv_channel: int) -> bool:
+        info = self.inspect_mesh_uv_channels(mesh, max_channels=uv_channel + 1)[uv_channel]
+        return bool(info.has_uvs and not info.has_overlaps and not info.has_out_of_bounds_uvs and info.coverage_ratio > 0.0)
+
+    def display_name(self, uv_channel: int) -> str:
+        return f"UV{int(uv_channel) + 1}"
+
     def _uvs(self, mesh: object, uv_channel: int) -> list:
-        attr = {0: "uvs", 1: "uvs_lm", 2: "uvs_2", 3: "uvs_3"}.get(int(uv_channel), "uvs")
+        attr = uv_attr_for_channel(uv_channel)
         return list(getattr(mesh, attr, []) or [])
+
+    def _face_uv_indices(self, mesh: object, uv_channel: int, face_index: int):
+        faces = getattr(mesh, "faces", []) or []
+        if face_index >= len(faces):
+            return None
+        face_uvs = getattr(mesh, face_uv_attr_for_channel(uv_channel), []) or []
+        if face_uvs and face_index < len(face_uvs):
+            return face_uvs[face_index]
+        return faces[face_index]
 
     def _face_uv_triangles(self, mesh: object, uv_channel: int) -> list[tuple[tuple[float, float], ...] | None]:
         return [self._face_uv_triangle(mesh, uv_channel, fi) for fi, _face in enumerate(getattr(mesh, "faces", []) or [])]
@@ -156,14 +245,7 @@ class LightmapUVValidator:
         uvs = self._uvs(mesh, uv_channel)
         if not uvs:
             return None
-        if uv_channel == 0:
-            face_uvs = getattr(mesh, "face_uvs", []) or []
-            if face_uvs and face_index < len(face_uvs):
-                indices = face_uvs[face_index]
-            else:
-                indices = face
-        else:
-            indices = face
+        indices = self._face_uv_indices(mesh, uv_channel, face_index)
         try:
             return tuple((float(uvs[int(i)][0]), float(uvs[int(i)][1])) for i in indices)
         except Exception:
@@ -171,6 +253,21 @@ class LightmapUVValidator:
 
     def _detect_inverted(self, mesh: object, uv_channel: int) -> list[int]:
         return [fi for fi, tri in enumerate(self._face_uv_triangles(mesh, uv_channel)) if tri is not None and _area2(tri) < -1.0e-10]
+
+    def _highest_existing_channel(self, mesh: object) -> int:
+        highest = -1
+        for channel in range(8):
+            if self._uvs(mesh, channel):
+                highest = channel
+        return highest
+
+
+def uv_attr_for_channel(uv_channel: int) -> str:
+    return {0: "uvs", 1: "uvs_lm", 2: "uvs_2", 3: "uvs_3"}.get(int(uv_channel), f"uvs_{int(uv_channel)}")
+
+
+def face_uv_attr_for_channel(uv_channel: int) -> str:
+    return {0: "face_uvs", 1: "face_uvs_lm", 2: "face_uvs_2", 3: "face_uvs_3"}.get(int(uv_channel), f"face_uvs_{int(uv_channel)}")
 
 
 def _area2(tri: tuple[tuple[float, float], ...]) -> float:

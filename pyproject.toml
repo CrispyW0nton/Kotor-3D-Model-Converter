@@ -40,8 +40,9 @@ classifiers = [
 # ── Core runtime dependencies ───────────────────────────────────────────────
 # All optional for the pure-data pipeline; required for the GUI.
 dependencies = [
-    "Pillow>=9.0.0",
-    "numpy>=1.21.0",
+    "Pillow>=10.0",
+    "numpy>=2.0",
+    "imageio",
     "pygltflib>=1.15.0",
     "flask>=2.3.0",
     "requests>=2.28.0",
@@ -74,7 +75,9 @@ kotor = [
     "pykotor>=2.3.1",
 ]
 mesh = [
-    "trimesh[easy]>=3.15.0",
+    "trimesh[easy]>=4.0",
+    "xatlas>=0.0.11",
+    "open3d",
     "pygltflib>=1.15.0",
 ]
 mcp = [

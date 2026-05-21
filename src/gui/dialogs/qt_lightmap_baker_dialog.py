@@ -10,8 +10,11 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.gui.lighting.lightmap_bake_job import LightmapBakeJob
 from src.gui.lighting.lightmap_bake_settings import LightmapBakeSettings, SUPPORTED_LIGHTMAP_RESOLUTIONS
-from src.gui.lighting.lightmap_bake_worker import LightmapBakeWorker
+from src.gui.lighting.lightmap_bake_worker import LightmapBakeWorker, LightmapPreviewBakeWorker
 from src.gui.lighting.lightmap_baker import LightmapBaker
+from src.gui.qt_lib.dialogs.lightmap_preview_window import LightmapPreviewWindow
+from src.gui.qt_lib.dialogs.uv_geometry_preview_window import UVGeometryPreviewWindow
+from src.gui.qt_lib.dialogs.uv_preview_window import UVPreviewWindow
 
 
 class QtLightmapBakerDialog(QtWidgets.QDialog):
@@ -40,6 +43,13 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
         self.texture_cache = texture_cache
         self._thread: QtCore.QThread | None = None
         self._worker: LightmapBakeWorker | None = None
+        self._preview_thread: QtCore.QThread | None = None
+        self._preview_worker: LightmapPreviewBakeWorker | None = None
+        self._preview_timer = QtCore.QTimer(self)
+        self._preview_timer.setSingleShot(True)
+        self._preview_timer.setInterval(450)
+        self._preview_timer.timeout.connect(self._start_preview_bake)
+        self._preview_window: LightmapPreviewWindow | None = None
         self._last_result = None
         self._default_output_dir = default_output_dir or str(Path("exports/lightmaps").resolve())
         self._build()
@@ -67,6 +77,28 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
         for button in (self.target_entire, self.target_selected, self.target_visible):
             target_layout.addWidget(button)
         form_root.addWidget(target_group)
+
+        mesh_group = QtWidgets.QGroupBox("Selected Mesh UVs")
+        mesh_layout = QtWidgets.QGridLayout(mesh_group)
+        self.selected_mesh_label = QtWidgets.QLabel(self._selected_mesh_name())
+        self.uv_combo = QtWidgets.QComboBox()
+        self.uv_combo.currentIndexChanged.connect(lambda _index=0: self._on_uv_changed())
+        self.uv_status = QtWidgets.QLabel("")
+        self.preview_uv_btn = QtWidgets.QPushButton("Preview UVs")
+        self.preview_uv_btn.clicked.connect(self._open_uv_preview)
+        self.preview_geo_btn = QtWidgets.QPushButton("Preview Geometry in UVs")
+        self.preview_geo_btn.clicked.connect(self._open_uv_geometry_preview)
+        self.generate_uv_btn = QtWidgets.QPushButton("Generate Lightmap UVs")
+        self.generate_uv_btn.clicked.connect(self._generate_lightmap_uvs)
+        mesh_layout.addWidget(QtWidgets.QLabel("Mesh"), 0, 0)
+        mesh_layout.addWidget(self.selected_mesh_label, 0, 1, 1, 3)
+        mesh_layout.addWidget(QtWidgets.QLabel("Lightmap UV"), 1, 0)
+        mesh_layout.addWidget(self.uv_combo, 1, 1)
+        mesh_layout.addWidget(self.preview_uv_btn, 1, 2)
+        mesh_layout.addWidget(self.preview_geo_btn, 1, 3)
+        mesh_layout.addWidget(self.uv_status, 2, 0, 1, 3)
+        mesh_layout.addWidget(self.generate_uv_btn, 2, 3)
+        form_root.addWidget(mesh_group)
 
         top_grid = QtWidgets.QGridLayout()
         self.preset_combo = QtWidgets.QComboBox()
@@ -126,6 +158,18 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
         self.dilation_spin = self._spin(0, 128, 8)
         self.exposure_spin = self._double_spin(0.01, 16.0, 1.0)
         self.gamma_spin = self._double_spin(0.01, 8.0, 2.2)
+        self.ambient_strength_spin = self._double_spin(0.0, 4.0, 1.0)
+        self.diffuse_strength_spin = self._double_spin(0.0, 4.0, 1.0)
+        self.indirect_strength_spin = self._double_spin(0.0, 4.0, 1.0)
+        self.shadow_strength_spin = self._double_spin(0.0, 1.0, 1.0)
+        self.normal_bias_spin = self._double_spin(0.0, 0.1, 0.002)
+        self.normal_bias_spin.setDecimals(4)
+        self.falloff_spin = self._double_spin(0.01, 10.0, 1.0)
+        self.ambient_strength_control = self._slider_control(self.ambient_strength_spin, 100)
+        self.diffuse_strength_control = self._slider_control(self.diffuse_strength_spin, 100)
+        self.indirect_strength_control = self._slider_control(self.indirect_strength_spin, 100)
+        self.shadow_strength_control = self._slider_control(self.shadow_strength_spin, 100)
+        self.falloff_control = self._slider_control(self.falloff_spin, 100)
         labels = [
             ("Samples per texel", self.samples_spin),
             ("Shadow samples", self.shadow_samples_spin),
@@ -133,6 +177,12 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
             ("Dilation passes", self.dilation_spin),
             ("Exposure", self.exposure_spin),
             ("Gamma", self.gamma_spin),
+            ("Ambient strength", self.ambient_strength_control),
+            ("Diffuse strength", self.diffuse_strength_control),
+            ("Indirect strength", self.indirect_strength_control),
+            ("Shadow strength", self.shadow_strength_control),
+            ("Normal bias", self.normal_bias_spin),
+            ("Light falloff", self.falloff_control),
         ]
         for idx, (label, widget) in enumerate(labels):
             quality_layout.addWidget(QtWidgets.QLabel(label), idx // 2, (idx % 2) * 2)
@@ -146,6 +196,8 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
         browse.clicked.connect(self._browse_output)
         self.manifest_check = self._check("Generate manifest", True)
         self.preview_check = self._check("Preview after bake", True)
+        self.live_preview_check = self._check("Live Preview", False)
+        self.compare_original_check = self._check("Compare Original", False)
         self.overwrite_check = self._check("Overwrite existing", False)
         output_layout.addWidget(QtWidgets.QLabel("Output directory"), 0, 0)
         output_layout.addWidget(self.output_edit, 0, 1)
@@ -153,6 +205,8 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
         output_layout.addWidget(self.manifest_check, 1, 0)
         output_layout.addWidget(self.preview_check, 1, 1)
         output_layout.addWidget(self.overwrite_check, 1, 2)
+        output_layout.addWidget(self.live_preview_check, 2, 0)
+        output_layout.addWidget(self.compare_original_check, 2, 1)
         form_root.addWidget(output_group)
 
         self.progress = QtWidgets.QProgressBar()
@@ -168,6 +222,8 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
         buttons = QtWidgets.QHBoxLayout()
         self.validate_btn = QtWidgets.QPushButton("Validate UVs")
         self.validate_btn.clicked.connect(self._validate_uvs)
+        self.bake_preview_btn = QtWidgets.QPushButton("Bake Preview")
+        self.bake_preview_btn.clicked.connect(self._start_preview_bake)
         self.bake_btn = QtWidgets.QPushButton("Bake")
         self.bake_btn.setProperty("accent", True)
         self.bake_btn.clicked.connect(self._start_bake)
@@ -183,9 +239,21 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
         self.open_btn.clicked.connect(self._open_output_folder)
         close_btn = QtWidgets.QPushButton("Close")
         close_btn.clicked.connect(self.accept)
-        for btn in (self.validate_btn, self.bake_btn, self.cancel_btn, self.preview_btn, self.apply_btn, self.revert_btn, self.open_btn, close_btn):
+        for btn in (self.validate_btn, self.bake_preview_btn, self.bake_btn, self.cancel_btn, self.preview_btn, self.apply_btn, self.revert_btn, self.open_btn, close_btn):
             buttons.addWidget(btn)
         root.addLayout(buttons)
+        for widget in (
+            self.res_combo,
+            self.ambient_strength_spin,
+            self.diffuse_strength_spin,
+            self.indirect_strength_spin,
+            self.shadow_strength_spin,
+            self.normal_bias_spin,
+            self.falloff_spin,
+        ):
+            signal = widget.currentIndexChanged if isinstance(widget, QtWidgets.QComboBox) else widget.valueChanged
+            signal.connect(lambda *_args: self._schedule_live_preview())
+        self._refresh_uv_channels()
 
     def _check(self, text: str, checked: bool) -> QtWidgets.QCheckBox:
         check = QtWidgets.QCheckBox(text)
@@ -208,6 +276,19 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
         spin.valueChanged.connect(lambda _value=0.0: self.preset_combo.setCurrentText("Custom"))
         return spin
 
+    def _slider_control(self, spin: QtWidgets.QDoubleSpinBox, scale: int) -> QtWidgets.QWidget:
+        box = QtWidgets.QWidget()
+        row = QtWidgets.QHBoxLayout(box)
+        row.setContentsMargins(0, 0, 0, 0)
+        slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        slider.setRange(int(spin.minimum() * scale), int(spin.maximum() * scale))
+        slider.setValue(int(spin.value() * scale))
+        slider.valueChanged.connect(lambda value: spin.setValue(float(value) / float(scale)))
+        spin.valueChanged.connect(lambda value: slider.setValue(int(float(value) * scale)))
+        row.addWidget(slider, 1)
+        row.addWidget(spin)
+        return box
+
     def _apply_preset(self, preset: str) -> None:
         if preset == "custom":
             return
@@ -225,6 +306,8 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
         fmt = str(self.format_combo.currentText()).lower()
         return LightmapBakeSettings(
             resolution=int(self.res_combo.currentData()),
+            bake_resolution=int(self.res_combo.currentData()),
+            selected_uv_channel=int(self.uv_combo.currentData() if self.uv_combo.count() else 1),
             output_format=fmt,
             output_directory=self.output_edit.text().strip(),
             filename_prefix=self.prefix_edit.text().strip(),
@@ -244,6 +327,15 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
             use_direct_lighting=self.direct_check.isChecked(),
             use_indirect_approximation=self.indirect_check.isChecked(),
             samples_per_texel=int(self.samples_spin.value()),
+            ambient_strength=float(self.ambient_strength_spin.value()),
+            diffuse_strength=float(self.diffuse_strength_spin.value()),
+            indirect_strength=float(self.indirect_strength_spin.value()),
+            shadow_strength=float(self.shadow_strength_spin.value()),
+            normal_bias=float(self.normal_bias_spin.value()),
+            light_falloff_multiplier=float(self.falloff_spin.value()),
+            use_aurora_lights=self.aurora_check.isChecked(),
+            use_original_lightmap_as_reference=self.compare_original_check.isChecked(),
+            preview_resolution=128,
             shadow_samples=int(self.shadow_samples_spin.value()),
             padding_pixels=int(self.padding_spin.value()),
             dilation_passes=int(self.dilation_spin.value()),
@@ -264,6 +356,147 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
             visible_meshes=self.visible_meshes,
             texture_cache=self.texture_cache,
         )
+
+    def _selected_mesh(self) -> object | None:
+        if self.selected_meshes:
+            return self.selected_meshes[0]
+        if self.visible_meshes:
+            return self.visible_meshes[0]
+        return None
+
+    def _selected_mesh_name(self) -> str:
+        mesh = self._selected_mesh()
+        if mesh is None:
+            return "No mesh selected"
+        return str(getattr(mesh, "name", "mesh") or "mesh")
+
+    def _refresh_uv_channels(self) -> None:
+        mesh = self._selected_mesh()
+        self.uv_combo.blockSignals(True)
+        self.uv_combo.clear()
+        if mesh is None:
+            self.uv_combo.addItem("UV2 (missing)", 1)
+            self.uv_status.setText("No mesh selected.")
+            self.uv_combo.blockSignals(False)
+            return
+        baker = LightmapBaker()
+        infos = baker.uv_validator.inspect_mesh_uv_channels(mesh, 3)
+        for info in infos:
+            label = f"{info.display_name} - {'OK' if info.has_uvs else 'missing'}"
+            if info.recommended_for_lightmap:
+                label += " (recommended)"
+            self.uv_combo.addItem(label, info.channel_index)
+        preferred = 1 if any(info.channel_index == 1 and info.has_uvs for info in infos) else 0
+        idx = self.uv_combo.findData(preferred)
+        if idx >= 0:
+            self.uv_combo.setCurrentIndex(idx)
+        self.uv_combo.blockSignals(False)
+        self._update_uv_status()
+
+    def _update_uv_status(self) -> None:
+        mesh = self._selected_mesh()
+        if mesh is None:
+            self.uv_status.setText("No mesh selected.")
+            return
+        channel = int(self.uv_combo.currentData() if self.uv_combo.count() else 1)
+        info = LightmapBaker().uv_validator.inspect_mesh_uv_channels(mesh, max_channels=channel + 1)[channel]
+        notes = "; ".join(info.notes[:2])
+        state = "safe for baking" if info.recommended_for_lightmap else "review before baking"
+        if not info.has_uvs:
+            state = "missing"
+        self.uv_status.setText(f"{info.display_name}: {state}, coverage {info.coverage_ratio:.1%}. {notes}".strip())
+
+    def _on_uv_changed(self) -> None:
+        self._update_uv_status()
+        self._schedule_live_preview()
+
+    def _open_uv_preview(self) -> None:
+        mesh = self._selected_mesh()
+        if mesh is None:
+            QtWidgets.QMessageBox.information(self, "UV Preview", "Select a mesh before previewing UVs.")
+            return
+        win = UVPreviewWindow(mesh, self, channel=int(self.uv_combo.currentData()))
+        win.show()
+
+    def _open_uv_geometry_preview(self) -> None:
+        mesh = self._selected_mesh()
+        if mesh is None:
+            QtWidgets.QMessageBox.information(self, "Geometry in UVs", "Select a mesh before previewing UV geometry.")
+            return
+        win = UVGeometryPreviewWindow(mesh, self, channel=int(self.uv_combo.currentData()))
+        win.show()
+
+    def _generate_lightmap_uvs(self) -> None:
+        mesh = self._selected_mesh()
+        if mesh is None:
+            QtWidgets.QMessageBox.information(self, "Lightmap UVs", "Select a mesh before generating lightmap UVs.")
+            return
+        channel = 1
+        baker = LightmapBaker()
+        existing = bool(baker.uv_validator._uvs(mesh, channel))
+        replace = False
+        if existing:
+            choice = QtWidgets.QMessageBox.question(
+                self,
+                "Generate Lightmap UVs",
+                "UV2 already exists. Replace UV2?\nChoose No to create UV3 instead.",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No | QtWidgets.QMessageBox.Cancel,
+                QtWidgets.QMessageBox.No,
+            )
+            if choice == QtWidgets.QMessageBox.Cancel:
+                return
+            replace = choice == QtWidgets.QMessageBox.Yes
+            if not replace:
+                channel = baker.uv_generator.choose_free_channel(mesh, preferred=2)
+        result = baker.generate_lightmap_uvs(mesh, target_channel=channel, replace_existing=replace, settings=self._settings())
+        for message in [*result.messages, *result.warnings, *result.errors]:
+            self._log(message)
+        if result.success:
+            self._refresh_uv_channels()
+            self._set_combo_data(self.uv_combo, result.channel_index)
+            self._schedule_live_preview()
+
+    def _schedule_live_preview(self) -> None:
+        if self.live_preview_check.isChecked():
+            self._preview_timer.start()
+
+    def _start_preview_bake(self) -> None:
+        mesh = self._selected_mesh()
+        if mesh is None:
+            self._log("No mesh selected for preview.")
+            return
+        if self._preview_worker is not None:
+            self._preview_worker.cancel()
+        if self._preview_thread is not None:
+            self._preview_thread.quit()
+            self._preview_thread.wait(100)
+        self._preview_thread = QtCore.QThread(self)
+        self._preview_worker = LightmapPreviewBakeWorker(mesh, self.lights, self._settings())
+        self._preview_worker.moveToThread(self._preview_thread)
+        self._preview_thread.started.connect(self._preview_worker.run)
+        self._preview_worker.finished.connect(self._on_preview_finished)
+        self._preview_worker.finished.connect(self._preview_thread.quit)
+        self._preview_worker.finished.connect(self._preview_worker.deleteLater)
+        self._preview_thread.finished.connect(self._preview_thread.deleteLater)
+        self._preview_thread.finished.connect(self._clear_preview_thread)
+        self._preview_thread.start()
+
+    def _on_preview_finished(self, result) -> None:
+        for message in getattr(result, "messages", []):
+            self._log(f"Preview: {message}")
+        for message in getattr(result, "warnings", []):
+            self._log(f"Preview warning: {message}")
+        for message in getattr(result, "errors", []):
+            self._log(f"Preview error: {message}")
+        if getattr(result, "preview_image", None) is not None:
+            if self._preview_window is None:
+                self._preview_window = LightmapPreviewWindow(self._selected_mesh(), self, texture_cache=self.texture_cache)
+            self._preview_window.set_preview_image(result.preview_image)
+            self._preview_window.show()
+
+    def _clear_preview_thread(self) -> None:
+        self._preview_thread = None
+        self._preview_worker = None
 
     def _validate_uvs(self) -> None:
         baker = LightmapBaker()
@@ -305,6 +538,9 @@ class QtLightmapBakerDialog(QtWidgets.QDialog):
         if self._worker is not None:
             self._worker.cancel()
             self._log("Cancellation requested.")
+        if self._preview_worker is not None:
+            self._preview_worker.cancel()
+            self._log("Preview cancellation requested.")
 
     def _on_progress(self, stage: str, value: int, total: int, detail: str) -> None:
         pct = int((float(value) / max(float(total), 1.0)) * 100.0)

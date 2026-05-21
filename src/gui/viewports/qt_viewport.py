@@ -31,6 +31,13 @@ from src.gui.qt_lib.gizmo.transform_controller import TransformController
 from src.gui.qt_lib.gizmo.transform_gizmo import TransformGizmo
 from src.gui.qt_lib.gizmo.transform_math import multiply_quaternions, ray_from_mouse
 from src.gui.qt_lib.viewports.qt_transform_typein_bar import QtTransformTypeInBar
+from src.gui.camera.camera_controller import CameraController
+from src.gui.camera.camera_gizmo_renderer import CameraGizmoRenderer
+from src.gui.camera.camera_manager import CameraManager
+from src.gui.camera.camera_overlays import CameraOverlays
+from src.gui.camera.camera_picker import CameraPicker
+from src.gui.camera.camera_viewport_adapter import CameraViewportAdapter
+from src.gui.camera.frame_renderer import FrameRenderer as CameraFrameRenderer
 from src.gui.lighting.light_picker import LightPicker
 from src.measurement.angle_snap import AngleSnap
 from src.measurement.dimension_calculator import DimensionCalculator
@@ -39,6 +46,27 @@ from src.measurement.measurement_controller import MeasurementController
 from src.measurement.percent_snap import PercentSnap
 from src.measurement.unit_settings import MeasurementSettings
 from src.measurement.unit_system import UnitSystem
+from src.mesh_tools.mesh_attach import attach_selected_meshes
+from src.mesh_tools.mesh_edit_types import MeshOperationOptions, MeshOperationResult, MeshSelectionMode
+from src.mesh_tools.mesh_element import select_element_for_face
+from src.mesh_tools.mesh_history import MeshHistory
+from src.mesh_tools.mesh_operations import (
+    bridge_selected,
+    cap_selected_borders,
+    connect_selected,
+    delete_selected,
+    detach_selection,
+    flip_normals,
+    recalculate_normals,
+    remove_isolated_vertices,
+    target_weld_edge,
+    target_weld_vertex,
+    weld_selected_vertices,
+)
+from src.mesh_tools.mesh_selection_convert import convert_selection
+from src.mesh_tools.mesh_selection_state import MeshSelectionState
+from src.mesh_tools.mesh_topology import MeshTopology, normalize_edge
+from src.mesh_tools.mesh_validation import validate_mesh
 
 log = logging.getLogger(__name__)
 
@@ -359,8 +387,12 @@ class QtViewportWidget(QtWidgets.QWidget):
     nodeSelected = QtCore.Signal(object)
     nodeMoved = QtCore.Signal(object)
     meshSelectionChanged = QtCore.Signal(list)
+    meshSubobjectSelectionChanged = QtCore.Signal(object)
     meshVisibilityChanged = QtCore.Signal()
     measurementSettingsChanged = QtCore.Signal(dict)
+    cameraSelectionChanged = QtCore.Signal(object)
+    cameraChanged = QtCore.Signal()
+    activeCameraChanged = QtCore.Signal(object)
     gpuUploadProgress = QtCore.Signal(int, int)
     _texturePrewarmFinished = QtCore.Signal(object)
     _deferredTxiFinished = QtCore.Signal(object)
@@ -418,10 +450,25 @@ class QtViewportWidget(QtWidgets.QWidget):
             TransformController(self._evict_transform_cache, self.angle_snap, self.percent_snap)
         )
         self._light_picker = LightPicker()
+        self.camera_manager = CameraManager()
+        self._camera_adapter = CameraViewportAdapter(self.camera)
+        self.camera_controller = CameraController(self.camera_manager, self._camera_adapter)
+        self._camera_picker = CameraPicker()
+        self._camera_helper_renderer = CameraGizmoRenderer()
+        self._camera_overlays = CameraOverlays()
+        self._camera_frame_renderer = CameraFrameRenderer(self)
+        self._camera_view_active = False
+        self._lock_view_to_camera = False
+        self._active_camera_guard = False
+        self._render_suppress_camera_overlays = False
         self._transform_gizmo_dragging = False
         self._undo_limit = 250
         self._undo_stack: list[dict] = []
         self._redo_stack: list[dict] = []
+        self.mesh_selection_state = MeshSelectionState()
+        self._mesh_history = MeshHistory()
+        self._mesh_topology_cache: dict[int, MeshTopology] = {}
+        self._mesh_target_weld_source: int | None = None
         self._render_pending = False
         self._last_canvas_size = (0, 0)
         self._pixmap: Optional[QtGui.QPixmap] = None
@@ -576,6 +623,13 @@ class QtViewportWidget(QtWidgets.QWidget):
             active=True,
             tooltip="Texture (T)",
         )
+        self.grid_button = self._button(
+            self._toolbar_text("Grid", "Grid"),
+            self.toggle_grid,
+            checkable=True,
+            active=True,
+            tooltip="Show or hide the viewport grid",
+        )
         self.renderer_button = self._button("GPU", self.toggle_gpu_renderer, checkable=True, active=True)
         self.joint_dot_button = self._button("Dots", self.toggle_joint_dots, checkable=True, active=True)
         self.joint_dot_button.setToolTip("Show or hide AccuRig joint-dot handles")
@@ -590,6 +644,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         row.addWidget(self.wire_button)
         row.addWidget(self.bones_button)
         row.addWidget(self.texture_button)
+        row.addWidget(self.grid_button)
         row.addWidget(self.renderer_button)
         row.addWidget(self.xray_button)
         row.addWidget(self.joint_dot_button)
@@ -653,6 +708,22 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.navigation_button = self._button(self._navigation_button_text(), self._cycle_navigation_profile)
         self.navigation_button.setToolTip(self._navigation_tooltip())
         row.addWidget(self.navigation_button)
+        row.addWidget(self._separator())
+        self.camera_view_combo = QtWidgets.QComboBox()
+        self.camera_view_combo.addItem("Perspective", "")
+        self.camera_view_combo.addItems(["Top", "Front", "Side"])
+        self.camera_view_combo.setFixedHeight(22)
+        self.camera_view_combo.setToolTip("Viewport camera")
+        self.camera_view_combo.setStyleSheet(self.shade_combo.styleSheet())
+        self.camera_view_combo.currentIndexChanged.connect(lambda _index=0: self._on_camera_view_combo_changed())
+        row.addWidget(self.camera_view_combo)
+        self.lock_camera_button = self._button(
+            self._toolbar_text("Lock View To Camera", "Lock"),
+            self.set_lock_view_to_camera,
+            checkable=True,
+            tooltip="Lock viewport navigation to the active scene camera",
+        )
+        row.addWidget(self.lock_camera_button)
         row.addStretch(1)
 
         self.canvas = QtWidgets.QLabel("No model loaded")
@@ -671,6 +742,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._renderer.show_bones = self.bones_button.isChecked()
         self._renderer.show_texture = self.texture_button.isChecked()
         self._renderer.show_wireframe = self.wire_button.isChecked()
+        self._renderer.show_grid = self.grid_button.isChecked()
         self._renderer.render_mode = self.render_mode_combo.currentText().lower()
 
         if self._compact_controls:
@@ -782,6 +854,9 @@ class QtViewportWidget(QtWidgets.QWidget):
             clear_prebuilt_static_gpu_model_data(old_model)
         self.model = model
         self._renderer.set_model(model)
+        self.camera_manager.set_model(model)
+        self._camera_view_active = False
+        self._refresh_camera_view_combo()
         self._clear_edit_history()
         self._gpu_tex_preload_model_id = 0
         if self._gpu_renderer is not None:
@@ -803,6 +878,8 @@ class QtViewportWidget(QtWidgets.QWidget):
             self.canvas.setPixmap(QtGui.QPixmap())
             self.canvas.setText("No model loaded")
             self._update_uv_viewer_model()
+            self.camera_manager.set_model(None)
+            self._refresh_camera_view_combo()
             # T403: clear the thumbnail when no model is loaded.
             self._refresh_thumbnail_safe()
             self.modelChanged.emit(None)
@@ -1029,6 +1106,16 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.texture_button.blockSignals(False)
         self._request_render()
 
+    def toggle_grid(self, checked: Optional[bool] = None) -> None:
+        enabled = bool(checked) if checked is not None else not bool(getattr(self._renderer, "show_grid", True))
+        self._renderer.show_grid = enabled
+        if self._gpu_renderer is not None:
+            self._gpu_renderer.show_grid = enabled
+        self.grid_button.blockSignals(True)
+        self.grid_button.setChecked(enabled)
+        self.grid_button.blockSignals(False)
+        self._request_render(fast=True)
+
     def set_lighting_mode(self, mode: str) -> None:
         mode = str(mode or "scene").strip().lower()
         allowed = {
@@ -1107,6 +1194,176 @@ class QtViewportWidget(QtWidgets.QWidget):
         if self._gpu_renderer is not None:
             self._gpu_renderer.clear_caches()
         self._request_render()
+
+    def refresh_cameras(self) -> None:
+        if self._camera_view_active:
+            camera = self.camera_manager.get_active_camera()
+            if camera is not None:
+                self.update_view_from_camera(camera)
+            else:
+                self.switch_to_perspective()
+        self._refresh_camera_view_combo()
+        self._request_render()
+
+    def create_scene_camera(self, camera_type: str = "Cinematic Camera"):
+        camera = self.camera_controller.create_camera(camera_type=camera_type, from_current_view=True)
+        self.set_selected_node(camera.original_ref)
+        self._refresh_camera_view_combo()
+        self.cameraChanged.emit()
+        self._request_render()
+        return camera
+
+    def create_camera_from_current_view(self, make_active: bool = True):
+        camera = self.camera_controller.create_camera_from_current_view(make_active=make_active)
+        self.set_selected_node(camera.original_ref)
+        self._refresh_camera_view_combo()
+        if make_active:
+            self.switch_to_camera(camera.id)
+        self.cameraChanged.emit()
+        return camera
+
+    def duplicate_selected_camera(self, camera_id: str | None = None):
+        camera = self.camera_manager.get_camera(camera_id or "")
+        if camera is None:
+            selected = self.camera_manager.selected_cameras()
+            camera = selected[-1] if selected else None
+        if camera is None:
+            return None
+        dup = self.camera_manager.duplicate_camera(camera.id)
+        if dup is not None:
+            self.set_selected_node(dup.original_ref)
+        self._refresh_camera_view_combo()
+        self.cameraChanged.emit()
+        self._request_render()
+        return dup
+
+    def delete_camera(self, camera_id: str) -> bool:
+        if self.camera_manager.active_camera_id == camera_id:
+            self.switch_to_perspective()
+        ok = self.camera_manager.delete_camera(camera_id)
+        if ok:
+            self._refresh_camera_view_combo()
+            self.cameraChanged.emit()
+            self._request_render()
+        return ok
+
+    def delete_selected_camera(self) -> None:
+        selected = self.camera_manager.selected_cameras()
+        if len(selected) > 1:
+            answer = QtWidgets.QMessageBox.question(self, "Delete Cameras", f"Delete {len(selected)} selected cameras?")
+            if answer != QtWidgets.QMessageBox.Yes:
+                return
+        for camera in list(selected):
+            self.delete_camera(camera.id)
+
+    def switch_to_camera(self, camera_id: str):
+        camera = self.camera_manager.set_active_camera(camera_id)
+        if camera is None:
+            return None
+        if not self._camera_view_active:
+            self._camera_adapter.save_perspective_state()
+        self._camera_view_active = True
+        self.update_view_from_camera(camera)
+        self._refresh_camera_view_combo()
+        self.activeCameraChanged.emit(camera.original_ref)
+        self._request_render()
+        return camera
+
+    def switch_to_perspective(self) -> None:
+        self.camera_manager.clear_active_camera()
+        if self._camera_view_active:
+            self._camera_adapter.restore_perspective_state()
+        self._camera_view_active = False
+        self._refresh_camera_view_combo()
+        self.activeCameraChanged.emit(None)
+        self._request_render()
+
+    def is_camera_view_active(self) -> bool:
+        return bool(self._camera_view_active and self.camera_manager.get_active_camera() is not None)
+
+    def update_view_from_camera(self, camera) -> None:
+        self._camera_adapter.update_view_from_camera(camera)
+        self._request_render()
+
+    def update_camera_from_view(self, camera=None) -> None:
+        target = camera or self.camera_manager.get_active_camera()
+        if target is None:
+            return
+        if bool(getattr(target, "locked", False)):
+            return
+        self._camera_adapter.update_camera_from_view(target)
+        self.camera_manager._store_on_model()
+        self.cameraChanged.emit()
+
+    def align_active_camera_to_view(self):
+        camera = self.camera_controller.align_active_camera_to_view()
+        if camera is not None:
+            self.cameraChanged.emit()
+            self._request_render()
+        return camera
+
+    def align_camera_to_current_view(self, camera_id: str):
+        camera = self.camera_manager.get_camera(camera_id)
+        if camera is None:
+            return None
+        self._camera_adapter.update_camera_from_view(camera)
+        self.cameraChanged.emit()
+        self._request_render()
+        return camera
+
+    def align_view_to_camera(self, camera_id: str):
+        return self.switch_to_camera(camera_id)
+
+    def set_lock_view_to_camera(self, checked: Optional[bool] = None) -> None:
+        self._lock_view_to_camera = bool(checked) if checked is not None else not self._lock_view_to_camera
+        if hasattr(self, "lock_camera_button"):
+            self.lock_camera_button.blockSignals(True)
+            self.lock_camera_button.setChecked(self._lock_view_to_camera)
+            self.lock_camera_button.blockSignals(False)
+
+    def render_still_frame(self, settings=None, camera_id: str = "") -> str:
+        camera = self.camera_manager.get_camera(camera_id) if camera_id else self.camera_manager.get_active_camera()
+        return self._camera_frame_renderer.render_to_file(
+            settings,
+            camera,
+            module_name=str(getattr(self.model, "name", "") or "scene"),
+        )
+
+    def _refresh_camera_view_combo(self) -> None:
+        combo = getattr(self, "camera_view_combo", None)
+        if combo is None:
+            return
+        current = self.camera_manager.active_camera_id if self._camera_view_active else ""
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("Perspective", "")
+        combo.addItem("Top", "__top__")
+        combo.addItem("Front", "__front__")
+        combo.addItem("Side", "__side__")
+        for camera in self.camera_manager.get_all_cameras():
+            combo.addItem(camera.name, camera.id)
+        index = combo.findData(current)
+        combo.setCurrentIndex(index if index >= 0 else 0)
+        combo.blockSignals(False)
+
+    def _on_camera_view_combo_changed(self) -> None:
+        combo = getattr(self, "camera_view_combo", None)
+        if combo is None:
+            return
+        value = str(combo.currentData() or "")
+        if not value:
+            self.switch_to_perspective()
+        elif value == "__top__":
+            self.switch_to_perspective()
+            self._snap_to_view("top")
+        elif value == "__front__":
+            self.switch_to_perspective()
+            self._snap_to_view("front")
+        elif value == "__side__":
+            self.switch_to_perspective()
+            self._snap_to_view("right")
+        else:
+            self.switch_to_camera(value)
 
     def toggle_gpu_renderer(self, checked: Optional[bool] = None) -> None:
         self._use_gpu = bool(checked) if checked is not None else not self._use_gpu
@@ -1369,6 +1626,10 @@ class QtViewportWidget(QtWidgets.QWidget):
         old_value = max(0.001, scale[axis_index])
         scale[axis_index] = value
         ratio = value / old_value
+        if bool(getattr(node, "is_camera", False)):
+            node._gr_helper_size = max(0.05, float(getattr(node, "_gr_helper_size", 1.0) or 1.0) * ratio)
+            node._gr_scale = tuple(scale)
+            return
         verts = getattr(node, "vertices", None)
         if verts is not None:
             node.vertices = [
@@ -1750,6 +2011,14 @@ class QtViewportWidget(QtWidgets.QWidget):
     def set_selected_node(self, node, orbit_bounds=None) -> None:
         if node is not None and self._renderer.is_hidden_bone_name(getattr(node, "name", "")):
             node = None
+        if node is not None and bool(getattr(node, "is_camera", False)):
+            camera = self.camera_manager.find_by_original(node)
+            if camera is not None:
+                self.camera_manager.select_camera(camera.id)
+                self.cameraSelectionChanged.emit(node)
+        elif hasattr(self, "camera_manager"):
+            self.camera_manager.clear_camera_selection()
+            self.cameraSelectionChanged.emit(None)
         if node is not None and self._is_selectable_mesh_node(node):
             self.set_selected_meshes([node], orbit_bounds=orbit_bounds)
             return
@@ -1782,6 +2051,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._uv_viewer.set_selected_node(node)
         self.nodeSelected.emit(node)
         self.meshSelectionChanged.emit([])
+        self._emit_mesh_subobject_selection()
         self._sync_transform_typein_bar()
         self._request_render()
 
@@ -1793,6 +2063,288 @@ class QtViewportWidget(QtWidgets.QWidget):
             return [node for node in self._renderer._iter_visible_mesh_nodes() if not getattr(node, "_gr_hidden", False)]
         except Exception:
             return []
+
+    def _active_edit_mesh(self):
+        active = getattr(self._renderer, "selected_node", None)
+        if self._is_selectable_mesh_node(active):
+            return active
+        meshes = self.get_selected_meshes()
+        return meshes[0] if meshes else None
+
+    def _active_topology(self) -> MeshTopology | None:
+        mesh = self._active_edit_mesh()
+        if mesh is None:
+            return None
+        cached = self._mesh_topology_cache.get(id(mesh))
+        if cached is None or cached.mesh is not mesh:
+            cached = MeshTopology.build_from_mesh(mesh)
+            self._mesh_topology_cache[id(mesh)] = cached
+        return cached
+
+    def _invalidate_mesh_topology(self, mesh=None) -> None:
+        if mesh is None:
+            self._mesh_topology_cache.clear()
+        else:
+            self._mesh_topology_cache.pop(id(mesh), None)
+        self._renderer._wt_cache.clear()
+        if self._gpu_renderer is not None:
+            self._gpu_renderer.invalidate_node_cache()
+
+    def set_mesh_selection_mode(self, mode) -> None:
+        try:
+            mode = mode if isinstance(mode, MeshSelectionMode) else MeshSelectionMode(str(mode).lower())
+        except Exception:
+            return
+        self.mesh_selection_state.set_mode(mode)
+        if mode is MeshSelectionMode.OBJECT:
+            self.mesh_selection_state.clear_subobject_selection()
+        self._emit_mesh_subobject_selection()
+        self._request_render()
+
+    def mesh_tool_select_all(self) -> None:
+        state = self.mesh_selection_state
+        topology = self._active_topology()
+        if state.mode is MeshSelectionMode.OBJECT:
+            self.set_selected_meshes(self.get_visible_meshes())
+            return
+        if topology is None:
+            return
+        if state.mode is MeshSelectionMode.VERTEX:
+            state.selected_vertices = set(range(len(topology.vertices)))
+        elif state.mode is MeshSelectionMode.EDGE:
+            state.selected_edges = set(topology.edges)
+        elif state.mode is MeshSelectionMode.BORDER:
+            state.selected_borders = set(range(len(topology.border_loops)))
+        elif state.mode is MeshSelectionMode.FACE:
+            state.selected_faces = set(range(len(topology.faces)))
+        elif state.mode is MeshSelectionMode.POLYGON:
+            state.selected_polygons = set(range(len(topology.faces)))
+            state.status_message = "Polygon Mode is using individual faces for this triangulated mesh."
+        elif state.mode is MeshSelectionMode.ELEMENT:
+            state.selected_elements = set(range(len(topology.connected_elements)))
+        self._emit_mesh_subobject_selection()
+        self._request_render()
+
+    def mesh_tool_clear_selection(self) -> None:
+        if self.mesh_selection_state.mode is MeshSelectionMode.OBJECT:
+            self.set_selected_meshes([])
+            return
+        self.mesh_selection_state.clear_subobject_selection()
+        self._emit_mesh_subobject_selection()
+        self._request_render()
+
+    def mesh_tool_invert_selection(self) -> None:
+        state = self.mesh_selection_state
+        topology = self._active_topology()
+        if topology is None:
+            return
+        if state.mode is MeshSelectionMode.VERTEX:
+            state.selected_vertices = set(range(len(topology.vertices))) - state.selected_vertices
+        elif state.mode is MeshSelectionMode.EDGE:
+            state.selected_edges = set(topology.edges) - state.selected_edges
+        elif state.mode is MeshSelectionMode.BORDER:
+            state.selected_borders = set(range(len(topology.border_loops))) - set(state.selected_borders)
+        elif state.mode is MeshSelectionMode.FACE:
+            state.selected_faces = set(range(len(topology.faces))) - state.selected_faces
+        elif state.mode is MeshSelectionMode.POLYGON:
+            state.selected_polygons = set(range(len(topology.faces))) - state.selected_polygons
+        elif state.mode is MeshSelectionMode.ELEMENT:
+            state.selected_elements = set(range(len(topology.connected_elements))) - state.selected_elements
+        self._emit_mesh_subobject_selection()
+        self._request_render()
+
+    def mesh_tool_grow_selection(self) -> None:
+        state = self.mesh_selection_state
+        topology = self._active_topology()
+        if topology is None:
+            return
+        if state.mode in (MeshSelectionMode.FACE, MeshSelectionMode.POLYGON):
+            selected = set(state.selected_faces or state.selected_polygons)
+            for fi in list(selected):
+                selected.update(topology.face_to_faces.get(fi, set()))
+            if state.mode is MeshSelectionMode.FACE:
+                state.selected_faces = selected
+            else:
+                state.selected_polygons = selected
+        elif state.mode is MeshSelectionMode.VERTEX:
+            for vi in list(state.selected_vertices):
+                for edge in topology.vertex_to_edges.get(vi, set()):
+                    state.selected_vertices.update(edge)
+        elif state.mode is MeshSelectionMode.EDGE:
+            for edge in list(state.selected_edges):
+                for vi in edge:
+                    state.selected_edges.update(topology.vertex_to_edges.get(vi, set()))
+        self._emit_mesh_subobject_selection()
+        self._request_render()
+
+    def mesh_tool_shrink_selection(self) -> None:
+        state = self.mesh_selection_state
+        topology = self._active_topology()
+        if topology is None:
+            return
+        if state.mode in (MeshSelectionMode.FACE, MeshSelectionMode.POLYGON):
+            selected = set(state.selected_faces or state.selected_polygons)
+            keep = {fi for fi in selected if topology.face_to_faces.get(fi, set()).issubset(selected)}
+            if state.mode is MeshSelectionMode.FACE:
+                state.selected_faces = keep
+            else:
+                state.selected_polygons = keep
+        self._emit_mesh_subobject_selection()
+        self._request_render()
+
+    def mesh_tool_loop_selection(self) -> MeshOperationResult:
+        topology = self._active_topology()
+        state = self.mesh_selection_state
+        if topology is None or not state.selected_edges:
+            return MeshOperationResult.fail("Select an edge before Loop.")
+        loop = topology.find_edge_loop(next(iter(state.selected_edges)))
+        if not loop:
+            return MeshOperationResult.fail("This topology does not support an edge loop from the selected edge.")
+        state.selected_edges = set(loop)
+        state.mode = MeshSelectionMode.EDGE
+        self._emit_mesh_subobject_selection()
+        self._request_render()
+        return MeshOperationResult.ok("Selected edge loop.", selection_changed=True)
+
+    def mesh_tool_ring_selection(self) -> MeshOperationResult:
+        topology = self._active_topology()
+        state = self.mesh_selection_state
+        if topology is None or not state.selected_edges:
+            return MeshOperationResult.fail("Select an edge before Ring.")
+        ring = topology.find_edge_ring(next(iter(state.selected_edges)))
+        if not ring:
+            return MeshOperationResult.fail("This topology does not support an edge ring from the selected edge.")
+        state.selected_edges = set(ring)
+        state.mode = MeshSelectionMode.EDGE
+        self._emit_mesh_subobject_selection()
+        self._request_render()
+        return MeshOperationResult.ok("Selected edge ring.", selection_changed=True)
+
+    def mesh_tool_convert_selection(self, mode) -> MeshOperationResult:
+        topology = self._active_topology()
+        if topology is None:
+            return MeshOperationResult.fail("No active mesh selected.")
+        try:
+            target = mode if isinstance(mode, MeshSelectionMode) else MeshSelectionMode(str(mode).lower())
+        except Exception:
+            return MeshOperationResult.fail("Unknown target selection mode.")
+        result = convert_selection(self.mesh_selection_state, topology, target)
+        self._emit_mesh_subobject_selection()
+        self._request_render()
+        return result
+
+    def mesh_tool_operation(self, operation: str, options: dict | None = None) -> MeshOperationResult:
+        options_obj = MeshOperationOptions(**(options or {}))
+        op = str(operation or "").strip().lower()
+        meshes = self.get_selected_meshes()
+        mesh = self._active_edit_mesh()
+        affected = list(meshes or ([mesh] if mesh is not None else []))
+        before = self._mesh_history.snapshot(affected)
+        result: MeshOperationResult
+        new_node = None
+        if op == "attach":
+            result, new_node = attach_selected_meshes(meshes)
+            if result.success and new_node is not None:
+                self._replace_meshes_with_combined(meshes, new_node)
+                self.set_selected_meshes([new_node])
+                affected = [new_node]
+        elif mesh is None:
+            result = MeshOperationResult.fail("No active mesh selected.")
+        elif op == "weld":
+            result = weld_selected_vertices(mesh, self.mesh_selection_state, options_obj)
+        elif op == "target_weld":
+            if self.mesh_selection_state.mode is MeshSelectionMode.EDGE:
+                selected_edges = sorted(self.mesh_selection_state.selected_edges)
+                if len(selected_edges) == 2:
+                    result = target_weld_edge(mesh, selected_edges[0], selected_edges[1], options_obj)
+                else:
+                    result = MeshOperationResult.fail("Target Edge Weld requires exactly two selected border edges.")
+            else:
+                selected = sorted(self.mesh_selection_state.selected_vertices)
+                if self._mesh_target_weld_source is None and selected:
+                    self._mesh_target_weld_source = selected[0]
+                    result = MeshOperationResult.ok("Target Weld source vertex set. Pick the target vertex.")
+                elif self._mesh_target_weld_source is not None and selected:
+                    result = target_weld_vertex(mesh, self.mesh_selection_state, self._mesh_target_weld_source, selected[-1], options_obj)
+                    self._mesh_target_weld_source = None
+                else:
+                    result = MeshOperationResult.fail("Select a source vertex, then a target vertex.")
+        elif op == "bridge":
+            result = bridge_selected(mesh, self.mesh_selection_state, options_obj)
+        elif op == "connect":
+            result = connect_selected(mesh, self.mesh_selection_state, options_obj)
+        elif op == "cap":
+            result = cap_selected_borders(mesh, self.mesh_selection_state, options_obj)
+        elif op == "delete":
+            result = delete_selected(mesh, self.mesh_selection_state, options_obj)
+        elif op == "remove_isolated":
+            result = remove_isolated_vertices(mesh)
+        elif op == "flip_normals":
+            result = flip_normals(mesh, self.mesh_selection_state)
+        elif op == "recalculate_normals":
+            result = recalculate_normals(mesh, self.mesh_selection_state)
+        elif op == "detach":
+            result, new_node = detach_selection(mesh, self.mesh_selection_state)
+            if result.success and new_node is not None:
+                self._append_mesh_node(new_node, parent=getattr(mesh, "parent", None))
+                self.set_selected_meshes([new_node])
+                affected = [mesh, new_node]
+        else:
+            result = MeshOperationResult.fail(f"Unsupported mesh operation: {operation}")
+        if result.success and (result.topology_changed or op in {"attach", "detach"}):
+            after = self._mesh_history.snapshot(affected)
+            self._mesh_history.record(result.message, before, after)
+            self._invalidate_mesh_topology()
+            for node in affected:
+                if hasattr(node, "compute_bounds"):
+                    node.compute_bounds()
+            self.meshVisibilityChanged.emit()
+        self.mesh_selection_state.status_message = result.message if result.success else "; ".join(result.errors or [result.message])
+        self._emit_mesh_subobject_selection()
+        self._request_render()
+        return result
+
+    def _replace_meshes_with_combined(self, meshes: list, combined) -> None:
+        parent = getattr(meshes[0], "parent", None) if meshes else getattr(self.model, "root_node", None)
+        for node in meshes:
+            setattr(node, "_gr_hidden", True)
+            if getattr(node, "parent", None) is not None:
+                try:
+                    node.parent.children.remove(node)
+                except ValueError:
+                    pass
+        self._append_mesh_node(combined, parent=parent)
+
+    def _append_mesh_node(self, node, parent=None) -> None:
+        if parent is None:
+            parent = getattr(self.model, "root_node", None)
+        if parent is not None:
+            node.parent = parent
+            if node not in parent.children:
+                parent.children.append(node)
+
+    def mesh_tool_undo(self) -> bool:
+        ok = self._mesh_history.undo()
+        if ok:
+            self._invalidate_mesh_topology()
+            self._emit_mesh_subobject_selection()
+            self._request_render()
+        return ok
+
+    def mesh_tool_redo(self) -> bool:
+        ok = self._mesh_history.redo()
+        if ok:
+            self._invalidate_mesh_topology()
+            self._emit_mesh_subobject_selection()
+            self._request_render()
+        return ok
+
+    def _emit_mesh_subobject_selection(self) -> None:
+        state = self.mesh_selection_state
+        active = self._active_edit_mesh()
+        state.active_mesh_id = str(getattr(active, "name", "")) if active is not None else None
+        state.selected_mesh_ids = {str(getattr(node, "name", id(node))) for node in self.get_selected_meshes()}
+        self.meshSubobjectSelectionChanged.emit(state)
 
     def set_baked_lightmap_assignments(self, assignments: dict, *, preview: bool = True) -> None:
         model = self.model
@@ -1884,6 +2436,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._uv_viewer.set_selected_node(active)
         self.nodeSelected.emit(active)
         self.meshSelectionChanged.emit(list(clean_nodes))
+        self._emit_mesh_subobject_selection()
         self._sync_transform_typein_bar()
         self._request_render()
 
@@ -2011,6 +2564,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             sources.append(self.model.mesh_nodes() or [])
         if hasattr(self.model, "all_nodes"):
             sources.append(self.model.all_nodes() or [])
+        sources.append(getattr(self.model, "_gr_extra_module_mesh_nodes", []) or [])
         result = []
         seen = set()
         for source in sources:
@@ -2326,7 +2880,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         before_scale=None,
         after_scale=None,
     ) -> None:
-        if node is None or not self._state_changed(before_pos, before_rot, after_pos, after_rot, before_vertices, after_vertices):
+        scale_changed = before_scale is not None and after_scale is not None and tuple(before_scale) != tuple(after_scale)
+        if node is None or (not scale_changed and not self._state_changed(before_pos, before_rot, after_pos, after_rot, before_vertices, after_vertices)):
             return
         self._undo_stack.append(
             {
@@ -2366,6 +2921,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._request_render()
 
     def undo(self) -> bool:
+        if getattr(self, "mesh_selection_state", None) is not None and self.mesh_selection_state.mode is not MeshSelectionMode.OBJECT:
+            if self.mesh_tool_undo():
+                return True
         if not self._undo_stack:
             return False
         action = self._undo_stack.pop()
@@ -2374,6 +2932,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         return True
 
     def redo(self) -> bool:
+        if getattr(self, "mesh_selection_state", None) is not None and self.mesh_selection_state.mode is not MeshSelectionMode.OBJECT:
+            if self.mesh_tool_redo():
+                return True
         if not self._redo_stack:
             return False
         action = self._redo_stack.pop()
@@ -2384,6 +2945,17 @@ class QtViewportWidget(QtWidgets.QWidget):
         return True
 
     def _notify_node_moved(self, node) -> None:
+        if bool(getattr(node, "is_camera", False)):
+            camera = self.camera_manager.find_by_original(node)
+            if camera is not None:
+                camera.position = tuple(float(v) for v in getattr(node, "position", camera.position)[:3])
+                camera.rotation = tuple(float(v) for v in getattr(node, "rotation", camera.rotation)[:4])
+                camera.metadata["helper_size"] = float(getattr(node, "_gr_helper_size", camera.metadata.get("helper_size", 1.0)) or 1.0)
+                camera.apply_to_original()
+                self.camera_manager._store_on_model()
+                if self.camera_manager.active_camera_id == camera.id:
+                    self.update_view_from_camera(camera)
+                self.cameraChanged.emit()
         if self.on_node_moved:
             self.on_node_moved(node)
         self.nodeMoved.emit(node)
@@ -2489,8 +3061,12 @@ class QtViewportWidget(QtWidgets.QWidget):
                     self._release_lmb(event)
                     return True
             if et == QtCore.QEvent.Wheel:
+                if self.is_camera_view_active() and not self._lock_view_to_camera:
+                    return True
                 steps = event.angleDelta().y() / 120.0
                 self.camera.zoom(steps)
+                if self.is_camera_view_active() and self._lock_view_to_camera:
+                    self.update_camera_from_view()
                 self._renderer.is_interactive = False
                 self._request_render()
                 return True
@@ -2520,6 +3096,8 @@ class QtViewportWidget(QtWidgets.QWidget):
                     self.texture_button.click(); return True
                 if key == QtCore.Qt.Key_G and no_modifiers:
                     self.gimbal_button.click(); return True
+                if key == QtCore.Qt.Key_G and (event.modifiers() & QtCore.Qt.AltModifier):
+                    self.grid_button.click(); return True
                 if key == QtCore.Qt.Key_S and no_modifiers:
                     self.snap_button.click(); return True
                 if key == QtCore.Qt.Key_A and no_modifiers and self._navigation_profile != "maya":
@@ -2594,6 +3172,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._request_render(fast=True)
 
     def _navigation_action(self, button, modifiers) -> str:
+        if self.is_camera_view_active() and not self._lock_view_to_camera:
+            return ""
         alt = has_modifier(modifiers, QtCore.Qt.AltModifier)
         shift = has_modifier(modifiers, QtCore.Qt.ShiftModifier)
         ctrl = has_modifier(modifiers, QtCore.Qt.ControlModifier)
@@ -2642,6 +3222,8 @@ class QtViewportWidget(QtWidgets.QWidget):
             self.camera.pan(dx, dy, self.canvas.height())
         elif self._nav_dragging == "zoom":
             self.camera.zoom((-dy + dx) / 120.0)
+        if self.is_camera_view_active() and self._lock_view_to_camera:
+            self.update_camera_from_view()
         self._renderer.is_interactive = self._fast_drag_enabled
         self._request_render(fast=True)
 
@@ -3142,7 +3724,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gpu_renderer.render_mode = str(getattr(self._renderer, "render_mode", "realistic") or "realistic")
         self._gpu_renderer.selected_node = getattr(self._renderer, "selected_node", None)
         self._gpu_renderer.selected_nodes = list(getattr(self, "_selected_meshes", []) or [])
-        self._gpu_renderer.show_grid = True
+        self._gpu_renderer.show_grid = bool(getattr(self._renderer, "show_grid", True))
         self._gpu_renderer.cull_faces = False
         img = self._gpu_renderer.render(
             self.model,
@@ -3207,6 +3789,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._renderer._draw_ext_skeleton(draw, w, h)
             if self._renderer.show_walkmesh:
                 self._renderer._draw_walkmesh_overlay(draw, w, h)
+            self._draw_camera_helpers(draw, w, h)
             if self._renderer.show_wireframe and not gpu_base:
                 old_solid = self._renderer.show_solid
                 try:
@@ -3218,9 +3801,11 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._draw_transform_gizmo(draw, w, h)
             self._draw_measurement_overlay(draw, w, h)
             self._draw_selected_model_outline(draw, w, h)
+            self._draw_mesh_subobject_selection(draw, w, h)
             self._draw_joint_marquee(draw)
             self._renderer._draw_axes(draw, w, h)
             self._renderer._draw_stats(draw, w, h)
+            self._draw_active_camera_overlays(draw, w, h)
             return img
         except Exception as exc:
             log.debug("Qt GPU overlay draw failed: %s", exc)
@@ -3237,8 +3822,10 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._renderer._last_W = w
             self._renderer._last_H = h
             self._renderer._frame_view = self._renderer._cam_view_matrix()
+            self._draw_camera_helpers(ImageDraw.Draw(img, "RGBA"), w, h)
             self._draw_transform_gizmo(ImageDraw.Draw(img, "RGBA"), w, h)
             self._draw_measurement_overlay(ImageDraw.Draw(img, "RGBA"), w, h)
+            self._draw_active_camera_overlays(ImageDraw.Draw(img, "RGBA"), w, h)
             return img
         except Exception as exc:
             log.debug("Transform gizmo overlay draw failed: %s", exc)
@@ -3263,6 +3850,31 @@ class QtViewportWidget(QtWidgets.QWidget):
             self.measurement_controller.draw_overlay(draw, self._renderer._proj, w, h)
         except Exception as exc:
             log.debug("Measurement overlay draw failed: %s", exc)
+
+    def _draw_camera_helpers(self, draw, w: int, h: int) -> None:
+        try:
+            active_id = self.camera_manager.active_camera_id
+            self._camera_helper_renderer.draw(
+                draw,
+                self.camera_manager.get_all_cameras(),
+                active_id,
+                self._renderer._proj,
+                w,
+                h,
+            )
+        except Exception as exc:
+            log.debug("Camera helper draw failed: %s", exc)
+
+    def _draw_active_camera_overlays(self, draw, w: int, h: int) -> None:
+        try:
+            if bool(getattr(self, "_render_suppress_camera_overlays", False)):
+                return
+            camera = self.camera_manager.get_active_camera()
+            if camera is None or not self._camera_view_active:
+                return
+            self._camera_overlays.draw(draw, camera, w, h, include_guides=True)
+        except Exception as exc:
+            log.debug("Camera overlay draw failed: %s", exc)
 
     # ── T401: Joint-dot overlay ────────────────────────────────────────
     def _draw_joint_marquee(self, draw) -> None:
@@ -3756,7 +4368,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             label = f"{fps:4.0f} fps  {self._last_render_ms:4.0f} ms  {mode}"
             text_w = self._renderer._hud_text_width(label) if hasattr(self._renderer, "_hud_text_width") else len(label) * 7
             x = max(8, w - text_w - 20)
-            y = max(8, h - 28)
+            y = max(8, h - 50)
             self._renderer._draw_hud_pill(
                 draw,
                 x,
@@ -3855,6 +4467,139 @@ class QtViewportWidget(QtWidgets.QWidget):
         detail = self._mesh_hit_test_detail(sx, sy)
         return detail[0] if detail is not None else None
 
+    def _mesh_subobject_hit_test(self, sx: int, sy: int):
+        mesh = self._active_edit_mesh()
+        topology = self._active_topology()
+        if mesh is None or topology is None:
+            return None
+        width = max(1, self.canvas.width())
+        height = max(1, self.canvas.height())
+        try:
+            bounds = self._projected_mesh_bounds(mesh, width, height)
+        except Exception:
+            bounds = None
+        if bounds is None:
+            return None
+        _min_x, _min_y, _max_x, _max_y, _world_verts, projected = bounds
+        mode = self.mesh_selection_state.mode
+        if mode is MeshSelectionMode.VERTEX:
+            best = self._nearest_projected_vertex(projected, sx, sy)
+            return ("vertex", best) if best is not None else None
+        if mode in (MeshSelectionMode.EDGE, MeshSelectionMode.BORDER):
+            best_edge = self._nearest_projected_edge(projected, topology.edges, sx, sy)
+            if best_edge is None:
+                return None
+            if mode is MeshSelectionMode.BORDER:
+                if best_edge not in topology.border_edges:
+                    self.mesh_selection_state.status_message = "Selected edge is not an open border edge."
+                    self._emit_mesh_subobject_selection()
+                    return None
+                border_idx = topology.border_index_for_edge(best_edge)
+                return ("border", border_idx) if border_idx is not None else None
+            return ("edge", best_edge)
+        if mode in (MeshSelectionMode.FACE, MeshSelectionMode.POLYGON, MeshSelectionMode.ELEMENT):
+            face_idx = self._projected_face_hit(topology, projected, sx, sy)
+            if face_idx is None:
+                return None
+            if mode is MeshSelectionMode.ELEMENT:
+                element_idx = select_element_for_face(topology, face_idx)
+                return ("element", element_idx) if element_idx is not None else None
+            return ("face", face_idx)
+        return None
+
+    def _apply_mesh_subobject_hit(self, hit, modifiers) -> bool:
+        if hit is None:
+            return False
+        kind, value = hit
+        state = self.mesh_selection_state
+        additive = bool(modifiers & QtCore.Qt.ShiftModifier)
+        toggle = bool(modifiers & QtCore.Qt.ControlModifier)
+
+        def update_set(target: set, item) -> set:
+            new_values = set(target) if additive or toggle else set()
+            if toggle and item in new_values:
+                new_values.remove(item)
+            else:
+                new_values.add(item)
+            return new_values
+
+        if kind == "vertex":
+            state.selected_vertices = update_set(state.selected_vertices, int(value))
+        elif kind == "edge":
+            state.selected_edges = update_set(state.selected_edges, normalize_edge(*value))
+        elif kind == "border":
+            state.selected_borders = update_set(set(state.selected_borders), int(value))
+        elif kind == "face":
+            if state.mode is MeshSelectionMode.POLYGON:
+                state.selected_polygons = update_set(state.selected_polygons, int(value))
+                state.status_message = "Polygon Mode is using individual faces for this triangulated mesh."
+            else:
+                state.selected_faces = update_set(state.selected_faces, int(value))
+        elif kind == "element":
+            state.selected_elements = update_set(state.selected_elements, int(value))
+        else:
+            return False
+        self._emit_mesh_subobject_selection()
+        self._request_render()
+        return True
+
+    def _nearest_projected_vertex(self, projected, sx: int, sy: int, radius: float = 12.0) -> int | None:
+        best = None
+        best_dist = radius * radius
+        for idx, point in enumerate(projected):
+            if point is None:
+                continue
+            dx = float(point[0]) - sx
+            dy = float(point[1]) - sy
+            dist = dx * dx + dy * dy
+            if dist <= best_dist:
+                best_dist = dist
+                best = idx
+        return best
+
+    def _nearest_projected_edge(self, projected, edges, sx: int, sy: int, radius: float = 10.0):
+        best = None
+        best_dist = radius * radius
+        for edge in edges:
+            p0, p1 = projected[edge[0]], projected[edge[1]]
+            if p0 is None or p1 is None:
+                continue
+            dist = self._point_segment_dist2(float(sx), float(sy), float(p0[0]), float(p0[1]), float(p1[0]), float(p1[1]))
+            if dist <= best_dist:
+                best_dist = dist
+                best = normalize_edge(*edge)
+        return best
+
+    @staticmethod
+    def _point_segment_dist2(px, py, ax, ay, bx, by) -> float:
+        dx = bx - ax
+        dy = by - ay
+        denom = dx * dx + dy * dy
+        if denom <= 1e-12:
+            return (px - ax) * (px - ax) + (py - ay) * (py - ay)
+        t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / denom))
+        cx = ax + t * dx
+        cy = ay + t * dy
+        return (px - cx) * (px - cx) + (py - cy) * (py - cy)
+
+    def _projected_face_hit(self, topology: MeshTopology, projected, sx: int, sy: int) -> int | None:
+        best = None
+        best_depth = float("inf")
+        for fi, face in enumerate(topology.faces):
+            try:
+                p0, p1, p2 = projected[face[0]], projected[face[1]], projected[face[2]]
+                if p0 is None or p1 is None or p2 is None:
+                    continue
+                if not self._point_in_triangle(sx, sy, p0, p1, p2):
+                    continue
+                depth = (p0[2] + p1[2] + p2[2]) / 3.0
+                if depth < best_depth:
+                    best_depth = depth
+                    best = fi
+            except Exception:
+                continue
+        return best
+
     def _mesh_hit_test_detail(self, sx: int, sy: int):
         if self.model is None:
             return None
@@ -3952,6 +4697,35 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._renderer._proj,
             self._renderer._node_world_transform,
         )
+
+    def _camera_hit_test(self, sx: int, sy: int, radius: int = 14):
+        if self.model is None:
+            return None
+        width = max(1, self.canvas.width())
+        height = max(1, self.canvas.height())
+        try:
+            self._renderer._last_W = width
+            self._renderer._last_H = height
+            self._renderer._frame_view = self._renderer._cam_view_matrix()
+        except Exception:
+            pass
+        self._camera_picker.max_screen_distance = int(radius)
+        hit = self._camera_picker.hit_test(
+            self.camera_manager.get_all_cameras(),
+            sx,
+            sy,
+            width,
+            height,
+            self._renderer._proj,
+        )
+        if not hit:
+            return None
+        camera, kind = hit
+        if kind == "target":
+            node = getattr(camera, "original_ref", None)
+            if node is not None:
+                setattr(node, "_gr_camera_target_handle", True)
+        return getattr(camera, "original_ref", None)
 
     def _set_mesh_hidden(self, node, hidden: bool) -> None:
         if node is None:
@@ -4107,6 +4881,8 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def _begin_transform_gizmo_drag(self, x: int, y: int) -> bool:
         if not self._renderer.show_gimbal or getattr(self._renderer, "selected_node", None) is None:
+            return False
+        if bool(getattr(self._renderer.selected_node, "_gr_camera_locked", False)):
             return False
         try:
             wp, _wo, _is_id = self._renderer._node_world_transform(self._renderer.selected_node)
@@ -4524,6 +5300,25 @@ class QtViewportWidget(QtWidgets.QWidget):
                 if self.on_bone_selected:
                     self.on_bone_selected(node)
                 return
+        if self.mesh_selection_state.mode is not MeshSelectionMode.OBJECT:
+            if self._apply_mesh_subobject_hit(
+                self._mesh_subobject_hit_test(x, y),
+                event.modifiers(),
+            ):
+                if self.on_bone_selected:
+                    self.on_bone_selected(None)
+                return
+        camera_node = self._camera_hit_test(x, y)
+        if camera_node is not None:
+            if event.modifiers() & (QtCore.Qt.ControlModifier | QtCore.Qt.ShiftModifier):
+                camera = self.camera_manager.find_by_original(camera_node)
+                if camera is not None:
+                    self.camera_manager.select_camera(camera.id, additive=True)
+                    self.cameraSelectionChanged.emit(camera_node)
+            self.set_selected_node(camera_node)
+            if self.on_bone_selected:
+                self.on_bone_selected(None)
+            return
         light_node = self._light_hit_test(x, y)
         if light_node is not None:
             self.set_selected_node(light_node)
@@ -4906,6 +5701,68 @@ class QtViewportWidget(QtWidgets.QWidget):
                 draw.line(hull + [hull[0]], fill=(255, 212, 0, 230), width=2)
         except Exception as exc:
             log.debug("Selected model outline draw failed: %s", exc)
+
+    def _draw_mesh_subobject_selection(self, draw, w: int, h: int) -> None:
+        state = getattr(self, "mesh_selection_state", None)
+        if state is None or state.mode is MeshSelectionMode.OBJECT:
+            return
+        mesh = self._active_edit_mesh()
+        topology = self._active_topology()
+        if mesh is None or topology is None:
+            return
+        try:
+            bounds = self._projected_mesh_bounds(mesh, w, h)
+            if bounds is None:
+                return
+            _min_x, _min_y, _max_x, _max_y, _world_verts, projected = bounds
+
+            def point(vi):
+                if vi < 0 or vi >= len(projected):
+                    return None
+                p = projected[vi]
+                if p is None:
+                    return None
+                return (float(p[0]), float(p[1]))
+
+            def draw_edge(edge, color, width=2):
+                p0 = point(edge[0])
+                p1 = point(edge[1])
+                if p0 is not None and p1 is not None:
+                    draw.line([p0, p1], fill=color, width=width)
+
+            if state.mode is MeshSelectionMode.VERTEX:
+                for vi in state.selected_vertices:
+                    p = point(vi)
+                    if p is not None:
+                        x, y = p
+                        draw.ellipse([x - 4, y - 4, x + 4, y + 4], fill=(0, 255, 122, 235), outline=(255, 255, 255, 230))
+            elif state.mode is MeshSelectionMode.EDGE:
+                for edge in state.selected_edges:
+                    draw_edge(edge, (0, 215, 181, 245), 3)
+                for edge in getattr(mesh, "_gr_connect_edges", set()) or set():
+                    draw_edge(edge, (255, 212, 0, 210), 1)
+            elif state.mode is MeshSelectionMode.BORDER:
+                for idx in state.selected_borders:
+                    if isinstance(idx, int) and 0 <= idx < len(topology.border_loops):
+                        loop = topology.border_loops[idx]
+                        for i in range(len(loop) - 1):
+                            draw_edge((loop[i], loop[i + 1]), (255, 170, 0, 245), 3)
+            elif state.mode in (MeshSelectionMode.FACE, MeshSelectionMode.POLYGON):
+                faces = state.selected_faces if state.mode is MeshSelectionMode.FACE else state.selected_polygons
+                for fi in faces:
+                    if 0 <= fi < len(topology.faces):
+                        pts = [point(vi) for vi in topology.faces[fi]]
+                        if all(p is not None for p in pts):
+                            draw.polygon(pts, fill=(0, 255, 122, 58), outline=(0, 255, 122, 230))
+            elif state.mode is MeshSelectionMode.ELEMENT:
+                for idx in state.selected_elements:
+                    if 0 <= idx < len(topology.connected_elements):
+                        for fi in topology.connected_elements[idx]:
+                            pts = [point(vi) for vi in topology.faces[fi]]
+                            if all(p is not None for p in pts):
+                                draw.polygon(pts, fill=(0, 215, 181, 48), outline=(0, 215, 181, 210))
+        except Exception as exc:
+            log.debug("Mesh sub-object overlay draw failed: %s", exc)
 
     def _evict_transform_cache(self, node) -> None:
         clear_prebuilt_static_gpu_mesh_data(node)

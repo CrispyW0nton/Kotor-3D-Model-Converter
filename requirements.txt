@@ -2,12 +2,13 @@
 # Install with: pip install -r requirements.txt
 
 # ── Core rendering ──────────────────────────────────────────────────────────
-Pillow>=9.0.0
-numpy>=1.21.0
+Pillow>=10.0
+numpy>=2.0
+imageio
 PyOpenGL>=3.1.0
-PyOpenGL_accelerate>=3.1.0     # optional GPU acceleration for PyOpenGL
-moderngl>=5.8.0                 # ModernGL for GPU-accelerated preview rendering
-PySide6>=6.6.0                  # Qt shell for the main application window
+PyOpenGL_accelerate>=3.1.0
+moderngl>=5.8.0
+PySide6>=6.6.0
 
 # ── KotOR file format library ───────────────────────────────────────────────
 # OldRepublicDevs/PyKotor — battle-tested KotOR MDL/TPC/TXI/ERF/BIF reader+writer
@@ -17,9 +18,12 @@ PySide6>=6.6.0                  # Qt shell for the main application window
 # re-validating the patch signature, source layout, and K1/K2 size constants.
 pykotor==2.3.1
 
-# ── 3D mesh import/export ───────────────────────────────────────────────────
-trimesh[easy]>=3.15.0           # OBJ/DAE import + fallback GLTF reader
-pygltflib>=1.15.0               # GLTF 2.0 / GLB import+export (pure Python)
+# ── 3D mesh import/export / lightmap raycasting ──────────────────────────────
+trimesh[easy]>=4.0
+embreex>=4.4.0
+xatlas>=0.0.11
+pygltflib>=1.15.0
+
 # pyassimp>=5.2.0              # FBX importer — OPTIONAL, requires Assimp native DLL
                                 # Not yet compatible with Python 3.14
                                 # Python 3.10-3.12: pip install pyassimp (then install DLL)
@@ -27,18 +31,16 @@ pygltflib>=1.15.0               # GLTF 2.0 / GLB import+export (pure Python)
                                 # macOS:         brew install assimp
 
 # ── IPC / HTTP server ────────────────────────────────────────────────────────
-flask>=2.3.0                    # GhostRigger IPC server (port 7001, Ghostworks pipeline)
-requests>=2.28.0                # IPC client HTTP calls
+flask>=2.3.0
+requests>=2.28.0
 
 # ── MCP (Model Context Protocol) integration ─────────────────────────────────
-# KotorMCP embedded server — exposes KotOR resources + GhostRigger tools to AI agents
-# Optional: only needed for MCP stdio/SSE transport. HTTP fallback works without it.
-mcp>=1.0.0                      # Model Context Protocol Python SDK
-pydantic>=2.0.0                 # Input validation for MCP tool arguments
-uvicorn[standard]>=0.20.0       # ASGI server for HTTP/SSE MCP transport (optional)
+mcp>=1.0.0
+pydantic>=2.0.0
+uvicorn[standard]>=0.20.0
 
 # ── Animated background ──────────────────────────────────────────────────────
-opencv-python-headless>=4.5.0   # video frame decoding for Matrix background effect
+opencv-python-headless>=4.5.0
 
 # ── Build / packaging ───────────────────────────────────────────────────────
-pyinstaller>=5.0                # standalone executable packaging
+pyinstaller>=5.0

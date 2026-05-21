@@ -147,6 +147,43 @@ def test_qt_gpu_viewport_keeps_gpu_for_wire_and_texture_off_modes() -> None:
     assert "show_wireframe = bool(self._renderer.show_wireframe)" in gpu_source
 
 
+def test_qt_viewport_grid_toggle_controls_cpu_and_gpu_paths() -> None:
+    import inspect
+
+    from src.gui.qt_lib.rendering.viewport_core import FrameRenderer
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    frame_grid_source = inspect.getsource(FrameRenderer._draw_grid)
+    viewport_build_source = inspect.getsource(QtViewportWidget._build)
+    toggle_source = inspect.getsource(QtViewportWidget.toggle_grid)
+    gpu_source = inspect.getsource(QtViewportWidget._render_gpu_frame)
+    menu_source = inspect.getsource(QtGhostRiggerMainWindow._build_actions) + inspect.getsource(QtGhostRiggerMainWindow._build_menu)
+
+    assert 'getattr(self, "show_grid", True)' in frame_grid_source
+    assert "self.grid_button" in viewport_build_source
+    assert "self._renderer.show_grid = self.grid_button.isChecked()" in viewport_build_source
+    assert "self._gpu_renderer.show_grid = enabled" in toggle_source
+    assert 'show_grid = bool(getattr(self._renderer, "show_grid", True))' in gpu_source
+    assert "Toggle Grid" in menu_source
+    assert 'setShortcut("Alt+G")' in menu_source
+    assert '"grid_button"' in menu_source
+
+
+def test_qt_viewport_performance_overlay_stacks_above_stats_badge() -> None:
+    import inspect
+
+    from src.gui.qt_lib.rendering.viewport_core import FrameRenderer
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    stats_source = inspect.getsource(FrameRenderer._draw_stats)
+    perf_source = inspect.getsource(QtViewportWidget._draw_performance_overlay)
+
+    assert "max(12, H - 28)" in stats_source
+    assert "h - 50" in perf_source
+    assert "_draw_hud_pill" in perf_source
+
+
 def test_qt_gpu_viewport_resets_render_targets_on_model_load() -> None:
     import inspect
 
@@ -542,6 +579,81 @@ def test_module_mesh_properties_panel_splits_meshes_nulls_and_walkmeshes() -> No
     assert panel.module_browser_tabs.tabText(2) == "Walkmeshes"
 
 
+def test_module_mesh_properties_panel_lists_coloaded_walkmesh_overlay_nodes() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtPropertiesPanel()
+    overlay_node = SimpleNamespace(
+        name="m01aa_01a_overlay",
+        flags=0x0200,
+        vertex_space=1,
+        vertices=[(0, 0, 0), (1, 0, 0), (0, 1, 0)],
+        faces=[(0, 1, 2)],
+        texture="walkmesh",
+        _gr_walkmesh_overlay_proxy=True,
+    )
+    model = SimpleNamespace(
+        name="m01aa_01a",
+        game_version="K1",
+        supermodel="NULL",
+        classification="tile",
+        animations=[],
+        mesh_nodes=lambda: [],
+        all_nodes=lambda: [],
+        bone_nodes=lambda: [],
+        texture_list=lambda: [],
+        _gr_extra_module_mesh_nodes=[overlay_node],
+    )
+
+    selected_batches = []
+    panel.moduleMeshesSelected.connect(selected_batches.append)
+    panel.show_model(model)
+
+    assert panel.module_walkmesh_tree.topLevelItemCount() == 1
+    assert panel.module_walkmesh_tree.topLevelItem(0).text(0) == "m01aa_01a_overlay"
+    panel.module_walkmesh_tree.setCurrentItem(panel.module_walkmesh_tree.topLevelItem(0))
+    assert selected_batches[-1] == [overlay_node]
+
+
+def test_coloaded_walkmesh_overlay_aligns_to_existing_model_walkmesh_bounds() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import (
+        _walkmesh_overlay_node_from_wok,
+        _walkmesh_overlay_offset_for_model,
+    )
+
+    face = SimpleNamespace(v1=0, v2=1, v3=2, surface=7)
+    wok = SimpleNamespace(
+        verts=[(100.0, 200.0, 5.0), (110.0, 200.0, 5.0), (100.0, 210.0, 5.0)],
+        faces=[face],
+    )
+    reference_walkmesh = SimpleNamespace(
+        name="walkmesh_12",
+        flags=0x0200,
+        vertex_space=2,
+        vertices=[(10.0, 20.0, 1.0), (20.0, 20.0, 1.0), (10.0, 30.0, 1.0)],
+        faces=[(0, 1, 2)],
+    )
+    model = SimpleNamespace(
+        all_nodes=lambda: [reference_walkmesh],
+        render_bounds=lambda: ((10.0, 20.0, 1.0), (20.0, 30.0, 1.0)),
+    )
+
+    offset = _walkmesh_overlay_offset_for_model(model, wok)
+    proxy = _walkmesh_overlay_node_from_wok(wok, "K1:m01aa_01a.wok", offset)
+
+    assert offset == (-90.0, -180.0, -4.0)
+    assert proxy.name == "m01aa_01a_overlay"
+    assert proxy.vertices == reference_walkmesh.vertices
+    assert proxy.faces == [(0, 1, 2)]
+    assert proxy.face_mats == [7]
+    assert proxy._gr_walkmesh_overlay_proxy is True
+
+
 def test_qt_viewport_exposes_mesh_multiselect_box_and_ctrl_a() -> None:
     import inspect
 
@@ -803,6 +915,142 @@ def test_qt_lighting_panel_select_light_syncs_from_viewport_without_emitting() -
     assert panel.tree.selectedItems() == []
 
 
+def test_cinematic_camera_model_links_focal_length_and_fov() -> None:
+    import math
+    import pytest
+
+    from src.gui.camera.camera_model import GhostRiggerCamera
+
+    camera = GhostRiggerCamera()
+    camera.set_focal_length(85.0)
+
+    assert camera.focal_length_mm == pytest.approx(85.0)
+    assert camera.field_of_view_degrees < 30.0
+
+    camera.set_field_of_view(60.0)
+
+    assert camera.field_of_view_degrees == pytest.approx(60.0)
+    assert camera.focal_length_mm == pytest.approx(36.0 / (2.0 * math.tan(math.radians(60.0) * 0.5)))
+
+
+def test_camera_manager_serializes_scene_cameras_and_active_camera() -> None:
+    from types import SimpleNamespace
+    from src.gui.camera.camera_manager import CameraManager
+
+    model = SimpleNamespace(name="danm13aa", _base_nodes=[])
+    model.all_nodes = lambda: list(model._base_nodes)
+    manager = CameraManager()
+    manager.set_model(model)
+    camera = manager.create_camera(camera_type="Cinematic Camera")
+    manager.set_active_camera(camera.id)
+    manager.select_camera(camera.id)
+
+    payload = manager.serialize()
+
+    assert payload["active_camera_id"] == camera.id
+    assert payload["cameras"][0]["name"] == "Camera001"
+    assert getattr(model, "_gr_camera_state")["active_camera_id"] == camera.id
+    assert any(getattr(node, "is_camera", False) for node in model.all_nodes())
+
+    restored = CameraManager()
+    restored.set_model(model)
+
+    assert restored.get_active_camera().id == camera.id
+    assert restored.get_all_cameras()[0].name == "Camera001"
+
+
+def test_render_output_builds_incrementing_camera_paths(tmp_path) -> None:
+    from pathlib import Path
+
+    from src.gui.camera.camera_render_settings import RenderSettings
+    from src.gui.camera.render_output import RenderOutput
+
+    settings = RenderSettings(output_directory=str(tmp_path), output_format="JPG", filename_prefix="")
+    output = RenderOutput()
+    first = output.build_output_path("Camera001", settings, module_name="danm13aa")
+    Path(first).write_text("existing", encoding="utf-8")
+    second = output.build_output_path("Camera001", settings, module_name="danm13aa")
+
+    assert Path(first).name == "danm13aa_Camera001_0001.jpg"
+    assert Path(second).name == "danm13aa_Camera001_0002.jpg"
+
+
+def test_qt_viewport_exposes_cinematic_camera_workflow_methods() -> None:
+    import inspect
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    source = inspect.getsource(QtViewportWidget)
+
+    assert "self.camera_manager = CameraManager()" in source
+    assert "def switch_to_camera" in source
+    assert "def switch_to_perspective" in source
+    assert "def update_view_from_camera" in source
+    assert "def update_camera_from_view" in source
+    assert "def render_still_frame" in source
+    assert "_camera_hit_test" in source
+    assert "_draw_active_camera_overlays" in source
+
+
+def test_camera_letterbox_render_burns_opaque_black_bars() -> None:
+    from PIL import Image, ImageDraw
+
+    from src.gui.camera.camera_model import GhostRiggerCamera
+    from src.gui.camera.camera_overlays import CameraOverlays
+
+    camera = GhostRiggerCamera(show_letterbox=True, letterbox_ratio=4.0)
+    image = Image.new("RGBA", (100, 100), (64, 64, 64, 255))
+    overlays = CameraOverlays()
+    draw = ImageDraw.Draw(image, "RGBA")
+
+    overlays.draw_letterbox(draw, overlays.active_frame_rect(camera, 100, 100), 100, 100, opaque=True)
+
+    assert image.getpixel((50, 5)) == (0, 0, 0, 255)
+
+
+def test_still_frame_renderer_suppresses_viewport_camera_overlays() -> None:
+    from types import SimpleNamespace
+
+    from PIL import Image
+
+    from src.gui.camera.camera_model import GhostRiggerCamera
+    from src.gui.camera.camera_render_settings import RenderSettings
+    from src.gui.camera.frame_renderer import FrameRenderer
+
+    calls = []
+    viewport = SimpleNamespace(
+        _renderer=SimpleNamespace(show_gimbal=True, show_grid=True, show_light_gizmos=True),
+        _gpu_renderer=SimpleNamespace(show_grid=True, show_light_gizmos=True),
+        _camera_helper_renderer=SimpleNamespace(show_camera_helpers=True),
+        _render_suppress_camera_overlays=False,
+    )
+
+    def _render_frame(width: int, height: int):
+        calls.append(bool(viewport._render_suppress_camera_overlays))
+        return Image.new("RGBA", (width, height), (32, 32, 32, 255))
+
+    viewport._render_frame = _render_frame
+    renderer = FrameRenderer(viewport)
+    settings = RenderSettings(
+        resolution_source="custom",
+        resolution_width=32,
+        resolution_height=24,
+        include_letterbox=False,
+        include_safe_frame=False,
+        include_camera_guides=False,
+        include_grid=False,
+        include_helpers=False,
+    )
+
+    image = renderer.render_current_frame(settings, GhostRiggerCamera())
+
+    assert image.size == (32, 24)
+    assert calls == [True]
+    assert viewport._render_suppress_camera_overlays is False
+    assert viewport._renderer.show_grid is True
+    assert viewport._camera_helper_renderer.show_camera_helpers is True
+
+
 def test_viewport_navigation_profiles_are_available() -> None:
     from src.gui.qt_lib.rendering.viewport_navigation import (
         DEFAULT_VIEWPORT_NAVIGATION_PROFILE,
@@ -818,6 +1066,7 @@ def test_viewport_navigation_profiles_are_available() -> None:
     assert normalize_viewport_navigation_profile("Maya") == "maya"
     assert "T: Toggle texture" in VIEWPORT_NAVIGATION_HELP
     assert "Shift+T: Top view" in VIEWPORT_NAVIGATION_HELP
+    assert "Alt+G: Toggle grid" in VIEWPORT_NAVIGATION_HELP
     assert "Alt+X: Toggle X-Ray viewport overlay" in VIEWPORT_NAVIGATION_HELP
 
 
@@ -847,6 +1096,8 @@ def test_qt_viewport_gpu_grid_is_native_and_xray_is_overlay_only() -> None:
     overlay_source = inspect.getsource(QtViewportWidget._draw_cpu_overlays)
     assert "self._xray_mode or not gpu_base" in overlay_source
     event_source = inspect.getsource(QtViewportWidget.eventFilter)
+    assert "QtCore.Qt.Key_G" in event_source
+    assert "self.grid_button.click()" in event_source
     assert "QtCore.Qt.Key_X" in event_source
     assert "QtCore.Qt.AltModifier" in event_source
 

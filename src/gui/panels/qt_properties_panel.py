@@ -743,7 +743,8 @@ class QtPropertiesPanel(QtWidgets.QWidget):
     def _module_mesh_candidates(self, model, mesh_nodes=None, all_nodes=None) -> list:
         candidates = []
         seen = set()
-        for source in (mesh_nodes or [], all_nodes or []):
+        extra_nodes = getattr(model, "_gr_extra_module_mesh_nodes", []) or []
+        for source in (mesh_nodes or [], all_nodes or [], extra_nodes):
             for node in source or []:
                 if node is None or id(node) in seen:
                     continue

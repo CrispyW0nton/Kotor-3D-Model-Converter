@@ -4239,6 +4239,8 @@ class FrameRenderer:
         return to_screen(c0), to_screen(c1)
 
     def _draw_grid(self, draw: 'ImageDraw.Draw', W: int, H: int):
+        if not getattr(self, "show_grid", True):
+            return
         grid = getattr(self, "grid_measurement", None)
         step = float(getattr(grid, "minor_spacing", 1.0) or 1.0)
         major_every = int(getattr(grid, "major_every", 5) or 5)
@@ -7695,6 +7697,9 @@ class FrameRenderer:
         """
         overlay = self._walkmesh_overlay
         if overlay is None or not WalkmeshOverlay:
+            return
+        proxy_node = getattr(overlay, "_gr_module_node", None)
+        if proxy_node is not None and getattr(proxy_node, "_gr_hidden", False):
             return
         try:
             faces = overlay.faces_for_render(

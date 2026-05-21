@@ -20,6 +20,7 @@ from src.gui.lighting.lightmap_lighting_solver import LightmapLightingSolver
 from src.gui.lighting.lightmap_rasterizer import LightmapRasterizer
 from src.gui.lighting.lightmap_padding import LightmapPadding
 from src.gui.lighting.lightmap_uv_validator import LightmapUVValidator
+from src.gui.lighting.uv_atlas_generator import UVAtlasGenerator
 
 
 def _model_with_lightmapped_triangle() -> tuple[KotorModel, ModelNode]:
@@ -92,6 +93,78 @@ def test_uv_validator_prefers_lightmap_uvs_and_warns_for_primary_fallback() -> N
     result = validator.validate_mesh_uvs(mesh, 0)
     assert result.usable
     assert result.severity == "ok"
+
+
+def test_uv_channel_info_uses_artist_facing_names_and_zero_indexed_data() -> None:
+    _model, mesh = _model_with_lightmapped_triangle()
+    mesh.uvs_lm = []
+
+    infos = LightmapUVValidator().inspect_mesh_uv_channels(mesh, 3)
+
+    assert infos[0].display_name == "UV1"
+    assert infos[0].channel_index == 0
+    assert infos[0].has_uvs
+    assert infos[1].display_name == "UV2"
+    assert infos[1].channel_index == 1
+    assert not infos[1].has_uvs
+
+
+def test_xatlas_generator_preserves_uv1_and_creates_uv2_faces() -> None:
+    _model, mesh = _model_with_lightmapped_triangle()
+    original_uv1 = list(mesh.uvs)
+    mesh.uvs_lm = []
+
+    result = UVAtlasGenerator().generate_lightmap_uvs(mesh, target_channel=1, replace_existing=False)
+
+    assert result.success
+    assert mesh.uvs == original_uv1
+    assert getattr(mesh, "uvs_lm")
+    assert getattr(mesh, "face_uvs_lm")
+    assert all(0.0 <= uv[0] <= 1.0 and 0.0 <= uv[1] <= 1.0 for uv in mesh.uvs_lm)
+
+
+def test_baker_does_not_fallback_to_diffuse_uvs_unless_selected() -> None:
+    model, mesh = _model_with_lightmapped_triangle()
+    mesh.uvs_lm = []
+
+    default_result = LightmapBaker().collect_bakeable_meshes(
+        LightmapBakeJob(model=model, selected_meshes=[mesh], settings=LightmapBakeSettings(bake_selected_only=True))
+    )
+    selected_uv1 = LightmapBaker().collect_bakeable_meshes(
+        LightmapBakeJob(
+            model=model,
+            selected_meshes=[mesh],
+            settings=LightmapBakeSettings(bake_selected_only=True, selected_uv_channel=0),
+        )
+    )
+
+    assert default_result == []
+    assert selected_uv1[0].uv_channel == 0
+
+
+def test_live_preview_bake_returns_pil_image_without_writing_file() -> None:
+    _model, mesh = _model_with_lightmapped_triangle()
+    light = SimpleNamespace(
+        name="AuroraLight001",
+        source_type="Aurora",
+        enabled=True,
+        visible=True,
+        type="aurora_point",
+        position=(0.25, 0.25, 2.0),
+        color=(1.0, 1.0, 1.0),
+        intensity=2.0,
+        radius=4.0,
+        casts_shadows=False,
+        affects_lightmap=True,
+    )
+    settings = LightmapBakeSettings(preview_resolution=64, selected_uv_channel=1, include_ambient=True)
+
+    result = LightmapBaker().bake_preview(mesh, [light], settings)
+
+    assert result.success
+    assert result.image_path is None
+    assert result.preview_image is not None
+    assert result.preview_image.size == (64, 64)
 
 
 def test_uv_validation_result_reports_warning_severity_for_risky_bakeable_uvs() -> None:

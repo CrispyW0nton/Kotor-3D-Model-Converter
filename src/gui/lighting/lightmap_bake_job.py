@@ -5,6 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Iterable, Sequence
 
+try:
+    from PIL import Image
+except Exception:  # pragma: no cover - Pillow is a runtime dependency.
+    Image = None  # type: ignore[assignment]
+
 from .lightmap_bake_settings import LightmapBakeSettings
 
 
@@ -57,6 +62,16 @@ class LightmapBakeResult:
 
     def preview_assignments(self) -> dict[str, str]:
         return {entry.mesh_name: entry.output_path for entry in self.bakes if entry.output_path}
+
+
+@dataclass
+class BakeResult:
+    success: bool
+    image_path: str | None = None
+    preview_image: "Image.Image | None" = None
+    messages: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
 
 @dataclass

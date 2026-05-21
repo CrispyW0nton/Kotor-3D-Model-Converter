@@ -42,9 +42,10 @@ class LightmapLightingSolver:
                     )[:, np.newaxis]
                 rgb += contribution
         if settings.use_indirect_approximation:
-            rgb += 0.08 * diffuse
+            rgb += 0.08 * float(getattr(settings, "indirect_strength", 1.0)) * diffuse
         if settings.include_diffuse:
-            rgb *= diffuse
+            strength = float(getattr(settings, "diffuse_strength", 1.0))
+            rgb *= (1.0 - strength) + diffuse * strength
         output[ys, xs] = self.apply_exposure_gamma(rgb, settings)
         return output
 
@@ -71,12 +72,16 @@ class LightmapLightingSolver:
             for light in lights:
                 contribution = self.solve_direct_light(texel, light, settings)
                 if shadow_solver is not None and settings.use_shadows:
-                    contribution *= float(shadow_solver.calculate_shadow_factor(texel, light, settings))
+                    raw = float(shadow_solver.calculate_shadow_factor(texel, light, settings))
+                    strength = float(getattr(settings, "shadow_strength", 1.0))
+                    contribution *= 1.0 - strength * (1.0 - raw)
                 rgb += contribution
         if settings.use_indirect_approximation:
-            rgb += 0.08 * np.asarray(texel["diffuse"], dtype=np.float32)
+            rgb += 0.08 * float(getattr(settings, "indirect_strength", 1.0)) * np.asarray(texel["diffuse"], dtype=np.float32)
         if settings.include_diffuse:
-            rgb *= np.asarray(texel["diffuse"], dtype=np.float32)
+            strength = float(getattr(settings, "diffuse_strength", 1.0))
+            diffuse = np.asarray(texel["diffuse"], dtype=np.float32)
+            rgb *= (1.0 - strength) + diffuse * strength
         return self.apply_exposure_gamma(rgb, settings)
 
     def solve_direct_light(self, texel, light, settings) -> np.ndarray:
@@ -112,6 +117,7 @@ class LightmapLightingSolver:
         vec = light_pos - position
         dist = max(float(np.linalg.norm(vec)), 1.0e-5)
         radius = max(float(getattr(light, "radius", getattr(light, "light_radius", 5.0)) or 5.0), 0.001)
+        radius *= max(0.001, float(getattr(settings, "light_falloff_multiplier", 1.0)))
         if dist > radius:
             return np.zeros(3, dtype=np.float32)
         ldir = vec / dist
@@ -132,6 +138,7 @@ class LightmapLightingSolver:
         dist = np.linalg.norm(vec, axis=1)
         safe_dist = np.maximum(dist, 1.0e-5)
         radius = max(float(getattr(light, "radius", getattr(light, "light_radius", 5.0)) or 5.0), 0.001)
+        radius *= max(0.001, float(getattr(settings, "light_falloff_multiplier", 1.0)))
         ldir = vec / safe_dist[:, np.newaxis]
         ndotl = np.maximum(np.sum(normals * ldir, axis=1), 0.0)
         falloff = np.maximum(0.0, 1.0 - (safe_dist / radius))
@@ -192,8 +199,9 @@ class LightmapLightingSolver:
 
     def solve_ambient(self, texel, settings, light: object | None = None) -> np.ndarray:
         if light is not None:
-            return _light_color(light) * _intensity(light) * 0.25
-        return np.asarray(getattr(settings, "background_color", (0.0, 0.0, 0.0)), dtype=np.float32) + np.asarray((0.035, 0.035, 0.035), dtype=np.float32)
+            return _light_color(light) * _intensity(light) * 0.25 * float(getattr(settings, "ambient_strength", 1.0))
+        ambient = np.asarray(getattr(settings, "background_color", (0.0, 0.0, 0.0)), dtype=np.float32) + np.asarray((0.035, 0.035, 0.035), dtype=np.float32)
+        return ambient * float(getattr(settings, "ambient_strength", 1.0))
 
     def solve_ambient_batch(self, count: int, settings) -> np.ndarray:
         return np.repeat(self.solve_ambient({}, settings)[np.newaxis, :], int(count), axis=0)
@@ -217,7 +225,9 @@ class LightmapLightingSolver:
                 "normal": normals[idx],
                 "mesh_id": int(mesh_ids[idx]),
             }
-            factors[idx] = float(shadow_solver.calculate_shadow_factor(texel, light, settings))
+            raw = float(shadow_solver.calculate_shadow_factor(texel, light, settings))
+            strength = float(getattr(settings, "shadow_strength", 1.0))
+            factors[idx] = 1.0 - strength * (1.0 - raw)
         return factors
 
     def sample_normal_map(self, material, uv):

@@ -26,6 +26,7 @@ class TransformSnapshot:
     light_radius: float | None = None
     light_area_size: float | None = None
     light_cone_degrees: float | None = None
+    camera_helper_size: float | None = None
 
 
 class TransformController:
@@ -62,6 +63,7 @@ class TransformController:
             light_radius=float(getattr(obj, "light_radius", 0.0) or 0.0) if bool(getattr(obj, "is_light", False)) else None,
             light_area_size=float(getattr(obj, "light_area_size", 0.0) or 0.0) if bool(getattr(obj, "is_light", False)) else None,
             light_cone_degrees=float(getattr(obj, "light_cone_degrees", 45.0) or 45.0) if bool(getattr(obj, "is_light", False)) else None,
+            camera_helper_size=float(getattr(obj, "_gr_helper_size", 1.0) or 1.0) if bool(getattr(obj, "is_camera", False)) else None,
         )
 
     def set_position_snap(self, enabled: bool, increment: float) -> None:
@@ -136,6 +138,9 @@ class TransformController:
         if bool(getattr(self.object, "is_light", False)):
             self._apply_light_scale(axis, mouse_pos, camera, viewport_height)
             return
+        if bool(getattr(self.object, "is_camera", False)):
+            self._apply_camera_scale(axis, mouse_pos, camera, viewport_height)
+            return
         if self.original.vertices is None:
             return
         if axis == "UNIFORM":
@@ -197,6 +202,8 @@ class TransformController:
             obj.light_area_size = float(snapshot.light_area_size)
         if snapshot.light_cone_degrees is not None:
             obj.light_cone_degrees = float(snapshot.light_cone_degrees)
+        if snapshot.camera_helper_size is not None:
+            obj._gr_helper_size = float(snapshot.camera_helper_size)
 
     def _invalidate(self) -> None:
         if self.invalidate_callback is not None and self.object is not None:
@@ -225,3 +232,17 @@ class TransformController:
         elif kind not in {"directional", "ambient", "aurora_ambient"}:
             base_radius = max(0.001, float(self.original.light_radius or 1.0))
             self.object.light_radius = base_radius * factor
+
+    def _apply_camera_scale(self, axis: str, mouse_pos, camera, viewport_height: int) -> None:
+        if self.original is None:
+            return
+        if axis == "UNIFORM":
+            raw = float(mouse_pos[0] - self.start_mouse[0] - (mouse_pos[1] - self.start_mouse[1]))
+            factor = max(0.01, 1.0 + raw * 0.01)
+        else:
+            delta = axis_drag_delta(self.start_mouse, mouse_pos, axis, camera, self.start_depth, viewport_height)
+            factor = max(0.01, 1.0 + delta)
+        if self.percent_snap is not None:
+            factor = self.percent_snap.snap_scale_factor(factor)
+        base = max(0.05, float(self.original.camera_helper_size or 1.0))
+        self.object._gr_helper_size = max(0.05, base * factor)

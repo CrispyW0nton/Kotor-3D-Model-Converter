@@ -8,6 +8,11 @@ import numpy as np
 
 from .lightmap_rasterizer import _world_vertices
 
+try:  # pragma: no cover - exercised when Open3D is installed locally.
+    import open3d as o3d
+except Exception:  # pragma: no cover
+    o3d = None
+
 
 @dataclass
 class ShadowTriangle:
@@ -29,9 +34,13 @@ class LightmapShadowSolver:
 
     def __init__(self) -> None:
         self._triangles: list[ShadowTriangle] = []
+        self._o3d_scene = None
+        self._last_error = ""
 
     def build_acceleration_structure(self, scene_meshes) -> None:
         triangles: list[ShadowTriangle] = []
+        vertices: list[np.ndarray] = []
+        indices: list[tuple[int, int, int]] = []
         for mesh in scene_meshes:
             verts = _world_vertices(mesh)
             for face in getattr(mesh, "faces", []) or []:
@@ -44,6 +53,9 @@ class LightmapShadowSolver:
                 except Exception:
                     continue
                 stack = np.vstack(pts)
+                base = len(vertices)
+                vertices.extend(pts)
+                indices.append((base, base + 1, base + 2))
                 triangles.append(
                     ShadowTriangle(
                         mesh_id=id(mesh),
@@ -55,6 +67,7 @@ class LightmapShadowSolver:
                     )
                 )
         self._triangles = triangles
+        self._build_open3d_scene(vertices, indices)
 
     def is_occluded(
         self,
@@ -72,6 +85,14 @@ class LightmapShadowSolver:
             return False
         d = d / length
         max_dist = float(max_distance)
+        if self._o3d_scene is not None:
+            try:
+                rays = o3d.core.Tensor([[o[0], o[1], o[2], d[0], d[1], d[2]]], dtype=o3d.core.Dtype.Float32)
+                hits = self._o3d_scene.cast_rays(rays)
+                t_hit = float(hits["t_hit"].numpy()[0])
+                return np.isfinite(t_hit) and 1.0e-4 < t_hit < max_dist - 1.0e-4
+            except Exception as exc:
+                self._last_error = str(exc)
         ray_min = np.minimum(o, o + d * max_dist) - 1.0e-5
         ray_max = np.maximum(o, o + d * max_dist) + 1.0e-5
         for tri in self._triangles:
@@ -91,7 +112,7 @@ class LightmapShadowSolver:
             return 1.0
         position = np.asarray(texel["position"], dtype=np.float32)
         normal = np.asarray(texel["normal"], dtype=np.float32)
-        origin = position + normal * 0.002
+        origin = position + normal * float(getattr(settings, "normal_bias", 0.002))
         kind = str(getattr(light, "type", getattr(light, "light_kind", "point")) or "point").lower()
         if kind.endswith("ambient") or bool(getattr(light, "ambient_only", False)):
             return 1.0
@@ -109,6 +130,22 @@ class LightmapShadowSolver:
 
     def clear_cache(self) -> None:
         self._triangles = []
+        self._o3d_scene = None
+
+    def _build_open3d_scene(self, vertices: list[np.ndarray], indices: list[tuple[int, int, int]]) -> None:
+        self._o3d_scene = None
+        if o3d is None or not vertices or not indices:
+            return
+        try:
+            scene = o3d.t.geometry.RaycastingScene()
+            verts = o3d.core.Tensor(np.asarray(vertices, dtype=np.float32), dtype=o3d.core.Dtype.Float32)
+            tris = o3d.core.Tensor(np.asarray(indices, dtype=np.uint32), dtype=o3d.core.Dtype.UInt32)
+            mesh = o3d.t.geometry.TriangleMesh(verts, tris)
+            scene.add_triangles(mesh)
+            self._o3d_scene = scene
+        except Exception as exc:
+            self._last_error = str(exc)
+            self._o3d_scene = None
 
 
 def _ray_triangle(origin, direction, v0, v1, v2) -> float | None:

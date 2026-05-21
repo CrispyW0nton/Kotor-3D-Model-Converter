@@ -33,6 +33,33 @@ if QtCore is not None:
         def cancel(self) -> None:
             self._cancelled = True
 
+
+    class LightmapPreviewBakeWorker(QtCore.QObject):
+        finished = QtCore.Signal(object)
+
+        def __init__(self, mesh: object, lights: list[object], settings, baker: LightmapBaker | None = None):
+            super().__init__()
+            self.mesh = mesh
+            self.lights = list(lights)
+            self.settings = settings
+            self.baker = baker or LightmapBaker()
+            self._cancelled = False
+
+        @QtCore.Slot()
+        def run(self) -> None:
+            self.finished.emit(
+                self.baker.bake_preview(
+                    self.mesh,
+                    self.lights,
+                    self.settings,
+                    should_cancel=lambda: self._cancelled,
+                )
+            )
+
+        @QtCore.Slot()
+        def cancel(self) -> None:
+            self._cancelled = True
+
 else:
 
     class LightmapBakeWorker:  # type: ignore[no-redef]
@@ -43,6 +70,21 @@ else:
 
         def run(self):
             return self.baker.bake(self.job)
+
+        def cancel(self) -> None:
+            self._cancelled = True
+
+
+    class LightmapPreviewBakeWorker:  # type: ignore[no-redef]
+        def __init__(self, mesh: object, lights: list[object], settings, baker: LightmapBaker | None = None):
+            self.mesh = mesh
+            self.lights = list(lights)
+            self.settings = settings
+            self.baker = baker or LightmapBaker()
+            self._cancelled = False
+
+        def run(self):
+            return self.baker.bake_preview(self.mesh, self.lights, self.settings, should_cancel=lambda: self._cancelled)
 
         def cancel(self) -> None:
             self._cancelled = True

@@ -7,6 +7,8 @@ from math import floor, isfinite
 
 import numpy as np
 
+from .lightmap_uv_validator import face_uv_attr_for_channel, uv_attr_for_channel
+
 try:
     from src.core.model_data import _quat_rotate
 except Exception:  # pragma: no cover
@@ -68,6 +70,7 @@ class LightmapRasterizer:
                 tri_index,
                 int(face_mats[tri_index]) if tri_index < len(face_mats) else 0,
                 diffuse,
+                id(mesh),
             )
         return buffer
 
@@ -80,6 +83,7 @@ class LightmapRasterizer:
         triangle_index: int,
         material_id: int,
         diffuse: tuple[float, float, float],
+        mesh_id: int = 0,
     ) -> None:
         res = buffer.resolution
         pix = [self.uv_to_texel(uv, res) for uv in uv_tri]
@@ -118,7 +122,7 @@ class LightmapRasterizer:
                 buffer.valid_mask[y, x] = True
                 buffer.world_positions[y, x] = pos
                 buffer.world_normals[y, x] = normal
-                buffer.mesh_ids[y, x] = id(positions) & 0x7FFFFFFF
+                buffer.mesh_ids[y, x] = int(mesh_id) & 0x7FFFFFFF
                 buffer.triangle_ids[y, x] = int(triangle_index)
                 buffer.material_ids[y, x] = int(material_id)
                 buffer.base_diffuse[y, x] = diffuse
@@ -141,18 +145,15 @@ class LightmapRasterizer:
         return (float(uv[0]) * float(resolution) - 0.5, (1.0 - float(uv[1])) * float(resolution) - 0.5)
 
     def _uv_triangle(self, mesh: object, uv_channel: int, face_index: int):
-        attr = {0: "uvs", 1: "uvs_lm", 2: "uvs_2", 3: "uvs_3"}.get(int(uv_channel), "uvs")
+        attr = uv_attr_for_channel(uv_channel)
         uvs = list(getattr(mesh, attr, []) or [])
         if not uvs:
             return None
         faces = getattr(mesh, "faces", []) or []
         if face_index >= len(faces):
             return None
-        if uv_channel == 0:
-            face_uvs = getattr(mesh, "face_uvs", []) or []
-            indices = face_uvs[face_index] if face_uvs and face_index < len(face_uvs) else faces[face_index]
-        else:
-            indices = faces[face_index]
+        face_uvs = getattr(mesh, face_uv_attr_for_channel(uv_channel), []) or []
+        indices = face_uvs[face_index] if face_uvs and face_index < len(face_uvs) else faces[face_index]
         try:
             return tuple((float(uvs[int(i)][0]), float(uvs[int(i)][1])) for i in indices)
         except Exception:

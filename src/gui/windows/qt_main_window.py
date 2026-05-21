@@ -31,6 +31,8 @@ except ImportError as exc:  # pragma: no cover - import gate for Tk fallback
 from src.gui.qt_lib.panels.qt_library_panel import QtLibraryPanel, enrich_library_rows
 from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel
 from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
+from src.gui.qt_lib.panels.qt_camera_panel import QtCameraPanel
+from src.gui.qt_lib.panels.qt_mesh_tools_panel import QtMeshToolsPanel
 from src.gui.qt_lib.assets.qt_matrix_background import QtMatrixEngine, QtMatrixLabel, QtMatrixPanel
 from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel, QtSkeletonPanel
 from src.gui.qt_lib.viewports.qt_viewport import QtMainViewportWidget
@@ -44,6 +46,7 @@ from src.gui.qt_lib.panels.qt_character_builder_panel import QtCharacterBuilderW
 from src.gui.qt_lib.panels.qt_diagnostics_panel import QtDiagnosticsWindow
 from src.gui.qt_lib.dialogs.qt_dialogs import show_about, show_format_reference, show_ipc_info, show_viewport_navigation_reference
 from src.gui.qt_lib.dialogs.qt_lightmap_baker_dialog import QtLightmapBakerDialog
+from src.gui.qt_lib.dialogs.qt_render_frame_dialog import QtRenderFrameDialog
 from src.gui.qt_lib.panels.qt_modular_panel import QtModularModePanel
 from src.gui.qt_lib.panels.qt_resource_panel import QtResourceBrowserPanel, QtTwoDaBrowserPanel
 from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
@@ -74,6 +77,124 @@ C = {
 
 _GUI_DIR = Path(__file__).resolve().parents[1]
 _QT_ICON_DIR = (_GUI_DIR / "icons").as_posix()
+
+
+def _bounds_from_points(points) -> Optional[tuple[tuple[float, float, float], tuple[float, float, float]]]:
+    valid = []
+    for point in points or []:
+        try:
+            x, y, z = float(point[0]), float(point[1]), float(point[2])
+        except Exception:
+            continue
+        if math.isfinite(x) and math.isfinite(y) and math.isfinite(z):
+            valid.append((x, y, z))
+    if not valid:
+        return None
+    return (
+        tuple(min(point[axis] for point in valid) for axis in range(3)),
+        tuple(max(point[axis] for point in valid) for axis in range(3)),
+    )
+
+
+def _bounds_center(bounds) -> tuple[float, float, float]:
+    return (
+        (float(bounds[0][0]) + float(bounds[1][0])) * 0.5,
+        (float(bounds[0][1]) + float(bounds[1][1])) * 0.5,
+        (float(bounds[0][2]) + float(bounds[1][2])) * 0.5,
+    )
+
+
+def _bounds_overlap_xy(a, b) -> bool:
+    return not (
+        float(a[1][0]) < float(b[0][0])
+        or float(b[1][0]) < float(a[0][0])
+        or float(a[1][1]) < float(b[0][1])
+        or float(b[1][1]) < float(a[0][1])
+    )
+
+
+def _walkmesh_reference_bounds(model, renderer=None):
+    if model is None or not hasattr(model, "all_nodes"):
+        return None
+    points = []
+    for node in model.all_nodes() or []:
+        name = str(getattr(node, "name", "") or "").lower()
+        flags = int(getattr(node, "flags", 0) or 0)
+        is_walkmesh = (
+            name.startswith("walkmesh")
+            or int(getattr(node, "vertex_space", 0) or 0) == 2
+            or bool(getattr(node, "is_aabb", False))
+            or bool(flags & 0x0200)
+        )
+        if not is_walkmesh:
+            continue
+        verts = getattr(node, "vertices", []) or []
+        if not verts:
+            continue
+        try:
+            if renderer is not None and hasattr(renderer, "_get_world_verts_for_node"):
+                points.extend(renderer._get_world_verts_for_node(node))
+            else:
+                points.extend(verts)
+        except Exception:
+            points.extend(verts)
+    return _bounds_from_points(points)
+
+
+def _walkmesh_overlay_offset_for_model(model, wok_data, renderer=None) -> tuple[float, float, float]:
+    wok_bounds = _bounds_from_points(getattr(wok_data, "verts", []) or [])
+    if wok_bounds is None:
+        return (0.0, 0.0, 0.0)
+
+    reference_bounds = _walkmesh_reference_bounds(model, renderer)
+    if reference_bounds is not None:
+        ref_center = _bounds_center(reference_bounds)
+        wok_center = _bounds_center(wok_bounds)
+        return (
+            ref_center[0] - wok_center[0],
+            ref_center[1] - wok_center[1],
+            ref_center[2] - wok_center[2],
+        )
+
+    try:
+        render_bounds = model.render_bounds()
+    except Exception:
+        render_bounds = None
+    if render_bounds is None or _bounds_overlap_xy(wok_bounds, render_bounds):
+        return (0.0, 0.0, 0.0)
+    render_center = _bounds_center(render_bounds)
+    wok_center = _bounds_center(wok_bounds)
+    return (
+        render_center[0] - wok_center[0],
+        render_center[1] - wok_center[1],
+        float(render_bounds[0][2]) - float(wok_bounds[0][2]),
+    )
+
+
+def _walkmesh_overlay_node_from_wok(wok_data, label: str, world_offset=(0.0, 0.0, 0.0)):
+    from src.core.model_data import ModelNode, NodeFlags
+
+    ox, oy, oz = (float(world_offset[0]), float(world_offset[1]), float(world_offset[2]))
+    raw_name = str(label or "walkmesh").split(":", 1)[-1]
+    stem = Path(raw_name).stem or "walkmesh"
+    node = ModelNode(name=f"{stem}_overlay", flags=int(NodeFlags.AABB), render=False)
+    node.vertex_space = 1
+    node.texture = "walkmesh"
+    node.vertices = [
+        (float(v[0]) + ox, float(v[1]) + oy, float(v[2]) + oz)
+        for v in (getattr(wok_data, "verts", []) or [])
+    ]
+    node.faces = [
+        (int(face.v1), int(face.v2), int(face.v3))
+        for face in (getattr(wok_data, "faces", []) or [])
+    ]
+    node.face_mats = [
+        int(getattr(face, "surface", 0) or 0)
+        for face in (getattr(wok_data, "faces", []) or [])
+    ]
+    node._gr_walkmesh_overlay_proxy = True
+    node._gr_walkmesh_source_label = str(label or "")
+    return node
 
 
 def _prebuild_gpu_mesh_data_for_model(model) -> None:
@@ -817,6 +938,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.texture_action = QtGui.QAction("Toggle Texture", self)
         self.texture_action.setShortcut("T")
         self.texture_action.triggered.connect(lambda: self._click_viewport_button("texture_button"))
+        self.grid_action = QtGui.QAction("Toggle Grid", self)
+        self.grid_action.setShortcut("Alt+G")
+        self.grid_action.triggered.connect(lambda: self._click_viewport_button("grid_button"))
         self.uv_action = QtGui.QAction("Open UV Viewer...", self)
         self.uv_action.triggered.connect(self._open_uv_viewer)
         self.diag_action = QtGui.QAction(self._icon("diag"), "Diagnostics...", self)
@@ -851,6 +975,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.nodes_panel_action.triggered.connect(lambda: self._show_detachable_panel("nodes"))
         self.lighting_panel_action = QtGui.QAction("Open Lighting Panel", self)
         self.lighting_panel_action.triggered.connect(lambda: self._show_detachable_panel("lighting"))
+        self.camera_panel_action = QtGui.QAction("Open Camera Panel", self)
+        self.camera_panel_action.triggered.connect(lambda: self._show_detachable_panel("cameras"))
+        self.render_frame_action = QtGui.QAction("Render Camera Still...", self)
+        self.render_frame_action.triggered.connect(self._open_render_frame_dialog)
         self.twoda_panel_action = QtGui.QAction(self._icon("twoda"), "Open 2DA Browser", self)
         self.twoda_panel_action.triggered.connect(lambda: self._show_detachable_panel("2das"))
         self.resources_panel_action = QtGui.QAction(self._icon("resources"), "Open Resource Browser", self)
@@ -925,6 +1053,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.wire_action,
             self.bones_action,
             self.texture_action,
+            self.grid_action,
             None,
             self.uv_action,
             self.info_action,
@@ -956,6 +1085,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         modules_menu.addSeparator()
         modules_menu.addAction(self.nodes_panel_action)
         modules_menu.addAction(self.lighting_panel_action)
+        modules_menu.addAction(self.camera_panel_action)
         modules_menu.addAction(self.module_meshes_panel_action)
         modules_menu.addAction(self.twoda_panel_action)
         modules_menu.addAction(self.resources_panel_action)
@@ -967,6 +1097,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
         tools_menu = self.menuBar().addMenu("Tools")
         tools_menu.addAction(self.diag_action)
+        tools_menu.addAction(self.render_frame_action)
         tools_menu.addAction(self.texture_tool_action)
         tools_menu.addAction(self.blueprint_editor_action)
         tools_menu.addSeparator()
@@ -1118,6 +1249,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._separator())
         layout.addWidget(self._tool_button("Anims  Ctrl+A", self.anims_action, "anims", compact=True))
         layout.addWidget(self._tool_button("Lights", self.lighting_panel_action, "", compact=True))
+        layout.addWidget(self._tool_button("Cameras", self.camera_panel_action, "", compact=True))
         layout.addWidget(self._tool_button("Diag  Ctrl+D", self.diag_action, "diag", compact=True))
         return bar
 
@@ -1250,6 +1382,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.right_tabs = right_tabs
         self.skeleton_panel = QtSkeletonPanel(self)
         self.lighting_panel = QtLightingPanel(self)
+        self.camera_panel = QtCameraPanel(self)
         self.properties_panel = QtPropertiesPanel(self, module_browser_enabled=False)
         self.module_geometry_panel = QtPropertiesPanel(self)
         self.module_geometry_panel.set_module_browser_only(True)
@@ -1306,19 +1439,24 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.resource_panel.resourceActivated.connect(self._activate_resource_row)
         self.modular_panel = QtModularModePanel(self)
         self.modular_panel.moduleActionRequested.connect(self._handle_module_action)
+        self.mesh_tools_panel = QtMeshToolsPanel(self)
         self.blueprint_window = QtBlueprintEditorWindow(self)
         self.blueprint_panel = self.blueprint_window.panel
         self._detachable_panels: dict[str, QtWidgets.QDockWidget] = {}
         self._detachable_panel_sizes = {
             "nodes": (620, 700),
             "lighting": (420, 620),
+            "cameras": (460, 680),
             "module_meshes": (620, 720),
+            "mesh_tools": (420, 760),
             "2das": (980, 640),
             "resources": (980, 640),
         }
         self._create_detachable_panel("nodes", "Nodes", self.skeleton_panel, QtCore.Qt.LeftDockWidgetArea)
         self._create_detachable_panel("lighting", "Lighting", self.lighting_panel, QtCore.Qt.RightDockWidgetArea)
+        self._create_detachable_panel("cameras", "Cameras", self.camera_panel, QtCore.Qt.RightDockWidgetArea)
         self._create_detachable_panel("module_meshes", "Module Meshes", self.module_geometry_panel, QtCore.Qt.RightDockWidgetArea)
+        self.mesh_tools_dock = self._create_detachable_panel("mesh_tools", "Mesh Tools", self.mesh_tools_panel, QtCore.Qt.RightDockWidgetArea)
         self._create_detachable_panel("2das", "2DA Browser", self.twoda_panel, QtCore.Qt.LeftDockWidgetArea)
         self._create_detachable_panel("resources", "Resource Browser", self.resource_panel, QtCore.Qt.LeftDockWidgetArea)
         left_tabs.addTab(self.modular_panel, self._icon("modular", 16), "Modules")
@@ -1328,6 +1466,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport.set_navigation_profile(
             self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
         )
+        self.mesh_tools_panel.set_viewport(self.viewport)
+        self.mesh_tools_dock.show()
         self.viewport.setMinimumWidth(420)
         self.viewport.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.viewport_label = self.viewport.canvas
@@ -1349,6 +1489,20 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.lighting_panel.lightSelected.connect(self.viewport.set_selected_node)
         self.lighting_panel.lightmapBakeRequested.connect(self._open_lightmap_baker)
         self.viewport.nodeSelected.connect(self.lighting_panel.select_light)
+        self.camera_panel.cameraSelected.connect(self.viewport.set_selected_node)
+        self.camera_panel.cameraChanged.connect(self._on_camera_panel_changed)
+        self.camera_panel.activeCameraRequested.connect(self.viewport.switch_to_camera)
+        self.camera_panel.clearActiveCameraRequested.connect(self.viewport.switch_to_perspective)
+        self.camera_panel.createCameraRequested.connect(self.viewport.create_scene_camera)
+        self.camera_panel.createFromViewRequested.connect(self.viewport.create_camera_from_current_view)
+        self.camera_panel.alignCameraToViewRequested.connect(self.viewport.align_camera_to_current_view)
+        self.camera_panel.alignViewToCameraRequested.connect(self.viewport.align_view_to_camera)
+        self.camera_panel.deleteCameraRequested.connect(self.viewport.delete_camera)
+        self.camera_panel.duplicateCameraRequested.connect(self.viewport.duplicate_selected_camera)
+        self.camera_panel.renderFrameRequested.connect(self._open_render_frame_dialog)
+        self.viewport.cameraChanged.connect(self._sync_camera_panel_from_viewport)
+        self.viewport.activeCameraChanged.connect(lambda _node=None: self.camera_panel.refresh())
+        self.viewport.cameraSelectionChanged.connect(self.camera_panel.select_camera_object)
         self.module_geometry_panel.moduleMeshesSelected.connect(self.viewport.set_selected_meshes)
         self.module_geometry_panel.moduleMeshVisibilityChanged.connect(self.viewport.refresh_view)
         self.module_geometry_panel.moduleMeshesWindowRequested.connect(lambda: self._show_detachable_panel("module_meshes"))
@@ -1670,6 +1824,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self.skeleton_panel.load_model(None)
             if hasattr(self, "lighting_panel"):
                 self.lighting_panel.set_model(None)
+            if hasattr(self, "camera_panel"):
+                self.camera_panel.set_model(None)
+                self.camera_panel.manager = self.viewport.camera_manager
             if hasattr(self, "properties_panel"):
                 self.properties_panel.show_model(None)
             if hasattr(self, "module_geometry_panel"):
@@ -1744,6 +1901,40 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport.revert_baked_lightmaps()
         self._log("Reverted baked lightmap preview/apply overrides.", "info")
 
+    def _on_camera_panel_changed(self) -> None:
+        self.viewport.refresh_cameras()
+        self.camera_panel.refresh()
+
+    def _sync_camera_panel_from_viewport(self) -> None:
+        self.camera_panel.manager = self.viewport.camera_manager
+        self.camera_panel.refresh()
+
+    def _open_render_frame_dialog(self) -> None:
+        cameras = self.viewport.camera_manager.get_all_cameras()
+        active_id = self.viewport.camera_manager.active_camera_id
+        dialog = QtRenderFrameDialog(cameras, active_id, self)
+        dialog.renderRequested.connect(lambda settings, camera_id: self._render_camera_still(dialog, settings, camera_id))
+        dialog.previewRequested.connect(lambda settings, camera_id: self._preview_camera_still(dialog, settings, camera_id))
+        dialog.exec()
+
+    def _preview_camera_still(self, dialog: QtRenderFrameDialog, settings, camera_id: str) -> None:
+        try:
+            path = self.viewport.render_still_frame(settings, camera_id)
+            dialog.report_status(f"Preview saved: {path}")
+            self._log(f"Preview rendered camera still: {path}", "success")
+        except Exception as exc:
+            dialog.report_status(f"Preview failed: {exc}")
+            self._log(f"Camera preview render failed: {exc}", "error")
+
+    def _render_camera_still(self, dialog: QtRenderFrameDialog, settings, camera_id: str) -> None:
+        try:
+            path = self.viewport.render_still_frame(settings, camera_id)
+            dialog.report_status(f"Saved: {path}")
+            self._log(f"Rendered camera still: {path}", "success")
+        except Exception as exc:
+            dialog.report_status(f"Render failed: {exc}")
+            self._log(f"Camera render failed: {exc}", "error")
+
     def _call_viewport(self, method_name: str):
         viewport = getattr(self, "viewport", None)
         method = getattr(viewport, method_name, None)
@@ -1786,6 +1977,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.skeleton_panel.load_model(model)
         if hasattr(self, "lighting_panel"):
             self.lighting_panel.set_model(model)
+        if hasattr(self, "camera_panel"):
+            self.camera_panel.set_model(model)
+            self.camera_panel.manager = self.viewport.camera_manager
+            self.camera_panel.refresh()
         if hasattr(self, "properties_panel"):
             self.properties_panel.show_model(model)
         if hasattr(self, "module_geometry_panel"):
@@ -3921,6 +4116,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.skeleton_panel.load_model(model)
         if hasattr(self, "lighting_panel"):
             self.lighting_panel.set_model(model)
+        if hasattr(self, "camera_panel"):
+            self.camera_panel.set_model(model)
+            self.camera_panel.manager = self.viewport.camera_manager
+            self.camera_panel.refresh()
         if hasattr(self, "properties_panel"):
             self.properties_panel.show_model(model)
         if hasattr(self, "module_geometry_panel"):
@@ -4111,14 +4310,34 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def _load_walkmesh_source(self, source, label: str) -> bool:
         try:
-            if isinstance(source, (bytes, bytearray)):
-                from src.core.module_format import WOKData
+            from src.core.module_format import WOKData
 
+            if isinstance(source, (bytes, bytearray)):
                 source = WOKData.from_bytes(bytes(source))
-            self.viewport.load_walkmesh(source)
+            elif isinstance(source, str):
+                source = WOKData.from_file(source)
+            offset = _walkmesh_overlay_offset_for_model(
+                self._current_model,
+                source,
+                getattr(self.viewport, "_renderer", None),
+            )
+            proxy_node = _walkmesh_overlay_node_from_wok(source, label, offset)
+            extra_nodes = [
+                node
+                for node in (getattr(self._current_model, "_gr_extra_module_mesh_nodes", []) or [])
+                if not getattr(node, "_gr_walkmesh_overlay_proxy", False)
+            ]
+            extra_nodes.append(proxy_node)
+            setattr(self._current_model, "_gr_extra_module_mesh_nodes", extra_nodes)
+            self.viewport.load_walkmesh(source, world_offset=offset)
+            overlay = getattr(getattr(self.viewport, "_renderer", None), "_walkmesh_overlay", None)
+            if overlay is not None:
+                setattr(overlay, "_gr_module_node", proxy_node)
             self.viewport._renderer.show_walkmesh = True
             self.viewport.walkmesh_button.setChecked(True)
             self.viewport._request_render()
+            if hasattr(self, "module_geometry_panel"):
+                self.module_geometry_panel.show_model(self._current_model)
             self._log(f"Walkmesh loaded: {label}", "success")
             return True
         except Exception as exc:

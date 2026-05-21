@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .lightmap_bake_job import BakeableMesh, LightmapBakeJob, LightmapBakeResult, LightmapMeshBake, ordered_unique
+import numpy as np
+from PIL import Image
+
+from .aurora_light_adapter import AuroraLightAdapter
+from .lightmap_bake_job import BakeResult, BakeableMesh, LightmapBakeJob, LightmapBakeResult, LightmapMeshBake, ordered_unique
 from .lightmap_gpu_solver import LightmapGpuSolver
 from .lightmap_lighting_solver import LightmapLightingSolver
 from .lightmap_manifest import LightmapManifest
@@ -13,6 +17,8 @@ from .lightmap_padding import LightmapPadding
 from .lightmap_rasterizer import LightmapRasterizer
 from .lightmap_shadow_solver import LightmapShadowSolver
 from .lightmap_uv_validator import LightmapUVValidator
+from .preview_cache import LightmapPreviewCache
+from .uv_atlas_generator import UVAtlasGenerator, UVAtlasResult
 
 
 class LightmapBaker:
@@ -25,6 +31,8 @@ class LightmapBaker:
         padding: LightmapPadding | None = None,
         output: LightmapOutput | None = None,
         manifest: LightmapManifest | None = None,
+        uv_generator: UVAtlasGenerator | None = None,
+        preview_cache: LightmapPreviewCache | None = None,
     ) -> None:
         self.uv_validator = uv_validator or LightmapUVValidator()
         self.rasterizer = rasterizer or LightmapRasterizer()
@@ -33,6 +41,9 @@ class LightmapBaker:
         self.padding = padding or LightmapPadding()
         self.output = output or LightmapOutput()
         self.manifest = manifest or LightmapManifest()
+        self.uv_generator = uv_generator or UVAtlasGenerator()
+        self.preview_cache = preview_cache or LightmapPreviewCache()
+        self.aurora_adapter = AuroraLightAdapter()
 
     def bake(self, job: LightmapBakeJob) -> LightmapBakeResult:
         settings = job.settings.normalized()
@@ -54,6 +65,7 @@ class LightmapBaker:
         if not bakeable:
             result.errors.append("No bakeable meshes found.")
             return result
+        lights = self._bake_lights(job, settings, result)
         self._progress(job, "Building shadow acceleration", 1, 12, "")
         if settings.use_shadows:
             self.shadow_solver.build_acceleration_structure([mesh.node for mesh in bakeable])
@@ -80,7 +92,7 @@ class LightmapBaker:
                 self._progress(job, "Baking direct lighting", index, total, entry.name)
                 buffer.baked_rgb = self.lighting_solver.solve_buffer(
                     buffer,
-                    job.lights,
+                    lights,
                     settings,
                     self.shadow_solver if settings.use_shadows else None,
                 )
@@ -99,6 +111,7 @@ class LightmapBaker:
                     settings.overwrite_existing,
                 )
                 self.output.save_image(image, path, settings.output_format)
+                self.assign_lightmap_to_mesh(entry.node, str(path), entry.uv_channel)
                 result.bakes.append(
                     LightmapMeshBake(
                         mesh_name=entry.name,
@@ -114,11 +127,70 @@ class LightmapBaker:
         if settings.generate_manifest and not result.cancelled:
             self._progress(job, "Writing manifest", 11, 12, "")
             try:
-                result.manifest_path = self.manifest.write(result, settings, job.lights, settings.output_directory or "exports/lightmaps")
+                result.manifest_path = self.manifest.write(result, settings, lights, settings.output_directory or "exports/lightmaps")
             except Exception as exc:
                 result.errors.append(f"Cannot write manifest: {exc}")
         self._progress(job, "Complete", 12, 12, "")
         return result
+
+    def bake_preview(
+        self,
+        mesh: object,
+        lights: list[object] | tuple[object, ...],
+        settings,
+        *,
+        texture_cache: object | None = None,
+        should_cancel=None,
+    ) -> BakeResult:
+        settings = settings.normalized()
+        preview_settings = settings
+        preview_settings.resolution = settings.preview_resolution
+        preview_settings.bake_resolution = settings.preview_resolution
+        key = self.preview_cache.make_key(mesh, preview_settings, list(lights))
+        cached = self.preview_cache.get(key)
+        if isinstance(cached, Image.Image):
+            return BakeResult(True, preview_image=cached, messages=["Preview cache hit."])
+
+        validation = self.uv_validator.validate_mesh_uvs(mesh, settings.selected_uv_channel)
+        if validation.errors:
+            return BakeResult(False, warnings=validation.warnings, errors=validation.errors)
+        if should_cancel and should_cancel():
+            return BakeResult(False, errors=["Bake cancelled by user."])
+        try:
+            buffer = self.rasterizer.rasterize_mesh(mesh, settings.selected_uv_channel, settings.preview_resolution)
+            if not buffer.valid_mask.any():
+                return BakeResult(False, warnings=validation.warnings, errors=["No valid texels were rasterized from UVs."])
+            if settings.use_shadows:
+                self.shadow_solver.build_acceleration_structure([mesh])
+            buffer.baked_rgb = self.lighting_solver.solve_buffer(
+                buffer,
+                lights,
+                preview_settings,
+                self.shadow_solver if settings.use_shadows else None,
+            )
+            image = self.padding.pad_islands(buffer.baked_rgb, buffer.valid_mask, min(settings.padding_pixels, 4))
+            pil = Image.fromarray((np.clip(image, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8), "RGB")
+            self.preview_cache.put(key, pil)
+            return BakeResult(True, preview_image=pil, warnings=validation.warnings)
+        except Exception as exc:
+            return BakeResult(False, warnings=validation.warnings, errors=[str(exc)])
+
+    def generate_lightmap_uvs(
+        self,
+        mesh: object,
+        *,
+        target_channel: int = 1,
+        replace_existing: bool = False,
+        settings=None,
+    ) -> UVAtlasResult:
+        settings = (settings or object())
+        return self.uv_generator.generate_lightmap_uvs(
+            mesh,
+            target_channel=target_channel,
+            resolution=int(getattr(settings, "resolution", getattr(settings, "bake_resolution", 1024)) or 1024),
+            padding_pixels=int(getattr(settings, "padding_pixels", 8) or 8),
+            replace_existing=replace_existing,
+        )
 
     def collect_bakeable_meshes(self, job: LightmapBakeJob, result: LightmapBakeResult | None = None) -> list[BakeableMesh]:
         settings = job.settings.normalized()
@@ -135,7 +207,14 @@ class LightmapBaker:
         for mesh in candidates:
             if not self._is_mesh(mesh):
                 continue
-            uv_channel = self.uv_validator.find_best_uv_channel(mesh)
+            requested_channel = int(getattr(settings, "selected_uv_channel", 1))
+            if not self.uv_validator._uvs(mesh, requested_channel):
+                if result is not None:
+                    result.warnings.append(
+                        f"{getattr(mesh, 'name', 'mesh')}: Requested UV{requested_channel + 1} is missing; generate lightmap UVs or explicitly choose another channel."
+                    )
+                continue
+            uv_channel = requested_channel
             warnings: list[str] = []
             if uv_channel < 0:
                 if result is not None:
@@ -145,6 +224,14 @@ class LightmapBaker:
                 warnings.append("Mesh has no separate lightmap UVs; using primary UVs.")
             bakeable.append(BakeableMesh(mesh, str(getattr(mesh, "name", "mesh") or "mesh"), self._material_name(mesh), uv_channel, warnings))
         return bakeable
+
+    def assign_lightmap_to_mesh(self, mesh: object, lightmap_path: str, uv_channel: int) -> None:
+        """Record generated assignment without mutating the original MDL lightmap field."""
+        try:
+            setattr(mesh, "_gr_baked_lightmap_path", str(lightmap_path))
+            setattr(mesh, "_gr_baked_lightmap_uv_channel", int(uv_channel))
+        except Exception:
+            pass
 
     def _all_meshes(self, model: object | None) -> list[object]:
         if model is None:
@@ -167,6 +254,19 @@ class LightmapBaker:
     def _module_name(self, model: object | None) -> str:
         raw = str(getattr(model, "name", "") or Path(str(getattr(model, "mdl_path", "") or "module")).stem)
         return self.output.sanitize_filename(raw or "module").lower()
+
+    def _bake_lights(self, job: LightmapBakeJob, settings, result: LightmapBakeResult) -> list[object]:
+        lights = list(job.lights or [])
+        if settings.include_aurora_lights:
+            existing = {id(light) for light in lights}
+            existing_names = {str(getattr(light, "name", "") or "").lower() for light in lights}
+            for light in self.aurora_adapter.from_model(job.model):
+                name = str(getattr(light, "name", "") or "").lower()
+                if id(light) not in existing and name not in existing_names:
+                    lights.append(light)
+        if not lights:
+            result.warnings.append("No active lights were found; bake may be black unless ambient is enabled.")
+        return [light for light in lights if bool(getattr(light, "affects_lightmap", True))]
 
     def _collision_safe_path(self, path: Path, overwrite: bool) -> Path:
         if overwrite or not path.exists():

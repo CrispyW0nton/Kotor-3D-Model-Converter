@@ -1,0 +1,7 @@
+# requirements-open3d-experimental.txt
+# Open3D experimental backend for GhostRigger.
+# Use only when testing RaycastingScene / Open3D-specific features.
+
+--find-links https://www.open3d.org/docs/latest/getting_started.html
+--only-binary open3d
+open3d

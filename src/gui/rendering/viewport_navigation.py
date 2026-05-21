@@ -45,6 +45,7 @@ B: Toggle bones
 T: Toggle texture
 G: Toggle gimbal
 Tab: Cycle gimbal mode
+Alt+G: Toggle grid
 Alt+X: Toggle X-Ray viewport overlay
 Ctrl+Z / Ctrl+Y: Undo / redo viewport edit
 Mouse wheel: Zoom
