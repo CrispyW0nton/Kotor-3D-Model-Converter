@@ -47,6 +47,10 @@ from src.core.validation.animation_block_validator import (
     AnimationBlockValidationError,
     validate_animation_block_against_model,
 )
+from src.core.validation.animation_roundtrip_validator import (
+    AnimationRoundTripValidationError,
+    verify_written_animation_override_roundtrip,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -188,6 +192,8 @@ class AuroraAnimationInjectionRequest:
     overwrite_existing: bool = True
     write_zero_position_controllers: bool = False
     max_size_multiplier: float = 2.0
+    verify_roundtrip: bool = False
+    roundtrip_tolerance: float = 1e-4
 
     def __post_init__(self) -> None:
         self.r3a_animation_json = Path(self.r3a_animation_json)
@@ -290,6 +296,8 @@ class AuroraAnimationWriter:
                 result.errors.append(f"Could not load target MDL: {request.target_mdl}")
                 return self._finish(result, request)
 
+            original_model_for_roundtrip = copy.deepcopy(model) if request.verify_roundtrip else None
+
             animation = self.build_animation_from_r3a(
                 payload=payload,
                 model=model,
@@ -361,6 +369,25 @@ class AuroraAnimationWriter:
                 result.errors.append(f"Animation '{resolved_slot.slot_name}' missing after reload")
                 return self._finish(result, request)
 
+            if request.verify_roundtrip:
+                roundtrip_report = verify_written_animation_override_roundtrip(
+                    original_model=original_model_for_roundtrip or model,
+                    prepared_animation=animation,
+                    written_mdl_path=request.output_mdl,
+                    written_mdx_path=request.output_mdl.with_suffix(".mdx"),
+                    slot_name=resolved_slot.slot_name,
+                    tolerance=request.roundtrip_tolerance,
+                    game_version=self._game_version(request.game),
+                )
+                try:
+                    roundtrip_report.raise_for_errors(resolved_slot.slot_name)
+                except AnimationRoundTripValidationError as exc:
+                    result.errors.append(str(exc))
+                    self._discard_outputs(request)
+                    return result
+                for warning in roundtrip_report.warnings:
+                    result.warnings.append(warning.message)
+
             result.output_mdl_sha256 = self.sha256(request.output_mdl)
             mdx_path = request.output_mdl.with_suffix(".mdx")
             if mdx_path.exists():
@@ -382,6 +409,19 @@ class AuroraAnimationWriter:
             encoding="utf-8",
         )
         return result
+
+    @staticmethod
+    def _discard_outputs(request: AuroraAnimationInjectionRequest) -> None:
+        for path in (
+            request.output_mdl,
+            request.output_mdl.with_suffix(".mdx"),
+            request.output_manifest,
+        ):
+            try:
+                if Path(path).exists():
+                    Path(path).unlink()
+            except OSError:
+                logger.warning("Could not discard failed export output: %s", path)
 
     def _load_model(self, request: AuroraAnimationInjectionRequest) -> Optional[KotorModel]:
         mdx = request.target_mdx or request.target_mdl.with_suffix(".mdx")

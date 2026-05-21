@@ -1,0 +1,326 @@
+"""MDL writer/readback gates for local animation override export."""
+
+from __future__ import annotations
+
+import json
+import math
+from pathlib import Path
+
+import pytest
+
+from src.core.animation.animation_engine import (
+    SuperModelResolver,
+    evaluate_aurora_animation_pose,
+)
+from src.core.game.kotor_loader import load_model_from_file
+from src.core.geometry.model_data import Animation, GameVersion, KotorModel, ModelNode
+from src.core.mdl.mdl_writer import MDLBinaryWriter
+from src.core.retargeting.aurora_animation_writer import (
+    AuroraAnimationInjectionRequest,
+    AuroraAnimationWriter,
+)
+from src.core.validation.animation_roundtrip_validator import (
+    quaternion_angular_difference_degrees,
+)
+
+
+def _quat_axis(axis: str, degrees: float) -> tuple[float, float, float, float]:
+    radians = math.radians(degrees)
+    s = math.sin(radians / 2.0)
+    c = math.cos(radians / 2.0)
+    if axis.upper() == "X":
+        return (s, 0.0, 0.0, c)
+    if axis.upper() == "Y":
+        return (0.0, s, 0.0, c)
+    if axis.upper() == "Z":
+        return (0.0, 0.0, s, c)
+    raise ValueError(axis)
+
+
+def _assert_quat_close(
+    actual: tuple[float, float, float, float],
+    expected: tuple[float, float, float, float],
+    *,
+    degrees: float = 0.01,
+) -> None:
+    assert quaternion_angular_difference_degrees(actual, expected) <= degrees
+
+
+def _anim_node(
+    name: str,
+    *,
+    positions: list[list[float]] | None = None,
+    orientations: list[list[float]] | None = None,
+    times: list[float] | None = None,
+) -> ModelNode:
+    key_times = times or [0.0]
+    controllers = []
+    if positions is not None:
+        controllers.append(
+            {
+                "type": 8,
+                "name": "position",
+                "columns": 3,
+                "times": key_times,
+                "values": positions,
+            }
+        )
+    if orientations is not None:
+        controllers.append(
+            {
+                "type": 20,
+                "name": "orientation",
+                "columns": 4,
+                "times": key_times,
+                "values": orientations,
+            }
+        )
+    return ModelNode(name=name, controllers=controllers)
+
+
+def _target_model(*, existing_length: float = 1.0) -> KotorModel:
+    root = ModelNode(name="root")
+    child = ModelNode(name="child", position=(1.0, 0.0, 0.0), parent=root)
+    root.children = [child]
+    existing = Animation(
+        name="pause1",
+        length=existing_length,
+        anim_root="root",
+        nodes=[_anim_node("root", orientations=[[0.0, 0.0, 0.0, 1.0]])],
+    )
+    return KotorModel(
+        name="synthetic_roundtrip",
+        root_node=root,
+        animations=[existing],
+        game_version=GameVersion.K1,
+    )
+
+
+def _write_target(tmp_path: Path, model: KotorModel) -> Path:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    mdl_path = tmp_path / "target.mdl"
+    MDLBinaryWriter().write_files(model, str(mdl_path))
+    return mdl_path
+
+
+def _request(tmp_path: Path, target_mdl: Path, *, replace_existing: bool = True) -> AuroraAnimationInjectionRequest:
+    r3a_path = tmp_path / "clip.json"
+    r3a_path.write_text(json.dumps({"frame_count": 1, "target_curves": {}}), encoding="utf-8")
+    return AuroraAnimationInjectionRequest(
+        r3a_animation_json=r3a_path,
+        target_mdl=target_mdl,
+        target_mdx=target_mdl.with_suffix(".mdx"),
+        animation_slot="pause1",
+        output_mdl=tmp_path / "out" / "target.mdl",
+        output_manifest=tmp_path / "out" / "manifest.json",
+        overwrite_existing=replace_existing,
+        verify_roundtrip=True,
+    )
+
+
+def _inject_with_animation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    animation: Animation,
+    *,
+    model: KotorModel | None = None,
+    replace_existing: bool = True,
+):
+    target_mdl = _write_target(tmp_path, model or _target_model())
+    request = _request(tmp_path, target_mdl, replace_existing=replace_existing)
+    monkeypatch.setattr(
+        AuroraAnimationWriter,
+        "build_animation_from_r3a",
+        lambda self, **_kwargs: animation,
+    )
+    result = AuroraAnimationWriter().inject(request)
+    return result, request
+
+
+def _read_animation(mdl_path: Path, slot_name: str = "pause1") -> tuple[KotorModel, Animation]:
+    model = load_model_from_file(str(mdl_path), str(mdl_path.with_suffix(".mdx")), GameVersion.K1)
+    assert model is not None
+    animations = [anim for anim in model.animations if anim.name.lower() == slot_name]
+    assert len(animations) == 1
+    return model, animations[0]
+
+
+@pytest.fixture(autouse=True)
+def _clear_supermodel_resolver():
+    SuperModelResolver.clear_cache()
+    SuperModelResolver.configure(None)
+    yield
+    SuperModelResolver.clear_cache()
+    SuperModelResolver.configure(None)
+
+
+def test_exported_local_override_exists_after_readback(monkeypatch, tmp_path: Path) -> None:
+    animation = Animation(
+        name="UE_Idle",
+        length=1.0,
+        anim_root="root",
+        nodes=[_anim_node("root", orientations=[[0.0, 0.0, 0.0, 1.0]])],
+    )
+
+    result, request = _inject_with_animation(monkeypatch, tmp_path, animation)
+    model, readback = _read_animation(request.output_mdl)
+
+    assert result.success is True, result.errors
+    assert readback.name == "pause1"
+    assert result.animation_slot == "pause1"
+    assert [anim.name for anim in model.animations].count("pause1") == 1
+
+
+def test_orientation_controller_survives_writer_boundary(monkeypatch, tmp_path: Path) -> None:
+    animation = Animation(
+        name="UE_RootAxes",
+        length=1.0,
+        anim_root="root",
+        nodes=[
+            _anim_node(
+                "root",
+                orientations=[
+                    [0.0, 0.0, 0.0, 1.0],
+                    list(_quat_axis("X", 90.0)),
+                    list(_quat_axis("Y", 90.0)),
+                ],
+                times=[0.0, 0.5, 1.0],
+            )
+        ],
+    )
+
+    result, request = _inject_with_animation(monkeypatch, tmp_path, animation)
+    model, readback = _read_animation(request.output_mdl)
+
+    assert result.success is True, result.errors
+    pose_half = evaluate_aurora_animation_pose(model, readback, 0.5)
+    pose_end = evaluate_aurora_animation_pose(model, readback, 1.0)
+    _assert_quat_close(pose_half.local_transforms_by_node["root"].rotation, _quat_axis("X", 90.0))
+    _assert_quat_close(pose_end.local_transforms_by_node["root"].rotation, _quat_axis("Y", 90.0))
+
+
+def test_position_controller_survives_writer_boundary_as_absolute_local(monkeypatch, tmp_path: Path) -> None:
+    animation = Animation(
+        name="UE_Position",
+        length=1.0,
+        anim_root="root",
+        nodes=[_anim_node("child", positions=[[2.0, 3.0, 4.0]], times=[0.5])],
+    )
+
+    result, request = _inject_with_animation(monkeypatch, tmp_path, animation)
+    model, readback = _read_animation(request.output_mdl)
+
+    assert result.success is True, result.errors
+    pose = evaluate_aurora_animation_pose(model, readback, 0.5)
+    assert pose.local_transforms_by_node["child"].position == pytest.approx((2.0, 3.0, 4.0))
+
+
+def test_parent_child_fk_evaluates_after_readback(monkeypatch, tmp_path: Path) -> None:
+    animation = Animation(
+        name="UE_FK",
+        length=1.0,
+        anim_root="root",
+        nodes=[_anim_node("root", orientations=[list(_quat_axis("Z", 90.0))])],
+    )
+
+    result, request = _inject_with_animation(monkeypatch, tmp_path, animation)
+    model, readback = _read_animation(request.output_mdl)
+
+    assert result.success is True, result.errors
+    pose = evaluate_aurora_animation_pose(model, readback, 0.0)
+    assert pose.world_transforms_by_node["child"].position == pytest.approx((0.0, 1.0, 0.0), abs=1e-6)
+
+
+def test_existing_local_animation_replacement_policy(monkeypatch, tmp_path: Path) -> None:
+    replacement = Animation(
+        name="UE_Replacement",
+        length=2.0,
+        anim_root="root",
+        nodes=[_anim_node("root", orientations=[list(_quat_axis("X", 45.0))])],
+    )
+
+    result, request = _inject_with_animation(monkeypatch, tmp_path / "replace", replacement)
+    model, readback = _read_animation(request.output_mdl)
+
+    assert result.success is True, result.errors
+    assert [anim.name for anim in model.animations].count("pause1") == 1
+    assert readback.length == pytest.approx(2.0)
+
+    denied_result, denied_request = _inject_with_animation(
+        monkeypatch,
+        tmp_path / "deny",
+        replacement,
+        replace_existing=False,
+    )
+
+    assert denied_result.success is False
+    assert "already exists" in denied_result.errors[0]
+    assert not denied_request.output_mdl.exists()
+    assert not denied_request.output_mdl.with_suffix(".mdx").exists()
+    assert not denied_request.output_manifest.exists()
+
+
+def test_node_hierarchy_and_mdx_are_not_altered(monkeypatch, tmp_path: Path) -> None:
+    animation = Animation(
+        name="UE_GeometrySafe",
+        length=1.0,
+        anim_root="root",
+        nodes=[_anim_node("root", orientations=[list(_quat_axis("Z", 10.0))])],
+    )
+    base_model = _target_model()
+
+    result, request = _inject_with_animation(monkeypatch, tmp_path, animation, model=base_model)
+    read_model, _readback = _read_animation(request.output_mdl)
+
+    assert result.success is True, result.errors
+    assert [node.name for node in base_model.all_nodes()] == [node.name for node in read_model.all_nodes()]
+    assert [
+        node.parent.name if node.parent is not None else None
+        for node in base_model.all_nodes()
+    ] == [
+        node.parent.name if node.parent is not None else None
+        for node in read_model.all_nodes()
+    ]
+    assert [node.position for node in base_model.all_nodes()] == pytest.approx(
+        [node.position for node in read_model.all_nodes()]
+    )
+    assert request.target_mdx.read_bytes() == request.output_mdl.with_suffix(".mdx").read_bytes()
+
+
+def test_post_write_readback_failure_is_reported(monkeypatch, tmp_path: Path) -> None:
+    import src.core.validation.animation_roundtrip_validator as roundtrip_validator
+
+    animation = Animation(
+        name="UE_CorruptMe",
+        length=1.0,
+        anim_root="root",
+        nodes=[
+            _anim_node(
+                "root",
+                orientations=[[0.0, 0.0, 0.0, 1.0], list(_quat_axis("X", 90.0))],
+                times=[0.0, 1.0],
+            )
+        ],
+    )
+    real_loader = roundtrip_validator.load_model_from_file
+
+    def corrupting_loader(*args, **kwargs):
+        model = real_loader(*args, **kwargs)
+        if model is None:
+            return None
+        anim = next(a for a in model.animations if a.name.lower() == "pause1")
+        root = next(node for node in anim.nodes if node.name == "root")
+        orient = next(ctrl for ctrl in root.controllers if ctrl["type"] == 20)
+        orient["values"][-1] = [0.0, 0.0, 0.0, 1.0]
+        return model
+
+    monkeypatch.setattr(roundtrip_validator, "load_model_from_file", corrupting_loader)
+
+    result, request = _inject_with_animation(monkeypatch, tmp_path, animation)
+
+    assert result.success is False
+    assert "failed MDL readback verification" in result.errors[0]
+    assert "orientation" in result.errors[0] or "rotation" in result.errors[0]
+    assert not request.output_mdl.exists()
+    assert not request.output_mdl.with_suffix(".mdx").exists()
+    assert not request.output_manifest.exists()
