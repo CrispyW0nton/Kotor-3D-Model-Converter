@@ -781,6 +781,41 @@ def test_qt_viewport_exposes_mesh_multiselect_box_and_ctrl_a() -> None:
     assert "def _point_in_triangle" in source
 
 
+def test_qt_viewport_mesh_pick_requires_real_triangle_and_hover_outline() -> None:
+    import inspect
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    source = inspect.getsource(QtViewportWidget)
+    pick_source = inspect.getsource(QtViewportWidget._mesh_hit_test_detail)
+    release_source = inspect.getsource(QtViewportWidget._release_lmb)
+    overlay_source = inspect.getsource(QtViewportWidget._draw_gpu_viewport_overlays)
+
+    assert "self._hovered_mesh_node = None" in source
+    assert "_update_mesh_hover(event)" in source
+    assert "_draw_hovered_mesh_outline(draw, w, h)" in overlay_source
+    assert "_ray_triangle_intersection" in pick_source
+    assert "area + dist2" not in pick_source
+    assert "_hit_test_model_bounds" not in release_source
+
+    hit = QtViewportWidget._ray_triangle_intersection(
+        (0.25, 0.25, 1.0),
+        (0.0, 0.0, -1.0),
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+    )
+    miss = QtViewportWidget._ray_triangle_intersection(
+        (1.25, 1.25, 1.0),
+        (0.0, 0.0, -1.0),
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+    )
+    assert hit == 1.0
+    assert miss is None
+
+
 def test_qt_viewport_context_menu_does_not_pick_on_right_click() -> None:
     import inspect
 

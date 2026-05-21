@@ -473,6 +473,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._mesh_box_start = None
         self._mesh_box_selecting = False
         self._selected_meshes: list = []
+        self._hovered_mesh_node = None
+        self._hovered_mesh_face_bounds = None
         self._pan_dragging = False
         self._nav_dragging = ""
         self._nav_button = QtCore.Qt.NoButton
@@ -1071,6 +1073,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         if old_model is not None and old_model is not model:
             clear_prebuilt_static_gpu_model_data(old_model)
         self.model = model
+        self._hovered_mesh_node = None
+        self._hovered_mesh_face_bounds = None
         self._renderer.set_model(model)
         self.camera_manager.set_model(model)
         self._camera_view_active = False
@@ -3410,6 +3414,12 @@ class QtViewportWidget(QtWidgets.QWidget):
             if et == QtCore.QEvent.FocusOut:
                 self._snap_key_down = False
                 return False
+            if et == QtCore.QEvent.Leave:
+                if self._hovered_mesh_node is not None:
+                    self._hovered_mesh_node = None
+                    self._hovered_mesh_face_bounds = None
+                    self._request_render(fast=True)
+                return False
             if et == QtCore.QEvent.MouseButtonPress:
                 self.canvas.setFocus()
                 action = self._navigation_action(event.button(), event.modifiers())
@@ -3436,6 +3446,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                     self._drag_lmb(event)
                     return True
                 self._update_gizmo_hover(event)
+                self._update_mesh_hover(event)
                 return False
             if et == QtCore.QEvent.MouseButtonRelease:
                 if self._nav_dragging and event.button() == self._nav_button:
@@ -4168,7 +4179,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             if self._ensure_renderer_gimbal_state():
                 self._draw_transform_gizmo(draw, w, h)
             self._draw_measurement_overlay(draw, w, h)
-            self._draw_selected_model_outline(draw, w, h)
+            self._draw_hovered_mesh_outline(draw, w, h)
             self._draw_mesh_subobject_selection(draw, w, h)
             self._draw_joint_marquee(draw)
             self._renderer._draw_axes(draw, w, h)
@@ -4978,6 +4989,33 @@ class QtViewportWidget(QtWidgets.QWidget):
                 continue
         return best
 
+    @staticmethod
+    def _ray_triangle_intersection(origin, direction, v0, v1, v2) -> float | None:
+        eps = 1.0e-8
+        ox, oy, oz = float(origin[0]), float(origin[1]), float(origin[2])
+        dx, dy, dz = float(direction[0]), float(direction[1]), float(direction[2])
+        ax, ay, az = float(v0[0]), float(v0[1]), float(v0[2])
+        bx, by, bz = float(v1[0]), float(v1[1]), float(v1[2])
+        cx, cy, cz = float(v2[0]), float(v2[1]), float(v2[2])
+
+        e1x, e1y, e1z = bx - ax, by - ay, bz - az
+        e2x, e2y, e2z = cx - ax, cy - ay, cz - az
+        px, py, pz = dy * e2z - dz * e2y, dz * e2x - dx * e2z, dx * e2y - dy * e2x
+        det = e1x * px + e1y * py + e1z * pz
+        if abs(det) < eps:
+            return None
+        inv_det = 1.0 / det
+        tx, ty, tz = ox - ax, oy - ay, oz - az
+        u = (tx * px + ty * py + tz * pz) * inv_det
+        if u < -eps or u > 1.0 + eps:
+            return None
+        qx, qy, qz = ty * e1z - tz * e1y, tz * e1x - tx * e1z, tx * e1y - ty * e1x
+        v = (dx * qx + dy * qy + dz * qz) * inv_det
+        if v < -eps or u + v > 1.0 + eps:
+            return None
+        t = (e2x * qx + e2y * qy + e2z * qz) * inv_det
+        return t if t > eps else None
+
     def _mesh_hit_test_detail(self, sx: int, sy: int):
         if self.model is None:
             return None
@@ -4991,7 +5029,11 @@ class QtViewportWidget(QtWidgets.QWidget):
             pass
         best = None
         best_face_bounds = None
-        best_score = float("inf")
+        best_t = float("inf")
+        try:
+            ray_origin, ray_direction = ray_from_mouse((sx, sy), self.camera, width, height)
+        except Exception:
+            ray_origin = ray_direction = None
         try:
             nodes = list(self._renderer._iter_visible_mesh_nodes())
         except Exception:
@@ -5006,44 +5048,34 @@ class QtViewportWidget(QtWidgets.QWidget):
                 min_x, min_y, max_x, max_y, world_verts, projected = bounds
                 if sx < min_x or sx > max_x or sy < min_y or sy > max_y:
                     continue
-                face_hit = False
-                best_face_depth = float("inf")
-                best_facing = -1.0
-                best_node_face_bounds = None
                 for face in getattr(node, "faces", []) or []:
                     try:
                         i0, i1, i2 = int(face[0]), int(face[1]), int(face[2])
-                        p0, p1, p2 = projected[i0], projected[i1], projected[i2]
-                        if p0 is None or p1 is None or p2 is None:
+                        if i0 < 0 or i1 < 0 or i2 < 0:
                             continue
-                        if not self._point_in_triangle(sx, sy, p0, p1, p2):
+                        v0, v1, v2 = world_verts[i0], world_verts[i1], world_verts[i2]
+                        hit_t = (
+                            self._ray_triangle_intersection(ray_origin, ray_direction, v0, v1, v2)
+                            if ray_origin is not None and ray_direction is not None
+                            else None
+                        )
+                        if hit_t is None:
+                            p0, p1, p2 = projected[i0], projected[i1], projected[i2]
+                            if p0 is None or p1 is None or p2 is None:
+                                continue
+                            if not self._point_in_triangle(sx, sy, p0, p1, p2):
+                                continue
+                            hit_t = max(1.0e-6, (p0[2] + p1[2] + p2[2]) / 3.0)
+                        if hit_t >= best_t:
                             continue
-                        facing = self._front_facing_score(world_verts, face)
-                        if facing < -0.05:
-                            continue
-                        face_hit = True
-                        depth = (p0[2] + p1[2] + p2[2]) / 3.0
-                        if facing > best_facing or (abs(facing - best_facing) < 0.001 and depth < best_face_depth):
-                            best_facing = facing
-                            best_face_depth = depth
-                            best_node_face_bounds = self._bounds_from_points(
-                                [world_verts[i0], world_verts[i1], world_verts[i2]],
-                                min_extent=0.05,
-                            )
+                        best_t = hit_t
+                        best = node
+                        best_face_bounds = self._bounds_from_points(
+                            [world_verts[i0], world_verts[i1], world_verts[i2]],
+                            min_extent=0.05,
+                        )
                     except Exception:
                         continue
-                area = max(1, (max_x - min_x) * (max_y - min_y))
-                cx = (min_x + max_x) * 0.5
-                cy = (min_y + max_y) * 0.5
-                dist2 = (sx - cx) * (sx - cx) + (sy - cy) * (sy - cy)
-                if face_hit:
-                    score = best_face_depth - (best_facing * 1000.0) + area * 0.001
-                else:
-                    score = area + dist2 * 0.1 + 100000.0
-                if score < best_score:
-                    best_score = score
-                    best = node
-                    best_face_bounds = best_node_face_bounds if face_hit else None
             except Exception:
                 continue
         if best is None:
@@ -5256,6 +5288,25 @@ class QtViewportWidget(QtWidgets.QWidget):
         handle = self._transform_gizmo.hit_test((x, y), self.camera)
         if handle != before:
             self._request_render(fast=True)
+
+    def _update_mesh_hover(self, event) -> None:
+        if self.model is None:
+            if self._hovered_mesh_node is not None:
+                self._hovered_mesh_node = None
+                self._hovered_mesh_face_bounds = None
+                self._request_render(fast=True)
+            return
+        if self._transform_gizmo.hovered_handle or self._measurement_mode:
+            return
+        x, y = int(event.position().x()), int(event.position().y())
+        hit = self._mesh_hit_test_detail(x, y)
+        node = hit[0] if hit is not None else None
+        face_bounds = hit[1] if hit is not None else None
+        if node is self._hovered_mesh_node and face_bounds == self._hovered_mesh_face_bounds:
+            return
+        self._hovered_mesh_node = node
+        self._hovered_mesh_face_bounds = face_bounds
+        self._request_render(fast=True)
 
     def _begin_transform_gizmo_drag(self, x: int, y: int) -> bool:
         node = self._active_gizmo_node()
@@ -5711,12 +5762,6 @@ class QtViewportWidget(QtWidgets.QWidget):
             if self.on_bone_selected:
                 self.on_bone_selected(None)
             return
-        if self._hit_test_model_bounds(x, y):
-            root_node = getattr(self.model, "root_node", None)
-            if root_node is not None:
-                self.set_selected_node(root_node)
-                self._request_render()
-                return
         self.set_selected_node(None)
         if self.on_bone_selected:
             self.on_bone_selected(None)
@@ -6041,51 +6086,54 @@ class QtViewportWidget(QtWidgets.QWidget):
         except Exception:
             return False
 
-    def _draw_selected_model_outline(self, draw, w: int, h: int) -> None:
-        if not self._is_selected_model_root(getattr(self._renderer, "selected_node", None)):
+    def _draw_hovered_mesh_outline(self, draw, w: int, h: int) -> None:
+        node = getattr(self, "_hovered_mesh_node", None)
+        if node is None or getattr(node, "_gr_hidden", False):
             return
         try:
-            points = []
-            nodes = self.model.mesh_nodes() if hasattr(self.model, "mesh_nodes") else []
-            for node in nodes:
-                verts = getattr(node, "vertices", None) or []
-                if not verts:
-                    continue
+            bounds = self._projected_mesh_bounds(node, w, h)
+            if bounds is None:
+                return
+            _min_x, _min_y, _max_x, _max_y, world_verts, projected = bounds
+            faces = list(getattr(node, "faces", []) or [])
+            if not faces:
+                return
+
+            edge_faces: dict[tuple[int, int], list[bool]] = {}
+            for face in faces:
                 try:
-                    wp, _wo, _ = self._renderer._node_world_transform(node)
+                    i0, i1, i2 = int(face[0]), int(face[1]), int(face[2])
+                    if i0 < 0 or i1 < 0 or i2 < 0:
+                        continue
+                    if i0 >= len(projected) or i1 >= len(projected) or i2 >= len(projected):
+                        continue
+                    if projected[i0] is None or projected[i1] is None or projected[i2] is None:
+                        continue
+                    front = self._front_facing_score(world_verts, (i0, i1, i2)) >= 0.0
+                    for a, b in ((i0, i1), (i1, i2), (i2, i0)):
+                        edge_faces.setdefault(normalize_edge(a, b), []).append(front)
                 except Exception:
-                    wp = (0.0, 0.0, 0.0)
-                stride = max(1, len(verts) // 800)
-                for vx, vy, vz in verts[::stride]:
-                    sp = self._renderer._proj(vx + wp[0], vy + wp[1], vz + wp[2], w, h)
-                    if sp is not None:
-                        sx, sy, _depth = sp
-                        if -40 <= sx <= w + 40 and -40 <= sy <= h + 40:
-                            points.append((float(sx), float(sy)))
-            if len(points) < 3:
-                return
+                    continue
 
-            def _cross(o, a, b):
-                return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
-
-            unique = sorted(set((round(px, 1), round(py, 1)) for px, py in points))
-            if len(unique) < 3:
+            outline_edges = []
+            for edge, front_flags in edge_faces.items():
+                if len(front_flags) == 1 or (any(front_flags) and not all(front_flags)):
+                    p0, p1 = projected[edge[0]], projected[edge[1]]
+                    if p0 is not None and p1 is not None:
+                        outline_edges.append(((float(p0[0]), float(p0[1])), (float(p1[0]), float(p1[1]))))
+            if not outline_edges:
                 return
-            lower = []
-            for p in unique:
-                while len(lower) >= 2 and _cross(lower[-2], lower[-1], p) <= 0:
-                    lower.pop()
-                lower.append(p)
-            upper = []
-            for p in reversed(unique):
-                while len(upper) >= 2 and _cross(upper[-2], upper[-1], p) <= 0:
-                    upper.pop()
-                upper.append(p)
-            hull = lower[:-1] + upper[:-1]
-            if len(hull) >= 3:
-                draw.line(hull + [hull[0]], fill=(255, 212, 0, 230), width=2)
+            shadow = (0, 0, 0, 155)
+            glow = (0, 215, 181, 230)
+            for p0, p1 in outline_edges:
+                draw.line([p0, p1], fill=shadow, width=5)
+            for p0, p1 in outline_edges:
+                draw.line([p0, p1], fill=glow, width=2)
         except Exception as exc:
-            log.debug("Selected model outline draw failed: %s", exc)
+            log.debug("Hovered mesh outline draw failed: %s", exc)
+
+    def _draw_selected_model_outline(self, draw, w: int, h: int) -> None:
+        self._draw_hovered_mesh_outline(draw, w, h)
 
     def _draw_mesh_subobject_selection(self, draw, w: int, h: int) -> None:
         state = getattr(self, "mesh_selection_state", None)
