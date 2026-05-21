@@ -54,3 +54,7 @@ Safe editing tips:
 - Use **Apply Theme** or **Apply Layout** for full-application changes. Theme
   Editor previews are local until explicitly applied.
 - Run `python tools/validate_themes.py` after editing packaged defaults.
+
+## Module Editor
+
+The standalone Module Editor uses existing theme tokens and layout metrics rather than adding a separate palette. It exposes a `moduleEditor` toolbar layout id for density/button sizing and keeps panels compatible with Default, Matrix, Droid, Dark, Light, Classic plus Default, Compact, Wide, and Cinematic layouts.

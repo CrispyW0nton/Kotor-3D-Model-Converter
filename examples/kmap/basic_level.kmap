@@ -1,0 +1,135 @@
+{
+  "blueprints": [
+    {
+      "blueprint_id": "blueprint_example_creature",
+      "blueprint_type": "Creature",
+      "metadata": {},
+      "name": "Example Creature",
+      "position": [
+        50.0,
+        0.0,
+        0.0
+      ],
+      "properties": {},
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "template_resref": "g_example"
+    }
+  ],
+  "cameras": [],
+  "exports": {},
+  "file_type": "GhostRiggerKMap",
+  "file_version": 1,
+  "lights": [],
+  "materials": [],
+  "metadata": {},
+  "modules": [
+    {
+      "enabled": true,
+      "game": "K1",
+      "locked": false,
+      "metadata": {},
+      "module_id": "module_example",
+      "module_name": "ExampleModule",
+      "resources": [],
+      "rooms": [
+        "room_example_01"
+      ],
+      "source_path": "",
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "visible": true,
+      "walkmeshes": [
+        "wok_example_01"
+      ]
+    }
+  ],
+  "objects": [],
+  "project": {
+    "author": "GhostRigger",
+    "created_at": "2026-05-21T00:00:00Z",
+    "description": "Minimal human-readable KMAP example.",
+    "game": "K1",
+    "id": "kmap_example_basic",
+    "metadata": {},
+    "modified_at": "2026-05-21T00:00:00Z",
+    "name": "basic_level",
+    "output_directory": "",
+    "source_directory": "",
+    "source_game": "K1",
+    "target_game": "K1"
+  },
+  "rooms": [
+    {
+      "enabled": true,
+      "lightmap_refs": [],
+      "locked": false,
+      "lyt_entry": {
+        "model": "m02aa_01a"
+      },
+      "metadata": {},
+      "model_resref": "m02aa_01a",
+      "name": "m02aa_01a",
+      "room_id": "room_example_01",
+      "source_module": "module_example",
+      "texture_refs": [],
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "visible": true,
+      "wok_entry": {
+        "wok_id": "wok_example_01"
+      }
+    }
+  ],
+  "sequences": [],
+  "textures": [],
+  "units": {
+    "display_unit": "cm",
+    "system_unit": "cm"
+  },
+  "walkmeshes": [
+    {
+      "edited": false,
+      "face_types": {},
+      "materials": {},
+      "metadata": {},
+      "room_id": "room_example_01",
+      "source_path": "",
+      "visible": true,
+      "wok_id": "wok_example_01"
+    }
+  ]
+}

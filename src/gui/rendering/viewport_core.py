@@ -8012,7 +8012,7 @@ class FrameRenderer:
         warning_fill = getattr(self, "hud_warning_fill", (68, 44, 22))
         warning_text = getattr(self, "hud_warning_text", (255, 190, 95))
         if not self.model:
-            self._draw_hud_pill(draw, 12, 12, "No model loaded", fill=hud_fill, fg=hud_muted, outline=hud_outline)
+            self._draw_hud_pill(draw, 12, 12, "Empty Scene", fill=hud_fill, fg=hud_muted, outline=hud_outline)
             return
         vc = bc = fc = tex_ok = tex_total = uv_ok = 0
         # Cache visible mesh nodes list for this stats call (avoid 3× iteration)

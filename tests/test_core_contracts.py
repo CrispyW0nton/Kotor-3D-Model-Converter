@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import os
 from types import MethodType, SimpleNamespace
 
@@ -111,14 +112,35 @@ def test_gpu_shader_has_per_node_uv_v_flip_control() -> None:
 
 
 def test_gpu_ascii_multitexture_split_is_ascii_gated() -> None:
-    import inspect
-
     from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
 
     source = inspect.getsource(GpuRenderer._render_gpu)
     assert "ASCII/Kotor Tool MDLs use face_mats as per-face texture slots" in source
     assert "getattr(node, 'imported_ascii', False)" in source
     assert "gm.mat_slots" in source
+
+
+def test_viewport_render_loop_is_gpu_only() -> None:
+    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    render_now = inspect.getsource(QtViewportWidget._render_now)
+    render_frame = inspect.getsource(QtViewportWidget._render_frame)
+    badge = inspect.getsource(QtViewportWidget._set_renderer_badge)
+    thumbnail = inspect.getsource(QtViewportWidget._render_neutral_pose_thumbnail)
+    gpu_render = inspect.getsource(GpuRenderer.render)
+    cpu_hook = inspect.getsource(GpuRenderer._render_cpu)
+
+    viewport_sources = "\n".join([render_now, render_frame, badge, thumbnail])
+    assert "_use_gpu = False" not in viewport_sources
+    assert 'setText("CPU' not in viewport_sources
+    assert "self._renderer.render(" not in viewport_sources
+    assert "_draw_cpu_overlays(" not in render_frame
+    assert "_draw_performance_overlay(" not in render_now
+    assert "_render_cpu(" not in gpu_render
+    assert "backend'] = 'cpu'" not in gpu_render
+    assert "FrameRenderer" not in cpu_hook
+    assert "return None" in cpu_hook
 
 
 def test_qt_gpu_viewport_uses_overlay_not_cpu_textured_fallback() -> None:
@@ -141,7 +163,9 @@ def test_qt_gpu_viewport_keeps_gpu_for_wire_and_texture_off_modes() -> None:
     frame_source = inspect.getsource(QtViewportWidget._render_frame)
     gpu_source = inspect.getsource(QtViewportWidget._render_gpu_frame)
 
-    assert "self._renderer.show_solid or self._renderer.show_wireframe" in frame_source
+    assert "gpu_can_match_mode" not in frame_source
+    assert "self._render_gpu_frame(w, h)" in frame_source
+    assert "self._renderer.render(" not in frame_source
     assert "and self._renderer.show_texture" not in frame_source
     assert "show_texture = bool(self._renderer.show_texture)" in gpu_source
     assert "show_wireframe = bool(self._renderer.show_wireframe)" in gpu_source

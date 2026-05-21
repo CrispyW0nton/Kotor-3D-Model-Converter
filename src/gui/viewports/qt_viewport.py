@@ -8,6 +8,7 @@ import os
 import re
 import threading
 import time as time_module
+import copy
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -458,6 +459,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._renderer = FrameRenderer(self.camera)
         self._renderer.show_gimbal = bool(getattr(self._renderer, "show_gimbal", True))
         self.model = None
+        self._scene_instances: list = []
+        self._scene_model = None
+        self._scene_name = "Untitled Scene"
         self.on_bone_selected = None
         self.on_node_selected = None
         self.on_node_moved = None
@@ -808,7 +812,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         )
         row.addWidget(self.lock_camera_button)
 
-        self.canvas = QtWidgets.QLabel("No model loaded")
+        self.canvas = QtWidgets.QLabel("Empty Scene")
         self.canvas.setObjectName("ViewportCanvas")
         self.canvas.setAlignment(QtCore.Qt.AlignCenter)
         self.canvas.setMinimumSize(120 if self._compact_controls else 180, 100 if self._compact_controls else 140)
@@ -1088,15 +1092,18 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._renderer._frame_view = None
             self._renderer._frame_verts_cache = {}
             self._renderer._frame_norms_cache = {}
-            self.renderer_button.setText("GPU" if self._use_gpu else "CPU")
+            self._use_gpu = True
+            self.renderer_button.setChecked(True)
+            self.renderer_button.setText("GPU")
             self.canvas.setPixmap(QtGui.QPixmap())
-            self.canvas.setText("No model loaded")
+            self.canvas.setText("Empty Scene")
             self._update_uv_viewer_model()
             self.camera_manager.set_model(None)
             self._refresh_camera_view_combo()
             # T403: clear the thumbnail when no model is loaded.
             self._refresh_thumbnail_safe()
             self.modelChanged.emit(None)
+            self._request_render(fast=True)
             return
         self._gpu_upload_model_id = id(model)
         self._gpu_upload_total = int(getattr(model, "_gr_gpu_prebuilt_mesh_count", 0) or 0)
@@ -1129,10 +1136,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._start_deferred_txi_metadata(model)
         self._update_uv_viewer_model()
         # T403: populate the mini-thumbnail inset with a neutral-pose
-        # snapshot of the freshly loaded model.  Cheap (CPU render at
-        # 216×276) and one-shot — subsequent re-frames don't need to
-        # re-render the thumbnail since neutral pose is camera-pose
-        # independent (its render path uses a private ArcBallCamera).
+        # snapshot of the freshly loaded model.  This uses the same GPU-only
+        # viewport rendering policy as the main canvas.
         if self._thumbnail_visible_setting:
             self._refresh_thumbnail_safe()
         self.modelChanged.emit(model)
@@ -1147,6 +1152,130 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def set_model(self, model) -> None:
         self.load_model(model)
+
+    def load_scene_instances(
+        self,
+        instances: list,
+        *,
+        scene_name: str = "Untitled Scene",
+        texture_dirs: Optional[list[str]] = None,
+    ) -> None:
+        """Render the active KMAX scene through a synthetic multi-object model."""
+
+        self._scene_instances = list(instances or [])
+        self._scene_name = scene_name or "Untitled Scene"
+        composite = self._build_scene_composite_model(self._scene_instances, self._scene_name)
+        if composite is None:
+            self._scene_model = None
+            self.load_model(None)
+            return
+        self._scene_model = composite
+        dirs = [directory for directory in (texture_dirs or []) if directory]
+        self.load_model(composite, dirs[0] if dirs else "", extra_texture_dirs=dirs[1:])
+        selected = next((obj for obj in self._scene_instances if getattr(obj, "selected", False)), None)
+        if selected is not None:
+            self.select_scene_object(selected.id)
+
+    def _build_scene_composite_model(self, instances: list, scene_name: str):
+        visible = [obj for obj in instances if getattr(obj, "visible", True)]
+        if not visible:
+            return None
+        try:
+            from src.core.qt_core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+        except Exception:
+            from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+
+        root = ModelNode(name="scene_root", flags=int(NodeFlags.HEADER))
+        setattr(root, "_gr_scene_composite_root", True)
+        composite = KotorModel(name=scene_name or "Untitled Scene", root_node=root)
+        first_model = None
+        for instance in visible:
+            runtime_model = (getattr(instance, "metadata", {}) or {}).get("_runtime_model")
+            model_root = getattr(runtime_model, "root_node", None)
+            if runtime_model is None or model_root is None:
+                continue
+            first_model = first_model or runtime_model
+            try:
+                node = copy.deepcopy(model_root)
+            except Exception:
+                node = model_root.clone_shallow()
+                node.children = []
+            node.parent = root
+            node.name = f"{instance.name}:{getattr(node, 'name', 'root')}"
+            node.position = tuple(float(v) for v in instance.transform.position[:3])
+            node.rotation = self._euler_degrees_to_quat(instance.transform.rotation)
+            setattr(node, "_gr_scene_object_id", instance.id)
+            setattr(node, "_gr_scene_object_root", True)
+            setattr(node, "_gr_scene_object_name", instance.name)
+            self._tag_scene_object_nodes(node, instance.id, node)
+            root.children.append(node)
+        if not root.children:
+            return None
+        if first_model is not None:
+            composite.game_version = getattr(first_model, "game_version", composite.game_version)
+            composite.classification = "scene"
+            composite.model_type = getattr(first_model, "model_type", composite.model_type)
+        try:
+            composite.compute_bounds()
+            setattr(composite, "_gr_bounds_prepared", True)
+            setattr(composite, "_gr_render_bounds", (composite.bb_min, composite.bb_max))
+        except Exception:
+            pass
+        return composite
+
+    def _tag_scene_object_nodes(self, node, object_id: str, root_node) -> None:
+        stack = [node]
+        visited = set()
+        while stack:
+            current = stack.pop()
+            if current is None or id(current) in visited:
+                continue
+            visited.add(id(current))
+            setattr(current, "_gr_scene_object_id", object_id)
+            setattr(current, "_gr_scene_object_root_ref", root_node)
+            stack.extend(getattr(current, "children", []) or [])
+
+    @staticmethod
+    def _euler_degrees_to_quat(rotation: tuple[float, float, float]) -> tuple[float, float, float, float]:
+        try:
+            rx, ry, rz = (math.radians(float(v)) for v in rotation[:3])
+        except Exception:
+            return (0.0, 0.0, 0.0, 1.0)
+        cx, sx = math.cos(rx * 0.5), math.sin(rx * 0.5)
+        cy, sy = math.cos(ry * 0.5), math.sin(ry * 0.5)
+        cz, sz = math.cos(rz * 0.5), math.sin(rz * 0.5)
+        return (
+            sx * cy * cz + cx * sy * sz,
+            cx * sy * cz - sx * cy * sz,
+            cx * cy * sz + sx * sy * cz,
+            cx * cy * cz - sx * sy * sz,
+        )
+
+    def select_scene_object(self, object_id: str) -> None:
+        node = self._scene_node_for_object(object_id)
+        self.set_selected_node(node)
+
+    def _scene_node_for_object(self, object_id: str):
+        model = self.model
+        if model is None or not getattr(model, "root_node", None):
+            return None
+        for child in getattr(model.root_node, "children", []) or []:
+            if getattr(child, "_gr_scene_object_id", "") == object_id:
+                return child
+        return None
+
+    def _scene_root_for_node(self, node):
+        if node is None:
+            return None
+        root_ref = getattr(node, "_gr_scene_object_root_ref", None)
+        if root_ref is not None:
+            return root_ref
+        current = node
+        while current is not None:
+            if bool(getattr(current, "_gr_scene_object_root", False)):
+                return current
+            current = getattr(current, "parent", None)
+        return None
 
     def refresh_model_geometry(self) -> None:
         """Refresh bounds/caches after in-place model vertex transforms."""
@@ -1585,9 +1714,9 @@ class QtViewportWidget(QtWidgets.QWidget):
             self.switch_to_camera(value)
 
     def toggle_gpu_renderer(self, checked: Optional[bool] = None) -> None:
-        self._use_gpu = bool(checked) if checked is not None else not self._use_gpu
-        self.renderer_button.setChecked(self._use_gpu)
-        self.renderer_button.setText("GPU" if self._use_gpu else "CPU")
+        self._use_gpu = True
+        self.renderer_button.setChecked(True)
+        self.renderer_button.setText("GPU")
         self._request_render(fast=True)
 
     def toggle_xray(self, checked: Optional[bool] = None) -> None:
@@ -2133,9 +2262,8 @@ class QtViewportWidget(QtWidgets.QWidget):
             ``selected_node`` / animation state to neutral so the
             preview reads as a clean reference; original state is
             restored in a try/finally.
-          • Falls back to CPU render only — GPU rendering would
-            require a second GL context and isn't worth it for a
-            220×280 inset.
+          • Uses the viewport GPU renderer only; if GPU rendering is
+            unavailable, no CPU thumbnail is generated.
         """
         if self.model is None:
             return None
@@ -2169,7 +2297,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             if hasattr(ren, "_anim_pose"):
                 ren._anim_pose = None
             img = None
-            if self._use_gpu and self.model is not None and ren.show_texture:
+            if self.model is not None:
                 try:
                     if self._gpu_renderer is None:
                         self._gpu_renderer = GpuRenderer()
@@ -2198,7 +2326,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                     log.debug("Thumbnail GPU render failed: %s", exc)
                     img = None
             if img is None:
-                img = ren.render(int(w), int(h))
+                return None
         finally:
             ren.cam = main_cam
             ren.show_bones = snap["show_bones"]
@@ -2228,6 +2356,9 @@ class QtViewportWidget(QtWidgets.QWidget):
             return None
 
     def set_selected_node(self, node, orbit_bounds=None) -> None:
+        scene_root = self._scene_root_for_node(node)
+        if scene_root is not None:
+            node = scene_root
         if node is not None and self._renderer.is_hidden_bone_name(getattr(node, "name", "")):
             node = None
         if node is not None and bool(getattr(node, "is_camera", False)):
@@ -3817,39 +3948,27 @@ class QtViewportWidget(QtWidgets.QWidget):
         if not self._render_pending:
             return
         self._render_pending = False
-        if self.model is None:
-            self._pixmap = None
-            self.canvas.setPixmap(QtGui.QPixmap())
-            self.canvas.setText("No model loaded")
-            return
         w = max(8, self.canvas.width())
         h = max(8, self.canvas.height())
         t0 = time_module.perf_counter()
         try:
             img = self._render_frame(w, h)
         except Exception as exc:
-            log.warning("Viewport render failed for %s: %s", getattr(self.model, "name", "model"), exc, exc_info=True)
+            log.error("GPU viewport render failed for %s: %s", getattr(self.model, "name", "scene"), exc, exc_info=True)
             img = None
-            if self._use_gpu:
-                try:
-                    self._use_gpu = False
-                    self.renderer_button.setChecked(False)
-                    self.renderer_button.setText("CPU")
-                    img = self._renderer.render(w, h)
-                except Exception:
-                    log.warning("Viewport CPU fallback also failed", exc_info=True)
-                    img = None
         self._last_render_ms = (time_module.perf_counter() - t0) * 1000.0
         self._last_render_wall = time_module.perf_counter()
         if img is None:
+            if self.model is None:
+                self.canvas.setText("GPU render unavailable\nEmpty Scene")
+                return
             mesh_count = len(self.model.mesh_nodes()) if hasattr(self.model, "mesh_nodes") else 0
             node_count = self.model.node_count() if hasattr(self.model, "node_count") else 0
-            self.canvas.setText(f"{getattr(self.model, 'name', 'model')}\nRender unavailable\n{mesh_count} mesh | {node_count} nodes")
+            self.canvas.setText(f"{getattr(self.model, 'name', 'model')}\nGPU render unavailable\n{mesh_count} mesh | {node_count} nodes")
             return
         if img.mode != "RGBA":
             img = img.convert("RGBA")
         self._update_fps()
-        img = self._draw_performance_overlay(img, w, h)
         qimg = QtGui.QImage(
             img.tobytes("raw", "RGBA"),
             img.width,
@@ -3866,22 +3985,12 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._request_render()
 
     def _render_frame(self, w: int, h: int):
-        gpu_can_match_mode = self._renderer.show_solid or self._renderer.show_wireframe
-        if self._use_gpu and self.model is not None and gpu_can_match_mode:
-            img = self._render_gpu_frame(w, h)
-            if img is not None:
-                self._set_renderer_badge(True)
-                return self._draw_cpu_overlays(img, w, h, gpu_base=True)
-        self._set_renderer_badge(False)
-        old_show_gimbal = self._ensure_renderer_gimbal_state()
-        try:
-            self._renderer.show_gimbal = False
-            img = self._renderer.render(w, h)
-        finally:
-            self._renderer.show_gimbal = old_show_gimbal
-        if self._xray_mode:
-            img = self._draw_xray_grid_overlay(img, w, h)
-        img = self._draw_transform_gizmo_overlay(img, w, h)
+        self._use_gpu = True
+        img = self._render_gpu_frame(w, h)
+        if img is None:
+            self._set_renderer_badge(False)
+            return None
+        self._set_renderer_badge(True)
         return img
 
     def _draw_xray_grid_overlay(self, img, w: int, h: int):
@@ -4628,10 +4737,9 @@ class QtViewportWidget(QtWidgets.QWidget):
     def _set_renderer_badge(self, gpu_active: bool) -> None:
         if not hasattr(self, "renderer_button"):
             return
-        if not self._use_gpu:
-            self.renderer_button.setText("CPU")
-            return
-        self.renderer_button.setText("GPU" if gpu_active else "CPU*")
+        self._use_gpu = True
+        self.renderer_button.setChecked(True)
+        self.renderer_button.setText("GPU" if gpu_active else "GPU!")
 
     def _on_shade_change(self, text: str) -> None:
         mode = "Wireframe" if text == "Wire" else text
@@ -5748,7 +5856,13 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._evict_transform_cache(node)
 
     def _is_selected_model_root(self, node) -> bool:
-        return bool(self.model is not None and node is getattr(self.model, "root_node", None))
+        return bool(
+            self.model is not None
+            and (
+                node is getattr(self.model, "root_node", None)
+                or bool(getattr(node, "_gr_scene_object_root", False))
+            )
+        )
 
     def _model_gimbal_axis_delta(
         self,

@@ -1,7 +1,7 @@
 """
 gpu_renderer.py  –  GhostRigger-K1-K2  GPU fast-path renderer
 ==============================================================
-Hybrid renderer with a ModernGL/EGL GPU fast-path and a PIL/CPU fallback.
+ModernGL/EGL GPU renderer for the Qt viewport.
 
 Architecture
 ------------
@@ -146,10 +146,8 @@ Phase 3.8 new features
                 Sources: KotOR.js OdysseyModel3D.ts:780–803 supermodel stacking;
                 Kotor.NET CompositeModel multi-mesh logic.
 
-CPU fallback  (always available, uses PIL)
-  • Delegates to FrameRenderer._draw_mesh_textured (existing code)
-  • Used when:  ModernGL not installed, EGL not available, or
-                GpuRenderer.force_cpu = True
+CPU graphics rendering
+  • Disabled. The Qt viewport and renderer failure paths do not rasterize on CPU.
 
 Performance notes
   – GPU path: ~1 ms/frame for typical 10 k-tri KotOR models
@@ -2204,7 +2202,7 @@ try:
     _MODERNGL = True
 except ImportError:
     _MODERNGL = False
-    log.info("gpu_renderer: moderngl not installed – using CPU fallback")
+    log.info("gpu_renderer: moderngl not installed - GPU viewport rendering unavailable")
 
 from dataclasses import dataclass, field as _field
 
@@ -4121,7 +4119,7 @@ class _GpuMesh:
 
 class GpuRenderer:
     """
-    Hybrid GPU/CPU renderer for KotOR models.
+    GPU renderer for KotOR models.
 
     Usage
     -----
@@ -4137,7 +4135,7 @@ class GpuRenderer:
         camera.near, camera.far  → clip distances (optional, default 0.01/2000)
     """
 
-    #: Set to True to force the CPU (PIL) fallback even if GPU is available.
+    #: Legacy diagnostic switch; the Qt viewport does not use CPU rendering.
     force_cpu: bool = False
 
     def __init__(self):
@@ -4390,7 +4388,7 @@ class GpuRenderer:
                      _ctx_backend, self._ctx.version_code)
             return True
         except Exception as e:
-            log.info(f"GpuRenderer: GPU init failed ({e}) – using CPU fallback")
+            log.info(f"GpuRenderer: GPU init failed ({e}) - viewport GPU rendering unavailable")
             self._gpu_available = False
             return False
 
@@ -4875,7 +4873,7 @@ class GpuRenderer:
         PIL RGBA Image, or None on failure.
         """
         t0 = time.perf_counter()
-        if model is None or W <= 0 or H <= 0:
+        if W <= 0 or H <= 0:
             return None
         textures = textures or {}
 
@@ -4886,12 +4884,11 @@ class GpuRenderer:
                 self.perf['last_frame_ms'] = (time.perf_counter() - t0) * 1000
                 self.perf['backend'] = 'gpu'
                 return result
-            # GPU render failed — fall through to CPU
+            # GPU render failed; the viewport reports GPU unavailable instead of falling back.
 
-        result = self._render_cpu(model, camera, W, H, textures, anim_pose, anim_time)
         self.perf['last_frame_ms'] = (time.perf_counter() - t0) * 1000
-        self.perf['backend'] = 'cpu'
-        return result
+        self.perf['backend'] = 'gpu_unavailable'
+        return None
 
     # ── GPU render ────────────────────────────────────────────────────────────
 
@@ -5144,7 +5141,7 @@ class GpuRenderer:
             if _all_nodes_fn is not None:
                 nodes = list(_all_nodes_fn())
             else:
-                nodes = getattr(model, 'nodes', [])
+                nodes = getattr(model, 'nodes', []) if model is not None else []
 
             # ── FIX-PERSCACHE: Persistent world-transform cache ────────────
             _cur_model_id = id(model)
@@ -6404,93 +6401,14 @@ class GpuRenderer:
             log.warning(f"GpuRenderer._render_gpu: {e}", exc_info=True)
             return None
 
-    # ── CPU fallback render ───────────────────────────────────────────────────
+    # ── Disabled CPU render hook ──────────────────────────────────────────────
 
     def _render_cpu(self, model, camera, W: int, H: int,
                     textures: Dict[str, 'Image.Image'],
                     anim_pose, anim_time: float) -> Optional['Image.Image']:
-        """
-        CPU fallback: delegates to the existing PIL-based FrameRenderer.
-        Returns a PIL RGB Image.
-        """
-        if not _PIL:
-            return None
-        try:
-            from src.gui.rendering.viewport_core import FrameRenderer, ArcBallCamera
-            renderer = FrameRenderer(camera)
-            renderer.model = model
-            renderer.show_texture = True
-            renderer.show_bones   = False
-            renderer.show_grid    = False
-            renderer.textures     = textures
-            renderer._anim_pose   = anim_pose
-            renderer._anim_time   = anim_time
-            # Build texture cache from provided dict.
-            # Use a proxy that first checks the provided textures dict, then falls
-            # back to the real TextureCache (which searches disk + BIF archives).
-            # This ensures textured rendering even when textures dict is partial.
-            _real_tc = getattr(renderer, 'tex_cache', None)
-            _tex_snapshot = dict(textures)  # local copy to avoid mutation
-
-            class _ProxyTC:
-                """Proxy texture cache: dict first, then real cache fallback."""
-                def get(self, name):
-                    if not name:
-                        return None
-                    k = name.lower()
-                    hit = _tex_snapshot.get(k)
-                    if hit is not None:
-                        return hit
-                    # Fallback to real TextureCache (searches disk dirs + BIF)
-                    if _real_tc is not None and hasattr(_real_tc, 'get'):
-                        try:
-                            return _real_tc.get(k)
-                        except Exception:
-                            pass
-                    return None
-
-                def get_mip1(self, img):
-                    if _real_tc is not None and hasattr(_real_tc, 'get_mip1'):
-                        return _real_tc.get_mip1(img)
-                    return img
-
-                def sample(self, img, u, v, interp=True):
-                    if _real_tc is not None and hasattr(_real_tc, 'sample'):
-                        return _real_tc.sample(img, u, v, interp)
-                    return (128, 128, 128)
-
-                def sample_bilinear(self, img, u, v):
-                    if _real_tc is not None and hasattr(_real_tc, 'sample_bilinear'):
-                        return _real_tc.sample_bilinear(img, u, v)
-                    return (128, 128, 128, 255)
-
-                def get_txi(self, name):
-                    if _real_tc is not None and hasattr(_real_tc, 'get_txi'):
-                        return _real_tc.get_txi(name)
-                    return ''
-
-                def get_raw_header(self, name):
-                    if _real_tc is not None and hasattr(_real_tc, 'get_raw_header'):
-                        return _real_tc.get_raw_header(name)
-                    return None
-
-                def clear_mip_cache(self):
-                    if _real_tc is not None and hasattr(_real_tc, 'clear_mip_cache'):
-                        _real_tc.clear_mip_cache()
-
-            renderer.tex_cache = _ProxyTC()
-            img = renderer.render(W, H)
-            # Kill the alpha layer — flatten RGBA to RGB against the background
-            if img is not None and getattr(img, 'mode', 'RGB') == 'RGBA':
-                bg_img = Image.new('RGB', img.size, (23, 25, 28))
-                bg_img.paste(img, mask=img.split()[3])
-                img = bg_img
-            return img
-        except Exception as e:
-            log.warning(f"GpuRenderer._render_cpu: {e}", exc_info=True)
-            if _PIL:
-                return Image.new('RGBA', (W, H), (31, 36, 41, 255))
-            return None
+        """CPU graphics rendering is disabled; the viewport is GPU-only."""
+        log.error("GpuRenderer._render_cpu called, but CPU graphics rendering is disabled")
+        return None
 
     # ── Invalidate node cache ─────────────────────────────────────────────────
 

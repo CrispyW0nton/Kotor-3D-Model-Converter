@@ -655,6 +655,35 @@ class QtPropertiesPanel(QtWidgets.QWidget):
             module_mesh_nodes = self._module_mesh_candidates(model, mesh_nodes, all_nodes)
             self._populate_module_meshes(module_mesh_nodes)
 
+    def show_scene_object(self, obj) -> None:
+        self._current_node = None
+        transform = getattr(obj, "transform", None)
+        source = getattr(obj, "source_ref", None)
+        position = getattr(transform, "position", (0.0, 0.0, 0.0))
+        rotation = getattr(transform, "rotation", (0.0, 0.0, 0.0))
+        scale = getattr(transform, "scale", (1.0, 1.0, 1.0))
+        if transform is not None:
+            self.x_spin.setValue(self.unit_system.to_display_units(float(position[0])))
+            self.y_spin.setValue(self.unit_system.to_display_units(float(position[1])))
+            self.z_spin.setValue(self.unit_system.to_display_units(float(position[2])))
+        lines = [
+            f"Scene Object: {getattr(obj, 'name', '')}",
+            f"Type: {getattr(obj, 'object_type', '')}",
+            f"Visible: {getattr(obj, 'visible', True)}",
+            f"Locked: {getattr(obj, 'locked', False)}",
+            "",
+            "-- Source --",
+            f"Game: {getattr(source, 'game', '') if source else ''}",
+            f"Resref: {getattr(source, 'resref', '') if source else ''}",
+            f"Path: {getattr(source, 'source_path', '') if source else ''}",
+            "",
+            "-- Transform --",
+            f"Position: {position[0]:.3f}, {position[1]:.3f}, {position[2]:.3f}",
+            f"Rotation: {rotation[0]:.3f}, {rotation[1]:.3f}, {rotation[2]:.3f}",
+            f"Scale: {scale[0]:.3f}, {scale[1]:.3f}, {scale[2]:.3f}",
+        ]
+        self.text.setPlainText("\n".join(lines))
+
     def show_node(self, node) -> None:
         self._current_node = node
         if node is None:
