@@ -76,6 +76,8 @@ def test_packaged_custom_themes_define_spinbox_stepper_tokens() -> None:
         stylesheet = QtStylesheetBuilder().build(theme)
         assert "QDoubleSpinBox::up-button" in stylesheet
         assert theme.color("spinbox.buttonBorder") in stylesheet
+        expected_arrow = "spin_up_light.svg" if theme.mode == "dark" else "spin_up_dark.svg"
+        assert expected_arrow in stylesheet
 
 
 def test_required_theme_tokens_resolve_for_all_packaged_themes() -> None:
@@ -143,6 +145,8 @@ def test_viewport_chrome_and_renderer_use_theme_tokens() -> None:
     app_stylesheet = QtStylesheetBuilder().build(theme)
     assert "QDoubleSpinBox::up-button" in app_stylesheet
     assert "QSpinBox::down-button" in app_stylesheet
+    assert "spin_up_dark.svg" in app_stylesheet
+    assert "spin_down_dark.svg" in app_stylesheet
     assert theme.color("spinbox.buttonBorder") in app_stylesheet
     assert theme.color("spinbox.buttonBackground") in app_stylesheet
 

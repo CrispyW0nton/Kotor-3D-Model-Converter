@@ -11,6 +11,15 @@ class QtStylesheetBuilder:
     def __init__(self) -> None:
         self.icon_dir = (Path(__file__).resolve().parents[1] / "icons").as_posix()
 
+    @staticmethod
+    def _is_light_hex(value: str) -> bool:
+        try:
+            raw = str(value or "").strip().lstrip("#")
+            r, g, b = (int(raw[index:index + 2], 16) for index in (0, 2, 4))
+        except Exception:
+            return True
+        return (0.2126 * r + 0.7152 * g + 0.0722 * b) >= 128
+
     def build(self, theme: Theme) -> str:
         if theme.is_native():
             return ""
@@ -26,6 +35,7 @@ class QtStylesheetBuilder:
         input_height = m("input.height", max(18, m("button.height", 28) - 8))
         spin_button_width = m("spinbox.buttonWidth", 16)
         spin_button_height = max(8, input_height // 2)
+        spin_arrow_variant = "light" if self._is_light_hex(c("spinbox.arrow")) else "dark"
         tab_mode = theme.style("tab.mode", "standard")
         tab_border = f"1px solid {c('panel.border')}"
         tab_selected_border = c("accent.secondary")
@@ -204,25 +214,18 @@ class QtStylesheetBuilder:
             border-color: {c('panel.border')};
         }}
         QDoubleSpinBox::up-arrow, QSpinBox::up-arrow {{
-            image: none;
-            width: 0;
-            height: 0;
-            border-left: 4px solid transparent;
-            border-right: 4px solid transparent;
-            border-bottom: 5px solid {c('spinbox.arrow')};
+            image: url("{self.icon_dir}/spin_up_{spin_arrow_variant}.svg");
+            width: 8px;
+            height: 8px;
         }}
         QDoubleSpinBox::down-arrow, QSpinBox::down-arrow {{
-            image: none;
-            width: 0;
-            height: 0;
-            border-left: 4px solid transparent;
-            border-right: 4px solid transparent;
-            border-top: 5px solid {c('spinbox.arrow')};
+            image: url("{self.icon_dir}/spin_down_{spin_arrow_variant}.svg");
+            width: 8px;
+            height: 8px;
         }}
         QDoubleSpinBox::up-arrow:disabled, QSpinBox::up-arrow:disabled,
         QDoubleSpinBox::down-arrow:disabled, QSpinBox::down-arrow:disabled {{
-            border-bottom-color: {c('text.disabled')};
-            border-top-color: {c('text.disabled')};
+            opacity: 0.55;
         }}
         QComboBox QAbstractItemView {{
             background: {panel_alt};
