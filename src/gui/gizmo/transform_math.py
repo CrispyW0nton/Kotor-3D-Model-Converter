@@ -98,6 +98,7 @@ def axis_drag_delta(
     camera,
     depth: float,
     viewport_height: int,
+    axis_vectors: dict[str, Vec3] | None = None,
 ) -> float:
     """Convert a screen drag into signed motion along a world axis.
 
@@ -106,7 +107,7 @@ def axis_drag_delta(
     stable when the axis is shallow by falling back to horizontal mouse motion.
     """
     right, up, _fwd, _eye = camera._view_matrix()
-    axis_vec = AXIS_VECTORS.get(axis, AXIS_VECTORS["X"])
+    axis_vec = (axis_vectors or AXIS_VECTORS).get(axis, AXIS_VECTORS["X"])
     screen_x = float(np.dot(_as_vec3(axis_vec), _as_vec3(right)))
     screen_y = float(np.dot(_as_vec3(axis_vec), _as_vec3(up)))
     length = math.sqrt(screen_x * screen_x + screen_y * screen_y)
@@ -133,11 +134,15 @@ def rotation_angle_from_mouse_delta(
     return float(mouse_pos[0] - start_mouse[0]) * 0.01
 
 
-def axis_quaternion(axis: str, angle: float) -> tuple[float, float, float, float]:
-    vec = AXIS_VECTORS.get(axis, AXIS_VECTORS["Z"])
+def axis_quaternion(
+    axis: str,
+    angle: float,
+    axis_vectors: dict[str, Vec3] | None = None,
+) -> tuple[float, float, float, float]:
+    vec = normalize((axis_vectors or AXIS_VECTORS).get(axis, AXIS_VECTORS["Z"]))
     half = float(angle) * 0.5
     s = math.sin(half)
-    return (vec[0] * s, vec[1] * s, vec[2] * s, math.cos(half))
+    return (float(vec[0]) * s, float(vec[1]) * s, float(vec[2]) * s, math.cos(half))
 
 
 def multiply_quaternions(a, b) -> tuple[float, float, float, float]:
@@ -153,6 +158,22 @@ def multiply_quaternions(a, b) -> tuple[float, float, float, float]:
     if length <= 1e-9:
         return (0.0, 0.0, 0.0, 1.0)
     return tuple(float(v) / length for v in result)
+
+
+def rotate_vector(quat, vector: Iterable[float]) -> Vec3:
+    """Rotate a vector by a quaternion."""
+
+    qx, qy, qz, qw = (float(v) for v in tuple(quat)[:4])
+    vx, vy, vz = (float(v) for v in tuple(vector)[:3])
+    # q * v * q^-1, expanded without allocating intermediate quaternions.
+    tx = 2.0 * (qy * vz - qz * vy)
+    ty = 2.0 * (qz * vx - qx * vz)
+    tz = 2.0 * (qx * vy - qy * vx)
+    return (
+        vx + qw * tx + (qy * tz - qz * ty),
+        vy + qw * ty + (qz * tx - qx * tz),
+        vz + qw * tz + (qx * ty - qy * tx),
+    )
 
 
 def build_translation_matrix(delta: Iterable[float]) -> np.ndarray:
@@ -187,4 +208,3 @@ def build_scale_matrix(scale: Iterable[float] | float) -> np.ndarray:
     matrix[1, 1] = float(sy)
     matrix[2, 2] = float(sz)
     return matrix
-

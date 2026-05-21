@@ -74,7 +74,7 @@ measurement and snap controls stay available even when the scene has no mesh
 objects.
 
 `.kmax` is GhostRigger's versioned, human-readable JSON scene/project format.
-It stores scene metadata, model object instances, transforms, cameras, lights,
+It stores scene metadata, model object instances, transforms, editable pivots, cameras, lights,
 sequence references, KMAP references, material/texture override references, and
 other lightweight editor state. It does not store bulky raw MDL/MDX/TPC payloads
 unless a future schema explicitly adds that behavior.
@@ -88,6 +88,12 @@ Scene formats are intentionally separate:
 Use `Ctrl+S` to save the active `.kmax` scene and `Ctrl+Shift+S` for Save Scene
 As. Double-clicking a second model in the library asks whether to clear the
 current scene, add the model as another scene object, or cancel.
+
+The viewport toolbar includes an Axis / Reference Coordinate System dropdown
+with World, Local, View, Screen, Parent, Gimbal, Grid, Working, and Pick modes.
+The dockable Adjust Pivot toolbox can affect pivot-only edits, object transforms
+around the current pivot, center pivots to object bounds, align pivot axes, and
+reset pivots; pivot data is saved per object in `.kmax`.
 
 ---
 

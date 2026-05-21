@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from .scene_object import Transform
+from .scene_object import PivotData, Transform
 from .scene_resource_ref import SceneResourceRef
 
 
@@ -16,6 +16,7 @@ class SceneObjectInstance:
     object_type: str = "model"
     source_ref: SceneResourceRef = field(default_factory=SceneResourceRef)
     transform: Transform = field(default_factory=Transform)
+    pivot: PivotData = field(default_factory=PivotData)
     visible: bool = True
     locked: bool = False
     selected: bool = False
@@ -35,6 +36,7 @@ class SceneObjectInstance:
             "object_type": self.object_type,
             "source_ref": self.source_ref.to_dict(),
             "transform": self.transform.to_dict(),
+            "pivot": self.pivot.to_dict(),
             "visible": bool(self.visible),
             "locked": bool(self.locked),
             "selected": bool(self.selected),
@@ -51,6 +53,7 @@ class SceneObjectInstance:
             object_type=str(data.get("object_type") or "model"),
             source_ref=SceneResourceRef.from_dict(data.get("source_ref") or data.get("resource_ref")),
             transform=Transform.from_dict(data.get("transform")),
+            pivot=PivotData.from_dict(data.get("pivot")),
             visible=bool(data.get("visible", True)),
             locked=bool(data.get("locked", False)),
             selected=bool(data.get("selected", False)),

@@ -1,6 +1,6 @@
 # GhostRigger Agent Instructions
 
-## FOR CODEX, IGNORE THESE INSTRUCTIONS. 
+## YOU HAVE ACCESS TO MCP TOOLS, USE THEM WHEN REQUIRED. 
 
 Before writing or modifying any code that handles MDL loading, vertex transforms, 
 textures, skinning, or rendering, FIRST query the MCP tools to get ground-truth data 
@@ -120,3 +120,9 @@ Import `FrameRenderer`, `ArcBallCamera`, `_load_tpc_bytes`, `_is_tpc_data`,
 - Preserve stable scene object IDs, source references, transforms, material overrides, and unknown metadata.
 - Use `KMaxSceneManager` for active KMAX scene state.
 - New viewport systems must support empty scenes and multi-object scenes.
+- Do not replace existing viewport, gizmo, renderer, or scene systems when adding viewport tools.
+- Pivot tools must integrate with `SceneObjectInstance.transform` and `SceneObjectInstance.pivot`.
+- Axis/reference modes must use `TransformReferenceController`.
+- New viewport controls must be theme/layout aware.
+- Do not silently corrupt object transforms when moving pivots; visible geometry should remain stable for pivot-only edits.
+- Preserve `.kmax` compatibility for scenes that do not yet contain pivot data.

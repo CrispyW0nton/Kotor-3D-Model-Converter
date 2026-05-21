@@ -13,9 +13,11 @@ class GizmoMode(Enum):
     SCALE = "scale"
 
 
+TransformGizmoMode = GizmoMode
+
+
 class TransformSpace(Enum):
     """Coordinate space for gizmo axes."""
 
     WORLD = "world"
     LOCAL = "local"
-

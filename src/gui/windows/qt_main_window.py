@@ -33,6 +33,7 @@ from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel
 from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
 from src.gui.qt_lib.panels.qt_camera_panel import QtCameraPanel
 from src.gui.qt_lib.panels.qt_mesh_tools_panel import QtMeshToolsPanel
+from src.gui.qt_lib.panels.adjust_pivot_panel import AdjustPivotPanel
 from src.gui.qt_lib.assets.qt_theme import (
     QtFlowLayout,
     make_horizontal_overflow_area,
@@ -71,6 +72,7 @@ from src.gui.libtheme.theme_settings import ThemeLayoutSettings
 from src.gui.libtheme.theme_watcher import ThemeLayoutWatcher
 from src.measurement.unit_settings import MeasurementSettings
 from src.core.scene.kmax_scene_manager import KMaxSceneManager
+from src.core.scene.axis_mode import AxisMode
 from src.core.scene.scene_object import Transform
 from src.core.scene.scene_resource_ref import SceneResourceRef
 
@@ -679,6 +681,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.settings_data.setdefault("model_double_click_behaviour", "always ask")
         self.settings_data.setdefault("default_import_placement", "auto_offset")
         self.settings_data.setdefault("recent_scenes", [])
+        self.settings_data.setdefault("last_axis_mode", AxisMode.WORLD.value)
+        self.settings_data.setdefault("last_pivot_edit_mode", "affect_object_only")
+        self.settings_data.setdefault("show_adjust_pivot_toolbox", True)
         self.theme_manager = ThemeManager(self.app_root, self.settings_data, self)
         self.layout_manager = LayoutManager(self.app_root, self.settings_data, self)
         self.theme_manager.themeChanged.connect(self._on_theme_changed)
@@ -1192,6 +1197,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.resources_panel_action.triggered.connect(lambda: self._show_detachable_panel("resources"))
         self.module_meshes_panel_action = QtGui.QAction(self._icon("props"), "Open Module Meshes", self)
         self.module_meshes_panel_action.triggered.connect(lambda: self._show_detachable_panel("module_meshes"))
+        self.adjust_pivot_panel_action = QtGui.QAction("Open Adjust Pivot", self)
+        self.adjust_pivot_panel_action.triggered.connect(lambda: self._show_detachable_panel("adjust_pivot"))
         self.set_mdlops_action = QtGui.QAction("Set MDLOps Path...", self)
         self.set_mdlops_action.triggered.connect(self._set_mdlops)
         self.compile_action = QtGui.QAction("Compile ASCII MDL to Binary", self)
@@ -1309,6 +1316,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         modules_menu.addAction(self.lighting_panel_action)
         modules_menu.addAction(self.camera_panel_action)
         modules_menu.addAction(self.module_meshes_panel_action)
+        modules_menu.addAction(self.adjust_pivot_panel_action)
         modules_menu.addAction(self.twoda_panel_action)
         modules_menu.addAction(self.resources_panel_action)
         modules_menu.addSeparator()
@@ -1699,6 +1707,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             pass
 
     def _on_detachable_panel_visibility(self, key: str, dock: QtWidgets.QDockWidget, visible: bool) -> None:
+        if key == "adjust_pivot":
+            self.settings_data["show_adjust_pivot_toolbox"] = bool(visible)
+            try:
+                save_settings(self.settings_path, self.settings_data)
+            except Exception:
+                pass
         if visible:
             return
         self._remember_detachable_panel_state(key, dock)
@@ -1852,6 +1866,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.resource_panel.resourceActivated.connect(self._activate_resource_row)
         self.module_editor_window = None
         self.mesh_tools_panel = QtMeshToolsPanel(self)
+        self.adjust_pivot_panel = AdjustPivotPanel(self)
         self.blueprint_window = QtBlueprintEditorWindow(self)
         self.blueprint_panel = self.blueprint_window.panel
         self._detachable_panels: dict[str, QtWidgets.QDockWidget] = {}
@@ -1861,6 +1876,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             "cameras": (460, 680),
             "module_meshes": (620, 720),
             "mesh_tools": (420, 760),
+            "adjust_pivot": (320, 420),
             "2das": (980, 640),
             "resources": (980, 640),
         }
@@ -1869,6 +1885,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._create_detachable_panel("cameras", "Cameras", self.camera_panel, QtCore.Qt.RightDockWidgetArea)
         self._create_detachable_panel("module_meshes", "Module Meshes", self.module_geometry_panel, QtCore.Qt.RightDockWidgetArea)
         self.mesh_tools_dock = self._create_detachable_panel("mesh_tools", "Mesh Tools", self.mesh_tools_panel, QtCore.Qt.RightDockWidgetArea)
+        self.adjust_pivot_dock = self._create_detachable_panel("adjust_pivot", "Adjust Pivot", self.adjust_pivot_panel, QtCore.Qt.RightDockWidgetArea)
         self._create_detachable_panel("2das", "2DA Browser", self.twoda_panel, QtCore.Qt.LeftDockWidgetArea)
         self._create_detachable_panel("resources", "Resource Browser", self.resource_panel, QtCore.Qt.LeftDockWidgetArea)
         main_splitter.addWidget(left_tabs)
@@ -1877,8 +1894,16 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport.set_navigation_profile(
             self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
         )
+        self.viewport.set_axis_mode(self.settings_data.get("last_axis_mode", AxisMode.WORLD.value))
+        self.settings_data["last_pivot_edit_mode"] = "affect_object_only"
+        self.viewport.set_pivot_edit_mode("affect_object_only")
+        self.adjust_pivot_panel.set_pivot_mode(self.viewport.pivot_edit_mode())
+        self.adjust_pivot_panel.pivotModeChanged.connect(self._set_pivot_edit_mode)
+        self.adjust_pivot_panel.pivotActionRequested.connect(self._apply_pivot_action)
         self.mesh_tools_panel.set_viewport(self.viewport)
         self.mesh_tools_dock.show()
+        if bool(self.settings_data.get("show_adjust_pivot_toolbox", True)):
+            self.adjust_pivot_dock.show()
         self.viewport.setMinimumWidth(420)
         self.viewport.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.viewport_label = self.viewport.canvas
@@ -1890,6 +1915,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport.meshSelectionChanged.connect(self.module_geometry_panel.select_module_meshes)
         self.viewport.nodeMoved.connect(self.properties_panel.show_node)
         self.viewport.nodeMoved.connect(self._on_viewport_scene_node_moved)
+        self.viewport.statusMessage.connect(self.statusBar().showMessage)
+        self.viewport.axis_mode_control.axisModeChanged.connect(self._persist_axis_mode)
         self.viewport.nodeMoved.connect(self.module_geometry_panel.show_node)
         self.viewport.meshVisibilityChanged.connect(self.module_geometry_panel.refresh_module_mesh_rows)
         self.viewport.gpuUploadProgress.connect(self._on_viewport_gpu_upload_progress)
@@ -2429,6 +2456,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if hasattr(self, "scene_outliner_panel"):
             self.scene_outliner_panel.set_scene(scene)
         self._update_scene_chrome()
+        self._refresh_adjust_pivot_panel()
 
     def _update_scene_chrome(self) -> None:
         scene = self.scene_manager.active_scene
@@ -2461,6 +2489,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 if callable(show_scene_object):
                     show_scene_object(obj)
         self._update_scene_chrome()
+        self._refresh_adjust_pivot_panel()
         if hasattr(self, "scene_outliner_panel"):
             self.scene_outliner_panel.set_scene(self.scene_manager.active_scene)
 
@@ -2498,6 +2527,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             obj.locked = bool(locked)
             self.scene_manager.mark_dirty()
             self._refresh_scene_view()
+            self._refresh_adjust_pivot_panel()
 
     def _rename_scene_object(self, object_id: str, name: str) -> None:
         obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
@@ -2522,18 +2552,126 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             for obj in self.scene_manager.active_scene.objects:
                 obj.selected = False
         self._update_scene_chrome()
+        self._refresh_adjust_pivot_panel()
 
     def _on_viewport_scene_node_moved(self, node) -> None:
         object_id = str(getattr(node, "_gr_scene_object_id", "") or "")
         if not object_id:
             return
+        rotation = None
+        scale = None
+        try:
+            rotation = self.viewport._quat_to_euler_degrees(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        except Exception:
+            rotation = None
+        try:
+            scale = tuple(float(v) for v in getattr(node, "_gr_scale", (1.0, 1.0, 1.0))[:3])
+        except Exception:
+            scale = None
         self.scene_manager.update_object_transform(
             object_id,
             position=tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3]),
+            rotation=rotation,
+            scale=scale,
         )
+        try:
+            pivot_local = self.viewport._pivot_local_from_node(node)
+            pivot_rotation = self.viewport._quat_to_euler_degrees(getattr(node, "_gr_pivot_rotation", (0.0, 0.0, 0.0, 1.0)))
+            self.scene_manager.update_object_pivot(
+                object_id,
+                position_local=pivot_local,
+                rotation_local=pivot_rotation,
+            )
+        except Exception:
+            log.debug("Could not persist scene pivot edit", exc_info=True)
         self._update_scene_chrome()
+        self._refresh_adjust_pivot_panel()
         if hasattr(self, "scene_outliner_panel"):
             self.scene_outliner_panel.set_scene(self.scene_manager.active_scene)
+
+    def _selected_scene_objects(self):
+        return list(self.scene_manager.get_selected_objects())
+
+    def _refresh_adjust_pivot_panel(self) -> None:
+        panel = getattr(self, "adjust_pivot_panel", None)
+        if panel is None:
+            return
+        selected = self._selected_scene_objects()
+        locked = any(bool(getattr(obj, "locked", False)) for obj in selected)
+        hierarchy_available = any(bool(getattr(obj, "group_id", "")) for obj in selected)
+        panel.set_selection_state(len(selected), locked=locked, hierarchy_available=hierarchy_available)
+        viewport = getattr(self, "viewport", None)
+        if viewport is not None and hasattr(viewport, "pivot_edit_mode"):
+            panel.set_pivot_mode(viewport.pivot_edit_mode())
+
+    def _set_pivot_edit_mode(self, mode: str) -> None:
+        if mode == "affect_hierarchy_only":
+            selected = self._selected_scene_objects()
+            if not any(bool(getattr(obj, "group_id", "")) for obj in selected):
+                self.statusBar().showMessage("Hierarchy mode is not available for this selection.")
+                self._refresh_adjust_pivot_panel()
+                return
+        if hasattr(self, "viewport"):
+            self.viewport.set_pivot_edit_mode(mode)
+        self._refresh_adjust_pivot_panel()
+
+    def _persist_axis_mode(self, mode) -> None:
+        resolved = AxisMode.from_value(mode)
+        self.settings_data["last_axis_mode"] = resolved.value
+        if resolved is not AxisMode.PICK:
+            self.settings_data.pop("picked_reference_object_id", None)
+        try:
+            save_settings(self.settings_path, self.settings_data)
+        except Exception:
+            log.debug("Could not persist axis mode", exc_info=True)
+
+    def _runtime_bounds_center_local(self, obj) -> tuple[float, float, float] | None:
+        model = (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
+        if model is None:
+            return None
+        try:
+            if hasattr(model, "compute_bounds"):
+                model.compute_bounds()
+            bb_min = tuple(float(v) for v in getattr(model, "bb_min")[:3])
+            bb_max = tuple(float(v) for v in getattr(model, "bb_max")[:3])
+            return (
+                (bb_min[0] + bb_max[0]) * 0.5,
+                (bb_min[1] + bb_max[1]) * 0.5,
+                (bb_min[2] + bb_max[2]) * 0.5,
+            )
+        except Exception:
+            return None
+
+    def _apply_pivot_action(self, action: str) -> None:
+        selected = self._selected_scene_objects()
+        if not selected:
+            self.statusBar().showMessage("No object selected.")
+            self._refresh_adjust_pivot_panel()
+            return
+        changed = False
+        for obj in selected:
+            if bool(getattr(obj, "locked", False)):
+                continue
+            if action == "center_to_object":
+                center = self._runtime_bounds_center_local(obj)
+                if center is None:
+                    self.statusBar().showMessage("Center to Object is unavailable: selected object has no bounds.")
+                    continue
+                changed = self.scene_manager.update_object_pivot(obj.id, position_local=center) or changed
+            elif action == "align_to_object":
+                changed = self.scene_manager.update_object_pivot(obj.id, rotation_local=obj.transform.rotation) or changed
+            elif action == "align_to_world":
+                changed = self.scene_manager.update_object_pivot(obj.id, rotation_local=(0.0, 0.0, 0.0)) or changed
+            elif action == "reset_pivot":
+                changed = self.scene_manager.update_object_pivot(
+                    obj.id,
+                    position_local=(0.0, 0.0, 0.0),
+                    rotation_local=(0.0, 0.0, 0.0),
+                ) or changed
+        if changed:
+            self._refresh_scene_view()
+            self._refresh_adjust_pivot_panel()
+            self._update_scene_chrome()
 
     def _require_model(self, action: str):
         if self._current_model is None:

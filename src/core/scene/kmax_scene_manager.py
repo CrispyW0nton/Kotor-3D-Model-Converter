@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from .kmax_scene import KMaxScene
 from .kmax_serializer import KMaxSerializer
-from .scene_object import Transform
+from .scene_object import PivotData, Transform
 from .scene_object_instance import SceneObjectInstance
 from .scene_resource_ref import SceneResourceRef
 
@@ -148,6 +148,29 @@ class KMaxSceneManager:
             obj.transform.rotation = tuple(float(v) for v in rotation[:3])
         if scale is not None:
             obj.transform.scale = tuple(float(v) for v in scale[:3])
+        self.mark_dirty()
+        return True
+
+    def update_object_pivot(
+        self,
+        object_id: str,
+        *,
+        position_local: tuple[float, float, float] | None = None,
+        rotation_local: tuple[float, float, float] | None = None,
+        enabled: bool | None = None,
+    ) -> bool:
+        obj = self._find_object(object_id)
+        if obj is None or bool(getattr(obj, "locked", False)):
+            return False
+        if getattr(obj, "pivot", None) is None:
+            obj.pivot = PivotData()
+        if position_local is not None:
+            obj.pivot.position_local = tuple(float(v) for v in position_local[:3])
+        if rotation_local is not None:
+            obj.pivot.rotation_local = tuple(float(v) for v in rotation_local[:3])
+        if enabled is not None:
+            obj.pivot.enabled = bool(enabled)
+        obj.pivot = obj.pivot.sanitized()
         self.mark_dirty()
         return True
 

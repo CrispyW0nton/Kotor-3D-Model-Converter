@@ -416,6 +416,50 @@ def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinnin
     assert uploader._skin_inverse_bind_source == "qBone_tBone_dfs_indexed_TR_no_invert"
 
 
+def test_kmax_scene_reload_preserves_selected_object_for_pivot_tools() -> None:
+    import inspect
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    load_model_source = inspect.getsource(QtViewportWidget.load_model)
+    load_scene_source = inspect.getsource(QtViewportWidget.load_scene_instances)
+
+    assert 'getattr(root_node, "_gr_scene_composite_root", False)' in load_model_source
+    assert "selected_id =" in load_scene_source
+    assert "self.load_model(composite" in load_scene_source
+    assert "self.select_scene_object(selected_id)" in load_scene_source
+
+
+def test_transform_cache_evict_clears_frame_and_gpu_child_caches() -> None:
+    from types import SimpleNamespace
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    child = SimpleNamespace(children=[])
+    setattr(child, "_gr_gpu_prebuilt_static_mesh", {"model_id": 1, "skin_bind_transform": False})
+    parent = SimpleNamespace(children=[child])
+
+    invalidated = []
+    viewport = SimpleNamespace(
+        _renderer=SimpleNamespace(
+            _wt_cache={id(parent): object(), id(child): object()},
+            _frame_view=object(),
+            _frame_verts_cache={id(child): [(0.0, 0.0, 0.0)]},
+            _frame_norms_cache={id(child): [(0.0, 0.0, 1.0)]},
+        ),
+        _gpu_renderer=SimpleNamespace(invalidate_node=lambda node: invalidated.append(node)),
+    )
+
+    QtViewportWidget._evict_transform_cache(viewport, parent)
+
+    assert not hasattr(child, "_gr_gpu_prebuilt_static_mesh")
+    assert viewport._renderer._wt_cache == {}
+    assert viewport._renderer._frame_view is None
+    assert viewport._renderer._frame_verts_cache == {}
+    assert viewport._renderer._frame_norms_cache == {}
+    assert invalidated == [parent, child]
+
+
 def test_model_load_worker_uses_single_read_and_gpu_prebuild() -> None:
     import inspect
 
@@ -1327,6 +1371,66 @@ def test_main_window_exposes_module_meshes_as_detachable_dock() -> None:
     assert "modules_menu.addAction(self.module_meshes_panel_action)" in menu_source
     assert "self.module_geometry_panel.show_model(model)" in refresh_source
     assert hasattr(QtPropertiesPanel, "set_module_browser_only")
+
+
+def test_main_window_exposes_adjust_pivot_in_modules_menu() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    actions_source = inspect.getsource(QtGhostRiggerMainWindow._build_actions)
+    menu_source = inspect.getsource(QtGhostRiggerMainWindow._build_menu)
+
+    assert "self.adjust_pivot_panel = AdjustPivotPanel(self)" in layout_source
+    assert '"adjust_pivot"' in layout_source
+    assert "self.adjust_pivot_panel_action" in actions_source
+    assert 'self._show_detachable_panel("adjust_pivot")' in actions_source
+    assert "modules_menu.addAction(self.adjust_pivot_panel_action)" in menu_source
+
+
+def test_adjust_pivot_mode_buttons_are_persistent_toggles() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.adjust_pivot_panel import AdjustPivotPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = AdjustPivotPanel()
+    try:
+        panel.set_selection_state(1, locked=False, hierarchy_available=True)
+        emitted = []
+        panel.pivotModeChanged.connect(emitted.append)
+
+        pivot_button = panel._mode_buttons["affect_pivot_only"]
+        object_button = panel._mode_buttons["affect_object_only"]
+        hierarchy_button = panel._mode_buttons["affect_hierarchy_only"]
+
+        pivot_button.click()
+        assert pivot_button.isChecked()
+        assert not object_button.isChecked()
+        assert emitted[-1] == "affect_pivot_only"
+
+        hierarchy_button.click()
+        assert hierarchy_button.isChecked()
+        assert not pivot_button.isChecked()
+        assert emitted[-1] == "affect_hierarchy_only"
+    finally:
+        panel.close()
+
+
+def test_adjust_pivot_mode_starts_object_only_for_normal_gizmo_drags() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    mode_source = inspect.getsource(QtGhostRiggerMainWindow._set_pivot_edit_mode)
+
+    assert 'self.settings_data["last_pivot_edit_mode"] = "affect_object_only"' in layout_source
+    assert 'self.viewport.set_pivot_edit_mode("affect_object_only")' in layout_source
+    assert "save_settings(self.settings_path, self.settings_data)" not in mode_source
 
 
 def test_regular_properties_panel_can_omit_module_mesh_tab() -> None:

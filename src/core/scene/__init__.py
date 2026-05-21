@@ -4,7 +4,8 @@ from .kmax_scene import KMAX_FILE_TYPE, KMAX_FILE_VERSION, KMaxScene
 from .kmax_scene_manager import KMaxSceneManager
 from .kmax_serializer import KMaxSerializer
 from .kmax_validator import KMaxValidationResult, KMaxValidator
-from .scene_object import Transform
+from .axis_mode import AxisMode, TransformReferenceController
+from .scene_object import PivotData, Transform
 from .scene_object_instance import SceneObjectInstance
 from .scene_resource_ref import SceneResourceRef
 
@@ -16,6 +17,9 @@ __all__ = [
     "KMaxSerializer",
     "KMaxValidationResult",
     "KMaxValidator",
+    "AxisMode",
+    "TransformReferenceController",
+    "PivotData",
     "SceneObjectInstance",
     "SceneResourceRef",
     "Transform",

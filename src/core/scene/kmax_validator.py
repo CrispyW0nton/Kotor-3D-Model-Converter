@@ -55,6 +55,15 @@ class KMaxValidator:
                 values = transform.get(key)
                 if not isinstance(values, list) or len(values) != 3:
                     result.add_warning(f"Object {object_id or '<unknown>'} has invalid {key}.")
+            pivot = obj.get("pivot")
+            if pivot is not None:
+                if not isinstance(pivot, dict):
+                    result.add_warning(f"Object {object_id or '<unknown>'} has invalid pivot block.")
+                else:
+                    for key in ("position_local", "rotation_local"):
+                        values = pivot.get(key, pivot.get(key.replace("_local", "")))
+                        if not isinstance(values, list) or len(values) != 3:
+                            result.add_warning(f"Object {object_id or '<unknown>'} has invalid pivot {key}.")
             source_ref = obj.get("source_ref") or {}
             if obj.get("object_type", "model") == "model":
                 if not source_ref.get("resref") and not source_ref.get("source_path"):
