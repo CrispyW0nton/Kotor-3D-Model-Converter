@@ -87,11 +87,59 @@ class QtMatrixPanel(QtWidgets.QFrame):
         self._speeds: list[float] = []
         self._phase = 0
         self._font_family = aurebesh_font_family()
+        self._font_size = 9
+        self._font_weight = QtGui.QFont.Weight.Normal
+        self._glyphs = self._GLYPHS
+        self._bar_style = "matrix"
+        self._image_path = ""
+        self._movie: Optional[QtGui.QMovie] = None
+        self._background = QtGui.QColor(C["bg"])
+        self._glyph_color = QtGui.QColor(C["accent"])
         self._rng = random.Random(1337)
         self.setAutoFillBackground(False)
         self.setAttribute(QtCore.Qt.WA_StyledBackground, False)
         self.engine.tick.connect(self._advance)
         self.engine.start()
+
+    def apply_ghost_theme(self, theme) -> None:
+        if theme is None:
+            self._background = QtGui.QColor(C["bg"])
+            self._glyph_color = QtGui.QColor(C["accent"])
+            return
+        self._background = QtGui.QColor(theme.color("matrixBar.background", theme.color("window.background")))
+        self._glyph_color = QtGui.QColor(theme.color("matrixBar.glyph", theme.color("accent.primary")))
+        if hasattr(theme, "font"):
+            matrix_font = theme.font("matrix")
+            self._font_family = matrix_font.family
+            self._font_size = matrix_font.size
+            self._font_weight = QtGui.QFont.Weight.Bold if matrix_font.weight.lower() == "bold" else QtGui.QFont.Weight.Normal
+        self.update()
+
+    def set_matrix_config(
+        self,
+        *,
+        style: str = "matrix",
+        glyphs: str = "",
+        font_family: str = "",
+        image_path: str = "",
+    ) -> None:
+        self._bar_style = (style or "matrix").strip().lower()
+        self._glyphs = glyphs or self._GLYPHS
+        if font_family:
+            self._font_family = font_family
+        self._image_path = image_path or ""
+        if self._movie is not None:
+            self._movie.stop()
+            try:
+                self._movie.frameChanged.disconnect()
+            except Exception:
+                pass
+            self._movie = None
+        if self._bar_style == "gif" and self._image_path:
+            self._movie = QtGui.QMovie(self._image_path)
+            self._movie.frameChanged.connect(lambda _frame=0: self.update())
+            self._movie.start()
+        self.update()
 
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         super().resizeEvent(event)
@@ -107,18 +155,34 @@ class QtMatrixPanel(QtWidgets.QFrame):
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
-        painter.fillRect(self.rect(), QtGui.QColor(C["bg"]))
+        painter.fillRect(self.rect(), self._background)
+        if self._bar_style in {"png", "image"} and self._image_path:
+            pix = QtGui.QPixmap(self._image_path)
+            if not pix.isNull():
+                painter.drawPixmap(self.rect(), pix)
+                painter.end()
+                return
+        if self._bar_style == "gif" and self._movie is not None:
+            pix = self._movie.currentPixmap()
+            if not pix.isNull():
+                painter.drawPixmap(self.rect(), pix)
+                painter.end()
+                return
+        if self._bar_style == "disabled":
+            painter.end()
+            return
         painter.setRenderHint(QtGui.QPainter.TextAntialiasing, False)
-        font = QtGui.QFont(self._font_family, 9)
+        font = QtGui.QFont(self._font_family, self._font_size)
+        font.setWeight(self._font_weight)
         font.setStyleHint(QtGui.QFont.Monospace)
         painter.setFont(font)
-        glyphs = self._GLYPHS
+        glyphs = self._glyphs or self._GLYPHS
         for idx, y in enumerate(self._columns):
             x = idx * 12 + 3
             for trail_idx, step in enumerate(range(0, 84, 12)):
                 char = glyphs[(idx * 7 + trail_idx + self._phase) % len(glyphs)]
                 alpha = int(max(28, 210 - step * 2) * self.opacity)
-                color = QtGui.QColor(C["accent"])
+                color = QtGui.QColor(self._glyph_color)
                 color.setAlpha(alpha)
                 painter.setPen(color)
                 painter.drawText(x, int(y - step), char)
@@ -144,6 +208,10 @@ class QtMatrixLabel(QtWidgets.QLabel):
     def __init__(self, text: str = "", parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(text, parent)
         self.setStyleSheet(f"color:{C['accent']}; background:transparent; font-weight:bold;")
+
+    def apply_ghost_theme(self, theme) -> None:
+        color = theme.color("matrixBar.text", theme.color("accent.primary")) if theme is not None else C["accent"]
+        self.setStyleSheet(f"color:{color}; background:transparent; font-weight:bold;")
 
 
 class QtMatrixBackground(QtMatrixPanel):

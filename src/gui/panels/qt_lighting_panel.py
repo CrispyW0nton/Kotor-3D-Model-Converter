@@ -6,6 +6,7 @@ from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from src.gui.libtheme.collapsible_group import CollapsibleGroupBox
 from src.gui.lighting.light_manager import LightManager
 from src.gui.lighting.light_model import GhostRiggerLight
 from src.gui.lighting.light_types import (
@@ -85,7 +86,7 @@ class QtLightingPanel(QtWidgets.QWidget):
         top_grid.addWidget(self.rig_preset_combo, 1, 1, 1, 3)
         root.addLayout(top_grid)
 
-        maps = QtWidgets.QGroupBox("Preview")
+        maps = CollapsibleGroupBox("Preview")
         maps_layout = QtWidgets.QGridLayout(maps)
         maps_layout.setContentsMargins(8, 8, 8, 8)
         maps_layout.setHorizontalSpacing(8)
@@ -150,7 +151,7 @@ class QtLightingPanel(QtWidgets.QWidget):
             self.tree.setColumnWidth(index, width)
         root.addWidget(self.tree, 1)
 
-        editor = QtWidgets.QGroupBox("Selected Light")
+        editor = CollapsibleGroupBox("Selected Light")
         form = QtWidgets.QFormLayout(editor)
         form.setContentsMargins(8, 8, 8, 8)
         form.setSpacing(5)
@@ -206,17 +207,39 @@ class QtLightingPanel(QtWidgets.QWidget):
         form.addRow("Group", self.group_edit)
         root.addWidget(editor)
 
-        self.setStyleSheet(
-            "QWidget { color:#d7dde6; }"
-            "QGroupBox { color:#d7dde6; border:1px solid #26362e; margin-top:8px; padding-top:7px; }"
-            "QGroupBox::title { subcontrol-origin:margin; left:6px; padding:0 4px; }"
-            "QTreeWidget, QComboBox, QDoubleSpinBox, QLineEdit { background:#101713; color:#e8f0ec; border:1px solid #26362e; }"
-            "QTreeWidget::item:selected { background:#2e6149; color:#ffffff; }"
-            "QHeaderView::section { background:#151d19; color:#aeb9b3; border:1px solid #26362e; padding:2px; }"
-            "QCheckBox { color:#d7dde6; }"
-            "QPushButton { background:#18241e; color:#e8f0ec; border:1px solid #314237; padding:2px 6px; }"
-        )
         self._set_editor_enabled(False)
+
+    def apply_ghost_theme(self, theme) -> None:
+        self.setStyleSheet(
+            f"QWidget {{ color:{theme.color('text.primary')}; }}"
+            f"QGroupBox {{ color:{theme.color('groupbox.title')}; border:1px solid {theme.color('groupbox.border')}; margin-top:8px; padding-top:7px; }}"
+            "QGroupBox::title { subcontrol-origin:margin; left:6px; padding:0 4px; }"
+            f"QTreeWidget, QComboBox, QDoubleSpinBox, QLineEdit {{ background:{theme.color('input.background')}; color:{theme.color('input.text')}; border:1px solid {theme.color('input.border')}; }}"
+            f"QTreeWidget::item:selected {{ background:{theme.color('selection.background')}; color:{theme.color('selection.text')}; }}"
+            f"QHeaderView::section {{ background:{theme.color('table.headerBackground')}; color:{theme.color('table.headerText')}; border:1px solid {theme.color('table.grid', theme.color('panel.border'))}; padding:3px; }}"
+            f"QCheckBox {{ color:{theme.color('text.primary')}; }}"
+            f"QPushButton {{ background:{theme.color('button.background')}; color:{theme.color('button.text')}; border:1px solid {theme.color('panel.border')}; padding:1px 6px; min-height:{theme.metric('button.height', 16)}px; min-width:{theme.metric('button.minWidth', 64)}px; }}"
+            f"QPushButton:hover {{ background:{theme.color('button.hover')}; }}"
+            f"QPushButton:checked {{ background:{theme.color('button.checked')}; color:{theme.color('button.checkedText', theme.color('button.accentText'))}; }}"
+        )
+        self.tree.setAlternatingRowColors(True)
+
+    def apply_ghost_layout(self, layout) -> None:
+        margin = layout.spacing_value("margin", 4)
+        spacing = layout.spacing_value("panelSpacing", 4)
+        if self.layout() is not None:
+            self.layout().setContentsMargins(margin, margin, margin, margin)
+            self.layout().setSpacing(spacing)
+        row_height = layout.spacing_value("treeRowHeight", 22)
+        self.tree.setUniformRowHeights(True)
+        self.tree.setStyleSheet(self.tree.styleSheet() + f" QTreeView::item {{ min-height:{row_height}px; }}")
+        widgets = [
+            *self.findChildren(QtWidgets.QComboBox),
+            *self.findChildren(QtWidgets.QDoubleSpinBox),
+            *self.findChildren(QtWidgets.QLineEdit),
+        ]
+        for widget in widgets:
+            widget.setMinimumHeight(layout.spacing_value("inputHeight", 24))
 
     def _double_spin(self, minimum: float, maximum: float, step: float, decimals: int) -> QtWidgets.QDoubleSpinBox:
         spin = QtWidgets.QDoubleSpinBox()

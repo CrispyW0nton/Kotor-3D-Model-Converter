@@ -36,6 +36,8 @@ class QtSettingsDialog(QtWidgets.QDialog):
     ):
         super().__init__(parent)
         self.setWindowTitle("Settings")
+        self.setModal(False)
+        self.setWindowModality(QtCore.Qt.NonModal)
         self.settings = dict(settings or {})
         self.theme_manager = theme_manager
         self.layout_manager = layout_manager
@@ -77,6 +79,30 @@ class QtSettingsDialog(QtWidgets.QDialog):
         self.matrix_check = QtWidgets.QCheckBox("Enable Matrix background")
         root.addWidget(self.autoscan_check)
         root.addWidget(self.matrix_check)
+        matrix_form = QtWidgets.QFormLayout()
+        self.matrix_style_combo = QtWidgets.QComboBox()
+        for label, value in (
+            ("Theme matrix", "matrix"),
+            ("PNG image", "png"),
+            ("Animated GIF", "gif"),
+            ("Disabled", "disabled"),
+        ):
+            self.matrix_style_combo.addItem(label, value)
+        self.matrix_glyphs_edit = QtWidgets.QLineEdit()
+        self.matrix_glyphs_edit.setPlaceholderText("Optional custom glyph alphabet")
+        self.matrix_font_edit = QtWidgets.QLineEdit()
+        self.matrix_font_edit.setPlaceholderText("Optional font family")
+        self.matrix_image_path = QtWidgets.QLineEdit()
+        image_row = QtWidgets.QHBoxLayout()
+        image_row.addWidget(self.matrix_image_path, 1)
+        image_browse = QtWidgets.QPushButton("Browse")
+        image_browse.clicked.connect(lambda _checked=False: self._browse_matrix_image())
+        image_row.addWidget(image_browse)
+        matrix_form.addRow("Matrix Bar Style:", self.matrix_style_combo)
+        matrix_form.addRow("Matrix Glyphs:", self.matrix_glyphs_edit)
+        matrix_form.addRow("Matrix Font:", self.matrix_font_edit)
+        matrix_form.addRow("Matrix Image/GIF:", image_row)
+        root.addLayout(matrix_form)
         self._build_theme_layout_group(root)
         self._build_measurement_group(root)
 
@@ -224,6 +250,14 @@ class QtSettingsDialog(QtWidgets.QDialog):
         self.viewport_navigation_profile.setCurrentIndex(max(index, 0))
         self.autoscan_check.setChecked(bool(self.settings.get("autoscan", False)))
         self.matrix_check.setChecked(bool(self.settings.get("matrix_background", True)))
+        matrix_bar = dict(self.settings.get("matrix_bar", {}))
+        self._set_combo_data(
+            self.matrix_style_combo,
+            str(matrix_bar.get("style") or ("matrix" if self.matrix_check.isChecked() else "disabled")),
+        )
+        self.matrix_glyphs_edit.setText(str(matrix_bar.get("glyphs") or ""))
+        self.matrix_font_edit.setText(str(matrix_bar.get("font_family") or ""))
+        self.matrix_image_path.setText(str(matrix_bar.get("image_path") or ""))
         self._set_combo_data(self.theme_mode_combo, self.theme_layout_settings.theme_mode)
         self._set_combo_data(self.theme_combo, self.theme_layout_settings.selected_theme)
         self._set_combo_data(self.light_theme_combo, self.theme_layout_settings.os_light_theme)
@@ -272,6 +306,12 @@ class QtSettingsDialog(QtWidgets.QDialog):
             "viewport_navigation_profile": self.viewport_navigation_profile.currentData(),
             "autoscan": self.autoscan_check.isChecked(),
             "matrix_background": self.matrix_check.isChecked(),
+            "matrix_bar": {
+                "style": self.matrix_style_combo.currentData() or "matrix",
+                "glyphs": self.matrix_glyphs_edit.text().strip(),
+                "font_family": self.matrix_font_edit.text().strip(),
+                "image_path": self.matrix_image_path.text().strip(),
+            },
             "theme_layout": {
                 "theme_mode": self.theme_mode_combo.currentData(),
                 "selected_theme": self.theme_combo.currentData(),
@@ -418,6 +458,16 @@ class QtSettingsDialog(QtWidgets.QDialog):
             path = QtWidgets.QFileDialog.getExistingDirectory(self, label)
         if path:
             edit.setText(path)
+
+    def _browse_matrix_image(self) -> None:
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Select Matrix Bar Image",
+            "",
+            "Images (*.png *.jpg *.jpeg *.gif);;All files (*.*)",
+        )
+        if path:
+            self.matrix_image_path.setText(path)
 
     def _save(self) -> None:
         values = self.values()

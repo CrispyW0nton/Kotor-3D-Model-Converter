@@ -236,6 +236,58 @@ class QtWorkflowRail(QtWidgets.QWidget):
         # Initial empty / fallback population.
         self.set_mode(None)
 
+    def apply_ghost_theme(self, theme) -> None:
+        brand = self.findChild(QtWidgets.QFrame, "GuidedRigRailBrand")
+        if brand is not None:
+            brand.setStyleSheet(
+                "QFrame#GuidedRigRailBrand { "
+                f"background:{theme.color('panel.background')}; "
+                f"border:1px solid {theme.color('panel.border')}; "
+                "border-radius:4px; "
+                "}"
+                "QLabel#GuidedRigRailTitle { "
+                f"color:{theme.color('accent.primary')}; "
+                "font-size:11pt; font-weight:800; letter-spacing:0px; "
+                "}"
+                "QLabel#GuidedRigRailSubtitle { "
+                f"color:{theme.color('text.secondary')}; "
+                "font-size:8pt; font-weight:600; letter-spacing:0px; "
+                "}"
+            )
+        self._mode_label.setStyleSheet(
+            f"color:{theme.color('text.secondary')}; font-size:8pt; padding-left:2px;"
+        )
+        self._list.setStyleSheet(
+            "QListWidget { "
+            f"background:{theme.color('panel.background')}; "
+            f"color:{theme.color('text.primary')}; "
+            "border:0; outline:0; "
+            "}"
+            "QListWidget::item { "
+            f"background:{theme.color('button.background')}; "
+            f"border:1px solid {theme.color('panel.border')}; "
+            "border-radius:5px; padding:8px 10px; min-height:28px; "
+            "}"
+            "QListWidget::item:hover { "
+            f"background:{theme.color('button.hover')}; "
+            "}"
+            "QListWidget::item:selected { "
+            f"background:{theme.color('button.checked')}; "
+            f"color:{theme.color('button.checkedText', theme.color('selection.text'))}; "
+            "font-weight:bold; "
+            "}"
+            "QListWidget::item:disabled { "
+            f"color:{theme.color('text.disabled')}; border-color:{theme.color('panel.border')}; background:{theme.color('panel.backgroundAlt', theme.color('panel.altBackground'))}; "
+            "}"
+        )
+
+    def apply_ghost_layout(self, layout) -> None:
+        if self.layout() is not None:
+            margin = layout.spacing_value("panelSpacing", 4)
+            self.layout().setContentsMargins(margin, margin, margin, margin)
+            self.layout().setSpacing(layout.spacing_value("panelSpacing", 4))
+        self._list.setSpacing(max(2, layout.spacing_value("groupboxSpacing", 4)))
+
     # ── Public API ────────────────────────────────────────────────────────
 
     def set_mode(self, mode) -> None:

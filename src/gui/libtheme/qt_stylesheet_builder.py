@@ -172,9 +172,10 @@ class QtStylesheetBuilder:
             border-color: {c('accent.primary')};
         }}
         QPushButton[compact="true"], QToolButton[compact="true"] {{
-            padding: 2px 8px;
+            padding: 1px 6px;
             font-size: {max(8, default_font.size - 1)}pt;
-            min-height: {max(22, m('button.height', 28) - 4)}px;
+            min-height: {max(16, m('button.height', 16))}px;
+            min-width: {m('button.minWidth', 64)}px;
         }}
         QLabel[heading="true"] {{
             color: {c('accent.primary')};

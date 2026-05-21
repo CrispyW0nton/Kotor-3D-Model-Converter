@@ -77,8 +77,8 @@ class LayoutApplier(QtCore.QObject):
                 button.setText(str(full_text))
                 button.setIconSize(QtCore.QSize(icon_size, icon_size))
             if toolbar.height > 0:
-                button.setMinimumHeight(max(22, toolbar.height - 8))
-                button.setMaximumHeight(max(22, toolbar.height - 4))
+                button.setMinimumHeight(max(16, min(toolbar.height - 8, 24)))
+                button.setMaximumHeight(max(16, min(toolbar.height - 4, 28)))
             button.setMinimumWidth(max(button.minimumWidth(), toolbar.icon_size + 14 if mode == "iconOnly" else 0))
 
     def _apply_toolbars(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:

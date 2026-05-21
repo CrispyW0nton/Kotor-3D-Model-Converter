@@ -59,6 +59,7 @@ from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditor
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
 from src.gui.libtheme import LayoutManager, ThemeManager
 from src.gui.libtheme.style_tokens import LEGACY_MATRIX_COLORS
+from src.gui.libtheme.theme_editor_window import ThemeEditorWindow
 from src.gui.libtheme.theme_settings import ThemeLayoutSettings
 from src.gui.libtheme.theme_watcher import ThemeLayoutWatcher
 from src.measurement.unit_settings import MeasurementSettings
@@ -551,32 +552,12 @@ class QtProgressToast(QtWidgets.QFrame):
         self._close_timer.setSingleShot(True)
         self._close_timer.timeout.connect(self.hide)
         self._build()
+        parent_theme = getattr(getattr(parent, "theme_manager", None), "current_theme", None)
+        if parent_theme is not None:
+            self.apply_ghost_theme(parent_theme)
 
     def _build(self):
-        self.setStyleSheet(
-            f"""
-            #ProgressToast {{
-                background: {C['panel']};
-                border: 1px solid {C['accent']};
-            }}
-            QLabel#ToastTitle {{
-                color: {C['text']};
-                font-weight: 700;
-            }}
-            QLabel#ToastDetail {{
-                color: {C['text2']};
-            }}
-            QProgressBar {{
-                background: {C['bg']};
-                border: 1px solid {C['border']};
-                height: 8px;
-                text-align: center;
-            }}
-            QProgressBar::chunk {{
-                background: {C['accent']};
-            }}
-            """
-        )
+        self.apply_ghost_theme(None)
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(6)
@@ -590,6 +571,46 @@ class QtProgressToast(QtWidgets.QFrame):
         layout.addWidget(self.title_label)
         layout.addWidget(self.detail_label)
         layout.addWidget(self.progress)
+
+    def apply_ghost_theme(self, theme) -> None:
+        if theme is None:
+            panel = C["panel"]
+            border = C["accent"]
+            text = C["text"]
+            subtext = C["text2"]
+            bg = C["bg"]
+            progress = C["accent"]
+        else:
+            panel = theme.color("panel.backgroundAlt", theme.color("panel.altBackground"))
+            border = theme.color("accent.primary")
+            text = theme.color("text.primary")
+            subtext = theme.color("text.secondary")
+            bg = theme.color("input.background")
+            progress = theme.color("success", theme.color("accent.primary"))
+        self.setStyleSheet(
+            f"""
+            #ProgressToast {{
+                background: {panel};
+                border: 1px solid {border};
+            }}
+            QLabel#ToastTitle {{
+                color: {text};
+                font-weight: 700;
+            }}
+            QLabel#ToastDetail {{
+                color: {subtext};
+            }}
+            QProgressBar {{
+                background: {bg};
+                border: 1px solid {border};
+                height: 8px;
+                text-align: center;
+            }}
+            QProgressBar::chunk {{
+                background: {progress};
+            }}
+            """
+        )
 
     def show_busy(self, title: str, detail: str):
         self._close_timer.stop()
@@ -697,6 +718,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.setMinimumSize(1100, 700)
         update_legacy_palette(self.theme_manager.get_theme())
         self._build_actions()
+        self._diagnostics_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+D"), self)
+        self._diagnostics_shortcut.activated.connect(self._show_diagnostics_panel)
         self._build_menu()
         self._build_toolbar()
         self._build_layout()
@@ -871,6 +894,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 color: {C['text2']};
                 font-size: 8pt;
             }}
+            QLabel#HeaderIpcMeta {{
+                color: {C['accent']};
+                font-size: 7pt;
+            }}
             QLabel#ModelPill {{
                 background: {C['bg']};
                 color: {C['accent']};
@@ -886,6 +913,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def apply_ghost_theme(self, theme) -> None:
         update_legacy_palette(theme)
+        self._apply_matrix_theme(theme)
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "apply_ghost_theme"):
             viewport.apply_ghost_theme(theme)
@@ -901,6 +929,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.settings_data.setdefault("theme_layout", {}).update(self.theme_manager.to_settings())
         self.settings_data["theme_layout"].update(self.layout_manager.to_settings())
         self._refresh_theme_sensitive_icons()
+        if self._progress_toast is not None:
+            self._progress_toast.apply_ghost_theme(theme)
 
     def _on_layout_changed(self, layout) -> None:
         self.settings_data.setdefault("theme_layout", {}).update(self.theme_manager.to_settings())
@@ -995,6 +1025,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.settings_action = QtGui.QAction(self._icon("settings"), "Settings...", self)
         self.settings_action.setShortcut("F2")
         self.settings_action.triggered.connect(self._open_settings_dialog)
+        self.theme_editor_action = QtGui.QAction(self._icon("settings"), "Theme Editor...", self)
+        self.theme_editor_action.triggered.connect(self._open_theme_editor_window)
         self.autorig_action = QtGui.QAction(self._icon("autorig"), "Auto-Rig Current Model", self)
         self.autorig_action.setShortcut("Ctrl+R")
         self.autorig_action.triggered.connect(self._quick_autorig)
@@ -1127,6 +1159,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(self.quit_action)
 
+        customise_menu = self.menuBar().addMenu("Customise")
+        customise_menu.addAction(self.settings_action)
+        customise_menu.addAction(self.theme_editor_action)
+
         model_menu = self.menuBar().addMenu("Model")
         for action in (
             self.autorig_action,
@@ -1246,6 +1282,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         header = QtMatrixPanel(engine=self._matrix_engine, opacity=0.55)
         header.setObjectName("HeaderBar")
         header.setFixedHeight(58)
+        self.header_bar = header
 
         layout = QtWidgets.QHBoxLayout(header)
         layout.setContentsMargins(18, 7, 18, 7)
@@ -1269,6 +1306,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         subtitle = QtWidgets.QLabel("Odyssey Engine Pipeline  //  KotOR 1 & 2 TSL")
         subtitle.setObjectName("GhostSubtitle")
         subtitle.setStyleSheet("background:transparent;")
+        self.header_title = title
+        self.header_subtitle = subtitle
         title_box.addWidget(title)
         title_box.addWidget(subtitle)
         layout.addLayout(title_box)
@@ -1279,30 +1318,31 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         meta_box.setSpacing(2)
         self.metrics_label = QtWidgets.QLabel("")
         self.metrics_label.setObjectName("HeaderMeta")
-        version = QtWidgets.QLabel(f"v{self.APP_VERSION}")
-        version.setObjectName("HeaderMeta")
-        ipc = QtWidgets.QLabel("IPC: port 7001 *")
-        ipc.setObjectName("HeaderMeta")
-        ipc.setStyleSheet(f"color:{C['accent']}; font-size:7pt;")
-        for label in (self.metrics_label, version, ipc):
+        self.version_label = QtWidgets.QLabel(f"v{self.APP_VERSION}")
+        self.version_label.setObjectName("HeaderMeta")
+        self.ipc_label = QtWidgets.QLabel("IPC: port 7001 *")
+        self.ipc_label.setObjectName("HeaderIpcMeta")
+        for label in (self.metrics_label, self.version_label, self.ipc_label):
             label.setAlignment(QtCore.Qt.AlignRight)
             label.setStyleSheet(label.styleSheet() + "background:transparent;")
             meta_box.addWidget(label)
         layout.addLayout(meta_box)
+        self._apply_matrix_bar_config(header)
         return header
 
     def _make_command_bar(self) -> QtWidgets.QWidget:
         bar = QtMatrixPanel(engine=self._matrix_engine, opacity=0.35)
         bar.setObjectName("CommandBar")
         bar.setFixedHeight(40)
+        self.command_bar = bar
 
         layout = QtWidgets.QHBoxLayout(bar)
         layout.setContentsMargins(10, 4, 10, 4)
         layout.setSpacing(5)
 
         layout.addWidget(self._tool_button("Open  Ctrl+O", self.open_model_action, "open"))
-        layout.addWidget(self._tool_button("Auto-Rig  R", self.autorig_action, "autorig", accent=True))
-        layout.addWidget(self._tool_button("Character Builder", self.character_builder_action, "charbuilder", accent=True))
+        layout.addWidget(self._tool_button("Auto-Rig  R", self.autorig_action, "autorig"))
+        layout.addWidget(self._tool_button("Character Builder", self.character_builder_action, "charbuilder"))
         layout.addWidget(self._tool_button("Modules", self.modules_action, "modular"))
         layout.addWidget(self._tool_button("Tex Dir", self.texture_dir_action, "texture"))
         layout.addWidget(self._separator())
@@ -1344,14 +1384,46 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._tool_button("Lights", self.lighting_panel_action, "", compact=True))
         layout.addWidget(self._tool_button("Cameras", self.camera_panel_action, "", compact=True))
         layout.addWidget(self._tool_button("Diag  Ctrl+D", self.diag_action, "diag", compact=True))
-        self.command_bar = bar
         self.command_bar_scroll = make_horizontal_overflow_area(
             bar,
             "CommandBarScroll",
             height=56,
             parent=self,
         )
+        self._apply_matrix_bar_config(bar)
         return self.command_bar_scroll
+
+    def _matrix_bar_settings(self) -> dict:
+        return dict(self.settings_data.get("matrix_bar", {}))
+
+    def _apply_matrix_bar_config(self, panel: QtMatrixPanel) -> None:
+        cfg = self._matrix_bar_settings()
+        style = str(cfg.get("style") or ("matrix" if self.settings_data.get("matrix_background", True) else "disabled"))
+        panel.set_matrix_config(
+            style=style,
+            glyphs=str(cfg.get("glyphs") or ""),
+            font_family=str(cfg.get("font_family") or ""),
+            image_path=str(cfg.get("image_path") or ""),
+        )
+
+    def _apply_matrix_theme(self, theme) -> None:
+        for panel in (getattr(self, "header_bar", None), getattr(self, "command_bar", None)):
+            if panel is not None:
+                self._apply_matrix_bar_config(panel)
+                panel.apply_ghost_theme(theme)
+        if hasattr(self, "header_subtitle"):
+            self.header_subtitle.setStyleSheet(
+                f"color:{theme.color('matrixBar.subtext', theme.color('text.secondary'))}; background:transparent;"
+            )
+        for label in (getattr(self, "metrics_label", None), getattr(self, "version_label", None)):
+            if label is not None:
+                label.setStyleSheet(
+                    f"color:{theme.color('matrixBar.metaText', theme.color('text.secondary'))}; background:transparent;"
+                )
+        if hasattr(self, "ipc_label"):
+            self.ipc_label.setStyleSheet(
+                f"color:{theme.color('matrixBar.ipcText', theme.color('accent.primary'))}; background:transparent; font-size:7pt;"
+            )
 
     def _tool_button(
         self,
@@ -1412,6 +1484,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         )
         self.addDockWidget(area, dock)
         dock.hide()
+        dock.topLevelChanged.connect(lambda floating, k=key, d=dock: self._remember_detachable_panel_state(k, d))
+        dock.visibilityChanged.connect(lambda visible, k=key, d=dock: self._on_detachable_panel_visibility(k, d, visible))
         self._detachable_panels[key] = dock
         return dock
 
@@ -1425,10 +1499,32 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self._populate_resource_panel()
         dock.show()
         dock.setFloating(True)
-        width, height = getattr(self, "_detachable_panel_sizes", {}).get(key, (760, 520))
+        dock.setWindowFlag(QtCore.Qt.Window, True)
+        dock.setWindowFlag(QtCore.Qt.WindowMinMaxButtonsHint, True)
+        dock.setWindowFlag(QtCore.Qt.WindowCloseButtonHint, True)
+        saved = self.settings_data.get("theme_layout", {}).get("panel_sizes", {}).get(key, {})
+        default_width, default_height = getattr(self, "_detachable_panel_sizes", {}).get(key, (760, 520))
+        width = int(saved.get("width", default_width)) if isinstance(saved, dict) else default_width
+        height = int(saved.get("height", default_height)) if isinstance(saved, dict) else default_height
         dock.resize(width, height)
+        dock.show()
         dock.raise_()
         dock.activateWindow()
+
+    def _remember_detachable_panel_state(self, key: str, dock: QtWidgets.QDockWidget) -> None:
+        sizes = self.settings_data.setdefault("theme_layout", {}).setdefault("panel_sizes", {})
+        sizes[key] = {"width": max(120, dock.width()), "height": max(120, dock.height()), "floating": dock.isFloating()}
+        try:
+            save_settings(self.settings_path, self.settings_data)
+        except Exception:
+            pass
+
+    def _on_detachable_panel_visibility(self, key: str, dock: QtWidgets.QDockWidget, visible: bool) -> None:
+        if visible:
+            return
+        self._remember_detachable_panel_state(key, dock)
+        if dock.isFloating():
+            dock.setFloating(False)
 
     def _build_layout(self):
         central = QtWidgets.QWidget()
@@ -1660,16 +1756,19 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     def _show_progress_toast(self, title: str, detail: str):
         if self._progress_toast is None:
             self._progress_toast = QtProgressToast(self)
+            self.theme_manager.register_theme_aware_widget(self._progress_toast)
         self._progress_toast.show_busy(title, detail)
 
     def _update_progress_toast(self, title: str, detail: str, value: int, total: int):
         if self._progress_toast is None:
             self._progress_toast = QtProgressToast(self)
+            self.theme_manager.register_theme_aware_widget(self._progress_toast)
         self._progress_toast.update_progress(title, detail, value, total)
 
     def _finish_progress_toast(self, title: str, detail: str):
         if self._progress_toast is None:
             self._progress_toast = QtProgressToast(self)
+            self.theme_manager.register_theme_aware_widget(self._progress_toast)
         self._progress_toast.finish(title, detail)
 
     @QtCore.Slot(str, int, int)
@@ -4541,14 +4640,34 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._character_builder_window.activateWindow()
 
     def _open_settings_dialog(self):
-        dialog = QtSettingsDialog(
-            self.settings_data,
-            self,
-            theme_manager=self.theme_manager,
-            layout_manager=self.layout_manager,
-        )
-        dialog.settingsSaved.connect(self._save_settings_data)
-        dialog.exec()
+        dialog = getattr(self, "_settings_dialog", None)
+        if dialog is None:
+            dialog = QtSettingsDialog(
+                self.settings_data,
+                self,
+                theme_manager=self.theme_manager,
+                layout_manager=self.layout_manager,
+            )
+            dialog.setModal(False)
+            dialog.setWindowModality(QtCore.Qt.NonModal)
+            dialog.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
+            dialog.destroyed.connect(lambda _obj=None: setattr(self, "_settings_dialog", None))
+            dialog.settingsSaved.connect(self._save_settings_data)
+            self._settings_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _open_theme_editor_window(self):
+        editor = getattr(self, "_theme_editor_window", None)
+        if editor is None:
+            editor = ThemeEditorWindow(self.theme_manager, self.layout_manager, self)
+            editor.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
+            editor.destroyed.connect(lambda _obj=None: setattr(self, "_theme_editor_window", None))
+            self._theme_editor_window = editor
+        editor.show()
+        editor.raise_()
+        editor.activateWindow()
 
     def _save_settings_data(self, values: dict):
         self.settings_data = values
@@ -4559,6 +4678,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.theme_manager.reload()
         self.layout_manager.reload()
         self.theme_manager.apply_current_theme(self)
+        self._apply_matrix_theme(self.theme_manager.get_theme())
         self.layout_manager.apply_current_layout(self)
         self._configure_theme_watcher()
         viewport = getattr(self, "viewport", None)

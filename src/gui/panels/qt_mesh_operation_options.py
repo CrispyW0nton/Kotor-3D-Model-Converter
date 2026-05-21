@@ -6,10 +6,11 @@ from dataclasses import asdict
 
 from PySide6 import QtWidgets
 
+from src.gui.libtheme.collapsible_group import CollapsibleGroupBox
 from src.mesh_tools.mesh_edit_types import MeshOperationOptions
 
 
-class QtMeshOperationOptionsWidget(QtWidgets.QGroupBox):
+class QtMeshOperationOptionsWidget(CollapsibleGroupBox):
     def __init__(self, parent: QtWidgets.QWidget | None = None):
         super().__init__("Operation Options", parent)
         self._build()

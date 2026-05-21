@@ -7,6 +7,7 @@ from typing import Optional
 from PySide6 import QtCore, QtWidgets
 
 from src.gui.qt_lib.assets.qt_theme import C, heading
+from src.gui.libtheme.collapsible_group import CollapsibleGroupBox
 from src.gui.qt_lib.panels.qt_mesh_operation_options import QtMeshOperationOptionsWidget
 from src.gui.qt_lib.panels.qt_mesh_selection_toolbar import QtMeshSelectionToolbar
 from src.mesh_tools.mesh_edit_types import MeshOperationResult, MeshSelectionMode
@@ -70,7 +71,7 @@ class QtMeshToolsPanel(QtWidgets.QWidget):
             widget.setMinimumHeight(layout.spacing_value("inputHeight", 24))
 
     def _selection_tools_section(self) -> QtWidgets.QGroupBox:
-        box = QtWidgets.QGroupBox("Selection Tools")
+        box = CollapsibleGroupBox("Selection Tools")
         grid = QtWidgets.QGridLayout(box)
         grid.setContentsMargins(8, 8, 8, 8)
         grid.setSpacing(4)
@@ -97,7 +98,7 @@ class QtMeshToolsPanel(QtWidgets.QWidget):
         return box
 
     def _geometry_tools_section(self) -> QtWidgets.QGroupBox:
-        box = QtWidgets.QGroupBox("Geometry Tools")
+        box = CollapsibleGroupBox("Geometry Tools")
         grid = QtWidgets.QGridLayout(box)
         grid.setContentsMargins(8, 8, 8, 8)
         grid.setSpacing(4)
@@ -122,7 +123,7 @@ class QtMeshToolsPanel(QtWidgets.QWidget):
         return box
 
     def _status_section(self) -> QtWidgets.QGroupBox:
-        box = QtWidgets.QGroupBox("Status")
+        box = CollapsibleGroupBox("Status")
         form = QtWidgets.QFormLayout(box)
         form.setContentsMargins(8, 8, 8, 8)
         for label, key in [

@@ -220,6 +220,24 @@ class QtInspectorPanel(QtWidgets.QWidget):
         # Default to step 1.
         self._stack.setCurrentIndex(0)
 
+    def apply_ghost_theme(self, theme) -> None:
+        self._title_label.setStyleSheet(
+            f"color:{theme.color('groupbox.title')}; font-weight:bold; padding:2px 0;"
+        )
+        self._stack.setStyleSheet(
+            f"QStackedWidget {{ background:{theme.color('panel.background')}; }}"
+        )
+
+    def apply_ghost_layout(self, layout) -> None:
+        margin = layout.spacing_value("panelSpacing", 4)
+        if self.layout() is not None:
+            self.layout().setContentsMargins(margin, margin, margin, margin)
+            self.layout().setSpacing(layout.spacing_value("groupboxSpacing", 4))
+        for page in self.findChildren(QtWidgets.QWidget):
+            page_layout = page.layout()
+            if page_layout is not None:
+                page_layout.setSpacing(layout.spacing_value("groupboxSpacing", 4))
+
     def _page_layout(self) -> QtWidgets.QWidget:
         page = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(page)

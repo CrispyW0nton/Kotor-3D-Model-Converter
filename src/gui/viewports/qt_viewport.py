@@ -681,12 +681,13 @@ class QtViewportWidget(QtWidgets.QWidget):
             checkable=True,
             tooltip="X-Ray (Alt+X)",
         )
+        self.xray_button.setVisible(False)
+        self.xray_button.setEnabled(False)
         row.addWidget(self.wire_button)
         row.addWidget(self.bones_button)
         row.addWidget(self.texture_button)
         row.addWidget(self.grid_button)
         row.addWidget(self.renderer_button)
-        row.addWidget(self.xray_button)
         row.addWidget(self.joint_dot_button)
         row.addWidget(self.heatmap_button)
         row.addWidget(self._separator())
@@ -3232,7 +3233,6 @@ class QtViewportWidget(QtWidgets.QWidget):
                     self.select_all_meshes()
                     return True
                 if key == QtCore.Qt.Key_X and (event.modifiers() & QtCore.Qt.AltModifier):
-                    self.xray_button.click()
                     return True
                 if self._handle_view_key(event):
                     return True

@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtWidgets
 
+from src.gui.libtheme.collapsible_group import CollapsibleGroupBox
 from src.mesh_tools.mesh_edit_types import MeshSelectionMode
 from src.mesh_tools.mesh_selection_modes import MESH_SELECTION_SHORTCUTS, MODE_ORDER
 
 
-class QtMeshSelectionToolbar(QtWidgets.QGroupBox):
+class QtMeshSelectionToolbar(CollapsibleGroupBox):
     modeRequested = QtCore.Signal(object)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None):

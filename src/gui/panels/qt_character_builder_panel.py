@@ -487,14 +487,19 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly if toolbar.button_mode == "iconOnly" else QtCore.Qt.ToolButtonTextOnly if toolbar.button_mode == "textOnly" else QtCore.Qt.ToolButtonTextBesideIcon)
         self._toolbar_scroll.setFixedHeight(max(toolbar.height + 10, toolbar.height))
         self._splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", 6))
-        self.rail.setMinimumWidth(layout.panel("library").min_width)
+        self.rail.setMinimumWidth(max(220, layout.panel("library").min_width // 2))
+        self.inspector.setMinimumWidth(max(360, layout.panel("properties").min_width))
         self._splitter.setSizes([
-            layout.panel("library").preferred_width,
+            max(240, layout.panel("library").preferred_width // 2),
             max(layout.viewport.preferred_width, layout.viewport.min_width),
-            layout.panel("properties").preferred_width,
+            max(380, layout.panel("properties").preferred_width),
         ])
         for widget in [*self.findChildren(QtWidgets.QComboBox), *self.findChildren(QtWidgets.QSpinBox), *self.findChildren(QtWidgets.QDoubleSpinBox)]:
             widget.setMinimumHeight(layout.spacing_value("inputHeight", 24))
+        for widget in (getattr(self, "rail", None), getattr(self, "inspector", None), getattr(self, "properties", None), getattr(self, "bottom_strip", None)):
+            hook = getattr(widget, "apply_ghost_layout", None)
+            if callable(hook):
+                hook(layout)
 
     # ── UI construction ──────────────────────────────────────────────────
 

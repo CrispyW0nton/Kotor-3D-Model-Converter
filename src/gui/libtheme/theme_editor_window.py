@@ -20,6 +20,25 @@ from .theme_model import Theme, ThemeFont
 from .theme_validator import ThemeValidator
 
 _HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+_MATRIX_FONT_DIR = Path(__file__).resolve().parents[1] / "fonts" / "AurebeshAF"
+_REGISTERED_MATRIX_FONT = False
+
+
+def _register_bundled_matrix_font() -> None:
+    """Register the packaged Aurebesh font without importing Matrix widgets."""
+    global _REGISTERED_MATRIX_FONT
+    if _REGISTERED_MATRIX_FONT:
+        return
+    for filename in (
+        "AurebeshAF-CanonTech.otf",
+        "AurebeshAF-LegendsTech.otf",
+        "AurebeshAF-Canon.otf",
+        "AurebeshAF-Legends.otf",
+    ):
+        path = _MATRIX_FONT_DIR / filename
+        if path.exists():
+            QtGui.QFontDatabase.addApplicationFont(str(path))
+    _REGISTERED_MATRIX_FONT = True
 
 
 class ThemeEditorWindow(QtWidgets.QMainWindow):
@@ -37,6 +56,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self._theme = copy.deepcopy(theme_manager.current_theme or theme_manager.get_theme())
         self._layout = copy.deepcopy(layout_manager.current_layout or layout_manager.get_layout())
         self._dirty = False
+        _register_bundled_matrix_font()
         self.setObjectName("ThemeEditorWindow")
         self.setWindowTitle("Theme Editor")
         self.resize(1180, 760)
@@ -122,7 +142,13 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self.color_filter.textChanged.connect(self._populate_color_tokens)
         root.addWidget(self.color_filter)
         self.color_list = QtWidgets.QTreeWidget()
-        self.color_list.setHeaderLabels(["Token", "Value"])
+        self.color_list.setHeaderLabels(["Token", "Colour", "Value"])
+        self.color_list.setRootIsDecorated(False)
+        self.color_list.setUniformRowHeights(True)
+        self.color_list.header().setStretchLastSection(False)
+        self.color_list.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        self.color_list.header().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
+        self.color_list.header().setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeToContents)
         self.color_list.itemSelectionChanged.connect(self._select_color_token)
         root.addWidget(self.color_list, 1)
         form = QtWidgets.QFormLayout()
@@ -290,14 +316,19 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         for token, value in sorted(self._theme.colors.items()):
             if text and text not in token.lower():
                 continue
-            QtWidgets.QTreeWidgetItem(self.color_list, [token, value])
+            item = QtWidgets.QTreeWidgetItem(self.color_list, [token, "", value])
+            font = item.font(0)
+            font.setBold(True)
+            item.setFont(0, font)
+            item.setBackground(1, QtGui.QColor(value))
+            item.setToolTip(1, value)
 
     def _select_color_token(self) -> None:
         item = self.color_list.currentItem()
         if item is None:
             return
         self.color_token_name.setText(item.text(0))
-        self.color_value.setText(item.text(1))
+        self.color_value.setText(item.text(2))
 
     def _set_color_from_text(self, value: str) -> None:
         token = self.color_token_name.text().strip()
@@ -307,7 +338,9 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self._theme.colors[token] = value.upper()
         item = self.color_list.currentItem()
         if item is not None:
-            item.setText(1, value.upper())
+            item.setText(2, value.upper())
+            item.setBackground(1, QtGui.QColor(value.upper()))
+            item.setToolTip(1, value.upper())
         self._mark_dirty()
         self._refresh_preview()
 

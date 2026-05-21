@@ -59,6 +59,12 @@
         <color name="accent.secondary" value="#6B7F39"/>
         <color name="transformBar.background" value="#E6E2D0"/>
         <color name="transformBar.border" value="#A9A28B"/>
+        <color name="matrixBar.background" value="#D9D3BC"/>
+        <color name="matrixBar.glyph" value="#6B7F39"/>
+        <color name="matrixBar.text" value="#5E4B12"/>
+        <color name="matrixBar.subtext" value="#4D493D"/>
+        <color name="matrixBar.metaText" value="#5E594C"/>
+        <color name="matrixBar.ipcText" value="#3F6FA8"/>
         <color name="info" value="#2F678B"/>
         <color name="warning" value="#A36B00"/>
         <color name="error" value="#B43C3C"/>
@@ -68,6 +74,7 @@
         <font role="default" family="Segoe UI" size="9"/>
         <font role="monospace" family="Consolas" size="9"/>
         <font role="heading" family="Segoe UI" size="10" weight="bold"/>
+        <font role="matrix" family="Aurebesh AF" size="9"/>
     </fonts>
     <icons>
         <provider>qtawesome</provider>
@@ -79,10 +86,10 @@
         <metric name="toolbar.height" value="38"/>
         <metric name="toolbar.iconSize" value="18"/>
         <metric name="toolbar.spacing" value="5"/>
-        <metric name="button.height" value="28"/>
-        <metric name="button.minWidth" value="82"/>
-        <metric name="button.paddingH" value="10"/>
-        <metric name="button.paddingV" value="4"/>
+        <metric name="button.height" value="16"/>
+        <metric name="button.minWidth" value="64"/>
+        <metric name="button.paddingH" value="6"/>
+        <metric name="button.paddingV" value="1"/>
         <metric name="panel.margin" value="5"/>
         <metric name="panel.spacing" value="5"/>
         <metric name="panel.minWidth" value="290"/>

@@ -3398,6 +3398,14 @@ class FrameRenderer:
         self.hud_success_text = (138, 230, 178)
         self.hud_warning_fill = (68, 44, 22)
         self.hud_warning_text = (255, 190, 95)
+        self.gimbal_x_color = (220, 60, 60)
+        self.gimbal_y_color = (60, 220, 60)
+        self.gimbal_z_color = (60, 120, 220)
+        self.gimbal_active_color = (255, 255, 80)
+        self.gimbal_plane_xy_color = (220, 220, 60)
+        self.gimbal_plane_xz_color = (60, 220, 220)
+        self.gimbal_plane_yz_color = (220, 60, 220)
+        self.gimbal_text_color = (200, 200, 200)
         self.show_texture   = False   # Toggle textured rendering
         self.render_mode    = "realistic"
         self.show_diffuse_map: bool = True
@@ -3490,6 +3498,14 @@ class FrameRenderer:
         self.hud_success_text = _hex_to_rgb_tuple(theme.color("selection.text"), (138, 230, 178))
         self.hud_warning_fill = _hex_to_rgb_tuple(theme.color("warning"), (68, 44, 22))
         self.hud_warning_text = _hex_to_rgb_tuple(theme.color("button.checkedText", theme.color("text.primary")), (255, 190, 95))
+        self.gimbal_x_color = _hex_to_rgb_tuple(theme.color("error"), (220, 60, 60))
+        self.gimbal_y_color = _hex_to_rgb_tuple(theme.color("success"), (60, 220, 60))
+        self.gimbal_z_color = _hex_to_rgb_tuple(theme.color("accent.secondary"), (60, 120, 220))
+        self.gimbal_active_color = _hex_to_rgb_tuple(theme.color("button.checkedText", theme.color("selection.text")), (255, 255, 80))
+        self.gimbal_plane_xy_color = _hex_to_rgb_tuple(theme.color("warning"), (220, 220, 60))
+        self.gimbal_plane_xz_color = _hex_to_rgb_tuple(theme.color("info"), (60, 220, 220))
+        self.gimbal_plane_yz_color = _hex_to_rgb_tuple(theme.color("accent.primary"), (220, 60, 220))
+        self.gimbal_text_color = _hex_to_rgb_tuple(theme.color("viewport.text"), (200, 200, 200))
         self._light_dir2 = _normalize((-0.35, -0.20, 0.60)) # fill light (left)
         self._ambient    = 0.38   # raised v12.14: brighter ambient for low-RGB creature textures
         self._specular   = 0.10
@@ -7495,10 +7511,11 @@ class FrameRenderer:
         arm = HANDLE_PX * world_per_px
 
         axis_colors = {
-            'X': (220,  60,  60),
-            'Y': ( 60, 220,  60),
-            'Z': ( 60, 120, 220),
+            'X': getattr(self, "gimbal_x_color", (220, 60, 60)),
+            'Y': getattr(self, "gimbal_y_color", (60, 220, 60)),
+            'Z': getattr(self, "gimbal_z_color", (60, 120, 220)),
         }
+        active_color = getattr(self, "gimbal_active_color", (255, 255, 80))
         active = self.gimbal_active_axis
 
         if self.gimbal_mode == 1:   # ── Translate ──────────────────
@@ -7510,7 +7527,7 @@ class FrameRenderer:
                 if sp is None:
                     continue
                 sx, sy, _ = sp
-                draw_col = (255, 255, 80) if active == name else col
+                draw_col = active_color if active == name else col
                 lw = 3 if active == name else 2
                 draw.line([cx, cy, sx, sy], fill=draw_col, width=lw)
                 # Arrowhead
@@ -7528,16 +7545,16 @@ class FrameRenderer:
 
             # Plane handles (small squares)
             plane_cfg = {
-                'XY': (arm*0.45, arm*0.45, 0.0,      (220, 220,  60)),
-                'XZ': (arm*0.45, 0.0,      arm*0.45,  ( 60, 220, 220)),
-                'YZ': (0.0,      arm*0.45, arm*0.45,  (220,  60, 220)),
+                'XY': (arm*0.45, arm*0.45, 0.0,      getattr(self, "gimbal_plane_xy_color", (220, 220, 60))),
+                'XZ': (arm*0.45, 0.0,      arm*0.45,  getattr(self, "gimbal_plane_xz_color", (60, 220, 220))),
+                'YZ': (0.0,      arm*0.45, arm*0.45,  getattr(self, "gimbal_plane_yz_color", (220, 60, 220))),
             }
             for pname, (pdx, pdy, pdz, pcol) in plane_cfg.items():
                 sp = self._proj(wp[0]+pdx, wp[1]+pdy, wp[2]+pdz, W, H)
                 if sp is None:
                     continue
                 px2, py2, _ = sp
-                c = (255, 255, 80) if active == pname else pcol
+                c = active_color if active == pname else pcol
                 draw.rectangle([px2-6, py2-6, px2+6, py2+6],
                                 fill=c, outline=(255, 255, 255))
                 self._gimbal_handles.append((px2, py2, pname))
@@ -7596,7 +7613,7 @@ class FrameRenderer:
             for name, (rx, ry, angle_deg, col, label, handle_t) in ring_cfg.items():
                 pts = _rotated_ellipse_points(rx, ry, angle_deg)
                 shadow = tuple(max(0, c - 90) for c in col)
-                ring_col = (255, 235, 80) if active == name else col
+                ring_col = active_color if active == name else col
                 _draw_polyline(pts, shadow, 5 if active == name else 4)
                 _draw_polyline(pts, ring_col, 3 if active == name else 2, name)
 
@@ -7619,7 +7636,7 @@ class FrameRenderer:
                 if sp is None:
                     continue
                 sx, sy, _ = sp
-                draw_col = (255, 255, 80) if active == name else col
+                draw_col = active_color if active == name else col
                 draw.line([cx, cy, sx, sy], fill=draw_col, width=2)
                 draw.rectangle([sx-6, sy-6, sx+6, sy+6],
                                fill=draw_col, outline=(255, 255, 255))
@@ -7634,7 +7651,7 @@ class FrameRenderer:
         mode_lbl = {1: "Translate", 2: "Rotate", 3: "Scale"}.get(self.gimbal_mode, "Translate")
         try:
             draw.text((cx+6, cy-14), f"[{mode_lbl}] {node.name}",
-                       fill=(200, 200, 200))
+                       fill=getattr(self, "gimbal_text_color", (200, 200, 200)))
         except Exception:
             pass
 

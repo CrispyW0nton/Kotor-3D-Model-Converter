@@ -109,5 +109,8 @@ class QtDiagnosticsWindow(QtWidgets.QMainWindow):
         self.panel = QtDiagnosticsPanel(model_getter, self)
         self.setCentralWidget(self.panel)
 
+    def run_diagnostics(self, model: Any = None) -> str:
+        return self.panel.run_diagnostics(model)
+
 
 __all__ = ["QtDiagnosticsPanel", "QtDiagnosticsWindow"]
