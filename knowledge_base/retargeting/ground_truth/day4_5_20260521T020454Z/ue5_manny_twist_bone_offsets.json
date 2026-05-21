@@ -1,0 +1,732 @@
+{
+  "capture_method": "MCP probe confirmed Quinn; offsets derived from CoordinateNormalizer local bind matrices.",
+  "created_at_utc": "2026-05-21T02:04:54.785943+00:00",
+  "notes": "Day 4.5 injects the required _01 twist leaves as zero-weight helpers. The bundled Quinn also contains _02 twist bones captured here for audit/future expansion.",
+  "required_day4_5_twist_count": 8,
+  "schema_version": "1.0",
+  "skeleton_id": "ue5_quinn",
+  "source": "C:\\Users\\NewAdmin\\Documents\\GDeveloper\\Workspaces\\Kotor-3D-Model-Converter-qt\\src\\unreal\\skels\\SKM_Quinn_Simple.FBX",
+  "total_quinn_twist_count": 16,
+  "twist_bones": [
+    {
+      "index": 14,
+      "is_day4_5_required_subset": false,
+      "key": "lowerarm_twist_02_l",
+      "local_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.043582249004482654
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.05379321787793117
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.05265994224385495
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "local_rotation_wxyz": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "local_translation_from_quinn": [
+        -0.043582249004482654,
+        0.05379321787793117,
+        -0.05265994224385495
+      ],
+      "name": "lowerarm_twist_02_l",
+      "parent": "lowerarm_l",
+      "parent_key": "lowerarm_l"
+    },
+    {
+      "index": 15,
+      "is_day4_5_required_subset": true,
+      "key": "lowerarm_twist_01_l",
+      "local_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.08716449800896547
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.10758643575586281
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.10531988448770901
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "local_rotation_wxyz": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "local_translation_from_quinn": [
+        -0.08716449800896547,
+        0.10758643575586281,
+        -0.10531988448770901
+      ],
+      "name": "lowerarm_twist_01_l",
+      "parent": "lowerarm_l",
+      "parent_key": "lowerarm_l"
+    },
+    {
+      "index": 36,
+      "is_day4_5_required_subset": true,
+      "key": "upperarm_twist_01_l",
+      "local_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.0544674899498257
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0024781741034867535
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.0719823192211646
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "local_rotation_wxyz": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "local_translation_from_quinn": [
+        -0.0544674899498257,
+        0.0024781741034867535,
+        -0.0719823192211646
+      ],
+      "name": "upperarm_twist_01_l",
+      "parent": "upperarm_l",
+      "parent_key": "upperarm_l"
+    },
+    {
+      "index": 37,
+      "is_day4_5_required_subset": false,
+      "key": "upperarm_twist_02_l",
+      "local_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.10893497989965154
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.004956348206973656
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.1439646384423292
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "local_rotation_wxyz": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "local_translation_from_quinn": [
+        -0.10893497989965154,
+        0.004956348206973656,
+        -0.1439646384423292
+      ],
+      "name": "upperarm_twist_02_l",
+      "parent": "upperarm_l",
+      "parent_key": "upperarm_l"
+    },
+    {
+      "index": 41,
+      "is_day4_5_required_subset": false,
+      "key": "lowerarm_twist_02_r",
+      "local_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.04358286886419266
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.05379398541598218
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.052660693048623086
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "local_rotation_wxyz": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "local_translation_from_quinn": [
+        0.04358286886419266,
+        0.05379398541598218,
+        -0.052660693048623086
+      ],
+      "name": "lowerarm_twist_02_r",
+      "parent": "lowerarm_r",
+      "parent_key": "lowerarm_r"
+    },
+    {
+      "index": 42,
+      "is_day4_5_required_subset": true,
+      "key": "lowerarm_twist_01_r",
+      "local_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.08716564216290967
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.10758785287626609
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.10532127062655205
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "local_rotation_wxyz": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "local_translation_from_quinn": [
+        0.08716564216290967,
+        0.10758785287626609,
+        -0.10532127062655205
+      ],
+      "name": "lowerarm_twist_01_r",
+      "parent": "lowerarm_r",
+      "parent_key": "lowerarm_r"
+    },
+    {
+      "index": 63,
+      "is_day4_5_required_subset": true,
+      "key": "upperarm_twist_01_r",
+      "local_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.054467631753263746
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.002478164662386848
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.07198041768264862
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "local_rotation_wxyz": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "local_translation_from_quinn": [
+        0.054467631753263746,
+        0.002478164662386848,
+        -0.07198041768264862
+      ],
+      "name": "upperarm_twist_01_r",
+      "parent": "upperarm_r",
+      "parent_key": "upperarm_r"
+    },
+    {
+      "index": 64,
+      "is_day4_5_required_subset": false,
+      "key": "upperarm_twist_02_r",
+      "local_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.10893526350652749
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0049563293247737
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.14396083536529702
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "local_rotation_wxyz": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "local_translation_from_quinn": [
+        0.10893526350652749,
+        0.0049563293247737,
+        -0.14396083536529702
+      ],
+      "name": "upperarm_twist_02_r",
+      "parent": "upperarm_r",
+      "parent_key": "upperarm_r"
+    },
+    {
+      "index": 69,
+      "is_day4_5_required_subset": false,
+      "key": "calf_twist_02_r",
+      "local_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.005900052336439171
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.005592783414403401
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.13878121584207437
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "local_rotation_wxyz": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "local_translation_from_quinn": [
+        0.005900052336439171,
+        -0.005592783414403401,
+        -0.13878121584207437
+      ],
+      "name": "calf_twist_02_r",
+      "parent": "calf_r",
+      "parent_key": "calf_r"
+    },
+    {
+      "index": 70,
+      "is_day4_5_required_subset": true,
+      "key": "calf_twist_01_r",
+      "local_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.011800104672878314
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.011185566828806715
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.2775624316841486
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "local_rotation_wxyz": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "local_translation_from_quinn": [
+        0.011800104672878314,
+        -0.011185566828806715,
+        -0.2775624316841486
+      ],
+      "name": "calf_twist_01_r",
+      "parent": "calf_r",
+      "parent_key": "calf_r"
+    },
+    {
+      "index": 71,
+      "is_day4_5_required_subset": true,
+      "key": "thigh_twist_01_r",
+      "local_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.006360211156417245
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.0031773650510274684
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.15234065186385803
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "local_rotation_wxyz": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "local_translation_from_quinn": [
+        0.006360211156417245,
+        -0.0031773650510274684,
+        -0.15234065186385803
+      ],
+      "name": "thigh_twist_01_r",
+      "parent": "thigh_r",
+      "parent_key": "thigh_r"
+    },
+    {
+      "index": 72,
+      "is_day4_5_required_subset": false,
+      "key": "thigh_twist_02_r",
+      "local_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.012720422312834725
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.006354730102054992
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.30468130372771607
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "local_rotation_wxyz": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "local_translation_from_quinn": [
+        0.012720422312834725,
+        -0.006354730102054992,
+        -0.30468130372771607
+      ],
+      "name": "thigh_twist_02_r",
+      "parent": "thigh_r",
+      "parent_key": "thigh_r"
+    },
+    {
+      "index": 77,
+      "is_day4_5_required_subset": false,
+      "key": "calf_twist_02_l",
+      "local_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.005900554171097361
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.005592760962652479
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.13878104436585553
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "local_rotation_wxyz": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "local_translation_from_quinn": [
+        -0.005900554171097361,
+        -0.005592760962652479,
+        -0.13878104436585553
+      ],
+      "name": "calf_twist_02_l",
+      "parent": "calf_l",
+      "parent_key": "calf_l"
+    },
+    {
+      "index": 78,
+      "is_day4_5_required_subset": true,
+      "key": "calf_twist_01_l",
+      "local_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.011800623811895422
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.011185535606391591
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.2775621261616773
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "local_rotation_wxyz": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "local_translation_from_quinn": [
+        -0.011800623811895422,
+        -0.011185535606391591,
+        -0.2775621261616773
+      ],
+      "name": "calf_twist_01_l",
+      "parent": "calf_l",
+      "parent_key": "calf_l"
+    },
+    {
+      "index": 79,
+      "is_day4_5_required_subset": true,
+      "key": "thigh_twist_01_l",
+      "local_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.006360385998432763
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.0031773672758026554
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.15234095957288551
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "local_rotation_wxyz": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "local_translation_from_quinn": [
+        -0.006360385998432763,
+        -0.0031773672758026554,
+        -0.15234095957288551
+      ],
+      "name": "thigh_twist_01_l",
+      "parent": "thigh_l",
+      "parent_key": "thigh_l"
+    },
+    {
+      "index": 80,
+      "is_day4_5_required_subset": false,
+      "key": "thigh_twist_02_l",
+      "local_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.01272077199686554
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.006354734551605307
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.3046819191457709
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "local_rotation_wxyz": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "local_translation_from_quinn": [
+        -0.01272077199686554,
+        -0.006354734551605307,
+        -0.3046819191457709
+      ],
+      "name": "thigh_twist_02_l",
+      "parent": "thigh_l",
+      "parent_key": "thigh_l"
+    }
+  ]
+}

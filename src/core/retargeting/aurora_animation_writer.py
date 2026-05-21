@@ -1,0 +1,546 @@
+"""Inject R3.A retargeted UE5 animation data into an Aurora MDL.
+
+R3.B consumes the JSON emitted by :mod:`animation_injector`, converts raw UE5
+world-space rotations into Aurora local orientation controllers, appends a local
+animation override, and writes binary MDL/MDX through GhostRigger's native
+``MDLBinaryWriter``.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+import hashlib
+import json
+import logging
+import math
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional, Tuple
+
+import numpy as np
+
+from src.core.game.kotor_loader import load_model_from_file
+from src.core.mdl.mdl_writer import MDLBinaryWriter
+from src.core.geometry.model_data import Animation, GameVersion, KotorModel, ModelNode
+from src.core.retargeting.coordinate_converter import aurora_from_ue5_quat
+from src.core.retargeting.coordinate_normalizer import (
+    CoordinateNormalizer,
+    matrix_to_quat_wxyz,
+    normalize_quat_wxyz,
+    quat_inverse_wxyz,
+    quat_mul_wxyz,
+    quat_to_matrix_wxyz,
+    wxyz_to_xyzw,
+    xyzw_to_wxyz,
+)
+
+
+logger = logging.getLogger(__name__)
+
+
+CTRL_POSITION = 8
+CTRL_ORIENTATION = 20
+
+
+def _coerce_matrix3(value: Iterable[Iterable[float]]) -> np.ndarray:
+    matrix = np.asarray(value, dtype=np.float64)
+    if matrix.shape == (4, 4):
+        matrix = matrix[:3, :3]
+    if matrix.shape != (3, 3):
+        raise ValueError(f"Basis matrix must be 3x3 or 4x4, got {matrix.shape}")
+    return matrix
+
+
+def compute_basis_change_matrix(ue5_rest_basis: np.ndarray, aurora_rest_basis: np.ndarray) -> np.ndarray:
+    """Return the per-bone basis bridge where ``M`` sends Aurora -> UE5.
+
+    Both inputs are local-to-world rest bases in the same coordinate system.
+    Therefore ``M = inverse(B_ue5) @ B_aurora`` converts target-local vectors
+    into source-local vectors.  Animation deltas are moved back into Aurora
+    local space with ``inverse(M) @ R_ue5 @ M``.
+    """
+
+    ue5_basis = _coerce_matrix3(ue5_rest_basis)
+    aurora_basis = _coerce_matrix3(aurora_rest_basis)
+    ue5_det = float(np.linalg.det(ue5_basis))
+    aurora_det = float(np.linalg.det(aurora_basis))
+    if abs(ue5_det) <= 1e-8:
+        raise ValueError(f"Degenerate UE5 rest basis determinant: {ue5_det}")
+    if abs(aurora_det) <= 1e-8:
+        raise ValueError(f"Degenerate Aurora rest basis determinant: {aurora_det}")
+    return np.linalg.inv(ue5_basis) @ aurora_basis
+
+
+def conjugate_rotation_matrix(rotation: np.ndarray, basis_change_matrix: np.ndarray) -> np.ndarray:
+    """Conjugate a source-local rotation through a per-bone basis change."""
+
+    rot = _coerce_matrix3(rotation)
+    basis = _coerce_matrix3(basis_change_matrix)
+    return np.linalg.inv(basis) @ rot @ basis
+
+
+def conjugate_quat_wxyz(quat_wxyz: Iterable[float], basis_change_matrix: np.ndarray) -> np.ndarray:
+    """Conjugate a WXYZ quaternion through ``basis_change_matrix``."""
+
+    rotated = conjugate_rotation_matrix(
+        quat_to_matrix_wxyz(quat_wxyz)[:3, :3],
+        basis_change_matrix,
+    )
+    return matrix_to_quat_wxyz(rotated)
+
+
+@dataclass
+class AuroraAnimationInjectionRequest:
+    """Input contract for R3.B MDL injection."""
+
+    r3a_animation_json: Path
+    target_mdl: Path
+    animation_slot: str
+    output_mdl: Path
+    output_manifest: Path
+    target_mdx: Optional[Path] = None
+    game: str = "K1"
+    fps: float = 30.0
+    overwrite_existing: bool = True
+    write_zero_position_controllers: bool = False
+    max_size_multiplier: float = 2.0
+
+    def __post_init__(self) -> None:
+        self.r3a_animation_json = Path(self.r3a_animation_json)
+        self.target_mdl = Path(self.target_mdl)
+        self.output_mdl = Path(self.output_mdl)
+        self.output_manifest = Path(self.output_manifest)
+        if self.target_mdx is not None:
+            self.target_mdx = Path(self.target_mdx)
+        if not self.r3a_animation_json.exists():
+            raise FileNotFoundError(f"R3.A JSON not found: {self.r3a_animation_json}")
+        if not self.target_mdl.exists():
+            raise FileNotFoundError(f"Target MDL not found: {self.target_mdl}")
+        if not str(self.animation_slot or "").strip():
+            raise ValueError("animation_slot is required")
+        self.output_mdl.parent.mkdir(parents=True, exist_ok=True)
+        self.output_manifest.parent.mkdir(parents=True, exist_ok=True)
+
+
+@dataclass
+class AuroraAnimationInjectionResult:
+    """Result for R3.B binary MDL injection."""
+
+    success: bool
+    phase: str = "R3B_MDL_INJECTION"
+    input_mdl_sha256: str = ""
+    output_mdl_sha256: str = ""
+    output_mdx_sha256: str = ""
+    output_mdl: Optional[Path] = None
+    output_mdx: Optional[Path] = None
+    manifest_path: Optional[Path] = None
+    animation_slot: str = ""
+    frame_count: int = 0
+    fps: float = 30.0
+    duration_seconds: float = 0.0
+    bone_count_animated: int = 0
+    operation: str = ""
+    input_size_bytes: int = 0
+    output_size_bytes: int = 0
+    warnings: List[str] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "success": self.success,
+            "phase": self.phase,
+            "input_mdl_sha256": self.input_mdl_sha256,
+            "output_mdl_sha256": self.output_mdl_sha256,
+            "output_mdx_sha256": self.output_mdx_sha256,
+            "output_mdl": str(self.output_mdl) if self.output_mdl else None,
+            "output_mdx": str(self.output_mdx) if self.output_mdx else None,
+            "manifest_path": str(self.manifest_path) if self.manifest_path else None,
+            "animation_slot": self.animation_slot,
+            "frame_count": self.frame_count,
+            "fps": self.fps,
+            "duration_seconds": self.duration_seconds,
+            "bone_count_animated": self.bone_count_animated,
+            "operation": self.operation,
+            "input_size_bytes": self.input_size_bytes,
+            "output_size_bytes": self.output_size_bytes,
+            "warnings": list(self.warnings),
+            "errors": list(self.errors),
+        }
+
+
+class AuroraAnimationWriter:
+    """Build and inject Aurora animation controllers into a loaded model."""
+
+    @staticmethod
+    def sha256(path: Path) -> str:
+        sha = hashlib.sha256()
+        with open(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                sha.update(chunk)
+        return sha.hexdigest()
+
+    @staticmethod
+    def _game_version(game: str) -> GameVersion:
+        return GameVersion.K2 if str(game or "").upper() == "K2" else GameVersion.K1
+
+    def inject(self, request: AuroraAnimationInjectionRequest) -> AuroraAnimationInjectionResult:
+        """Load target MDL, append/replace local animation, write binary MDL/MDX."""
+
+        result = AuroraAnimationInjectionResult(
+            success=False,
+            animation_slot=request.animation_slot,
+            output_mdl=request.output_mdl,
+            output_mdx=request.output_mdl.with_suffix(".mdx"),
+            manifest_path=request.output_manifest,
+            fps=float(request.fps or 30.0),
+        )
+        try:
+            result.input_mdl_sha256 = self.sha256(request.target_mdl)
+            result.input_size_bytes = request.target_mdl.stat().st_size
+
+            with open(request.r3a_animation_json, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+
+            model = self._load_model(request)
+            if model is None:
+                result.errors.append(f"Could not load target MDL: {request.target_mdl}")
+                return self._finish(result, request)
+
+            animation = self.build_animation_from_r3a(
+                payload=payload,
+                model=model,
+                slot_name=request.animation_slot,
+                fps=request.fps,
+                write_zero_position_controllers=request.write_zero_position_controllers,
+                warnings=result.warnings,
+            )
+            result.frame_count = int(payload.get("frame_count") or 0)
+            result.duration_seconds = float(animation.length or 0.0)
+            result.bone_count_animated = len(animation.nodes)
+
+            existing_index = self._find_local_animation_index(model, request.animation_slot)
+            if existing_index is None:
+                model.animations.append(animation)
+                result.operation = "appended_local_override"
+            elif request.overwrite_existing:
+                model.animations[existing_index] = animation
+                result.operation = "replaced_local"
+            else:
+                result.errors.append(f"Local animation '{request.animation_slot}' already exists")
+                return self._finish(result, request)
+
+            MDLBinaryWriter().write_files(model, str(request.output_mdl))
+            if not request.output_mdl.exists():
+                result.errors.append(f"Output MDL was not written: {request.output_mdl}")
+                return self._finish(result, request)
+
+            result.output_size_bytes = request.output_mdl.stat().st_size
+            if (
+                result.input_size_bytes > 0
+                and result.output_size_bytes > result.input_size_bytes * request.max_size_multiplier
+            ):
+                result.errors.append(
+                    "Output MDL grew beyond size gate: "
+                    f"{result.output_size_bytes} > {request.max_size_multiplier}x {result.input_size_bytes}"
+                )
+                return self._finish(result, request)
+
+            reloaded = self._load_output_model(request.output_mdl, request.game)
+            if reloaded is None:
+                result.errors.append(f"Output MDL failed reload: {request.output_mdl}")
+                return self._finish(result, request)
+            if self._find_local_animation_index(reloaded, request.animation_slot) is None:
+                result.errors.append(f"Animation '{request.animation_slot}' missing after reload")
+                return self._finish(result, request)
+
+            result.output_mdl_sha256 = self.sha256(request.output_mdl)
+            mdx_path = request.output_mdl.with_suffix(".mdx")
+            if mdx_path.exists():
+                result.output_mdx = mdx_path
+                result.output_mdx_sha256 = self.sha256(mdx_path)
+            result.success = True
+        except Exception as exc:
+            logger.exception("Aurora animation injection failed")
+            result.errors.append(f"Exception: {type(exc).__name__}: {exc}")
+        return self._finish(result, request)
+
+    def _finish(
+        self,
+        result: AuroraAnimationInjectionResult,
+        request: AuroraAnimationInjectionRequest,
+    ) -> AuroraAnimationInjectionResult:
+        request.output_manifest.write_text(
+            json.dumps(result.to_dict(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return result
+
+    def _load_model(self, request: AuroraAnimationInjectionRequest) -> Optional[KotorModel]:
+        mdx = request.target_mdx or request.target_mdl.with_suffix(".mdx")
+        return load_model_from_file(
+            str(request.target_mdl),
+            str(mdx) if mdx.exists() else "",
+            self._game_version(request.game),
+        )
+
+    def _load_output_model(self, mdl_path: Path, game: str) -> Optional[KotorModel]:
+        mdx = mdl_path.with_suffix(".mdx")
+        return load_model_from_file(
+            str(mdl_path),
+            str(mdx) if mdx.exists() else "",
+            self._game_version(game),
+        )
+
+    def build_animation_from_r3a(
+        self,
+        payload: dict,
+        model: KotorModel,
+        slot_name: str,
+        fps: float = 30.0,
+        write_zero_position_controllers: bool = True,
+        warnings: Optional[List[str]] = None,
+    ) -> Animation:
+        """Create an Aurora ``Animation`` from R3.A target curves."""
+
+        warnings = warnings if warnings is not None else []
+        frame_count = int(payload.get("frame_count") or 0)
+        duration = float(payload.get("duration_seconds") or 0.0)
+        if duration <= 0.0 and frame_count > 0:
+            duration = frame_count / float(fps or 30.0)
+        anim = Animation(
+            name=slot_name,
+            length=duration,
+            transition_time=0.25,
+            anim_root=getattr(getattr(model, "root_node", None), "name", "") or getattr(model, "name", ""),
+        )
+
+        aurora_rest_bases = self._capture_aurora_rest_bases(model)
+        target_curves = payload.get("target_curves", {}) or {}
+        for requested_name, curve in sorted(target_curves.items()):
+            target_node = model.find_node(curve.get("target_bone") or requested_name)
+            if target_node is None:
+                warnings.append(f"Skipping missing target node: {requested_name}")
+                continue
+
+            frames = sorted(curve.get("frames", []) or [], key=lambda item: int(item.get("frame") or 0))
+            if not frames:
+                warnings.append(f"Skipping target node with no frames: {target_node.name}")
+                continue
+
+            times = self._normalized_times(frames, fps)
+            source_rest = curve.get("source_rest_world")
+            source_parent_rest = curve.get("source_parent_rest_world")
+            parent_frames = sorted(
+                curve.get("source_parent_frames", []) or [],
+                key=lambda item: int(item.get("frame") or 0),
+            )
+            source_reference_frame = frames[0]
+            source_parent_reference_frame = parent_frames[0] if parent_frames else None
+            basis_change = self._basis_change_for_curve(
+                curve=curve,
+                target_node=target_node,
+                source_rest=source_rest,
+                aurora_rest_bases=aurora_rest_bases,
+            )
+            rotations = []
+            for index, frame in enumerate(frames):
+                parent_frame = parent_frames[index] if index < len(parent_frames) else None
+                rotations.append(
+                    self._local_rotation_xyzw_from_ue5_world(
+                        frame,
+                        target_node,
+                        source_rest,
+                        source_parent_rest,
+                        parent_frame,
+                        basis_change,
+                        source_reference_frame,
+                        source_parent_reference_frame,
+                    )
+                )
+            self._validate_controller_rows(target_node.name, times, rotations, 4)
+
+            controllers = [
+                {
+                    "type": CTRL_ORIENTATION,
+                    "name": "orientation",
+                    "columns": 4,
+                    "times": times,
+                    "values": rotations,
+                }
+            ]
+            if write_zero_position_controllers:
+                controllers.insert(
+                    0,
+                    {
+                        "type": CTRL_POSITION,
+                        "name": "position",
+                        "columns": 3,
+                        "times": times,
+                        "values": [[0.0, 0.0, 0.0] for _ in times],
+                    },
+                )
+
+            anim.nodes.append(ModelNode(name=target_node.name, controllers=controllers))
+
+        if write_zero_position_controllers:
+            warnings.append(
+                "R3.B writes zero Aurora position deltas to preserve PMBAM bind proportions."
+            )
+        else:
+            warnings.append(
+                "R3.B/R3.5 omits Aurora position controllers to preserve PMBAM bind proportions."
+            )
+        warnings.append("R3.5 per-bone local basis remapping enabled for orientation controllers.")
+        warnings.append(
+            "R3.5 uses source clip frame 0 as the retarget reference pose before applying motion deltas."
+        )
+        return anim
+
+    @staticmethod
+    def _normalized_times(frames: List[dict], fps: float) -> List[float]:
+        if not frames:
+            return []
+        raw = [
+            float(frame.get("time_seconds"))
+            if frame.get("time_seconds") is not None
+            else float(index) / float(fps or 30.0)
+            for index, frame in enumerate(frames)
+        ]
+        start = raw[0]
+        return [max(0.0, value - start) for value in raw]
+
+    def _capture_aurora_rest_bases(self, model: KotorModel) -> Dict[str, np.ndarray]:
+        """Capture Aurora world-space rest rotation bases by node name."""
+
+        registry = CoordinateNormalizer().normalize_aurora_bind(model, skeleton_id=getattr(model, "name", "aurora"))
+        bases: Dict[str, np.ndarray] = {}
+        for name in registry.bone_names:
+            key = str(name or "").lower()
+            bases[key] = quat_to_matrix_wxyz(registry.world_rotation(name))[:3, :3]
+        return bases
+
+    def _source_rest_basis_aurora(self, curve: dict, source_rest: Optional[dict]) -> np.ndarray:
+        """Return the source rest basis converted into Aurora coordinate space."""
+
+        basis_data = curve.get("source_rest_basis") or source_rest or {}
+        raw_rotation = basis_data.get("rotation_wxyz")
+        if raw_rotation is None and basis_data.get("world_matrix_at_rest"):
+            raw_rotation = matrix_to_quat_wxyz(np.asarray(basis_data["world_matrix_at_rest"], dtype=np.float64))
+        if raw_rotation is None and basis_data.get("matrix"):
+            raw_rotation = matrix_to_quat_wxyz(np.asarray(basis_data["matrix"], dtype=np.float64))
+
+        ue5_w, ue5_x, ue5_y, ue5_z = self._four_floats(raw_rotation, (1.0, 0.0, 0.0, 0.0))
+        aurora_wxyz = aurora_from_ue5_quat((ue5_x, ue5_y, ue5_z, ue5_w)).to_wxyz()
+        return quat_to_matrix_wxyz(aurora_wxyz)[:3, :3]
+
+    def _basis_change_for_curve(
+        self,
+        *,
+        curve: dict,
+        target_node: ModelNode,
+        source_rest: Optional[dict],
+        aurora_rest_bases: Dict[str, np.ndarray],
+    ) -> np.ndarray:
+        """Compute the per-bone source-to-target rest-basis bridge."""
+
+        target_key = str(target_node.name or "").lower()
+        aurora_basis = aurora_rest_bases.get(target_key)
+        if aurora_basis is None:
+            raise ValueError(f"Missing Aurora rest basis for target node '{target_node.name}'")
+        source_basis = self._source_rest_basis_aurora(curve, source_rest)
+        return compute_basis_change_matrix(source_basis, aurora_basis)
+
+    def _local_rotation_xyzw_from_ue5_world(
+        self,
+        frame: dict,
+        target_node: ModelNode,
+        source_rest: Optional[dict] = None,
+        source_parent_rest: Optional[dict] = None,
+        source_parent_frame: Optional[dict] = None,
+        basis_change_matrix: Optional[np.ndarray] = None,
+        source_reference_frame: Optional[dict] = None,
+        source_parent_reference_frame: Optional[dict] = None,
+    ) -> List[float]:
+        ue5_wxyz = frame.get("rotation_wxyz") or (1.0, 0.0, 0.0, 0.0)
+        ue5_w, ue5_x, ue5_y, ue5_z = self._four_floats(ue5_wxyz, (1.0, 0.0, 0.0, 0.0))
+
+        if source_rest and source_rest.get("rotation_wxyz"):
+            rest_w, rest_x, rest_y, rest_z = self._four_floats(
+                source_rest.get("rotation_wxyz"),
+                (1.0, 0.0, 0.0, 0.0),
+            )
+            source_anim = (ue5_w, ue5_x, ue5_y, ue5_z)
+            source_rest_rot = (rest_w, rest_x, rest_y, rest_z)
+            if source_reference_frame and source_reference_frame.get("rotation_wxyz"):
+                source_rest_rot = self._four_floats(
+                    source_reference_frame.get("rotation_wxyz"),
+                    (rest_w, rest_x, rest_y, rest_z),
+                )
+            if (
+                source_parent_frame
+                and source_parent_frame.get("rotation_wxyz")
+                and source_parent_rest
+                and source_parent_rest.get("rotation_wxyz")
+            ):
+                parent_anim = self._four_floats(
+                    source_parent_frame.get("rotation_wxyz"),
+                    (1.0, 0.0, 0.0, 0.0),
+                )
+                parent_rest = self._four_floats(
+                    source_parent_rest.get("rotation_wxyz"),
+                    (1.0, 0.0, 0.0, 0.0),
+                )
+                if source_parent_reference_frame and source_parent_reference_frame.get("rotation_wxyz"):
+                    parent_rest = self._four_floats(
+                        source_parent_reference_frame.get("rotation_wxyz"),
+                        (1.0, 0.0, 0.0, 0.0),
+                    )
+                source_anim = quat_mul_wxyz(quat_inverse_wxyz(parent_anim), source_anim)
+                source_rest_rot = quat_mul_wxyz(quat_inverse_wxyz(parent_rest), source_rest_rot)
+            source_delta = quat_mul_wxyz(
+                quat_inverse_wxyz(source_rest_rot),
+                source_anim,
+            )
+            delta_w, delta_x, delta_y, delta_z = source_delta
+            aurora_delta = aurora_from_ue5_quat((delta_x, delta_y, delta_z, delta_w)).to_wxyz()
+            if basis_change_matrix is not None:
+                aurora_delta = conjugate_quat_wxyz(aurora_delta, basis_change_matrix)
+            bind_local = xyzw_to_wxyz(target_node.rotation)
+            local_wxyz = quat_mul_wxyz(bind_local, aurora_delta)
+        else:
+            aurora_world = aurora_from_ue5_quat((ue5_x, ue5_y, ue5_z, ue5_w)).to_wxyz()
+            parent = getattr(target_node, "parent", None)
+            if parent is not None:
+                parent_world_xyzw = parent.world_transform()[1]
+                parent_world_wxyz = xyzw_to_wxyz(parent_world_xyzw)
+                local_wxyz = quat_mul_wxyz(quat_inverse_wxyz(parent_world_wxyz), aurora_world)
+            else:
+                local_wxyz = normalize_quat_wxyz(aurora_world)
+        local_xyzw = wxyz_to_xyzw(local_wxyz)
+        return [float(v) for v in local_xyzw]
+
+    @staticmethod
+    def _four_floats(values: Iterable[float], default: Tuple[float, float, float, float]) -> Tuple[float, float, float, float]:
+        raw = list(values or default)
+        raw = (raw + list(default))[:4]
+        return tuple(float(value) for value in raw)  # type: ignore[return-value]
+
+    @staticmethod
+    def _validate_controller_rows(name: str, times: List[float], values: List[List[float]], columns: int) -> None:
+        if len(times) != len(values):
+            raise ValueError(f"{name}: controller times/values row mismatch")
+        for time_value in times:
+            if not math.isfinite(time_value):
+                raise ValueError(f"{name}: non-finite controller time")
+        for row in values:
+            if len(row) != columns:
+                raise ValueError(f"{name}: controller row has {len(row)} columns, expected {columns}")
+            if not all(math.isfinite(value) for value in row):
+                raise ValueError(f"{name}: non-finite controller value")
+
+    @staticmethod
+    def _find_local_animation_index(model: KotorModel, slot_name: str) -> Optional[int]:
+        wanted = str(slot_name or "").lower()
+        for index, anim in enumerate(model.animations):
+            if str(anim.name or "").lower() == wanted:
+                return index
+        return None

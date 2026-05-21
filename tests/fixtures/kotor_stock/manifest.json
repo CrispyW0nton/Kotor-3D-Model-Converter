@@ -1,0 +1,126 @@
+{
+  "created_at": "2026-05-20T22:14:28+00:00",
+  "source": "bif_extraction",
+  "source_path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\swkotor\\data\\models.bif",
+  "source_paths": [
+    "C:\\Program Files (x86)\\Steam\\steamapps\\common\\swkotor\\data\\models.bif",
+    "C:\\Program Files (x86)\\Steam\\steamapps\\common\\swkotor\\data\\player.bif"
+  ],
+  "k1_version": "/K1/k1_win_gog_swkotor.exe via Ghidra Odyssey repo; swkotor.exe x86:LE:32:default windows compiler; 24591 functions",
+  "files": [
+    {
+      "path": "k1/S_Male01.mdl",
+      "sha256": "80c8dbcf5cdd7f1259f3bf164a95a60199b44ecd09be5b37ddb2df261a2565df",
+      "size_bytes": 325037,
+      "source_resref": "S_Male01",
+      "source_type": "mdl",
+      "source_path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\swkotor\\data\\models.bif"
+    },
+    {
+      "path": "k1/S_Male01.mdx",
+      "sha256": "a219744e0443efccb82974675deb340719e3679d92eba5b1567c18627e89d8d1",
+      "size_bytes": 42424,
+      "source_resref": "S_Male01",
+      "source_type": "mdx",
+      "source_path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\swkotor\\data\\models.bif"
+    },
+    {
+      "path": "k1/S_Male02.mdl",
+      "sha256": "720583afa6df88856510f57f00d021c9072f607065cf7c233a839f5169bbf17a",
+      "size_bytes": 2718844,
+      "source_resref": "S_Male02",
+      "source_type": "mdl",
+      "source_path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\swkotor\\data\\models.bif"
+    },
+    {
+      "path": "k1/S_Male02.mdx",
+      "sha256": "de1d28f719c877c2785442406fd4f1fcfb7baa879fbb02fb9523c65c38568f10",
+      "size_bytes": 42584,
+      "source_resref": "S_Male02",
+      "source_type": "mdx",
+      "source_path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\swkotor\\data\\models.bif"
+    },
+    {
+      "path": "k1/S_Female01.mdl",
+      "sha256": "f33abb1db46fc5189e95a038c3111b9f8b4885b2101bd992056768967b67c96b",
+      "size_bytes": 1042696,
+      "source_resref": "S_Female01",
+      "source_type": "mdl",
+      "source_path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\swkotor\\data\\models.bif"
+    },
+    {
+      "path": "k1/S_Female01.mdx",
+      "sha256": "e2efd51a22610f238390d5492a27226568649e5330bb29fe85fde6bf2a00ba0d",
+      "size_bytes": 44152,
+      "source_resref": "S_Female01",
+      "source_type": "mdx",
+      "source_path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\swkotor\\data\\models.bif"
+    },
+    {
+      "path": "k1/S_Female02.mdl",
+      "sha256": "607819480b40297092a70aff50a7e204d5166d233d62ee32bfbdca054226dc3f",
+      "size_bytes": 906680,
+      "source_resref": "S_Female02",
+      "source_type": "mdl",
+      "source_path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\swkotor\\data\\models.bif"
+    },
+    {
+      "path": "k1/S_Female02.mdx",
+      "sha256": "d79dffb0dc35bf0364251be3142c431fb1eb2c80a4955b0c7c94d1d2082a1a3f",
+      "size_bytes": 44152,
+      "source_resref": "S_Female02",
+      "source_type": "mdx",
+      "source_path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\swkotor\\data\\models.bif"
+    },
+    {
+      "path": "k1/S_Female03.mdl",
+      "sha256": "84a3ae2524f0168282f601072c6852f7223e34e7f657a607ecf08514a92a5c5f",
+      "size_bytes": 1087950,
+      "source_resref": "S_Female03",
+      "source_type": "mdl",
+      "source_path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\swkotor\\data\\models.bif"
+    },
+    {
+      "path": "k1/S_Female03.mdx",
+      "sha256": "c27c38b5955c01dbd0da16063b4cef195681b6e2e0f836e89f6a68844f381503",
+      "size_bytes": 44152,
+      "source_resref": "S_Female03",
+      "source_type": "mdx",
+      "source_path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\swkotor\\data\\models.bif"
+    },
+    {
+      "path": "k1/pmbam.mdl",
+      "sha256": "f439fbdbf9e50ef994d14c333d0829017ad72bcfc1bf6f922420943e37ebf3f1",
+      "size_bytes": 188736,
+      "source_resref": "pmbam",
+      "source_type": "mdl",
+      "source_path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\swkotor\\data\\player.bif"
+    },
+    {
+      "path": "k1/pmbam.mdx",
+      "sha256": "a912c9fb3f8e785f06652e778295ebe6655d20fdb82a437456cd71939b4c6b22",
+      "size_bytes": 150464,
+      "source_resref": "pmbam",
+      "source_type": "mdx",
+      "source_path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\swkotor\\data\\player.bif"
+    },
+    {
+      "path": "k1/pfbam.mdl",
+      "sha256": "c3d2e0623ac94385a4f2cbea14d72566754af2ff1104376ef1e14d5148cc494d",
+      "size_bytes": 182394,
+      "source_resref": "pfbam",
+      "source_type": "mdl",
+      "source_path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\swkotor\\data\\player.bif"
+    },
+    {
+      "path": "k1/pfbam.mdx",
+      "sha256": "dd177e7579f83eb9d23c696e0af39c21661fca74908af8b2b2ce3e5eb3af42f8",
+      "size_bytes": 147776,
+      "source_resref": "pfbam",
+      "source_type": "mdx",
+      "source_path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\swkotor\\data\\player.bif"
+    }
+  ],
+  "purpose": "Isolated stock corpus for GhostRigger retargeter tests. Never touched by external patchers, override systems, or other projects. Re-extract from BIF if validation needed.",
+  "do_not_modify": true
+}

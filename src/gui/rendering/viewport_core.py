@@ -4096,6 +4096,8 @@ class FrameRenderer:
         # Save current camera state
         _saved_az  = getattr(self.cam, 'az',  -45.0)
         _saved_el  = getattr(self.cam, 'el',   20.0)
+        _saved_azimuth = getattr(self.cam, 'azimuth', None)
+        _saved_elevation = getattr(self.cam, 'elevation', None)
         _saved_fov = getattr(self.cam, 'fov',  45.0)
         # Temporarily raise triangle cap to still-render budget
         _saved_cap = self.__class__.MAX_TRIS_TEXTURED
@@ -4104,8 +4106,12 @@ class FrameRenderer:
             # Override camera angles if accessible
             if hasattr(self.cam, 'az'):
                 self.cam.az = az_deg
+            if hasattr(self.cam, 'azimuth'):
+                self.cam.azimuth = az_deg
             if hasattr(self.cam, 'el'):
                 self.cam.el = el_deg
+            if hasattr(self.cam, 'elevation'):
+                self.cam.elevation = el_deg
             if hasattr(self.cam, 'fov'):
                 self.cam.fov = fov
             return self.render(W, H)
@@ -4117,6 +4123,10 @@ class FrameRenderer:
             self.__class__.MAX_TRIS_TEXTURED = _saved_cap
             if hasattr(self.cam, 'az'):  self.cam.az  = _saved_az
             if hasattr(self.cam, 'el'):  self.cam.el  = _saved_el
+            if _saved_azimuth is not None and hasattr(self.cam, 'azimuth'):
+                self.cam.azimuth = _saved_azimuth
+            if _saved_elevation is not None and hasattr(self.cam, 'elevation'):
+                self.cam.elevation = _saved_elevation
             if hasattr(self.cam, 'fov'): self.cam.fov = _saved_fov
 
     def _render_inner(self, W: int, H: int) -> Optional['Image.Image']:

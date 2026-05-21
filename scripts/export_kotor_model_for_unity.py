@@ -22,6 +22,15 @@ from src.core.qt_core.assets.resource_manager import ResourceManager
 from src.core.qt_core.export.unity_export_bridge import export_model_for_unity
 
 
+class _ResourceTextureCache:
+    def __init__(self, manager: ResourceManager, game: str) -> None:
+        self._manager = manager
+        self._game = game
+
+    def get(self, texture_name: str):
+        return self._manager.load_texture_image(texture_name, self._game, max_size=0)
+
+
 def _normalise_game(value: str) -> str:
     value = value.strip().lower()
     if value in {"k1", "1", "swkotor"}:
@@ -59,6 +68,7 @@ def export_model(args: argparse.Namespace) -> dict[str, Any]:
         exporter=lambda loaded_model, out_path, rigging: FBXExporter().export(
             loaded_model,
             str(out_path),
+            tex_cache=_ResourceTextureCache(manager, args.game),
             export_rigging=rigging,
         ),
     )

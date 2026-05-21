@@ -1,0 +1,1965 @@
+{
+  "name": "SKM_Quinn_Simple",
+  "source": "SKM_Quinn_Simple.FBX",
+  "skeleton_type": "unreal_quinn",
+  "supermodel": "NULL",
+  "node_count": 90,
+  "mesh_node_count": 0,
+  "bone_node_count": 90,
+  "animation_count": 0,
+  "animations": [],
+  "asset": {
+    "name": "SKM_Quinn_Simple",
+    "source": "SKM_Quinn_Simple.FBX",
+    "bone_count": 89,
+    "bone_map_path": "C:\\Users\\NewAdmin\\Documents\\GDeveloper\\Workspaces\\Kotor-3D-Model-Converter-qt\\src\\unreal\\skels\\SKM_Quinn_Simple_BoneMap.xml",
+    "fbx_path": "C:\\Users\\NewAdmin\\Documents\\GDeveloper\\Workspaces\\Kotor-3D-Model-Converter-qt\\src\\unreal\\skels\\SKM_Quinn_Simple.FBX",
+    "texture_count": 0
+  },
+  "nodes": [
+    {
+      "name": "SKM_Quinn_Simple",
+      "parent": "",
+      "children": [
+        "root"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "root",
+      "parent": "SKM_Quinn_Simple",
+      "children": [
+        "pelvis",
+        "ik_foot_root",
+        "ik_hand_root",
+        "interaction",
+        "center_of_mass"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.0,
+        -0.0,
+        0.0
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "pelvis",
+      "parent": "root",
+      "children": [
+        "spine_01",
+        "thigh_r",
+        "thigh_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -1.643580311187394e-23,
+        0.02379462480545044,
+        0.9869322204589844
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "spine_01",
+      "parent": "pelvis",
+      "children": [
+        "spine_02"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        1.7832338646600127e-18,
+        -0.0015532299236462564,
+        0.024669682020010852
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "spine_02",
+      "parent": "spine_01",
+      "children": [
+        "spine_03"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -4.991993497625803e-16,
+        0.01176505253905405,
+        0.048467645621501854
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "spine_03",
+      "parent": "spine_02",
+      "children": [
+        "spine_04"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -9.668195538287379e-16,
+        0.009054571043465853,
+        0.07571938179655624
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "spine_04",
+      "parent": "spine_03",
+      "children": [
+        "spine_05"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -1.818239715178487e-15,
+        -0.005406746180596909,
+        0.08834586108840292
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "spine_05",
+      "parent": "spine_04",
+      "children": [
+        "neck_01",
+        "clavicle_l",
+        "clavicle_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -9.779125406605517e-15,
+        -0.03632430632789715,
+        0.17117593005476905
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "neck_01",
+      "parent": "spine_05",
+      "children": [
+        "neck_02"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        3.247115198960873e-09,
+        -0.025259072296638273,
+        0.11644228706046733
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "neck_02",
+      "parent": "neck_01",
+      "children": [
+        "head"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        1.443012829942293e-09,
+        0.013052758473689223,
+        0.0570132764146325
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "head",
+      "parent": "neck_02",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        1.4276775192223922e-09,
+        0.012258694924795099,
+        0.05626490171007581
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "clavicle_l",
+      "parent": "spine_05",
+      "children": [
+        "upperarm_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.009313598891070217,
+        -0.022180849021256364,
+        0.05485331932649151
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "upperarm_l",
+      "parent": "clavicle_l",
+      "children": [
+        "lowerarm_l",
+        "upperarm_twist_01_l",
+        "upperarm_twist_02_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.1512398625310472,
+        -0.004227475342201557,
+        -0.02179675504694023
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "lowerarm_l",
+      "parent": "upperarm_l",
+      "children": [
+        "lowerarm_twist_02_l",
+        "lowerarm_twist_01_l",
+        "hand_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.16340246409714523,
+        0.007434522048739532,
+        -0.21594695006141218
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "lowerarm_twist_02_l",
+      "parent": "lowerarm_l",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.043582249004482654,
+        0.05379321787793117,
+        -0.05265994224385495
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "lowerarm_twist_01_l",
+      "parent": "lowerarm_l",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.08716449800896547,
+        0.10758643575586281,
+        -0.10531988448770901
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "hand_l",
+      "parent": "lowerarm_l",
+      "children": [
+        "middle_metacarpal_l",
+        "pinky_metacarpal_l",
+        "ring_metacarpal_l",
+        "thumb_01_l",
+        "index_metacarpal_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.13074675179172213,
+        0.1613796595315789,
+        -0.15797983250509828
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "middle_metacarpal_l",
+      "parent": "hand_l",
+      "children": [
+        "middle_01_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.009994075694136462,
+        0.02067510539791753,
+        -0.021394845901299586
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "middle_01_l",
+      "parent": "middle_metacarpal_l",
+      "children": [
+        "middle_02_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.026601649352547774,
+        0.031757851512511925,
+        -0.0370912290702341
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "middle_02_l",
+      "parent": "middle_01_l",
+      "children": [
+        "middle_03_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.009529572138593179,
+        0.018306017064134927,
+        -0.04465862579013291
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "middle_03_l",
+      "parent": "middle_02_l",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.0030011421733744936,
+        0.006796054821378961,
+        -0.028053472555856995
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "pinky_metacarpal_l",
+      "parent": "hand_l",
+      "children": [
+        "pinky_01_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.01983164667692744,
+        0.001343664583762616,
+        -0.029532804610911345
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "pinky_01_l",
+      "parent": "pinky_metacarpal_l",
+      "children": [
+        "pinky_02_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.020340016041989317,
+        0.009115319985542464,
+        -0.04158241316143263
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "pinky_02_l",
+      "parent": "pinky_01_l",
+      "children": [
+        "pinky_03_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.006882951471479437,
+        0.006308626733641243,
+        -0.027385091050624033
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "pinky_03_l",
+      "parent": "pinky_02_l",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.0020282221901692377,
+        0.0036303742419188934,
+        -0.017425870432599688
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "ring_metacarpal_l",
+      "parent": "hand_l",
+      "children": [
+        "ring_01_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.015439980196939873,
+        0.011266824300953548,
+        -0.025799062337235945
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "ring_01_l",
+      "parent": "ring_metacarpal_l",
+      "children": [
+        "ring_02_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.026207409622848066,
+        0.01906459539893962,
+        -0.03797999123880391
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "ring_02_l",
+      "parent": "ring_01_l",
+      "children": [
+        "ring_03_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.010666336038473112,
+        0.014658630749331047,
+        -0.038454964311648854
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "ring_03_l",
+      "parent": "ring_02_l",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.006041548548186726,
+        0.007314382064774916,
+        -0.030925890804765044
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "thumb_01_l",
+      "parent": "hand_l",
+      "children": [
+        "thumb_02_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.016390928294339524,
+        0.02853916985285407,
+        -0.0176078010380194
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "thumb_02_l",
+      "parent": "thumb_01_l",
+      "children": [
+        "thumb_03_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.01061894358686194,
+        0.036284589520225285,
+        -0.026758432814361743
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "thumb_03_l",
+      "parent": "thumb_02_l",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.00047949370481831233,
+        0.016629834661323617,
+        -0.021399738912644795
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "index_metacarpal_l",
+      "parent": "hand_l",
+      "children": [
+        "index_01_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.0005731020709872636,
+        0.0350725967863009,
+        -0.01959547025588848
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "index_01_l",
+      "parent": "index_metacarpal_l",
+      "children": [
+        "index_02_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.019478729643587378,
+        0.035384308044813434,
+        -0.035491436624576655
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "index_02_l",
+      "parent": "index_01_l",
+      "children": [
+        "index_03_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.010688613905700306,
+        0.019359326512851827,
+        -0.03993094418768062
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "index_03_l",
+      "parent": "index_02_l",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.001942255865528375,
+        0.007798658493578164,
+        -0.02353003060496095
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "upperarm_twist_01_l",
+      "parent": "upperarm_l",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.0544674899498257,
+        0.0024781741034867535,
+        -0.0719823192211646
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "upperarm_twist_02_l",
+      "parent": "upperarm_l",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.10893497989965154,
+        0.004956348206973656,
+        -0.1439646384423292
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "clavicle_r",
+      "parent": "spine_05",
+      "children": [
+        "upperarm_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.00931359706519821,
+        -0.022180824209158134,
+        0.054848771828820864
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "upperarm_r",
+      "parent": "clavicle_r",
+      "children": [
+        "lowerarm_r",
+        "upperarm_twist_01_r",
+        "upperarm_twist_02_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.1512393959175961,
+        -0.004227512855264317,
+        -0.021792628491232424
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "lowerarm_r",
+      "parent": "upperarm_r",
+      "children": [
+        "lowerarm_twist_02_r",
+        "lowerarm_twist_01_r",
+        "hand_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.1633998713398413,
+        0.007434407576124843,
+        -0.21594353219492524
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "lowerarm_twist_02_r",
+      "parent": "lowerarm_r",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.04358286886419266,
+        0.05379398541598218,
+        -0.052660693048623086
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "lowerarm_twist_01_r",
+      "parent": "lowerarm_r",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.08716564216290967,
+        0.10758785287626609,
+        -0.10532127062655205
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "hand_r",
+      "parent": "lowerarm_r",
+      "children": [
+        "middle_metacarpal_r",
+        "pinky_metacarpal_r",
+        "ring_metacarpal_r",
+        "thumb_01_r",
+        "index_metacarpal_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.1307484297964488,
+        0.16138173802990435,
+        -0.15798186552508486
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "middle_metacarpal_r",
+      "parent": "hand_r",
+      "children": [
+        "middle_01_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.009995705439282854,
+        0.020672658673284855,
+        -0.02139569568766353
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "middle_01_r",
+      "parent": "middle_metacarpal_r",
+      "children": [
+        "middle_02_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.02660181716326887,
+        0.03175865617003726,
+        -0.03709146344650349
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "middle_02_r",
+      "parent": "middle_01_r",
+      "children": [
+        "middle_03_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.009529314062581895,
+        0.01830538038574131,
+        -0.04465825896149178
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "middle_03_r",
+      "parent": "middle_02_r",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.0030011800250118736,
+        0.006796381831023268,
+        -0.0280535841306625
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "pinky_metacarpal_r",
+      "parent": "hand_r",
+      "children": [
+        "pinky_01_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.019832970410086304,
+        0.0013414901358215214,
+        -0.029533326716096653
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "pinky_01_r",
+      "parent": "pinky_metacarpal_r",
+      "children": [
+        "pinky_02_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.020339788960634875,
+        0.009115135932813018,
+        -0.041583040682280026
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "pinky_02_r",
+      "parent": "pinky_01_r",
+      "children": [
+        "pinky_03_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.00688329535923371,
+        0.00630924032713151,
+        -0.02738510508516734
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "pinky_03_r",
+      "parent": "pinky_02_r",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.002027969707764865,
+        0.003629959207744532,
+        -0.017425520568879582
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "ring_metacarpal_r",
+      "parent": "hand_r",
+      "children": [
+        "ring_01_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.015441181103654333,
+        0.01126459541244676,
+        -0.025800360914247422
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "ring_01_r",
+      "parent": "ring_metacarpal_r",
+      "children": [
+        "ring_02_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.02620802573467873,
+        0.01906506536147745,
+        -0.037979906889513915
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "ring_02_r",
+      "parent": "ring_01_r",
+      "children": [
+        "ring_03_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.010665621097681655,
+        0.014658254335337156,
+        -0.038455248112978735
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "ring_03_r",
+      "parent": "ring_02_r",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.0060409893439939966,
+        0.0073146412256025195,
+        -0.030924933734883808
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "thumb_01_r",
+      "parent": "hand_r",
+      "children": [
+        "thumb_02_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.016389365209096673,
+        0.028537748137403313,
+        -0.017609079316807108
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "thumb_02_r",
+      "parent": "thumb_01_r",
+      "children": [
+        "thumb_03_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.010619478989614961,
+        0.03628456696064594,
+        -0.026758473788283554
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "thumb_03_r",
+      "parent": "thumb_02_r",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.000479632364871585,
+        0.0166293541739998,
+        -0.021399912899805362
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "index_metacarpal_r",
+      "parent": "hand_r",
+      "children": [
+        "index_01_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.0005747645928764755,
+        0.03507017374187296,
+        -0.019596275267976804
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "index_01_r",
+      "parent": "index_metacarpal_r",
+      "children": [
+        "index_02_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.019478169564583148,
+        0.03538432305925196,
+        -0.035491620682731595
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "index_02_r",
+      "parent": "index_01_r",
+      "children": [
+        "index_03_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.010689226304704036,
+        0.01936013913349166,
+        -0.03993062067077613
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "index_03_r",
+      "parent": "index_02_r",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.0019421304950510976,
+        0.007798564525557411,
+        -0.023529817636059658
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "upperarm_twist_01_r",
+      "parent": "upperarm_r",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.054467631753263746,
+        0.002478164662386848,
+        -0.07198041768264862
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "upperarm_twist_02_r",
+      "parent": "upperarm_r",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.10893526350652749,
+        0.0049563293247737,
+        -0.14396083536529702
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "thigh_r",
+      "parent": "pelvis",
+      "children": [
+        "calf_r",
+        "thigh_twist_01_r",
+        "thigh_twist_02_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.11154600143432618,
+        0.00270948313793681,
+        -0.032213840379042624
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "calf_r",
+      "parent": "thigh_r",
+      "children": [
+        "foot_r",
+        "calf_twist_02_r",
+        "calf_twist_01_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.019080632673801237,
+        -0.00953209475569974,
+        -0.4570219365388257
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "foot_r",
+      "parent": "calf_r",
+      "children": [
+        "ball_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.01621791292224395,
+        -0.016558622342848352,
+        -0.416410123513799
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "ball_r",
+      "parent": "foot_r",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.01943830682420697,
+        0.13274674590249722,
+        -0.06963595842576252
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "calf_twist_02_r",
+      "parent": "calf_r",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.005900052336439171,
+        -0.005592783414403401,
+        -0.13878121584207437
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "calf_twist_01_r",
+      "parent": "calf_r",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.011800104672878314,
+        -0.011185566828806715,
+        -0.2775624316841486
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "thigh_twist_01_r",
+      "parent": "thigh_r",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.006360211156417245,
+        -0.0031773650510274684,
+        -0.15234065186385803
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "thigh_twist_02_r",
+      "parent": "thigh_r",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.012720422312834725,
+        -0.006354730102054992,
+        -0.30468130372771607
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "thigh_l",
+      "parent": "pelvis",
+      "children": [
+        "calf_l",
+        "thigh_twist_01_l",
+        "thigh_twist_02_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.11154585838317871,
+        0.0027098462147309432,
+        -0.03221329673767559
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "calf_l",
+      "parent": "thigh_l",
+      "children": [
+        "foot_l",
+        "calf_twist_02_l",
+        "calf_twist_01_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.019080674037246198,
+        -0.009532115419599398,
+        -0.45702292728174804
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "foot_l",
+      "parent": "calf_l",
+      "children": [
+        "ball_l"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.01621789512128896,
+        -0.016558604167927194,
+        -0.41640966645759075
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "ball_l",
+      "parent": "foot_l",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.019438378831413278,
+        0.13274672593668974,
+        -0.06963594382500753
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "calf_twist_02_l",
+      "parent": "calf_l",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.005900554171097361,
+        -0.005592760962652479,
+        -0.13878104436585553
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "calf_twist_01_l",
+      "parent": "calf_l",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.011800623811895422,
+        -0.011185535606391591,
+        -0.2775621261616773
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "thigh_twist_01_l",
+      "parent": "thigh_l",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.006360385998432763,
+        -0.0031773672758026554,
+        -0.15234095957288551
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "thigh_twist_02_l",
+      "parent": "thigh_l",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.01272077199686554,
+        -0.006354734551605307,
+        -0.3046819191457709
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "ik_foot_root",
+      "parent": "root",
+      "children": [
+        "ik_foot_l",
+        "ik_foot_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "ik_foot_l",
+      "parent": "ik_foot_root",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.14711810111999513,
+        0.0004145237058401108,
+        0.08143789291381837
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "ik_foot_r",
+      "parent": "ik_foot_root",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.14711830139160156,
+        0.00041416238993406294,
+        0.08143787384033203
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "ik_hand_root",
+      "parent": "root",
+      "children": [
+        "ik_hand_gun"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "ik_hand_gun",
+      "parent": "ik_hand_root",
+      "children": [
+        "ik_hand_l",
+        "ik_hand_r"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.4555488967895508,
+        0.14400569915771486,
+        1.0564070129394532
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "ik_hand_l",
+      "parent": "ik_hand_gun",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.9110990367001903,
+        -1.9108217536589756e-06,
+        -9.675282768295546e-07
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "ik_hand_r",
+      "parent": "ik_hand_gun",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.0,
+        -5.551115123125783e-17,
+        -2.220446049250313e-16
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "interaction",
+      "parent": "root",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        1.7763568394002505e-17,
+        -1.8735013540549518e-18,
+        3.552713678800501e-17
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "center_of_mass",
+      "parent": "root",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        1.7763568394002505e-17,
+        -1.8735013540549518e-18,
+        3.552713678800501e-17
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    }
+  ]
+}

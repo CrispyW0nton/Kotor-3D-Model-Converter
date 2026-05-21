@@ -1711,6 +1711,49 @@ def test_quinn_aliases_map_common_kotor_supermodel_bones() -> None:
     assert report.mapping["rfoott_g"] == "ball_r"
 
 
+def test_quinn_aliases_include_real_kotor_mesh_bone_nodes() -> None:
+    import pytest
+
+    from src.core.geometry.model_data import ModelNode, NodeFlags
+    from src.unreal.animation_retargeting import build_bone_map
+    from src.unreal.quinn import QUINN_BONE_MAP, load_quinn_skeleton_asset, unreal_skeleton_model
+
+    if not QUINN_BONE_MAP.exists():
+        pytest.skip("SKM_Quinn_Simple_BoneMap.xml not available")
+
+    source = SimpleNamespace(
+        name="S_Male02",
+        all_nodes=lambda: [
+            ModelNode(name="pelvis_g", flags=int(NodeFlags.MESH)),
+            ModelNode(name="torso_g", flags=int(NodeFlags.MESH)),
+            ModelNode(name="torsoUpr_g", flags=int(NodeFlags.MESH)),
+            ModelNode(name="neck_g", flags=int(NodeFlags.MESH)),
+            ModelNode(name="rCollar_g", flags=int(NodeFlags.MESH)),
+            ModelNode(name="rbicep_g", flags=int(NodeFlags.MESH)),
+            ModelNode(name="rbicepL_g", flags=int(NodeFlags.MESH)),
+            ModelNode(name="rforearm_g", flags=int(NodeFlags.MESH)),
+            ModelNode(name="rhand_g", flags=int(NodeFlags.MESH)),
+            ModelNode(name="rhand"),
+            ModelNode(name="Torso", flags=int(NodeFlags.SKIN)),
+        ],
+    )
+    target = unreal_skeleton_model(load_quinn_skeleton_asset())
+
+    report = build_bone_map(source, target)
+
+    assert report.mapping["pelvis_g"] == "pelvis"
+    assert report.mapping["torso_g"] == "spine_02"
+    assert report.mapping["torsoupr_g"] in {"spine_03", "spine_04", "spine_01"}
+    assert report.mapping["neck_g"] == "neck_01"
+    assert report.mapping["rcollar_g"] == "clavicle_r"
+    assert report.mapping["rbicep_g"] == "upperarm_r"
+    assert report.mapping["rbicepl_g"] == "lowerarm_r"
+    assert report.mapping["rforearm_g"] == "lowerarm_r"
+    assert report.mapping["rhand_g"] == "hand_r"
+    assert report.mapping["rhand"] == "hand_r"
+    assert "torso" not in report.mapping
+
+
 def test_unreal_bone_map_excludes_dummy_and_hook_helpers() -> None:
     from src.core.qt_core.geometry.model_data import ModelNode
     from src.unreal.animation_retargeting import build_bone_map

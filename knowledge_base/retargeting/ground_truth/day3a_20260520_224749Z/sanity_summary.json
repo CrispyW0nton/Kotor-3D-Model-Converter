@@ -1,0 +1,44 @@
+{
+  "created_at_utc": "2026-05-20T22:47:52.501261+00:00",
+  "files": [
+    "animation_inventory.json",
+    "aurora_pmbam_skeleton.json",
+    "aurora_smale01_skeleton.json",
+    "bone_map_smale01_to_quinn.json",
+    "ue5_quinn_skeleton.json"
+  ],
+  "mapping_counts": {
+    "matched_count": 27,
+    "derived_count": 20
+  },
+  "pmbam_chain": [
+    "pmbam",
+    "S_Female02",
+    "S_Female01",
+    "S_Male02",
+    "S_Male01"
+  ],
+  "g1a1_available": true,
+  "walk_available": true,
+  "run_available": true,
+  "quinn_bone_count": 89,
+  "quinn_twist_bones": [
+    "calf_twist_01_l",
+    "calf_twist_01_r",
+    "calf_twist_02_l",
+    "calf_twist_02_r",
+    "lowerarm_twist_01_l",
+    "lowerarm_twist_01_r",
+    "lowerarm_twist_02_l",
+    "lowerarm_twist_02_r",
+    "thigh_twist_01_l",
+    "thigh_twist_01_r",
+    "thigh_twist_02_l",
+    "thigh_twist_02_r",
+    "upperarm_twist_01_l",
+    "upperarm_twist_01_r",
+    "upperarm_twist_02_l",
+    "upperarm_twist_02_r"
+  ],
+  "live_install_noise_observed": true
+}

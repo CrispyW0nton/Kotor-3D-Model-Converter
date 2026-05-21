@@ -1,0 +1,20 @@
+{
+  "files": [
+    "aurora_pfbam_rest_pose_local.json",
+    "aurora_pmbam_rest_pose_local.json",
+    "ue5_manny_twist_bone_offsets.json",
+    "ue5_quinn_rest_pose_local.json"
+  ],
+  "ground_truth_dir": "C:\\Users\\NewAdmin\\Documents\\GDeveloper\\Workspaces\\Kotor-3D-Model-Converter-qt\\knowledge_base\\retargeting\\ground_truth\\day4_5_20260521T020454Z",
+  "max_g5_delta": 8.881784197001252e-16,
+  "min_abs_det": 0.9999999999999996,
+  "pfbam_bone_count_non_skin": 61,
+  "pfbam_supermodel": "S_Female03",
+  "pmbam_bone_count_non_skin": 58,
+  "pmbam_supermodel": "S_Female02",
+  "quaternion_norm_max_error": 1.1102230246251565e-16,
+  "quinn_asset_bone_count": 89,
+  "quinn_bone_count_including_wrapper": 90,
+  "quinn_required_twist_missing": [],
+  "quinn_total_twist_bones": 16
+}

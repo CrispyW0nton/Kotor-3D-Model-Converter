@@ -1,0 +1,3788 @@
+{
+  "generated_at": "2026-05-21T00:56:04.551706+00:00",
+  "source": "MCP queried first; persisted from local BindPoseRegistry for implementation reproducibility",
+  "skeleton_id": "ue5_quinn",
+  "name": "SKM_Quinn_Simple",
+  "bone_count": 90,
+  "parents": {
+    "root": "skm_quinn_simple",
+    "pelvis": "root",
+    "spine_01": "pelvis",
+    "spine_02": "spine_01",
+    "spine_03": "spine_02",
+    "spine_04": "spine_03",
+    "spine_05": "spine_04",
+    "neck_01": "spine_05",
+    "neck_02": "neck_01",
+    "head": "neck_02",
+    "clavicle_l": "spine_05",
+    "upperarm_l": "clavicle_l",
+    "lowerarm_l": "upperarm_l",
+    "lowerarm_twist_02_l": "lowerarm_l",
+    "lowerarm_twist_01_l": "lowerarm_l",
+    "hand_l": "lowerarm_l",
+    "middle_metacarpal_l": "hand_l",
+    "middle_01_l": "middle_metacarpal_l",
+    "middle_02_l": "middle_01_l",
+    "middle_03_l": "middle_02_l",
+    "pinky_metacarpal_l": "hand_l",
+    "pinky_01_l": "pinky_metacarpal_l",
+    "pinky_02_l": "pinky_01_l",
+    "pinky_03_l": "pinky_02_l",
+    "ring_metacarpal_l": "hand_l",
+    "ring_01_l": "ring_metacarpal_l",
+    "ring_02_l": "ring_01_l",
+    "ring_03_l": "ring_02_l",
+    "thumb_01_l": "hand_l",
+    "thumb_02_l": "thumb_01_l",
+    "thumb_03_l": "thumb_02_l",
+    "index_metacarpal_l": "hand_l",
+    "index_01_l": "index_metacarpal_l",
+    "index_02_l": "index_01_l",
+    "index_03_l": "index_02_l",
+    "upperarm_twist_01_l": "upperarm_l",
+    "upperarm_twist_02_l": "upperarm_l",
+    "clavicle_r": "spine_05",
+    "upperarm_r": "clavicle_r",
+    "lowerarm_r": "upperarm_r",
+    "lowerarm_twist_02_r": "lowerarm_r",
+    "lowerarm_twist_01_r": "lowerarm_r",
+    "hand_r": "lowerarm_r",
+    "middle_metacarpal_r": "hand_r",
+    "middle_01_r": "middle_metacarpal_r",
+    "middle_02_r": "middle_01_r",
+    "middle_03_r": "middle_02_r",
+    "pinky_metacarpal_r": "hand_r",
+    "pinky_01_r": "pinky_metacarpal_r",
+    "pinky_02_r": "pinky_01_r",
+    "pinky_03_r": "pinky_02_r",
+    "ring_metacarpal_r": "hand_r",
+    "ring_01_r": "ring_metacarpal_r",
+    "ring_02_r": "ring_01_r",
+    "ring_03_r": "ring_02_r",
+    "thumb_01_r": "hand_r",
+    "thumb_02_r": "thumb_01_r",
+    "thumb_03_r": "thumb_02_r",
+    "index_metacarpal_r": "hand_r",
+    "index_01_r": "index_metacarpal_r",
+    "index_02_r": "index_01_r",
+    "index_03_r": "index_02_r",
+    "upperarm_twist_01_r": "upperarm_r",
+    "upperarm_twist_02_r": "upperarm_r",
+    "thigh_r": "pelvis",
+    "calf_r": "thigh_r",
+    "foot_r": "calf_r",
+    "ball_r": "foot_r",
+    "calf_twist_02_r": "calf_r",
+    "calf_twist_01_r": "calf_r",
+    "thigh_twist_01_r": "thigh_r",
+    "thigh_twist_02_r": "thigh_r",
+    "thigh_l": "pelvis",
+    "calf_l": "thigh_l",
+    "foot_l": "calf_l",
+    "ball_l": "foot_l",
+    "calf_twist_02_l": "calf_l",
+    "calf_twist_01_l": "calf_l",
+    "thigh_twist_01_l": "thigh_l",
+    "thigh_twist_02_l": "thigh_l",
+    "ik_foot_root": "root",
+    "ik_foot_l": "ik_foot_root",
+    "ik_foot_r": "ik_foot_root",
+    "ik_hand_root": "root",
+    "ik_hand_gun": "ik_hand_root",
+    "ik_hand_l": "ik_hand_gun",
+    "ik_hand_r": "ik_hand_gun",
+    "interaction": "root",
+    "center_of_mass": "root"
+  },
+  "bone_names": [
+    "SKM_Quinn_Simple",
+    "root",
+    "pelvis",
+    "spine_01",
+    "spine_02",
+    "spine_03",
+    "spine_04",
+    "spine_05",
+    "neck_01",
+    "neck_02",
+    "head",
+    "clavicle_l",
+    "upperarm_l",
+    "lowerarm_l",
+    "lowerarm_twist_02_l",
+    "lowerarm_twist_01_l",
+    "hand_l",
+    "middle_metacarpal_l",
+    "middle_01_l",
+    "middle_02_l",
+    "middle_03_l",
+    "pinky_metacarpal_l",
+    "pinky_01_l",
+    "pinky_02_l",
+    "pinky_03_l",
+    "ring_metacarpal_l",
+    "ring_01_l",
+    "ring_02_l",
+    "ring_03_l",
+    "thumb_01_l",
+    "thumb_02_l",
+    "thumb_03_l",
+    "index_metacarpal_l",
+    "index_01_l",
+    "index_02_l",
+    "index_03_l",
+    "upperarm_twist_01_l",
+    "upperarm_twist_02_l",
+    "clavicle_r",
+    "upperarm_r",
+    "lowerarm_r",
+    "lowerarm_twist_02_r",
+    "lowerarm_twist_01_r",
+    "hand_r",
+    "middle_metacarpal_r",
+    "middle_01_r",
+    "middle_02_r",
+    "middle_03_r",
+    "pinky_metacarpal_r",
+    "pinky_01_r",
+    "pinky_02_r",
+    "pinky_03_r",
+    "ring_metacarpal_r",
+    "ring_01_r",
+    "ring_02_r",
+    "ring_03_r",
+    "thumb_01_r",
+    "thumb_02_r",
+    "thumb_03_r",
+    "index_metacarpal_r",
+    "index_01_r",
+    "index_02_r",
+    "index_03_r",
+    "upperarm_twist_01_r",
+    "upperarm_twist_02_r",
+    "thigh_r",
+    "calf_r",
+    "foot_r",
+    "ball_r",
+    "calf_twist_02_r",
+    "calf_twist_01_r",
+    "thigh_twist_01_r",
+    "thigh_twist_02_r",
+    "thigh_l",
+    "calf_l",
+    "foot_l",
+    "ball_l",
+    "calf_twist_02_l",
+    "calf_twist_01_l",
+    "thigh_twist_01_l",
+    "thigh_twist_02_l",
+    "ik_foot_root",
+    "ik_foot_l",
+    "ik_foot_r",
+    "ik_hand_root",
+    "ik_hand_gun",
+    "ik_hand_l",
+    "ik_hand_r",
+    "interaction",
+    "center_of_mass"
+  ],
+  "nodes": [
+    {
+      "name": "SKM_Quinn_Simple",
+      "key": "skm_quinn_simple",
+      "parent": "",
+      "children": [
+        "root"
+      ],
+      "world_position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "root",
+      "key": "root",
+      "parent": "skm_quinn_simple",
+      "children": [
+        "center_of_mass",
+        "ik_foot_root",
+        "ik_hand_root",
+        "interaction",
+        "pelvis"
+      ],
+      "world_position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "pelvis",
+      "key": "pelvis",
+      "parent": "root",
+      "children": [
+        "spine_01",
+        "thigh_l",
+        "thigh_r"
+      ],
+      "world_position": [
+        -1.643580311187394e-23,
+        0.02379462480545044,
+        0.9869322204589844
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -1.643580311187394e-23
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.02379462480545044
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9869322204589844
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "spine_01",
+      "key": "spine_01",
+      "parent": "pelvis",
+      "children": [
+        "spine_02"
+      ],
+      "world_position": [
+        1.7832174288569007e-18,
+        0.022241394881804183,
+        1.0116019024789953
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          1.7832174288569007e-18
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.022241394881804183
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.0116019024789953
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "spine_02",
+      "key": "spine_02",
+      "parent": "spine_01",
+      "children": [
+        "spine_03"
+      ],
+      "world_position": [
+        -4.974161323337234e-16,
+        0.03400644742085823,
+        1.0600695481004971
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -4.974161323337234e-16
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.03400644742085823
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.0600695481004971
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "spine_03",
+      "key": "spine_03",
+      "parent": "spine_02",
+      "children": [
+        "spine_04"
+      ],
+      "world_position": [
+        -1.4642356861624614e-15,
+        0.043061018464324086,
+        1.1357889298970534
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -1.4642356861624614e-15
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.043061018464324086
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.1357889298970534
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "spine_04",
+      "key": "spine_04",
+      "parent": "spine_03",
+      "children": [
+        "spine_05"
+      ],
+      "world_position": [
+        -3.2824754013409484e-15,
+        0.037654272283727176,
+        1.2241347909854563
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -3.2824754013409484e-15
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.037654272283727176
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.2241347909854563
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "spine_05",
+      "key": "spine_05",
+      "parent": "spine_04",
+      "children": [
+        "clavicle_l",
+        "clavicle_r",
+        "neck_01"
+      ],
+      "world_position": [
+        -1.3061600807946466e-14,
+        0.0013299659558300286,
+        1.3953107210402254
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -1.3061600807946466e-14
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0013299659558300286
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.3953107210402254
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "neck_01",
+      "key": "neck_01",
+      "parent": "spine_05",
+      "children": [
+        "neck_02"
+      ],
+      "world_position": [
+        3.247102137360065e-09,
+        -0.023929106340808245,
+        1.5117530081006927
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          3.247102137360065e-09
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.023929106340808245
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.5117530081006927
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "neck_02",
+      "key": "neck_02",
+      "parent": "neck_01",
+      "children": [
+        "head"
+      ],
+      "world_position": [
+        4.690114967302358e-09,
+        -0.010876347867119022,
+        1.5687662845153252
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          4.690114967302358e-09
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.010876347867119022
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.5687662845153252
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "head",
+      "key": "head",
+      "parent": "neck_02",
+      "children": [],
+      "world_position": [
+        6.11779248652475e-09,
+        0.0013823470576760765,
+        1.625031186225401
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          6.11779248652475e-09
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0013823470576760765
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.625031186225401
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "clavicle_l",
+      "key": "clavicle_l",
+      "parent": "spine_05",
+      "children": [
+        "upperarm_l"
+      ],
+      "world_position": [
+        -0.00931359889108328,
+        -0.020850883065426335,
+        1.4501640403667169
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.00931359889108328
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.020850883065426335
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.4501640403667169
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "upperarm_l",
+      "key": "upperarm_l",
+      "parent": "clavicle_l",
+      "children": [
+        "lowerarm_l",
+        "upperarm_twist_01_l",
+        "upperarm_twist_02_l"
+      ],
+      "world_position": [
+        -0.16055346142213048,
+        -0.025078358407627892,
+        1.4283672853197766
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.16055346142213048
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.025078358407627892
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.4283672853197766
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "lowerarm_l",
+      "key": "lowerarm_l",
+      "parent": "upperarm_l",
+      "children": [
+        "hand_l",
+        "lowerarm_twist_01_l",
+        "lowerarm_twist_02_l"
+      ],
+      "world_position": [
+        -0.3239559255192757,
+        -0.01764383635888836,
+        1.2124203352583645
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.3239559255192757
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.01764383635888836
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.2124203352583645
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "lowerarm_twist_02_l",
+      "key": "lowerarm_twist_02_l",
+      "parent": "lowerarm_l",
+      "children": [],
+      "world_position": [
+        -0.36753817452375837,
+        0.03614938151904281,
+        1.1597603930145095
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.36753817452375837
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.03614938151904281
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.1597603930145095
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "lowerarm_twist_01_l",
+      "key": "lowerarm_twist_01_l",
+      "parent": "lowerarm_l",
+      "children": [],
+      "world_position": [
+        -0.4111204235282412,
+        0.08994259939697445,
+        1.1071004507706554
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.4111204235282412
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.08994259939697445
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.1071004507706554
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "hand_l",
+      "key": "hand_l",
+      "parent": "lowerarm_l",
+      "children": [
+        "index_metacarpal_l",
+        "middle_metacarpal_l",
+        "pinky_metacarpal_l",
+        "ring_metacarpal_l",
+        "thumb_01_l"
+      ],
+      "world_position": [
+        -0.45470267731099784,
+        0.14373582317269054,
+        1.0544405027532662
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.45470267731099784
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.14373582317269054
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.0544405027532662
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "middle_metacarpal_l",
+      "key": "middle_metacarpal_l",
+      "parent": "hand_l",
+      "children": [
+        "middle_01_l"
+      ],
+      "world_position": [
+        -0.4646967530051343,
+        0.16441092857060807,
+        1.0330456568519666
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.4646967530051343
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.16441092857060807
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.0330456568519666
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "middle_01_l",
+      "key": "middle_01_l",
+      "parent": "middle_metacarpal_l",
+      "children": [
+        "middle_02_l"
+      ],
+      "world_position": [
+        -0.4912984023576821,
+        0.19616878008312,
+        0.9959544277817325
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.4912984023576821
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.19616878008312
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9959544277817325
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "middle_02_l",
+      "key": "middle_02_l",
+      "parent": "middle_01_l",
+      "children": [
+        "middle_03_l"
+      ],
+      "world_position": [
+        -0.5008279744962753,
+        0.21447479714725493,
+        0.9512958019915996
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.5008279744962753
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.21447479714725493
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9512958019915996
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "middle_03_l",
+      "key": "middle_03_l",
+      "parent": "middle_02_l",
+      "children": [],
+      "world_position": [
+        -0.49782683232290076,
+        0.22127085196863389,
+        0.9232423294357426
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.49782683232290076
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.22127085196863389
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9232423294357426
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "pinky_metacarpal_l",
+      "key": "pinky_metacarpal_l",
+      "parent": "hand_l",
+      "children": [
+        "pinky_01_l"
+      ],
+      "world_position": [
+        -0.4745343239879253,
+        0.14507948775645316,
+        1.0249076981423548
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.4745343239879253
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.14507948775645316
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.0249076981423548
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "pinky_01_l",
+      "key": "pinky_01_l",
+      "parent": "pinky_metacarpal_l",
+      "children": [
+        "pinky_02_l"
+      ],
+      "world_position": [
+        -0.4948743400299146,
+        0.15419480774199562,
+        0.9833252849809222
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.4948743400299146
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.15419480774199562
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9833252849809222
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "pinky_02_l",
+      "key": "pinky_02_l",
+      "parent": "pinky_01_l",
+      "children": [
+        "pinky_03_l"
+      ],
+      "world_position": [
+        -0.501757291501394,
+        0.16050343447563686,
+        0.9559401939302982
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.501757291501394
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.16050343447563686
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9559401939302982
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "pinky_03_l",
+      "key": "pinky_03_l",
+      "parent": "pinky_02_l",
+      "children": [],
+      "world_position": [
+        -0.4997290693112248,
+        0.16413380871755576,
+        0.9385143234976985
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.4997290693112248
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.16413380871755576
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9385143234976985
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "ring_metacarpal_l",
+      "key": "ring_metacarpal_l",
+      "parent": "hand_l",
+      "children": [
+        "ring_01_l"
+      ],
+      "world_position": [
+        -0.4701426575079377,
+        0.1550026474736441,
+        1.0286414404160302
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.4701426575079377
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.1550026474736441
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.0286414404160302
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "ring_01_l",
+      "key": "ring_01_l",
+      "parent": "ring_metacarpal_l",
+      "children": [
+        "ring_02_l"
+      ],
+      "world_position": [
+        -0.4963500671307858,
+        0.1740672428725837,
+        0.9906614491772263
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.4963500671307858
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.1740672428725837
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9906614491772263
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "ring_02_l",
+      "key": "ring_02_l",
+      "parent": "ring_01_l",
+      "children": [
+        "ring_03_l"
+      ],
+      "world_position": [
+        -0.5070164031692589,
+        0.18872587362191476,
+        0.9522064848655775
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.5070164031692589
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.18872587362191476
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9522064848655775
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "ring_03_l",
+      "key": "ring_03_l",
+      "parent": "ring_02_l",
+      "children": [],
+      "world_position": [
+        -0.5009748546210722,
+        0.19604025568668967,
+        0.9212805940608124
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.5009748546210722
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.19604025568668967
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9212805940608124
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "thumb_01_l",
+      "key": "thumb_01_l",
+      "parent": "hand_l",
+      "children": [
+        "thumb_02_l"
+      ],
+      "world_position": [
+        -0.4383117490166583,
+        0.1722749930255446,
+        1.0368327017152468
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.4383117490166583
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.1722749930255446
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.0368327017152468
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "thumb_02_l",
+      "key": "thumb_02_l",
+      "parent": "thumb_01_l",
+      "children": [
+        "thumb_03_l"
+      ],
+      "world_position": [
+        -0.4276928054297964,
+        0.2085595825457699,
+        1.010074268900885
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.4276928054297964
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.2085595825457699
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.010074268900885
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "thumb_03_l",
+      "key": "thumb_03_l",
+      "parent": "thumb_02_l",
+      "children": [],
+      "world_position": [
+        -0.4281722991346147,
+        0.2251894172070935,
+        0.9886745299882402
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.4281722991346147
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.2251894172070935
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9886745299882402
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "index_metacarpal_l",
+      "key": "index_metacarpal_l",
+      "parent": "hand_l",
+      "children": [
+        "index_01_l"
+      ],
+      "world_position": [
+        -0.4552757793819851,
+        0.17880841995899144,
+        1.0348450324973777
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.4552757793819851
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.17880841995899144
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.0348450324973777
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "index_01_l",
+      "key": "index_01_l",
+      "parent": "index_metacarpal_l",
+      "children": [
+        "index_02_l"
+      ],
+      "world_position": [
+        -0.4747545090255725,
+        0.21419272800380487,
+        0.999353595872801
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.4747545090255725
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.21419272800380487
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.999353595872801
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "index_02_l",
+      "key": "index_02_l",
+      "parent": "index_01_l",
+      "children": [
+        "index_03_l"
+      ],
+      "world_position": [
+        -0.4854431229312728,
+        0.2335520545166567,
+        0.9594226516851204
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.4854431229312728
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.2335520545166567
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9594226516851204
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "index_03_l",
+      "key": "index_03_l",
+      "parent": "index_02_l",
+      "children": [],
+      "world_position": [
+        -0.48738537879680116,
+        0.24135071301023486,
+        0.9358926210801595
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.48738537879680116
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.24135071301023486
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9358926210801595
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "upperarm_twist_01_l",
+      "key": "upperarm_twist_01_l",
+      "parent": "upperarm_l",
+      "children": [],
+      "world_position": [
+        -0.21502095137195618,
+        -0.022600184304141138,
+        1.356384966098612
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.21502095137195618
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.022600184304141138
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.356384966098612
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "upperarm_twist_02_l",
+      "key": "upperarm_twist_02_l",
+      "parent": "upperarm_l",
+      "children": [],
+      "world_position": [
+        -0.269488441321782,
+        -0.020122010200654235,
+        1.2844026468774474
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.269488441321782
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.020122010200654235
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.2844026468774474
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "clavicle_r",
+      "key": "clavicle_r",
+      "parent": "spine_05",
+      "children": [
+        "upperarm_r"
+      ],
+      "world_position": [
+        0.009313597065185147,
+        -0.020850858253328105,
+        1.4501594928690462
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.009313597065185147
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.020850858253328105
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.4501594928690462
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "upperarm_r",
+      "key": "upperarm_r",
+      "parent": "clavicle_r",
+      "children": [
+        "lowerarm_r",
+        "upperarm_twist_01_r",
+        "upperarm_twist_02_r"
+      ],
+      "world_position": [
+        0.16055299298278125,
+        -0.025078371108592422,
+        1.4283668643778138
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.16055299298278125
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.025078371108592422
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.4283668643778138
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "lowerarm_r",
+      "key": "lowerarm_r",
+      "parent": "upperarm_r",
+      "children": [
+        "hand_r",
+        "lowerarm_twist_01_r",
+        "lowerarm_twist_02_r"
+      ],
+      "world_position": [
+        0.32395286432262255,
+        -0.01764396353246758,
+        1.2124233321828886
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.32395286432262255
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.01764396353246758
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.2124233321828886
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "lowerarm_twist_02_r",
+      "key": "lowerarm_twist_02_r",
+      "parent": "lowerarm_r",
+      "children": [],
+      "world_position": [
+        0.3675357331868152,
+        0.0361500218835146,
+        1.1597626391342655
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.3675357331868152
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0361500218835146
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.1597626391342655
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "lowerarm_twist_01_r",
+      "key": "lowerarm_twist_01_r",
+      "parent": "lowerarm_r",
+      "children": [],
+      "world_position": [
+        0.4111185064855322,
+        0.0899438893437985,
+        1.1071020615563365
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.4111185064855322
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0899438893437985
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.1071020615563365
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "hand_r",
+      "key": "hand_r",
+      "parent": "lowerarm_r",
+      "children": [
+        "index_metacarpal_r",
+        "middle_metacarpal_r",
+        "pinky_metacarpal_r",
+        "ring_metacarpal_r",
+        "thumb_01_r"
+      ],
+      "world_position": [
+        0.45470129411907134,
+        0.14373777449743677,
+        1.0544414666578037
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.45470129411907134
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.14373777449743677
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.0544414666578037
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "middle_metacarpal_r",
+      "key": "middle_metacarpal_r",
+      "parent": "hand_r",
+      "children": [
+        "middle_01_r"
+      ],
+      "world_position": [
+        0.4646969995583542,
+        0.16441043317072163,
+        1.0330457709701402
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.4646969995583542
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.16441043317072163
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.0330457709701402
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "middle_01_r",
+      "key": "middle_01_r",
+      "parent": "middle_metacarpal_r",
+      "children": [
+        "middle_02_r"
+      ],
+      "world_position": [
+        0.49129881672162307,
+        0.19616908934075888,
+        0.9959543075236367
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.49129881672162307
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.19616908934075888
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9959543075236367
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "middle_02_r",
+      "key": "middle_02_r",
+      "parent": "middle_01_r",
+      "children": [
+        "middle_03_r"
+      ],
+      "world_position": [
+        0.500828130784205,
+        0.2144744697265002,
+        0.9512960485621449
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.500828130784205
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.2144744697265002
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9512960485621449
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "middle_03_r",
+      "key": "middle_03_r",
+      "parent": "middle_02_r",
+      "children": [],
+      "world_position": [
+        0.4978269507591931,
+        0.22127085155752346,
+        0.9232424644314824
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.4978269507591931
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.22127085155752346
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9232424644314824
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "pinky_metacarpal_r",
+      "key": "pinky_metacarpal_r",
+      "parent": "hand_r",
+      "children": [
+        "pinky_01_r"
+      ],
+      "world_position": [
+        0.47453426452915765,
+        0.1450792646332583,
+        1.024908139941707
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.47453426452915765
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.1450792646332583
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.024908139941707
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "pinky_01_r",
+      "key": "pinky_01_r",
+      "parent": "pinky_metacarpal_r",
+      "children": [
+        "pinky_02_r"
+      ],
+      "world_position": [
+        0.4948740534897925,
+        0.1541944005660713,
+        0.983325099259427
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.4948740534897925
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.1541944005660713
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.983325099259427
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "pinky_02_r",
+      "key": "pinky_02_r",
+      "parent": "pinky_01_r",
+      "children": [
+        "pinky_03_r"
+      ],
+      "world_position": [
+        0.5017573488490262,
+        0.16050364089320282,
+        0.9559399941742597
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.5017573488490262
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.16050364089320282
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9559399941742597
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "pinky_03_r",
+      "key": "pinky_03_r",
+      "parent": "pinky_02_r",
+      "children": [],
+      "world_position": [
+        0.49972937914126137,
+        0.16413360010094735,
+        0.9385144736053801
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.49972937914126137
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.16413360010094735
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9385144736053801
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "ring_metacarpal_r",
+      "key": "ring_metacarpal_r",
+      "parent": "hand_r",
+      "children": [
+        "ring_01_r"
+      ],
+      "world_position": [
+        0.4701424752227257,
+        0.15500236990988353,
+        1.0286411057435563
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.4701424752227257
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.15500236990988353
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.0286411057435563
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "ring_01_r",
+      "key": "ring_01_r",
+      "parent": "ring_metacarpal_r",
+      "children": [
+        "ring_02_r"
+      ],
+      "world_position": [
+        0.4963505009574044,
+        0.17406743527136098,
+        0.9906611988540424
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.4963505009574044
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.17406743527136098
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9906611988540424
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "ring_02_r",
+      "key": "ring_02_r",
+      "parent": "ring_01_r",
+      "children": [
+        "ring_03_r"
+      ],
+      "world_position": [
+        0.5070161220550861,
+        0.18872568960669814,
+        0.9522059507410636
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.5070161220550861
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.18872568960669814
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9522059507410636
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "ring_03_r",
+      "key": "ring_03_r",
+      "parent": "ring_02_r",
+      "children": [],
+      "world_position": [
+        0.5009751327110921,
+        0.19604033083230066,
+        0.9212810170061798
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.5009751327110921
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.19604033083230066
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9212810170061798
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "thumb_01_r",
+      "key": "thumb_01_r",
+      "parent": "hand_r",
+      "children": [
+        "thumb_02_r"
+      ],
+      "world_position": [
+        0.43831192890997467,
+        0.17227552263484008,
+        1.0368323873409966
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.43831192890997467
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.17227552263484008
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.0368323873409966
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "thumb_02_r",
+      "key": "thumb_02_r",
+      "parent": "thumb_01_r",
+      "children": [
+        "thumb_03_r"
+      ],
+      "world_position": [
+        0.4276924499203597,
+        0.20856008959548603,
+        1.010073913552713
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.4276924499203597
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.20856008959548603
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.010073913552713
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "thumb_03_r",
+      "key": "thumb_03_r",
+      "parent": "thumb_02_r",
+      "children": [],
+      "world_position": [
+        0.4281720822852313,
+        0.22518944376948583,
+        0.9886740006529077
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.4281720822852313
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.22518944376948583
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9886740006529077
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "index_metacarpal_r",
+      "key": "index_metacarpal_r",
+      "parent": "hand_r",
+      "children": [
+        "index_01_r"
+      ],
+      "world_position": [
+        0.4552760587119478,
+        0.17880794823930973,
+        1.034845191389827
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.4552760587119478
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.17880794823930973
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.034845191389827
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "index_01_r",
+      "key": "index_01_r",
+      "parent": "index_metacarpal_r",
+      "children": [
+        "index_02_r"
+      ],
+      "world_position": [
+        0.47475422827653097,
+        0.2141922712985617,
+        0.9993535707070953
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.47475422827653097
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.2141922712985617
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9993535707070953
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "index_02_r",
+      "key": "index_02_r",
+      "parent": "index_01_r",
+      "children": [
+        "index_03_r"
+      ],
+      "world_position": [
+        0.485443454581235,
+        0.23355241043205335,
+        0.9594229500363192
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.485443454581235
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.23355241043205335
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9594229500363192
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "index_03_r",
+      "key": "index_03_r",
+      "parent": "index_02_r",
+      "children": [],
+      "world_position": [
+        0.4873855850762861,
+        0.24135097495761076,
+        0.9358931324002595
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.4873855850762861
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.24135097495761076
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9358931324002595
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "upperarm_twist_01_r",
+      "key": "upperarm_twist_01_r",
+      "parent": "upperarm_r",
+      "children": [],
+      "world_position": [
+        0.215020624736045,
+        -0.022600206446205574,
+        1.3563864466951652
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.215020624736045
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.022600206446205574
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.3563864466951652
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "upperarm_twist_02_r",
+      "key": "upperarm_twist_02_r",
+      "parent": "upperarm_r",
+      "children": [],
+      "world_position": [
+        0.26948825648930874,
+        -0.020122041783818722,
+        1.2844060290125168
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.26948825648930874
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.020122041783818722
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.2844060290125168
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "thigh_r",
+      "key": "thigh_r",
+      "parent": "pelvis",
+      "children": [
+        "calf_r",
+        "thigh_twist_01_r",
+        "thigh_twist_02_r"
+      ],
+      "world_position": [
+        0.11154600143432618,
+        0.02650410794338725,
+        0.9547183800799418
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.11154600143432618
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.02650410794338725
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9547183800799418
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "calf_r",
+      "key": "calf_r",
+      "parent": "thigh_r",
+      "children": [
+        "calf_twist_01_r",
+        "calf_twist_02_r",
+        "foot_r"
+      ],
+      "world_position": [
+        0.13062663410812742,
+        0.01697201318768751,
+        0.4976964435411161
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.13062663410812742
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.01697201318768751
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.4976964435411161
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "foot_r",
+      "key": "foot_r",
+      "parent": "calf_r",
+      "children": [
+        "ball_r"
+      ],
+      "world_position": [
+        0.14684454703037136,
+        0.00041339084483915656,
+        0.08128632002731706
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.14684454703037136
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.00041339084483915656
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.08128632002731706
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "ball_r",
+      "key": "ball_r",
+      "parent": "foot_r",
+      "children": [],
+      "world_position": [
+        0.16628285385457833,
+        0.13316013674733637,
+        0.01165036160155454
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.16628285385457833
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.13316013674733637
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.01165036160155454
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "calf_twist_02_r",
+      "key": "calf_twist_02_r",
+      "parent": "calf_r",
+      "children": [],
+      "world_position": [
+        0.1365266864445666,
+        0.011379229773284108,
+        0.3589152276990417
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.1365266864445666
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.011379229773284108
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.3589152276990417
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "calf_twist_01_r",
+      "key": "calf_twist_01_r",
+      "parent": "calf_r",
+      "children": [],
+      "world_position": [
+        0.14242673878100573,
+        0.005786446358880794,
+        0.22013401185696746
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.14242673878100573
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.005786446358880794
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.22013401185696746
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "thigh_twist_01_r",
+      "key": "thigh_twist_01_r",
+      "parent": "thigh_r",
+      "children": [],
+      "world_position": [
+        0.11790621259074342,
+        0.02332674289235978,
+        0.8023777282160838
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.11790621259074342
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.02332674289235978
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.8023777282160838
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "thigh_twist_02_r",
+      "key": "thigh_twist_02_r",
+      "parent": "thigh_r",
+      "children": [],
+      "world_position": [
+        0.1242664237471609,
+        0.020149377841332257,
+        0.6500370763522257
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.1242664237471609
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.020149377841332257
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.6500370763522257
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "thigh_l",
+      "key": "thigh_l",
+      "parent": "pelvis",
+      "children": [
+        "calf_l",
+        "thigh_twist_01_l",
+        "thigh_twist_02_l"
+      ],
+      "world_position": [
+        -0.11154585838317871,
+        0.026504471020181383,
+        0.9547189237213088
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.11154585838317871
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.026504471020181383
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.9547189237213088
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "calf_l",
+      "key": "calf_l",
+      "parent": "thigh_l",
+      "children": [
+        "calf_twist_01_l",
+        "calf_twist_02_l",
+        "foot_l"
+      ],
+      "world_position": [
+        -0.1306265324204249,
+        0.016972355600581985,
+        0.4976959964395608
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.1306265324204249
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.016972355600581985
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.4976959964395608
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "foot_l",
+      "key": "foot_l",
+      "parent": "calf_l",
+      "children": [
+        "ball_l"
+      ],
+      "world_position": [
+        -0.14684442754171387,
+        0.00041375143265479086,
+        0.08128632998197005
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.14684442754171387
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.00041375143265479086
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.08128632998197005
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "ball_l",
+      "key": "ball_l",
+      "parent": "foot_l",
+      "children": [],
+      "world_position": [
+        -0.16628280637312715,
+        0.13316047736934453,
+        0.011650386156962525
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.16628280637312715
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.13316047736934453
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.011650386156962525
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "calf_twist_02_l",
+      "key": "calf_twist_02_l",
+      "parent": "calf_l",
+      "children": [],
+      "world_position": [
+        -0.13652708659152227,
+        0.011379594637929506,
+        0.3589149520737053
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.13652708659152227
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.011379594637929506
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.3589149520737053
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "calf_twist_01_l",
+      "key": "calf_twist_01_l",
+      "parent": "calf_l",
+      "children": [],
+      "world_position": [
+        -0.14242715623232033,
+        0.0057868199941903935,
+        0.2201338702778835
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.14242715623232033
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0057868199941903935
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.2201338702778835
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "thigh_twist_01_l",
+      "key": "thigh_twist_01_l",
+      "parent": "thigh_l",
+      "children": [],
+      "world_position": [
+        -0.11790624438161147,
+        0.023327103744378727,
+        0.8023779641484233
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.11790624438161147
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.023327103744378727
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.8023779641484233
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "thigh_twist_02_l",
+      "key": "thigh_twist_02_l",
+      "parent": "thigh_l",
+      "children": [],
+      "world_position": [
+        -0.12426663038004425,
+        0.020149736468576075,
+        0.6500370045755379
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.12426663038004425
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.020149736468576075
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.6500370045755379
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "ik_foot_root",
+      "key": "ik_foot_root",
+      "parent": "root",
+      "children": [
+        "ik_foot_l",
+        "ik_foot_r"
+      ],
+      "world_position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "ik_foot_l",
+      "key": "ik_foot_l",
+      "parent": "ik_foot_root",
+      "children": [],
+      "world_position": [
+        -0.14711810111999513,
+        0.0004145237058401108,
+        0.08143789291381837
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.14711810111999513
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0004145237058401108
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.08143789291381837
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "ik_foot_r",
+      "key": "ik_foot_r",
+      "parent": "ik_foot_root",
+      "children": [],
+      "world_position": [
+        0.14711830139160156,
+        0.00041416238993406294,
+        0.08143787384033203
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.14711830139160156
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.00041416238993406294
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.08143787384033203
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "ik_hand_root",
+      "key": "ik_hand_root",
+      "parent": "root",
+      "children": [
+        "ik_hand_gun"
+      ],
+      "world_position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "ik_hand_gun",
+      "key": "ik_hand_gun",
+      "parent": "ik_hand_root",
+      "children": [
+        "ik_hand_l",
+        "ik_hand_r"
+      ],
+      "world_position": [
+        0.4555488967895508,
+        0.14400569915771486,
+        1.0564070129394532
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.4555488967895508
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.14400569915771486
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.0564070129394532
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "ik_hand_l",
+      "key": "ik_hand_l",
+      "parent": "ik_hand_gun",
+      "children": [],
+      "world_position": [
+        -0.45555013991063953,
+        0.1440037883359612,
+        1.0564060454111763
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.45555013991063953
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.1440037883359612
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.0564060454111763
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "ik_hand_r",
+      "key": "ik_hand_r",
+      "parent": "ik_hand_gun",
+      "children": [],
+      "world_position": [
+        0.4555488967895508,
+        0.1440056991577148,
+        1.056407012939453
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.4555488967895508
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.1440056991577148
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          1.056407012939453
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "interaction",
+      "key": "interaction",
+      "parent": "root",
+      "children": [],
+      "world_position": [
+        1.7763568394002505e-17,
+        -1.8735013540549518e-18,
+        3.552713678800501e-17
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          1.7763568394002505e-17
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -1.8735013540549518e-18
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          3.552713678800501e-17
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    },
+    {
+      "name": "center_of_mass",
+      "key": "center_of_mass",
+      "parent": "root",
+      "children": [],
+      "world_position": [
+        1.7763568394002505e-17,
+        -1.8735013540549518e-18,
+        3.552713678800501e-17
+      ],
+      "world_bind": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          1.7763568394002505e-17
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -1.8735013540549518e-18
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          3.552713678800501e-17
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "determinant3x3": 1.0
+    }
+  ],
+  "g5_inverse_bind_delta_max": 0.0,
+  "mapping_validation": {
+    "direct_mapped_count": 24,
+    "mapping": {
+      "pelvis_g": "pelvis",
+      "lthigh_g": "thigh_l",
+      "lshin_g": "calf_l",
+      "lfoot_g": "foot_l",
+      "lfoott_g": "ball_l",
+      "rthigh_g": "thigh_r",
+      "rshin_g": "calf_r",
+      "rfoot_g": "foot_r",
+      "rfoott_g": "ball_r",
+      "torso_g": "spine_02",
+      "torsoupr_g": "spine_03",
+      "rcollar_g": "clavicle_r",
+      "rbicep_g": "upperarm_r",
+      "rbicepl_g": "lowerarm_r",
+      "rforearm_g": "lowerarm_r",
+      "rhand_g": "hand_r",
+      "rhand": "hand_r",
+      "lcollar_g": "clavicle_l",
+      "lbicep_g": "upperarm_l",
+      "lbicepl_g": "lowerarm_l",
+      "lforearm_g": "lowerarm_l",
+      "lforearm": "lowerarm_l",
+      "lhand_g": "hand_l",
+      "lhand": "hand_l"
+    },
+    "all_direct_mapped_have_source_bind": true,
+    "all_direct_mapped_have_target_bind": true
+  }
+}

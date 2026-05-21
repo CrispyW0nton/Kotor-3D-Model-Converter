@@ -1,0 +1,60 @@
+{
+  "version": "1.0.0",
+  "source": "ue5_manny",
+  "target": "aurora_kotor",
+  "scope": "BONE_NAMING_ONLY",
+  "direction": "REVERSE",
+  "derived_from": "aurora_to_ue5_rename_map.json",
+  "rename_pairs": {
+    "ball_l": "lfoott_g",
+    "ball_r": "rfoott_g",
+    "calf_l": "lshin_g",
+    "calf_r": "rshin_g",
+    "clavicle_l": "lcollar_g",
+    "clavicle_r": "rcollar_g",
+    "foot_l": "lfoot_g",
+    "foot_r": "rfoot_g",
+    "hand_l": "lhand_g",
+    "hand_r": "rhand_g",
+    "lowerarm_l": "lbicepl_g",
+    "lowerarm_r": "rbicepl_g",
+    "pelvis": "pelvis_g",
+    "root": "rootdummy",
+    "spine_01": "torso_g",
+    "spine_03": "torsoupr_g",
+    "thigh_l": "lthigh_g",
+    "thigh_r": "rthigh_g",
+    "upperarm_l": "lbicep_g",
+    "upperarm_r": "rbicep_g"
+  },
+  "ue5_only_bones_dropped": [
+    "calf_twist_01_l",
+    "calf_twist_01_r",
+    "lowerarm_twist_01_l",
+    "lowerarm_twist_01_r",
+    "thigh_twist_01_l",
+    "thigh_twist_01_r",
+    "upperarm_twist_01_l",
+    "upperarm_twist_01_r"
+  ],
+  "synthetic_helper_bones_dropped": [
+    "head",
+    "neck_01"
+  ],
+  "aurora_helpers_preserved_from_target": [
+    "cutscenedummy",
+    "freelookhook",
+    "camerahook",
+    "headconjure",
+    "lightsaberhook",
+    "deflecthook",
+    "handconjure",
+    "impact",
+    "impact_bolt",
+    "headhook",
+    "lforearm",
+    "rforearm",
+    "lhand",
+    "rhand"
+  ]
+}

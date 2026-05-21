@@ -1,0 +1,22 @@
+{
+  "animation_slot": "victory",
+  "bone_count_animated": 20,
+  "duration_seconds": 10.066666666666666,
+  "errors": [],
+  "fps": 30.0,
+  "frame_count": 302,
+  "input_mdl_sha256": "f439fbdbf9e50ef994d14c333d0829017ad72bcfc1bf6f922420943e37ebf3f1",
+  "input_size_bytes": 188736,
+  "manifest_path": "exports\\r3_idle_test\\pmbam__victory__r3b_manifest.json",
+  "operation": "appended_local_override",
+  "output_mdl": "exports\\r3_idle_test\\pmbam__victory__r3b.mdl",
+  "output_mdl_sha256": "bfcd3468838050d25159afa3c90d963fec1a06fcbfc64b6ea9982adc4a8be8df",
+  "output_mdx": "exports\\r3_idle_test\\pmbam__victory__r3b.mdx",
+  "output_mdx_sha256": "84dc9b42faa0b2004c0e10eef6ab0bc65e02ee7bffaca027b829574832a58154",
+  "output_size_bytes": 293360,
+  "phase": "R3B_MDL_INJECTION",
+  "success": true,
+  "warnings": [
+    "R3.B first pass omits Aurora position controllers to preserve PMBAM bind proportions."
+  ]
+}

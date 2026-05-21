@@ -1477,7 +1477,8 @@ class MDLBinaryWriter:
                 roots.append(node)
 
         root_key = str(getattr(anim, 'anim_root', '') or '').lower()
-        root_node = local_by_name.get(root_key) if root_key else None
+        requested_root = local_by_name.get(root_key) if root_key else None
+        root_node = requested_root if requested_root in roots else None
         if root_node is None and roots:
             root_node = min(
                 roots,
@@ -1528,7 +1529,13 @@ class MDLBinaryWriter:
         """Write animation nodes (two-pass); returns root offset (relative to BASE)."""
         # Flatten
         ordered: List[ModelNode] = []
+        seen: set[int] = set()
+
         def _dfs(n):
+            nid = id(n)
+            if nid in seen:
+                return
+            seen.add(nid)
             ordered.append(n)
             for c in n.children:
                 _dfs(c)

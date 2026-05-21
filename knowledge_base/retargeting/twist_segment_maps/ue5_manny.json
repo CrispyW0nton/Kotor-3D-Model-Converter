@@ -1,0 +1,93 @@
+{
+  "version": "1.1",
+  "skeleton_id": "ue5_quinn",
+  "created": "2026-05-20",
+  "source": "Day 3B MCP/fixture ground truth from bundled SKM_Quinn_Simple",
+  "notes": "Bundled Quinn has two twist bones per limb segment. The _01/_02 ordering is not identical between upper and lower limb segments, so each entry stores the measured segment parameter.",
+  "twist_segments": {
+    "upperarm_twist_01_l": {
+      "parent_bone": "upperarm_l",
+      "child_bone": "lowerarm_l",
+      "twist_position": 0.333333,
+      "notes": "First third of UE5 left upper-arm segment"
+    },
+    "upperarm_twist_02_l": {
+      "parent_bone": "upperarm_l",
+      "child_bone": "lowerarm_l",
+      "twist_position": 0.666667,
+      "notes": "Second third of UE5 left upper-arm segment"
+    },
+    "upperarm_twist_01_r": {
+      "parent_bone": "upperarm_r",
+      "child_bone": "lowerarm_r",
+      "twist_position": 0.333333
+    },
+    "upperarm_twist_02_r": {
+      "parent_bone": "upperarm_r",
+      "child_bone": "lowerarm_r",
+      "twist_position": 0.666667
+    },
+    "lowerarm_twist_02_l": {
+      "parent_bone": "lowerarm_l",
+      "child_bone": "hand_l",
+      "twist_position": 0.333333,
+      "notes": "Bundled Quinn lower-arm twist numbering places _02 before _01 along the elbow-to-wrist segment"
+    },
+    "lowerarm_twist_01_l": {
+      "parent_bone": "lowerarm_l",
+      "child_bone": "hand_l",
+      "twist_position": 0.666667
+    },
+    "lowerarm_twist_02_r": {
+      "parent_bone": "lowerarm_r",
+      "child_bone": "hand_r",
+      "twist_position": 0.333333
+    },
+    "lowerarm_twist_01_r": {
+      "parent_bone": "lowerarm_r",
+      "child_bone": "hand_r",
+      "twist_position": 0.666667
+    },
+    "thigh_twist_01_l": {
+      "parent_bone": "thigh_l",
+      "child_bone": "calf_l",
+      "twist_position": 0.333333
+    },
+    "thigh_twist_02_l": {
+      "parent_bone": "thigh_l",
+      "child_bone": "calf_l",
+      "twist_position": 0.666667
+    },
+    "thigh_twist_01_r": {
+      "parent_bone": "thigh_r",
+      "child_bone": "calf_r",
+      "twist_position": 0.333333
+    },
+    "thigh_twist_02_r": {
+      "parent_bone": "thigh_r",
+      "child_bone": "calf_r",
+      "twist_position": 0.666667
+    },
+    "calf_twist_02_l": {
+      "parent_bone": "calf_l",
+      "child_bone": "foot_l",
+      "twist_position": 0.333333,
+      "notes": "Bundled Quinn calf twist numbering places _02 before _01 along the knee-to-ankle segment"
+    },
+    "calf_twist_01_l": {
+      "parent_bone": "calf_l",
+      "child_bone": "foot_l",
+      "twist_position": 0.666667
+    },
+    "calf_twist_02_r": {
+      "parent_bone": "calf_r",
+      "child_bone": "foot_r",
+      "twist_position": 0.333333
+    },
+    "calf_twist_01_r": {
+      "parent_bone": "calf_r",
+      "child_bone": "foot_r",
+      "twist_position": 0.666667
+    }
+  }
+}

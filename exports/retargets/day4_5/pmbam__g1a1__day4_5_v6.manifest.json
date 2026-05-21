@@ -1,0 +1,59 @@
+{
+  "aligned_skeleton_id": "kotor_pmbam_renamed_ue5_native_pose",
+  "axis_system": {
+    "autodesk_predefined": "MayaZUp/Max: +Z up, -Y forward, right-handed",
+    "axis_forward": "-Y",
+    "axis_up": "Z"
+  },
+  "bind_pose_validation": {
+    "aurora_bone_count": 58.0,
+    "helper_leaf_count": 2.0,
+    "twist_leaf_count": 8.0,
+    "weight_conservation_max_drift": 5.960464477539063e-08
+  },
+  "blender_version": "Blender 4.2.0",
+  "bone_map_version": "62bf1599f9fe72d3e7be4fd0233bb505269c4e4ef1be93f85610ca253f5cf5c1",
+  "clip_inventory": [
+    {
+      "clip_name": "g1a1",
+      "duration_seconds": 1.466670036315918,
+      "fps": 30.0,
+      "frame_count": 45,
+      "sampling_strategy": "fixed_30fps_delta_from_rest",
+      "source_supermodel": "S_Male02"
+    }
+  ],
+  "export_timestamp": "2026-05-21T03:22:00.797619+00:00",
+  "fbx_path": "C:\\Users\\NewAdmin\\Documents\\GDeveloper\\Workspaces\\Kotor-3D-Model-Converter-qt\\exports\\retargets\\day4_5\\pmbam__g1a1__day4_5_v6.fbx",
+  "fbx_sha256": "b05743b68c955b0eadaee13fc2d396f89e4b02fa8bb442473520942ca158f634",
+  "fbx_version": "FBX201600",
+  "intermediate_path": "C:\\Users\\NewAdmin\\Documents\\GDeveloper\\Workspaces\\Kotor-3D-Model-Converter-qt\\exports\\retargets\\day4_5\\pmbam__g1a1__day4_5_v6_intermediate.json",
+  "manifest_path": "C:\\Users\\NewAdmin\\Documents\\GDeveloper\\Workspaces\\Kotor-3D-Model-Converter-qt\\exports\\retargets\\day4_5\\pmbam__g1a1__day4_5_v6.manifest.json",
+  "roundtrip_metrics": {
+    "axis_system_expected": {
+      "axis_forward": "-Y",
+      "axis_up": "Z"
+    },
+    "axis_system_match": true,
+    "axis_system_observed": {
+      "axis_forward": "-Y",
+      "axis_up": "Z"
+    },
+    "bone_count_expected": 68,
+    "bone_count_match": true,
+    "bone_count_observed": 68,
+    "frame0_rotation_max_delta": 0.0,
+    "frame_count_expected": 45,
+    "frame_count_match": true,
+    "frame_count_observed": 45,
+    "leaf_bones": [],
+    "no_leaf_bones_added": true,
+    "validation_path": "C:\\Users\\NewAdmin\\Documents\\GDeveloper\\Workspaces\\Kotor-3D-Model-Converter-qt\\exports\\retargets\\day4_5\\pmbam__g1a1__day4_5_v6.roundtrip.json",
+    "vertex_count_expected": 1184,
+    "vertex_count_match": true,
+    "vertex_count_observed": 1184
+  },
+  "schema_version": "4.0.0-day4_5_v6",
+  "source_mesh_resref": "pmbam",
+  "source_skeleton_id": "kotor_pmbam"
+}

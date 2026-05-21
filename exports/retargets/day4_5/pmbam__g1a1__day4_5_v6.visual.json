@@ -1,0 +1,151 @@
+{
+  "bind_pose_validity": {
+    "all_influencing_bones_present": true,
+    "all_parent_bones_present": true,
+    "bind_pose_present": true,
+    "deformer_relative_matrix_check_max_delta": 0.0,
+    "missing_influencing_groups": [],
+    "missing_parent_bones": []
+  },
+  "bone_names": [
+    "ball_l",
+    "ball_r",
+    "calf_l",
+    "calf_r",
+    "calf_twist_01_l",
+    "calf_twist_01_r",
+    "camerahook",
+    "clavicle_l",
+    "clavicle_r",
+    "cutscenedummy",
+    "deflecthook",
+    "foot_l",
+    "foot_r",
+    "freelookhook",
+    "hand_l",
+    "hand_r",
+    "handconjure",
+    "head",
+    "headconjure",
+    "headhook",
+    "impact",
+    "impact_bolt",
+    "lafngrb_g",
+    "lafngrt_g",
+    "lbfngrb_g",
+    "lbfngrt_g",
+    "lcfngrb_g",
+    "lcfngrt_g",
+    "lcollar_dum",
+    "ldfngrb_g",
+    "ldfngrt_g",
+    "lforearm",
+    "lforearm_g",
+    "lhand",
+    "lightsaberhook",
+    "lowerarm_l",
+    "lowerarm_r",
+    "lowerarm_twist_01_l",
+    "lowerarm_twist_01_r",
+    "lthumbb_g",
+    "lthumbt_g",
+    "neck_01",
+    "pelvis",
+    "pmbam",
+    "rafngrb_g",
+    "rafngrt_g",
+    "rbfngrb_g",
+    "rbfngrt_g",
+    "rcfngrb_g",
+    "rcfngrt_g",
+    "rcollar_dum",
+    "rdfngrb_g",
+    "rdfngrt_g",
+    "rforearm_g",
+    "rhand",
+    "root",
+    "rthumbb_g",
+    "rthumbt_g",
+    "spine_01",
+    "spine_03",
+    "thigh_l",
+    "thigh_r",
+    "thigh_twist_01_l",
+    "thigh_twist_01_r",
+    "upperarm_l",
+    "upperarm_r",
+    "upperarm_twist_01_l",
+    "upperarm_twist_01_r"
+  ],
+  "evaluated_bbox": {
+    "center": [
+      -5.960464477539063e-08,
+      0.002255573868751526,
+      0.7785654930048622
+    ],
+    "diag": 1.9929264545199803,
+    "max": [
+      0.6031479239463806,
+      0.15248307585716248,
+      1.5573999881744385
+    ],
+    "min": [
+      -0.6031480431556702,
+      -0.14797192811965942,
+      -0.00026900216471403837
+    ],
+    "size": [
+      1.2062959671020508,
+      0.3004550039768219,
+      1.5576689903391525
+    ]
+  },
+  "evaluated_region_counts": {
+    "left_arm": 257,
+    "left_leg": 109,
+    "right_arm": 253,
+    "right_leg": 111
+  },
+  "height_ratio": 0.9999999658452466,
+  "max_center_distance_ratio": 0.4170230826442839,
+  "reference_bbox": {
+    "center": [
+      0.0,
+      0.0022554993629455566,
+      0.778565526008606
+    ],
+    "diag": 1.9929264961024469,
+    "max": [
+      0.6031479835510254,
+      0.1524830013513565,
+      1.5574000477790833
+    ],
+    "min": [
+      -0.6031479835510254,
+      -0.1479720026254654,
+      -0.0002689957618713379
+    ],
+    "size": [
+      1.2062959671020508,
+      0.3004550039768219,
+      1.5576690435409546
+    ]
+  },
+  "reference_region_counts": {
+    "left_arm": 257,
+    "left_leg": 109,
+    "right_arm": 253,
+    "right_leg": 111
+  },
+  "reference_vertex_count": 1184,
+  "region_count_ratios": {
+    "left_arm": 1.0,
+    "left_leg": 1.0,
+    "right_arm": 1.0,
+    "right_leg": 1.0
+  },
+  "required_unity_humanoid_missing": [],
+  "silhouette_ssim_proxy": 0.9994565217391305,
+  "vertex_count": 1184,
+  "width_ratio": 1.0
+}

@@ -142,8 +142,20 @@ def test_unity_export_sidecar_records_fbx_skin_diagnostics():
     def _fake_exporter(model, out_path, export_rigging):
         out_path.write_text(
             '\n'.join([
+                'Model: 10, "Model::pelvis_g", "LimbNode" {',
+                'NodeAttribute: 11, "NodeAttribute::pelvis_g", "Skeleton" {',
                 'Deformer: 1, "Deformer::torso_Skin", "Skin" {',
-                'SubDeformer: 2, "SubDeformer::root", "Cluster" {',
+                'Deformer: 2, "SubDeformer::root", "Cluster" {',
+                'Transform: *16 {',
+                'TransformLink: *16 {',
+                'Pose: 3, "Pose::BIND_POSES", "BindPose" {',
+                'PoseNode:  {',
+                'Texture: 4, "Texture::torso_diff", "" {',
+                'P: "WrapModeU","enum","","",0',
+                'P: "WrapModeV","enum","","",0',
+                'AnimationStack: 5, "AnimStack::pause1", "" {',
+                'AnimationLayer: 6, "AnimLayer::pause1", "" {',
+                'AnimationCurve: 7, "AnimCurve::pause1", "" {',
             ]),
             encoding="utf-8",
         )
@@ -162,13 +174,24 @@ def test_unity_export_sidecar_records_fbx_skin_diagnostics():
         )
         sidecar = json.loads(Path(result["metadata"]).read_text(encoding="utf-8"))
 
-        assert sidecar["fbx"] == {
-            "checked": True,
-            "skin_deformers": 1,
-            "clusters": 1,
-            "duplicate_object_ids": {},
-            "ok": True,
-        }
+        fbx = sidecar["fbx"]
+        assert fbx["checked"] is True
+        assert fbx["skin_deformers"] == 1
+        assert fbx["clusters"] == 1
+        assert fbx["legacy_subdeformer_clusters"] == 0
+        assert fbx["skeleton_node_attributes"] == 1
+        assert fbx["limb_node_models"] == 1
+        assert fbx["bind_poses"] == 1
+        assert fbx["pose_nodes"] == 1
+        assert fbx["texture_wrap_u"] == 1
+        assert fbx["texture_wrap_v"] == 1
+        assert fbx["animation_stacks"] == 1
+        assert fbx["animation_layers"] == 1
+        assert fbx["animation_curves"] == 1
+        assert fbx["skin_contract_ok"] is True
+        assert fbx["texture_contract_ok"] is True
+        assert fbx["duplicate_object_ids"] == {}
+        assert fbx["ok"] is True
     finally:
         shutil.rmtree(out_root, ignore_errors=True)
 
@@ -202,7 +225,7 @@ def test_unity_export_can_use_custom_output_name():
         shutil.rmtree(out_root, ignore_errors=True)
 
 
-def test_fbx_skin_diagnostics_flags_duplicate_deformer_ids(tmp_path):
+def test_fbx_skin_diagnostics_flags_legacy_subdeformer_clusters(tmp_path):
     path = tmp_path / "bad.fbx"
     path.write_text(
         '\n'.join([
@@ -215,7 +238,32 @@ def test_fbx_skin_diagnostics_flags_duplicate_deformer_ids(tmp_path):
     diagnostics = inspect_fbx_skin_objects(path)
 
     assert diagnostics["ok"] is False
-    assert diagnostics["duplicate_object_ids"] == {"42": 2}
+    assert diagnostics["clusters"] == 0
+    assert diagnostics["legacy_subdeformer_clusters"] == 2
+
+
+def test_fbx_skin_diagnostics_counts_unity_compatible_cluster_records(tmp_path):
+    path = tmp_path / "good.fbx"
+    path.write_text(
+        '\n'.join([
+            'Model: 10, "Model::pelvis_g", "LimbNode" {',
+            'NodeAttribute: 11, "NodeAttribute::pelvis_g", "Skeleton" {',
+            'Deformer: 41, "Deformer::torso_Skin", "Skin" {',
+            'Deformer: 42, "SubDeformer::root", "Cluster" {',
+            'Transform: *16 {',
+            'TransformLink: *16 {',
+            'Pose: 43, "Pose::BIND_POSES", "BindPose" {',
+            'PoseNode:  {',
+        ]),
+        encoding="utf-8",
+    )
+
+    diagnostics = inspect_fbx_skin_objects(path)
+
+    assert diagnostics["ok"] is True
+    assert diagnostics["skin_deformers"] == 1
+    assert diagnostics["clusters"] == 1
+    assert diagnostics["legacy_subdeformer_clusters"] == 0
 
 
 def test_unity_import_manifest_reports_missing_skin_warning():

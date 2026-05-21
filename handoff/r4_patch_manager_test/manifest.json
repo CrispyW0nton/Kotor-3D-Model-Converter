@@ -1,0 +1,34 @@
+{
+  "id": "R4_GhostRiggerUE5IdleTest",
+  "version": "1.0.0",
+  "name": "R4 Ghost Rigger UE5 Idle Live Test",
+  "description": "Proof-of-pipeline test: retargeted UE5 idle animation in PMBAM victory slot.",
+  "author": "Ghost Rigger team",
+  "dependencies": [
+    {
+      "id": "CustomAnimationCore",
+      "version": ">=1.0.0"
+    }
+  ],
+  "conflicts": [],
+  "files": [
+    {
+      "source": "files/override/pmbam.mdl",
+      "destination": "override/pmbam.mdl",
+      "sha256": "bfcd3468838050d25159afa3c90d963fec1a06fcbfc64b6ea9982adc4a8be8df",
+      "backup_original": true
+    },
+    {
+      "source": "files/override/pmbam.mdx",
+      "destination": "override/pmbam.mdx",
+      "sha256": "84dc9b42faa0b2004c0e10eef6ab0bc65e02ee7bffaca027b829574832a58154",
+      "backup_original": true
+    }
+  ],
+  "test_assertions": {
+    "trigger_animation": "victory",
+    "expected_animation_id": 65000,
+    "expected_duration_seconds": 10.07,
+    "success_threshold": "Tier 1: animation plays at all"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "bone_count": 58,
+  "clip_fps": 30.0,
+  "clip_frame_count": 45,
+  "errors": [],
+  "ground_truth_dir": "knowledge_base\\retargeting\\ground_truth\\day4_5_v6_20260521T032834Z",
+  "vertex_count": 1184
+}

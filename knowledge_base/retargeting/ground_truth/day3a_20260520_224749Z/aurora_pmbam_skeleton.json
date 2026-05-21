@@ -1,0 +1,1328 @@
+{
+  "name": "PMBAM",
+  "source": "installation:pmbam.mdl",
+  "skeleton_type": "aurora_model",
+  "supermodel": "S_Female02",
+  "node_count": 61,
+  "mesh_node_count": 44,
+  "bone_node_count": 17,
+  "animation_count": 0,
+  "animations": [],
+  "asset": {},
+  "nodes": [
+    {
+      "name": "PMBAM",
+      "parent": "",
+      "children": [
+        "cutscenedummy",
+        "FreeLookHook",
+        "camerahook",
+        "headconjure",
+        "LightsaberHook",
+        "DeflectHook",
+        "handconjure",
+        "Torso",
+        "LArm",
+        "RArm",
+        "impact_bolt"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "cutscenedummy",
+      "parent": "PMBAM",
+      "children": [
+        "rootdummy"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        2.704899998207111e-05,
+        -3.847220000352536e-07,
+        0.0
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "rootdummy",
+      "parent": "cutscenedummy",
+      "children": [
+        "pelvis_g",
+        "torso_g"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.0,
+        0.0,
+        1.1255700588226318
+      ],
+      "rotation_xyzw": [
+        -1.604905008889525e-07,
+        -0.0,
+        -0.0,
+        0.9999999999999871
+      ]
+    },
+    {
+      "name": "pelvis_g",
+      "parent": "rootdummy",
+      "children": [
+        "lthigh_g",
+        "rthigh_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        0.0035602799616754055,
+        -0.046704500913619995,
+        0.00020613799279090017
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "lthigh_g",
+      "parent": "pelvis_g",
+      "children": [
+        "lshin_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.10710900276899338,
+        0.03272400051355362,
+        -0.14361999928951263
+      ],
+      "rotation_xyzw": [
+        2.17356959444431e-07,
+        0.05233607907601834,
+        -0.0,
+        0.9986295283171339
+      ]
+    },
+    {
+      "name": "lshin_g",
+      "parent": "lthigh_g",
+      "children": [
+        "lfoot_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.021167799830436707,
+        -0.020680900663137436,
+        -0.45146501064300537
+      ],
+      "rotation_xyzw": [
+        3.758803678392657e-08,
+        -0.013089625821971177,
+        4.35480051777792e-08,
+        0.9999143271780024
+      ]
+    },
+    {
+      "name": "lfoot_g",
+      "parent": "lshin_g",
+      "children": [
+        "lfootT_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        0.0021700600627809763,
+        -0.05373239889740944,
+        -0.3930949866771698
+      ],
+      "rotation_xyzw": [
+        -0.0025676418753775294,
+        -0.03917587879313184,
+        0.06535258074559974,
+        0.9970896137889892
+      ]
+    },
+    {
+      "name": "lfootT_g",
+      "parent": "lfoot_g",
+      "children": [],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -1.3037499968504562e-07,
+        0.1193540021777153,
+        -0.11130599677562714
+      ],
+      "rotation_xyzw": [
+        -8.940700269022237e-08,
+        -0.0,
+        -0.0,
+        0.999999999999996
+      ]
+    },
+    {
+      "name": "rthigh_g",
+      "parent": "pelvis_g",
+      "children": [
+        "rshin_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        0.10067600011825562,
+        0.03272410109639168,
+        -0.14384600520133972
+      ],
+      "rotation_xyzw": [
+        1.3534999497521284e-07,
+        -0.05233607907601893,
+        -7.907196106510199e-08,
+        0.9986295283171452
+      ]
+    },
+    {
+      "name": "rshin_g",
+      "parent": "rthigh_g",
+      "children": [
+        "rfoot_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        0.025924699380993843,
+        -0.02284649945795536,
+        -0.45215800404548645
+      ],
+      "rotation_xyzw": [
+        -1.1444482122292826e-07,
+        0.013089475904730263,
+        2.3866826284013068e-08,
+        0.9999143291405147
+      ]
+    },
+    {
+      "name": "rfoot_g",
+      "parent": "rshin_g",
+      "children": [
+        "rfootT_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.0013834299752488732,
+        -0.05270349979400635,
+        -0.39221200346946716
+      ],
+      "rotation_xyzw": [
+        -0.00256766585902042,
+        0.03917581922032753,
+        -0.06535260315045609,
+        0.9970896145993656
+      ]
+    },
+    {
+      "name": "rfootT_g",
+      "parent": "rfoot_g",
+      "children": [],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.00021695300529245287,
+        0.1193540021777153,
+        -0.11130599677562714
+      ],
+      "rotation_xyzw": [
+        -6.495250204351117e-07,
+        -0.0,
+        -0.0,
+        0.9999999999997891
+      ]
+    },
+    {
+      "name": "torso_g",
+      "parent": "rootdummy",
+      "children": [
+        "torsoUpr_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        0.0004051630094181746,
+        -0.03927439823746681,
+        0.013746500015258789
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "torsoUpr_g",
+      "parent": "torso_g",
+      "children": [
+        "rcollar_dum",
+        "lcollar_dum",
+        "headhook",
+        "Impact"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        2.524760134292592e-07,
+        -0.01824829913675785,
+        0.10475800186395645
+      ],
+      "rotation_xyzw": [
+        -6.322049728169064e-08,
+        -0.0,
+        -0.0,
+        0.999999999999998
+      ]
+    },
+    {
+      "name": "rcollar_dum",
+      "parent": "torsoUpr_g",
+      "children": [
+        "rcollar_g"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.0007103760144673288,
+        0.08387549966573715,
+        0.15650099515914917
+      ],
+      "rotation_xyzw": [
+        6.805952779116267e-08,
+        -2.147180111928308e-06,
+        -6.293477383664157e-08,
+        0.9999999999976905
+      ]
+    },
+    {
+      "name": "rcollar_g",
+      "parent": "rcollar_dum",
+      "children": [
+        "rbicep_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        0.003190570045262575,
+        -0.02239540033042431,
+        0.08736719936132431
+      ],
+      "rotation_xyzw": [
+        0.8658113589398878,
+        -0.01074884305875823,
+        0.4998899417506456,
+        0.019110186814868427
+      ]
+    },
+    {
+      "name": "rbicep_g",
+      "parent": "rcollar_g",
+      "children": [
+        "RbicepL_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        0.06948979943990707,
+        0.019332699477672577,
+        0.16096599400043488
+      ],
+      "rotation_xyzw": [
+        0.9723610827768451,
+        0.0013168800662948987,
+        0.23347800790564457,
+        -0.0004586418474967256
+      ]
+    },
+    {
+      "name": "RbicepL_g",
+      "parent": "rbicep_g",
+      "children": [
+        "Rforearm_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.0010325999464839697,
+        -0.0075929597951471806,
+        -0.21230599284172058
+      ],
+      "rotation_xyzw": [
+        -0.0010069598121123112,
+        -0.002097265310497762,
+        -0.010657048689102059,
+        0.9999405056419068
+      ]
+    },
+    {
+      "name": "Rforearm_g",
+      "parent": "RbicepL_g",
+      "children": [
+        "Rhand_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        0.010129599831998348,
+        0.008809270337224007,
+        -0.08572210371494293
+      ],
+      "rotation_xyzw": [
+        -0.04358561622008669,
+        0.0392223439685902,
+        0.0017125939140817963,
+        0.9982780017682501
+      ]
+    },
+    {
+      "name": "Rhand_g",
+      "parent": "Rforearm_g",
+      "children": [
+        "rhand",
+        "RdFngrB_g",
+        "RcFngrB_g",
+        "RbFngrB_g",
+        "RaFngrB_g",
+        "RThumbB_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        0.04482400044798851,
+        0.038430798798799515,
+        -0.2419780045747757
+      ],
+      "rotation_xyzw": [
+        0.04090534472383484,
+        -0.019527010377393947,
+        -0.156284762470242,
+        0.9866714355135479
+      ]
+    },
+    {
+      "name": "rhand",
+      "parent": "Rhand_g",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.031434398144483566,
+        -0.013004999607801437,
+        -0.08558029681444168
+      ],
+      "rotation_xyzw": [
+        -0.6727991535257679,
+        0.009099369645594796,
+        -0.026417729728579996,
+        0.7392973718626697
+      ]
+    },
+    {
+      "name": "RdFngrB_g",
+      "parent": "Rhand_g",
+      "children": [
+        "RdFngrT_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        0.0024768200237303972,
+        -0.012968899682164192,
+        -0.08248680084943771
+      ],
+      "rotation_xyzw": [
+        0.9914400690909333,
+        7.239634661362007e-05,
+        9.899202381761046e-05,
+        0.13056253046074764
+      ]
+    },
+    {
+      "name": "RdFngrT_g",
+      "parent": "RdFngrB_g",
+      "children": [],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.005128160119056702,
+        -2.673700009836466e-06,
+        0.04883719980716705
+      ],
+      "rotation_xyzw": [
+        -2.440028800285315e-07,
+        -0.3907309229913236,
+        6.304873725863594e-07,
+        0.9205049406808695
+      ]
+    },
+    {
+      "name": "RcFngrB_g",
+      "parent": "Rhand_g",
+      "children": [
+        "RcFngrT_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        0.0012765399878844619,
+        0.004094710107892752,
+        -0.08337420225143433
+      ],
+      "rotation_xyzw": [
+        0.9993784703983151,
+        0.0021312797225932945,
+        0.034913866595109005,
+        0.004376353555986939
+      ]
+    },
+    {
+      "name": "RcFngrT_g",
+      "parent": "RcFngrB_g",
+      "children": [],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.0073606898076832294,
+        -2.8279001185183006e-07,
+        0.060654498636722565
+      ],
+      "rotation_xyzw": [
+        2.361043223246362e-06,
+        -0.3461168676606574,
+        -5.380040828687402e-07,
+        0.9381914057988973
+      ]
+    },
+    {
+      "name": "RbFngrB_g",
+      "parent": "Rhand_g",
+      "children": [
+        "RbFngrT_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        0.0009437340195290744,
+        0.029509399086236954,
+        -0.08057829737663269
+      ],
+      "rotation_xyzw": [
+        0.9972222156972462,
+        -0.00022821079591274732,
+        0.06973260109752887,
+        -0.026175652501522647
+      ]
+    },
+    {
+      "name": "RbFngrT_g",
+      "parent": "RbFngrB_g",
+      "children": [],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.005471779964864254,
+        1.3979099833250075e-07,
+        0.060777001082897186
+      ],
+      "rotation_xyzw": [
+        2.49131609094244e-06,
+        -0.33380666502586637,
+        -4.477115300043396e-07,
+        0.9426415598613833
+      ]
+    },
+    {
+      "name": "RaFngrB_g",
+      "parent": "Rhand_g",
+      "children": [
+        "RaFngrT_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        0.004521070048213005,
+        0.0485243983566761,
+        -0.07912430167198181
+      ],
+      "rotation_xyzw": [
+        0.9897278478285816,
+        -0.004251862846474381,
+        0.03037299567147401,
+        -0.13963591955109297
+      ]
+    },
+    {
+      "name": "RaFngrT_g",
+      "parent": "RaFngrB_g",
+      "children": [],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.006876050028949976,
+        2.8779600143025164e-06,
+        0.059936098754405975
+      ],
+      "rotation_xyzw": [
+        3.2789148499091e-06,
+        -0.3090167347012865,
+        -6.835790607747924e-07,
+        0.9510566006623035
+      ]
+    },
+    {
+      "name": "RThumbB_g",
+      "parent": "Rhand_g",
+      "children": [
+        "RThumbT_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.010983499698340893,
+        0.031745098531246185,
+        -0.036765601485967636
+      ],
+      "rotation_xyzw": [
+        -0.08409472655825692,
+        0.9124746432117852,
+        0.34975830140165154,
+        -0.19490313763828657
+      ]
+    },
+    {
+      "name": "RThumbT_g",
+      "parent": "RThumbB_g",
+      "children": [],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        2.243189919681754e-05,
+        -0.001450069947168231,
+        0.054101500660181046
+      ],
+      "rotation_xyzw": [
+        0.20791168023318152,
+        2.783625566937149e-07,
+        -1.069834400403535e-07,
+        0.9781476029835815
+      ]
+    },
+    {
+      "name": "lcollar_dum",
+      "parent": "torsoUpr_g",
+      "children": [
+        "lcollar_g"
+      ],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.0007103729876689613,
+        0.08387559652328491,
+        0.15650099515914917
+      ],
+      "rotation_xyzw": [
+        1.985314668213197e-07,
+        -2.2024626105067707e-06,
+        3.067365028634187e-08,
+        0.9999999999975544
+      ]
+    },
+    {
+      "name": "lcollar_g",
+      "parent": "lcollar_dum",
+      "children": [
+        "lbicep_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.0033911101054400206,
+        -0.024242699146270752,
+        0.0850318968296051
+      ],
+      "rotation_xyzw": [
+        -0.0002463473342035616,
+        0.499996659238868,
+        -0.00010981876339375526,
+        0.8660272905646805
+      ]
+    },
+    {
+      "name": "lbicep_g",
+      "parent": "lcollar_g",
+      "children": [
+        "LbicepL_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.06006329879164696,
+        -0.01954280026257038,
+        -0.1507049947977066
+      ],
+      "rotation_xyzw": [
+        -0.016372153661082,
+        -0.22066019644736495,
+        -0.005287439602942182,
+        0.9751989916272235
+      ]
+    },
+    {
+      "name": "LbicepL_g",
+      "parent": "lbicep_g",
+      "children": [
+        "Lforearm_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.011448499746620655,
+        0.007195369806140661,
+        -0.21591100096702576
+      ],
+      "rotation_xyzw": [
+        -0.004834434908364456,
+        0.0047880331584568,
+        -0.0017526458103542888,
+        0.9999753153004597
+      ]
+    },
+    {
+      "name": "Lforearm_g",
+      "parent": "LbicepL_g",
+      "children": [
+        "lforearm",
+        "Lhand_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.005171699915081263,
+        -0.011036200448870659,
+        -0.08256889879703522
+      ],
+      "rotation_xyzw": [
+        -0.047356284322794394,
+        -0.05276679899967281,
+        -0.001244689199625363,
+        0.9974825803026652
+      ]
+    },
+    {
+      "name": "lforearm",
+      "parent": "Lforearm_g",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.013335799798369408,
+        0.005120229907333851,
+        -0.09715580195188522
+      ],
+      "rotation_xyzw": [
+        -0.01804540154402281,
+        -0.6593427783541815,
+        -0.04041928502341691,
+        0.7505383038283252
+      ]
+    },
+    {
+      "name": "Lhand_g",
+      "parent": "Lforearm_g",
+      "children": [
+        "lhand",
+        "LaFngrB_g",
+        "LcFngrB_g",
+        "LdFngrB_g",
+        "LThumbB_g",
+        "LbFngrB_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.03837120160460472,
+        0.03617990016937256,
+        -0.25073400139808655
+      ],
+      "rotation_xyzw": [
+        0.01624225447145059,
+        0.008391420329044899,
+        0.1635483497907019,
+        0.9863659110671273
+      ]
+    },
+    {
+      "name": "lhand",
+      "parent": "Lhand_g",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.037307798862457275,
+        -0.004942739848047495,
+        -0.07467939704656601
+      ],
+      "rotation_xyzw": [
+        -0.6749984812959473,
+        -0.01627842755473965,
+        -0.01534249863219259,
+        0.7374799460190298
+      ]
+    },
+    {
+      "name": "LaFngrB_g",
+      "parent": "Lhand_g",
+      "children": [
+        "LaFngrT_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.007294849958270788,
+        0.061504799872636795,
+        -0.0644695982336998
+      ],
+      "rotation_xyzw": [
+        0.11434682552720503,
+        0.043733910085973215,
+        -0.023372868268272232,
+        0.9922025285340472
+      ]
+    },
+    {
+      "name": "LaFngrT_g",
+      "parent": "LaFngrB_g",
+      "children": [],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.0015921200392767787,
+        -0.00027249299455434084,
+        -0.05055699869990349
+      ],
+      "rotation_xyzw": [
+        -1.1494315906492592e-06,
+        -0.31316418056619044,
+        -2.1072942906466094e-07,
+        0.9496990028471868
+      ]
+    },
+    {
+      "name": "LcFngrB_g",
+      "parent": "Lhand_g",
+      "children": [
+        "LcFngrT_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.01191370002925396,
+        0.01569020003080368,
+        -0.0760388970375061
+      ],
+      "rotation_xyzw": [
+        -0.012991356944958003,
+        0.00983928351566588,
+        0.013936512474257905,
+        0.9997700669477367
+      ]
+    },
+    {
+      "name": "LcFngrT_g",
+      "parent": "LcFngrB_g",
+      "children": [],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        0.0003333789936732501,
+        -0.0003080710012000054,
+        -0.04949060082435608
+      ],
+      "rotation_xyzw": [
+        -8.868759569831187e-07,
+        -0.4027464942884947,
+        2.2714621407960402e-07,
+        0.9153115651719306
+      ]
+    },
+    {
+      "name": "LdFngrB_g",
+      "parent": "Lhand_g",
+      "children": [
+        "LdFngrT_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.006632079835981131,
+        -0.006725910119712353,
+        -0.08338270336389542
+      ],
+      "rotation_xyzw": [
+        -0.09165083669031567,
+        -0.11330948089350336,
+        0.030029090291959968,
+        0.9888677057169211
+      ]
+    },
+    {
+      "name": "LdFngrT_g",
+      "parent": "LdFngrB_g",
+      "children": [],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        1.948120007000398e-05,
+        0.0012521400349214673,
+        -0.03679740056395531
+      ],
+      "rotation_xyzw": [
+        -1.0325585214443044e-06,
+        -0.1993675785285251,
+        1.1129755012404488e-07,
+        0.9799247770265808
+      ]
+    },
+    {
+      "name": "LThumbB_g",
+      "parent": "Lhand_g",
+      "children": [
+        "LThumbT_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        0.02129649929702282,
+        0.03729119896888733,
+        -0.014715800061821938
+      ],
+      "rotation_xyzw": [
+        -0.10383332236459598,
+        -0.30048715245626295,
+        0.9430445770532772,
+        0.09794405579647116
+      ]
+    },
+    {
+      "name": "LThumbT_g",
+      "parent": "LThumbB_g",
+      "children": [],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        0.00018672899750526994,
+        0.0016973100136965513,
+        -0.05420919880270958
+      ],
+      "rotation_xyzw": [
+        0.05233607907601932,
+        9.216540229807755e-08,
+        2.9648648513030793e-08,
+        0.9986295283171528
+      ]
+    },
+    {
+      "name": "LbFngrB_g",
+      "parent": "Lhand_g",
+      "children": [
+        "LbFngrT_g"
+      ],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.01074020005762577,
+        0.043211400508880615,
+        -0.07357479631900787
+      ],
+      "rotation_xyzw": [
+        0.03616467949533802,
+        -0.03455321573135568,
+        -0.00642537434070273,
+        0.998727643456515
+      ]
+    },
+    {
+      "name": "LbFngrT_g",
+      "parent": "LbFngrB_g",
+      "children": [],
+      "flags": 32,
+      "is_mesh": true,
+      "is_skin": false,
+      "is_dummy": false,
+      "position": [
+        -0.0006881669978611171,
+        0.0003621480136644095,
+        -0.05834430083632469
+      ],
+      "rotation_xyzw": [
+        -1.0154167343605895e-06,
+        -0.271440090321417,
+        -1.562962959228984e-07,
+        0.9624553378548251
+      ]
+    },
+    {
+      "name": "headhook",
+      "parent": "torsoUpr_g",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.00043232899042777717,
+        0.039482999593019485,
+        0.28088200092315674
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "Impact",
+      "parent": "torsoUpr_g",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.0004053089942317456,
+        0.12469799816608429,
+        0.16232900321483612
+      ],
+      "rotation_xyzw": [
+        -2.3748549438095564e-07,
+        -0.0,
+        -0.0,
+        0.9999999999999718
+      ]
+    },
+    {
+      "name": "FreeLookHook",
+      "parent": "PMBAM",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.0,
+        0.11999999731779099,
+        1.6349999904632568
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "camerahook",
+      "parent": "PMBAM",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.0002859880041796714,
+        0.020678700879216194,
+        1.6339199542999268
+      ],
+      "rotation_xyzw": [
+        -0.0002632984898997035,
+        -6.653631767191077e-08,
+        -3.0907557285020805e-09,
+        0.9999999653369498
+      ]
+    },
+    {
+      "name": "headconjure",
+      "parent": "PMBAM",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.2555390000343323,
+        0.21338500082492828,
+        2.0134499073028564
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "LightsaberHook",
+      "parent": "PMBAM",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.0037373099476099014,
+        0.7577189803123474,
+        1.9998400211334229
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "DeflectHook",
+      "parent": "PMBAM",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.003892269916832447,
+        0.4731050133705139,
+        2.0010900497436523
+      ],
+      "rotation_xyzw": [
+        -1.1920950271360113e-07,
+        -0.0,
+        -0.0,
+        0.9999999999999929
+      ]
+    },
+    {
+      "name": "handconjure",
+      "parent": "PMBAM",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        -0.0690373033285141,
+        0.8918120265007019,
+        1.2738100290298462
+      ],
+      "rotation_xyzw": [
+        -6.98925006759053e-08,
+        -0.0,
+        -0.0,
+        0.9999999999999976
+      ]
+    },
+    {
+      "name": "Torso",
+      "parent": "PMBAM",
+      "children": [],
+      "flags": 97,
+      "is_mesh": true,
+      "is_skin": true,
+      "is_dummy": false,
+      "position": [
+        0.0,
+        0.0,
+        0.7900000214576721
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "LArm",
+      "parent": "PMBAM",
+      "children": [],
+      "flags": 97,
+      "is_mesh": true,
+      "is_skin": true,
+      "is_dummy": false,
+      "position": [
+        0.0,
+        0.0,
+        0.7900000214576721
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "RArm",
+      "parent": "PMBAM",
+      "children": [],
+      "flags": 97,
+      "is_mesh": true,
+      "is_skin": true,
+      "is_dummy": false,
+      "position": [
+        0.0,
+        0.0,
+        0.7900000214576721
+      ],
+      "rotation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "name": "impact_bolt",
+      "parent": "PMBAM",
+      "children": [],
+      "flags": 1,
+      "is_mesh": false,
+      "is_skin": false,
+      "is_dummy": true,
+      "position": [
+        0.04010229930281639,
+        0.4160279929637909,
+        1.3162000179290771
+      ],
+      "rotation_xyzw": [
+        -6.663999840839082e-08,
+        -0.0,
+        -0.0,
+        0.9999999999999978
+      ]
+    }
+  ]
+}

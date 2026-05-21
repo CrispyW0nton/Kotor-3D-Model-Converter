@@ -1,0 +1,119 @@
+{
+  "version": "1.0.0",
+  "source": "aurora_kotor",
+  "target": "ue5_manny_naming_only",
+  "scope": "BONE_NAMING_ONLY",
+  "explicit_non_scope": [
+    "rest_pose_modification",
+    "rotation_application",
+    "vertex_transformation",
+    "vertex_weight_remapping"
+  ],
+  "rename_pairs": {
+    "rootdummy": "root",
+    "pelvis_g": "pelvis",
+    "torso_g": "spine_01",
+    "torsoupr_g": "spine_03",
+    "lcollar_g": "clavicle_l",
+    "lbicep_g": "upperarm_l",
+    "lbicepl_g": "lowerarm_l",
+    "lhand_g": "hand_l",
+    "rcollar_g": "clavicle_r",
+    "rbicep_g": "upperarm_r",
+    "rbicepl_g": "lowerarm_r",
+    "rhand_g": "hand_r",
+    "lthigh_g": "thigh_l",
+    "lshin_g": "calf_l",
+    "lfoot_g": "foot_l",
+    "lfoott_g": "ball_l",
+    "rthigh_g": "thigh_r",
+    "rshin_g": "calf_r",
+    "rfoot_g": "foot_r",
+    "rfoott_g": "ball_r"
+  },
+  "unmapped_aurora_bones": [
+    "model roots, hooks, helper dummies, fingers, and intermediary limb nodes retain Aurora names unless a unique UE5 humanoid target exists"
+  ],
+  "aurora_helper_bones_non_deform": [
+    "cutscenedummy",
+    "freelookhook",
+    "camerahook",
+    "headconjure",
+    "lightsaberhook",
+    "deflecthook",
+    "handconjure",
+    "impact",
+    "impact_bolt",
+    "headhook",
+    "lforearm",
+    "rforearm",
+    "lhand",
+    "rhand"
+  ],
+  "helper_bone_leaves": {
+    "neck_01": {
+      "parent": "spine_03",
+      "local_translation_fraction": 1.0,
+      "use_deform": false,
+      "vertex_weight_policy": "zero",
+      "reason": "PMBAM body models expose headhook instead of a deforming neck chain; the helper supplies the Unity humanoid neck slot without changing Aurora weights."
+    },
+    "head": {
+      "parent": "neck_01",
+      "local_translation_fraction": 1.0,
+      "use_deform": false,
+      "vertex_weight_policy": "zero",
+      "reason": "PMBAM body models use swappable head hooks; the Unity humanoid pre-check needs a terminal head bone."
+    }
+  },
+  "twist_bone_leaves": {
+    "upperarm_twist_01_l": {
+      "parent": "upperarm_l",
+      "local_translation_fraction": 0.5,
+      "use_deform": false,
+      "vertex_weight_policy": "zero"
+    },
+    "upperarm_twist_01_r": {
+      "parent": "upperarm_r",
+      "local_translation_fraction": 0.5,
+      "use_deform": false,
+      "vertex_weight_policy": "zero"
+    },
+    "lowerarm_twist_01_l": {
+      "parent": "lowerarm_l",
+      "local_translation_fraction": 0.5,
+      "use_deform": false,
+      "vertex_weight_policy": "zero"
+    },
+    "lowerarm_twist_01_r": {
+      "parent": "lowerarm_r",
+      "local_translation_fraction": 0.5,
+      "use_deform": false,
+      "vertex_weight_policy": "zero"
+    },
+    "thigh_twist_01_l": {
+      "parent": "thigh_l",
+      "local_translation_fraction": 0.5,
+      "use_deform": false,
+      "vertex_weight_policy": "zero"
+    },
+    "thigh_twist_01_r": {
+      "parent": "thigh_r",
+      "local_translation_fraction": 0.5,
+      "use_deform": false,
+      "vertex_weight_policy": "zero"
+    },
+    "calf_twist_01_l": {
+      "parent": "calf_l",
+      "local_translation_fraction": 0.5,
+      "use_deform": false,
+      "vertex_weight_policy": "zero"
+    },
+    "calf_twist_01_r": {
+      "parent": "calf_r",
+      "local_translation_fraction": 0.5,
+      "use_deform": false,
+      "vertex_weight_policy": "zero"
+    }
+  }
+}

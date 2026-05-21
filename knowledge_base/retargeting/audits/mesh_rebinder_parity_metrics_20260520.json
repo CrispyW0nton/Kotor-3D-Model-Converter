@@ -1,0 +1,66 @@
+{
+  "pmbam": {
+    "raw": {
+      "mean": 0.05394830020582736,
+      "p95": 0.073789967849633,
+      "p99": 0.07764039846676918,
+      "max": 0.07764043329500704,
+      "weight_drift": 4.0978193283081055e-08,
+      "normal_drift": 2.220446049250313e-16,
+      "target_id": "ue5_quinn"
+    },
+    "aligned": {
+      "mean": 3.75277717551706e-09,
+      "p95": 2.1500050194469017e-08,
+      "p99": 2.2444928569757854e-08,
+      "max": 3.931263037295683e-08,
+      "weight_drift": 3.3527612686157227e-08,
+      "normal_drift": 2.220446049250313e-16,
+      "target_id": "ue5_quinn_aligned_to_kotor_pmbam",
+      "validation_max_drift": 0.0,
+      "global_scale_factor": 0.6268270156880318,
+      "handling_counts": {
+        "direct_copy": 19,
+        "twist_interpolated": 16,
+        "ancestor_fallback": 54,
+        "root_anchor": 1
+      }
+    },
+    "improvement": {
+      "mean_ratio": 14375567.128734289,
+      "p95_ratio": 3432083.515256899
+    }
+  },
+  "pfbam": {
+    "raw": {
+      "mean": 0.03803094518334659,
+      "p95": 0.05963614012773809,
+      "p99": 0.07481476221734684,
+      "max": 0.08472106367530756,
+      "weight_drift": 3.073364496231079e-08,
+      "normal_drift": 2.220446049250313e-16,
+      "target_id": "ue5_quinn"
+    },
+    "aligned": {
+      "mean": 0.002537012799483372,
+      "p95": 0.016592289813604208,
+      "p99": 0.0596960382146099,
+      "max": 0.07339747478701722,
+      "weight_drift": 3.3527612686157227e-08,
+      "normal_drift": 2.220446049250313e-16,
+      "target_id": "ue5_quinn_aligned_to_kotor_pfbam",
+      "validation_max_drift": 0.0,
+      "global_scale_factor": 0.6232079519006507,
+      "handling_counts": {
+        "direct_copy": 20,
+        "twist_interpolated": 16,
+        "ancestor_fallback": 53,
+        "root_anchor": 1
+      }
+    },
+    "improvement": {
+      "mean_ratio": 14.990442772338822,
+      "p95_ratio": 3.5942079603046553
+    }
+  }
+}

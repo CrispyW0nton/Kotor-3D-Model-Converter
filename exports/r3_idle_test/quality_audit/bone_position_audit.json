@@ -1,0 +1,1830 @@
+{
+  "all_length_issues": [],
+  "all_motion_issues": [],
+  "animation": null,
+  "fps": null,
+  "frame_count": null,
+  "length_issue_count": 0,
+  "length_tolerance": 0.05,
+  "max_frame_delta": 0.01,
+  "model": "exports\\r3_idle_test\\pmbam__victory__r3b.mdl",
+  "motion_issue_count": 0,
+  "rest_bone_lengths": 60,
+  "rest_validation": "exports\\calibration\\baselines\\pmbam_validation.json",
+  "summary": [
+    {
+      "bones": 61,
+      "frame": 0,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 1,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 2,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 3,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 4,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 5,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 6,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 7,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 8,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 9,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 10,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 11,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 12,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 13,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 14,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 15,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 16,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 17,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 18,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 19,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 20,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 21,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 22,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 23,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 24,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 25,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 26,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 27,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 28,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 29,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 30,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 31,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 32,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 33,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 34,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 35,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 36,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 37,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 38,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 39,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 40,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 41,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 42,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 43,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 44,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 45,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 46,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 47,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 48,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 49,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 50,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 51,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 52,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 53,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 54,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 55,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 56,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 57,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 58,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 59,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 60,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 61,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 62,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 63,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 64,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 65,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 66,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 67,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 68,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 69,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 70,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 71,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 72,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 73,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 74,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 75,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 76,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 77,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 78,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 79,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 80,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 81,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 82,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 83,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 84,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 85,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 86,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 87,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 88,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 89,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 90,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 91,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 92,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 93,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 94,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 95,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 96,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 97,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 98,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 99,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 100,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 101,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 102,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 103,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 104,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 105,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 106,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 107,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 108,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 109,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 110,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 111,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 112,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 113,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 114,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 115,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 116,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 117,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 118,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 119,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 120,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 121,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 122,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 123,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 124,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 125,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 126,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 127,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 128,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 129,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 130,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 131,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 132,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 133,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 134,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 135,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 136,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 137,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 138,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 139,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 140,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 141,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 142,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 143,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 144,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 145,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 146,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 147,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 148,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 149,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 150,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 151,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 152,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 153,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 154,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 155,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 156,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 157,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 158,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 159,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 160,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 161,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 162,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 163,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 164,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 165,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 166,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 167,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 168,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 169,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 170,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 171,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 172,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 173,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 174,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 175,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 176,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 177,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 178,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 179,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 180,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 181,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 182,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 183,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 184,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 185,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 186,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 187,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 188,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 189,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 190,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 191,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 192,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 193,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 194,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 195,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 196,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 197,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 198,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 199,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 200,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 201,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 202,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 203,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 204,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 205,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 206,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 207,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 208,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 209,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 210,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 211,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 212,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 213,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 214,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 215,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 216,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 217,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 218,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 219,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 220,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 221,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 222,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 223,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 224,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 225,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 226,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 227,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 228,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 229,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 230,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 231,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 232,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 233,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 234,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 235,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 236,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 237,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 238,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 239,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 240,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 241,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 242,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 243,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 244,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 245,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 246,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 247,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 248,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 249,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 250,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 251,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 252,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 253,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 254,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 255,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 256,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 257,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 258,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 259,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 260,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 261,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 262,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 263,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 264,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 265,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 266,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 267,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 268,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 269,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 270,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 271,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 272,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 273,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 274,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 275,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 276,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 277,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 278,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 279,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 280,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 281,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 282,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 283,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 284,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 285,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 286,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 287,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 288,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 289,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 290,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 291,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 292,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 293,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 294,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 295,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 296,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 297,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 298,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 299,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 300,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    },
+    {
+      "bones": 61,
+      "frame": 301,
+      "length_issues": 0,
+      "validation": "exports\\r3_idle_test\\quality_audit\\full_motion_64\\pmbam__victory__r3b_validation.json"
+    }
+  ],
+  "top_length_issues": [],
+  "top_motion_issues": []
+}

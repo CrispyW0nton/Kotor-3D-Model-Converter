@@ -67,6 +67,24 @@ def _is_null_helper_name(name: str) -> bool:
     return "dummy" in key or "hook" in key
 
 
+def _is_kotor_mesh_bone_name(name: str) -> bool:
+    """Return True for Odyssey mesh-object-as-bone names.
+
+    KOTOR humanoid skeleton joints are often renderable trimesh nodes instead
+    of modern non-rendering bones.  The Unreal target mesh itself must still be
+    excluded, so mesh nodes only count as skeletal when their names match the
+    KOTOR limb/body naming vocabulary used by the alias table.
+    """
+    key = str(name or "").strip().lower()
+    if not key:
+        return False
+    if key.endswith("_g"):
+        return True
+    if key in _ALIASES:
+        return True
+    return any(key in aliases for aliases in _ALIASES.values())
+
+
 @dataclass(frozen=True)
 class RetargetConfig:
     """Controls how poses are transferred between skeletons."""
@@ -126,9 +144,11 @@ def _node_key(node: object) -> str:
 
 
 def _is_skeletal_node(node: object) -> bool:
-    if bool(getattr(node, "is_mesh", False)):
-        return False
     key = _node_key(node)
+    if bool(getattr(node, "is_skin", False)):
+        return False
+    if bool(getattr(node, "is_mesh", False)) and not _is_kotor_mesh_bone_name(key):
+        return False
     if _is_null_helper_name(key):
         return False
     if key.startswith("ik_") or key in {"interaction", "center_of_mass"}:

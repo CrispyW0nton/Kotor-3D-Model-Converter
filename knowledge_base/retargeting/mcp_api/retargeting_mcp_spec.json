@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "generated": "2026-05-20",
+  "tools": [
+    {
+      "name": "ghostrigger_get_retarget_skeleton_info",
+      "status": "implemented",
+      "mutates_files": false,
+      "purpose": "Inspect Aurora/KOTOR model skeleton nodes or the bundled Unreal Quinn target skeleton.",
+      "minimum_arguments": {
+        "target_type": "unreal_quinn"
+      },
+      "example_arguments": {
+        "target_type": "aurora_model",
+        "game": "k1",
+        "resref": "s_male02",
+        "include_nodes": true
+      }
+    },
+    {
+      "name": "ghostrigger_build_retarget_map",
+      "status": "implemented",
+      "mutates_files": false,
+      "purpose": "Build deterministic source-to-target bone mapping report before retargeting.",
+      "example_arguments": {
+        "source_type": "aurora_model",
+        "source_game": "k1",
+        "source_resref": "s_male02",
+        "target_type": "unreal_quinn"
+      }
+    },
+    {
+      "name": "ghostrigger_list_retarget_animations",
+      "status": "implemented",
+      "mutates_files": false,
+      "purpose": "List local and inherited KOTOR animations through the supermodel chain.",
+      "example_arguments": {
+        "game": "k1",
+        "resref": "pmbam",
+        "include_chain": true,
+        "limit": 50
+      }
+    },
+    {
+      "name": "ghostrigger_retarget_animation",
+      "status": "planned",
+      "mutates_files": true,
+      "gate": "Do not expose until mapping reports are stable and at least one KOTOR-to-Quinn clip has a golden QA artifact."
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "aligned_skeleton_id": "ue5_quinn_aligned_to_kotor_pmbam",
+  "axis_system": {
+    "autodesk_predefined": "MayaZUp/Max: +Z up, -Y forward, right-handed",
+    "axis_forward": "-Y",
+    "axis_up": "Z"
+  },
+  "bind_pose_validation": {
+    "alignment_validation_max_drift": 0.0,
+    "normal_unit_max_drift": 2.220446049250313e-16,
+    "weight_conservation_max_drift": 3.3527612686157227e-08
+  },
+  "blender_version": "Blender 4.2.0",
+  "bone_map_version": "5a34b953087cf8ca793d73a7e9377d4ce8815c131320fb34a353e8d7cf9f70e3",
+  "clip_inventory": [
+    {
+      "clip_name": "g1a1",
+      "duration_seconds": 1.466670036315918,
+      "fps": 60.0,
+      "frame_count": 89,
+      "sampling_strategy": "fixed_60fps_slerp",
+      "source_supermodel": "S_Male02"
+    }
+  ],
+  "export_timestamp": "2026-05-21T01:27:02.949999+00:00",
+  "fbx_path": "exports\\retargets\\day4\\pmbam__g1a1__to__quinn_aligned.fbx",
+  "fbx_sha256": "bdd560848ac20bd8f1ac3718b8a28d274d2df13d36fa29dcf82f00a0f307bd67",
+  "fbx_version": "FBX201600",
+  "intermediate_path": "exports\\retargets\\day4\\pmbam__g1a1__to__quinn_aligned_intermediate.json",
+  "manifest_path": "exports\\retargets\\day4\\pmbam__g1a1__to__quinn_aligned.manifest.json",
+  "roundtrip_metrics": {
+    "axis_system_expected": {
+      "axis_forward": "-Y",
+      "axis_up": "Z"
+    },
+    "axis_system_match": true,
+    "axis_system_observed": {
+      "axis_forward": "-Y",
+      "axis_up": "Z"
+    },
+    "bone_count_expected": 89,
+    "bone_count_match": true,
+    "bone_count_observed": 89,
+    "frame0_rotation_max_delta": 1.3700886175582738e-07,
+    "frame_count_expected": 89,
+    "frame_count_match": true,
+    "frame_count_observed": 89,
+    "leaf_bones": [],
+    "no_leaf_bones_added": true,
+    "validation_path": "exports\\retargets\\day4\\pmbam__g1a1__to__quinn_aligned.roundtrip.json",
+    "vertex_count_expected": 661,
+    "vertex_count_match": true,
+    "vertex_count_observed": 661
+  },
+  "schema_version": "1.0",
+  "source_mesh_resref": "pmbam",
+  "source_skeleton_id": "kotor_pmbam"
+}

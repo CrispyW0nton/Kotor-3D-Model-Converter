@@ -1639,7 +1639,9 @@ class FBXExporter:
             # tvert (texture vertex) indices in node.face_uvs that differ from the
             # vertex position indices.  Use them when present to avoid scrambled UVs.
             if n.uvs:
-                uv_flat = [c for uv in n.uvs for c in uv]
+                # GhostRigger stores KotOR-oriented UVs internally.  Match the OBJ
+                # and glTF exporters by converting V for DCC/engine importers.
+                uv_flat = [c for u, v in n.uvs for c in (float(u), 1.0 - float(v))]
                 _fuvs_fbx = getattr(n, 'face_uvs', []) or []
                 _has_fuvs_fbx = bool(_fuvs_fbx) and len(_fuvs_fbx) == len(n.faces)
                 _nuv_fbx = len(n.uvs)
@@ -1669,7 +1671,7 @@ class FBXExporter:
             # Exported for area meshes and any node with a second UV set.
             _uvs_lm_n = getattr(n, 'uvs_lm', []) or getattr(n, 'uvs2', []) or []
             if _uvs_lm_n:
-                _uv2_flat = [c for uv in _uvs_lm_n for c in uv]
+                _uv2_flat = [c for u, v in _uvs_lm_n for c in (float(u), 1.0 - float(v))]
                 _nuv2 = len(_uvs_lm_n)
                 _uv2_idx = []
                 for _face2 in n.faces:
@@ -1751,6 +1753,11 @@ class FBXExporter:
             if tname_tex and tname_tex.upper() not in ('NULL', 'BLACK', '') \
                     and tname_tex not in _seen_tex_names:
                 _seen_tex_names.add(tname_tex)
+                # FBX wrap enum: 0 = Repeat, 1 = Clamp.  KotOR/TXI stores this
+                # as clamp_s/clamp_t booleans; exporting it keeps Unity/Unreal
+                # from guessing on large tiled menu and room UVs.
+                wrap_u = 1 if bool(getattr(n, 'txi_clamp_s', False)) else 0
+                wrap_v = 1 if bool(getattr(n, 'txi_clamp_t', False)) else 0
                 tex_obj_id = new_id()
                 vid_id     = new_id()
                 _tex_obj_ids[tname_tex] = tex_obj_id
@@ -1775,6 +1782,8 @@ class FBXExporter:
                 w(f'\t\tProperties70:  {{')
                 w(f'\t\t\tP: "UVSet","KString","","","UVMap"')
                 w(f'\t\t\tP: "UseMaterial","bool","","",1')
+                w(f'\t\t\tP: "WrapModeU","enum","","",{wrap_u}')
+                w(f'\t\t\tP: "WrapModeV","enum","","",{wrap_v}')
                 w(f'\t\t}}')
                 w(f'\t\tMedia: "{tname_tex}"')
                 w(f'\t\tFileName: "{tname_tex}.tga"')
@@ -1825,15 +1834,16 @@ class FBXExporter:
 
         def _world_matrix_col_major(node) -> str:
             """
-            Return 16 floats in COLUMN-MAJOR order for FBX BindPose/TransformLink.
+            Return 16 floats for FBX BindPose/TransformLink matrices.
 
-            FBX 7.4 stores matrices in column-major order:
-              [m00, m10, m20, m30,   <- column 0
-               m01, m11, m21, m31,   <- column 1
-               m02, m12, m22, m32,   <- column 2
-               m03, m13, m23, m33]   <- column 3
-            where the rotation part occupies the upper-left 3x3 and the
-            translation is in the LAST ROW (m30, m31, m32, m33=1).
+            FBX ASCII matrix properties are serialized in row-major order,
+            with translation in the last row for FBX's row-vector convention:
+              [m00, m01, m02, m03,
+               m10, m11, m12, m13,
+               m20, m21, m22, m23,
+               tx,  ty,  tz,  1]
+            Unity's FBX importer reads Transform/TransformLink this way when
+            constructing SkinnedMeshRenderer bindposes.
 
             KotorBlender's world_transform() returns (world_pos, world_quat).
             The quaternion is [x, y, z, w].
@@ -1841,25 +1851,20 @@ class FBXExporter:
             try:
                 wp, wq = node.world_transform()
                 qx, qy, qz, qw = wq
-                # Build 3x3 rotation matrix columns from quaternion
-                # Column 0 (right/X axis)
-                r00 = 1 - 2*(qy*qy + qz*qz)  # m00
-                r10 = 2*(qx*qy + qz*qw)        # m10
-                r20 = 2*(qx*qz - qy*qw)        # m20
-                # Column 1 (up/Y axis)
-                r01 = 2*(qx*qy - qz*qw)        # m01
-                r11 = 1 - 2*(qx*qx + qz*qz)   # m11
-                r21 = 2*(qy*qz + qx*qw)        # m21
-                # Column 2 (forward/Z axis)
-                r02 = 2*(qx*qz + qy*qw)        # m02
-                r12 = 2*(qy*qz - qx*qw)        # m12
-                r22 = 1 - 2*(qx*qx + qy*qy)   # m22
+                r00 = 1 - 2*(qy*qy + qz*qz)
+                r01 = 2*(qx*qy - qz*qw)
+                r02 = 2*(qx*qz + qy*qw)
+                r10 = 2*(qx*qy + qz*qw)
+                r11 = 1 - 2*(qx*qx + qz*qz)
+                r12 = 2*(qy*qz - qx*qw)
+                r20 = 2*(qx*qz - qy*qw)
+                r21 = 2*(qy*qz + qx*qw)
+                r22 = 1 - 2*(qx*qx + qy*qy)
                 tx, ty, tz = wp
-                # FBX column-major layout (translation in last row)
-                mat = [r00, r10, r20, 0.0,   # col 0
-                       r01, r11, r21, 0.0,   # col 1
-                       r02, r12, r22, 0.0,   # col 2
-                       tx,  ty,  tz,  1.0]   # col 3 (translation)
+                mat = [r00, r01, r02, 0.0,
+                       r10, r11, r12, 0.0,
+                       r20, r21, r22, 0.0,
+                       tx,  ty,  tz,  1.0]
                 return ','.join(f'{v:.6f}' for v in mat)
             except Exception:
                 return '1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1'
@@ -1988,8 +1993,20 @@ class FBXExporter:
             w(f'\tModel: {nid}, "Model::{n.name}", "Mesh" {{')
             w('\t\tVersion: 232')
             w('\t\tProperties70:  {')
-            px, py, pz = n.position
+            if n.is_skin:
+                # Skinned mesh objects must not inherit animated bone transforms
+                # through their scene parent while also being deformed by skin
+                # clusters.  Emit them in bind-pose world space and connect them
+                # under the model root; the Cluster Transform/TransformLink data
+                # then supplies the intended bind relationship to the bones.
+                (px, py, pz), (mqx, mqy, mqz, mqw) = n.world_transform()
+                mex, mey, mez = _quat_to_euler_deg(mqx, mqy, mqz, mqw)
+            else:
+                px, py, pz = n.position
+                mex = mey = mez = 0.0
             w(f'\t\t\tP: "Lcl Translation","Lcl Translation","","A",{px:.6f},{py:.6f},{pz:.6f}')
+            if n.is_skin:
+                w(f'\t\t\tP: "Lcl Rotation","Lcl Rotation","","A",{mex:.4f},{mey:.4f},{mez:.4f}')
             w(f'\t\t\tP: "Lcl Scaling","Lcl Scaling","","A",1.000000,1.000000,1.000000')
             w('\t\t}')
             w('\t}')  # end Model (mesh node)
@@ -2007,7 +2024,7 @@ class FBXExporter:
             w('\t}')
 
             # Sub-deformers (clusters per bone)
-            # TransformLink = bone world-space bind matrix in COLUMN-MAJOR order
+            # TransformLink = bone world-space bind matrix in FBX ASCII order
             # Transform = mesh node's world-space bind matrix (geometry_to_world).
             #   FBX spec: Transform brings vertices from mesh-local to bone-local.
             #   = inverse(mesh_world) for identity-bone case; for correct skinning
@@ -2030,17 +2047,17 @@ class FBXExporter:
             _tbone_list = getattr(n, 'tbone_list', []) or []
 
             def _qbone_matrix_col_major(bi: int) -> str:
-                """Build column-major matrix from qBone/tBone arrays for bone index bi."""
+                """Build FBX ASCII matrix from qBone/tBone arrays for bone index bi."""
                 if bi < len(_qbone_list) and bi < len(_tbone_list):
                     qx, qy, qz, qw = _qbone_list[bi]
                     tx, ty, tz = _tbone_list[bi]
                     # Build rotation from quaternion
-                    r00 = 1 - 2*(qy*qy + qz*qz); r10 = 2*(qx*qy + qz*qw); r20 = 2*(qx*qz - qy*qw)
-                    r01 = 2*(qx*qy - qz*qw); r11 = 1 - 2*(qx*qx + qz*qz); r21 = 2*(qy*qz + qx*qw)
-                    r02 = 2*(qx*qz + qy*qw); r12 = 2*(qy*qz - qx*qw); r22 = 1 - 2*(qx*qx + qy*qy)
-                    mat = [r00, r10, r20, 0.0,
-                           r01, r11, r21, 0.0,
-                           r02, r12, r22, 0.0,
+                    r00 = 1 - 2*(qy*qy + qz*qz); r01 = 2*(qx*qy - qz*qw); r02 = 2*(qx*qz + qy*qw)
+                    r10 = 2*(qx*qy + qz*qw); r11 = 1 - 2*(qx*qx + qz*qz); r12 = 2*(qy*qz - qx*qw)
+                    r20 = 2*(qx*qz - qy*qw); r21 = 2*(qy*qz + qx*qw); r22 = 1 - 2*(qx*qx + qy*qy)
+                    mat = [r00, r01, r02, 0.0,
+                           r10, r11, r12, 0.0,
+                           r20, r21, r22, 0.0,
                            tx,  ty,  tz,  1.0]
                     return ','.join(f'{v:.6f}' for v in mat)
                 return identity_m
@@ -2130,7 +2147,10 @@ class FBXExporter:
                 else:
                     link_m = identity_m
 
-                w(f'\tSubDeformer: {cid}, "SubDeformer::{bname}", "Cluster" {{')
+                # FBX cluster objects are Deformer records with subtype "Cluster".
+                # Writing "SubDeformer:" produces an object our own text checks can
+                # count, but Unity's FBX importer ignores for skin binding.
+                w(f'\tDeformer: {cid}, "SubDeformer::{bname}", "Cluster" {{')
                 w('\t\tVersion: 100')
                 if vi_list:
                     w(f'\t\tIndexes: *{len(vi_list)} {{')
@@ -2503,9 +2523,16 @@ class FBXExporter:
         w('Connections:  {')
 
         # Node → parent hierarchy (model nodes)
+        _root_nid_for_skin_meshes = 0
+        _root_for_skin_meshes = next((n for n in model.all_nodes() if n.parent is None), None)
+        if _root_for_skin_meshes and _root_for_skin_meshes.name in node_ids:
+            _root_nid_for_skin_meshes = node_ids[_root_for_skin_meshes.name]
+        _mesh_nodes_by_name = {n.name: n for n in mesh_nodes_list}
         for n in model.all_nodes():
             nid = node_ids[n.name]
-            if n.parent and n.parent.name in node_ids:
+            if n.name in _mesh_nodes_by_name and _mesh_nodes_by_name[n.name].is_skin:
+                w(f'\tC: "OO",{nid},{_root_nid_for_skin_meshes}')
+            elif n.parent and n.parent.name in node_ids:
                 pid = node_ids[n.parent.name]
                 w(f'\tC: "OO",{nid},{pid}')
             else:

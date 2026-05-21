@@ -17,7 +17,7 @@ Architecture note (Constantine, "Structured Design"):
   are context-free — the same tool works in a Discord bot, VS Code extension,
   CI pipeline, or any other consumer without modification.
 
-Tool manifest (v3.6 — 70 total):
+  Tool manifest (v3.7 — 74 total):
   Installation   (3): detectInstallations, loadInstallation, kotor_installation_info
   Discovery      (4): listResources, describeResource, kotor_find_resource, kotor_search_resources
   Game data      (3): journalOverview, kotor_lookup_2da, kotor_lookup_tlk
@@ -51,6 +51,10 @@ Tool manifest (v3.6 — 70 total):
                       kotor_describe_jrl, kotor_describe_resource_refs
   Walkmesh       (1): kotor_walkmesh_validation_diagram
   Archives       (2): kotor_list_archive, kotor_extract_resource
+  Retargeting    (4): ghostrigger_get_retarget_skeleton_info,
+                      ghostrigger_build_retarget_map,
+                      ghostrigger_list_retarget_animations,
+                      ghostrigger_export_unity_fbx
 """
 
 from __future__ import annotations
@@ -61,18 +65,18 @@ from kotormcp.tools import (
     installation, discovery, gamedata, ghostrigger,
     debug_skinning, debug_materials,
     modules, gffdata, decompile, resource, quest,
-    refs, walkmesh, archives,
+    refs, walkmesh, archives, retargeting,
 )
 
 
 def get_all_tools() -> List[Dict[str, Any]]:
     """Return all tool definitions from all tool modules.
 
-    Tool count: 70 (v3.6)
+    Tool count: 74 (v3.7)
       3  installation  +  4 discovery  +  3 gamedata  +  7 ghostrigger
     + 25 debug_skinning + 3  modules   +  3 gffdata   + 11 decompile
     +  2 composite     +  6  refs      +  1 walkmesh  +  2 archives
-    = 70
+    +  4 retargeting   = 74
     """
     return (
         installation.get_tools()          # 3  installation management
@@ -89,6 +93,7 @@ def get_all_tools() -> List[Dict[str, Any]]:
         + walkmesh.get_tools()            # 1  walkmesh validation diagram
         + archives.get_tools()            # 2  archive listing + extraction
         + debug_materials.get_tools()     # 13 debug materials/textures/assembly
+        + retargeting.get_tools()         # 4  retargeting introspection/mapping/export
     )
 
 
@@ -207,6 +212,16 @@ async def handle_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         return await archives.handle_list_archive(arguments)
     if name == "kotor_extract_resource":
         return await archives.handle_extract_resource(arguments)
+
+    # ── Retargeting tools (v3.7 — introspection, mapping, and Day 4 export) ──
+    if name == "ghostrigger_get_retarget_skeleton_info":
+        return await retargeting.handle_get_retarget_skeleton_info(arguments)
+    if name == "ghostrigger_build_retarget_map":
+        return await retargeting.handle_build_retarget_map(arguments)
+    if name == "ghostrigger_list_retarget_animations":
+        return await retargeting.handle_list_retarget_animations(arguments)
+    if name == "ghostrigger_export_unity_fbx":
+        return await retargeting.handle_export_unity_fbx(arguments)
 
     # ── Debug Skinning Bridge tools (v3.5 — observability-first) ─────────────
     if name == "ghostrigger_debug_launch_app":

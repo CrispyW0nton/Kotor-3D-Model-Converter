@@ -54,6 +54,17 @@ game_data/
 !/tests/test_head_phoneme_panel.py
 !/tests/test_head_camera_preset.py
 !/tests/test_lightmap_baker.py
+!/tests/test_mcp_retargeting_tools.py
+!/tests/test_retargeting_test_utils.py
+!/tests/test_sampler.py
+!/tests/test_coordinate_normalizer.py
+!/tests/test_baker.py
+!/tests/fixtures/
+!/tests/fixtures/kotor_stock/
+!/tests/fixtures/kotor_stock/README.md
+!/tests/fixtures/kotor_stock/manifest.json
+/tests/fixtures/kotor_stock/k1/*.mdl
+/tests/fixtures/kotor_stock/k1/*.mdx
 test_assets/
 pytest.ini
 .pytest_cache/
@@ -153,6 +164,8 @@ scripts/
 !/scripts/generate_manifest.py
 !/scripts/full_scan.py
 !/scripts/analyze_scan.py
+!/scripts/extract_stock_corpus.py
+!/scripts/blender_fbx_export.py
 !/scripts/export_kotor_model_for_unity.py
 !/scripts/run_malak_unity_smoke.py
 exports/
@@ -162,6 +175,8 @@ exports/
 !/exports/full_scan_results_fast.json
 !/exports/full_scan_results_modules.json
 !/exports/failure_analysis.json
+exports/retargets/day4_mcp_smoke/
+.pytest_tmp_fbx_exporter/
 audit_deep.py
 audit_exhaustive.py
 _patch_viewport.py

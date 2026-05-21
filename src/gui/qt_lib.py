@@ -135,6 +135,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "qt_resource_panel",
         "qt_rig_panel",
         "qt_texture_panel",
+        "qt_ue5_rig_export_panel",
         "qt_workflow_rail",
     ),
     "rendering": (

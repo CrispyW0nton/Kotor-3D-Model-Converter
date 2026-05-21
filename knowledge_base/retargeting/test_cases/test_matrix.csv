@@ -1,0 +1,7 @@
+id,direction,source,target,animation,expected_result,status
+RT-001,aurora_to_unreal,k1:s_male02,unreal:SKM_Quinn_Simple,walk,Mapping report covers core body/arms/legs and derives bridge/twist bones,planned
+RT-002,aurora_to_unreal,k1:s_male02,unreal:SKM_Quinn_Simple,run,Root motion scales without target skeleton resizing,planned
+RT-003,aurora_to_unreal,k1:s_male02,unreal:SKM_Quinn_Simple,g1a1,Weapon-arm swing preserves hand endpoint direction,planned
+RT-004,aurora_to_unreal,k1:s_female02,unreal:SKM_Quinn_Simple,f2a1,Female combat clip maps through same Quinn target,planned
+RT-005,aurora_chain,k1:pmbam,k1:s_female02,walk,Supermodel chain animation list resolves inherited clip source,planned
+RT-006,unreal_to_aurora,unreal:SKM_Quinn_Simple,k1:s_male02,external_walk,Inbound bake is blocked until export contract is implemented,planned

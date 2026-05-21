@@ -15,6 +15,7 @@ from src.unreal import UnrealSkeletonAsset, load_quinn_fbx_model, load_quinn_ske
 
 from src.gui.qt_lib.rendering.qt_gpu_renderer import GpuRenderer
 from src.gui.qt_lib.assets.qt_theme import heading
+from src.gui.qt_lib.panels.qt_ue5_rig_export_panel import QtUE5RigExportPanel
 from src.gui.qt_lib.viewports.qt_viewport import QtUnrealAnimatorViewportWidget
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 
@@ -361,6 +362,10 @@ class QtUnrealAnimatorWindow(QtWidgets.QMainWindow):
         self.source_bones.currentItemChanged.connect(self._on_source_bone_selected)
         bones_layout.addWidget(self.source_bones, 1)
         tabs.addTab(bones_tab, "Source Bones")
+
+        self.ue5_rig_export_panel = QtUE5RigExportPanel(self)
+        self.ue5_rig_export_panel.exportCompleted.connect(self._on_ue5_rig_export_completed)
+        tabs.addTab(self.ue5_rig_export_panel, "UE5 Rig Export")
         return box
 
     def _viewport_group(self) -> QtWidgets.QWidget:
@@ -521,6 +526,14 @@ class QtUnrealAnimatorWindow(QtWidgets.QMainWindow):
             self.source_viewport.set_navigation_profile(self._navigation_profile)
         if hasattr(self, "target_viewport"):
             self.target_viewport.set_navigation_profile(self._navigation_profile)
+
+    def _on_ue5_rig_export_completed(self, result: object) -> None:
+        if bool(getattr(result, "success", False)):
+            path = getattr(result, "fbx_path", None)
+            self.statusBar().showMessage(f"UE5 Rig Export PASS: {path}")
+        else:
+            reason = getattr(result, "halt_reason", None) or "export failed"
+            self.statusBar().showMessage(f"UE5 Rig Export HALT: {reason}")
 
     def set_supermodel_library(self, rows: list[dict]) -> None:
         self._library_rows = [

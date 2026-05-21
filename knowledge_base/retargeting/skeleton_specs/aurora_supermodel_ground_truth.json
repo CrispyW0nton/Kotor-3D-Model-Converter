@@ -1,0 +1,81 @@
+{
+  "generated": "2026-05-20",
+  "source": "GhostRigger MCP ghostrigger_model_info",
+  "notes": [
+    "This is an initial high-level ground-truth capture, not a full node DAG.",
+    "Use ghostrigger_get_retarget_skeleton_info for the full current node summary."
+  ],
+  "k1": {
+    "s_male01": {
+      "node_count": 82,
+      "mesh_node_count": 62,
+      "bone_count": 20,
+      "supermodel": "NULL",
+      "classification": "character",
+      "bones": [
+        "S_Male01",
+        "cutscenedummy",
+        "rootdummy",
+        "rcollar_dum",
+        "rhand",
+        "revmask1hook",
+        "lcollar_dum",
+        "lhand",
+        "lforearm",
+        "headhook",
+        "Impact",
+        "hturn_g",
+        "talkdummy",
+        "Camera03",
+        "revmask2hook",
+        "DeflectHook",
+        "handconjure",
+        "headconjure",
+        "LightsaberHook",
+        "impact_bolt"
+      ],
+      "animation_count": 12
+    },
+    "s_male02": {
+      "node_count": 81,
+      "mesh_node_count": 62,
+      "bone_count": 19,
+      "supermodel": "S_Male01",
+      "classification": "character",
+      "sample_animations": [
+        "walk",
+        "run",
+        "pause1",
+        "walkss",
+        "runss",
+        "g1a1",
+        "g8a1",
+        "talk",
+        "dead"
+      ]
+    },
+    "s_female02": {
+      "node_count": 83,
+      "mesh_node_count": 63,
+      "bone_count": 20,
+      "supermodel": "S_Female01",
+      "classification": "character",
+      "sample_animations": [
+        "f2a1",
+        "f2a2",
+        "g3a1",
+        "g4a1",
+        "c3a1",
+        "c4a1"
+      ]
+    },
+    "pmbam": {
+      "node_count": 61,
+      "mesh_node_count": 44,
+      "bone_count": 17,
+      "supermodel": "S_Female02",
+      "classification": "character",
+      "animation_count": 0
+    }
+  }
+}
