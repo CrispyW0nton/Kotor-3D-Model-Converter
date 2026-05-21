@@ -5,86 +5,130 @@ from __future__ import annotations
 from PySide6 import QtCore, QtWidgets
 
 
-def transform_bar_stylesheet() -> str:
-    return """
-    QFrame#TransformTypeInBar {
-        background:#25272b;
-        border-top:1px solid #3b3f46;
-        border-bottom:1px solid #15171a;
-    }
-    QLabel#TransformModePill {
-        color:#f0d58a;
-        background:#303238;
-        border:1px solid #555b65;
+def transform_bar_stylesheet(theme=None) -> str:
+    if theme is None:
+        c = {
+            "bar_bg": "#25272b",
+            "bar_border": "#3b3f46",
+            "pill_bg": "#303238",
+            "pill_text": "#f0d58a",
+            "pill_border": "#555b65",
+            "label": "#c4c9d1",
+            "input_bg": "#181a1e",
+            "input_text": "#e6ebf2",
+            "input_border": "#484d56",
+            "input_focus": "#69717e",
+            "disabled_bg": "#202226",
+            "disabled_text": "#666d78",
+            "button_bg": "#303238",
+            "button_text": "#d9dee6",
+            "button_hover": "#3a3d44",
+            "button_checked": "#4d3b18",
+            "button_checked_text": "#ffe39a",
+            "selection": "#315b88",
+            "popup_bg": "#24272c",
+        }
+    else:
+        c = {
+            "bar_bg": theme.color("transformBar.background"),
+            "bar_border": theme.color("transformBar.border"),
+            "pill_bg": theme.color("button.checked"),
+            "pill_text": theme.color("button.checkedText", theme.color("button.accentText")),
+            "pill_border": theme.color("accent.primary"),
+            "label": theme.color("text.secondary"),
+            "input_bg": theme.color("input.background"),
+            "input_text": theme.color("input.text"),
+            "input_border": theme.color("input.border"),
+            "input_focus": theme.color("input.focusBorder"),
+            "disabled_bg": theme.color("button.disabledBackground"),
+            "disabled_text": theme.color("button.disabledText", theme.color("text.disabled")),
+            "button_bg": theme.color("button.background"),
+            "button_text": theme.color("button.text"),
+            "button_hover": theme.color("button.hover"),
+            "button_checked": theme.color("button.checked"),
+            "button_checked_text": theme.color("button.checkedText", theme.color("button.accentText")),
+            "selection": theme.color("selection.background"),
+            "popup_bg": theme.color("panel.backgroundAlt", theme.color("panel.altBackground")),
+        }
+    return f"""
+    QFrame#TransformTypeInBar {{
+        background:{c['bar_bg']};
+        border-top:1px solid {c['bar_border']};
+        border-bottom:1px solid {c['bar_border']};
+    }}
+    QLabel#TransformModePill {{
+        color:{c['pill_text']};
+        background:{c['pill_bg']};
+        border:1px solid {c['pill_border']};
         border-radius:3px;
         padding:1px 7px;
         font-size:9pt;
         font-weight:600;
-    }
-    QLabel#TransformMiniLabel {
-        color:#c4c9d1;
+    }}
+    QLabel#TransformMiniLabel {{
+        color:{c['label']};
         font-size:8pt;
-    }
-    QLineEdit {
-        background:#181a1e;
-        color:#e6ebf2;
-        border:1px solid #484d56;
+    }}
+    QLineEdit {{
+        background:{c['input_bg']};
+        color:{c['input_text']};
+        border:1px solid {c['input_border']};
         border-radius:2px;
         padding:1px 4px;
-        selection-background-color:#315b88;
+        selection-background-color:{c['selection']};
         font-size:9pt;
-    }
-    QLineEdit:disabled {
-        background:#202226;
-        color:#666d78;
-        border-color:#333740;
-    }
-    QLineEdit:hover {
-        border-color:#69717e;
-    }
-    QToolButton {
-        background:#303238;
-        color:#d9dee6;
-        border:1px solid #555b65;
+    }}
+    QLineEdit:disabled {{
+        background:{c['disabled_bg']};
+        color:{c['disabled_text']};
+        border-color:{c['bar_border']};
+    }}
+    QLineEdit:hover {{
+        border-color:{c['input_focus']};
+    }}
+    QToolButton {{
+        background:{c['button_bg']};
+        color:{c['button_text']};
+        border:1px solid {c['input_border']};
         border-radius:2px;
         padding:0;
         font-size:9pt;
         font-weight:600;
-    }
-    QToolButton:hover {
-        background:#3a3d44;
-        border-color:#767f8e;
-    }
-    QToolButton:checked {
-        background:#4d3b18;
-        color:#ffe39a;
-        border-color:#c9952f;
-    }
-    QToolButton:disabled {
-        background:#24262b;
-        color:#686f7a;
-        border-color:#383d45;
-    }
-    QComboBox {
-        background:#181a1e;
-        color:#e6ebf2;
-        border:1px solid #484d56;
+    }}
+    QToolButton:hover {{
+        background:{c['button_hover']};
+        border-color:{c['input_focus']};
+    }}
+    QToolButton:checked {{
+        background:{c['button_checked']};
+        color:{c['button_checked_text']};
+        border-color:{c['pill_border']};
+    }}
+    QToolButton:disabled {{
+        background:{c['disabled_bg']};
+        color:{c['disabled_text']};
+        border-color:{c['bar_border']};
+    }}
+    QComboBox {{
+        background:{c['input_bg']};
+        color:{c['input_text']};
+        border:1px solid {c['input_border']};
         border-radius:2px;
         padding:1px 17px 1px 5px;
         font-size:9pt;
-    }
-    QComboBox:hover {
-        border-color:#69717e;
-    }
-    QComboBox::drop-down {
+    }}
+    QComboBox:hover {{
+        border-color:{c['input_focus']};
+    }}
+    QComboBox::drop-down {{
         border:0;
         width:15px;
-    }
-    QComboBox QAbstractItemView {
-        background:#24272c;
-        color:#d7dde6;
-        selection-background-color:#4d3b18;
-    }
+    }}
+    QComboBox QAbstractItemView {{
+        background:{c['popup_bg']};
+        color:{c['input_text']};
+        selection-background-color:{c['selection']};
+    }}
     """
 
 
@@ -106,6 +150,24 @@ class QtTransformTypeInBar(QtWidgets.QFrame):
         self.setFixedHeight(32)
         self.setStyleSheet(transform_bar_stylesheet())
         self._build()
+
+    def apply_ghost_theme(self, theme) -> None:
+        self.setStyleSheet(transform_bar_stylesheet(theme))
+
+    def apply_ghost_layout(self, layout) -> None:
+        height = layout.spacing_value("transformBarHeight", layout.spacing_value("inputHeight", 24) + 8)
+        self.setFixedHeight(max(24, height))
+        spacing = layout.spacing_value("toolbarSpacing", 4)
+        if self.layout() is not None:
+            self.layout().setContentsMargins(spacing + 1, 3, spacing + 1, 3)
+            self.layout().setSpacing(max(1, spacing))
+        control_h = max(18, layout.spacing_value("inputHeight", 24))
+        for button in self.findChildren(QtWidgets.QToolButton):
+            button.setFixedSize(max(22, control_h), control_h)
+        for combo in self.findChildren(QtWidgets.QComboBox):
+            combo.setFixedHeight(control_h)
+        for edit in self.findChildren(QtWidgets.QLineEdit):
+            edit.setFixedHeight(control_h)
 
     def _build(self) -> None:
         row = QtWidgets.QHBoxLayout(self)

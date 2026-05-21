@@ -209,6 +209,20 @@ _VBO_BONE_IDS_FORMAT = '4i'
 _VBO_BONE_IDS_ATTRS = ('in_bone_ids',)
 
 
+def _hex_to_rgb_float(value: str, fallback: tuple[float, float, float]) -> tuple[float, float, float]:
+    raw = str(value or "").strip().lstrip("#")
+    if len(raw) != 6:
+        return fallback
+    try:
+        return (
+            int(raw[0:2], 16) / 255.0,
+            int(raw[2:4], 16) / 255.0,
+            int(raw[4:6], 16) / 255.0,
+        )
+    except ValueError:
+        return fallback
+
+
 def _gl_state_trace_path() -> str:
     """Return the JSONL trace path, or empty string when tracing is disabled."""
     raw = os.environ.get(_GL_STATE_TRACE_ENV, '').strip()
@@ -4198,6 +4212,11 @@ class GpuRenderer:
         self.selected_node = None
         self.selected_nodes: list = []
         self.wire_color: tuple[float, float, float] = (0.18, 0.62, 0.95)
+        self.viewport_background: tuple[float, float, float] = (23 / 255.0, 25 / 255.0, 28 / 255.0)
+        self.grid_minor_color: tuple[float, float, float] = (58 / 255.0, 64 / 255.0, 72 / 255.0)
+        self.grid_major_color: tuple[float, float, float] = (82 / 255.0, 90 / 255.0, 102 / 255.0)
+        self.grid_x_axis_color: tuple[float, float, float] = (118 / 255.0, 54 / 255.0, 54 / 255.0)
+        self.grid_y_axis_color: tuple[float, float, float] = (62 / 255.0, 112 / 255.0, 68 / 255.0)
         self._wireframe_pass: bool = False
         self.show_grid: bool = True
         self.cull_faces: bool = True
@@ -4224,6 +4243,27 @@ class GpuRenderer:
             'tri_count': 0,
             'backend': 'none',
         }
+
+    def set_theme_colors(self, theme) -> None:
+        self.viewport_background = _hex_to_rgb_float(theme.color("viewport.background"), self.viewport_background)
+        self.grid_minor_color = _hex_to_rgb_float(theme.color("viewport.gridMinor"), self.grid_minor_color)
+        self.grid_major_color = _hex_to_rgb_float(theme.color("viewport.gridMajor"), self.grid_major_color)
+        self.grid_x_axis_color = _hex_to_rgb_float(theme.color("error"), self.grid_x_axis_color)
+        self.grid_y_axis_color = _hex_to_rgb_float(theme.color("success"), self.grid_y_axis_color)
+        self.wire_color = _hex_to_rgb_float(theme.color("accent.primary"), self.wire_color)
+        if self._grid_vao is not None or self._grid_vbo is not None:
+            try:
+                if self._grid_vao is not None:
+                    self._grid_vao.release()
+            except Exception:
+                pass
+            try:
+                if self._grid_vbo is not None:
+                    self._grid_vbo.release()
+            except Exception:
+                pass
+            self._grid_vao = None
+            self._grid_vbo = None
 
     # ── Context management ────────────────────────────────────────────────────
 
@@ -4441,10 +4481,10 @@ class GpuRenderer:
 
         extent = 60
         major_every = 5
-        minor = (58 / 255.0, 64 / 255.0, 72 / 255.0)
-        major = (82 / 255.0, 90 / 255.0, 102 / 255.0)
-        x_axis = (118 / 255.0, 54 / 255.0, 54 / 255.0)
-        y_axis = (62 / 255.0, 112 / 255.0, 68 / 255.0)
+        minor = self.grid_minor_color
+        major = self.grid_major_color
+        x_axis = self.grid_x_axis_color
+        y_axis = self.grid_y_axis_color
         rows = []
 
         for i in range(-extent, extent + 1):
@@ -4892,7 +4932,7 @@ class GpuRenderer:
             # PERF-READBACK: Clear with OPAQUE background (alpha=1.0) so that
             # the readback path can skip the expensive alpha compositing step
             # (saves ~19ms/frame at 800x600).  Keep this in sync with viewport._BG.
-            ctx.clear(23/255, 25/255, 28/255, 1.0)
+            ctx.clear(*self.viewport_background, 1.0)
             ctx.enable(moderngl.DEPTH_TEST)
             # v7.0 FIX (Finding 5.8 — reone context.cpp cross-ref):
             # reone uses GL_LEQUAL (not GL_LESS) to match KotOR engine behavior.

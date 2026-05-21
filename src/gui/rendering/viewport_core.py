@@ -2580,6 +2580,16 @@ _AXIS_Y  = (80, 255, 80, 255)
 _AXIS_Z  = (80, 140,255, 255)
 
 
+def _hex_to_rgb_tuple(value: str, fallback: tuple[int, int, int]) -> tuple[int, int, int]:
+    raw = str(value or "").strip().lstrip("#")
+    if len(raw) != 6:
+        return fallback
+    try:
+        return (int(raw[0:2], 16), int(raw[2:4], 16), int(raw[4:6], 16))
+    except ValueError:
+        return fallback
+
+
 def _rgb_str_to_tuple(s: str):
     s = s.lstrip('#')
     return int(s[0:2],16), int(s[2:4],16), int(s[4:6],16)
@@ -3373,6 +3383,21 @@ class FrameRenderer:
         self.show_grid      = True
         self.unit_system    = UnitSystem()
         self.grid_measurement = GridMeasurement(self.unit_system)
+        self.viewport_background = _BG[:3]
+        self.viewport_text = (170, 180, 195)
+        self.grid_minor_color = _GRID[:3]
+        self.grid_major_color = (82, 90, 102)
+        self.grid_x_axis_color = (118, 54, 54)
+        self.grid_y_axis_color = (62, 112, 68)
+        self.grid_label_color = (174, 184, 198, 205)
+        self.hud_fill = (30, 34, 40)
+        self.hud_text = (213, 220, 230)
+        self.hud_outline = (78, 88, 102)
+        self.hud_muted_text = (165, 176, 190)
+        self.hud_success_fill = (25, 43, 37)
+        self.hud_success_text = (138, 230, 178)
+        self.hud_warning_fill = (68, 44, 22)
+        self.hud_warning_text = (255, 190, 95)
         self.show_texture   = False   # Toggle textured rendering
         self.render_mode    = "realistic"
         self.show_diffuse_map: bool = True
@@ -3448,6 +3473,23 @@ class FrameRenderer:
         # KotOR-accurate lighting (two-light rig matching Odyssey engine)
         # Key light from upper-right, fill from left
         self._light_dir  = _normalize((0.55, 0.40, 0.90))  # main key light (upper right)
+
+    def set_theme_colors(self, theme) -> None:
+        self.viewport_background = _hex_to_rgb_tuple(theme.color("viewport.background"), _BG[:3])
+        self.viewport_text = _hex_to_rgb_tuple(theme.color("viewport.text"), (170, 180, 195))
+        self.grid_minor_color = _hex_to_rgb_tuple(theme.color("viewport.gridMinor"), _GRID[:3])
+        self.grid_major_color = _hex_to_rgb_tuple(theme.color("viewport.gridMajor"), (82, 90, 102))
+        self.grid_x_axis_color = _hex_to_rgb_tuple(theme.color("error"), (118, 54, 54))
+        self.grid_y_axis_color = _hex_to_rgb_tuple(theme.color("success"), (62, 112, 68))
+        self.grid_label_color = self.viewport_text + (205,)
+        self.hud_fill = _hex_to_rgb_tuple(theme.color("panel.backgroundAlt", theme.color("panel.altBackground")), (30, 34, 40))
+        self.hud_text = _hex_to_rgb_tuple(theme.color("text.primary"), (213, 220, 230))
+        self.hud_outline = _hex_to_rgb_tuple(theme.color("panel.border"), (78, 88, 102))
+        self.hud_muted_text = _hex_to_rgb_tuple(theme.color("text.secondary"), (165, 176, 190))
+        self.hud_success_fill = _hex_to_rgb_tuple(theme.color("success"), (25, 43, 37))
+        self.hud_success_text = _hex_to_rgb_tuple(theme.color("selection.text"), (138, 230, 178))
+        self.hud_warning_fill = _hex_to_rgb_tuple(theme.color("warning"), (68, 44, 22))
+        self.hud_warning_text = _hex_to_rgb_tuple(theme.color("button.checkedText", theme.color("text.primary")), (255, 190, 95))
         self._light_dir2 = _normalize((-0.35, -0.20, 0.60)) # fill light (left)
         self._ambient    = 0.38   # raised v12.14: brighter ambient for low-RGB creature textures
         self._specular   = 0.10
@@ -4040,7 +4082,7 @@ class FrameRenderer:
         # the fast img.paste(patch, pos, mask) path without crop+composite overhead.
         # The RGBA alpha channel is ignored at display time (converted to RGB by
         # ImageTk.PhotoImage when drawn to the canvas).
-        img  = Image.new('RGBA', (W, H), _BG[:3] + (255,))
+        img  = Image.new('RGBA', (W, H), tuple(getattr(self, "viewport_background", _BG[:3])) + (255,))
         draw = ImageDraw.Draw(img)
 
         self._draw_grid(draw, W, H)
@@ -4269,10 +4311,10 @@ class FrameRenderer:
         x1 = math.ceil(extent / step)
         y0 = math.floor(-extent / step)
         y1 = math.ceil(extent / step)
-        minor = _GRID[:3]
-        major = (82, 90, 102)
-        x_axis = (118, 54, 54)
-        y_axis = (62, 112, 68)
+        minor = tuple(getattr(self, "grid_minor_color", _GRID[:3]))
+        major = tuple(getattr(self, "grid_major_color", (82, 90, 102)))
+        x_axis = tuple(getattr(self, "grid_x_axis_color", (118, 54, 54)))
+        y_axis = tuple(getattr(self, "grid_y_axis_color", (62, 112, 68)))
         label_points = []
         for i in range(y0, y1 + 1):
             y = i * step
@@ -4311,7 +4353,7 @@ class FrameRenderer:
                 if mx < 12 or mx > W - 80 or my < 12 or my > H - 20:
                     continue
                 label = grid.format_label(float(value))
-                draw.text((mx + 4, my + 4), label, fill=(174, 184, 198, 205))
+                draw.text((mx + 4, my + 4), label, fill=getattr(self, "grid_label_color", (174, 184, 198, 205)))
                 drawn += 1
                 if drawn >= 16:
                     break
@@ -5390,7 +5432,7 @@ class FrameRenderer:
                 sel_fill = (min(fill[0]+30,255), min(fill[1]+50,255), fill[2]) if is_sel else fill
                 if t_alpha < 0.999:
                     # Blend with background colour for transparent flat-shaded faces
-                    bg = _BG[:3]
+                    bg = tuple(getattr(self, "viewport_background", _BG[:3]))
                     a = t_alpha
                     sel_fill = (int(sel_fill[0]*a + bg[0]*(1-a)),
                                 int(sel_fill[1]*a + bg[1]*(1-a)),
@@ -5445,7 +5487,7 @@ class FrameRenderer:
         # We maintain a separate NumPy (H, W, 4) RGBA buffer so the JIT
         # rasterizer can write pixels directly without PIL overhead.
         # Pre-fill with the viewport background colour.
-        bg_r, bg_g, bg_b = _BG[:3]
+        bg_r, bg_g, bg_b = tuple(getattr(self, "viewport_background", _BG[:3]))
         buf = np.empty((H, W, 4), dtype=np.uint8)
         buf[:, :, 0] = bg_r
         buf[:, :, 1] = bg_g
@@ -7710,7 +7752,8 @@ class FrameRenderer:
         if not faces:
             return
 
-        _BG_R, _BG_G, _BG_B = _BG[0], _BG[1], _BG[2]
+        _bg_for_blend = tuple(getattr(self, "viewport_background", _BG[:3]))
+        _BG_R, _BG_G, _BG_B = _bg_for_blend[0], _bg_for_blend[1], _bg_for_blend[2]
 
         for face in faces:
             try:
@@ -7879,8 +7922,16 @@ class FrameRenderer:
             draw.text((text_x, text_y), line, fill=fg)
 
     def _draw_stats(self, draw: 'ImageDraw.Draw', W: int, H: int):
+        hud_fill = getattr(self, "hud_fill", (30, 34, 40))
+        hud_text = getattr(self, "hud_text", (213, 220, 230))
+        hud_outline = getattr(self, "hud_outline", (78, 88, 102))
+        hud_muted = getattr(self, "hud_muted_text", (165, 176, 190))
+        success_fill = getattr(self, "hud_success_fill", (25, 43, 37))
+        success_text = getattr(self, "hud_success_text", (138, 230, 178))
+        warning_fill = getattr(self, "hud_warning_fill", (68, 44, 22))
+        warning_text = getattr(self, "hud_warning_text", (255, 190, 95))
         if not self.model:
-            self._draw_hud_pill(draw, 12, 12, "No model loaded", fill=(34, 38, 44), fg=(170, 180, 195))
+            self._draw_hud_pill(draw, 12, 12, "No model loaded", fill=hud_fill, fg=hud_muted, outline=hud_outline)
             return
         vc = bc = fc = tex_ok = tex_total = uv_ok = 0
         # Cache visible mesh nodes list for this stats call (avoid 3× iteration)
@@ -7924,12 +7975,12 @@ class FrameRenderer:
             model_name = model_name[:31] + "..."
         x = 12
         y = 12
-        x += self._draw_hud_pill(draw, x, y, f"{model_name}  [{gv_str}]", fill=(28, 32, 38), fg=(226, 232, 240)) + 6
-        x += self._draw_hud_pill(draw, x, y, mode_str, fill=(25, 43, 37), fg=(138, 230, 178), outline=(58, 118, 88)) + 6
+        x += self._draw_hud_pill(draw, x, y, f"{model_name}  [{gv_str}]", fill=hud_fill, fg=hud_text, outline=hud_outline) + 6
+        x += self._draw_hud_pill(draw, x, y, mode_str, fill=success_fill, fg=success_text, outline=hud_outline) + 6
         if self.show_bones:
-            x += self._draw_hud_pill(draw, x, y, f"Bones {bc}", fill=(45, 37, 24), fg=(255, 198, 88), outline=(120, 86, 38)) + 6
+            x += self._draw_hud_pill(draw, x, y, f"Bones {bc}", fill=warning_fill, fg=warning_text, outline=hud_outline) + 6
         compact_stats = f"V {vc:,}  F {fc:,}  Skin {skin_nodes}  UV {uv_ok}/{uv_mesh}  Tex {tex_ok}/{tex_total}"
-        self._draw_hud_pill(draw, 12, 34, compact_stats, fill=(22, 25, 30), fg=(165, 176, 190), outline=(58, 66, 78))
+        self._draw_hud_pill(draw, 12, 34, compact_stats, fill=hud_fill, fg=hud_muted, outline=hud_outline)
         # Show render bounds info — use CACHED value (not recomputed every frame)
         rbb_min, rbb_max = self._get_render_bounds()
         dx = rbb_max[0]-rbb_min[0]; dy = rbb_max[1]-rbb_min[1]; dz = rbb_max[2]-rbb_min[2]
@@ -7939,9 +7990,9 @@ class FrameRenderer:
             max(12, W - self._hud_text_width(bounds_txt) - 26),
             max(12, H - 28),
             bounds_txt,
-            fill=(18, 21, 25),
-            fg=(120, 132, 146),
-            outline=(46, 52, 60),
+            fill=hud_fill,
+            fg=hud_muted,
+            outline=hud_outline,
         )
         if vc == 0:
             if is_animation_supermodel(self.model):
@@ -7951,9 +8002,9 @@ class FrameRenderer:
                     H,
                     ["Animation supermodel loaded", "Skeleton and clips only"],
                     placement=getattr(self, "animation_supermodel_hud_placement", "center"),
-                    fill=(14, 18, 24),
-                    fg=(132, 205, 255),
-                    outline=(40, 100, 150),
+                    fill=hud_fill,
+                    fg=hud_text,
+                    outline=hud_outline,
                 )
                 return
             # Context-aware "no geometry" message:
@@ -8067,7 +8118,7 @@ class FrameRenderer:
             draw.text((W//2 - 220, H//2 - 8), warn, fill=warn_col)
         elif self.show_texture and tex_ok == 0 and tex_total > 0:
             warn = f"⚠ {tex_total} texture(s) referenced but none loaded – set texture directory"
-            self._draw_hud_pill(draw, 12, 58, warn, fill=(68, 44, 22), fg=(255, 190, 95), outline=(135, 82, 34))
+            self._draw_hud_pill(draw, 12, 58, warn, fill=warning_fill, fg=warning_text, outline=hud_outline)
 
         # Show animation state in bottom-right corner
         if self._anim_pose is not None and self._anim_name:
@@ -8082,17 +8133,17 @@ class FrameRenderer:
                 max(12, W - txt_w - 24),
                 max(12, H - 52),
                 anim_txt,
-                fill=(18, 46, 28),
-                fg=(125, 232, 142),
-                outline=(42, 118, 64),
+                fill=success_fill,
+                fg=success_text,
+                outline=hud_outline,
             )
             # Draw a progress bar at the very bottom of the frame
             bar_h = 4
             bar_y = H - bar_h
-            draw.rectangle([0, bar_y, W, H], fill=(20, 30, 40))
+            draw.rectangle([0, bar_y, W, H], fill=hud_fill)
             if self._anim_length > 0:
                 bar_w = int(W * min(1.0, self._anim_time / self._anim_length))
-                draw.rectangle([0, bar_y, bar_w, H], fill=(60, 200, 100))
+                draw.rectangle([0, bar_y, bar_w, H], fill=success_text)
         elif not self._anim_pose:
             # Show "Bind Pose" indicator when in rest position
             pose_txt = "Bind pose"
@@ -8101,8 +8152,8 @@ class FrameRenderer:
                 max(12, W - self._hud_text_width(pose_txt) - 26),
                 12,
                 pose_txt,
-                fill=(22, 25, 30),
-                fg=(112, 124, 140),
-                outline=(50, 58, 68),
+                fill=hud_fill,
+                fg=hud_muted,
+                outline=hud_outline,
             )
 

@@ -254,6 +254,36 @@ class _FloatingSnapViewWidget(QtWidgets.QWidget):
 
         self.adjustSize()
 
+    def apply_ghost_theme(self, theme) -> None:
+        panel_bg = theme.color("panel.backgroundAlt", theme.color("panel.altBackground"))
+        self.setStyleSheet(
+            "QWidget#snapBar {"
+            f"  background:{panel_bg};"
+            f"  border:1px solid {theme.color('panel.border')};"
+            "  border-radius:5px;"
+            "}"
+            "QPushButton {"
+            f"  background:{theme.color('button.background')};"
+            f"  color:{theme.color('button.text')};"
+            f"  border:1px solid {theme.color('panel.border')};"
+            "  padding:1px 6px; min-width:18px; font-size:10pt;"
+            "}"
+            "QPushButton:hover {"
+            f"  background:{theme.color('button.hover')};"
+            f"  border-color:{theme.color('input.focusBorder')};"
+            "}"
+            "QPushButton:pressed {"
+            f"  background:{theme.color('button.pressed')};"
+            "}"
+            "QPushButton:checked {"
+            f"  background:{theme.color('button.checked')};"
+            f"  color:{theme.color('button.checkedText', theme.color('button.accentText'))};"
+            f"  border-color:{theme.color('accent.primary')};"
+            "}"
+        )
+        for sep in self.findChildren(QtWidgets.QFrame):
+            sep.setStyleSheet(f"background:{theme.color('panel.border')};")
+
     def _on_ortho_toggled(self, checked: bool) -> None:
         self._ortho_button.setText("Ortho" if checked else "Persp")
         self.orthoToggled.emit(bool(checked))
@@ -308,6 +338,7 @@ class _MiniThumbnailWidget(QtWidgets.QGraphicsView):
         # The graphics scene holds a single QPixmap item — the thumbnail
         # render.  Updates replace that item's pixmap rather than the
         # scene contents so geometry stays stable.
+
         self._scene = QtWidgets.QGraphicsScene(self)
         self._scene.setBackgroundBrush(QtGui.QColor("#101216"))
         self.setScene(self._scene)
@@ -321,6 +352,17 @@ class _MiniThumbnailWidget(QtWidgets.QGraphicsView):
         )
         self._placeholder.setDefaultTextColor(QtGui.QColor("#8f9aaa"))
         self._placeholder.setPos(8.0, 8.0)
+
+    def apply_ghost_theme(self, theme) -> None:
+        self.setStyleSheet(
+            "QGraphicsView {"
+            f"  background:{theme.color('viewport.background')};"
+            f"  border:1px solid {theme.color('viewport.border')};"
+            "  border-radius:4px;"
+            "}"
+        )
+        self._scene.setBackgroundBrush(QtGui.QColor(theme.color("viewport.background")))
+        self._placeholder.setDefaultTextColor(QtGui.QColor(theme.color("viewport.text")))
 
     def set_thumbnail(self, pixmap: Optional[QtGui.QPixmap]) -> None:
         """Replace the inset's pixmap with *pixmap* (or clear if None)."""
@@ -597,9 +639,6 @@ class QtViewportWidget(QtWidgets.QWidget):
 
         tb = QtWidgets.QFrame()
         tb.setObjectName("ViewportToolbar")
-        tb.setStyleSheet(
-            "#ViewportToolbar { background:#202124; border:0; border-bottom:1px solid #3a3d42; }"
-        )
         tb.setFixedHeight(30)
         row = QtWidgets.QHBoxLayout(tb)
         row.setContentsMargins(4 if self._compact_controls else 5, 3, 4 if self._compact_controls else 5, 3)
@@ -657,20 +696,12 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.shade_combo.setFixedHeight(22)
         if self._compact_controls:
             self.shade_combo.setFixedWidth(58)
-        self.shade_combo.setStyleSheet(
-            "QComboBox { background:#2b2e33; color:#d7dde6; border:1px solid #464b53; "
-            f"padding:2px 18px 2px 7px; min-width:{44 if self._compact_controls else 68}px; }}"
-            "QComboBox:hover { border-color:#6d747f; }"
-            "QComboBox::drop-down { border:0; width:16px; }"
-            "QComboBox QAbstractItemView { background:#24272c; color:#d7dde6; selection-background-color:#3d5f8a; }"
-        )
         row.addWidget(self.shade_combo)
         self.render_mode_combo = QtWidgets.QComboBox()
         self.render_mode_combo.addItems(["Realistic", "Shaded", "Flat"])
         self.render_mode_combo.setFixedHeight(22)
         if self._compact_controls:
             self.render_mode_combo.setFixedWidth(76)
-        self.render_mode_combo.setStyleSheet(self.shade_combo.styleSheet())
         self.render_mode_combo.setToolTip("GPU render mode")
         row.addWidget(self.render_mode_combo)
         row.addWidget(self._button(self._toolbar_text("Frame  F", "F"), self.frame_all, tooltip="Frame all (F)"))
@@ -715,7 +746,6 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.camera_view_combo.addItems(["Top", "Front", "Side"])
         self.camera_view_combo.setFixedHeight(22)
         self.camera_view_combo.setToolTip("Viewport camera")
-        self.camera_view_combo.setStyleSheet(self.shade_combo.styleSheet())
         self.camera_view_combo.currentIndexChanged.connect(lambda _index=0: self._on_camera_view_combo_changed())
         row.addWidget(self.camera_view_combo)
         self.lock_camera_button = self._button(
@@ -735,9 +765,6 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.canvas.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.canvas.setMouseTracking(True)
         self.canvas.setScaledContents(False)
-        self.canvas.setStyleSheet(
-            "background:#17191c; color:#8f9aaa; border:1px solid #34383f;"
-        )
         self.canvas.installEventFilter(self)
         self.shade_combo.currentTextChanged.connect(self._on_shade_change)
         self.render_mode_combo.currentTextChanged.connect(self._on_render_mode_change)
@@ -753,8 +780,8 @@ class QtViewportWidget(QtWidgets.QWidget):
             height=44,
             parent=self,
         )
-        toolbar_scroll.setStyleSheet("QScrollArea { background:#202124; border:0; }")
         toolbar_scroll.setMinimumWidth(0)
+        self.viewport_toolbar_scroll = toolbar_scroll
         if self._compact_controls:
             toolbar_scroll.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
             root.addWidget(toolbar_scroll)
@@ -825,23 +852,23 @@ class QtViewportWidget(QtWidgets.QWidget):
             button.setFixedWidth(width)
             button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         button.setCursor(QtCore.Qt.PointingHandCursor)
-        button.setStyleSheet(
-            f"QPushButton {{ background:#2b2e33; color:#d7dde6; border:1px solid #464b53; padding:2px {4 if self._compact_controls else 7}px; }}"
-            "QPushButton:checked { background:#35506f; color:#ffffff; border-color:#6ea0d8; }"
-            "QPushButton:hover { background:#363a40; color:#ffffff; border-color:#6d747f; }"
-            "QPushButton:pressed { background:#1f2227; }"
-        )
         if tooltip:
             button.setToolTip(tooltip)
         button.clicked.connect(lambda checked=False: callback(checked) if checkable else callback())
         return button
 
     def apply_ghost_theme(self, theme) -> None:
+        self._current_theme = theme
         toolbar = self.findChild(QtWidgets.QFrame, "ViewportToolbar")
         if toolbar is not None:
             toolbar.setStyleSheet(
                 f"#ViewportToolbar {{ background:{theme.color('toolbar.background')}; "
                 f"border:0; border-bottom:1px solid {theme.color('toolbar.border')}; }}"
+            )
+        toolbar_scroll = getattr(self, "viewport_toolbar_scroll", None)
+        if toolbar_scroll is not None:
+            toolbar_scroll.setStyleSheet(
+                f"QScrollArea {{ background:{theme.color('toolbar.background')}; border:0; }}"
             )
         combo_style = (
             f"QComboBox {{ background:{theme.color('input.background')}; "
@@ -849,7 +876,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             "padding:2px 18px 2px 7px; }"
             f"QComboBox:hover {{ border-color:{theme.color('accent.secondary')}; }}"
             "QComboBox::drop-down { border:0; width:16px; }"
-            f"QComboBox QAbstractItemView {{ background:{theme.color('panel.altBackground')}; "
+            f"QComboBox QAbstractItemView {{ background:{theme.color('panel.backgroundAlt', theme.color('panel.altBackground'))}; "
             f"color:{theme.color('text.primary')}; selection-background-color:{theme.color('selection.background')}; }}"
         )
         for combo_name in ("shade_combo", "render_mode_combo", "camera_view_combo"):
@@ -866,6 +893,17 @@ class QtViewportWidget(QtWidgets.QWidget):
             f"color:{theme.color('viewport.text')}; "
             f"border:1px solid {theme.color('viewport.border')};"
         )
+        if hasattr(self._renderer, "set_theme_colors"):
+            self._renderer.set_theme_colors(theme)
+        if self._gpu_renderer is not None and hasattr(self._gpu_renderer, "set_theme_colors"):
+            self._gpu_renderer.set_theme_colors(theme)
+        if hasattr(self, "transform_typein_bar"):
+            self.transform_typein_bar.apply_ghost_theme(theme)
+        if hasattr(self, "_snap_view_widget"):
+            self._snap_view_widget.apply_ghost_theme(theme)
+        if hasattr(self, "_thumbnail_widget"):
+            self._thumbnail_widget.apply_ghost_theme(theme)
+        self._request_render(fast=True)
 
     def apply_ghost_layout(self, layout) -> None:
         toolbar = self.findChild(QtWidgets.QFrame, "ViewportToolbar")
@@ -893,11 +931,12 @@ class QtViewportWidget(QtWidgets.QWidget):
             max(120, layout.viewport.min_width // 4 if self._compact_controls else 180),
             100 if self._compact_controls else 140,
         )
+        if hasattr(self, "transform_typein_bar"):
+            self.transform_typein_bar.apply_ghost_layout(layout)
 
     def _separator(self) -> QtWidgets.QFrame:
         sep = QtWidgets.QFrame()
         sep.setFrameShape(QtWidgets.QFrame.VLine)
-        sep.setStyleSheet("background:#4a4f58;")
         sep.setFixedWidth(1)
         return sep
 
@@ -1124,6 +1163,9 @@ class QtViewportWidget(QtWidgets.QWidget):
     def set_shared_gpu_renderer(self, renderer: Optional[GpuRenderer]) -> None:
         self._gpu_renderer = renderer
         self._owns_gpu_renderer = renderer is None
+        theme = getattr(self, "_current_theme", None)
+        if theme is not None and self._gpu_renderer is not None and hasattr(self._gpu_renderer, "set_theme_colors"):
+            self._gpu_renderer.set_theme_colors(theme)
 
     def set_game_library(self, library, game_tag: str = "K1") -> None:
         self._renderer.tex_cache.set_game_library(library, game_tag)
@@ -3742,6 +3784,9 @@ class QtViewportWidget(QtWidgets.QWidget):
     def _render_gpu_frame(self, w: int, h: int):
         if self._gpu_renderer is None:
             self._gpu_renderer = GpuRenderer()
+            theme = getattr(self, "_current_theme", None)
+            if theme is not None and hasattr(self._gpu_renderer, "set_theme_colors"):
+                self._gpu_renderer.set_theme_colors(theme)
         self._preload_gpu_textures()
         tex_cache = getattr(self._renderer, "tex_cache", None)
         textures = {

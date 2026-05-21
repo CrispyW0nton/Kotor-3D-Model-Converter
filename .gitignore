@@ -44,6 +44,7 @@ game_data/
 !/tests/test_mcp_textures.py
 !/tests/test_mcp_skinning.py
 !/tests/test_qt_only_imports.py
+!/tests/test_theme_layout_loading.py
 !/tests/test_character_mode.py
 !/tests/test_joint_dot_overlay.py
 !/tests/test_headless_body_workflow.py
