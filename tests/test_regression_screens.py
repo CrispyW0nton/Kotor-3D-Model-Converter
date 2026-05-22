@@ -207,9 +207,16 @@ def _make_screenshot_shell(mode_name: str, step: int) -> QtWidgets.QWidget:
     return shell
 
 
-def _capture_builder_mode(mode_name: str, step: int, out_path: pathlib.Path, qapp) -> None:
+def _capture_builder_mode(
+    mode_name: str,
+    step: int,
+    out_path: pathlib.Path,
+    qapp,
+    target_size: tuple[int, int],
+) -> None:
     shell = _make_screenshot_shell(mode_name, step)
     try:
+        shell.setFixedSize(*target_size)
         shell.show()
         qapp.processEvents()
         qapp.processEvents()
@@ -254,7 +261,10 @@ def test_t1102_character_builder_mode_screenshots(
     if not golden_path.exists():
         pytest.fail(f"Missing screenshot golden: {golden_path}")
 
-    _capture_builder_mode(mode_name, step, current_path, qapp)
+    with Image.open(golden_path) as golden:
+        target_size = golden.size
+
+    _capture_builder_mode(mode_name, step, current_path, qapp, target_size)
 
     score = _similarity(current_path, golden_path)
     assert score >= SIMILARITY_THRESHOLD, (

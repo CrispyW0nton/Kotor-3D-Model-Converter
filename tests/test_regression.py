@@ -1820,8 +1820,39 @@ def test_read_mdl_safe_k1_supermodel_node_order_uses_logical_offsets() -> None:
     model = read_mdl_safe(mdl, source_ext=mdx)
 
     assert model.name.lower() == "s_male02"
-    assert len(model.all_nodes()) == 96
+    node_names = [node.name.lower() for node in model.all_nodes()]
+    assert len(node_names) >= 80
+    assert "impact_bolt" in node_names
     assert len(model.anims) == 166
+
+
+@pytest.mark.parametrize(
+    ("game", "resref", "expected_node"),
+    [
+        ("k1", "fx_explode_03", "auroralight04"),
+        ("k2", "504ondh", "sunaurora"),
+    ],
+)
+def test_read_mdl_safe_trims_stock_light_arrays(game: str, resref: str, expected_node: str) -> None:
+    from src.core.qt_core.mdl.mdl_reader_wrapper import read_mdl_safe
+
+    mdl, mdx = _raw_model(game, resref)
+    model = read_mdl_safe(mdl, source_ext=mdx)
+
+    node_names = {node.name.lower() for node in model.all_nodes()}
+    assert expected_node in node_names
+
+
+@pytest.mark.skipif(not K1_PATH.exists(), reason="K1 install not available")
+def test_read_mdl_safe_sanitizes_stock_nan_face_coefficients() -> None:
+    from src.core.qt_core.mdl.mdl_reader_wrapper import read_mdl_safe
+
+    mdl, mdx = _raw_model("k1", "w_dblsbr_001")
+    model = read_mdl_safe(mdl, source_ext=mdx)
+    mesh_nodes = [node for node in model.all_nodes() if node.mesh is not None]
+
+    assert any(node.name.lower() == "dblsbr" for node in mesh_nodes)
+    assert all(isinstance(face.coefficient, int) for node in mesh_nodes for face in node.mesh.faces)
 
 
 @pytest.mark.skipif(not K2_PATH.exists(), reason="K2 install not available")

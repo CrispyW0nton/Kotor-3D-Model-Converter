@@ -31,11 +31,23 @@ class GizmoRenderer:
         cx, cy, depth = cp
         world_per_px = (2.0 * max(0.5, float(depth)) * math.tan(math.radians(float(camera.fov)) * 0.5)) / max(1, height)
         arm_world = 82.0 * world_per_px
-        axes = {"X": (arm_world, 0.0, 0.0), "Y": (0.0, arm_world, 0.0), "Z": (0.0, 0.0, arm_world)}
+        basis = getattr(gizmo, "axis_basis", None) or {}
+        axes = {
+            axis: (
+                float((basis.get(axis) or fallback)[0]) * arm_world,
+                float((basis.get(axis) or fallback)[1]) * arm_world,
+                float((basis.get(axis) or fallback)[2]) * arm_world,
+            )
+            for axis, fallback in {
+                "X": (1.0, 0.0, 0.0),
+                "Y": (0.0, 1.0, 0.0),
+                "Z": (0.0, 0.0, 1.0),
+            }.items()
+        }
         if gizmo.mode == GizmoMode.TRANSLATE:
             self._draw_translate(draw, gizmo, projector, width, height, (cx, cy), center, axes)
         elif gizmo.mode == GizmoMode.ROTATE:
-            self._draw_rotate(draw, gizmo, camera, projector, width, height, (cx, cy, depth), center, arm_world)
+            self._draw_rotate(draw, gizmo, camera, projector, width, height, (cx, cy, depth), center, arm_world, axes)
         elif gizmo.mode == GizmoMode.SCALE:
             self._draw_scale(draw, gizmo, projector, width, height, (cx, cy), center, axes)
         return self.handles
@@ -56,7 +68,10 @@ class GizmoRenderer:
             draw.line([cx, cy, sx, sy], fill=col, width=line_w)
             self._draw_arrowhead(draw, cx, cy, sx, sy, col)
             self.handles.append({"name": name, "kind": "segment", "start": (cx, cy), "end": (sx, sy), "radius": 10})
-        draw.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], fill=(235, 235, 235, 255), outline=(30, 32, 36, 255), width=2)
+        center_name = "TRANSLATE_VIEW"
+        center_col = self.HILITE if center_name in (gizmo.hovered_handle, gizmo.active_handle) else (235, 235, 235, 255)
+        draw.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], fill=center_col, outline=(30, 32, 36, 255), width=2)
+        self.handles.append({"name": center_name, "kind": "point", "pos": (cx, cy), "radius": 14, "priority": 10})
 
     def _draw_scale(self, draw, gizmo, projector, width, height, center_screen, center_world, axes) -> None:
         cx, cy = center_screen
@@ -76,7 +91,7 @@ class GizmoRenderer:
         draw.rectangle([cx - 7, cy - 7, cx + 7, cy + 7], fill=uniform_col, outline=(20, 22, 26, 255), width=2)
         self.handles.append({"name": "SCALE_UNIFORM", "kind": "point", "pos": (cx, cy), "radius": 14, "priority": 10})
 
-    def _draw_rotate(self, draw, gizmo, camera, projector, width, height, center_screen, center_world, radius_world) -> None:
+    def _draw_rotate(self, draw, gizmo, camera, projector, width, height, center_screen, center_world, radius_world, axes) -> None:
         cx, cy, center_depth = center_screen
         radius_px = 82
         draw.ellipse(
@@ -86,9 +101,9 @@ class GizmoRenderer:
         )
 
         ring_points = {
-            "X": self._world_ring_points(center_world, radius_world, (0, 1, 0), (0, 0, 1)),
-            "Y": self._world_ring_points(center_world, radius_world, (1, 0, 0), (0, 0, 1)),
-            "Z": self._world_ring_points(center_world, radius_world, (1, 0, 0), (0, 1, 0)),
+            "X": self._world_ring_points(center_world, radius_world, axes["Y"], axes["Z"], normalize=True),
+            "Y": self._world_ring_points(center_world, radius_world, axes["X"], axes["Z"], normalize=True),
+            "Z": self._world_ring_points(center_world, radius_world, axes["X"], axes["Y"], normalize=True),
         }
         projected: dict[str, list[tuple[int, int, float] | None]] = {}
         for axis, points in ring_points.items():
@@ -146,10 +161,15 @@ class GizmoRenderer:
         return (max(25, int(r * 0.32)), max(25, int(g * 0.32)), max(25, int(b * 0.32)), min(170, a))
 
     @staticmethod
-    def _world_ring_points(center, radius, u, v, steps: int = 144):
+    def _world_ring_points(center, radius, u, v, steps: int = 144, normalize: bool = False):
         cx, cy, cz = float(center[0]), float(center[1]), float(center[2])
         ux, uy, uz = float(u[0]), float(u[1]), float(u[2])
         vx, vy, vz = float(v[0]), float(v[1]), float(v[2])
+        if normalize:
+            ul = max(1e-9, math.sqrt(ux * ux + uy * uy + uz * uz))
+            vl = max(1e-9, math.sqrt(vx * vx + vy * vy + vz * vz))
+            ux, uy, uz = ux / ul, uy / ul, uz / ul
+            vx, vy, vz = vx / vl, vy / vl, vz / vl
         pts = []
         for i in range(steps + 1):
             t = math.tau * float(i) / float(steps)

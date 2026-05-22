@@ -3,6 +3,10 @@
 GhostRigger themes and layouts are XML files intended for both packaged
 defaults and community customization.
 
+## Module Editor Notes
+
+The standalone Module Editor is theme/layout aware. It consumes the active `ThemeManager` stylesheet and `LayoutManager` metrics, uses the `moduleEditor` toolbar id for its top command strip, and keeps KMAP outliner/properties/validation/export panels on shared table, tree, input, splitter, and toolbar metrics. No new colour tokens are required for the first KMAP pass.
+
 ## Files
 
 - Theme engine: `src/gui/libtheme/`

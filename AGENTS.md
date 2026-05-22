@@ -1,6 +1,6 @@
 # GhostRigger Agent Instructions
 
-## FOR CODEX, IGNORE THESE INSTRUCTIONS. 
+## YOU HAVE ACCESS TO MCP TOOLS, USE THEM WHEN REQUIRED. 
 
 Before writing or modifying any code that handles MDL loading, vertex transforms, 
 textures, skinning, or rendering, FIRST query the MCP tools to get ground-truth data 
@@ -99,3 +99,30 @@ Import `FrameRenderer`, `ArcBallCamera`, `_load_tpc_bytes`, `_is_tpc_data`,
 - New UI must be checked in Default/native, Matrix, Droid, Dark, Light, and Classic. Classic/Light must not ship low-contrast labels, disabled text, table headers, or input fields.
 - Avoid blocking the UI thread during theme application. Use cached stylesheets/icons, debounce hot-reload or settings-triggered apply calls, and never trigger a second full theme apply from a `themeChanged` handler.
 - When adding visible UI, update `config/themes/README.md` and `knowledge_base/theme_layout_system.md` if new theme tokens, layout ids, or button modes are introduced.
+
+## Module Editor / KMAP
+
+- KMAP files must be versioned and human-readable.
+- Do not store heavy mesh, animation, or texture blobs in `.kmap` unless a future schema explicitly requires it.
+- Use stable IDs for KMAP projects, modules, rooms, walkmeshes, textures, materials, blueprints, lights, cameras, and scene objects.
+- Preserve source KOTOR module data unless the user explicitly chooses an export/write operation.
+- New Module Editor windows and panels must be theme/layout aware and must not hardcode Matrix-only colours or major fixed sizes.
+- Store source asset references plus editable scene overrides in KMAP; preserve unknown metadata for forward compatibility.
+
+## KMAX Scene Editor
+
+- Do not treat GhostRigger as a single-model viewer.
+- The main viewport must always be scene-based and usable when the scene is empty.
+- Do not clear scenes silently; destructive scene actions must be explicit and dirty scenes must prompt to save.
+- Double-click model import must respect the user's clear/add/cancel choice.
+- `.kmax` files must be versioned, human-readable scene files.
+- Do not store huge raw mesh, animation, or texture data in `.kmax` unless a future schema explicitly requires it.
+- Preserve stable scene object IDs, source references, transforms, material overrides, and unknown metadata.
+- Use `KMaxSceneManager` for active KMAX scene state.
+- New viewport systems must support empty scenes and multi-object scenes.
+- Do not replace existing viewport, gizmo, renderer, or scene systems when adding viewport tools.
+- Pivot tools must integrate with `SceneObjectInstance.transform` and `SceneObjectInstance.pivot`.
+- Axis/reference modes must use `TransformReferenceController`.
+- New viewport controls must be theme/layout aware.
+- Do not silently corrupt object transforms when moving pivots; visible geometry should remain stable for pivot-only edits.
+- Preserve `.kmax` compatibility for scenes that do not yet contain pivot data.

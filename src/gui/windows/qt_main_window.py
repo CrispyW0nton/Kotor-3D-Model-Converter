@@ -1,8 +1,8 @@
 """Qt main-window shell for GhostRigger.
 
 This is the first migration step away from Tkinter.  Qt owns the main
-application window and process event loop; legacy Tk tools are launched in a
-separate process so Qt and Tk do not fight over GUI ownership in one process.
+application window and process event loop. Legacy Tk tools were removed in
+M3/T302; this shell exposes only Qt workflows.
 """
 
 from __future__ import annotations
@@ -33,9 +33,16 @@ from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel
 from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
 from src.gui.qt_lib.panels.qt_camera_panel import QtCameraPanel
 from src.gui.qt_lib.panels.qt_mesh_tools_panel import QtMeshToolsPanel
-from src.gui.qt_lib.assets.qt_theme import QtFlowLayout, make_scrollable_panel, update_legacy_palette
+from src.gui.qt_lib.panels.adjust_pivot_panel import AdjustPivotPanel
+from src.gui.qt_lib.assets.qt_theme import (
+    QtFlowLayout,
+    make_horizontal_overflow_area,
+    make_scrollable_panel,
+    update_legacy_palette,
+)
 from src.gui.qt_lib.assets.qt_matrix_background import QtMatrixEngine, QtMatrixLabel, QtMatrixPanel
 from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel, QtSkeletonPanel
+from src.gui.qt_lib.panels.qt_scene_outliner_panel import QtSceneOutlinerPanel
 from src.gui.qt_lib.viewports.qt_viewport import QtMainViewportWidget
 from src.gui.qt_lib.panels.qt_animation_panel import (
     QtAnimationLibraryCombinedPanel,
@@ -46,10 +53,11 @@ from src.gui.qt_lib.windows.qt_blueprint_editor import QtBlueprintEditorWindow
 from src.gui.qt_lib.panels.qt_character_builder_panel import QtCharacterBuilderWindow
 from src.gui.qt_lib.panels.qt_diagnostics_panel import QtDiagnosticsWindow
 from src.gui.qt_lib.dialogs.qt_dialogs import show_about, show_format_reference, show_ipc_info, show_viewport_navigation_reference
+from src.gui.qt_lib.dialogs.add_model_to_scene_dialog import AddModelToSceneChoice, AddModelToSceneDialog
 from src.gui.qt_lib.dialogs.qt_lightmap_baker_dialog import QtLightmapBakerDialog
 from src.gui.qt_lib.dialogs.qt_render_frame_dialog import QtRenderFrameDialog
-from src.gui.qt_lib.panels.qt_modular_panel import QtModularModePanel
 from src.gui.qt_lib.panels.qt_resource_panel import QtResourceBrowserPanel, QtTwoDaBrowserPanel
+from src.gui.qt_lib.windows.module_editor_window import ModuleEditorWindow
 from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
 from src.gui.qt_lib.windows.qt_retarget_preview_controller import (
     QtRetargetViewportAdapter,
@@ -67,6 +75,10 @@ from src.gui.libtheme.theme_editor_window import ThemeEditorWindow
 from src.gui.libtheme.theme_settings import ThemeLayoutSettings
 from src.gui.libtheme.theme_watcher import ThemeLayoutWatcher
 from src.measurement.unit_settings import MeasurementSettings
+from src.core.scene.kmax_scene_manager import KMaxSceneManager
+from src.core.scene.axis_mode import AxisMode
+from src.core.scene.scene_object import Transform
+from src.core.scene.scene_resource_ref import SceneResourceRef
 
 
 C = dict(LEGACY_MATRIX_COLORS)
@@ -670,6 +682,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.startup_input = startup_input or {}
         self.settings_path = self.app_root / "settings.json"
         self.settings_data = self._load_settings()
+        self.settings_data.setdefault("model_double_click_behaviour", "always ask")
+        self.settings_data.setdefault("default_import_placement", "auto_offset")
+        self.settings_data.setdefault("recent_scenes", [])
+        self.settings_data.setdefault("last_axis_mode", AxisMode.WORLD.value)
+        self.settings_data.setdefault("last_pivot_edit_mode", "affect_object_only")
+        self.settings_data.setdefault("show_adjust_pivot_toolbox", True)
         self.theme_manager = ThemeManager(self.app_root, self.settings_data, self)
         self.layout_manager = LayoutManager(self.app_root, self.settings_data, self)
         self.theme_manager.themeChanged.connect(self._on_theme_changed)
@@ -689,8 +707,14 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._auto_detect_worker: Optional[QtCore.QObject] = None
         self._batch_thread: Optional[QtCore.QThread] = None
         self._batch_worker: Optional[QtCore.QObject] = None
-        self._legacy_process: Optional[subprocess.Popen] = None
         self._library_rows: list[dict] = []
+        self.scene_manager = KMaxSceneManager()
+        self._scene_texture_dirs: list[str] = []
+        self._pending_scene_import_action = "add"
+        self._pending_scene_import_placement = str(
+            self.settings_data.get("default_import_placement") or "auto_offset"
+        )
+        self._session_model_double_click_choice = ""
         self._current_model = None
         self._model_path = ""
         self._current_game = ""
@@ -736,6 +760,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.theme_manager.apply_current_theme(self)
         self.layout_manager.apply_current_layout(self)
         self._build_statusbar()
+        self._refresh_scene_view()
+        self.scene_manager.active_scene.mark_clean()
+        self._update_scene_chrome()
         self._configure_theme_watcher()
         self._log("Qt host window ready.", "success")
         QtCore.QTimer.singleShot(0, self._open_startup_inputs)
@@ -1038,8 +1065,25 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._log(f"Layout file reloaded: {Path(path).name}", "success")
 
     def _build_actions(self):
+        self.new_scene_action = QtGui.QAction("New Scene", self)
+        self.new_scene_action.setShortcut("Ctrl+N")
+        self.new_scene_action.triggered.connect(self._new_scene)
+        self.open_scene_action = QtGui.QAction(self._icon("open"), "Open Scene...", self)
+        self.open_scene_action.setShortcut("Ctrl+O")
+        self.open_scene_action.triggered.connect(self._open_scene)
+        self.save_scene_action = QtGui.QAction("Save Scene", self)
+        self.save_scene_action.setShortcut("Ctrl+S")
+        self.save_scene_action.triggered.connect(self._save_scene)
+        self.save_scene_as_action = QtGui.QAction("Save Scene As...", self)
+        self.save_scene_as_action.setShortcut("Ctrl+Shift+S")
+        self.save_scene_as_action.triggered.connect(self._save_scene_as)
+        self.close_scene_action = QtGui.QAction("Close Scene", self)
+        self.close_scene_action.triggered.connect(self._close_scene)
+        self.export_scene_action = QtGui.QAction("Export Scene...", self)
+        self.export_scene_action.triggered.connect(self._export_scene)
+
         self.open_model_action = QtGui.QAction(self._icon("open"), "Open MDL (binary)...", self)
-        self.open_model_action.setShortcut("Ctrl+O")
+        self.open_model_action.setShortcut("Ctrl+Shift+M")
         self.open_model_action.triggered.connect(self._open_model)
 
         self.open_ascii_action = QtGui.QAction("Open MDL (ASCII text)...", self)
@@ -1056,7 +1100,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.import_gltf_action = QtGui.QAction("Import GLB/GLTF...", self)
         self.import_gltf_action.triggered.connect(self._import_gltf)
         self.save_ascii_action = QtGui.QAction("Save ASCII MDL...", self)
-        self.save_ascii_action.setShortcut("Ctrl+S")
+        self.save_ascii_action.setShortcut("Ctrl+Alt+S")
         self.save_ascii_action.triggered.connect(self._save_ascii_mdl)
         self.export_binary_action = QtGui.QAction("Export Binary MDL...", self)
         self.export_binary_action.setShortcut("Ctrl+M")
@@ -1140,12 +1184,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.unreal_animator_action.setShortcut("Ctrl+Shift+U")
         self.unreal_animator_action.triggered.connect(self._open_unreal_animator_window)
         self.sequence_editor_action = QtGui.QAction(self._icon("anims"), "Sequence Editor (Dock)", self)
-        self.sequence_editor_action.setShortcut("Ctrl+Shift+S")
+        self.sequence_editor_action.setShortcut("Ctrl+Alt+Q")
         self.sequence_editor_action.triggered.connect(self._show_sequence_editor_dock)
         self.sequence_editor_window_action = QtGui.QAction(self._icon("anims"), "Sequence Editor (Window)...", self)
         self.sequence_editor_window_action.triggered.connect(self._open_sequence_editor_window)
         self.modules_action = QtGui.QAction(self._icon("modular"), "Open Module Editor", self)
-        self.modules_action.triggered.connect(self._show_modules_tab)
+        self.modules_action.triggered.connect(self._open_module_editor_window)
         self.rig_window_action = QtGui.QAction(self._icon("rig"), "Open Rigging Window", self)
         self.rig_window_action.triggered.connect(self._open_rig_window)
         self.texture_tool_action = QtGui.QAction(self._icon("texture"), "Texture Tool...", self)
@@ -1166,6 +1210,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.resources_panel_action.triggered.connect(lambda: self._show_detachable_panel("resources"))
         self.module_meshes_panel_action = QtGui.QAction(self._icon("props"), "Open Module Meshes", self)
         self.module_meshes_panel_action.triggered.connect(lambda: self._show_detachable_panel("module_meshes"))
+        self.adjust_pivot_panel_action = QtGui.QAction("Open Adjust Pivot", self)
+        self.adjust_pivot_panel_action.triggered.connect(lambda: self._show_detachable_panel("adjust_pivot"))
         self.set_mdlops_action = QtGui.QAction("Set MDLOps Path...", self)
         self.set_mdlops_action.triggered.connect(self._set_mdlops)
         self.compile_action = QtGui.QAction("Compile ASCII MDL to Binary", self)
@@ -1189,15 +1235,20 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.refresh_gmodular_action = QtGui.QAction("Refresh GModular Viewport", self)
         self.refresh_gmodular_action.triggered.connect(self._ipc_refresh_gmodular)
 
-        self.launch_legacy_action = QtGui.QAction("Open Legacy Tk Workbench", self)
-        self.launch_legacy_action.triggered.connect(self._launch_legacy_tk)
-
         self.quit_action = QtGui.QAction("Exit", self)
         self.quit_action.setShortcut("Alt+F4")
         self.quit_action.triggered.connect(self.close)
 
     def _build_menu(self):
         file_menu = self.menuBar().addMenu("File")
+        file_menu.addAction(self.new_scene_action)
+        file_menu.addAction(self.open_scene_action)
+        self.recent_scenes_menu = file_menu.addMenu("Recent Scenes")
+        self._rebuild_recent_scenes_menu()
+        file_menu.addAction(self.save_scene_action)
+        file_menu.addAction(self.save_scene_as_action)
+        file_menu.addAction(self.close_scene_action)
+        file_menu.addSeparator()
         file_menu.addAction(self.open_model_action)
         file_menu.addAction(self.open_ascii_action)
         file_menu.addAction(self.clear_model_action)
@@ -1207,6 +1258,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         file_menu.addAction(self.import_gltf_action)
         file_menu.addSeparator()
         file_menu.addAction(self.save_ascii_action)
+        file_menu.addAction(self.export_scene_action)
         file_menu.addAction(self.export_binary_action)
         file_menu.addAction(self.export_obj_action)
         file_menu.addAction(self.export_fbx_action)
@@ -1283,6 +1335,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         modules_menu.addAction(self.lighting_panel_action)
         modules_menu.addAction(self.camera_panel_action)
         modules_menu.addAction(self.module_meshes_panel_action)
+        modules_menu.addAction(self.adjust_pivot_panel_action)
         modules_menu.addAction(self.twoda_panel_action)
         modules_menu.addAction(self.resources_panel_action)
         modules_menu.addSeparator()
@@ -1300,8 +1353,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         tools_menu.addAction(self.character_builder_action)
         tools_menu.addSeparator()
         tools_menu.addAction(self.validate_character_action)
-        tools_menu.addSeparator()
-        tools_menu.addAction(self.launch_legacy_action)
 
         ipc_menu = self.menuBar().addMenu("IPC")
         server_action = QtGui.QAction("GhostRigger Server (port 7001) - This Program", self)
@@ -1409,7 +1460,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout = QtFlowLayout(bar, margin=0, hspacing=5, vspacing=4)
         layout.setContentsMargins(10, 4, 10, 4)
 
-        layout.addWidget(self._tool_button("Open  Ctrl+O", self.open_model_action, "open"))
+        layout.addWidget(self._tool_button("Open Scene  Ctrl+O", self.open_scene_action, "open"))
+        layout.addWidget(self._tool_button("Save  Ctrl+S", self.save_scene_action, "save"))
         layout.addWidget(self._tool_button("Auto-Rig  R", self.autorig_action, "autorig"))
         layout.addWidget(self._tool_button("Character Builder", self.character_builder_action, "charbuilder"))
         layout.addWidget(self._tool_button("Modules", self.modules_action, "modular"))
@@ -1438,11 +1490,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(export_button)
         layout.addWidget(self._separator())
 
-        self.model_pill = QtWidgets.QLabel("// No model loaded")
+        self.model_pill = QtWidgets.QLabel("// Untitled Scene")
         self.model_pill.setObjectName("ModelPill")
         self.model_pill.setMinimumWidth(154)
         self.model_pill.setAlignment(QtCore.Qt.AlignCenter)
-        self.model_pill.setToolTip("No model loaded. Ctrl+W clears the current viewport.")
+        self.model_pill.setToolTip("Active KMAX scene.")
         layout.addWidget(self.model_pill)
 
         layout.addWidget(self._tool_button("Settings  F2", self.settings_action, "settings", compact=True))
@@ -1454,8 +1506,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._tool_button("Lights", self.lighting_panel_action, "", compact=True))
         layout.addWidget(self._tool_button("Cameras", self.camera_panel_action, "", compact=True))
         layout.addWidget(self._tool_button("Diag  Ctrl+D", self.diag_action, "diag", compact=True))
-        self.command_bar_scroll = None
-        return bar
+        self.command_bar_scroll = make_horizontal_overflow_area(
+            bar,
+            "CommandBarScroll",
+            height=max(42, bar.sizeHint().height()),
+            parent=self,
+        )
+        return self.command_bar_scroll
 
     def _make_viewport_toolbar_band(self, toolbar: QtWidgets.QWidget | None) -> QtWidgets.QWidget | None:
         if toolbar is None:
@@ -1669,6 +1726,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             pass
 
     def _on_detachable_panel_visibility(self, key: str, dock: QtWidgets.QDockWidget, visible: bool) -> None:
+        if key == "adjust_pivot":
+            self.settings_data["show_adjust_pivot_toolbox"] = bool(visible)
+            try:
+                save_settings(self.settings_path, self.settings_data)
+            except Exception:
+                pass
         if visible:
             return
         self._remember_detachable_panel_state(key, dock)
@@ -1731,11 +1794,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.left_tabs = left_tabs
 
         self.library_panel = QtLibraryPanel(self)
-        self.library_panel.autoDetectRequested.connect(self._auto_detect_dirs)
         self.library_panel.scanRequested.connect(self._scan_library)
         self.library_panel.deepScanRequested.connect(self._scan_library)
         self.library_panel.loadRequested.connect(self._start_resource_load)
         self.library_panel.extractRequested.connect(self._extract_library_row)
+        self.library_panel.levelEditorImportRequested.connect(self._send_library_row_to_module_editor)
         self.library_panel.retargetSourceRequested.connect(
             lambda row: self._send_library_row_to_retarget(row, "source")
         )
@@ -1743,8 +1806,17 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             lambda row: self._send_library_row_to_retarget(row, "target")
         )
         self.library_panel.batchRequested.connect(self._batch_library_export)
-        self.library_panel.dirsChanged.connect(self._on_library_dirs_changed)
         left_tabs.addTab(self.library_panel, self._icon("library", 16), "Library")
+
+        self.scene_outliner_panel = QtSceneOutlinerPanel(self)
+        self.scene_outliner_panel.objectSelected.connect(self._select_scene_object)
+        self.scene_outliner_panel.objectDeleteRequested.connect(self._delete_scene_object)
+        self.scene_outliner_panel.objectDuplicateRequested.connect(self._duplicate_scene_object)
+        self.scene_outliner_panel.objectFocusRequested.connect(self._focus_scene_object)
+        self.scene_outliner_panel.objectVisibilityChanged.connect(self._set_scene_object_visible)
+        self.scene_outliner_panel.objectLockedChanged.connect(self._set_scene_object_locked)
+        self.scene_outliner_panel.objectRenamed.connect(self._rename_scene_object)
+        left_tabs.addTab(self.scene_outliner_panel, self._icon("props", 16), "Scene")
 
         right_tabs = QtWidgets.QTabWidget()
         right_tabs.setUsesScrollButtons(True)
@@ -1811,9 +1883,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.resource_panel.scanRequested.connect(self._populate_resource_panel)
         self.resource_panel.resourceSelected.connect(self._preview_resource_row)
         self.resource_panel.resourceActivated.connect(self._activate_resource_row)
-        self.modular_panel = QtModularModePanel(self)
-        self.modular_panel.moduleActionRequested.connect(self._handle_module_action)
+        self.module_editor_window = None
         self.mesh_tools_panel = QtMeshToolsPanel(self)
+        self.adjust_pivot_panel = AdjustPivotPanel(self)
         self.blueprint_window = QtBlueprintEditorWindow(self)
         self.blueprint_panel = self.blueprint_window.panel
         self._detachable_panels: dict[str, QtWidgets.QDockWidget] = {}
@@ -1823,6 +1895,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             "cameras": (460, 680),
             "module_meshes": (620, 720),
             "mesh_tools": (420, 760),
+            "adjust_pivot": (320, 420),
             "2das": (980, 640),
             "resources": (980, 640),
         }
@@ -1831,26 +1904,38 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._create_detachable_panel("cameras", "Cameras", self.camera_panel, QtCore.Qt.RightDockWidgetArea)
         self._create_detachable_panel("module_meshes", "Module Meshes", self.module_geometry_panel, QtCore.Qt.RightDockWidgetArea)
         self.mesh_tools_dock = self._create_detachable_panel("mesh_tools", "Mesh Tools", self.mesh_tools_panel, QtCore.Qt.RightDockWidgetArea)
+        self.adjust_pivot_dock = self._create_detachable_panel("adjust_pivot", "Adjust Pivot", self.adjust_pivot_panel, QtCore.Qt.RightDockWidgetArea)
         self._create_detachable_panel("2das", "2DA Browser", self.twoda_panel, QtCore.Qt.LeftDockWidgetArea)
         self._create_detachable_panel("resources", "Resource Browser", self.resource_panel, QtCore.Qt.LeftDockWidgetArea)
-        left_tabs.addTab(self.modular_panel, self._icon("modular", 16), "Modules")
         main_splitter.addWidget(left_tabs)
 
         self.viewport = QtMainViewportWidget(self)
         self.viewport.set_navigation_profile(
             self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
         )
+        self.viewport.set_axis_mode(self.settings_data.get("last_axis_mode", AxisMode.WORLD.value))
+        self.settings_data["last_pivot_edit_mode"] = "affect_object_only"
+        self.viewport.set_pivot_edit_mode("affect_object_only")
+        self.adjust_pivot_panel.set_pivot_mode(self.viewport.pivot_edit_mode())
+        self.adjust_pivot_panel.pivotModeChanged.connect(self._set_pivot_edit_mode)
+        self.adjust_pivot_panel.pivotActionRequested.connect(self._apply_pivot_action)
         self.mesh_tools_panel.set_viewport(self.viewport)
         self.mesh_tools_dock.show()
+        if bool(self.settings_data.get("show_adjust_pivot_toolbox", True)):
+            self.adjust_pivot_dock.show()
         self.viewport.setMinimumWidth(420)
         self.viewport.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.viewport_label = self.viewport.canvas
         self.skeleton_panel.nodeSelected.connect(self.viewport.set_selected_node)
         self.viewport.nodeSelected.connect(self.properties_panel.show_node)
+        self.viewport.nodeSelected.connect(self._on_viewport_scene_node_selected)
         self.viewport.nodeSelected.connect(self.module_geometry_panel.show_node)
         self.viewport.nodeSelected.connect(self.module_geometry_panel.select_module_mesh)
         self.viewport.meshSelectionChanged.connect(self.module_geometry_panel.select_module_meshes)
         self.viewport.nodeMoved.connect(self.properties_panel.show_node)
+        self.viewport.nodeMoved.connect(self._on_viewport_scene_node_moved)
+        self.viewport.statusMessage.connect(self.statusBar().showMessage)
+        self.viewport.axis_mode_control.axisModeChanged.connect(self._persist_axis_mode)
         self.viewport.nodeMoved.connect(self.module_geometry_panel.show_node)
         self.viewport.meshVisibilityChanged.connect(self.module_geometry_panel.refresh_module_mesh_rows)
         self.viewport.gpuUploadProgress.connect(self._on_viewport_gpu_upload_progress)
@@ -1934,6 +2019,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.k2_dir_edit.setText(k2_dir)
         self.settings_data["k1_dir"] = k1_dir
         self.settings_data["k2_dir"] = k2_dir
+        dialog = getattr(self, "_settings_dialog", None)
+        if dialog is not None:
+            try:
+                dialog.set_game_dirs(k1_dir, k2_dir)
+            except RuntimeError:
+                pass
         try:
             save_settings(self.settings_path, self.settings_data)
         except Exception as exc:
@@ -2165,6 +2256,451 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     def _build_statusbar(self):
         self.statusBar().showMessage("Ready")
 
+    def _scene_path_filter(self) -> str:
+        return "GhostRigger Scene (*.kmax);;All files (*.*)"
+
+    def _new_scene(self):
+        if not self._prompt_save_dirty_scene():
+            return
+        game = str(self.settings_data.get("default_game") or "K1").upper()
+        self.scene_manager.create_new_scene(game=game)
+        self._scene_texture_dirs.clear()
+        self._set_model_internal(None)
+        self._refresh_scene_view()
+        self.scene_manager.active_scene.mark_clean()
+        self._update_scene_chrome()
+        self._log("New empty scene created.", "success")
+
+    def _close_scene(self):
+        self._new_scene()
+
+    def _open_scene(self):
+        if not self._prompt_save_dirty_scene():
+            return
+        start_dir = str(self.settings_data.get("last_kmax_dir") or self.app_root)
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Open Scene", start_dir, self._scene_path_filter())
+        if path:
+            self._load_scene_from_path(path)
+
+    def _load_scene_from_path(self, path: str) -> bool:
+        try:
+            scene = self.scene_manager.load_kmax(path)
+            self.settings_data["last_kmax_dir"] = str(Path(path).parent)
+            self._add_recent_scene(path)
+            self._load_runtime_models_for_scene()
+            selected = self.scene_manager.get_selected_objects()
+            if selected:
+                self._current_model = selected[-1].metadata.get("_runtime_model")
+            self._refresh_scene_view()
+            self.scene_manager.active_scene.mark_clean()
+            self._update_scene_chrome()
+            self._log(f"Scene loaded: {path}", "success")
+            return True
+        except Exception:
+            self._log(f"Scene load failed:\n{traceback.format_exc()}", "error")
+            QtWidgets.QMessageBox.warning(self, "Open Scene", "Could not open the selected .kmax scene.")
+            return False
+
+    def _save_scene(self) -> bool:
+        scene = self.scene_manager.active_scene
+        if not scene.path:
+            return self._save_scene_as()
+        try:
+            self.scene_manager.save_kmax(scene.path)
+            self._add_recent_scene(scene.path)
+            self._update_scene_chrome()
+            self._log(f"Scene saved: {scene.path}", "success")
+            return True
+        except Exception:
+            self._log(f"Scene save failed:\n{traceback.format_exc()}", "error")
+            QtWidgets.QMessageBox.warning(self, "Save Scene", "Could not save the current scene.")
+            return False
+
+    def _save_scene_as(self) -> bool:
+        scene = self.scene_manager.active_scene
+        start_dir = str(self.settings_data.get("last_kmax_dir") or self.app_root)
+        default_name = Path(scene.path).name if scene.path else "untitled_scene.kmax"
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Save Scene As",
+            str(Path(start_dir) / default_name),
+            self._scene_path_filter(),
+        )
+        if not path:
+            return False
+        if not path.lower().endswith(".kmax"):
+            path = f"{path}.kmax"
+        try:
+            self.scene_manager.save_kmax_as(path)
+            self.settings_data["last_kmax_dir"] = str(Path(path).parent)
+            self._add_recent_scene(path)
+            self._update_scene_chrome()
+            self._log(f"Scene saved: {path}", "success")
+            return True
+        except Exception:
+            self._log(f"Scene save-as failed:\n{traceback.format_exc()}", "error")
+            QtWidgets.QMessageBox.warning(self, "Save Scene As", "Could not save the current scene.")
+            return False
+
+    def _export_scene(self):
+        scene = self.scene_manager.active_scene
+        if not scene.objects:
+            QtWidgets.QMessageBox.information(self, "Export Scene", "The current scene is empty.")
+            return
+        QtWidgets.QMessageBox.information(
+            self,
+            "Export Scene",
+            "Scene export will use the existing model exporters for the active model in this first KMAX bridge.",
+        )
+
+    def _prompt_save_dirty_scene(self) -> bool:
+        if not self.scene_manager.is_dirty():
+            return True
+        box = QtWidgets.QMessageBox(self)
+        box.setWindowTitle("Save Scene")
+        box.setText("Save changes to current scene?")
+        save_button = box.addButton("Save", QtWidgets.QMessageBox.AcceptRole)
+        discard_button = box.addButton("Don't Save", QtWidgets.QMessageBox.DestructiveRole)
+        cancel_button = box.addButton("Cancel", QtWidgets.QMessageBox.RejectRole)
+        box.setDefaultButton(save_button)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is save_button:
+            return self._save_scene()
+        if clicked is discard_button:
+            return True
+        return clicked is not cancel_button and False
+
+    def _add_recent_scene(self, path: str) -> None:
+        scene_path = str(Path(path))
+        recent = [item for item in self.settings_data.get("recent_scenes", []) if item != scene_path]
+        recent.insert(0, scene_path)
+        self.settings_data["recent_scenes"] = recent[:10]
+        try:
+            save_settings(self.settings_path, self.settings_data)
+        except Exception:
+            log.debug("Could not persist recent scenes", exc_info=True)
+        self._rebuild_recent_scenes_menu()
+
+    def _rebuild_recent_scenes_menu(self) -> None:
+        menu = getattr(self, "recent_scenes_menu", None)
+        if menu is None:
+            return
+        menu.clear()
+        recent = [str(path) for path in self.settings_data.get("recent_scenes", []) if path]
+        if not recent:
+            action = menu.addAction("No Recent Scenes")
+            action.setEnabled(False)
+            return
+        for path in recent[:10]:
+            action = menu.addAction(Path(path).name)
+            action.setToolTip(path)
+            action.triggered.connect(lambda _checked=False, p=path: self._open_recent_scene(p))
+
+    def _open_recent_scene(self, path: str) -> None:
+        if not Path(path).exists():
+            QtWidgets.QMessageBox.information(self, "Recent Scene", "That scene file no longer exists.")
+            return
+        if self._prompt_save_dirty_scene():
+            self._load_scene_from_path(path)
+
+    def _load_runtime_models_for_scene(self) -> None:
+        self._scene_texture_dirs.clear()
+        for obj in self.scene_manager.active_scene.objects:
+            if obj.object_type != "model":
+                continue
+            try:
+                model, texture_dir = self._load_model_for_resource_ref(obj.source_ref)
+                if model is not None:
+                    obj.metadata["_runtime_model"] = model
+                    if texture_dir and texture_dir not in self._scene_texture_dirs:
+                        self._scene_texture_dirs.append(texture_dir)
+                else:
+                    obj.metadata["unresolved"] = True
+            except Exception as exc:
+                obj.metadata["unresolved"] = True
+                obj.metadata["load_error"] = str(exc)
+                self._log(f"Scene object unresolved: {obj.name} ({exc})", "warning")
+
+    def _load_model_for_resource_ref(self, ref: SceneResourceRef):
+        if ref.source_path:
+            path = Path(ref.source_path)
+            if not path.exists():
+                return None, ""
+            model = self._load_model_from_path_sync(path, ref.game)
+            return model, str(path.parent)
+        if ref.resref:
+            mgr = self._get_resource_manager()
+            if mgr is None:
+                return None, ""
+            from src.core.qt_core.game.kotor_loader import load_model_from_bytes
+            from src.core.qt_core.geometry.model_data import GameVersion
+
+            game = (ref.game or "K1").upper()
+            mdl = mgr.get_mdl(ref.resref, game)
+            if not mdl:
+                return None, ""
+            mdx = mgr.get_mdx(ref.resref, game) or b""
+            model = load_model_from_bytes(mdl, mdx, game_version=GameVersion.K2 if game == "K2" else GameVersion.K1)
+            if model is not None:
+                model.game_version = GameVersion.K2 if game == "K2" else GameVersion.K1
+            return model, ""
+        return None, ""
+
+    def _load_model_from_path_sync(self, path: Path, game: str = ""):
+        raw = path.read_bytes()
+        first16 = raw[:16]
+        printable_count = sum(1 for byte in first16 if 0x20 <= byte <= 0x7E or byte in (0x09, 0x0A, 0x0D))
+        is_ascii_mdl = printable_count >= 10 or raw[:8].lstrip(b"\x00").startswith(b"newmodel") or raw[:2] in (b"#\x20", b"# ")
+        if is_ascii_mdl:
+            from src.core.qt_core.mdl.mdl_parser import MDLAsciiParser
+
+            model = MDLAsciiParser().parse(raw.decode("utf-8", errors="replace").splitlines())
+            model.mdl_path = str(path)
+            model.mdx_path = ""
+            return model
+        from src.core.qt_core.game.kotor_loader import load_model_from_bytes
+        from src.core.qt_core.geometry.model_data import GameVersion
+
+        mdx_path = path.with_suffix(".mdx")
+        mdx = mdx_path.read_bytes() if mdx_path.exists() else b""
+        game_version = GameVersion.K2 if str(game).upper() == "K2" else GameVersion.K1
+        model = load_model_from_bytes(raw, mdx, game_version=game_version)
+        if model is not None:
+            model.mdl_path = str(path)
+            model.mdx_path = str(mdx_path) if mdx else ""
+            model.game_version = game_version
+        return model
+
+    def _refresh_scene_view(self) -> None:
+        scene = self.scene_manager.active_scene
+        if hasattr(self, "viewport"):
+            self._configure_viewport_resources()
+            self.viewport.load_scene_instances(
+                scene.objects,
+                scene_name=scene.display_name,
+                texture_dirs=self._scene_texture_dirs,
+            )
+        if hasattr(self, "scene_outliner_panel"):
+            self.scene_outliner_panel.set_scene(scene)
+        self._update_scene_chrome()
+        self._refresh_adjust_pivot_panel()
+
+    def _update_scene_chrome(self) -> None:
+        scene = self.scene_manager.active_scene
+        dirty = " *" if scene.dirty else ""
+        self.setWindowTitle(f"GhostRigger - {scene.display_name}{dirty}")
+        objects = len(scene.objects)
+        selected = len(self.scene_manager.get_selected_objects())
+        models = len(scene.model_instances)
+        if hasattr(self, "model_pill"):
+            self.model_pill.setText(f"// {scene.display_name}{dirty}")
+            status = "Empty Scene" if objects == 0 else f"Objects: {objects} | Selected: {selected}"
+            self.model_pill.setToolTip(f"{status} | Models: {models}")
+        try:
+            self.statusBar().showMessage("Empty Scene" if objects == 0 else f"Objects: {objects} | Selected: {selected} | Models: {models}")
+        except Exception:
+            pass
+
+    def _select_scene_object(self, object_id: str) -> None:
+        for obj in self.scene_manager.active_scene.objects:
+            obj.selected = obj.id == object_id
+        if hasattr(self, "viewport"):
+            self.viewport.select_scene_object(object_id)
+        obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
+        if obj is not None:
+            model = obj.metadata.get("_runtime_model")
+            if model is not None:
+                self._current_model = model
+            if hasattr(self, "properties_panel"):
+                show_scene_object = getattr(self.properties_panel, "show_scene_object", None)
+                if callable(show_scene_object):
+                    show_scene_object(obj)
+        self._update_scene_chrome()
+        self._refresh_adjust_pivot_panel()
+        if hasattr(self, "scene_outliner_panel"):
+            self.scene_outliner_panel.set_scene(self.scene_manager.active_scene)
+
+    def _delete_scene_object(self, object_id: str) -> None:
+        self.scene_manager.remove_object(object_id)
+        self._refresh_scene_view()
+
+    def _duplicate_scene_object(self, object_id: str) -> None:
+        duplicate = self.scene_manager.duplicate_object(object_id)
+        if duplicate is not None:
+            source = next((obj for obj in self.scene_manager.active_scene.objects if obj.id == object_id), None)
+            if source is not None and "_runtime_model" in source.metadata:
+                duplicate.metadata["_runtime_model"] = copy.deepcopy(source.metadata["_runtime_model"])
+            duplicate.transform.position = (
+                duplicate.transform.position[0] + 2.0,
+                duplicate.transform.position[1],
+                duplicate.transform.position[2],
+            )
+        self._refresh_scene_view()
+
+    def _focus_scene_object(self, object_id: str) -> None:
+        self._select_scene_object(object_id)
+        self._call_viewport("frame_all")
+
+    def _set_scene_object_visible(self, object_id: str, visible: bool) -> None:
+        obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
+        if obj is not None:
+            obj.visible = bool(visible)
+            self.scene_manager.mark_dirty()
+            self._refresh_scene_view()
+
+    def _set_scene_object_locked(self, object_id: str, locked: bool) -> None:
+        obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
+        if obj is not None:
+            obj.locked = bool(locked)
+            self.scene_manager.mark_dirty()
+            self._refresh_scene_view()
+            self._refresh_adjust_pivot_panel()
+
+    def _rename_scene_object(self, object_id: str, name: str) -> None:
+        obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
+        if obj is not None and name.strip():
+            obj.name = name.strip()
+            self.scene_manager.mark_dirty()
+            self._refresh_scene_view()
+
+    def _on_viewport_scene_node_selected(self, node) -> None:
+        object_id = str(getattr(node, "_gr_scene_object_id", "") or "")
+        if object_id:
+            for obj in self.scene_manager.active_scene.objects:
+                obj.selected = obj.id == object_id
+            if hasattr(self, "scene_outliner_panel"):
+                self.scene_outliner_panel.set_scene(self.scene_manager.active_scene)
+            obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
+            if obj is not None:
+                show_scene_object = getattr(self.properties_panel, "show_scene_object", None)
+                if callable(show_scene_object):
+                    show_scene_object(obj)
+        else:
+            for obj in self.scene_manager.active_scene.objects:
+                obj.selected = False
+        self._update_scene_chrome()
+        self._refresh_adjust_pivot_panel()
+
+    def _on_viewport_scene_node_moved(self, node) -> None:
+        object_id = str(getattr(node, "_gr_scene_object_id", "") or "")
+        if not object_id:
+            return
+        rotation = None
+        scale = None
+        try:
+            rotation = self.viewport._quat_to_euler_degrees(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        except Exception:
+            rotation = None
+        try:
+            scale = tuple(float(v) for v in getattr(node, "_gr_scale", (1.0, 1.0, 1.0))[:3])
+        except Exception:
+            scale = None
+        self.scene_manager.update_object_transform(
+            object_id,
+            position=tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3]),
+            rotation=rotation,
+            scale=scale,
+        )
+        try:
+            pivot_local = self.viewport._pivot_local_from_node(node)
+            pivot_rotation = self.viewport._quat_to_euler_degrees(getattr(node, "_gr_pivot_rotation", (0.0, 0.0, 0.0, 1.0)))
+            self.scene_manager.update_object_pivot(
+                object_id,
+                position_local=pivot_local,
+                rotation_local=pivot_rotation,
+            )
+        except Exception:
+            log.debug("Could not persist scene pivot edit", exc_info=True)
+        self._update_scene_chrome()
+        self._refresh_adjust_pivot_panel()
+        if hasattr(self, "scene_outliner_panel"):
+            self.scene_outliner_panel.set_scene(self.scene_manager.active_scene)
+
+    def _selected_scene_objects(self):
+        return list(self.scene_manager.get_selected_objects())
+
+    def _refresh_adjust_pivot_panel(self) -> None:
+        panel = getattr(self, "adjust_pivot_panel", None)
+        if panel is None:
+            return
+        selected = self._selected_scene_objects()
+        locked = any(bool(getattr(obj, "locked", False)) for obj in selected)
+        hierarchy_available = any(bool(getattr(obj, "group_id", "")) for obj in selected)
+        panel.set_selection_state(len(selected), locked=locked, hierarchy_available=hierarchy_available)
+        viewport = getattr(self, "viewport", None)
+        if viewport is not None and hasattr(viewport, "pivot_edit_mode"):
+            panel.set_pivot_mode(viewport.pivot_edit_mode())
+
+    def _set_pivot_edit_mode(self, mode: str) -> None:
+        if mode == "affect_hierarchy_only":
+            selected = self._selected_scene_objects()
+            if not any(bool(getattr(obj, "group_id", "")) for obj in selected):
+                self.statusBar().showMessage("Hierarchy mode is not available for this selection.")
+                self._refresh_adjust_pivot_panel()
+                return
+        if hasattr(self, "viewport"):
+            self.viewport.set_pivot_edit_mode(mode)
+        self._refresh_adjust_pivot_panel()
+
+    def _persist_axis_mode(self, mode) -> None:
+        resolved = AxisMode.from_value(mode)
+        self.settings_data["last_axis_mode"] = resolved.value
+        if resolved is not AxisMode.PICK:
+            self.settings_data.pop("picked_reference_object_id", None)
+        try:
+            save_settings(self.settings_path, self.settings_data)
+        except Exception:
+            log.debug("Could not persist axis mode", exc_info=True)
+
+    def _runtime_bounds_center_local(self, obj) -> tuple[float, float, float] | None:
+        model = (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
+        if model is None:
+            return None
+        try:
+            if hasattr(model, "compute_bounds"):
+                model.compute_bounds()
+            bb_min = tuple(float(v) for v in getattr(model, "bb_min")[:3])
+            bb_max = tuple(float(v) for v in getattr(model, "bb_max")[:3])
+            return (
+                (bb_min[0] + bb_max[0]) * 0.5,
+                (bb_min[1] + bb_max[1]) * 0.5,
+                (bb_min[2] + bb_max[2]) * 0.5,
+            )
+        except Exception:
+            return None
+
+    def _apply_pivot_action(self, action: str) -> None:
+        selected = self._selected_scene_objects()
+        if not selected:
+            self.statusBar().showMessage("No object selected.")
+            self._refresh_adjust_pivot_panel()
+            return
+        changed = False
+        for obj in selected:
+            if bool(getattr(obj, "locked", False)):
+                continue
+            if action == "center_to_object":
+                center = self._runtime_bounds_center_local(obj)
+                if center is None:
+                    self.statusBar().showMessage("Center to Object is unavailable: selected object has no bounds.")
+                    continue
+                changed = self.scene_manager.update_object_pivot(obj.id, position_local=center) or changed
+            elif action == "align_to_object":
+                changed = self.scene_manager.update_object_pivot(obj.id, rotation_local=obj.transform.rotation) or changed
+            elif action == "align_to_world":
+                changed = self.scene_manager.update_object_pivot(obj.id, rotation_local=(0.0, 0.0, 0.0)) or changed
+            elif action == "reset_pivot":
+                changed = self.scene_manager.update_object_pivot(
+                    obj.id,
+                    position_local=(0.0, 0.0, 0.0),
+                    rotation_local=(0.0, 0.0, 0.0),
+                ) or changed
+        if changed:
+            self._refresh_scene_view()
+            self._refresh_adjust_pivot_panel()
+            self._update_scene_chrome()
+
     def _require_model(self, action: str):
         if self._current_model is None:
             QtWidgets.QMessageBox.information(self, action, "Load or import a model first.")
@@ -2225,8 +2761,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._retarget_last_tick = None
             self._current_model = None
             self._model_path = ""
-            self.model_pill.setText("// No model loaded")
-            self.model_pill.setToolTip("No model loaded. Ctrl+W clears the current viewport.")
+            self.model_pill.setText(f"// {self.scene_manager.active_scene.display_name}")
+            self.model_pill.setToolTip("Active KMAX scene.")
             self.statusBar().showMessage("Ready")
             if hasattr(self, "viewport"):
                 self.viewport.set_model(None)
@@ -2364,9 +2900,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         button.click()
 
     def _clear_model(self):
+        if not self._prompt_save_dirty_scene():
+            return
+        self.scene_manager.clear_scene()
         self._set_model_internal(None)
-        self._finish_progress_toast("Model cleared", "GPU buffers and RAM-side mesh buffers were released.")
-        self._log("Model cleared.", "info")
+        self._refresh_scene_view()
+        self._finish_progress_toast("Scene cleared", "Scene objects were removed.")
+        self._log("Scene cleared.", "info")
 
     def _set_texture_dir(self):
         directory = QtWidgets.QFileDialog.getExistingDirectory(
@@ -2384,7 +2924,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         model = self._current_model
         if hasattr(self, "viewport"):
             self._configure_viewport_resources()
-            self.viewport.load_model(model, self._texture_dir)
+            self._refresh_scene_view()
         if hasattr(self, "skeleton_panel"):
             self.skeleton_panel.load_model(model)
         if hasattr(self, "lighting_panel"):
@@ -3101,7 +3641,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.critical(self, "Port Error", str(exc))
 
     def _generate_module_files(self):
-        self._show_modules_tab()
         out_dir = QtWidgets.QFileDialog.getExistingDirectory(
             self,
             "Select output directory for module files",
@@ -3997,10 +4536,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self,
             "Module Editor",
             "GhostRigger Module Editor\n\n"
-            "Tabs include room layout, walkmesh tools, K1/K2 model porting, module "
-            "starter-file generation, and blueprint handoff to GModular.\n\n"
-            "The Qt panel is wired for navigation and starter generation; deeper "
-            "module editing tools will migrate from the Tk module panel in later passes.",
+            "The standalone Module Editor creates and opens KMAP level projects, "
+            "loads LYT/WOK data, tracks rooms/modules/blueprints, validates level "
+            "state, and generates build/export manifests without overwriting source "
+            "KOTOR data.",
         )
 
     def _validate_current_character(self):
@@ -4076,15 +4615,33 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return
         viewport.open_uv_viewer()
 
-    def _show_modules_tab(self):
-        tabs = getattr(self, "left_tabs", None)
-        panel = getattr(self, "modular_panel", None)
-        if tabs is None or panel is None:
-            self._not_migrated("Modules")
+    def _open_module_editor_window(self):
+        window = getattr(self, "module_editor_window", None)
+        if window is None:
+            window = ModuleEditorWindow(
+                self,
+                theme_manager=getattr(self, "theme_manager", None),
+                layout_manager=getattr(self, "layout_manager", None),
+            )
+            self.module_editor_window = window
+            window.set_library_rows(getattr(self, "_library_rows", []) or [])
+        window.set_navigation_profile(
+            self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
+        )
+        window.set_library_rows(getattr(self, "_library_rows", []) or [])
+        window.show()
+        window.raise_()
+        window.activateWindow()
+
+    def _send_library_row_to_module_editor(self, row: dict) -> None:
+        self._open_module_editor_window()
+        window = getattr(self, "module_editor_window", None)
+        if window is None:
             return
-        index = tabs.indexOf(panel)
-        if index >= 0:
-            tabs.setCurrentIndex(index)
+        window.import_library_asset(row)
+        resref = str(row.get("resref") or "asset")
+        game = str(row.get("game") or "")
+        self._log(f"Level Editor <- {game}:{resref}", "success")
 
     def _open_rig_window(self):
         window = getattr(self, "rig_window", None)
@@ -4477,6 +5034,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             "Indexing model resources from detected game directories...",
         )
         self.scan_button.setEnabled(False)
+        self._set_library_scan_buttons_enabled(False)
         self.library_list.clear()
         self.library_list.addItem("Scanning...")
         self._log("Scanning game library...")
@@ -4499,6 +5057,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     @QtCore.Slot(list, str)
     def _on_library_scanned(self, rows: list, error: str):
         self.scan_button.setEnabled(True)
+        self._set_library_scan_buttons_enabled(True)
         if error:
             self._finish_progress_toast("Library scan failed", "Check the output log for details.")
             self.library_list.clear()
@@ -4514,12 +5073,24 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if hasattr(self, "library_panel"):
             self.library_panel.set_rows(rows)
             self.library_panel.set_status(f"{len(rows)} models")
+        module_editor_window = getattr(self, "module_editor_window", None)
+        if module_editor_window is not None:
+            module_editor_window.set_library_rows(rows)
         self._unreal_refresh_supermodel_library()
         self._populate_resource_panel()
         self._populate_animation_library_from_current_model()
         self._finish_progress_toast("Library ready", f"{len(rows)} models indexed.")
         self._log(f"Library scan complete: {len(rows)} models", "success")
         self.statusBar().showMessage(f"{len(rows)} models")
+
+    def _set_library_scan_buttons_enabled(self, enabled: bool) -> None:
+        panel = getattr(self, "library_panel", None)
+        if panel is None:
+            return
+        for name in ("scan_button", "deep_button"):
+            button = getattr(panel, name, None)
+            if button is not None:
+                button.setEnabled(enabled)
 
     def _rebuild_library_list(self):
         self.library_list.clear()
@@ -4551,6 +5122,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if self._model_worker_is_running():
             self._log("A model is already loading.", "warning")
             return
+        action = self._choose_model_import_action(f"{game}:{resref}")
+        if action == "cancel":
+            return
+        self._pending_scene_import_action = action
         if str(resref).lower().startswith("gr_humanoid"):
             try:
                 from src.core.qt_core.templates.template_builder import build_humanoid_template
@@ -4624,6 +5199,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if self._model_worker_is_running():
             self._log("A model is already loading.", "warning")
             return
+        action = self._choose_model_import_action(Path(path).name)
+        if action == "cancel":
+            return
+        self._pending_scene_import_action = action
         mdl = Path(path)
         if not mdl.exists():
             self._log(f"Startup model not found: {path}", "error")
@@ -4652,6 +5231,100 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._worker_thread = thread
         self._model_worker = worker
         thread.start()
+
+    def _choose_model_import_action(self, model_label: str) -> str:
+        objects = self.scene_manager.get_scene_objects()
+        if not objects:
+            self._pending_scene_import_placement = "origin"
+            return "add"
+        preference = str(self._session_model_double_click_choice or self.settings_data.get("model_double_click_behaviour") or "always ask").lower()
+        if preference in {"add", "add to existing scene", "add_to_scene"}:
+            self._pending_scene_import_placement = str(self.settings_data.get("default_import_placement") or "auto_offset")
+            return "add"
+        if preference in {"clear", "clear scene and load", "clear_and_load"}:
+            if not self._prompt_save_dirty_scene():
+                return "cancel"
+            self._pending_scene_import_placement = "origin"
+            return "clear"
+        dialog = AddModelToSceneDialog(model_label, self)
+        try:
+            self.theme_manager.register_theme_aware_widget(dialog)
+            active_theme = self.theme_manager.current_theme or self.theme_manager.get_theme()
+            if active_theme.is_native():
+                dialog.setStyleSheet("")
+            else:
+                dialog.apply_ghost_theme(active_theme)
+            active_layout = self.layout_manager.current_layout or self.layout_manager.get_layout()
+            dialog.apply_ghost_layout(active_layout)
+        except Exception:
+            pass
+        if dialog.exec() != QtWidgets.QDialog.Accepted:
+            return "cancel"
+        if dialog.remember_choice:
+            self._session_model_double_click_choice = dialog.choice.value
+        self._pending_scene_import_placement = dialog.placement_mode
+        if dialog.choice is AddModelToSceneChoice.CLEAR_AND_LOAD:
+            if not self._prompt_save_dirty_scene():
+                return "cancel"
+            return "clear"
+        if dialog.choice is AddModelToSceneChoice.ADD_TO_SCENE:
+            return "add"
+        return "cancel"
+
+    def _resource_ref_from_loaded_model(self, model, path: str) -> SceneResourceRef:
+        label = str(path or "")
+        if ":" in label and label.split(":", 1)[0].upper() in {"K1", "K2"}:
+            game, resref = label.split(":", 1)
+            return SceneResourceRef(
+                resource_type="model",
+                game=game.upper(),
+                resref=resref,
+                original_name=getattr(model, "name", resref),
+            )
+        return SceneResourceRef(
+            resource_type="model",
+            game=(self._current_game or self._infer_game_from_model(model)).upper(),
+            source_path=label,
+            original_name=getattr(model, "name", Path(label).stem if label else "model"),
+        )
+
+    def _placement_transform_for_new_model(self) -> Transform:
+        placement = str(self._pending_scene_import_placement or "auto_offset")
+        if placement == "origin":
+            return Transform()
+        occupied = {
+            tuple(round(float(v), 3) for v in obj.transform.position[:3])
+            for obj in self.scene_manager.active_scene.objects
+        }
+        position = (0.0, 0.0, 0.0)
+        if position in occupied:
+            index = 1
+            while (round(index * 2.0, 3), 0.0, 0.0) in occupied:
+                index += 1
+            position = (index * 2.0, 0.0, 0.0)
+        return Transform(position=position)
+
+    def _add_loaded_model_to_scene(self, model, path: str):
+        action = str(self._pending_scene_import_action or "add")
+        if action == "clear":
+            self.scene_manager.clear_scene()
+        ref = self._resource_ref_from_loaded_model(model, path)
+        texture_dir = ""
+        if path and not str(path).startswith(("K1:", "K2:")):
+            try:
+                texture_dir = str(Path(path).parent)
+            except Exception:
+                texture_dir = ""
+        if texture_dir and texture_dir not in self._scene_texture_dirs:
+            self._scene_texture_dirs.append(texture_dir)
+        instance = self.scene_manager.add_model_instance(
+            ref,
+            transform=self._placement_transform_for_new_model(),
+            runtime_model=model,
+            select=True,
+        )
+        self.scene_manager.active_scene.game = ref.game or self.scene_manager.active_scene.game
+        return instance
 
     @QtCore.Slot(object, str, str)
     def _on_model_loaded(self, model, path: str, error: str):
@@ -4683,16 +5356,14 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         node_count = model.node_count() if hasattr(model, "node_count") else 0
         anim_count = len(getattr(model, "animations", []) or [])
         name = getattr(model, "name", Path(path).stem)
+        scene_instance = self._add_loaded_model_to_scene(model, path)
         if hasattr(self, "viewport"):
             self._configure_viewport_resources()
-            self.viewport.load_model(model, self._texture_dir)
+            self._refresh_scene_view()
             self._try_coload_walkmesh()
         else:
             self.viewport_label.setText(f"{name}\n\nQt viewport host\n{mesh_count} mesh | {node_count} nodes")
-        self.model_pill.setText(f"// {name}")
-        self.model_pill.setToolTip(
-            f"Currently loaded model: {name} (Ctrl+W to clear)"
-        )
+        self._update_scene_chrome()
         if hasattr(self, "skeleton_panel"):
             self.skeleton_panel.load_model(model)
         if hasattr(self, "lighting_panel"):
@@ -4761,6 +5432,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         else:
             self._log(f"Loaded {name} ({mesh_count} mesh, {node_count} nodes)", "success")
         self.statusBar().showMessage(f"Loaded {name}")
+        if scene_instance is not None:
+            self._log(f"Scene object added: {scene_instance.name}", "success")
 
     def _infer_game_from_model(self, model) -> str:
         try:
@@ -4927,31 +5600,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             log.debug("walkmesh load failed for %s: %s", label, exc)
             return False
 
-    def _launch_legacy_tk(self):
-        if self._legacy_process is not None and self._legacy_process.poll() is None:
-            self._log("Legacy Tk workbench is already running.", "warning")
-            return
-
-        env = os.environ.copy()
-        env["GHOSTRIGGER_GUI"] = "tk"
-        env["GHOSTRIGGER_NO_MCP_AUTOSTART"] = "1"
-
-        if getattr(sys, "frozen", False):
-            argv = [sys.executable]
-        else:
-            argv = [sys.executable, str(self.app_root / "main.py")]
-
-        try:
-            self._legacy_process = subprocess.Popen(
-                argv,
-                cwd=str(self.app_root),
-                env=env,
-                stdin=subprocess.DEVNULL,
-            )
-            self._log("Legacy Tk workbench launched.", "success")
-        except Exception as exc:
-            self._log(f"Could not launch legacy Tk workbench: {exc}", "error")
-
     def _open_qt_character_builder_window(self):
         """Open (or raise) the M2 AccuRig-style Character Builder window.
 
@@ -4984,6 +5632,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             dialog.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
             dialog.destroyed.connect(lambda _obj=None: setattr(self, "_settings_dialog", None))
             dialog.settingsSaved.connect(self._save_settings_data)
+            dialog.autoDetectRequested.connect(self._auto_detect_dirs)
             self._settings_dialog = dialog
         dialog.show()
         dialog.raise_()
@@ -5016,6 +5665,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._log(f"Theme/layout settings save failed: {exc}", "error")
 
     def _save_settings_data(self, values: dict):
+        old_dirs = (
+            self.k1_dir_edit.text().strip() if hasattr(self, "k1_dir_edit") else "",
+            self.k2_dir_edit.text().strip() if hasattr(self, "k2_dir_edit") else "",
+        )
         self.settings_data = values
         self.theme_manager.settings = ThemeLayoutSettings.from_settings(values)
         self.layout_manager.settings = ThemeLayoutSettings.from_settings(values)
@@ -5048,6 +5701,26 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                     values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
                 )
             )
+        module_editor_window = getattr(self, "module_editor_window", None)
+        if module_editor_window is not None:
+            module_editor_window.set_navigation_profile(
+                normalize_viewport_navigation_profile(
+                    values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
+                )
+            )
+        new_dirs = (str(values.get("k1_dir") or "").strip(), str(values.get("k2_dir") or "").strip())
+        if hasattr(self, "k1_dir_edit"):
+            self.k1_dir_edit.setText(new_dirs[0])
+            self.k2_dir_edit.setText(new_dirs[1])
+        texture_dir = str(values.get("texture_dir") or "").strip()
+        if texture_dir:
+            self._texture_dir = texture_dir
+        if new_dirs != old_dirs:
+            self._resource_manager = None
+            self._resource_manager_dirs = ("", "")
+            if hasattr(self, "library_panel"):
+                self.library_panel.set_status("Game directories updated")
+            self._log("Game directories updated. Run Scan to refresh the library.", "success")
         self._apply_measurement_settings()
         try:
             save_settings(self.settings_path, values)
@@ -5074,6 +5747,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._log(f"Measurement settings save failed: {exc}", "error")
 
     def closeEvent(self, event: QtGui.QCloseEvent):
+        if not self._prompt_save_dirty_scene():
+            event.ignore()
+            return
         try:
             self._matrix_engine.stop()
         except Exception:

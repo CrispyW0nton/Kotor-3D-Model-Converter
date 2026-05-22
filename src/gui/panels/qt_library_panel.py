@@ -124,9 +124,8 @@ class QtLibraryPanel(QtWidgets.QWidget):
     extractRequested = QtCore.Signal(dict)
     retargetSourceRequested = QtCore.Signal(dict)
     retargetTargetRequested = QtCore.Signal(dict)
+    levelEditorImportRequested = QtCore.Signal(dict)
     batchRequested = QtCore.Signal(str, list)
-    autoDetectRequested = QtCore.Signal()
-    dirsChanged = QtCore.Signal(str, str)
     scanRequested = QtCore.Signal()
     deepScanRequested = QtCore.Signal()
 
@@ -150,27 +149,6 @@ class QtLibraryPanel(QtWidgets.QWidget):
         root.setContentsMargins(6, 6, 6, 6)
         root.setSpacing(5)
         root.addWidget(heading("Game Library"))
-
-        dir_row = QtWidgets.QHBoxLayout()
-        self.k1_button = QtWidgets.QPushButton("Set K1 Dir")
-        self.k2_button = QtWidgets.QPushButton("Set K2 Dir")
-        self.auto_button = QtWidgets.QPushButton("Auto-detect")
-        self.deep_button = QtWidgets.QPushButton("Deep Scan")
-        self.scan_button = QtWidgets.QPushButton("Scan")
-        self.scan_button.setProperty("accent", True)
-        self.k1_button.clicked.connect(lambda: self._choose_dir("K1"))
-        self.k2_button.clicked.connect(lambda: self._choose_dir("K2"))
-        self.auto_button.clicked.connect(self.autoDetectRequested.emit)
-        self.deep_button.clicked.connect(self.deepScanRequested.emit)
-        self.scan_button.clicked.connect(self.scanRequested.emit)
-        for button in (self.k1_button, self.k2_button, self.auto_button):
-            button.setProperty("compact", True)
-            dir_row.addWidget(button)
-        dir_row.addStretch(1)
-        for button in (self.deep_button, self.scan_button):
-            button.setProperty("compact", True)
-            dir_row.addWidget(button)
-        root.addLayout(dir_row)
 
         filter_row = QtWidgets.QHBoxLayout()
         self.game_filter = QtWidgets.QButtonGroup(self)
@@ -237,10 +215,13 @@ class QtLibraryPanel(QtWidgets.QWidget):
         self.load_button = QtWidgets.QPushButton("Load Model")
         self.load_button.setProperty("accent", True)
         self.extract_button = QtWidgets.QPushButton("Extract")
+        self.level_button = QtWidgets.QPushButton("Add to Level")
         self.load_button.clicked.connect(self.load_selected)
         self.extract_button.clicked.connect(self.extract_selected)
+        self.level_button.clicked.connect(self.import_selected_to_level)
         action_row.addWidget(self.load_button, 1)
         action_row.addWidget(self.extract_button)
+        action_row.addWidget(self.level_button)
         root.addLayout(action_row)
 
         batch_row = QtWidgets.QHBoxLayout()
@@ -251,6 +232,18 @@ class QtLibraryPanel(QtWidgets.QWidget):
             batch_row.addWidget(button)
         batch_row.addStretch(1)
         root.addLayout(batch_row)
+
+        scan_row = QtWidgets.QHBoxLayout()
+        self.deep_button = QtWidgets.QPushButton("Deep Scan")
+        self.scan_button = QtWidgets.QPushButton("Scan")
+        self.scan_button.setProperty("accent", True)
+        self.deep_button.clicked.connect(self.deepScanRequested.emit)
+        self.scan_button.clicked.connect(self.scanRequested.emit)
+        scan_row.addStretch(1)
+        for button in (self.deep_button, self.scan_button):
+            button.setProperty("compact", True)
+            scan_row.addWidget(button)
+        root.addLayout(scan_row)
 
     def set_rows(self, rows: list[dict]) -> None:
         self._rows = enrich_library_rows(rows)
@@ -282,6 +275,11 @@ class QtLibraryPanel(QtWidgets.QWidget):
         if row:
             self.extractRequested.emit(row)
 
+    def import_selected_to_level(self) -> None:
+        row = self.selected_row()
+        if row:
+            self.levelEditorImportRequested.emit(row)
+
     def _load_item(self, item: QtWidgets.QListWidgetItem) -> None:
         row = getattr(item, "row", None)
         if row:
@@ -296,6 +294,7 @@ class QtLibraryPanel(QtWidgets.QWidget):
             return
         menu = QtWidgets.QMenu(self)
         load_action = menu.addAction("Load Model")
+        add_to_level_action = menu.addAction("Add to Level Editor")
         extract_action = menu.addAction("Extract")
         menu.addSeparator()
         source_action = menu.addAction("Send to Retarget Workbench (Source)")
@@ -303,25 +302,14 @@ class QtLibraryPanel(QtWidgets.QWidget):
         chosen = menu.exec(self.listbox.mapToGlobal(pos))
         if chosen is load_action:
             self.loadRequested.emit(row.get("resref", ""), row.get("game", ""))
+        elif chosen is add_to_level_action:
+            self.levelEditorImportRequested.emit(row)
         elif chosen is extract_action:
             self.extractRequested.emit(row)
         elif chosen is source_action:
             self.retargetSourceRequested.emit(row)
         elif chosen is target_action:
             self.retargetTargetRequested.emit(row)
-
-    def _choose_dir(self, game: str) -> None:
-        title = "Select KotOR 1 Game Directory" if game == "K1" else "Select KotOR 2 TSL Game Directory"
-        path = QtWidgets.QFileDialog.getExistingDirectory(self, title)
-        if not path:
-            return
-        if game == "K1":
-            self._k1_dir = path
-            self._k2_dir = getattr(self, "_k2_dir", "")
-        else:
-            self._k1_dir = getattr(self, "_k1_dir", "")
-            self._k2_dir = path
-        self.dirsChanged.emit(getattr(self, "_k1_dir", ""), getattr(self, "_k2_dir", ""))
 
     def _current_game_filter(self) -> str:
         checked = self.game_filter.checkedButton()

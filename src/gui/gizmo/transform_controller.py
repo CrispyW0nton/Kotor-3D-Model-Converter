@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Callable, Optional
 
 from .gizmo_mode import GizmoMode
@@ -11,6 +12,7 @@ from .transform_math import (
     axis_drag_delta,
     axis_quaternion,
     multiply_quaternions,
+    rotate_vector,
     rotation_angle_from_mouse_delta,
 )
 from src.measurement.angle_snap import AngleSnap
@@ -27,6 +29,8 @@ class TransformSnapshot:
     light_area_size: float | None = None
     light_cone_degrees: float | None = None
     camera_helper_size: float | None = None
+    pivot_world: tuple[float, float, float] | None = None
+    pivot_rotation: tuple[float, float, float, float] | None = None
 
 
 class TransformController:
@@ -51,6 +55,7 @@ class TransformController:
         self.center_screen: tuple[float, float] | None = None
         self.original: TransformSnapshot | None = None
         self.active = False
+        self.axis_vectors = dict(AXIS_VECTORS)
 
     def snapshot(self, obj) -> TransformSnapshot:
         vertices = getattr(obj, "vertices", None)
@@ -64,7 +69,19 @@ class TransformController:
             light_area_size=float(getattr(obj, "light_area_size", 0.0) or 0.0) if bool(getattr(obj, "is_light", False)) else None,
             light_cone_degrees=float(getattr(obj, "light_cone_degrees", 45.0) or 45.0) if bool(getattr(obj, "is_light", False)) else None,
             camera_helper_size=float(getattr(obj, "_gr_helper_size", 1.0) or 1.0) if bool(getattr(obj, "is_camera", False)) else None,
+            pivot_world=self._tuple_attr(obj, "_gr_pivot_world", getattr(obj, "position", (0.0, 0.0, 0.0)), 3),
+            pivot_rotation=self._tuple_attr(obj, "_gr_pivot_rotation", getattr(obj, "rotation", (0.0, 0.0, 0.0, 1.0)), 4),
         )
+
+    @staticmethod
+    def _tuple_attr(obj, name: str, fallback, count: int):
+        raw = getattr(obj, name, None)
+        if raw is None:
+            raw = fallback
+        try:
+            return tuple(float(v) for v in tuple(raw)[:count])
+        except Exception:
+            return tuple(float(v) for v in tuple(fallback)[:count])
 
     def set_position_snap(self, enabled: bool, increment: float) -> None:
         self.position_snap_enabled = bool(enabled)
@@ -83,6 +100,7 @@ class TransformController:
         *,
         depth: float,
         center_screen: tuple[float, float] | None = None,
+        axis_vectors: dict[str, tuple[float, float, float]] | None = None,
     ) -> None:
         self.object = obj
         self.mode = mode
@@ -90,6 +108,7 @@ class TransformController:
         self.start_mouse = (int(mouse_pos[0]), int(mouse_pos[1]))
         self.start_depth = float(depth)
         self.center_screen = center_screen
+        self.axis_vectors = axis_vectors or dict(AXIS_VECTORS)
         self.original = self.snapshot(obj)
         self.active = True
 
@@ -106,13 +125,35 @@ class TransformController:
         self._invalidate()
 
     def _apply_translate(self, axis: str, mouse_pos, camera, viewport_height: int) -> None:
-        delta = axis_drag_delta(self.start_mouse, mouse_pos, axis, camera, self.start_depth, viewport_height)
-        av = AXIS_VECTORS.get(axis, AXIS_VECTORS["X"])
+        if axis in {"VIEW", "SCREEN", "CENTER"}:
+            self._apply_view_translate(mouse_pos, camera, viewport_height)
+            return
+        delta = axis_drag_delta(
+            self.start_mouse,
+            mouse_pos,
+            axis,
+            camera,
+            self.start_depth,
+            viewport_height,
+            self.axis_vectors,
+        )
+        av = self.axis_vectors.get(axis, AXIS_VECTORS["X"])
+        if str(getattr(self.object, "_gr_pivot_edit_mode", "") or "") == "affect_pivot_only":
+            p = self.original.pivot_world or self.original.position
+            self.object._gr_pivot_world = (
+                p[0] + av[0] * delta,
+                p[1] + av[1] * delta,
+                p[2] + av[2] * delta,
+            )
+            self.object._gr_pivot_world_dirty = True
+            self.object._gr_gizmo_world_position = tuple(self.object._gr_pivot_world)
+            return
         p = self.original.position
+        delta_vec = (av[0] * delta, av[1] * delta, av[2] * delta)
         new_position = (
-            p[0] + av[0] * delta,
-            p[1] + av[1] * delta,
-            p[2] + av[2] * delta,
+            p[0] + delta_vec[0],
+            p[1] + delta_vec[1],
+            p[2] + delta_vec[2],
         )
         if self.position_snap_enabled:
             inc = self.position_snap_increment
@@ -123,6 +164,63 @@ class TransformController:
             elif axis == "Z":
                 new_position = (new_position[0], new_position[1], round(new_position[2] / inc) * inc)
         self.object.position = new_position
+        if self.original.pivot_world is not None:
+            actual_delta = (
+                new_position[0] - self.original.position[0],
+                new_position[1] - self.original.position[1],
+                new_position[2] - self.original.position[2],
+            )
+            self.object._gr_pivot_world = (
+                self.original.pivot_world[0] + actual_delta[0],
+                self.original.pivot_world[1] + actual_delta[1],
+                self.original.pivot_world[2] + actual_delta[2],
+            )
+            self.object._gr_pivot_world_dirty = True
+            self.object._gr_gizmo_world_position = tuple(self.object._gr_pivot_world)
+
+    def _apply_view_translate(self, mouse_pos, camera, viewport_height: int) -> None:
+        right, up, _fwd, _eye = camera._view_matrix()
+        dx = float(mouse_pos[0] - self.start_mouse[0])
+        dy = float(mouse_pos[1] - self.start_mouse[1])
+        world_per_px = (
+            2.0
+            * max(0.5, float(self.start_depth))
+            * math.tan(math.radians(float(camera.fov)) * 0.5)
+        ) / max(1, int(viewport_height))
+        delta_vec = (
+            (float(right[0]) * dx + float(up[0]) * -dy) * world_per_px,
+            (float(right[1]) * dx + float(up[1]) * -dy) * world_per_px,
+            (float(right[2]) * dx + float(up[2]) * -dy) * world_per_px,
+        )
+        if str(getattr(self.object, "_gr_pivot_edit_mode", "") or "") == "affect_pivot_only":
+            p = self.original.pivot_world or self.original.position
+            self.object._gr_pivot_world = (
+                p[0] + delta_vec[0],
+                p[1] + delta_vec[1],
+                p[2] + delta_vec[2],
+            )
+            self.object._gr_pivot_world_dirty = True
+            self.object._gr_gizmo_world_position = tuple(self.object._gr_pivot_world)
+            return
+        p = self.original.position
+        new_position = (p[0] + delta_vec[0], p[1] + delta_vec[1], p[2] + delta_vec[2])
+        if self.position_snap_enabled:
+            inc = self.position_snap_increment
+            new_position = tuple(round(v / inc) * inc for v in new_position)
+        self.object.position = new_position
+        if self.original.pivot_world is not None:
+            actual_delta = (
+                new_position[0] - self.original.position[0],
+                new_position[1] - self.original.position[1],
+                new_position[2] - self.original.position[2],
+            )
+            self.object._gr_pivot_world = (
+                self.original.pivot_world[0] + actual_delta[0],
+                self.original.pivot_world[1] + actual_delta[1],
+                self.original.pivot_world[2] + actual_delta[2],
+            )
+            self.object._gr_pivot_world_dirty = True
+            self.object._gr_gizmo_world_position = tuple(self.object._gr_pivot_world)
 
     def _apply_rotate(self, axis: str, mouse_pos) -> None:
         # Screen-space drag angles are clockwise-positive in Qt's y-down
@@ -131,7 +229,25 @@ class TransformController:
         angle = -rotation_angle_from_mouse_delta(self.start_mouse, mouse_pos, self.center_screen)
         if self.angle_snap is not None:
             angle = self.angle_snap.snap_radians(angle)
-        delta_q = axis_quaternion(axis, angle)
+        delta_q = axis_quaternion(axis, angle, self.axis_vectors)
+        if str(getattr(self.object, "_gr_pivot_edit_mode", "") or "") == "affect_pivot_only":
+            base = self.original.pivot_rotation or self.original.rotation
+            self.object._gr_pivot_rotation = multiply_quaternions(delta_q, base)
+            return
+        pivot_world = self.original.pivot_world
+        if pivot_world is not None:
+            rel = (
+                self.original.position[0] - pivot_world[0],
+                self.original.position[1] - pivot_world[1],
+                self.original.position[2] - pivot_world[2],
+            )
+            rotated = rotate_vector(delta_q, rel)
+            self.object.position = (
+                pivot_world[0] + rotated[0],
+                pivot_world[1] + rotated[1],
+                pivot_world[2] + rotated[2],
+            )
+            self.object._gr_gizmo_world_position = tuple(pivot_world)
         self.object.rotation = multiply_quaternions(delta_q, self.original.rotation)
 
     def _apply_scale(self, axis: str, mouse_pos, camera, viewport_height: int) -> None:
@@ -141,7 +257,8 @@ class TransformController:
         if bool(getattr(self.object, "is_camera", False)):
             self._apply_camera_scale(axis, mouse_pos, camera, viewport_height)
             return
-        if self.original.vertices is None:
+        scene_root_scale = bool(getattr(self.object, "_gr_scene_object_root", False))
+        if self.original.vertices is None and not scene_root_scale:
             return
         if axis == "UNIFORM":
             raw = float(mouse_pos[0] - self.start_mouse[0] - (mouse_pos[1] - self.start_mouse[1]))
@@ -150,7 +267,15 @@ class TransformController:
                 factor = self.percent_snap.snap_scale_factor(factor)
             sx = sy = sz = factor
         else:
-            delta = axis_drag_delta(self.start_mouse, mouse_pos, axis, camera, self.start_depth, viewport_height)
+            delta = axis_drag_delta(
+                self.start_mouse,
+                mouse_pos,
+                axis,
+                camera,
+                self.start_depth,
+                viewport_height,
+                self.axis_vectors,
+            )
             factor = max(0.01, 1.0 + delta)
             if self.percent_snap is not None:
                 factor = self.percent_snap.snap_scale_factor(factor)
@@ -161,9 +286,36 @@ class TransformController:
                 sy = factor
             else:
                 sz = factor
-        # GhostRigger ModelNode has no persistent scale field; mutating the
-        # mesh's local vertices is the durable transform representation.
-        self.object.vertices = [(x * sx, y * sy, z * sz) for x, y, z in self.original.vertices]
+        pivot_world = self.original.pivot_world
+        if pivot_world is not None:
+            rel = (
+                self.original.position[0] - pivot_world[0],
+                self.original.position[1] - pivot_world[1],
+                self.original.position[2] - pivot_world[2],
+            )
+            if axis == "UNIFORM":
+                scaled_rel = (rel[0] * sx, rel[1] * sy, rel[2] * sz)
+            else:
+                av = self.axis_vectors.get(axis, AXIS_VECTORS["X"])
+                length = max(1e-9, (av[0] * av[0] + av[1] * av[1] + av[2] * av[2]) ** 0.5)
+                unit = (av[0] / length, av[1] / length, av[2] / length)
+                component = rel[0] * unit[0] + rel[1] * unit[1] + rel[2] * unit[2]
+                scaled_rel = (
+                    rel[0] + unit[0] * component * (factor - 1.0),
+                    rel[1] + unit[1] * component * (factor - 1.0),
+                    rel[2] + unit[2] * component * (factor - 1.0),
+                )
+            self.object.position = (
+                pivot_world[0] + scaled_rel[0],
+                pivot_world[1] + scaled_rel[1],
+                pivot_world[2] + scaled_rel[2],
+            )
+            self.object._gr_gizmo_world_position = tuple(pivot_world)
+        # GhostRigger ModelNode has no universal persistent scale field. Mesh
+        # nodes keep scale by mutating local vertices; scene wrappers keep the
+        # authored KMAX scale metadata for the owning scene object.
+        if self.original.vertices is not None and not scene_root_scale:
+            self.object.vertices = [(x * sx, y * sy, z * sz) for x, y, z in self.original.vertices]
         osx, osy, osz = self.original.scale
         self.object._gr_scale = (
             max(0.001, osx * sx),
@@ -204,6 +356,10 @@ class TransformController:
             obj.light_cone_degrees = float(snapshot.light_cone_degrees)
         if snapshot.camera_helper_size is not None:
             obj._gr_helper_size = float(snapshot.camera_helper_size)
+        if snapshot.pivot_world is not None:
+            obj._gr_pivot_world = tuple(snapshot.pivot_world)
+        if snapshot.pivot_rotation is not None:
+            obj._gr_pivot_rotation = tuple(snapshot.pivot_rotation)
 
     def _invalidate(self) -> None:
         if self.invalidate_callback is not None and self.object is not None:
@@ -216,7 +372,7 @@ class TransformController:
             raw = float(mouse_pos[0] - self.start_mouse[0] - (mouse_pos[1] - self.start_mouse[1]))
             factor = max(0.01, 1.0 + raw * 0.01)
         else:
-            delta = axis_drag_delta(self.start_mouse, mouse_pos, axis, camera, self.start_depth, viewport_height)
+            delta = axis_drag_delta(self.start_mouse, mouse_pos, axis, camera, self.start_depth, viewport_height, self.axis_vectors)
             factor = max(0.01, 1.0 + delta)
         if self.percent_snap is not None:
             factor = self.percent_snap.snap_scale_factor(factor)
@@ -240,7 +396,7 @@ class TransformController:
             raw = float(mouse_pos[0] - self.start_mouse[0] - (mouse_pos[1] - self.start_mouse[1]))
             factor = max(0.01, 1.0 + raw * 0.01)
         else:
-            delta = axis_drag_delta(self.start_mouse, mouse_pos, axis, camera, self.start_depth, viewport_height)
+            delta = axis_drag_delta(self.start_mouse, mouse_pos, axis, camera, self.start_depth, viewport_height, self.axis_vectors)
             factor = max(0.01, 1.0 + delta)
         if self.percent_snap is not None:
             factor = self.percent_snap.snap_scale_factor(factor)

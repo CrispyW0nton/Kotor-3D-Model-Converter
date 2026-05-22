@@ -6,6 +6,12 @@
 
 ![GhostRigger UI](assets/icons/ghostrigger_1024x1024.png)
 
+## Module Editor, Level Editor, and KMAP
+
+GhostRigger includes a standalone Qt Module Editor window that starts the Level Editor foundation. It creates and opens `.kmap` projects, tracks KOTOR module/room references, loads LYT room layouts, associates WOK walkmeshes, edits module and room transforms, stores blueprint placeholders, validates map state, and generates build/export manifests.
+
+KMAP is GhostRigger's JSON level/map project format. It is versioned, human-readable, and stores stable IDs plus references to source KOTOR assets rather than embedding heavy raw mesh or texture data. See `docs/knowledgebase/module_editor_kmap.md` and `examples/kmap/basic_level.kmap`.
+
 | | |
 |---|---|
 | **Project version** | `6.0.0` (`pyproject.toml`) — five-pillar UI baseline + active 2026-05 skinning audit |
@@ -57,6 +63,37 @@ goals:
 
 GhostRigger is **not** affiliated with LucasArts, BioWare, Obsidian or
 Disney. KotOR and The Sith Lords are trademarks of their respective owners.
+
+---
+
+### KMAX Scene Workflow
+
+GhostRigger now opens into an active blank 3D scene instead of a single-model
+viewer state. The viewport grid, world origin, camera controls, transform bar,
+measurement and snap controls stay available even when the scene has no mesh
+objects.
+
+`.kmax` is GhostRigger's versioned, human-readable JSON scene/project format.
+It stores scene metadata, model object instances, transforms, editable pivots, cameras, lights,
+sequence references, KMAP references, material/texture override references, and
+other lightweight editor state. It does not store bulky raw MDL/MDX/TPC payloads
+unless a future schema explicitly adds that behavior.
+
+Scene formats are intentionally separate:
+
+- `.kmax` is the general GhostRigger 3D scene format.
+- `.kmap` is the module/level composition format.
+- `.grseq` is the sequence/timeline format.
+
+Use `Ctrl+S` to save the active `.kmax` scene and `Ctrl+Shift+S` for Save Scene
+As. Double-clicking a second model in the library asks whether to clear the
+current scene, add the model as another scene object, or cancel.
+
+The viewport toolbar includes an Axis / Reference Coordinate System dropdown
+with World, Local, View, Screen, Parent, Gimbal, Grid, Working, and Pick modes.
+The dockable Adjust Pivot toolbox can affect pivot-only edits, object transforms
+around the current pivot, center pivots to object bounds, align pivot axes, and
+reset pivots; pivot data is saved per object in `.kmax`.
 
 ---
 

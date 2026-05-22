@@ -1,7 +1,7 @@
 """
 gpu_renderer.py  –  GhostRigger-K1-K2  GPU fast-path renderer
 ==============================================================
-Hybrid renderer with a ModernGL/EGL GPU fast-path and a PIL/CPU fallback.
+ModernGL/EGL GPU renderer for the Qt viewport.
 
 Architecture
 ------------
@@ -146,10 +146,8 @@ Phase 3.8 new features
                 Sources: KotOR.js OdysseyModel3D.ts:780–803 supermodel stacking;
                 Kotor.NET CompositeModel multi-mesh logic.
 
-CPU fallback  (always available, uses PIL)
-  • Delegates to FrameRenderer._draw_mesh_textured (existing code)
-  • Used when:  ModernGL not installed, EGL not available, or
-                GpuRenderer.force_cpu = True
+CPU graphics rendering
+  • Disabled. The Qt viewport and renderer failure paths do not rasterize on CPU.
 
 Performance notes
   – GPU path: ~1 ms/frame for typical 10 k-tri KotOR models
@@ -2204,7 +2202,7 @@ try:
     _MODERNGL = True
 except ImportError:
     _MODERNGL = False
-    log.info("gpu_renderer: moderngl not installed – using CPU fallback")
+    log.info("gpu_renderer: moderngl not installed - GPU viewport rendering unavailable")
 
 from dataclasses import dataclass, field as _field
 
@@ -2582,8 +2580,8 @@ _VERT_SRC = """
 #version 330 core
 
 // Per-vertex inputs
-in vec3  in_pos;       // world-space position (pre-transformed by _build_vbo_data)
-in vec3  in_norm;      // world-space normal
+in vec3  in_pos;       // model/world position from _build_vbo_data; scene placement uses u_model
+in vec3  in_norm;      // matching normal basis for in_pos
 in vec2  in_uv;        // primary UV (UV0) — KotOR D3D convention: V=0 at top
 in vec2  in_uv_lm;     // lightmap UV (UV1)
 in vec4  in_color;     // vertex colour (w = per-vertex alpha, 1.0 if unused)
@@ -2669,8 +2667,8 @@ void main() {
 
     vec4 world_pos = u_model * vec4(final_pos, 1.0);
     v_world_pos  = world_pos.xyz;
-    // Normals are already in world space (pre-transformed); u_normal_mat = I for
-    // world-space verts, but we still normalize to handle precision loss.
+    // Ordinary MDL draws already provide world-space normals; scene-object
+    // placement uses u_normal_mat so rotate/scale stay on the GPU.
     v_world_norm = normalize(u_normal_mat * final_norm);
 
     // BUG-UV FIX: KotOR MDX stores UV with V=0 at top (Direct3D convention).
@@ -3305,6 +3303,88 @@ def _mat3_normal(model_mat: np.ndarray) -> np.ndarray:
         return np.linalg.inv(m33).T.astype(np.float32)
     except np.linalg.LinAlgError:
         return np.eye(3, dtype=np.float32)
+
+
+def _scene_gpu_root_for_node(node):
+    current = node
+    visited = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        if bool(getattr(current, "_gr_scene_object_root", False)) and bool(getattr(current, "_gr_scene_gpu_transform", False)):
+            return current
+        current = getattr(current, "parent", None)
+    return None
+
+
+def _mat4_from_pos_quat_scale(pos, quat, scale) -> np.ndarray:
+    mat = _matrix_from_pos_quat_np(pos, quat)
+    if mat is None:
+        mat = np.eye(4, dtype=np.float64)
+    try:
+        sx, sy, sz = (float(v) for v in tuple(scale or (1.0, 1.0, 1.0))[:3])
+    except Exception:
+        sx, sy, sz = 1.0, 1.0, 1.0
+    scale_mat = np.diag([sx, sy, sz, 1.0]).astype(np.float64)
+    return (mat.reshape(4, 4) @ scale_mat).astype(np.float32)
+
+
+def _scene_gpu_model_matrix(node) -> Optional[np.ndarray]:
+    root = _scene_gpu_root_for_node(node)
+    if root is None:
+        return None
+    return _mat4_from_pos_quat_scale(
+        getattr(root, "position", (0.0, 0.0, 0.0)),
+        getattr(root, "rotation", (0.0, 0.0, 0.0, 1.0)),
+        getattr(root, "_gr_scale", (1.0, 1.0, 1.0)),
+    )
+
+
+def _quat_multiply_xyzw(parent, child) -> tuple[float, float, float, float]:
+    px, py, pz, pw = (float(v) for v in tuple(parent)[:4])
+    cx, cy, cz, cw = (float(v) for v in tuple(child)[:4])
+    return (
+        pw * cx + px * cw + py * cz - pz * cy,
+        pw * cy - px * cz + py * cw + pz * cx,
+        pw * cz + px * cy - py * cx + pz * cw,
+        pw * cw - px * cx - py * cy - pz * cz,
+    )
+
+
+def _scene_authored_world_transform(node):
+    root = _scene_gpu_root_for_node(node)
+    if root is None:
+        return None
+    chain = []
+    current = node
+    visited = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        chain.append(current)
+        if current is root:
+            break
+        current = getattr(current, "parent", None)
+    if not chain or chain[-1] is not root:
+        return None
+    chain.reverse()
+    world_pos = np.array([0.0, 0.0, 0.0], dtype=np.float64)
+    world_rot = (0.0, 0.0, 0.0, 1.0)
+    for current in chain:
+        if current is root:
+            local_pos = getattr(current, "_gr_scene_source_position", getattr(current, "position", (0.0, 0.0, 0.0)))
+            local_rot = getattr(current, "_gr_scene_source_rotation", getattr(current, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        else:
+            local_pos = getattr(current, "position", (0.0, 0.0, 0.0))
+            local_rot = getattr(current, "rotation", (0.0, 0.0, 0.0, 1.0))
+        try:
+            local_vec = np.array([tuple(float(v) for v in tuple(local_pos)[:3])], dtype=np.float64)
+        except Exception:
+            local_vec = np.array([(0.0, 0.0, 0.0)], dtype=np.float64)
+        world_pos = world_pos + _quat_rotate_batch(np.array(world_rot, dtype=np.float64), local_vec)[0]
+        try:
+            world_rot = _quat_multiply_xyzw(world_rot, local_rot)
+        except Exception:
+            pass
+    return (tuple(float(v) for v in world_pos.tolist()), world_rot)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4121,7 +4201,7 @@ class _GpuMesh:
 
 class GpuRenderer:
     """
-    Hybrid GPU/CPU renderer for KotOR models.
+    GPU renderer for KotOR models.
 
     Usage
     -----
@@ -4137,7 +4217,7 @@ class GpuRenderer:
         camera.near, camera.far  → clip distances (optional, default 0.01/2000)
     """
 
-    #: Set to True to force the CPU (PIL) fallback even if GPU is available.
+    #: Legacy diagnostic switch; the Qt viewport does not use CPU rendering.
     force_cpu: bool = False
 
     def __init__(self):
@@ -4390,7 +4470,7 @@ class GpuRenderer:
                      _ctx_backend, self._ctx.version_code)
             return True
         except Exception as e:
-            log.info(f"GpuRenderer: GPU init failed ({e}) – using CPU fallback")
+            log.info(f"GpuRenderer: GPU init failed ({e}) - viewport GPU rendering unavailable")
             self._gpu_available = False
             return False
 
@@ -4875,7 +4955,7 @@ class GpuRenderer:
         PIL RGBA Image, or None on failure.
         """
         t0 = time.perf_counter()
-        if model is None or W <= 0 or H <= 0:
+        if W <= 0 or H <= 0:
             return None
         textures = textures or {}
 
@@ -4886,12 +4966,11 @@ class GpuRenderer:
                 self.perf['last_frame_ms'] = (time.perf_counter() - t0) * 1000
                 self.perf['backend'] = 'gpu'
                 return result
-            # GPU render failed — fall through to CPU
+            # GPU render failed; the viewport reports GPU unavailable instead of falling back.
 
-        result = self._render_cpu(model, camera, W, H, textures, anim_pose, anim_time)
         self.perf['last_frame_ms'] = (time.perf_counter() - t0) * 1000
-        self.perf['backend'] = 'cpu'
-        return result
+        self.perf['backend'] = 'gpu_unavailable'
+        return None
 
     # ── GPU render ────────────────────────────────────────────────────────────
 
@@ -5144,7 +5223,7 @@ class GpuRenderer:
             if _all_nodes_fn is not None:
                 nodes = list(_all_nodes_fn())
             else:
-                nodes = getattr(model, 'nodes', [])
+                nodes = getattr(model, 'nodes', []) if model is not None else []
 
             # ── FIX-PERSCACHE: Persistent world-transform cache ────────────
             _cur_model_id = id(model)
@@ -5549,6 +5628,12 @@ class GpuRenderer:
                 # Use world-space transform (full parent-chain walk) for correct
                 # positioning of all mesh nodes, not just local node.position.
                 wp, wo = _get_world_transform(node)
+                scene_gpu_mat = _scene_gpu_model_matrix(node)
+                vbo_wp, vbo_wo = wp, wo
+                if scene_gpu_mat is not None and anim_pose is None:
+                    authored_transform = _scene_authored_world_transform(node)
+                    if authored_transform is not None:
+                        vbo_wp, vbo_wo = authored_transform
 
                 node_alpha = float(getattr(node, 'alpha', 1.0))
                 node_alpha = max(0.0, min(1.0, node_alpha))
@@ -5612,14 +5697,14 @@ class GpuRenderer:
                     # vertex influences addresses qBone[k]/tBone[k] for this skin.
                     _bone_remap = None
                     _prebuilt_vbo = None
-                    if anim_pose is None and not is_animated:
+                    if anim_pose is None and not is_animated and scene_gpu_mat is None:
                         _prebuilt_vbo = _prebuilt_static_gpu_mesh_data(
                             node, _cur_model_id, _skin_bind_transform
                         )
                     if _prebuilt_vbo is not None:
                         vdata, idx_arr = _prebuilt_vbo
                     else:
-                        vdata, idx_arr = _build_vbo_data(node, wp, wo,
+                        vdata, idx_arr = _build_vbo_data(node, vbo_wp, vbo_wo,
                                                          anim_pose_node=None,
                                                          is_module=_gpu_is_module,
                                                          bone_index_remap=_bone_remap,
@@ -6215,6 +6300,14 @@ class GpuRenderer:
                             'Skin parity dump',
                         )
 
+                draw_model_mat = scene_gpu_mat if scene_gpu_mat is not None else model_mat
+                if scene_gpu_mat is not None:
+                    _u['u_model'].write(_mat4_tobytes(draw_model_mat))
+                    _u['u_normal_mat'].write(_mat3_normal(draw_model_mat).T.astype(np.float32).tobytes())
+                else:
+                    _u['u_model'].write(_mat4_tobytes(model_mat))
+                    _u['u_normal_mat'].write(normal_mat.T.astype(np.float32).tobytes())
+
                 _use_vao.render(moderngl.TRIANGLES)
                 total_tris += _use_tris
 
@@ -6404,93 +6497,14 @@ class GpuRenderer:
             log.warning(f"GpuRenderer._render_gpu: {e}", exc_info=True)
             return None
 
-    # ── CPU fallback render ───────────────────────────────────────────────────
+    # ── Disabled CPU render hook ──────────────────────────────────────────────
 
     def _render_cpu(self, model, camera, W: int, H: int,
                     textures: Dict[str, 'Image.Image'],
                     anim_pose, anim_time: float) -> Optional['Image.Image']:
-        """
-        CPU fallback: delegates to the existing PIL-based FrameRenderer.
-        Returns a PIL RGB Image.
-        """
-        if not _PIL:
-            return None
-        try:
-            from src.gui.rendering.viewport_core import FrameRenderer, ArcBallCamera
-            renderer = FrameRenderer(camera)
-            renderer.model = model
-            renderer.show_texture = True
-            renderer.show_bones   = False
-            renderer.show_grid    = False
-            renderer.textures     = textures
-            renderer._anim_pose   = anim_pose
-            renderer._anim_time   = anim_time
-            # Build texture cache from provided dict.
-            # Use a proxy that first checks the provided textures dict, then falls
-            # back to the real TextureCache (which searches disk + BIF archives).
-            # This ensures textured rendering even when textures dict is partial.
-            _real_tc = getattr(renderer, 'tex_cache', None)
-            _tex_snapshot = dict(textures)  # local copy to avoid mutation
-
-            class _ProxyTC:
-                """Proxy texture cache: dict first, then real cache fallback."""
-                def get(self, name):
-                    if not name:
-                        return None
-                    k = name.lower()
-                    hit = _tex_snapshot.get(k)
-                    if hit is not None:
-                        return hit
-                    # Fallback to real TextureCache (searches disk dirs + BIF)
-                    if _real_tc is not None and hasattr(_real_tc, 'get'):
-                        try:
-                            return _real_tc.get(k)
-                        except Exception:
-                            pass
-                    return None
-
-                def get_mip1(self, img):
-                    if _real_tc is not None and hasattr(_real_tc, 'get_mip1'):
-                        return _real_tc.get_mip1(img)
-                    return img
-
-                def sample(self, img, u, v, interp=True):
-                    if _real_tc is not None and hasattr(_real_tc, 'sample'):
-                        return _real_tc.sample(img, u, v, interp)
-                    return (128, 128, 128)
-
-                def sample_bilinear(self, img, u, v):
-                    if _real_tc is not None and hasattr(_real_tc, 'sample_bilinear'):
-                        return _real_tc.sample_bilinear(img, u, v)
-                    return (128, 128, 128, 255)
-
-                def get_txi(self, name):
-                    if _real_tc is not None and hasattr(_real_tc, 'get_txi'):
-                        return _real_tc.get_txi(name)
-                    return ''
-
-                def get_raw_header(self, name):
-                    if _real_tc is not None and hasattr(_real_tc, 'get_raw_header'):
-                        return _real_tc.get_raw_header(name)
-                    return None
-
-                def clear_mip_cache(self):
-                    if _real_tc is not None and hasattr(_real_tc, 'clear_mip_cache'):
-                        _real_tc.clear_mip_cache()
-
-            renderer.tex_cache = _ProxyTC()
-            img = renderer.render(W, H)
-            # Kill the alpha layer — flatten RGBA to RGB against the background
-            if img is not None and getattr(img, 'mode', 'RGB') == 'RGBA':
-                bg_img = Image.new('RGB', img.size, (23, 25, 28))
-                bg_img.paste(img, mask=img.split()[3])
-                img = bg_img
-            return img
-        except Exception as e:
-            log.warning(f"GpuRenderer._render_cpu: {e}", exc_info=True)
-            if _PIL:
-                return Image.new('RGBA', (W, H), (31, 36, 41, 255))
-            return None
+        """CPU graphics rendering is disabled; the viewport is GPU-only."""
+        log.error("GpuRenderer._render_cpu called, but CPU graphics rendering is disabled")
+        return None
 
     # ── Invalidate node cache ─────────────────────────────────────────────────
 

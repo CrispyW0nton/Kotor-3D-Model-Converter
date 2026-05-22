@@ -8,6 +8,7 @@ import os
 import re
 import threading
 import time as time_module
+import copy
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -30,8 +31,9 @@ from src.gui.qt_lib.rendering.viewport_navigation import (
 from src.gui.qt_lib.gizmo.gizmo_mode import GizmoMode
 from src.gui.qt_lib.gizmo.transform_controller import TransformController
 from src.gui.qt_lib.gizmo.transform_gizmo import TransformGizmo
-from src.gui.qt_lib.gizmo.transform_math import multiply_quaternions, ray_from_mouse
+from src.gui.qt_lib.gizmo.transform_math import multiply_quaternions, ray_from_mouse, rotate_vector
 from src.gui.qt_lib.viewports.qt_transform_typein_bar import QtTransformTypeInBar
+from src.gui.qt_lib.panels.axis_mode_control import AxisModeControl
 from src.gui.camera.camera_controller import CameraController
 from src.gui.camera.camera_gizmo_renderer import CameraGizmoRenderer
 from src.gui.camera.camera_manager import CameraManager
@@ -45,6 +47,7 @@ from src.measurement.dimension_calculator import DimensionCalculator
 from src.measurement.grid_measurement import GridMeasurement
 from src.measurement.measurement_controller import MeasurementController
 from src.measurement.percent_snap import PercentSnap
+from src.core.scene.axis_mode import AxisMode, TransformReferenceController
 from src.measurement.unit_settings import MeasurementSettings
 from src.measurement.unit_system import UnitSystem
 from src.mesh_tools.mesh_attach import attach_selected_meshes
@@ -436,6 +439,7 @@ class QtViewportWidget(QtWidgets.QWidget):
     cameraSelectionChanged = QtCore.Signal(object)
     cameraChanged = QtCore.Signal()
     activeCameraChanged = QtCore.Signal(object)
+    statusMessage = QtCore.Signal(str)
     gpuUploadProgress = QtCore.Signal(int, int)
     _texturePrewarmFinished = QtCore.Signal(object)
     _deferredTxiFinished = QtCore.Signal(object)
@@ -458,6 +462,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._renderer = FrameRenderer(self.camera)
         self._renderer.show_gimbal = bool(getattr(self._renderer, "show_gimbal", True))
         self.model = None
+        self._scene_instances: list = []
+        self._scene_model = None
+        self._scene_name = "Untitled Scene"
         self.on_bone_selected = None
         self.on_node_selected = None
         self.on_node_moved = None
@@ -469,6 +476,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._mesh_box_start = None
         self._mesh_box_selecting = False
         self._selected_meshes: list = []
+        self._hovered_mesh_node = None
+        self._hovered_mesh_face_bounds = None
         self._pan_dragging = False
         self._nav_dragging = ""
         self._nav_button = QtCore.Qt.NoButton
@@ -493,6 +502,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._transform_gizmo = TransformGizmo(
             TransformController(self._evict_transform_cache, self.angle_snap, self.percent_snap)
         )
+        self.transform_reference_controller = TransformReferenceController()
+        self._pivot_edit_mode = "affect_object_only"
+        self._pick_reference_waiting = False
         self._light_picker = LightPicker()
         self.camera_manager = CameraManager()
         self._camera_adapter = CameraViewportAdapter(self.camera)
@@ -613,10 +625,6 @@ class QtViewportWidget(QtWidgets.QWidget):
         node = getattr(self._renderer, "selected_node", None)
         if node is not None:
             return node
-        root_node = getattr(self.model, "root_node", None) if self.model is not None else None
-        if root_node is not None and not self._renderer.is_hidden_bone_name(getattr(root_node, "name", "")):
-            self._renderer.selected_node = root_node
-            return root_node
         return None
 
     def _gizmo_world_position(self, node) -> tuple[float, float, float] | None:
@@ -624,6 +632,24 @@ class QtViewportWidget(QtWidgets.QWidget):
             return None
         if self._is_external_skeleton_node(node):
             return self._external_overlay_world_position(node)
+        pivot_local = getattr(node, "_gr_pivot_local", None)
+        if pivot_local is not None and not bool(getattr(node, "_gr_pivot_world_dirty", False)):
+            try:
+                position = tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3])
+                rotation = tuple(float(v) for v in getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))[:4])
+                local = tuple(float(v) for v in pivot_local[:3])
+                offset = rotate_vector(rotation, local)
+                pivot_world = (position[0] + offset[0], position[1] + offset[1], position[2] + offset[2])
+                setattr(node, "_gr_pivot_world", pivot_world)
+                return pivot_world
+            except Exception:
+                pass
+        pivot_world = getattr(node, "_gr_pivot_world", None)
+        if pivot_world is not None:
+            try:
+                return tuple(float(v) for v in pivot_world[:3])
+            except Exception:
+                pass
         if self._is_selected_model_root(node):
             try:
                 bb_min, bb_max = self._renderer._get_render_bounds()
@@ -636,6 +662,93 @@ class QtViewportWidget(QtWidgets.QWidget):
                 pass
         wp, _wo, _is_id = self._renderer._node_world_transform(node)
         return (float(wp[0]), float(wp[1]), float(wp[2]))
+
+    @staticmethod
+    def _quat_conjugate(quat) -> tuple[float, float, float, float]:
+        try:
+            x, y, z, w = (float(v) for v in tuple(quat)[:4])
+            return (-x, -y, -z, w)
+        except Exception:
+            return (0.0, 0.0, 0.0, 1.0)
+
+    def _scene_instance_for_node(self, node):
+        object_id = str(getattr(node, "_gr_scene_object_id", "") or "")
+        if not object_id:
+            return None
+        return next((obj for obj in self._scene_instances if getattr(obj, "id", "") == object_id), None)
+
+    def _sync_transform_reference_for_node(self, node) -> None:
+        if node is None:
+            return
+        try:
+            object_rotation = getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))
+            pivot_rotation = getattr(node, "_gr_pivot_rotation", None)
+            reference_rotation = (
+                multiply_quaternions(object_rotation, pivot_rotation)
+                if pivot_rotation is not None
+                else object_rotation
+            )
+            setattr(node, "_gr_reference_rotation", reference_rotation)
+            basis = self.transform_reference_controller.get_transform_basis(node, self.camera, None)
+            setattr(node, "_gr_axis_basis", basis)
+        except Exception:
+            setattr(node, "_gr_axis_basis", ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)))
+        setattr(node, "_gr_pivot_edit_mode", self._pivot_edit_mode)
+
+    def set_axis_mode(self, mode) -> None:
+        resolved = self.transform_reference_controller.set_axis_mode(mode)
+        self._pick_reference_waiting = resolved is AxisMode.PICK
+        if hasattr(self, "axis_mode_control"):
+            self.axis_mode_control.set_axis_mode(resolved)
+        if self._pick_reference_waiting:
+            self.statusMessage.emit("Pick an object to use as transform reference.")
+        self._request_render(fast=True)
+
+    def axis_mode(self) -> AxisMode:
+        return self.transform_reference_controller.get_axis_mode()
+
+    def set_pivot_edit_mode(self, mode: str) -> None:
+        mode = str(mode or "affect_object_only")
+        if mode == "affect_hierarchy_only":
+            self.statusMessage.emit("Hierarchy mode is not available for this selection.")
+            return
+        self._pivot_edit_mode = mode if mode in {"affect_pivot_only", "affect_object_only"} else "affect_object_only"
+        node = getattr(self._renderer, "selected_node", None)
+        if node is not None:
+            setattr(node, "_gr_pivot_edit_mode", self._pivot_edit_mode)
+            self._sync_transform_reference_for_node(node)
+            self._transform_gizmo.update_from_object_transform()
+        self._sync_transform_typein_bar()
+        self._request_render(fast=True)
+
+    def pivot_edit_mode(self) -> str:
+        return self._pivot_edit_mode
+
+    def _pivot_world_from_instance(self, instance) -> tuple[float, float, float]:
+        transform = getattr(instance, "transform", None)
+        pivot = getattr(instance, "pivot", None)
+        position = tuple(float(v) for v in getattr(transform, "position", (0.0, 0.0, 0.0))[:3])
+        rotation_q = self._euler_degrees_to_quat(getattr(transform, "rotation", (0.0, 0.0, 0.0)))
+        local = tuple(float(v) for v in getattr(pivot, "position_local", (0.0, 0.0, 0.0))[:3])
+        offset = rotate_vector(rotation_q, local)
+        return (position[0] + offset[0], position[1] + offset[1], position[2] + offset[2])
+
+    def _pivot_local_from_node(self, node) -> tuple[float, float, float]:
+        instance = self._scene_instance_for_node(node)
+        if instance is None:
+            return (0.0, 0.0, 0.0)
+        transform = getattr(instance, "transform", None)
+        position = tuple(float(v) for v in getattr(node, "position", getattr(transform, "position", (0.0, 0.0, 0.0)))[:3])
+        pivot_world = tuple(float(v) for v in getattr(node, "_gr_pivot_world", position)[:3])
+        rotation = tuple(float(v) for v in getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))[:4])
+        rel = (pivot_world[0] - position[0], pivot_world[1] - position[1], pivot_world[2] - position[2])
+        local = rotate_vector(self._quat_conjugate(rotation), rel)
+        try:
+            setattr(node, "_gr_pivot_local", local)
+            setattr(node, "_gr_pivot_world_dirty", False)
+        except Exception:
+            pass
+        return local
 
     @property
     def navigation_profile(self) -> str:
@@ -780,6 +893,9 @@ class QtViewportWidget(QtWidgets.QWidget):
             tooltip="Cycle gimbal mode",
         )
         row.addWidget(self.gimbal_mode_button)
+        self.axis_mode_control = AxisModeControl(self, compact=self._compact_controls)
+        self.axis_mode_control.axisModeChanged.connect(self.set_axis_mode)
+        row.addWidget(self.axis_mode_control)
         self.measure_button = self._button(
             self._toolbar_text("Measure", "Meas"),
             self.toggle_measurement_mode,
@@ -808,7 +924,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         )
         row.addWidget(self.lock_camera_button)
 
-        self.canvas = QtWidgets.QLabel("No model loaded")
+        self.canvas = QtWidgets.QLabel("Empty Scene")
         self.canvas.setObjectName("ViewportCanvas")
         self.canvas.setAlignment(QtCore.Qt.AlignCenter)
         self.canvas.setMinimumSize(120 if self._compact_controls else 180, 100 if self._compact_controls else 140)
@@ -951,6 +1067,8 @@ class QtViewportWidget(QtWidgets.QWidget):
             combo = getattr(self, combo_name, None)
             if combo is not None:
                 combo.setStyleSheet(combo_style)
+        if hasattr(self, "axis_mode_control"):
+            self.axis_mode_control.apply_ghost_theme(theme)
         for button in self.findChildren(QtWidgets.QPushButton):
             button.setStyleSheet("")
         for sep in self.findChildren(QtWidgets.QFrame):
@@ -1049,6 +1167,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         )
         if hasattr(self, "transform_typein_bar"):
             self.transform_typein_bar.apply_ghost_layout(layout)
+        if hasattr(self, "axis_mode_control"):
+            self.axis_mode_control.apply_ghost_layout(layout)
 
     def _separator(self) -> QtWidgets.QFrame:
         sep = QtWidgets.QFrame()
@@ -1067,6 +1187,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         if old_model is not None and old_model is not model:
             clear_prebuilt_static_gpu_model_data(old_model)
         self.model = model
+        self._hovered_mesh_node = None
+        self._hovered_mesh_face_bounds = None
         self._renderer.set_model(model)
         self.camera_manager.set_model(model)
         self._camera_view_active = False
@@ -1088,15 +1210,18 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._renderer._frame_view = None
             self._renderer._frame_verts_cache = {}
             self._renderer._frame_norms_cache = {}
-            self.renderer_button.setText("GPU" if self._use_gpu else "CPU")
+            self._use_gpu = True
+            self.renderer_button.setChecked(True)
+            self.renderer_button.setText("GPU")
             self.canvas.setPixmap(QtGui.QPixmap())
-            self.canvas.setText("No model loaded")
+            self.canvas.setText("Empty Scene")
             self._update_uv_viewer_model()
             self.camera_manager.set_model(None)
             self._refresh_camera_view_combo()
             # T403: clear the thumbnail when no model is loaded.
             self._refresh_thumbnail_safe()
             self.modelChanged.emit(None)
+            self._request_render(fast=True)
             return
         self._gpu_upload_model_id = id(model)
         self._gpu_upload_total = int(getattr(model, "_gr_gpu_prebuilt_mesh_count", 0) or 0)
@@ -1129,16 +1254,14 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._start_deferred_txi_metadata(model)
         self._update_uv_viewer_model()
         # T403: populate the mini-thumbnail inset with a neutral-pose
-        # snapshot of the freshly loaded model.  Cheap (CPU render at
-        # 216×276) and one-shot — subsequent re-frames don't need to
-        # re-render the thumbnail since neutral pose is camera-pose
-        # independent (its render path uses a private ArcBallCamera).
+        # snapshot of the freshly loaded model.  This uses the same GPU-only
+        # viewport rendering policy as the main canvas.
         if self._thumbnail_visible_setting:
             self._refresh_thumbnail_safe()
         self.modelChanged.emit(model)
         try:
             root_node = getattr(model, "root_node", None)
-            if root_node is not None:
+            if root_node is not None and not bool(getattr(root_node, "_gr_scene_composite_root", False)):
                 self.set_selected_node(root_node)
         except Exception:
             log.debug("Could not select imported model root", exc_info=True)
@@ -1147,6 +1270,220 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def set_model(self, model) -> None:
         self.load_model(model)
+
+    def load_scene_instances(
+        self,
+        instances: list,
+        *,
+        scene_name: str = "Untitled Scene",
+        texture_dirs: Optional[list[str]] = None,
+    ) -> None:
+        """Render the active KMAX scene through a synthetic multi-object model."""
+
+        self._scene_instances = list(instances or [])
+        self._scene_name = scene_name or "Untitled Scene"
+        selected_id = str(
+            getattr(next((obj for obj in self._scene_instances if getattr(obj, "selected", False)), None), "id", "")
+            or ""
+        )
+        composite = self._build_scene_composite_model(self._scene_instances, self._scene_name)
+        if composite is None:
+            self._scene_model = None
+            self.load_model(None)
+            return
+        self._scene_model = composite
+        dirs = [directory for directory in (texture_dirs or []) if directory]
+        self.load_model(composite, dirs[0] if dirs else "", extra_texture_dirs=dirs[1:])
+        if selected_id:
+            self.select_scene_object(selected_id)
+        else:
+            self.set_selected_node(None)
+
+    def _build_scene_composite_model(self, instances: list, scene_name: str):
+        visible = [obj for obj in instances if getattr(obj, "visible", True)]
+        if not visible:
+            return None
+        try:
+            from src.core.qt_core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+        except Exception:
+            from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+
+        root = ModelNode(name="scene_root", flags=int(NodeFlags.HEADER))
+        setattr(root, "_gr_scene_composite_root", True)
+        composite = KotorModel(name=scene_name or "Untitled Scene", root_node=root)
+        first_model = None
+        for instance in visible:
+            runtime_model = (getattr(instance, "metadata", {}) or {}).get("_runtime_model")
+            model_root = getattr(runtime_model, "root_node", None)
+            if runtime_model is None or model_root is None:
+                continue
+            first_model = first_model or runtime_model
+            try:
+                node = copy.deepcopy(model_root)
+            except Exception:
+                node = model_root.clone_shallow()
+                node.children = []
+            source_position = tuple(float(v) for v in getattr(model_root, "position", (0.0, 0.0, 0.0))[:3])
+            source_rotation = tuple(float(v) for v in getattr(model_root, "rotation", (0.0, 0.0, 0.0, 1.0))[:4])
+            scene_position = tuple(float(v) for v in instance.transform.position[:3])
+            scene_rotation = self._euler_degrees_to_quat(instance.transform.rotation)
+            scene_scale = tuple(float(v) for v in getattr(instance.transform, "scale", (1.0, 1.0, 1.0))[:3])
+            node.parent = root
+            node.position = scene_position
+            node.rotation = scene_rotation
+            node._gr_scale = scene_scale
+            setattr(node, "_gr_scene_object_id", instance.id)
+            setattr(node, "_gr_scene_object_root", True)
+            setattr(node, "_gr_scene_object_name", instance.name)
+            setattr(node, "_gr_scene_object_locked", bool(getattr(instance, "locked", False)))
+            setattr(node, "_gr_scene_gpu_transform", True)
+            setattr(node, "_gr_scene_source_position", source_position)
+            setattr(node, "_gr_scene_source_rotation", source_rotation)
+            pivot_world_fn = getattr(self, "_pivot_world_from_instance", None)
+            pivot_world = (
+                pivot_world_fn(instance)
+                if callable(pivot_world_fn)
+                else tuple(float(v) for v in instance.transform.position[:3])
+            )
+            pivot_data = getattr(instance, "pivot", None)
+            pivot_local = tuple(float(v) for v in getattr(pivot_data, "position_local", (0.0, 0.0, 0.0))[:3])
+            setattr(node, "_gr_pivot_world", pivot_world)
+            setattr(node, "_gr_pivot_local", pivot_local)
+            setattr(node, "_gr_pivot_world_dirty", False)
+            setattr(node, "_gr_pivot_rotation", self._euler_degrees_to_quat(getattr(pivot_data, "rotation_local", (0.0, 0.0, 0.0))))
+            setattr(node, "_gr_reference_rotation", getattr(node, "_gr_pivot_rotation"))
+            setattr(node, "_gr_pivot_edit_mode", getattr(self, "_pivot_edit_mode", "affect_object_only"))
+
+            # Preserve authored MDL node names for animations, skin bone maps,
+            # and qBone/tBone rows while keeping scene placement as metadata.
+            self._tag_scene_object_nodes(node, instance.id, node)
+            self._tag_scene_source_indices(node, runtime_model)
+            root.children.append(node)
+        if not root.children:
+            return None
+        if first_model is not None:
+            composite.game_version = getattr(first_model, "game_version", composite.game_version)
+            composite.classification = "scene"
+            composite.model_type = getattr(first_model, "model_type", composite.model_type)
+        try:
+            composite.compute_bounds()
+            setattr(composite, "_gr_bounds_prepared", True)
+            setattr(composite, "_gr_render_bounds", (composite.bb_min, composite.bb_max))
+        except Exception:
+            pass
+        return composite
+
+    def _tag_scene_object_nodes(self, node, object_id: str, root_node) -> None:
+        stack = [node]
+        visited = set()
+        while stack:
+            current = stack.pop()
+            if current is None or id(current) in visited:
+                continue
+            visited.add(id(current))
+            setattr(current, "_gr_scene_object_id", object_id)
+            setattr(current, "_gr_scene_object_root_ref", root_node)
+            stack.extend(getattr(current, "children", []) or [])
+
+    @staticmethod
+    def _apply_scene_instance_scale(node, scale) -> None:
+        try:
+            sx, sy, sz = (float(v) for v in tuple(scale)[:3])
+        except Exception:
+            return
+        if abs(sx - 1.0) < 1e-9 and abs(sy - 1.0) < 1e-9 and abs(sz - 1.0) < 1e-9:
+            return
+        stack = [node]
+        visited = set()
+        while stack:
+            current = stack.pop()
+            if current is None or id(current) in visited:
+                continue
+            visited.add(id(current))
+            try:
+                px, py, pz = tuple(float(v) for v in getattr(current, "position", (0.0, 0.0, 0.0))[:3])
+                current.position = (px * sx, py * sy, pz * sz)
+            except Exception:
+                pass
+            vertices = getattr(current, "vertices", None)
+            if vertices is not None:
+                try:
+                    current.vertices = [(float(x) * sx, float(y) * sy, float(z) * sz) for x, y, z in vertices]
+                    compute_bounds = getattr(current, "compute_bounds", None)
+                    if callable(compute_bounds):
+                        compute_bounds()
+                except Exception:
+                    pass
+            stack.extend(getattr(current, "children", []) or [])
+
+    def _tag_scene_source_indices(self, copied_root, source_model) -> None:
+        """Preserve original MDL DFS indices on scene copies for qBone lookup."""
+        try:
+            source_nodes = list(source_model.all_nodes()) if hasattr(source_model, "all_nodes") else []
+        except Exception:
+            source_nodes = []
+        if not source_nodes:
+            return
+
+        copied_nodes = []
+        stack = [copied_root]
+        visited = set()
+        while stack:
+            current = stack.pop()
+            if current is None or id(current) in visited:
+                continue
+            visited.add(id(current))
+            copied_nodes.append(current)
+            stack.extend(reversed(getattr(current, "children", []) or []))
+
+        for idx, current in enumerate(copied_nodes):
+            if idx >= len(source_nodes):
+                break
+            setattr(current, "_gr_source_dfs_index", idx)
+            setattr(current, "_gr_source_model_id", id(source_model))
+            setattr(current, "_gr_source_node_name", getattr(source_nodes[idx], "name", ""))
+
+    @staticmethod
+    def _euler_degrees_to_quat(rotation: tuple[float, float, float]) -> tuple[float, float, float, float]:
+        try:
+            rx, ry, rz = (math.radians(float(v)) for v in rotation[:3])
+        except Exception:
+            return (0.0, 0.0, 0.0, 1.0)
+        cx, sx = math.cos(rx * 0.5), math.sin(rx * 0.5)
+        cy, sy = math.cos(ry * 0.5), math.sin(ry * 0.5)
+        cz, sz = math.cos(rz * 0.5), math.sin(rz * 0.5)
+        return (
+            sx * cy * cz + cx * sy * sz,
+            cx * sy * cz - sx * cy * sz,
+            cx * cy * sz + sx * sy * cz,
+            cx * cy * cz - sx * sy * sz,
+        )
+
+    def select_scene_object(self, object_id: str) -> None:
+        node = self._scene_node_for_object(object_id)
+        self.set_selected_node(node)
+
+    def _scene_node_for_object(self, object_id: str):
+        model = self.model
+        if model is None or not getattr(model, "root_node", None):
+            return None
+        for child in getattr(model.root_node, "children", []) or []:
+            if getattr(child, "_gr_scene_object_id", "") == object_id:
+                return child
+        return None
+
+    def _scene_root_for_node(self, node):
+        if node is None:
+            return None
+        root_ref = getattr(node, "_gr_scene_object_root_ref", None)
+        if root_ref is not None:
+            return root_ref
+        current = node
+        while current is not None:
+            if bool(getattr(current, "_gr_scene_object_root", False)):
+                return current
+            current = getattr(current, "parent", None)
+        return None
 
     def refresh_model_geometry(self) -> None:
         """Refresh bounds/caches after in-place model vertex transforms."""
@@ -1585,9 +1922,9 @@ class QtViewportWidget(QtWidgets.QWidget):
             self.switch_to_camera(value)
 
     def toggle_gpu_renderer(self, checked: Optional[bool] = None) -> None:
-        self._use_gpu = bool(checked) if checked is not None else not self._use_gpu
-        self.renderer_button.setChecked(self._use_gpu)
-        self.renderer_button.setText("GPU" if self._use_gpu else "CPU")
+        self._use_gpu = True
+        self.renderer_button.setChecked(True)
+        self.renderer_button.setText("GPU")
         self._request_render(fast=True)
 
     def toggle_xray(self, checked: Optional[bool] = None) -> None:
@@ -1785,6 +2122,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         before_rot = tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)))
         before_vertices = self._snapshot_vertices(node)
         before_scale = self._node_scale(node)
+        before_pivot_world = self._optional_tuple_attr(node, "_gr_pivot_world")
+        before_pivot_rotation = self._optional_tuple_attr(node, "_gr_pivot_rotation")
         try:
             if self._transform_gizmo.mode == GizmoMode.ROTATE:
                 self._apply_rotation_typein(node, axis_index, text)
@@ -1810,6 +2149,10 @@ class QtViewportWidget(QtWidgets.QWidget):
             after_vertices=after_vertices,
             before_scale=before_scale,
             after_scale=self._node_scale(node),
+            before_pivot_world=before_pivot_world,
+            after_pivot_world=self._optional_tuple_attr(node, "_gr_pivot_world"),
+            before_pivot_rotation=before_pivot_rotation,
+            after_pivot_rotation=self._optional_tuple_attr(node, "_gr_pivot_rotation"),
         )
         self._evict_transform_cache(node)
         self._notify_node_moved(node)
@@ -1821,8 +2164,26 @@ class QtViewportWidget(QtWidgets.QWidget):
             inc = self.measurement_settings.minor_grid_spacing
             value = round(value / inc) * inc
         position = list(tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3]))
+        old_position = tuple(position)
         position[axis_index] = float(value)
-        node.position = tuple(position)
+        new_position = tuple(position)
+        node.position = new_position
+        if str(getattr(node, "_gr_pivot_edit_mode", "") or "") != "affect_pivot_only":
+            pivot_world = getattr(node, "_gr_pivot_world", None)
+            if pivot_world is not None:
+                delta = (
+                    new_position[0] - old_position[0],
+                    new_position[1] - old_position[1],
+                    new_position[2] - old_position[2],
+                )
+                updated = (
+                    float(pivot_world[0]) + delta[0],
+                    float(pivot_world[1]) + delta[1],
+                    float(pivot_world[2]) + delta[2],
+                )
+                setattr(node, "_gr_pivot_world", updated)
+                setattr(node, "_gr_pivot_world_dirty", True)
+                setattr(node, "_gr_gizmo_world_position", updated)
 
     def _apply_rotation_typein(self, node, axis_index: int, text: str) -> None:
         value = float(str(text or "").replace("deg", "").replace("°", "").strip())
@@ -1849,6 +2210,9 @@ class QtViewportWidget(QtWidgets.QWidget):
             node._gr_helper_size = max(0.05, float(getattr(node, "_gr_helper_size", 1.0) or 1.0) * ratio)
             node._gr_scale = tuple(scale)
             return
+        if bool(getattr(node, "_gr_scene_object_root", False)):
+            node._gr_scale = tuple(scale)
+            return
         verts = getattr(node, "vertices", None)
         if verts is not None:
             node.vertices = [
@@ -1869,6 +2233,16 @@ class QtViewportWidget(QtWidgets.QWidget):
         if vertices is None:
             return None
         return tuple(tuple(float(c) for c in vertex[:3]) for vertex in vertices)
+
+    @staticmethod
+    def _optional_tuple_attr(node, name: str):
+        raw = getattr(node, name, None)
+        if raw is None:
+            return None
+        try:
+            return tuple(float(v) for v in raw)
+        except Exception:
+            return None
 
     @staticmethod
     def _node_scale(node) -> tuple[float, float, float]:
@@ -1923,6 +2297,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._sync_legacy_gimbal_mode()
         self.gimbal_mode_button.setText(self._gimbal_mode_button_text())
         self._sync_transform_typein_bar()
+        self.statusMessage.emit(f"Gizmo: {self._transform_gizmo.mode.value.title()}")
         self._request_render()
 
     def set_gimbal_mode(self, mode: int) -> None:
@@ -1935,6 +2310,16 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._sync_legacy_gimbal_mode()
         self.gimbal_mode_button.setText(self._gimbal_mode_button_text())
         self._sync_transform_typein_bar()
+        self.statusMessage.emit(f"Gizmo: {self._transform_gizmo.mode.value.title()}")
+        self._request_render(fast=True)
+
+    def _set_transform_gizmo_mode(self, mode: GizmoMode) -> None:
+        self._transform_gizmo.set_mode(mode)
+        self._sync_legacy_gimbal_mode()
+        self.gimbal_mode_button.setText(self._gimbal_mode_button_text())
+        self._sync_transform_typein_bar()
+        self.statusMessage.emit(f"Gizmo: {mode.value.title()}")
+        self._request_render(fast=True)
 
     def _sync_legacy_gimbal_mode(self) -> None:
         if self._transform_gizmo.mode == GizmoMode.ROTATE:
@@ -2133,9 +2518,8 @@ class QtViewportWidget(QtWidgets.QWidget):
             ``selected_node`` / animation state to neutral so the
             preview reads as a clean reference; original state is
             restored in a try/finally.
-          • Falls back to CPU render only — GPU rendering would
-            require a second GL context and isn't worth it for a
-            220×280 inset.
+          • Uses the viewport GPU renderer only; if GPU rendering is
+            unavailable, no CPU thumbnail is generated.
         """
         if self.model is None:
             return None
@@ -2169,7 +2553,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             if hasattr(ren, "_anim_pose"):
                 ren._anim_pose = None
             img = None
-            if self._use_gpu and self.model is not None and ren.show_texture:
+            if self.model is not None:
                 try:
                     if self._gpu_renderer is None:
                         self._gpu_renderer = GpuRenderer()
@@ -2198,7 +2582,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                     log.debug("Thumbnail GPU render failed: %s", exc)
                     img = None
             if img is None:
-                img = ren.render(int(w), int(h))
+                return None
         finally:
             ren.cam = main_cam
             ren.show_bones = snap["show_bones"]
@@ -2228,6 +2612,9 @@ class QtViewportWidget(QtWidgets.QWidget):
             return None
 
     def set_selected_node(self, node, orbit_bounds=None) -> None:
+        scene_root = self._scene_root_for_node(node)
+        if scene_root is not None:
+            node = scene_root
         if node is not None and self._renderer.is_hidden_bone_name(getattr(node, "name", "")):
             node = None
         if node is not None and bool(getattr(node, "is_camera", False)):
@@ -2254,6 +2641,10 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._selected_joint_nodes = []
             self._renderer._ext_skel_selected_node = None
             self._renderer._ext_skel_selected_ids = set()
+            self._sync_transform_reference_for_node(node)
+            wp = self._gizmo_world_position(node)
+            if wp is not None:
+                setattr(node, "_gr_gizmo_world_position", wp)
             self._transform_gizmo.set_selected_object(node)
         elif not self._is_selected_model_root(node):
             known = {id(n) for n in self._selected_joint_nodes}
@@ -2265,6 +2656,10 @@ class QtViewportWidget(QtWidgets.QWidget):
             else:
                 self._renderer._ext_skel_selected_node = None
                 self._renderer._ext_skel_selected_ids = set()
+            self._sync_transform_reference_for_node(node)
+            wp = self._gizmo_world_position(node)
+            if wp is not None:
+                setattr(node, "_gr_gizmo_world_position", wp)
             self._transform_gizmo.set_selected_object(node)
         if self._uv_viewer is not None:
             self._uv_viewer.set_selected_node(node)
@@ -2650,6 +3045,10 @@ class QtViewportWidget(QtWidgets.QWidget):
         if active is None:
             self._transform_gizmo.clear_selection()
         else:
+            self._sync_transform_reference_for_node(active)
+            wp = self._gizmo_world_position(active)
+            if wp is not None:
+                setattr(active, "_gr_gizmo_world_position", wp)
             self._transform_gizmo.set_selected_object(active)
         if self._uv_viewer is not None:
             self._uv_viewer.set_selected_node(active)
@@ -3098,9 +3497,25 @@ class QtViewportWidget(QtWidgets.QWidget):
         after_vertices=None,
         before_scale=None,
         after_scale=None,
+        before_pivot_world=None,
+        after_pivot_world=None,
+        before_pivot_rotation=None,
+        after_pivot_rotation=None,
     ) -> None:
         scale_changed = before_scale is not None and after_scale is not None and tuple(before_scale) != tuple(after_scale)
-        if node is None or (not scale_changed and not self._state_changed(before_pos, before_rot, after_pos, after_rot, before_vertices, after_vertices)):
+        pivot_changed = (
+            (before_pivot_world is not None and after_pivot_world is not None and tuple(before_pivot_world) != tuple(after_pivot_world))
+            or (
+                before_pivot_rotation is not None
+                and after_pivot_rotation is not None
+                and tuple(before_pivot_rotation) != tuple(after_pivot_rotation)
+            )
+        )
+        if node is None or (
+            not scale_changed
+            and not pivot_changed
+            and not self._state_changed(before_pos, before_rot, after_pos, after_rot, before_vertices, after_vertices)
+        ):
             return
         self._undo_stack.append(
             {
@@ -3113,6 +3528,10 @@ class QtViewportWidget(QtWidgets.QWidget):
                 "after_vertices": after_vertices,
                 "before_scale": before_scale,
                 "after_scale": after_scale,
+                "before_pivot_world": before_pivot_world,
+                "after_pivot_world": after_pivot_world,
+                "before_pivot_rotation": before_pivot_rotation,
+                "after_pivot_rotation": after_pivot_rotation,
                 "label": label,
             }
         )
@@ -3128,8 +3547,16 @@ class QtViewportWidget(QtWidgets.QWidget):
         node.rotation = action["after_rot"] if use_after else action["before_rot"]
         vertices = action.get("after_vertices") if use_after else action.get("before_vertices")
         scale = action.get("after_scale") if use_after else action.get("before_scale")
+        pivot_world = action.get("after_pivot_world") if use_after else action.get("before_pivot_world")
+        pivot_rotation = action.get("after_pivot_rotation") if use_after else action.get("before_pivot_rotation")
         if scale is not None:
             node._gr_scale = tuple(scale)
+        if pivot_world is not None:
+            node._gr_pivot_world = tuple(pivot_world)
+            node._gr_gizmo_world_position = tuple(pivot_world)
+            node._gr_pivot_world_dirty = True
+        if pivot_rotation is not None:
+            node._gr_pivot_rotation = tuple(pivot_rotation)
         if vertices is not None:
             node.vertices = [tuple(v) for v in vertices]
             compute_bounds = getattr(node, "compute_bounds", None)
@@ -3178,6 +3605,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         if self.on_node_moved:
             self.on_node_moved(node)
         self.nodeMoved.emit(node)
+        if node is getattr(self._renderer, "selected_node", None):
+            self._transform_gizmo.update_from_object_transform()
         self._sync_transform_typein_bar()
         if self._renderer.rig_edit_mode and self._renderer.on_bone_moved:
             try:
@@ -3245,6 +3674,12 @@ class QtViewportWidget(QtWidgets.QWidget):
             if et == QtCore.QEvent.FocusOut:
                 self._snap_key_down = False
                 return False
+            if et == QtCore.QEvent.Leave:
+                if self._hovered_mesh_node is not None:
+                    self._hovered_mesh_node = None
+                    self._hovered_mesh_face_bounds = None
+                    self._request_render(fast=True)
+                return False
             if et == QtCore.QEvent.MouseButtonPress:
                 self.canvas.setFocus()
                 action = self._navigation_action(event.button(), event.modifiers())
@@ -3271,6 +3706,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                     self._drag_lmb(event)
                     return True
                 self._update_gizmo_hover(event)
+                self._update_mesh_hover(event)
                 return False
             if et == QtCore.QEvent.MouseButtonRelease:
                 if self._nav_dragging and event.button() == self._nav_button:
@@ -3278,6 +3714,10 @@ class QtViewportWidget(QtWidgets.QWidget):
                     return True
                 if event.button() == QtCore.Qt.LeftButton:
                     self._release_lmb(event)
+                    return True
+            if et in (QtCore.QEvent.FocusOut, QtCore.QEvent.WindowDeactivate):
+                if self._transform_gizmo_dragging:
+                    self._cancel_transform_gizmo_drag()
                     return True
             if et == QtCore.QEvent.Wheel:
                 if self.is_camera_view_active() and not self._lock_view_to_camera:
@@ -3305,6 +3745,13 @@ class QtViewportWidget(QtWidgets.QWidget):
                     self.frame_all(); return True
                 if key == QtCore.Qt.Key_Z and no_modifiers:
                     self.frame_selection_or_all(); return True
+                if self._active_gizmo_node() is not None:
+                    if key == QtCore.Qt.Key_W and no_modifiers:
+                        self._set_transform_gizmo_mode(GizmoMode.TRANSLATE); return True
+                    if key == QtCore.Qt.Key_E and no_modifiers:
+                        self._set_transform_gizmo_mode(GizmoMode.ROTATE); return True
+                    if key == QtCore.Qt.Key_R and no_modifiers:
+                        self._set_transform_gizmo_mode(GizmoMode.SCALE); return True
                 if key == QtCore.Qt.Key_R and no_modifiers:
                     self.reset_camera(); return True
                 if key == QtCore.Qt.Key_W and no_modifiers:
@@ -3328,6 +3775,12 @@ class QtViewportWidget(QtWidgets.QWidget):
                 if key == QtCore.Qt.Key_Space and no_modifiers:
                     self.cycle_gimbal_mode(); return True
                 if key == QtCore.Qt.Key_Escape and no_modifiers:
+                    if self._pick_reference_waiting:
+                        self._pick_reference_waiting = False
+                        self.transform_reference_controller.clear_pick_reference()
+                        self.statusMessage.emit("Pick reference cancelled.")
+                        self._request_render(fast=True)
+                        return True
                     if self._transform_gizmo_dragging:
                         self._cancel_transform_gizmo_drag()
                         return True
@@ -3817,39 +4270,27 @@ class QtViewportWidget(QtWidgets.QWidget):
         if not self._render_pending:
             return
         self._render_pending = False
-        if self.model is None:
-            self._pixmap = None
-            self.canvas.setPixmap(QtGui.QPixmap())
-            self.canvas.setText("No model loaded")
-            return
         w = max(8, self.canvas.width())
         h = max(8, self.canvas.height())
         t0 = time_module.perf_counter()
         try:
             img = self._render_frame(w, h)
         except Exception as exc:
-            log.warning("Viewport render failed for %s: %s", getattr(self.model, "name", "model"), exc, exc_info=True)
+            log.error("GPU viewport render failed for %s: %s", getattr(self.model, "name", "scene"), exc, exc_info=True)
             img = None
-            if self._use_gpu:
-                try:
-                    self._use_gpu = False
-                    self.renderer_button.setChecked(False)
-                    self.renderer_button.setText("CPU")
-                    img = self._renderer.render(w, h)
-                except Exception:
-                    log.warning("Viewport CPU fallback also failed", exc_info=True)
-                    img = None
         self._last_render_ms = (time_module.perf_counter() - t0) * 1000.0
         self._last_render_wall = time_module.perf_counter()
         if img is None:
+            if self.model is None:
+                self.canvas.setText("GPU render unavailable\nEmpty Scene")
+                return
             mesh_count = len(self.model.mesh_nodes()) if hasattr(self.model, "mesh_nodes") else 0
             node_count = self.model.node_count() if hasattr(self.model, "node_count") else 0
-            self.canvas.setText(f"{getattr(self.model, 'name', 'model')}\nRender unavailable\n{mesh_count} mesh | {node_count} nodes")
+            self.canvas.setText(f"{getattr(self.model, 'name', 'model')}\nGPU render unavailable\n{mesh_count} mesh | {node_count} nodes")
             return
         if img.mode != "RGBA":
             img = img.convert("RGBA")
         self._update_fps()
-        img = self._draw_performance_overlay(img, w, h)
         qimg = QtGui.QImage(
             img.tobytes("raw", "RGBA"),
             img.width,
@@ -3866,22 +4307,14 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._request_render()
 
     def _render_frame(self, w: int, h: int):
-        gpu_can_match_mode = self._renderer.show_solid or self._renderer.show_wireframe
-        if self._use_gpu and self.model is not None and gpu_can_match_mode:
-            img = self._render_gpu_frame(w, h)
-            if img is not None:
-                self._set_renderer_badge(True)
-                return self._draw_cpu_overlays(img, w, h, gpu_base=True)
-        self._set_renderer_badge(False)
-        old_show_gimbal = self._ensure_renderer_gimbal_state()
-        try:
-            self._renderer.show_gimbal = False
-            img = self._renderer.render(w, h)
-        finally:
-            self._renderer.show_gimbal = old_show_gimbal
-        if self._xray_mode:
-            img = self._draw_xray_grid_overlay(img, w, h)
-        img = self._draw_transform_gizmo_overlay(img, w, h)
+        self._use_gpu = True
+        img = self._render_gpu_frame(w, h)
+        if img is None:
+            self._set_renderer_badge(False)
+            return None
+        self._set_renderer_badge(True)
+        img = self._draw_gpu_viewport_overlays(img, w, h)
+        img = self._draw_performance_overlay(img, w, h)
         return img
 
     def _draw_xray_grid_overlay(self, img, w: int, h: int):
@@ -3977,7 +4410,14 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._gpu_upload_model_id = 0
         return img
 
-    def _draw_cpu_overlays(self, img, w: int, h: int, *, gpu_base: bool = False):
+    def _draw_gpu_viewport_overlays(self, img, w: int, h: int):
+        """Draw screen-space viewport tools over an already-rendered GPU frame.
+
+        This intentionally does not call FrameRenderer.render() or any CPU mesh
+        rasterizer.  It only restores the interactive overlay layer that lives
+        above the GPU scene: gimbal tools, transform gizmo, HUD stats, axes,
+        selection outlines, measurement/camera helpers, and editor markers.
+        """
         if img is None:
             return None
         try:
@@ -3994,7 +4434,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             except Exception:
                 pass
             draw = ImageDraw.Draw(img, "RGBA")
-            if self._xray_mode or not gpu_base:
+            if self._xray_mode:
                 self._renderer._draw_grid(draw, w, h)
             # T405: weight heat-map runs BEFORE bones so the joint dots
             # stay clearly visible on top of the colored vertex cloud.
@@ -4013,17 +4453,10 @@ class QtViewportWidget(QtWidgets.QWidget):
             if self._renderer.show_walkmesh:
                 self._renderer._draw_walkmesh_overlay(draw, w, h)
             self._draw_camera_helpers(draw, w, h)
-            if self._renderer.show_wireframe and not gpu_base:
-                old_solid = self._renderer.show_solid
-                try:
-                    self._renderer.show_solid = False
-                    self._renderer._draw_mesh_flat(draw, img, w, h)
-                finally:
-                    self._renderer.show_solid = old_solid
             if self._ensure_renderer_gimbal_state():
                 self._draw_transform_gizmo(draw, w, h)
             self._draw_measurement_overlay(draw, w, h)
-            self._draw_selected_model_outline(draw, w, h)
+            self._draw_hovered_mesh_outline(draw, w, h)
             self._draw_mesh_subobject_selection(draw, w, h)
             self._draw_joint_marquee(draw)
             self._renderer._draw_axes(draw, w, h)
@@ -4033,6 +4466,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         except Exception as exc:
             log.debug("Qt GPU overlay draw failed: %s", exc)
             return img
+
+    def _draw_cpu_overlays(self, img, w: int, h: int, *, gpu_base: bool = False):
+        return self._draw_gpu_viewport_overlays(img, w, h)
 
     def _draw_transform_gizmo_overlay(self, img, w: int, h: int):
         if img is None:
@@ -4059,12 +4495,16 @@ class QtViewportWidget(QtWidgets.QWidget):
             return
         self._transform_gizmo.visible = True
         node = self._active_gizmo_node()
+        if node is None:
+            self._transform_gizmo.clear_selection()
+            return
         if node is not None:
             try:
                 wp = self._gizmo_world_position(node)
                 setattr(node, "_gr_gizmo_world_position", wp)
             except Exception:
                 pass
+            self._sync_transform_reference_for_node(node)
         self._transform_gizmo.set_selected_object(node)
         self._transform_gizmo.renderer.AXIS_COLORS = {
             "X": tuple(getattr(self._renderer, "gimbal_x_color", (220, 60, 60)))[:3] + (255,),
@@ -4628,10 +5068,9 @@ class QtViewportWidget(QtWidgets.QWidget):
     def _set_renderer_badge(self, gpu_active: bool) -> None:
         if not hasattr(self, "renderer_button"):
             return
-        if not self._use_gpu:
-            self.renderer_button.setText("CPU")
-            return
-        self.renderer_button.setText("GPU" if gpu_active else "CPU*")
+        self._use_gpu = True
+        self.renderer_button.setChecked(True)
+        self.renderer_button.setText("GPU" if gpu_active else "GPU!")
 
     def _on_shade_change(self, text: str) -> None:
         mode = "Wireframe" if text == "Wire" else text
@@ -4831,6 +5270,33 @@ class QtViewportWidget(QtWidgets.QWidget):
                 continue
         return best
 
+    @staticmethod
+    def _ray_triangle_intersection(origin, direction, v0, v1, v2) -> float | None:
+        eps = 1.0e-8
+        ox, oy, oz = float(origin[0]), float(origin[1]), float(origin[2])
+        dx, dy, dz = float(direction[0]), float(direction[1]), float(direction[2])
+        ax, ay, az = float(v0[0]), float(v0[1]), float(v0[2])
+        bx, by, bz = float(v1[0]), float(v1[1]), float(v1[2])
+        cx, cy, cz = float(v2[0]), float(v2[1]), float(v2[2])
+
+        e1x, e1y, e1z = bx - ax, by - ay, bz - az
+        e2x, e2y, e2z = cx - ax, cy - ay, cz - az
+        px, py, pz = dy * e2z - dz * e2y, dz * e2x - dx * e2z, dx * e2y - dy * e2x
+        det = e1x * px + e1y * py + e1z * pz
+        if abs(det) < eps:
+            return None
+        inv_det = 1.0 / det
+        tx, ty, tz = ox - ax, oy - ay, oz - az
+        u = (tx * px + ty * py + tz * pz) * inv_det
+        if u < -eps or u > 1.0 + eps:
+            return None
+        qx, qy, qz = ty * e1z - tz * e1y, tz * e1x - tx * e1z, tx * e1y - ty * e1x
+        v = (dx * qx + dy * qy + dz * qz) * inv_det
+        if v < -eps or u + v > 1.0 + eps:
+            return None
+        t = (e2x * qx + e2y * qy + e2z * qz) * inv_det
+        return t if t > eps else None
+
     def _mesh_hit_test_detail(self, sx: int, sy: int):
         if self.model is None:
             return None
@@ -4844,7 +5310,11 @@ class QtViewportWidget(QtWidgets.QWidget):
             pass
         best = None
         best_face_bounds = None
-        best_score = float("inf")
+        best_t = float("inf")
+        try:
+            ray_origin, ray_direction = ray_from_mouse((sx, sy), self.camera, width, height)
+        except Exception:
+            ray_origin = ray_direction = None
         try:
             nodes = list(self._renderer._iter_visible_mesh_nodes())
         except Exception:
@@ -4859,49 +5329,52 @@ class QtViewportWidget(QtWidgets.QWidget):
                 min_x, min_y, max_x, max_y, world_verts, projected = bounds
                 if sx < min_x or sx > max_x or sy < min_y or sy > max_y:
                     continue
-                face_hit = False
-                best_face_depth = float("inf")
-                best_facing = -1.0
-                best_node_face_bounds = None
                 for face in getattr(node, "faces", []) or []:
                     try:
                         i0, i1, i2 = int(face[0]), int(face[1]), int(face[2])
-                        p0, p1, p2 = projected[i0], projected[i1], projected[i2]
-                        if p0 is None or p1 is None or p2 is None:
+                        if i0 < 0 or i1 < 0 or i2 < 0:
                             continue
-                        if not self._point_in_triangle(sx, sy, p0, p1, p2):
+                        v0, v1, v2 = world_verts[i0], world_verts[i1], world_verts[i2]
+                        hit_t = (
+                            self._ray_triangle_intersection(ray_origin, ray_direction, v0, v1, v2)
+                            if ray_origin is not None and ray_direction is not None
+                            else None
+                        )
+                        if hit_t is None:
+                            p0, p1, p2 = projected[i0], projected[i1], projected[i2]
+                            if p0 is None or p1 is None or p2 is None:
+                                continue
+                            if not self._point_in_triangle(sx, sy, p0, p1, p2):
+                                continue
+                            hit_t = max(1.0e-6, (p0[2] + p1[2] + p2[2]) / 3.0)
+                        if hit_t >= best_t:
                             continue
-                        facing = self._front_facing_score(world_verts, face)
-                        if facing < -0.05:
-                            continue
-                        face_hit = True
-                        depth = (p0[2] + p1[2] + p2[2]) / 3.0
-                        if facing > best_facing or (abs(facing - best_facing) < 0.001 and depth < best_face_depth):
-                            best_facing = facing
-                            best_face_depth = depth
-                            best_node_face_bounds = self._bounds_from_points(
-                                [world_verts[i0], world_verts[i1], world_verts[i2]],
-                                min_extent=0.05,
-                            )
+                        best_t = hit_t
+                        best = node
+                        best_face_bounds = self._bounds_from_points(
+                            [world_verts[i0], world_verts[i1], world_verts[i2]],
+                            min_extent=0.05,
+                        )
                     except Exception:
                         continue
-                area = max(1, (max_x - min_x) * (max_y - min_y))
-                cx = (min_x + max_x) * 0.5
-                cy = (min_y + max_y) * 0.5
-                dist2 = (sx - cx) * (sx - cx) + (sy - cy) * (sy - cy)
-                if face_hit:
-                    score = best_face_depth - (best_facing * 1000.0) + area * 0.001
-                else:
-                    score = area + dist2 * 0.1 + 100000.0
-                if score < best_score:
-                    best_score = score
-                    best = node
-                    best_face_bounds = best_node_face_bounds if face_hit else None
             except Exception:
                 continue
         if best is None:
             return None
         return best, best_face_bounds
+
+    def _pick_reference_hit_test(self, sx: int, sy: int):
+        camera_node = self._camera_hit_test(sx, sy)
+        if camera_node is not None:
+            return camera_node
+        light_node = self._light_hit_test(sx, sy)
+        if light_node is not None:
+            return light_node
+        mesh_hit = self._mesh_hit_test_detail(sx, sy)
+        if mesh_hit is None:
+            return None
+        node = mesh_hit[0]
+        return self._scene_root_for_node(node) or node
 
     def _light_hit_test(self, sx: int, sy: int, radius: int = 12):
         if self.model is None:
@@ -5103,6 +5576,9 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def _update_gizmo_hover(self, event) -> None:
         if not self._ensure_renderer_gimbal_state() or self._active_gizmo_node() is None:
+            if self._transform_gizmo.hovered_handle is not None:
+                self._transform_gizmo.hovered_handle = None
+                self._request_render(fast=True)
             return
         x, y = int(event.position().x()), int(event.position().y())
         before = self._transform_gizmo.hovered_handle
@@ -5110,17 +5586,40 @@ class QtViewportWidget(QtWidgets.QWidget):
         if handle != before:
             self._request_render(fast=True)
 
+    def _update_mesh_hover(self, event) -> None:
+        if self.model is None:
+            if self._hovered_mesh_node is not None:
+                self._hovered_mesh_node = None
+                self._hovered_mesh_face_bounds = None
+                self._request_render(fast=True)
+            return
+        if self._transform_gizmo.hovered_handle or self._measurement_mode:
+            return
+        x, y = int(event.position().x()), int(event.position().y())
+        hit = self._mesh_hit_test_detail(x, y)
+        node = hit[0] if hit is not None else None
+        face_bounds = hit[1] if hit is not None else None
+        if node is self._hovered_mesh_node and face_bounds == self._hovered_mesh_face_bounds:
+            return
+        self._hovered_mesh_node = node
+        self._hovered_mesh_face_bounds = face_bounds
+        self._request_render(fast=True)
+
     def _begin_transform_gizmo_drag(self, x: int, y: int) -> bool:
         node = self._active_gizmo_node()
         if not self._ensure_renderer_gimbal_state() or node is None:
             return False
         if bool(getattr(node, "_gr_camera_locked", False)):
             return False
+        if bool(getattr(node, "_gr_scene_object_locked", False)):
+            self.statusMessage.emit("Selected object is locked.")
+            return False
         try:
             wp = self._gizmo_world_position(node)
             setattr(node, "_gr_gizmo_world_position", wp)
         except Exception:
             pass
+        self._sync_transform_reference_for_node(node)
         self._transform_gizmo.set_selected_object(node)
         handle = self._transform_gizmo.hit_test((x, y), self.camera)
         if not handle:
@@ -5156,6 +5655,10 @@ class QtViewportWidget(QtWidgets.QWidget):
                 after_vertices=after.vertices,
                 before_scale=before.scale,
                 after_scale=after.scale,
+                before_pivot_world=before.pivot_world,
+                after_pivot_world=after.pivot_world,
+                before_pivot_rotation=before.pivot_rotation,
+                after_pivot_rotation=after.pivot_rotation,
             )
             self._notify_node_moved(node)
         self._request_render()
@@ -5517,6 +6020,20 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._request_render()
             return
 
+        if self._pick_reference_waiting:
+            target = self._pick_reference_hit_test(x, y)
+            if target is not None:
+                self.transform_reference_controller.resolve_pick_reference(target)
+                self._pick_reference_waiting = False
+                label = str(getattr(target, "_gr_scene_object_name", getattr(target, "name", "Object")) or "Object")
+                if hasattr(self, "axis_mode_control"):
+                    self.axis_mode_control.set_axis_mode(AxisMode.PICK, label=f"Pick: {label[:24]}")
+                self.statusMessage.emit(f"Transform reference picked: {label}")
+                self._request_render(fast=True)
+            else:
+                self.statusMessage.emit("Pick an object to use as transform reference.")
+            return
+
         if self._renderer.show_bones:
             # T402: joint-dot hit-test takes priority over the underlying
             # bone hit-test so clicks on a dot always select the right node.
@@ -5564,12 +6081,6 @@ class QtViewportWidget(QtWidgets.QWidget):
             if self.on_bone_selected:
                 self.on_bone_selected(None)
             return
-        if self._hit_test_model_bounds(x, y):
-            root_node = getattr(self.model, "root_node", None)
-            if root_node is not None:
-                self.set_selected_node(root_node)
-                self._request_render()
-                return
         self.set_selected_node(None)
         if self.on_bone_selected:
             self.on_bone_selected(None)
@@ -5748,7 +6259,13 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._evict_transform_cache(node)
 
     def _is_selected_model_root(self, node) -> bool:
-        return bool(self.model is not None and node is getattr(self.model, "root_node", None))
+        return bool(
+            self.model is not None
+            and (
+                node is getattr(self.model, "root_node", None)
+                or bool(getattr(node, "_gr_scene_object_root", False))
+            )
+        )
 
     def _model_gimbal_axis_delta(
         self,
@@ -5888,49 +6405,96 @@ class QtViewportWidget(QtWidgets.QWidget):
         except Exception:
             return False
 
-    def _draw_selected_model_outline(self, draw, w: int, h: int) -> None:
-        if not self._is_selected_model_root(getattr(self._renderer, "selected_node", None)):
+    def _draw_hovered_mesh_outline(self, draw, w: int, h: int) -> None:
+        node = getattr(self, "_hovered_mesh_node", None)
+        if node is None or getattr(node, "_gr_hidden", False):
             return
         try:
-            points = []
-            nodes = self.model.mesh_nodes() if hasattr(self.model, "mesh_nodes") else []
-            for node in nodes:
-                verts = getattr(node, "vertices", None) or []
-                if not verts:
-                    continue
+            bounds = self._projected_mesh_bounds(node, w, h)
+            if bounds is None:
+                return
+            _min_x, _min_y, _max_x, _max_y, world_verts, projected = bounds
+            faces = list(getattr(node, "faces", []) or [])
+            if not faces:
+                return
+
+            edge_faces: dict[tuple[int, int], list[bool]] = {}
+            for face in faces:
                 try:
-                    wp, _wo, _ = self._renderer._node_world_transform(node)
+                    i0, i1, i2 = int(face[0]), int(face[1]), int(face[2])
+                    if i0 < 0 or i1 < 0 or i2 < 0:
+                        continue
+                    if i0 >= len(projected) or i1 >= len(projected) or i2 >= len(projected):
+                        continue
+                    if projected[i0] is None or projected[i1] is None or projected[i2] is None:
+                        continue
+                    front = self._front_facing_score(world_verts, (i0, i1, i2)) >= 0.0
+                    for a, b in ((i0, i1), (i1, i2), (i2, i0)):
+                        edge_faces.setdefault(normalize_edge(a, b), []).append(front)
                 except Exception:
-                    wp = (0.0, 0.0, 0.0)
-                stride = max(1, len(verts) // 800)
-                for vx, vy, vz in verts[::stride]:
-                    sp = self._renderer._proj(vx + wp[0], vy + wp[1], vz + wp[2], w, h)
-                    if sp is not None:
-                        sx, sy, _depth = sp
-                        if -40 <= sx <= w + 40 and -40 <= sy <= h + 40:
-                            points.append((float(sx), float(sy)))
+                    continue
+
+            outline_edges = []
+            for edge, front_flags in edge_faces.items():
+                if len(front_flags) == 1 or (any(front_flags) and not all(front_flags)):
+                    p0, p1 = projected[edge[0]], projected[edge[1]]
+                    if p0 is not None and p1 is not None:
+                        outline_edges.append(((float(p0[0]), float(p0[1])), (float(p1[0]), float(p1[1]))))
+            if not outline_edges:
+                return
+            shadow = (0, 0, 0, 155)
+            glow = (0, 215, 181, 230)
+            for p0, p1 in outline_edges:
+                draw.line([p0, p1], fill=shadow, width=5)
+            for p0, p1 in outline_edges:
+                draw.line([p0, p1], fill=glow, width=2)
+        except Exception as exc:
+            log.debug("Hovered mesh outline draw failed: %s", exc)
+
+    def _draw_selected_model_outline(self, draw, w: int, h: int) -> None:
+        if self.model is None or not self._is_selected_model_root(getattr(self._renderer, "selected_node", None)):
+            self._draw_hovered_mesh_outline(draw, w, h)
+            return
+        try:
+            mesh_nodes = self.model.mesh_nodes() if hasattr(self.model, "mesh_nodes") else []
+            points: list[tuple[float, float]] = []
+            for node in mesh_nodes:
+                if getattr(node, "_gr_hidden", False):
+                    continue
+                bounds = self._projected_mesh_bounds(node, w, h)
+                if bounds is None:
+                    continue
+                _min_x, _min_y, _max_x, _max_y, _world_verts, projected = bounds
+                for point in projected:
+                    if point is not None:
+                        points.append((float(point[0]), float(point[1])))
             if len(points) < 3:
                 return
 
-            def _cross(o, a, b):
+            unique = sorted(set(points))
+
+            def cross(o, a, b) -> float:
                 return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
 
-            unique = sorted(set((round(px, 1), round(py, 1)) for px, py in points))
-            if len(unique) < 3:
-                return
-            lower = []
-            for p in unique:
-                while len(lower) >= 2 and _cross(lower[-2], lower[-1], p) <= 0:
+            lower: list[tuple[float, float]] = []
+            for point in unique:
+                while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0:
                     lower.pop()
-                lower.append(p)
-            upper = []
-            for p in reversed(unique):
-                while len(upper) >= 2 and _cross(upper[-2], upper[-1], p) <= 0:
+                lower.append(point)
+            upper: list[tuple[float, float]] = []
+            for point in reversed(unique):
+                while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0:
                     upper.pop()
-                upper.append(p)
+                upper.append(point)
             hull = lower[:-1] + upper[:-1]
-            if len(hull) >= 3:
-                draw.line(hull + [hull[0]], fill=(255, 212, 0, 230), width=2)
+            if len(hull) < 3:
+                return
+
+            shadow = (0, 0, 0, 155)
+            glow = (255, 212, 0, 230)
+            closed = hull + [hull[0]]
+            draw.line(closed, fill=shadow, width=6)
+            draw.line(closed, fill=glow, width=2)
         except Exception as exc:
             log.debug("Selected model outline draw failed: %s", exc)
 
@@ -5999,6 +6563,12 @@ class QtViewportWidget(QtWidgets.QWidget):
     def _evict_transform_cache(self, node) -> None:
         clear_prebuilt_static_gpu_mesh_data(node)
         self._renderer._wt_cache.pop(id(node), None)
+        try:
+            self._renderer._frame_view = None
+            self._renderer._frame_verts_cache = {}
+            self._renderer._frame_norms_cache = {}
+        except Exception:
+            pass
         if self._gpu_renderer is not None:
             self._gpu_renderer.invalidate_node(node)
         stack = list(getattr(node, "children", []) or [])

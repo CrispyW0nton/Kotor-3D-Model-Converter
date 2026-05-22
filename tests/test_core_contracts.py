@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import inspect
 import os
 from types import MethodType, SimpleNamespace
+
+import pytest
 
 
 def test_vertex_space_enum_contract() -> None:
@@ -111,8 +114,6 @@ def test_gpu_shader_has_per_node_uv_v_flip_control() -> None:
 
 
 def test_gpu_ascii_multitexture_split_is_ascii_gated() -> None:
-    import inspect
-
     from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
 
     source = inspect.getsource(GpuRenderer._render_gpu)
@@ -121,16 +122,70 @@ def test_gpu_ascii_multitexture_split_is_ascii_gated() -> None:
     assert "gm.mat_slots" in source
 
 
+def test_viewport_render_loop_is_gpu_only() -> None:
+    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    render_now = inspect.getsource(QtViewportWidget._render_now)
+    render_frame = inspect.getsource(QtViewportWidget._render_frame)
+    badge = inspect.getsource(QtViewportWidget._set_renderer_badge)
+    thumbnail = inspect.getsource(QtViewportWidget._render_neutral_pose_thumbnail)
+    gpu_render = inspect.getsource(GpuRenderer.render)
+    cpu_hook = inspect.getsource(GpuRenderer._render_cpu)
+
+    viewport_sources = "\n".join([render_now, render_frame, badge, thumbnail])
+    assert "_use_gpu = False" not in viewport_sources
+    assert 'setText("CPU' not in viewport_sources
+    assert "self._renderer.render(" not in viewport_sources
+    assert "_draw_cpu_overlays(" not in render_frame
+    assert "_draw_performance_overlay(" not in render_now
+    assert "_render_cpu(" not in gpu_render
+    assert "backend'] = 'cpu'" not in gpu_render
+    assert "FrameRenderer" not in cpu_hook
+    assert "return None" in cpu_hook
+
+
+def test_add_model_to_scene_dialog_stays_compact_under_layout_apply() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.dialogs.add_model_to_scene_dialog import AddModelToSceneDialog
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    dialog = AddModelToSceneDialog("K2:c_drdmktwo")
+    dialog.apply_ghost_layout(SimpleNamespace(dialog_width=1650))
+
+    source = inspect.getsource(QtGhostRiggerMainWindow._choose_model_import_action)
+    assert "apply_current_layout(dialog)" not in source
+    assert "apply_current_theme(dialog)" not in source
+    assert "dialog.apply_ghost_theme(active_theme)" in source
+    assert dialog.width() <= AddModelToSceneDialog.MAX_WIDTH
+    assert dialog.maximumWidth() == AddModelToSceneDialog.MAX_WIDTH
+    assert dialog.minimumWidth() == AddModelToSceneDialog.MAX_WIDTH
+
+
 def test_qt_gpu_viewport_uses_overlay_not_cpu_textured_fallback() -> None:
     import inspect
 
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
-    source = inspect.getsource(QtViewportWidget._draw_cpu_overlays)
+    frame_source = inspect.getsource(QtViewportWidget._render_frame)
+    source = inspect.getsource(QtViewportWidget._draw_gpu_viewport_overlays)
+    legacy_source = inspect.getsource(QtViewportWidget._draw_cpu_overlays)
+
+    assert "_draw_gpu_viewport_overlays" in frame_source
+    assert "_draw_performance_overlay" in frame_source
+    assert "self._renderer.render(" not in frame_source
     assert "_draw_mesh_textured" not in source
-    assert "not gpu_base" in source
+    assert "_draw_mesh_flat" not in source
+    assert "self._xray_mode" in source
     assert "_draw_grid" in source
     assert "_draw_stats" in source
+    assert "_draw_transform_gizmo" in source
+    assert "_draw_axes" in source
+    assert "return self._draw_gpu_viewport_overlays" in legacy_source
 
 
 def test_qt_gpu_viewport_keeps_gpu_for_wire_and_texture_off_modes() -> None:
@@ -141,7 +196,9 @@ def test_qt_gpu_viewport_keeps_gpu_for_wire_and_texture_off_modes() -> None:
     frame_source = inspect.getsource(QtViewportWidget._render_frame)
     gpu_source = inspect.getsource(QtViewportWidget._render_gpu_frame)
 
-    assert "self._renderer.show_solid or self._renderer.show_wireframe" in frame_source
+    assert "gpu_can_match_mode" not in frame_source
+    assert "self._render_gpu_frame(w, h)" in frame_source
+    assert "self._renderer.render(" not in frame_source
     assert "and self._renderer.show_texture" not in frame_source
     assert "show_texture = bool(self._renderer.show_texture)" in gpu_source
     assert "show_wireframe = bool(self._renderer.show_wireframe)" in gpu_source
@@ -306,6 +363,130 @@ def test_gpu_static_mesh_prebuild_uses_ram_and_chunked_uploads() -> None:
     assert "self._start_deferred_txi_metadata(model)" in load_source
     assert "gpuUploadProgress.emit" in viewport_source
     assert "_request_render(fast=True)" in viewport_source
+
+
+def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinning() -> None:
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    root = ModelNode(name="N_Bith", flags=int(NodeFlags.HEADER), position=(9.0, 8.0, 7.0))
+    head_bone = ModelNode(name="head_g", flags=int(NodeFlags.HEADER))
+    skin = ModelNode(name="Head", flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH) | int(NodeFlags.SKIN))
+    skin.bone_map = ["N_Bith", "head_g"]
+    skin.qbone_list = [(1.0, 0.0, 0.0, 0.0)] * 3
+    skin.tbone_list = [(0.0, 0.0, 0.0)] * 3
+    root.children.append(head_bone)
+    head_bone.parent = root
+    root.children.append(skin)
+    skin.parent = root
+    model = KotorModel(name="N_Bith", root_node=root)
+
+    fake_viewport = SimpleNamespace()
+    fake_viewport._tag_scene_object_nodes = MethodType(QtViewportWidget._tag_scene_object_nodes, fake_viewport)
+    fake_viewport._tag_scene_source_indices = MethodType(QtViewportWidget._tag_scene_source_indices, fake_viewport)
+    fake_viewport._euler_degrees_to_quat = QtViewportWidget._euler_degrees_to_quat
+
+    instance = SimpleNamespace(
+        id="scene-object-1",
+        name="Bith Actor",
+        visible=True,
+        metadata={"_runtime_model": model},
+        transform=SimpleNamespace(position=(1.0, 2.0, 3.0), rotation=(0.0, 0.0, 0.0)),
+    )
+
+    composite = QtViewportWidget._build_scene_composite_model(fake_viewport, [instance], "Untitled Scene")
+    placed_root = composite.root_node.children[0]
+    placed_skin = placed_root.children[1]
+
+    assert placed_root.name == "N_Bith"
+    assert placed_root.position == (1.0, 2.0, 3.0)
+    assert getattr(placed_root, "_gr_scene_source_position") == (9.0, 8.0, 7.0)
+    assert getattr(placed_root, "_gr_scene_gpu_transform") is True
+    assert getattr(placed_root, "_gr_scene_object_name") == "Bith Actor"
+    assert placed_skin.bone_map[0] == placed_root.name
+    assert getattr(placed_skin, "_gr_scene_object_id") == "scene-object-1"
+
+    uploader = MatrixPaletteUploader(max_bones=4)
+    uploader.build_inverse_bind_pose(composite)
+    assert uploader._name_to_dfs_index["n_bith"] == 0
+    assert uploader._name_to_dfs_index["head_g"] == 1
+    assert uploader._name_to_dfs_index["head"] == 2
+    assert uploader._model_node_count == 3
+    uploader.compute_skin_node_palette(placed_skin, SimpleNamespace(nodes={}))
+    assert uploader._skin_inverse_bind_source == "qBone_tBone_dfs_indexed_TR_no_invert"
+
+
+def test_kmax_scene_gpu_transform_uses_authored_vbo_basis() -> None:
+    from src.gui.rendering.gpu_renderer import _scene_authored_world_transform, _scene_gpu_model_matrix
+
+    child = SimpleNamespace(
+        position=(2.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=None,
+    )
+    root = SimpleNamespace(
+        position=(100.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=None,
+        _gr_scale=(3.0, 3.0, 3.0),
+        _gr_scene_object_root=True,
+        _gr_scene_gpu_transform=True,
+        _gr_scene_source_position=(9.0, 8.0, 7.0),
+        _gr_scene_source_rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    child.parent = root
+
+    authored_pos, _authored_rot = _scene_authored_world_transform(child)
+    scene_mat = _scene_gpu_model_matrix(child)
+
+    assert authored_pos == pytest.approx((11.0, 8.0, 7.0))
+    assert scene_mat[0, 3] == pytest.approx(100.0)
+    assert scene_mat[0, 0] == pytest.approx(3.0)
+
+
+def test_kmax_scene_reload_preserves_selected_object_for_pivot_tools() -> None:
+    import inspect
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    load_model_source = inspect.getsource(QtViewportWidget.load_model)
+    load_scene_source = inspect.getsource(QtViewportWidget.load_scene_instances)
+
+    assert 'getattr(root_node, "_gr_scene_composite_root", False)' in load_model_source
+    assert "selected_id =" in load_scene_source
+    assert "self.load_model(composite" in load_scene_source
+    assert "self.select_scene_object(selected_id)" in load_scene_source
+
+
+def test_transform_cache_evict_clears_frame_and_gpu_child_caches() -> None:
+    from types import SimpleNamespace
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    child = SimpleNamespace(children=[])
+    setattr(child, "_gr_gpu_prebuilt_static_mesh", {"model_id": 1, "skin_bind_transform": False})
+    parent = SimpleNamespace(children=[child])
+
+    invalidated = []
+    viewport = SimpleNamespace(
+        _renderer=SimpleNamespace(
+            _wt_cache={id(parent): object(), id(child): object()},
+            _frame_view=object(),
+            _frame_verts_cache={id(child): [(0.0, 0.0, 0.0)]},
+            _frame_norms_cache={id(child): [(0.0, 0.0, 1.0)]},
+        ),
+        _gpu_renderer=SimpleNamespace(invalidate_node=lambda node: invalidated.append(node)),
+    )
+
+    QtViewportWidget._evict_transform_cache(viewport, parent)
+
+    assert not hasattr(child, "_gr_gpu_prebuilt_static_mesh")
+    assert viewport._renderer._wt_cache == {}
+    assert viewport._renderer._frame_view is None
+    assert viewport._renderer._frame_verts_cache == {}
+    assert viewport._renderer._frame_norms_cache == {}
+    assert invalidated == [parent, child]
 
 
 def test_model_load_worker_uses_single_read_and_gpu_prebuild() -> None:
@@ -671,6 +852,41 @@ def test_qt_viewport_exposes_mesh_multiselect_box_and_ctrl_a() -> None:
     assert "QtWidgets.QRubberBand" in source
     assert "def _front_facing_score" in source
     assert "def _point_in_triangle" in source
+
+
+def test_qt_viewport_mesh_pick_requires_real_triangle_and_hover_outline() -> None:
+    import inspect
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    source = inspect.getsource(QtViewportWidget)
+    pick_source = inspect.getsource(QtViewportWidget._mesh_hit_test_detail)
+    release_source = inspect.getsource(QtViewportWidget._release_lmb)
+    overlay_source = inspect.getsource(QtViewportWidget._draw_gpu_viewport_overlays)
+
+    assert "self._hovered_mesh_node = None" in source
+    assert "_update_mesh_hover(event)" in source
+    assert "_draw_hovered_mesh_outline(draw, w, h)" in overlay_source
+    assert "_ray_triangle_intersection" in pick_source
+    assert "area + dist2" not in pick_source
+    assert "_hit_test_model_bounds" not in release_source
+
+    hit = QtViewportWidget._ray_triangle_intersection(
+        (0.25, 0.25, 1.0),
+        (0.0, 0.0, -1.0),
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+    )
+    miss = QtViewportWidget._ray_triangle_intersection(
+        (1.25, 1.25, 1.0),
+        (0.0, 0.0, -1.0),
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+    )
+    assert hit == 1.0
+    assert miss is None
 
 
 def test_qt_viewport_context_menu_does_not_pick_on_right_click() -> None:
@@ -1093,8 +1309,9 @@ def test_qt_viewport_gpu_grid_is_native_and_xray_is_overlay_only() -> None:
     assert "vao.render(moderngl.LINES)" in gpu_source
     render_source = inspect.getsource(GpuRenderer._render_gpu)
     assert "self._draw_grid(ctx, mvp)" in render_source
-    overlay_source = inspect.getsource(QtViewportWidget._draw_cpu_overlays)
-    assert "self._xray_mode or not gpu_base" in overlay_source
+    overlay_source = inspect.getsource(QtViewportWidget._draw_gpu_viewport_overlays)
+    assert "if self._xray_mode" in overlay_source
+    assert "not gpu_base" not in overlay_source
     event_source = inspect.getsource(QtViewportWidget.eventFilter)
     assert "QtCore.Qt.Key_G" in event_source
     assert "self.grid_button.click()" in event_source
@@ -1183,6 +1400,66 @@ def test_main_window_exposes_module_meshes_as_detachable_dock() -> None:
     assert "modules_menu.addAction(self.module_meshes_panel_action)" in menu_source
     assert "self.module_geometry_panel.show_model(model)" in refresh_source
     assert hasattr(QtPropertiesPanel, "set_module_browser_only")
+
+
+def test_main_window_exposes_adjust_pivot_in_modules_menu() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    actions_source = inspect.getsource(QtGhostRiggerMainWindow._build_actions)
+    menu_source = inspect.getsource(QtGhostRiggerMainWindow._build_menu)
+
+    assert "self.adjust_pivot_panel = AdjustPivotPanel(self)" in layout_source
+    assert '"adjust_pivot"' in layout_source
+    assert "self.adjust_pivot_panel_action" in actions_source
+    assert 'self._show_detachable_panel("adjust_pivot")' in actions_source
+    assert "modules_menu.addAction(self.adjust_pivot_panel_action)" in menu_source
+
+
+def test_adjust_pivot_mode_buttons_are_persistent_toggles() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.adjust_pivot_panel import AdjustPivotPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = AdjustPivotPanel()
+    try:
+        panel.set_selection_state(1, locked=False, hierarchy_available=True)
+        emitted = []
+        panel.pivotModeChanged.connect(emitted.append)
+
+        pivot_button = panel._mode_buttons["affect_pivot_only"]
+        object_button = panel._mode_buttons["affect_object_only"]
+        hierarchy_button = panel._mode_buttons["affect_hierarchy_only"]
+
+        pivot_button.click()
+        assert pivot_button.isChecked()
+        assert not object_button.isChecked()
+        assert emitted[-1] == "affect_pivot_only"
+
+        hierarchy_button.click()
+        assert hierarchy_button.isChecked()
+        assert not pivot_button.isChecked()
+        assert emitted[-1] == "affect_hierarchy_only"
+    finally:
+        panel.close()
+
+
+def test_adjust_pivot_mode_starts_object_only_for_normal_gizmo_drags() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    mode_source = inspect.getsource(QtGhostRiggerMainWindow._set_pivot_edit_mode)
+
+    assert 'self.settings_data["last_pivot_edit_mode"] = "affect_object_only"' in layout_source
+    assert 'self.viewport.set_pivot_edit_mode("affect_object_only")' in layout_source
+    assert "save_settings(self.settings_path, self.settings_data)" not in mode_source
 
 
 def test_regular_properties_panel_can_omit_module_mesh_tab() -> None:
@@ -1319,6 +1596,9 @@ def test_main_window_moves_utility_tabs_to_tools_windows() -> None:
     assert "tools_menu.addAction(self.diag_action)" in menu_source
     assert "tools_menu.addAction(self.texture_tool_action)" in menu_source
     assert "tools_menu.addAction(self.blueprint_editor_action)" in menu_source
+    assert "Legacy Tk" not in actions_source
+    assert "Legacy Tk" not in menu_source
+    assert "_launch_legacy_tk" not in inspect.getsource(QtGhostRiggerMainWindow)
 
     model_menu_block = menu_source.split("mdlops_menu = self.menuBar().addMenu", 1)[0]
     assert "self.diag_action" not in model_menu_block
@@ -2175,8 +2455,8 @@ def test_unreal_animator_uses_gpu_during_animation_preview() -> None:
 
         window.stop_preview()
 
-        assert window.source_viewport._use_gpu is False
-        assert window.target_viewport._use_gpu is False
+        assert window.source_viewport._use_gpu is True
+        assert window.target_viewport._use_gpu is True
     finally:
         window.close()
 

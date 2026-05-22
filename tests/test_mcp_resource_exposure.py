@@ -33,3 +33,17 @@ def test_mcp_exposes_concrete_resources_and_templates() -> None:
         for row in templates
     )
     assert all("{" not in row["uri"] for row in resources)
+
+
+def test_ghostrigger_tools_compat_module_exports_scan_helpers() -> None:
+    from kotormcp.tools import ghostrigger_tools
+
+    for name in (
+        "_resource_pair",
+        "compare_model_pipelines",
+        "inspect_mdl",
+        "inspect_mdl_ghostrigger",
+        "inspect_skinning",
+        "validate_textures",
+    ):
+        assert callable(getattr(ghostrigger_tools, name))

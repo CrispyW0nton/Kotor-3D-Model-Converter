@@ -23,6 +23,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "qt_theme",
     ),
     "dialogs": (
+        "add_model_to_scene_dialog",
         "qt_render_frame_dialog",
         "qt_dialogs",
         "qt_export_dialog",
@@ -117,6 +118,8 @@ _GROUPS: dict[str, tuple[str, ...]] = {
     ),
     "panels": (
         "qt_animation_panel",
+        "adjust_pivot_panel",
+        "axis_mode_control",
         "qt_bottom_strip",
         "qt_character_builder_panel",
         "qt_common_panels",
@@ -134,6 +137,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "qt_properties_panel",
         "qt_resource_panel",
         "qt_rig_panel",
+        "qt_scene_outliner_panel",
         "qt_texture_panel",
         "qt_ue5_rig_export_panel",
         "qt_workflow_rail",
@@ -170,6 +174,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "qt_viewport",
     ),
     "windows": (
+        "module_editor_window",
         "qt_blueprint_editor",
         "qt_character_builder_window",
         "qt_main_window",

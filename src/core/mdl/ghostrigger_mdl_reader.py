@@ -12,6 +12,7 @@ and only owns the binary parsing points GhostRigger must correct.
 
 from __future__ import annotations
 
+import math
 from types import FunctionType
 from typing import Any, Dict
 
@@ -24,6 +25,20 @@ K1_TRIMESH_SIZE = 332
 K2_TRIMESH_SIZE = 340
 
 _ACTIVE_READERS: Dict[int, "GhostRiggerMDLBinaryReader"] = {}
+
+
+def _logical_reader_size(reader: BinaryReader) -> int:
+    """Return the largest logical MDL offset readable from this BinaryReader."""
+    return max(0, reader.size() - int(getattr(reader, "_offset", 0) or 0))
+
+
+def _array_count_within_reader(offset: int, count: int, stride: int, reader: BinaryReader) -> int:
+    if count <= 0 or offset in (0, 0xFFFFFFFF) or offset < 0 or stride <= 0:
+        return 0
+    logical_size = _logical_reader_size(reader)
+    if offset >= logical_size:
+        return 0
+    return min(count, (logical_size - offset) // stride)
 
 
 class GhostRiggerTrimeshHeader(_iom._TrimeshHeader):  # type: ignore[attr-defined]
@@ -132,6 +147,97 @@ class GhostRiggerTrimeshHeader(_iom._TrimeshHeader):  # type: ignore[attr-define
         reader.seek(start_pos + expected)
         return self
 
+    def read_extra(self, reader: BinaryReader):
+        """Read variable-size trimesh arrays using logical MDL bounds."""
+
+        counts = _array_count_within_reader(
+            self.offset_to_indices_counts,
+            self.indices_counts_count,
+            4,
+            reader,
+        )
+        if counts:
+            reader.seek(self.offset_to_indices_counts)
+            self.indices_counts = [reader.read_uint32() for _ in range(counts)]
+            self.indices_counts_count = counts
+            self.indices_counts_count2 = min(self.indices_counts_count2, counts)
+        else:
+            self.indices_counts = []
+            self.indices_counts_count = 0
+            self.indices_counts_count2 = 0
+
+        offsets = _array_count_within_reader(
+            self.offset_to_indices_offset,
+            self.indices_offsets_count,
+            4,
+            reader,
+        )
+        if offsets:
+            reader.seek(self.offset_to_indices_offset)
+            self.indices_offsets = [reader.read_uint32() for _ in range(offsets)]
+            self.indices_offsets_count = offsets
+            self.indices_offsets_count2 = min(self.indices_offsets_count2, offsets)
+        else:
+            self.indices_offsets = []
+            self.indices_offsets_count = 0
+            self.indices_offsets_count2 = 0
+
+        counters = _array_count_within_reader(
+            self.offset_to_counters,
+            self.counters_count,
+            4,
+            reader,
+        )
+        if counters:
+            reader.seek(self.offset_to_counters)
+            self.inverted_counters = [reader.read_uint32() for _ in range(counters)]
+            self.counters_count = counters
+            self.counters_count2 = min(self.counters_count2, counters)
+        else:
+            self.inverted_counters = []
+            self.counters_count = 0
+            self.counters_count2 = 0
+
+        faces = _array_count_within_reader(self.offset_to_faces, self.faces_count, _iom._Face.SIZE, reader)
+        if faces:
+            reader.seek(self.offset_to_faces)
+            self.faces = [_iom._Face().read(reader) for _ in range(faces)]  # type: ignore[attr-defined]
+            self.faces_count = faces
+            self.faces_count2 = min(self.faces_count2, faces)
+            self._sanitize_faces()
+        else:
+            self.faces = []
+            self.faces_count = 0
+            self.faces_count2 = 0
+
+        if self.faces:
+            max_vertex_index = 0
+            for face in self.faces:
+                max_vertex_index = max(max_vertex_index, face.vertex1, face.vertex2, face.vertex3)
+            self.vertex_count = max(self.vertex_count, max_vertex_index + 1)
+
+        vertices = _array_count_within_reader(self.vertices_offset, self.vertex_count, 12, reader)
+        if vertices:
+            reader.seek(self.vertices_offset)
+            self.vertices = [reader.read_vector3() for _ in range(vertices)]
+            self.vertex_count = vertices
+        else:
+            self.vertices = []
+            if self.vertices_offset not in (0, 0xFFFFFFFF):
+                self.vertex_count = 0
+
+    def _sanitize_faces(self) -> None:
+        for face in self.faces:
+            if not math.isfinite(face.plane_coefficient):
+                face.plane_coefficient = 0.0
+            normal = face.normal
+            if not (
+                math.isfinite(normal.x)
+                and math.isfinite(normal.y)
+                and math.isfinite(normal.z)
+            ):
+                face.normal = _iom.Vector3.from_null()
+
 
 class GhostRiggerNode(_iom._Node):  # type: ignore[attr-defined]
     """PyKotor binary node with GhostRigger's fixed trimesh header reader."""
@@ -148,6 +254,7 @@ class GhostRiggerNode(_iom._Node):  # type: ignore[attr-defined]
 
         if self.header.type_id & _iom.MDLNodeFlags.LIGHT:
             self.light = _iom._LightHeader().read(reader)  # type: ignore[attr-defined]
+            self._sanitize_light_header(reader)
 
         if self.header.type_id & _iom.MDLNodeFlags.EMITTER:
             self.emitter = _iom._EmitterHeader().read(reader)  # type: ignore[attr-defined]
@@ -187,7 +294,17 @@ class GhostRiggerNode(_iom._Node):  # type: ignore[attr-defined]
 
         try:
             reader.seek(child_loc)
-            self.children_offsets = [reader.read_uint32() for _ in range(self.header.children_count)]
+            child_offsets = [reader.read_uint32() for _ in range(self.header.children_count)]
+            logical_size = _logical_reader_size(reader)
+            self.children_offsets = [
+                child_offset
+                for child_offset in child_offsets
+                if child_offset not in (0, 0xFFFFFFFF)
+                and child_offset >= 0
+                and child_offset + _iom._NodeHeader.SIZE <= logical_size
+            ]
+            self.header.children_count = len(self.children_offsets)
+            self.header.children_count2 = min(self.header.children_count2, self.header.children_count)
         except Exception:
             self.header.children_count = 0
             self.header.children_count2 = 0
@@ -200,6 +317,22 @@ class GhostRiggerNode(_iom._Node):  # type: ignore[attr-defined]
         owner = _ACTIVE_READERS.get(id(reader))
         if owner is not None:
             owner._gr_bin_nodes[offset] = self
+
+    def _sanitize_light_header(self, reader: BinaryReader) -> None:
+        light = self.light
+        if light is None:
+            return
+
+        def _trim(offset_attr: str, count_attr: str, count2_attr: str, stride: int) -> None:
+            count = _array_count_within_reader(getattr(light, offset_attr), getattr(light, count_attr), stride, reader)
+            setattr(light, count_attr, count)
+            setattr(light, count2_attr, min(getattr(light, count2_attr), count))
+
+        _trim("offset_to_flare_sizes", "flare_sizes_count", "flare_sizes_count2", 4)
+        _trim("offset_to_flare_positions", "flare_positions_count", "flare_positions_count2", 4)
+        _trim("offset_to_flare_colors", "flare_colors_count", "flare_colors_count2", 12)
+        _trim("offset_to_flare_textures", "flare_textures_count", "flare_textures_count2", 4)
+        _trim("offset_to_unknown0", "unknown0_count", "unknown0_count2", 4)
 
 
 _LOAD_NODE_GLOBALS: Dict[str, Any] = dict(_iom.MDLBinaryReader._load_node.__globals__)

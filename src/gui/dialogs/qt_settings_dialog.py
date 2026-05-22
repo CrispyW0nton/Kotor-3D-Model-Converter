@@ -25,6 +25,7 @@ from src.measurement.unit_system import CANONICAL_UNITS, UNIT_SYMBOLS
 
 class QtSettingsDialog(QtWidgets.QDialog):
     settingsSaved = QtCore.Signal(dict)
+    autoDetectRequested = QtCore.Signal()
 
     def __init__(
         self,
@@ -68,19 +69,26 @@ class QtSettingsDialog(QtWidgets.QDialog):
         self.k2_dir = QtWidgets.QLineEdit()
         self.texture_dir = QtWidgets.QLineEdit()
         self.mdlops_path = QtWidgets.QLineEdit()
-        for label, edit in (
-            ("KotOR 1 Directory:", self.k1_dir),
-            ("KotOR 2 Directory:", self.k2_dir),
-            ("Texture Directory:", self.texture_dir),
-            ("MDLOps Path:", self.mdlops_path),
+        for label, edit, button_text in (
+            ("KotOR 1 Directory:", self.k1_dir, "Set K1 Dir"),
+            ("KotOR 2 Directory:", self.k2_dir, "Set K2 Dir"),
+            ("Texture Directory:", self.texture_dir, "Browse"),
+            ("MDLOps Path:", self.mdlops_path, "Browse"),
         ):
             row = QtWidgets.QHBoxLayout()
             row.addWidget(edit, 1)
-            browse = QtWidgets.QPushButton("Browse")
+            browse = QtWidgets.QPushButton(button_text)
             browse.clicked.connect(lambda _checked=False, e=edit, l=label: self._browse(e, l))
             row.addWidget(browse)
             form.addRow(label, row)
         paths_root.addLayout(form)
+        path_actions = QtWidgets.QHBoxLayout()
+        self.auto_detect_paths_button = QtWidgets.QPushButton("Auto-detect")
+        self.auto_detect_paths_button.setToolTip("Find installed KotOR 1 and KotOR 2 directories.")
+        self.auto_detect_paths_button.clicked.connect(self.autoDetectRequested.emit)
+        path_actions.addStretch(1)
+        path_actions.addWidget(self.auto_detect_paths_button)
+        paths_root.addLayout(path_actions)
         paths_root.addStretch(1)
         self.settings_tabs.addTab(self._scroll_tab_page(paths_page), "Paths")
 
@@ -355,6 +363,10 @@ class QtSettingsDialog(QtWidgets.QDialog):
             },
             "measurement": measurement.to_dict(),
         }
+
+    def set_game_dirs(self, k1_dir: str, k2_dir: str) -> None:
+        self.k1_dir.setText(k1_dir)
+        self.k2_dir.setText(k2_dir)
 
     @staticmethod
     def _set_combo_data(combo: QtWidgets.QComboBox, value: object) -> None:
