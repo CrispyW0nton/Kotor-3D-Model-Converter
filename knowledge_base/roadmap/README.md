@@ -15,6 +15,7 @@ This folder contains the post-Qt-migration roadmap for GhostRigger, derived from
 | `01_qt_branch_audit.md` | Audit of the current Qt branch: Tk-vs-Qt status, module map, KOTOR model-type taxonomy, HUD design notes, Stewart Jones takeaways, gaps |
 | `02_roadmap_2026_05.md` | Live launch roadmap with task IDs, hours, acceptance criteria, commit-message templates. **Last revised 2026-05-16** after M12/M10 local Character Builder launch work plus the broader product-pillar audit for Unity MCP transfer, Asset Viewer, Module Editor, and Map Builder |
 | `03_character_builder_native_kotor_pipeline.md` | Native KOTOR Character Builder correction: mesh-objects-as-bones, exact Odyssey node DAG preservation, skin binding, supermodel animation assignment, hook preview, and export-readiness gates. **Use this as the next Character Builder execution plan.** |
+| `04_full_suite_completion_roadmap_20260522.md` | Suite-level completion roadmap after the retargeting foundation landed: Character Studio, Retarget Studio, Module Studio, Map Studio, shared project/session architecture, and milestone plan through beta. |
 
 ## Headline
 
