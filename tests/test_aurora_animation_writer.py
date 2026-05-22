@@ -477,6 +477,60 @@ def test_injected_mdl_preserves_pmbam_node_name_case_and_inherited_slots(tmp_pat
         assert resolved.slot_name == slot
 
 
+@pytest.mark.skipif(not TARGET_MDL.exists(), reason="PMBAM fixture unavailable")
+def test_injected_mdl_preserves_pmbam_mesh_skin_payload_bytes(tmp_path: Path):
+    r3a = tmp_path / "r3a.json"
+    _write_synthetic_r3a(r3a)
+    output_mdl = tmp_path / "pmbam__victory__mesh_preserved.mdl"
+    output_mdx = output_mdl.with_suffix(".mdx")
+    original_mdl_bytes = TARGET_MDL.read_bytes()
+    original_mdx_bytes = TARGET_MDL.with_suffix(".mdx").read_bytes()
+    original = load_model_from_file(str(TARGET_MDL), str(TARGET_MDL.with_suffix(".mdx")))
+
+    result = AuroraAnimationWriter().inject(
+        AuroraAnimationInjectionRequest(
+            r3a_animation_json=r3a,
+            target_mdl=TARGET_MDL,
+            animation_slot="victory",
+            output_mdl=output_mdl,
+            output_manifest=tmp_path / "manifest.json",
+        )
+    )
+
+    assert result.success, result.errors
+    assert output_mdx.read_bytes() == original_mdx_bytes
+
+    exported_prefix = output_mdl.read_bytes()[: len(original_mdl_bytes)]
+    changed_offsets = {
+        index
+        for index, (before, after) in enumerate(zip(original_mdl_bytes, exported_prefix))
+        if before != after
+    }
+    # Animation-only export may patch the file size and model animation table
+    # pointer/counts. Everything else in the original prefix covers vanilla
+    # geometry, skin, bonemap/qbone/tbone arrays, mesh bounds, flags, texture
+    # strings, and MDL fallback/index arrays and must remain byte-identical.
+    allowed_header_patches = set(range(4, 8)) | set(range(0x64, 0x70))
+    assert changed_offsets <= allowed_header_patches
+
+    reloaded = load_model_from_file(str(output_mdl), str(output_mdx))
+    assert _case_sensitive_node_paths(reloaded) == _case_sensitive_node_paths(original)
+    original_by_name = {node.name: node for node in original.all_nodes()}
+    reloaded_by_name = {node.name: node for node in reloaded.all_nodes()}
+    for name in ("Torso", "LArm", "RArm"):
+        before = original_by_name[name]
+        after = reloaded_by_name[name]
+        assert after.flags == before.flags
+        assert after.bone_map == before.bone_map
+        assert getattr(after, "qbone_list", []) == getattr(before, "qbone_list", [])
+        assert getattr(after, "tbone_list", []) == getattr(before, "tbone_list", [])
+        assert len(getattr(after, "skin_data", []) or []) == len(getattr(before, "skin_data", []) or [])
+        assert after.texture == before.texture
+        assert after.lightmap == before.lightmap
+        assert after.has_shadow == before.has_shadow
+        assert after.render == before.render
+
+
 def test_result_manifest_is_json_serializable(tmp_path: Path):
     r3a = tmp_path / "r3a.json"
     target = tmp_path / "target.mdl"

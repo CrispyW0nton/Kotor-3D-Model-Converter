@@ -584,7 +584,15 @@ class AuroraAnimationWriter:
             result.errors.append(f"Local animation '{resolved_slot.slot_name}' already exists")
             return
 
-        MDLBinaryWriter().write_files(model, str(request.output_mdl))
+        source_mdx = request.target_mdx or request.target_mdl.with_suffix(".mdx")
+        MDLBinaryWriter().write_animation_override_files(
+            model,
+            request.target_mdl,
+            source_mdx if source_mdx.exists() else None,
+            request.output_mdl,
+            animation,
+            replace_existing=request.overwrite_existing,
+        )
         if not request.output_mdl.exists():
             result.errors.append(f"Output MDL was not written: {request.output_mdl}")
             return

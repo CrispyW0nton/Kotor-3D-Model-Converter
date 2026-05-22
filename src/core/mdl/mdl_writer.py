@@ -106,6 +106,7 @@ import logging
 import copy
 from dataclasses import dataclass, field
 from io import BytesIO
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from ..geometry.model_data import (
@@ -189,6 +190,12 @@ def _mesh_fp_pair(is_k2: bool, flags: int) -> Tuple[int, int]:
     return (_K2_MESH_FP1, _K2_MESH_FP2) if is_k2 else (_K1_MESH_FP1, _K1_MESH_FP2)
 
 _BASE = 12          # all MDL offsets are relative to byte 12
+_MODEL_FIELDS_ABS = _BASE + 80
+_MODEL_ANIM_ARRAY_OFF_ABS = _MODEL_FIELDS_ABS + 8
+_MODEL_ANIM_COUNT_ABS = _MODEL_FIELDS_ABS + 12
+_MODEL_ANIM_COUNT2_ABS = _MODEL_FIELDS_ABS + 16
+_MODEL_NAME_OFFSETS_OFF_ABS = _MODEL_FIELDS_ABS + 104
+_MODEL_NAME_COUNT_ABS = _MODEL_FIELDS_ABS + 108
 
 # Controller type IDs (verified against KotorBlender types.py)
 CTRL_POSITION    = 8
@@ -265,13 +272,174 @@ class MDLBinaryWriter:
 
     def write_files(self, model: KotorModel, mdl_path: str) -> None:
         """Write MDL and MDX files to disk (MDX path derived from mdl_path)."""
-        from pathlib import Path
         mdl_bytes, mdx_bytes = self.write(model)
         p = Path(mdl_path)
         p.write_bytes(mdl_bytes)
         mdx_path = p.with_suffix('.mdx')
         mdx_path.write_bytes(mdx_bytes)
         log.debug(f"Wrote {len(mdl_bytes)} B MDL + {len(mdx_bytes)} B MDX → {mdl_path}")
+
+    def write_animation_override_files(
+        self,
+        model: KotorModel,
+        source_mdl_path: str | Path,
+        source_mdx_path: str | Path | None,
+        output_mdl_path: str | Path,
+        animation: Animation,
+        *,
+        replace_existing: bool = True,
+    ) -> None:
+        """Write an animation-only override while preserving source mesh bytes.
+
+        Retarget exports should not rebuild PMBAM's skin payload. This path
+        keeps the source MDL geometry/name/node/mesh bytes and the source MDX
+        buffer byte-for-byte, then appends a fresh local animation table and the
+        supplied animation block. Existing local animations remain referenced
+        unless ``replace_existing`` excludes one with the same name.
+        """
+
+        mdl_bytes, mdx_bytes = self.inject_animation_override_bytes(
+            model,
+            Path(source_mdl_path).read_bytes(),
+            Path(source_mdx_path).read_bytes() if source_mdx_path and Path(source_mdx_path).exists() else b"",
+            animation,
+            replace_existing=replace_existing,
+        )
+        output_mdl = Path(output_mdl_path)
+        output_mdl.write_bytes(mdl_bytes)
+        output_mdl.with_suffix(".mdx").write_bytes(mdx_bytes)
+
+    def inject_animation_override_bytes(
+        self,
+        model: KotorModel,
+        source_mdl_bytes: bytes,
+        source_mdx_bytes: bytes,
+        animation: Animation,
+        *,
+        replace_existing: bool = True,
+    ) -> Tuple[bytes, bytes]:
+        """Return MDL/MDX bytes for a surgical animation-block injection."""
+
+        if len(source_mdl_bytes) < _BASE + 196:
+            raise ValueError("Source MDL is too small to contain a full model header.")
+
+        self._prepare_animation_only_state(model, source_mdl_bytes)
+
+        old_offsets = self._read_animation_offsets(source_mdl_bytes)
+        slot_name = str(getattr(animation, "name", "") or "").lower()
+        kept_offsets: List[int] = []
+        for offset in old_offsets:
+            old_name = self._read_animation_name(source_mdl_bytes, offset).lower()
+            if replace_existing and old_name == slot_name:
+                continue
+            kept_offsets.append(offset)
+
+        out = BytesIO(bytearray(source_mdl_bytes))
+        out.seek(0, 2)
+        _align4(out)
+        anim_table_rel = out.tell() - _BASE
+        new_count = len(kept_offsets) + 1
+        for offset in kept_offsets:
+            out.write(_wu32(offset))
+        new_anim_offset_patch = out.tell()
+        out.write(_wu32(0))
+
+        new_anim_rel = out.tell() - _BASE
+        end = out.tell()
+        out.seek(new_anim_offset_patch)
+        out.write(_wu32(new_anim_rel))
+        out.seek(end)
+        self._write_animation(out, animation)
+
+        mdl_bytes = bytearray(out.getvalue())
+        struct.pack_into("<I", mdl_bytes, 4, len(mdl_bytes) - _BASE)
+        if source_mdx_bytes:
+            struct.pack_into("<I", mdl_bytes, 8, len(source_mdx_bytes))
+        struct.pack_into("<I", mdl_bytes, _MODEL_ANIM_ARRAY_OFF_ABS, anim_table_rel)
+        struct.pack_into("<I", mdl_bytes, _MODEL_ANIM_COUNT_ABS, new_count)
+        struct.pack_into("<I", mdl_bytes, _MODEL_ANIM_COUNT2_ABS, new_count)
+        return bytes(mdl_bytes), bytes(source_mdx_bytes)
+
+    def _prepare_animation_only_state(self, model: KotorModel, source_mdl_bytes: bytes) -> None:
+        """Initialize the subset of writer state needed for animation blocks."""
+
+        self._model = model
+        self._is_k2 = (model.game_version == GameVersion.K2)
+        self._nodes = []
+
+        def _collect(node: ModelNode) -> None:
+            self._nodes.append(node)
+            for child in getattr(node, "children", []) or []:
+                _collect(child)
+
+        if model.root_node:
+            _collect(model.root_node)
+
+        self._node_index_by_name = {}
+        for idx, node in enumerate(self._nodes):
+            key = str(getattr(node, "name", "") or "").lower()
+            if key and key not in self._node_index_by_name:
+                self._node_index_by_name[key] = idx
+
+        names = self._read_name_table(source_mdl_bytes)
+        if not names:
+            names = []
+            seen = set()
+            for node in self._nodes:
+                name = str(getattr(node, "name", "") or "unnamed")
+                if name not in seen:
+                    seen.add(name)
+                    names.append(name)
+
+        self._names = []
+        self._name_idx = {}
+        self._name_idx_ci = {}
+        for name in names:
+            self._register_name(name)
+
+    @staticmethod
+    def _read_animation_offsets(source_mdl_bytes: bytes) -> List[int]:
+        count = struct.unpack_from("<I", source_mdl_bytes, _MODEL_ANIM_COUNT_ABS)[0]
+        table_rel = struct.unpack_from("<I", source_mdl_bytes, _MODEL_ANIM_ARRAY_OFF_ABS)[0]
+        if count <= 0 or table_rel <= 0:
+            return []
+        table_abs = _BASE + table_rel
+        offsets: List[int] = []
+        for index in range(count):
+            entry_abs = table_abs + index * 4
+            if entry_abs + 4 > len(source_mdl_bytes):
+                break
+            offset = struct.unpack_from("<I", source_mdl_bytes, entry_abs)[0]
+            if 0 < _BASE + offset < len(source_mdl_bytes):
+                offsets.append(offset)
+        return offsets
+
+    @staticmethod
+    def _read_animation_name(source_mdl_bytes: bytes, animation_offset: int) -> str:
+        start = _BASE + int(animation_offset) + 8
+        end = start + 32
+        if start < 0 or end > len(source_mdl_bytes):
+            return ""
+        return source_mdl_bytes[start:end].split(b"\x00", 1)[0].decode("ascii", errors="replace")
+
+    @staticmethod
+    def _read_name_table(source_mdl_bytes: bytes) -> List[str]:
+        table_rel = struct.unpack_from("<I", source_mdl_bytes, _MODEL_NAME_OFFSETS_OFF_ABS)[0]
+        count = struct.unpack_from("<I", source_mdl_bytes, _MODEL_NAME_COUNT_ABS)[0]
+        table_abs = _BASE + table_rel
+        names: List[str] = []
+        if count <= 0 or table_abs <= 0 or table_abs + count * 4 > len(source_mdl_bytes):
+            return names
+        for index in range(count):
+            name_rel = struct.unpack_from("<I", source_mdl_bytes, table_abs + index * 4)[0]
+            name_abs = _BASE + name_rel
+            if name_abs < 0 or name_abs >= len(source_mdl_bytes):
+                continue
+            end = source_mdl_bytes.find(b"\x00", name_abs)
+            if end < 0:
+                continue
+            names.append(source_mdl_bytes[name_abs:end].decode("ascii", errors="replace"))
+        return names
 
     def write(self, model: KotorModel) -> Tuple[bytes, bytes]:
         """

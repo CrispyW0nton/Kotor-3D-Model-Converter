@@ -99,6 +99,9 @@ def test_inherited_slot_is_accepted_and_written_as_local_override(monkeypatch, t
             Path(output_path).write_bytes(b"mdl")
             Path(output_path).with_suffix(".mdx").write_bytes(b"mdx")
 
+        def write_animation_override_files(self, model: KotorModel, _source_mdl, _source_mdx, output_path, _animation, **_kwargs):
+            self.write_files(model, str(output_path))
+
     monkeypatch.setattr(AuroraAnimationWriter, "_load_model", lambda self, req: target_model)
     monkeypatch.setattr(
         AuroraAnimationWriter,
