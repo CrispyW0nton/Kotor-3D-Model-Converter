@@ -58,6 +58,7 @@ def test_ue5_source_adapter_maps_core_and_aliases():
 
     assert result.target_for("attach") == "rootdummy"
     assert result.target_for("pelvis") == "pelvis_g"
+    assert result.target_for("lowerarm_l") == "lforearm_g"
     assert result.target_for("hand_l") == "lhand_g"
     assert not result.unmapped
 
@@ -67,7 +68,7 @@ def test_ue5_source_adapter_drops_expected_helpers():
     source_bones = [
         "ik_foot_root",
         "lowerarm_twist_01_l",
-        "index_01_l",
+        "index_02_l",
         "weapon_l",
         "spine_02",
     ]
@@ -77,10 +78,30 @@ def test_ue5_source_adapter_drops_expected_helpers():
     assert {item.source_bone for item in result.dropped} >= {
         "ik_foot_root",
         "lowerarm_twist_01_l",
-        "index_01_l",
+        "index_02_l",
         "weapon_l",
     }
     assert {item.source_bone for item in result.collapsed} == {"spine_02"}
+
+
+def test_ue5_source_adapter_maps_pmbam_two_joint_fingers():
+    spec = load_reverse_rename_spec(RENAME_MAP)
+    source_bones = [
+        "hand_l",
+        "index_01_l",
+        "index_03_l",
+        "middle_02_l",
+        "thumb_01_r",
+        "thumb_03_r",
+    ]
+
+    result = UE5SourceAdapter().adapt(source_bones, spec)
+
+    assert result.target_for("index_01_l") == "lafngrb_g"
+    assert result.target_for("index_03_l") == "lafngrt_g"
+    assert result.target_for("thumb_01_r") == "rthumbb_g"
+    assert result.target_for("thumb_03_r") == "rthumbt_g"
+    assert "middle_02_l" in {item.source_bone for item in result.dropped}
 
 
 def _fake_extraction_payload(spec):

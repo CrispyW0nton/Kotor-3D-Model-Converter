@@ -36,6 +36,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--frame-step", type=int, default=1)
     parser.add_argument("--game", default="K1", choices=["K1", "K2", "k1", "k2"])
     parser.add_argument(
+        "--source-reference-mode",
+        default="hybrid_limb_source_rest",
+        choices=["hybrid_limb_source_rest", "source_rest", "clip_frame_zero"],
+        help=(
+            "Reference pose for R3.B motion deltas. Use hybrid_limb_source_rest for authored UE idle poses; "
+            "source_rest applies bind-pose deltas to every mapped node; "
+            "clip_frame_zero preserves the legacy frame-0-as-zero behavior."
+        ),
+    )
+    parser.add_argument(
+        "--hybrid-limb-source-rest-weight",
+        type=float,
+        default=0.35,
+        help="Blend weight from stable frame-0 limb solve toward FBX bind/rest limb solve in hybrid mode.",
+    )
+    parser.add_argument(
         "--write-mdl",
         action="store_true",
         help="Run R3.B after extraction and write a binary MDL/MDX with the injected animation",
@@ -99,6 +115,8 @@ def main() -> int:
             output_manifest=output_manifest,
             game=args.game.upper(),
             fps=result.fps,
+            source_reference_mode=args.source_reference_mode,
+            hybrid_limb_source_rest_weight=args.hybrid_limb_source_rest_weight,
         )
         writer_result = AuroraAnimationWriter().inject(writer_request)
         print("-" * 60)

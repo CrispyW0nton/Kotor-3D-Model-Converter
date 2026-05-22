@@ -1,9 +1,11 @@
 """UE5/Unity-style to Aurora coordinate conversion for reverse retargeting.
 
-The conversion mirrors the prior-art transform documented from KotOR-Unity:
-positions swap Y/Z, and quaternions swap Y/Z while negating vector parts.
-That transform is involutive, so the same mapping can be used for the reverse
-direction after accounting for quaternion storage order.
+The conversion maps UE's exported humanoid convention to the PMBAM/Aurora
+viewport convention used by GhostRigger.  Current stock PMBAM calibration shows
+the lowest rest-pose segment error with X and Y mirrored while preserving Z-up:
+``(-X, -Y, Z)``.  The transform is
+involutive, so the same mapping can be used for the reverse direction after
+accounting for quaternion storage order.
 """
 
 from __future__ import annotations
@@ -53,28 +55,28 @@ def aurora_from_ue5_quat(ue5_xyzw: Tuple[float, float, float, float]) -> Quatern
     """Convert UE5/Unity-style XYZW quaternion to Aurora WXYZ."""
 
     x, y, z, w = (float(v) for v in ue5_xyzw)
-    return Quaternion(w=w, x=-x, y=-z, z=-y).normalized()
+    return Quaternion(w=w, x=-x, y=-y, z=z).normalized()
 
 
 def ue5_from_aurora_quat(aurora_wxyz: Tuple[float, float, float, float]) -> Quaternion:
     """Convert Aurora WXYZ quaternion back to UE5/Unity-style storage."""
 
     w, x, y, z = (float(v) for v in aurora_wxyz)
-    return Quaternion(w=w, x=-x, y=-z, z=-y).normalized()
+    return Quaternion(w=w, x=-x, y=-y, z=z).normalized()
 
 
 def aurora_from_ue5_position(ue5_xyz: Tuple[float, float, float]) -> Vector3:
-    """Convert UE5/Unity-style position to Aurora by swapping Y and Z."""
+    """Convert UE5/Unity-style position to Aurora with calibrated X/Y mirror."""
 
     x, y, z = (float(v) for v in ue5_xyz)
-    return Vector3(x=x, y=z, z=y)
+    return Vector3(x=-x, y=-y, z=z)
 
 
 def ue5_from_aurora_position(aurora_xyz: Tuple[float, float, float]) -> Vector3:
     """Convert Aurora position back to UE5/Unity-style coordinates."""
 
     x, y, z = (float(v) for v in aurora_xyz)
-    return Vector3(x=x, y=z, z=y)
+    return Vector3(x=-x, y=-y, z=z)
 
 
 def verify_round_trip(

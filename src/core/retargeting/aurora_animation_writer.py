@@ -119,6 +119,127 @@ def _format_slot_suggestions(slots: List[str], *, limit: int = 12) -> str:
     return ", ".join(shown) + suffix
 
 
+def _normalize_source_reference_mode(mode: str) -> str:
+    """Return the source pose reference policy used by R3.B.
+
+    ``hybrid_limb_source_rest`` keeps root/torso motion stable while treating
+    shoulder/arm/finger frame-0 poses as motion from the FBX bind pose.  This is
+    the safest current default for UE idle clips on PMBAM: it lowers/extents the
+    upper limbs without copying a whole-body bind-to-idle bend into Aurora's
+    torso or lower-body stacks.
+    """
+
+    normalized = str(mode or "hybrid_limb_source_rest").strip().lower().replace("-", "_")
+    aliases = {
+        "bind": "source_rest",
+        "bind_rest": "source_rest",
+        "rest": "source_rest",
+        "source_rest": "source_rest",
+        "hybrid": "hybrid_limb_source_rest",
+        "hybrid_limb": "hybrid_limb_source_rest",
+        "hybrid_limb_source_rest": "hybrid_limb_source_rest",
+        "limb_source_rest": "hybrid_limb_source_rest",
+        "clip_frame_0": "clip_frame_zero",
+        "clip_frame_zero": "clip_frame_zero",
+        "frame0": "clip_frame_zero",
+        "frame_0": "clip_frame_zero",
+    }
+    if normalized not in aliases:
+        raise ValueError(
+            "source_reference_mode must be 'hybrid_limb_source_rest', 'source_rest', or 'clip_frame_zero', "
+            f"got '{mode}'."
+        )
+    return aliases[normalized]
+
+
+def _curve_reference_mode(reference_mode: str, curve: dict, target_node: ModelNode) -> str:
+    """Return the source reference policy for one R3.A curve."""
+
+    if reference_mode != "hybrid_limb_source_rest":
+        return reference_mode
+    target_name = str(getattr(target_node, "name", "") or "").lower()
+    source_name = str(curve.get("source_bone") or "").lower()
+    limb_tokens = (
+        "clavicle",
+        "collar",
+        "shoulder",
+        "bicep",
+        "upperarm",
+        "forearm",
+        "lowerarm",
+        "hand",
+        "fngr",
+        "finger",
+        "thumb",
+    )
+    if any(token in target_name or token in source_name for token in limb_tokens):
+        return "source_rest"
+    return "clip_frame_zero"
+
+
+def _clamped_weight(value: float) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        numeric = 0.35
+    if not math.isfinite(numeric):
+        return 0.35
+    return max(0.0, min(1.0, numeric))
+
+
+def _slerp_xyzw(
+    a_xyzw: Iterable[float],
+    b_xyzw: Iterable[float],
+    t: float,
+) -> List[float]:
+    """Shortest-path slerp for Aurora/GhostRigger XYZW quaternions."""
+
+    a = np.asarray(list(a_xyzw), dtype=np.float64)
+    b = np.asarray(list(b_xyzw), dtype=np.float64)
+    if a.shape[0] < 4:
+        a = np.pad(a, (0, 4 - a.shape[0]))
+        a[3] = 1.0
+    if b.shape[0] < 4:
+        b = np.pad(b, (0, 4 - b.shape[0]))
+        b[3] = 1.0
+    a = a[:4]
+    b = b[:4]
+    a_norm = float(np.linalg.norm(a))
+    b_norm = float(np.linalg.norm(b))
+    if a_norm <= 1e-12:
+        a = np.asarray((0.0, 0.0, 0.0, 1.0), dtype=np.float64)
+    else:
+        a = a / a_norm
+    if b_norm <= 1e-12:
+        b = np.asarray((0.0, 0.0, 0.0, 1.0), dtype=np.float64)
+    else:
+        b = b / b_norm
+
+    dot = float(np.dot(a, b))
+    if dot < 0.0:
+        b = -b
+        dot = -dot
+    dot = max(-1.0, min(1.0, dot))
+    amount = _clamped_weight(t)
+    if dot > 0.9995:
+        out = a + amount * (b - a)
+        out_norm = float(np.linalg.norm(out))
+        if out_norm <= 1e-12:
+            out = np.asarray((0.0, 0.0, 0.0, 1.0), dtype=np.float64)
+        else:
+            out = out / out_norm
+        return [float(value) for value in out]
+
+    theta_0 = math.acos(dot)
+    sin_theta_0 = math.sin(theta_0)
+    theta = theta_0 * amount
+    sin_theta = math.sin(theta)
+    scale_a = math.cos(theta) - dot * sin_theta / sin_theta_0
+    scale_b = sin_theta / sin_theta_0
+    out = scale_a * a + scale_b * b
+    return [float(value) for value in out / float(np.linalg.norm(out))]
+
+
 def prepare_local_animation_override_for_export(
     target_model: KotorModel,
     animation_block: Animation,
@@ -195,6 +316,8 @@ class AuroraAnimationInjectionRequest:
     verify_roundtrip: bool = False
     roundtrip_tolerance: float = 1e-4
     target_model_override: Optional[KotorModel] = None
+    source_reference_mode: str = "hybrid_limb_source_rest"
+    hybrid_limb_source_rest_weight: float = 0.35
 
     def __post_init__(self) -> None:
         self.r3a_animation_json = Path(self.r3a_animation_json)
@@ -305,6 +428,8 @@ class AuroraAnimationWriter:
                 slot_name=request.animation_slot,
                 fps=request.fps,
                 write_zero_position_controllers=request.write_zero_position_controllers,
+                source_reference_mode=request.source_reference_mode,
+                hybrid_limb_source_rest_weight=request.hybrid_limb_source_rest_weight,
                 warnings=result.warnings,
             )
             result.frame_count = int(payload.get("frame_count") or 0)
@@ -524,11 +649,15 @@ class AuroraAnimationWriter:
         slot_name: str,
         fps: float = 30.0,
         write_zero_position_controllers: bool = True,
+        source_reference_mode: str = "hybrid_limb_source_rest",
+        hybrid_limb_source_rest_weight: float = 0.35,
         warnings: Optional[List[str]] = None,
     ) -> Animation:
         """Create an Aurora ``Animation`` from R3.A target curves."""
 
         warnings = warnings if warnings is not None else []
+        reference_mode = _normalize_source_reference_mode(source_reference_mode)
+        hybrid_weight = _clamped_weight(hybrid_limb_source_rest_weight)
         frame_count = int(payload.get("frame_count") or 0)
         duration = float(payload.get("duration_seconds") or 0.0)
         if duration <= 0.0 and frame_count > 0:
@@ -560,8 +689,12 @@ class AuroraAnimationWriter:
                 curve.get("source_parent_frames", []) or [],
                 key=lambda item: int(item.get("frame") or 0),
             )
+            curve_reference_mode = _curve_reference_mode(reference_mode, curve, target_node)
             source_reference_frame = frames[0]
             source_parent_reference_frame = parent_frames[0] if parent_frames else None
+            if curve_reference_mode == "source_rest":
+                source_reference_frame = None
+                source_parent_reference_frame = None
             basis_change = self._basis_change_for_curve(
                 curve=curve,
                 target_node=target_node,
@@ -571,18 +704,30 @@ class AuroraAnimationWriter:
             rotations = []
             for index, frame in enumerate(frames):
                 parent_frame = parent_frames[index] if index < len(parent_frames) else None
-                rotations.append(
-                    self._local_rotation_xyzw_from_ue5_world(
+                source_rest_rotation = self._local_rotation_xyzw_from_ue5_world(
+                    frame,
+                    target_node,
+                    source_rest,
+                    source_parent_rest,
+                    parent_frame,
+                    basis_change,
+                    source_reference_frame,
+                    source_parent_reference_frame,
+                )
+                if reference_mode == "hybrid_limb_source_rest" and curve_reference_mode == "source_rest":
+                    frame_zero_rotation = self._local_rotation_xyzw_from_ue5_world(
                         frame,
                         target_node,
                         source_rest,
                         source_parent_rest,
                         parent_frame,
                         basis_change,
-                        source_reference_frame,
-                        source_parent_reference_frame,
+                        frames[0],
+                        parent_frames[0] if parent_frames else None,
                     )
-                )
+                    rotations.append(_slerp_xyzw(frame_zero_rotation, source_rest_rotation, hybrid_weight))
+                else:
+                    rotations.append(source_rest_rotation)
             self._validate_controller_rows(target_node.name, times, rotations, 4)
 
             controllers = [
@@ -617,9 +762,19 @@ class AuroraAnimationWriter:
                 "R3.B/R3.5 omits Aurora position controllers to preserve PMBAM bind proportions."
             )
         warnings.append("R3.5 per-bone local basis remapping enabled for orientation controllers.")
-        warnings.append(
-            "R3.5 uses source clip frame 0 as the retarget reference pose before applying motion deltas."
-        )
+        if reference_mode == "clip_frame_zero":
+            warnings.append(
+                "R3.5 uses source clip frame 0 as the retarget reference pose before applying motion deltas."
+            )
+        elif reference_mode == "hybrid_limb_source_rest":
+            warnings.append(
+                "R3.5 uses source rest as the shoulder/arm/finger reference and source frame 0 as the "
+                f"root/torso/lower-body reference (upper-limb rest weight={hybrid_weight:.3f})."
+            )
+        else:
+            warnings.append(
+                "R3.5 uses the FBX bind/rest pose as the source retarget reference before applying motion deltas."
+            )
         return anim
 
     @staticmethod

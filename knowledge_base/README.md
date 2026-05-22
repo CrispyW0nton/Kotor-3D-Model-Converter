@@ -34,6 +34,13 @@ knowledge_base/
 ├── cli/                            ← Command-line reference
 │   └── CLI.md
 │
+├── book_notes/                     ← ACTIVE: tracked notes from local reference books
+│   ├── README.md                   ← book-note index and usage rules
+│   ├── ghostrigger_engine_crosswalk.md
+│   ├── vince_mathematics_for_computer_graphics_7e.md
+│   ├── gregory_game_engine_architecture_4e_vol1.md
+│   └── dunn_parberry_3d_math_primer_2e.md
+│
 └── reference/                      ← HISTORICAL (iteration-1, pre-Qt)
     ├── INDEX.md                    ← original knowledge-base index
     ├── MANDATORY_CHECKLIST.md      ← legacy pre-task protocol
@@ -73,11 +80,12 @@ knowledge_base/
 | Debug skinning / rendering | [`audits/2026-05/skinning_parity.md`](audits/2026-05/skinning_parity.md) |
 | Run the CLI | [`cli/CLI.md`](cli/CLI.md) |
 | Theme/layout customization | [`theme_layout_system.md`](theme_layout_system.md) |
+| Apply book knowledge to engine work | [`book_notes/ghostrigger_engine_crosswalk.md`](book_notes/ghostrigger_engine_crosswalk.md) |
 | Character Builder UI spec (original) | [`reference/specs/character_builder_spec.md`](reference/specs/character_builder_spec.md) |
 | Architecture audit (original) | [`reference/specs/architecture_audit.html`](reference/specs/architecture_audit.html) |
 | Pre-task protocol (legacy iteration-1) | [`reference/MANDATORY_CHECKLIST.md`](reference/MANDATORY_CHECKLIST.md) |
 | Legacy iteration-1 roadmap (T001–T804) | [`reference/ROADMAP_legacy_2026_04.md`](reference/ROADMAP_legacy_2026_04.md) |
-| Book-extract principles (matrix math, skinning, rendering) | [`reference/book_extracts.md`](reference/book_extracts.md) |
+| Legacy book-extract principles (iteration-1) | [`reference/book_extracts.md`](reference/book_extracts.md) |
 | Cross-reference map (feature → repo → book) | [`reference/cross_reference_map.md`](reference/cross_reference_map.md) |
 
 ---
@@ -96,6 +104,10 @@ knowledge_base/reference/spreadsheets/   feature_mapping.xlsx, roadmap.xlsx
 If you need the binary bundle, see
 [`reference/specs/README_manifest.txt`](reference/specs/README_manifest.txt)
 for the original handoff manifest.
+
+Tracked summaries and GhostRigger-specific applications for local reference
+books live in [`book_notes/`](book_notes/). Put Markdown notes there, not under
+the gitignored binary `reference/books/` path.
 
 ---
 

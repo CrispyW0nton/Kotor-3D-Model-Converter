@@ -13,17 +13,17 @@ from src.core.retargeting.coordinate_converter import (
 )
 
 
-def test_position_conversion_swaps_y_and_z():
+def test_position_conversion_mirrors_x_y_and_preserves_z_up():
     converted = aurora_from_ue5_position((1.0, 2.0, 3.0))
 
-    assert converted.to_xyz() == (1.0, 3.0, 2.0)
+    assert converted.to_xyz() == (-1.0, -2.0, 3.0)
 
 
-def test_quaternion_conversion_uses_kotor_unity_pattern():
+def test_quaternion_conversion_matches_calibrated_xy_mirror_basis():
     converted = aurora_from_ue5_quat((0.1, 0.2, 0.3, 0.9))
     mag = math.sqrt(0.9 * 0.9 + 0.1 * 0.1 + 0.3 * 0.3 + 0.2 * 0.2)
 
-    assert converted.to_wxyz() == (0.9 / mag, -0.1 / mag, -0.3 / mag, -0.2 / mag)
+    assert converted.to_wxyz() == (0.9 / mag, -0.1 / mag, -0.2 / mag, 0.3 / mag)
 
 
 def test_position_conversion_is_involutive():

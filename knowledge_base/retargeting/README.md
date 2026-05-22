@@ -39,6 +39,26 @@ for Odyssey node names such as `torso_g`, `torsoUpr_g`, `neck_g`, `rCollar_g`,
 `rbicep_g`, `rbicepl_g`, `lforearm`, `rhand`, `lhand`, `Hturn_g`, and hook
 nodes.
 
+## Living Math Reference
+
+The retargeting math reference is maintained in
+`knowledge_base/retargeting/research/computer_graphics_math_for_aurora_retargeting.md`.
+Use it while changing solver, mapping, calibration, and viewport-audit code. It
+tracks the book-backed basis/inverse/quaternion principles that apply to
+Aurora/Odyssey object-node retargeting and records why simple segment-direction
+matching regressed on PMBAM.
+
+The engine-pipeline reference is maintained in
+`knowledge_base/retargeting/research/game_engine_architecture_for_aurora_retargeting.md`.
+Use it while changing source import, preview/export gates, resource manifests,
+debug overlays, capture packs, and validation reports.
+
+The practical 3D math primer reference is maintained in
+`knowledge_base/retargeting/research/3d_math_primer_for_aurora_retargeting.md`.
+Use it while changing coordinate-space naming, calibrated chain frames,
+pole-plane audits, twist audits, quaternion-difference helpers, and matrix
+convention diagnostics.
+
 ## Initial MCP Surface
 
 The first read-only MCP retargeting tools are:

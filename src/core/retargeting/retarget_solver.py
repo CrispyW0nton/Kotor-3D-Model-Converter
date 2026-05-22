@@ -15,6 +15,12 @@ from src.core.validation.animation_block_validator import validate_animation_blo
 
 from .coordinate import BasisConversion
 from .reference_pose import ReferencePosePair, build_reference_pose_pair
+from .retarget_calibration import (
+    CalibratedRetargetFrame,
+    build_calibrated_retarget_frames,
+    current_source_basis_for_frame,
+    transfer_calibrated_frame_delta,
+)
 from .retarget_frame_audit import audit_retarget_reference_frames
 from .retarget_frames import transfer_reference_frame_delta
 from .retarget_mapping import HELPER_CLASSIFICATIONS, validate_retarget_profile
@@ -131,6 +137,15 @@ def retarget_source_clip_to_aurora_animation(
 
     frame_audit = audit_retarget_reference_frames(normalized_profile, reference_pair)
     warnings.extend(frame_audit.warnings)
+    calibration_by_target: Dict[str, CalibratedRetargetFrame] = {}
+    if opts.rotation_transfer_mode == "calibrated_frame_delta":
+        calibration_report = build_calibrated_retarget_frames(normalized_profile, reference_pair)
+        warnings.extend(calibration_report.warnings)
+        if calibration_report.errors:
+            raise RetargetSolveError("; ".join(calibration_report.errors))
+        calibration_by_target = calibration_report.by_target_parent()
+        if not calibration_by_target:
+            warnings.append("No calibrated retarget frames were available; falling back to reference-frame deltas.")
 
     source_poses = _sample_source_poses(source_clip, opts.sample_rate)
     target_to_source = {entry.target_node: entry.source_node for entry in normalized_profile.mappings}
@@ -179,6 +194,7 @@ def retarget_source_clip_to_aurora_animation(
                     target_node_name=target_name,
                     mode=opts.rotation_transfer_mode,
                     mapped_segments=mapped_segments,
+                    calibrated_frames_by_target=calibration_by_target,
                 )
                 parent_world_rotation = None
                 if target_node.parent is not None:
@@ -305,8 +321,19 @@ def _desired_target_world_rotation(
     target_node_name: str,
     mode: str,
     mapped_segments: List[_MappedSegment],
+    calibrated_frames_by_target: Dict[str, CalibratedRetargetFrame],
 ) -> tuple[float, float, float, float]:
-    if mode == "segment_direction":
+    if mode == "calibrated_frame_delta":
+        calibrated_frame = calibrated_frames_by_target.get(target_node_name)
+        if calibrated_frame is not None:
+            current_basis = current_source_basis_for_frame(calibrated_frame, source_pose)
+            if current_basis is not None:
+                return transfer_calibrated_frame_delta(
+                    source_current_basis=current_basis,
+                    calibrated_frame=calibrated_frame,
+                    target_reference_rotation=target_reference_pair.target_global_transforms[target_node_name].rotation,
+                )
+    elif mode == "segment_direction":
         segment_rotation = _segment_direction_world_rotation(
             source_pose=source_pose,
             source_reference_pose=source_reference_pose,
@@ -593,7 +620,7 @@ def _audit_segment_pose_errors(
     mapped_segments: List[_MappedSegment],
     mode: str,
 ) -> List[SegmentPoseError]:
-    if mode != "segment_direction" or not mapped_segments:
+    if mode not in {"segment_direction", "calibrated_frame_delta"} or not mapped_segments:
         return []
     errors: List[SegmentPoseError] = []
     for source_pose in source_poses:
