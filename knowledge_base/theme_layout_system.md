@@ -62,8 +62,11 @@ Required root attributes:
 <layout id="default" name="Default" version="1">
 ```
 
-Known panel ids include `library`, `modules`, `properties`,
-`animationLibrary`, `meshTools`, `outputLog`, and `pythonTerminal`. Unknown ids
+Known panel ids include `contentBrowser`, `scene`, `library`, `modules`,
+`properties`, `animationLibrary`, `meshTools`, `outputLog`, and
+`pythonTerminal`. The `contentBrowser`, `scene`, and `properties` ids control
+top-level dock widgets around the central viewport; the older `library` and
+`animationLibrary` ids remain valid for user layout compatibility. Unknown ids
 warn but do not crash, so future panels can be added safely.
 
 Supported button modes:

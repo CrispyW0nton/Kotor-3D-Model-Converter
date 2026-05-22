@@ -28,7 +28,13 @@ try:
 except ImportError as exc:  # pragma: no cover - import gate for Tk fallback
     raise RuntimeError("PySide6 is required for the Qt shell") from exc
 
-from src.gui.qt_lib.panels.qt_library_panel import QtLibraryPanel, enrich_library_rows
+try:  # PySide exposes object-lifetime checks through shiboken.
+    import shiboken6
+except Exception:  # pragma: no cover - defensive fallback for unusual PySide installs
+    shiboken6 = None
+
+from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+from src.gui.qt_lib.panels.qt_library_panel import enrich_library_rows
 from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel
 from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
 from src.gui.qt_lib.panels.qt_camera_panel import QtCameraPanel
@@ -45,8 +51,6 @@ from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel, QtSkele
 from src.gui.qt_lib.panels.qt_scene_outliner_panel import QtSceneOutlinerPanel
 from src.gui.qt_lib.viewports.qt_viewport import QtMainViewportWidget
 from src.gui.qt_lib.panels.qt_animation_panel import (
-    QtAnimationLibraryCombinedPanel,
-    QtAnimationLibraryPanel,
     QtAnimationsPanel,
 )
 from src.gui.qt_lib.windows.qt_blueprint_editor import QtBlueprintEditorWindow
@@ -81,6 +85,23 @@ C = dict(LEGACY_MATRIX_COLORS)
 
 _GUI_DIR = Path(__file__).resolve().parents[1]
 _QT_ICON_DIR = (_GUI_DIR / "icons").as_posix()
+
+
+def _qt_object_alive(obj) -> bool:
+    if obj is None:
+        return False
+    if shiboken6 is not None:
+        try:
+            return bool(shiboken6.isValid(obj))
+        except Exception:
+            return False
+    try:
+        obj.objectName()
+    except RuntimeError:
+        return False
+    except Exception:
+        return True
+    return True
 
 
 def _bounds_from_points(points) -> Optional[tuple[tuple[float, float, float], tuple[float, float, float]]]:
@@ -345,6 +366,77 @@ class LibraryScanWorker(QtCore.QObject):
             rows = enrich_library_rows(rows)
             rows.sort(key=lambda item: (item["game"], item["resref"]))
             self.finished.emit(rows, "")
+        except Exception:
+            self.finished.emit([], traceback.format_exc())
+
+
+class AnimationLibraryScanWorker(QtCore.QObject):
+    progress = QtCore.Signal(str, int, int)
+    finished = QtCore.Signal(list, str)
+
+    def __init__(self, rows: list[dict], k1_dir: str = "", k2_dir: str = ""):
+        super().__init__()
+        self.rows = [dict(row) for row in rows]
+        self.k1_dir = k1_dir
+        self.k2_dir = k2_dir
+
+    @QtCore.Slot()
+    def run(self):
+        try:
+            from src.core.qt_core.assets.resource_manager import ResourceManager
+            from src.core.qt_core.game.kotor_loader import load_model_from_bytes
+            from src.core.qt_core.geometry.model_data import GameVersion
+
+            mgr = ResourceManager()
+            if self.k1_dir:
+                mgr.set_k1_dir(self.k1_dir)
+            if self.k2_dir:
+                mgr.set_k2_dir(self.k2_dir)
+
+            entries: list[dict] = []
+            rows = [row for row in self.rows if row.get("resref") and row.get("game")]
+            total = len(rows)
+            seen: set[tuple[str, str, str]] = set()
+            for index, row in enumerate(rows, start=1):
+                resref = str(row.get("resref") or "").strip()
+                game = str(row.get("game") or "K1").upper()
+                if index == 1 or index % 25 == 0 or index == total:
+                    self.progress.emit(f"Scanning animations: {game}:{resref}", index, total)
+                try:
+                    mdl = mgr.get_mdl(resref, game)
+                    if not mdl:
+                        continue
+                    mdx = mgr.get_mdx(resref, game) or b""
+                    game_version = GameVersion.K2 if game == "K2" else GameVersion.K1
+                    model = load_model_from_bytes(mdl, mdx, game_version=game_version)
+                    if model is None:
+                        continue
+                    model_name = str(getattr(model, "name", "") or resref)
+                    for anim in getattr(model, "animations", []) or []:
+                        anim_name = str(getattr(anim, "name", "") or "").strip()
+                        if not anim_name:
+                            continue
+                        key = (game, resref.lower(), anim_name.lower())
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        length = float(getattr(anim, "length", 0.0) or 0.0)
+                        entries.append(
+                            {
+                                "game": game,
+                                "model": model_name,
+                                "resref": resref,
+                                "animation": anim_name,
+                                "frames": int(round(length * 30.0)) if length else "",
+                                "length": f"{length:.3f}" if length else "",
+                                "source": f"Game Library ({game}:{resref})",
+                                "category": row.get("category") or "",
+                            }
+                        )
+                except Exception:
+                    continue
+            entries.sort(key=lambda item: (str(item.get("game", "")), str(item.get("model", "")), str(item.get("animation", ""))))
+            self.finished.emit(entries, "")
         except Exception:
             self.finished.emit([], traceback.format_exc())
 
@@ -668,6 +760,189 @@ class QtProgressToast(QtWidgets.QFrame):
         self.move(point)
 
 
+class QtFloatingDockHost(QtWidgets.QMainWindow):
+    """Real top-level window that can host one or more detachable dock panels."""
+
+    def __init__(self, owner, title: str, host_key: str):
+        super().__init__(None)
+        self.owner = owner
+        self.host_key = host_key
+        self.dock_keys: list[str] = []
+        self.setObjectName(f"{host_key}FloatingDockHost")
+        self.setWindowTitle(title)
+        try:
+            self.setWindowIcon(owner.windowIcon())
+        except Exception:
+            pass
+        self.setDockNestingEnabled(True)
+        self.setDockOptions(
+            QtWidgets.QMainWindow.AnimatedDocks
+            | QtWidgets.QMainWindow.AllowNestedDocks
+            | QtWidgets.QMainWindow.AllowTabbedDocks
+            | QtWidgets.QMainWindow.GroupedDragging
+        )
+        all_dock_areas = (
+            QtCore.Qt.LeftDockWidgetArea
+            | QtCore.Qt.RightDockWidgetArea
+            | QtCore.Qt.TopDockWidgetArea
+            | QtCore.Qt.BottomDockWidgetArea
+        )
+        self.setTabPosition(all_dock_areas, QtWidgets.QTabWidget.North)
+        self.setWindowFlags(
+            QtCore.Qt.Window
+            | QtCore.Qt.WindowMinMaxButtonsHint
+            | QtCore.Qt.WindowCloseButtonHint
+        )
+
+    def add_detachable_dock(self, key: str, dock: QtWidgets.QDockWidget, area, *, tabify: bool = False) -> None:
+        if not _qt_object_alive(dock):
+            return
+        owner = self.owner
+        owner._dock_rehosting = True
+        try:
+            if hasattr(owner, "_remove_dock_key_from_floating_hosts"):
+                owner._remove_dock_key_from_floating_hosts(key, keep_host=self)
+            if not _qt_object_alive(dock):
+                return
+            self._relax_dock_size_limits(dock)
+            if dock.isFloating():
+                dock.setFloating(False)
+            if not _qt_object_alive(dock):
+                return
+            self._relax_dock_size_limits(dock)
+            previous_parent = dock.parentWidget()
+            if isinstance(previous_parent, QtWidgets.QMainWindow) and previous_parent is not self:
+                try:
+                    if previous_parent.centralWidget() is dock:
+                        previous_parent.takeCentralWidget()
+                    else:
+                        previous_parent.removeDockWidget(dock)
+                except Exception:
+                    pass
+            dock.setParent(self)
+            central_dock = self.centralWidget()
+            if isinstance(central_dock, QtWidgets.QDockWidget) and central_dock is not dock:
+                self.takeCentralWidget()
+                existing_key = self._key_for_dock(central_dock)
+                self.addDockWidget(self._default_area_for_key(existing_key), central_dock)
+            existing_docks = [
+                existing
+                for existing in self.findChildren(QtWidgets.QDockWidget)
+                if existing is not dock and _qt_object_alive(existing)
+            ]
+            if not existing_docks:
+                try:
+                    self.removeDockWidget(dock)
+                except Exception:
+                    pass
+                self.setCentralWidget(dock)
+                self._relax_dock_size_limits(dock)
+            else:
+                self.addDockWidget(area, dock)
+                self._relax_dock_size_limits(dock)
+                if tabify:
+                    self.tabifyDockWidget(existing_docks[-1], dock)
+            dock.show()
+            if key not in self.dock_keys:
+                self.dock_keys.append(key)
+            owner._floating_dock_hosts[key] = self
+            self._refresh_title()
+            QtCore.QTimer.singleShot(0, self._expand_dock_layout)
+        finally:
+            owner._dock_rehosting = False
+
+    def _refresh_title(self) -> None:
+        if len(self.dock_keys) == 1:
+            dock = self.owner._detachable_panels.get(self.dock_keys[0])
+            self.setWindowTitle(dock.windowTitle() if _qt_object_alive(dock) else "GhostRigger Workspace")
+        else:
+            label = self.owner._floating_dock_host_label(self) if hasattr(self.owner, "_floating_dock_host_label") else ""
+            self.setWindowTitle(label or "GhostRigger Workspace")
+
+    def _relax_dock_size_limits(self, dock: QtWidgets.QDockWidget) -> None:
+        max_size = 16777215
+        dock.setMaximumSize(max_size, max_size)
+        dock.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        widget = dock.widget()
+        if widget is not None:
+            widget.setMaximumSize(max_size, max_size)
+            if widget.sizePolicy().horizontalPolicy() != QtWidgets.QSizePolicy.Expanding:
+                widget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, widget.sizePolicy().verticalPolicy())
+
+    def _key_for_dock(self, dock: QtWidgets.QDockWidget) -> str:
+        for key, candidate in getattr(self.owner, "_detachable_panels", {}).items():
+            if candidate is dock:
+                return key
+        return getattr(dock, "detachable_key", "")
+
+    def _default_area_for_key(self, key: str):
+        if hasattr(self.owner, "_default_dock_area_for_key"):
+            return self.owner._default_dock_area_for_key(key)
+        return QtCore.Qt.LeftDockWidgetArea
+
+    def _dock_widgets(self) -> list[QtWidgets.QDockWidget]:
+        return [
+            dock
+            for dock in self.findChildren(QtWidgets.QDockWidget)
+            if _qt_object_alive(dock) and dock.isVisible()
+        ]
+
+    def _expand_dock_layout(self) -> None:
+        if isinstance(self.centralWidget(), QtWidgets.QDockWidget):
+            return
+        docks = self._dock_widgets()
+        if not docks:
+            return
+        primary = docks[0]
+        is_tab_stack = len(self.tabifiedDockWidgets(primary)) >= len(docks) - 1
+        if len(docks) != 1 and not is_tab_stack:
+            return
+        try:
+            self.resizeDocks([primary], [max(420, self.width())], QtCore.Qt.Horizontal)
+            self.resizeDocks([primary], [max(320, self.height())], QtCore.Qt.Vertical)
+        except Exception:
+            pass
+
+    def _promote_single_dock_to_central(self) -> None:
+        if isinstance(self.centralWidget(), QtWidgets.QDockWidget):
+            return
+        docks = self._dock_widgets()
+        if len(docks) != 1:
+            return
+        dock = docks[0]
+        try:
+            self.removeDockWidget(dock)
+            self.setCentralWidget(dock)
+            dock.show()
+        except Exception:
+            pass
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
+        super().resizeEvent(event)
+        QtCore.QTimer.singleShot(0, self._expand_dock_layout)
+
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt API
+        self.owner._close_floating_dock_host(self)
+        event.accept()
+
+
+class QtDetachableDockWidget(QtWidgets.QDockWidget):
+    """Dock widget with a small workspace-routing context menu."""
+
+    def __init__(self, key: str, title: str, owner):
+        super().__init__(title, owner)
+        self.detachable_key = key
+        self.owner_window = owner
+
+    def contextMenuEvent(self, event) -> None:  # noqa: N802 - Qt API
+        owner = getattr(self, "owner_window", None)
+        if owner is not None and hasattr(owner, "_show_detachable_dock_context_menu"):
+            owner._show_detachable_dock_context_menu(self.detachable_key, self, event.globalPos())
+            event.accept()
+            return
+        super().contextMenuEvent(event)
+
+
 class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     APP_TITLE = "GhostRigger-K1-K2  //  Odyssey Engine Pipeline v6.1"
     APP_VERSION = "6.1.0"
@@ -701,8 +976,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._scan_worker: Optional[QtCore.QObject] = None
         self._auto_detect_thread: Optional[QtCore.QThread] = None
         self._auto_detect_worker: Optional[QtCore.QObject] = None
+        self._animation_scan_thread: Optional[QtCore.QThread] = None
+        self._animation_scan_worker: Optional[QtCore.QObject] = None
         self._batch_thread: Optional[QtCore.QThread] = None
         self._batch_worker: Optional[QtCore.QObject] = None
+        self._floating_dock_hosts: dict[str, QtFloatingDockHost] = {}
+        self._dock_rehosting = False
         self._library_rows: list[dict] = []
         self.scene_manager = KMaxSceneManager()
         self._scene_texture_dirs: list[str] = []
@@ -1162,7 +1441,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.character_builder_action.triggered.connect(self._open_qt_character_builder_window)
         self.anims_action = QtGui.QAction(self._icon("anims"), "Animation Library", self)
         self.anims_action.setShortcut("Ctrl+A")
-        self.anims_action.triggered.connect(lambda: self._show_right_tab("Animation Library"))
+        self.anims_action.triggered.connect(lambda: self._show_content_browser("Animation"))
         self.retarget_workbench_action = QtGui.QAction(self._icon("anims"), "Animation Retargeting Workbench...", self)
         self.retarget_workbench_action.setShortcut("Ctrl+Shift+A")
         self.retarget_workbench_action.triggered.connect(self._open_animation_retarget_window)
@@ -1182,6 +1461,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.texture_tool_action.triggered.connect(self._open_texture_tool_window)
         self.blueprint_editor_action = QtGui.QAction(self._icon("library"), "Blueprint Editor...", self)
         self.blueprint_editor_action.triggered.connect(self._open_blueprint_editor_window)
+        self.content_browser_action = QtGui.QAction(self._icon("library"), "Open Content Browser", self)
+        self.content_browser_action.triggered.connect(lambda: self._show_content_browser("All"))
+        self.scene_panel_action = QtGui.QAction("Open Scene", self)
+        self.scene_panel_action.triggered.connect(lambda: self._show_workspace_dock("scene"))
+        self.properties_panel_action = QtGui.QAction(self._icon("props"), "Open Properties", self)
+        self.properties_panel_action.triggered.connect(lambda: self._show_workspace_dock("properties"))
         self.nodes_panel_action = QtGui.QAction(self._icon("skeleton"), "Open Nodes Panel", self)
         self.nodes_panel_action.triggered.connect(lambda: self._show_detachable_panel("nodes"))
         self.lighting_panel_action = QtGui.QAction("Open Lighting Panel", self)
@@ -1308,6 +1593,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         modules_menu.addAction(self.sequence_editor_action)
         modules_menu.addAction(self.sequence_editor_window_action)
         modules_menu.addSeparator()
+        modules_menu.addAction(self.content_browser_action)
+        modules_menu.addAction(self.scene_panel_action)
+        modules_menu.addAction(self.properties_panel_action)
         modules_menu.addAction(self.nodes_panel_action)
         modules_menu.addAction(self.lighting_panel_action)
         modules_menu.addAction(self.camera_panel_action)
@@ -1476,6 +1764,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
         layout.addWidget(self._tool_button("Settings  F2", self.settings_action, "settings", compact=True))
         layout.addWidget(self._separator())
+        layout.addWidget(self._tool_button("Content", self.content_browser_action, "library", compact=True))
+        layout.addWidget(self._tool_button("Scene", self.scene_panel_action, "props", compact=True))
+        layout.addWidget(self._tool_button("Props", self.properties_panel_action, "props", compact=True))
         layout.addWidget(self._tool_button("Anims  Ctrl+A", self.anims_action, "anims", compact=True))
         layout.addWidget(self._tool_button("Sequence", self.sequence_editor_action, "anims", compact=True))
         layout.addWidget(self._tool_button("Lights", self.lighting_panel_action, "", compact=True))
@@ -1651,11 +1942,21 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     def _workspace_dock_areas(self) -> QtCore.Qt.DockWidgetArea:
         return QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea | QtCore.Qt.BottomDockWidgetArea
 
-    def _create_detachable_panel(self, key: str, title: str, widget: QtWidgets.QWidget, area) -> QtWidgets.QDockWidget:
-        dock = QtWidgets.QDockWidget(title, self)
+    def _create_detachable_panel(
+        self,
+        key: str,
+        title: str,
+        widget: QtWidgets.QWidget,
+        area,
+        *,
+        scroll: bool = True,
+    ) -> QtWidgets.QDockWidget:
+        dock = QtDetachableDockWidget(key, title, self)
         dock.setObjectName(f"{key}Dock")
-        scroll = make_scrollable_panel(widget, f"{key}DockScroll", dock)
-        dock.setWidget(scroll)
+        if scroll:
+            dock.setWidget(make_scrollable_panel(widget, f"{key}DockScroll", dock))
+        else:
+            dock.setWidget(widget)
         dock.setAllowedAreas(self._workspace_dock_areas())
         dock.setFeatures(
             QtWidgets.QDockWidget.DockWidgetClosable
@@ -1664,7 +1965,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         )
         self.addDockWidget(area, dock)
         dock.hide()
-        dock.topLevelChanged.connect(lambda floating, k=key, d=dock: self._remember_detachable_panel_state(k, d))
+        dock.topLevelChanged.connect(lambda floating, k=key: self._on_detachable_panel_top_level_changed(k, floating))
         dock.dockLocationChanged.connect(lambda area, k=key, d=dock: self._on_detachable_panel_dock_location_changed(k, d, area))
         dock.visibilityChanged.connect(lambda visible, k=key, d=dock: self._on_detachable_panel_visibility(k, d, visible))
         self._detachable_panels[key] = dock
@@ -1680,27 +1981,339 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self._populate_resource_panel()
         dock.show()
         dock.setFloating(True)
-        dock.setWindowFlag(QtCore.Qt.Window, True)
-        dock.setWindowFlag(QtCore.Qt.WindowMinMaxButtonsHint, True)
-        dock.setWindowFlag(QtCore.Qt.WindowCloseButtonHint, True)
-        saved = self.settings_data.get("theme_layout", {}).get("panel_sizes", {}).get(key, {})
-        default_width, default_height = getattr(self, "_detachable_panel_sizes", {}).get(key, (760, 520))
-        width = int(saved.get("width", default_width)) if isinstance(saved, dict) else default_width
-        height = int(saved.get("height", default_height)) if isinstance(saved, dict) else default_height
-        dock.resize(width, height)
+        self._promote_detached_panel_window(key, dock)
+
+    def _show_workspace_dock(self, key: str) -> None:
+        dock = getattr(self, "_detachable_panels", {}).get(key)
+        if dock is None:
+            self._not_migrated(key)
+            return
+        host = self._host_for_dock_key(key)
+        if host is not None:
+            host.show()
+            host.raise_()
+            host.activateWindow()
+            dock.show()
+            dock.raise_()
+            return
+        if dock.isFloating():
+            dock.setFloating(False)
         dock.show()
         dock.raise_()
-        dock.activateWindow()
+
+    def _detachable_dock_for_key(self, key: str, dock: Optional[QtWidgets.QDockWidget] = None):
+        candidate = dock if _qt_object_alive(dock) else getattr(self, "_detachable_panels", {}).get(key)
+        return candidate if _qt_object_alive(candidate) else None
+
+    def _on_detachable_panel_top_level_changed(self, key: str, floating: bool) -> None:
+        dock = self._detachable_dock_for_key(key)
+        if dock is None:
+            return
+        if floating and not self._dock_rehosting:
+            QtCore.QTimer.singleShot(0, lambda k=key: self._promote_detached_panel_window(k))
+        self._remember_detachable_panel_state(key, dock)
+
+    def _promote_detached_panel_window(self, key: str, dock: Optional[QtWidgets.QDockWidget] = None) -> None:
+        dock = self._detachable_dock_for_key(key, dock)
+        if dock is None:
+            return
+        if not dock.isFloating():
+            return
+        target_host = None
+        tabify = False
+        previous_host = self._floating_dock_hosts.get(key)
+        host = previous_host if previous_host is not None and len(getattr(previous_host, "dock_keys", [])) <= 1 else None
+        area = self._default_dock_area_for_key(key)
+        if host is None:
+            host = QtFloatingDockHost(self, dock.windowTitle(), key)
+            self._floating_dock_hosts[key] = host
+        width, height = self._detachable_panel_window_size(key)
+        host.add_detachable_dock(key, dock, area, tabify=tabify)
+        if host is not target_host:
+            host.resize(width, height)
+        QtCore.QTimer.singleShot(0, host._expand_dock_layout)
+        host.show()
+        host.raise_()
+        host.activateWindow()
+
+    def _show_detachable_dock_context_menu(self, key: str, dock: QtWidgets.QDockWidget, global_pos: QtCore.QPoint) -> None:
+        dock = self._detachable_dock_for_key(key, dock)
+        if dock is None:
+            return
+        menu = QtWidgets.QMenu(dock)
+        current_host = self._host_for_dock_key(key)
+
+        new_window_action = menu.addAction("Dock to New Window")
+        new_window_action.triggered.connect(lambda _checked=False, k=key: self._move_detachable_panel_to_new_host(k))
+
+        window_menu = menu.addMenu("Dock to Window")
+        hosts = self._available_floating_dock_hosts(exclude_key=key)
+        if hosts:
+            for host in hosts:
+                label = self._floating_dock_host_label(host)
+                host_menu = window_menu.addMenu(label)
+                placements = (
+                    ("As Tab", self._default_dock_area_for_key(getattr(host, "host_key", "")), True),
+                    ("Left", QtCore.Qt.LeftDockWidgetArea, False),
+                    ("Right", QtCore.Qt.RightDockWidgetArea, False),
+                    ("Bottom", QtCore.Qt.BottomDockWidgetArea, False),
+                )
+                for placement_label, area, tabify in placements:
+                    action = host_menu.addAction(placement_label)
+                    action.triggered.connect(
+                        lambda _checked=False, k=key, h=host, a=area, t=tabify: self._move_detachable_panel_to_host(
+                            k,
+                            h,
+                            a,
+                            tabify=t,
+                        )
+                    )
+        else:
+            action = window_menu.addAction("No other floating windows")
+            action.setEnabled(False)
+
+        if current_host is not None:
+            menu.addSeparator()
+            return_action = menu.addAction("Return to Main Window")
+            return_action.triggered.connect(lambda _checked=False, k=key: self._return_detachable_panel_to_main_window(k))
+
+        menu.exec(global_pos)
+
+    def _available_floating_dock_hosts(self, *, exclude_key: str = "") -> list[QtFloatingDockHost]:
+        hosts: list[QtFloatingDockHost] = []
+        seen: set[int] = set()
+        for host in list(self._floating_dock_hosts.values()):
+            if not _qt_object_alive(host):
+                continue
+            marker = id(host)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            if exclude_key and exclude_key in getattr(host, "dock_keys", []):
+                continue
+            if host.isVisible():
+                hosts.append(host)
+        return hosts
+
+    def _floating_dock_host_label(self, host: QtFloatingDockHost) -> str:
+        keys = [key for key in getattr(host, "dock_keys", []) if key in getattr(self, "_detachable_panels", {})]
+        titles = []
+        for key in keys:
+            dock = self._detachable_dock_for_key(key)
+            if dock is not None:
+                titles.append(dock.windowTitle())
+        if titles:
+            prefix = "Workspace" if len(titles) > 1 else "Window"
+            return f"{prefix}: {' / '.join(titles)}"
+        try:
+            return host.windowTitle()
+        except RuntimeError:
+            return "Floating Window"
+
+    def _move_detachable_panel_to_new_host(self, key: str) -> None:
+        dock = self._detachable_dock_for_key(key)
+        if dock is None:
+            return
+        current_host = self._host_for_dock_key(key)
+        if current_host is not None and len(getattr(current_host, "dock_keys", [])) == 1:
+            current_host.show()
+            current_host.raise_()
+            current_host.activateWindow()
+            return
+        host = QtFloatingDockHost(self, dock.windowTitle(), key)
+        self._floating_dock_hosts[key] = host
+        host.add_detachable_dock(key, dock, self._default_dock_area_for_key(key))
+        width, height = self._detachable_panel_window_size(key)
+        host.resize(width, height)
+        QtCore.QTimer.singleShot(0, host._expand_dock_layout)
+        host.show()
+        host.raise_()
+        host.activateWindow()
+
+    def _detachable_panel_window_size(self, key: str) -> tuple[int, int]:
+        default_width, default_height = getattr(self, "_detachable_panel_sizes", {}).get(key, (760, 520))
+        saved = self.settings_data.get("theme_layout", {}).get("panel_sizes", {}).get(key, {})
+        use_saved = isinstance(saved, dict) and bool(saved.get("floating"))
+        width = int(saved.get("width", default_width)) if use_saved else default_width
+        height = int(saved.get("height", default_height)) if use_saved else default_height
+        if key == "content_browser":
+            width = max(width, default_width)
+            height = max(height, default_height)
+        return max(240, width), max(180, height)
+
+    def _move_detachable_panel_to_host(
+        self,
+        key: str,
+        host: QtFloatingDockHost,
+        area,
+        *,
+        tabify: bool = True,
+    ) -> None:
+        dock = self._detachable_dock_for_key(key)
+        if dock is None or not _qt_object_alive(host):
+            return
+        host.add_detachable_dock(key, dock, area, tabify=tabify)
+        host.show()
+        host.raise_()
+        host.activateWindow()
+        dock.raise_()
+
+    def _return_detachable_panel_to_main_window(self, key: str) -> None:
+        dock = self._detachable_dock_for_key(key)
+        if dock is None:
+            return
+        self._remove_dock_key_from_floating_hosts(key)
+        self._dock_rehosting = True
+        try:
+            if dock.isFloating():
+                dock.setFloating(False)
+            previous_parent = dock.parentWidget()
+            if isinstance(previous_parent, QtWidgets.QMainWindow) and previous_parent is not self:
+                try:
+                    if previous_parent.centralWidget() is dock:
+                        previous_parent.takeCentralWidget()
+                    else:
+                        previous_parent.removeDockWidget(dock)
+                except Exception:
+                    pass
+            dock.setParent(self)
+            self.addDockWidget(self._default_dock_area_for_key(key), dock)
+            dock.show()
+            dock.raise_()
+        finally:
+            self._dock_rehosting = False
+        self._remember_detachable_panel_state(key, dock)
+
+    def _floating_dock_host_at(self, global_pos: QtCore.QPoint, *, exclude_key: str = ""):
+        seen: set[int] = set()
+        for host in list(self._floating_dock_hosts.values()):
+            try:
+                marker = id(host)
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                if exclude_key and exclude_key in getattr(host, "dock_keys", []):
+                    continue
+                if host.isVisible() and host.frameGeometry().contains(global_pos):
+                    return host
+            except RuntimeError:
+                continue
+        return None
+
+    def _dock_area_for_host_drop(self, host: QtFloatingDockHost, global_pos: QtCore.QPoint):
+        local = host.mapFromGlobal(global_pos)
+        width = max(1, host.width())
+        height = max(1, host.height())
+        if local.y() >= int(height * 0.72):
+            return QtCore.Qt.BottomDockWidgetArea, False
+        if int(width * 0.35) <= local.x() <= int(width * 0.65):
+            return self._default_dock_area_for_key(getattr(host, "host_key", "")), True
+        if local.x() < width // 2:
+            return QtCore.Qt.LeftDockWidgetArea, False
+        return QtCore.Qt.RightDockWidgetArea, False
+
+    def _default_dock_area_for_key(self, key: str):
+        if key in {"content_browser", "scene", "nodes", "2das", "resources"}:
+            return QtCore.Qt.LeftDockWidgetArea
+        if key == "output_log":
+            return QtCore.Qt.BottomDockWidgetArea
+        return QtCore.Qt.RightDockWidgetArea
+
+    def _host_for_dock_key(self, key: str):
+        host = self._floating_dock_hosts.get(key)
+        if host is not None:
+            try:
+                host.objectName()
+                return host
+            except RuntimeError:
+                self._floating_dock_hosts.pop(key, None)
+        for candidate in list(self._floating_dock_hosts.values()):
+            try:
+                candidate.objectName()
+            except RuntimeError:
+                for stale_key, stale_host in list(self._floating_dock_hosts.items()):
+                    if stale_host is candidate:
+                        self._floating_dock_hosts.pop(stale_key, None)
+                continue
+            if key in getattr(candidate, "dock_keys", []):
+                return candidate
+        return None
+
+    def _remove_dock_key_from_floating_hosts(self, key: str, *, keep_host=None) -> None:
+        for host in list(dict.fromkeys(self._floating_dock_hosts.values())):
+            try:
+                dock_keys = getattr(host, "dock_keys", [])
+            except RuntimeError:
+                continue
+            if host is keep_host:
+                continue
+            if key in dock_keys:
+                dock_keys.remove(key)
+                host._refresh_title()
+            if not dock_keys:
+                host.hide()
+                for mapped_key, mapped_host in list(self._floating_dock_hosts.items()):
+                    if mapped_host is host:
+                        self._floating_dock_hosts.pop(mapped_key, None)
+            else:
+                host._promote_single_dock_to_central()
+                QtCore.QTimer.singleShot(0, host._expand_dock_layout)
+        if keep_host is None:
+            self._floating_dock_hosts.pop(key, None)
+
+    def _close_floating_dock_host(self, host: QtFloatingDockHost) -> None:
+        self._dock_rehosting = True
+        try:
+            for key in list(host.dock_keys):
+                dock = getattr(self, "_detachable_panels", {}).get(key)
+                if not _qt_object_alive(dock):
+                    continue
+                try:
+                    if host.centralWidget() is dock:
+                        host.takeCentralWidget()
+                    else:
+                        host.removeDockWidget(dock)
+                except Exception:
+                    pass
+                dock.setParent(self)
+                self.addDockWidget(self._default_dock_area_for_key(key), dock)
+                dock.hide()
+                self._remember_detachable_panel_state(key, dock)
+                self._floating_dock_hosts.pop(key, None)
+        finally:
+            self._dock_rehosting = False
+        for key, candidate in list(self._floating_dock_hosts.items()):
+            if candidate is host:
+                self._floating_dock_hosts.pop(key, None)
 
     def _remember_detachable_panel_state(self, key: str, dock: QtWidgets.QDockWidget) -> None:
+        dock = self._detachable_dock_for_key(key, dock)
+        if dock is None:
+            return
+        host = self._host_for_dock_key(key)
+        size_source = host if host is not None else dock
+        try:
+            width = size_source.width()
+            height = size_source.height()
+        except RuntimeError:
+            width = dock.width()
+            height = dock.height()
+            host = None
         sizes = self.settings_data.setdefault("theme_layout", {}).setdefault("panel_sizes", {})
-        sizes[key] = {"width": max(120, dock.width()), "height": max(120, dock.height()), "floating": dock.isFloating()}
+        sizes[key] = {
+            "width": max(120, width),
+            "height": max(120, height),
+            "floating": bool(dock.isFloating() or host is not None),
+        }
         try:
             save_settings(self.settings_path, self.settings_data)
         except Exception:
             pass
 
     def _on_detachable_panel_visibility(self, key: str, dock: QtWidgets.QDockWidget, visible: bool) -> None:
+        dock = self._detachable_dock_for_key(key, dock)
+        if dock is None:
+            return
         if key == "adjust_pivot":
             self.settings_data["show_adjust_pivot_toolbox"] = bool(visible)
             try:
@@ -1714,10 +2327,14 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             dock.setFloating(False)
 
     def _on_detachable_panel_dock_location_changed(self, key: str, dock: QtWidgets.QDockWidget, area) -> None:
+        dock = self._detachable_dock_for_key(key, dock)
+        if dock is None:
+            return
         if area != QtCore.Qt.TopDockWidgetArea:
             self._remember_detachable_panel_state(key, dock)
             return
-        fallback = QtCore.Qt.LeftDockWidgetArea if key in {"nodes", "2das", "resources"} else QtCore.Qt.RightDockWidgetArea
+        left_keys = {"content_browser", "scene", "nodes", "2das", "resources"}
+        fallback = QtCore.Qt.LeftDockWidgetArea if key in left_keys else QtCore.Qt.RightDockWidgetArea
         QtCore.QTimer.singleShot(0, lambda d=dock, a=fallback: self.addDockWidget(a, d))
 
     def _build_layout(self):
@@ -1754,34 +2371,21 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         vertical_splitter.setHandleWidth(8)
         self.vertical_splitter = vertical_splitter
 
-        main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
-        main_splitter.setChildrenCollapsible(False)
-        main_splitter.setHandleWidth(8)
-        self.main_splitter = main_splitter
-
-        left_tabs = QtWidgets.QTabWidget()
-        left_tabs.setUsesScrollButtons(True)
-        left_tabs.setElideMode(QtCore.Qt.ElideRight)
-        left_tabs.tabBar().setExpanding(False)
-        left_tabs.setMinimumWidth(260)
-        left_tabs.setMaximumWidth(520)
-        left_tabs.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
-        self.left_tabs = left_tabs
-
-        self.library_panel = QtLibraryPanel(self)
-        self.library_panel.scanRequested.connect(self._scan_library)
-        self.library_panel.deepScanRequested.connect(self._scan_library)
-        self.library_panel.loadRequested.connect(self._start_resource_load)
-        self.library_panel.extractRequested.connect(self._extract_library_row)
-        self.library_panel.levelEditorImportRequested.connect(self._send_library_row_to_module_editor)
-        self.library_panel.retargetSourceRequested.connect(
+        self.content_browser_panel = QtContentBrowserPanel(self)
+        self.library_panel = self.content_browser_panel
+        self.content_browser_panel.scanRequested.connect(self._scan_library)
+        self.content_browser_panel.deepScanRequested.connect(self._scan_library)
+        self.content_browser_panel.loadRequested.connect(self._start_resource_load)
+        self.content_browser_panel.extractRequested.connect(self._extract_library_row)
+        self.content_browser_panel.levelEditorImportRequested.connect(self._send_library_row_to_module_editor)
+        self.content_browser_panel.retargetSourceRequested.connect(
             lambda row: self._send_library_row_to_retarget(row, "source")
         )
-        self.library_panel.retargetTargetRequested.connect(
+        self.content_browser_panel.retargetTargetRequested.connect(
             lambda row: self._send_library_row_to_retarget(row, "target")
         )
-        self.library_panel.batchRequested.connect(self._batch_library_export)
-        left_tabs.addTab(self.library_panel, self._icon("library", 16), "Library")
+        self.content_browser_panel.batchRequested.connect(self._batch_library_export)
+        self.content_browser_panel.libraryActionRequested.connect(self._handle_animation_library_action)
 
         self.scene_outliner_panel = QtSceneOutlinerPanel(self)
         self.scene_outliner_panel.objectSelected.connect(self._select_scene_object)
@@ -1791,16 +2395,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.scene_outliner_panel.objectVisibilityChanged.connect(self._set_scene_object_visible)
         self.scene_outliner_panel.objectLockedChanged.connect(self._set_scene_object_locked)
         self.scene_outliner_panel.objectRenamed.connect(self._rename_scene_object)
-        left_tabs.addTab(self.scene_outliner_panel, self._icon("props", 16), "Scene")
-
-        right_tabs = QtWidgets.QTabWidget()
-        right_tabs.setUsesScrollButtons(True)
-        right_tabs.setElideMode(QtCore.Qt.ElideRight)
-        right_tabs.tabBar().setExpanding(False)
-        right_tabs.setMinimumWidth(280)
-        right_tabs.setMaximumWidth(560)
-        right_tabs.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
-        self.right_tabs = right_tabs
         self.skeleton_panel = QtSkeletonPanel(self)
         self.lighting_panel = QtLightingPanel(self)
         self.camera_panel = QtCameraPanel(self)
@@ -1820,13 +2414,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.animations_panel.animationSelected.connect(self._handle_animation_selected)
         self.animations_panel.animationActionRequested.connect(self._handle_animation_action)
         self.animations_panel.seekRequested.connect(self._handle_animation_seek)
-        self.animation_library_panel = QtAnimationLibraryPanel(self)
-        self.animation_library_panel.libraryActionRequested.connect(self._handle_animation_library_action)
-        self.animation_library_combined_panel = QtAnimationLibraryCombinedPanel(
-            self.animations_panel,
-            self.animation_library_panel,
-            self,
-        )
+        self.animation_library_panel = self.content_browser_panel
         self.animation_retarget_window = QtAnimationRetargetWindow(self)
         self.animation_retarget_window.set_navigation_profile(
             self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
@@ -1865,6 +2453,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.blueprint_panel = self.blueprint_window.panel
         self._detachable_panels: dict[str, QtWidgets.QDockWidget] = {}
         self._detachable_panel_sizes = {
+            "content_browser": (760, 520),
+            "scene": (360, 620),
+            "properties": (420, 720),
+            "animations": (380, 520),
             "nodes": (620, 700),
             "lighting": (420, 620),
             "cameras": (460, 680),
@@ -1874,6 +2466,34 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             "2das": (980, 640),
             "resources": (980, 640),
         }
+        self.content_browser_dock = self._create_detachable_panel(
+            "content_browser",
+            "Content Browser",
+            self.content_browser_panel,
+            QtCore.Qt.BottomDockWidgetArea,
+            scroll=False,
+        )
+        self.scene_dock = self._create_detachable_panel(
+            "scene",
+            "Scene",
+            self.scene_outliner_panel,
+            QtCore.Qt.LeftDockWidgetArea,
+            scroll=False,
+        )
+        self.properties_dock = self._create_detachable_panel(
+            "properties",
+            "Properties",
+            self.properties_panel,
+            QtCore.Qt.RightDockWidgetArea,
+            scroll=True,
+        )
+        self.animations_dock = self._create_detachable_panel(
+            "animations",
+            "Animations",
+            self.animations_panel,
+            QtCore.Qt.RightDockWidgetArea,
+            scroll=False,
+        )
         self._create_detachable_panel("nodes", "Nodes", self.skeleton_panel, QtCore.Qt.LeftDockWidgetArea)
         self._create_detachable_panel("lighting", "Lighting", self.lighting_panel, QtCore.Qt.RightDockWidgetArea)
         self._create_detachable_panel("cameras", "Cameras", self.camera_panel, QtCore.Qt.RightDockWidgetArea)
@@ -1882,7 +2502,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.adjust_pivot_dock = self._create_detachable_panel("adjust_pivot", "Adjust Pivot", self.adjust_pivot_panel, QtCore.Qt.RightDockWidgetArea)
         self._create_detachable_panel("2das", "2DA Browser", self.twoda_panel, QtCore.Qt.LeftDockWidgetArea)
         self._create_detachable_panel("resources", "Resource Browser", self.resource_panel, QtCore.Qt.LeftDockWidgetArea)
-        main_splitter.addWidget(left_tabs)
+        for dock in (self.content_browser_dock, self.scene_dock, self.properties_dock):
+            dock.show()
 
         self.viewport = QtMainViewportWidget(self)
         self.viewport.set_navigation_profile(
@@ -1945,22 +2566,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         )
         self.viewport.measurementSettingsChanged.connect(self._merge_measurement_settings)
         self._apply_measurement_settings()
-        main_splitter.addWidget(self.viewport)
-
-        right_tabs.addTab(self.properties_panel, self._icon("props", 16), "Properties")
-        right_tabs.addTab(self.animation_library_combined_panel, self._icon("anims", 16), "Animation Library")
-        main_splitter.addWidget(right_tabs)
-        main_splitter.setStretchFactor(0, 0)
-        main_splitter.setStretchFactor(1, 1)
-        main_splitter.setStretchFactor(2, 0)
-        main_splitter.setSizes([420, 760, 380])
-        main_splitter.splitterMoved.connect(lambda _pos=0, _index=0: self._sync_viewport_toolbar_band())
 
         viewport_toolbar_band = self._make_viewport_toolbar_band(self.viewport.take_viewport_toolbar())
         if viewport_toolbar_band is not None:
             self.reserved_top_layout.addWidget(viewport_toolbar_band)
             QtCore.QTimer.singleShot(0, self._sync_reserved_top_rows)
-        vertical_splitter.addWidget(main_splitter)
+        vertical_splitter.addWidget(self.viewport)
 
         self.log_panel = QtLogPanel(self)
         self.log_panel.setMinimumHeight(96)
@@ -2449,8 +3060,61 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             )
         if hasattr(self, "scene_outliner_panel"):
             self.scene_outliner_panel.set_scene(scene)
+        self._refresh_scene_animation_entries()
         self._update_scene_chrome()
         self._refresh_adjust_pivot_panel()
+
+    def _refresh_scene_animation_entries(self) -> None:
+        panel = getattr(self, "content_browser_panel", getattr(self, "animation_library_panel", None))
+        if panel is None or not hasattr(panel, "set_scene_animation_entries"):
+            return
+        panel.set_scene_animation_entries(self._collect_scene_animation_entries())
+
+    def _collect_scene_animation_entries(self) -> list[dict]:
+        entries: list[dict] = []
+        for obj in self.scene_manager.active_scene.objects:
+            model = (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
+            if model is None:
+                continue
+            model_name = str(getattr(model, "name", "") or getattr(obj, "name", "") or "model")
+            game = str(getattr(getattr(obj, "source_ref", None), "game", "") or self._infer_game_from_model(model) or "").upper()
+            resref = str(getattr(getattr(obj, "source_ref", None), "resref", "") or "")
+            for anim in getattr(model, "animations", []) or []:
+                anim_name = str(getattr(anim, "name", "") or "").strip()
+                if not anim_name:
+                    continue
+                length = float(getattr(anim, "length", 0.0) or 0.0)
+                entries.append(
+                    {
+                        "game": game,
+                        "model": model_name,
+                        "resref": resref,
+                        "object_id": obj.id,
+                        "object_name": obj.name,
+                        "animation": anim_name,
+                        "frames": int(round(length * 30.0)) if length else "",
+                        "length": f"{length:.3f}" if length else "",
+                        "source": f"Scene: {obj.name}",
+                    }
+                )
+        return entries
+
+    def _activate_scene_object_model(self, obj) -> None:
+        model = (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
+        if model is None:
+            return
+        self._current_model = model
+        if hasattr(self, "animations_panel"):
+            self.animations_panel.load_model(model)
+        if hasattr(self, "animation_retarget_panel"):
+            game = str(getattr(getattr(obj, "source_ref", None), "game", "") or self._infer_game_from_model(model)).upper()
+            self.animation_retarget_panel.set_texture_dir(self._texture_dir)
+            if self._supports_animation_retarget_target(model):
+                mgr = self._get_resource_manager()
+                if mgr is not None:
+                    self.animation_retarget_panel.set_target_resource_context(mgr, game)
+                self._retarget_target_model = model
+                self.animation_retarget_panel.set_target_model(model, game)
 
     def _update_scene_chrome(self) -> None:
         scene = self.scene_manager.active_scene
@@ -2475,9 +3139,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.viewport.select_scene_object(object_id)
         obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
         if obj is not None:
-            model = obj.metadata.get("_runtime_model")
-            if model is not None:
-                self._current_model = model
+            self._activate_scene_object_model(obj)
             if hasattr(self, "properties_panel"):
                 show_scene_object = getattr(self.properties_panel, "show_scene_object", None)
                 if callable(show_scene_object):
@@ -2539,6 +3201,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self.scene_outliner_panel.set_scene(self.scene_manager.active_scene)
             obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
             if obj is not None:
+                self._activate_scene_object_model(obj)
                 show_scene_object = getattr(self.properties_panel, "show_scene_object", None)
                 if callable(show_scene_object):
                     show_scene_object(obj)
@@ -2704,6 +3367,17 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         except RuntimeError:
             self._auto_detect_thread = None
             self._auto_detect_worker = None
+            return False
+
+    def _animation_scan_worker_is_running(self) -> bool:
+        thread = self._animation_scan_thread
+        if thread is None:
+            return False
+        try:
+            return thread.isRunning()
+        except RuntimeError:
+            self._animation_scan_thread = None
+            self._animation_scan_worker = None
             return False
 
     def _set_model_internal(self, model, path: str = ""):
@@ -3026,7 +3700,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return False
         ok = self.animations_panel.select_animation(anim_name)
         if ok:
-            self._show_right_tab("Animation Library")
+            self._show_right_tab("Animations")
         return ok
 
     def _terminal_play_animation(self, anim_name: str = "", loop: Optional[bool] = None) -> str:
@@ -3086,7 +3760,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if hasattr(self, "animations_panel"):
             self.animations_panel.load_model(model, select_name=target_name)
         self._populate_animation_library_from_current_model()
-        self._show_right_tab("Animation Library")
+        self._show_content_browser("Animation")
         self._log(f"Animation override: {source_name} -> {target_name}", "success")
         return target_name
 
@@ -4285,40 +4959,135 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if not hasattr(self, "animation_library_panel"):
             return
         model = self._current_model
-        entries = []
+        entries = self._collect_scene_animation_entries()
+        scene_models = {
+            id((getattr(obj, "metadata", {}) or {}).get("_runtime_model"))
+            for obj in self.scene_manager.active_scene.objects
+            if (getattr(obj, "metadata", {}) or {}).get("_runtime_model") is not None
+        }
         if model is not None:
-            for anim in getattr(model, "animations", []) or []:
-                length = float(getattr(anim, "length", 0.0) or 0.0)
-                entries.append(
-                    {
-                        "model": getattr(model, "name", ""),
-                        "animation": getattr(anim, "name", ""),
-                        "frames": int(round(length * 30.0)) if length else "",
-                        "source": "Current model",
-                    }
-                )
-        self.animation_library_panel.set_entries(entries)
+            include_current = not scene_models or id(model) not in scene_models
+            if include_current:
+                for anim in getattr(model, "animations", []) or []:
+                    length = float(getattr(anim, "length", 0.0) or 0.0)
+                    entries.append(
+                        {
+                            "model": getattr(model, "name", ""),
+                            "animation": getattr(anim, "name", ""),
+                            "frames": int(round(length * 30.0)) if length else "",
+                            "source": "Current model",
+                        }
+                    )
+        panel = getattr(self, "content_browser_panel", getattr(self, "animation_library_panel", None))
+        if panel is not None and hasattr(panel, "set_scene_animation_entries"):
+            panel.set_scene_animation_entries(entries)
+        elif panel is not None and hasattr(panel, "set_animation_entries"):
+            panel.set_animation_entries(entries)
+        elif panel is not None and hasattr(panel, "set_entries"):
+            panel.set_entries(entries)
 
     def _handle_animation_library_action(self, action: str):
-        if action in {"Scan Animations", "Refresh"}:
-            self._populate_animation_library_from_current_model()
-            count = self.animation_library_panel.tree.topLevelItemCount()
-            self._log(f"Animation library refreshed: {count} current-model animations", "info")
+        if action == "Scan Animations":
+            self._scan_animation_library()
             return
-        entry = self.animation_library_panel.selected_entry()
+        if action == "Refresh":
+            self._populate_animation_library_from_current_model()
+            count = len(self._collect_scene_animation_entries())
+            model = self._current_model
+            if model is not None and not count:
+                count = len(getattr(model, "animations", []) or [])
+            self._log(f"Animation library refreshed: {count} scene/current animation rows", "info")
+            return
+        panel = getattr(self, "content_browser_panel", getattr(self, "animation_library_panel", None))
+        entry = panel.selected_entry() if panel is not None and hasattr(panel, "selected_entry") else None
         if not entry:
             QtWidgets.QMessageBox.information(self, "Animation Library", "Select an animation entry first.")
             return
         anim_name = str(entry.get("animation") or "")
         if action in {"Load", "Preview"}:
-            self._show_right_tab("Animation Library")
+            self._activate_animation_entry_model(entry)
+            self._show_right_tab("Animations")
             matches = self.animations_panel.listbox.findItems(anim_name, QtCore.Qt.MatchExactly)
             if matches:
                 self.animations_panel.listbox.setCurrentItem(matches[0])
             if action == "Preview":
                 self._handle_animation_action("Play", anim_name)
         elif action == "Export":
+            self._activate_animation_entry_model(entry)
             self._export_selected_animation(anim_name)
+
+    def _scan_animation_library(self) -> None:
+        if self._animation_scan_worker_is_running():
+            self._log("Animation library scan is already running.", "warning")
+            return
+        rows = list(getattr(self, "_library_rows", []) or [])
+        if not rows:
+            QtWidgets.QMessageBox.information(self, "Animation Library", "Scan the Content Browser library first.")
+            return
+        k1_dir, k2_dir = self._configured_game_dirs()
+        self._show_progress_toast("Scanning animations", "Reading animation headers from library models...")
+        panel = getattr(self, "content_browser_panel", None)
+        for name in ("scan_anims_button", "refresh_anims_button"):
+            button = getattr(panel, name, None) if panel is not None else None
+            if button is not None:
+                button.setEnabled(False)
+        worker = AnimationLibraryScanWorker(rows, k1_dir, k2_dir)
+        thread = QtCore.QThread(self)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.progress.connect(self._on_animation_library_scan_progress)
+        worker.finished.connect(self._on_animation_library_scanned)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: setattr(self, "_animation_scan_thread", None))
+        thread.finished.connect(lambda: setattr(self, "_animation_scan_worker", None))
+        self._animation_scan_thread = thread
+        self._animation_scan_worker = worker
+        thread.start()
+
+    @QtCore.Slot(str, int, int)
+    def _on_animation_library_scan_progress(self, detail: str, value: int, total: int) -> None:
+        self._update_progress_toast("Scanning animations", detail, value, total)
+        self.statusBar().showMessage(detail)
+
+    @QtCore.Slot(list, str)
+    def _on_animation_library_scanned(self, entries: list, error: str) -> None:
+        panel = getattr(self, "content_browser_panel", None)
+        for name in ("scan_anims_button", "refresh_anims_button"):
+            button = getattr(panel, name, None) if panel is not None else None
+            if button is not None:
+                button.setEnabled(True)
+        if error:
+            self._finish_progress_toast("Animation scan failed", "Check the output log for details.")
+            self._log(f"Animation library scan failed:\n{error}", "error")
+            return
+        if panel is not None and hasattr(panel, "set_scanned_animation_entries"):
+            panel.set_scanned_animation_entries(entries)
+            panel.select_asset_type("Animation")
+        self._finish_progress_toast("Animation library ready", f"{len(entries)} animation clips indexed.")
+        self._log(f"Animation library scan complete: {len(entries)} clips", "success")
+
+    def _activate_animation_entry_model(self, entry: dict) -> None:
+        object_id = str(entry.get("object_id") or "")
+        if object_id:
+            obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
+            if obj is not None:
+                self._activate_scene_object_model(obj)
+                return
+        resref = str(entry.get("resref") or "").strip()
+        game = str(entry.get("game") or self._current_game or "K1").upper()
+        if not resref:
+            return
+        mgr = self._get_resource_manager()
+        if mgr is None:
+            return
+        model = mgr.load_model(resref, game)
+        if model is None:
+            return
+        self._current_model = model
+        if hasattr(self, "animations_panel"):
+            self.animations_panel.load_model(model)
 
     def _populate_resource_panel(self):
         if not hasattr(self, "resource_panel"):
@@ -4774,18 +5543,26 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._log(f"Unreal source <- {game}:{row.get('resref', '')}", "success")
 
     def _show_right_tab(self, label: str):
-        tabs = getattr(self, "right_tabs", None)
-        if tabs is None:
-            self._not_migrated(label)
-            return
         needle = label.lower()
-        aliases = {"animations": ("anims", "anim lib")}
-        names = aliases.get(needle, (needle,))
-        for index in range(tabs.count()):
-            text = tabs.tabText(index).lower()
-            if any(name in text for name in names):
-                tabs.setCurrentIndex(index)
-                return
+        aliases = {
+            "animations": "animations",
+            "animation library": "animations",
+            "properties": "properties",
+        }
+        key = aliases.get(needle)
+        if key:
+            self._show_workspace_dock(key)
+        else:
+            self._not_migrated(label)
+
+    def _show_content_browser(self, asset_type: str = "All"):
+        panel = getattr(self, "content_browser_panel", None)
+        if panel is None:
+            self._not_migrated("Content Browser")
+            return
+        self._show_workspace_dock("content_browser")
+        if hasattr(panel, "select_asset_type"):
+            panel.select_asset_type(asset_type)
 
     def _get_model(self):
         return self._current_model
@@ -4847,11 +5624,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         panel = getattr(self, "library_panel", None)
         row = panel.selected_row() if panel is not None else None
         if not row:
-            tabs = getattr(self, "left_tabs", None)
-            if tabs is not None and panel is not None:
-                index = tabs.indexOf(panel)
-                if index >= 0:
-                    tabs.setCurrentIndex(index)
+            self._show_content_browser("Model")
             QtWidgets.QMessageBox.information(
                 self,
                 "Retarget Workbench",

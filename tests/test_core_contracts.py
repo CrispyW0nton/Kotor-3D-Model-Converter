@@ -1617,29 +1617,41 @@ def test_main_window_moves_utility_tabs_to_tools_windows() -> None:
     assert QtBlueprintEditorWindow.__name__ == "QtBlueprintEditorWindow"
 
 
-def test_main_window_combines_animation_tabs_and_removes_builder_tab() -> None:
+def test_main_window_routes_library_and_animation_library_to_content_browser() -> None:
     import inspect
 
-    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationLibraryCombinedPanel
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
     source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
-    assert "self.animation_library_combined_panel = QtAnimationLibraryCombinedPanel(" in source
-    assert 'right_tabs.addTab(self.animation_library_combined_panel, self._icon("anims", 16), "Animation Library")' in source
-    assert "right_tabs.addTab(self.animations_panel" not in source
+    assert "self.content_browser_panel = QtContentBrowserPanel(self)" in source
+    assert "self.library_panel = self.content_browser_panel" in source
+    assert 'self.content_browser_dock = self._create_detachable_panel(' in source
+    assert '"Content Browser"' in source
+    assert 'self.scene_dock = self._create_detachable_panel(' in source
+    assert 'self.properties_dock = self._create_detachable_panel(' in source
+    assert 'self.animations_dock = self._create_detachable_panel(' in source
+    assert "vertical_splitter.addWidget(self.viewport)" in source
+    assert "left_tabs.addTab(" not in source
+    assert "right_tabs.addTab(" not in source
+    assert "self.animation_library_panel = self.content_browser_panel" in source
+    assert "self.animation_library_combined_panel = QtAnimationLibraryCombinedPanel(" not in source
     assert "right_tabs.addTab(self.animation_library_panel" not in source
     assert "right_tabs.addTab(self.character_builder_panel" not in source
     assert "self.character_builder_panel = QtCharacterBuilderPanel" not in source
 
     actions_source = inspect.getsource(QtGhostRiggerMainWindow._build_actions)
     assert '"Animation Library"' in actions_source
-    assert 'self._show_right_tab("Animation Library")' in actions_source
+    assert 'self._show_content_browser("Animation")' in actions_source
+    assert "self.content_browser_action" in actions_source
+    assert "self.scene_panel_action" in actions_source
+    assert "self.properties_panel_action" in actions_source
 
     module_source = inspect.getsource(QtGhostRiggerMainWindow._handle_module_action)
     assert 'self._open_blueprint_editor_window()' in module_source
     assert 'self._show_right_tab("Blueprint")' not in module_source
 
-    assert QtAnimationLibraryCombinedPanel.__name__ == "QtAnimationLibraryCombinedPanel"
+    assert QtContentBrowserPanel.__name__ == "QtContentBrowserPanel"
 
 
 def test_main_window_bottom_area_is_resizable_splitter() -> None:
@@ -1650,10 +1662,10 @@ def test_main_window_bottom_area_is_resizable_splitter() -> None:
     source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
     assert "vertical_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)" in source
     assert "self.vertical_splitter = vertical_splitter" in source
-    assert "vertical_splitter.addWidget(main_splitter)" in source
+    assert "vertical_splitter.addWidget(self.viewport)" in source
     assert "vertical_splitter.addWidget(self.log_panel)" in source
     assert "root.addWidget(vertical_splitter, 1)" in source
-    assert "root.addWidget(main_splitter, 1)" not in source
+    assert "main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)" not in source
     assert "root.addWidget(self.log_panel, 0)" not in source
     assert "vertical_splitter.setSizes([720, 240])" in source
 
@@ -1862,6 +1874,43 @@ def test_retarget_apply_promotes_target_model_for_animation_list() -> None:
     assert ("populate",) in calls
     assert ("select", "walkss") in calls
     assert ("tab", "Animations") in calls
+
+
+def test_scene_animation_entries_collect_all_runtime_models() -> None:
+    from types import SimpleNamespace
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    window = SimpleNamespace()
+    anim_walk = SimpleNamespace(name="walk", length=1.0)
+    anim_talk = SimpleNamespace(name="talk", length=2.0)
+    bith = SimpleNamespace(name="N_Bith", animations=[anim_walk])
+    malak = SimpleNamespace(name="N_DarthMalak", animations=[anim_talk])
+    window.scene_manager = SimpleNamespace(
+        active_scene=SimpleNamespace(
+            objects=[
+                SimpleNamespace(
+                    id="obj-bith",
+                    name="Cantina Bith",
+                    source_ref=SimpleNamespace(game="K1", resref="n_bith"),
+                    metadata={"_runtime_model": bith},
+                ),
+                SimpleNamespace(
+                    id="obj-malak",
+                    name="Malak",
+                    source_ref=SimpleNamespace(game="K1", resref="n_darthmalak"),
+                    metadata={"_runtime_model": malak},
+                ),
+            ]
+        )
+    )
+    window._infer_game_from_model = lambda _model: "K1"
+
+    entries = QtGhostRiggerMainWindow._collect_scene_animation_entries(window)
+
+    assert {entry["animation"] for entry in entries} == {"walk", "talk"}
+    assert {entry["object_name"] for entry in entries} == {"Cantina Bith", "Malak"}
+    assert {entry["resref"] for entry in entries} == {"n_bith", "n_darthmalak"}
 
 
 def test_quinn_bone_map_loads_as_unreal_target_model() -> None:

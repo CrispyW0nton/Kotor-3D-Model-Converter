@@ -16,6 +16,13 @@ Built-in themes are:
 Themes define colours, fonts, icon provider defaults, Matrix bar style, and visual tokens.
 Layouts define window size, panel widths, splitter proportions, toolbar
 visibility, row heights, control density, and button display modes.
+The unified Content Browser uses the stable `contentBrowser` panel layout id.
+The Scene outliner uses `scene`, and Properties uses `properties`; all three
+are top-level dock widgets so layouts can size them without squeezing the
+viewport through permanent side tabs.
+The older `library` and `animationLibrary` ids remain in packaged layouts for
+user layout compatibility, but new Library and Animation Library entry points
+route through `contentBrowser`.
 Custom themes should define the `spinbox.*` colour tokens for numeric
 up/down controls: `spinbox.buttonBackground`, `spinbox.buttonHover`,
 `spinbox.buttonPressed`, `spinbox.buttonBorder`, and `spinbox.arrow`.

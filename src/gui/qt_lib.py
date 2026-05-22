@@ -118,6 +118,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
     ),
     "panels": (
         "qt_animation_panel",
+        "qt_content_browser_panel",
         "adjust_pivot_panel",
         "axis_mode_control",
         "qt_bottom_strip",

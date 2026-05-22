@@ -7,8 +7,10 @@ from xml.etree import ElementTree as ET
 from .style_tokens import VALID_BUTTON_MODES
 
 KNOWN_PANELS = {
+    "contentBrowser",
     "library",
     "modules",
+    "scene",
     "properties",
     "animationLibrary",
     "meshTools",

@@ -38,6 +38,7 @@ game_data/
 !/tests/__init__.py
 !/tests/conftest.py
 !/tests/test_core_contracts.py
+!/tests/test_content_browser_panel.py
 !/tests/test_regression.py
 !/tests/test_mcp_full_scan.py
 !/tests/test_mcp_resource_exposure.py
