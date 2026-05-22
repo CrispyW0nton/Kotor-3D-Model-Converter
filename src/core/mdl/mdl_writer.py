@@ -27,30 +27,30 @@ Geometry header  (80 bytes, at BASE+0):
   +76 geo_type   uint8    (MaxTree subtype: 2=model, 5=animation)
   +77..79        padding / unknown bytes (3 bytes)
 
-Model header  (88 bytes, at BASE+80):
+Model fields  (116 bytes, at BASE+80; together with geometry = _ModelHeader 0xC4):
   +0   model_type       uint8
   +1   subclassification uint8
-  +2   unknown_byte      uint8
-  +3   disable_fog       uint8
-  +4   unknown0          uint32
+  +2   padding0          uint8
+  +3   fog               uint8
+  +4   child_model_count uint32
   +8   anim_array_off    uint32   (relative to BASE)
   +12  anim_count        uint32
   +16  anim_count2       uint32
-  +20  unknown2          uint32
+  +20  parent_model_ptr  uint32
   +24  bb_min            3×float
   +36  bb_max            3×float
   +48  radius            float
   +52  anim_scale        float
   +56  supermodel        char[32]
+  +88  offset_to_super_root uint32
+  +92  mdx_data_buffer_offset uint32
+  +96  mdx_size          uint32
+  +100 mdx_offset        uint32
+  +104 name_offsets_off  uint32
+  +108 name_offsets_count uint32
+  +112 name_offsets_count2 uint32
 
-  Total model header = 88 bytes → ends at BASE+168
-
-Name block header (48 bytes, at BASE+168):
-  +0   unknown[4]   4×uint32
-  +16  names_off    uint32   (relative to BASE)
-  +20  names_count  uint32
-  +24  names_count2 uint32
-  +28..47           unknown (5×uint32)
+  Total _ModelHeader = 196 bytes → name offset table usually starts at BASE+196
 
   → Name offset table starts at BASE + names_off
   → Each entry: uint32 offset (relative to BASE) pointing to null-term string
@@ -362,18 +362,22 @@ class MDLBinaryWriter:
         buf.write(b'\x02')                 # geometry_type = 2 (model)
         buf.write(b'\x00' * (80 - (buf.tell() - _BASE)))
 
-        # 4c. Model header (88 bytes at BASE+80)
-        assert buf.tell() == _BASE + 80, f"Model header at wrong offset: {buf.tell()}"
+        # 4c. Model fields (116 bytes at BASE+80).
+        # PyKotor's _ModelHeader.SIZE is 0xC4, which includes the 80-byte
+        # geometry header plus these 116 bytes. K1 InputBinary::Reset reads the
+        # late fields directly, so a compact 88-byte model header leaves
+        # offset_to_super_root / mdx_size / name offsets in the wrong slots.
+        assert buf.tell() == _BASE + 80, f"Model fields at wrong offset: {buf.tell()}"
         buf.write(struct.pack('B', model.model_type & 0xFF))
         buf.write(struct.pack('B', getattr(model, 'subclassification', 0) & 0xFF))
-        buf.write(struct.pack('B', getattr(model, 'unknown_byte', 0) & 0xFF))
+        buf.write(struct.pack('B', getattr(model, 'padding0', getattr(model, 'unknown_byte', 0)) & 0xFF))
         buf.write(struct.pack('B', 1 if model.disable_fog else 0))
-        buf.write(_wu32(0))               # unknown0
+        buf.write(_wu32(0))               # child_model_count
         self._anim_arr_off_patch = buf.tell()   # anim_array_off (patched)
         buf.write(_wu32(0))
         buf.write(_wu32(len(model.animations)))  # anim_count
         buf.write(_wu32(len(model.animations)))  # anim_count2
-        buf.write(_wu32(0))               # unknown2
+        buf.write(_wu32(0))               # parent_model_pointer
         # Bounding box
         bb_min = model.bb_min or (0.0, 0.0, 0.0)
         bb_max = model.bb_max or (0.0, 0.0, 0.0)
@@ -382,22 +386,16 @@ class MDLBinaryWriter:
         buf.write(_wf32(getattr(model, 'radius', 0.0)))
         buf.write(_wf32(model.anim_scale or 1.0))
         buf.write(_wstr(model.supermodel or 'NULL', 32))
-        # Pad to exactly 88 bytes
-        _written = buf.tell() - (_BASE + 80)
-        if _written < 88:
-            buf.write(b'\x00' * (88 - _written))
-
-        # 4d. Name block (48 bytes at BASE+168)
-        assert buf.tell() == _BASE + 168, f"Name block at wrong offset: {buf.tell()}"
-        # 4 unknown uint32s
-        buf.write(b'\x00' * 16)
-        self._names_arr_off_patch = buf.tell()   # names_off (patched)
+        self._super_root_off_patch = buf.tell()
+        buf.write(_wu32(0))               # offset_to_super_root (patched)
+        buf.write(_wu32(0))               # mdx_data_buffer_offset
+        buf.write(_wu32(len(mdx_bytes)))  # mdx_size
+        buf.write(_wu32(0))               # mdx_offset
+        self._names_arr_off_patch = buf.tell()   # name_offsets_off (patched)
         buf.write(_wu32(0))
         buf.write(_wu32(len(self._names)))
         buf.write(_wu32(len(self._names)))
-        # 5 more unknown uint32s
-        buf.write(b'\x00' * 20)
-        assert buf.tell() == _BASE + 216, f"After name block: {buf.tell()}"
+        assert buf.tell() == _BASE + 196, f"After _ModelHeader: {buf.tell()}"
 
         # Write name offset table + strings
         names_table_off = buf.tell() - _BASE  # relative to BASE
@@ -425,6 +423,8 @@ class MDLBinaryWriter:
         # Patch root_off in geometry header
         end = buf.tell()
         buf.seek(self._root_off_patch)
+        buf.write(_wu32(root_off))
+        buf.seek(self._super_root_off_patch)
         buf.write(_wu32(root_off))
         buf.seek(end)
 

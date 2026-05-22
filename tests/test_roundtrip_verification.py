@@ -182,6 +182,33 @@ def test_mdl_writer_sets_engine_maxtree_subtype_bytes():
     assert mdl_bytes[base + anim_rel + 0x4C] == 0x05
 
 
+def test_mdl_writer_emits_full_engine_model_header_fields():
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
+
+    root = ModelNode(
+        name="pmbam",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH),
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+        faces=[(0, 1, 2)],
+    )
+    model = KotorModel(name="pmbam", root_node=root, animations=[])
+
+    mdl_bytes, mdx_bytes = MDLBinaryWriter().write(model)
+    base = 12
+
+    root_off = struct.unpack_from("<I", mdl_bytes, base + 0x28)[0]
+    assert struct.unpack_from("<I", mdl_bytes, base + 0xA8)[0] == root_off
+    assert struct.unpack_from("<I", mdl_bytes, base + 0xAC)[0] == 0
+    assert struct.unpack_from("<I", mdl_bytes, base + 0xB0)[0] == len(mdx_bytes)
+    assert struct.unpack_from("<I", mdl_bytes, base + 0xB4)[0] == 0
+    assert struct.unpack_from("<I", mdl_bytes, base + 0xB8)[0] == 0xC4
+    assert struct.unpack_from("<I", mdl_bytes, base + 0xBC)[0] == 1
+    assert struct.unpack_from("<I", mdl_bytes, base + 0xC0)[0] == 1
+
+
 def test_legacy_mdl_porter_sets_engine_maxtree_model_subtype_byte():
     from src.core.geometry.model_data import KotorModel, ModelNode
     from src.core.mdl.mdl_porter import MDLBinaryWriter
@@ -190,4 +217,8 @@ def test_legacy_mdl_porter_sets_engine_maxtree_model_subtype_byte():
 
     mdl_bytes, _mdx_bytes = MDLBinaryWriter().build(model)
 
-    assert mdl_bytes[12 + 0x4C] == 0x02
+    base = 12
+    root_off = struct.unpack_from("<I", mdl_bytes, base + 0x28)[0]
+    assert mdl_bytes[base + 0x4C] == 0x02
+    assert struct.unpack_from("<I", mdl_bytes, base + 0xA8)[0] == root_off
+    assert struct.unpack_from("<I", mdl_bytes, base + 0xB8)[0] == 0xC4

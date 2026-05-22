@@ -285,12 +285,11 @@ class MDLBinaryWriter:
         # names array: one entry per node, stored as null-terminated strings
         # Plan layout (all offsets relative to BASE):
         #   BASE+0:    geo header (80)
-        #   BASE+80:   model header (88)
-        #   BASE+168:  names array header (24) → points to ptr array
-        #   BASE+192:  name ptr array (4 * n_nodes)
-        #   BASE+192+4n: name strings (null-terminated, padded to 4-byte alignment)
+        #   BASE+80:   model fields (116) completing _ModelHeader.SIZE=0xC4
+        #   BASE+196:  name ptr array (4 * n_nodes)
+        #   BASE+196+4n: name strings (null-terminated, padded to 4-byte alignment)
         name_strs = [n.name for n in all_nodes]
-        ptr_array_rel    = 192   # relative to BASE
+        ptr_array_rel    = 196   # relative to BASE
         string_base_rel  = ptr_array_rel + 4 * len(all_nodes)
 
         # Build name string data
@@ -529,11 +528,12 @@ class MDLBinaryWriter:
         struct.pack_into('<I', geo_hdr, 44, len(all_nodes))
         geo_hdr[76] = 2   # geometry type = 2 (model) at MaxTree +0x4C
 
-        # Model header (88 bytes)
-        mod_hdr = bytearray(88)
+        # Model fields (116 bytes after the 80-byte geometry header).  Together
+        # with geo_hdr this is PyKotor's / the engine's 0xC4 _ModelHeader.
+        mod_hdr = bytearray(116)
         mod_hdr[0] = model.model_type or 4
         mod_hdr[1] = getattr(model, 'subclassification', 0) & 0xFF
-        mod_hdr[2] = getattr(model, 'unknown_byte', 0) & 0xFF
+        mod_hdr[2] = getattr(model, 'padding0', getattr(model, 'unknown_byte', 0)) & 0xFF
         mod_hdr[3] = 1 if model.disable_fog else 0
         struct.pack_into('<I', mod_hdr,  8, anim_ptr_start_rel)
         struct.pack_into('<I', mod_hdr, 12, len(model.animations))
@@ -546,18 +546,18 @@ class MDLBinaryWriter:
         struct.pack_into('<f',   mod_hdr, 52, model.anim_scale or 1.0)
         sm = (model.supermodel or "").encode('ascii','replace')[:32].ljust(32, b'\x00')
         mod_hdr[56:88] = sm
-
-        # Names array header (24 bytes at BASE+168)
-        names_hdr = bytearray(24)
-        struct.pack_into('<I', names_hdr,  8, len(all_nodes))   # count2
-        struct.pack_into('<I', names_hdr, 16, ptr_array_rel)    # offset of ptr array
-        struct.pack_into('<I', names_hdr, 20, len(all_nodes))   # count
+        struct.pack_into('<I', mod_hdr,  88, root_node_off)     # offset_to_super_root
+        struct.pack_into('<I', mod_hdr,  92, 0)                 # mdx_data_buffer_offset
+        struct.pack_into('<I', mod_hdr,  96, len(mdx))          # mdx_size
+        struct.pack_into('<I', mod_hdr, 100, 0)                 # mdx_offset
+        struct.pack_into('<I', mod_hdr, 104, ptr_array_rel)     # offset_to_name_offsets
+        struct.pack_into('<I', mod_hdr, 108, len(all_nodes))    # name_offsets_count
+        struct.pack_into('<I', mod_hdr, 112, len(all_nodes))    # name_offsets_count2
 
         # Assemble everything
         mdl_body = bytearray()
         mdl_body += geo_hdr
         mdl_body += mod_hdr
-        mdl_body += names_hdr
         mdl_body += name_ptr_section
         mdl_body += name_data
         for blk in node_blocks:

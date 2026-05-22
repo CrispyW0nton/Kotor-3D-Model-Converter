@@ -47,6 +47,31 @@ Writer implication:
 The regression test is `tests/test_roundtrip_verification.py::
 test_mdl_writer_sets_engine_maxtree_subtype_bytes`.
 
+## Model Header Size
+
+PyKotor's `_ModelHeader.SIZE` is `0xC4` / 196 bytes. That size includes:
+
+- `0x00..0x4F`: 80-byte geometry header;
+- `0x50..0xC3`: 116 bytes of model fields.
+
+The late model fields are engine-facing and must not be moved behind a custom
+GhostRigger name-block header:
+
+- `+0xA8` `offset_to_super_root` should point at the model root node offset;
+- `+0xAC` `mdx_data_buffer_offset` is usually 0 for the emitted MDX buffer;
+- `+0xB0` `mdx_size` must match the MDX byte length;
+- `+0xB4` `mdx_offset` is usually 0 for the companion MDX;
+- `+0xB8` `offset_to_name_offsets` points to the uint32 name-offset table;
+- `+0xBC` and `+0xC0` are duplicate name-offset counts.
+
+Stock `PMBAM` has `offset_to_name_offsets = 0xC4`, meaning the name-offset
+table starts immediately after `_ModelHeader`. GhostRigger exports should keep
+that canonical layout unless a specific source file requires preservation of a
+different valid offset.
+
+The regression test is `tests/test_roundtrip_verification.py::
+test_mdl_writer_emits_full_engine_model_header_fields`.
+
 ## Recommended Use
 
 Use Ghidra MCP when:
