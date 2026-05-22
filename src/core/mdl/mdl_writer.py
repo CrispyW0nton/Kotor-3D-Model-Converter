@@ -1358,6 +1358,7 @@ class MDLBinaryWriter:
           Animation node tree
         """
         anim_nodes = self._animation_nodes_with_hierarchy(anim, self._nodes)
+        self._validate_animation_export_tree(anim, anim_nodes, self._nodes)
         anim_root_name = anim.anim_root or (anim_nodes[0].name if anim_nodes else '')
         node_count = len(anim_nodes)
 
@@ -1415,34 +1416,26 @@ class MDLBinaryWriter:
             buf.seek(end)
 
     def _animation_nodes_with_hierarchy(self, anim: Animation, all_nodes: List[ModelNode]) -> List[ModelNode]:
-        """Return animation nodes as a geometry-hierarchy tree.
+        """Return animation nodes as a full target geometry-hierarchy tree.
 
-        Retarget preview can use flat animation-node lists because playback
-        resolves by name. Binary MDL readers walk only descendants of the
-        animation root, so export must add controllerless ancestor stubs.
+        Retarget preview can use sparse/flat animation-node lists because
+        playback resolves controllers by name. The KotOR engine walks the
+        binary animation tree itself in routines such as UpdateAnimFootprint,
+        so export must preserve the target Aurora hierarchy shape, including
+        controllerless placeholders for unkeyed toes, hands, helpers, and
+        meshes. Controllers from ``anim.nodes`` are overlaid onto cloned target
+        nodes by name; node rest transforms and parent/child links come from the
+        target model.
         """
         source_nodes = list(getattr(anim, 'nodes', None) or [])
-        if not source_nodes:
+        if not all_nodes:
             return []
 
-        geom_by_name = {
-            str(getattr(node, 'name', '') or '').lower(): node
-            for node in (all_nodes or [])
-            if getattr(node, 'name', '')
-        }
         order_by_name = {
             str(getattr(node, 'name', '') or '').lower(): index
             for index, node in enumerate(all_nodes or [])
             if getattr(node, 'name', '')
         }
-        local_by_name: Dict[str, ModelNode] = {}
-
-        def clone_anim_node(node: ModelNode) -> ModelNode:
-            cloned = copy.copy(node)
-            cloned.children = []
-            cloned.parent = None
-            cloned.controllers = list(getattr(node, 'controllers', []) or [])
-            return cloned
 
         def clone_stub_node(node: ModelNode) -> ModelNode:
             cloned = node.clone_shallow() if hasattr(node, 'clone_shallow') else copy.copy(node)
@@ -1451,58 +1444,37 @@ class MDLBinaryWriter:
             cloned.controllers = []
             return cloned
 
+        controller_by_name: Dict[str, list] = {}
         for node in source_nodes:
             key = str(getattr(node, 'name', '') or '').lower()
             if key:
-                local_by_name[key] = clone_anim_node(node)
+                controller_by_name[key] = list(getattr(node, 'controllers', []) or [])
 
-        for key in list(local_by_name):
-            geom = geom_by_name.get(key)
-            parent = getattr(geom, 'parent', None) if geom is not None else None
-            while parent is not None:
-                parent_key = str(getattr(parent, 'name', '') or '').lower()
-                if parent_key and parent_key not in local_by_name:
-                    local_by_name[parent_key] = clone_stub_node(parent)
-                parent = getattr(parent, 'parent', None)
-
-        for node in local_by_name.values():
-            node.children = []
-            node.parent = None
+        local_by_source_id: Dict[int, ModelNode] = {}
+        for geom in all_nodes:
+            clone = clone_stub_node(geom)
+            key = str(getattr(geom, 'name', '') or '').lower()
+            clone.controllers = list(controller_by_name.get(key, []))
+            local_by_source_id[id(geom)] = clone
 
         roots: List[ModelNode] = []
-        for key, node in local_by_name.items():
-            geom = geom_by_name.get(key)
-            parent = getattr(geom, 'parent', None) if geom is not None else None
-            linked = False
-            while parent is not None:
-                parent_key = str(getattr(parent, 'name', '') or '').lower()
-                parent_node = local_by_name.get(parent_key)
-                if parent_node is not None:
-                    node.parent = parent_node
-                    parent_node.children.append(node)
-                    linked = True
-                    break
-                parent = getattr(parent, 'parent', None)
-            if not linked:
+        for geom in all_nodes:
+            node = local_by_source_id[id(geom)]
+            parent = getattr(geom, 'parent', None)
+            parent_node = local_by_source_id.get(id(parent)) if parent is not None else None
+            if parent_node is not None and parent_node is not node:
+                node.parent = parent_node
+                parent_node.children.append(node)
+            else:
                 roots.append(node)
 
-        root_key = str(getattr(anim, 'anim_root', '') or '').lower()
-        requested_root = local_by_name.get(root_key) if root_key else None
-        root_node = requested_root if requested_root in roots else None
-        if root_node is None and roots:
-            root_node = min(
-                roots,
-                key=lambda node: order_by_name.get(
-                    str(getattr(node, 'name', '') or '').lower(),
-                    1_000_000,
-                ),
-            )
-        if root_node is not None:
-            for node in list(roots):
-                if node is root_node:
-                    continue
-                node.parent = root_node
-                root_node.children.append(node)
+        root_node = min(
+            roots,
+            key=lambda node: order_by_name.get(
+                str(getattr(node, 'name', '') or '').lower(),
+                1_000_000,
+            ),
+        ) if roots else None
 
         ordered: List[ModelNode] = []
         seen = set()
@@ -1525,7 +1497,7 @@ class MDLBinaryWriter:
         if root_node is not None:
             visit(root_node)
         for node in sorted(
-            local_by_name.values(),
+            local_by_source_id.values(),
             key=lambda item: order_by_name.get(
                 str(getattr(item, 'name', '') or '').lower(),
                 1_000_000,
@@ -1533,6 +1505,72 @@ class MDLBinaryWriter:
         ):
             visit(node)
         return ordered
+
+    @staticmethod
+    def _validate_animation_export_tree(
+        anim: Animation,
+        anim_nodes: List[ModelNode],
+        target_nodes: List[ModelNode],
+    ) -> None:
+        """Fail early if the binary animation tree no longer mirrors target nodes."""
+
+        if not target_nodes:
+            return
+        expected_names = [str(getattr(node, 'name', '') or '').lower() for node in target_nodes]
+        actual_names = [str(getattr(node, 'name', '') or '').lower() for node in anim_nodes]
+        if actual_names != expected_names:
+            raise ValueError(
+                f"Animation '{getattr(anim, 'name', '')}' export tree has {len(anim_nodes)} nodes "
+                f"but target model hierarchy has {len(target_nodes)} nodes; binary Aurora "
+                "animations must preserve the full target hierarchy, including unkeyed placeholders."
+            )
+
+        actual_by_name = {
+            str(getattr(node, 'name', '') or '').lower(): node
+            for node in anim_nodes
+            if getattr(node, 'name', '')
+        }
+        for target, actual in zip(target_nodes, anim_nodes):
+            expected_parent = (
+                str(getattr(target.parent, 'name', '') or '').lower()
+                if getattr(target, 'parent', None) is not None
+                else None
+            )
+            actual_parent = (
+                str(getattr(actual.parent, 'name', '') or '').lower()
+                if getattr(actual, 'parent', None) is not None
+                else None
+            )
+            if actual_parent != expected_parent:
+                raise ValueError(
+                    f"Animation '{getattr(anim, 'name', '')}' export tree parent mismatch for "
+                    f"node '{getattr(actual, 'name', '')}': expected {expected_parent!r}, got {actual_parent!r}."
+                )
+
+            expected_children = [
+                str(getattr(child, 'name', '') or '').lower()
+                for child in getattr(target, 'children', []) or []
+            ]
+            actual_children = [
+                str(getattr(child, 'name', '') or '').lower()
+                for child in getattr(actual, 'children', []) or []
+            ]
+            if actual_children != expected_children:
+                raise ValueError(
+                    f"Animation '{getattr(anim, 'name', '')}' export tree child mismatch for "
+                    f"node '{getattr(actual, 'name', '')}': expected {expected_children!r}, got {actual_children!r}."
+                )
+            if actual.parent is actual or any(child is actual for child in getattr(actual, 'children', []) or []):
+                raise ValueError(
+                    f"Animation '{getattr(anim, 'name', '')}' export tree has a self-reference at "
+                    f"node '{getattr(actual, 'name', '')}'."
+                )
+            for child_name in actual_children:
+                if child_name not in actual_by_name:
+                    raise ValueError(
+                        f"Animation '{getattr(anim, 'name', '')}' export tree references missing child "
+                        f"node '{child_name}'."
+                    )
 
     def _write_anim_node_tree(self, buf: BytesIO, root: ModelNode,
                                anim_node_abs: Dict[int, int]) -> int:

@@ -72,6 +72,29 @@ different valid offset.
 The regression test is `tests/test_roundtrip_verification.py::
 test_mdl_writer_emits_full_engine_model_header_fields`.
 
+## Animation Footprint Tree
+
+K1 live testing with a custom local `victory` animation reached
+`UpdateAnimFootprint` at `0x00437db0` and crashed at `0x00437f3f`:
+
+- the function reads the child array pointer/count from the current animation
+  node header (`[EDI + 0x2C]` / `[EDI + 0x30]`);
+- it indexes into that child array and treats each child offset as a full node;
+- it immediately reads fields such as `[EDI + 0x48]` from the child node.
+
+Writer implication:
+
+- Do not export sparse animation trees containing only keyed nodes plus
+  ancestors.
+- Local animation blocks must preserve the target Aurora node hierarchy shape:
+  every target node, original parent/child relationships, and valid child arrays
+  must be emitted even when the node has no controllers.
+- Unkeyed nodes should be controllerless placeholder animation nodes, not
+  omitted nodes and not fake header-count-only entries.
+
+The regression test is `tests/test_roundtrip_verification.py::
+test_mdl_writer_exports_full_target_hierarchy_for_sparse_animation_tree`.
+
 ## Recommended Use
 
 Use Ghidra MCP when:

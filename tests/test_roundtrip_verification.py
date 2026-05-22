@@ -209,6 +209,83 @@ def test_mdl_writer_emits_full_engine_model_header_fields():
     assert struct.unpack_from("<I", mdl_bytes, base + 0xC0)[0] == 1
 
 
+def test_mdl_writer_exports_full_target_hierarchy_for_sparse_animation_tree():
+    from src.core.geometry.model_data import Animation, KotorModel, ModelNode
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
+
+    root = ModelNode(name="pmbam")
+    pelvis = ModelNode(name="pelvis_g", parent=root)
+    helper = ModelNode(name="headhook", parent=root)
+    upperarm = ModelNode(name="lupperarm_g", parent=pelvis)
+    hand = ModelNode(name="lhand_g", parent=upperarm)
+    leg = ModelNode(name="lthigh_g", parent=pelvis)
+    root.children = [pelvis, helper]
+    pelvis.children = [upperarm, leg]
+    upperarm.children = [hand]
+
+    keyed_hand = ModelNode(
+        name="lhand_g",
+        controllers=[
+            {
+                "type": 20,
+                "name": "orientation",
+                "columns": 4,
+                "times": [0.0],
+                "values": [(0.0, 0.0, 0.0, 1.0)],
+            }
+        ],
+    )
+    model = KotorModel(
+        name="pmbam",
+        root_node=root,
+        animations=[Animation(name="victory", length=0.0, anim_root="pmbam", nodes=[keyed_hand])],
+    )
+
+    mdl_bytes, _mdx_bytes = MDLBinaryWriter().write(model)
+    base = 12
+
+    name_table_rel = struct.unpack_from("<I", mdl_bytes, base + 0xB8)[0]
+    name_count = struct.unpack_from("<I", mdl_bytes, base + 0xBC)[0]
+    names = []
+    for index in range(name_count):
+        string_rel = struct.unpack_from("<I", mdl_bytes, base + name_table_rel + index * 4)[0]
+        string_abs = base + string_rel
+        end = mdl_bytes.index(b"\0", string_abs)
+        names.append(mdl_bytes[string_abs:end].decode("ascii"))
+
+    anim_table_rel = struct.unpack_from("<I", mdl_bytes, base + 0x58)[0]
+    anim_rel = struct.unpack_from("<I", mdl_bytes, base + anim_table_rel)[0]
+    anim_abs = base + anim_rel
+    root_rel = struct.unpack_from("<I", mdl_bytes, anim_abs + 0x28)[0]
+    node_count = struct.unpack_from("<I", mdl_bytes, anim_abs + 0x2C)[0]
+    assert node_count == 6
+
+    visited_offsets: set[int] = set()
+    visited_names: list[str] = []
+
+    def walk(node_rel: int) -> None:
+        node_abs = base + node_rel
+        assert node_rel != 0
+        assert node_abs not in visited_offsets
+        visited_offsets.add(node_abs)
+        name_index = struct.unpack_from("<H", mdl_bytes, node_abs + 0x04)[0]
+        visited_names.append(names[name_index])
+        child_array_rel = struct.unpack_from("<I", mdl_bytes, node_abs + 0x2C)[0]
+        child_count = struct.unpack_from("<I", mdl_bytes, node_abs + 0x30)[0]
+        child_count2 = struct.unpack_from("<I", mdl_bytes, node_abs + 0x34)[0]
+        assert child_count == child_count2
+        for child_index in range(child_count):
+            child_rel = struct.unpack_from("<I", mdl_bytes, base + child_array_rel + child_index * 4)[0]
+            assert child_rel != 0
+            assert child_rel != node_rel
+            walk(child_rel)
+
+    walk(root_rel)
+
+    assert visited_names == ["pmbam", "pelvis_g", "lupperarm_g", "lhand_g", "lthigh_g", "headhook"]
+    assert len(visited_offsets) == node_count
+
+
 def test_legacy_mdl_porter_sets_engine_maxtree_model_subtype_byte():
     from src.core.geometry.model_data import KotorModel, ModelNode
     from src.core.mdl.mdl_porter import MDLBinaryWriter
