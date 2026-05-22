@@ -312,7 +312,7 @@ class AuroraAnimationInjectionRequest:
     fps: float = 30.0
     overwrite_existing: bool = True
     write_zero_position_controllers: bool = False
-    max_size_multiplier: float = 2.0
+    max_size_multiplier: float = 5.0
     verify_roundtrip: bool = False
     roundtrip_tolerance: float = 1e-4
     target_model_override: Optional[KotorModel] = None
@@ -671,6 +671,9 @@ class AuroraAnimationWriter:
 
         aurora_rest_bases = self._capture_aurora_rest_bases(model)
         target_curves = payload.get("target_curves", {}) or {}
+        orientation_tracks: Dict[str, Tuple[List[float], List[List[float]]]] = {}
+        position_tracks: Dict[str, Tuple[List[float], List[List[float]]]] = {}
+        canonical_times: List[float] = []
         for requested_name, curve in sorted(target_curves.items()):
             target_node = model.find_node(curve.get("target_bone") or requested_name)
             if target_node is None:
@@ -728,9 +731,72 @@ class AuroraAnimationWriter:
                     rotations.append(_slerp_xyzw(frame_zero_rotation, source_rest_rotation, hybrid_weight))
                 else:
                     rotations.append(source_rest_rotation)
+            rotations = self._hemisphere_continuous_xyzw(rotations)
+            self._validate_controller_rows(target_node.name, times, rotations, 4)
+            key = str(target_node.name or "").lower()
+            orientation_tracks[key] = (times, rotations)
+            position_tracks[key] = (
+                times,
+                self._position_values_from_frames(frames, default_position=target_node.position),
+            )
+            canonical_times = self._merge_controller_times(canonical_times, times)
+
+        if not canonical_times:
+            canonical_times = self._fallback_animation_times(frame_count, duration, fps)
+        if canonical_times:
+            anim.length = max(float(anim.length or 0.0), max(canonical_times))
+
+        root_motion_present = any(
+            self._is_root_or_pelvis_node(model, node_name)
+            and self._position_values_have_motion(values)
+            for node_name, (_times, values) in position_tracks.items()
+        )
+
+        for target_node in model.all_nodes():
+            key = str(target_node.name or "").lower()
+            times, rotations = orientation_tracks.get(
+                key,
+                (
+                    canonical_times,
+                    self._constant_orientation_values(target_node.rotation, len(canonical_times)),
+                ),
+            )
+            rotations = self._hemisphere_continuous_xyzw(rotations)
             self._validate_controller_rows(target_node.name, times, rotations, 4)
 
-            controllers = [
+            controllers = []
+            if write_zero_position_controllers:
+                controllers.append(
+                    {
+                        "type": CTRL_POSITION,
+                        "name": "position",
+                        "columns": 3,
+                        "times": times,
+                        "values": [[0.0, 0.0, 0.0] for _ in times],
+                    }
+                )
+            elif root_motion_present and self._is_root_or_pelvis_node(model, key):
+                pos_times, pos_values = position_tracks.get(
+                    key,
+                    (
+                        canonical_times,
+                        [
+                            [float(target_node.position[0]), float(target_node.position[1]), float(target_node.position[2])]
+                            for _ in canonical_times
+                        ],
+                    ),
+                )
+                self._validate_controller_rows(target_node.name, pos_times, pos_values, 3)
+                controllers.append(
+                    {
+                        "type": CTRL_POSITION,
+                        "name": "position",
+                        "columns": 3,
+                        "times": pos_times,
+                        "values": pos_values,
+                    }
+                )
+            controllers.append(
                 {
                     "type": CTRL_ORIENTATION,
                     "name": "orientation",
@@ -738,18 +804,7 @@ class AuroraAnimationWriter:
                     "times": times,
                     "values": rotations,
                 }
-            ]
-            if write_zero_position_controllers:
-                controllers.insert(
-                    0,
-                    {
-                        "type": CTRL_POSITION,
-                        "name": "position",
-                        "columns": 3,
-                        "times": times,
-                        "values": [[0.0, 0.0, 0.0] for _ in times],
-                    },
-                )
+            )
 
             anim.nodes.append(ModelNode(name=target_node.name, controllers=controllers))
 
@@ -775,6 +830,14 @@ class AuroraAnimationWriter:
             warnings.append(
                 "R3.5 uses the FBX bind/rest pose as the source retarget reference before applying motion deltas."
             )
+        warnings.append(
+            "R3.6 emits full-hierarchy Aurora orientation controllers, including constant keys for "
+            "unmoving target nodes, so in-game playback does not fall back to A-pose branches."
+        )
+        if root_motion_present:
+            warnings.append(
+                "R3.6 detected source root motion and emitted root/pelvis position controllers."
+            )
         return anim
 
     @staticmethod
@@ -789,6 +852,107 @@ class AuroraAnimationWriter:
         ]
         start = raw[0]
         return [max(0.0, value - start) for value in raw]
+
+    @staticmethod
+    def _merge_controller_times(existing: List[float], incoming: List[float]) -> List[float]:
+        merged = [float(value) for value in existing]
+        merged.extend(float(value) for value in incoming)
+        finite = [value for value in merged if math.isfinite(value) and value >= 0.0]
+        return sorted(set(round(value, 7) for value in finite))
+
+    @staticmethod
+    def _fallback_animation_times(frame_count: int, duration: float, fps: float) -> List[float]:
+        if frame_count <= 1:
+            return [0.0]
+        if duration > 0.0:
+            step = float(duration) / float(max(1, frame_count - 1))
+            return [round(index * step, 7) for index in range(frame_count)]
+        step = 1.0 / float(fps or 30.0)
+        return [round(index * step, 7) for index in range(frame_count)]
+
+    @staticmethod
+    def _normalize_quat_xyzw(values: Iterable[float]) -> List[float]:
+        raw = list(values or [])
+        padded = (raw + [0.0, 0.0, 0.0, 1.0])[:4]
+        quat = np.asarray([float(value) for value in padded], dtype=np.float64)
+        norm = float(np.linalg.norm(quat))
+        if norm <= 1e-12 or not math.isfinite(norm):
+            return [0.0, 0.0, 0.0, 1.0]
+        return [float(value) for value in quat / norm]
+
+    @classmethod
+    def _hemisphere_continuous_xyzw(cls, values: List[List[float]]) -> List[List[float]]:
+        result: List[List[float]] = []
+        previous: Optional[np.ndarray] = None
+        for raw in values:
+            quat = np.asarray(cls._normalize_quat_xyzw(raw), dtype=np.float64)
+            if previous is not None and float(np.dot(previous, quat)) < 0.0:
+                quat = -quat
+            result.append([float(value) for value in quat])
+            previous = quat
+        return result
+
+    @classmethod
+    def _constant_orientation_values(
+        cls,
+        rotation_xyzw: Iterable[float],
+        count: int,
+    ) -> List[List[float]]:
+        quat = cls._normalize_quat_xyzw(rotation_xyzw)
+        return [list(quat) for _ in range(max(1, count))]
+
+    @staticmethod
+    def _three_floats(values: Iterable[float], default: Tuple[float, float, float]) -> List[float]:
+        raw = list(values or [])
+        padded = (raw + list(default))[:3]
+        result = []
+        for index, value in enumerate(padded):
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                numeric = float(default[index])
+            result.append(numeric if math.isfinite(numeric) else float(default[index]))
+        return result
+
+    @classmethod
+    def _position_values_from_frames(
+        cls,
+        frames: List[dict],
+        *,
+        default_position: Tuple[float, float, float],
+    ) -> List[List[float]]:
+        default = (
+            float(default_position[0]),
+            float(default_position[1]),
+            float(default_position[2]),
+        )
+        return [
+            cls._three_floats(frame.get("location_xyz"), default)
+            for frame in frames
+        ]
+
+    @staticmethod
+    def _position_values_have_motion(values: List[List[float]], epsilon: float = 1e-5) -> bool:
+        if len(values) < 2:
+            return False
+        first = np.asarray(values[0][:3], dtype=np.float64)
+        for value in values[1:]:
+            current = np.asarray(value[:3], dtype=np.float64)
+            if float(np.linalg.norm(current - first)) > epsilon:
+                return True
+        return False
+
+    @staticmethod
+    def _is_root_or_pelvis_node(model: KotorModel, node_name: str) -> bool:
+        key = str(node_name or "").lower()
+        root = str(getattr(getattr(model, "root_node", None), "name", "") or "").lower()
+        return key in {
+            root,
+            "root",
+            "rootdummy",
+            "pelvis",
+            "pelvis_g",
+        }
 
     def _capture_aurora_rest_bases(self, model: KotorModel) -> Dict[str, np.ndarray]:
         """Capture Aurora world-space rest rotation bases by node name."""

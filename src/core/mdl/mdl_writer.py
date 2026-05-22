@@ -318,18 +318,13 @@ class MDLBinaryWriter:
         # ── 2. Build name list (deduplicated, preserving DFS order) ─────────
         self._names: List[str] = []
         self._name_idx: Dict[str, int] = {}
+        self._name_idx_ci: Dict[str, int] = {}
         for nd in self._nodes:
-            nm = nd.name.lower() if nd.name else 'unnamed'
-            if nm not in self._name_idx:
-                self._name_idx[nm] = len(self._names)
-                self._names.append(nm)
+            self._register_name(nd.name)
         # Also add animation node names
         for anim in model.animations:
             for an in anim.nodes:
-                nm = an.name.lower() if an.name else 'unnamed'
-                if nm not in self._name_idx:
-                    self._name_idx[nm] = len(self._names)
-                    self._names.append(nm)
+                self._register_name(an.name)
 
         # ── 3. Build MDX buffer ──────────────────────────────────────────────
         self._mdx_buf = BytesIO()
@@ -474,6 +469,24 @@ class MDLBinaryWriter:
         Many tests call writer.build(model); this is identical to write(model).
         """
         return self.write(model)
+
+    def _register_name(self, name: str) -> int:
+        """Register an MDL name table entry without changing its original case."""
+
+        nm = str(name or 'unnamed')
+        if nm not in self._name_idx:
+            self._name_idx[nm] = len(self._names)
+            self._name_idx_ci.setdefault(nm.lower(), self._name_idx[nm])
+            self._names.append(nm)
+        return self._name_idx[nm]
+
+    def _name_index_for(self, name: str) -> int:
+        """Return the name-table index, preferring byte/case-exact node names."""
+
+        nm = str(name or 'unnamed')
+        if nm in self._name_idx:
+            return self._name_idx[nm]
+        return self._name_idx_ci.get(nm.lower(), 0)
 
     # ─────────────────────────────  MDX  ────────────────────────────────────
 
@@ -662,8 +675,7 @@ class MDLBinaryWriter:
         """
         node_start = buf.tell()
 
-        nm = (node.name or 'unnamed').lower()
-        name_idx = self._name_idx.get(nm, 0)
+        name_idx = self._name_index_for(node.name)
 
         # ── Node header  (80 bytes) ──────────────────────────────────────────
         buf.write(_wu16(node.flags))
@@ -1451,10 +1463,12 @@ class MDLBinaryWriter:
                 controller_by_name[key] = list(getattr(node, 'controllers', []) or [])
 
         local_by_source_id: Dict[int, ModelNode] = {}
+        fallback_orientation_times = self._animation_export_key_times(anim)
         for geom in all_nodes:
             clone = clone_stub_node(geom)
             key = str(getattr(geom, 'name', '') or '').lower()
             clone.controllers = list(controller_by_name.get(key, []))
+            self._ensure_export_orientation_controller(clone, fallback_orientation_times)
             local_by_source_id[id(geom)] = clone
 
         roots: List[ModelNode] = []
@@ -1507,6 +1521,53 @@ class MDLBinaryWriter:
         return ordered
 
     @staticmethod
+    def _animation_export_key_times(anim: Animation) -> List[float]:
+        times: List[float] = []
+        for node in getattr(anim, 'nodes', []) or []:
+            for ctrl in getattr(node, 'controllers', []) or []:
+                for raw_time in ctrl.get('times', []) or []:
+                    try:
+                        value = float(raw_time)
+                    except (TypeError, ValueError):
+                        continue
+                    if math.isfinite(value) and value >= 0.0:
+                        times.append(value)
+        if times:
+            return sorted(set(round(value, 7) for value in times))
+
+        length = float(getattr(anim, 'length', 0.0) or 0.0)
+        if math.isfinite(length) and length > 0.0:
+            return [0.0, round(length, 7)]
+        return [0.0]
+
+    @staticmethod
+    def _normalized_xyzw(values: Tuple[float, float, float, float]) -> List[float]:
+        raw = list(values or (0.0, 0.0, 0.0, 1.0))[:4]
+        while len(raw) < 4:
+            raw.append(1.0 if len(raw) == 3 else 0.0)
+        mag_sq = sum(float(value) * float(value) for value in raw)
+        if mag_sq <= 1e-12 or not math.isfinite(mag_sq):
+            return [0.0, 0.0, 0.0, 1.0]
+        mag = math.sqrt(mag_sq)
+        return [float(value) / mag for value in raw]
+
+    @classmethod
+    def _ensure_export_orientation_controller(cls, node: ModelNode, times: List[float]) -> None:
+        for ctrl in getattr(node, 'controllers', []) or []:
+            if int(ctrl.get('type', 0) or 0) == CTRL_ORIENTATION or str(ctrl.get('name', '')).lower() == 'orientation':
+                return
+        quat = cls._normalized_xyzw(getattr(node, 'rotation', (0.0, 0.0, 0.0, 1.0)))
+        node.controllers.append(
+            {
+                'type': CTRL_ORIENTATION,
+                'name': 'orientation',
+                'columns': 4,
+                'times': list(times or [0.0]),
+                'values': [list(quat) for _ in (times or [0.0])],
+            }
+        )
+
+    @staticmethod
     def _validate_animation_export_tree(
         anim: Animation,
         anim_nodes: List[ModelNode],
@@ -1516,28 +1577,29 @@ class MDLBinaryWriter:
 
         if not target_nodes:
             return
-        expected_names = [str(getattr(node, 'name', '') or '').lower() for node in target_nodes]
-        actual_names = [str(getattr(node, 'name', '') or '').lower() for node in anim_nodes]
+        expected_names = [str(getattr(node, 'name', '') or '') for node in target_nodes]
+        actual_names = [str(getattr(node, 'name', '') or '') for node in anim_nodes]
         if actual_names != expected_names:
             raise ValueError(
                 f"Animation '{getattr(anim, 'name', '')}' export tree has {len(anim_nodes)} nodes "
                 f"but target model hierarchy has {len(target_nodes)} nodes; binary Aurora "
-                "animations must preserve the full target hierarchy, including unkeyed placeholders."
+                "animations must preserve the full target hierarchy, including unkeyed placeholders "
+                "and original node-name casing."
             )
 
         actual_by_name = {
-            str(getattr(node, 'name', '') or '').lower(): node
+            str(getattr(node, 'name', '') or ''): node
             for node in anim_nodes
             if getattr(node, 'name', '')
         }
         for target, actual in zip(target_nodes, anim_nodes):
             expected_parent = (
-                str(getattr(target.parent, 'name', '') or '').lower()
+                str(getattr(target.parent, 'name', '') or '')
                 if getattr(target, 'parent', None) is not None
                 else None
             )
             actual_parent = (
-                str(getattr(actual.parent, 'name', '') or '').lower()
+                str(getattr(actual.parent, 'name', '') or '')
                 if getattr(actual, 'parent', None) is not None
                 else None
             )
@@ -1548,11 +1610,11 @@ class MDLBinaryWriter:
                 )
 
             expected_children = [
-                str(getattr(child, 'name', '') or '').lower()
+                str(getattr(child, 'name', '') or '')
                 for child in getattr(target, 'children', []) or []
             ]
             actual_children = [
-                str(getattr(child, 'name', '') or '').lower()
+                str(getattr(child, 'name', '') or '')
                 for child in getattr(actual, 'children', []) or []
             ]
             if actual_children != expected_children:
@@ -1642,8 +1704,7 @@ class MDLBinaryWriter:
         after the 80-byte base, which we do not emit for animation nodes.
         """
         node_start = buf.tell()
-        nm = (node.name or 'unnamed').lower()
-        name_idx = self._name_idx.get(nm, 0)
+        name_idx = self._name_index_for(node.name)
 
         # Animation nodes must always be DUMMY (0x0001) — see NWN binary spec
         # and PyKotor io_mdl.py.  Mesh flags belong only in geometry nodes.
