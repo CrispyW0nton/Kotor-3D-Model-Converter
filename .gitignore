@@ -193,6 +193,7 @@ exports/
 !/exports/failure_analysis.json
 exports/retargets/day4_mcp_smoke/
 .pytest_tmp_fbx_exporter/
+!/tests/test_ghostrigger_retarget_preview_controller.py
 audit_deep.py
 audit_exhaustive.py
 _patch_viewport.py

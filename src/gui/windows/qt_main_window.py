@@ -51,6 +51,10 @@ from src.gui.qt_lib.dialogs.qt_render_frame_dialog import QtRenderFrameDialog
 from src.gui.qt_lib.panels.qt_modular_panel import QtModularModePanel
 from src.gui.qt_lib.panels.qt_resource_panel import QtResourceBrowserPanel, QtTwoDaBrowserPanel
 from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
+from src.gui.qt_lib.windows.qt_retarget_preview_controller import (
+    QtRetargetViewportAdapter,
+    RetargetPreviewUiController,
+)
 from src.gui.qt_lib.panels.qt_rig_panel import QtRigWindow
 from src.gui.qt_lib.dialogs.qt_settings_dialog import QtSettingsDialog, save_settings
 from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow
@@ -1122,6 +1126,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.retarget_workbench_action = QtGui.QAction(self._icon("anims"), "Animation Retargeting Workbench...", self)
         self.retarget_workbench_action.setShortcut("Ctrl+Shift+A")
         self.retarget_workbench_action.triggered.connect(self._open_animation_retarget_window)
+        self.load_retarget_source_clip_action = QtGui.QAction("Load UE/FBX Source Animation...", self)
+        self.load_retarget_source_clip_action.triggered.connect(self._load_retarget_source_clip)
+        self.load_retarget_profile_action = QtGui.QAction("Load Retarget Profile...", self)
+        self.load_retarget_profile_action.triggered.connect(self._load_retarget_profile)
+        self.preview_retarget_action = QtGui.QAction(self._icon("anims"), "Preview Retarget", self)
+        self.preview_retarget_action.setEnabled(False)
+        self.preview_retarget_action.triggered.connect(self._preview_retarget_animation)
         self.unreal_animator_action = QtGui.QAction(self._icon("anims"), "Unreal Animator...", self)
         self.unreal_animator_action.setShortcut("Ctrl+Shift+U")
         self.unreal_animator_action.triggered.connect(self._open_unreal_animator_window)
@@ -1247,6 +1258,14 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         help_menu.addAction(about_action)
         help_menu.addAction(viewport_controls_action)
         help_menu.addAction(format_action)
+
+        retarget_menu = self.menuBar().addMenu("Retarget")
+        retarget_menu.addAction(self.load_retarget_source_clip_action)
+        retarget_menu.addAction(self.load_retarget_profile_action)
+        retarget_menu.addAction(self.preview_retarget_action)
+        retarget_menu.addSeparator()
+        retarget_menu.addAction(self.retarget_workbench_action)
+        retarget_menu.addAction(self.unreal_animator_action)
 
         modules_menu = self.menuBar().addMenu("Modules")
         modules_menu.addAction(self.modules_action)
@@ -1425,6 +1444,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._tool_button("Settings  F2", self.settings_action, "settings", compact=True))
         layout.addWidget(self._separator())
         layout.addWidget(self._tool_button("Anims  Ctrl+A", self.anims_action, "anims", compact=True))
+        layout.addWidget(self._tool_button("Preview Retarget", self.preview_retarget_action, "anims", compact=True))
         layout.addWidget(self._tool_button("Sequence", self.sequence_editor_action, "anims", compact=True))
         layout.addWidget(self._tool_button("Lights", self.lighting_panel_action, "", compact=True))
         layout.addWidget(self._tool_button("Cameras", self.camera_panel_action, "", compact=True))
@@ -1860,6 +1880,14 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         )
         self.viewport.measurementSettingsChanged.connect(self._merge_measurement_settings)
         self._apply_measurement_settings()
+        self._retarget_preview_viewport = QtRetargetViewportAdapter(self.viewport, parent=self)
+        self.retarget_preview_controller = RetargetPreviewUiController(
+            viewport=self._retarget_preview_viewport,
+            preview_action=self.preview_retarget_action,
+            target_model_provider=lambda: self._retarget_target_model or self._current_model,
+            log_callback=self._log,
+            status_callback=self.statusBar().showMessage,
+        )
         main_splitter.addWidget(self.viewport)
 
         right_tabs.addTab(self.properties_panel, self._icon("props", 16), "Properties")
@@ -2211,6 +2239,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self.animations_panel.load_model(None)
             if hasattr(self, "animation_retarget_panel"):
                 self.animation_retarget_panel.set_target_model(None)
+            if hasattr(self, "retarget_preview_controller"):
+                self.retarget_preview_controller.update_enabled()
             if hasattr(self, "diagnostics_panel"):
                 self.diagnostics_panel.run_diagnostics(None)
             self.props_text.clear()
@@ -2387,6 +2417,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             else:
                 self._retarget_target_model = None
                 self.animation_retarget_panel.set_target_model(None, game)
+        if hasattr(self, "retarget_preview_controller"):
+            self.retarget_preview_controller.update_enabled()
         self._animation_engine = None
         self._animation_timer.stop()
         self._animation_last_tick = None
@@ -3190,6 +3222,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.animation_retarget_panel.set_target_resource_context(mgr, game)
         self.animation_retarget_panel.set_target_model(model, game)
         self._retarget_refresh_mapping()
+        if hasattr(self, "retarget_preview_controller"):
+            self.retarget_preview_controller.update_enabled()
         self._log(f"Retarget target set: {getattr(model, 'name', '?')}", "success")
 
     def _retarget_preview(self, anim_name: str):
@@ -4075,6 +4109,56 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         window.raise_()
         window.activateWindow()
 
+    def _load_retarget_source_clip(self):
+        path, _selected = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Load UE/FBX Source Animation",
+            str(Path(self._model_path).parent if self._model_path else self.app_root),
+            "FBX animation files (*.fbx);;All files (*.*)",
+        )
+        if not path:
+            return
+        controller = getattr(self, "retarget_preview_controller", None)
+        if controller is None:
+            self._not_migrated("Preview Retarget")
+            return
+        try:
+            clip = controller.load_source_clip(path)
+            self.statusBar().showMessage(f"Loaded source clip: {getattr(clip, 'clip_name', Path(path).stem)}")
+        except Exception as exc:
+            self._log(f"UE/FBX source import failed: {exc}", "error")
+            QtWidgets.QMessageBox.critical(self, "Load UE/FBX Source Animation", str(exc))
+
+    def _load_retarget_profile(self):
+        path, _selected = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Load Retarget Profile",
+            str(self.app_root),
+            "Retarget profile JSON (*.json);;All files (*.*)",
+        )
+        if not path:
+            return
+        controller = getattr(self, "retarget_preview_controller", None)
+        if controller is None:
+            self._not_migrated("Preview Retarget")
+            return
+        try:
+            profile = controller.load_retarget_profile(path)
+            slot = str(getattr(profile, "animation_slot", "") or "(no slot)")
+            self.statusBar().showMessage(f"Loaded retarget profile: {getattr(profile, 'name', Path(path).stem)} [{slot}]")
+        except Exception as exc:
+            self._log(f"Retarget profile load failed: {exc}", "error")
+            QtWidgets.QMessageBox.critical(self, "Load Retarget Profile", str(exc))
+
+    def _preview_retarget_animation(self):
+        controller = getattr(self, "retarget_preview_controller", None)
+        if controller is None:
+            self._not_migrated("Preview Retarget")
+            return
+        preview = controller.preview_retarget(auto_play=True, show_node_overlay=True)
+        if preview is None and getattr(controller, "last_error", ""):
+            self.statusBar().showMessage("Retarget preview failed")
+
     def _open_unreal_animator_window(self):
         window = getattr(self, "unreal_animator_window", None)
         if window is None:
@@ -4283,6 +4367,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 window.set_target_resource_context(mgr, game)
             window.set_target_model(model, game)
             self._log(f"Retarget target <- {game}:{row.get('resref', '')}", "success")
+            if hasattr(self, "retarget_preview_controller"):
+                self.retarget_preview_controller.update_enabled()
         self._retarget_refresh_mapping()
         self._open_animation_retarget_window()
 
@@ -4564,6 +4650,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self._retarget_target_model = None
                 self._retarget_mapping_report = None
                 self.animation_retarget_panel.set_target_model(None, game)
+        if hasattr(self, "retarget_preview_controller"):
+            self.retarget_preview_controller.update_enabled()
         if hasattr(self, "diagnostics_panel"):
             self.diagnostics_panel.run_diagnostics(model)
         self.props_text.setPlainText(
