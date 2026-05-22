@@ -206,6 +206,8 @@ exports/retargets/day4_mcp_smoke/
 .pytest_tmp_fbx_exporter/
 !/tests/test_ghostrigger_retarget_preview_controller.py
 !/tests/test_ghostrigger_retarget_export_controller.py
+!/tests/test_retarget_workbench_modes.py
+!/tests/test_ghostrigger_retarget_workbench_controller.py
 audit_deep.py
 audit_exhaustive.py
 _patch_viewport.py

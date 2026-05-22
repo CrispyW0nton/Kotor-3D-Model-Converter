@@ -179,6 +179,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "qt_character_builder_window",
         "qt_main_window",
         "qt_retarget_preview_controller",
+        "qt_retarget_workbench_controller",
         "qt_retarget_window",
         "qt_unreal_animator",
     ),

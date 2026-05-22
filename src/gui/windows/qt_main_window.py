@@ -63,6 +63,11 @@ from src.gui.qt_lib.windows.qt_retarget_preview_controller import (
     QtRetargetViewportAdapter,
     RetargetPreviewUiController,
 )
+from src.gui.qt_lib.windows.qt_retarget_workbench_controller import (
+    RetargetWorkbenchController,
+    combo_current_retarget_mode,
+    populate_retarget_mode_combo,
+)
 from src.gui.qt_lib.panels.qt_rig_panel import QtRigWindow
 from src.gui.qt_lib.dialogs.qt_settings_dialog import QtSettingsDialog, save_settings
 from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow
@@ -1434,6 +1439,14 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addLayout(title_box)
         layout.addStretch(1)
 
+        self.retarget_mode_combo = QtWidgets.QComboBox()
+        self.retarget_mode_combo.setObjectName("retargetModeComboBox")
+        self.retarget_mode_combo.setMinimumWidth(150)
+        self.retarget_mode_combo.setMaximumWidth(190)
+        populate_retarget_mode_combo(self.retarget_mode_combo)
+        self.retarget_mode_combo.currentIndexChanged.connect(self._on_retarget_mode_changed)
+        layout.addWidget(self.retarget_mode_combo, 0, QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+
         meta_box = QtWidgets.QVBoxLayout()
         meta_box.setContentsMargins(0, 0, 0, 0)
         meta_box.setSpacing(2)
@@ -1979,6 +1992,14 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             log_callback=self._log,
             status_callback=self.statusBar().showMessage,
         )
+        self.retarget_workbench_controller = RetargetWorkbenchController(
+            ue_to_kotor_controller=self.retarget_preview_controller,
+            preview_action=self.preview_retarget_action,
+            export_action=self.export_retarget_preview_action,
+            log_callback=self._log,
+            status_callback=self.statusBar().showMessage,
+        )
+        self._apply_retarget_workbench_mode_status()
         main_splitter.addWidget(self.viewport)
 
         right_tabs.addTab(self.properties_panel, self._icon("props", 16), "Properties")
@@ -4673,10 +4694,32 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         window.activateWindow()
 
     def _sync_retarget_preview_target(self) -> None:
-        controller = getattr(self, "retarget_preview_controller", None)
+        controller = getattr(self, "retarget_workbench_controller", None)
         if controller is None:
             return
         controller.set_target_model(self._retarget_target_model or self._current_model)
+
+    def _on_retarget_mode_changed(self, _index: int = -1) -> None:
+        combo = getattr(self, "retarget_mode_combo", None)
+        controller = getattr(self, "retarget_workbench_controller", None)
+        if combo is None or controller is None:
+            return
+        try:
+            controller.set_mode(combo_current_retarget_mode(combo))
+            self._apply_retarget_workbench_mode_status()
+        except Exception as exc:
+            self._log(f"Retarget mode change failed: {exc}", "error")
+            self.statusBar().showMessage("Retarget mode change failed")
+
+    def _apply_retarget_workbench_mode_status(self) -> None:
+        controller = getattr(self, "retarget_workbench_controller", None)
+        combo = getattr(self, "retarget_mode_combo", None)
+        if controller is None:
+            return
+        spec = controller.current_mode_spec()
+        if combo is not None:
+            combo.setToolTip(controller.mode_status_text())
+        self.statusBar().showMessage(f"Retarget mode: {spec.label}")
 
     def _load_retarget_source_clip(self):
         path, _selected = QtWidgets.QFileDialog.getOpenFileName(
@@ -4687,7 +4730,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         )
         if not path:
             return
-        controller = getattr(self, "retarget_preview_controller", None)
+        controller = getattr(self, "retarget_workbench_controller", None)
         if controller is None:
             self._not_migrated("Preview Retarget")
             return
@@ -4707,7 +4750,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         )
         if not path:
             return
-        controller = getattr(self, "retarget_preview_controller", None)
+        controller = getattr(self, "retarget_workbench_controller", None)
         if controller is None:
             self._not_migrated("Preview Retarget")
             return
@@ -4720,16 +4763,20 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.critical(self, "Load Retarget Profile", str(exc))
 
     def _preview_retarget_animation(self):
-        controller = getattr(self, "retarget_preview_controller", None)
+        controller = getattr(self, "retarget_workbench_controller", None)
         if controller is None:
             self._not_migrated("Preview Retarget")
             return
-        preview = controller.preview_retarget(auto_play=True, show_node_overlay=True)
-        if preview is None and getattr(controller, "last_error", ""):
-            self.statusBar().showMessage("Retarget preview failed")
+        try:
+            preview = controller.preview(auto_play=True, show_node_overlay=True)
+            if preview is None and getattr(controller, "last_error", ""):
+                self.statusBar().showMessage("Retarget preview failed")
+        except Exception as exc:
+            self._log(str(exc), "warning")
+            self.statusBar().showMessage("Retarget preview unavailable in this mode")
 
     def _export_retarget_preview(self):
-        controller = getattr(self, "retarget_preview_controller", None)
+        controller = getattr(self, "retarget_workbench_controller", None)
         if controller is None:
             self._not_migrated("Export Retarget Preview")
             return
@@ -4778,7 +4825,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 return
             overwrite = True
 
-        result = controller.export_retarget_preview(mdl_path, overwrite=overwrite)
+        result = controller.export_preview(mdl_path, overwrite=overwrite)
         if result is None:
             detail = getattr(controller, "last_error", "") or "Export failed."
             QtWidgets.QMessageBox.critical(self, "Export Retarget Preview", detail)
