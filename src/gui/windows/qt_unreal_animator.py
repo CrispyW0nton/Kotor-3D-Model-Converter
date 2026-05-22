@@ -1020,9 +1020,11 @@ class QtUnrealAnimatorWindow(QtWidgets.QMainWindow):
     def _set_viewport_gpu_enabled(viewport, enabled: bool) -> None:
         if viewport is None or not hasattr(viewport, "toggle_gpu_renderer"):
             return
+        if not bool(enabled):
+            return
         current = bool(getattr(viewport, "_use_gpu", False))
-        if current != bool(enabled):
-            viewport.toggle_gpu_renderer(bool(enabled))
+        if not current:
+            viewport.toggle_gpu_renderer(True)
 
     def _force_gpu_for_animation_preview(self) -> None:
         if self._animation_gpu_restore_state is None:
@@ -1034,12 +1036,9 @@ class QtUnrealAnimatorWindow(QtWidgets.QMainWindow):
         self._set_viewport_gpu_enabled(self.target_viewport, True)
 
     def _restore_gpu_after_animation_preview(self) -> None:
-        state = self._animation_gpu_restore_state
-        if state is None:
-            return
         self._animation_gpu_restore_state = None
-        self._set_viewport_gpu_enabled(self.source_viewport, state[0])
-        self._set_viewport_gpu_enabled(self.target_viewport, state[1])
+        self._set_viewport_gpu_enabled(self.source_viewport, True)
+        self._set_viewport_gpu_enabled(self.target_viewport, True)
 
     def _on_animation_selection_changed(self) -> None:
         anim = self._selected_source_animation()

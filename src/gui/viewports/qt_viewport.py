@@ -6452,7 +6452,51 @@ class QtViewportWidget(QtWidgets.QWidget):
             log.debug("Hovered mesh outline draw failed: %s", exc)
 
     def _draw_selected_model_outline(self, draw, w: int, h: int) -> None:
-        self._draw_hovered_mesh_outline(draw, w, h)
+        if self.model is None or not self._is_selected_model_root(getattr(self._renderer, "selected_node", None)):
+            self._draw_hovered_mesh_outline(draw, w, h)
+            return
+        try:
+            mesh_nodes = self.model.mesh_nodes() if hasattr(self.model, "mesh_nodes") else []
+            points: list[tuple[float, float]] = []
+            for node in mesh_nodes:
+                if getattr(node, "_gr_hidden", False):
+                    continue
+                bounds = self._projected_mesh_bounds(node, w, h)
+                if bounds is None:
+                    continue
+                _min_x, _min_y, _max_x, _max_y, _world_verts, projected = bounds
+                for point in projected:
+                    if point is not None:
+                        points.append((float(point[0]), float(point[1])))
+            if len(points) < 3:
+                return
+
+            unique = sorted(set(points))
+
+            def cross(o, a, b) -> float:
+                return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+            lower: list[tuple[float, float]] = []
+            for point in unique:
+                while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0:
+                    lower.pop()
+                lower.append(point)
+            upper: list[tuple[float, float]] = []
+            for point in reversed(unique):
+                while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0:
+                    upper.pop()
+                upper.append(point)
+            hull = lower[:-1] + upper[:-1]
+            if len(hull) < 3:
+                return
+
+            shadow = (0, 0, 0, 155)
+            glow = (255, 212, 0, 230)
+            closed = hull + [hull[0]]
+            draw.line(closed, fill=shadow, width=6)
+            draw.line(closed, fill=glow, width=2)
+        except Exception as exc:
+            log.debug("Selected model outline draw failed: %s", exc)
 
     def _draw_mesh_subobject_selection(self, draw, w: int, h: int) -> None:
         state = getattr(self, "mesh_selection_state", None)

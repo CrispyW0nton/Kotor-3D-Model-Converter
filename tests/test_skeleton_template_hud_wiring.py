@@ -162,22 +162,24 @@ def test_shift_snaps_viewport_rotation_gimbal_to_ten_degrees() -> None:
 
 def test_import_root_gimbal_transforms_whole_mesh_and_supports_scale() -> None:
     viewport = _read("src/gui/viewports/qt_viewport.py")
-    core = _read("src/gui/viewport_core.py")
+    core = _read("src/gui/rendering/viewport_core.py")
 
-    assert "self.set_gimbal_mode(1 if current >= 3 else current + 1)" in viewport
-    assert "3: \"Scale\"" in viewport
+    assert "self._transform_gizmo.cycle_mode()" in viewport
+    assert "def set_gimbal_mode" in viewport
+    assert "GizmoMode.SCALE" in viewport
+    assert "return \"[S]\" if self._compact_controls else \"[Scale]\"" in viewport
     assert "def _apply_model_gimbal_drag" in viewport
     assert "apply_external_model_fit_adjustment" in viewport
     assert "translation_delta=translation_delta" in viewport
     assert "scale_delta=scale_delta" in viewport
     assert "def _hit_test_model_bounds" in viewport
     assert "def _draw_selected_model_outline" in viewport
-    assert "gimbal_mode: 0=none, 1=translate, 2=rotate, 3=scale" in core
+    assert "Scale mode (gimbal_mode==3)" in core
     assert "elif self.gimbal_mode == 3" in core
 
 
 def test_rotation_gimbal_rings_are_hit_testable() -> None:
-    core = _read("src/gui/viewport_core.py")
+    core = _read("src/gui/rendering/viewport_core.py")
 
     assert "_gimbal_handle_lines" in core
     assert "self._gimbal_handle_lines.append" in core
@@ -196,7 +198,7 @@ def test_viewport_supports_multi_joint_marquee_and_group_drag() -> None:
 
 def test_external_template_skeleton_is_selectable_and_symmetry_aware() -> None:
     viewport = _read("src/gui/viewports/qt_viewport.py")
-    core = _read("src/gui/viewport_core.py")
+    core = _read("src/gui/rendering/viewport_core.py")
     builder = _read("src/gui/panels/qt_character_builder_panel.py")
     inspector = _read("src/gui/panels/qt_inspector_panel.py")
 
@@ -235,7 +237,7 @@ def test_viewport_preloads_textures_for_skin_nodes() -> None:
 
 def test_external_dcc_imports_disable_kotor_uv_seam_repair() -> None:
     workflow = _read("src/core/characters/headless_body_workflow.py")
-    viewport = _read("src/gui/viewport_core.py")
+    viewport = _read("src/gui/rendering/viewport_core.py")
 
     assert "def _mark_external_import" in workflow
     assert 'setattr(node, "_external_imported", True)' in workflow
@@ -245,8 +247,8 @@ def test_external_dcc_imports_disable_kotor_uv_seam_repair() -> None:
 
 
 def test_gpu_renderer_clamps_single_tile_character_atlases_like_cpu_renderer() -> None:
-    viewport = _read("src/gui/viewport_core.py")
-    gpu = _read("src/gui/gpu_renderer.py")
+    viewport = _read("src/gui/rendering/viewport_core.py")
+    gpu = _read("src/gui/rendering/gpu_renderer.py")
 
     assert "FIX-EDGEBLEED (CPU)" in viewport
     assert "FIX-EDGEBLEED (GPU)" in viewport

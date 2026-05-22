@@ -8,6 +8,7 @@ scan still needs direct, synchronous helpers for PyKotor-vs-GhostRigger parity.
 from __future__ import annotations
 
 import os
+import math
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Iterable, Optional
@@ -89,6 +90,21 @@ def _vec(values: Any) -> list[float]:
         return [float(v) for v in values]
     except Exception:
         return []
+
+
+def _close_quat(left: Any, right: Any, tol: float = 1e-5) -> bool:
+    """Return True when quaternions match, allowing the equivalent negated form."""
+    a = _vec(left)
+    b = _vec(right)
+    if len(a) != 4 or len(b) != 4:
+        return False
+    if any(not math.isfinite(v) for v in (*a, *b)):
+        return False
+
+    def close(sign: float) -> bool:
+        return all(abs(a[i] - sign * b[i]) <= tol for i in range(4))
+
+    return close(1.0) or close(-1.0)
 
 
 def _face_tuple(face: Any) -> tuple[int, int, int] | None:

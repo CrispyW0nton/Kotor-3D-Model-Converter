@@ -2409,8 +2409,8 @@ def test_unreal_animator_uses_gpu_during_animation_preview() -> None:
 
         window.stop_preview()
 
-        assert window.source_viewport._use_gpu is False
-        assert window.target_viewport._use_gpu is False
+        assert window.source_viewport._use_gpu is True
+        assert window.target_viewport._use_gpu is True
     finally:
         window.close()
 
