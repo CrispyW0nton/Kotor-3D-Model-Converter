@@ -5,8 +5,8 @@ Architecture note (Khononov, "Balancing Coupling in Software Design"):
   Tool handlers in tools/decompile.py depend only on the public methods of
   AgentDecompileClient — Contract Coupling to a stable adapter surface.
 
-The remote AgentDecompile server hosts Ghidra-analysed KotOR game binaries
-in the "Odyssey" shared repository:
+An AgentDecompile server can host Ghidra-analysed KotOR game binaries
+in a shared repository:
   - swkotor.exe        (K1 GoG / retail)
   - swkotor2.exe       (K2 / TSL)
   - Additional DLLs, modules, scripts
@@ -14,12 +14,13 @@ in the "Odyssey" shared repository:
 Connection topology:
   KotorMCP tools
     → AgentDecompileClient (this module)
-    → http://170.9.241.140:8080/mcp/  (AgentDecompile HTTP MCP server)
+    → local AgentDecompile HTTP MCP server
     → Ghidra PyGhidra runtime
-    → Ghidra shared repository (170.9.241.140:13100, repo "Odyssey")
+    → local or user-configured Ghidra shared repository
 
-For Claude Desktop the same backend is accessed via the agdec-proxy stdio
-bridge — see docs/AGENTDECOMPILE_INTEGRATION.md.
+Do not hardcode remote hosts, usernames, or passwords here. Configure private
+AgentDecompile/Ghidra endpoints through local environment variables or local MCP
+configuration files that are ignored by git.
 """
 from __future__ import annotations
 
@@ -34,11 +35,11 @@ from typing import Any, Dict, List, Optional
 # ── connection defaults (override via environment or explicit arguments) ──────
 _DEFAULT_SERVER_URL = os.environ.get(
     "AGENTDECOMPILE_MCP_SERVER_URL",
-    os.environ.get("AGENT_DECOMPILE_MCP_SERVER_URL", "http://170.9.241.140:8080/mcp/"),
+    os.environ.get("AGENT_DECOMPILE_MCP_SERVER_URL", "http://127.0.0.1:8080/mcp/"),
 )
 _DEFAULT_GHIDRA_HOST = os.environ.get(
     "AGENTDECOMPILE_HTTP_GHIDRA_SERVER_HOST",
-    os.environ.get("AGENT_DECOMPILE_GHIDRA_SERVER_HOST", "170.9.241.140"),
+    os.environ.get("AGENT_DECOMPILE_GHIDRA_SERVER_HOST", "127.0.0.1"),
 )
 _DEFAULT_GHIDRA_PORT = int(
     os.environ.get(
@@ -50,8 +51,14 @@ _DEFAULT_GHIDRA_REPO = os.environ.get(
     "AGENTDECOMPILE_HTTP_GHIDRA_SERVER_REPOSITORY",
     os.environ.get("AGENT_DECOMPILE_GHIDRA_SERVER_REPOSITORY", "Odyssey"),
 )
-_DEFAULT_GHIDRA_USER = os.environ.get("AGENTDECOMPILE_GHIDRA_USERNAME", "OpenKotOR")
-_DEFAULT_GHIDRA_PASS = os.environ.get("AGENTDECOMPILE_GHIDRA_PASSWORD", "")
+_DEFAULT_GHIDRA_USER = os.environ.get(
+    "AGENTDECOMPILE_GHIDRA_USERNAME",
+    os.environ.get("AGENT_DECOMPILE_GHIDRA_USERNAME", ""),
+)
+_DEFAULT_GHIDRA_PASS = os.environ.get(
+    "AGENTDECOMPILE_GHIDRA_PASSWORD",
+    os.environ.get("AGENT_DECOMPILE_GHIDRA_PASSWORD", ""),
+)
 
 # Known program paths inside the Odyssey repository
 KNOWN_PROGRAMS = {

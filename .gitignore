@@ -123,7 +123,14 @@ diagnostics/
 
 # ── User runtime state (never commit; auto-recreated on first launch) ─────────
 settings.json
+.env
+.env.*
+!.env.example
 .cursor/mcp.json
+.cursor/mcp.*.json
+.cursor/*local*.json
+agentdecompile*.local.*
+ghidra*.local.*
 GhostRigger-K1-K2.exe
 /dist/
 /build/
@@ -209,6 +216,7 @@ exports/retargets/day4_mcp_smoke/
 !/tests/test_retarget_workbench_modes.py
 !/tests/test_ghostrigger_retarget_workbench_controller.py
 !/tests/test_kotor_animation_source_sampler.py
+!/tests/test_secret_hygiene.py
 audit_deep.py
 audit_exhaustive.py
 _patch_viewport.py
