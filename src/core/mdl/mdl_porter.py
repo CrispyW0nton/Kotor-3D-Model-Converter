@@ -527,7 +527,7 @@ class MDLBinaryWriter:
         geo_hdr[8:40] = nm_enc
         struct.pack_into('<I', geo_hdr, 40, root_node_off)
         struct.pack_into('<I', geo_hdr, 44, len(all_nodes))
-        geo_hdr[77] = 2   # geometry type = 2 (model)
+        geo_hdr[76] = 2   # geometry type = 2 (model) at MaxTree +0x4C
 
         # Model header (88 bytes)
         mod_hdr = bytearray(88)

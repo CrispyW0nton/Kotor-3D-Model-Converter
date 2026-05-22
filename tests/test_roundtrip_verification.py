@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import struct
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -147,3 +148,46 @@ def test_animation_hierarchy_does_not_cycle_when_anim_root_is_descendant():
     by_name = {node.name: node for node in nodes}
     assert by_name["talkdummy"].parent.name == "head_g"
     assert by_name["f_jaw_g"].parent.name == "talkdummy"
+
+
+def test_mdl_writer_sets_engine_maxtree_subtype_bytes():
+    from src.core.geometry.model_data import Animation, KotorModel, ModelNode
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
+
+    root = ModelNode(name="pmbam")
+    anim_node = ModelNode(
+        name="pmbam",
+        controllers=[
+            {
+                "type": 20,
+                "name": "orientation",
+                "columns": 4,
+                "times": [0.0],
+                "values": [(0.0, 0.0, 0.0, 1.0)],
+            }
+        ],
+    )
+    model = KotorModel(
+        name="pmbam",
+        root_node=root,
+        animations=[Animation(name="victory", length=0.0, anim_root="pmbam", nodes=[anim_node])],
+    )
+
+    mdl_bytes, _mdx_bytes = MDLBinaryWriter().write(model)
+    base = 12
+    assert mdl_bytes[base + 0x4C] == 0x02
+
+    anim_table_rel = struct.unpack_from("<I", mdl_bytes, base + 80 + 8)[0]
+    anim_rel = struct.unpack_from("<I", mdl_bytes, base + anim_table_rel)[0]
+    assert mdl_bytes[base + anim_rel + 0x4C] == 0x05
+
+
+def test_legacy_mdl_porter_sets_engine_maxtree_model_subtype_byte():
+    from src.core.geometry.model_data import KotorModel, ModelNode
+    from src.core.mdl.mdl_porter import MDLBinaryWriter
+
+    model = KotorModel(name="pmbam", root_node=ModelNode(name="pmbam"))
+
+    mdl_bytes, _mdx_bytes = MDLBinaryWriter().build(model)
+
+    assert mdl_bytes[12 + 0x4C] == 0x02

@@ -43,6 +43,7 @@ knowledge_base/
 │
 └── reference/                      ← HISTORICAL (iteration-1, pre-Qt)
     ├── INDEX.md                    ← original knowledge-base index
+    ├── ghidra_odyssey_mcp.md       ← Odyssey engine/Ghidra MCP workflow
     ├── MANDATORY_CHECKLIST.md      ← legacy pre-task protocol
     ├── PROTOCOL.md                 ← legacy AI developer protocol
     ├── ROADMAP_legacy_2026_04.md   ← superseded by roadmap/02_roadmap_2026_05.md
@@ -81,6 +82,7 @@ knowledge_base/
 | Run the CLI | [`cli/CLI.md`](cli/CLI.md) |
 | Theme/layout customization | [`theme_layout_system.md`](theme_layout_system.md) |
 | Apply book knowledge to engine work | [`book_notes/ghostrigger_engine_crosswalk.md`](book_notes/ghostrigger_engine_crosswalk.md) |
+| Verify Odyssey engine behavior with Ghidra MCP | [`reference/ghidra_odyssey_mcp.md`](reference/ghidra_odyssey_mcp.md) |
 | Character Builder UI spec (original) | [`reference/specs/character_builder_spec.md`](reference/specs/character_builder_spec.md) |
 | Architecture audit (original) | [`reference/specs/architecture_audit.html`](reference/specs/architecture_audit.html) |
 | Pre-task protocol (legacy iteration-1) | [`reference/MANDATORY_CHECKLIST.md`](reference/MANDATORY_CHECKLIST.md) |

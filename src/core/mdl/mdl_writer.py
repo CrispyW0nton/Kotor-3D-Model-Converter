@@ -23,8 +23,9 @@ Geometry header  (80 bytes, at BASE+0):
   +44 node_count uint32
   +48 unknown0   uint32
   +52 ref_count  uint32
-  +56 geo_type   uint8
-  +57..79        padding / unknown bytes (23 bytes)
+  +56..75        runtime/ref padding
+  +76 geo_type   uint8    (MaxTree subtype: 2=model, 5=animation)
+  +77..79        padding / unknown bytes (3 bytes)
 
 Model header  (88 bytes, at BASE+80):
   +0   model_type       uint8
@@ -354,7 +355,12 @@ class MDLBinaryWriter:
         self._root_off_patch = buf.tell()  # patch root_off later
         buf.write(_wu32(0))                # root_node_off (patched)
         buf.write(_wu32(len(self._nodes))) # node_count
-        buf.write(b'\x00' * (80 - (buf.tell() - _BASE)))  # pad to 80 bytes
+        # MaxTree subtype byte lives at geometry header +0x4C.  The K1 engine's
+        # AsModel() masks this byte with 0x7F and requires value 2 before
+        # InputBinary::Read writes model fields through the returned pointer.
+        buf.write(b'\x00' * (76 - (buf.tell() - _BASE)))
+        buf.write(b'\x02')                 # geometry_type = 2 (model)
+        buf.write(b'\x00' * (80 - (buf.tell() - _BASE)))
 
         # 4c. Model header (88 bytes at BASE+80)
         assert buf.tell() == _BASE + 80, f"Model header at wrong offset: {buf.tell()}"
@@ -1367,7 +1373,11 @@ class MDLBinaryWriter:
         anim_root_off_patch = buf.tell()
         buf.write(_wu32(0))              # root_node_off (patched)
         buf.write(_wu32(node_count))
-        buf.write(b'\x00' * (80 - (buf.tell() - geo_start)))  # pad to 80 bytes
+        # Animation geometry headers use the same MaxTree subtype byte at
+        # +0x4C; stock animation blocks use value 5.
+        buf.write(b'\x00' * (76 - (buf.tell() - geo_start)))
+        buf.write(b'\x05')               # geometry_type = 5 (animation)
+        buf.write(b'\x00' * (80 - (buf.tell() - geo_start)))
 
         # Animation model header (starts at geo_start+80)
         assert buf.tell() == geo_start + 80
