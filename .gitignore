@@ -74,6 +74,7 @@ game_data/
 !/tests/test_retarget_preview_gate.py
 !/tests/test_retarget_preview_export.py
 !/tests/test_ghostrigger_retarget_export_controller.py
+!/tests/test_ghostrigger_project_model.py
 !/tests/test_sampler.py
 !/tests/test_coordinate_normalizer.py
 !/tests/test_baker.py
