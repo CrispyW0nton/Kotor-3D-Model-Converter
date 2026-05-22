@@ -1,8 +1,8 @@
 """Qt main-window shell for GhostRigger.
 
 This is the first migration step away from Tkinter.  Qt owns the main
-application window and process event loop; legacy Tk tools are launched in a
-separate process so Qt and Tk do not fight over GUI ownership in one process.
+application window and process event loop. Legacy Tk tools were removed in
+M3/T302; this shell exposes only Qt workflows.
 """
 
 from __future__ import annotations
@@ -703,7 +703,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._auto_detect_worker: Optional[QtCore.QObject] = None
         self._batch_thread: Optional[QtCore.QThread] = None
         self._batch_worker: Optional[QtCore.QObject] = None
-        self._legacy_process: Optional[subprocess.Popen] = None
         self._library_rows: list[dict] = []
         self.scene_manager = KMaxSceneManager()
         self._scene_texture_dirs: list[str] = []
@@ -1222,9 +1221,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.refresh_gmodular_action = QtGui.QAction("Refresh GModular Viewport", self)
         self.refresh_gmodular_action.triggered.connect(self._ipc_refresh_gmodular)
 
-        self.launch_legacy_action = QtGui.QAction("Open Legacy Tk Workbench", self)
-        self.launch_legacy_action.triggered.connect(self._launch_legacy_tk)
-
         self.quit_action = QtGui.QAction("Exit", self)
         self.quit_action.setShortcut("Alt+F4")
         self.quit_action.triggered.connect(self.close)
@@ -1334,8 +1330,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         tools_menu.addAction(self.character_builder_action)
         tools_menu.addSeparator()
         tools_menu.addAction(self.validate_character_action)
-        tools_menu.addSeparator()
-        tools_menu.addAction(self.launch_legacy_action)
 
         ipc_menu = self.menuBar().addMenu("IPC")
         server_action = QtGui.QAction("GhostRigger Server (port 7001) - This Program", self)
@@ -5448,31 +5442,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         except Exception as exc:
             log.debug("walkmesh load failed for %s: %s", label, exc)
             return False
-
-    def _launch_legacy_tk(self):
-        if self._legacy_process is not None and self._legacy_process.poll() is None:
-            self._log("Legacy Tk workbench is already running.", "warning")
-            return
-
-        env = os.environ.copy()
-        env["GHOSTRIGGER_GUI"] = "tk"
-        env["GHOSTRIGGER_NO_MCP_AUTOSTART"] = "1"
-
-        if getattr(sys, "frozen", False):
-            argv = [sys.executable]
-        else:
-            argv = [sys.executable, str(self.app_root / "main.py")]
-
-        try:
-            self._legacy_process = subprocess.Popen(
-                argv,
-                cwd=str(self.app_root),
-                env=env,
-                stdin=subprocess.DEVNULL,
-            )
-            self._log("Legacy Tk workbench launched.", "success")
-        except Exception as exc:
-            self._log(f"Could not launch legacy Tk workbench: {exc}", "error")
 
     def _open_qt_character_builder_window(self):
         """Open (or raise) the M2 AccuRig-style Character Builder window.

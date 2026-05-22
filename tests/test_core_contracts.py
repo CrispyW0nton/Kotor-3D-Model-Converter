@@ -1596,6 +1596,9 @@ def test_main_window_moves_utility_tabs_to_tools_windows() -> None:
     assert "tools_menu.addAction(self.diag_action)" in menu_source
     assert "tools_menu.addAction(self.texture_tool_action)" in menu_source
     assert "tools_menu.addAction(self.blueprint_editor_action)" in menu_source
+    assert "Legacy Tk" not in actions_source
+    assert "Legacy Tk" not in menu_source
+    assert "_launch_legacy_tk" not in inspect.getsource(QtGhostRiggerMainWindow)
 
     model_menu_block = menu_source.split("mdlops_menu = self.menuBar().addMenu", 1)[0]
     assert "self.diag_action" not in model_menu_block
