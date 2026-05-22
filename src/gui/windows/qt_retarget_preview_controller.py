@@ -18,6 +18,11 @@ from src.core.retargeting.retarget_preview import (
     apply_retarget_preview_to_viewport,
     build_retarget_preview,
 )
+from src.core.retargeting.retarget_preview_export import (
+    RetargetPreviewExportRequest,
+    RetargetPreviewExportResult,
+    export_retarget_preview_override,
+)
 from src.core.retargeting.retarget_profile import RetargetProfile, load_retarget_profile
 from src.core.retargeting.source_animation import SourceSkeletonClip
 
@@ -30,6 +35,7 @@ class RetargetPreviewUiState:
     target_model: Any | None = None
     retarget_profile: RetargetProfile | None = None
     last_preview_result: RetargetPreviewResult | None = None
+    last_preview_is_current: bool = False
 
 
 class QtRetargetViewportAdapter:
@@ -142,33 +148,46 @@ class RetargetPreviewUiController:
         *,
         viewport: Any | None = None,
         preview_action: Any | None = None,
+        export_action: Any | None = None,
         target_model_provider: Callable[[], Any | None] | None = None,
         log_callback: Callable[[str, str], None] | None = None,
         status_callback: Callable[[str], None] | None = None,
         build_preview: Callable[[RetargetPreviewRequest], RetargetPreviewResult] = build_retarget_preview,
         apply_preview: Callable[..., None] = apply_retarget_preview_to_viewport,
+        export_preview: Callable[..., RetargetPreviewExportResult] = export_retarget_preview_override,
     ) -> None:
         self.state = RetargetPreviewUiState()
         self.viewport = viewport
         self.preview_action = preview_action
+        self.export_action = export_action
         self.target_model_provider = target_model_provider
         self.log_callback = log_callback
         self.status_callback = status_callback
         self._build_preview = build_preview
         self._apply_preview = apply_preview
+        self._export_preview = export_preview
         self.last_error = ""
         self.update_enabled()
 
     def set_source_clip(self, clip: SourceSkeletonClip | None) -> None:
         self.state.source_clip = clip
+        self._mark_preview_stale()
         self.update_enabled()
 
     def set_target_model(self, model: Any | None) -> None:
         self.state.target_model = model
+        self._mark_preview_stale()
         self.update_enabled()
 
     def set_retarget_profile(self, profile: RetargetProfile | None) -> None:
         self.state.retarget_profile = profile
+        self._mark_preview_stale()
+        self.update_enabled()
+
+    def invalidate_preview(self) -> None:
+        """Mark the stored preview stale after external target/session changes."""
+
+        self._mark_preview_stale()
         self.update_enabled()
 
     def load_source_clip(self, path: str | Path, *, clip_name: str | None = None, sample_rate: float = 30.0) -> SourceSkeletonClip:
@@ -202,6 +221,19 @@ class RetargetPreviewUiController:
     def update_enabled(self) -> None:
         if self.preview_action is not None and hasattr(self.preview_action, "setEnabled"):
             self.preview_action.setEnabled(self.can_preview())
+        if self.export_action is not None and hasattr(self.export_action, "setEnabled"):
+            self.export_action.setEnabled(self.can_export())
+
+    def can_export(self) -> bool:
+        preview = self.state.last_preview_result
+        audit = getattr(preview, "preview_audit", None)
+        return (
+            preview is not None
+            and self.state.last_preview_is_current
+            and audit is not None
+            and bool(getattr(audit, "passed", False))
+            and self.current_target_model() is not None
+        )
 
     def preview_retarget(self, *, auto_play: bool = True, show_node_overlay: bool = True) -> RetargetPreviewResult | None:
         self.update_enabled()
@@ -234,14 +266,80 @@ class RetargetPreviewUiController:
                     show_node_overlay=show_node_overlay,
                 )
             self.state.last_preview_result = preview
+            self.state.last_preview_is_current = True
             self.last_error = ""
             self._report_success(preview)
             return preview
         except Exception as exc:
             self.state.last_preview_result = None
+            self.state.last_preview_is_current = False
             self.last_error = str(exc)
             self._log(f"Retarget preview failed: {exc}", "error")
             self._status("Retarget preview failed")
+            return None
+        finally:
+            self.update_enabled()
+
+    def export_retarget_preview(
+        self,
+        output_mdl_path: str | Path,
+        *,
+        overwrite: bool = False,
+        write_manifest: bool = True,
+    ) -> RetargetPreviewExportResult | None:
+        """Export the currently approved preview without rebuilding it."""
+
+        self.update_enabled()
+        if self.state.last_preview_result is None:
+            message = (
+                "No successful retarget preview is available to export. "
+                "Preview the animation in GhostRigger before exporting MDL/MDX."
+            )
+            self.last_error = message
+            self._log(message, "warning")
+            self._status("No retarget preview to export")
+            return None
+        if not self.state.last_preview_is_current:
+            message = (
+                "The retarget preview is stale because the source clip, target model, "
+                "or retarget profile changed. Run Preview Retarget again before exporting."
+            )
+            self.last_error = message
+            self._log(message, "warning")
+            self._status("Retarget preview is stale")
+            return None
+        if not self.can_export():
+            message = (
+                "Retarget preview cannot be exported because its audit did not pass. "
+                "Run Preview Retarget again before exporting MDL/MDX."
+            )
+            self.last_error = message
+            self._log(message, "error")
+            self._status("Retarget preview export blocked")
+            return None
+
+        mdl_path = Path(output_mdl_path)
+        if self.export_action is not None and hasattr(self.export_action, "setEnabled"):
+            self.export_action.setEnabled(False)
+        try:
+            result = self._export_preview(
+                RetargetPreviewExportRequest(
+                    preview_result=self.state.last_preview_result,
+                    original_target_model=self.current_target_model(),
+                    output_mdl_path=mdl_path,
+                    output_mdx_path=mdl_path.with_suffix(".mdx"),
+                    overwrite=overwrite,
+                    verify_roundtrip=True,
+                    write_manifest=write_manifest,
+                )
+            )
+            self.last_error = ""
+            self._report_export_success(result)
+            return result
+        except Exception as exc:
+            self.last_error = str(exc)
+            self._log(f"Retarget preview export failed: {exc}", "error")
+            self._status("Retarget preview export failed")
             return None
         finally:
             self.update_enabled()
@@ -266,6 +364,24 @@ class RetargetPreviewUiController:
         for warning in getattr(preview, "warnings", []) or []:
             self._log(str(warning), "warning")
         self._status(f"Retarget preview ready: {preview.slot_name}")
+
+    def _report_export_success(self, result: RetargetPreviewExportResult) -> None:
+        verified = "passed" if result.verified_roundtrip else "not requested"
+        message = (
+            "Retarget preview exported successfully.\n"
+            f"Slot: {result.slot_name}\n"
+            f"MDL: {result.mdl_path}\n"
+            f"MDX: {result.mdx_path}\n"
+            f"MDL readback verification: {verified}\n"
+            "Ready for Override/Patch Manager testing."
+        )
+        self._log(message, "success")
+        for warning in result.warnings:
+            self._log(str(warning), "warning")
+        self._status(f"Retarget preview exported: {result.slot_name}")
+
+    def _mark_preview_stale(self) -> None:
+        self.state.last_preview_is_current = False
 
     def _log(self, message: str, level: str = "info") -> None:
         if self.log_callback is not None:

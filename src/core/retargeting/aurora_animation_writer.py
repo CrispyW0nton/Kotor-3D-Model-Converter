@@ -194,6 +194,7 @@ class AuroraAnimationInjectionRequest:
     max_size_multiplier: float = 2.0
     verify_roundtrip: bool = False
     roundtrip_tolerance: float = 1e-4
+    target_model_override: Optional[KotorModel] = None
 
     def __post_init__(self) -> None:
         self.r3a_animation_json = Path(self.r3a_animation_json)
@@ -310,93 +311,62 @@ class AuroraAnimationWriter:
             result.duration_seconds = float(animation.length or 0.0)
             result.bone_count_animated = len(animation.nodes)
 
-            try:
-                animation, resolved_slot = prepare_local_animation_override_for_export(
-                    model,
-                    animation,
-                    request.animation_slot,
-                    game=request.game,
-                    require_valid_slot=True,
-                    replace_existing=request.overwrite_existing,
-                )
-            except InvalidAnimationSlotError as exc:
-                result.errors.append(str(exc))
+            self._write_animation_block_to_output(
+                request=request,
+                result=result,
+                model=model,
+                animation=animation,
+                original_model_for_roundtrip=original_model_for_roundtrip,
+            )
+            if result.errors:
                 return result
-            except ValueError as exc:
-                result.errors.append(str(exc))
-                return result
-            result.animation_slot = resolved_slot.slot_name
-
-            validation = validate_animation_block_against_model(model, animation, strict=True)
-            try:
-                validation.raise_for_errors(animation.name, getattr(model, "name", "") or "target model")
-            except AnimationBlockValidationError as exc:
-                result.errors.append(str(exc))
-                return result
-
-            existing_index = self._find_local_animation_index(model, resolved_slot.slot_name)
-            if existing_index is None:
-                model.animations.append(animation)
-                result.operation = "appended_local_override"
-            elif request.overwrite_existing:
-                model.animations[existing_index] = animation
-                result.operation = "replaced_local"
-            else:
-                result.errors.append(f"Local animation '{resolved_slot.slot_name}' already exists")
-                return result
-
-            MDLBinaryWriter().write_files(model, str(request.output_mdl))
-            if not request.output_mdl.exists():
-                result.errors.append(f"Output MDL was not written: {request.output_mdl}")
-                return self._finish(result, request)
-
-            result.output_size_bytes = request.output_mdl.stat().st_size
-            if (
-                result.input_size_bytes > 0
-                and result.output_size_bytes > result.input_size_bytes * request.max_size_multiplier
-            ):
-                result.errors.append(
-                    "Output MDL grew beyond size gate: "
-                    f"{result.output_size_bytes} > {request.max_size_multiplier}x {result.input_size_bytes}"
-                )
-                return self._finish(result, request)
-
-            reloaded = self._load_output_model(request.output_mdl, request.game)
-            if reloaded is None:
-                result.errors.append(f"Output MDL failed reload: {request.output_mdl}")
-                return self._finish(result, request)
-            if self._find_local_animation_index(reloaded, resolved_slot.slot_name) is None:
-                result.errors.append(f"Animation '{resolved_slot.slot_name}' missing after reload")
-                return self._finish(result, request)
-
-            if request.verify_roundtrip:
-                roundtrip_report = verify_written_animation_override_roundtrip(
-                    original_model=original_model_for_roundtrip or model,
-                    prepared_animation=animation,
-                    written_mdl_path=request.output_mdl,
-                    written_mdx_path=request.output_mdl.with_suffix(".mdx"),
-                    slot_name=resolved_slot.slot_name,
-                    tolerance=request.roundtrip_tolerance,
-                    game_version=self._game_version(request.game),
-                )
-                try:
-                    roundtrip_report.raise_for_errors(resolved_slot.slot_name)
-                except AnimationRoundTripValidationError as exc:
-                    result.errors.append(str(exc))
-                    self._discard_outputs(request)
-                    return result
-                for warning in roundtrip_report.warnings:
-                    result.warnings.append(warning.message)
-
-            result.output_mdl_sha256 = self.sha256(request.output_mdl)
-            mdx_path = request.output_mdl.with_suffix(".mdx")
-            if mdx_path.exists():
-                result.output_mdx = mdx_path
-                result.output_mdx_sha256 = self.sha256(mdx_path)
-            result.success = True
         except Exception as exc:
             logger.exception("Aurora animation injection failed")
             result.errors.append(f"Exception: {type(exc).__name__}: {exc}")
+            return result
+        return self._finish(result, request)
+
+    def inject_animation_block(
+        self,
+        request: AuroraAnimationInjectionRequest,
+        animation_block: Animation,
+    ) -> AuroraAnimationInjectionResult:
+        """Inject an already-built Aurora animation block through export gates."""
+
+        result = AuroraAnimationInjectionResult(
+            success=False,
+            animation_slot=request.animation_slot,
+            output_mdl=request.output_mdl,
+            output_mdx=request.output_mdl.with_suffix(".mdx"),
+            manifest_path=request.output_manifest,
+            fps=float(request.fps or 30.0),
+        )
+        try:
+            result.input_mdl_sha256 = self.sha256(request.target_mdl)
+            result.input_size_bytes = request.target_mdl.stat().st_size
+            model = self._load_model(request)
+            if model is None:
+                result.errors.append(f"Could not load target MDL: {request.target_mdl}")
+                return self._finish(result, request)
+
+            result.frame_count = self._animation_frame_count(animation_block)
+            result.duration_seconds = float(animation_block.length or 0.0)
+            result.bone_count_animated = len(getattr(animation_block, "nodes", []) or [])
+            original_model_for_roundtrip = copy.deepcopy(model) if request.verify_roundtrip else None
+
+            self._write_animation_block_to_output(
+                request=request,
+                result=result,
+                model=model,
+                animation=copy.deepcopy(animation_block),
+                original_model_for_roundtrip=original_model_for_roundtrip,
+            )
+            if result.errors:
+                return result
+        except Exception as exc:
+            logger.exception("Aurora animation block injection failed")
+            result.errors.append(f"Exception: {type(exc).__name__}: {exc}")
+            return result
         return self._finish(result, request)
 
     def _finish(
@@ -424,6 +394,12 @@ class AuroraAnimationWriter:
                 logger.warning("Could not discard failed export output: %s", path)
 
     def _load_model(self, request: AuroraAnimationInjectionRequest) -> Optional[KotorModel]:
+        override = getattr(request, "target_model_override", None)
+        if override is not None:
+            model = copy.deepcopy(override)
+            model.mdl_path = str(request.target_mdl)
+            model.mdx_path = str(request.target_mdx or request.target_mdl.with_suffix(".mdx"))
+            return model
         mdx = request.target_mdx or request.target_mdl.with_suffix(".mdx")
         return load_model_from_file(
             str(request.target_mdl),
@@ -438,6 +414,108 @@ class AuroraAnimationWriter:
             str(mdx) if mdx.exists() else "",
             self._game_version(game),
         )
+
+    def _write_animation_block_to_output(
+        self,
+        *,
+        request: AuroraAnimationInjectionRequest,
+        result: AuroraAnimationInjectionResult,
+        model: KotorModel,
+        animation: Animation,
+        original_model_for_roundtrip: Optional[KotorModel],
+    ) -> None:
+        try:
+            animation, resolved_slot = prepare_local_animation_override_for_export(
+                model,
+                animation,
+                request.animation_slot,
+                game=request.game,
+                require_valid_slot=True,
+                replace_existing=request.overwrite_existing,
+            )
+        except InvalidAnimationSlotError as exc:
+            result.errors.append(str(exc))
+            return
+        except ValueError as exc:
+            result.errors.append(str(exc))
+            return
+        result.animation_slot = resolved_slot.slot_name
+
+        validation = validate_animation_block_against_model(model, animation, strict=True)
+        try:
+            validation.raise_for_errors(animation.name, getattr(model, "name", "") or "target model")
+        except AnimationBlockValidationError as exc:
+            result.errors.append(str(exc))
+            return
+
+        existing_index = self._find_local_animation_index(model, resolved_slot.slot_name)
+        if existing_index is None:
+            model.animations.append(animation)
+            result.operation = "appended_local_override"
+        elif request.overwrite_existing:
+            model.animations[existing_index] = animation
+            result.operation = "replaced_local"
+        else:
+            result.errors.append(f"Local animation '{resolved_slot.slot_name}' already exists")
+            return
+
+        MDLBinaryWriter().write_files(model, str(request.output_mdl))
+        if not request.output_mdl.exists():
+            result.errors.append(f"Output MDL was not written: {request.output_mdl}")
+            return
+
+        result.output_size_bytes = request.output_mdl.stat().st_size
+        if (
+            result.input_size_bytes > 0
+            and result.output_size_bytes > result.input_size_bytes * request.max_size_multiplier
+        ):
+            result.errors.append(
+                "Output MDL grew beyond size gate: "
+                f"{result.output_size_bytes} > {request.max_size_multiplier}x {result.input_size_bytes}"
+            )
+            return
+
+        reloaded = self._load_output_model(request.output_mdl, request.game)
+        if reloaded is None:
+            result.errors.append(f"Output MDL failed reload: {request.output_mdl}")
+            return
+        if self._find_local_animation_index(reloaded, resolved_slot.slot_name) is None:
+            result.errors.append(f"Animation '{resolved_slot.slot_name}' missing after reload")
+            return
+
+        if request.verify_roundtrip:
+            roundtrip_report = verify_written_animation_override_roundtrip(
+                original_model=original_model_for_roundtrip or model,
+                prepared_animation=animation,
+                written_mdl_path=request.output_mdl,
+                written_mdx_path=request.output_mdl.with_suffix(".mdx"),
+                slot_name=resolved_slot.slot_name,
+                tolerance=request.roundtrip_tolerance,
+                game_version=self._game_version(request.game),
+            )
+            try:
+                roundtrip_report.raise_for_errors(resolved_slot.slot_name)
+            except AnimationRoundTripValidationError as exc:
+                result.errors.append(str(exc))
+                self._discard_outputs(request)
+                return
+            for warning in roundtrip_report.warnings:
+                result.warnings.append(warning.message)
+
+        result.output_mdl_sha256 = self.sha256(request.output_mdl)
+        mdx_path = request.output_mdl.with_suffix(".mdx")
+        if mdx_path.exists():
+            result.output_mdx = mdx_path
+            result.output_mdx_sha256 = self.sha256(mdx_path)
+        result.success = True
+
+    @staticmethod
+    def _animation_frame_count(animation: Animation) -> int:
+        frame_count = 0
+        for node in getattr(animation, "nodes", []) or []:
+            for ctrl in getattr(node, "controllers", []) or []:
+                frame_count = max(frame_count, len(ctrl.get("times", []) or []))
+        return frame_count
 
     def build_animation_from_r3a(
         self,

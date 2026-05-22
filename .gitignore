@@ -65,6 +65,8 @@ game_data/
 !/tests/test_retarget_reference_pose.py
 !/tests/test_basic_retarget_solver.py
 !/tests/test_retarget_preview_gate.py
+!/tests/test_retarget_preview_export.py
+!/tests/test_ghostrigger_retarget_export_controller.py
 !/tests/test_sampler.py
 !/tests/test_coordinate_normalizer.py
 !/tests/test_baker.py
@@ -194,6 +196,7 @@ exports/
 exports/retargets/day4_mcp_smoke/
 .pytest_tmp_fbx_exporter/
 !/tests/test_ghostrigger_retarget_preview_controller.py
+!/tests/test_ghostrigger_retarget_export_controller.py
 audit_deep.py
 audit_exhaustive.py
 _patch_viewport.py

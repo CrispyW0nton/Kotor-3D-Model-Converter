@@ -1133,6 +1133,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.preview_retarget_action = QtGui.QAction(self._icon("anims"), "Preview Retarget", self)
         self.preview_retarget_action.setEnabled(False)
         self.preview_retarget_action.triggered.connect(self._preview_retarget_animation)
+        self.export_retarget_preview_action = QtGui.QAction("Export Retarget Preview...", self)
+        self.export_retarget_preview_action.setEnabled(False)
+        self.export_retarget_preview_action.triggered.connect(self._export_retarget_preview)
         self.unreal_animator_action = QtGui.QAction(self._icon("anims"), "Unreal Animator...", self)
         self.unreal_animator_action.setShortcut("Ctrl+Shift+U")
         self.unreal_animator_action.triggered.connect(self._open_unreal_animator_window)
@@ -1263,6 +1266,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         retarget_menu.addAction(self.load_retarget_source_clip_action)
         retarget_menu.addAction(self.load_retarget_profile_action)
         retarget_menu.addAction(self.preview_retarget_action)
+        retarget_menu.addAction(self.export_retarget_preview_action)
         retarget_menu.addSeparator()
         retarget_menu.addAction(self.retarget_workbench_action)
         retarget_menu.addAction(self.unreal_animator_action)
@@ -1445,6 +1449,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._separator())
         layout.addWidget(self._tool_button("Anims  Ctrl+A", self.anims_action, "anims", compact=True))
         layout.addWidget(self._tool_button("Preview Retarget", self.preview_retarget_action, "anims", compact=True))
+        layout.addWidget(self._tool_button("Export Preview", self.export_retarget_preview_action, "save", compact=True))
         layout.addWidget(self._tool_button("Sequence", self.sequence_editor_action, "anims", compact=True))
         layout.addWidget(self._tool_button("Lights", self.lighting_panel_action, "", compact=True))
         layout.addWidget(self._tool_button("Cameras", self.camera_panel_action, "", compact=True))
@@ -1884,6 +1889,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.retarget_preview_controller = RetargetPreviewUiController(
             viewport=self._retarget_preview_viewport,
             preview_action=self.preview_retarget_action,
+            export_action=self.export_retarget_preview_action,
             target_model_provider=lambda: self._retarget_target_model or self._current_model,
             log_callback=self._log,
             status_callback=self.statusBar().showMessage,
@@ -2240,7 +2246,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             if hasattr(self, "animation_retarget_panel"):
                 self.animation_retarget_panel.set_target_model(None)
             if hasattr(self, "retarget_preview_controller"):
-                self.retarget_preview_controller.update_enabled()
+                self._sync_retarget_preview_target()
             if hasattr(self, "diagnostics_panel"):
                 self.diagnostics_panel.run_diagnostics(None)
             self.props_text.clear()
@@ -2418,7 +2424,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self._retarget_target_model = None
                 self.animation_retarget_panel.set_target_model(None, game)
         if hasattr(self, "retarget_preview_controller"):
-            self.retarget_preview_controller.update_enabled()
+            self._sync_retarget_preview_target()
         self._animation_engine = None
         self._animation_timer.stop()
         self._animation_last_tick = None
@@ -3223,7 +3229,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.animation_retarget_panel.set_target_model(model, game)
         self._retarget_refresh_mapping()
         if hasattr(self, "retarget_preview_controller"):
-            self.retarget_preview_controller.update_enabled()
+            self._sync_retarget_preview_target()
         self._log(f"Retarget target set: {getattr(model, 'name', '?')}", "success")
 
     def _retarget_preview(self, anim_name: str):
@@ -4109,6 +4115,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         window.raise_()
         window.activateWindow()
 
+    def _sync_retarget_preview_target(self) -> None:
+        controller = getattr(self, "retarget_preview_controller", None)
+        if controller is None:
+            return
+        controller.set_target_model(self._retarget_target_model or self._current_model)
+
     def _load_retarget_source_clip(self):
         path, _selected = QtWidgets.QFileDialog.getOpenFileName(
             self,
@@ -4158,6 +4170,63 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         preview = controller.preview_retarget(auto_play=True, show_node_overlay=True)
         if preview is None and getattr(controller, "last_error", ""):
             self.statusBar().showMessage("Retarget preview failed")
+
+    def _export_retarget_preview(self):
+        controller = getattr(self, "retarget_preview_controller", None)
+        if controller is None:
+            self._not_migrated("Export Retarget Preview")
+            return
+        if not controller.can_export():
+            message = (
+                "No successful current retarget preview is available to export. "
+                "Run Preview Retarget before exporting MDL/MDX."
+            )
+            if getattr(controller.state, "last_preview_result", None) is not None:
+                message = (
+                    "The retarget preview is stale because the source clip, target model, "
+                    "or retarget profile changed. Run Preview Retarget again before exporting."
+                )
+            self._log(message, "warning")
+            QtWidgets.QMessageBox.information(self, "Export Retarget Preview", message)
+            return
+
+        target = controller.current_target_model()
+        stem = str(getattr(target, "name", "") or "").strip() or "retarget_preview"
+        default_dir = self.app_root / "exports" / "retarget_previews"
+        default_path = default_dir / f"{stem}.mdl"
+        path, _selected = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Export Retarget Preview",
+            str(default_path),
+            "KOTOR MDL files (*.mdl);;All files (*.*)",
+        )
+        if not path:
+            return
+        mdl_path = Path(path)
+        if mdl_path.suffix.lower() != ".mdl":
+            mdl_path = mdl_path.with_suffix(".mdl")
+        mdx_path = mdl_path.with_suffix(".mdx")
+        overwrite = False
+        existing = [p for p in (mdl_path, mdx_path) if p.exists()]
+        if existing:
+            names = "\n".join(str(p) for p in existing)
+            answer = QtWidgets.QMessageBox.question(
+                self,
+                "Overwrite Retarget Preview Export?",
+                f"The following output file(s) already exist:\n{names}\n\nOverwrite them?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No,
+            )
+            if answer != QtWidgets.QMessageBox.Yes:
+                return
+            overwrite = True
+
+        result = controller.export_retarget_preview(mdl_path, overwrite=overwrite)
+        if result is None:
+            detail = getattr(controller, "last_error", "") or "Export failed."
+            QtWidgets.QMessageBox.critical(self, "Export Retarget Preview", detail)
+            return
+        self.statusBar().showMessage(f"Retarget preview exported: {result.mdl_path}")
 
     def _open_unreal_animator_window(self):
         window = getattr(self, "unreal_animator_window", None)
@@ -4368,7 +4437,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             window.set_target_model(model, game)
             self._log(f"Retarget target <- {game}:{row.get('resref', '')}", "success")
             if hasattr(self, "retarget_preview_controller"):
-                self.retarget_preview_controller.update_enabled()
+                self._sync_retarget_preview_target()
         self._retarget_refresh_mapping()
         self._open_animation_retarget_window()
 
@@ -4651,7 +4720,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self._retarget_mapping_report = None
                 self.animation_retarget_panel.set_target_model(None, game)
         if hasattr(self, "retarget_preview_controller"):
-            self.retarget_preview_controller.update_enabled()
+            self._sync_retarget_preview_target()
         if hasattr(self, "diagnostics_panel"):
             self.diagnostics_panel.run_diagnostics(model)
         self.props_text.setPlainText(
