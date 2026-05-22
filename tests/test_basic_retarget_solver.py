@@ -12,7 +12,11 @@ from src.core.animation.animation_engine import SuperModelResolver, evaluate_aur
 from src.core.geometry.model_data import Animation, KotorModel, ModelNode
 from src.core.retargeting.fbx_importer import classify_source_node_name
 from src.core.retargeting.retarget_profile import RetargetMappingEntry, RetargetProfile
-from src.core.retargeting.retarget_solver import RetargetSolveError, retarget_source_clip_to_aurora_animation
+from src.core.retargeting.retarget_solver import (
+    RetargetSolveError,
+    RetargetSolverOptions,
+    retarget_source_clip_to_aurora_animation,
+)
 from src.core.retargeting.source_animation import (
     SourcePose,
     SourceSkeletonClip,
@@ -279,7 +283,7 @@ def test_child_local_articulation_transfers_correctly() -> None:
     _assert_quat_equivalent(pose.local_transforms_by_node["child"].rotation, child_local_rot)
 
 
-def test_default_segment_direction_mode_aligns_mapped_limb_segment() -> None:
+def test_segment_direction_mode_aligns_mapped_limb_segment_when_explicitly_enabled() -> None:
     source = _source_clip(
         [("upperarm_l", None), ("lowerarm_l", "upperarm_l")],
         [
@@ -307,7 +311,12 @@ def test_default_segment_direction_mode_aligns_mapped_limb_segment() -> None:
         ]
     )
 
-    result = retarget_source_clip_to_aurora_animation(source_clip=source, target_model=target, profile=profile)
+    result = retarget_source_clip_to_aurora_animation(
+        source_clip=source,
+        target_model=target,
+        profile=profile,
+        options=RetargetSolverOptions(rotation_transfer_mode="segment_direction"),
+    )
     pose = evaluate_aurora_animation_pose(target, result.animation_block, 1.0)
 
     assert pose.world_transforms_by_node["lbicepl_g"].position == pytest.approx((0.0, 1.0, 0.0), abs=1e-6)

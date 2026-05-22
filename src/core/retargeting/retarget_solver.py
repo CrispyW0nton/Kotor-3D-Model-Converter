@@ -38,7 +38,7 @@ class RetargetSolverOptions:
     """Options for the first conservative Aurora animation solve."""
 
     sample_rate: Optional[float] = None
-    rotation_transfer_mode: str = "segment_direction"
+    rotation_transfer_mode: str = "reference_frame_delta"
     root_translation_policy: str = "in_place"
     allow_root_rotation: bool = True
     allow_pelvis_vertical_translation: bool = False
