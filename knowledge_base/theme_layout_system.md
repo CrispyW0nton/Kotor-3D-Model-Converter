@@ -21,7 +21,11 @@ the manager records a diagnostic warning.
 Packaged theme ids are `default`, `matrix`, `droid`, `dark`, `light`, and
 `classic`. `default` sets `application.native=true`, which tells the theme
 engine to apply no generated GhostRigger stylesheet and restore the Qt platform
-palette. `droid` captures the dark graphite startup-console look: grey panels
+palette. Native themes still carry neutral colour tokens for editor previews
+and custom-painted startup UI; when an older native user override contains
+saved Matrix fallback values, `ThemeLoader` replaces those stale values with
+the neutral native palette before the Theme Editor displays them. `droid`
+captures the dark graphite startup-console look: grey panels
 and controls, bright Matrix-green accents, high-contrast text, and the default
 Aurebesh Matrix bar font.
 
@@ -105,6 +109,9 @@ Open **Settings -> Theme/Layout -> Theme Editor...**. The editor separates:
 - Theme values: colours, fonts, icon provider/defaults.
 - Matrix Bar values: mode, optional glyph alphabet, optional font override,
   optional PNG/GIF path, and crop rectangle.
+- Splash values: optional logo path, product title, subtitle, copyright text,
+  target splash size, logo size, and a live preview of the themed loading
+  panel used before the main window opens.
 - Layout values: sizes, density, panel widths, row heights, button mode.
 
 Changing a colour, font, metric, or button mode updates only the editor preview
@@ -167,7 +174,20 @@ Style tokens include `application.native`, `tab.mode`, `matrixBar.style`,
 `matrixBar.glyphs`, `matrixBar.fontFamily`, `matrixBar.imagePath`,
 `matrixBar.cropX`, `matrixBar.cropY`, `matrixBar.cropW`, and
 `matrixBar.cropH`. Supported `matrixBar.style` values are `matrix`, `png`,
-`gif`, and `disabled`; crop values are percentages.
+`gif`, and `disabled`; crop values are percentages. Startup splash branding
+uses `splash.logoPath`, `splash.productText`, `splash.subtitleText`, and
+`splash.copyrightText`. `splash.surfaceStyle` selects the splash surface finish
+and accepts `matte`, `bevelled`, `glossy`, or `flat`. Splash sizing uses the
+metric tokens `splash.width`, `splash.height`, and `splash.logoSize`.
+Splash-specific colours use
+`splash.background`, `splash.panel`, `splash.brandBackground`,
+`splash.progressBackground`, `splash.border`, `splash.text`,
+`splash.secondaryText`, `splash.accent`, `splash.progressTrack`, and
+`splash.progressFill`; if a non-native theme omits them, the loader derives
+them from the theme's normal window, panel, text, accent, input, and success
+tokens. Native/default previews and the startup splash also layer these tokens
+over the live `QApplication` palette so native platform greys are represented
+instead of stale XML fallback colours.
 
 ## Fixing Widgets
 

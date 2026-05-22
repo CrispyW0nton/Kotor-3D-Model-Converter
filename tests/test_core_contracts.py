@@ -1628,9 +1628,13 @@ def test_main_window_routes_library_and_animation_library_to_content_browser() -
     assert "self.library_panel = self.content_browser_panel" in source
     assert 'self.content_browser_dock = self._create_detachable_panel(' in source
     assert '"Content Browser"' in source
+    assert '"content_browser",\n            "Content Browser",\n            self.content_browser_panel,\n            QtCore.Qt.LeftDockWidgetArea,' in source
     assert 'self.scene_dock = self._create_detachable_panel(' in source
     assert 'self.properties_dock = self._create_detachable_panel(' in source
     assert 'self.animations_dock = self._create_detachable_panel(' in source
+    assert "self._stack_content_browser_under_scene()" in source
+    stack_source = inspect.getsource(QtGhostRiggerMainWindow._stack_content_browser_under_scene)
+    assert "self.splitDockWidget(self.scene_dock, self.content_browser_dock, QtCore.Qt.Vertical)" in stack_source
     assert "vertical_splitter.addWidget(self.viewport)" in source
     assert "left_tabs.addTab(" not in source
     assert "right_tabs.addTab(" not in source

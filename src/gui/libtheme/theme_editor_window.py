@@ -42,6 +42,164 @@ _PIXEL_TOKEN_HINTS = (
     "handle",
 )
 _MATRIX_BAR_STYLE_VALUES = {"matrix", "png", "gif", "disabled"}
+_SPLASH_STYLE_KEYS = (
+    "splash.logoPath",
+    "splash.productText",
+    "splash.subtitleText",
+    "splash.copyrightText",
+    "splash.surfaceStyle",
+)
+_SPLASH_SURFACE_STYLES = {"matte", "bevelled", "glossy", "flat"}
+_SPLASH_COLOR_KEYS = (
+    "splash.background",
+    "splash.panel",
+    "splash.brandBackground",
+    "splash.progressBackground",
+    "splash.border",
+    "splash.text",
+    "splash.secondaryText",
+    "splash.accent",
+    "splash.progressTrack",
+    "splash.progressFill",
+)
+
+
+def _lighten_hex(value: str, factor: float = 1.18) -> str:
+    color = QtGui.QColor(value)
+    if not color.isValid():
+        return value
+    return color.lighter(int(factor * 100)).name().upper()
+
+
+def _darken_hex(value: str, factor: float = 1.18) -> str:
+    color = QtGui.QColor(value)
+    if not color.isValid():
+        return value
+    return color.darker(int(factor * 100)).name().upper()
+
+
+def _surface_fill(value: str, style: str) -> str:
+    style = style if style in _SPLASH_SURFACE_STYLES else "matte"
+    if style == "flat":
+        return value
+    if style == "bevelled":
+        return f"qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {_lighten_hex(value, 1.18)}, stop:1 {_darken_hex(value, 1.05)})"
+    if style == "glossy":
+        return (
+            "qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            f"stop:0 {_lighten_hex(value, 1.35)}, stop:0.48 {_lighten_hex(value, 1.10)}, "
+            f"stop:0.50 {value}, stop:1 {_darken_hex(value, 1.18)})"
+        )
+    return f"qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {value}, stop:1 {_darken_hex(value, 1.06)})"
+
+
+def _palette_hex(palette: QtGui.QPalette, role: QtGui.QPalette.ColorRole, group: QtGui.QPalette.ColorGroup | None = None) -> str:
+    color = palette.color(group, role) if group is not None else palette.color(role)
+    return color.name().upper()
+
+
+def _live_native_palette_colors() -> dict[str, str]:
+    app = QtWidgets.QApplication.instance()
+    palette = app.palette() if app is not None else QtGui.QPalette()
+    disabled = QtGui.QPalette.ColorGroup.Disabled
+    role = QtGui.QPalette.ColorRole
+    window = _palette_hex(palette, role.Window)
+    base = _palette_hex(palette, role.Base)
+    alternate = _palette_hex(palette, role.AlternateBase)
+    button = _palette_hex(palette, role.Button)
+    text = _palette_hex(palette, role.Text)
+    window_text = _palette_hex(palette, role.WindowText)
+    button_text = _palette_hex(palette, role.ButtonText)
+    mid = _palette_hex(palette, role.Mid)
+    dark = _palette_hex(palette, role.Dark)
+    light = _palette_hex(palette, role.Light)
+    highlight = _palette_hex(palette, role.Highlight)
+    highlighted_text = _palette_hex(palette, role.HighlightedText)
+    link = _palette_hex(palette, role.Link)
+    disabled_button = _palette_hex(palette, role.Button, disabled)
+    disabled_text = _palette_hex(palette, role.Text, disabled)
+    warning = "#D8A326" if QtGui.QColor(window).lightness() < 128 else "#B88700"
+    error = "#F05252" if QtGui.QColor(window).lightness() < 128 else "#C93434"
+    success = "#22C55E" if QtGui.QColor(window).lightness() < 128 else "#1B8F45"
+    return {
+        "window.background": window,
+        "window.text": window_text,
+        "panel.background": button,
+        "panel.backgroundAlt": base,
+        "panel.altBackground": base,
+        "panel.border": mid,
+        "panel.headerBackground": button,
+        "panel.headerText": button_text,
+        "groupbox.border": mid,
+        "groupbox.title": highlight,
+        "viewport.background": base,
+        "viewport.border": mid,
+        "viewport.text": text,
+        "viewport.gridMajor": mid,
+        "viewport.gridMinor": dark,
+        "toolbar.background": window,
+        "toolbar.border": mid,
+        "button.background": button,
+        "button.hover": light,
+        "button.pressed": dark,
+        "button.checked": highlight,
+        "button.checkedText": highlighted_text,
+        "button.text": button_text,
+        "button.accentText": highlighted_text,
+        "button.disabledBackground": disabled_button,
+        "button.disabledText": disabled_text,
+        "input.background": base,
+        "input.text": text,
+        "input.border": mid,
+        "input.focusBorder": highlight,
+        "spinbox.background": base,
+        "spinbox.text": text,
+        "spinbox.border": mid,
+        "tab.background": window,
+        "tab.selectedBackground": base,
+        "tab.inactiveBackground": button,
+        "tab.text": text,
+        "tab.selectedText": highlight,
+        "table.background": base,
+        "table.text": text,
+        "table.headerBackground": button,
+        "table.headerText": button_text,
+        "table.grid": mid,
+        "tree.background": base,
+        "tree.text": text,
+        "scrollbar.background": window,
+        "scrollbar.handle": mid,
+        "selection.background": highlight,
+        "selection.text": highlighted_text,
+        "text.primary": window_text,
+        "text.secondary": text,
+        "text.disabled": disabled_text,
+        "text.gold": warning,
+        "accent.primary": highlight,
+        "accent.secondary": link,
+        "transformBar.background": window,
+        "transformBar.border": mid,
+        "splash.background": window,
+        "splash.panel": button,
+        "splash.brandBackground": base,
+        "splash.progressBackground": base,
+        "splash.border": mid,
+        "splash.text": window_text,
+        "splash.secondaryText": text,
+        "splash.accent": highlight,
+        "splash.progressTrack": base,
+        "splash.progressFill": highlight,
+        "matrixBar.background": window,
+        "matrixBar.glyph": highlight,
+        "matrixBar.text": highlight,
+        "matrixBar.subtext": text,
+        "matrixBar.metaText": text,
+        "matrixBar.ipcText": link,
+        "info": link,
+        "warning": warning,
+        "error": error,
+        "success": success,
+    }
 
 
 def _register_bundled_matrix_font() -> None:
@@ -198,6 +356,177 @@ class MatrixBarImagePreview(QtWidgets.QLabel):
         self.update()
 
 
+class SplashPreviewWidget(QtWidgets.QFrame):
+    """Compact preview for the startup splash theme styles."""
+
+    def __init__(self, app_root: Path, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.app_root = Path(app_root)
+        self.setObjectName("SplashPreview")
+        self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        root = QtWidgets.QHBoxLayout(self)
+        root.setContentsMargins(18, 18, 18, 18)
+        root.setSpacing(18)
+
+        self.brand_panel = QtWidgets.QFrame()
+        self.brand_panel.setObjectName("SplashPreviewBrand")
+        brand_layout = QtWidgets.QVBoxLayout(self.brand_panel)
+        brand_layout.setContentsMargins(18, 18, 18, 18)
+        brand_layout.setSpacing(10)
+        self.logo_label = QtWidgets.QLabel()
+        self.logo_label.setObjectName("SplashPreviewLogo")
+        self.logo_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.product_label = QtWidgets.QLabel()
+        self.product_label.setObjectName("SplashPreviewProduct")
+        self.product_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.product_label.setWordWrap(True)
+        self.subtitle_label = QtWidgets.QLabel()
+        self.subtitle_label.setObjectName("SplashPreviewSubtitle")
+        self.subtitle_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.subtitle_label.setWordWrap(True)
+        brand_layout.addStretch(1)
+        brand_layout.addWidget(self.logo_label)
+        brand_layout.addWidget(self.product_label)
+        brand_layout.addWidget(self.subtitle_label)
+        brand_layout.addStretch(1)
+        root.addWidget(self.brand_panel, 0)
+
+        self.content_panel = QtWidgets.QFrame()
+        self.content_panel.setObjectName("SplashPreviewContent")
+        content_layout = QtWidgets.QVBoxLayout(self.content_panel)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(10)
+        self.header_label = QtWidgets.QLabel("Preparing GhostRigger")
+        self.header_label.setObjectName("SplashPreviewHeader")
+        self.progress_block = QtWidgets.QFrame()
+        self.progress_block.setObjectName("SplashPreviewProgress")
+        progress_layout = QtWidgets.QVBoxLayout(self.progress_block)
+        progress_layout.setContentsMargins(12, 10, 12, 10)
+        progress_layout.setSpacing(6)
+        self.progress_title = QtWidgets.QLabel("Theme editor preview")
+        self.progress_title.setObjectName("SplashPreviewProgressTitle")
+        self.progress_detail = QtWidgets.QLabel("Library scan and theme feedback appear inside the splash.")
+        self.progress_detail.setObjectName("SplashPreviewProgressDetail")
+        self.progress_detail.setWordWrap(True)
+        self.progress = QtWidgets.QProgressBar()
+        self.progress.setRange(0, 100)
+        self.progress.setValue(72)
+        self.progress.setTextVisible(False)
+        progress_layout.addWidget(self.progress_title)
+        progress_layout.addWidget(self.progress_detail)
+        progress_layout.addWidget(self.progress)
+        self.copyright_label = QtWidgets.QLabel()
+        self.copyright_label.setObjectName("SplashPreviewCopyright")
+        self.copyright_label.setWordWrap(True)
+        content_layout.addWidget(self.header_label)
+        content_layout.addWidget(self.progress_block, 1)
+        content_layout.addWidget(self.copyright_label)
+        root.addWidget(self.content_panel, 1)
+
+    def apply_theme(self, theme: Theme) -> None:
+        width = theme.metric("splash.width", FALLBACK_METRICS["splash.width"])
+        height = theme.metric("splash.height", FALLBACK_METRICS["splash.height"])
+        logo_size = theme.metric("splash.logoSize", FALLBACK_METRICS["splash.logoSize"])
+        surface_style = theme.style("splash.surfaceStyle", FALLBACK_STYLES["splash.surfaceStyle"]).strip().lower()
+        if surface_style not in _SPLASH_SURFACE_STYLES:
+            surface_style = FALLBACK_STYLES["splash.surfaceStyle"]
+        self.setMinimumHeight(max(220, min(420, int(height))))
+        self.setMaximumHeight(max(240, min(480, int(height))))
+        product = theme.style("splash.productText", FALLBACK_STYLES["splash.productText"])
+        self.product_label.setText(product)
+        self.subtitle_label.setText(theme.style("splash.subtitleText", FALLBACK_STYLES["splash.subtitleText"]))
+        self.copyright_label.setText(theme.style("splash.copyrightText", FALLBACK_STYLES["splash.copyrightText"]))
+        font_metrics = QtGui.QFontMetrics(self.product_label.font())
+        self.brand_panel.setMinimumWidth(min(max(220, font_metrics.horizontalAdvance(product) + 42), max(260, int(width) // 2)))
+        pixmap = self._load_logo_pixmap(theme.style("splash.logoPath", ""))
+        if not pixmap.isNull():
+            self.logo_label.setPixmap(
+                pixmap.scaled(
+                    max(16, int(logo_size)),
+                    max(16, int(logo_size)),
+                    QtCore.Qt.KeepAspectRatio,
+                    QtCore.Qt.SmoothTransformation,
+                )
+            )
+        else:
+            self.logo_label.clear()
+        window = theme.color("splash.background", theme.color("window.background"))
+        panel = theme.color("splash.panel", theme.color("panel.background"))
+        panel_alt = theme.color("splash.brandBackground", theme.color("panel.backgroundAlt", theme.color("panel.altBackground")))
+        border = theme.color("splash.border", theme.color("toolbar.border", theme.color("accent.primary")))
+        text = theme.color("splash.text", theme.color("text.primary"))
+        subtext = theme.color("splash.secondaryText", theme.color("text.secondary"))
+        accent = theme.color("splash.accent", theme.color("accent.primary"))
+        progress_bg = theme.color("splash.progressTrack", theme.color("input.background"))
+        success = theme.color("splash.progressFill", theme.color("success", accent))
+        window_fill = _surface_fill(window, surface_style)
+        panel_fill = _surface_fill(panel, surface_style)
+        panel_alt_fill = _surface_fill(panel_alt, surface_style)
+        progress_fill = _surface_fill(progress_bg, surface_style)
+        border_top = _lighten_hex(border, 1.28) if surface_style in {"bevelled", "glossy"} else border
+        border_bottom = _darken_hex(border, 1.28) if surface_style in {"bevelled", "glossy"} else border
+        self.setStyleSheet(
+            f"""
+            QFrame#SplashPreview {{
+                background: {window_fill};
+                border: 1px solid {border};
+            }}
+            QFrame#SplashPreviewBrand {{
+                background: {panel_alt_fill};
+                border-top: 1px solid {border_top};
+                border-left: 1px solid {border_top};
+                border-right: 1px solid {border_bottom};
+                border-bottom: 1px solid {border_bottom};
+            }}
+            QFrame#SplashPreviewContent {{
+                background: {panel_fill};
+                border: 0;
+            }}
+            QLabel#SplashPreviewProduct {{
+                color: {text};
+                font-size: 15pt;
+                font-weight: 800;
+            }}
+            QLabel#SplashPreviewSubtitle,
+            QLabel#SplashPreviewCopyright,
+            QLabel#SplashPreviewProgressDetail {{
+                color: {subtext};
+            }}
+            QLabel#SplashPreviewHeader {{
+                color: {accent};
+                font-size: 12pt;
+                font-weight: 700;
+            }}
+            QFrame#SplashPreviewProgress {{
+                background: {panel_alt_fill};
+                border-top: 1px solid {border_top};
+                border-left: 1px solid {border_top};
+                border-right: 1px solid {border_bottom};
+                border-bottom: 1px solid {border_bottom};
+            }}
+            QLabel#SplashPreviewProgressTitle {{
+                color: {text};
+                font-weight: 700;
+            }}
+            QProgressBar {{
+                background: {progress_fill};
+                border: 1px solid {border};
+                height: 12px;
+            }}
+            QProgressBar::chunk {{
+                background: {success};
+            }}
+            """
+        )
+        self.setToolTip(f"Splash preview target size: {width} x {height}")
+
+    def _load_logo_pixmap(self, logo_path: str) -> QtGui.QPixmap:
+        path = Path(logo_path).expanduser() if logo_path else Path(__file__).resolve().parents[1] / "icons" / "logo_24.png"
+        if logo_path and not path.is_absolute():
+            path = self.app_root / path
+        return QtGui.QPixmap(path.as_posix())
+
+
 class ThemeEditorWindow(QtWidgets.QMainWindow):
     """Editor with local preview and explicit full-application apply actions."""
 
@@ -256,6 +585,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
 
         editor_tabs.addTab(self._build_theme_page(), "Theme")
         editor_tabs.addTab(self._build_matrix_bar_page(), "Matrix Bar")
+        editor_tabs.addTab(self._build_splash_page(), "Splash")
         editor_tabs.addTab(self._build_color_page(), "Colours")
         editor_tabs.addTab(self._build_font_page(), "Fonts")
         editor_tabs.addTab(self._build_metric_page(), "Metrics")
@@ -357,6 +687,83 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self._matrix_bar_preview_movie: QtGui.QMovie | None = None
         self.matrix_bar_preview.cropChanged.connect(self._set_matrix_bar_crop_from_preview)
         root.addWidget(self.matrix_bar_preview)
+        root.addStretch(1)
+        return page
+
+    def _build_splash_page(self) -> QtWidgets.QWidget:
+        page = QtWidgets.QWidget()
+        root = QtWidgets.QVBoxLayout(page)
+        form = QtWidgets.QFormLayout()
+        form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+        form.setHorizontalSpacing(8)
+        form.setVerticalSpacing(6)
+        self.splash_product = QtWidgets.QLineEdit()
+        self.splash_product.textEdited.connect(lambda value: self._set_splash_style("splash.productText", value))
+        self.splash_subtitle = QtWidgets.QLineEdit()
+        self.splash_subtitle.textEdited.connect(lambda value: self._set_splash_style("splash.subtitleText", value))
+        self.splash_copyright = QtWidgets.QPlainTextEdit()
+        self.splash_copyright.setMaximumHeight(70)
+        self.splash_copyright.textChanged.connect(
+            lambda: self._set_splash_style("splash.copyrightText", self.splash_copyright.toPlainText())
+        )
+        self.splash_logo = QtWidgets.QLineEdit()
+        self.splash_logo.textEdited.connect(lambda value: self._set_splash_style("splash.logoPath", value))
+        logo_row = QtWidgets.QHBoxLayout()
+        logo_row.addWidget(self.splash_logo, 1)
+        logo_browse = QtWidgets.QPushButton("Browse")
+        logo_browse.clicked.connect(self._browse_splash_logo)
+        logo_row.addWidget(logo_browse)
+        logo_reset = QtWidgets.QPushButton("Use Packaged")
+        logo_reset.clicked.connect(self._reset_splash_logo)
+        logo_row.addWidget(logo_reset)
+        self.splash_surface_style = QtWidgets.QComboBox()
+        for label, value in (("Matte", "matte"), ("Bevelled", "bevelled"), ("Glossy", "glossy"), ("Flat", "flat")):
+            self.splash_surface_style.addItem(label, value)
+        self.splash_surface_style.currentIndexChanged.connect(
+            lambda _=0: self._set_splash_style("splash.surfaceStyle", str(self.splash_surface_style.currentData() or "matte"))
+        )
+        self.splash_metric_spins: dict[str, QtWidgets.QSpinBox] = {}
+        size_row = QtWidgets.QHBoxLayout()
+        for label, key, minimum, maximum in (
+            ("W", "splash.width", 420, 1800),
+            ("H", "splash.height", 220, 900),
+            ("Logo", "splash.logoSize", 16, 220),
+        ):
+            size_row.addWidget(QtWidgets.QLabel(label))
+            spin = QtWidgets.QSpinBox()
+            spin.setRange(minimum, maximum)
+            spin.setSuffix(" px")
+            spin.setKeyboardTracking(False)
+            spin.valueChanged.connect(lambda value, metric_key=key: self._set_splash_metric(metric_key, int(value)))
+            self.splash_metric_spins[key] = spin
+            size_row.addWidget(spin)
+        form.addRow("Product", self.splash_product)
+        form.addRow("Subtitle", self.splash_subtitle)
+        form.addRow("Copyright", self.splash_copyright)
+        form.addRow("Logo image", logo_row)
+        form.addRow("Surface style", self.splash_surface_style)
+        form.addRow("Splash size", size_row)
+        root.addLayout(form)
+        colour_group = QtWidgets.QGroupBox("Splash Colours")
+        colour_grid = QtWidgets.QGridLayout(colour_group)
+        colour_grid.setColumnStretch(1, 1)
+        self.splash_color_edits: dict[str, QtWidgets.QLineEdit] = {}
+        for row, token in enumerate(_SPLASH_COLOR_KEYS):
+            colour_grid.addWidget(QtWidgets.QLabel(token), row, 0)
+            edit = QtWidgets.QLineEdit()
+            edit.setMaxLength(9)
+            edit.textEdited.connect(lambda value, colour_token=token: self._set_splash_color(colour_token, value))
+            self.splash_color_edits[token] = edit
+            colour_grid.addWidget(edit, row, 1)
+            picker = QtWidgets.QPushButton("Pick")
+            picker.clicked.connect(lambda _checked=False, colour_token=token: self._pick_splash_color(colour_token))
+            colour_grid.addWidget(picker, row, 2)
+            reset = QtWidgets.QPushButton("Reset")
+            reset.clicked.connect(lambda _checked=False, colour_token=token: self._reset_splash_color(colour_token))
+            colour_grid.addWidget(reset, row, 3)
+        root.addWidget(colour_group)
+        self.splash_preview = SplashPreviewWidget(self.theme_manager.app_root)
+        root.addWidget(self.splash_preview)
         root.addStretch(1)
         return page
 
@@ -579,6 +986,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
     def _load_theme(self, theme_id: str) -> None:
         theme = self.theme_manager.get_theme(theme_id)
         self._theme = copy.deepcopy(theme)
+        self._apply_live_native_palette()
         self.theme_id.setText(self._theme.id)
         self.theme_name.setText(self._theme.name)
         self.theme_version.setText(self._theme.version)
@@ -587,6 +995,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self._populate_fonts()
         self._populate_metric_tokens()
         self._populate_matrix_bar_controls()
+        self._populate_splash_controls()
         self._populate_style_controls()
         self._dirty = False
         self._refresh_preview()
@@ -834,6 +1243,159 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
             self.matrix_bar_image.setText(path)
             self._set_matrix_bar_text_style("matrixBar.imagePath", path)
 
+    def _splash_style_value(self, key: str) -> str:
+        return str(self._theme.styles.get(key, FALLBACK_STYLES.get(key, "")))
+
+    def _populate_splash_controls(self) -> None:
+        if not hasattr(self, "splash_product"):
+            return
+        self.splash_product.blockSignals(True)
+        self.splash_subtitle.blockSignals(True)
+        self.splash_copyright.blockSignals(True)
+        self.splash_logo.blockSignals(True)
+        self.splash_surface_style.blockSignals(True)
+        self.splash_product.setText(self._splash_style_value("splash.productText"))
+        self.splash_subtitle.setText(self._splash_style_value("splash.subtitleText"))
+        self.splash_copyright.setPlainText(self._splash_style_value("splash.copyrightText"))
+        self.splash_logo.setText(self._splash_style_value("splash.logoPath"))
+        surface_style = self._splash_style_value("splash.surfaceStyle").strip().lower() or "matte"
+        index = self.splash_surface_style.findData(surface_style if surface_style in _SPLASH_SURFACE_STYLES else "matte")
+        self.splash_surface_style.setCurrentIndex(max(index, 0))
+        self.splash_product.blockSignals(False)
+        self.splash_subtitle.blockSignals(False)
+        self.splash_copyright.blockSignals(False)
+        self.splash_logo.blockSignals(False)
+        self.splash_surface_style.blockSignals(False)
+        for key, spin in getattr(self, "splash_metric_spins", {}).items():
+            spin.blockSignals(True)
+            spin.setValue(self._theme.metric(key, FALLBACK_METRICS[key]))
+            spin.blockSignals(False)
+        for key, edit in getattr(self, "splash_color_edits", {}).items():
+            value = self._theme.color(key)
+            edit.blockSignals(True)
+            edit.setText(value)
+            edit.setStyleSheet(f"background:{value}; color:{self._contrast_text(value)};")
+            edit.blockSignals(False)
+
+    def _set_splash_style(self, key: str, value: str) -> None:
+        if key not in _SPLASH_STYLE_KEYS:
+            return
+        cleaned = value.strip() if key == "splash.logoPath" else value.strip()
+        if key == "splash.surfaceStyle":
+            cleaned = cleaned.lower()
+            if cleaned not in _SPLASH_SURFACE_STYLES:
+                cleaned = "matte"
+        if cleaned:
+            self._theme.styles[key] = cleaned
+        else:
+            self._theme.styles.pop(key, None)
+        self._mark_dirty()
+        self._refresh_preview()
+
+    def _set_splash_metric(self, key: str, value: int) -> None:
+        if key not in {"splash.width", "splash.height", "splash.logoSize"}:
+            return
+        self._theme.metrics[key] = max(0, min(5000, int(value)))
+        spin = getattr(self, "splash_metric_spins", {}).get(key)
+        if spin is not None and spin.value() != self._theme.metrics[key]:
+            spin.blockSignals(True)
+            spin.setValue(self._theme.metrics[key])
+            spin.blockSignals(False)
+        self._mark_dirty()
+        self._refresh_preview()
+
+    def _set_splash_color(self, key: str, value: str) -> None:
+        value = value.strip().upper()
+        if key not in _SPLASH_COLOR_KEYS or not _HEX_RE.match(value):
+            return
+        self._theme.colors[key] = value
+        edit = getattr(self, "splash_color_edits", {}).get(key)
+        if edit is not None:
+            if edit.text() != value:
+                edit.blockSignals(True)
+                edit.setText(value)
+                edit.blockSignals(False)
+            edit.setStyleSheet(f"background:{value}; color:{self._contrast_text(value)};")
+        self._mark_dirty()
+        self._refresh_preview()
+
+    def _pick_splash_color(self, key: str) -> None:
+        current = QtGui.QColor(self._theme.color(key))
+        picked = QtWidgets.QColorDialog.getColor(current, self, f"Select {key}")
+        if picked.isValid():
+            value = picked.name().upper()
+            edit = self.splash_color_edits.get(key)
+            if edit is not None:
+                edit.setText(value)
+            self._set_splash_color(key, value)
+
+    def _reset_splash_color(self, key: str) -> None:
+        if key not in _SPLASH_COLOR_KEYS:
+            return
+        value = self._derived_splash_color(key).upper()
+        self._theme.colors[key] = value
+        edit = self.splash_color_edits.get(key)
+        if edit is not None:
+            edit.setText(value)
+            edit.setStyleSheet(f"background:{value}; color:{self._contrast_text(value)};")
+        self._mark_dirty()
+        self._refresh_preview()
+
+    def _derived_splash_color(self, key: str) -> str:
+        if self._theme.is_native():
+            palette = QtWidgets.QApplication.palette()
+            native = {
+                "splash.background": palette.color(QtGui.QPalette.Window).name(),
+                "splash.panel": palette.color(QtGui.QPalette.Base).name(),
+                "splash.brandBackground": palette.color(QtGui.QPalette.AlternateBase).name(),
+                "splash.progressBackground": palette.color(QtGui.QPalette.AlternateBase).name(),
+                "splash.border": palette.color(QtGui.QPalette.Mid).name(),
+                "splash.text": palette.color(QtGui.QPalette.WindowText).name(),
+                "splash.secondaryText": palette.color(QtGui.QPalette.Text).name(),
+                "splash.accent": palette.color(QtGui.QPalette.Highlight).name(),
+                "splash.progressTrack": palette.color(QtGui.QPalette.Base).name(),
+                "splash.progressFill": palette.color(QtGui.QPalette.Highlight).name(),
+            }
+            return native.get(key, self._theme.color(key))
+        derived = {
+            "splash.background": self._theme.color("window.background"),
+            "splash.panel": self._theme.color("panel.background"),
+            "splash.brandBackground": self._theme.color("panel.backgroundAlt", self._theme.color("panel.altBackground")),
+            "splash.progressBackground": self._theme.color("panel.backgroundAlt", self._theme.color("panel.altBackground")),
+            "splash.border": self._theme.color("toolbar.border", self._theme.color("panel.border")),
+            "splash.text": self._theme.color("text.primary"),
+            "splash.secondaryText": self._theme.color("text.secondary"),
+            "splash.accent": self._theme.color("accent.primary"),
+            "splash.progressTrack": self._theme.color("input.background"),
+            "splash.progressFill": self._theme.color("success", self._theme.color("accent.primary")),
+        }
+        return derived.get(key, self._theme.color(key))
+
+    @staticmethod
+    def _contrast_text(value: str) -> str:
+        color = QtGui.QColor(value)
+        if not color.isValid():
+            return "#FFFFFF"
+        luminance = (0.299 * color.red() + 0.587 * color.green() + 0.114 * color.blue()) / 255.0
+        return "#000000" if luminance > 0.58 else "#FFFFFF"
+
+    def _browse_splash_logo(self) -> None:
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Select Splash Logo",
+            self.splash_logo.text().strip(),
+            "Images (*.png *.jpg *.jpeg *.webp *.bmp);;All files (*.*)",
+        )
+        if path:
+            self.splash_logo.setText(path)
+            self._set_splash_style("splash.logoPath", path)
+
+    def _reset_splash_logo(self) -> None:
+        self.splash_logo.clear()
+        self._theme.styles.pop("splash.logoPath", None)
+        self._mark_dirty()
+        self._refresh_preview()
+
     def _clear_matrix_bar_preview_media(self) -> None:
         movie = getattr(self, "_matrix_bar_preview_movie", None)
         if movie is not None:
@@ -1040,6 +1602,8 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
             f"color:{self._theme.color('viewport.text')}; "
             f"border:1px solid {self._theme.color('transformBar.border')};"
         )
+        if hasattr(self, "splash_preview"):
+            self.splash_preview.apply_theme(preview_theme)
         self._refresh_matrix_bar_preview()
 
     def _mark_dirty(self, *_args) -> None:
@@ -1080,6 +1644,10 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         )
         self._load_theme_fields()
 
+    def _apply_live_native_palette(self) -> None:
+        if self._theme.is_native():
+            self._theme.colors.update(_live_native_palette_colors())
+
     def _rename_theme(self) -> None:
         text, ok = QtWidgets.QInputDialog.getText(self, "Rename Theme", "Theme name", text=self.theme_name.text())
         if ok and text.strip():
@@ -1087,6 +1655,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
             self._mark_dirty()
 
     def _load_theme_fields(self) -> None:
+        self._apply_live_native_palette()
         self.theme_id.setText(self._theme.id)
         self.theme_name.setText(self._theme.name)
         self.theme_version.setText(self._theme.version)
@@ -1095,6 +1664,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self._populate_fonts()
         self._populate_metric_tokens()
         self._populate_matrix_bar_controls()
+        self._populate_splash_controls()
         self._populate_style_controls()
         self._refresh_preview()
 
@@ -1209,8 +1779,18 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self._load_theme(str(self.theme_combo.currentData() or self.theme_manager.get_theme().id))
         self._load_layout(str(self.layout_combo.currentData() or self.layout_manager.get_layout().id))
 
+    def close_without_prompt(self) -> None:
+        self.setProperty("_skipUnsavedPrompt", True)
+        self.close()
+
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # noqa: N802
-        if self._dirty:
+        skip_prompt = bool(self.property("_skipUnsavedPrompt"))
+        spontaneous = True
+        try:
+            spontaneous = bool(event.spontaneous())
+        except Exception:
+            spontaneous = True
+        if self._dirty and not skip_prompt and spontaneous:
             result = QtWidgets.QMessageBox.question(self, "Theme Editor", "Discard unsaved theme/layout changes?")
             if result != QtWidgets.QMessageBox.Yes:
                 event.ignore()

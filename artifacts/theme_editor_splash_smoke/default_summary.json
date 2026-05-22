@@ -1,0 +1,9 @@
+{
+  "screenshot": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\theme_editor_splash_smoke\\theme_editor_default_splash_colours.png",
+  "theme": "default",
+  "splash_accent": "#1F6FEB",
+  "splash_background": "#F3F3F3",
+  "matrix_green_present_in_preview": false,
+  "accent_edit": "#1F6FEB",
+  "progress_fill_edit": "#1B8F45"
+}

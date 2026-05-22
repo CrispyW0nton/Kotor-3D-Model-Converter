@@ -5,8 +5,8 @@
         <toolbar id="viewport" visible="true" buttonMode="textBesideIcon" iconSize="18" height="36"/>
     </toolbars>
     <panels>
-        <panel id="contentBrowser" region="left" visible="true" minWidth="320" preferredWidth="500"/>
-        <panel id="scene" region="left" visible="true" minWidth="280" preferredWidth="360"/>
+        <panel id="contentBrowser" region="left" visible="true" minWidth="320" preferredWidth="500" minHeight="380" preferredHeight="560"/>
+        <panel id="scene" region="left" visible="true" minWidth="280" preferredWidth="360" minHeight="220" preferredHeight="280"/>
         <panel id="library" region="left" visible="true" minWidth="320" preferredWidth="430"/>
         <panel id="modules" region="left" visible="true" minWidth="320" preferredWidth="430"/>
         <panel id="properties" region="right" visible="true" minWidth="320" preferredWidth="420"/>

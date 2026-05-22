@@ -70,7 +70,7 @@ from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditorWindow
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
 from src.gui.libtheme import LayoutManager, ThemeManager
-from src.gui.libtheme.style_tokens import LEGACY_MATRIX_COLORS
+from src.gui.libtheme.style_tokens import FALLBACK_STYLES, LEGACY_MATRIX_COLORS
 from src.gui.libtheme.theme_editor_window import ThemeEditorWindow
 from src.gui.libtheme.theme_settings import ThemeLayoutSettings
 from src.gui.libtheme.theme_watcher import ThemeLayoutWatcher
@@ -82,9 +82,90 @@ from src.core.scene.scene_resource_ref import SceneResourceRef
 
 
 C = dict(LEGACY_MATRIX_COLORS)
+_SPLASH_SURFACE_STYLES = {"matte", "bevelled", "glossy", "flat"}
 
 _GUI_DIR = Path(__file__).resolve().parents[1]
 _QT_ICON_DIR = (_GUI_DIR / "icons").as_posix()
+
+
+def _lighten_hex(value: str, factor: float = 1.18) -> str:
+    color = QtGui.QColor(value)
+    if not color.isValid():
+        return value
+    return color.lighter(int(factor * 100)).name().upper()
+
+
+def _darken_hex(value: str, factor: float = 1.18) -> str:
+    color = QtGui.QColor(value)
+    if not color.isValid():
+        return value
+    return color.darker(int(factor * 100)).name().upper()
+
+
+def _surface_fill(value: str, style: str) -> str:
+    style = style if style in _SPLASH_SURFACE_STYLES else "matte"
+    if style == "flat":
+        return value
+    if style == "bevelled":
+        return f"qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {_lighten_hex(value, 1.18)}, stop:1 {_darken_hex(value, 1.05)})"
+    if style == "glossy":
+        return (
+            "qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            f"stop:0 {_lighten_hex(value, 1.35)}, stop:0.48 {_lighten_hex(value, 1.10)}, "
+            f"stop:0.50 {value}, stop:1 {_darken_hex(value, 1.18)})"
+        )
+    return f"qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {value}, stop:1 {_darken_hex(value, 1.06)})"
+
+
+def _palette_hex(palette: QtGui.QPalette, role: QtGui.QPalette.ColorRole, group: QtGui.QPalette.ColorGroup | None = None) -> str:
+    color = palette.color(group, role) if group is not None else palette.color(role)
+    return color.name().upper()
+
+
+def _native_splash_palette_colors() -> dict[str, str]:
+    app = QtWidgets.QApplication.instance()
+    palette = app.palette() if app is not None else QtGui.QPalette()
+    role = QtGui.QPalette.ColorRole
+    return {
+        "splash.background": _palette_hex(palette, role.Window),
+        "splash.panel": _palette_hex(palette, role.Button),
+        "splash.brandBackground": _palette_hex(palette, role.Base),
+        "splash.progressBackground": _palette_hex(palette, role.Base),
+        "splash.border": _palette_hex(palette, role.Mid),
+        "splash.text": _palette_hex(palette, role.WindowText),
+        "splash.secondaryText": _palette_hex(palette, role.Text),
+        "splash.accent": _palette_hex(palette, role.Highlight),
+        "splash.progressTrack": _palette_hex(palette, role.Base),
+        "splash.progressFill": _palette_hex(palette, role.Highlight),
+        "window.background": _palette_hex(palette, role.Window),
+        "panel.background": _palette_hex(palette, role.Button),
+        "panel.backgroundAlt": _palette_hex(palette, role.Base),
+        "panel.altBackground": _palette_hex(palette, role.Base),
+        "toolbar.border": _palette_hex(palette, role.Mid),
+        "text.primary": _palette_hex(palette, role.WindowText),
+        "text.secondary": _palette_hex(palette, role.Text),
+        "accent.primary": _palette_hex(palette, role.Highlight),
+        "input.background": _palette_hex(palette, role.Base),
+        "success": _palette_hex(palette, role.Highlight),
+    }
+
+
+class _ThemeColorOverride:
+    def __init__(self, theme, colors: dict[str, str]) -> None:
+        self._theme = theme
+        self._colors = colors
+
+    def color(self, token: str, default: str | None = None) -> str:
+        return self._colors.get(token, self._theme.color(token, default))
+
+    def metric(self, token: str, default: int | None = None) -> int:
+        return self._theme.metric(token, default)
+
+    def style(self, token: str, default: str | None = None) -> str:
+        return self._theme.style(token, default)
+
+    def is_native(self) -> bool:
+        return self._theme.is_native()
 
 
 def _qt_object_alive(obj) -> bool:
@@ -349,25 +430,108 @@ class LibraryScanWorker(QtCore.QObject):
     @QtCore.Slot()
     def run(self):
         try:
-            from src.core.qt_core.assets.resource_manager import ResourceManager
-
-            mgr = ResourceManager()
-            rows = []
-            if self.k1_dir:
-                ok = mgr.set_k1_dir(self.k1_dir)
-                if ok:
-                    for resref, _restype in mgr.list_models("K1"):
-                        rows.append({"game": "K1", "resref": resref, "source": self.k1_dir})
-            if self.k2_dir:
-                ok = mgr.set_k2_dir(self.k2_dir)
-                if ok:
-                    for resref, _restype in mgr.list_models("K2"):
-                        rows.append({"game": "K2", "resref": resref, "source": self.k2_dir})
-            rows = enrich_library_rows(rows)
-            rows.sort(key=lambda item: (item["game"], item["resref"]))
+            rows = _scan_library_rows_sync(self.k1_dir, self.k2_dir)
             self.finished.emit(rows, "")
         except Exception:
             self.finished.emit([], traceback.format_exc())
+
+
+def _scan_library_rows_sync(k1_dir: str = "", k2_dir: str = "") -> list[dict]:
+    from src.core.qt_core.assets.resource_manager import ResourceManager
+
+    mgr = ResourceManager()
+    rows = []
+    if k1_dir:
+        ok = mgr.set_k1_dir(k1_dir)
+        if ok:
+            for resref, _restype in mgr.list_models("K1"):
+                rows.append({"game": "K1", "resref": resref, "source": k1_dir})
+    if k2_dir:
+        ok = mgr.set_k2_dir(k2_dir)
+        if ok:
+            for resref, _restype in mgr.list_models("K2"):
+                rows.append({"game": "K2", "resref": resref, "source": k2_dir})
+    rows = enrich_library_rows(rows)
+    rows.sort(key=lambda item: (item["game"], item["resref"]))
+    return rows
+
+
+def _read_settings_file(path: Path) -> dict:
+    try:
+        if path.exists():
+            return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        log.warning("Could not read settings from %s", path, exc_info=True)
+    return {}
+
+
+def _write_settings_file(path: Path, values: dict) -> None:
+    try:
+        save_settings(path, values)
+    except Exception:
+        log.warning("Could not save settings to %s", path, exc_info=True)
+
+
+def _build_prelaunch_library_input(
+    app_root: Path,
+    startup_input: Optional[dict] = None,
+    status_callback=None,
+) -> dict:
+    payload = dict(startup_input or {})
+    settings_path = app_root / "settings.json"
+    settings = _read_settings_file(settings_path)
+    autoscan = bool(settings.get("autoscan", True))
+    k1_dir = str(settings.get("k1_dir") or "").strip()
+    k2_dir = str(settings.get("k2_dir") or "").strip()
+    detected = False
+
+    def status(title: str, detail: str) -> None:
+        if status_callback is not None:
+            status_callback(title, detail)
+
+    status("Detecting game installs", "Checking saved paths and installed KotOR directories...")
+    if not (k1_dir and k2_dir):
+        from src.resources.game_detector import detect_kotor_dirs, save_config
+
+        found_k1, found_k2 = detect_kotor_dirs()
+        if found_k1 and not k1_dir:
+            k1_dir = found_k1
+            settings["k1_dir"] = found_k1
+            detected = True
+        if found_k2 and not k2_dir:
+            k2_dir = found_k2
+            settings["k2_dir"] = found_k2
+            detected = True
+        if detected:
+            save_config(k1_dir or None, k2_dir or None)
+            _write_settings_file(settings_path, settings)
+
+    preloaded = {
+        "k1_dir": k1_dir,
+        "k2_dir": k2_dir,
+        "rows": [],
+        "error": "",
+        "autoscan": autoscan,
+        "detection_attempted": True,
+        "detected": detected,
+    }
+    payload["preloaded_library"] = preloaded
+    if not (k1_dir or k2_dir):
+        preloaded["error"] = "No KotOR game directories were detected."
+        status("No game installs found", "GhostRigger will open with an empty Content Browser.")
+        return payload
+    if not autoscan:
+        status("Game installs ready", "Startup library scan is disabled in Settings.")
+        return payload
+
+    try:
+        status("Indexing game libraries", "Scanning model resources before the main window opens...")
+        preloaded["rows"] = _scan_library_rows_sync(k1_dir, k2_dir)
+        status("Library ready", f"{len(preloaded['rows'])} model resources indexed.")
+    except Exception:
+        preloaded["error"] = traceback.format_exc()
+        status("Library scan failed", "GhostRigger will open; see the output log for details.")
+    return payload
 
 
 class AnimationLibraryScanWorker(QtCore.QObject):
@@ -644,6 +808,104 @@ class GhostRiggerLogPanel(QtWidgets.QWidget):
             log.error("Log save failed: %s", exc)
 
 
+class QtProgressPanel(QtWidgets.QFrame):
+    """Reusable themed progress block used by startup splash and toast."""
+
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
+        super().__init__(parent)
+        self.setObjectName("ProgressPanel")
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(6)
+        self.title_label = QtWidgets.QLabel()
+        self.title_label.setObjectName("ProgressPanelTitle")
+        self.detail_label = QtWidgets.QLabel()
+        self.detail_label.setObjectName("ProgressPanelDetail")
+        self.detail_label.setWordWrap(True)
+        self.progress = QtWidgets.QProgressBar()
+        self.progress.setTextVisible(False)
+        layout.addWidget(self.title_label)
+        layout.addWidget(self.detail_label)
+        layout.addWidget(self.progress)
+        self.apply_ghost_theme(None)
+
+    def apply_ghost_theme(self, theme, *, color_prefix: str = "", surface_style: str = "flat") -> None:
+        if theme is None:
+            panel = C["panel"]
+            border = C["accent"]
+            text = C["text"]
+            subtext = C["text2"]
+            bg = C["bg"]
+            progress = C["accent"]
+        else:
+            if color_prefix:
+                panel = theme.color(f"{color_prefix}.progressBackground", theme.color("panel.backgroundAlt", theme.color("panel.altBackground")))
+                border = theme.color(f"{color_prefix}.border", theme.color("accent.primary"))
+                text = theme.color(f"{color_prefix}.text", theme.color("text.primary"))
+                subtext = theme.color(f"{color_prefix}.secondaryText", theme.color("text.secondary"))
+                bg = theme.color(f"{color_prefix}.progressTrack", theme.color("input.background"))
+                progress = theme.color(f"{color_prefix}.progressFill", theme.color("success", theme.color("accent.primary")))
+            else:
+                panel = theme.color("panel.backgroundAlt", theme.color("panel.altBackground"))
+                border = theme.color("accent.primary")
+                text = theme.color("text.primary")
+                subtext = theme.color("text.secondary")
+                bg = theme.color("input.background")
+                progress = theme.color("success", theme.color("accent.primary"))
+        panel_fill = _surface_fill(panel, surface_style)
+        bg_fill = _surface_fill(bg, surface_style)
+        border_top = _lighten_hex(border, 1.16)
+        border_bottom = _darken_hex(border, 1.18)
+        self.setStyleSheet(
+            f"""
+            QFrame#ProgressPanel,
+            QFrame#StartupSplashProgressPanel {{
+                background: {panel_fill};
+                border-top: 1px solid {border_top};
+                border-left: 1px solid {border_top};
+                border-right: 1px solid {border_bottom};
+                border-bottom: 1px solid {border_bottom};
+            }}
+            QLabel#ProgressPanelTitle {{
+                color: {text};
+                font-weight: 700;
+            }}
+            QLabel#ProgressPanelDetail {{
+                color: {subtext};
+            }}
+            QProgressBar {{
+                background: {bg_fill};
+                border: 1px solid {border};
+                height: 8px;
+                text-align: center;
+            }}
+            QProgressBar::chunk {{
+                background: {progress};
+            }}
+            """
+        )
+
+    def set_busy(self, title: str, detail: str) -> None:
+        self.title_label.setText(title)
+        self.detail_label.setText(detail)
+        self.progress.setRange(0, 0)
+
+    def set_progress(self, title: str, detail: str, value: int, total: int) -> None:
+        self.title_label.setText(title)
+        self.detail_label.setText(detail)
+        if total > 0:
+            self.progress.setRange(0, total)
+            self.progress.setValue(max(0, min(value, total)))
+        else:
+            self.progress.setRange(0, 0)
+
+    def set_finished(self, title: str, detail: str) -> None:
+        self.title_label.setText(title)
+        self.detail_label.setText(detail)
+        self.progress.setRange(0, 1)
+        self.progress.setValue(1)
+
+
 class QtProgressToast(QtWidgets.QFrame):
     """Small non-modal progress toast anchored to the main window."""
 
@@ -655,94 +917,44 @@ class QtProgressToast(QtWidgets.QFrame):
         self._close_timer = QtCore.QTimer(self)
         self._close_timer.setSingleShot(True)
         self._close_timer.timeout.connect(self.hide)
-        self._build()
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.progress_panel = QtProgressPanel(self)
+        layout.addWidget(self.progress_panel)
         parent_theme = getattr(getattr(parent, "theme_manager", None), "current_theme", None)
         if parent_theme is not None:
             self.apply_ghost_theme(parent_theme)
 
-    def _build(self):
-        self.apply_ghost_theme(None)
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(6)
-        self.title_label = QtWidgets.QLabel()
-        self.title_label.setObjectName("ToastTitle")
-        self.detail_label = QtWidgets.QLabel()
-        self.detail_label.setObjectName("ToastDetail")
-        self.detail_label.setWordWrap(True)
-        self.progress = QtWidgets.QProgressBar()
-        self.progress.setTextVisible(False)
-        layout.addWidget(self.title_label)
-        layout.addWidget(self.detail_label)
-        layout.addWidget(self.progress)
-
     def apply_ghost_theme(self, theme) -> None:
-        if theme is None:
-            panel = C["panel"]
-            border = C["accent"]
-            text = C["text"]
-            subtext = C["text2"]
-            bg = C["bg"]
-            progress = C["accent"]
-        else:
-            panel = theme.color("panel.backgroundAlt", theme.color("panel.altBackground"))
-            border = theme.color("accent.primary")
-            text = theme.color("text.primary")
-            subtext = theme.color("text.secondary")
-            bg = theme.color("input.background")
-            progress = theme.color("success", theme.color("accent.primary"))
-        self.setStyleSheet(
-            f"""
-            #ProgressToast {{
-                background: {panel};
-                border: 1px solid {border};
-            }}
-            QLabel#ToastTitle {{
-                color: {text};
-                font-weight: 700;
-            }}
-            QLabel#ToastDetail {{
-                color: {subtext};
-            }}
-            QProgressBar {{
-                background: {bg};
-                border: 1px solid {border};
-                height: 8px;
-                text-align: center;
-            }}
-            QProgressBar::chunk {{
-                background: {progress};
-            }}
-            """
-        )
+        self.progress_panel.apply_ghost_theme(theme)
+
+    def apply_native_theme(self) -> None:
+        theme = None
+        parent = self.parentWidget()
+        if parent is not None:
+            theme = getattr(getattr(parent, "theme_manager", None), "current_theme", None)
+            if theme is None:
+                manager = getattr(parent, "theme_manager", None)
+                if manager is not None:
+                    theme = manager.get_theme()
+        self.progress_panel.apply_ghost_theme(theme)
 
     def show_busy(self, title: str, detail: str):
         self._close_timer.stop()
-        self.title_label.setText(title)
-        self.detail_label.setText(detail)
-        self.progress.setRange(0, 0)
+        self.progress_panel.set_busy(title, detail)
         self._reposition()
         self.show()
         self.raise_()
 
     def update_progress(self, title: str, detail: str, value: int, total: int):
         self._close_timer.stop()
-        self.title_label.setText(title)
-        self.detail_label.setText(detail)
-        if total > 0:
-            self.progress.setRange(0, total)
-            self.progress.setValue(max(0, min(value, total)))
-        else:
-            self.progress.setRange(0, 0)
+        self.progress_panel.set_progress(title, detail, value, total)
         self._reposition()
         self.show()
         self.raise_()
 
     def finish(self, title: str, detail: str, delay_ms: int = 2200):
-        self.title_label.setText(title)
-        self.detail_label.setText(detail)
-        self.progress.setRange(0, 1)
-        self.progress.setValue(1)
+        self.progress_panel.set_finished(title, detail)
         self._reposition()
         self.show()
         self.raise_()
@@ -758,6 +970,205 @@ class QtProgressToast(QtWidgets.QFrame):
             QtCore.QPoint(x, y)
         )
         self.move(point)
+
+
+class QtStartupSplash(QtWidgets.QWidget):
+    """Theme-aware startup splash with embedded progress panel."""
+
+    COPYRIGHT_TEXT = "GhostRigger (C) 2026 Shaolin (CrispyWonton). Co-developed by LordVaderCW."
+    PRODUCT_TEXT = "GhostRigger"
+    SUBTITLE_TEXT = "Odyssey Engine Pipeline"
+
+    def __init__(self, app_root: Path, theme=None, *, theme_manager: Optional[ThemeManager] = None):
+        super().__init__(None, QtCore.Qt.SplashScreen | QtCore.Qt.FramelessWindowHint)
+        self.app_root = Path(app_root)
+        self.theme_manager = theme_manager
+        self.setObjectName("StartupSplash")
+        self.setAttribute(QtCore.Qt.WA_ShowWithoutActivating, True)
+        self._build()
+        if self.theme_manager is not None:
+            self.theme_manager.register_theme_aware_widget(self)
+            self.theme_manager.themeChanged.connect(self.apply_ghost_theme)
+            theme = getattr(self.theme_manager, "current_theme", None) or self.theme_manager.get_theme()
+        self.apply_ghost_theme(theme)
+        self._center_on_screen()
+
+    def _build(self) -> None:
+        root = QtWidgets.QHBoxLayout(self)
+        root.setContentsMargins(18, 18, 18, 18)
+        root.setSpacing(18)
+
+        brand_panel = QtWidgets.QFrame()
+        brand_panel.setObjectName("StartupSplashBrand")
+        brand_layout = QtWidgets.QVBoxLayout(brand_panel)
+        brand_layout.setContentsMargins(18, 18, 18, 18)
+        brand_layout.setSpacing(10)
+        self.logo_label = QtWidgets.QLabel()
+        self.logo_label.setObjectName("StartupSplashLogo")
+        self.logo_label.setAlignment(QtCore.Qt.AlignCenter)
+        logo = QtGui.QPixmap((_GUI_DIR / "icons" / "logo_24.png").as_posix())
+        if not logo.isNull():
+            self.logo_label.setPixmap(logo.scaled(72, 72, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+        self.product_label = QtWidgets.QLabel("GhostRigger")
+        self.product_label.setObjectName("StartupSplashProduct")
+        self.product_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.product_label.setWordWrap(True)
+        self.subtitle_label = QtWidgets.QLabel("Odyssey Engine Pipeline")
+        self.subtitle_label.setObjectName("StartupSplashSubtitle")
+        self.subtitle_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.subtitle_label.setWordWrap(True)
+        brand_layout.addStretch(1)
+        brand_layout.addWidget(self.logo_label)
+        brand_layout.addWidget(self.product_label)
+        brand_layout.addWidget(self.subtitle_label)
+        brand_layout.addStretch(1)
+        root.addWidget(brand_panel, 0)
+
+        content = QtWidgets.QFrame()
+        content.setObjectName("StartupSplashContent")
+        content_layout = QtWidgets.QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(10)
+        self.header_label = QtWidgets.QLabel("Preparing GhostRigger")
+        self.header_label.setObjectName("StartupSplashHeader")
+        self.progress_panel = QtProgressPanel()
+        self.progress_panel.setObjectName("StartupSplashProgressPanel")
+        self.copyright_label = QtWidgets.QLabel(self.COPYRIGHT_TEXT)
+        self.copyright_label.setObjectName("StartupSplashCopyright")
+        self.copyright_label.setWordWrap(True)
+        content_layout.addWidget(self.header_label)
+        content_layout.addWidget(self.progress_panel, 1)
+        content_layout.addWidget(self.copyright_label)
+        root.addWidget(content, 1)
+
+    def apply_ghost_theme(self, theme) -> None:
+        style_theme = theme
+        if theme is not None and theme.is_native():
+            style_theme = _ThemeColorOverride(theme, _native_splash_palette_colors())
+        if theme is None:
+            window = C["bg"]
+            panel = C["panel"]
+            panel_alt = C["panel2"]
+            border = C["accent"]
+            text = C["text"]
+            subtext = C["text2"]
+            accent = C["accent"]
+            surface_style = "matte"
+        else:
+            window = style_theme.color("splash.background", style_theme.color("window.background"))
+            panel = style_theme.color("splash.panel", style_theme.color("panel.background"))
+            panel_alt = style_theme.color(
+                "splash.brandBackground",
+                style_theme.color("panel.backgroundAlt", style_theme.color("panel.altBackground")),
+            )
+            border = style_theme.color("splash.border", style_theme.color("toolbar.border", style_theme.color("accent.primary")))
+            text = style_theme.color("splash.text", style_theme.color("text.primary"))
+            subtext = style_theme.color("splash.secondaryText", style_theme.color("text.secondary"))
+            accent = style_theme.color("splash.accent", style_theme.color("accent.primary"))
+            surface_style = theme.style("splash.surfaceStyle", FALLBACK_STYLES["splash.surfaceStyle"]).strip().lower()
+            if surface_style not in _SPLASH_SURFACE_STYLES:
+                surface_style = "matte"
+        window_fill = _surface_fill(window, surface_style)
+        panel_fill = _surface_fill(panel, surface_style)
+        panel_alt_fill = _surface_fill(panel_alt, surface_style)
+        border_top = _lighten_hex(border, 1.16)
+        border_bottom = _darken_hex(border, 1.18)
+        self.setStyleSheet(
+            f"""
+            QWidget#StartupSplash {{
+                background: {window_fill};
+                border-top: 1px solid {border_top};
+                border-left: 1px solid {border_top};
+                border-right: 1px solid {border_bottom};
+                border-bottom: 1px solid {border_bottom};
+            }}
+            QFrame#StartupSplashBrand {{
+                background: {panel_alt_fill};
+                border-top: 1px solid {border_top};
+                border-left: 1px solid {border_top};
+                border-right: 1px solid {border_bottom};
+                border-bottom: 1px solid {border_bottom};
+            }}
+            QFrame#StartupSplashContent {{
+                background: {panel_fill};
+                border: 0;
+            }}
+            QLabel#StartupSplashProduct {{
+                color: {text};
+                font-size: 15pt;
+                font-weight: 800;
+            }}
+            QLabel#StartupSplashSubtitle,
+            QLabel#StartupSplashCopyright {{
+                color: {subtext};
+            }}
+            QLabel#StartupSplashHeader {{
+                color: {accent};
+                font-size: 12pt;
+                font-weight: 700;
+            }}
+            """
+        )
+        self.progress_panel.apply_ghost_theme(style_theme, color_prefix="splash", surface_style=surface_style)
+        self._apply_splash_content(theme)
+
+    def _apply_splash_content(self, theme) -> None:
+        if theme is not None:
+            width = theme.metric("splash.width", 720)
+            height = theme.metric("splash.height", 300)
+            logo_size = theme.metric("splash.logoSize", 72)
+            product = theme.style("splash.productText", self.PRODUCT_TEXT).strip() or self.PRODUCT_TEXT
+            subtitle = theme.style("splash.subtitleText", self.SUBTITLE_TEXT).strip() or self.SUBTITLE_TEXT
+            copyright_text = theme.style("splash.copyrightText", self.COPYRIGHT_TEXT).strip() or self.COPYRIGHT_TEXT
+            logo_path = theme.style("splash.logoPath", "").strip()
+        else:
+            width = 720
+            height = 300
+            logo_size = 72
+            product = self.PRODUCT_TEXT
+            subtitle = self.SUBTITLE_TEXT
+            copyright_text = self.COPYRIGHT_TEXT
+            logo_path = ""
+        self.setFixedSize(max(420, int(width)), max(220, int(height)))
+        self.product_label.setText(product)
+        self.subtitle_label.setText(subtitle)
+        self.copyright_label.setText(copyright_text)
+        font_metrics = QtGui.QFontMetrics(self.product_label.font())
+        self.product_label.setMinimumWidth(min(max(140, font_metrics.horizontalAdvance(product) + 18), max(160, int(width) // 2)))
+        pixmap = self._load_logo_pixmap(logo_path)
+        if not pixmap.isNull():
+            self.logo_label.setPixmap(
+                pixmap.scaled(
+                    max(16, int(logo_size)),
+                    max(16, int(logo_size)),
+                    QtCore.Qt.KeepAspectRatio,
+                    QtCore.Qt.SmoothTransformation,
+                )
+            )
+        else:
+            self.logo_label.clear()
+
+    def _load_logo_pixmap(self, logo_path: str) -> QtGui.QPixmap:
+        path = Path(logo_path).expanduser() if logo_path else (_GUI_DIR / "icons" / "logo_24.png")
+        if logo_path and not path.is_absolute():
+            path = self.app_root / path
+        return QtGui.QPixmap(path.as_posix())
+
+    def set_status(self, title: str, detail: str, *, value: int = 0, total: int = 0, finished: bool = False) -> None:
+        self.header_label.setText(title)
+        if finished:
+            self.progress_panel.set_finished(title, detail)
+        elif total > 0:
+            self.progress_panel.set_progress(title, detail, value, total)
+        else:
+            self.progress_panel.set_busy(title, detail)
+
+    def _center_on_screen(self) -> None:
+        screen = QtGui.QGuiApplication.primaryScreen()
+        if screen is None:
+            return
+        geometry = screen.availableGeometry()
+        self.move(geometry.center() - self.rect().center())
 
 
 class QtFloatingDockHost(QtWidgets.QMainWindow):
@@ -959,6 +1370,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.settings_data.setdefault("last_axis_mode", AxisMode.WORLD.value)
         self.settings_data.setdefault("last_pivot_edit_mode", "affect_object_only")
         self.settings_data.setdefault("show_adjust_pivot_toolbox", True)
+        self.settings_data.setdefault("autoscan", True)
+        self._preloaded_library = dict(self.startup_input.get("preloaded_library") or {})
+        self._suppress_theme_progress_toast = True
         self.theme_manager = ThemeManager(self.app_root, self.settings_data, self)
         self.layout_manager = LayoutManager(self.app_root, self.settings_data, self)
         self.theme_manager.themeChanged.connect(self._on_theme_changed)
@@ -1035,19 +1449,25 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.theme_manager.apply_current_theme(self)
         self.layout_manager.apply_current_layout(self)
         self._build_statusbar()
+        self._apply_preloaded_library()
         self._refresh_scene_view()
         self.scene_manager.active_scene.mark_clean()
         self._update_scene_chrome()
         self._configure_theme_watcher()
         self._log("Qt host window ready.", "success")
+        QtCore.QTimer.singleShot(1200, self._enable_theme_progress_toasts)
         QtCore.QTimer.singleShot(0, self._open_startup_inputs)
-        QtCore.QTimer.singleShot(250, self._auto_detect_dirs_on_startup)
+        if not self._preloaded_library.get("detection_attempted"):
+            QtCore.QTimer.singleShot(250, self._auto_detect_dirs_on_startup)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self._progress_toast is not None and self._progress_toast.isVisible():
             self._progress_toast._reposition()
         self._sync_reserved_top_rows()
+
+    def _enable_theme_progress_toasts(self) -> None:
+        self._suppress_theme_progress_toast = False
 
     def moveEvent(self, event):
         super().moveEvent(event)
@@ -1265,8 +1685,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         update_legacy_palette(theme)
         self._sync_theme_layout_settings()
         self._refresh_theme_sensitive_icons()
-        if self._progress_toast is not None:
-            self._progress_toast.apply_ghost_theme(theme)
+        self._apply_progress_toast_theme()
 
     def _on_layout_changed(self, layout) -> None:
         self._sync_theme_layout_settings()
@@ -2470,7 +2889,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             "content_browser",
             "Content Browser",
             self.content_browser_panel,
-            QtCore.Qt.BottomDockWidgetArea,
+            QtCore.Qt.LeftDockWidgetArea,
             scroll=False,
         )
         self.scene_dock = self._create_detachable_panel(
@@ -2504,6 +2923,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._create_detachable_panel("resources", "Resource Browser", self.resource_panel, QtCore.Qt.LeftDockWidgetArea)
         for dock in (self.content_browser_dock, self.scene_dock, self.properties_dock):
             dock.show()
+        self._stack_content_browser_under_scene()
 
         self.viewport = QtMainViewportWidget(self)
         self.viewport.set_navigation_profile(
@@ -2590,6 +3010,38 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.library_filter = QtWidgets.QLineEdit()
         self.props_text = QtWidgets.QTextEdit()
 
+    def _stack_content_browser_under_scene(self) -> None:
+        """Keep startup browsing in the left dock column without stealing the output/log row."""
+        if not all(_qt_object_alive(dock) for dock in (self.scene_dock, self.content_browser_dock)):
+            return
+        if self.scene_dock.isFloating() or self.content_browser_dock.isFloating():
+            return
+        self.splitDockWidget(self.scene_dock, self.content_browser_dock, QtCore.Qt.Vertical)
+        QtCore.QTimer.singleShot(0, self._resize_startup_left_dock_stack)
+
+    def _resize_startup_left_dock_stack(self) -> None:
+        if not all(_qt_object_alive(dock) for dock in (self.scene_dock, self.content_browser_dock)):
+            return
+        layout = self.layout_manager.get_layout()
+        scene_panel = layout.panel("scene")
+        content_panel = layout.panel("contentBrowser")
+        scene_height = max(scene_panel.min_height, scene_panel.preferred_height)
+        content_height = max(content_panel.min_height, content_panel.preferred_height)
+        left_width = max(scene_panel.min_width, scene_panel.preferred_width, content_panel.min_width, content_panel.preferred_width)
+        try:
+            self.resizeDocks(
+                [self.scene_dock, self.content_browser_dock],
+                [scene_height, content_height],
+                QtCore.Qt.Vertical,
+            )
+            self.resizeDocks(
+                [self.scene_dock, self.content_browser_dock],
+                [left_width, left_width],
+                QtCore.Qt.Horizontal,
+            )
+        except RuntimeError:
+            pass
+
     @QtCore.Slot(str, str)
     def _on_library_dirs_changed(self, k1_dir: str, k2_dir: str):
         self.k1_dir_edit.setText(k1_dir)
@@ -2615,36 +3067,58 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if self._progress_toast is None:
             self._progress_toast = QtProgressToast(self)
             self.theme_manager.register_theme_aware_widget(self._progress_toast)
+        self._apply_progress_toast_theme()
         self._progress_toast.show_busy(title, detail)
 
     def _update_progress_toast(self, title: str, detail: str, value: int, total: int):
         if self._progress_toast is None:
             self._progress_toast = QtProgressToast(self)
             self.theme_manager.register_theme_aware_widget(self._progress_toast)
+        self._apply_progress_toast_theme()
         self._progress_toast.update_progress(title, detail, value, total)
 
     def _finish_progress_toast(self, title: str, detail: str):
         if self._progress_toast is None:
             self._progress_toast = QtProgressToast(self)
             self.theme_manager.register_theme_aware_widget(self._progress_toast)
+        self._apply_progress_toast_theme()
         self._progress_toast.finish(title, detail)
+
+    def _apply_progress_toast_theme(self) -> None:
+        toast = getattr(self, "_progress_toast", None)
+        if toast is None:
+            return
+        theme = getattr(self.theme_manager, "current_theme", None) or self.theme_manager.get_theme()
+        native = getattr(getattr(self.theme_manager, "settings", None), "theme_mode", "") == "native"
+        if native and hasattr(toast, "apply_native_theme"):
+            toast.apply_native_theme()
+        else:
+            toast.apply_ghost_theme(theme)
 
     @QtCore.Slot(object)
     def _on_theme_apply_started(self, theme) -> None:
+        if getattr(self, "_suppress_theme_progress_toast", False):
+            return
         name = getattr(theme, "name", getattr(theme, "id", "theme"))
         self._show_progress_toast("Applying theme", f"Preparing {name}...")
 
     @QtCore.Slot(str, int, int)
     def _on_theme_apply_progress(self, detail: str, value: int, total: int) -> None:
+        if getattr(self, "_suppress_theme_progress_toast", False):
+            return
         self._update_progress_toast("Applying theme", detail, value, total)
 
     @QtCore.Slot(object, float)
     def _on_theme_apply_finished(self, theme, total_ms: float) -> None:
+        if getattr(self, "_suppress_theme_progress_toast", False):
+            return
         name = getattr(theme, "name", getattr(theme, "id", "Theme"))
         self._finish_progress_toast("Theme applied", f"{name} applied in {total_ms:.0f} ms.")
 
     @QtCore.Slot(str)
     def _on_theme_apply_failed(self, detail: str) -> None:
+        if getattr(self, "_suppress_theme_progress_toast", False):
+            return
         self._finish_progress_toast("Theme apply failed", detail[:180])
 
     @QtCore.Slot(str, int, int)
@@ -2716,6 +3190,40 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if self._auto_detect_worker_is_running() or self._scan_worker_is_running():
             return
         self._auto_detect_dirs()
+
+    def _apply_preloaded_library(self) -> None:
+        preloaded = getattr(self, "_preloaded_library", {}) or {}
+        if not preloaded:
+            return
+        k1_dir = str(preloaded.get("k1_dir") or "").strip()
+        k2_dir = str(preloaded.get("k2_dir") or "").strip()
+        if k1_dir or k2_dir:
+            self._on_library_dirs_changed(k1_dir or self.k1_dir_edit.text().strip(), k2_dir or self.k2_dir_edit.text().strip())
+        error = str(preloaded.get("error") or "")
+        if error and not preloaded.get("rows"):
+            self.library_panel.set_status("Startup library scan unavailable")
+            self._log(f"Startup library preload warning:\n{error}", "warning")
+            self.statusBar().showMessage("Library preload unavailable")
+            return
+        rows = list(preloaded.get("rows") or [])
+        if not rows:
+            status = "No KotOR directories found" if not (k1_dir or k2_dir) else "No models indexed"
+            self.library_panel.set_status(status)
+            self.statusBar().showMessage(status)
+            self._log(status, "warning")
+            return
+        self._library_rows = rows
+        self._rebuild_library_list()
+        self.library_panel.set_rows(rows)
+        self.library_panel.set_status(f"{len(rows)} models")
+        module_editor_window = getattr(self, "module_editor_window", None)
+        if module_editor_window is not None:
+            module_editor_window.set_library_rows(rows)
+        self._unreal_refresh_supermodel_library()
+        self._populate_resource_panel()
+        self._populate_animation_library_from_current_model()
+        self.statusBar().showMessage(f"{len(rows)} models")
+        self._log(f"Startup library preload complete: {len(rows)} models", "success")
 
     def _extract_library_row(self, row: dict):
         resref = str(row.get("resref") or "")
@@ -6387,6 +6895,23 @@ def run(app_root: Optional[str] = None, startup_input: Optional[dict] = None) ->
         if family in QtGui.QFontDatabase.families():
             app.setFont(QtGui.QFont(family, 9))
             break
-    win = QtGhostRiggerMainWindow(Path(app_root) if app_root else None, startup_input=startup_input)
+    root = Path(app_root) if app_root else Path(__file__).resolve().parents[2]
+    settings_data = _read_settings_file(root / "settings.json")
+    startup_theme_manager = ThemeManager(root, settings_data)
+    splash = QtStartupSplash(root, theme_manager=startup_theme_manager)
+    splash.show()
+
+    def update_prelaunch_status(title: str, detail: str) -> None:
+        finished = title.lower().endswith("ready")
+        splash.set_status(title, detail, finished=finished)
+        splash.show()
+        splash.raise_()
+        app.processEvents()
+
+    update_prelaunch_status("Preparing startup", "Detecting game installs before the main window opens...")
+    prepared_input = _build_prelaunch_library_input(root, startup_input, update_prelaunch_status)
+    app.processEvents()
+    win = QtGhostRiggerMainWindow(root, startup_input=prepared_input)
     win.show()
+    splash.close()
     return app.exec()

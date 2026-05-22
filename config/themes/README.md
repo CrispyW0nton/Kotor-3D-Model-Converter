@@ -13,6 +13,10 @@ Built-in themes are:
 - `light.xml`: modern light UI.
 - `classic.xml`: traditional light DCC/tool UI.
 
+The Default/native theme uses neutral native-style colour tokens, not Matrix
+fallback colours. `ThemeLoader` also repairs stale Matrix fallback values when
+older user overrides of a native theme are loaded.
+
 Themes define colours, fonts, icon provider defaults, Matrix bar style, and visual tokens.
 Layouts define window size, panel widths, splitter proportions, toolbar
 visibility, row heights, control density, and button display modes.
@@ -34,6 +38,18 @@ The Theme Editor owns Matrix bar appearance. Its Matrix Bar tab writes
 `matrixBar.cropX`, `matrixBar.cropY`, `matrixBar.cropW`, and
 `matrixBar.cropH` for selecting the image region. Matrix bar colours remain
 editable as `matrixBar.*` colour tokens.
+The Theme Editor also owns startup splash branding. Its Splash tab writes
+`splash.logoPath`, `splash.productText`, `splash.subtitleText`, and
+`splash.copyrightText` into `<styles>`, plus `splash.surfaceStyle` for the
+surface finish (`matte`, `bevelled`, `glossy`, or `flat`), and writes
+`splash.width`, `splash.height`, and `splash.logoSize` into `<metrics>`. The
+splash itself uses `splash.background`, `splash.panel`, `splash.brandBackground`,
+`splash.progressBackground`, `splash.border`, `splash.text`,
+`splash.secondaryText`, `splash.accent`, `splash.progressTrack`, and
+`splash.progressFill` colour tokens, which the Splash tab exposes next to the
+branding controls. Native/default themes are previewed against the live
+`QApplication` palette, so the splash matches the actual platform greys even
+when the XML file contains portable fallback colours.
 
 User themes and layouts can be placed in the platform-specific GhostRigger
 config directory:

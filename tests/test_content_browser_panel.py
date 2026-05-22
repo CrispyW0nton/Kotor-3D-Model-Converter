@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -320,3 +321,258 @@ def test_floating_host_clears_stale_dock_maximum_width() -> None:
 
     assert dock.maximumWidth() >= 900
     assert dock.width() >= 860
+
+
+def test_prelaunch_library_payload_scans_before_main_window(tmp_path, monkeypatch) -> None:
+    import src.gui.windows.qt_main_window as qt_main_window
+
+    app_root = tmp_path
+    (app_root / "settings.json").write_text(
+        '{"k1_dir": "C:/Games/KOTOR", "k2_dir": "C:/Games/KOTOR2", "autoscan": true}',
+        encoding="utf-8",
+    )
+    calls = []
+
+    def fake_scan(k1_dir, k2_dir):
+        calls.append((k1_dir, k2_dir))
+        return [{"game": "K1", "resref": "pmbam", "source": k1_dir}]
+
+    monkeypatch.setattr(qt_main_window, "_scan_library_rows_sync", fake_scan)
+    statuses = []
+    payload = qt_main_window._build_prelaunch_library_input(
+        app_root,
+        {"foo": "bar"},
+        lambda title, detail: statuses.append((title, detail)),
+    )
+
+    assert payload["foo"] == "bar"
+    assert calls == [("C:/Games/KOTOR", "C:/Games/KOTOR2")]
+    assert payload["preloaded_library"]["detection_attempted"] is True
+    assert payload["preloaded_library"]["rows"][0]["resref"] == "pmbam"
+    assert any(title == "Indexing game libraries" for title, _detail in statuses)
+
+
+def test_preloaded_library_skips_post_show_auto_detect_timer() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    init_source = inspect.getsource(QtGhostRiggerMainWindow.__init__)
+    assert "self._preloaded_library" in init_source
+    assert 'if not self._preloaded_library.get("detection_attempted")' in init_source
+    assert "QtCore.QTimer.singleShot(250, self._auto_detect_dirs_on_startup)" in init_source
+    assert "self._suppress_theme_progress_toast = True" in init_source
+    assert "QtCore.QTimer.singleShot(1200, self._enable_theme_progress_toasts)" in init_source
+    assert "self._suppress_theme_progress_toast = False" in inspect.getsource(
+        QtGhostRiggerMainWindow._enable_theme_progress_toasts
+    )
+
+
+def test_startup_splash_uses_themed_embedded_progress() -> None:
+    _qapp()
+
+    from PySide6 import QtWidgets
+    from src.gui.qt_lib.windows.qt_main_window import QtProgressPanel, QtProgressToast, QtStartupSplash
+
+    splash = QtStartupSplash(Path("P:/OAI/Agent/GhostRiggerGH"))
+    splash.set_status("Library ready", "6071 model resources indexed.", finished=True)
+
+    assert isinstance(splash.progress_panel, QtProgressPanel)
+    assert splash.logo_label.pixmap() is not None
+    assert "GhostRigger (C) 2026 Shaolin (CrispyWonton)" in splash.copyright_label.text()
+    assert "LordVaderCW" in splash.copyright_label.text()
+
+    class Parent(QtWidgets.QWidget):
+        theme_manager = None
+
+    toast = QtProgressToast(Parent())
+    assert isinstance(toast.progress_panel, QtProgressPanel)
+
+
+def test_startup_splash_registers_with_theme_manager() -> None:
+    _qapp()
+
+    from PySide6 import QtWidgets
+    from src.gui.libtheme import ThemeManager
+    from src.gui.qt_lib.windows.qt_main_window import QtStartupSplash
+
+    manager = ThemeManager(
+        Path("P:/OAI/Agent/GhostRiggerGH"),
+        {"theme_layout": {"theme_mode": "manual", "selected_theme": "matrix"}},
+    )
+    splash = QtStartupSplash(Path("P:/OAI/Agent/GhostRiggerGH"), theme_manager=manager)
+    matrix_style = splash.styleSheet()
+
+    manager.themeChanged.emit(manager.get_theme("light"))
+    for _ in range(8):
+        QtWidgets.QApplication.processEvents()
+    light_style = splash.styleSheet()
+
+    assert splash.theme_manager is manager
+    assert splash in manager.applier._aware_widgets
+    assert "#00FF7A" in matrix_style
+    assert "#1F6FEB" in light_style
+    assert matrix_style != light_style
+
+
+def test_startup_splash_reads_theme_customization_styles() -> None:
+    _qapp()
+
+    from src.gui.libtheme.theme_model import Theme
+    from src.gui.qt_lib.windows.qt_main_window import QtStartupSplash
+
+    theme = Theme(
+        id="custom",
+        name="Custom",
+        version="1",
+        colors={
+            "window.background": "#101010",
+            "panel.background": "#202020",
+            "panel.backgroundAlt": "#303030",
+            "panel.altBackground": "#303030",
+            "toolbar.border": "#445566",
+            "accent.primary": "#00AAFF",
+            "text.primary": "#FFFFFF",
+            "text.secondary": "#CCCCCC",
+            "input.background": "#050505",
+            "success": "#44AA66",
+            "splash.background": "#111122",
+            "splash.panel": "#222233",
+            "splash.brandBackground": "#333344",
+            "splash.progressBackground": "#444455",
+            "splash.border": "#556677",
+            "splash.text": "#EEEEFF",
+            "splash.secondaryText": "#AAAACC",
+            "splash.accent": "#8899FF",
+            "splash.progressTrack": "#050515",
+            "splash.progressFill": "#22CC88",
+        },
+        metrics={"splash.width": 640, "splash.height": 260, "splash.logoSize": 48},
+        styles={
+            "splash.productText": "GhostRigger Premium",
+            "splash.subtitleText": "Theme linked startup",
+            "splash.copyrightText": "Custom copyright",
+            "splash.surfaceStyle": "glossy",
+        },
+    )
+    splash = QtStartupSplash(Path("P:/OAI/Agent/GhostRiggerGH"), theme=theme)
+
+    assert splash.product_label.text() == "GhostRigger Premium"
+    assert splash.subtitle_label.text() == "Theme linked startup"
+    assert splash.copyright_label.text() == "Custom copyright"
+    assert splash.width() == 640
+    assert splash.height() == 260
+    assert "#111122" in splash.styleSheet()
+    assert "#8899FF" in splash.styleSheet()
+    assert "#22CC88" in splash.progress_panel.styleSheet()
+    assert "qlineargradient" in splash.styleSheet()
+
+
+def test_startup_splash_native_theme_uses_live_app_palette() -> None:
+    app = _qapp()
+    QtGui = pytest.importorskip("PySide6.QtGui")
+
+    from src.gui.libtheme.theme_model import Theme
+    from src.gui.qt_lib.windows.qt_main_window import QtStartupSplash
+
+    old_palette = QtGui.QPalette(app.palette())
+    native_palette = QtGui.QPalette(old_palette)
+    native_palette.setColor(QtGui.QPalette.ColorRole.Window, QtGui.QColor("#1E1E1E"))
+    native_palette.setColor(QtGui.QPalette.ColorRole.Base, QtGui.QColor("#2D2D2D"))
+    native_palette.setColor(QtGui.QPalette.ColorRole.Button, QtGui.QColor("#3C3C3C"))
+    native_palette.setColor(QtGui.QPalette.ColorRole.Mid, QtGui.QColor("#282828"))
+    native_palette.setColor(QtGui.QPalette.ColorRole.Highlight, QtGui.QColor("#E81123"))
+    native_palette.setColor(QtGui.QPalette.ColorRole.WindowText, QtGui.QColor("#FFFFFF"))
+    native_palette.setColor(QtGui.QPalette.ColorRole.Text, QtGui.QColor("#FFFFFF"))
+    app.setPalette(native_palette)
+    theme = Theme(
+        id="native",
+        name="Native",
+        version="1",
+        colors={
+            "splash.background": "#F3F3F3",
+            "splash.panel": "#FFFFFF",
+            "splash.accent": "#1F6FEB",
+        },
+        styles={"application.native": "true", "splash.surfaceStyle": "glossy"},
+    )
+    splash = None
+    try:
+        splash = QtStartupSplash(Path("P:/OAI/Agent/GhostRiggerGH"), theme=theme)
+        assert "#1E1E1E" in splash.styleSheet()
+        assert "#3C3C3C" in splash.styleSheet()
+        assert "#E81123" in splash.styleSheet()
+        assert "#F3F3F3" not in splash.styleSheet()
+        assert "qlineargradient" in splash.styleSheet()
+        assert "#E81123" in splash.progress_panel.styleSheet()
+    finally:
+        if splash is not None:
+            splash.deleteLater()
+        app.setPalette(old_palette)
+
+
+def test_progress_toast_reapplies_active_theme_on_show() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow, QtProgressToast
+
+    show_source = inspect.getsource(QtGhostRiggerMainWindow._show_progress_toast)
+    update_source = inspect.getsource(QtGhostRiggerMainWindow._update_progress_toast)
+    finish_source = inspect.getsource(QtGhostRiggerMainWindow._finish_progress_toast)
+    changed_source = inspect.getsource(QtGhostRiggerMainWindow._on_theme_changed)
+    apply_source = inspect.getsource(QtGhostRiggerMainWindow._apply_progress_toast_theme)
+
+    assert "_apply_progress_toast_theme()" in show_source
+    assert "_apply_progress_toast_theme()" in update_source
+    assert "_apply_progress_toast_theme()" in finish_source
+    assert "self._apply_progress_toast_theme()" in changed_source
+    assert "current_theme" in apply_source
+    assert "get_theme()" in apply_source
+    assert hasattr(QtProgressToast, "apply_native_theme")
+
+
+def test_progress_panel_stylesheet_tracks_theme_tokens() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.windows.qt_main_window import QtProgressPanel
+
+    class Theme:
+        def __init__(self, colors):
+            self.colors = colors
+
+        def color(self, token, default=None):
+            return self.colors.get(token, default or "#000000")
+
+    panel = QtProgressPanel()
+    panel.apply_ghost_theme(
+        Theme(
+            {
+                "panel.backgroundAlt": "#101010",
+                "panel.altBackground": "#101010",
+                "accent.primary": "#112233",
+                "text.primary": "#eeeeee",
+                "text.secondary": "#aaaaaa",
+                "input.background": "#050505",
+                "success": "#44aa66",
+            }
+        )
+    )
+    dark_style = panel.styleSheet()
+    panel.apply_ghost_theme(
+        Theme(
+            {
+                "panel.backgroundAlt": "#f0f0f0",
+                "panel.altBackground": "#f0f0f0",
+                "accent.primary": "#1F6FEB",
+                "text.primary": "#1D2733",
+                "text.secondary": "#4A5568",
+                "input.background": "#ffffff",
+                "success": "#1B8F45",
+            }
+        )
+    )
+    light_style = panel.styleSheet()
+
+    assert "#112233" in dark_style
+    assert "#1F6FEB" in light_style
+    assert dark_style != light_style

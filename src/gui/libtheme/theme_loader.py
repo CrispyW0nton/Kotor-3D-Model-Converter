@@ -5,7 +5,16 @@ from __future__ import annotations
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from .style_tokens import FALLBACK_COLORS, FALLBACK_FONTS, FALLBACK_METRICS, FALLBACK_STYLES, VALID_BUTTON_MODES, VALID_TAB_STYLE_MODES
+from .style_tokens import (
+    FALLBACK_COLORS,
+    FALLBACK_FONTS,
+    FALLBACK_METRICS,
+    FALLBACK_STYLES,
+    LEGACY_MATRIX_COLORS,
+    NATIVE_FALLBACK_COLORS,
+    VALID_BUTTON_MODES,
+    VALID_TAB_STYLE_MODES,
+)
 from .theme_model import Theme, ThemeFont, ThemeIcons
 from .theme_validator import ThemeValidator
 
@@ -36,6 +45,7 @@ class ThemeLoader:
             )
 
         metadata = root.find("metadata")
+        mode_text = ((metadata.findtext("mode") if metadata is not None else None) or "dark").strip().lower()
         colors = dict(FALLBACK_COLORS)
         explicit_colors: set[str] = set()
         for entry in root.findall("./colors/color"):
@@ -45,6 +55,8 @@ class ThemeLoader:
                 colors[name] = value
                 explicit_colors.add(name)
         self._derive_missing_colors(colors, explicit_colors)
+        if mode_text == "native":
+            self._derive_native_colors(colors, explicit_colors)
 
         fonts: dict[str, ThemeFont] = {}
         for role, data in FALLBACK_FONTS.items():
@@ -99,7 +111,7 @@ class ThemeLoader:
             version=(root.get("version") or "1").strip(),
             author=(metadata.findtext("author") if metadata is not None else None) or "GhostRigger",
             description=(metadata.findtext("description") if metadata is not None else None) or "",
-            mode=((metadata.findtext("mode") if metadata is not None else None) or "dark").strip().lower(),
+            mode=mode_text,
             colors=colors,
             fonts=fonts,
             icons=ThemeIcons(provider=provider, default_mode=default_mode, sizes=sizes),
@@ -153,7 +165,26 @@ class ThemeLoader:
         fill("viewport.gridMinor", colors.get("toolbar.border", colors.get("panel.border", "#303030")))
         fill("transformBar.background", colors.get("toolbar.background", colors.get("panel.background", "#202020")))
         fill("transformBar.border", colors.get("toolbar.border", colors.get("panel.border", "#404040")))
+        fill("splash.background", colors.get("window.background", "#202020"))
+        fill("splash.panel", colors.get("panel.background", "#202020"))
+        fill("splash.brandBackground", colors.get("panel.backgroundAlt", colors.get("panel.background", "#303030")))
+        fill("splash.progressBackground", colors.get("panel.backgroundAlt", colors.get("panel.background", "#303030")))
+        fill("splash.border", colors.get("toolbar.border", colors.get("accent.primary", colors.get("panel.border", "#404040"))))
+        fill("splash.text", colors.get("text.primary", "#FFFFFF"))
+        fill("splash.secondaryText", colors.get("text.secondary", "#CCCCCC"))
+        fill("splash.accent", colors.get("accent.primary", colors.get("text.primary", "#FFFFFF")))
+        fill("splash.progressTrack", colors.get("input.background", colors.get("panel.backgroundAlt", "#303030")))
+        fill("splash.progressFill", colors.get("success", colors.get("accent.primary", "#4080FF")))
         fill("info", colors.get("accent.secondary", colors.get("accent.primary", "#4080FF")))
+
+    @staticmethod
+    def _derive_native_colors(colors: dict[str, str], explicit: set[str]) -> None:
+        for name, value in NATIVE_FALLBACK_COLORS.items():
+            current = colors.get(name, "").upper()
+            stale_matrix_fallback = current == FALLBACK_COLORS.get(name, "").upper()
+            stale_matrix_value = current in {color.upper() for color in LEGACY_MATRIX_COLORS.values()}
+            if name not in explicit or stale_matrix_fallback or stale_matrix_value:
+                colors[name] = value
 
     def load_dir(self, directory: Path) -> dict[str, Theme]:
         themes: dict[str, Theme] = {}
