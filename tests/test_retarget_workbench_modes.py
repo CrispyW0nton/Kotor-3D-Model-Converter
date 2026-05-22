@@ -41,9 +41,10 @@ def test_kotor_to_kotor_and_kotor_to_unreal_are_explicit_pending_modes() -> None
     assert kotor_to_kotor.implemented is False
     assert kotor_to_kotor.supports_preview is False
     assert kotor_to_kotor.supports_export is False
-    assert "source KOTOR animation slot" in kotor_to_kotor.description
+    assert "KOTOR source animation sampler is available" in kotor_to_kotor.description
 
     assert kotor_to_unreal.implemented is False
     assert kotor_to_unreal.supports_preview is False
     assert kotor_to_unreal.supports_export is False
     assert "UE-compatible FBX" in kotor_to_unreal.description
+    assert "KOTOR source animation sampler is available" in kotor_to_unreal.description

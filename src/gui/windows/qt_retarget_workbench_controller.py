@@ -103,6 +103,26 @@ class RetargetWorkbenchController:
         self.invalidate_preview("retarget profile changed")
         self.update_enabled()
 
+    def set_source_kotor_model(self, model: Any | None) -> None:
+        self.state.source_kotor_model = model
+        self.invalidate_preview("source KOTOR model changed")
+        self.update_enabled()
+
+    def set_source_kotor_animation_slot(self, slot_name: str | None) -> None:
+        self.state.source_kotor_animation_slot = str(slot_name or "").strip() or None
+        self.invalidate_preview("source KOTOR animation slot changed")
+        self.update_enabled()
+
+    def set_target_unreal_skeleton(self, skeleton: Any | None) -> None:
+        self.state.target_unreal_skeleton = skeleton
+        self.invalidate_preview("target Unreal skeleton changed")
+        self.update_enabled()
+
+    def set_target_unreal_profile(self, profile: Any | None) -> None:
+        self.state.target_unreal_profile = profile
+        self.invalidate_preview("target Unreal profile changed")
+        self.update_enabled()
+
     def load_source_clip(self, path: str | Path, *, clip_name: str | None = None, sample_rate: float = 30.0) -> Any:
         self._require_mode(RetargetMode.UNREAL_TO_KOTOR, "Load UE/FBX Source Animation")
         controller = self._require_ue_to_kotor_controller()
@@ -282,9 +302,9 @@ def combo_current_retarget_mode(combo: Any) -> RetargetMode:
 
 def _pending_status_for_mode(mode: RetargetMode) -> str:
     if mode == RetargetMode.KOTOR_TO_KOTOR:
-        return "pending KOTOR animation source sampler"
+        return "KOTOR source animation sampler available; pending KOTOR→KOTOR preview adapter"
     if mode == RetargetMode.KOTOR_TO_UNREAL:
-        return "pending UE FBX export adapter"
+        return "KOTOR source animation sampler available; pending UE-compatible FBX export adapter"
     return "pending implementation"
 
 

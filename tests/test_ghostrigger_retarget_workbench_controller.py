@@ -210,4 +210,4 @@ def test_selecting_pending_mode_updates_controller_status_and_buttons() -> None:
     assert preview_action.isEnabled() is False
     assert export_action.isEnabled() is False
     assert any("Retarget mode changed to KOTOR → Unreal" in message for message, _level in logs)
-    assert "pending UE FBX export adapter" in statuses[-1]
+    assert "pending UE-compatible FBX export adapter" in statuses[-1]

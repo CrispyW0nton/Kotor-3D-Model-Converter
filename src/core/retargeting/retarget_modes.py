@@ -35,9 +35,9 @@ _MODE_SPECS: dict[RetargetMode, RetargetModeSpec] = {
         mode=RetargetMode.KOTOR_TO_KOTOR,
         label="KOTOR → KOTOR",
         description=(
-            "Retarget a source KOTOR/Aurora animation slot onto another KOTOR/Aurora "
-            "target model. Pending next adapter: sample a source KOTOR animation slot "
-            "through the Aurora evaluator."
+            "Retarget a sampled KOTOR/Aurora animation slot onto another KOTOR/Aurora "
+            "target model. KOTOR source animation sampler is available; pending next "
+            "adapter: KOTOR-to-KOTOR preview/export wiring."
         ),
         source_kind="kotor_aurora_model_animation_slot",
         target_kind="kotor_aurora_model",
@@ -52,8 +52,8 @@ _MODE_SPECS: dict[RetargetMode, RetargetModeSpec] = {
         label="KOTOR → Unreal",
         description=(
             "Export a sampled KOTOR/Aurora animation slot toward an Unreal-compatible "
-            "skeleton/FBX animation clip. Pending next adapter: convert sampled Aurora "
-            "source poses into a UE-compatible FBX animation export."
+            "skeleton/FBX animation clip. KOTOR source animation sampler is available; "
+            "pending next adapter: UE-compatible FBX animation export."
         ),
         source_kind="kotor_aurora_model_animation_slot",
         target_kind="unreal_skeleton",
