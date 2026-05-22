@@ -6,6 +6,20 @@ from dataclasses import dataclass, field
 
 
 @dataclass
+class SegmentPoseError:
+    """Direction error for one mapped anatomical segment at one sample."""
+
+    role: str
+    side: str
+    source_parent: str
+    source_child: str
+    target_parent: str
+    target_child: str
+    time_seconds: float
+    angle_degrees: float
+
+
+@dataclass
 class RetargetSolveReport:
     """Summary of one generated Aurora animation solve."""
 
@@ -18,6 +32,8 @@ class RetargetSolveReport:
     stripped_root_translation: bool = False
     max_quaternion_norm_error: float = 0.0
     max_adjacent_rotation_degrees: float = 0.0
+    max_segment_direction_error_degrees: float = 0.0
+    segment_pose_errors: list[SegmentPoseError] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
 

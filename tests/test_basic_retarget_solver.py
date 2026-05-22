@@ -12,10 +12,7 @@ from src.core.animation.animation_engine import SuperModelResolver, evaluate_aur
 from src.core.geometry.model_data import Animation, KotorModel, ModelNode
 from src.core.retargeting.fbx_importer import classify_source_node_name
 from src.core.retargeting.retarget_profile import RetargetMappingEntry, RetargetProfile
-from src.core.retargeting.retarget_solver import (
-    RetargetSolveError,
-    retarget_source_clip_to_aurora_animation,
-)
+from src.core.retargeting.retarget_solver import RetargetSolveError, retarget_source_clip_to_aurora_animation
 from src.core.retargeting.source_animation import (
     SourcePose,
     SourceSkeletonClip,
@@ -280,6 +277,42 @@ def test_child_local_articulation_transfers_correctly() -> None:
     pose = evaluate_aurora_animation_pose(target, result.animation_block, 1.0)
 
     _assert_quat_equivalent(pose.local_transforms_by_node["child"].rotation, child_local_rot)
+
+
+def test_default_segment_direction_mode_aligns_mapped_limb_segment() -> None:
+    source = _source_clip(
+        [("upperarm_l", None), ("lowerarm_l", "upperarm_l")],
+        [
+            {
+                "upperarm_l": Transform(),
+                "lowerarm_l": Transform(position=(1.0, 0.0, 0.0)),
+            },
+            {
+                "upperarm_l": Transform(),
+                "lowerarm_l": Transform(position=(0.0, 1.0, 0.0), rotation=_quat_axis("Z", 90.0)),
+            },
+        ],
+    )
+    target = _target_model(
+        [
+            ("root", None, (0.0, 0.0, 0.0), None),
+            ("lbicep_g", "root", (0.0, 0.0, 0.0), None),
+            ("lbicepl_g", "lbicep_g", (1.0, 0.0, 0.0), None),
+        ]
+    )
+    profile = _profile(
+        [
+            RetargetMappingEntry("upperarm", "upperarm_l", "lbicep_g", side="left"),
+            RetargetMappingEntry("forearm", "lowerarm_l", "lbicepl_g", side="left"),
+        ]
+    )
+
+    result = retarget_source_clip_to_aurora_animation(source_clip=source, target_model=target, profile=profile)
+    pose = evaluate_aurora_animation_pose(target, result.animation_block, 1.0)
+
+    assert pose.world_transforms_by_node["lbicepl_g"].position == pytest.approx((0.0, 1.0, 0.0), abs=1e-6)
+    assert result.report.max_segment_direction_error_degrees == pytest.approx(0.0, abs=1e-5)
+    assert result.report.segment_pose_errors
 
 
 def test_non_root_source_translations_are_ignored() -> None:

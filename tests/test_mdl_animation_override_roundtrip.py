@@ -21,6 +21,7 @@ from src.core.retargeting.aurora_animation_writer import (
 )
 from src.core.validation.animation_roundtrip_validator import (
     quaternion_angular_difference_degrees,
+    verify_written_animation_override_roundtrip,
 )
 
 
@@ -285,6 +286,55 @@ def test_node_hierarchy_and_mdx_are_not_altered(monkeypatch, tmp_path: Path) -> 
         [node.position for node in read_model.all_nodes()]
     )
     assert request.target_mdx.read_bytes() == request.output_mdl.with_suffix(".mdx").read_bytes()
+
+
+def test_readback_verifier_accepts_case_normalized_node_names(monkeypatch, tmp_path: Path) -> None:
+    import src.core.validation.animation_roundtrip_validator as roundtrip_validator
+
+    original_root = ModelNode(name="PMBAM")
+    original_child = ModelNode(name="torsoUpr_g", position=(1.0, 0.0, 0.0), parent=original_root)
+    original_root.children = [original_child]
+    original = KotorModel(
+        name="PMBAM",
+        root_node=original_root,
+        game_version=GameVersion.K1,
+    )
+
+    readback_root = ModelNode(name="pmbam")
+    readback_child = ModelNode(name="torsoupr_g", position=(1.0, 0.0, 0.0), parent=readback_root)
+    readback_root.children = [readback_child]
+    readback = KotorModel(
+        name="pmbam",
+        root_node=readback_root,
+        animations=[
+            Animation(
+                name="pause1",
+                length=1.0,
+                anim_root="pmbam",
+                nodes=[_anim_node("torsoupr_g", orientations=[list(_quat_axis("Z", 15.0))])],
+            )
+        ],
+        game_version=GameVersion.K1,
+    )
+
+    monkeypatch.setattr(roundtrip_validator, "load_model_from_file", lambda *_args, **_kwargs: readback)
+
+    report = verify_written_animation_override_roundtrip(
+        original_model=original,
+        prepared_animation=Animation(
+            name="pause1",
+            length=1.0,
+            anim_root="PMBAM",
+            nodes=[_anim_node("torsoUpr_g", orientations=[list(_quat_axis("Z", 15.0))])],
+        ),
+        written_mdl_path=tmp_path / "out.mdl",
+        written_mdx_path=tmp_path / "out.mdx",
+        slot_name="pause1",
+        game_version=GameVersion.K1,
+    )
+
+    assert report.success is True
+    assert any("casing normalized" in warning.message for warning in report.warnings)
 
 
 def test_post_write_readback_failure_is_reported(monkeypatch, tmp_path: Path) -> None:

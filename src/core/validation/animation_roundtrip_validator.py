@@ -182,16 +182,26 @@ def _compare_model_structure(
         return
 
     for index, (orig_node, read_node) in enumerate(zip(original_nodes, readback_nodes)):
-        if orig_node.name != read_node.name:
+        if str(orig_node.name or "").lower() != str(read_node.name or "").lower():
             report.add_error(
                 f"node order/name changed at index {index}: '{orig_node.name}' -> '{read_node.name}'",
                 node_name=read_node.name,
             )
+        elif orig_node.name != read_node.name:
+            report.add_warning(
+                f"node name casing normalized at index {index}: '{orig_node.name}' -> '{read_node.name}'",
+                node_name=read_node.name,
+            )
         orig_parent = orig_node.parent.name if orig_node.parent is not None else None
         read_parent = read_node.parent.name if read_node.parent is not None else None
-        if orig_parent != read_parent:
+        if str(orig_parent or "").lower() != str(read_parent or "").lower():
             report.add_error(
                 f"parent changed for node '{orig_node.name}': {orig_parent!r} -> {read_parent!r}",
+                node_name=orig_node.name,
+            )
+        elif orig_parent != read_parent:
+            report.add_warning(
+                f"parent name casing normalized for node '{orig_node.name}': {orig_parent!r} -> {read_parent!r}",
                 node_name=orig_node.name,
             )
         if not _vec_close(orig_node.position, read_node.position, tolerance):
@@ -342,9 +352,18 @@ def _compare_evaluated_poses(
     for time_value in _sample_times_for(expected_animation, sample_times):
         expected_pose = evaluate_aurora_animation_pose(original_model, expected_animation, time_value)
         readback_pose = evaluate_aurora_animation_pose(readback_model, readback_animation, time_value)
+        read_local_by_lower = {
+            str(name or "").lower(): transform
+            for name, transform in readback_pose.local_transforms_by_node.items()
+        }
+        read_world_by_lower = {
+            str(name or "").lower(): transform
+            for name, transform in readback_pose.world_transforms_by_node.items()
+        }
         for node_name, expected_local in expected_pose.local_transforms_by_node.items():
-            read_local = readback_pose.local_transforms_by_node.get(node_name)
-            read_world = readback_pose.world_transforms_by_node.get(node_name)
+            read_key = str(node_name or "").lower()
+            read_local = read_local_by_lower.get(read_key)
+            read_world = read_world_by_lower.get(read_key)
             expected_world = expected_pose.world_transforms_by_node[node_name]
             if read_local is None or read_world is None:
                 report.add_error(f"node '{node_name}' missing from evaluated readback pose", node_name=node_name, time=time_value)

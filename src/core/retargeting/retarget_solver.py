@@ -19,7 +19,7 @@ from .retarget_frame_audit import audit_retarget_reference_frames
 from .retarget_frames import transfer_reference_frame_delta
 from .retarget_mapping import HELPER_CLASSIFICATIONS, validate_retarget_profile
 from .retarget_profile import RetargetProfile, normalize_retarget_profile
-from .retarget_solve_audit import RetargetSolveError, RetargetSolveReport
+from .retarget_solve_audit import RetargetSolveError, RetargetSolveReport, SegmentPoseError
 from .root_motion import compute_target_local_translation_for_retarget
 from .source_animation import (
     SourcePose,
@@ -38,7 +38,7 @@ class RetargetSolverOptions:
     """Options for the first conservative Aurora animation solve."""
 
     sample_rate: Optional[float] = None
-    rotation_transfer_mode: str = "reference_frame_delta"
+    rotation_transfer_mode: str = "segment_direction"
     root_translation_policy: str = "in_place"
     allow_root_rotation: bool = True
     allow_pelvis_vertical_translation: bool = False
@@ -56,6 +56,16 @@ class RetargetResult:
     reference_pair: ReferencePosePair
     report: RetargetSolveReport
     warnings: list[str]
+
+
+@dataclass(frozen=True)
+class _MappedSegment:
+    role: str
+    side: str
+    source_parent: str
+    source_child: str
+    target_parent: str
+    target_child: str
 
 
 def retarget_source_clip_to_aurora_animation(
@@ -123,9 +133,8 @@ def retarget_source_clip_to_aurora_animation(
     warnings.extend(frame_audit.warnings)
 
     source_poses = _sample_source_poses(source_clip, opts.sample_rate)
-    source_to_target = {entry.source_node: entry.target_node for entry in normalized_profile.mappings}
     target_to_source = {entry.target_node: entry.source_node for entry in normalized_profile.mappings}
-    role_by_target = {entry.target_node: entry.role for entry in normalized_profile.mappings}
+    mapped_segments = _mapped_segments(normalized_profile)
 
     converted_reference_source = _convert_source_pose(reference_pair.source_pose, opts.basis_conversion)
     converted_source_poses = [_convert_source_pose(pose, opts.basis_conversion) for pose in source_poses]
@@ -139,7 +148,6 @@ def retarget_source_clip_to_aurora_animation(
     root_warning_seen = False
 
     target_nodes = target_model.all_nodes()
-    target_nodes_by_name = {node.name: node for node in target_nodes}
 
     for source_pose in converted_source_poses:
         target_fk_world_rotation: Dict[str, tuple[float, float, float, float]] = {}
@@ -170,6 +178,7 @@ def retarget_source_clip_to_aurora_animation(
                     target_reference_pair=reference_pair,
                     target_node_name=target_name,
                     mode=opts.rotation_transfer_mode,
+                    mapped_segments=mapped_segments,
                 )
                 parent_world_rotation = None
                 if target_node.parent is not None:
@@ -221,8 +230,18 @@ def retarget_source_clip_to_aurora_animation(
     for pose in source_poses:
         evaluate_aurora_animation_pose(target_model, animation, pose.time_seconds)
 
+    segment_pose_errors = _audit_segment_pose_errors(
+        target_model=target_model,
+        animation=animation,
+        source_poses=converted_source_poses,
+        source_reference_pose=converted_reference_source,
+        target_reference_pair=reference_pair,
+        mapped_segments=mapped_segments,
+        mode=opts.rotation_transfer_mode,
+    )
     max_norm_error = _max_quaternion_norm_error(orientation_tracks)
     max_adjacent_degrees = _max_adjacent_rotation_degrees(orientation_tracks)
+    max_segment_error = max((error.angle_degrees for error in segment_pose_errors), default=0.0)
     report = RetargetSolveReport(
         generated_slot_name=animation.name,
         duration_seconds=float(animation.length),
@@ -233,6 +252,8 @@ def retarget_source_clip_to_aurora_animation(
         stripped_root_translation=stripped_root_translation,
         max_quaternion_norm_error=max_norm_error,
         max_adjacent_rotation_degrees=max_adjacent_degrees,
+        max_segment_direction_error_degrees=max_segment_error,
+        segment_pose_errors=segment_pose_errors,
         warnings=warnings,
     )
     return RetargetResult(
@@ -283,8 +304,19 @@ def _desired_target_world_rotation(
     target_reference_pair: ReferencePosePair,
     target_node_name: str,
     mode: str,
+    mapped_segments: List[_MappedSegment],
 ) -> tuple[float, float, float, float]:
-    if mode != "reference_frame_delta":
+    if mode == "segment_direction":
+        segment_rotation = _segment_direction_world_rotation(
+            source_pose=source_pose,
+            source_reference_pose=source_reference_pose,
+            target_reference_pair=target_reference_pair,
+            target_node_name=target_node_name,
+            mapped_segments=mapped_segments,
+        )
+        if segment_rotation is not None:
+            return segment_rotation
+    elif mode != "reference_frame_delta":
         raise RetargetSolveError(f"Unsupported rotation transfer mode '{mode}'.")
     source_current = source_pose.global_transforms[source_node_name].rotation
     source_reference = source_reference_pose.global_transforms[source_node_name].rotation
@@ -306,6 +338,164 @@ def _local_rotation_from_world(
     out = np.eye(4, dtype=np.float64)
     out[:3, :3] = _orthonormalized(local_matrix)
     return matrix_to_quat_xyzw(out)
+
+
+def _mapped_segments(profile: RetargetProfile) -> List[_MappedSegment]:
+    """Return mapped parent->child limb/body segments for pose-direction solving."""
+
+    by_key: dict[tuple[str, str], object] = {}
+    for entry in profile.mappings:
+        role = str(entry.role or "").lower()
+        side = str(entry.side or "center").lower()
+        by_key[(role, side)] = entry
+
+    pairs = (
+        ("clavicle", "upperarm"),
+        ("upperarm", "forearm"),
+        ("forearm", "hand"),
+        ("thigh", "calf"),
+        ("calf", "foot"),
+        ("foot", "toe"),
+        ("spine", "chest"),
+        ("chest", "neck"),
+        ("neck", "head"),
+    )
+    segments: List[_MappedSegment] = []
+    for parent_role, child_role in pairs:
+        for side in sorted({key_side for _key_role, key_side in by_key if key_side}):
+            parent = by_key.get((parent_role, side))
+            child = by_key.get((child_role, side))
+            if parent is None or child is None:
+                continue
+            segments.append(
+                _MappedSegment(
+                    role=f"{parent_role}->{child_role}",
+                    side=side,
+                    source_parent=parent.source_node,
+                    source_child=child.source_node,
+                    target_parent=parent.target_node,
+                    target_child=child.target_node,
+                )
+            )
+    return segments
+
+
+def _segment_direction_world_rotation(
+    *,
+    source_pose: SourcePose,
+    source_reference_pose: SourcePose,
+    target_reference_pair: ReferencePosePair,
+    target_node_name: str,
+    mapped_segments: List[_MappedSegment],
+) -> tuple[float, float, float, float] | None:
+    segment = next((item for item in mapped_segments if item.target_parent == target_node_name), None)
+    if segment is None:
+        return None
+    try:
+        source_current_parent = source_pose.global_transforms[segment.source_parent]
+        source_current_child = source_pose.global_transforms[segment.source_child]
+        source_ref_parent = source_reference_pose.global_transforms[segment.source_parent]
+        source_ref_child = source_reference_pose.global_transforms[segment.source_child]
+        target_ref_parent = target_reference_pair.target_global_transforms[segment.target_parent]
+        target_ref_child = target_reference_pair.target_global_transforms[segment.target_child]
+    except KeyError:
+        return None
+
+    source_ref_dir = _segment_direction(source_ref_parent.position, source_ref_child.position)
+    source_current_dir = _segment_direction(source_current_parent.position, source_current_child.position)
+    target_ref_dir = _segment_direction(target_ref_parent.position, target_ref_child.position)
+    if source_ref_dir is None or source_current_dir is None or target_ref_dir is None:
+        return None
+
+    source_frame = _frame_from_primary(source_ref_dir, source_ref_parent.rotation)
+    target_frame = _frame_from_primary(target_ref_dir, target_ref_parent.rotation)
+    source_current_local = source_frame.T @ source_current_dir
+    target_desired_dir = _normalize_vec(target_frame @ source_current_local)
+    if target_desired_dir is None:
+        return None
+
+    swing = _shortest_arc_matrix(target_ref_dir, target_desired_dir)
+    target_ref_rot = quat_to_matrix_xyzw(target_ref_parent.rotation)[:3, :3]
+    desired = swing @ target_ref_rot
+    out = np.eye(4, dtype=np.float64)
+    out[:3, :3] = _orthonormalized(desired)
+    return matrix_to_quat_xyzw(out)
+
+
+def _segment_direction(parent_position, child_position) -> np.ndarray | None:
+    raw = np.asarray(child_position, dtype=np.float64) - np.asarray(parent_position, dtype=np.float64)
+    return _normalize_vec(raw)
+
+
+def _normalize_vec(value) -> np.ndarray | None:
+    vec = np.asarray(value, dtype=np.float64)
+    length = float(np.linalg.norm(vec))
+    if length <= 1e-8 or not math.isfinite(length):
+        return None
+    return vec / length
+
+
+def _frame_from_primary(primary: np.ndarray, reference_rotation) -> np.ndarray:
+    x_axis = _normalize_vec(primary)
+    if x_axis is None:
+        return np.eye(3, dtype=np.float64)
+    ref = quat_to_matrix_xyzw(reference_rotation)[:3, :3]
+    helper = ref[:, 1]
+    helper_norm = _normalize_vec(helper)
+    if helper_norm is None or abs(float(np.dot(x_axis, helper_norm))) > 0.95:
+        helper = ref[:, 2]
+        helper_norm = _normalize_vec(helper)
+    if helper_norm is None or abs(float(np.dot(x_axis, helper_norm))) > 0.95:
+        helper = np.asarray((0.0, 0.0, 1.0), dtype=np.float64)
+        helper_norm = _normalize_vec(helper)
+    if helper_norm is None or abs(float(np.dot(x_axis, helper_norm))) > 0.95:
+        helper = np.asarray((0.0, 1.0, 0.0), dtype=np.float64)
+    z_axis = _normalize_vec(np.cross(x_axis, helper))
+    if z_axis is None:
+        z_axis = np.asarray((0.0, 0.0, 1.0), dtype=np.float64)
+    y_axis = _normalize_vec(np.cross(z_axis, x_axis))
+    if y_axis is None:
+        y_axis = np.asarray((0.0, 1.0, 0.0), dtype=np.float64)
+    return np.column_stack((x_axis, y_axis, z_axis))
+
+
+def _shortest_arc_matrix(source_dir: np.ndarray, target_dir: np.ndarray) -> np.ndarray:
+    source = _normalize_vec(source_dir)
+    target = _normalize_vec(target_dir)
+    if source is None or target is None:
+        return np.eye(3, dtype=np.float64)
+    dot = max(-1.0, min(1.0, float(np.dot(source, target))))
+    if dot > 0.999999:
+        return np.eye(3, dtype=np.float64)
+    if dot < -0.999999:
+        axis = _normalize_vec(np.cross(source, np.asarray((1.0, 0.0, 0.0), dtype=np.float64)))
+        if axis is None:
+            axis = _normalize_vec(np.cross(source, np.asarray((0.0, 1.0, 0.0), dtype=np.float64)))
+        if axis is None:
+            axis = np.asarray((0.0, 0.0, 1.0), dtype=np.float64)
+        return _axis_angle_matrix(axis, math.pi)
+    axis = _normalize_vec(np.cross(source, target))
+    if axis is None:
+        axis = np.asarray((0.0, 0.0, 1.0), dtype=np.float64)
+    return _axis_angle_matrix(axis, math.acos(dot))
+
+
+def _axis_angle_matrix(axis: np.ndarray, angle: float) -> np.ndarray:
+    axis = _normalize_vec(axis)
+    if axis is None:
+        return np.eye(3, dtype=np.float64)
+    x, y, z = axis
+    c = math.cos(float(angle))
+    s = math.sin(float(angle))
+    t = 1.0 - c
+    return np.asarray(
+        (
+            (t * x * x + c, t * x * y - s * z, t * x * z + s * y),
+            (t * x * y + s * z, t * y * y + c, t * y * z - s * x),
+            (t * x * z - s * y, t * y * z + s * x, t * z * z + c),
+        ),
+        dtype=np.float64,
+    )
 
 
 def _compose_fk(
@@ -391,6 +581,70 @@ def _max_adjacent_rotation_degrees(
             dot = max(-1.0, min(1.0, dot))
             max_degrees = max(max_degrees, math.degrees(2.0 * math.acos(dot)))
     return max_degrees
+
+
+def _audit_segment_pose_errors(
+    *,
+    target_model: KotorModel,
+    animation: Animation,
+    source_poses: List[SourcePose],
+    source_reference_pose: SourcePose,
+    target_reference_pair: ReferencePosePair,
+    mapped_segments: List[_MappedSegment],
+    mode: str,
+) -> List[SegmentPoseError]:
+    if mode != "segment_direction" or not mapped_segments:
+        return []
+    errors: List[SegmentPoseError] = []
+    for source_pose in source_poses:
+        target_pose = evaluate_aurora_animation_pose(target_model, animation, source_pose.time_seconds)
+        for segment in mapped_segments:
+            try:
+                actual_parent = target_pose.world_transforms_by_node[segment.target_parent]
+                actual_child = target_pose.world_transforms_by_node[segment.target_child]
+                target_ref_parent = target_reference_pair.target_global_transforms[segment.target_parent]
+                target_ref_child = target_reference_pair.target_global_transforms[segment.target_child]
+                source_current_parent = source_pose.global_transforms[segment.source_parent]
+                source_current_child = source_pose.global_transforms[segment.source_child]
+                source_ref_parent = source_reference_pose.global_transforms[segment.source_parent]
+                source_ref_child = source_reference_pose.global_transforms[segment.source_child]
+            except KeyError:
+                continue
+
+            actual_dir = _segment_direction(actual_parent.position, actual_child.position)
+            target_ref_dir = _segment_direction(target_ref_parent.position, target_ref_child.position)
+            source_ref_dir = _segment_direction(source_ref_parent.position, source_ref_child.position)
+            source_current_dir = _segment_direction(source_current_parent.position, source_current_child.position)
+            if actual_dir is None or target_ref_dir is None or source_ref_dir is None or source_current_dir is None:
+                continue
+            source_frame = _frame_from_primary(source_ref_dir, source_ref_parent.rotation)
+            target_frame = _frame_from_primary(target_ref_dir, target_ref_parent.rotation)
+            desired_dir = _normalize_vec(target_frame @ (source_frame.T @ source_current_dir))
+            if desired_dir is None:
+                continue
+            angle = _angle_between_degrees(actual_dir, desired_dir)
+            errors.append(
+                SegmentPoseError(
+                    role=segment.role,
+                    side=segment.side,
+                    source_parent=segment.source_parent,
+                    source_child=segment.source_child,
+                    target_parent=segment.target_parent,
+                    target_child=segment.target_child,
+                    time_seconds=float(source_pose.time_seconds),
+                    angle_degrees=angle,
+                )
+            )
+    return errors
+
+
+def _angle_between_degrees(a: np.ndarray, b: np.ndarray) -> float:
+    a_norm = _normalize_vec(a)
+    b_norm = _normalize_vec(b)
+    if a_norm is None or b_norm is None:
+        return 0.0
+    dot = max(-1.0, min(1.0, float(np.dot(a_norm, b_norm))))
+    return math.degrees(math.acos(dot))
 
 
 def _source_classification_warnings(
