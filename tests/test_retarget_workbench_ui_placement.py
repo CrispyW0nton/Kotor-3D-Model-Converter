@@ -15,6 +15,38 @@ def _qapp():
     return QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
 
+def _sample_source_clip():
+    from src.core.retargeting.source_animation import (
+        SourcePose,
+        SourceSkeletonClip,
+        SourceSkeletonNode,
+        Transform,
+    )
+
+    root_local = Transform()
+    child_local = Transform(position=(0.0, 1.0, 0.0))
+    root_global = Transform()
+    child_global = Transform(position=(0.0, 1.0, 0.0))
+    nodes = [
+        SourceSkeletonNode("Root", None, 0, root_local, root_global),
+        SourceSkeletonNode("RHand", "Root", 1, child_local, child_global),
+    ]
+    pose = SourcePose(
+        time_seconds=0.0,
+        local_transforms={node.name: node.rest_local for node in nodes},
+        global_transforms={node.name: node.rest_global for node in nodes},
+    )
+    return SourceSkeletonClip(
+        source_path="demo.fbx",
+        clip_name="Demo UE Idle",
+        duration_seconds=0.5,
+        sample_rate=30.0,
+        nodes=nodes,
+        rest_pose=pose,
+        sampled_poses=[pose, pose],
+    )
+
+
 def test_retarget_workbench_controls_live_in_retarget_window() -> None:
     _qapp()
     from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
@@ -62,6 +94,25 @@ def test_retarget_workbench_source_target_boxes_have_search_and_external_import(
 
         assert emitted == [("source", "pmbam"), ("target", "p_kreia")]
         assert any(button.text() == "Import External File..." for button in window.findChildren(QtWidgets.QPushButton))
+    finally:
+        window.close()
+
+
+def test_retarget_window_source_clip_preview_populates_source_viewport() -> None:
+    _qapp()
+    from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
+
+    window = QtAnimationRetargetWindow()
+    try:
+        window.set_source_clip_preview(_sample_source_clip())
+
+        assert window.source_viewport.model is not None
+        assert window.source_viewport.model.node_count() == 3
+        assert getattr(window.source_viewport.model, "_gr_source_clip_preview") is True
+        assert "Demo UE Idle" in window.panel.source_label.text()
+        assert "2 nodes" in window.panel.source_label.text()
+        assert window.source_viewport.bones_button.isChecked() is True
+        assert window.source_viewport._renderer.show_bones is True
     finally:
         window.close()
 

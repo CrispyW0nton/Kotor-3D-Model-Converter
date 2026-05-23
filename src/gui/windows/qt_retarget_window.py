@@ -10,6 +10,7 @@ from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationRetargetPanel
 from src.gui.qt_lib.rendering.qt_gpu_renderer import GpuRenderer
 from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+from src.gui.qt_lib.windows.qt_source_clip_preview_model import build_source_clip_preview_model
 from src.gui.qt_lib.windows.qt_retarget_workbench_controller import populate_retarget_mode_combo
 from src.core.retargeting.retarget_output_naming import KotorOutputAnimationNameMode
 
@@ -289,6 +290,27 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.source_viewport.load_model(model, self._texture_dir)
         self._refresh_cloth_tool()
         self.statusBar().showMessage(f"Source: {getattr(model, 'name', 'None') if model else 'None'}")
+
+    def set_source_clip_preview(self, clip) -> None:
+        preview_model = build_source_clip_preview_model(clip)
+        self.panel.set_source_model(preview_model)
+        self.source_viewport.load_model(preview_model, self._texture_dir)
+        if hasattr(self.source_viewport, "bones_button"):
+            self.source_viewport.bones_button.blockSignals(True)
+            self.source_viewport.bones_button.setChecked(True)
+            self.source_viewport.bones_button.blockSignals(False)
+        self.source_viewport.toggle_bones(True)
+        self.source_viewport.set_joint_dot_enabled(True)
+        self.source_viewport.frame_all()
+        node_count = int(getattr(preview_model, "_gr_source_clip_node_count", 0) or 0)
+        sample_count = len(getattr(clip, "sampled_poses", []) or [])
+        duration = float(getattr(clip, "duration_seconds", 0.0) or 0.0)
+        self.panel.source_label.setText(
+            f"UE/FBX clip: {getattr(clip, 'clip_name', 'Source Clip')} "
+            f"({node_count} nodes, {sample_count} samples, {duration:.3f}s)"
+        )
+        self._refresh_cloth_tool()
+        self.statusBar().showMessage(f"Source clip preview: {getattr(clip, 'clip_name', 'Source Clip')}")
 
     def set_target_model(self, model, game_tag: str = "") -> None:
         if game_tag:

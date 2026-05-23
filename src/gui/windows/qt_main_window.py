@@ -5264,7 +5264,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
         if role == "source" and suffix == ".fbx" and controller is not None and mode_name == "UNREAL_TO_KOTOR":
             try:
-                controller.load_source_clip(path)
+                clip = controller.load_source_clip(path)
             except Exception as exc:
                 self._log(f"UE/FBX source clip import failed: {exc}", "error")
                 QtWidgets.QMessageBox.critical(self, title, str(exc))
@@ -5272,10 +5272,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._texture_dir = texture_dir
             if window is not None:
                 window.set_texture_dir(texture_dir)
-                panel = getattr(window, "panel", None)
-                label = getattr(panel, "source_label", None)
-                if label is not None:
-                    label.setText(f"UE/FBX clip: {Path(path).name}")
+                if hasattr(window, "set_source_clip_preview"):
+                    window.set_source_clip_preview(clip)
+                else:
+                    panel = getattr(window, "panel", None)
+                    label = getattr(panel, "source_label", None)
+                    if label is not None:
+                        label.setText(f"UE/FBX clip: {Path(path).name}")
             self._retarget_source_model = None
             self._apply_retarget_workbench_mode_status()
             self._log(f"Retarget source UE/FBX clip <- {Path(path).name}", "success")
