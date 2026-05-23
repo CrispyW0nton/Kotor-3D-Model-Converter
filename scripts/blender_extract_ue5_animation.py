@@ -72,6 +72,20 @@ def pick_action(armature, action_name: str):
     raise RuntimeError("No action found in FBX")
 
 
+def action_entries():
+    entries = []
+    for action in bpy.data.actions:
+        entries.append(
+            {
+                "name": action.name,
+                "frame_start": float(action.frame_range[0]),
+                "frame_end": float(action.frame_range[1]),
+                "frame_count": int(round(action.frame_range[1] - action.frame_range[0] + 1)),
+            }
+        )
+    return entries
+
+
 def main():
     args = parse_args()
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -128,6 +142,7 @@ def main():
         "source_fbx": str(args.fbx),
         "armature_name": armature.name,
         "action_name": action.name,
+        "actions": action_entries(),
         "source_bone_count": len(source_bones),
         "source_bones": source_bones,
         "bone_parents": parents,

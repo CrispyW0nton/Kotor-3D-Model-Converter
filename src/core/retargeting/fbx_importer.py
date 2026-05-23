@@ -302,6 +302,7 @@ def import_ue_fbx_animation_clip(
         unit_scale_to_meters=float(unit_scale),
         handedness=handedness,
         import_warnings=warnings,
+        available_clips=_available_clip_entries(scene, fallback_clips=scene.clips),
     )
 
 
@@ -366,6 +367,7 @@ def _scene_from_blender_payload(payload: dict[str, Any], *, source_path: str) ->
     metadata = {
         "backend": "blender",
         "armature_name": payload.get("armature_name"),
+        "actions": _actions_from_blender_payload(payload),
         "frame_start": payload.get("frame_start"),
         "frame_end": payload.get("frame_end"),
         "frame_count": payload.get("frame_count"),
@@ -382,6 +384,72 @@ def _scene_from_blender_payload(payload: dict[str, Any], *, source_path: str) ->
         warnings=warnings,
         metadata=metadata,
     )
+
+
+def _available_clip_entries(
+    scene: FbxBackendScene,
+    *,
+    fallback_clips: Sequence[FbxBackendClip],
+) -> list[dict[str, Any]]:
+    metadata = getattr(scene, "metadata", None) or {}
+    actions = metadata.get("actions") if isinstance(metadata, dict) else None
+    entries: list[dict[str, Any]] = []
+    if isinstance(actions, list):
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+            name = str(action.get("name") or "").strip()
+            if not name:
+                continue
+            entry = dict(action)
+            entry["name"] = name
+            entries.append(entry)
+    if entries:
+        return entries
+    return [
+        {
+            "name": str(clip.name),
+            "duration_seconds": float(clip.duration_seconds),
+        }
+        for clip in (fallback_clips or [])
+    ]
+
+
+def _actions_from_blender_payload(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    actions = payload.get("actions")
+    if not isinstance(actions, list):
+        return []
+    fps = _safe_float(payload.get("fps"), fallback=30.0)
+    out: list[dict[str, Any]] = []
+    for action in actions:
+        if not isinstance(action, dict):
+            continue
+        name = str(action.get("name") or "").strip()
+        if not name:
+            continue
+        frame_start = _safe_float(action.get("frame_start"), fallback=0.0)
+        frame_end = _safe_float(action.get("frame_end"), fallback=frame_start)
+        duration = max(0.0, (frame_end - frame_start) / fps) if fps > 0 else 0.0
+        out.append(
+            {
+                "name": name,
+                "frame_start": frame_start,
+                "frame_end": frame_end,
+                "frame_count": int(max(0.0, frame_end - frame_start + 1.0)),
+                "duration_seconds": duration,
+            }
+        )
+    return out
+
+
+def _safe_float(value: Any, *, fallback: float) -> float:
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return float(fallback)
+    if not math.isfinite(result):
+        return float(fallback)
+    return result
 
 
 def _matrix_from_blender_entry(entry: dict[str, Any]) -> np.ndarray:

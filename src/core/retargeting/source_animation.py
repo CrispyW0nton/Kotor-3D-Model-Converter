@@ -175,6 +175,7 @@ class SourceSkeletonClip:
     unit_scale_to_meters: Optional[float] = None
     handedness: Optional[str] = None
     import_warnings: List[str] = field(default_factory=list)
+    available_clips: List[dict] = field(default_factory=list)
 
     @property
     def node_names(self) -> List[str]:

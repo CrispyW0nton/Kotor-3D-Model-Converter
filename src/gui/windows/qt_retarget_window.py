@@ -6,6 +6,7 @@ from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from src.core.animation.animation_engine import AnimPose, NodePose
 from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationRetargetPanel
 from src.gui.qt_lib.rendering.qt_gpu_renderer import GpuRenderer
 from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
@@ -40,6 +41,8 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self._source_game = "K1"
         self._target_game = "K1"
         self._navigation_profile = DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+        self._source_clip_preview_clip = None
+        self._source_clip_mesh_model = None
         self._build_actions()
         self._build_menu()
         self._build_statusbar()
@@ -282,6 +285,8 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self._target_game = (game_tag or "K1").upper()
 
     def set_source_model(self, model, game_tag: str = "") -> None:
+        self._source_clip_preview_clip = None
+        self._source_clip_mesh_model = None
         if game_tag:
             self._source_game = game_tag.upper()
         if self._resource_manager is not None:
@@ -292,8 +297,14 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.statusBar().showMessage(f"Source: {getattr(model, 'name', 'None') if model else 'None'}")
 
     def set_source_clip_preview(self, clip, mesh_model=None) -> None:
+        self._source_clip_preview_clip = clip
+        if mesh_model is None:
+            mesh_model = self._source_clip_mesh_model
+        else:
+            self._source_clip_mesh_model = mesh_model
         preview_model = build_source_clip_preview_model(clip, mesh_model=mesh_model)
         self.panel.set_source_model(preview_model)
+        self.panel.select_animation(str(getattr(clip, "clip_name", "") or ""))
         self.source_viewport.load_model(preview_model, self._texture_dir)
         if hasattr(self.source_viewport, "bones_button"):
             self.source_viewport.bones_button.blockSignals(True)
@@ -301,6 +312,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             self.source_viewport.bones_button.blockSignals(False)
         self.source_viewport.toggle_bones(True)
         self.source_viewport.set_joint_dot_enabled(True)
+        self._set_source_clip_pose(clip, 0.0)
         self.source_viewport.frame_all()
         node_count = int(getattr(preview_model, "_gr_source_clip_node_count", 0) or 0)
         mesh_count = int(getattr(preview_model, "_gr_source_clip_mesh_count", 0) or 0)
@@ -313,6 +325,14 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         )
         self._refresh_cloth_tool()
         self.statusBar().showMessage(f"Source clip preview: {getattr(clip, 'clip_name', 'Source Clip')}")
+
+    def set_source_clip_animation_pose(self, animation_name: str, time_seconds: float = 0.0) -> None:
+        clip = self._source_clip_preview_clip
+        if clip is None:
+            return
+        if animation_name and str(animation_name) != str(getattr(clip, "clip_name", "")):
+            return
+        self._set_source_clip_pose(clip, time_seconds)
 
     def set_target_model(self, model, game_tag: str = "") -> None:
         if game_tag:
@@ -352,6 +372,26 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
     def clear_poses(self) -> None:
         self.source_viewport.clear_animation_pose()
         self.target_viewport.clear_animation_pose()
+
+    def _set_source_clip_pose(self, clip, time_seconds: float) -> None:
+        try:
+            source_pose = clip.pose_at_time(float(time_seconds))
+        except Exception:
+            return
+        pose = AnimPose(time=float(getattr(source_pose, "time_seconds", time_seconds) or time_seconds))
+        for node_name, transform in (getattr(source_pose, "local_transforms", {}) or {}).items():
+            pose.nodes[str(node_name).lower()] = NodePose(
+                name=str(node_name),
+                position=tuple(float(v) for v in getattr(transform, "position", (0.0, 0.0, 0.0))[:3]),
+                rotation=tuple(float(v) for v in getattr(transform, "rotation", (0.0, 0.0, 0.0, 1.0))[:4]),
+                scale=1.0,
+            )
+        self.source_viewport.set_animation_pose(
+            pose,
+            name=str(getattr(clip, "clip_name", "") or "Source Clip"),
+            time=pose.time,
+            length=float(getattr(clip, "duration_seconds", 0.0) or 0.0),
+        )
 
     def _tool_mode_changed(self) -> None:
         active = self.tool_action_group.checkedAction()

@@ -5296,6 +5296,24 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._retarget_preview(anim_name)
             return
         mode_name = str(getattr(getattr(controller.state, "mode", None), "name", "") or "")
+        if anim_name and mode_name == "UNREAL_TO_KOTOR":
+            clip = getattr(controller.state, "source_clip", None)
+            current_name = str(getattr(clip, "clip_name", "") or "")
+            source_path = str(getattr(clip, "source_path", "") or "")
+            if clip is not None and source_path and anim_name != current_name:
+                try:
+                    clip = controller.load_source_clip(source_path, clip_name=anim_name)
+                    window = getattr(self, "animation_retarget_window", None)
+                    if window is not None and hasattr(window, "set_source_clip_preview"):
+                        mesh_model = getattr(window, "_source_clip_mesh_model", None)
+                        window.set_source_clip_preview(clip, mesh_model=mesh_model)
+                except Exception as exc:
+                    self._log(f"UE/FBX source clip reload failed: {exc}", "error")
+                    QtWidgets.QMessageBox.critical(self, "Retarget Source Animation", str(exc))
+                    return
+            window = getattr(self, "animation_retarget_window", None)
+            if window is not None and hasattr(window, "set_source_clip_animation_pose"):
+                window.set_source_clip_animation_pose(anim_name, 0.0)
         if self._retarget_source_model is not None and mode_name in {"KOTOR_TO_KOTOR", "KOTOR_TO_UNREAL"}:
             controller.set_source_kotor_model(self._retarget_source_model)
         if self._retarget_target_model is not None and mode_name != "KOTOR_TO_UNREAL":

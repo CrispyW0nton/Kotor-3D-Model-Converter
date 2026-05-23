@@ -53,6 +53,7 @@ class FakeFbxScene:
         axis_system: str = "UE_X_FORWARD_Y_RIGHT_Z_UP",
         unit_scale_to_meters: float = 0.01,
         handedness: str = "left-handed",
+        metadata: dict | None = None,
     ):
         self.source_path = "fake.fbx"
         self.nodes = nodes
@@ -62,6 +63,7 @@ class FakeFbxScene:
         self.axis_system = axis_system
         self.unit_scale_to_meters = unit_scale_to_meters
         self.handedness = handedness
+        self.metadata = metadata or {}
 
     def evaluate_global_transform(self, node_name: str, time_seconds: float, clip_name: str):
         key = (node_name, round(float(time_seconds), 10), clip_name)
@@ -260,6 +262,7 @@ def test_multiple_clips_require_explicit_clip_name() -> None:
     )
 
     assert clip.clip_name == "Run"
+    assert [entry["name"] for entry in clip.available_clips] == ["Walk", "Run"]
 
 
 def test_sampled_quaternions_are_normalized_and_continuous() -> None:

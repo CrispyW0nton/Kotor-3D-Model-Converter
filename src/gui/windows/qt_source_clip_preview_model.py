@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import math
-from typing import Iterable
+from typing import Any, Iterable
 
 from src.core.geometry.model_data import (
     GameVersion,
@@ -13,6 +14,19 @@ from src.core.geometry.model_data import (
     NodeFlags,
 )
 from src.core.retargeting.source_animation import SourceSkeletonClip, Transform
+
+
+@dataclass(frozen=True)
+class SourceClipPreviewAnimation:
+    """Lightweight animation row for an imported UE/FBX source clip."""
+
+    name: str
+    length: float = 0.0
+    source_path: str = ""
+    loaded_clip_name: str = ""
+    frame_start: float | None = None
+    frame_end: float | None = None
+    frame_count: int | None = None
 
 
 def build_source_clip_preview_model(clip: SourceSkeletonClip, mesh_model: KotorModel | None = None) -> KotorModel:
@@ -36,8 +50,12 @@ def build_source_clip_preview_model(clip: SourceSkeletonClip, mesh_model: KotorM
         root_node=root,
     )
     setattr(model, "_gr_source_clip_preview", True)
+    setattr(model, "_gr_source_clip", clip)
     setattr(model, "_gr_source_clip_name", clip_name)
     setattr(model, "_gr_source_clip_node_count", len(getattr(clip, "nodes", []) or []))
+    animations = _source_clip_animation_rows(clip)
+    model.animations = animations
+    setattr(model, "_gr_source_clip_animations", animations)
 
     by_name: dict[str, ModelNode] = {}
     for node in getattr(clip, "nodes", []) or []:
@@ -72,6 +90,82 @@ def build_source_clip_preview_model(clip: SourceSkeletonClip, mesh_model: KotorM
     setattr(model, "_gr_render_bounds", bounds)
     setattr(model, "_gr_source_clip_mesh_count", len([n for n in model.all_nodes() if getattr(n, "_gr_fbx_mesh_preview_node", False)]))
     return model
+
+
+def _source_clip_animation_rows(clip: SourceSkeletonClip) -> list[SourceClipPreviewAnimation]:
+    entries = list(getattr(clip, "available_clips", []) or [])
+    if not entries:
+        entries = [
+            {
+                "name": str(getattr(clip, "clip_name", "") or "Source Clip"),
+                "duration_seconds": float(getattr(clip, "duration_seconds", 0.0) or 0.0),
+            }
+        ]
+
+    rows: list[SourceClipPreviewAnimation] = []
+    seen: set[str] = set()
+    source_path = str(getattr(clip, "source_path", "") or "")
+    loaded_name = str(getattr(clip, "clip_name", "") or "")
+    for entry in entries:
+        data = entry if isinstance(entry, dict) else {"name": str(entry)}
+        name = str(data.get("name") or "").strip()
+        if not name:
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append(
+            SourceClipPreviewAnimation(
+                name=name,
+                length=_animation_length(data, clip if name == loaded_name else None),
+                source_path=source_path,
+                loaded_clip_name=loaded_name,
+                frame_start=_optional_float(data.get("frame_start")),
+                frame_end=_optional_float(data.get("frame_end")),
+                frame_count=_optional_int(data.get("frame_count")),
+            )
+        )
+    if not rows:
+        rows.append(
+            SourceClipPreviewAnimation(
+                name=loaded_name or "Source Clip",
+                length=float(getattr(clip, "duration_seconds", 0.0) or 0.0),
+                source_path=source_path,
+                loaded_clip_name=loaded_name,
+            )
+        )
+    return rows
+
+
+def _animation_length(data: dict[str, Any], clip: SourceSkeletonClip | None) -> float:
+    if "duration_seconds" in data:
+        return max(0.0, _optional_float(data.get("duration_seconds")) or 0.0)
+    if clip is not None:
+        return max(0.0, float(getattr(clip, "duration_seconds", 0.0) or 0.0))
+    frame_start = _optional_float(data.get("frame_start"))
+    frame_end = _optional_float(data.get("frame_end"))
+    fps = _optional_float(data.get("fps")) or 30.0
+    if frame_start is not None and frame_end is not None and fps > 0:
+        return max(0.0, (frame_end - frame_start) / fps)
+    return 0.0
+
+
+def _optional_float(value: Any) -> float | None:
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(result):
+        return None
+    return result
+
+
+def _optional_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _append_mesh_preview_nodes(root: ModelNode, mesh_model: KotorModel | None) -> tuple[tuple[float, float, float], tuple[float, float, float]] | None:

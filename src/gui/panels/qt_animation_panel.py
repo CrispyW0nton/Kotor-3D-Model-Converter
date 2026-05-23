@@ -163,6 +163,7 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
     previewRequested = QtCore.Signal(str)
     applyRequested = QtCore.Signal(str)
     stopRequested = QtCore.Signal()
+    animationSelected = QtCore.Signal(str)
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
@@ -191,11 +192,13 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
         controls = QtWidgets.QHBoxLayout()
         controls.setSpacing(6)
         for label, slot in (
-            ("Preview", self._preview),
+            ("Retarget", self._preview),
             ("Apply", self._apply),
             ("Stop", self.stopRequested.emit),
         ):
             button = QtWidgets.QPushButton(label)
+            if label == "Retarget":
+                button.setObjectName("retargetSelectedAnimationButton")
             button.clicked.connect(slot)
             controls.addWidget(button, 1)
         root.addLayout(controls)
@@ -207,6 +210,7 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
         layout.setSpacing(4)
         layout.addWidget(heading("Animations"))
         self.anim_list = QtWidgets.QListWidget()
+        self.anim_list.currentTextChanged.connect(self.animationSelected.emit)
         self.anim_list.itemDoubleClicked.connect(lambda _item: self._preview())
         layout.addWidget(self.anim_list, 1)
         return column
@@ -359,7 +363,14 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
         self.source_label.setText(self._model_label(model))
         self.anim_list.clear()
         for anim in getattr(model, "animations", []) or [] if model else []:
-            self.anim_list.addItem(str(getattr(anim, "name", anim)))
+            item = QtWidgets.QListWidgetItem(str(getattr(anim, "name", anim)))
+            length = float(getattr(anim, "length", 0.0) or 0.0)
+            if length > 0.0:
+                item.setToolTip(f"{length:.3f}s")
+            item.setData(QtCore.Qt.UserRole, anim)
+            self.anim_list.addItem(item)
+        if self.anim_list.count() == 1:
+            self.anim_list.setCurrentRow(0)
         self._update_info()
 
     def set_target_model(self, model) -> None:
@@ -406,6 +417,16 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
     def selected_animation(self) -> str:
         item = self.anim_list.currentItem()
         return item.text() if item else ""
+
+    def select_animation(self, anim_name: str) -> bool:
+        if not anim_name:
+            return False
+        matches = self.anim_list.findItems(anim_name, QtCore.Qt.MatchExactly)
+        if not matches:
+            return False
+        self.anim_list.setCurrentItem(matches[0])
+        self.anim_list.scrollToItem(matches[0])
+        return True
 
     def config_kwargs(self) -> dict:
         return {
