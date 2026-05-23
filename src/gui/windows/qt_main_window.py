@@ -5255,6 +5255,54 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         )
         if not path:
             return
+        texture_dir = str(Path(path).resolve().parent)
+        window = getattr(self, "animation_retarget_window", None)
+        controller = getattr(self, "retarget_workbench_controller", None)
+        mode_value = getattr(getattr(controller, "state", None), "mode", None)
+        mode_name = str(getattr(mode_value, "name", mode_value) or "")
+        suffix = Path(path).suffix.lower()
+
+        if role == "source" and suffix == ".fbx" and controller is not None and mode_name == "UNREAL_TO_KOTOR":
+            try:
+                controller.load_source_clip(path)
+            except Exception as exc:
+                self._log(f"UE/FBX source clip import failed: {exc}", "error")
+                QtWidgets.QMessageBox.critical(self, title, str(exc))
+                return
+            self._texture_dir = texture_dir
+            if window is not None:
+                window.set_texture_dir(texture_dir)
+                panel = getattr(window, "panel", None)
+                label = getattr(panel, "source_label", None)
+                if label is not None:
+                    label.setText(f"UE/FBX clip: {Path(path).name}")
+            self._retarget_source_model = None
+            self._apply_retarget_workbench_mode_status()
+            self._log(f"Retarget source UE/FBX clip <- {Path(path).name}", "success")
+            self._open_animation_retarget_window()
+            return
+
+        if role == "target" and suffix == ".fbx" and controller is not None and mode_name == "KOTOR_TO_UNREAL":
+            try:
+                from src.core.retargeting.unreal_target_skeleton import import_unreal_target_skeleton_from_fbx
+
+                controller.set_target_unreal_skeleton(import_unreal_target_skeleton_from_fbx(path))
+            except Exception as exc:
+                self._log(f"Unreal target skeleton import failed: {exc}", "error")
+                QtWidgets.QMessageBox.critical(self, title, str(exc))
+                return
+            self._texture_dir = texture_dir
+            if window is not None:
+                window.set_texture_dir(texture_dir)
+                panel = getattr(window, "panel", None)
+                label = getattr(panel, "target_label", None)
+                if label is not None:
+                    label.setText(f"Unreal skeleton: {Path(path).name}")
+            self._apply_retarget_workbench_mode_status()
+            self._log(f"Retarget target Unreal skeleton <- {Path(path).name}", "success")
+            self._open_animation_retarget_window()
+            return
+
         try:
             model = self._load_external_retarget_model(path)
         except Exception as exc:
@@ -5262,28 +5310,16 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.critical(self, title, str(exc))
             return
 
-        texture_dir = str(Path(path).resolve().parent)
         self._texture_dir = texture_dir
-        window = getattr(self, "animation_retarget_window", None)
         if window is None:
             return
         window.set_texture_dir(texture_dir)
-        controller = getattr(self, "retarget_workbench_controller", None)
-        mode_value = getattr(getattr(controller, "state", None), "mode", None)
-        mode_name = str(getattr(mode_value, "name", mode_value) or "")
-        suffix = Path(path).suffix.lower()
 
         if role == "source":
             self._retarget_source_model = model
             self._retarget_engine = None
             window.set_source_model(model, "")
-            if controller is not None and mode_name == "UNREAL_TO_KOTOR" and suffix == ".fbx":
-                try:
-                    controller.load_source_clip(path)
-                    self._apply_retarget_workbench_mode_status()
-                except Exception as exc:
-                    self._log(f"UE/FBX source clip import failed: {exc}", "warning")
-            elif controller is not None and mode_name in {"KOTOR_TO_KOTOR", "KOTOR_TO_UNREAL"}:
+            if controller is not None and mode_name in {"KOTOR_TO_KOTOR", "KOTOR_TO_UNREAL"}:
                 controller.set_source_kotor_model(model)
                 self._apply_retarget_workbench_mode_status()
             self._log(f"Retarget source external import <- {Path(path).name}", "success")
@@ -5292,14 +5328,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._retarget_engine = None
             self._retarget_mapping_report = None
             window.set_target_model(model, "")
-            if controller is not None and mode_name == "KOTOR_TO_UNREAL" and suffix == ".fbx":
-                try:
-                    from src.core.retargeting.unreal_target_skeleton import import_unreal_target_skeleton_from_fbx
-
-                    controller.set_target_unreal_skeleton(import_unreal_target_skeleton_from_fbx(path))
-                except Exception as exc:
-                    self._log(f"Unreal target skeleton import is not configured yet: {exc}", "warning")
-            elif controller is not None:
+            if controller is not None:
                 controller.set_target_model(model)
             self._sync_retarget_preview_target()
             self._log(f"Retarget target external import <- {Path(path).name}", "success")

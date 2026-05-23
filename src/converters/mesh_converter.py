@@ -12,18 +12,20 @@ from typing import List, Dict, Optional, Tuple
 # active system unit. UI display-unit formatting is intentionally not read here.
 # Format-specific unit conversion belongs at the exporter boundary only when a
 # target format explicitly requires it.
-try:
-    from ..core.model_data import (
-        KotorModel, ModelNode, NodeFlags, GameVersion,
-        VertexSkinData, BoneWeight,
-        _quat_rotate, _quat_conjugate, _quat_normalize_bind, _quat_normalize, _quat_mul
-    )
-except ImportError:
-    from core.qt_core.geometry.model_data import (  # type: ignore[no-redef]  # tests add src/ to sys.path
-        KotorModel, ModelNode, NodeFlags, GameVersion,
-        VertexSkinData, BoneWeight,
-        _quat_rotate, _quat_conjugate, _quat_normalize_bind, _quat_normalize, _quat_mul
-    )
+from src.core.geometry.model_data import (
+    KotorModel,
+    ModelNode,
+    NodeFlags,
+    GameVersion,
+    VertexSkinData,
+    BoneWeight,
+    _quat_rotate,
+    _quat_conjugate,
+    _quat_normalize_bind,
+    _quat_normalize,
+    _quat_mul,
+    Animation,
+)
 
 log = logging.getLogger(__name__)
 
@@ -3003,7 +3005,6 @@ class GLTFImporter:
                     joints_data  = _get_accessor_data(getattr(attrs, 'JOINTS_0',  None))
                     weights_data = _get_accessor_data(getattr(attrs, 'WEIGHTS_0', None))
                     if joints_data and weights_data and len(joints_data) == len(weights_data):
-                        from core.qt_core.geometry.model_data import VertexSkinData, BoneWeight
                         mesh_node.flags = int(NodeFlags.HEADER | NodeFlags.SKIN)
                         skin_data_list = []
                         # Build bone_map from skin joints (resolved later if skin index present)
@@ -3086,7 +3087,6 @@ class GLTFImporter:
         # ── Import animations ─────────────────────────────────────────────────
         for ganim in (gltf.animations or []):
             try:
-                from core.qt_core.geometry.model_data import Animation
                 anim_name = (ganim.name or 'anim')[:32]
                 anim_length = 0.0
                 anim_nodes_map: Dict[str, ModelNode] = {}
