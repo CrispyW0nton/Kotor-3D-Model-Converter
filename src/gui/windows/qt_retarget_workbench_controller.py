@@ -22,6 +22,10 @@ from src.core.retargeting.retarget_preview_export import (
     RetargetPreviewExportRequest,
     export_retarget_preview_override,
 )
+from src.core.retargeting.retarget_workbench_readiness import (
+    RetargetWorkbenchReadiness,
+    build_retarget_workbench_readiness,
+)
 from src.core.retargeting.retarget_modes import (
     RetargetMode,
     RetargetModeSpec,
@@ -60,6 +64,7 @@ class RetargetWorkbenchState:
     last_kotor_source_sample_result: Any | None = None
     last_preview_result: Any | None = None
     last_export_result: Any | None = None
+    last_preview_invalidated_reason: str = ""
     dirty_revision: int = 0
 
 
@@ -94,6 +99,9 @@ class RetargetWorkbenchController:
 
     def current_mode_spec(self) -> RetargetModeSpec:
         return get_retarget_mode_spec(self.state.mode)
+
+    def readiness(self) -> RetargetWorkbenchReadiness:
+        return build_retarget_workbench_readiness(self.state)
 
     def set_mode(self, mode: RetargetMode | str) -> None:
         next_mode = coerce_retarget_mode(mode)
@@ -239,6 +247,8 @@ class RetargetWorkbenchController:
         spec = self.current_mode_spec()
         if not spec.implemented or not spec.supports_export:
             return False
+        if self.state.last_preview_invalidated_reason:
+            return False
         if self.state.mode == RetargetMode.KOTOR_TO_KOTOR:
             preview = self.state.last_preview_result
             audit = getattr(preview, "preview_audit", None)
@@ -264,6 +274,8 @@ class RetargetWorkbenchController:
         result = controller.preview_retarget(auto_play=auto_play, show_node_overlay=show_node_overlay)
         self._sync_from_ue_controller()
         self.last_error = str(getattr(controller, "last_error", "") or "")
+        if result is not None:
+            self.state.last_preview_invalidated_reason = ""
         self.state.last_export_result = None
         self.update_enabled()
         return result
@@ -294,6 +306,7 @@ class RetargetWorkbenchController:
         self.state.last_export_result = None
         self.state.last_kotor_to_kotor_preview_result = None
         self.state.last_kotor_source_sample_result = None
+        self.state.last_preview_invalidated_reason = str(reason or "").strip()
         self.state.dirty_revision += 1
         if self.ue_to_kotor_controller is not None:
             ue_state = getattr(self.ue_to_kotor_controller, "state", None)
@@ -402,6 +415,7 @@ class RetargetWorkbenchController:
             self.state.last_kotor_source_sample_result = result.source_sample_result
             self.state.last_preview_result = preview
             self.state.last_export_result = None
+            self.state.last_preview_invalidated_reason = ""
             self.last_error = ""
             self._report_kotor_to_kotor_preview_success(result)
             self.update_enabled()
