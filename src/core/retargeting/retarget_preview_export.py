@@ -4,15 +4,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import copy
-import tempfile
 from pathlib import Path
 from typing import Any, List
 
+from src.core.export.export_job import (
+    ExportJobContext,
+    ExportJobRequest,
+    ExportJobResult,
+    ExportOutputSpec,
+    run_export_job,
+)
 from src.core.retargeting.aurora_animation_writer import (
     AuroraAnimationInjectionRequest,
     AuroraAnimationWriter,
 )
 from src.core.retargeting.retarget_preview import RetargetPreviewResult
+from src.core.validation.validation_bus import (
+    ValidationBus,
+    ValidationIssue,
+    ValidationReport,
+    ValidationSeverity,
+    ValidationSubsystem,
+)
 
 
 class RetargetPreviewExportError(RuntimeError):
@@ -48,12 +61,14 @@ class RetargetPreviewExportResult:
     slot_name: str
     verified_roundtrip: bool
     warnings: List[str] = field(default_factory=list)
+    export_job_result: ExportJobResult | None = None
 
 
 def export_retarget_preview_override(
     request: RetargetPreviewExportRequest,
     *,
     writer: AuroraAnimationWriter | None = None,
+    validation_bus: ValidationBus | None = None,
 ) -> RetargetPreviewExportResult:
     """Export the exact animation block from a successful preview result."""
 
@@ -64,59 +79,95 @@ def export_retarget_preview_override(
             "Output MDX path must match the MDL basename "
             f"({request.output_mdl_path.with_suffix('.mdx')})."
         )
-    existing = [path for path in (request.output_mdl_path, request.output_mdx_path) if path.exists()]
-    if existing and not request.overwrite:
-        raise RetargetPreviewExportError(
-            "Retarget preview export would overwrite existing file(s): "
-            + ", ".join(str(path) for path in existing)
-        )
-
     target_mdl = _target_mdl_path(request.original_target_model)
     target_mdx = _target_mdx_path(request.original_target_model, target_mdl)
     warnings = _basename_warnings(request.original_target_model, request.output_mdl_path)
     manifest_path = request.output_mdl_path.with_suffix(".retarget_preview.json")
-    request.output_mdl_path.parent.mkdir(parents=True, exist_ok=True)
+    outputs = [
+        ExportOutputSpec(final_path=request.output_mdl_path, artifact_kind="mdl"),
+        ExportOutputSpec(final_path=request.output_mdx_path, artifact_kind="mdx"),
+    ]
+    if request.write_manifest:
+        outputs.append(ExportOutputSpec(final_path=manifest_path, artifact_kind="manifest"))
 
-    tmp_json = _write_temporary_preview_payload(request.output_mdl_path.parent)
-    try:
+    export_writer = writer or AuroraAnimationWriter()
+    injection_holder: dict[str, Any] = {}
+
+    def _writer(context: ExportJobContext) -> None:
+        tmp_json = _write_staged_preview_payload(context.staging_dir)
+        staged_mdl = context.staged_path_for(request.output_mdl_path)
+        staged_manifest = (
+            context.staged_path_for(manifest_path)
+            if request.write_manifest
+            else context.staging_dir / manifest_path.name
+        )
         try:
             injection_request = AuroraAnimationInjectionRequest(
                 r3a_animation_json=tmp_json,
                 target_mdl=target_mdl,
                 target_mdx=target_mdx,
                 animation_slot=preview.slot_name,
-                output_mdl=request.output_mdl_path,
-                output_manifest=manifest_path,
+                output_mdl=staged_mdl,
+                output_manifest=staged_manifest,
                 game=_game_tag(request.original_target_model),
                 overwrite_existing=request.replace_existing,
                 verify_roundtrip=request.verify_roundtrip,
                 roundtrip_tolerance=request.roundtrip_tolerance,
                 target_model_override=copy.deepcopy(request.original_target_model),
             )
-            export_writer = writer or AuroraAnimationWriter()
             injection_result = export_writer.inject_animation_block(
                 injection_request,
                 copy.deepcopy(preview.animation_block),
             )
-        except Exception as exc:
-            _discard_export_outputs(request.output_mdl_path, manifest_path)
-            raise RetargetPreviewExportError(f"Export failed: {exc}") from exc
-    finally:
-        try:
-            tmp_json.unlink()
-        except OSError:
-            pass
+            injection_holder["result"] = injection_result
+            if not injection_result.success:
+                message = "; ".join(injection_result.errors or ["unknown export failure"])
+                raise RetargetPreviewExportError(message)
+        finally:
+            try:
+                tmp_json.unlink()
+            except OSError:
+                pass
 
-    if not injection_result.success:
-        _discard_export_outputs(request.output_mdl_path, manifest_path)
-        message = "; ".join(injection_result.errors or ["unknown export failure"])
+    def _verifier(context: ExportJobContext) -> ValidationReport:
+        issues: list[ValidationIssue] = []
+        injection_result = injection_holder.get("result")
+        if injection_result is None or not getattr(injection_result, "success", False):
+            issues.append(
+                ValidationIssue(
+                    severity=ValidationSeverity.BLOCKING,
+                    subsystem=ValidationSubsystem.EXPORT,
+                    code="export.verification.failed",
+                    message="Retarget preview export did not complete MDL/MDX writer verification.",
+                )
+            )
+        return ValidationReport(issues=issues, source="retarget.preview_export")
+
+    export_job_request = ExportJobRequest(
+        job_id=f"retarget_{preview.slot_name}",
+        kind="retarget_mdl_mdx",
+        outputs=outputs,
+        overwrite=request.overwrite,
+        metadata={
+            "slot_name": preview.slot_name,
+            "verify_roundtrip": request.verify_roundtrip,
+            "write_manifest": request.write_manifest,
+        },
+        validation_bus_source="retarget.preview_export",
+    )
+    export_job_result = run_export_job(
+        export_job_request,
+        writer=_writer,
+        verifier=_verifier,
+        validation_bus=validation_bus,
+    )
+    if not export_job_result.succeeded:
+        messages = [issue.message for issue in export_job_result.validation_report.issues]
+        message = "; ".join(messages or ["unknown export failure"])
         raise RetargetPreviewExportError(f"Export failed: {message}")
 
-    if not request.write_manifest and manifest_path.exists():
-        manifest_path.unlink()
-        manifest_path_out: Path | None = None
-    else:
-        manifest_path_out = manifest_path if manifest_path.exists() else None
+    injection_result = injection_holder["result"]
+    manifest_path_out: Path | None = manifest_path if request.write_manifest and manifest_path.exists() else None
 
     return RetargetPreviewExportResult(
         mdl_path=request.output_mdl_path,
@@ -125,6 +176,7 @@ def export_retarget_preview_override(
         slot_name=injection_result.animation_slot or preview.slot_name,
         verified_roundtrip=bool(request.verify_roundtrip),
         warnings=[*warnings, *list(injection_result.warnings or [])],
+        export_job_result=export_job_result,
     )
 
 
@@ -182,24 +234,8 @@ def _basename_warnings(model: Any, output_mdl: Path) -> list[str]:
     return []
 
 
-def _write_temporary_preview_payload(directory: Path) -> Path:
+def _write_staged_preview_payload(directory: Path) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        "w",
-        suffix=".json",
-        prefix=".retarget_preview_export_",
-        dir=str(directory),
-        delete=False,
-        encoding="utf-8",
-    ) as handle:
-        handle.write('{"frame_count": 0, "target_curves": {}}\n')
-        return Path(handle.name)
-
-
-def _discard_export_outputs(output_mdl: Path, manifest_path: Path) -> None:
-    for path in (output_mdl, output_mdl.with_suffix(".mdx"), manifest_path):
-        try:
-            if Path(path).exists():
-                Path(path).unlink()
-        except OSError:
-            pass
+    path = directory / ".retarget_preview_export_payload.json"
+    path.write_text('{"frame_count": 0, "target_curves": {}}\n', encoding="utf-8")
+    return path

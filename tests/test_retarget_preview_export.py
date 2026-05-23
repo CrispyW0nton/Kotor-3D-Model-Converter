@@ -73,13 +73,24 @@ def _request(tmp_path: Path, *, preview=None, target=None, overwrite: bool = Tru
 
 
 class SpyWriter:
-    def __init__(self, *, success: bool = True, mutate_model: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        success: bool = True,
+        mutate_model: bool = False,
+        expected_final_mdl: Path | None = None,
+    ) -> None:
         self.success = success
         self.mutate_model = mutate_model
+        self.expected_final_mdl = expected_final_mdl
         self.calls: list[tuple[object, Animation]] = []
 
     def inject_animation_block(self, request, animation_block: Animation):
         self.calls.append((request, animation_block))
+        if self.expected_final_mdl is not None:
+            assert request.output_mdl != self.expected_final_mdl
+            assert not self.expected_final_mdl.exists()
+            assert request.output_mdl.parent.name.startswith(".ghostrigger_export_")
         if self.mutate_model:
             request.target_model_override.animations.append(Animation(name="mutated", length=1.0))
             animation_block.name = "mutated"
@@ -118,6 +129,8 @@ def test_export_uses_last_preview_animation_block_without_retargeting(monkeypatc
     assert injection_request.animation_slot == "pause1"
     assert injection_request.verify_roundtrip is True
     assert animation_block.name == "pause1"
+    assert result.export_job_result is not None
+    assert result.export_job_result.succeeded is True
 
 
 def test_failed_preview_audit_blocks_export_before_write(tmp_path: Path) -> None:
@@ -139,6 +152,20 @@ def test_verify_roundtrip_defaults_true(tmp_path: Path) -> None:
 
     injection_request, _animation_block = writer.calls[0]
     assert injection_request.verify_roundtrip is True
+
+
+def test_export_uses_staged_paths_before_final_promotion(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    writer = SpyWriter(expected_final_mdl=request.output_mdl_path)
+
+    result = export_retarget_preview_override(request, writer=writer)
+
+    assert result.mdl_path == request.output_mdl_path
+    assert result.mdx_path == request.output_mdx_path
+    assert request.output_mdl_path.read_bytes() == b"out mdl"
+    assert request.output_mdx_path.read_bytes() == b"out mdx"
+    assert result.export_job_result is not None
+    assert result.export_job_result.kind == "retarget_mdl_mdx"
 
 
 def test_original_target_model_is_not_mutated(tmp_path: Path) -> None:
