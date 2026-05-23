@@ -2973,7 +2973,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.animation_retarget_window.sourceAnimationPlayRequested.connect(
             self._retarget_workbench_play_source_animation_from_window
         )
-        self.animation_retarget_window.applyRequested.connect(self._retarget_apply)
+        self.animation_retarget_window.applyRequested.connect(self._retarget_workbench_apply_from_window)
         self.animation_retarget_window.stopRequested.connect(self._retarget_stop)
         self.animation_retarget_panel = self.animation_retarget_window
         self.unreal_animator_window = QtUnrealAnimatorWindow(self)
@@ -5298,6 +5298,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if controller is None:
             self._retarget_preview(anim_name)
             return
+        self._ensure_retarget_workbench_target_viewport_adapter()
         mode_name = str(getattr(getattr(controller.state, "mode", None), "name", "") or "")
         if anim_name and mode_name == "UNREAL_TO_KOTOR":
             clip = getattr(controller.state, "source_clip", None)
@@ -5345,10 +5346,30 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 window.set_source_clip_preview(loaded, mesh_model=mesh_model)
             if hasattr(window, "play_source_clip_animation"):
                 window.play_source_clip_animation(anim_name)
+            self._ensure_retarget_workbench_target_viewport_adapter()
+            if self._retarget_target_model is not None:
+                controller.set_target_model(self._retarget_target_model)
+            self._refresh_target_kotor_animation_slots()
+            if controller.can_preview():
+                preview = controller.preview(auto_play=True, show_node_overlay=True)
+                if preview is not None:
+                    self._log(f"Retargeted source animation to target preview: {anim_name}", "success")
+            elif getattr(controller, "last_error", ""):
+                self._log(f"Retarget preview not ready while playing source: {controller.last_error}", "warning")
             self._apply_retarget_workbench_mode_status()
         except Exception as exc:
             self._log(f"UE/FBX source animation playback load failed: {exc}", "error")
             QtWidgets.QMessageBox.critical(self, "Play Source Animation", str(exc))
+
+    def _retarget_workbench_apply_from_window(self, anim_name: str) -> None:
+        controller = getattr(self, "retarget_workbench_controller", None)
+        if controller is None:
+            self._retarget_apply(anim_name)
+            return
+        self._ensure_retarget_workbench_target_viewport_adapter()
+        if not controller.can_export() and anim_name:
+            self._retarget_workbench_preview_from_window(anim_name)
+        self._export_retarget_preview()
 
     def _retarget_target_label(self) -> str:
         model = self._retarget_target_model
@@ -5451,6 +5472,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._retarget_last_tick = None
         if self._retarget_engine is not None:
             self._retarget_engine.stop()
+        adapters = [getattr(self, "_retarget_preview_viewport", None)]
+        window = getattr(self, "animation_retarget_window", None)
+        if window is not None:
+            adapters.append(getattr(window, "_retarget_target_viewport_adapter", None))
+        for adapter in adapters:
+            if adapter is not None and hasattr(adapter, "pause"):
+                adapter.pause()
         if hasattr(self, "animation_retarget_panel"):
             self.animation_retarget_panel.clear_poses()
         self._log("Retarget preview stopped.", "info")
@@ -6299,6 +6327,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._not_migrated("Animation Retargeting Workbench")
             return
         try:
+            self._ensure_retarget_workbench_target_viewport_adapter()
             window.set_texture_dir(self._texture_dir)
             window.set_navigation_profile(
                 self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
@@ -6313,6 +6342,22 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         window.show()
         window.raise_()
         window.activateWindow()
+
+    def _ensure_retarget_workbench_target_viewport_adapter(self):
+        window = getattr(self, "animation_retarget_window", None)
+        if window is None or not hasattr(window, "target_viewport"):
+            return getattr(self, "_retarget_preview_viewport", None)
+        adapter = getattr(window, "_retarget_target_viewport_adapter", None)
+        if adapter is None or getattr(adapter, "viewport", None) is not window.target_viewport:
+            adapter = QtRetargetViewportAdapter(window.target_viewport, parent=window)
+            window._retarget_target_viewport_adapter = adapter
+        preview_controller = getattr(self, "retarget_preview_controller", None)
+        if preview_controller is not None:
+            preview_controller.viewport = adapter
+        workbench_controller = getattr(self, "retarget_workbench_controller", None)
+        if workbench_controller is not None:
+            workbench_controller.viewport = adapter
+        return adapter
 
     def _sync_retarget_preview_target(self) -> None:
         controller = getattr(self, "retarget_workbench_controller", None)
@@ -6422,8 +6467,18 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             combo.addItems(slots)
             if current:
                 combo.setCurrentText(current)
+            elif slots:
+                combo.setCurrentIndex(0)
         finally:
             combo.blockSignals(False)
+        selected = combo.currentText().strip()
+        naming = getattr(controller.state, "output_naming", None)
+        is_custom_output = (
+            getattr(naming, "kotor_name_mode", None) == KotorOutputAnimationNameMode.CUSTOM_PATCH
+        )
+        is_kotor_output = getattr(controller.state.mode, "name", "") in {"UNREAL_TO_KOTOR", "KOTOR_TO_KOTOR"}
+        if selected and is_kotor_output and not is_custom_output:
+            controller.set_target_kotor_animation_slot(selected)
 
     def _on_kotor_output_name_mode_changed(self, _index: int = -1) -> None:
         controller = getattr(self, "retarget_workbench_controller", None)

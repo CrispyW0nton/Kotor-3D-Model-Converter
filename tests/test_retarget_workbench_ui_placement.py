@@ -145,3 +145,48 @@ def test_main_window_routes_retarget_window_preview_to_workbench_controller() ->
     assert "previewRequested.connect(self._retarget_workbench_preview_from_window)" in source
     assert "controller.set_source_kotor_animation_slot(anim_name)" in source
     assert "self._preview_retarget_animation()" in source
+
+
+def test_workbench_source_playback_auto_retargets_to_workbench_target_viewport() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    source = inspect.getsource(QtGhostRiggerMainWindow._retarget_workbench_play_source_animation_from_window)
+    adapter_source = inspect.getsource(QtGhostRiggerMainWindow._ensure_retarget_workbench_target_viewport_adapter)
+
+    assert "window.play_source_clip_animation(anim_name)" in source
+    assert "self._ensure_retarget_workbench_target_viewport_adapter()" in source
+    assert "controller.preview(auto_play=True, show_node_overlay=True)" in source
+    assert "window.target_viewport" in adapter_source
+    assert "preview_controller.viewport = adapter" in adapter_source
+    assert "workbench_controller.viewport = adapter" in adapter_source
+
+
+def test_workbench_apply_button_routes_to_verified_export_path() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    build_layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    apply_source = inspect.getsource(QtGhostRiggerMainWindow._retarget_workbench_apply_from_window)
+
+    assert "applyRequested.connect(self._retarget_workbench_apply_from_window)" in build_layout_source
+    assert "self._retarget_workbench_preview_from_window(anim_name)" in apply_source
+    assert "self._export_retarget_preview()" in apply_source
+
+
+def test_target_slot_refresh_syncs_vanilla_output_without_overwriting_custom_mode() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    source = inspect.getsource(QtGhostRiggerMainWindow._refresh_target_kotor_animation_slots)
+
+    assert "controller.set_target_kotor_animation_slot(selected)" in source
+    assert "KotorOutputAnimationNameMode.CUSTOM_PATCH" in source
+    assert "not is_custom_output" in source
+
+
+def test_workbench_stop_pauses_target_preview_adapter() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    source = inspect.getsource(QtGhostRiggerMainWindow._retarget_stop)
+
+    assert "_retarget_target_viewport_adapter" in source
+    assert "adapter.pause()" in source
+    assert "clear_poses()" in source
