@@ -291,8 +291,8 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self._refresh_cloth_tool()
         self.statusBar().showMessage(f"Source: {getattr(model, 'name', 'None') if model else 'None'}")
 
-    def set_source_clip_preview(self, clip) -> None:
-        preview_model = build_source_clip_preview_model(clip)
+    def set_source_clip_preview(self, clip, mesh_model=None) -> None:
+        preview_model = build_source_clip_preview_model(clip, mesh_model=mesh_model)
         self.panel.set_source_model(preview_model)
         self.source_viewport.load_model(preview_model, self._texture_dir)
         if hasattr(self.source_viewport, "bones_button"):
@@ -303,11 +303,13 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.source_viewport.set_joint_dot_enabled(True)
         self.source_viewport.frame_all()
         node_count = int(getattr(preview_model, "_gr_source_clip_node_count", 0) or 0)
+        mesh_count = int(getattr(preview_model, "_gr_source_clip_mesh_count", 0) or 0)
         sample_count = len(getattr(clip, "sampled_poses", []) or [])
         duration = float(getattr(clip, "duration_seconds", 0.0) or 0.0)
+        mesh_suffix = f", {mesh_count} mesh" if mesh_count == 1 else (f", {mesh_count} meshes" if mesh_count else "")
         self.panel.source_label.setText(
             f"UE/FBX clip: {getattr(clip, 'clip_name', 'Source Clip')} "
-            f"({node_count} nodes, {sample_count} samples, {duration:.3f}s)"
+            f"({node_count} nodes{mesh_suffix}, {sample_count} samples, {duration:.3f}s)"
         )
         self._refresh_cloth_tool()
         self.statusBar().showMessage(f"Source clip preview: {getattr(clip, 'clip_name', 'Source Clip')}")

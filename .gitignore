@@ -144,6 +144,12 @@ GhostRigger-K1-K2.exe
 /dist/
 /build/
 
+# Autodesk FBX SDK is a manually installed optional dependency. Do not vendor
+# SDK installers, headers, DLLs, .pyd bindings, or extracted SDK trees.
+/external/Autodesk/
+/vendor/Autodesk/
+/third_party/Autodesk/
+
 # ── One-off debug / prototype render PNGs at repo root ────────────────────────
 audit_c_*.png
 audit_n_*.png
@@ -209,6 +215,7 @@ scripts/
 !/scripts/analyze_scan.py
 !/scripts/extract_stock_corpus.py
 !/scripts/blender_fbx_export.py
+!/scripts/blender_extract_fbx_mesh.py
 !/scripts/export_kotor_model_for_unity.py
 !/scripts/run_malak_unity_smoke.py
 exports/

@@ -247,11 +247,28 @@ class FBXImporter:
             log.debug("trimesh not available for FBX import")
         except Exception as e:
             log.debug(f"trimesh FBX load failed: {e}")
+        # 4) Blender headless fallback for binary UE/FBX files that Assimp/trimesh
+        # cannot read in the current Python environment.
+        try:
+            from src.converters.blender_fbx_mesh_importer import import_fbx_mesh_with_blender
+
+            return import_fbx_mesh_with_blender(
+                path,
+                model_name=model_name,
+                game_version=game_version,
+                supermodel=supermodel,
+                classification=classification,
+            )
+        except ImportError:
+            log.debug("Blender FBX mesh fallback importer not available")
+        except Exception as e:
+            log.debug(f"Blender FBX mesh fallback failed: {e}")
         log.error(
             "FBX import failed — no suitable library found.\n"
             "  Option A: pip install pyassimp  (+ Assimp DLL for bone/skin data)\n"
             "  Option B: pip install assimp-py (bundled DLL, geometry only)\n"
             "  Option C: pip install trimesh   (pure Python, limited FBX support)\n"
+            "  Option D: install Blender 4.2 for GhostRigger's headless mesh preview fallback\n"
             "  Or export your model as OBJ or GLB for import."
         )
         return None

@@ -5269,11 +5269,18 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self._log(f"UE/FBX source clip import failed: {exc}", "error")
                 QtWidgets.QMessageBox.critical(self, title, str(exc))
                 return
+            mesh_model = None
+            try:
+                from src.converters.blender_fbx_mesh_importer import import_fbx_mesh_with_blender
+
+                mesh_model = import_fbx_mesh_with_blender(str(path), game_version=self._game_version())
+            except Exception as exc:
+                self._log(f"UE/FBX source mesh preview unavailable: {exc}", "warning")
             self._texture_dir = texture_dir
             if window is not None:
                 window.set_texture_dir(texture_dir)
                 if hasattr(window, "set_source_clip_preview"):
-                    window.set_source_clip_preview(clip)
+                    window.set_source_clip_preview(clip, mesh_model=mesh_model)
                 else:
                     panel = getattr(window, "panel", None)
                     label = getattr(panel, "source_label", None)

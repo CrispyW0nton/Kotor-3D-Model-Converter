@@ -15,15 +15,13 @@ from src.core.geometry.model_data import (
 from src.core.retargeting.source_animation import SourceSkeletonClip, Transform
 
 
-def build_source_clip_preview_model(clip: SourceSkeletonClip) -> KotorModel:
+def build_source_clip_preview_model(clip: SourceSkeletonClip, mesh_model: KotorModel | None = None) -> KotorModel:
     """Build a lightweight dummy-node model for rendering an animation-only clip.
 
-    UE/FBX source imports can legitimately contain only a sampled skeleton clip,
-    with no mesh payload.  The Retarget Workbench source viewport still needs a
-    renderable hierarchy, so this adapter mirrors the clip's node tree as
-    ``ModelNode`` dummy joints and gives the viewport prepared bounds from the
-    clip rest/global pose.  It intentionally lives in the Qt/window layer rather
-    than in the FBX backend so import data stays backend-neutral.
+    UE/FBX source imports always need the sampled animation skeleton. Some FBX
+    files also carry mesh geometry; when ``mesh_model`` is provided, this adapter
+    appends flattened renderable mesh nodes under the preview root while keeping
+    the sampled skeleton hierarchy available for the Bones/Dots overlays.
     """
 
     clip_name = str(getattr(clip, "clip_name", "") or "Source Clip").strip() or "Source Clip"
@@ -66,12 +64,53 @@ def build_source_clip_preview_model(clip: SourceSkeletonClip) -> KotorModel:
         preview_node.parent = parent
         parent.children.append(preview_node)
 
-    bounds = _bounds_from_clip(clip)
+    mesh_bounds = _append_mesh_preview_nodes(root, mesh_model)
+    bounds = _merge_bounds(_bounds_from_clip(clip), mesh_bounds)
     model.bb_min, model.bb_max = bounds
     model.radius = _radius_for_bounds(*bounds)
     setattr(model, "_gr_bounds_prepared", True)
     setattr(model, "_gr_render_bounds", bounds)
+    setattr(model, "_gr_source_clip_mesh_count", len([n for n in model.all_nodes() if getattr(n, "_gr_fbx_mesh_preview_node", False)]))
     return model
+
+
+def _append_mesh_preview_nodes(root: ModelNode, mesh_model: KotorModel | None) -> tuple[tuple[float, float, float], tuple[float, float, float]] | None:
+    if mesh_model is None:
+        return None
+    mesh_nodes = [node for node in getattr(mesh_model, "all_nodes", lambda: [])() if getattr(node, "vertices", None) and getattr(node, "faces", None)]
+    if not mesh_nodes:
+        return None
+
+    points: list[tuple[float, float, float]] = []
+    for index, source in enumerate(mesh_nodes):
+        node = ModelNode(
+            name=str(getattr(source, "name", "") or f"fbx_mesh_{index}")[:32],
+            flags=int(NodeFlags.HEADER | NodeFlags.MESH),
+            parent=root,
+        )
+        node.vertices = [tuple(float(c) for c in vertex[:3]) for vertex in (getattr(source, "vertices", []) or [])]
+        node.normals = [tuple(float(c) for c in normal[:3]) for normal in (getattr(source, "normals", []) or [])]
+        node.uvs = [tuple(float(c) for c in uv[:2]) for uv in (getattr(source, "uvs", []) or [])]
+        node.faces = [tuple(int(c) for c in face[:3]) for face in (getattr(source, "faces", []) or [])]
+        node.texture = str(getattr(source, "texture", "") or "")[:32]
+        node.diffuse = tuple(getattr(source, "diffuse", (0.8, 0.8, 0.8))[:3])  # type: ignore[assignment]
+        node.ambient = tuple(getattr(source, "ambient", (0.2, 0.2, 0.2))[:3])  # type: ignore[assignment]
+        node.render = True
+        node._imported = True
+        node.vertex_space = 1
+        node._gr_fbx_mesh_preview_node = True
+        node.compute_bounds()
+        root.children.append(node)
+        points.extend(node.vertices)
+
+    if not points:
+        return None
+    mins = [min(point[i] for point in points) for i in range(3)]
+    maxs = [max(point[i] for point in points) for i in range(3)]
+    return (
+        tuple(float(value) for value in mins),  # type: ignore[return-value]
+        tuple(float(value) for value in maxs),  # type: ignore[return-value]
+    )
 
 
 def _apply_transform_to_node(node: ModelNode, transform: Transform | None) -> None:
@@ -100,6 +139,22 @@ def _bounds_from_clip(clip: SourceSkeletonClip) -> tuple[tuple[float, float, flo
     pad = max(0.05, largest * 0.05)
     if largest <= 1e-6:
         pad = 0.5
+    return (
+        tuple(float(value - pad) for value in mins),  # type: ignore[return-value]
+        tuple(float(value + pad) for value in maxs),  # type: ignore[return-value]
+    )
+
+
+def _merge_bounds(
+    first: tuple[tuple[float, float, float], tuple[float, float, float]],
+    second: tuple[tuple[float, float, float], tuple[float, float, float]] | None,
+) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    if second is None:
+        return first
+    mins = [min(first[0][i], second[0][i]) for i in range(3)]
+    maxs = [max(first[1][i], second[1][i]) for i in range(3)]
+    span = [maxs[i] - mins[i] for i in range(3)]
+    pad = max(0.05, max(span) * 0.03)
     return (
         tuple(float(value - pad) for value in mins),  # type: ignore[return-value]
         tuple(float(value + pad) for value in maxs),  # type: ignore[return-value]

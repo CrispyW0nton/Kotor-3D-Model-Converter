@@ -20,6 +20,14 @@
 
 ## Autodesk FBX SDK Backend (Optional Secondary)
 
+Official source: https://aps.autodesk.com/developer/overview/fbx-sdk
+
+The Autodesk FBX SDK is a manually installed local dependency. Do not commit,
+vendor, or redistribute Autodesk SDK installers, headers, DLLs, Python bindings,
+`.pyd` files, extracted SDK trees, or generated SDK packages in this repository.
+The GhostRigger repo may contain detection code, documentation, tests using fake
+SDK modules, and adapter interfaces only.
+
 Installation status:
 
 - [x] Not installed in current shell environment.

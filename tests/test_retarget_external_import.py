@@ -56,6 +56,8 @@ def test_unreal_source_fbx_import_routes_to_source_clip_before_mesh_conversion()
     fbx_source_route = 'role == "source" and suffix == ".fbx" and controller is not None and mode_name == "UNREAL_TO_KOTOR"'
     assert fbx_source_route in source
     assert "controller.load_source_clip(path)" in source
+    assert "import_fbx_mesh_with_blender" in source
+    assert "window.set_source_clip_preview(clip, mesh_model=mesh_model)" in source
     assert source.index(fbx_source_route) < source.index("model = self._load_external_retarget_model(path)")
 
 
@@ -87,3 +89,50 @@ def test_source_clip_preview_model_preserves_imported_skeleton_for_viewport() ->
     assert bb_min[0] < bb_max[0]
     assert bb_min[1] < bb_max[1]
     assert bb_min[2] < bb_max[2]
+
+
+def test_source_clip_preview_model_can_include_fbx_mesh_geometry() -> None:
+    from src.converters.blender_fbx_mesh_importer import model_from_blender_fbx_mesh_payload
+    from src.core.geometry.model_data import GameVersion
+    from src.gui.qt_lib.windows.qt_source_clip_preview_model import build_source_clip_preview_model
+
+    mesh_model = model_from_blender_fbx_mesh_payload(
+        {
+            "success": True,
+            "armatures": ["root"],
+            "actions": [{"name": "root|Unreal Take|Base Layer"}],
+            "meshes": [
+                {
+                    "name": "Body",
+                    "vertices": [[-1, 0, 0], [1, 0, 0], [0, 0, 2]],
+                    "normals": [[0, 1, 0], [0, 1, 0], [0, 1, 0]],
+                    "uvs": [[0, 0], [1, 0], [0.5, 1]],
+                    "faces": [[0, 1, 2]],
+                    "materials": [{"name": "BodyMat", "texture": "Body_D", "diffuse": [0.5, 0.6, 0.7]}],
+                }
+            ],
+        },
+        model_name="source_body",
+        game_version=GameVersion.K1,
+    )
+
+    model = build_source_clip_preview_model(_sample_clip(), mesh_model=mesh_model)
+    mesh_nodes = [node for node in model.all_nodes() if getattr(node, "_gr_fbx_mesh_preview_node", False)]
+
+    assert getattr(model, "_gr_source_clip_preview") is True
+    assert getattr(model, "_gr_source_clip_mesh_count") == 1
+    assert len(mesh_nodes) == 1
+    assert mesh_nodes[0].name == "Body"
+    assert mesh_nodes[0].texture == "Body_D"
+    assert mesh_nodes[0].vertex_space == 1
+    assert mesh_nodes[0].vertices
+    assert mesh_nodes[0].faces == [(0, 1, 2)]
+
+
+def test_mesh_converter_has_blender_fbx_mesh_fallback() -> None:
+    from src.converters.mesh_converter import FBXImporter
+
+    source = inspect.getsource(FBXImporter.import_file)
+
+    assert "import_fbx_mesh_with_blender" in source
+    assert source.index("import_fbx_mesh_with_blender") > source.index("_load_trimesh")
