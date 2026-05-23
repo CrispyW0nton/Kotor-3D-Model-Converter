@@ -9,9 +9,12 @@ safe enough.
 from __future__ import annotations
 
 from dataclasses import dataclass
-import importlib.util
+import hashlib
 import math
-from typing import Dict, Iterable, List, Optional, Protocol, Sequence
+import os
+from pathlib import Path
+import tempfile
+from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Sequence
 
 import numpy as np
 
@@ -26,6 +29,9 @@ from .source_animation import (
 
 
 FRAME0_REFERENCE_WARNING = "No complete FBX bind/default pose found; using frame 0 as source reference pose."
+BLENDER_FBX_IMPORT_AXIS_SYSTEM = "blender_fbx_import_z_up"
+BLENDER_FBX_IMPORT_UNIT_SCALE_TO_METERS = 1.0
+BLENDER_FBX_IMPORT_HANDEDNESS = "right-handed"
 
 
 class FbxImportUnavailableError(RuntimeError):
@@ -71,6 +77,96 @@ class FbxBackend(Protocol):
 
     def load_scene(self, path: str) -> FbxBackendScene:
         ...
+
+
+@dataclass
+class BlenderFbxBackendScene:
+    """FBX animation scene extracted through GhostRigger's Blender bridge."""
+
+    source_path: str
+    nodes: Sequence[FbxBackendNode]
+    clips: Sequence[FbxBackendClip]
+    curves: Dict[str, list[tuple[float, np.ndarray]]]
+    rest_matrices: Dict[str, np.ndarray]
+    axis_system: str = BLENDER_FBX_IMPORT_AXIS_SYSTEM
+    unit_scale_to_meters: float = BLENDER_FBX_IMPORT_UNIT_SCALE_TO_METERS
+    handedness: str = BLENDER_FBX_IMPORT_HANDEDNESS
+    warnings: list[str] | None = None
+    metadata: dict[str, Any] | None = None
+
+    def evaluate_global_transform(self, node_name: str, time_seconds: float, clip_name: str) -> np.ndarray:
+        samples = self.curves.get(node_name) or []
+        if not samples:
+            rest = self.bind_global_transform(node_name)
+            return np.asarray(rest if rest is not None else np.eye(4), dtype=np.float64)
+        wanted = float(time_seconds)
+        for sample_time, matrix in samples:
+            if abs(sample_time - wanted) <= 1e-6:
+                return np.asarray(matrix, dtype=np.float64)
+        nearest_time, nearest_matrix = min(samples, key=lambda item: abs(item[0] - wanted))
+        return np.asarray(nearest_matrix, dtype=np.float64)
+
+    def bind_global_transform(self, node_name: str) -> np.ndarray | None:
+        matrix = self.rest_matrices.get(node_name)
+        if matrix is None:
+            return None
+        return np.asarray(matrix, dtype=np.float64)
+
+
+@dataclass
+class BlenderFbxBackend:
+    """Production FBX source backend using headless Blender evaluated transforms."""
+
+    blender_executable: str | Path | None = None
+    extraction_root: Path | None = None
+    timeout: int = 300
+    extraction_runner: Callable[..., dict[str, Any]] | None = None
+
+    def load_scene(
+        self,
+        path: str,
+        *,
+        clip_name: str | None = None,
+        sample_rate: float | None = None,
+    ) -> BlenderFbxBackendScene:
+        source = Path(path)
+        if not source.exists():
+            raise FbxImportError(f"FBX source file not found: {source}")
+        payload = self._extract_payload(source, clip_name=clip_name)
+        if not payload.get("success"):
+            errors = [str(error) for error in (payload.get("errors") or []) if str(error).strip()]
+            message = "; ".join(errors) if errors else "Blender FBX extraction failed."
+            if "Blender 4.2 LTS was not found" in message:
+                raise FbxImportUnavailableError(message)
+            raise FbxImportError(message)
+        return _scene_from_blender_payload(payload, source_path=str(source))
+
+    def _extract_payload(self, source: Path, *, clip_name: str | None) -> dict[str, Any]:
+        from .blender_animation_injection import run_blender_animation_extraction
+
+        runner = self.extraction_runner or run_blender_animation_extraction
+        output_json = self._output_json_path(source, clip_name=clip_name)
+        return runner(
+            source_fbx=source,
+            output_json=output_json,
+            action_name=str(clip_name or ""),
+            frame_step=1,
+            blender_executable=Path(self.blender_executable) if self.blender_executable else None,
+            timeout=int(self.timeout),
+        )
+
+    def _output_json_path(self, source: Path, *, clip_name: str | None) -> Path:
+        root = self.extraction_root
+        if root is None:
+            env_root = os.environ.get("GHOSTRIGGER_FBX_IMPORT_CACHE")
+            root = Path(env_root) if env_root else Path(tempfile.gettempdir()) / "ghostrigger_fbx_import"
+        root.mkdir(parents=True, exist_ok=True)
+        digest = hashlib.sha256(
+            f"{source.resolve()}|{source.stat().st_mtime_ns}|{source.stat().st_size}|{clip_name or ''}".encode(
+                "utf-8"
+            )
+        ).hexdigest()[:12]
+        return root / f"{source.stem}_{digest}_source_clip.json"
 
 
 def classify_source_node_name(name: str) -> str:
@@ -122,7 +218,7 @@ def import_ue_fbx_animation_clip(
     """Import and sample a UE/FBX skeleton animation clip."""
 
     backend = backend or _default_backend()
-    scene = backend.load_scene(str(path))
+    scene = _load_backend_scene(backend, str(path), clip_name=clip_name, sample_rate=sample_rate)
     nodes = _topological_nodes(scene.nodes)
     if not nodes:
         raise FbxImportError("FBX file contains no source skeleton nodes.")
@@ -131,7 +227,7 @@ def import_ue_fbx_animation_clip(
         raise FbxImportError(f"FBX animation stack '{selected_clip.name}' has negative duration.")
     sample_times = _sample_times(selected_clip.duration_seconds, sample_rate)
 
-    warnings: List[str] = []
+    warnings: List[str] = list(getattr(scene, "warnings", None) or [])
     axis_system = getattr(scene, "axis_system", None) or UE_X_FORWARD_Y_RIGHT_Z_UP
     unit_scale = getattr(scene, "unit_scale_to_meters", None)
     if unit_scale is None:
@@ -201,15 +297,118 @@ def import_ue_fbx_animation_clip(
 
 
 def _default_backend() -> FbxBackend:
-    if importlib.util.find_spec("fbx") is None:
-        raise FbxImportUnavailableError(
-            "FBX import backend is not available. Configure the project-supported "
-            "FBX backend before importing Unreal animation clips."
-        )
-    raise FbxImportUnavailableError(
-        "Autodesk FBX Python bindings were found, but GhostRigger has not wired "
-        "the production FBX SDK backend yet. Configure the project-supported FBX backend."
+    return BlenderFbxBackend()
+
+
+def _load_backend_scene(
+    backend: FbxBackend,
+    path: str,
+    *,
+    clip_name: str | None,
+    sample_rate: float,
+) -> FbxBackendScene:
+    try:
+        return backend.load_scene(path, clip_name=clip_name, sample_rate=sample_rate)  # type: ignore[call-arg]
+    except TypeError as exc:
+        text = str(exc)
+        if "unexpected keyword" not in text and "positional" not in text:
+            raise
+    return backend.load_scene(path)
+
+
+def _scene_from_blender_payload(payload: dict[str, Any], *, source_path: str) -> BlenderFbxBackendScene:
+    source_bones = [str(name) for name in (payload.get("source_bones") or []) if str(name).strip()]
+    parent_map = {
+        str(name): (str(parent) if parent is not None else None)
+        for name, parent in (payload.get("bone_parents") or {}).items()
+    }
+    if not source_bones:
+        source_bones = list(parent_map)
+    nodes = [FbxBackendNode(name=name, parent_name=parent_map.get(name)) for name in source_bones]
+    if not nodes:
+        raise FbxImportError("Blender FBX extraction produced no armature bones.")
+
+    curves_payload = payload.get("curves") or {}
+    curves: Dict[str, list[tuple[float, np.ndarray]]] = {}
+    for node_name in source_bones:
+        entries = curves_payload.get(node_name) or []
+        samples: list[tuple[float, np.ndarray]] = []
+        for entry in entries:
+            try:
+                time_value = float(entry.get("time_seconds", 0.0))
+                samples.append((time_value, _matrix_from_blender_entry(entry)))
+            except Exception as exc:
+                raise FbxImportError(f"Invalid Blender FBX matrix sample for node '{node_name}': {exc}") from exc
+        samples.sort(key=lambda item: item[0])
+        curves[node_name] = samples
+
+    rest_matrices: Dict[str, np.ndarray] = {}
+    for node_name, rest in (payload.get("rest_world") or {}).items():
+        matrix = rest.get("matrix") if isinstance(rest, dict) else None
+        if matrix is not None:
+            rest_matrices[str(node_name)] = _as_4x4_matrix(matrix)
+
+    duration = _duration_from_blender_payload(payload, curves)
+    action_name = str(payload.get("action_name") or "FBXAction")
+    warnings = [
+        "FBX animation imported through Blender; transforms are evaluated after Blender's FBX axis/unit conversion."
+    ]
+    log_path = payload.get("log_path")
+    metadata = {
+        "backend": "blender",
+        "armature_name": payload.get("armature_name"),
+        "frame_start": payload.get("frame_start"),
+        "frame_end": payload.get("frame_end"),
+        "frame_count": payload.get("frame_count"),
+        "fps": payload.get("fps"),
+        "mesh_count": payload.get("mesh_count"),
+        "log_path": log_path,
+    }
+    return BlenderFbxBackendScene(
+        source_path=str(source_path),
+        nodes=nodes,
+        clips=[FbxBackendClip(action_name, duration)],
+        curves=curves,
+        rest_matrices=rest_matrices,
+        warnings=warnings,
+        metadata=metadata,
     )
+
+
+def _matrix_from_blender_entry(entry: dict[str, Any]) -> np.ndarray:
+    matrix = entry.get("matrix")
+    if matrix is not None:
+        return _as_4x4_matrix(matrix)
+    location = entry.get("location_xyz") or (0.0, 0.0, 0.0)
+    rotation = entry.get("rotation_wxyz") or (1.0, 0.0, 0.0, 0.0)
+    w, x, y, z = (float(value) for value in list(rotation)[:4])
+    return Transform(
+        position=tuple(float(value) for value in list(location)[:3]),  # type: ignore[arg-type]
+        rotation=(x, y, z, w),
+    ).to_matrix()
+
+
+def _as_4x4_matrix(matrix: Any) -> np.ndarray:
+    value = np.asarray(matrix, dtype=np.float64)
+    if value.shape != (4, 4):
+        raise ValueError(f"Expected 4x4 matrix, got {value.shape}")
+    return value
+
+
+def _duration_from_blender_payload(
+    payload: dict[str, Any],
+    curves: Dict[str, list[tuple[float, np.ndarray]]],
+) -> float:
+    times = [time_value for samples in curves.values() for time_value, _matrix in samples]
+    if times:
+        return max(0.0, max(times))
+    try:
+        frame_start = float(payload.get("frame_start") or 0.0)
+        frame_end = float(payload.get("frame_end") or frame_start)
+        fps = float(payload.get("fps") or 30.0)
+        return max(0.0, (frame_end - frame_start) / fps)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return 0.0
 
 
 def _select_clip(clips: Sequence[FbxBackendClip], clip_name: Optional[str]) -> FbxBackendClip:

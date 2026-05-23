@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from src.core.retargeting.fbx_importer import (
+    BlenderFbxBackend,
     FbxBackendClip,
     FbxBackendNode,
     FbxImportError,
@@ -83,6 +84,41 @@ class FakeFbxBackend:
         return self.scene
 
 
+def _blender_payload() -> dict:
+    identity = np.eye(4).tolist()
+    root_rot = _matrix(rotation=_quat_axis("Z", 90.0)).tolist()
+    pelvis_rest = _matrix(position=(1.0, 0.0, 0.0)).tolist()
+    pelvis_moved = (_matrix(rotation=_quat_axis("Z", 90.0)) @ _matrix(position=(1.0, 0.0, 0.0))).tolist()
+    return {
+        "success": True,
+        "source_fbx": "idle.fbx",
+        "armature_name": "Armature",
+        "action_name": "Idle",
+        "source_bones": ["root", "pelvis"],
+        "bone_parents": {"root": None, "pelvis": "root"},
+        "rest_world": {
+            "root": {"matrix": identity},
+            "pelvis": {"matrix": pelvis_rest},
+        },
+        "frame_start": 0,
+        "frame_end": 30,
+        "frame_count": 2,
+        "fps": 30.0,
+        "mesh_count": 1,
+        "curves": {
+            "root": [
+                {"frame": 0, "time_seconds": 0.0, "matrix": identity},
+                {"frame": 30, "time_seconds": 1.0, "matrix": root_rot},
+            ],
+            "pelvis": [
+                {"frame": 0, "time_seconds": 0.0, "matrix": pelvis_rest},
+                {"frame": 30, "time_seconds": 1.0, "matrix": pelvis_moved},
+            ],
+        },
+        "log_path": "extract.blender.log",
+    }
+
+
 def test_source_hierarchy_is_imported_parent_before_child() -> None:
     scene = FakeFbxScene(
         nodes=[
@@ -96,6 +132,30 @@ def test_source_hierarchy_is_imported_parent_before_child() -> None:
 
     assert [node.name for node in clip.nodes] == ["root", "pelvis", "thigh_l"]
     assert [node.parent_name for node in clip.nodes] == [None, "root", "pelvis"]
+
+
+def test_blender_backend_payload_imports_as_source_clip(tmp_path: Path) -> None:
+    source = tmp_path / "idle.fbx"
+    source.write_bytes(b"fake fbx")
+    calls: list[dict] = []
+
+    def fake_extract(**kwargs):
+        calls.append(kwargs)
+        return _blender_payload()
+
+    backend = BlenderFbxBackend(extraction_root=tmp_path, extraction_runner=fake_extract)
+
+    clip = import_ue_fbx_animation_clip(str(source), sample_rate=1.0, backend=backend)
+    pose = clip.pose_at_time(1.0)
+
+    assert calls and calls[0]["source_fbx"] == source
+    assert clip.clip_name == "Idle"
+    assert clip.axis_system == "blender_fbx_import_z_up"
+    assert clip.handedness == "right-handed"
+    assert any("imported through Blender" in warning for warning in clip.import_warnings)
+    assert [node.name for node in clip.nodes] == ["root", "pelvis"]
+    assert pose.global_transforms["root"].rotation == pytest.approx(_quat_axis("Z", 90.0), abs=1e-6)
+    assert pose.local_transforms["pelvis"].position == pytest.approx((1.0, 0.0, 0.0), abs=1e-6)
 
 
 def test_evaluated_global_transforms_are_sampled() -> None:
