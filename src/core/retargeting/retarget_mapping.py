@@ -8,6 +8,12 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from src.core.game.kotor_loader import resolve_animation_slot
 from src.core.geometry.model_data import KotorModel
 
+from .retarget_output_naming import (
+    KotorOutputAnimationNameMode,
+    RetargetOutputNamingError,
+    coerce_kotor_output_name_mode,
+    validate_custom_kotor_animation_name,
+)
 from .retarget_profile import RetargetMappingEntry, RetargetProfile
 from .source_animation import SourceSkeletonClip
 
@@ -118,6 +124,8 @@ def validate_retarget_profile(
     target_model: KotorModel,
     *,
     strict: bool = True,
+    allow_custom_kotor_animation_name: bool = False,
+    output_name_mode: KotorOutputAnimationNameMode | str = KotorOutputAnimationNameMode.VANILLA_SLOT,
 ) -> RetargetProfileValidationReport:
     """Validate a retarget profile without mutating source or target assets."""
 
@@ -176,7 +184,13 @@ def validate_retarget_profile(
 
     _warn_required_roles(report, profile)
     _warn_parent_chain_consistency(report, profile, source_by_name, target_by_name)
-    _validate_animation_slot(report, profile, target_model)
+    _validate_animation_slot(
+        report,
+        profile,
+        target_model,
+        allow_custom_kotor_animation_name=allow_custom_kotor_animation_name,
+        output_name_mode=output_name_mode,
+    )
     return report
 
 
@@ -318,9 +332,19 @@ def _validate_animation_slot(
     report: RetargetProfileValidationReport,
     profile: RetargetProfile,
     target_model: KotorModel,
+    *,
+    allow_custom_kotor_animation_name: bool = False,
+    output_name_mode: KotorOutputAnimationNameMode | str = KotorOutputAnimationNameMode.VANILLA_SLOT,
 ) -> None:
     slot = str(profile.animation_slot or "").strip()
     if not slot:
+        return
+    mode = coerce_kotor_output_name_mode(output_name_mode)
+    if allow_custom_kotor_animation_name or mode == KotorOutputAnimationNameMode.CUSTOM_PATCH:
+        try:
+            validate_custom_kotor_animation_name(slot)
+        except RetargetOutputNamingError as exc:
+            report.add_error(str(exc))
         return
     try:
         resolve_animation_slot(target_model, slot, require_valid=True)

@@ -23,6 +23,10 @@ from src.core.retargeting.retarget_preview_export import (
     RetargetPreviewExportResult,
     export_retarget_preview_override,
 )
+from src.core.retargeting.retarget_output_naming import (
+    KotorOutputAnimationNameMode,
+    RetargetOutputNaming,
+)
 from src.core.retargeting.retarget_profile import RetargetProfile, load_retarget_profile
 from src.core.retargeting.source_animation import SourceSkeletonClip
 
@@ -34,6 +38,7 @@ class RetargetPreviewUiState:
     source_clip: SourceSkeletonClip | None = None
     target_model: Any | None = None
     retarget_profile: RetargetProfile | None = None
+    output_naming: RetargetOutputNaming | None = None
     last_preview_result: RetargetPreviewResult | None = None
     last_preview_is_current: bool = False
 
@@ -184,6 +189,11 @@ class RetargetPreviewUiController:
         self._mark_preview_stale()
         self.update_enabled()
 
+    def set_output_naming(self, naming: RetargetOutputNaming | None) -> None:
+        self.state.output_naming = naming
+        self._mark_preview_stale()
+        self.update_enabled()
+
     def invalidate_preview(self) -> None:
         """Mark the stored preview stale after external target/session changes."""
 
@@ -215,7 +225,7 @@ class RetargetPreviewUiController:
             self.state.source_clip is not None
             and self.current_target_model() is not None
             and profile is not None
-            and bool(str(getattr(profile, "animation_slot", "") or "").strip())
+            and self._has_output_animation_name(profile)
         )
 
     def update_enabled(self) -> None:
@@ -255,6 +265,7 @@ class RetargetPreviewUiController:
                 source_clip=self.state.source_clip,
                 target_model=self.current_target_model(),
                 profile=self.state.retarget_profile,
+                output_naming=self.state.output_naming,
                 auto_play=auto_play,
             )
             preview = self._build_preview(request)
@@ -331,6 +342,14 @@ class RetargetPreviewUiController:
                     overwrite=overwrite,
                     verify_roundtrip=True,
                     write_manifest=write_manifest,
+                    kotor_output_name_mode=getattr(
+                        self.state.last_preview_result,
+                        "output_name_mode",
+                        KotorOutputAnimationNameMode.VANILLA_SLOT,
+                    ),
+                    requires_custom_animation_patch=bool(
+                        getattr(self.state.last_preview_result, "requires_custom_animation_patch", False)
+                    ),
                 )
             )
             self.last_error = ""
@@ -382,6 +401,19 @@ class RetargetPreviewUiController:
 
     def _mark_preview_stale(self) -> None:
         self.state.last_preview_is_current = False
+
+    def _has_output_animation_name(self, profile: RetargetProfile | None) -> bool:
+        naming = self.state.output_naming
+        if naming is not None:
+            raw = (
+                naming.requested_kotor_animation_name
+                or naming.canonical_kotor_animation_name
+                or naming.unreal_clip_name
+                or ""
+            )
+            if str(raw).strip():
+                return True
+        return bool(str(getattr(profile, "animation_slot", "") or "").strip())
 
     def _log(self, message: str, level: str = "info") -> None:
         if self.log_callback is not None:

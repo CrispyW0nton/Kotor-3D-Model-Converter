@@ -24,6 +24,11 @@ from .retarget_calibration import (
 from .retarget_frame_audit import audit_retarget_reference_frames
 from .retarget_frames import transfer_reference_frame_delta
 from .retarget_mapping import HELPER_CLASSIFICATIONS, validate_retarget_profile
+from .retarget_output_naming import (
+    KotorOutputAnimationNameMode,
+    coerce_kotor_output_name_mode,
+    validate_custom_kotor_animation_name,
+)
 from .retarget_profile import RetargetProfile, normalize_retarget_profile
 from .retarget_solve_audit import RetargetSolveError, RetargetSolveReport, SegmentPoseError
 from .root_motion import compute_target_local_translation_for_retarget
@@ -52,6 +57,8 @@ class RetargetSolverOptions:
     basis_conversion: Optional[BasisConversion] = None
     validate_profile: bool = True
     strict: bool = True
+    kotor_output_name_mode: KotorOutputAnimationNameMode = KotorOutputAnimationNameMode.VANILLA_SLOT
+    allow_custom_kotor_animation_name: bool = False
 
 
 @dataclass
@@ -98,11 +105,17 @@ def retarget_source_clip_to_aurora_animation(
         )
 
     if opts.validate_profile:
+        output_name_mode = coerce_kotor_output_name_mode(opts.kotor_output_name_mode)
         validation = validate_retarget_profile(
             normalized_profile,
             source_clip,
             target_model,
             strict=opts.strict,
+            allow_custom_kotor_animation_name=(
+                opts.allow_custom_kotor_animation_name
+                or output_name_mode == KotorOutputAnimationNameMode.CUSTOM_PATCH
+            ),
+            output_name_mode=output_name_mode,
         )
         if not validation.success:
             raise RetargetSolveError("; ".join(validation.errors))
@@ -110,17 +123,27 @@ def retarget_source_clip_to_aurora_animation(
     else:
         validation_warnings = []
 
-    try:
-        resolved_slot = resolve_animation_slot(
-            target_model,
-            normalized_profile.animation_slot,
-            require_valid=True,
-        )
-    except ValueError as exc:
-        raise RetargetSolveError(
-            f"Invalid animation slot '{normalized_profile.animation_slot}' for this target model/supermodel chain. "
-            "UE clip names are not KOTOR animation slot names."
-        ) from exc
+    output_name_mode = coerce_kotor_output_name_mode(opts.kotor_output_name_mode)
+    if opts.allow_custom_kotor_animation_name or output_name_mode == KotorOutputAnimationNameMode.CUSTOM_PATCH:
+        custom_name = validate_custom_kotor_animation_name(normalized_profile.animation_slot)
+        resolved_slot_name = custom_name
+        resolved_transtime = 0.25
+        resolved_anim_root = str(getattr(getattr(target_model, "root_node", None), "name", "") or getattr(target_model, "name", ""))
+    else:
+        try:
+            resolved_slot = resolve_animation_slot(
+                target_model,
+                normalized_profile.animation_slot,
+                require_valid=True,
+            )
+        except ValueError as exc:
+            raise RetargetSolveError(
+                f"Invalid animation slot '{normalized_profile.animation_slot}' for this target model/supermodel chain. "
+                "UE clip names are not KOTOR animation slot names."
+            ) from exc
+        resolved_slot_name = resolved_slot.slot_name
+        resolved_transtime = float(resolved_slot.transtime)
+        resolved_anim_root = str(resolved_slot.anim_root or "")
 
     reference_pair = build_reference_pose_pair(
         source_clip=source_clip,
@@ -234,10 +257,10 @@ def retarget_source_clip_to_aurora_animation(
             target_fk_world_rotation[target_name] = world_rotation
 
     animation = _build_animation_block(
-        slot_name=resolved_slot.slot_name,
+        slot_name=resolved_slot_name,
         duration=float(source_clip.duration_seconds),
-        transition_time=float(resolved_slot.transtime),
-        anim_root=str(resolved_slot.anim_root or ""),
+        transition_time=resolved_transtime,
+        anim_root=resolved_anim_root,
         orientation_tracks=orientation_tracks,
     )
 

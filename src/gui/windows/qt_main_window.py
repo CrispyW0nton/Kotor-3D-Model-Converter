@@ -68,6 +68,7 @@ from src.gui.qt_lib.windows.qt_retarget_workbench_controller import (
     combo_current_retarget_mode,
     populate_retarget_mode_combo,
 )
+from src.core.retargeting.retarget_output_naming import KotorOutputAnimationNameMode
 from src.gui.qt_lib.panels.qt_rig_panel import QtRigWindow
 from src.gui.qt_lib.dialogs.qt_settings_dialog import QtSettingsDialog, save_settings
 from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow
@@ -1513,6 +1514,35 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._tool_button("Settings  F2", self.settings_action, "settings", compact=True))
         layout.addWidget(self._separator())
         layout.addWidget(self._tool_button("Anims  Ctrl+A", self.anims_action, "anims", compact=True))
+        self.kotor_output_name_mode_combo = QtWidgets.QComboBox()
+        self.kotor_output_name_mode_combo.setObjectName("kotorOutputNameModeComboBox")
+        self.kotor_output_name_mode_combo.addItem("Vanilla slot override", KotorOutputAnimationNameMode.VANILLA_SLOT.value)
+        self.kotor_output_name_mode_combo.addItem("Custom animation patch", KotorOutputAnimationNameMode.CUSTOM_PATCH.value)
+        self.kotor_output_name_mode_combo.setMinimumWidth(150)
+        self.kotor_output_name_mode_combo.currentIndexChanged.connect(self._on_kotor_output_name_mode_changed)
+        layout.addWidget(self.kotor_output_name_mode_combo)
+
+        self.target_kotor_animation_slot_combo = QtWidgets.QComboBox()
+        self.target_kotor_animation_slot_combo.setObjectName("targetKotorAnimationSlotComboBox")
+        self.target_kotor_animation_slot_combo.setEditable(True)
+        self.target_kotor_animation_slot_combo.setMinimumWidth(100)
+        self.target_kotor_animation_slot_combo.currentTextChanged.connect(self._on_target_kotor_animation_slot_changed)
+        layout.addWidget(self.target_kotor_animation_slot_combo)
+
+        self.custom_kotor_animation_name_edit = QtWidgets.QLineEdit()
+        self.custom_kotor_animation_name_edit.setObjectName("customKotorAnimationNameLineEdit")
+        self.custom_kotor_animation_name_edit.setPlaceholderText("gr_spin_attack_01")
+        self.custom_kotor_animation_name_edit.setMinimumWidth(136)
+        self.custom_kotor_animation_name_edit.textChanged.connect(self._on_custom_kotor_animation_name_changed)
+        layout.addWidget(self.custom_kotor_animation_name_edit)
+
+        self.retarget_output_display_label_edit = QtWidgets.QLineEdit()
+        self.retarget_output_display_label_edit.setObjectName("retargetOutputDisplayLabelLineEdit")
+        self.retarget_output_display_label_edit.setPlaceholderText("Display label / notes")
+        self.retarget_output_display_label_edit.setMinimumWidth(150)
+        self.retarget_output_display_label_edit.textChanged.connect(self._on_retarget_output_display_label_changed)
+        layout.addWidget(self.retarget_output_display_label_edit)
+
         layout.addWidget(self._tool_button("Preview Retarget", self.preview_retarget_action, "anims", compact=True))
         layout.addWidget(self._tool_button("Export Preview", self.export_retarget_preview_action, "save", compact=True))
         layout.addWidget(self._tool_button("Sequence", self.sequence_editor_action, "anims", compact=True))
@@ -4698,6 +4728,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if controller is None:
             return
         controller.set_target_model(self._retarget_target_model or self._current_model)
+        self._refresh_target_kotor_animation_slots()
 
     def _on_retarget_mode_changed(self, _index: int = -1) -> None:
         combo = getattr(self, "retarget_mode_combo", None)
@@ -4719,7 +4750,79 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         spec = controller.current_mode_spec()
         if combo is not None:
             combo.setToolTip(controller.mode_status_text())
+        self._apply_retarget_output_naming_controls()
         self.statusBar().showMessage(f"Retarget mode: {spec.label}")
+
+    def _apply_retarget_output_naming_controls(self) -> None:
+        controller = getattr(self, "retarget_workbench_controller", None)
+        if controller is None:
+            return
+        is_kotor_output = controller.state.mode.name in {"UNREAL_TO_KOTOR", "KOTOR_TO_KOTOR"}
+        mode_combo = getattr(self, "kotor_output_name_mode_combo", None)
+        slot_combo = getattr(self, "target_kotor_animation_slot_combo", None)
+        custom_edit = getattr(self, "custom_kotor_animation_name_edit", None)
+        label_edit = getattr(self, "retarget_output_display_label_edit", None)
+        selected = KotorOutputAnimationNameMode.VANILLA_SLOT.value
+        if mode_combo is not None:
+            data = mode_combo.currentData()
+            selected = str(data or selected)
+            mode_combo.setVisible(is_kotor_output)
+            mode_combo.setEnabled(is_kotor_output)
+        custom = selected == KotorOutputAnimationNameMode.CUSTOM_PATCH.value
+        if slot_combo is not None:
+            slot_combo.setVisible(is_kotor_output and not custom)
+            slot_combo.setEnabled(is_kotor_output and not custom)
+        if custom_edit is not None:
+            custom_edit.setVisible(is_kotor_output and custom)
+            custom_edit.setEnabled(is_kotor_output and custom)
+        if label_edit is not None:
+            label_edit.setVisible(is_kotor_output)
+            label_edit.setEnabled(is_kotor_output)
+
+    def _refresh_target_kotor_animation_slots(self) -> None:
+        controller = getattr(self, "retarget_workbench_controller", None)
+        combo = getattr(self, "target_kotor_animation_slot_combo", None)
+        if controller is None or combo is None:
+            return
+        current = combo.currentText()
+        slots = controller.available_target_kotor_slots()
+        combo.blockSignals(True)
+        try:
+            combo.clear()
+            combo.addItems(slots)
+            if current:
+                combo.setCurrentText(current)
+        finally:
+            combo.blockSignals(False)
+
+    def _on_kotor_output_name_mode_changed(self, _index: int = -1) -> None:
+        controller = getattr(self, "retarget_workbench_controller", None)
+        combo = getattr(self, "kotor_output_name_mode_combo", None)
+        if controller is None or combo is None:
+            return
+        try:
+            controller.set_kotor_output_name_mode(combo.currentData())
+            self._apply_retarget_output_naming_controls()
+        except Exception as exc:
+            self._log(f"Retarget output name mode change failed: {exc}", "error")
+
+    def _on_target_kotor_animation_slot_changed(self, text: str) -> None:
+        controller = getattr(self, "retarget_workbench_controller", None)
+        if controller is None:
+            return
+        controller.set_target_kotor_animation_slot(text)
+
+    def _on_custom_kotor_animation_name_changed(self, text: str) -> None:
+        controller = getattr(self, "retarget_workbench_controller", None)
+        if controller is None:
+            return
+        controller.set_custom_kotor_animation_name(text)
+
+    def _on_retarget_output_display_label_changed(self, text: str) -> None:
+        controller = getattr(self, "retarget_workbench_controller", None)
+        if controller is None:
+            return
+        controller.set_output_display_label(text)
 
     def _load_retarget_source_clip(self):
         path, _selected = QtWidgets.QFileDialog.getOpenFileName(
@@ -4757,6 +4860,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         try:
             profile = controller.load_retarget_profile(path)
             slot = str(getattr(profile, "animation_slot", "") or "(no slot)")
+            slot_combo = getattr(self, "target_kotor_animation_slot_combo", None)
+            if slot_combo is not None and slot != "(no slot)":
+                slot_combo.setCurrentText(slot)
             self.statusBar().showMessage(f"Loaded retarget profile: {getattr(profile, 'name', Path(path).stem)} [{slot}]")
         except Exception as exc:
             self._log(f"Retarget profile load failed: {exc}", "error")

@@ -13,6 +13,13 @@ from src.core.geometry.model_data import Animation, KotorModel
 from src.core.validation.animation_block_validator import validate_animation_block_against_model
 
 from .retarget_profile import RetargetProfile, normalize_retarget_profile
+from .retarget_modes import RetargetMode
+from .retarget_output_naming import (
+    KotorOutputAnimationNameMode,
+    RetargetOutputNaming,
+    ResolvedRetargetOutputName,
+    resolve_retarget_output_name,
+)
 from .retarget_solve_audit import RetargetSolveReport
 from .retarget_solver import (
     RetargetResult,
@@ -37,6 +44,8 @@ class RetargetPreviewRequest:
     supermodel_chain: Any | None = None
     solver_options: RetargetSolverOptions | None = None
     animation_slot: str | None = None
+    output_naming: RetargetOutputNaming | None = None
+    workbench_mode: RetargetMode = RetargetMode.UNREAL_TO_KOTOR
     auto_play: bool = True
     enable_numeric_audit: bool = True
 
@@ -55,6 +64,9 @@ class RetargetPreviewAudit:
     max_adjacent_rotation_degrees: float = 0.0
     missing_controller_nodes: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
+    output_name_mode: KotorOutputAnimationNameMode = KotorOutputAnimationNameMode.VANILLA_SLOT
+    requires_custom_animation_patch: bool = False
+    output_display_label: str | None = None
 
     @property
     def passed(self) -> bool:
@@ -76,6 +88,9 @@ class RetargetPreviewResult:
     solver_report: RetargetSolveReport
     preview_audit: RetargetPreviewAudit
     warnings: List[str] = field(default_factory=list)
+    output_name_mode: KotorOutputAnimationNameMode = KotorOutputAnimationNameMode.VANILLA_SLOT
+    requires_custom_animation_patch: bool = False
+    output_display_label: str | None = None
 
 
 class RetargetViewportAdapter(Protocol):
@@ -104,8 +119,22 @@ def build_retarget_preview(request: RetargetPreviewRequest) -> RetargetPreviewRe
     """Build an in-memory local animation override ready for viewport playback."""
 
     profile = normalize_retarget_profile(request.profile)
-    if request.animation_slot:
-        profile = replace(profile, animation_slot=str(request.animation_slot).strip())
+    resolved_output: ResolvedRetargetOutputName | None = None
+    if request.output_naming is not None:
+        resolved_output = resolve_retarget_output_name(
+            workbench_mode=request.workbench_mode,
+            naming=request.output_naming,
+            target_model=request.target_model,
+            target_supermodel_chain=request.supermodel_chain,
+        )
+        profile = replace(profile, animation_slot=resolved_output.animation_block_name)
+        solver_options = copy.deepcopy(request.solver_options) if request.solver_options is not None else RetargetSolverOptions()
+        solver_options.kotor_output_name_mode = resolved_output.mode
+        solver_options.allow_custom_kotor_animation_name = resolved_output.requires_custom_animation_patch
+    else:
+        if request.animation_slot:
+            profile = replace(profile, animation_slot=str(request.animation_slot).strip())
+        solver_options = request.solver_options
 
     try:
         solver_result = retarget_source_clip_to_aurora_animation(
@@ -113,7 +142,7 @@ def build_retarget_preview(request: RetargetPreviewRequest) -> RetargetPreviewRe
             target_model=request.target_model,
             profile=profile,
             supermodel_chain=request.supermodel_chain,
-            options=request.solver_options,
+            options=solver_options,
         )
     except RetargetSolveError as exc:
         raise RetargetPreviewError(f"Cannot preview retargeted animation: {exc}") from exc
@@ -144,8 +173,18 @@ def build_retarget_preview(request: RetargetPreviewRequest) -> RetargetPreviewRe
         )
         if not audit.passed:
             raise RetargetPreviewError(_format_audit_failure(animation_for_preview.name, audit))
+    if resolved_output is not None:
+        audit.output_name_mode = resolved_output.mode
+        audit.requires_custom_animation_patch = bool(resolved_output.requires_custom_animation_patch)
+        audit.output_display_label = resolved_output.display_label
 
-    warnings = [*solver_result.warnings, *audit.warnings]
+    output_warnings = list(resolved_output.warnings if resolved_output is not None else ())
+    if resolved_output is not None and resolved_output.requires_custom_animation_patch:
+        output_warnings.append(
+            f"Retarget output will be attached as custom KOTOR animation '{resolved_output.animation_block_name}'. "
+            "This requires the custom animation patch/runtime to play in-game."
+        )
+    warnings = [*solver_result.warnings, *audit.warnings, *output_warnings]
     return RetargetPreviewResult(
         preview_model=preview_model,
         animation_block=animation_for_preview,
@@ -153,6 +192,15 @@ def build_retarget_preview(request: RetargetPreviewRequest) -> RetargetPreviewRe
         solver_report=solver_result.report,
         preview_audit=audit,
         warnings=warnings,
+        output_name_mode=(
+            resolved_output.mode
+            if resolved_output is not None
+            else KotorOutputAnimationNameMode.VANILLA_SLOT
+        ),
+        requires_custom_animation_patch=bool(
+            resolved_output.requires_custom_animation_patch if resolved_output is not None else False
+        ),
+        output_display_label=resolved_output.display_label if resolved_output is not None else None,
     )
 
 

@@ -43,6 +43,11 @@ from src.core.retargeting.coordinate_normalizer import (
     wxyz_to_xyzw,
     xyzw_to_wxyz,
 )
+from src.core.retargeting.retarget_output_naming import (
+    KotorOutputAnimationNameMode,
+    coerce_kotor_output_name_mode,
+    validate_custom_kotor_animation_name,
+)
 from src.core.validation.animation_block_validator import (
     AnimationBlockValidationError,
     validate_animation_block_against_model,
@@ -249,6 +254,7 @@ def prepare_local_animation_override_for_export(
     resource_manager: object | None = None,
     require_valid_slot: bool = True,
     replace_existing: bool = True,
+    kotor_output_name_mode: KotorOutputAnimationNameMode | str = KotorOutputAnimationNameMode.VANILLA_SLOT,
 ) -> tuple[Animation, ResolvedAnimationSlot]:
     """Validate and prepare a local animation override before MDL export.
 
@@ -259,6 +265,25 @@ def prepare_local_animation_override_for_export(
     """
 
     requested = str(requested_slot_name or "").strip()
+    name_mode = coerce_kotor_output_name_mode(kotor_output_name_mode)
+    if name_mode == KotorOutputAnimationNameMode.CUSTOM_PATCH:
+        custom_name = validate_custom_kotor_animation_name(requested)
+        if not replace_existing:
+            wanted = custom_name.lower()
+            if any(str(anim.name or "").lower() == wanted for anim in getattr(target_model, "animations", [])):
+                raise ValueError(f"Local animation '{custom_name}' already exists")
+        prepared = copy.deepcopy(animation_block)
+        prepared.name = custom_name
+        return prepared, ResolvedAnimationSlot(
+            slot_name=custom_name,
+            animation=None,
+            source_model_name=str(getattr(target_model, "name", "") or ""),
+            inherited=False,
+            cumulative_scale=1.0,
+            transtime=float(getattr(prepared, "transition_time", 0.25) or 0.25),
+            anim_root=str(getattr(prepared, "anim_root", "") or ""),
+            events=list(getattr(prepared, "events", []) or []),
+        )
     try:
         resolved_slot = resolve_animation_slot(
             target_model,
@@ -318,6 +343,8 @@ class AuroraAnimationInjectionRequest:
     target_model_override: Optional[KotorModel] = None
     source_reference_mode: str = "hybrid_limb_source_rest"
     hybrid_limb_source_rest_weight: float = 0.35
+    kotor_output_name_mode: KotorOutputAnimationNameMode = KotorOutputAnimationNameMode.VANILLA_SLOT
+    requires_custom_animation_patch: bool = False
 
     def __post_init__(self) -> None:
         self.r3a_animation_json = Path(self.r3a_animation_json)
@@ -356,6 +383,9 @@ class AuroraAnimationInjectionResult:
     operation: str = ""
     input_size_bytes: int = 0
     output_size_bytes: int = 0
+    kotor_output_name_mode: str = KotorOutputAnimationNameMode.VANILLA_SLOT.value
+    requires_custom_animation_patch: bool = False
+    vanilla_slot_safe: bool = True
     warnings: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
 
@@ -377,6 +407,9 @@ class AuroraAnimationInjectionResult:
             "operation": self.operation,
             "input_size_bytes": self.input_size_bytes,
             "output_size_bytes": self.output_size_bytes,
+            "kotor_output_name_mode": self.kotor_output_name_mode,
+            "requires_custom_animation_patch": self.requires_custom_animation_patch,
+            "vanilla_slot_safe": self.vanilla_slot_safe,
             "warnings": list(self.warnings),
             "errors": list(self.errors),
         }
@@ -407,6 +440,9 @@ class AuroraAnimationWriter:
             output_mdx=request.output_mdl.with_suffix(".mdx"),
             manifest_path=request.output_manifest,
             fps=float(request.fps or 30.0),
+            kotor_output_name_mode=coerce_kotor_output_name_mode(request.kotor_output_name_mode).value,
+            requires_custom_animation_patch=bool(request.requires_custom_animation_patch),
+            vanilla_slot_safe=not bool(request.requires_custom_animation_patch),
         )
         try:
             result.input_mdl_sha256 = self.sha256(request.target_mdl)
@@ -465,6 +501,9 @@ class AuroraAnimationWriter:
             output_mdx=request.output_mdl.with_suffix(".mdx"),
             manifest_path=request.output_manifest,
             fps=float(request.fps or 30.0),
+            kotor_output_name_mode=coerce_kotor_output_name_mode(request.kotor_output_name_mode).value,
+            requires_custom_animation_patch=bool(request.requires_custom_animation_patch),
+            vanilla_slot_safe=not bool(request.requires_custom_animation_patch),
         )
         try:
             result.input_mdl_sha256 = self.sha256(request.target_mdl)
@@ -557,6 +596,7 @@ class AuroraAnimationWriter:
                 game=request.game,
                 require_valid_slot=True,
                 replace_existing=request.overwrite_existing,
+                kotor_output_name_mode=request.kotor_output_name_mode,
             )
         except InvalidAnimationSlotError as exc:
             result.errors.append(str(exc))

@@ -19,6 +19,10 @@ from src.core.retargeting.aurora_animation_writer import (
     AuroraAnimationWriter,
 )
 from src.core.retargeting.retarget_preview import RetargetPreviewResult
+from src.core.retargeting.retarget_output_naming import (
+    KotorOutputAnimationNameMode,
+    validate_custom_kotor_animation_name,
+)
 from src.core.validation.validation_bus import (
     ValidationBus,
     ValidationIssue,
@@ -45,6 +49,8 @@ class RetargetPreviewExportRequest:
     verify_roundtrip: bool = True
     write_manifest: bool = True
     roundtrip_tolerance: float = 1e-4
+    kotor_output_name_mode: KotorOutputAnimationNameMode = KotorOutputAnimationNameMode.VANILLA_SLOT
+    requires_custom_animation_patch: bool = False
 
     def __post_init__(self) -> None:
         self.output_mdl_path = Path(self.output_mdl_path)
@@ -82,6 +88,15 @@ def export_retarget_preview_override(
     target_mdl = _target_mdl_path(request.original_target_model)
     target_mdx = _target_mdx_path(request.original_target_model, target_mdl)
     warnings = _basename_warnings(request.original_target_model, request.output_mdl_path)
+    output_mode = _request_output_mode(request, preview)
+    requires_custom_patch = _request_requires_custom_patch(request, preview)
+    if output_mode == KotorOutputAnimationNameMode.CUSTOM_PATCH:
+        validate_custom_kotor_animation_name(preview.slot_name)
+        if not any("custom animation name" in warning for warning in warnings):
+            warnings.append(
+                "This MDL contains a custom animation name and is not vanilla-slot playable. "
+                "Install/use it through the custom animation patch workflow."
+            )
     manifest_path = request.output_mdl_path.with_suffix(".retarget_preview.json")
     outputs = [
         ExportOutputSpec(final_path=request.output_mdl_path, artifact_kind="mdl"),
@@ -114,6 +129,8 @@ def export_retarget_preview_override(
                 verify_roundtrip=request.verify_roundtrip,
                 roundtrip_tolerance=request.roundtrip_tolerance,
                 target_model_override=copy.deepcopy(request.original_target_model),
+                kotor_output_name_mode=output_mode,
+                requires_custom_animation_patch=requires_custom_patch,
             )
             injection_result = export_writer.inject_animation_block(
                 injection_request,
@@ -152,6 +169,10 @@ def export_retarget_preview_override(
             "slot_name": preview.slot_name,
             "verify_roundtrip": request.verify_roundtrip,
             "write_manifest": request.write_manifest,
+            "kotor_output_name_mode": output_mode.value,
+            "animation_name": preview.slot_name,
+            "requires_custom_animation_patch": requires_custom_patch,
+            "vanilla_slot_safe": not requires_custom_patch,
         },
         validation_bus_source="retarget.preview_export",
     )
@@ -232,6 +253,25 @@ def _basename_warnings(model: Any, output_mdl: Path) -> list[str]:
             f"the target model resref ('{target_name}')."
         ]
     return []
+
+
+def _request_output_mode(
+    request: RetargetPreviewExportRequest,
+    preview: RetargetPreviewResult,
+) -> KotorOutputAnimationNameMode:
+    mode = getattr(preview, "output_name_mode", None) or request.kotor_output_name_mode
+    return KotorOutputAnimationNameMode(mode)
+
+
+def _request_requires_custom_patch(
+    request: RetargetPreviewExportRequest,
+    preview: RetargetPreviewResult,
+) -> bool:
+    return bool(
+        request.requires_custom_animation_patch
+        or getattr(preview, "requires_custom_animation_patch", False)
+        or _request_output_mode(request, preview) == KotorOutputAnimationNameMode.CUSTOM_PATCH
+    )
 
 
 def _write_staged_preview_payload(directory: Path) -> Path:

@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable
 
+from src.core.game.kotor_loader import get_valid_animation_slots
+from src.core.retargeting.retarget_output_naming import (
+    KotorOutputAnimationNameMode,
+    RetargetOutputNaming,
+    coerce_kotor_output_name_mode,
+)
 from src.core.retargeting.retarget_modes import (
     RetargetMode,
     RetargetModeSpec,
@@ -37,6 +43,8 @@ class RetargetWorkbenchState:
     # Future Unreal target mode.
     target_unreal_skeleton: Any | None = None
     target_unreal_profile: Any | None = None
+
+    output_naming: RetargetOutputNaming | None = None
 
     last_preview_result: Any | None = None
     last_export_result: Any | None = None
@@ -102,6 +110,58 @@ class RetargetWorkbenchController:
             self.ue_to_kotor_controller.set_retarget_profile(profile)
         self.invalidate_preview("retarget profile changed")
         self.update_enabled()
+
+    def set_kotor_output_name_mode(self, mode: KotorOutputAnimationNameMode | str) -> None:
+        naming = self.state.output_naming or RetargetOutputNaming()
+        self.state.output_naming = replace(
+            naming,
+            kotor_name_mode=coerce_kotor_output_name_mode(mode),
+        )
+        self._push_output_naming()
+        self.invalidate_preview("KOTOR output animation name mode changed")
+        self.update_enabled()
+
+    def set_target_kotor_animation_slot(self, slot_name: str | None) -> None:
+        naming = self.state.output_naming or RetargetOutputNaming()
+        self.state.output_naming = replace(
+            naming,
+            kotor_name_mode=KotorOutputAnimationNameMode.VANILLA_SLOT,
+            requested_kotor_animation_name=str(slot_name or "").strip() or None,
+            canonical_kotor_animation_name=None,
+        )
+        self._push_output_naming()
+        self.invalidate_preview("target KOTOR animation slot changed")
+        self.update_enabled()
+
+    def set_custom_kotor_animation_name(self, name: str | None) -> None:
+        naming = self.state.output_naming or RetargetOutputNaming(
+            kotor_name_mode=KotorOutputAnimationNameMode.CUSTOM_PATCH
+        )
+        self.state.output_naming = replace(
+            naming,
+            kotor_name_mode=KotorOutputAnimationNameMode.CUSTOM_PATCH,
+            requested_kotor_animation_name=str(name or "").strip() or None,
+            canonical_kotor_animation_name=None,
+        )
+        self._push_output_naming()
+        self.invalidate_preview("custom KOTOR animation name changed")
+        self.update_enabled()
+
+    def set_output_display_label(self, label: str | None) -> None:
+        naming = self.state.output_naming or RetargetOutputNaming()
+        self.state.output_naming = replace(
+            naming,
+            display_label=str(label or "").strip() or None,
+        )
+        self._push_output_naming()
+        self.invalidate_preview("retarget output display label changed")
+        self.update_enabled()
+
+    def available_target_kotor_slots(self) -> list[str]:
+        try:
+            return list(get_valid_animation_slots(self.current_target_model()))
+        except Exception:
+            return []
 
     def set_source_kotor_model(self, model: Any | None) -> None:
         self.state.source_kotor_model = model
@@ -172,6 +232,7 @@ class RetargetWorkbenchController:
         if self.state.mode != RetargetMode.UNREAL_TO_KOTOR:
             raise RetargetWorkbenchError(self.not_implemented_message("preview"))
         controller = self._require_ue_to_kotor_controller()
+        self._push_output_naming()
         result = controller.preview_retarget(auto_play=auto_play, show_node_overlay=show_node_overlay)
         self._sync_from_ue_controller()
         self.last_error = str(getattr(controller, "last_error", "") or "")
@@ -247,6 +308,10 @@ class RetargetWorkbenchController:
         self.state.target_model = getattr(ue_state, "target_model", self.state.target_model)
         self.state.retarget_profile = getattr(ue_state, "retarget_profile", self.state.retarget_profile)
         self.state.last_preview_result = getattr(ue_state, "last_preview_result", None)
+
+    def _push_output_naming(self) -> None:
+        if self.ue_to_kotor_controller is not None and hasattr(self.ue_to_kotor_controller, "set_output_naming"):
+            self.ue_to_kotor_controller.set_output_naming(self.state.output_naming)
 
     def _require_mode(self, mode: RetargetMode, action: str) -> None:
         if self.state.mode != mode:
