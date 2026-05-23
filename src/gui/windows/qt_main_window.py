@@ -19,6 +19,7 @@ import traceback
 import copy
 import importlib
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional
 
 log = logging.getLogger(__name__)
@@ -6422,7 +6423,38 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if runtime_label is not None:
             runtime_label.setText(f"Runtime: {readiness.runtime_summary}")
         self._apply_retarget_output_naming_controls()
+        self._sync_retarget_workbench_profile_mapping()
         self.statusBar().showMessage(f"Retarget mode: {spec.label}")
+
+    def _sync_retarget_workbench_profile_mapping(self) -> None:
+        window = getattr(self, "animation_retarget_window", None)
+        controller = getattr(self, "retarget_workbench_controller", None)
+        if window is None or controller is None or not hasattr(window, "set_mapping_report"):
+            return
+        if getattr(controller.state.mode, "name", "") == "KOTOR_TO_UNREAL":
+            return
+        profile = getattr(controller.state, "retarget_profile", None)
+        target_model = controller.current_target_model()
+        if profile is None or target_model is None:
+            return
+        entries = list(getattr(profile, "mappings", []) or [])
+        mapping = {
+            str(getattr(entry, "source_node", "") or ""): str(getattr(entry, "target_node", "") or "")
+            for entry in entries
+            if str(getattr(entry, "source_node", "") or "").strip()
+            and str(getattr(entry, "target_node", "") or "").strip()
+        }
+        window.set_mapping_report(
+            SimpleNamespace(
+                mapping=mapping,
+                missing_source=[],
+                missing_target=[],
+                matched_count=len(mapping),
+                exact_matches=0,
+                alias_matches=len(mapping),
+                manual_matches=0,
+            )
+        )
 
     def _apply_retarget_output_naming_controls(self) -> None:
         controller = getattr(self, "retarget_workbench_controller", None)

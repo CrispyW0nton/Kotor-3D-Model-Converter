@@ -161,6 +161,17 @@ def test_workbench_source_playback_auto_retargets_to_workbench_target_viewport()
     assert "workbench_controller.viewport = adapter" in adapter_source
 
 
+def test_workbench_status_syncs_auto_profile_mapping_table() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    status_source = inspect.getsource(QtGhostRiggerMainWindow._apply_retarget_workbench_mode_status)
+    mapping_source = inspect.getsource(QtGhostRiggerMainWindow._sync_retarget_workbench_profile_mapping)
+
+    assert "self._sync_retarget_workbench_profile_mapping()" in status_source
+    assert "window.set_mapping_report" in mapping_source
+    assert "matched_count=len(mapping)" in mapping_source
+
+
 def test_workbench_apply_button_routes_to_verified_export_path() -> None:
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 

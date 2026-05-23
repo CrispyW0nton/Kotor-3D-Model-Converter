@@ -17,6 +17,7 @@ from src.core.retargeting.kotor_to_unreal_preview import (
     KotorToUnrealPreviewResult,
     build_kotor_to_unreal_preview,
 )
+from src.core.retargeting.retarget_mapping import suggest_initial_mapping
 from src.core.retargeting.retarget_output_naming import (
     KotorOutputAnimationNameMode,
     RetargetOutputNaming,
@@ -69,6 +70,7 @@ class RetargetWorkbenchState:
     unreal_fbx_export_backend: Any | None = None
 
     output_naming: RetargetOutputNaming | None = None
+    retarget_profile_is_auto: bool = False
 
     last_kotor_to_kotor_preview_result: Any | None = None
     last_kotor_to_unreal_preview_result: Any | None = None
@@ -140,6 +142,7 @@ class RetargetWorkbenchController:
         if self.ue_to_kotor_controller is not None and hasattr(self.ue_to_kotor_controller, "set_source_clip"):
             self.ue_to_kotor_controller.set_source_clip(clip)
         self.invalidate_preview("source clip changed")
+        self._maybe_autogenerate_unreal_to_kotor_profile()
         self.update_enabled()
 
     def set_target_model(self, model: Any | None) -> None:
@@ -147,10 +150,12 @@ class RetargetWorkbenchController:
         if self.ue_to_kotor_controller is not None and hasattr(self.ue_to_kotor_controller, "set_target_model"):
             self.ue_to_kotor_controller.set_target_model(model)
         self.invalidate_preview("target model changed")
+        self._maybe_autogenerate_unreal_to_kotor_profile()
         self.update_enabled()
 
     def set_retarget_profile(self, profile: Any | None) -> None:
         self.state.retarget_profile = profile
+        self.state.retarget_profile_is_auto = False
         if self.ue_to_kotor_controller is not None and hasattr(self.ue_to_kotor_controller, "set_retarget_profile"):
             self.ue_to_kotor_controller.set_retarget_profile(profile)
         self.invalidate_preview("retarget profile changed")
@@ -247,6 +252,7 @@ class RetargetWorkbenchController:
         clip = controller.load_source_clip(path, clip_name=clip_name, sample_rate=sample_rate)
         self.state.source_clip = clip
         self.invalidate_preview("source clip changed")
+        self._maybe_autogenerate_unreal_to_kotor_profile()
         self.update_enabled()
         return clip
 
@@ -254,6 +260,7 @@ class RetargetWorkbenchController:
         controller = self._require_ue_to_kotor_controller()
         profile = controller.load_retarget_profile(path)
         self.state.retarget_profile = profile
+        self.state.retarget_profile_is_auto = False
         self.invalidate_preview("retarget profile changed")
         self.update_enabled()
         return profile
@@ -361,6 +368,29 @@ class RetargetWorkbenchController:
             elif hasattr(self.ue_to_kotor_controller, "invalidate_preview"):
                 self.ue_to_kotor_controller.invalidate_preview()
         self.last_error = reason
+
+    def _maybe_autogenerate_unreal_to_kotor_profile(self) -> None:
+        if self.state.mode != RetargetMode.UNREAL_TO_KOTOR:
+            return
+        source_clip = self.state.source_clip
+        target_model = self.current_target_model()
+        if source_clip is None or target_model is None:
+            return
+        if self.state.retarget_profile is not None and not self.state.retarget_profile_is_auto:
+            return
+        try:
+            profile = suggest_initial_mapping(source_clip, target_model)
+        except Exception as exc:
+            self._log(f"Automatic retarget profile suggestion failed: {exc}", "warning")
+            return
+        self.state.retarget_profile = profile
+        self.state.retarget_profile_is_auto = True
+        if self.ue_to_kotor_controller is not None and hasattr(self.ue_to_kotor_controller, "set_retarget_profile"):
+            self.ue_to_kotor_controller.set_retarget_profile(profile)
+        self._log(
+            f"Auto-generated retarget profile with {len(getattr(profile, 'mappings', []) or [])} source-to-target mappings.",
+            "info",
+        )
 
     def mode_status_text(self) -> str:
         spec = self.current_mode_spec()

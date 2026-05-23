@@ -11,6 +11,7 @@ from src.core.geometry.model_data import Animation, KotorModel, ModelNode
 from src.core.retargeting.fbx_importer import classify_source_node_name
 from src.core.retargeting.retarget_mapping import (
     detect_side,
+    suggest_initial_mapping,
     suggest_source_roles,
     validate_retarget_profile,
 )
@@ -160,6 +161,17 @@ def test_source_role_suggestions_classify_ue_style_names() -> None:
     assert "ik_foot_root" not in suggestions
     assert detect_side("upperarm_l") == "left"
     assert detect_side("thigh_r") == "right"
+
+
+def test_initial_mapping_does_not_duplicate_target_nodes() -> None:
+    clip = _source_clip(["root", "spine_01", "spine_02", "spine_04"])
+    target = _target_model(["root", "torso_g"], parents={"torso_g": "root"})
+
+    profile = suggest_initial_mapping(clip, target)
+
+    target_nodes = [entry.target_node.lower() for entry in profile.mappings]
+    assert target_nodes.count("torso_g") == 1
+    assert validate_retarget_profile(profile, clip, target).success is True
 
 
 def test_validation_rejects_unknown_source_node() -> None:

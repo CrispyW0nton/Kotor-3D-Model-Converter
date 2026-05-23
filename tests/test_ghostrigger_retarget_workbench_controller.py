@@ -8,6 +8,8 @@ from types import SimpleNamespace
 import pytest
 
 from src.core.retargeting.retarget_modes import RetargetMode
+from src.core.geometry.model_data import KotorModel, ModelNode
+from src.core.retargeting.source_animation import SourcePose, SourceSkeletonClip, SourceSkeletonNode, Transform
 from src.gui.qt_lib.windows.qt_retarget_workbench_controller import (
     RetargetWorkbenchController,
     RetargetWorkbenchError,
@@ -120,6 +122,47 @@ def _ready_controller() -> tuple[RetargetWorkbenchController, FakePreviewControl
     return controller, ue, preview_action, export_action
 
 
+def _source_clip_for_auto_profile() -> SourceSkeletonClip:
+    nodes = [
+        SourceSkeletonNode("root", None, 0, Transform(), Transform()),
+        SourceSkeletonNode("pelvis", "root", 1, Transform(), Transform()),
+        SourceSkeletonNode("upperarm_l", "pelvis", 2, Transform(), Transform()),
+        SourceSkeletonNode("lowerarm_l", "upperarm_l", 3, Transform(), Transform()),
+        SourceSkeletonNode("hand_l", "lowerarm_l", 4, Transform(), Transform()),
+    ]
+    pose = SourcePose(
+        time_seconds=0.0,
+        local_transforms={node.name: node.rest_local for node in nodes},
+        global_transforms={node.name: node.rest_global for node in nodes},
+    )
+    return SourceSkeletonClip(
+        source_path="source.fbx",
+        clip_name="Idle",
+        duration_seconds=1.0,
+        sample_rate=30.0,
+        nodes=nodes,
+        rest_pose=pose,
+        sampled_poses=[pose],
+    )
+
+
+def _target_model_for_auto_profile() -> KotorModel:
+    root = ModelNode(name="root")
+    pelvis = ModelNode(name="pelvis_g")
+    upper = ModelNode(name="lbicep_g")
+    forearm = ModelNode(name="Lforearm_g")
+    hand = ModelNode(name="Lhand_g")
+    root.children = [pelvis]
+    pelvis.parent = root
+    pelvis.children = [upper]
+    upper.parent = pelvis
+    upper.children = [forearm]
+    forearm.parent = upper
+    forearm.children = [hand]
+    hand.parent = forearm
+    return KotorModel(name="pmbam", root_node=root)
+
+
 def test_mode_switch_invalidates_preview_and_export() -> None:
     controller, ue, _preview_action, export_action = _ready_controller()
     preview = controller.preview()
@@ -172,6 +215,27 @@ def test_unreal_to_kotor_delegates_to_existing_preview_and_export() -> None:
     assert controller.state.last_preview_result is preview
     assert controller.state.last_export_result is export
     assert export_action.isEnabled() is True
+
+
+def test_unreal_to_kotor_auto_generates_initial_profile_when_source_and_target_are_set() -> None:
+    preview_action = FakeAction()
+    export_action = FakeAction()
+    ue = FakePreviewController()
+    controller = RetargetWorkbenchController(
+        ue_to_kotor_controller=ue,
+        preview_action=preview_action,
+        export_action=export_action,
+    )
+
+    controller.set_source_clip(_source_clip_for_auto_profile())
+    controller.set_target_model(_target_model_for_auto_profile())
+
+    profile = controller.state.retarget_profile
+    assert profile is not None
+    assert controller.state.retarget_profile_is_auto is True
+    assert ue.state.retarget_profile is profile
+    assert {entry.target_node for entry in profile.mappings} >= {"pelvis_g", "lbicep_g", "Lforearm_g", "Lhand_g"}
+    assert controller.can_preview() is True
 
 
 def test_mode_dropdown_contains_all_modes_and_defaults_to_unreal_to_kotor() -> None:

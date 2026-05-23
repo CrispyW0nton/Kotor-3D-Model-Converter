@@ -88,11 +88,16 @@ def suggest_initial_mapping(source_clip: SourceSkeletonClip, target_model: Kotor
         target_by_key.setdefault((role, None), target_name)
 
     mappings: List[RetargetMappingEntry] = []
+    used_targets: set[str] = set()
     for source_name, role in source_roles.items():
         side = detect_side(source_name)
         target_name = target_by_key.get((role, side)) or target_by_key.get((role, None))
         if not target_name:
             continue
+        target_key = target_name.lower()
+        if target_key in used_targets:
+            continue
+        used_targets.add(target_key)
         mappings.append(
             RetargetMappingEntry(
                 role=role,
