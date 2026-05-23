@@ -2975,6 +2975,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._retarget_workbench_play_source_animation_from_window
         )
         self.animation_retarget_window.applyRequested.connect(self._retarget_workbench_apply_from_window)
+        self.animation_retarget_window.pauseRequested.connect(self._retarget_pause)
         self.animation_retarget_window.stopRequested.connect(self._retarget_stop)
         self.animation_retarget_panel = self.animation_retarget_window
         self.unreal_animator_window = QtUnrealAnimatorWindow(self)
@@ -5300,6 +5301,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._retarget_preview(anim_name)
             return
         self._ensure_retarget_workbench_target_viewport_adapter()
+        self._apply_retarget_workbench_animation_assignment(anim_name)
         mode_name = str(getattr(getattr(controller.state, "mode", None), "name", "") or "")
         if anim_name and mode_name == "UNREAL_TO_KOTOR":
             clip = getattr(controller.state, "source_clip", None)
@@ -5348,6 +5350,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             if hasattr(window, "play_source_clip_animation"):
                 window.play_source_clip_animation(anim_name)
             self._ensure_retarget_workbench_target_viewport_adapter()
+            self._apply_retarget_workbench_animation_assignment(anim_name)
             if self._retarget_target_model is not None:
                 controller.set_target_model(self._retarget_target_model)
             self._refresh_target_kotor_animation_slots()
@@ -5368,9 +5371,62 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._retarget_apply(anim_name)
             return
         self._ensure_retarget_workbench_target_viewport_adapter()
+        self._apply_retarget_workbench_animation_assignment(anim_name)
         if not controller.can_export() and anim_name:
             self._retarget_workbench_preview_from_window(anim_name)
         self._export_retarget_preview()
+
+    def _apply_retarget_workbench_animation_assignment(self, anim_name: str) -> None:
+        controller = getattr(self, "retarget_workbench_controller", None)
+        window = getattr(self, "animation_retarget_window", None)
+        if controller is None or window is None or not anim_name:
+            return
+        if not hasattr(window, "current_animation_assignment"):
+            return
+        assignment = window.current_animation_assignment() or {}
+        if str(assignment.get("source_animation") or anim_name) != str(anim_name):
+            try:
+                if hasattr(window.panel, "assignment_for_animation"):
+                    assignment = window.panel.assignment_for_animation(anim_name)
+            except Exception:
+                assignment = {}
+        output_name = str(assignment.get("output_name") or "").strip()
+        output_mode = str(assignment.get("output_mode") or "").strip()
+        if not output_name:
+            return
+        mode_name = str(getattr(getattr(controller.state, "mode", None), "name", "") or "")
+        if mode_name in {"UNREAL_TO_KOTOR", "KOTOR_TO_KOTOR"}:
+            if output_mode == KotorOutputAnimationNameMode.VANILLA_SLOT.value:
+                controller.set_target_kotor_animation_slot(output_name)
+            else:
+                controller.set_custom_kotor_animation_name(output_name)
+            self._sync_retarget_assignment_controls(output_name, output_mode)
+        elif mode_name == "KOTOR_TO_UNREAL":
+            controller.set_output_unreal_clip_name(output_name)
+
+    def _sync_retarget_assignment_controls(self, output_name: str, output_mode: str) -> None:
+        mode_combo = self._retarget_workbench_widget("kotor_output_name_mode_combo")
+        slot_combo = self._retarget_workbench_widget("target_kotor_animation_slot_combo")
+        custom_edit = self._retarget_workbench_widget("custom_kotor_animation_name_edit")
+        if mode_combo is not None:
+            mode_value = (
+                KotorOutputAnimationNameMode.VANILLA_SLOT.value
+                if output_mode == KotorOutputAnimationNameMode.VANILLA_SLOT.value
+                else KotorOutputAnimationNameMode.CUSTOM_PATCH.value
+            )
+            index = mode_combo.findData(mode_value)
+            if index >= 0:
+                mode_combo.blockSignals(True)
+                mode_combo.setCurrentIndex(index)
+                mode_combo.blockSignals(False)
+        if output_mode == KotorOutputAnimationNameMode.VANILLA_SLOT.value and slot_combo is not None:
+            slot_combo.blockSignals(True)
+            slot_combo.setCurrentText(output_name)
+            slot_combo.blockSignals(False)
+        elif custom_edit is not None:
+            custom_edit.blockSignals(True)
+            custom_edit.setText(output_name)
+            custom_edit.blockSignals(False)
 
     def _retarget_target_label(self) -> str:
         model = self._retarget_target_model
@@ -5483,6 +5539,20 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if hasattr(self, "animation_retarget_panel"):
             self.animation_retarget_panel.clear_poses()
         self._log("Retarget preview stopped.", "info")
+
+    def _retarget_pause(self):
+        self._retarget_timer.stop()
+        self._retarget_last_tick = None
+        if self._retarget_engine is not None:
+            self._retarget_engine.stop()
+        adapters = [getattr(self, "_retarget_preview_viewport", None)]
+        window = getattr(self, "animation_retarget_window", None)
+        if window is not None:
+            adapters.append(getattr(window, "_retarget_target_viewport_adapter", None))
+        for adapter in adapters:
+            if adapter is not None and hasattr(adapter, "pause"):
+                adapter.pause()
+        self._log("Retarget preview paused.", "info")
 
     def _tick_retarget_animation(self):
         engine = self._retarget_engine

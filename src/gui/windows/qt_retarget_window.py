@@ -29,6 +29,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
     targetExternalImportRequested = QtCore.Signal()
     previewRequested = QtCore.Signal(str)
     applyRequested = QtCore.Signal(str)
+    pauseRequested = QtCore.Signal()
     stopRequested = QtCore.Signal()
     sourceAnimationPlayRequested = QtCore.Signal(str)
 
@@ -171,8 +172,9 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.panel.targetExternalImportRequested.connect(self.targetExternalImportRequested.emit)
         self.panel.previewRequested.connect(self.previewRequested.emit)
         self.panel.applyRequested.connect(self.applyRequested.emit)
+        self.panel.pauseRequested.connect(self._pause_requested)
         self.panel.stopRequested.connect(self._stop_requested)
-        self.panel.sourceAnimationPlayRequested.connect(self.play_source_clip_animation)
+        self.panel.sourceAnimationPlayRequested.connect(self._source_animation_play_requested)
 
         viewport_split = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         viewport_split.setChildrenCollapsible(False)
@@ -209,24 +211,27 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         top.addWidget(self.retarget_workbench_status_label, 4)
         outer.addLayout(top)
 
-        names = QtWidgets.QHBoxLayout()
+        self.retarget_output_global_controls = QtWidgets.QFrame(box)
+        self.retarget_output_global_controls.setObjectName("retargetOutputGlobalControls")
+        self.retarget_output_global_controls.setVisible(False)
+        names = QtWidgets.QHBoxLayout(self.retarget_output_global_controls)
         names.setContentsMargins(0, 0, 0, 0)
         names.setSpacing(6)
-        self.kotor_output_name_mode_combo = QtWidgets.QComboBox(box)
+        self.kotor_output_name_mode_combo = QtWidgets.QComboBox(self.retarget_output_global_controls)
         self.kotor_output_name_mode_combo.setObjectName("kotorOutputNameModeComboBox")
         self.kotor_output_name_mode_combo.addItem("Vanilla slot override", KotorOutputAnimationNameMode.VANILLA_SLOT.value)
         self.kotor_output_name_mode_combo.addItem("Custom animation patch", KotorOutputAnimationNameMode.CUSTOM_PATCH.value)
-        self.target_kotor_animation_slot_combo = QtWidgets.QComboBox(box)
+        self.target_kotor_animation_slot_combo = QtWidgets.QComboBox(self.retarget_output_global_controls)
         self.target_kotor_animation_slot_combo.setObjectName("targetKotorAnimationSlotComboBox")
         self.target_kotor_animation_slot_combo.setEditable(True)
         self.target_kotor_animation_slot_combo.setMinimumWidth(120)
-        self.custom_kotor_animation_name_edit = QtWidgets.QLineEdit(box)
+        self.custom_kotor_animation_name_edit = QtWidgets.QLineEdit(self.retarget_output_global_controls)
         self.custom_kotor_animation_name_edit.setObjectName("customKotorAnimationNameLineEdit")
         self.custom_kotor_animation_name_edit.setPlaceholderText("gr_spin_attack_01")
-        self.output_unreal_clip_name_edit = QtWidgets.QLineEdit(box)
+        self.output_unreal_clip_name_edit = QtWidgets.QLineEdit(self.retarget_output_global_controls)
         self.output_unreal_clip_name_edit.setObjectName("outputUnrealClipNameLineEdit")
         self.output_unreal_clip_name_edit.setPlaceholderText("pmbam_pause1")
-        self.retarget_output_display_label_edit = QtWidgets.QLineEdit(box)
+        self.retarget_output_display_label_edit = QtWidgets.QLineEdit(self.retarget_output_global_controls)
         self.retarget_output_display_label_edit.setObjectName("retargetOutputDisplayLabelLineEdit")
         self.retarget_output_display_label_edit.setPlaceholderText("Display label / notes")
         for widget in (
@@ -237,7 +242,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             self.retarget_output_display_label_edit,
         ):
             names.addWidget(widget)
-        outer.addLayout(names)
+        outer.addWidget(self.retarget_output_global_controls, 0)
 
         details = QtWidgets.QGridLayout()
         details.setContentsMargins(0, 0, 0, 0)
@@ -348,7 +353,6 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             return
         current_name = str(getattr(clip, "clip_name", "") or "")
         if animation_name and animation_name != current_name:
-            self.sourceAnimationPlayRequested.emit(animation_name)
             self.statusBar().showMessage(f"Loading source animation: {animation_name}")
             return
         self._source_clip_play_name = current_name
@@ -358,6 +362,10 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             self._source_clip_play_clock.restart()
             self._source_clip_play_timer.start()
         self.statusBar().showMessage(f"Playing source animation: {current_name}")
+
+    def pause_source_clip_animation(self) -> None:
+        self._source_clip_play_timer.stop()
+        self.statusBar().showMessage("Source animation paused")
 
     def set_target_model(self, model, game_tag: str = "") -> None:
         if game_tag:
@@ -381,6 +389,15 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
 
     def selected_animation(self) -> str:
         return self.panel.selected_animation()
+
+    def current_animation_assignment(self) -> dict:
+        return self.panel.assignment_for_animation(self.panel.selected_animation())
+
+    def checked_animation_assignments(self) -> list[dict]:
+        return self.panel.checked_animation_assignments()
+
+    def set_animation_assignment(self, anim_name: str, **kwargs) -> None:
+        self.panel.set_animation_assignment(anim_name, **kwargs)
 
     def request_apply_options(self, source_anim, target_model) -> Optional[dict]:
         dialog = QtRetargetApplyDialog(source_anim, target_model, self)
@@ -455,6 +472,19 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             return
         elapsed = max(0.0, self._source_clip_play_clock.elapsed() / 1000.0)
         self._set_source_clip_pose(clip, elapsed % duration)
+
+    def _source_animation_play_requested(self, animation_name: str) -> None:
+        clip = self._source_clip_preview_clip
+        current_name = str(getattr(clip, "clip_name", "") or "") if clip is not None else ""
+        if clip is not None and (not animation_name or animation_name == current_name):
+            self.play_source_clip_animation(animation_name)
+        else:
+            self.statusBar().showMessage(f"Loading source animation: {animation_name}")
+        self.sourceAnimationPlayRequested.emit(animation_name)
+
+    def _pause_requested(self) -> None:
+        self.pause_source_clip_animation()
+        self.pauseRequested.emit()
 
     def _stop_requested(self) -> None:
         self.clear_poses()

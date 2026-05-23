@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from PySide6 import QtCore, QtWidgets
 
+from src.core.retargeting.retarget_output_naming import KotorOutputAnimationNameMode
 from src.gui.qt_lib.assets.qt_theme import C, heading
 
 
@@ -162,6 +164,7 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
     targetExternalImportRequested = QtCore.Signal()
     previewRequested = QtCore.Signal(str)
     applyRequested = QtCore.Signal(str)
+    pauseRequested = QtCore.Signal()
     stopRequested = QtCore.Signal()
     animationSelected = QtCore.Signal(str)
     sourceAnimationPlayRequested = QtCore.Signal(str)
@@ -171,8 +174,7 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
         self._source_model = None
         self._target_model = None
         self._library_rows: list[dict] = []
-        self._manual_mapping: dict[str, str] = {}
-        self._updating_mapping = False
+        self._animation_assignments: dict[str, dict] = {}
         self._build()
 
     def _build(self) -> None:
@@ -186,20 +188,30 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
         content = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         content.setChildrenCollapsible(False)
         content.addWidget(self._make_animation_column())
-        content.addWidget(self._make_mapping_column())
+        content.addWidget(self._make_assignment_column())
         content.setSizes([320, 520])
         root.addWidget(content, 1)
 
         controls = QtWidgets.QHBoxLayout()
         controls.setSpacing(6)
         for label, slot in (
-            ("Retarget", self._preview),
-            ("Apply", self._apply),
+            ("Play", self._play_source_animation),
+            ("Pause", self.pauseRequested.emit),
             ("Stop", self.stopRequested.emit),
+            ("Retarget", self._preview),
+            ("Export MDL and Assign Retargeted Animations", self._apply),
         ):
             button = QtWidgets.QPushButton(label)
             if label == "Retarget":
                 button.setObjectName("retargetSelectedAnimationButton")
+            elif label == "Play":
+                button.setObjectName("playSelectedRetargetAnimationButton")
+            elif label == "Pause":
+                button.setObjectName("pauseRetargetAnimationButton")
+            elif label == "Stop":
+                button.setObjectName("stopRetargetAnimationButton")
+            elif label.startswith("Export MDL"):
+                button.setObjectName("exportAssignedRetargetAnimationsButton")
             button.clicked.connect(slot)
             controls.addWidget(button, 1)
         root.addLayout(controls)
@@ -211,24 +223,20 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
         layout.setSpacing(4)
         layout.addWidget(heading("Animations"))
         self.anim_list = QtWidgets.QListWidget()
-        self.anim_list.currentTextChanged.connect(self.animationSelected.emit)
+        self.anim_list.currentItemChanged.connect(
+            lambda item, _old=None: self.animationSelected.emit(self._source_name_for_item(item))
+        )
         self.anim_list.itemDoubleClicked.connect(lambda _item: self._play_source_animation())
+        self.anim_list.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.anim_list.customContextMenuRequested.connect(self._show_animation_context_menu)
         layout.addWidget(self.anim_list, 1)
         return column
 
-    def _make_mapping_column(self) -> QtWidgets.QWidget:
+    def _make_assignment_column(self) -> QtWidgets.QWidget:
         column = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(column)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
-
-        mapping_box = QtWidgets.QGroupBox("Source Bone / Target Bone")
-        mapping_layout = QtWidgets.QVBoxLayout(mapping_box)
-        mapping_layout.setContentsMargins(6, 6, 6, 6)
-        self.mapping = QtWidgets.QTreeWidget()
-        self.mapping.setHeaderLabels(["Source Bone", "Target Bone"])
-        mapping_layout.addWidget(self.mapping, 1)
-        layout.addWidget(mapping_box, 3)
 
         info_box = QtWidgets.QGroupBox("Information")
         info_layout = QtWidgets.QVBoxLayout(info_box)
@@ -360,15 +368,22 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
 
     def set_source_model(self, model) -> None:
         self._source_model = model
-        self._manual_mapping.clear()
         self.source_label.setText(self._model_label(model))
+        previous_assignments = {str(key): dict(value) for key, value in self._animation_assignments.items()}
         self.anim_list.clear()
+        self._animation_assignments.clear()
         for anim in getattr(model, "animations", []) or [] if model else []:
-            item = QtWidgets.QListWidgetItem(str(getattr(anim, "name", anim)))
+            source_name = str(getattr(anim, "name", anim))
+            item = QtWidgets.QListWidgetItem()
+            item.setFlags(item.flags() | QtCore.Qt.ItemIsUserCheckable)
+            item.setCheckState(QtCore.Qt.Checked)
             length = float(getattr(anim, "length", 0.0) or 0.0)
-            if length > 0.0:
-                item.setToolTip(f"{length:.3f}s")
             item.setData(QtCore.Qt.UserRole, anim)
+            item.setData(QtCore.Qt.UserRole + 2, source_name)
+            assignment = previous_assignments.get(source_name) or self._default_assignment_for(source_name)
+            item.setData(QtCore.Qt.UserRole + 1, assignment)
+            self._animation_assignments[source_name] = dict(assignment)
+            self._render_animation_item(item, length=length)
             self.anim_list.addItem(item)
         if self.anim_list.count() == 1:
             self.anim_list.setCurrentRow(0)
@@ -376,37 +391,10 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
 
     def set_target_model(self, model) -> None:
         self._target_model = model
-        self._manual_mapping.clear()
         self.target_label.setText(self._model_label(model))
         self._update_info()
 
     def set_mapping_report(self, report) -> None:
-        self._updating_mapping = True
-        self.mapping.clear()
-        target_names = self._bone_names(self._target_model)
-        mapped = dict(getattr(report, "mapping", {}) or {})
-        missing = {str(src or "").lower() for src in (getattr(report, "missing_source", []) or [])}
-        for src in sorted(set(mapped).union(missing)):
-            auto_dst = mapped.get(src, "")
-            current_dst = self._manual_mapping.get(src, auto_dst)
-            item = QtWidgets.QTreeWidgetItem([src, ""])
-            item.setData(0, QtCore.Qt.UserRole, src)
-            item.setData(1, QtCore.Qt.UserRole, auto_dst)
-            self.mapping.addTopLevelItem(item)
-            combo = QtWidgets.QComboBox(self.mapping)
-            combo.setEditable(False)
-            combo.addItem("")
-            for name in target_names:
-                combo.addItem(name)
-            if current_dst and combo.findText(current_dst) < 0:
-                combo.addItem(current_dst)
-            combo.setCurrentText(current_dst)
-            combo.currentTextChanged.connect(
-                lambda text, src_key=src, auto_key=auto_dst: self._on_mapping_combo_changed(src_key, auto_key, text)
-            )
-            self.mapping.setItemWidget(item, 1, combo)
-        self._updating_mapping = False
-        self.mapping.resizeColumnToContents(0)
         self.info.setPlainText(
             f"Mapped bones: {getattr(report, 'matched_count', 0)}\n"
             f"Exact: {getattr(report, 'exact_matches', 0)}  Alias: {getattr(report, 'alias_matches', 0)}  "
@@ -417,17 +405,18 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
 
     def selected_animation(self) -> str:
         item = self.anim_list.currentItem()
-        return item.text() if item else ""
+        return self._source_name_for_item(item)
 
     def select_animation(self, anim_name: str) -> bool:
         if not anim_name:
             return False
-        matches = self.anim_list.findItems(anim_name, QtCore.Qt.MatchExactly)
-        if not matches:
-            return False
-        self.anim_list.setCurrentItem(matches[0])
-        self.anim_list.scrollToItem(matches[0])
-        return True
+        for index in range(self.anim_list.count()):
+            item = self.anim_list.item(index)
+            if self._source_name_for_item(item) == str(anim_name):
+                self.anim_list.setCurrentItem(item)
+                self.anim_list.scrollToItem(item)
+                return True
+        return False
 
     def config_kwargs(self) -> dict:
         return {
@@ -437,16 +426,52 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
         }
 
     def manual_bone_mapping(self) -> dict[str, str]:
-        return dict(self._manual_mapping)
+        return {}
 
-    def _on_mapping_combo_changed(self, src_key: str, auto_key: str, text: str) -> None:
-        if self._updating_mapping:
+    def assignment_for_animation(self, anim_name: str | None = None) -> dict:
+        item = self._item_for_animation(anim_name or self.selected_animation())
+        if item is None:
+            return {}
+        source_name = self._source_name_for_item(item)
+        assignment = item.data(QtCore.Qt.UserRole + 1)
+        if not isinstance(assignment, dict):
+            assignment = self._default_assignment_for(source_name)
+            item.setData(QtCore.Qt.UserRole + 1, assignment)
+        result = dict(assignment)
+        result.setdefault("source_animation", source_name)
+        result["checked"] = item.checkState() == QtCore.Qt.Checked
+        return result
+
+    def checked_animation_assignments(self) -> list[dict]:
+        assignments: list[dict] = []
+        for index in range(self.anim_list.count()):
+            item = self.anim_list.item(index)
+            if item.checkState() == QtCore.Qt.Checked:
+                assignments.append(self.assignment_for_animation(self._source_name_for_item(item)))
+        return assignments
+
+    def set_animation_assignment(
+        self,
+        anim_name: str,
+        *,
+        output_name: str | None = None,
+        output_mode: KotorOutputAnimationNameMode | str | None = None,
+        checked: bool | None = None,
+    ) -> None:
+        item = self._item_for_animation(anim_name)
+        if item is None:
             return
-        dst_key = str(text or "").strip().lower()
-        if not dst_key or dst_key == str(auto_key or "").lower():
-            self._manual_mapping.pop(src_key, None)
-        else:
-            self._manual_mapping[src_key] = dst_key
+        source_name = self._source_name_for_item(item)
+        assignment = self.assignment_for_animation(source_name) or self._default_assignment_for(source_name)
+        if output_name is not None:
+            assignment["output_name"] = str(output_name or "").strip()
+        if output_mode is not None:
+            assignment["output_mode"] = self._coerce_output_mode(output_mode).value
+        if checked is not None:
+            item.setCheckState(QtCore.Qt.Checked if checked else QtCore.Qt.Unchecked)
+        item.setData(QtCore.Qt.UserRole + 1, dict(assignment))
+        self._animation_assignments[source_name] = dict(assignment)
+        self._render_animation_item(item)
 
     def _bone_names(self, model) -> list[str]:
         if model is None or not hasattr(model, "all_nodes"):
@@ -466,6 +491,97 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
 
     def _apply(self) -> None:
         self.applyRequested.emit(self.selected_animation())
+
+    def _item_for_animation(self, anim_name: str | None) -> QtWidgets.QListWidgetItem | None:
+        needle = str(anim_name or "")
+        if not needle:
+            return self.anim_list.currentItem()
+        for index in range(self.anim_list.count()):
+            item = self.anim_list.item(index)
+            if self._source_name_for_item(item) == needle:
+                return item
+        return None
+
+    def _source_name_for_item(self, item: QtWidgets.QListWidgetItem | None) -> str:
+        if item is None:
+            return ""
+        source_name = item.data(QtCore.Qt.UserRole + 2)
+        return str(source_name or item.text() or "")
+
+    def _default_assignment_for(self, source_name: str) -> dict:
+        return {
+            "source_animation": source_name,
+            "output_name": self._safe_custom_output_name(source_name),
+            "output_mode": KotorOutputAnimationNameMode.CUSTOM_PATCH.value,
+            "checked": True,
+        }
+
+    def _render_animation_item(self, item: QtWidgets.QListWidgetItem, *, length: float | None = None) -> None:
+        source_name = self._source_name_for_item(item)
+        assignment = item.data(QtCore.Qt.UserRole + 1)
+        if not isinstance(assignment, dict):
+            assignment = self._default_assignment_for(source_name)
+        mode = self._coerce_output_mode(assignment.get("output_mode"))
+        output_name = str(assignment.get("output_name") or "").strip() or self._safe_custom_output_name(source_name)
+        mode_label = "custom patch" if mode == KotorOutputAnimationNameMode.CUSTOM_PATCH else "vanilla slot"
+        item.setText(f"{source_name}  ->  {output_name} ({mode_label})")
+        tooltip = (
+            f"Source animation: {source_name}\n"
+            f"Target output animation: {output_name}\n"
+            f"Output type: {mode_label}"
+        )
+        if length is not None and length > 0.0:
+            tooltip += f"\nLength: {length:.3f}s"
+        item.setToolTip(tooltip)
+
+    def _show_animation_context_menu(self, pos: QtCore.QPoint) -> None:
+        item = self.anim_list.itemAt(pos)
+        if item is None:
+            return
+        self.anim_list.setCurrentItem(item)
+        menu = QtWidgets.QMenu(self)
+        rename_action = menu.addAction("Rename target output animation...")
+        custom_action = menu.addAction("Set output type: Custom animation patch")
+        vanilla_action = menu.addAction("Set output type: Vanilla slot override")
+        toggle_action = menu.addAction("Assign/export this animation")
+        toggle_action.setCheckable(True)
+        toggle_action.setChecked(item.checkState() == QtCore.Qt.Checked)
+        chosen = menu.exec(self.anim_list.mapToGlobal(pos))
+        if chosen is None:
+            return
+        source_name = self._source_name_for_item(item)
+        if chosen is rename_action:
+            current = str(self.assignment_for_animation(source_name).get("output_name") or "")
+            text, accepted = QtWidgets.QInputDialog.getText(
+                self,
+                "Rename Retarget Output",
+                "Target output animation name:",
+                QtWidgets.QLineEdit.Normal,
+                current,
+            )
+            if accepted:
+                self.set_animation_assignment(source_name, output_name=text)
+        elif chosen is custom_action:
+            self.set_animation_assignment(source_name, output_mode=KotorOutputAnimationNameMode.CUSTOM_PATCH)
+        elif chosen is vanilla_action:
+            self.set_animation_assignment(source_name, output_mode=KotorOutputAnimationNameMode.VANILLA_SLOT)
+        elif chosen is toggle_action:
+            self.set_animation_assignment(source_name, checked=toggle_action.isChecked())
+
+    def _coerce_output_mode(self, value) -> KotorOutputAnimationNameMode:
+        if isinstance(value, KotorOutputAnimationNameMode):
+            return value
+        raw = str(value or "").strip().lower()
+        if raw in {KotorOutputAnimationNameMode.VANILLA_SLOT.value, "vanilla", "slot"}:
+            return KotorOutputAnimationNameMode.VANILLA_SLOT
+        return KotorOutputAnimationNameMode.CUSTOM_PATCH
+
+    def _safe_custom_output_name(self, source_name: str) -> str:
+        text = re.sub(r"[^A-Za-z0-9_-]+", "_", str(source_name or "").strip())
+        text = re.sub(r"_+", "_", text).strip("_-")
+        if not text:
+            text = "retargeted_animation"
+        return text[:64]
 
     def _model_label(self, model) -> str:
         if model is None:

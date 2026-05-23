@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 import os
 
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -62,6 +62,15 @@ def test_retarget_workbench_controls_live_in_retarget_window() -> None:
         assert window.findChild(QtWidgets.QComboBox, "targetKotorAnimationSlotComboBox") is not None
         assert window.findChild(QtWidgets.QLineEdit, "customKotorAnimationNameLineEdit") is not None
         assert window.findChild(QtWidgets.QLineEdit, "outputUnrealClipNameLineEdit") is not None
+        assert window.findChild(QtWidgets.QFrame, "retargetOutputGlobalControls").isVisible() is False
+        assert not any(
+            box.title() == "Source Bone / Target Bone"
+            for box in window.findChildren(QtWidgets.QGroupBox)
+        )
+        assert window.findChild(QtWidgets.QPushButton, "playSelectedRetargetAnimationButton") is not None
+        assert window.findChild(QtWidgets.QPushButton, "pauseRetargetAnimationButton") is not None
+        assert window.findChild(QtWidgets.QPushButton, "stopRetargetAnimationButton") is not None
+        assert window.findChild(QtWidgets.QPushButton, "exportAssignedRetargetAnimationsButton") is not None
     finally:
         window.close()
 
@@ -117,6 +126,61 @@ def test_retarget_window_source_clip_preview_populates_source_viewport() -> None
         window.close()
 
 
+def test_retarget_window_animation_rows_have_assignable_output_names() -> None:
+    _qapp()
+    from src.core.retargeting.retarget_output_naming import KotorOutputAnimationNameMode
+    from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
+
+    window = QtAnimationRetargetWindow()
+    try:
+        window.set_source_clip_preview(_sample_source_clip())
+
+        item = window.panel.anim_list.currentItem()
+        assert item is not None
+        assert item.checkState() == QtCore.Qt.Checked
+        assert window.panel.selected_animation() == "Demo UE Idle"
+        assignment = window.current_animation_assignment()
+        assert assignment["source_animation"] == "Demo UE Idle"
+        assert assignment["output_name"] == "Demo_UE_Idle"
+        assert assignment["output_mode"] == KotorOutputAnimationNameMode.CUSTOM_PATCH.value
+
+        window.set_animation_assignment(
+            "Demo UE Idle",
+            output_name="ca_idle_01",
+            output_mode=KotorOutputAnimationNameMode.CUSTOM_PATCH,
+        )
+
+        assignment = window.current_animation_assignment()
+        assert assignment["output_name"] == "ca_idle_01"
+        assert "ca_idle_01" in item.text()
+
+        window.set_source_clip_preview(_sample_source_clip())
+        assignment = window.current_animation_assignment()
+        assert assignment["output_name"] == "ca_idle_01"
+    finally:
+        window.close()
+
+
+def test_double_clicking_source_animation_notifies_retarget_controller_path() -> None:
+    _qapp()
+    from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
+
+    window = QtAnimationRetargetWindow()
+    try:
+        played: list[str] = []
+        window.sourceAnimationPlayRequested.connect(played.append)
+        window.set_source_clip_preview(_sample_source_clip())
+
+        item = window.panel.anim_list.currentItem()
+        assert item is not None
+        window.panel.anim_list.itemDoubleClicked.emit(item)
+
+        assert played == ["Demo UE Idle"]
+        assert window.source_viewport._renderer._anim_pose is not None
+    finally:
+        window.close()
+
+
 def test_main_viewport_header_does_not_construct_retarget_workbench_controls() -> None:
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
@@ -154,6 +218,7 @@ def test_workbench_source_playback_auto_retargets_to_workbench_target_viewport()
     adapter_source = inspect.getsource(QtGhostRiggerMainWindow._ensure_retarget_workbench_target_viewport_adapter)
 
     assert "window.play_source_clip_animation(anim_name)" in source
+    assert "self._apply_retarget_workbench_animation_assignment(anim_name)" in source
     assert "self._ensure_retarget_workbench_target_viewport_adapter()" in source
     assert "controller.preview(auto_play=True, show_node_overlay=True)" in source
     assert "window.target_viewport" in adapter_source
@@ -170,6 +235,16 @@ def test_workbench_status_syncs_auto_profile_mapping_table() -> None:
     assert "self._sync_retarget_workbench_profile_mapping()" in status_source
     assert "window.set_mapping_report" in mapping_source
     assert "matched_count=len(mapping)" in mapping_source
+
+
+def test_workbench_assignment_helper_pushes_row_output_naming_to_controller() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    source = inspect.getsource(QtGhostRiggerMainWindow._apply_retarget_workbench_animation_assignment)
+
+    assert "window.current_animation_assignment()" in source
+    assert "controller.set_custom_kotor_animation_name(output_name)" in source
+    assert "controller.set_target_kotor_animation_slot(output_name)" in source
 
 
 def test_workbench_apply_button_routes_to_verified_export_path() -> None:
