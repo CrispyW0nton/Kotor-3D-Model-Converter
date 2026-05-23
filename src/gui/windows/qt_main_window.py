@@ -1821,6 +1821,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.export_obj_action.triggered.connect(self._export_obj)
         self.export_fbx_action = QtGui.QAction("Export FBX...", self)
         self.export_fbx_action.triggered.connect(self._export_fbx)
+        self.export_selected_fbx_action = QtGui.QAction("Export Selected FBX...", self)
+        self.export_selected_fbx_action.triggered.connect(self._export_selected_fbx)
         self.export_gltf_action = QtGui.QAction("Export GLB/GLTF...", self)
         self.export_gltf_action.setShortcut("Ctrl+G")
         self.export_gltf_action.triggered.connect(self._export_gltf)
@@ -1867,6 +1869,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.diag_action = QtGui.QAction(self._icon("diag"), "Diagnostics...", self)
         self.diag_action.setShortcut("Ctrl+D")
         self.diag_action.triggered.connect(self._show_diagnostics_panel)
+        self.fbx_sdk_status_action = QtGui.QAction("FBX SDK Status", self)
+        self.fbx_sdk_status_action.triggered.connect(self._show_fbx_sdk_status)
         self.info_action = QtGui.QAction("Model Info...", self)
         self.info_action.triggered.connect(self._show_model_info)
         self.refresh_action = QtGui.QAction("Refresh All", self)
@@ -1969,6 +1973,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         file_menu.addAction(self.export_binary_action)
         file_menu.addAction(self.export_obj_action)
         file_menu.addAction(self.export_fbx_action)
+        file_menu.addAction(self.export_selected_fbx_action)
         file_menu.addAction(self.export_gltf_action)
         file_menu.addSeparator()
         file_menu.addAction(self.export_humanoid_action)
@@ -2020,6 +2025,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         help_menu.addAction(about_action)
         help_menu.addAction(viewport_controls_action)
         help_menu.addAction(format_action)
+        diagnostics_menu = help_menu.addMenu("Diagnostics")
+        diagnostics_menu.addAction(self.fbx_sdk_status_action)
 
         modules_menu = self.menuBar().addMenu("Modules")
         modules_menu.addAction(self.modules_action)
@@ -2047,6 +2054,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
         tools_menu = self.menuBar().addMenu("Tools")
         tools_menu.addAction(self.diag_action)
+        tools_menu.addAction(self.fbx_sdk_status_action)
         tools_menu.addAction(self.render_frame_action)
         tools_menu.addAction(self.texture_tool_action)
         tools_menu.addAction(self.blueprint_editor_action)
@@ -4515,22 +4523,21 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self,
             "Import FBX",
             str(Path(self.settings_data.get("last_import") or self.app_root)),
-            "FBX files (*.fbx);;OBJ files (*.obj);;All files (*.*)",
+            "FBX files (*.fbx);;All files (*.*)",
         )
         if not path:
             return
-        if path.lower().endswith(".obj"):
-            self._import_obj_from_path(path)
-            return
         try:
-            from src.converters.mesh_converter import FBXImporter
+            from src.io.fbx.fbx_importer import FbxSdkUnavailableError, import_fbx
 
-            model = FBXImporter().import_file(path, game_version=self._game_version())
-            if model is None:
-                raise RuntimeError("FBX import failed. Install pyassimp, assimp-py, or trimesh.")
+            model = import_fbx(path, {"game_version": self._game_version()})
             self._texture_dir = str(Path(path).parent)
             self._set_model_internal(model, path)
-            self._log(f"Imported FBX: {Path(path).name}", "success")
+            summary = getattr(model, "fbx_import_summary", None)
+            suffix = f" ({summary.log_line()})" if summary is not None else ""
+            self._log(f"Imported FBX: {Path(path).name}{suffix}", "success")
+        except FbxSdkUnavailableError as exc:
+            self._show_missing_fbx_sdk_dialog(str(exc))
         except Exception as exc:
             self._log(f"FBX import error: {exc}", "error")
             QtWidgets.QMessageBox.critical(self, "FBX Import Error", str(exc))
@@ -4646,26 +4653,74 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self,
             "Export FBX",
             f"{getattr(model, 'name', 'model')}.fbx",
-            "FBX files (*.fbx);;OBJ files (*.obj);;All files (*.*)",
+            "FBX files (*.fbx);;All files (*.*)",
         )
         if not path:
             return
         try:
-            from src.converters.mesh_converter import FBXExporter
+            from src.io.fbx.fbx_exporter import FbxSdkUnavailableError, export_fbx
 
-            ok = FBXExporter().export(
-                model,
-                path,
-                tex_cache=self._get_tex_cache_for_export(),
-                export_rigging=True,
-                base_skeleton_model=getattr(self, "_base_skeleton_model", None),
-            )
-            level = "success" if ok else "warning"
-            msg = f"Exported FBX -> {Path(path).name}" if ok else "FBX export fell back or failed; see log."
-            self._log(msg, level)
+            export_fbx(model, path)
+            self._log(f"Exported FBX -> {Path(path).name}", "success")
+        except FbxSdkUnavailableError as exc:
+            self._show_missing_fbx_sdk_dialog(str(exc))
         except Exception as exc:
             self._log(f"FBX export error: {exc}", "error")
             QtWidgets.QMessageBox.critical(self, "Export Error", str(exc))
+
+    def _export_selected_fbx(self):
+        selected = self.scene_manager.get_selected_objects()
+        if not selected:
+            QtWidgets.QMessageBox.information(self, "Export Selected FBX", "Select a scene object first.")
+            return
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Export Selected FBX",
+            f"{selected[0].name if len(selected) == 1 else 'selection'}.fbx",
+            "FBX files (*.fbx);;All files (*.*)",
+        )
+        if not path:
+            return
+        try:
+            from src.io.fbx.fbx_exporter import FbxSdkUnavailableError, export_fbx
+
+            export_fbx(selected, path, {"export_selection_only": True})
+            self._log(f"Exported selected FBX -> {Path(path).name}", "success")
+        except FbxSdkUnavailableError as exc:
+            self._show_missing_fbx_sdk_dialog(str(exc))
+        except Exception as exc:
+            self._log(f"Selected FBX export error: {exc}", "error")
+            QtWidgets.QMessageBox.critical(self, "Export Selected FBX", str(exc))
+
+    def _show_missing_fbx_sdk_dialog(self, details: str = "") -> None:
+        message = (
+            "Autodesk FBX Python SDK is not installed or not available to this Python environment. "
+            "FBX import/export is disabled until the SDK is installed."
+        )
+        if details:
+            message = f"{message}\n\n{details}"
+        self._log("FBX SDK unavailable; import/export disabled.", "warning")
+        QtWidgets.QMessageBox.warning(self, "Autodesk FBX SDK Missing", message)
+
+    def _show_fbx_sdk_status(self) -> None:
+        try:
+            from src.io.fbx.fbx_diagnostics import build_fbx_diagnostic_report
+
+            report = build_fbx_diagnostic_report()
+        except Exception as exc:
+            report = f"FBX SDK diagnostic failed: {exc}"
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("FBX SDK Status")
+        dialog.resize(720, 480)
+        layout = QtWidgets.QVBoxLayout(dialog)
+        text = QtWidgets.QPlainTextEdit()
+        text.setReadOnly(True)
+        text.setPlainText(report)
+        layout.addWidget(text, 1)
+        close_button = QtWidgets.QPushButton("Close")
+        close_button.clicked.connect(dialog.accept)
+        layout.addWidget(close_button, 0, QtCore.Qt.AlignRight)
+        dialog.exec()
 
     def _export_gltf(self):
         model = self._require_model("Export GLB/GLTF")

@@ -66,6 +66,11 @@ pygltflib>=1.15.0
                                 # Ubuntu/Debian: sudo apt install libassimp-dev
                                 # macOS:         brew install assimp
 
+# Optional FBX support:
+# Autodesk FBX Python SDK is not installed through standard pip in this project.
+# Install the Autodesk FBX Python SDK / bindings matching your Python version and platform,
+# then ensure the fbx module and FbxCommon.py are visible to this Python environment.
+
 # ── IPC / HTTP server ────────────────────────────────────────────────────────
 flask>=2.3.0
 requests>=2.28.0
