@@ -57,17 +57,23 @@ _MODE_SPECS: dict[RetargetMode, RetargetModeSpec] = {
         mode=RetargetMode.KOTOR_TO_UNREAL,
         label="KOTOR → Unreal",
         description=(
-            "Export a sampled KOTOR/Aurora animation slot toward an Unreal-compatible "
-            "skeleton/FBX animation clip. KOTOR source animation sampler is available; "
-            "pending next adapter: UE-compatible FBX animation export."
+            "Sample a KOTOR/Aurora animation through the evaluator, retarget it onto "
+            "an Unreal-compatible target skeleton, and export the baked UE-compatible "
+            "FBX animation through the FBX backend contract."
         ),
         source_kind="kotor_aurora_model_animation_slot",
         target_kind="unreal_skeleton",
         output_kind="unreal_fbx_animation_clip",
-        supports_preview=False,
-        supports_export=False,
-        implemented=False,
-        required_inputs=("source_kotor_model", "source_kotor_animation_slot", "target_unreal_skeleton", "target_unreal_profile"),
+        supports_preview=True,
+        supports_export=True,
+        implemented=True,
+        required_inputs=(
+            "source_kotor_model",
+            "source_kotor_animation_slot",
+            "target_unreal_skeleton",
+            "retarget_profile",
+            "output_unreal_clip_name",
+        ),
     ),
     RetargetMode.UNREAL_TO_KOTOR: RetargetModeSpec(
         mode=RetargetMode.UNREAL_TO_KOTOR,

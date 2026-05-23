@@ -140,9 +140,9 @@ def test_mode_switch_invalidates_preview_and_export() -> None:
     assert export_action.isEnabled() is False
 
 
-def test_unimplemented_kotor_to_unreal_mode_does_not_call_solvers_or_writers(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_kotor_to_unreal_mode_does_not_call_ue_to_kotor_or_mdl_paths_when_inputs_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     def fail(*_args, **_kwargs):
-        raise AssertionError("pending workbench modes must not call retarget/export internals")
+        raise AssertionError("KOTOR-to-Unreal readiness must not call UE-to-KOTOR retarget/export internals")
 
     monkeypatch.setattr("src.core.retargeting.retarget_solver.retarget_source_clip_to_aurora_animation", fail)
     monkeypatch.setattr("src.core.retargeting.retarget_preview.build_retarget_preview", fail)
@@ -151,10 +151,9 @@ def test_unimplemented_kotor_to_unreal_mode_does_not_call_solvers_or_writers(mon
     controller, ue, _preview_action, _export_action = _ready_controller()
 
     controller.set_mode(RetargetMode.KOTOR_TO_UNREAL)
-    with pytest.raises(RetargetWorkbenchError, match="KOTOR → Unreal export is not implemented yet"):
-        controller.preview()
-    with pytest.raises(RetargetWorkbenchError, match="KOTOR → Unreal export is not implemented yet"):
-        controller.export_preview(Path("clip.fbx"))
+
+    assert controller.preview() is None
+    assert controller.export_preview(Path("clip.fbx")) is None
 
     assert ue.preview_calls == []
     assert ue.export_calls == []
@@ -190,7 +189,7 @@ def test_mode_dropdown_contains_all_modes_and_defaults_to_unreal_to_kotor() -> N
     assert "verified GhostRigger" in combo.tooltip
 
 
-def test_selecting_pending_mode_updates_controller_status_and_buttons() -> None:
+def test_selecting_kotor_to_unreal_mode_updates_controller_status_and_buttons() -> None:
     controller, _ue, preview_action, export_action = _ready_controller()
     logs: list[tuple[str, str]] = []
     statuses: list[str] = []
@@ -204,4 +203,4 @@ def test_selecting_pending_mode_updates_controller_status_and_buttons() -> None:
     assert preview_action.isEnabled() is False
     assert export_action.isEnabled() is False
     assert any("Retarget mode changed to KOTOR → Unreal" in message for message, _level in logs)
-    assert "pending UE-compatible FBX export adapter" in statuses[-1]
+    assert "FBX backend export" in statuses[-1]

@@ -1804,35 +1804,50 @@ class MDLBinaryWriter:
 
     def _write_anim_node_tree(self, buf: BytesIO, root: ModelNode,
                                anim_node_abs: Dict[int, int]) -> int:
-        """Write animation nodes (two-pass); returns root offset (relative to BASE)."""
-        # Flatten
-        ordered: List[ModelNode] = []
-        seen: set[int] = set()
+        """Write animation nodes in vanilla depth-first layout.
 
-        def _dfs(n):
-            nid = id(n)
-            if nid in seen:
-                return
-            seen.add(nid)
-            ordered.append(n)
-            for c in n.children:
-                _dfs(c)
-        _dfs(root)
+        Stock Aurora animation blocks place a node's controller arrays after
+        its child subtrees, not immediately after the node header.  The engine's
+        ResetMdlNode/UpdateAnimFootprint path mutates the raw child offset
+        arrays into runtime pointer arrays while walking this layout, so the
+        emitted order here intentionally mirrors MDLOps/vanilla blocks:
 
-        # Pass 1: write all nodes, record positions
+            node header -> child pointer array -> child subtrees -> controllers
+        """
         root_off_patches: Dict[int, int] = {}
         parent_off_patches: Dict[int, int] = {}
         anim_child_data_locs: Dict[int, int] = {}
+        anim_controller_patches: Dict[int, Tuple[int, int]] = {}
+        ordered: List[ModelNode] = []
+        seen: set[int] = set()
 
-        for nd in ordered:
+        def _write_depth_first(node: ModelNode) -> None:
+            nid = id(node)
+            if nid in seen:
+                return
+            seen.add(nid)
+            ordered.append(node)
             _align4(buf)
-            anim_node_abs[id(nd)] = buf.tell()
-            self._write_one_anim_node_pass1(
-                buf, nd,
-                root_off_patches, parent_off_patches, anim_child_data_locs)
+            anim_node_abs[nid] = buf.tell()
+            self._write_one_anim_node_header_and_child_array(
+                buf,
+                node,
+                root_off_patches,
+                parent_off_patches,
+                anim_child_data_locs,
+                anim_controller_patches,
+            )
+            for child in getattr(node, "children", []) or []:
+                _write_depth_first(child)
+            ctrl_patches = anim_controller_patches.get(nid)
+            if ctrl_patches is not None:
+                self._write_controllers(buf, node, ctrl_patches[0], ctrl_patches[1])
 
-        # Pass 2: patch root_off, parent_off, and child ptr arrays
-        root_abs = anim_node_abs[id(ordered[0])]
+        _write_depth_first(root)
+
+        # Patch root_off, parent_off, and child ptr arrays after every child
+        # node has a concrete file offset.
+        root_abs = anim_node_abs[id(root)]
         cur_end = buf.tell()
 
         for nd in ordered:
@@ -1860,11 +1875,16 @@ class MDLBinaryWriter:
         buf.seek(cur_end)
         return root_abs - _BASE
 
-    def _write_one_anim_node_pass1(self, buf: BytesIO, node: ModelNode,
-                                    root_off_patches: Dict[int, int],
-                                    parent_off_patches: Dict[int, int],
-                                    anim_child_data_locs: Dict[int, int]) -> None:
-        """Write a single animation node (80-byte header + controllers only).
+    def _write_one_anim_node_header_and_child_array(
+        self,
+        buf: BytesIO,
+        node: ModelNode,
+        root_off_patches: Dict[int, int],
+        parent_off_patches: Dict[int, int],
+        anim_child_data_locs: Dict[int, int],
+        anim_controller_patches: Dict[int, Tuple[int, int]],
+    ) -> None:
+        """Write one animation node header and its child pointer array.
 
         Real KotOR animation nodes are always DUMMY (type 1) regardless of what
         the geometry node carries.  Writing MESH/SKIN flags here would cause
@@ -1909,18 +1929,18 @@ class MDLBinaryWriter:
         ctrl_data_cnt = self._count_ctrl_data(node)
         buf.write(_wu32(ctrl_data_cnt))
         buf.write(_wu32(ctrl_data_cnt))
+        anim_controller_patches[id(node)] = (ctrl_arr_patch, ctrl_data_patch)
 
         assert buf.tell() == node_start + 80
 
-        # Child pointer array (placeholder zeros; patched in pass 2)
-        _align4(buf)
-        child_arr_data_off = buf.tell() - _BASE
-        anim_child_data_locs[id(node)] = buf.tell()
-        for _ in node.children:
-            buf.write(_wu32(0))
-        end = buf.tell()
-        buf.seek(child_arr_patch)
-        buf.write(_wu32(child_arr_data_off))
-        buf.seek(end)
-
-        self._write_controllers(buf, node, ctrl_arr_patch, ctrl_data_patch)
+        if node.children:
+            # Child pointer array (placeholder zeros; patched in pass 2)
+            _align4(buf)
+            child_arr_data_off = buf.tell() - _BASE
+            anim_child_data_locs[id(node)] = buf.tell()
+            for _ in node.children:
+                buf.write(_wu32(0))
+            end = buf.tell()
+            buf.seek(child_arr_patch)
+            buf.write(_wu32(child_arr_data_off))
+            buf.seek(end)

@@ -51,6 +51,7 @@ from src.core.retargeting.retarget_output_naming import (
 from src.core.validation.animation_block_validator import (
     AnimationBlockValidationError,
     validate_animation_block_against_model,
+    validate_raw_animation_footprint,
 )
 from src.core.validation.animation_roundtrip_validator import (
     AnimationRoundTripValidationError,
@@ -471,6 +472,13 @@ class AuroraAnimationWriter:
             result.frame_count = int(payload.get("frame_count") or 0)
             result.duration_seconds = float(animation.length or 0.0)
             result.bone_count_animated = len(animation.nodes)
+            amplitude_issues = self._validate_export_motion_amplitude(payload, animation)
+            if amplitude_issues:
+                result.errors.append(
+                    "Exported animation lost source motion amplitude before MDL write: "
+                    + "; ".join(amplitude_issues[:8])
+                )
+                return self._finish(result, request)
 
             self._write_animation_block_to_output(
                 request=request,
@@ -637,6 +645,18 @@ class AuroraAnimationWriter:
             result.errors.append(f"Output MDL was not written: {request.output_mdl}")
             return
 
+        raw_footprint = validate_raw_animation_footprint(
+            request.output_mdl.read_bytes(),
+            resolved_slot.slot_name,
+        )
+        if not raw_footprint.success:
+            result.errors.append(
+                f"Exported animation '{resolved_slot.slot_name}' failed raw UpdateAnimFootprint validation: "
+                + "; ".join(raw_footprint.issues[:5])
+            )
+            self._discard_outputs(request)
+            return
+
         result.output_size_bytes = request.output_mdl.stat().st_size
         if (
             result.input_size_bytes > 0
@@ -689,6 +709,100 @@ class AuroraAnimationWriter:
             for ctrl in getattr(node, "controllers", []) or []:
                 frame_count = max(frame_count, len(ctrl.get("times", []) or []))
         return frame_count
+
+    @classmethod
+    def _validate_export_motion_amplitude(
+        cls,
+        payload: dict,
+        animation: Animation,
+        *,
+        source_motion_threshold_degrees: float = 1.0,
+        minimum_ratio: float = 0.5,
+    ) -> List[str]:
+        """Return issues when important source tracks are flattened in export."""
+
+        nodes_by_key = {
+            str(getattr(node, "name", "") or "").lower(): node
+            for node in getattr(animation, "nodes", []) or []
+        }
+        issues: List[str] = []
+        target_curves = payload.get("target_curves", {}) or {}
+        for requested_name, curve in target_curves.items():
+            target_name = str(curve.get("target_bone") or requested_name or "")
+            if not cls._is_motion_gate_node(target_name):
+                continue
+            source_amp = cls._source_world_rotation_amplitude_degrees(curve)
+            if source_amp < source_motion_threshold_degrees:
+                continue
+            anim_node = nodes_by_key.get(target_name.lower())
+            export_amp = cls._export_orientation_amplitude_degrees(anim_node) if anim_node else 0.0
+            if export_amp + 1e-5 < source_amp * minimum_ratio:
+                issues.append(
+                    f"{target_name} source={source_amp:.3f}deg export={export_amp:.3f}deg"
+                )
+        return issues
+
+    @staticmethod
+    def _is_motion_gate_node(node_name: str) -> bool:
+        key = str(node_name or "").lower()
+        if key in {"rootdummy", "pelvis_g", "torso_g", "torsoupr_g"}:
+            return True
+        return any(
+            token in key
+            for token in (
+                "collar",
+                "bicep",
+                "forearm",
+                "hand",
+                "thigh",
+                "shin",
+            )
+        )
+
+    @classmethod
+    def _source_world_rotation_amplitude_degrees(cls, curve: dict) -> float:
+        frames = sorted(curve.get("frames", []) or [], key=lambda item: int(item.get("frame") or 0))
+        rotations = [
+            cls._normalize_quat_wxyz(cls._four_floats(frame.get("rotation_wxyz"), (1.0, 0.0, 0.0, 0.0)))
+            for frame in frames
+        ]
+        return cls._rotation_amplitude_wxyz(rotations)
+
+    @classmethod
+    def _export_orientation_amplitude_degrees(cls, node: Optional[ModelNode]) -> float:
+        if node is None:
+            return 0.0
+        for ctrl in getattr(node, "controllers", []) or []:
+            if int(ctrl.get("type", 0) or 0) == CTRL_ORIENTATION or str(ctrl.get("name", "")).lower() == "orientation":
+                rotations = [
+                    cls._normalize_quat_wxyz(xyzw_to_wxyz(row[:4]))
+                    for row in (ctrl.get("values", []) or [])
+                    if len(row or []) >= 4
+                ]
+                return cls._rotation_amplitude_wxyz(rotations)
+        return 0.0
+
+    @staticmethod
+    def _normalize_quat_wxyz(values: Iterable[float]) -> Tuple[float, float, float, float]:
+        raw = list(values) if values is not None else []
+        padded = (raw + [1.0, 0.0, 0.0, 0.0])[:4]
+        quat = np.asarray([float(value) for value in padded], dtype=np.float64)
+        norm = float(np.linalg.norm(quat))
+        if norm <= 1e-12 or not math.isfinite(norm):
+            return (1.0, 0.0, 0.0, 0.0)
+        return tuple(float(value) for value in quat / norm)  # type: ignore[return-value]
+
+    @staticmethod
+    def _rotation_amplitude_wxyz(rotations: List[Tuple[float, float, float, float]]) -> float:
+        if not rotations:
+            return 0.0
+        first = rotations[0]
+        max_angle = 0.0
+        for quat in rotations[1:]:
+            dot = abs(sum(a * b for a, b in zip(first, quat)))
+            dot = max(-1.0, min(1.0, dot))
+            max_angle = max(max_angle, math.degrees(2.0 * math.acos(dot)))
+        return max_angle
 
     def build_animation_from_r3a(
         self,
@@ -755,7 +869,7 @@ class AuroraAnimationWriter:
             rotations = []
             for index, frame in enumerate(frames):
                 parent_frame = parent_frames[index] if index < len(parent_frames) else None
-                source_rest_rotation = self._local_rotation_xyzw_from_ue5_world(
+                source_rest_rotation = self._motion_rotation_xyzw_from_ue5_world(
                     frame,
                     target_node,
                     source_rest,
@@ -766,7 +880,7 @@ class AuroraAnimationWriter:
                     source_parent_reference_frame,
                 )
                 if reference_mode == "hybrid_limb_source_rest" and curve_reference_mode == "source_rest":
-                    frame_zero_rotation = self._local_rotation_xyzw_from_ue5_world(
+                    frame_zero_rotation = self._motion_rotation_xyzw_from_ue5_world(
                         frame,
                         target_node,
                         source_rest,
@@ -1042,6 +1156,68 @@ class AuroraAnimationWriter:
             raise ValueError(f"Missing Aurora rest basis for target node '{target_node.name}'")
         source_basis = self._source_rest_basis_aurora(curve, source_rest)
         return compute_basis_change_matrix(source_basis, aurora_basis)
+
+    def _motion_rotation_xyzw_from_ue5_world(
+        self,
+        frame: dict,
+        target_node: ModelNode,
+        source_rest: Optional[dict] = None,
+        source_parent_rest: Optional[dict] = None,
+        source_parent_frame: Optional[dict] = None,
+        basis_change_matrix: Optional[np.ndarray] = None,
+        source_reference_frame: Optional[dict] = None,
+        source_parent_reference_frame: Optional[dict] = None,
+    ) -> List[float]:
+        """Convert source world-space bone motion into an Aurora local controller.
+
+        The first R3.B implementation subtracted the animated source parent
+        before building a local delta. That is mathematically tidy for matched
+        skeletons, but it flattens authored UE motion when several source bones
+        move together or when a longer UE chain is collapsed onto PMBAM. For
+        KOTOR injection we need the mapped source bone's visible motion to
+        survive as local Aurora controller motion, so this path transfers the
+        source bone's world-space rotation delta onto the target bind-local
+        rotation.
+        """
+
+        ue5_wxyz = frame.get("rotation_wxyz") or (1.0, 0.0, 0.0, 0.0)
+        ue5_w, ue5_x, ue5_y, ue5_z = self._four_floats(ue5_wxyz, (1.0, 0.0, 0.0, 0.0))
+
+        reference_wxyz: Tuple[float, float, float, float]
+        if source_reference_frame and source_reference_frame.get("rotation_wxyz"):
+            reference_wxyz = self._four_floats(
+                source_reference_frame.get("rotation_wxyz"),
+                (ue5_w, ue5_x, ue5_y, ue5_z),
+            )
+        elif source_rest and source_rest.get("rotation_wxyz"):
+            reference_wxyz = self._four_floats(
+                source_rest.get("rotation_wxyz"),
+                (1.0, 0.0, 0.0, 0.0),
+            )
+        else:
+            return self._local_rotation_xyzw_from_ue5_world(
+                frame,
+                target_node,
+                source_rest,
+                source_parent_rest,
+                source_parent_frame,
+                basis_change_matrix,
+                source_reference_frame,
+                source_parent_reference_frame,
+            )
+
+        source_delta = quat_mul_wxyz(
+            quat_inverse_wxyz(reference_wxyz),
+            (ue5_w, ue5_x, ue5_y, ue5_z),
+        )
+        delta_w, delta_x, delta_y, delta_z = source_delta
+        aurora_delta = aurora_from_ue5_quat((delta_x, delta_y, delta_z, delta_w)).to_wxyz()
+        if basis_change_matrix is not None:
+            aurora_delta = conjugate_quat_wxyz(aurora_delta, basis_change_matrix)
+        bind_local = xyzw_to_wxyz(target_node.rotation)
+        local_wxyz = quat_mul_wxyz(bind_local, aurora_delta)
+        local_xyzw = wxyz_to_xyzw(local_wxyz)
+        return [float(v) for v in local_xyzw]
 
     def _local_rotation_xyzw_from_ue5_world(
         self,

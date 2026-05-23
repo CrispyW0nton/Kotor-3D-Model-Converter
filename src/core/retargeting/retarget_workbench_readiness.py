@@ -61,9 +61,17 @@ def build_retarget_workbench_readiness(state: Any) -> RetargetWorkbenchReadiness
         if not entry.present
     )
     can_preview = bool(spec.implemented and spec.supports_preview and not missing)
-    preview = getattr(state, "last_preview_result", None)
-    audit = getattr(preview, "preview_audit", None)
-    audit_passed = bool(audit is not None and getattr(audit, "passed", False))
+    if mode == RetargetMode.KOTOR_TO_UNREAL:
+        preview = getattr(state, "last_kotor_to_unreal_preview_result", None)
+        report = getattr(preview, "validation_report", None)
+        audit_passed = bool(
+            preview is not None
+            and (report is None or (not getattr(report, "has_blocking", False) and not getattr(report, "has_errors", False)))
+        )
+    else:
+        preview = getattr(state, "last_preview_result", None)
+        audit = getattr(preview, "preview_audit", None)
+        audit_passed = bool(audit is not None and getattr(audit, "passed", False))
     invalidation_reason = str(getattr(state, "last_preview_invalidated_reason", "") or "").strip()
     can_export = bool(
         spec.implemented
@@ -72,6 +80,9 @@ def build_retarget_workbench_readiness(state: Any) -> RetargetWorkbenchReadiness
         and audit_passed
         and not invalidation_reason
     )
+    if mode == RetargetMode.KOTOR_TO_UNREAL and can_export:
+        backend = getattr(state, "unreal_fbx_export_backend", None)
+        can_export = bool(backend is not None and backend.is_available())
 
     if not spec.implemented:
         preview_status = "Not implemented yet."
@@ -80,6 +91,8 @@ def build_retarget_workbench_readiness(state: Any) -> RetargetWorkbenchReadiness
         preview_status = "Ready."
         if can_export:
             export_status = "Ready."
+        elif mode == RetargetMode.KOTOR_TO_UNREAL and preview is not None and audit_passed and not invalidation_reason:
+            export_status = "No FBX export backend is configured."
         elif invalidation_reason:
             export_status = f"Stale preview. Run Preview Retarget again because {invalidation_reason}."
         elif preview is None:
@@ -204,22 +217,47 @@ def _kotor_to_unreal_status(state: Any):
     source_model = getattr(state, "source_kotor_model", None)
     source_slot = str(getattr(state, "source_kotor_animation_slot", "") or "").strip()
     skeleton = getattr(state, "target_unreal_skeleton", None)
-    profile = getattr(state, "target_unreal_profile", None)
+    profile = getattr(state, "target_unreal_profile", None) or getattr(state, "retarget_profile", None)
     naming = getattr(state, "output_naming", None)
     clip_name = str(getattr(naming, "unreal_clip_name", "") or "").strip()
     inputs = [
-        RetargetWorkbenchInputStatus("Source KOTOR model", source_model is not None, _model_label(source_model)),
-        RetargetWorkbenchInputStatus("Source KOTOR animation", bool(source_slot), source_slot or None),
-        RetargetWorkbenchInputStatus("Target Unreal skeleton", skeleton is not None, _object_label(skeleton)),
-        RetargetWorkbenchInputStatus("Unreal export profile", profile is not None, _object_label(profile)),
-        RetargetWorkbenchInputStatus("UE animation clip name", bool(clip_name), clip_name or None),
+        RetargetWorkbenchInputStatus(
+            "Source KOTOR model",
+            source_model is not None,
+            _model_label(source_model),
+            "Choose the KOTOR/Aurora model to sample from.",
+        ),
+        RetargetWorkbenchInputStatus(
+            "Source KOTOR animation",
+            bool(source_slot),
+            source_slot or None,
+            "Choose an animation from the source model or inherited supermodel chain.",
+        ),
+        RetargetWorkbenchInputStatus(
+            "Target Unreal skeleton",
+            skeleton is not None,
+            _object_label(skeleton),
+            "Choose or import the Unreal target skeleton.",
+        ),
+        RetargetWorkbenchInputStatus(
+            "Retarget profile",
+            profile is not None,
+            _object_label(profile),
+            "Load a KOTOR-to-Unreal retarget profile.",
+        ),
+        RetargetWorkbenchInputStatus(
+            "UE animation clip name",
+            bool(clip_name),
+            clip_name or None,
+            "Enter the UE/FBX animation clip name to export.",
+        ),
     ]
     return (
         inputs,
         f"KOTOR model {_model_label(source_model)} / source animation {source_slot or '(not selected)'}",
         f"Unreal skeleton {_object_label(skeleton)}",
         f"UE-compatible FBX animation clip {clip_name or '(not selected)'}",
-        "KOTOR → Unreal export is pending implementation.",
+        "Import the exported FBX animation into Unreal and assign it to a compatible skeleton.",
     )
 
 

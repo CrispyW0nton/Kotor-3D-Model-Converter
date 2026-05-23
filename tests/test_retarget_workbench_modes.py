@@ -34,7 +34,7 @@ def test_unreal_to_kotor_mode_is_implemented() -> None:
     assert spec.output_kind == "kotor_mdl_mdx_animation_override"
 
 
-def test_kotor_to_kotor_is_implemented_and_kotor_to_unreal_is_pending() -> None:
+def test_kotor_to_kotor_and_kotor_to_unreal_are_implemented() -> None:
     kotor_to_kotor = get_retarget_mode_spec(RetargetMode.KOTOR_TO_KOTOR)
     kotor_to_unreal = get_retarget_mode_spec(RetargetMode.KOTOR_TO_UNREAL)
 
@@ -43,8 +43,8 @@ def test_kotor_to_kotor_is_implemented_and_kotor_to_unreal_is_pending() -> None:
     assert kotor_to_kotor.supports_export is True
     assert "verified GhostRigger preview/export pipeline" in kotor_to_kotor.description
 
-    assert kotor_to_unreal.implemented is False
-    assert kotor_to_unreal.supports_preview is False
-    assert kotor_to_unreal.supports_export is False
+    assert kotor_to_unreal.implemented is True
+    assert kotor_to_unreal.supports_preview is True
+    assert kotor_to_unreal.supports_export is True
     assert "UE-compatible FBX" in kotor_to_unreal.description
-    assert "KOTOR source animation sampler is available" in kotor_to_unreal.description
+    assert "FBX backend" in kotor_to_unreal.description

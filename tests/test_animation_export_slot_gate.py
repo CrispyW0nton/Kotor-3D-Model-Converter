@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -116,6 +117,10 @@ def test_inherited_slot_is_accepted_and_written_as_local_override(monkeypatch, t
         AuroraAnimationWriter,
         "_load_output_model",
         lambda self, _mdl, _game: captured["model"],
+    )
+    monkeypatch.setattr(
+        "src.core.retargeting.aurora_animation_writer.validate_raw_animation_footprint",
+        lambda *_args, **_kwargs: SimpleNamespace(success=True, issues=[]),
     )
 
     result = AuroraAnimationWriter().inject(request)

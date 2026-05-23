@@ -1,6 +1,6 @@
 # GhostRigger Capability Matrix
 
-Date: 2026-05-22
+Date: 2026-05-23
 
 Status values: Working, Partial, Experimental, Stub, Missing, Unknown.
 
@@ -20,13 +20,13 @@ Status values: Working, Partial, Experimental, Stub, Missing, Unknown.
 | Capability | Existing implementation | Tests | Status | Gap | Recommended next task |
 |---|---|---|---|---|---|
 | Unreal/FBX source clip import | `source_animation.py`, `fbx_importer.py`, `source_skeleton_audit.py` | `tests/test_ue_fbx_source_import.py` | Working for abstraction, Partial for real backend | Real FBX backend availability is optional | Keep fake-backend tests; add opt-in real fixture coverage. |
-| KOTOR source animation sampling | `kotor_source_animation.py` | `tests/test_kotor_animation_source_sampler.py` | Working | Needs integration into KOTOR to KOTOR and KOTOR to Unreal product flows | Use sampler as source adapter for both pending modes. |
+| KOTOR source animation sampling | `kotor_source_animation.py` | `tests/test_kotor_animation_source_sampler.py` | Working | Still needed for KOTOR to Unreal | Use sampler as source adapter for UE-compatible export later. |
 | Profile/mapping/reference poses | `retarget_profile.py`, `retarget_mapping.py`, `reference_pose.py`, frame audit | `tests/test_retarget_mapping_profile.py`, `tests/test_retarget_reference_pose.py` | Working | UI profile editor is missing | Add profile editor only after mode/product flows stabilize. |
 | Basic UE to KOTOR solver | `retarget_solver.py`, `retarget_frames.py`, calibration helpers | `tests/test_basic_retarget_solver.py`, calibration tests | Working | Exact successful PMBAM segment correction should be a named tested solver mode | Promote PMBAM idle solution into solver options and goldens. |
 | Headless preview/audit | `retarget_preview.py` | `tests/test_retarget_preview_gate.py` | Working | Mesh deformation audit is limited by headless skinning availability | Expand skinning/AABB checks when headless skinning is available. |
-| Qt preview/export path | `qt_retarget_preview_controller.py`, `qt_retarget_workbench_controller.py` | `tests/test_ghostrigger_retarget_preview_controller.py`, export/workbench tests | Working for Unreal to KOTOR | Other two modes are pending | Add KOTOR to KOTOR preview adapter next. |
-| Verified MDL/MDX export | `retarget_preview_export.py`, `aurora_animation_writer.py`, `mdl_writer.py` | `tests/test_retarget_preview_export.py`, writer roundtrip tests | Partial | Current working tree has active MDL writer fixes for in-game behavior | Finish and commit writer regression coverage after audit if not already done. |
-| KOTOR to KOTOR | Mode contract only | Workbench mode tests | Stub | Needs sampler -> profile -> solver -> preview/export adapter | Implement KOTOR to KOTOR preview/export using existing gates. |
+| Qt preview/export path | `qt_retarget_preview_controller.py`, `qt_retarget_workbench_controller.py` | `tests/test_ghostrigger_retarget_preview_controller.py`, export/workbench tests | Working for Unreal to KOTOR and KOTOR to KOTOR | KOTOR to Unreal remains pending | Add KOTOR to Unreal contract/export after provider and quality work. |
+| Verified MDL/MDX export | `retarget_preview_export.py`, `aurora_animation_writer.py`, `mdl_writer.py`, `src/core/export/export_job.py` | `tests/test_retarget_preview_export.py`, writer roundtrip tests, `tests/test_export_job.py` | Working foundation | Retarget export uses staged transactions; Character/Module/Map exports still need migration | Keep MDL writer changes source-truth verified and migrate other exports to ExportJob. |
+| KOTOR to KOTOR | `kotor_to_kotor_preview.py`, workbench controller | KOTOR-to-KOTOR core/controller tests | Working preview/export candidate | Needs more real-model/game-tested fixtures and quality modes | Add named quality/correction modes and capability labels. |
 | KOTOR to Unreal | Mode contract and Unreal helper modules | Limited | Stub | Needs UE skeleton target/profile and FBX animation export | Add UE-compatible sampled clip exporter after KOTOR to KOTOR. |
 
 ## Module Studio
@@ -58,10 +58,10 @@ Status values: Working, Partial, Experimental, Stub, Missing, Unknown.
 
 | Capability | Existing implementation | Tests | Status | Gap | Recommended next task |
 |---|---|---|---|---|---|
-| Project/session document | KMAX, KMAP, retarget and module state islands | KMAX/KMAP tests | Missing as a shared service | No suite-level session model | Add `GhostRiggerProject`. |
+| Project/session document | `src/core/project/`, KMAX/KMAP/retarget/module refs | Project model tests plus KMAX/KMAP tests | Working foundation | Studios are not fully migrated | Gradually route studio state through `GhostRiggerProject`. |
 | Resource provider | `game_library_ext.py`, PyKotor bridge, module loaders | MCP/resource tests | Partial | Resource lookup is still per subsystem | Add `GameResourceProvider`. |
-| Validation reporting | Many subsystem report dataclasses | Per-subsystem tests | Partial | No shared bus/UI issue model | Add `ValidationBus`. |
-| Export transactions | Retarget preview export, module save pipeline, packager | Per-subsystem tests | Partial | No common staging/promote abstraction | Add `ExportJob`. |
+| Validation reporting | `src/core/validation/validation_bus.py`, adapters, many subsystem validators | ValidationBus and subsystem tests | Working foundation | No shared Qt issue model/panel yet | Add model/view issue panel. |
+| Export transactions | `src/core/export/export_job.py`, retarget export integration, module save pipeline, packager | ExportJob and retarget export tests | Working foundation | Module/Map/Character/FBX/Patch Manager not migrated | Migrate export surfaces through ExportJob. |
 | Secret hygiene | `tests/test_secret_hygiene.py` | Secret hygiene test | Working | Keep local-only endpoint values out of docs/config | Include in CI and review all debug docs. |
 
 ## Scripting / GhostScripter Integration
@@ -78,6 +78,6 @@ Status values: Working, Partial, Experimental, Stub, Missing, Unknown.
 |---|---|---|---|---|---|
 | Animation structural validation | `animation_block_validator.py` | Retarget validation tests | Working | Continue expanding writer-specific checks | Keep as Retarget Studio gate. |
 | Animation roundtrip verification | `animation_roundtrip_validator.py` | MDL animation roundtrip tests | Working/Partial | Real game smoke still revealed MDL writer gaps | Add regression fixtures for full hierarchy/controller export. |
-| Module save/readback | `module_save_pipeline.py` | Module save tests | Partial | Needs transaction and reload diff in UI | Move through `ExportJob`. |
+| Module save/readback | `module_save_pipeline.py` | Module save tests | Partial | Needs transaction and reload diff in UI | Move through `ExportJob` and provider-backed reload comparison. |
 | KMAP export manifest | `level_export_bridge.py`, `level_manifest.py` | Level export tests | Partial | FBX mesh assembly pending | Keep manifest-first until assembly is safe. |
 | Custom module package | `custom_module_packager.py` | Packager tests | Partial | Needs install staging and external validator hooks | Add package export transaction. |

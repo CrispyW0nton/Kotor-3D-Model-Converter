@@ -167,7 +167,7 @@ def test_kotor_to_kotor_export_uses_last_preview_only() -> None:
     assert request.requires_custom_animation_patch is True
 
 
-def test_kotor_to_unreal_remains_pending_non_writing() -> None:
+def test_switching_to_kotor_to_unreal_does_not_call_kotor_to_kotor_paths() -> None:
     controller, _preview_action, export_action, calls = _controller()
 
     controller.set_mode(RetargetMode.KOTOR_TO_UNREAL)

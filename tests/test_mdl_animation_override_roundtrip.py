@@ -23,6 +23,7 @@ from src.core.validation.animation_roundtrip_validator import (
     quaternion_angular_difference_degrees,
     verify_written_animation_override_roundtrip,
 )
+from src.core.validation.animation_block_validator import validate_raw_animation_footprint
 
 
 def _quat_axis(axis: str, degrees: float) -> tuple[float, float, float, float]:
@@ -374,3 +375,91 @@ def test_post_write_readback_failure_is_reported(monkeypatch, tmp_path: Path) ->
     assert not request.output_mdl.exists()
     assert not request.output_mdl.with_suffix(".mdx").exists()
     assert not request.output_manifest.exists()
+
+
+def test_animation_only_injection_uses_vanilla_depth_first_node_order() -> None:
+    fixture_dir = Path(__file__).resolve().parent / "fixtures" / "kotor_stock" / "k1"
+    target_mdl = fixture_dir / "pmbam.mdl"
+    target_mdx = fixture_dir / "pmbam.mdx"
+    reference_mdl = fixture_dir / "S_Female02.mdl"
+
+    target_model = load_model_from_file(str(target_mdl), str(target_mdx), GameVersion.K1)
+    assert target_model is not None
+    root_name = target_model.root_node.name
+    animation = Animation(
+        name="kpmwin1",
+        length=10.0666666,
+        transition_time=0.25,
+        anim_root=root_name,
+        nodes=[
+            _anim_node(
+                root_name,
+                orientations=[
+                    [0.0, 0.0, 0.0, 1.0],
+                    list(_quat_axis("Z", 5.0)),
+                ],
+                times=[0.0, 10.0666666],
+            )
+        ],
+    )
+
+    writer = MDLBinaryWriter()
+    mdl_bytes, mdx_bytes = writer.inject_animation_override_bytes(
+        target_model,
+        target_mdl.read_bytes(),
+        target_mdx.read_bytes(),
+        animation,
+    )
+
+    assert mdx_bytes == target_mdx.read_bytes()
+
+    candidate = validate_raw_animation_footprint(mdl_bytes, "kpmwin1")
+    reference = validate_raw_animation_footprint(
+        reference_mdl.read_bytes(),
+        "f2a2",
+        require_declared_count_match=False,
+    )
+
+    assert reference.success is True, reference.issues
+    assert reference.depth_first_order_ok is True
+    assert candidate.success is True, candidate.issues
+    assert candidate.depth_first_order_ok is True
+    assert candidate.declared_node_count == 61
+    assert candidate.visited_node_count == 61
+    assert candidate.node_names == [node.name for node in target_model.all_nodes()]
+
+
+def test_raw_animation_footprint_validator_rejects_non_depth_first_child_layout() -> None:
+    root = ModelNode(name="root")
+    child = ModelNode(name="child", parent=root)
+    root.children = [child]
+    model = KotorModel(
+        name="synthetic_order_gate",
+        root_node=root,
+        animations=[
+            Animation(
+                name="pause1",
+                length=1.0,
+                anim_root="root",
+                nodes=[_anim_node("root", orientations=[[0.0, 0.0, 0.0, 1.0]])],
+            )
+        ],
+        game_version=GameVersion.K1,
+    )
+    mdl_bytes, _mdx_bytes = MDLBinaryWriter().write(model)
+
+    anim_table_rel = int.from_bytes(mdl_bytes[100:104], "little")
+    anim_rel = int.from_bytes(mdl_bytes[12 + anim_table_rel:16 + anim_table_rel], "little")
+    root_rel = int.from_bytes(mdl_bytes[12 + anim_rel + 0x28:12 + anim_rel + 0x2C], "little")
+    root_abs = 12 + root_rel
+    child_array_rel = int.from_bytes(mdl_bytes[root_abs + 0x2C:root_abs + 0x30], "little")
+    child_array_abs = 12 + child_array_rel
+
+    corrupted = bytearray(mdl_bytes)
+    corrupted[child_array_abs:child_array_abs + 4] = (root_rel + 128).to_bytes(4, "little")
+
+    report = validate_raw_animation_footprint(bytes(corrupted), "pause1")
+
+    assert report.success is False
+    assert report.depth_first_order_ok is False
+    assert any("expected immediately after child array" in issue for issue in report.issues)

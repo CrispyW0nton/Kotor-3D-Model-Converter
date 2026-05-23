@@ -87,6 +87,29 @@ Do not add `from .viewport import ...` anywhere; that shim no longer exists.
 Import `FrameRenderer`, `ArcBallCamera`, `_load_tpc_bytes`, `_is_tpc_data`,
 `_clean_tex_name`, etc. through `src.gui.qt_lib.rendering.viewport_core`.
 
+## UI/workbench boundaries
+
+- Respect separate modules, panels, and standalone workbench windows. Before
+  adding a feature, identify the owning product surface: Main Viewport/KMAX,
+  Retarget Workbench, Character Studio, Module Studio, Map Studio, Resource
+  Browser, Validation, Export, or Project/session infrastructure.
+- Keep workflow-specific controls inside their owning window or panel. For
+  example, retarget mode, source/target animation choices, output animation
+  naming, and retarget readiness belong in the Animation Retargeting Workbench,
+  not the main viewport header or command bar.
+- The main window may provide shared services such as `ProjectManager`,
+  current scene/model access, game-library rows, file dialogs, logging,
+  theme/layout registration, and command routing, but it should not display
+  persistent controls for a workflow-specific mode unless that workflow is the
+  main viewport itself.
+- Shared architecture such as `GhostRiggerProject`, `ResourceAddress`,
+  `GameResourceProvider`, `ValidationBus`, and `ExportJob` should stay headless
+  or service-oriented. UI code should consume those services through the
+  appropriate studio/window boundary rather than bypassing the owning module.
+- When roadmap work begins, include a module-boundary checkpoint: owning
+  studio/window, user task, source/target resource type, validation/export
+  gates, and what must remain outside the slice.
+
 ## Theme and layout system
 
 - Do not hardcode new UI colours. Add or consume tokens through `src/gui/libtheme/` and the active `ThemeManager`.

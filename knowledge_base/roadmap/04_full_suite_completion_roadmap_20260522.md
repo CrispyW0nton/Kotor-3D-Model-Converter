@@ -150,14 +150,32 @@ No direct writer call should be reachable from a UI button without passing throu
 
 Goal: give all studios one shared project/session spine.
 
+2026-05-23 status note:
+
+- `T2301`, `T2302`, and `T2303` are implemented as foundations:
+  `GhostRiggerProject`/`ResourceAddress`, `ValidationBus`, and `ExportJob`.
+- `T2304 GameResourceProvider` is implemented as a read-only foundation:
+  ResourceAddress-backed queries, provenance records, in-memory/project/local
+  providers, a composite provider, and an adapter over the existing fast
+  ResourceManager. Studio migration remains the next step.
+- `T2305` has started with provider-backed Qt table/proxy models for resource
+  rows and filters. Full panel integration and studio-specific browser wiring
+  remain.
+- The third coding-book pass adds a scope sanity rule: every new feature must
+  name its owning studio, modder task, target resource/object, safety gates, and
+  capability label before implementation.
+
 | ID | Task | Acceptance |
 |----|------|------------|
-| T2301 | Add `GhostRiggerProject` dataclasses and JSON save/load. | Project stores game install paths, open assets, retarget profiles, module/map sessions, export candidates, and validation history. |
-| T2302 | Add `ValidationBus` and standard report payloads. | Character, retarget, module, and map validations can all publish UI-ready issues with severity and target object links. |
-| T2303 | Add `ExportJob` transaction helper. | Exports write to staging/temp paths, verify readback, then promote outputs; failed preflight leaves no partial files. |
-| T2304 | Normalize resource access through one provider interface. | KOTOR loaders, Module Studio, Map Studio, Character Studio, and MCP tools can share one configured resource provider. |
-| T2305 | Reconcile KMAX/KMAP with existing Module/Map services. | KMAX scene objects, KMAP room/module instances, LYT/VIS/WOK services, and module package outputs have one documented data-flow contract. |
-| T2306 | Repo hygiene pass. | Remove stale `__pycache__`/pytest temp dirs from workspace, document scratch-output policies, and keep generated assets ignored. |
+| DONE T2301 | Add `GhostRiggerProject` dataclasses and JSON save/load. | Project stores game install paths, open assets, retarget profiles, module/map sessions, export candidates, and validation history. |
+| DONE T2302 | Add `ValidationBus` and standard report payloads. | Character, retarget, module, and map validations can all publish UI-ready issues with severity and target object links. |
+| DONE T2303 | Add `ExportJob` transaction helper. | Exports write to staging/temp paths, verify readback, then promote outputs; failed preflight leaves no partial files. |
+| DONE T2304 | Normalize resource access through one provider interface. | KOTOR loaders, Module Studio, Map Studio, Character Studio, and MCP tools can share one configured resource provider. |
+| T2305 | Add provider-backed resource browser models. | Qt model/view resource lists expose `ResourceAddress`, resref, restype, module, layer, provenance, and filters from the shared provider. |
+| T2306 | Add ValidationBus issue model and panel. | Modders see one filterable diagnostics surface for retarget, project, resource, module, map, and export issues. |
+| T2307 | Add undo command foundation for authoring. | Module, map, KMAP/KMAX, and GFF edits can be made through undoable command objects before broad editing is exposed. |
+| T2308 | Add shared job/progress bridge. | Long imports, resource scans, validation passes, and exports run as cancellable jobs without blocking Qt. |
+| T2309 | Reconcile KMAX/KMAP with existing Module/Map services. | KMAX scene objects, KMAP room/module instances, LYT/VIS/WOK services, and module package outputs have one documented data-flow contract. |
 
 ### M24 - Retarget Studio Tri-Mode Productization
 
@@ -271,16 +289,16 @@ Goal: harden the suite for modder beta.
 
 ## Recommended Immediate Sprint
 
-Start with M23, then M24/T2402.
+Current recommended order after the 2026-05-23 foundation pass:
 
-1. T2301 - add a project/session model so future UI work has one source of truth.
-2. T2305 - reconcile LordVader's KMAX/KMAP scene work with the existing Module/Map services.
-3. T2302 - centralize validation reports so all studios speak the same language.
-4. T2303 - add export transactions so no studio writes partial or unverified outputs.
-5. T2402 - promote exact segment correction from the PMBAM success path into the tracked retarget solver.
-6. T2405 - make Retarget Studio a tri-mode UI once the core contracts are unified.
+1. T2305 - add provider-backed Qt resource browser models.
+2. T2306 - add the ValidationBus issue model/panel.
+3. T2307 - add the undo command foundation for Module/Map/KMAP/KMAX editing.
+4. T2308 - add a shared job/progress bridge for scans, imports, exports, and validation.
+5. T2309 - reconcile KMAX/KMAP with existing Module/Map services.
+6. T2402 - promote exact PMBAM segment correction from the success path into a named, tested retarget solver mode.
 
-This order keeps the momentum from the retargeting breakthrough while protecting the much larger Character/Module/Map roadmap from state-management drift.
+This order keeps Retarget Studio momentum while turning the shared foundations into modder-visible infrastructure before broad Character, Module, and Map editing expands.
 
 ## Completion Definition
 

@@ -126,23 +126,24 @@ def test_export_requires_current_successful_preview() -> None:
     assert "Stale preview" in readiness.export_status
 
 
-def test_kotor_to_unreal_pending_status_is_clear() -> None:
+def test_kotor_to_unreal_status_is_clear_and_waits_for_backend_before_export() -> None:
     state = RetargetWorkbenchState(
         mode=RetargetMode.KOTOR_TO_UNREAL,
         source_kotor_model=SimpleNamespace(name="pmbam"),
         source_kotor_animation_slot="pause1",
         target_unreal_skeleton=SimpleNamespace(name="Quinn"),
-        target_unreal_profile=SimpleNamespace(name="ue_profile"),
+        retarget_profile=SimpleNamespace(name="ue_profile"),
         output_naming=RetargetOutputNaming(unreal_clip_name="pmbam_pause1"),
     )
 
     readiness = build_retarget_workbench_readiness(state)
 
-    assert readiness.implemented is False
-    assert readiness.can_preview is False
+    assert readiness.implemented is True
+    assert readiness.can_preview is True
     assert readiness.can_export is False
-    assert readiness.preview_status == "Not implemented yet."
+    assert readiness.export_status == "Preview required before export."
     assert "UE-compatible FBX animation clip" in readiness.output_summary
+    assert "Import the exported FBX animation into Unreal" in readiness.runtime_summary
 
 
 def test_readiness_update_calls_no_sampling_solving_or_writing(monkeypatch: pytest.MonkeyPatch) -> None:

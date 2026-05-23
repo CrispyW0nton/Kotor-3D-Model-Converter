@@ -1,6 +1,6 @@
 # GhostRigger Development Roadmap Recommendations
 
-Date: 2026-05-22
+Date: 2026-05-23
 
 ## 1. Recommended Architecture Target
 
@@ -122,27 +122,43 @@ Scenario Authoring should build on this model:
 - sequence editor binds cameras/actors/animations/scripts;
 - package stage writes resources and manifest through `ExportJob`.
 
-## 8. First 5 Safe Coding Slices
+## 8. First Safe Coding Slices
+
+Completed:
 
 1. `T2301: GhostRiggerProject + ResourceAddress`
    - Add dataclasses and JSON roundtrip tests.
-   - No UI migration yet.
+   - Status: foundation implemented; studio migration remains.
 
 2. `T2302: ValidationBus`
    - Add shared issue/report schema and adapters for one existing validator.
-   - Start with Retarget Preview and KMAP validator.
+   - Status: foundation implemented; Qt issue model/panel remains.
 
 3. `T2303: ExportJob`
    - Add staging/promotion helper and migrate retarget preview export first.
-   - Keep existing writer gates unchanged.
+   - Status: foundation implemented; non-retarget exports remain.
 
 4. `T2304: GameResourceProvider`
    - Add interface and PyKotor-backed adapter.
    - Start with read-only resource lookup and provenance.
+   - Status: foundation implemented; studio migration remains.
 
-5. `T2305: KMAX/KMAP/Module State Contract`
-   - Document and test how KMAX scene objects, KMAP rooms/objects, and hydrated
-     module resources refer to each other.
+Next:
+
+5. `T2305: Provider-backed resource browser models`
+   - Add Qt models/proxy filtering for provider results.
+   - Rows carry `ResourceAddress` and exact resref/restype casing.
+
+6. `T2306: ValidationBus issue model/panel`
+   - Add a model/view validation issue surface.
+   - Filter by severity/subsystem/source and preserve navigation targets.
+
+7. `T2307: Undo command foundation`
+   - Add undoable edit commands before broad Module/Map save workflows.
+
+8. `T2308: Shared job/progress service bridge`
+   - Add progress/cancel/result wrappers for scans, imports, validators,
+     exports, and external `QProcess` tools.
 
 ## 9. Best Next Product Slices
 
@@ -172,45 +188,39 @@ waypoints, triggers, doors, and placeables before cutscene logic can be useful.
 
 ### Retarget Workbench
 
-Next product slice: KOTOR to KOTOR preview mode.
+Next product slice: named retarget quality/correction mode plus KOTOR to Unreal
+contract.
 
-Flow:
-
-`sample source KOTOR slot -> existing profile/reference/solver path -> preview local override on target -> export through existing verified path`
-
-Do not start KOTOR to Unreal until KOTOR to KOTOR reuses all the same safety
-gates.
+Why: Unreal to KOTOR and KOTOR to KOTOR are now preview/export candidates. The
+remaining retarget risk is quality/game-tested confidence and the pending
+KOTOR-to-Unreal exporter.
 
 ## 10. Specific First Codex Coding Prompt After Audit
 
-Title: Add GhostRiggerProject session model and resource addresses
+Title: Add read-only GameResourceProvider foundation
 
 Goal:
 
-Add a headless `GhostRiggerProject` data model that can store the shared session
-state needed by Character, Retarget, Module, and Map Studio without moving any
-existing UI behavior yet.
+Add one resource provider interface for KOTOR game resources, module resources,
+Override/project layers, local files, and generated outputs.
 
 Suggested files:
 
-- `src/core/project/ghostrigger_project.py`
-- `src/core/project/resource_address.py`
-- `tests/test_ghostrigger_project_model.py`
+- `src/core/resources/game_resource_provider.py`
+- `src/core/resources/resource_result.py`
+- `tests/test_game_resource_provider.py`
 
 Requirements:
 
-- JSON save/load roundtrip;
-- resource addresses for KOTOR installation resources, local files, generated
-  outputs, KMAP/KMAX objects, and retarget profiles;
-- no embedded proprietary game asset bytes;
-- migration/version field;
-- validation-friendly stable ids;
-- no writer calls;
-- no UI refactor in this slice.
+- resolve `ResourceAddress` values read-only;
+- preserve resref/restype/game/module/layer/provenance;
+- fake provider tests first;
+- PyKotor-backed adapter if practical;
+- no save/write behavior;
+- no proprietary bytes committed.
 
 Acceptance:
 
-- new project model roundtrips sample Character, Retarget, Module, and Map
-  references;
-- existing retarget/module/character tests continue to pass;
-- docs show how existing state islands will migrate gradually.
+- provider returns typed metadata and source provenance;
+- duplicate/shadowed resources produce warnings;
+- future Qt resource models can consume provider result DTOs.

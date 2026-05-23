@@ -10,6 +10,8 @@ from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationRetargetPanel
 from src.gui.qt_lib.rendering.qt_gpu_renderer import GpuRenderer
 from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+from src.gui.qt_lib.windows.qt_retarget_workbench_controller import populate_retarget_mode_combo
+from src.core.retargeting.retarget_output_naming import KotorOutputAnimationNameMode
 
 
 class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
@@ -19,6 +21,10 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
     targetCurrentRequested = QtCore.Signal()
     sourceLibraryRequested = QtCore.Signal()
     targetLibraryRequested = QtCore.Signal()
+    sourceGameLibraryRequested = QtCore.Signal(dict)
+    targetGameLibraryRequested = QtCore.Signal(dict)
+    sourceExternalImportRequested = QtCore.Signal()
+    targetExternalImportRequested = QtCore.Signal()
     previewRequested = QtCore.Signal(str)
     applyRequested = QtCore.Signal(str)
     stopRequested = QtCore.Signal()
@@ -61,7 +67,12 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         button_height = max(22, layout.toolbar("viewport").height - 8)
         for button in self.findChildren(QtWidgets.QPushButton):
             button.setMinimumHeight(button_height)
-        for widget in [*self.findChildren(QtWidgets.QComboBox), *self.findChildren(QtWidgets.QSpinBox), *self.findChildren(QtWidgets.QDoubleSpinBox)]:
+        for widget in [
+            *self.findChildren(QtWidgets.QComboBox),
+            *self.findChildren(QtWidgets.QSpinBox),
+            *self.findChildren(QtWidgets.QDoubleSpinBox),
+            *self.findChildren(QtWidgets.QLineEdit),
+        ]:
             widget.setMinimumHeight(layout.spacing_value("inputHeight", 24))
 
     def _build_actions(self) -> None:
@@ -121,6 +132,12 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.statusBar().showMessage("Ready")
 
     def _build_central(self) -> None:
+        central = QtWidgets.QWidget(self)
+        central_layout = QtWidgets.QVBoxLayout(central)
+        central_layout.setContentsMargins(4, 4, 4, 4)
+        central_layout.setSpacing(4)
+        central_layout.addWidget(self._build_workbench_controls(), 0)
+
         root = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         root.setChildrenCollapsible(False)
         self.source_viewport = QtViewportWidget(self)
@@ -138,6 +155,10 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.panel.targetCurrentRequested.connect(self.targetCurrentRequested.emit)
         self.panel.sourceLibraryRequested.connect(self.sourceLibraryRequested.emit)
         self.panel.targetLibraryRequested.connect(self.targetLibraryRequested.emit)
+        self.panel.sourceGameLibraryRequested.connect(self.sourceGameLibraryRequested.emit)
+        self.panel.targetGameLibraryRequested.connect(self.targetGameLibraryRequested.emit)
+        self.panel.sourceExternalImportRequested.connect(self.sourceExternalImportRequested.emit)
+        self.panel.targetExternalImportRequested.connect(self.targetExternalImportRequested.emit)
         self.panel.previewRequested.connect(self.previewRequested.emit)
         self.panel.applyRequested.connect(self.applyRequested.emit)
         self.panel.stopRequested.connect(self.stopRequested.emit)
@@ -151,7 +172,77 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         root.addWidget(viewport_split)
         root.addWidget(self.panel)
         root.setSizes([560, 260])
-        self.setCentralWidget(root)
+        central_layout.addWidget(root, 1)
+        self.setCentralWidget(central)
+
+    def _build_workbench_controls(self) -> QtWidgets.QWidget:
+        box = QtWidgets.QFrame(self)
+        box.setObjectName("RetargetWorkbenchControls")
+        outer = QtWidgets.QVBoxLayout(box)
+        outer.setContentsMargins(4, 2, 4, 2)
+        outer.setSpacing(3)
+
+        top = QtWidgets.QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
+        top.setSpacing(6)
+        mode_label = QtWidgets.QLabel("Mode", box)
+        self.retarget_mode_combo = QtWidgets.QComboBox(box)
+        self.retarget_mode_combo.setObjectName("retargetModeComboBox")
+        self.retarget_mode_combo.setMinimumWidth(170)
+        populate_retarget_mode_combo(self.retarget_mode_combo)
+        top.addWidget(mode_label)
+        top.addWidget(self.retarget_mode_combo)
+        top.addStretch(1)
+        self.retarget_workbench_status_label = QtWidgets.QLabel("Mode: Unreal → KOTOR", box)
+        self.retarget_workbench_status_label.setObjectName("retargetWorkbenchStatusLabel")
+        top.addWidget(self.retarget_workbench_status_label, 4)
+        outer.addLayout(top)
+
+        names = QtWidgets.QHBoxLayout()
+        names.setContentsMargins(0, 0, 0, 0)
+        names.setSpacing(6)
+        self.kotor_output_name_mode_combo = QtWidgets.QComboBox(box)
+        self.kotor_output_name_mode_combo.setObjectName("kotorOutputNameModeComboBox")
+        self.kotor_output_name_mode_combo.addItem("Vanilla slot override", KotorOutputAnimationNameMode.VANILLA_SLOT.value)
+        self.kotor_output_name_mode_combo.addItem("Custom animation patch", KotorOutputAnimationNameMode.CUSTOM_PATCH.value)
+        self.target_kotor_animation_slot_combo = QtWidgets.QComboBox(box)
+        self.target_kotor_animation_slot_combo.setObjectName("targetKotorAnimationSlotComboBox")
+        self.target_kotor_animation_slot_combo.setEditable(True)
+        self.target_kotor_animation_slot_combo.setMinimumWidth(120)
+        self.custom_kotor_animation_name_edit = QtWidgets.QLineEdit(box)
+        self.custom_kotor_animation_name_edit.setObjectName("customKotorAnimationNameLineEdit")
+        self.custom_kotor_animation_name_edit.setPlaceholderText("gr_spin_attack_01")
+        self.output_unreal_clip_name_edit = QtWidgets.QLineEdit(box)
+        self.output_unreal_clip_name_edit.setObjectName("outputUnrealClipNameLineEdit")
+        self.output_unreal_clip_name_edit.setPlaceholderText("pmbam_pause1")
+        self.retarget_output_display_label_edit = QtWidgets.QLineEdit(box)
+        self.retarget_output_display_label_edit.setObjectName("retargetOutputDisplayLabelLineEdit")
+        self.retarget_output_display_label_edit.setPlaceholderText("Display label / notes")
+        for widget in (
+            self.kotor_output_name_mode_combo,
+            self.target_kotor_animation_slot_combo,
+            self.custom_kotor_animation_name_edit,
+            self.output_unreal_clip_name_edit,
+            self.retarget_output_display_label_edit,
+        ):
+            names.addWidget(widget)
+        outer.addLayout(names)
+
+        details = QtWidgets.QGridLayout()
+        details.setContentsMargins(0, 0, 0, 0)
+        details.setHorizontalSpacing(10)
+        details.setVerticalSpacing(1)
+        self.retarget_workbench_inputs_label = QtWidgets.QLabel("Source: (not selected) / Target: (not selected)", box)
+        self.retarget_workbench_inputs_label.setObjectName("retargetWorkbenchInputsLabel")
+        self.retarget_workbench_output_label = QtWidgets.QLabel("Output: (not selected)", box)
+        self.retarget_workbench_output_label.setObjectName("retargetWorkbenchOutputLabel")
+        self.retarget_workbench_runtime_label = QtWidgets.QLabel("Runtime: Vanilla slot override", box)
+        self.retarget_workbench_runtime_label.setObjectName("retargetWorkbenchRuntimeLabel")
+        details.addWidget(self.retarget_workbench_inputs_label, 0, 0)
+        details.addWidget(self.retarget_workbench_output_label, 0, 1)
+        details.addWidget(self.retarget_workbench_runtime_label, 1, 0, 1, 2)
+        outer.addLayout(details)
+        return box
 
     def _viewport_group(
         self,
@@ -212,6 +303,9 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
     def set_mapping_report(self, report) -> None:
         self.panel.set_mapping_report(report)
         self.statusBar().showMessage(f"Mapped bones: {getattr(report, 'matched_count', 0)}")
+
+    def set_library_rows(self, rows: list[dict]) -> None:
+        self.panel.set_library_rows(rows)
 
     def config_kwargs(self) -> dict:
         return self.panel.config_kwargs()

@@ -100,6 +100,43 @@ def validate_custom_kotor_animation_name(name: str) -> str:
     return text
 
 
+def validate_unreal_clip_name(name: str | None) -> str:
+    """Return a filesystem/asset-safe Unreal animation clip name.
+
+    KOTOR -> Unreal output names are Unreal/FBX clip names, not Aurora
+    animation slots. Preserve user-facing case, convert whitespace to
+    underscores, and reject path/control characters before any export path is
+    built.
+    """
+
+    text = str(name or "").strip()
+    if not text:
+        raise RetargetOutputNamingError("KOTOR -> Unreal output requires a UE animation clip name.")
+    if len(text) > 128:
+        raise RetargetOutputNamingError("UE animation clip names are limited to 128 characters.")
+    forbidden = {
+        "\x00": "NUL",
+        "\n": "newline",
+        "\r": "newline",
+        "\t": "tab",
+        "/": "slash",
+        "\\": "backslash",
+    }
+    for token, label in forbidden.items():
+        if token in text:
+            raise RetargetOutputNamingError(
+                f"UE animation clip name '{text}' is not safe for export: contains {label}."
+            )
+    if any(ord(ch) < 32 for ch in text):
+        raise RetargetOutputNamingError(
+            f"UE animation clip name '{text}' is not safe for export: contains a control character."
+        )
+    sanitized = _sanitize_unreal_clip_name(text)
+    if not sanitized:
+        raise RetargetOutputNamingError("KOTOR -> Unreal output requires a UE animation clip name.")
+    return sanitized
+
+
 def resolve_retarget_output_name(
     *,
     workbench_mode: RetargetMode | str,
@@ -112,9 +149,7 @@ def resolve_retarget_output_name(
 
     mode = coerce_retarget_mode(workbench_mode)
     if not is_kotor_output_mode(mode):
-        clip_name = _sanitize_unreal_clip_name(naming.unreal_clip_name or naming.requested_kotor_animation_name or "")
-        if not clip_name:
-            raise RetargetOutputNamingError("KOTOR → Unreal output requires a UE animation clip name.")
+        clip_name = validate_unreal_clip_name(naming.unreal_clip_name or naming.requested_kotor_animation_name)
         return ResolvedRetargetOutputName(
             mode=KotorOutputAnimationNameMode.CUSTOM_PATCH,
             requested_name=clip_name,
@@ -210,4 +245,3 @@ def _optional_text(value: str | None) -> str | None:
         return None
     text = str(value).strip()
     return text or None
-

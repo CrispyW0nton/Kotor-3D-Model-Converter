@@ -1,6 +1,6 @@
 # Holocron Toolset / PyKotor Comparison
 
-Date: 2026-05-22
+Date: 2026-05-23
 
 ## 1. Source Map and Checkout Notes
 
@@ -14,9 +14,12 @@ therefore used the existing local research checkout:
 
 `C:/Users/NewAdmin/Documents/GDeveloper/Workspaces/PyKotor`
 
-Local checkout remote:
+Current upstream source checked by web:
 
-`https://github.com/OldRepublicDevs/PyKotor`
+`https://github.com/OpenKotOR/PyKotor`
+
+The local checkout may still point at an older remote; do not assume its remote
+name is authoritative without checking.
 
 Local repo notes:
 
@@ -89,7 +92,7 @@ PyKotor is LGPL-3.0-or-later while GhostRigger is MIT.
 | GFF object editing | Typed generics for ARE/GIT/UTC/UTP/etc. | Module object inspector and local GFF reader/writer | GhostRigger forms are less complete | Back Module Studio forms with PyKotor generics. |
 | Module editor | Holocron Module Designer/Indoor Builder concepts | KMAP/KMAX, module hydration/save, module editor UI | GhostRigger has stronger 3D ambitions but less mature typed editor coverage | Combine GhostRigger 3D viewport with PyKotor-style typed resource models. |
 | Map/indoor builder | `IndoorMap` headless builder and kit concepts | KMAP/KMAX, LYT/VIS/WOK services, custom packager | GhostRigger needs product integration | Borrow kit/module-builder concepts; keep KMAP as GhostRigger authoring format. |
-| Patching/install | HoloPatcher/TSLPatcher-style ecosystem | Custom module packager and Patch Manager workflows outside this repo | Need staging conventions | Add `ExportJob` and optional HoloPatcher/Patch Manager staging manifests. |
+| Patching/install | HoloPatcher/TSLPatcher-style ecosystem | Custom module packager, Patch Manager workflows outside this repo, and shared `ExportJob` foundation | Need migration and staging conventions for non-retarget outputs | Use `ExportJob` for package staging and optional HoloPatcher/Patch Manager manifests. |
 | MDL animation retargeting | Not the main Holocron strength | Strong Retarget Studio gates and GhostRigger viewport | GhostRigger should keep owning this | Use PyKotor/MDLOps/KotorBlender only as validation references. |
 | Character import/rigging | Limited compared to GhostRigger goals | Character Builder/autorig/retarget stack | GhostRigger has unique scope but export not fully proven | Continue native KOTOR DAG Character Studio plan. |
 | 3D visual scenario authoring | Module Designer exists, but advanced cutscene/battle authoring is limited | KMAP/KMAX/sequence foundation | Neither is complete | GhostRigger can differentiate here. |

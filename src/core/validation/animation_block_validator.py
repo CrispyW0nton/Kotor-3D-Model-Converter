@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import math
+import struct
 from typing import Any, Dict, Iterable, List, Optional
 
 from src.core.animation.animation_engine import AnimationEngine
@@ -12,6 +13,14 @@ from src.core.geometry.model_data import Animation, KotorModel, ModelNode
 
 class AnimationBlockValidationError(ValueError):
     """Raised when an animation block is unsafe to export for a target model."""
+
+
+_BASE = 12
+_MODEL_FIELDS_ABS = _BASE + 80
+_MODEL_ANIM_ARRAY_OFF_ABS = _MODEL_FIELDS_ABS + 8
+_MODEL_ANIM_COUNT_ABS = _MODEL_FIELDS_ABS + 12
+_MODEL_NAME_OFFSETS_OFF_ABS = _MODEL_FIELDS_ABS + 104
+_MODEL_NAME_COUNT_ABS = _MODEL_FIELDS_ABS + 108
 
 
 @dataclass(frozen=True)
@@ -64,6 +73,228 @@ class AnimationValidationReport:
             f"{details}. KOTOR animation controllers must target existing Aurora nodes "
             "on the model/supermodel hierarchy."
         )
+
+
+@dataclass(frozen=True)
+class RawAnimationNodeRecord:
+    """Raw MDL fields needed by the engine's animation child walker."""
+
+    name: str
+    offset_rel: int
+    child_array_rel: int
+    child_count: int
+    child_offsets_rel: List[int]
+    controller_array_rel: int
+    controller_count: int
+
+
+@dataclass
+class RawAnimationFootprintReport:
+    """Raw-byte validation of an MDL animation tree."""
+
+    success: bool = True
+    animation_name: str = ""
+    declared_node_count: int = 0
+    visited_node_count: int = 0
+    depth_first_order_ok: bool = True
+    issues: List[str] = field(default_factory=list)
+    nodes: List[RawAnimationNodeRecord] = field(default_factory=list)
+
+    def add_error(self, message: str) -> None:
+        self.success = False
+        self.issues.append(message)
+
+    @property
+    def node_names(self) -> List[str]:
+        return [node.name for node in self.nodes]
+
+
+def validate_raw_animation_footprint(
+    mdl_bytes: bytes,
+    animation_name: str,
+    *,
+    require_depth_first_layout: bool = True,
+    require_declared_count_match: bool = True,
+) -> RawAnimationFootprintReport:
+    """Simulate the engine's raw child traversal for one MDL animation block.
+
+    PyKotor can resolve child offsets even when the binary block is arranged in
+    a more forgiving order.  KotOR's ResetMdlNode/UpdateAnimFootprint path is
+    stricter: it reads each node's child count at ``+0x30``, takes the child
+    pointer array from ``+0x2c``, and immediately dereferences every entry as an
+    animation node pointer.  This validator checks those raw fields directly and
+    optionally requires the vanilla depth-first layout where child subtrees are
+    serialized before the parent controller arrays.
+    """
+
+    report = RawAnimationFootprintReport(animation_name=animation_name)
+    try:
+        anim_rel = _find_animation_offset(mdl_bytes, animation_name)
+    except ValueError as exc:
+        report.add_error(str(exc))
+        return report
+
+    names = _read_name_table(mdl_bytes)
+    anim_abs = _BASE + anim_rel
+    if anim_abs + 80 > len(mdl_bytes):
+        report.add_error(f"animation '{animation_name}' offset 0x{anim_rel:x} is out of bounds")
+        return report
+
+    root_rel = _u32(mdl_bytes, anim_abs + 0x28)
+    report.declared_node_count = _u32(mdl_bytes, anim_abs + 0x2C)
+    visited: set[int] = set()
+    stack: set[int] = set()
+
+    def walk(node_rel: int) -> None:
+        node_abs = _BASE + node_rel
+        if node_rel == 0:
+            report.add_error("encountered null animation node offset")
+            return
+        if node_abs < 0 or node_abs + 80 > len(mdl_bytes):
+            report.add_error(f"animation node offset 0x{node_rel:x} is out of bounds")
+            return
+        if node_rel in stack:
+            report.add_error(f"cycle detected at animation node offset 0x{node_rel:x}")
+            return
+        if node_rel in visited:
+            report.add_error(f"animation node offset 0x{node_rel:x} is referenced more than once")
+            return
+
+        stack.add(node_rel)
+        visited.add(node_rel)
+
+        name_index = _u16(mdl_bytes, node_abs + 0x04)
+        name = names[name_index] if 0 <= name_index < len(names) else f"<name:{name_index}>"
+        child_array_rel = _u32(mdl_bytes, node_abs + 0x2C)
+        child_count = _u32(mdl_bytes, node_abs + 0x30)
+        child_count2 = _u32(mdl_bytes, node_abs + 0x34)
+        controller_array_rel = _u32(mdl_bytes, node_abs + 0x38)
+        controller_count = _u32(mdl_bytes, node_abs + 0x3C)
+        controller_count2 = _u32(mdl_bytes, node_abs + 0x40)
+        child_offsets: List[int] = []
+
+        if child_count != child_count2:
+            report.add_error(
+                f"node '{name}' child count duplicate mismatch: {child_count} != {child_count2}"
+            )
+        if controller_count != controller_count2:
+            report.add_error(
+                f"node '{name}' controller count duplicate mismatch: {controller_count} != {controller_count2}"
+            )
+
+        if child_count > 0:
+            child_array_abs = _BASE + child_array_rel
+            array_size = child_count * 4
+            if child_array_rel == 0 or child_array_abs + array_size > len(mdl_bytes):
+                report.add_error(f"node '{name}' child pointer array is invalid: 0x{child_array_rel:x}")
+            else:
+                for index in range(child_count):
+                    child_rel = _u32(mdl_bytes, child_array_abs + index * 4)
+                    child_offsets.append(child_rel)
+                    child_abs = _BASE + child_rel
+                    if child_rel == 0:
+                        report.add_error(f"node '{name}' child {index} is null")
+                    elif child_abs + 80 > len(mdl_bytes):
+                        report.add_error(
+                            f"node '{name}' child {index} offset 0x{child_rel:x} is out of bounds"
+                        )
+                    elif child_rel == node_rel:
+                        report.add_error(f"node '{name}' child {index} points back to itself")
+
+                if child_offsets and require_depth_first_layout:
+                    expected_first_child_abs = child_array_abs + array_size
+                    actual_first_child_abs = _BASE + child_offsets[0]
+                    if actual_first_child_abs != expected_first_child_abs:
+                        report.depth_first_order_ok = False
+                        report.add_error(
+                            f"node '{name}' first child starts at 0x{actual_first_child_abs:x}, "
+                            f"expected immediately after child array at 0x{expected_first_child_abs:x}"
+                        )
+
+        report.nodes.append(
+            RawAnimationNodeRecord(
+                name=name,
+                offset_rel=node_rel,
+                child_array_rel=child_array_rel,
+                child_count=child_count,
+                child_offsets_rel=child_offsets,
+                controller_array_rel=controller_array_rel,
+                controller_count=controller_count,
+            )
+        )
+
+        for child_rel in child_offsets:
+            walk(child_rel)
+        stack.remove(node_rel)
+
+    walk(root_rel)
+    report.visited_node_count = len(visited)
+    if require_declared_count_match and report.visited_node_count != report.declared_node_count:
+        report.add_error(
+            f"raw child traversal visited {report.visited_node_count} nodes, "
+            f"but animation header declares {report.declared_node_count}"
+        )
+    return report
+
+
+def _u32(data: bytes, offset: int) -> int:
+    if offset < 0 or offset + 4 > len(data):
+        raise ValueError(f"uint32 read at 0x{offset:x} is out of bounds")
+    return struct.unpack_from("<I", data, offset)[0]
+
+
+def _u16(data: bytes, offset: int) -> int:
+    if offset < 0 or offset + 2 > len(data):
+        raise ValueError(f"uint16 read at 0x{offset:x} is out of bounds")
+    return struct.unpack_from("<H", data, offset)[0]
+
+
+def _read_c_string(data: bytes, offset: int) -> str:
+    if offset < 0 or offset >= len(data):
+        return ""
+    end = data.find(b"\0", offset)
+    if end < 0:
+        end = len(data)
+    return data[offset:end].decode("ascii", errors="replace")
+
+
+def _read_name_table(mdl_bytes: bytes) -> List[str]:
+    if len(mdl_bytes) < _MODEL_NAME_COUNT_ABS + 4:
+        return []
+    table_rel = _u32(mdl_bytes, _MODEL_NAME_OFFSETS_OFF_ABS)
+    count = _u32(mdl_bytes, _MODEL_NAME_COUNT_ABS)
+    table_abs = _BASE + table_rel
+    names: List[str] = []
+    for index in range(count):
+        entry_abs = table_abs + index * 4
+        if entry_abs + 4 > len(mdl_bytes):
+            break
+        name_rel = _u32(mdl_bytes, entry_abs)
+        names.append(_read_c_string(mdl_bytes, _BASE + name_rel))
+    return names
+
+
+def _find_animation_offset(mdl_bytes: bytes, animation_name: str) -> int:
+    if len(mdl_bytes) < _MODEL_ANIM_COUNT_ABS + 4:
+        raise ValueError("MDL is too small to contain an animation table")
+    wanted = str(animation_name or "").lower()
+    count = _u32(mdl_bytes, _MODEL_ANIM_COUNT_ABS)
+    table_rel = _u32(mdl_bytes, _MODEL_ANIM_ARRAY_OFF_ABS)
+    if count <= 0 or table_rel <= 0:
+        raise ValueError(f"animation '{animation_name}' is missing; model has no local animations")
+    table_abs = _BASE + table_rel
+    for index in range(count):
+        entry_abs = table_abs + index * 4
+        if entry_abs + 4 > len(mdl_bytes):
+            break
+        anim_rel = _u32(mdl_bytes, entry_abs)
+        anim_abs = _BASE + anim_rel
+        if anim_abs + 40 > len(mdl_bytes):
+            continue
+        name = _read_c_string(mdl_bytes, anim_abs + 8)
+        if name.lower() == wanted:
+            return anim_rel
+    raise ValueError(f"animation '{animation_name}' was not found in the local animation table")
 
 
 def _controller_label(ctrl: Dict[str, Any]) -> str:

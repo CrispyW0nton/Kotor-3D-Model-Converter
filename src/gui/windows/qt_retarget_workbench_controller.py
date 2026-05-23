@@ -12,6 +12,11 @@ from src.core.retargeting.kotor_to_kotor_preview import (
     KotorToKotorPreviewResult,
     build_kotor_to_kotor_retarget_preview,
 )
+from src.core.retargeting.kotor_to_unreal_preview import (
+    KotorToUnrealPreviewRequest,
+    KotorToUnrealPreviewResult,
+    build_kotor_to_unreal_preview,
+)
 from src.core.retargeting.retarget_output_naming import (
     KotorOutputAnimationNameMode,
     RetargetOutputNaming,
@@ -21,6 +26,10 @@ from src.core.retargeting.retarget_preview import apply_retarget_preview_to_view
 from src.core.retargeting.retarget_preview_export import (
     RetargetPreviewExportRequest,
     export_retarget_preview_override,
+)
+from src.core.retargeting.ue_fbx_exporter import (
+    KotorToUnrealExportRequest,
+    export_kotor_to_unreal_preview,
 )
 from src.core.retargeting.retarget_workbench_readiness import (
     RetargetWorkbenchReadiness,
@@ -57,10 +66,12 @@ class RetargetWorkbenchState:
     # Future Unreal target mode.
     target_unreal_skeleton: Any | None = None
     target_unreal_profile: Any | None = None
+    unreal_fbx_export_backend: Any | None = None
 
     output_naming: RetargetOutputNaming | None = None
 
     last_kotor_to_kotor_preview_result: Any | None = None
+    last_kotor_to_unreal_preview_result: Any | None = None
     last_kotor_source_sample_result: Any | None = None
     last_preview_result: Any | None = None
     last_export_result: Any | None = None
@@ -81,8 +92,11 @@ class RetargetWorkbenchController:
         log_callback: Callable[[str, str], None] | None = None,
         status_callback: Callable[[str], None] | None = None,
         build_kotor_to_kotor_preview: Callable[[KotorToKotorPreviewRequest], KotorToKotorPreviewResult] = build_kotor_to_kotor_retarget_preview,
+        build_kotor_to_unreal_preview_fn: Callable[[KotorToUnrealPreviewRequest], KotorToUnrealPreviewResult] = build_kotor_to_unreal_preview,
         apply_preview: Callable[..., None] = apply_retarget_preview_to_viewport,
         export_preview: Callable[..., Any] = export_retarget_preview_override,
+        export_kotor_to_unreal_preview_fn: Callable[..., Any] = export_kotor_to_unreal_preview,
+        unreal_fbx_export_backend: Any | None = None,
     ) -> None:
         self.state = RetargetWorkbenchState()
         self.ue_to_kotor_controller = ue_to_kotor_controller
@@ -92,8 +106,11 @@ class RetargetWorkbenchController:
         self.log_callback = log_callback
         self.status_callback = status_callback
         self._build_kotor_to_kotor_preview = build_kotor_to_kotor_preview
+        self._build_kotor_to_unreal_preview = build_kotor_to_unreal_preview_fn
         self._apply_preview = apply_preview
         self._export_preview = export_preview
+        self._export_kotor_to_unreal_preview = export_kotor_to_unreal_preview_fn
+        self.state.unreal_fbx_export_backend = unreal_fbx_export_backend
         self.last_error = ""
         self.update_enabled()
 
@@ -185,6 +202,15 @@ class RetargetWorkbenchController:
         self.invalidate_preview("retarget output display label changed")
         self.update_enabled()
 
+    def set_output_unreal_clip_name(self, clip_name: str | None) -> None:
+        naming = self.state.output_naming or RetargetOutputNaming()
+        self.state.output_naming = replace(
+            naming,
+            unreal_clip_name=str(clip_name or "").strip() or None,
+        )
+        self.invalidate_preview("UE output animation clip name changed")
+        self.update_enabled()
+
     def available_target_kotor_slots(self) -> list[str]:
         try:
             return list(get_valid_animation_slots(self.current_target_model()))
@@ -209,6 +235,10 @@ class RetargetWorkbenchController:
     def set_target_unreal_profile(self, profile: Any | None) -> None:
         self.state.target_unreal_profile = profile
         self.invalidate_preview("target Unreal profile changed")
+        self.update_enabled()
+
+    def set_unreal_fbx_export_backend(self, backend: Any | None) -> None:
+        self.state.unreal_fbx_export_backend = backend
         self.update_enabled()
 
     def load_source_clip(self, path: str | Path, *, clip_name: str | None = None, sample_rate: float = 30.0) -> Any:
@@ -240,6 +270,8 @@ class RetargetWorkbenchController:
             return False
         if self.state.mode == RetargetMode.KOTOR_TO_KOTOR:
             return self._can_preview_kotor_to_kotor()
+        if self.state.mode == RetargetMode.KOTOR_TO_UNREAL:
+            return self._can_preview_kotor_to_unreal()
         controller = self._optional_ue_to_kotor_controller()
         return bool(controller is not None and controller.can_preview())
 
@@ -253,6 +285,8 @@ class RetargetWorkbenchController:
             preview = self.state.last_preview_result
             audit = getattr(preview, "preview_audit", None)
             return bool(preview is not None and audit is not None and getattr(audit, "passed", False))
+        if self.state.mode == RetargetMode.KOTOR_TO_UNREAL:
+            return self._can_export_kotor_to_unreal()
         controller = self._optional_ue_to_kotor_controller()
         return bool(controller is not None and controller.can_export())
 
@@ -267,6 +301,8 @@ class RetargetWorkbenchController:
     def preview(self, *, auto_play: bool = True, show_node_overlay: bool = True) -> Any | None:
         if self.state.mode == RetargetMode.KOTOR_TO_KOTOR:
             return self._preview_kotor_to_kotor(auto_play=auto_play, show_node_overlay=show_node_overlay)
+        if self.state.mode == RetargetMode.KOTOR_TO_UNREAL:
+            return self._preview_kotor_to_unreal()
         if self.state.mode != RetargetMode.UNREAL_TO_KOTOR:
             raise RetargetWorkbenchError(self.not_implemented_message("preview"))
         controller = self._require_ue_to_kotor_controller()
@@ -283,6 +319,12 @@ class RetargetWorkbenchController:
     def export_preview(self, output_mdl_path: str | Path, *, overwrite: bool = False, write_manifest: bool = True) -> Any | None:
         if self.state.mode == RetargetMode.KOTOR_TO_KOTOR:
             return self._export_kotor_to_kotor_preview(
+                output_mdl_path,
+                overwrite=overwrite,
+                write_manifest=write_manifest,
+            )
+        if self.state.mode == RetargetMode.KOTOR_TO_UNREAL:
+            return self._export_kotor_to_unreal_preview_current(
                 output_mdl_path,
                 overwrite=overwrite,
                 write_manifest=write_manifest,
@@ -305,6 +347,7 @@ class RetargetWorkbenchController:
         self.state.last_preview_result = None
         self.state.last_export_result = None
         self.state.last_kotor_to_kotor_preview_result = None
+        self.state.last_kotor_to_unreal_preview_result = None
         self.state.last_kotor_source_sample_result = None
         self.state.last_preview_invalidated_reason = str(reason or "").strip()
         self.state.dirty_revision += 1
@@ -321,7 +364,7 @@ class RetargetWorkbenchController:
 
     def mode_status_text(self) -> str:
         spec = self.current_mode_spec()
-        status = "implemented" if spec.implemented else _pending_status_for_mode(spec.mode)
+        status = _mode_status_for_mode(spec.mode) if spec.implemented else _pending_status_for_mode(spec.mode)
         return (
             f"Mode: {spec.label}\n"
             f"Source: {_human_kind(spec.source_kind)}\n"
@@ -336,9 +379,9 @@ class RetargetWorkbenchController:
             return "KOTOR → KOTOR is available when source/target inputs and output naming are complete."
         if spec.mode == RetargetMode.KOTOR_TO_UNREAL:
             return (
-                "KOTOR → Unreal export is not implemented yet.\n"
-                "Next step: add a UE-compatible FBX animation export adapter using sampled "
-                "Aurora source poses."
+                "KOTOR → Unreal is available when source animation, target Unreal skeleton, "
+                "retarget profile, and UE output clip name are complete. Export also needs "
+                "a configured FBX backend."
             )
         return f"{spec.label} {action} is not available."
 
@@ -367,6 +410,25 @@ class RetargetWorkbenchController:
             and self._has_target_output_animation_name()
         )
 
+    def _can_preview_kotor_to_unreal(self) -> bool:
+        return bool(
+            self.state.source_kotor_model is not None
+            and str(self.state.source_kotor_animation_slot or "").strip()
+            and self.state.target_unreal_skeleton is not None
+            and self._current_kotor_to_unreal_profile() is not None
+            and self._has_unreal_output_clip_name()
+        )
+
+    def _can_export_kotor_to_unreal(self) -> bool:
+        preview = self.state.last_kotor_to_unreal_preview_result
+        if preview is None:
+            return False
+        report = getattr(preview, "validation_report", None)
+        if report is not None and (getattr(report, "has_blocking", False) or getattr(report, "has_errors", False)):
+            return False
+        backend = self.state.unreal_fbx_export_backend
+        return bool(backend is not None and backend.is_available())
+
     def _has_target_output_animation_name(self) -> bool:
         naming = self.state.output_naming
         if naming is not None:
@@ -379,6 +441,13 @@ class RetargetWorkbenchController:
             if str(raw).strip():
                 return True
         return bool(str(getattr(self.state.retarget_profile, "animation_slot", "") or "").strip())
+
+    def _has_unreal_output_clip_name(self) -> bool:
+        naming = self.state.output_naming
+        return bool(str(getattr(naming, "unreal_clip_name", "") or "").strip())
+
+    def _current_kotor_to_unreal_profile(self) -> Any | None:
+        return self.state.target_unreal_profile or self.state.retarget_profile
 
     def _preview_kotor_to_kotor(self, *, auto_play: bool, show_node_overlay: bool) -> Any | None:
         if not self._can_preview_kotor_to_kotor():
@@ -480,6 +549,93 @@ class RetargetWorkbenchController:
             self.update_enabled()
             return None
 
+    def _preview_kotor_to_unreal(self) -> Any | None:
+        if not self._can_preview_kotor_to_unreal():
+            message = (
+                "KOTOR → Unreal preview requires a source KOTOR model, source animation name, "
+                "target Unreal skeleton, retarget profile, and UE output clip name."
+            )
+            self.last_error = message
+            self._log(message, "warning")
+            self._status("KOTOR → Unreal preview inputs are incomplete")
+            self.update_enabled()
+            return None
+        try:
+            result = self._build_kotor_to_unreal_preview(
+                KotorToUnrealPreviewRequest(
+                    source_model=self.state.source_kotor_model,
+                    source_animation_slot=str(self.state.source_kotor_animation_slot or ""),
+                    target_skeleton=self.state.target_unreal_skeleton,
+                    retarget_profile=self._current_kotor_to_unreal_profile(),
+                    output_naming=self.state.output_naming or RetargetOutputNaming(),
+                )
+            )
+            self.state.last_kotor_to_unreal_preview_result = result
+            self.state.last_kotor_source_sample_result = result.source_sample_result
+            self.state.last_preview_result = result.animation_clip
+            self.state.last_export_result = None
+            self.state.last_preview_invalidated_reason = ""
+            self.last_error = ""
+            self._report_kotor_to_unreal_preview_success(result)
+            self.update_enabled()
+            return result.animation_clip
+        except Exception as exc:
+            self.state.last_kotor_to_unreal_preview_result = None
+            self.state.last_preview_result = None
+            self.state.last_export_result = None
+            self.last_error = str(exc)
+            self._log(f"KOTOR → Unreal preview failed: {exc}", "error")
+            self._status("KOTOR → Unreal preview failed")
+            self.update_enabled()
+            return None
+
+    def _export_kotor_to_unreal_preview_current(
+        self,
+        output_fbx_path: str | Path,
+        *,
+        overwrite: bool,
+        write_manifest: bool,
+    ) -> Any | None:
+        preview = self.state.last_kotor_to_unreal_preview_result
+        if preview is None:
+            message = (
+                "No successful current KOTOR → Unreal preview is available to export. "
+                "Run Preview/Audit UE Clip before exporting FBX."
+            )
+            self.last_error = message
+            self._log(message, "warning")
+            self._status("KOTOR → Unreal export blocked")
+            self.update_enabled()
+            return None
+        manifest_path = Path(output_fbx_path).with_suffix(".ghostrigger.json") if write_manifest else None
+        try:
+            result = self._export_kotor_to_unreal_preview(
+                KotorToUnrealExportRequest(
+                    preview_result=preview,
+                    output_fbx_path=Path(output_fbx_path),
+                    output_manifest_path=manifest_path,
+                    overwrite=overwrite,
+                    verify_export=True,
+                    exporter_backend=self.state.unreal_fbx_export_backend,
+                )
+            )
+            self.state.last_export_result = result
+            if getattr(result, "succeeded", False):
+                self.last_error = ""
+                self._status(f"KOTOR → Unreal FBX exported: {Path(output_fbx_path).with_suffix('.fbx')}")
+            else:
+                messages = [issue.message for issue in getattr(result.validation_report, "issues", [])]
+                self.last_error = "; ".join(messages) or "KOTOR → Unreal export failed"
+                self._status("KOTOR → Unreal export failed")
+            self.update_enabled()
+            return result
+        except Exception as exc:
+            self.last_error = str(exc)
+            self._log(f"KOTOR → Unreal export failed: {exc}", "error")
+            self._status("KOTOR → Unreal export failed")
+            self.update_enabled()
+            return None
+
     def _report_kotor_to_kotor_preview_success(self, result: KotorToKotorPreviewResult) -> None:
         sample_report = result.source_sample_result.report
         preview = result.preview_result
@@ -502,6 +658,21 @@ class RetargetWorkbenchController:
         for warning in result.warnings:
             self._log(str(warning), "warning")
         self._status(f"KOTOR → KOTOR preview ready: {preview.slot_name}")
+
+    def _report_kotor_to_unreal_preview_success(self, result: KotorToUnrealPreviewResult) -> None:
+        sample_report = result.source_sample_result.report
+        clip = result.animation_clip
+        message = (
+            "KOTOR → Unreal preview built successfully.\n"
+            f"Source animation: {sample_report.resolved_slot_name}\n"
+            f"Output UE clip: {clip.clip_name}\n"
+            f"Target skeleton: {result.target_skeleton.name}\n"
+            f"Sampled poses: {len(clip.poses)}"
+        )
+        self._log(message, "success")
+        for warning in result.warnings:
+            self._log(str(warning), "warning")
+        self._status(f"KOTOR → Unreal UE clip preview ready: {clip.clip_name}")
 
     def _require_mode(self, mode: RetargetMode, action: str) -> None:
         if self.state.mode != mode:
@@ -559,8 +730,18 @@ def _pending_status_for_mode(mode: RetargetMode) -> str:
     if mode == RetargetMode.KOTOR_TO_KOTOR:
         return "implemented through KOTOR source sampling and verified preview/export"
     if mode == RetargetMode.KOTOR_TO_UNREAL:
-        return "KOTOR source animation sampler available; pending UE-compatible FBX export adapter"
+        return "implemented through KOTOR source sampling, UE clip baking, and FBX backend export"
     return "pending implementation"
+
+
+def _mode_status_for_mode(mode: RetargetMode) -> str:
+    if mode == RetargetMode.KOTOR_TO_KOTOR:
+        return "implemented through KOTOR source sampling and verified preview/export"
+    if mode == RetargetMode.KOTOR_TO_UNREAL:
+        return "implemented through KOTOR source sampling, UE clip baking, and FBX backend export"
+    if mode == RetargetMode.UNREAL_TO_KOTOR:
+        return "implemented through verified GhostRigger preview/export"
+    return "implemented"
 
 
 def _human_kind(kind: str) -> str:

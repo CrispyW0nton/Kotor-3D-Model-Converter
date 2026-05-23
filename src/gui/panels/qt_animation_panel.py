@@ -156,6 +156,10 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
     targetCurrentRequested = QtCore.Signal()
     sourceLibraryRequested = QtCore.Signal()
     targetLibraryRequested = QtCore.Signal()
+    sourceGameLibraryRequested = QtCore.Signal(dict)
+    targetGameLibraryRequested = QtCore.Signal(dict)
+    sourceExternalImportRequested = QtCore.Signal()
+    targetExternalImportRequested = QtCore.Signal()
     previewRequested = QtCore.Signal(str)
     applyRequested = QtCore.Signal(str)
     stopRequested = QtCore.Signal()
@@ -164,6 +168,7 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
         super().__init__(parent)
         self._source_model = None
         self._target_model = None
+        self._library_rows: list[dict] = []
         self._manual_mapping: dict[str, str] = {}
         self._updating_mapping = False
         self._build()
@@ -250,22 +255,103 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
         layout.setSpacing(4)
         label = QtWidgets.QLabel("None")
         label.setWordWrap(True)
+        library_combo = QtWidgets.QComboBox()
+        library_combo.setEditable(True)
+        library_combo.setInsertPolicy(QtWidgets.QComboBox.NoInsert)
+        library_combo.setMinimumWidth(240)
+        library_combo.setPlaceholderText(f"Search {title.lower()} game-library model")
+        library_combo.lineEdit().setPlaceholderText(f"Search {title.lower()} game-library model")
+        completer = QtWidgets.QCompleter(library_combo.model(), library_combo)
+        completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
+        completer.setFilterMode(QtCore.Qt.MatchContains)
+        library_combo.setCompleter(completer)
         button_row = QtWidgets.QHBoxLayout()
         current_button = QtWidgets.QPushButton("Use Current")
-        library_button = QtWidgets.QPushButton(f"Select {title} from Library")
+        library_button = QtWidgets.QPushButton("Load from Game Library")
+        external_button = QtWidgets.QPushButton("Import External File...")
         if title == "Source":
             self.source_label = label
+            self.source_library_combo = library_combo
             current_button.clicked.connect(self.sourceCurrentRequested.emit)
-            library_button.clicked.connect(self.sourceLibraryRequested.emit)
+            library_button.clicked.connect(lambda _checked=False: self._emit_or_request_library_row("source"))
+            external_button.clicked.connect(self.sourceExternalImportRequested.emit)
+            library_combo.activated.connect(lambda _index=0: self._emit_library_row("source"))
         else:
             self.target_label = label
+            self.target_library_combo = library_combo
             current_button.clicked.connect(self.targetCurrentRequested.emit)
-            library_button.clicked.connect(self.targetLibraryRequested.emit)
+            library_button.clicked.connect(lambda _checked=False: self._emit_or_request_library_row("target"))
+            external_button.clicked.connect(self.targetExternalImportRequested.emit)
+            library_combo.activated.connect(lambda _index=0: self._emit_library_row("target"))
         button_row.addWidget(current_button, 1)
         button_row.addWidget(library_button, 1)
+        button_row.addWidget(external_button, 1)
         layout.addWidget(label)
+        layout.addWidget(library_combo)
         layout.addLayout(button_row)
         return box
+
+    def set_library_rows(self, rows: list[dict]) -> None:
+        self._library_rows = [dict(row) for row in rows or []]
+        for combo in (getattr(self, "source_library_combo", None), getattr(self, "target_library_combo", None)):
+            if combo is not None:
+                self._populate_library_combo(combo)
+
+    def selected_library_row(self, role: str) -> Optional[dict]:
+        combo = self.source_library_combo if role == "source" else self.target_library_combo
+        row = combo.currentData()
+        if isinstance(row, dict):
+            return dict(row)
+        text = combo.currentText().strip().lower()
+        if not text:
+            return None
+        for candidate in self._library_rows:
+            if text in self._library_row_label(candidate).lower():
+                return dict(candidate)
+        return None
+
+    def _populate_library_combo(self, combo: QtWidgets.QComboBox) -> None:
+        current = combo.currentText()
+        combo.blockSignals(True)
+        try:
+            combo.clear()
+            combo.addItem("Search game library...", None)
+            for row in self._library_rows:
+                combo.addItem(self._library_row_label(row), dict(row))
+            if current:
+                combo.setCurrentText(current)
+        finally:
+            combo.blockSignals(False)
+
+    def _emit_library_row(self, role: str) -> None:
+        row = self.selected_library_row(role)
+        if not row:
+            return
+        if role == "source":
+            self.sourceGameLibraryRequested.emit(row)
+        else:
+            self.targetGameLibraryRequested.emit(row)
+
+    def _emit_or_request_library_row(self, role: str) -> None:
+        row = self.selected_library_row(role)
+        if row:
+            if role == "source":
+                self.sourceGameLibraryRequested.emit(row)
+            else:
+                self.targetGameLibraryRequested.emit(row)
+            return
+        if role == "source":
+            self.sourceLibraryRequested.emit()
+        else:
+            self.targetLibraryRequested.emit()
+
+    def _library_row_label(self, row: dict) -> str:
+        game = str(row.get("game") or "").strip()
+        resref = str(row.get("resref") or row.get("name") or "").strip()
+        category = str(row.get("category") or "").strip()
+        module = str(row.get("module_code") or row.get("area_label") or "").strip()
+        pieces = [piece for piece in (game, resref, category, module) if piece]
+        return " : ".join(pieces) if pieces else "(unnamed model)"
 
     def set_source_model(self, model) -> None:
         self._source_model = model

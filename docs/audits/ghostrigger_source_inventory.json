@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-05-22",
-  "audit_type": "read_only_architecture_capability_audit",
+  "generated_at": "2026-05-23",
+  "audit_type": "read_only_architecture_capability_audit_second_pass",
   "ghostrigger_repo": "C:/Users/NewAdmin/Documents/GDeveloper/Workspaces/Kotor-3D-Model-Converter-qt",
   "external_research": {
     "pykotor_local_checkout": "C:/Users/NewAdmin/Documents/GDeveloper/Workspaces/PyKotor",
-    "pykotor_remote": "https://github.com/OldRepublicDevs/PyKotor",
+    "pykotor_remote": "https://github.com/OpenKotOR/PyKotor",
     "holocron_checkout_target": "C:/Users/NewAdmin/Documents/GDeveloper/Workspaces/HolocronToolset-PyKotor",
     "holocron_clone_status": "clone_attempt_failed_due_untrusted_tls_certificate_chain; existing PyKotor checkout used",
     "ghostscripter_repo": "not_found_at_requested_path"
@@ -20,13 +20,13 @@
       "area": "mdl_mdx",
       "paths": ["src/core/mdl", "src/core/retargeting/aurora_animation_writer.py"],
       "status": "partial",
-      "notes": "Reader/writer boundary and retarget animation writer exist; current working tree contains active writer fixes that should be finished separately."
+      "notes": "Reader/writer boundary, byte-preserving retarget animation injection, and readback gates exist. Full character/model reconstruction remains high risk and must use MCP/PyKotor/Ghidra ground truth."
     },
     {
       "area": "retargeting",
       "paths": ["src/core/retargeting", "src/unreal", "src/gui/windows/qt_retarget_preview_controller.py", "src/gui/windows/qt_retarget_workbench_controller.py"],
-      "status": "working_for_unreal_to_kotor_partial_for_other_modes",
-      "notes": "Unreal to KOTOR has source import, mapping, solver, preview, and export gates. KOTOR to KOTOR and KOTOR to Unreal are explicit pending modes."
+      "status": "working_for_unreal_to_kotor_and_kotor_to_kotor_pending_kotor_to_unreal",
+      "notes": "Unreal to KOTOR and KOTOR to KOTOR have source sampling/import, mapping, solver, preview, custom output names, readiness UX, and staged export gates. KOTOR to Unreal remains an explicit pending mode."
     },
     {
       "area": "character_studio",
@@ -38,32 +38,32 @@
       "area": "module_studio",
       "paths": ["src/core/modules", "src/gui/windows/module_editor_window.py", "src/gui/panels/module_editor"],
       "status": "partial",
-      "notes": "Hydration, inspection, save pipeline, reference safety, KMAP-aware UI exist. Needs unified state model and transaction save path."
+      "notes": "Hydration, inspection, save pipeline, reference safety, KMAP-aware UI exist. Needs GameResourceProvider integration, undoable edit commands, and ExportJob migration."
     },
     {
       "area": "map_studio",
       "paths": ["src/core/level", "src/core/scene", "src/core/walkmesh", "src/core/modules/custom_module_packager.py"],
       "status": "partial",
-      "notes": "KMAP/KMAX, LYT/VIS/WOK, walkmesh, export manifest and package services exist. Scenario object/cutscene authoring remains incomplete."
+      "notes": "KMAP/KMAX, LYT/VIS/WOK, walkmesh, export manifest and package services exist. Scenario object/cutscene authoring, provider-backed palettes, undo commands, and ExportJob package migration remain incomplete."
     },
     {
       "area": "qt_ui",
       "paths": ["src/gui/windows/qt_main_window.py", "src/gui/qt_lib.py", "src/gui/viewports", "src/gui/rendering"],
       "status": "partial",
-      "notes": "Qt entry points and grouped facade exist; main window is large and should keep delegating to controllers."
+      "notes": "Qt entry points and grouped facade exist; main window is large and should keep delegating to controllers. Resource, validation, and outliner UIs should move toward Qt models/proxy models."
     },
     {
       "area": "validation_export",
-      "paths": ["src/core/validation", "src/core/level/level_export_bridge.py", "src/core/modules/module_save_pipeline.py"],
-      "status": "partial",
-      "notes": "Many validators exist, but no shared ValidationBus or ExportJob transaction helper."
+      "paths": ["src/core/validation", "src/core/export", "src/core/level/level_export_bridge.py", "src/core/modules/module_save_pipeline.py"],
+      "status": "working_foundation",
+      "notes": "Shared ValidationBus and ExportJob exist. Retarget export uses ExportJob; Character, Module, Map, FBX, and Patch Manager exports still need migration."
     }
   ],
-  "recommended_next_architecture_slice": "GhostRiggerProject + ResourceAddress session model",
+  "recommended_next_architecture_slice": "T2304 GameResourceProvider",
   "recommended_next_product_slices": {
     "character_builder": "NativeSkeletonSnapshot and clone-native-DAG-then-bind path",
-    "module_editor": "Qt edit/save/reload loop for one safe GIT object field",
-    "map_builder": "KMAP object placement palette backed by Module Studio template types",
-    "retarget_workbench": "KOTOR to KOTOR preview/export adapter using KOTOR source sampler"
+    "module_editor": "provider-backed resource tree plus undoable edit/save/reload loop for one safe GIT object field",
+    "map_builder": "KMAP object placement palette backed by provider-loaded Module Studio template types",
+    "retarget_workbench": "T2402 named retarget quality mode and KOTOR to Unreal contract"
   }
 }

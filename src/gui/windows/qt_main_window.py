@@ -66,7 +66,6 @@ from src.gui.qt_lib.windows.qt_retarget_preview_controller import (
 from src.gui.qt_lib.windows.qt_retarget_workbench_controller import (
     RetargetWorkbenchController,
     combo_current_retarget_mode,
-    populate_retarget_mode_combo,
 )
 from src.core.retargeting.retarget_output_naming import KotorOutputAnimationNameMode
 from src.gui.qt_lib.panels.qt_rig_panel import QtRigWindow
@@ -1440,36 +1439,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addLayout(title_box)
         layout.addStretch(1)
 
-        self.retarget_mode_combo = QtWidgets.QComboBox()
-        self.retarget_mode_combo.setObjectName("retargetModeComboBox")
-        self.retarget_mode_combo.setMinimumWidth(150)
-        self.retarget_mode_combo.setMaximumWidth(190)
-        populate_retarget_mode_combo(self.retarget_mode_combo)
-        self.retarget_mode_combo.currentIndexChanged.connect(self._on_retarget_mode_changed)
-        layout.addWidget(self.retarget_mode_combo, 0, QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-
-        readiness_box = QtWidgets.QVBoxLayout()
-        readiness_box.setContentsMargins(0, 0, 0, 0)
-        readiness_box.setSpacing(1)
-        self.retarget_workbench_status_label = QtWidgets.QLabel("Mode: Unreal → KOTOR")
-        self.retarget_workbench_status_label.setObjectName("retargetWorkbenchStatusLabel")
-        self.retarget_workbench_inputs_label = QtWidgets.QLabel("Source: (not selected) / Target: (not selected)")
-        self.retarget_workbench_inputs_label.setObjectName("retargetWorkbenchInputsLabel")
-        self.retarget_workbench_output_label = QtWidgets.QLabel("Output: (not selected)")
-        self.retarget_workbench_output_label.setObjectName("retargetWorkbenchOutputLabel")
-        self.retarget_workbench_runtime_label = QtWidgets.QLabel("Runtime: Vanilla slot override")
-        self.retarget_workbench_runtime_label.setObjectName("retargetWorkbenchRuntimeLabel")
-        for label in (
-            self.retarget_workbench_status_label,
-            self.retarget_workbench_inputs_label,
-            self.retarget_workbench_output_label,
-            self.retarget_workbench_runtime_label,
-        ):
-            label.setAlignment(QtCore.Qt.AlignRight)
-            label.setStyleSheet("background:transparent;")
-            readiness_box.addWidget(label)
-        layout.addLayout(readiness_box)
-
         meta_box = QtWidgets.QVBoxLayout()
         meta_box.setContentsMargins(0, 0, 0, 0)
         meta_box.setSpacing(2)
@@ -1536,37 +1505,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._tool_button("Settings  F2", self.settings_action, "settings", compact=True))
         layout.addWidget(self._separator())
         layout.addWidget(self._tool_button("Anims  Ctrl+A", self.anims_action, "anims", compact=True))
-        self.kotor_output_name_mode_combo = QtWidgets.QComboBox()
-        self.kotor_output_name_mode_combo.setObjectName("kotorOutputNameModeComboBox")
-        self.kotor_output_name_mode_combo.addItem("Vanilla slot override", KotorOutputAnimationNameMode.VANILLA_SLOT.value)
-        self.kotor_output_name_mode_combo.addItem("Custom animation patch", KotorOutputAnimationNameMode.CUSTOM_PATCH.value)
-        self.kotor_output_name_mode_combo.setMinimumWidth(150)
-        self.kotor_output_name_mode_combo.currentIndexChanged.connect(self._on_kotor_output_name_mode_changed)
-        layout.addWidget(self.kotor_output_name_mode_combo)
-
-        self.target_kotor_animation_slot_combo = QtWidgets.QComboBox()
-        self.target_kotor_animation_slot_combo.setObjectName("targetKotorAnimationSlotComboBox")
-        self.target_kotor_animation_slot_combo.setEditable(True)
-        self.target_kotor_animation_slot_combo.setMinimumWidth(100)
-        self.target_kotor_animation_slot_combo.currentTextChanged.connect(self._on_target_kotor_animation_slot_changed)
-        layout.addWidget(self.target_kotor_animation_slot_combo)
-
-        self.custom_kotor_animation_name_edit = QtWidgets.QLineEdit()
-        self.custom_kotor_animation_name_edit.setObjectName("customKotorAnimationNameLineEdit")
-        self.custom_kotor_animation_name_edit.setPlaceholderText("gr_spin_attack_01")
-        self.custom_kotor_animation_name_edit.setMinimumWidth(136)
-        self.custom_kotor_animation_name_edit.textChanged.connect(self._on_custom_kotor_animation_name_changed)
-        layout.addWidget(self.custom_kotor_animation_name_edit)
-
-        self.retarget_output_display_label_edit = QtWidgets.QLineEdit()
-        self.retarget_output_display_label_edit.setObjectName("retargetOutputDisplayLabelLineEdit")
-        self.retarget_output_display_label_edit.setPlaceholderText("Display label / notes")
-        self.retarget_output_display_label_edit.setMinimumWidth(150)
-        self.retarget_output_display_label_edit.textChanged.connect(self._on_retarget_output_display_label_changed)
-        layout.addWidget(self.retarget_output_display_label_edit)
-
-        layout.addWidget(self._tool_button("Preview Retarget", self.preview_retarget_action, "anims", compact=True))
-        layout.addWidget(self._tool_button("Export Preview", self.export_retarget_preview_action, "save", compact=True))
         layout.addWidget(self._tool_button("Sequence", self.sequence_editor_action, "anims", compact=True))
         layout.addWidget(self._tool_button("Lights", self.lighting_panel_action, "", compact=True))
         layout.addWidget(self._tool_button("Cameras", self.camera_panel_action, "", compact=True))
@@ -1929,7 +1867,19 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.animation_retarget_window.targetLibraryRequested.connect(
             lambda: self._retarget_select_library_model("target")
         )
-        self.animation_retarget_window.previewRequested.connect(self._retarget_preview)
+        self.animation_retarget_window.sourceGameLibraryRequested.connect(
+            lambda row: self._send_library_row_to_retarget(row, "source")
+        )
+        self.animation_retarget_window.targetGameLibraryRequested.connect(
+            lambda row: self._send_library_row_to_retarget(row, "target")
+        )
+        self.animation_retarget_window.sourceExternalImportRequested.connect(
+            lambda: self._retarget_import_external_model("source")
+        )
+        self.animation_retarget_window.targetExternalImportRequested.connect(
+            lambda: self._retarget_import_external_model("target")
+        )
+        self.animation_retarget_window.previewRequested.connect(self._retarget_workbench_preview_from_window)
         self.animation_retarget_window.applyRequested.connect(self._retarget_apply)
         self.animation_retarget_window.stopRequested.connect(self._retarget_stop)
         self.animation_retarget_panel = self.animation_retarget_window
@@ -2052,6 +2002,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             log_callback=self._log,
             status_callback=self.statusBar().showMessage,
         )
+        self._connect_retarget_workbench_window_controls()
         self._apply_retarget_workbench_mode_status()
         main_splitter.addWidget(self.viewport)
 
@@ -3883,6 +3834,21 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._log(f"Retarget preview error: {exc}", "error")
             QtWidgets.QMessageBox.critical(self, "Retarget", str(exc))
 
+    def _retarget_workbench_preview_from_window(self, anim_name: str) -> None:
+        controller = getattr(self, "retarget_workbench_controller", None)
+        if controller is None:
+            self._retarget_preview(anim_name)
+            return
+        mode_name = str(getattr(getattr(controller.state, "mode", None), "name", "") or "")
+        if self._retarget_source_model is not None and mode_name in {"KOTOR_TO_KOTOR", "KOTOR_TO_UNREAL"}:
+            controller.set_source_kotor_model(self._retarget_source_model)
+        if self._retarget_target_model is not None and mode_name != "KOTOR_TO_UNREAL":
+            controller.set_target_model(self._retarget_target_model)
+        if anim_name and mode_name in {"KOTOR_TO_KOTOR", "KOTOR_TO_UNREAL"}:
+            controller.set_source_kotor_animation_slot(anim_name)
+        self._apply_retarget_workbench_mode_status()
+        self._preview_retarget_animation()
+
     def _retarget_target_label(self) -> str:
         model = self._retarget_target_model
         if model is None:
@@ -4746,6 +4712,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             window.set_navigation_profile(
                 self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
             )
+            window.set_library_rows(getattr(self, "_library_rows", []) or [])
             if self._retarget_source_model is not None:
                 window.set_source_model(self._retarget_source_model)
             if self._retarget_target_model is not None:
@@ -4764,8 +4731,26 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._refresh_target_kotor_animation_slots()
         self._apply_retarget_workbench_mode_status()
 
+    def _connect_retarget_workbench_window_controls(self) -> None:
+        window = getattr(self, "animation_retarget_window", None)
+        if window is None or getattr(self, "_retarget_workbench_controls_connected", False):
+            return
+        window.retarget_mode_combo.currentIndexChanged.connect(self._on_retarget_mode_changed)
+        window.kotor_output_name_mode_combo.currentIndexChanged.connect(self._on_kotor_output_name_mode_changed)
+        window.target_kotor_animation_slot_combo.currentTextChanged.connect(self._on_target_kotor_animation_slot_changed)
+        window.custom_kotor_animation_name_edit.textChanged.connect(self._on_custom_kotor_animation_name_changed)
+        window.output_unreal_clip_name_edit.textChanged.connect(self._on_output_unreal_clip_name_changed)
+        window.retarget_output_display_label_edit.textChanged.connect(self._on_retarget_output_display_label_changed)
+        self._retarget_workbench_controls_connected = True
+
+    def _retarget_workbench_widget(self, name: str):
+        window = getattr(self, "animation_retarget_window", None)
+        if window is not None and hasattr(window, name):
+            return getattr(window, name)
+        return getattr(self, name, None)
+
     def _on_retarget_mode_changed(self, _index: int = -1) -> None:
-        combo = getattr(self, "retarget_mode_combo", None)
+        combo = self._retarget_workbench_widget("retarget_mode_combo")
         controller = getattr(self, "retarget_workbench_controller", None)
         if combo is None or controller is None:
             return
@@ -4778,17 +4763,17 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def _apply_retarget_workbench_mode_status(self) -> None:
         controller = getattr(self, "retarget_workbench_controller", None)
-        combo = getattr(self, "retarget_mode_combo", None)
+        combo = self._retarget_workbench_widget("retarget_mode_combo")
         if controller is None:
             return
         spec = controller.current_mode_spec()
         if combo is not None:
             combo.setToolTip(controller.mode_status_text())
         readiness = controller.readiness()
-        status_label = getattr(self, "retarget_workbench_status_label", None)
-        inputs_label = getattr(self, "retarget_workbench_inputs_label", None)
-        output_label = getattr(self, "retarget_workbench_output_label", None)
-        runtime_label = getattr(self, "retarget_workbench_runtime_label", None)
+        status_label = self._retarget_workbench_widget("retarget_workbench_status_label")
+        inputs_label = self._retarget_workbench_widget("retarget_workbench_inputs_label")
+        output_label = self._retarget_workbench_widget("retarget_workbench_output_label")
+        runtime_label = self._retarget_workbench_widget("retarget_workbench_runtime_label")
         if status_label is not None:
             status_label.setText(
                 f"Mode: {readiness.mode_label} | Preview: {readiness.preview_status} | Export: {readiness.export_status}"
@@ -4808,10 +4793,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if controller is None:
             return
         is_kotor_output = controller.state.mode.name in {"UNREAL_TO_KOTOR", "KOTOR_TO_KOTOR"}
-        mode_combo = getattr(self, "kotor_output_name_mode_combo", None)
-        slot_combo = getattr(self, "target_kotor_animation_slot_combo", None)
-        custom_edit = getattr(self, "custom_kotor_animation_name_edit", None)
-        label_edit = getattr(self, "retarget_output_display_label_edit", None)
+        mode_combo = self._retarget_workbench_widget("kotor_output_name_mode_combo")
+        slot_combo = self._retarget_workbench_widget("target_kotor_animation_slot_combo")
+        custom_edit = self._retarget_workbench_widget("custom_kotor_animation_name_edit")
+        unreal_clip_edit = self._retarget_workbench_widget("output_unreal_clip_name_edit")
+        label_edit = self._retarget_workbench_widget("retarget_output_display_label_edit")
         selected = KotorOutputAnimationNameMode.VANILLA_SLOT.value
         if mode_combo is not None:
             data = mode_combo.currentData()
@@ -4825,13 +4811,16 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if custom_edit is not None:
             custom_edit.setVisible(is_kotor_output and custom)
             custom_edit.setEnabled(is_kotor_output and custom)
+        if unreal_clip_edit is not None:
+            unreal_clip_edit.setVisible(not is_kotor_output)
+            unreal_clip_edit.setEnabled(not is_kotor_output)
         if label_edit is not None:
-            label_edit.setVisible(is_kotor_output)
-            label_edit.setEnabled(is_kotor_output)
+            label_edit.setVisible(True)
+            label_edit.setEnabled(True)
 
     def _refresh_target_kotor_animation_slots(self) -> None:
         controller = getattr(self, "retarget_workbench_controller", None)
-        combo = getattr(self, "target_kotor_animation_slot_combo", None)
+        combo = self._retarget_workbench_widget("target_kotor_animation_slot_combo")
         if controller is None or combo is None:
             return
         current = combo.currentText()
@@ -4847,7 +4836,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def _on_kotor_output_name_mode_changed(self, _index: int = -1) -> None:
         controller = getattr(self, "retarget_workbench_controller", None)
-        combo = getattr(self, "kotor_output_name_mode_combo", None)
+        combo = self._retarget_workbench_widget("kotor_output_name_mode_combo")
         if controller is None or combo is None:
             return
         try:
@@ -4869,6 +4858,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if controller is None:
             return
         controller.set_custom_kotor_animation_name(text)
+        self._apply_retarget_workbench_mode_status()
+
+    def _on_output_unreal_clip_name_changed(self, text: str) -> None:
+        controller = getattr(self, "retarget_workbench_controller", None)
+        if controller is None:
+            return
+        controller.set_output_unreal_clip_name(text)
         self._apply_retarget_workbench_mode_status()
 
     def _on_retarget_output_display_label_changed(self, text: str) -> None:
@@ -4915,7 +4911,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         try:
             profile = controller.load_retarget_profile(path)
             slot = str(getattr(profile, "animation_slot", "") or "(no slot)")
-            slot_combo = getattr(self, "target_kotor_animation_slot_combo", None)
+            slot_combo = self._retarget_workbench_widget("target_kotor_animation_slot_combo")
             if slot_combo is not None and slot != "(no slot)":
                 slot_combo.setCurrentText(slot)
             self._apply_retarget_workbench_mode_status()
@@ -4943,12 +4939,19 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if controller is None:
             self._not_migrated("Export Retarget Preview")
             return
+        is_kotor_to_unreal = getattr(controller.state.mode, "name", "") == "KOTOR_TO_UNREAL"
         if not controller.can_export():
             message = (
                 "No successful current retarget preview is available to export. "
-                "Run Preview Retarget before exporting MDL/MDX."
+                "Run Preview Retarget before exporting."
             )
-            if getattr(controller.state, "last_preview_result", None) is not None:
+            if is_kotor_to_unreal and getattr(controller.state, "last_kotor_to_unreal_preview_result", None) is not None:
+                readiness = controller.readiness()
+                message = readiness.export_status or (
+                    "No FBX export backend is configured. Configure the project-supported "
+                    "FBX backend before exporting."
+                )
+            elif getattr(controller.state, "last_preview_result", None) is not None:
                 message = (
                     "The retarget preview is stale because the source clip, target model, "
                     "or retarget profile changed. Run Preview Retarget again before exporting."
@@ -4957,24 +4960,34 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.information(self, "Export Retarget Preview", message)
             return
 
-        target = controller.current_target_model()
-        stem = str(getattr(target, "name", "") or "").strip() or "retarget_preview"
+        target = controller.state.target_unreal_skeleton if is_kotor_to_unreal else controller.current_target_model()
+        naming = getattr(controller.state, "output_naming", None)
+        stem = str(
+            (getattr(naming, "unreal_clip_name", "") if is_kotor_to_unreal else "")
+            or getattr(target, "name", "")
+            or ""
+        ).strip() or "retarget_preview"
         default_dir = self.app_root / "exports" / "retarget_previews"
-        default_path = default_dir / f"{stem}.mdl"
+        default_path = default_dir / f"{stem}.{'fbx' if is_kotor_to_unreal else 'mdl'}"
         path, _selected = QtWidgets.QFileDialog.getSaveFileName(
             self,
-            "Export Retarget Preview",
+            "Export UE FBX Animation" if is_kotor_to_unreal else "Export Retarget Preview",
             str(default_path),
-            "KOTOR MDL files (*.mdl);;All files (*.*)",
+            "FBX animation files (*.fbx);;All files (*.*)" if is_kotor_to_unreal else "KOTOR MDL files (*.mdl);;All files (*.*)",
         )
         if not path:
             return
-        mdl_path = Path(path)
-        if mdl_path.suffix.lower() != ".mdl":
-            mdl_path = mdl_path.with_suffix(".mdl")
-        mdx_path = mdl_path.with_suffix(".mdx")
+        output_path = Path(path)
+        if is_kotor_to_unreal:
+            if output_path.suffix.lower() != ".fbx":
+                output_path = output_path.with_suffix(".fbx")
+            paired_paths = (output_path, output_path.with_suffix(".ghostrigger.json"))
+        else:
+            if output_path.suffix.lower() != ".mdl":
+                output_path = output_path.with_suffix(".mdl")
+            paired_paths = (output_path, output_path.with_suffix(".mdx"))
         overwrite = False
-        existing = [p for p in (mdl_path, mdx_path) if p.exists()]
+        existing = [p for p in paired_paths if p.exists()]
         if existing:
             names = "\n".join(str(p) for p in existing)
             answer = QtWidgets.QMessageBox.question(
@@ -4988,13 +5001,19 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 return
             overwrite = True
 
-        result = controller.export_preview(mdl_path, overwrite=overwrite)
+        result = controller.export_preview(output_path, overwrite=overwrite)
         self._apply_retarget_workbench_mode_status()
         if result is None:
             detail = getattr(controller, "last_error", "") or "Export failed."
             QtWidgets.QMessageBox.critical(self, "Export Retarget Preview", detail)
             return
-        self.statusBar().showMessage(f"Retarget preview exported: {result.mdl_path}")
+        if is_kotor_to_unreal:
+            final_paths = [str(path) for path in getattr(result, "final_paths", [])]
+            self.statusBar().showMessage(
+                "KOTOR → Unreal FBX exported: " + (", ".join(final_paths) if final_paths else str(output_path))
+            )
+        else:
+            self.statusBar().showMessage(f"Retarget preview exported: {result.mdl_path}")
 
     def _open_unreal_animator_window(self):
         window = getattr(self, "unreal_animator_window", None)
@@ -5226,6 +5245,90 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return
         self._send_library_row_to_retarget(row, role)
 
+    def _retarget_import_external_model(self, role: str) -> None:
+        title = "Import External Retarget Source" if role == "source" else "Import External Retarget Target"
+        path, _selected = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            title,
+            str(Path(self.settings_data.get("last_import") or self.app_root)),
+            "External models (*.fbx *.obj *.glb *.gltf);;FBX files (*.fbx);;OBJ files (*.obj);;GLB/GLTF files (*.glb *.gltf);;All files (*.*)",
+        )
+        if not path:
+            return
+        try:
+            model = self._load_external_retarget_model(path)
+        except Exception as exc:
+            self._log(f"External retarget import failed: {exc}", "error")
+            QtWidgets.QMessageBox.critical(self, title, str(exc))
+            return
+
+        texture_dir = str(Path(path).resolve().parent)
+        self._texture_dir = texture_dir
+        window = getattr(self, "animation_retarget_window", None)
+        if window is None:
+            return
+        window.set_texture_dir(texture_dir)
+        controller = getattr(self, "retarget_workbench_controller", None)
+        mode_value = getattr(getattr(controller, "state", None), "mode", None)
+        mode_name = str(getattr(mode_value, "name", mode_value) or "")
+        suffix = Path(path).suffix.lower()
+
+        if role == "source":
+            self._retarget_source_model = model
+            self._retarget_engine = None
+            window.set_source_model(model, "")
+            if controller is not None and mode_name == "UNREAL_TO_KOTOR" and suffix == ".fbx":
+                try:
+                    controller.load_source_clip(path)
+                    self._apply_retarget_workbench_mode_status()
+                except Exception as exc:
+                    self._log(f"UE/FBX source clip import failed: {exc}", "warning")
+            elif controller is not None and mode_name in {"KOTOR_TO_KOTOR", "KOTOR_TO_UNREAL"}:
+                controller.set_source_kotor_model(model)
+                self._apply_retarget_workbench_mode_status()
+            self._log(f"Retarget source external import <- {Path(path).name}", "success")
+        else:
+            self._retarget_target_model = model
+            self._retarget_engine = None
+            self._retarget_mapping_report = None
+            window.set_target_model(model, "")
+            if controller is not None and mode_name == "KOTOR_TO_UNREAL" and suffix == ".fbx":
+                try:
+                    from src.core.retargeting.unreal_target_skeleton import import_unreal_target_skeleton_from_fbx
+
+                    controller.set_target_unreal_skeleton(import_unreal_target_skeleton_from_fbx(path))
+                except Exception as exc:
+                    self._log(f"Unreal target skeleton import is not configured yet: {exc}", "warning")
+            elif controller is not None:
+                controller.set_target_model(model)
+            self._sync_retarget_preview_target()
+            self._log(f"Retarget target external import <- {Path(path).name}", "success")
+        self._retarget_refresh_mapping()
+        self._open_animation_retarget_window()
+
+    def _load_external_retarget_model(self, path: str):
+        file_path = Path(path)
+        suffix = file_path.suffix.lower()
+        if suffix == ".obj":
+            from src.converters.mesh_converter import OBJImporter
+
+            return OBJImporter().import_file(str(file_path), game_version=self._game_version())
+        if suffix == ".fbx":
+            from src.converters.mesh_converter import FBXImporter
+
+            model = FBXImporter().import_file(str(file_path), game_version=self._game_version())
+            if model is None:
+                raise RuntimeError("FBX import failed. Install pyassimp, assimp-py, or trimesh.")
+            return model
+        if suffix in {".glb", ".gltf"}:
+            from src.converters.mesh_converter import GLTFImporter
+
+            model = GLTFImporter().import_file(str(file_path), game_version=self._game_version())
+            if model is None:
+                raise RuntimeError("GLTF import failed. Install pygltflib or trimesh.")
+            return model
+        raise RuntimeError("Choose an external FBX, OBJ, GLB, or GLTF model file.")
+
     def _populate_saved_dirs(self):
         self.library_list.clear()
         for key, label in (("k1_dir", "KotOR 1"), ("k2_dir", "KotOR 2")):
@@ -5281,6 +5384,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return
         self._library_rows = rows
         self._rebuild_library_list()
+        if hasattr(self, "animation_retarget_window"):
+            self.animation_retarget_window.set_library_rows(rows)
         if hasattr(self, "library_panel"):
             self.library_panel.set_rows(rows)
             self.library_panel.set_status(f"{len(rows)} models")

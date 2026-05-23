@@ -37,13 +37,20 @@ knowledge_base/
 ├── book_notes/                     ← ACTIVE: tracked notes from local reference books
 │   ├── README.md                   ← book-note index and usage rules
 │   ├── ghostrigger_engine_crosswalk.md
+│   ├── ghostrigger_programming_crosswalk.md
+│   ├── coding_books_second_pass_2026_05_23.md
+│   ├── coding_books_third_pass_scope_sanity_2026_05_23.md
+│   ├── qt_python_ui_architecture_for_ghostrigger.md
+│   ├── python_clean_architecture_for_ghostrigger.md
 │   ├── vince_mathematics_for_computer_graphics_7e.md
 │   ├── gregory_game_engine_architecture_4e_vol1.md
 │   └── dunn_parberry_3d_math_primer_2e.md
 │
-└── reference/                      ← HISTORICAL (iteration-1, pre-Qt)
+└── reference/                      ← shared references plus historical iteration-1 docs
     ├── INDEX.md                    ← original knowledge-base index
     ├── ghidra_odyssey_mcp.md       ← Odyssey engine/Ghidra MCP workflow
+    ├── kotor_modding_verified_sources.md
+    │                                  ← trusted KOTOR modding/source hierarchy
     ├── MANDATORY_CHECKLIST.md      ← legacy pre-task protocol
     ├── PROTOCOL.md                 ← legacy AI developer protocol
     ├── ROADMAP_legacy_2026_04.md   ← superseded by roadmap/02_roadmap_2026_05.md
@@ -82,6 +89,10 @@ knowledge_base/
 | Run the CLI | [`cli/CLI.md`](cli/CLI.md) |
 | Theme/layout customization | [`theme_layout_system.md`](theme_layout_system.md) |
 | Apply book knowledge to engine work | [`book_notes/ghostrigger_engine_crosswalk.md`](book_notes/ghostrigger_engine_crosswalk.md) |
+| Apply Qt/UI and clean architecture guidance | [`book_notes/ghostrigger_programming_crosswalk.md`](book_notes/ghostrigger_programming_crosswalk.md) |
+| Review the second-pass coding-book misses | [`book_notes/coding_books_second_pass_2026_05_23.md`](book_notes/coding_books_second_pass_2026_05_23.md) |
+| Check scope sanity and product boundaries | [`book_notes/coding_books_third_pass_scope_sanity_2026_05_23.md`](book_notes/coding_books_third_pass_scope_sanity_2026_05_23.md) |
+| Check trusted KOTOR modding/documentation sources | [`reference/kotor_modding_verified_sources.md`](reference/kotor_modding_verified_sources.md) |
 | Verify Odyssey engine behavior with Ghidra MCP | [`reference/ghidra_odyssey_mcp.md`](reference/ghidra_odyssey_mcp.md) |
 | Character Builder UI spec (original) | [`reference/specs/character_builder_spec.md`](reference/specs/character_builder_spec.md) |
 | Architecture audit (original) | [`reference/specs/architecture_audit.html`](reference/specs/architecture_audit.html) |

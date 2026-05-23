@@ -9,13 +9,14 @@ import pytest
 
 from src.core.animation.animation_engine import SuperModelResolver
 from src.core.game.kotor_loader import load_model_from_file
-from src.core.geometry.model_data import Animation, KotorModel
+from src.core.geometry.model_data import Animation, KotorModel, ModelNode
 from src.core.retargeting.aurora_animation_writer import (
     CTRL_ORIENTATION,
     CTRL_POSITION,
     AuroraAnimationInjectionRequest,
     AuroraAnimationWriter,
 )
+from src.core.validation.animation_roundtrip_validator import quaternion_angular_difference_degrees
 
 
 TARGET_MDL = Path("tests/fixtures/kotor_stock/k1/pmbam.mdl")
@@ -378,6 +379,106 @@ def test_clip_frame_zero_reference_mode_remains_explicit_legacy_option(tmp_path:
     pelvis_anim = _anim_node(animation, "pelvis_g")
     orientation = _controller(pelvis_anim, CTRL_ORIENTATION)
     assert orientation["values"][0] == pytest.approx(list(model.find_node("pelvis_g").rotation), abs=1e-6)
+
+
+@pytest.mark.skipif(not TARGET_MDL.exists(), reason="PMBAM fixture unavailable")
+def test_world_motion_delta_survives_when_source_parent_matches_child_motion(tmp_path: Path):
+    r3a = tmp_path / "r3a.json"
+    _write_synthetic_r3a(r3a)
+    model = load_model_from_file(str(TARGET_MDL), str(TARGET_MDL.with_suffix(".mdx")))
+    payload = json.loads(r3a.read_text(encoding="utf-8"))
+    moving_frames = [
+        {
+            "frame": 1,
+            "time_seconds": 0.0,
+            "rotation_wxyz": [1.0, 0.0, 0.0, 0.0],
+            "location_xyz": [0.0, 0.0, 0.0],
+        },
+        {
+            "frame": 2,
+            "time_seconds": 1.0 / 30.0,
+            "rotation_wxyz": [0.9848078, 0.0, 0.1736482, 0.0],
+            "location_xyz": [0.0, 0.0, 0.0],
+        },
+    ]
+    payload["target_curves"] = {
+        "lcollar_g": {
+            "target_bone": "lcollar_g",
+            "source_bone": "clavicle_l",
+            "source_rest_world": {"rotation_wxyz": [1.0, 0.0, 0.0, 0.0]},
+            "frames": moving_frames,
+        },
+        "lbicep_g": {
+            "target_bone": "lbicep_g",
+            "source_bone": "upperarm_l",
+            "source_rest_world": {"rotation_wxyz": [1.0, 0.0, 0.0, 0.0]},
+            "source_parent_rest_world": {"rotation_wxyz": [1.0, 0.0, 0.0, 0.0]},
+            "source_parent_frames": moving_frames,
+            "frames": moving_frames,
+        },
+    }
+
+    animation = AuroraAnimationWriter().build_animation_from_r3a(
+        payload=payload,
+        model=model,
+        slot_name="victory",
+        write_zero_position_controllers=False,
+        source_reference_mode="clip_frame_zero",
+    )
+
+    bicep_orientation = _controller(_anim_node(animation, "lbicep_g"), CTRL_ORIENTATION)
+    exported_amplitude = quaternion_angular_difference_degrees(
+        bicep_orientation["values"][0],
+        bicep_orientation["values"][1],
+    )
+    assert exported_amplitude == pytest.approx(20.0, abs=0.01)
+    assert AuroraAnimationWriter._validate_export_motion_amplitude(payload, animation) == []
+
+
+@pytest.mark.skipif(not TARGET_MDL.exists(), reason="PMBAM fixture unavailable")
+def test_motion_amplitude_gate_rejects_flattened_arm_export(tmp_path: Path):
+    r3a = tmp_path / "r3a.json"
+    _write_synthetic_r3a(r3a)
+    model = load_model_from_file(str(TARGET_MDL), str(TARGET_MDL.with_suffix(".mdx")))
+    payload = json.loads(r3a.read_text(encoding="utf-8"))
+    payload["target_curves"] = {
+        "lbicep_g": {
+            "target_bone": "lbicep_g",
+            "source_bone": "upperarm_l",
+            "source_rest_world": {"rotation_wxyz": [1.0, 0.0, 0.0, 0.0]},
+            "frames": [
+                {"frame": 1, "time_seconds": 0.0, "rotation_wxyz": [1.0, 0.0, 0.0, 0.0]},
+                {"frame": 2, "time_seconds": 1.0 / 30.0, "rotation_wxyz": [0.9848078, 0.0, 0.1736482, 0.0]},
+            ],
+        }
+    }
+    flat = Animation(
+        name="victory",
+        length=1.0 / 30.0,
+        anim_root="PMBAM",
+        nodes=[
+            ModelNode(
+                name="lbicep_g",
+                controllers=[
+                    {
+                        "type": CTRL_ORIENTATION,
+                        "name": "orientation",
+                        "columns": 4,
+                        "times": [0.0, 1.0 / 30.0],
+                        "values": [
+                            list(model.find_node("lbicep_g").rotation),
+                            list(model.find_node("lbicep_g").rotation),
+                        ],
+                    }
+                ],
+            )
+        ],
+    )
+
+    issues = AuroraAnimationWriter._validate_export_motion_amplitude(payload, flat)
+
+    assert issues
+    assert "lbicep_g" in issues[0]
 
 
 @pytest.mark.skipif(not TARGET_MDL.exists(), reason="PMBAM fixture unavailable")
