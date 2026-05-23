@@ -406,20 +406,19 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             return
         pose = AnimPose(time=float(getattr(source_pose, "time_seconds", time_seconds) or time_seconds))
         model = getattr(self.source_viewport, "model", None)
-        for node_name, transform in (getattr(source_pose, "local_transforms", {}) or {}).items():
+        global_transforms = getattr(source_pose, "global_transforms", {}) or {}
+        for node_name, transform in global_transforms.items():
             preview_node = None
             if model is not None and hasattr(model, "find_node"):
                 try:
                     preview_node = model.find_node(str(node_name))
                 except Exception:
                     preview_node = None
-            position = getattr(preview_node, "_gr_source_clip_preview_position", None)
-            if position is None and preview_node is not None:
-                position = getattr(preview_node, "position", (0.0, 0.0, 0.0))
+            position = self._source_clip_pose_delta(preview_node, str(node_name), global_transforms, transform)
             pose.nodes[str(node_name).lower()] = NodePose(
                 name=str(node_name),
                 position=tuple(float(v) for v in (position or (0.0, 0.0, 0.0))[:3]),
-                rotation=tuple(float(v) for v in getattr(transform, "rotation", (0.0, 0.0, 0.0, 1.0))[:4]),
+                rotation=(0.0, 0.0, 0.0, 1.0),
                 scale=1.0,
             )
         self.source_viewport.set_animation_pose(
@@ -427,6 +426,22 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             name=str(getattr(clip, "clip_name", "") or "Source Clip"),
             time=pose.time,
             length=float(getattr(clip, "duration_seconds", 0.0) or 0.0),
+        )
+
+    def _source_clip_pose_delta(self, preview_node, node_name: str, global_transforms: dict, transform) -> tuple[float, float, float]:
+        position = tuple(float(v) for v in getattr(transform, "position", (0.0, 0.0, 0.0))[:3])
+        parent_name = None
+        parent = getattr(preview_node, "parent", None)
+        if parent is not None and not getattr(parent, "_gr_source_clip_preview_root", False):
+            parent_name = str(getattr(parent, "name", "") or "")
+        parent_transform = global_transforms.get(parent_name) if parent_name else None
+        if parent_transform is None:
+            return position
+        parent_position = tuple(float(v) for v in getattr(parent_transform, "position", (0.0, 0.0, 0.0))[:3])
+        return (
+            position[0] - parent_position[0],
+            position[1] - parent_position[1],
+            position[2] - parent_position[2],
         )
 
     def _tick_source_clip_playback(self) -> None:
@@ -442,7 +457,8 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self._set_source_clip_pose(clip, elapsed % duration)
 
     def _stop_requested(self) -> None:
-        self._source_clip_play_timer.stop()
+        self.clear_poses()
+        self.statusBar().showMessage("Preview stopped")
         self.stopRequested.emit()
 
     def _tool_mode_changed(self) -> None:

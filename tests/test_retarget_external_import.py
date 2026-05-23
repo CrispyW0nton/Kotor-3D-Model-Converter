@@ -19,6 +19,8 @@ def _sample_clip(
     *,
     child_local_position: tuple[float, float, float] = (1.0, 0.0, 0.0),
     child_global_position: tuple[float, float, float] = (1.0, 0.0, 0.0),
+    root_rotation: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0),
+    extra_nodes: list | None = None,
 ):
     from src.core.retargeting.source_animation import (
         SourcePose,
@@ -29,12 +31,14 @@ def _sample_clip(
 
     root_local = Transform()
     child_local = Transform(position=child_local_position)
-    root_global = Transform()
+    root_global = Transform(rotation=root_rotation)
     child_global = Transform(position=child_global_position)
     nodes = [
         SourceSkeletonNode("Root", None, 0, root_local, root_global),
         SourceSkeletonNode("RHand", "Root", 1, child_local, child_global),
     ]
+    if extra_nodes:
+        nodes.extend(extra_nodes)
     pose = SourcePose(
         time_seconds=0.0,
         local_transforms={node.name: node.rest_local for node in nodes},
@@ -90,20 +94,32 @@ def test_kotor_to_unreal_target_fbx_import_routes_to_unreal_skeleton_before_mesh
 
 def test_source_clip_preview_model_preserves_imported_skeleton_for_viewport() -> None:
     from src.gui.qt_lib.windows.qt_source_clip_preview_model import build_source_clip_preview_model
+    from src.core.retargeting.source_animation import SourceSkeletonNode, Transform
 
-    model = build_source_clip_preview_model(_sample_clip())
+    model = build_source_clip_preview_model(
+        _sample_clip(
+            extra_nodes=[
+                SourceSkeletonNode("upperarm_twist_01_l", "Root", 2, Transform(), Transform(), "twist"),
+                SourceSkeletonNode("ik_foot_root", "Root", 3, Transform(), Transform(), "ik"),
+                SourceSkeletonNode("weapon_socket", "Root", 4, Transform(), Transform(), "helper"),
+            ]
+        )
+    )
 
     assert model.name == "root|Unreal Take|Base Layer"
-    assert model.node_count() == 3
+    assert model.node_count() == 6
     assert getattr(model, "_gr_source_clip_preview") is True
-    assert getattr(model, "_gr_source_clip_node_count") == 2
+    assert getattr(model, "_gr_source_clip_node_count") == 5
     assert [anim.name for anim in model.animations] == ["root|Unreal Take|Base Layer"]
     assert model.animations[0].length == 1.0
     assert [node.name for node in model.root_node.children] == ["Root"]
     root = model.root_node.children[0]
-    assert [node.name for node in root.children] == ["RHand"]
-    assert getattr(root.children[0], "external_world_position") == (1.0, 0.0, 0.0)
-    assert getattr(root.children[0], "_gr_source_clip_preview_position") == (1.0, 0.0, 0.0)
+    assert {node.name for node in root.children} == {"RHand", "upperarm_twist_01_l", "ik_foot_root", "weapon_socket"}
+    rhand = next(node for node in root.children if node.name == "RHand")
+    assert getattr(rhand, "external_world_position") == (1.0, 0.0, 0.0)
+    assert getattr(rhand, "_gr_source_clip_preview_position") == (1.0, 0.0, 0.0)
+    hidden = {node.name for node in model.all_nodes() if getattr(node, "_hide_skeleton_overlay", False)}
+    assert hidden == {"upperarm_twist_01_l", "ik_foot_root", "weapon_socket"}
     bb_min, bb_max = getattr(model, "_gr_render_bounds")
     assert bb_min[0] < bb_max[0]
     assert bb_min[1] < bb_max[1]
@@ -170,7 +186,11 @@ def test_retarget_window_source_animation_playback_uses_compact_preview_position
     _qapp()
     from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
 
-    clip = _sample_clip(child_local_position=(100.0, 0.0, 0.0), child_global_position=(1.0, 0.0, 0.0))
+    clip = _sample_clip(
+        child_local_position=(100.0, 0.0, 0.0),
+        child_global_position=(1.0, 0.0, 0.0),
+        root_rotation=(0.0, 0.0, 0.70710678, 0.70710678),
+    )
     window = QtAnimationRetargetWindow()
     try:
         previewed: list[str] = []
@@ -184,10 +204,29 @@ def test_retarget_window_source_animation_playback_uses_compact_preview_position
         pose = window.source_viewport._renderer._anim_pose
         assert pose is not None
         assert pose.nodes["rhand"].position == (1.0, 0.0, 0.0)
+        assert pose.nodes["root"].rotation == (0.0, 0.0, 0.0, 1.0)
         assert previewed == []
 
         window.panel._preview()
         assert previewed == ["root|Unreal Take|Base Layer"]
+    finally:
+        window.close()
+
+
+def test_retarget_window_stop_clears_source_clip_playback() -> None:
+    _qapp()
+    from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
+
+    window = QtAnimationRetargetWindow()
+    try:
+        window.set_source_clip_preview(_sample_clip())
+        window.play_source_clip_animation(window.panel.selected_animation())
+        assert window.source_viewport._renderer._anim_pose is not None
+
+        window._stop_requested()
+
+        assert window._source_clip_play_timer.isActive() is False
+        assert window.source_viewport._renderer._anim_pose is None
     finally:
         window.close()
 

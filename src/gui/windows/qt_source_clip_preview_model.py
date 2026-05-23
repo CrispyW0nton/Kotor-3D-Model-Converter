@@ -69,6 +69,8 @@ def build_source_clip_preview_model(clip: SourceSkeletonClip, mesh_model: KotorM
         if rest_global is not None:
             preview_node.external_world_position = _finite_position(rest_global.position)
         preview_node._source_clip_classification = str(getattr(node, "classification", "") or "deform")
+        if preview_node._source_clip_classification in {"twist", "ik", "helper"}:
+            preview_node._hide_skeleton_overlay = True
         by_name[preview_node.name] = preview_node
 
     for node in getattr(clip, "nodes", []) or []:
