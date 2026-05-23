@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src.core.game.kotor_loader import get_valid_animation_slots
+from src.core.retargeting.coordinate import BasisConversion
 from src.core.retargeting.kotor_to_kotor_preview import (
     KotorToKotorPreviewRequest,
     KotorToKotorPreviewResult,
@@ -17,13 +18,17 @@ from src.core.retargeting.kotor_to_unreal_preview import (
     KotorToUnrealPreviewResult,
     build_kotor_to_unreal_preview,
 )
-from src.core.retargeting.retarget_mapping import suggest_initial_mapping
+from src.core.retargeting.retarget_mapping import (
+    suggest_initial_mapping,
+    suggest_ue5_to_aurora_mapping,
+)
 from src.core.retargeting.retarget_output_naming import (
     KotorOutputAnimationNameMode,
     RetargetOutputNaming,
     coerce_kotor_output_name_mode,
 )
 from src.core.retargeting.retarget_preview import apply_retarget_preview_to_viewport
+from src.core.retargeting.retarget_solver import RetargetSolverOptions
 from src.core.retargeting.retarget_preview_export import (
     RetargetPreviewExportRequest,
     export_retarget_preview_override,
@@ -59,6 +64,7 @@ class RetargetWorkbenchState:
     source_clip: Any | None = None
     target_model: Any | None = None
     retarget_profile: Any | None = None
+    solver_options: RetargetSolverOptions | None = None
 
     # Future KOTOR source modes.
     source_kotor_model: Any | None = None
@@ -156,8 +162,10 @@ class RetargetWorkbenchController:
     def set_retarget_profile(self, profile: Any | None) -> None:
         self.state.retarget_profile = profile
         self.state.retarget_profile_is_auto = False
+        self.state.solver_options = None
         if self.ue_to_kotor_controller is not None and hasattr(self.ue_to_kotor_controller, "set_retarget_profile"):
             self.ue_to_kotor_controller.set_retarget_profile(profile)
+        self._push_solver_options()
         self.invalidate_preview("retarget profile changed")
         self.update_enabled()
 
@@ -379,16 +387,31 @@ class RetargetWorkbenchController:
         if self.state.retarget_profile is not None and not self.state.retarget_profile_is_auto:
             return
         try:
-            profile = suggest_initial_mapping(source_clip, target_model)
+            profile = suggest_ue5_to_aurora_mapping(source_clip, target_model)
+            solver_options = _verified_ue5_to_aurora_solver_options(profile)
+            profile_kind = "verified UE5 → Aurora"
         except Exception as exc:
-            self._log(f"Automatic retarget profile suggestion failed: {exc}", "warning")
-            return
+            self._log(
+                f"Verified UE5 → Aurora profile suggestion unavailable: {exc}. "
+                "Falling back to generic role-based mapping.",
+                "warning",
+            )
+            try:
+                profile = suggest_initial_mapping(source_clip, target_model)
+                solver_options = None
+                profile_kind = "generic"
+            except Exception as fallback_exc:
+                self._log(f"Automatic retarget profile suggestion failed: {fallback_exc}", "warning")
+                return
         self.state.retarget_profile = profile
+        self.state.solver_options = solver_options
         self.state.retarget_profile_is_auto = True
         if self.ue_to_kotor_controller is not None and hasattr(self.ue_to_kotor_controller, "set_retarget_profile"):
             self.ue_to_kotor_controller.set_retarget_profile(profile)
+        self._push_solver_options()
         self._log(
-            f"Auto-generated retarget profile with {len(getattr(profile, 'mappings', []) or [])} source-to-target mappings.",
+            f"Auto-generated {profile_kind} retarget profile with "
+            f"{len(getattr(profile, 'mappings', []) or [])} source-to-target mappings.",
             "info",
         )
 
@@ -430,6 +453,10 @@ class RetargetWorkbenchController:
     def _push_output_naming(self) -> None:
         if self.ue_to_kotor_controller is not None and hasattr(self.ue_to_kotor_controller, "set_output_naming"):
             self.ue_to_kotor_controller.set_output_naming(self.state.output_naming)
+
+    def _push_solver_options(self) -> None:
+        if self.ue_to_kotor_controller is not None and hasattr(self.ue_to_kotor_controller, "set_solver_options"):
+            self.ue_to_kotor_controller.set_solver_options(self.state.solver_options)
 
     def _can_preview_kotor_to_kotor(self) -> bool:
         return bool(
@@ -784,3 +811,27 @@ def _human_kind(kind: str) -> str:
         "unreal_fbx_animation_clip": "UE-compatible FBX animation clip",
     }
     return labels.get(kind, kind.replace("_", " "))
+
+
+def _verified_ue5_to_aurora_solver_options(profile: Any) -> RetargetSolverOptions:
+    """Return the solver policy proven for the UE5/Manny -> PMBAM workflow."""
+
+    metadata = dict(getattr(profile, "metadata", {}) or {})
+    return RetargetSolverOptions(
+        rotation_transfer_mode=str(
+            metadata.get("recommended_rotation_transfer_mode") or "exact_segment_correction"
+        ),
+        key_unmapped_reference_nodes=bool(metadata.get("key_unmapped_reference_nodes", True)),
+        basis_conversion=BasisConversion(
+            source_basis=(
+                (-1.0, 0.0, 0.0),
+                (0.0, -1.0, 0.0),
+                (0.0, 0.0, 1.0),
+            ),
+            target_basis=(
+                (1.0, 0.0, 0.0),
+                (0.0, 1.0, 0.0),
+                (0.0, 0.0, 1.0),
+            ),
+        ),
+    )

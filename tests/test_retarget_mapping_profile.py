@@ -7,12 +7,14 @@ from pathlib import Path
 import pytest
 
 from src.core.animation.animation_engine import SuperModelResolver
+from src.core.game.kotor_loader import load_model_from_file
 from src.core.geometry.model_data import Animation, KotorModel, ModelNode
 from src.core.retargeting.fbx_importer import classify_source_node_name
 from src.core.retargeting.retarget_mapping import (
     detect_side,
     suggest_initial_mapping,
     suggest_source_roles,
+    suggest_ue5_to_aurora_mapping,
     validate_retarget_profile,
 )
 from src.core.retargeting.retarget_profile import (
@@ -172,6 +174,62 @@ def test_initial_mapping_does_not_duplicate_target_nodes() -> None:
     target_nodes = [entry.target_node.lower() for entry in profile.mappings]
     assert target_nodes.count("torso_g") == 1
     assert validate_retarget_profile(profile, clip, target).success is True
+
+
+def test_verified_ue5_to_aurora_mapping_uses_rename_map_and_target_casing() -> None:
+    clip = _source_clip(
+        [
+            "attach",
+            "pelvis",
+            "spine_01",
+            "spine_03",
+            "clavicle_l",
+            "upperarm_l",
+            "lowerarm_l",
+            "hand_l",
+            "middle_01_l",
+            "middle_03_l",
+            "thigh_l",
+            "calf_l",
+            "foot_l",
+            "ball_l",
+            "clavicle_r",
+            "upperarm_r",
+            "lowerarm_r",
+            "hand_r",
+            "middle_01_r",
+            "middle_03_r",
+            "thigh_r",
+            "calf_r",
+            "foot_r",
+            "ball_r",
+            "head",
+            "lowerarm_twist_01_l",
+        ]
+    )
+    target = load_model_from_file(
+        "tests/fixtures/kotor_stock/k1/pmbam.mdl",
+        "tests/fixtures/kotor_stock/k1/pmbam.mdx",
+    )
+
+    profile = suggest_ue5_to_aurora_mapping(clip, target)
+    pairs = {entry.source_node: entry.target_node for entry in profile.mappings}
+
+    assert profile.metadata["generated_by"] == "verified_ue5_to_aurora_mapping"
+    assert pairs["lowerarm_l"] == "Lforearm_g"
+    assert pairs["hand_l"] == "Lhand_g"
+    assert pairs["middle_01_l"] == "LbFngrB_g"
+    assert pairs["middle_03_l"] == "LbFngrT_g"
+    assert pairs["lowerarm_r"] == "Rforearm_g"
+    assert pairs["hand_r"] == "Rhand_g"
+    assert pairs["ball_l"] == "lfootT_g"
+    assert pairs["ball_r"] == "rfootT_g"
+    assert "headhook" not in {entry.target_node.lower() for entry in profile.mappings}
+    assert profile.metadata["recommended_rotation_transfer_mode"] == "exact_segment_correction"
+    assert profile.metadata["key_unmapped_reference_nodes"] is True
+
+    report = validate_retarget_profile(profile, clip, target)
+    assert report.success is True
 
 
 def test_validation_rejects_unknown_source_node() -> None:

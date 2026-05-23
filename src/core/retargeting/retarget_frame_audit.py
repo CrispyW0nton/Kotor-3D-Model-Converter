@@ -15,8 +15,11 @@ from .retarget_profile import RetargetMappingEntry, RetargetProfile
 SEGMENT_ROLE_PAIRS: Tuple[Tuple[str, str], ...] = (
     ("upperarm", "forearm"),
     ("forearm", "hand"),
+    ("hand", "middle_base"),
+    ("middle_base", "middle_tip"),
     ("thigh", "calf"),
     ("calf", "foot"),
+    ("foot", "toe"),
     ("spine", "chest"),
     ("neck", "head"),
 )

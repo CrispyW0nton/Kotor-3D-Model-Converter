@@ -21,7 +21,7 @@ from .retarget_calibration import (
     current_source_basis_for_frame,
     transfer_calibrated_frame_delta,
 )
-from .retarget_frame_audit import audit_retarget_reference_frames
+from .retarget_frame_audit import SEGMENT_ROLE_PAIRS, audit_retarget_reference_frames
 from .retarget_frames import transfer_reference_frame_delta
 from .retarget_mapping import HELPER_CLASSIFICATIONS, validate_retarget_profile
 from .retarget_output_naming import (
@@ -173,6 +173,7 @@ def retarget_source_clip_to_aurora_animation(
     source_poses = _sample_source_poses(source_clip, opts.sample_rate)
     target_to_source = {entry.target_node: entry.source_node for entry in normalized_profile.mappings}
     mapped_segments = _mapped_segments(normalized_profile)
+    target_nodes = target_model.all_nodes()
 
     converted_reference_source = _convert_source_pose(reference_pair.source_pose, opts.basis_conversion)
     converted_source_poses = [_convert_source_pose(pose, opts.basis_conversion) for pose in source_poses]
@@ -181,11 +182,12 @@ def retarget_source_clip_to_aurora_animation(
         entry.target_node: ([], [])
         for entry in normalized_profile.mappings
     }
+    if opts.key_unmapped_reference_nodes:
+        for target_node in target_nodes:
+            orientation_tracks.setdefault(target_node.name, ([], []))
     previous_quat_by_target: Dict[str, tuple[float, float, float, float]] = {}
     stripped_root_translation = False
     root_warning_seen = False
-
-    target_nodes = target_model.all_nodes()
 
     for source_pose in converted_source_poses:
         target_fk_world_rotation: Dict[str, tuple[float, float, float, float]] = {}
@@ -356,7 +358,7 @@ def _desired_target_world_rotation(
                     calibrated_frame=calibrated_frame,
                     target_reference_rotation=target_reference_pair.target_global_transforms[target_node_name].rotation,
                 )
-    elif mode == "segment_direction":
+    elif mode in {"segment_direction", "exact_segment_correction"}:
         segment_rotation = _segment_direction_world_rotation(
             source_pose=source_pose,
             source_reference_pose=source_reference_pose,
@@ -401,14 +403,8 @@ def _mapped_segments(profile: RetargetProfile) -> List[_MappedSegment]:
 
     pairs = (
         ("clavicle", "upperarm"),
-        ("upperarm", "forearm"),
-        ("forearm", "hand"),
-        ("thigh", "calf"),
-        ("calf", "foot"),
-        ("foot", "toe"),
-        ("spine", "chest"),
+        *SEGMENT_ROLE_PAIRS,
         ("chest", "neck"),
-        ("neck", "head"),
     )
     segments: List[_MappedSegment] = []
     for parent_role, child_role in pairs:
@@ -643,7 +639,7 @@ def _audit_segment_pose_errors(
     mapped_segments: List[_MappedSegment],
     mode: str,
 ) -> List[SegmentPoseError]:
-    if mode not in {"segment_direction", "calibrated_frame_delta"} or not mapped_segments:
+    if mode not in {"segment_direction", "calibrated_frame_delta", "exact_segment_correction"} or not mapped_segments:
         return []
     errors: List[SegmentPoseError] = []
     for source_pose in source_poses:
