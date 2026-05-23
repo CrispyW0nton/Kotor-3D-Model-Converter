@@ -41,6 +41,9 @@ class LayoutApplier(QtCore.QObject):
             self._apply_density_metrics(layout, window)
             self._apply_toolbars(layout, window)
             self._notify_layout_aware_widgets(layout, window)
+            sync_top_rows = getattr(window, "_sync_reserved_top_rows", None)
+            if callable(sync_top_rows):
+                sync_top_rows()
         finally:
             window.setUpdatesEnabled(True)
             window.update()
@@ -111,17 +114,7 @@ class LayoutApplier(QtCore.QObject):
                 apply_layout(layout)
 
     def _apply_splitters(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
-        main_splitter = getattr(window, "main_splitter", None)
         vertical_splitter = getattr(window, "vertical_splitter", None)
-        if main_splitter is not None:
-            left = layout.panel("library").preferred_width
-            right = layout.panel("properties").preferred_width
-            mesh_tools = layout.panel("meshTools")
-            if mesh_tools.visible:
-                right = max(right, mesh_tools.preferred_width)
-            center = max(layout.viewport.preferred_width, layout.viewport.min_width)
-            main_splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", layout.spacing_value("splitter.handleWidth", 6)))
-            main_splitter.setSizes([left, center, right])
         if vertical_splitter is not None:
             bottom = layout.panel("outputLog")
             vertical_splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", layout.spacing_value("splitter.handleWidth", 6)))
@@ -129,8 +122,9 @@ class LayoutApplier(QtCore.QObject):
 
     def _apply_panels(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
         pairs = {
-            "library": getattr(window, "left_tabs", None),
-            "properties": getattr(window, "right_tabs", None),
+            "contentBrowser": getattr(window, "content_browser_dock", None),
+            "scene": getattr(window, "scene_dock", None),
+            "properties": getattr(window, "properties_dock", None),
             "outputLog": getattr(window, "log_panel", None),
         }
         for panel_id, widget in pairs.items():
@@ -144,16 +138,81 @@ class LayoutApplier(QtCore.QObject):
                 widget.setMaximumWidth(max(panel.preferred_width + 220, panel.min_width))
             if panel.min_height:
                 widget.setMinimumHeight(panel.min_height)
+            if isinstance(widget, QtWidgets.QDockWidget) and panel.preferred_width:
+                widget.resize(panel.preferred_width, max(panel.preferred_height, panel.min_height))
         viewport = getattr(window, "viewport", None)
         if viewport is not None:
             viewport.setMinimumWidth(layout.viewport.min_width)
 
         docks = getattr(window, "_detachable_panels", {})
-        mesh_dock = docks.get("mesh_tools") if isinstance(docks, dict) else None
-        mesh_panel = layout.panel("meshTools")
-        if mesh_dock is not None:
-            mesh_dock.setVisible(mesh_panel.visible)
-            mesh_dock.resize(mesh_panel.preferred_width, max(520, mesh_panel.preferred_height))
+        if isinstance(docks, dict):
+            for key, panel_id in (
+                ("animations", "animationLibrary"),
+                ("mesh_tools", "meshTools"),
+            ):
+                dock = docks.get(key)
+                panel = layout.panel(panel_id)
+                if dock is not None:
+                    if key == "mesh_tools":
+                        dock.setVisible(panel.visible)
+                    dock.resize(panel.preferred_width, max(520, panel.preferred_height))
+        self._apply_dock_groups(layout, window)
+
+    def _apply_dock_groups(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
+        groups = getattr(layout, "dock_groups", [])
+        docks = getattr(window, "_detachable_panels", {})
+        if not groups or not isinstance(docks, dict):
+            return
+        area_map = {
+            "left": QtCore.Qt.LeftDockWidgetArea,
+            "right": QtCore.Qt.RightDockWidgetArea,
+            "bottom": QtCore.Qt.BottomDockWidgetArea,
+            "top": QtCore.Qt.TopDockWidgetArea,
+        }
+        split_map = {
+            "vertical": QtCore.Qt.Vertical,
+            "horizontal": QtCore.Qt.Horizontal,
+        }
+        for group in groups:
+            dock_pairs = [(key, docks[key]) for key in group.docks if key in docks and docks.get(key) is not None]
+            if not dock_pairs:
+                continue
+            group_docks = [dock for _key, dock in dock_pairs]
+            area = area_map.get(group.area, QtCore.Qt.LeftDockWidgetArea)
+            anchor = group_docks[0]
+            for key, dock in dock_pairs:
+                return_to_main = getattr(window, "_return_detachable_panel_to_main_window", None)
+                if callable(return_to_main):
+                    try:
+                        host = getattr(window, "_host_for_dock_key", lambda _key: None)(key)
+                        if dock.isFloating() or host is not None:
+                            return_to_main(key)
+                    except RuntimeError:
+                        continue
+                try:
+                    window.addDockWidget(area, dock)
+                    dock.setVisible(bool(group.visible))
+                except RuntimeError:
+                    continue
+            if group.mode == "tabbed":
+                for dock in group_docks[1:]:
+                    try:
+                        window.tabifyDockWidget(anchor, dock)
+                    except RuntimeError:
+                        continue
+                active_key = group.active if group.active in group.docks else group.docks[0]
+                active = docks.get(active_key)
+                if active is not None:
+                    active.raise_()
+            elif group.mode in split_map:
+                orientation = split_map[group.mode]
+                previous = anchor
+                for dock in group_docks[1:]:
+                    try:
+                        window.splitDockWidget(previous, dock, orientation)
+                        previous = dock
+                    except RuntimeError:
+                        continue
 
     def _apply_density_metrics(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
         margin = layout.spacing_value("margin", 4)

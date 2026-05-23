@@ -13,9 +13,28 @@ Built-in themes are:
 - `light.xml`: modern light UI.
 - `classic.xml`: traditional light DCC/tool UI.
 
+The Default/native theme uses neutral native-style colour tokens, not Matrix
+fallback colours. `ThemeLoader` also repairs stale Matrix fallback values when
+older user overrides of a native theme are loaded.
+
 Themes define colours, fonts, icon provider defaults, Matrix bar style, and visual tokens.
 Layouts define window size, panel widths, splitter proportions, toolbar
-visibility, row heights, control density, and button display modes.
+visibility, row heights, control density, button display modes, and optional
+`<dockLayout>` groups that tab or split dock widgets into workspace profiles.
+The unified Content Browser uses the stable `contentBrowser` panel layout id.
+The Scene outliner uses `scene`, and Properties uses `properties`; all three
+are top-level dock widgets so layouts can size them without squeezing the
+viewport through permanent side tabs.
+Visual profile layouts are packaged as normal layout XML files:
+`profile_animation`, `profile_mesh_editing`, `profile_lighting`,
+`profile_cinegraphics`, and `profile_clean`. They are available from the
+toolbar Visual Profile dropdown and the Settings layout selector. Dock group
+entries use the runtime dock keys `content_browser`, `scene`, `properties`,
+`animations`, `nodes`, `lighting`, `cameras`, `module_meshes`, `mesh_tools`,
+`adjust_pivot`, `2das`, and `resources`.
+The older `library` and `animationLibrary` ids remain in packaged layouts for
+user layout compatibility, but new Library and Animation Library entry points
+route through `contentBrowser`.
 Custom themes should define the `spinbox.*` colour tokens for numeric
 up/down controls: `spinbox.buttonBackground`, `spinbox.buttonHover`,
 `spinbox.buttonPressed`, `spinbox.buttonBorder`, and `spinbox.arrow`.
@@ -27,6 +46,18 @@ The Theme Editor owns Matrix bar appearance. Its Matrix Bar tab writes
 `matrixBar.cropX`, `matrixBar.cropY`, `matrixBar.cropW`, and
 `matrixBar.cropH` for selecting the image region. Matrix bar colours remain
 editable as `matrixBar.*` colour tokens.
+The Theme Editor also owns startup splash branding. Its Splash tab writes
+`splash.logoPath`, `splash.productText`, `splash.subtitleText`, and
+`splash.copyrightText` into `<styles>`, plus `splash.surfaceStyle` for the
+surface finish (`matte`, `bevelled`, `glossy`, or `flat`), and writes
+`splash.width`, `splash.height`, and `splash.logoSize` into `<metrics>`. The
+splash itself uses `splash.background`, `splash.panel`, `splash.brandBackground`,
+`splash.progressBackground`, `splash.border`, `splash.text`,
+`splash.secondaryText`, `splash.accent`, `splash.progressTrack`, and
+`splash.progressFill` colour tokens, which the Splash tab exposes next to the
+branding controls. Native/default themes are previewed against the live
+`QApplication` palette, so the splash matches the actual platform greys even
+when the XML file contains portable fallback colours.
 
 User themes and layouts can be placed in the platform-specific GhostRigger
 config directory:
@@ -54,6 +85,10 @@ Safe editing tips:
 - Use **Apply Theme** or **Apply Layout** for full-application changes. Theme
   Editor previews are local until explicitly applied.
 - Run `python tools/validate_themes.py` after editing packaged defaults.
+
+Viewport command bars use `viewportToolbar.background` and
+`viewportToolbar.border` so the Theme Editor can style their framed surface
+separately from general application toolbars.
 
 ## Module Editor
 

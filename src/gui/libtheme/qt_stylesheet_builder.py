@@ -349,9 +349,8 @@ class QtStylesheetBuilder:
             min-height: {m('statusbar.height', 24)}px;
         }}
         #ViewportToolbar, #ViewportToolbarBand {{
-            background: {c('toolbar.background')};
-            border: 0;
-            border-bottom: 1px solid {c('toolbar.border')};
+            background: {c('viewportToolbar.background')};
+            border: 1px solid {c('viewportToolbar.border')};
         }}
         QLabel#ViewportCanvas {{
             background: {c('viewport.background')};

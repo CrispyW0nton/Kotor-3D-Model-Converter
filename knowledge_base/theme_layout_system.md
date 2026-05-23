@@ -21,7 +21,11 @@ the manager records a diagnostic warning.
 Packaged theme ids are `default`, `matrix`, `droid`, `dark`, `light`, and
 `classic`. `default` sets `application.native=true`, which tells the theme
 engine to apply no generated GhostRigger stylesheet and restore the Qt platform
-palette. `droid` captures the dark graphite startup-console look: grey panels
+palette. Native themes still carry neutral colour tokens for editor previews
+and custom-painted startup UI; when an older native user override contains
+saved Matrix fallback values, `ThemeLoader` replaces those stale values with
+the neutral native palette before the Theme Editor displays them. `droid`
+captures the dark graphite startup-console look: grey panels
 and controls, bright Matrix-green accents, high-contrast text, and the default
 Aurebesh Matrix bar font.
 
@@ -54,7 +58,8 @@ painted widgets should expose `apply_ghost_theme(theme)` and read tokens with
 ## Layout XML
 
 Layouts define structure only: window size, panel widths/heights, splitter
-proportions, toolbar visibility, toolbar button mode, and viewport density.
+proportions, toolbar visibility, toolbar button mode, viewport density, and
+optional dock group topology.
 
 Required root attributes:
 
@@ -62,9 +67,33 @@ Required root attributes:
 <layout id="default" name="Default" version="1">
 ```
 
-Known panel ids include `library`, `modules`, `properties`,
-`animationLibrary`, `meshTools`, `outputLog`, and `pythonTerminal`. Unknown ids
+Known panel ids include `contentBrowser`, `scene`, `library`, `modules`,
+`properties`, `animationLibrary`, `meshTools`, `nodes`, `lighting`, `cameras`,
+`moduleMeshes`, `adjustPivot`, `2das`, `resources`, `outputLog`, and
+`pythonTerminal`. The `contentBrowser`, `scene`, and `properties` ids control
+top-level dock widgets around the central viewport; the older `library` and
+`animationLibrary` ids remain valid for user layout compatibility. Unknown ids
 warn but do not crash, so future panels can be added safely.
+
+Dock topology is optional and lives under `<dockLayout>`. Groups can be
+`tabbed`, `vertical`, or `horizontal`, and use runtime dock keys:
+`content_browser`, `scene`, `properties`, `animations`, `nodes`, `lighting`,
+`cameras`, `module_meshes`, `mesh_tools`, `adjust_pivot`, `2das`, and
+`resources`.
+
+```xml
+<dockLayout>
+    <group id="lightingCameras" area="right" mode="tabbed" active="lighting">
+        <dock id="lighting"/>
+        <dock id="cameras"/>
+    </group>
+</dockLayout>
+```
+
+Packaged visual profile layouts are normal layout XML files:
+`profile_animation`, `profile_mesh_editing`, `profile_lighting`,
+`profile_cinegraphics`, and `profile_clean`. They appear in the toolbar Visual
+Profile dropdown and in Settings -> Theme / Layout.
 
 Supported button modes:
 
@@ -102,6 +131,9 @@ Open **Settings -> Theme/Layout -> Theme Editor...**. The editor separates:
 - Theme values: colours, fonts, icon provider/defaults.
 - Matrix Bar values: mode, optional glyph alphabet, optional font override,
   optional PNG/GIF path, and crop rectangle.
+- Splash values: optional logo path, product title, subtitle, copyright text,
+  target splash size, logo size, and a live preview of the themed loading
+  panel used before the main window opens.
 - Layout values: sizes, density, panel widths, row heights, button mode.
 
 Changing a colour, font, metric, or button mode updates only the editor preview
@@ -121,7 +153,8 @@ Core colour tokens include:
 - `panel.background`, `panel.backgroundAlt`, `panel.border`,
   `panel.headerBackground`, `panel.headerText`
 - `groupbox.border`, `groupbox.title`
-- `toolbar.background`, `toolbar.border`
+- `toolbar.background`, `toolbar.border`, `viewportToolbar.background`,
+  `viewportToolbar.border`
 - `button.background`, `button.text`, `button.hover`, `button.pressed`,
   `button.checked`, `button.checkedText`, `button.disabledBackground`,
   `button.disabledText`
@@ -164,7 +197,20 @@ Style tokens include `application.native`, `tab.mode`, `matrixBar.style`,
 `matrixBar.glyphs`, `matrixBar.fontFamily`, `matrixBar.imagePath`,
 `matrixBar.cropX`, `matrixBar.cropY`, `matrixBar.cropW`, and
 `matrixBar.cropH`. Supported `matrixBar.style` values are `matrix`, `png`,
-`gif`, and `disabled`; crop values are percentages.
+`gif`, and `disabled`; crop values are percentages. Startup splash branding
+uses `splash.logoPath`, `splash.productText`, `splash.subtitleText`, and
+`splash.copyrightText`. `splash.surfaceStyle` selects the splash surface finish
+and accepts `matte`, `bevelled`, `glossy`, or `flat`. Splash sizing uses the
+metric tokens `splash.width`, `splash.height`, and `splash.logoSize`.
+Splash-specific colours use
+`splash.background`, `splash.panel`, `splash.brandBackground`,
+`splash.progressBackground`, `splash.border`, `splash.text`,
+`splash.secondaryText`, `splash.accent`, `splash.progressTrack`, and
+`splash.progressFill`; if a non-native theme omits them, the loader derives
+them from the theme's normal window, panel, text, accent, input, and success
+tokens. Native/default previews and the startup splash also layer these tokens
+over the live `QApplication` palette so native platform greys are represented
+instead of stale XML fallback colours.
 
 ## Fixing Widgets
 

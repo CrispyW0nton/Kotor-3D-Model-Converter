@@ -29,6 +29,16 @@ class PanelLayout:
 
 
 @dataclass(slots=True)
+class DockGroupLayout:
+    id: str
+    area: str = "left"
+    mode: str = "tabbed"
+    visible: bool = True
+    active: str = ""
+    docks: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class ViewportLayout:
     min_width: int = 500
     preferred_width: int = 900
@@ -47,6 +57,7 @@ class LayoutDefinition:
     maximized: bool = False
     toolbars: dict[str, ToolbarLayout] = field(default_factory=dict)
     panels: dict[str, PanelLayout] = field(default_factory=dict)
+    dock_groups: list[DockGroupLayout] = field(default_factory=list)
     viewport: ViewportLayout = field(default_factory=ViewportLayout)
     spacing: dict[str, int] = field(default_factory=dict)
     source_path: str = ""

@@ -42,6 +42,7 @@ import importlib
 import os
 import pathlib
 import sys
+from types import ModuleType
 
 import pytest
 
@@ -404,3 +405,76 @@ def test_viewport_core_imports_without_tkinter(monkeypatch):
             sys.modules.pop(mod_name, None)
     sys.modules.pop("src.gui.rendering.viewport_core", None)
     importlib.import_module("src.gui.qt_lib.rendering.viewport_core")
+
+
+def test_fbx_sdk_loader_reports_missing_without_import_crash(monkeypatch):
+    from src.io.fbx import fbx_sdk_loader
+
+    monkeypatch.setattr(fbx_sdk_loader, "_CACHE", None)
+
+    def fake_import(name: str):
+        return None, f"missing {name}"
+
+    monkeypatch.setattr(fbx_sdk_loader, "_import_optional_module", fake_import)
+
+    modules = fbx_sdk_loader.get_fbx_modules(refresh=True)
+
+    assert modules.fbx is None
+    assert modules.FbxCommon is None
+    assert not fbx_sdk_loader.is_fbx_sdk_available()
+    status = fbx_sdk_loader.get_fbx_sdk_status()
+    assert "fbx module: missing" in status
+    assert "Autodesk FBX Python SDK is not installed" in status
+
+
+def test_fbx_sdk_loader_accepts_fbx_without_fbxcommon(monkeypatch):
+    from src.io.fbx import fbx_sdk_loader
+
+    monkeypatch.setattr(fbx_sdk_loader, "_CACHE", None)
+    fake_fbx = ModuleType("fbx")
+
+    def fake_import(name: str):
+        if name == "fbx":
+            return fake_fbx, ""
+        return None, "missing FbxCommon"
+
+    monkeypatch.setattr(fbx_sdk_loader, "_import_optional_module", fake_import)
+
+    modules = fbx_sdk_loader.get_fbx_modules(refresh=True)
+
+    assert modules.available
+    assert modules.fbx is fake_fbx
+    assert modules.FbxCommon is None
+
+
+def test_main_window_routes_fbx_menu_to_optional_sdk_bridge():
+    text = (_REPO_ROOT / "src/gui/windows/qt_main_window.py").read_text(encoding="utf-8")
+
+    assert "def _auto_detect_fbx_import_backend" in text
+    assert "def _choose_fbx_import_backend" in text
+    assert '"Use Auto: {labels[detected_backend]}"' in text
+    assert "Auto-detected FBX import backend" in text
+    assert '"Autodesk FBX SDK"' in text
+    assert '"Blender FBX"' in text
+    assert "from src.io.fbx.fbx_importer import FbxSdkUnavailableError, import_fbx" in text
+    assert "from src.converters.mesh_converter import FBXImporter" in text
+    assert "trying Blender FBX fallback" not in text
+    assert "from src.io.fbx.fbx_exporter import FbxSdkUnavailableError, export_fbx" in text
+    assert "self.export_selected_fbx_action" in text
+    assert "self.fbx_sdk_status_action" in text
+    assert "self.fbx_sdk_setup_action" in text
+    assert "Tools > Setup" not in text  # menu is built with QMenu objects, not hard-coded help text
+    assert "_show_missing_fbx_sdk_dialog" in text
+
+
+def test_fbx_setup_assistant_files_do_not_vendor_autodesk_sdk():
+    gitignore = (_REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+    requirements = (_REPO_ROOT / "requirements.txt").read_text(encoding="utf-8")
+    dialog_source = (_REPO_ROOT / "src/gui/dialogs/fbx_sdk_setup_dialog.py").read_text(encoding="utf-8")
+
+    assert "/external/AutodeskFBX/" in gitignore
+    assert "/FBXSDK/" in gitignore
+    assert "Autodesk FBX Python SDK / bindings are external dependencies" in requirements
+    assert "fbx==" not in requirements
+    assert "pip install fbx" not in (_REPO_ROOT / "docs/FBX_SDK_SETUP.md").read_text(encoding="utf-8")
+    assert "Open Autodesk FBX SDK Download Page" in dialog_source

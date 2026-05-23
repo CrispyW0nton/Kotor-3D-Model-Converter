@@ -13,6 +13,13 @@ venv/
 .venv/
 env/
 
+# Autodesk FBX SDK is an external optional dependency. Do not commit SDK files.
+/external/AutodeskFBX/
+/third_party/AutodeskFBX/
+/sdk/AutodeskFBX/
+/FBXSDK/
+/fbx_sdk_local/
+
 # ── Jupyter / IDE ─────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
 .vscode/
@@ -39,6 +46,7 @@ game_data/
 !/tests/__init__.py
 !/tests/conftest.py
 !/tests/test_core_contracts.py
+!/tests/test_content_browser_panel.py
 !/tests/test_regression.py
 !/tests/test_mcp_full_scan.py
 !/tests/test_mcp_resource_exposure.py
@@ -116,6 +124,7 @@ d*_validation*/
 proof_*/
 *_report.txt
 *_diagnostic*.py
+!src/io/fbx/fbx_diagnostics.py
 
 # ── Reproducible audit dumps (regenerate via scripts/dump_*.py) ───────────────
 diagnostics/
@@ -194,6 +203,8 @@ Thumbs.db
 # Keep PNGs inside assets folder
 !assets/**/*.png
 !src/gui/icons/*.png
+!src/gui/icons/branded_controls/*.png
+!src/gui/icons/gpu_branding/*.png
 !tests/golden/screens/*.png
 
 # ── Spreadsheets / audit scripts (inessential) ──────────────────────────────

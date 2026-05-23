@@ -8,7 +8,7 @@ from src.gui.libtheme.collapsible_group import CollapsibleGroupBox
 from src.gui.libtheme.layout_applier import LayoutApplier, button_mode_to_toolbutton_style
 from src.gui.libtheme.layout_model import ToolbarLayout
 from src.gui.libtheme.qt_stylesheet_builder import QtStylesheetBuilder
-from src.gui.libtheme.style_tokens import FALLBACK_COLORS, FALLBACK_METRICS, VALID_BUTTON_MODES
+from src.gui.libtheme.style_tokens import FALLBACK_COLORS, FALLBACK_METRICS, FALLBACK_STYLES, LEGACY_MATRIX_COLORS, VALID_BUTTON_MODES
 from src.gui.libtheme.theme_applier import ThemeApplier
 from src.gui.libtheme.theme_editor_window import ThemeEditorWindow
 from src.gui.libtheme.theme_loader import ThemeLoader
@@ -32,6 +32,9 @@ def test_packaged_themes_load_and_validate() -> None:
     assert themes["matrix"].name == "Matrix"
     assert themes["matrix"].color("accent.primary") == "#00FF7A"
     assert themes["matrix"].legacy_colors()["accent"] == "#00FF7A"
+    assert themes["default"].color("splash.accent") != "#00FF7A"
+    assert themes["default"].color("splash.background") != themes["matrix"].color("splash.background")
+    assert not ({value.upper() for value in themes["default"].colors.values()} & {value.upper() for value in LEGACY_MATRIX_COLORS.values()})
     assert themes["droid"].name == "Droid"
     assert themes["droid"].color("button.background") == "#4A4A4A"
     assert themes["droid"].font("matrix").family == "Aurebesh AF"
@@ -41,9 +44,22 @@ def test_packaged_layouts_load_and_affect_metrics() -> None:
     loader = LayoutLoader()
     layouts = loader.load_dir(ROOT / "config" / "themes" / "layouts")
 
-    assert {"default", "compact", "wide", "cinematic"}.issubset(layouts)
+    assert {
+        "default",
+        "compact",
+        "wide",
+        "cinematic",
+        "profile_animation",
+        "profile_mesh_editing",
+        "profile_lighting",
+        "profile_cinegraphics",
+        "profile_clean",
+    }.issubset(layouts)
     assert layouts["compact"].toolbar("main").button_mode == "iconOnly"
     assert layouts["wide"].viewport.preferred_width > layouts["compact"].viewport.preferred_width
+    assert layouts["default"].dock_groups
+    assert layouts["profile_lighting"].dock_groups[1].docks == ["lighting", "cameras", "properties"]
+    assert layouts["profile_clean"].panel("contentBrowser").visible is False
 
 
 def test_stylesheet_builds_from_matrix_theme() -> None:
@@ -96,6 +112,68 @@ def test_required_theme_tokens_resolve_for_all_packaged_themes() -> None:
             assert stylesheet == ""
         else:
             assert "QPushButton:disabled" in stylesheet
+            assert "viewportToolbar.background" not in stylesheet
+            assert theme.color("viewportToolbar.border") in stylesheet
+
+
+def test_native_theme_normalizes_stale_matrix_splash_fallbacks(tmp_path: Path) -> None:
+    theme_path = tmp_path / "default.xml"
+    theme_path.write_text(
+        """<theme id="default" name="Default" version="1">
+  <metadata><mode>native</mode></metadata>
+  <styles><style name="application.native" value="true"/></styles>
+  <colors>
+    <color name="splash.background" value="#0B0F0D"/>
+    <color name="splash.accent" value="#00FF7A"/>
+    <color name="splash.progressFill" value="#00FF7A"/>
+  </colors>
+</theme>
+""",
+        encoding="utf-8",
+    )
+
+    theme = ThemeLoader().load_file(theme_path)
+
+    assert theme is not None
+    assert theme.is_native()
+    assert theme.color("splash.background") == "#F3F3F3"
+    assert theme.color("splash.accent") == "#1F6FEB"
+    assert theme.color("splash.progressFill") == "#1B8F45"
+
+
+def test_native_theme_normalizes_stale_matrix_palette_fallbacks(tmp_path: Path) -> None:
+    theme_path = tmp_path / "default.xml"
+    theme_path.write_text(
+        """<theme id="default" name="Default" version="1">
+  <metadata><mode>native</mode></metadata>
+  <styles><style name="application.native" value="true"/></styles>
+  <colors>
+    <color name="window.background" value="#0B0F0D"/>
+    <color name="panel.background" value="#111916"/>
+    <color name="button.checked" value="#00FF7A"/>
+    <color name="button.pressed" value="#1B2A22"/>
+    <color name="accent.primary" value="#00FF7A"/>
+    <color name="viewport.gridMajor" value="#1B2A22"/>
+    <color name="matrixBar.text" value="#00FF7A"/>
+    <color name="success" value="#00FF7A"/>
+  </colors>
+</theme>
+""",
+        encoding="utf-8",
+    )
+
+    theme = ThemeLoader().load_file(theme_path)
+
+    assert theme is not None
+    assert theme.is_native()
+    assert theme.color("window.background") == "#F3F3F3"
+    assert theme.color("panel.background") == "#FFFFFF"
+    assert theme.color("button.checked") == "#1F6FEB"
+    assert theme.color("button.pressed") == "#D9E2EC"
+    assert theme.color("accent.primary") == "#1F6FEB"
+    assert theme.color("viewport.gridMajor") == "#D5DAE1"
+    assert theme.color("matrixBar.text") == "#1F4F8F"
+    assert theme.color("success") == "#1B8F45"
 
 
 def test_required_layout_metrics_resolve_for_all_packaged_layouts() -> None:
@@ -229,6 +307,7 @@ def test_matrix_bar_controls_live_in_theme_editor_not_settings(tmp_path: Path) -
             if "Colours" in [tabs.tabText(index) for index in range(tabs.count())]
         )
         assert "Matrix Bar" in [editor_tabs.tabText(index) for index in range(editor_tabs.count())]
+        assert "Splash" in [editor_tabs.tabText(index) for index in range(editor_tabs.count())]
         assert editor.matrix_bar_style.currentData() == "gif"
         assert editor.matrix_bar_glyphs.text() == "ABC"
 
@@ -259,6 +338,102 @@ def test_matrix_bar_controls_live_in_theme_editor_not_settings(tmp_path: Path) -
         settings_dialog.deleteLater()
 
 
+def test_theme_editor_splash_customization_updates_preview_and_theme() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    theme_manager = ThemeManager(ROOT, {"theme_layout": {"selected_theme": "matrix"}})
+    layout_manager = LayoutManager(ROOT, {"theme_layout": {"selected_layout": "default"}})
+    editor = ThemeEditorWindow(theme_manager, layout_manager)
+    try:
+        assert editor.splash_product.text() == FALLBACK_STYLES["splash.productText"]
+        editor.splash_product.setText("GhostRigger Premium")
+        editor._set_splash_style("splash.productText", "GhostRigger Premium")
+        editor.splash_subtitle.setText("Theme linked startup")
+        editor._set_splash_style("splash.subtitleText", "Theme linked startup")
+        editor.splash_copyright.setPlainText("Custom copyright")
+        editor._set_splash_style("splash.copyrightText", "Custom copyright")
+        editor._set_splash_metric("splash.logoSize", 96)
+        editor._set_splash_color("splash.accent", "#8844CC")
+        editor._set_splash_color("splash.progressFill", "#228833")
+        editor._set_splash_style("splash.surfaceStyle", "glossy")
+
+        assert editor._theme.styles["splash.productText"] == "GhostRigger Premium"
+        assert editor._theme.styles["splash.subtitleText"] == "Theme linked startup"
+        assert editor._theme.styles["splash.copyrightText"] == "Custom copyright"
+        assert editor._theme.styles["splash.surfaceStyle"] == "glossy"
+        assert editor._theme.metrics["splash.logoSize"] == 96
+        assert editor._theme.colors["splash.accent"] == "#8844CC"
+        assert editor._theme.colors["splash.progressFill"] == "#228833"
+        assert editor.splash_color_edits["splash.accent"].text() == "#8844CC"
+        assert editor.splash_preview.product_label.text() == "GhostRigger Premium"
+        assert editor.splash_preview.subtitle_label.text() == "Theme linked startup"
+        assert "Custom copyright" in editor.splash_preview.copyright_label.text()
+        assert "#8844CC" in editor.splash_preview.styleSheet()
+        assert "#228833" in editor.splash_preview.styleSheet()
+        assert "qlineargradient" in editor.splash_preview.styleSheet()
+    finally:
+        editor.deleteLater()
+        app.processEvents()
+
+
+def test_theme_editor_native_splash_uses_live_app_palette() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtGui, QtWidgets
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    old_palette = QtGui.QPalette(app.palette())
+    native_palette = QtGui.QPalette(old_palette)
+    native_palette.setColor(QtGui.QPalette.ColorRole.Window, QtGui.QColor("#1E1E1E"))
+    native_palette.setColor(QtGui.QPalette.ColorRole.Base, QtGui.QColor("#2D2D2D"))
+    native_palette.setColor(QtGui.QPalette.ColorRole.Button, QtGui.QColor("#3C3C3C"))
+    native_palette.setColor(QtGui.QPalette.ColorRole.Mid, QtGui.QColor("#282828"))
+    native_palette.setColor(QtGui.QPalette.ColorRole.Highlight, QtGui.QColor("#E81123"))
+    native_palette.setColor(QtGui.QPalette.ColorRole.WindowText, QtGui.QColor("#FFFFFF"))
+    native_palette.setColor(QtGui.QPalette.ColorRole.Text, QtGui.QColor("#FFFFFF"))
+    app.setPalette(native_palette)
+
+    theme_manager = ThemeManager(ROOT, {"theme_layout": {"selected_theme": "default"}})
+    layout_manager = LayoutManager(ROOT, {"theme_layout": {"selected_layout": "default"}})
+    editor = ThemeEditorWindow(theme_manager, layout_manager)
+    try:
+        assert editor._theme.is_native()
+        assert editor._theme.color("window.background") == "#1E1E1E"
+        assert editor._theme.color("splash.background") == "#1E1E1E"
+        assert editor._theme.color("splash.panel") == "#3C3C3C"
+        assert editor._theme.color("splash.accent") == "#E81123"
+        assert editor.splash_color_edits["splash.background"].text() == "#1E1E1E"
+        assert "#1E1E1E" in editor.splash_preview.styleSheet()
+    finally:
+        editor.deleteLater()
+        app.setPalette(old_palette)
+        app.processEvents()
+
+
+def test_theme_editor_programmatic_close_skips_dirty_prompt() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    theme_manager = ThemeManager(ROOT, {"theme_layout": {"selected_theme": "matrix"}})
+    layout_manager = LayoutManager(ROOT, {"theme_layout": {"selected_layout": "default"}})
+    editor = ThemeEditorWindow(theme_manager, layout_manager)
+    try:
+        editor._mark_dirty()
+        editor.show()
+        app.processEvents()
+        editor.close()
+        app.processEvents()
+        assert not editor.isVisible()
+    finally:
+        editor.deleteLater()
+        app.processEvents()
+
+
 def test_matrix_bar_media_is_header_only_and_crop_aware() -> None:
     import inspect
 
@@ -272,6 +447,21 @@ def test_matrix_bar_media_is_header_only_and_crop_aware() -> None:
     assert "command_bar" not in apply_source
     assert "command_bar" not in native_source
     assert "matrixBar.cropX" in inspect.getsource(QtGhostRiggerMainWindow._matrix_bar_settings)
+
+
+def test_main_window_reserves_command_bar_overflow_height() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    sync_source = inspect.getsource(QtGhostRiggerMainWindow._sync_command_bar_scroll_height)
+    reserved_source = inspect.getsource(QtGhostRiggerMainWindow._sync_reserved_top_rows)
+    apply_source = inspect.getsource(LayoutApplier.apply_layout)
+
+    assert "command_bar_scroll" in sync_source
+    assert "PM_ScrollBarExtent" in sync_source
+    assert "_sync_command_bar_scroll_height(height)" in reserved_source
+    assert "_sync_reserved_top_rows" in apply_source
 
 
 def test_viewport_chrome_and_renderer_use_theme_tokens() -> None:

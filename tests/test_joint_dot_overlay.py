@@ -205,6 +205,98 @@ def test_t401_setter_defaults():
         w.deleteLater()
 
 
+def test_viewport_toolbar_primary_controls_are_icon_only():
+    """Bulky viewport toggles stay compact while preserving tooltips."""
+    app, w = _make_widget()
+    try:
+        icon_buttons = [
+            w.solid_button,
+            w.wire_button,
+            w.solid_wire_button,
+            w.bones_button,
+            w.texture_button,
+            w.grid_button,
+            w.renderer_button,
+            w.joint_dot_button,
+            w.heatmap_button,
+            w.render_realistic_button,
+            w.render_shaded_button,
+            w.render_flat_button,
+            w.gimbal_button,
+            w.gimbal_mode_button,
+            w.measure_button,
+            w.uv_button,
+            w.lock_camera_button,
+        ]
+        for button in icon_buttons:
+            assert button.text() == ""
+            assert not button.icon().isNull()
+            assert button.toolTip()
+            assert button.property("_gr_ignore_layout_button_mode") is True
+        layout = w.viewport_toolbar.layout()
+        assert layout.itemAt(0).widget() is w.renderer_button
+        assert w.renderer_button.iconSize().width() > w.wire_button.iconSize().width()
+        assert w.renderer_button.objectName() == "ViewportGpuButton"
+        assert not w.walkmesh_button.isVisible()
+        assert not hasattr(w, "shade_combo")
+        assert not hasattr(w, "render_mode_combo")
+        assert not hasattr(w, "camera_view_combo")
+    finally:
+        w.deleteLater()
+
+
+def test_viewport_toolbar_shade_buttons_select_exact_modes():
+    app, w = _make_widget()
+    try:
+        w.set_shade_mode("solid")
+        assert w._renderer.show_solid is True
+        assert w._renderer.show_wireframe is False
+        assert w.solid_button.isChecked() is True
+
+        w.toggle_wireframe(True)
+        assert w._renderer.show_solid is False
+        assert w._renderer.show_wireframe is True
+        assert w.wire_button.isChecked() is True
+
+        w.set_shade_mode("both")
+        assert w._renderer.show_solid is True
+        assert w._renderer.show_wireframe is True
+        assert w.solid_wire_button.isChecked() is True
+    finally:
+        w.deleteLater()
+
+
+def test_viewport_toolbar_render_buttons_and_navigation_are_branded():
+    app, w = _make_widget()
+    try:
+        w.set_render_mode("flat")
+        assert w._renderer.render_mode == "flat"
+        assert w.render_flat_button.isChecked() is True
+        assert w.render_realistic_button.isChecked() is False
+
+        assert not w.navigation_button.icon().isNull()
+        menu = w.navigation_button.menu()
+        assert menu is not None
+        actions = menu.actions()
+        assert [action.text() for action in actions] == ["3ds Max", "Blender", "Maya"]
+        assert all(not action.icon().isNull() for action in actions)
+    finally:
+        w.deleteLater()
+
+
+def test_gpu_vendor_icon_uses_packaged_brand_png(monkeypatch):
+    from src.gui.qt_lib.viewports import qt_viewport
+
+    assert (qt_viewport._ICON_DIR / "gpu_branding" / "nvidia.png").exists()
+    assert (qt_viewport._ICON_DIR / "gpu_branding" / "amd.png").exists()
+
+    monkeypatch.setattr(qt_viewport, "_detect_gpu_brand", lambda: "nvidia")
+    assert not qt_viewport._gpu_icon().isNull()
+
+    monkeypatch.setattr(qt_viewport, "_detect_gpu_brand", lambda: "amd")
+    assert not qt_viewport._gpu_icon().isNull()
+
+
 def test_t401_setter_size_clamping():
     """Joint-dot size clamps to the [1, 8] range."""
     app, w = _make_widget()

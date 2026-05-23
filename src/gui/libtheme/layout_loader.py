@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from .layout_model import LayoutDefinition, PanelLayout, ToolbarLayout, ViewportLayout
+from .layout_model import DockGroupLayout, LayoutDefinition, PanelLayout, ToolbarLayout, ViewportLayout
 from .layout_validator import LayoutValidator
 from .style_tokens import VALID_BUTTON_MODES
 
@@ -73,6 +73,27 @@ class LayoutLoader:
                     collapsed=_bool(entry.get("collapsed"), False),
                 )
 
+        dock_groups: list[DockGroupLayout] = []
+        for group in root.findall("./dockLayout/group"):
+            group_id = (group.get("id") or "").strip()
+            if not group_id:
+                continue
+            docks = [
+                (dock.get("id") or "").strip()
+                for dock in group.findall("./dock")
+                if (dock.get("id") or "").strip()
+            ]
+            dock_groups.append(
+                DockGroupLayout(
+                    id=group_id,
+                    area=(group.get("area") or "left").strip(),
+                    mode=(group.get("mode") or "tabbed").strip(),
+                    visible=_bool(group.get("visible"), True),
+                    active=(group.get("active") or "").strip(),
+                    docks=docks,
+                )
+            )
+
         viewport = root.find("viewport")
         viewport_region = root.find("./viewport/region")
         viewport_toolbar = root.find("./viewport/toolbar")
@@ -102,6 +123,7 @@ class LayoutLoader:
             maximized=_bool(main_window.get("maximized") if main_window is not None else None, False),
             toolbars=toolbars,
             panels=panels,
+            dock_groups=dock_groups,
             viewport=viewport_layout,
             spacing=spacing,
             source_path=str(path),

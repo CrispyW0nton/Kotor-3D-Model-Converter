@@ -24,6 +24,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
     ),
     "dialogs": (
         "add_model_to_scene_dialog",
+        "fbx_sdk_setup_dialog",
         "qt_render_frame_dialog",
         "qt_dialogs",
         "qt_export_dialog",
@@ -118,6 +119,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
     ),
     "panels": (
         "qt_animation_panel",
+        "qt_content_browser_panel",
         "adjust_pivot_panel",
         "axis_mode_control",
         "qt_bottom_strip",
