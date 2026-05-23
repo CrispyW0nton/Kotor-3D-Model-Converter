@@ -24,6 +24,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
     ),
     "dialogs": (
         "add_model_to_scene_dialog",
+        "fbx_sdk_setup_dialog",
         "qt_render_frame_dialog",
         "qt_dialogs",
         "qt_export_dialog",

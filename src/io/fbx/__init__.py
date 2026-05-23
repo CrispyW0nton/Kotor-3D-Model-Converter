@@ -6,6 +6,7 @@ require Autodesk's Python FBX bindings to be installed.
 
 from .fbx_sdk_loader import (
     FbxSdkModules,
+    configure_fbx_sdk_paths,
     get_fbx_modules,
     get_fbx_sdk_status,
     is_fbx_sdk_available,
@@ -13,8 +14,8 @@ from .fbx_sdk_loader import (
 
 __all__ = [
     "FbxSdkModules",
+    "configure_fbx_sdk_paths",
     "get_fbx_modules",
     "get_fbx_sdk_status",
     "is_fbx_sdk_available",
 ]
-

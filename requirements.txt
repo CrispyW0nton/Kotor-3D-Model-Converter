@@ -67,9 +67,10 @@ pygltflib>=1.15.0
                                 # macOS:         brew install assimp
 
 # Optional FBX support:
-# Autodesk FBX Python SDK is not installed through standard pip in this project.
-# Install the Autodesk FBX Python SDK / bindings matching your Python version and platform,
-# then ensure the fbx module and FbxCommon.py are visible to this Python environment.
+# Autodesk FBX Python SDK / bindings are external dependencies.
+# GhostRigger does not bundle or redistribute Autodesk SDK binaries.
+# Install the matching Autodesk FBX Python SDK for your Python version/platform,
+# then configure the path inside GhostRigger.
 
 # ── IPC / HTTP server ────────────────────────────────────────────────────────
 flask>=2.3.0

@@ -18,7 +18,7 @@ from .fbx_scene_adapter import (
     quat_xyzw_to_euler_degrees,
     sdk_class,
 )
-from .fbx_sdk_loader import get_fbx_modules, get_fbx_sdk_status
+from .fbx_sdk_loader import configure_fbx_sdk_paths, get_fbx_modules, get_fbx_sdk_status
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +45,7 @@ def export_fbx(scene_or_selection: Any, path: str, options: dict[str, Any] | Non
     """Export a GhostRigger model/scene/selection to FBX using Autodesk SDK."""
     opts = {**DEFAULT_EXPORT_OPTIONS, **(options or {})}
     target = _validate_output_path(path)
+    configure_fbx_sdk_paths(opts.get("fbx_sdk"), refresh=True)
     modules = get_fbx_modules()
     if modules.fbx is None:
         raise FbxSdkUnavailableError(get_fbx_sdk_status())
@@ -249,4 +250,3 @@ def _destroy(obj: Any) -> None:
     destroy = getattr(obj, "Destroy", None)
     if callable(destroy):
         destroy()
-

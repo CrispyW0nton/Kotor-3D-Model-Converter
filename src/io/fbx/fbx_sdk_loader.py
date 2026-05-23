@@ -6,6 +6,9 @@ from dataclasses import dataclass
 import importlib
 import sys
 from types import ModuleType
+from typing import Any
+
+from .fbx_sdk_paths import apply_configured_sdk_paths
 
 
 @dataclass(frozen=True)
@@ -21,6 +24,7 @@ class FbxSdkModules:
 
 
 _CACHE: FbxSdkModules | None = None
+_LAST_SETTINGS_KEY: tuple[tuple[str, str], ...] | None = None
 
 
 def _import_optional_module(name: str) -> tuple[ModuleType | None, str]:
@@ -39,6 +43,17 @@ def get_fbx_modules(refresh: bool = False) -> FbxSdkModules:
     common, common_error = _import_optional_module("FbxCommon")
     _CACHE = FbxSdkModules(fbx=fbx, FbxCommon=common, fbx_error=fbx_error, common_error=common_error)
     return _CACHE
+
+
+def configure_fbx_sdk_paths(settings: dict[str, Any] | None, refresh: bool = True) -> list[str]:
+    """Apply configured local SDK paths and optionally refresh import status."""
+    global _CACHE, _LAST_SETTINGS_KEY
+    added = apply_configured_sdk_paths(settings)
+    key = tuple(sorted((str(k), str(v)) for k, v in (settings or {}).items() if k != "extra_paths"))
+    if refresh or key != _LAST_SETTINGS_KEY:
+        _CACHE = None
+        _LAST_SETTINGS_KEY = key
+    return added
 
 
 def is_fbx_sdk_available() -> bool:
@@ -93,4 +108,3 @@ def _detect_sdk_version(fbx: ModuleType) -> str:
             destroy = getattr(manager, "Destroy", None)
             if callable(destroy):
                 destroy()
-

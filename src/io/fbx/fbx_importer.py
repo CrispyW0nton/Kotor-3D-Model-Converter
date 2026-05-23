@@ -9,7 +9,7 @@ from typing import Any
 from src.core.geometry.model_data import GameVersion, KotorModel, ModelNode, NodeFlags
 
 from .fbx_scene_adapter import FbxImportSummary, euler_degrees_to_quat_xyz, fbx_mesh_to_gr_mesh, sdk_class
-from .fbx_sdk_loader import get_fbx_modules, get_fbx_sdk_status
+from .fbx_sdk_loader import configure_fbx_sdk_paths, get_fbx_modules, get_fbx_sdk_status
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ def import_fbx(path: str, options: dict[str, Any] | None = None) -> KotorModel:
     until GhostRigger has a clean architecture path for them.
     """
     source = _validate_fbx_path(path)
+    configure_fbx_sdk_paths((options or {}).get("fbx_sdk"), refresh=True)
     modules = get_fbx_modules()
     if modules.fbx is None:
         raise FbxSdkUnavailableError(get_fbx_sdk_status())
@@ -212,4 +213,3 @@ def _destroy(obj: Any) -> None:
     destroy = getattr(obj, "Destroy", None)
     if callable(destroy):
         destroy()
-

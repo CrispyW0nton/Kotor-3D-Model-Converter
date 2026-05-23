@@ -13,6 +13,13 @@ venv/
 .venv/
 env/
 
+# Autodesk FBX SDK is an external optional dependency. Do not commit SDK files.
+/external/AutodeskFBX/
+/third_party/AutodeskFBX/
+/sdk/AutodeskFBX/
+/FBXSDK/
+/fbx_sdk_local/
+
 # ── Jupyter / IDE ─────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
 .vscode/

@@ -454,4 +454,19 @@ def test_main_window_routes_fbx_menu_to_optional_sdk_bridge():
     assert "from src.io.fbx.fbx_exporter import FbxSdkUnavailableError, export_fbx" in text
     assert "self.export_selected_fbx_action" in text
     assert "self.fbx_sdk_status_action" in text
+    assert "self.fbx_sdk_setup_action" in text
+    assert "Tools > Setup" not in text  # menu is built with QMenu objects, not hard-coded help text
     assert "_show_missing_fbx_sdk_dialog" in text
+
+
+def test_fbx_setup_assistant_files_do_not_vendor_autodesk_sdk():
+    gitignore = (_REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+    requirements = (_REPO_ROOT / "requirements.txt").read_text(encoding="utf-8")
+    dialog_source = (_REPO_ROOT / "src/gui/dialogs/fbx_sdk_setup_dialog.py").read_text(encoding="utf-8")
+
+    assert "/external/AutodeskFBX/" in gitignore
+    assert "/FBXSDK/" in gitignore
+    assert "Autodesk FBX Python SDK / bindings are external dependencies" in requirements
+    assert "fbx==" not in requirements
+    assert "pip install fbx" not in (_REPO_ROOT / "docs/FBX_SDK_SETUP.md").read_text(encoding="utf-8")
+    assert "Open Autodesk FBX SDK Download Page" in dialog_source
