@@ -2024,6 +2024,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         )
         self.retarget_workbench_controller = RetargetWorkbenchController(
             ue_to_kotor_controller=self.retarget_preview_controller,
+            viewport=self._retarget_preview_viewport,
             preview_action=self.preview_retarget_action,
             export_action=self.export_retarget_preview_action,
             log_callback=self._log,
@@ -3796,6 +3797,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return
         self._retarget_source_model = model
         self._retarget_engine = None
+        controller = getattr(self, "retarget_workbench_controller", None)
+        if controller is not None:
+            controller.set_source_kotor_model(model)
         self.animation_retarget_panel.set_texture_dir(self._texture_dir)
         game = (self._current_game or self._infer_game_from_model(model)).upper()
         mgr = self._get_resource_manager()
@@ -3829,6 +3833,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if self._retarget_source_model is None or self._retarget_target_model is None:
             QtWidgets.QMessageBox.information(self, "Retarget", "Set both a source and target model.")
             return
+        controller = getattr(self, "retarget_workbench_controller", None)
+        if controller is not None:
+            controller.set_source_kotor_model(self._retarget_source_model)
+            controller.set_source_kotor_animation_slot(anim_name)
         try:
             from src.core.qt_core.animation.animation_engine import AnimationEngine
 

@@ -221,6 +221,8 @@ exports/retargets/day4_mcp_smoke/
 !/tests/test_kotor_animation_source_sampler.py
 !/tests/test_retarget_output_naming.py
 !/tests/test_ghostrigger_retarget_output_naming_controller.py
+!/tests/test_kotor_to_kotor_preview_mode.py
+!/tests/test_ghostrigger_kotor_to_kotor_workbench_controller.py
 !/tests/test_secret_hygiene.py
 audit_deep.py
 audit_exhaustive.py

@@ -140,7 +140,7 @@ def test_mode_switch_invalidates_preview_and_export() -> None:
     assert export_action.isEnabled() is False
 
 
-def test_unimplemented_modes_do_not_call_solvers_or_writers(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unimplemented_kotor_to_unreal_mode_does_not_call_solvers_or_writers(monkeypatch: pytest.MonkeyPatch) -> None:
     def fail(*_args, **_kwargs):
         raise AssertionError("pending workbench modes must not call retarget/export internals")
 
@@ -149,12 +149,6 @@ def test_unimplemented_modes_do_not_call_solvers_or_writers(monkeypatch: pytest.
     monkeypatch.setattr("src.core.retargeting.retarget_preview_export.export_retarget_preview_override", fail)
 
     controller, ue, _preview_action, _export_action = _ready_controller()
-
-    controller.set_mode(RetargetMode.KOTOR_TO_KOTOR)
-    with pytest.raises(RetargetWorkbenchError, match="KOTOR → KOTOR preview is not implemented yet"):
-        controller.preview()
-    with pytest.raises(RetargetWorkbenchError, match="KOTOR → KOTOR preview is not implemented yet"):
-        controller.export_preview(Path("pmbam.mdl"))
 
     controller.set_mode(RetargetMode.KOTOR_TO_UNREAL)
     with pytest.raises(RetargetWorkbenchError, match="KOTOR → Unreal export is not implemented yet"):

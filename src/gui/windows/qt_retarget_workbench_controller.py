@@ -7,10 +7,20 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src.core.game.kotor_loader import get_valid_animation_slots
+from src.core.retargeting.kotor_to_kotor_preview import (
+    KotorToKotorPreviewRequest,
+    KotorToKotorPreviewResult,
+    build_kotor_to_kotor_retarget_preview,
+)
 from src.core.retargeting.retarget_output_naming import (
     KotorOutputAnimationNameMode,
     RetargetOutputNaming,
     coerce_kotor_output_name_mode,
+)
+from src.core.retargeting.retarget_preview import apply_retarget_preview_to_viewport
+from src.core.retargeting.retarget_preview_export import (
+    RetargetPreviewExportRequest,
+    export_retarget_preview_override,
 )
 from src.core.retargeting.retarget_modes import (
     RetargetMode,
@@ -46,6 +56,8 @@ class RetargetWorkbenchState:
 
     output_naming: RetargetOutputNaming | None = None
 
+    last_kotor_to_kotor_preview_result: Any | None = None
+    last_kotor_source_sample_result: Any | None = None
     last_preview_result: Any | None = None
     last_export_result: Any | None = None
     dirty_revision: int = 0
@@ -58,17 +70,25 @@ class RetargetWorkbenchController:
         self,
         *,
         ue_to_kotor_controller: Any | None = None,
+        viewport: Any | None = None,
         preview_action: Any | None = None,
         export_action: Any | None = None,
         log_callback: Callable[[str, str], None] | None = None,
         status_callback: Callable[[str], None] | None = None,
+        build_kotor_to_kotor_preview: Callable[[KotorToKotorPreviewRequest], KotorToKotorPreviewResult] = build_kotor_to_kotor_retarget_preview,
+        apply_preview: Callable[..., None] = apply_retarget_preview_to_viewport,
+        export_preview: Callable[..., Any] = export_retarget_preview_override,
     ) -> None:
         self.state = RetargetWorkbenchState()
         self.ue_to_kotor_controller = ue_to_kotor_controller
+        self.viewport = viewport
         self.preview_action = preview_action
         self.export_action = export_action
         self.log_callback = log_callback
         self.status_callback = status_callback
+        self._build_kotor_to_kotor_preview = build_kotor_to_kotor_preview
+        self._apply_preview = apply_preview
+        self._export_preview = export_preview
         self.last_error = ""
         self.update_enabled()
 
@@ -210,6 +230,8 @@ class RetargetWorkbenchController:
         spec = self.current_mode_spec()
         if not spec.implemented or not spec.supports_preview:
             return False
+        if self.state.mode == RetargetMode.KOTOR_TO_KOTOR:
+            return self._can_preview_kotor_to_kotor()
         controller = self._optional_ue_to_kotor_controller()
         return bool(controller is not None and controller.can_preview())
 
@@ -217,6 +239,10 @@ class RetargetWorkbenchController:
         spec = self.current_mode_spec()
         if not spec.implemented or not spec.supports_export:
             return False
+        if self.state.mode == RetargetMode.KOTOR_TO_KOTOR:
+            preview = self.state.last_preview_result
+            audit = getattr(preview, "preview_audit", None)
+            return bool(preview is not None and audit is not None and getattr(audit, "passed", False))
         controller = self._optional_ue_to_kotor_controller()
         return bool(controller is not None and controller.can_export())
 
@@ -229,6 +255,8 @@ class RetargetWorkbenchController:
             self.export_action.setEnabled(self.can_export())
 
     def preview(self, *, auto_play: bool = True, show_node_overlay: bool = True) -> Any | None:
+        if self.state.mode == RetargetMode.KOTOR_TO_KOTOR:
+            return self._preview_kotor_to_kotor(auto_play=auto_play, show_node_overlay=show_node_overlay)
         if self.state.mode != RetargetMode.UNREAL_TO_KOTOR:
             raise RetargetWorkbenchError(self.not_implemented_message("preview"))
         controller = self._require_ue_to_kotor_controller()
@@ -241,6 +269,12 @@ class RetargetWorkbenchController:
         return result
 
     def export_preview(self, output_mdl_path: str | Path, *, overwrite: bool = False, write_manifest: bool = True) -> Any | None:
+        if self.state.mode == RetargetMode.KOTOR_TO_KOTOR:
+            return self._export_kotor_to_kotor_preview(
+                output_mdl_path,
+                overwrite=overwrite,
+                write_manifest=write_manifest,
+            )
         if self.state.mode != RetargetMode.UNREAL_TO_KOTOR:
             raise RetargetWorkbenchError(self.not_implemented_message("export"))
         controller = self._require_ue_to_kotor_controller()
@@ -258,6 +292,8 @@ class RetargetWorkbenchController:
     def invalidate_preview(self, reason: str) -> None:
         self.state.last_preview_result = None
         self.state.last_export_result = None
+        self.state.last_kotor_to_kotor_preview_result = None
+        self.state.last_kotor_source_sample_result = None
         self.state.dirty_revision += 1
         if self.ue_to_kotor_controller is not None:
             ue_state = getattr(self.ue_to_kotor_controller, "state", None)
@@ -284,11 +320,7 @@ class RetargetWorkbenchController:
     def not_implemented_message(self, action: str) -> str:
         spec = self.current_mode_spec()
         if spec.mode == RetargetMode.KOTOR_TO_KOTOR:
-            return (
-                "KOTOR → KOTOR preview is not implemented yet.\n"
-                "Next step: add a KOTOR animation source sampler that evaluates a source "
-                "model animation slot through the Aurora evaluator."
-            )
+            return "KOTOR → KOTOR is available when source/target inputs and output naming are complete."
         if spec.mode == RetargetMode.KOTOR_TO_UNREAL:
             return (
                 "KOTOR → Unreal export is not implemented yet.\n"
@@ -312,6 +344,150 @@ class RetargetWorkbenchController:
     def _push_output_naming(self) -> None:
         if self.ue_to_kotor_controller is not None and hasattr(self.ue_to_kotor_controller, "set_output_naming"):
             self.ue_to_kotor_controller.set_output_naming(self.state.output_naming)
+
+    def _can_preview_kotor_to_kotor(self) -> bool:
+        return bool(
+            self.state.source_kotor_model is not None
+            and str(self.state.source_kotor_animation_slot or "").strip()
+            and self.current_target_model() is not None
+            and self.state.retarget_profile is not None
+            and self._has_target_output_animation_name()
+        )
+
+    def _has_target_output_animation_name(self) -> bool:
+        naming = self.state.output_naming
+        if naming is not None:
+            raw = (
+                naming.requested_kotor_animation_name
+                or naming.canonical_kotor_animation_name
+                or naming.unreal_clip_name
+                or ""
+            )
+            if str(raw).strip():
+                return True
+        return bool(str(getattr(self.state.retarget_profile, "animation_slot", "") or "").strip())
+
+    def _preview_kotor_to_kotor(self, *, auto_play: bool, show_node_overlay: bool) -> Any | None:
+        if not self._can_preview_kotor_to_kotor():
+            message = (
+                "KOTOR → KOTOR preview requires a source KOTOR model, source animation name, "
+                "target KOTOR model, retarget profile, and target output animation name."
+            )
+            self.last_error = message
+            self._log(message, "warning")
+            self._status("KOTOR → KOTOR preview inputs are incomplete")
+            self.update_enabled()
+            return None
+        try:
+            result = self._build_kotor_to_kotor_preview(
+                KotorToKotorPreviewRequest(
+                    source_model=self.state.source_kotor_model,
+                    source_animation_slot=str(self.state.source_kotor_animation_slot or ""),
+                    target_model=self.current_target_model(),
+                    retarget_profile=self.state.retarget_profile,
+                    output_naming=self.state.output_naming,
+                    auto_play=auto_play,
+                    enable_numeric_audit=True,
+                )
+            )
+            preview = result.preview_result
+            if self.viewport is not None:
+                self._apply_preview(
+                    preview,
+                    self.viewport,
+                    auto_play=auto_play,
+                    show_node_overlay=show_node_overlay,
+                )
+            self.state.last_kotor_to_kotor_preview_result = result
+            self.state.last_kotor_source_sample_result = result.source_sample_result
+            self.state.last_preview_result = preview
+            self.state.last_export_result = None
+            self.last_error = ""
+            self._report_kotor_to_kotor_preview_success(result)
+            self.update_enabled()
+            return preview
+        except Exception as exc:
+            self.state.last_preview_result = None
+            self.state.last_export_result = None
+            self.last_error = str(exc)
+            self._log(f"KOTOR → KOTOR preview failed: {exc}", "error")
+            self._status("KOTOR → KOTOR preview failed")
+            self.update_enabled()
+            return None
+
+    def _export_kotor_to_kotor_preview(
+        self,
+        output_mdl_path: str | Path,
+        *,
+        overwrite: bool,
+        write_manifest: bool,
+    ) -> Any | None:
+        preview = self.state.last_preview_result
+        if preview is None or not self.can_export():
+            message = (
+                "No successful current KOTOR → KOTOR preview is available to export. "
+                "Run Preview Retarget before exporting MDL/MDX."
+            )
+            self.last_error = message
+            self._log(message, "warning")
+            self._status("KOTOR → KOTOR export blocked")
+            self.update_enabled()
+            return None
+        mdl_path = Path(output_mdl_path)
+        try:
+            result = self._export_preview(
+                RetargetPreviewExportRequest(
+                    preview_result=preview,
+                    original_target_model=self.current_target_model(),
+                    output_mdl_path=mdl_path,
+                    output_mdx_path=mdl_path.with_suffix(".mdx"),
+                    overwrite=overwrite,
+                    verify_roundtrip=True,
+                    write_manifest=write_manifest,
+                    kotor_output_name_mode=getattr(
+                        preview,
+                        "output_name_mode",
+                        KotorOutputAnimationNameMode.VANILLA_SLOT,
+                    ),
+                    requires_custom_animation_patch=bool(
+                        getattr(preview, "requires_custom_animation_patch", False)
+                    ),
+                )
+            )
+            self.state.last_export_result = result
+            self.last_error = ""
+            self._status(f"KOTOR → KOTOR preview exported: {getattr(result, 'mdl_path', mdl_path)}")
+            self.update_enabled()
+            return result
+        except Exception as exc:
+            self.last_error = str(exc)
+            self._log(f"KOTOR → KOTOR export failed: {exc}", "error")
+            self._status("KOTOR → KOTOR export failed")
+            self.update_enabled()
+            return None
+
+    def _report_kotor_to_kotor_preview_success(self, result: KotorToKotorPreviewResult) -> None:
+        sample_report = result.source_sample_result.report
+        preview = result.preview_result
+        output_mode = getattr(preview, "output_name_mode", KotorOutputAnimationNameMode.VANILLA_SLOT)
+        mode_label = (
+            "custom animation patch"
+            if output_mode == KotorOutputAnimationNameMode.CUSTOM_PATCH
+            else "vanilla slot override"
+        )
+        solver_report = getattr(preview, "solver_report", None)
+        message = (
+            "KOTOR → KOTOR preview built successfully.\n"
+            f"Source animation: {sample_report.resolved_slot_name}\n"
+            f"Target animation: {preview.slot_name}\n"
+            f"Output mode: {mode_label}\n"
+            f"Source sampled poses: {sample_report.sample_count}\n"
+            f"Mapped target nodes: {int(getattr(solver_report, 'mapped_node_count', 0) or 0)}"
+        )
+        self._log(message, "success")
+        for warning in result.warnings:
+            self._log(str(warning), "warning")
+        self._status(f"KOTOR → KOTOR preview ready: {preview.slot_name}")
 
     def _require_mode(self, mode: RetargetMode, action: str) -> None:
         if self.state.mode != mode:
@@ -367,7 +543,7 @@ def combo_current_retarget_mode(combo: Any) -> RetargetMode:
 
 def _pending_status_for_mode(mode: RetargetMode) -> str:
     if mode == RetargetMode.KOTOR_TO_KOTOR:
-        return "KOTOR source animation sampler available; pending KOTOR→KOTOR preview adapter"
+        return "implemented through KOTOR source sampling and verified preview/export"
     if mode == RetargetMode.KOTOR_TO_UNREAL:
         return "KOTOR source animation sampler available; pending UE-compatible FBX export adapter"
     return "pending implementation"

@@ -35,17 +35,23 @@ _MODE_SPECS: dict[RetargetMode, RetargetModeSpec] = {
         mode=RetargetMode.KOTOR_TO_KOTOR,
         label="KOTOR → KOTOR",
         description=(
-            "Retarget a sampled KOTOR/Aurora animation slot onto another KOTOR/Aurora "
-            "target model. KOTOR source animation sampler is available; pending next "
-            "adapter: KOTOR-to-KOTOR preview/export wiring."
+            "Sample a KOTOR/Aurora source animation through the evaluator and use "
+            "the verified GhostRigger preview/export pipeline to attach it as a "
+            "local target animation override."
         ),
         source_kind="kotor_aurora_model_animation_slot",
         target_kind="kotor_aurora_model",
         output_kind="kotor_mdl_mdx_animation_override",
-        supports_preview=False,
-        supports_export=False,
-        implemented=False,
-        required_inputs=("source_kotor_model", "source_kotor_animation_slot", "target_model", "retarget_profile"),
+        supports_preview=True,
+        supports_export=True,
+        implemented=True,
+        required_inputs=(
+            "source_kotor_model",
+            "source_kotor_animation_slot",
+            "target_model",
+            "retarget_profile",
+            "target_output_animation_name",
+        ),
     ),
     RetargetMode.KOTOR_TO_UNREAL: RetargetModeSpec(
         mode=RetargetMode.KOTOR_TO_UNREAL,
