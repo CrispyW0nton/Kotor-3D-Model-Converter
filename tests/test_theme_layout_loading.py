@@ -44,9 +44,22 @@ def test_packaged_layouts_load_and_affect_metrics() -> None:
     loader = LayoutLoader()
     layouts = loader.load_dir(ROOT / "config" / "themes" / "layouts")
 
-    assert {"default", "compact", "wide", "cinematic"}.issubset(layouts)
+    assert {
+        "default",
+        "compact",
+        "wide",
+        "cinematic",
+        "profile_animation",
+        "profile_mesh_editing",
+        "profile_lighting",
+        "profile_cinegraphics",
+        "profile_clean",
+    }.issubset(layouts)
     assert layouts["compact"].toolbar("main").button_mode == "iconOnly"
     assert layouts["wide"].viewport.preferred_width > layouts["compact"].viewport.preferred_width
+    assert layouts["default"].dock_groups
+    assert layouts["profile_lighting"].dock_groups[1].docks == ["lighting", "cameras", "properties"]
+    assert layouts["profile_clean"].panel("contentBrowser").visible is False
 
 
 def test_stylesheet_builds_from_matrix_theme() -> None:
@@ -99,6 +112,8 @@ def test_required_theme_tokens_resolve_for_all_packaged_themes() -> None:
             assert stylesheet == ""
         else:
             assert "QPushButton:disabled" in stylesheet
+            assert "viewportToolbar.background" not in stylesheet
+            assert theme.color("viewportToolbar.border") in stylesheet
 
 
 def test_native_theme_normalizes_stale_matrix_splash_fallbacks(tmp_path: Path) -> None:
@@ -432,6 +447,21 @@ def test_matrix_bar_media_is_header_only_and_crop_aware() -> None:
     assert "command_bar" not in apply_source
     assert "command_bar" not in native_source
     assert "matrixBar.cropX" in inspect.getsource(QtGhostRiggerMainWindow._matrix_bar_settings)
+
+
+def test_main_window_reserves_command_bar_overflow_height() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    sync_source = inspect.getsource(QtGhostRiggerMainWindow._sync_command_bar_scroll_height)
+    reserved_source = inspect.getsource(QtGhostRiggerMainWindow._sync_reserved_top_rows)
+    apply_source = inspect.getsource(LayoutApplier.apply_layout)
+
+    assert "command_bar_scroll" in sync_source
+    assert "PM_ScrollBarExtent" in sync_source
+    assert "_sync_command_bar_scroll_height(height)" in reserved_source
+    assert "_sync_reserved_top_rows" in apply_source
 
 
 def test_viewport_chrome_and_renderer_use_theme_tokens() -> None:

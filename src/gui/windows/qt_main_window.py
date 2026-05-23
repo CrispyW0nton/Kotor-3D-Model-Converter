@@ -142,6 +142,8 @@ def _native_splash_palette_colors() -> dict[str, str]:
         "panel.backgroundAlt": _palette_hex(palette, role.Base),
         "panel.altBackground": _palette_hex(palette, role.Base),
         "toolbar.border": _palette_hex(palette, role.Mid),
+        "viewportToolbar.background": _palette_hex(palette, role.Window),
+        "viewportToolbar.border": _palette_hex(palette, role.Mid),
         "text.primary": _palette_hex(palette, role.WindowText),
         "text.secondary": _palette_hex(palette, role.Text),
         "accent.primary": _palette_hex(palette, role.Highlight),
@@ -436,7 +438,7 @@ class LibraryScanWorker(QtCore.QObject):
             self.finished.emit([], traceback.format_exc())
 
 
-def _scan_library_rows_sync(k1_dir: str = "", k2_dir: str = "") -> list[dict]:
+def _index_game_libraries_sync(k1_dir: str = "", k2_dir: str = "") -> tuple[object, list[dict]]:
     from src.core.qt_core.assets.resource_manager import ResourceManager
 
     mgr = ResourceManager()
@@ -453,6 +455,11 @@ def _scan_library_rows_sync(k1_dir: str = "", k2_dir: str = "") -> list[dict]:
                 rows.append({"game": "K2", "resref": resref, "source": k2_dir})
     rows = enrich_library_rows(rows)
     rows.sort(key=lambda item: (item["game"], item["resref"]))
+    return mgr, rows
+
+
+def _scan_library_rows_sync(k1_dir: str = "", k2_dir: str = "") -> list[dict]:
+    _mgr, rows = _index_game_libraries_sync(k1_dir, k2_dir)
     return rows
 
 
@@ -526,7 +533,9 @@ def _build_prelaunch_library_input(
 
     try:
         status("Indexing game libraries", "Scanning model resources before the main window opens...")
-        preloaded["rows"] = _scan_library_rows_sync(k1_dir, k2_dir)
+        resource_manager, rows = _index_game_libraries_sync(k1_dir, k2_dir)
+        preloaded["_resource_manager"] = resource_manager
+        preloaded["rows"] = rows
         status("Library ready", f"{len(preloaded['rows'])} model resources indexed.")
     except Exception:
         preloaded["error"] = traceback.format_exc()
@@ -1651,8 +1660,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         toolbar_band = getattr(self, "viewport_toolbar_band", None)
         if toolbar_band is not None:
             toolbar_band.setStyleSheet(
-                f"QFrame#ViewportToolbarBand {{ background:{theme.color('toolbar.background')}; "
-                f"border:0; border-bottom:1px solid {theme.color('toolbar.border')}; }}"
+                f"QFrame#ViewportToolbarBand {{ background:{theme.color('viewportToolbar.background', theme.color('toolbar.background'))}; "
+                f"border:1px solid {theme.color('viewportToolbar.border', theme.color('toolbar.border'))}; }}"
             )
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "apply_ghost_theme"):
@@ -1689,6 +1698,14 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def _on_layout_changed(self, layout) -> None:
         self._sync_theme_layout_settings()
+        combo = getattr(self, "visual_profile_combo", None)
+        if combo is not None:
+            combo.blockSignals(True)
+            try:
+                index = combo.findData(getattr(layout, "id", "default"))
+                combo.setCurrentIndex(max(index, 0))
+            finally:
+                combo.blockSignals(False)
         QtCore.QTimer.singleShot(0, self._sync_reserved_top_rows)
 
     def _sync_theme_layout_settings(self) -> dict:
@@ -2183,6 +2200,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
         layout.addWidget(self._tool_button("Settings  F2", self.settings_action, "settings", compact=True))
         layout.addWidget(self._separator())
+        self.visual_profile_combo = QtWidgets.QComboBox()
+        self.visual_profile_combo.setObjectName("VisualProfileCombo")
+        self.visual_profile_combo.setToolTip("Apply a saved visual profile layout.")
+        self.visual_profile_combo.setMinimumWidth(170)
+        self._populate_visual_profile_combo()
+        self.visual_profile_combo.currentIndexChanged.connect(self._on_visual_profile_selected)
+        layout.addWidget(self.visual_profile_combo)
         layout.addWidget(self._tool_button("Content", self.content_browser_action, "library", compact=True))
         layout.addWidget(self._tool_button("Scene", self.scene_panel_action, "props", compact=True))
         layout.addWidget(self._tool_button("Props", self.properties_panel_action, "props", compact=True))
@@ -2199,11 +2223,45 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         )
         return self.command_bar_scroll
 
+    def _populate_visual_profile_combo(self) -> None:
+        combo = getattr(self, "visual_profile_combo", None)
+        if combo is None:
+            return
+        combo.blockSignals(True)
+        try:
+            combo.clear()
+            for layout in self.layout_manager.available_layouts():
+                combo.addItem(layout.name, layout.id)
+            selected = self.layout_manager.settings.selected_layout
+            index = combo.findData(selected)
+            combo.setCurrentIndex(max(index, 0))
+        finally:
+            combo.blockSignals(False)
+
+    def _on_visual_profile_selected(self, _index: int) -> None:
+        combo = getattr(self, "visual_profile_combo", None)
+        if combo is None:
+            return
+        layout_id = str(combo.currentData() or "default")
+        current = self.layout_manager.settings.selected_layout
+        if layout_id == current:
+            return
+        self.layout_manager.select_layout(layout_id, window=self)
+        self._sync_theme_layout_settings()
+        try:
+            save_settings(self.settings_path, self.settings_data)
+        except Exception as exc:
+            self._log(f"Could not save visual profile: {exc}", "warning")
+        layout = self.layout_manager.get_layout(layout_id)
+        self._log(f"Visual profile applied: {layout.name}", "success")
+
     def _make_viewport_toolbar_band(self, toolbar: QtWidgets.QWidget | None) -> QtWidgets.QWidget | None:
         if toolbar is None:
             return None
         band = QtWidgets.QFrame()
         band.setObjectName("ViewportToolbarBand")
+        band.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        band.setLineWidth(1)
         band.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
         band.setFixedHeight(max(28, toolbar.height()))
         row = QtWidgets.QHBoxLayout(band)
@@ -2227,12 +2285,23 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             toolbar.setMaximumHeight(height)
             band.setFixedHeight(height)
 
+    def _sync_command_bar_scroll_height(self, content_height: int) -> None:
+        scroll = getattr(self, "command_bar_scroll", None)
+        if scroll is None:
+            return
+        scrollbar_height = scroll.style().pixelMetric(QtWidgets.QStyle.PM_ScrollBarExtent, None, scroll)
+        frame = scroll.frameWidth() * 2
+        height = max(42, int(content_height) + max(14, scrollbar_height) + frame + 2)
+        scroll.setMinimumHeight(height)
+        scroll.setMaximumHeight(height)
+
     def _sync_reserved_top_rows(self) -> None:
         command_bar = getattr(self, "command_bar", None)
         if command_bar is not None:
             height = self._height_for_wrapping_widget(command_bar, max(36, command_bar.sizeHint().height()))
             command_bar.setMinimumHeight(height)
             command_bar.setMaximumHeight(height)
+            self._sync_command_bar_scroll_height(height)
         self._sync_viewport_toolbar_band()
         top_shell = getattr(self, "reserved_top_shell", None)
         if top_shell is not None:
@@ -3199,6 +3268,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         k2_dir = str(preloaded.get("k2_dir") or "").strip()
         if k1_dir or k2_dir:
             self._on_library_dirs_changed(k1_dir or self.k1_dir_edit.text().strip(), k2_dir or self.k2_dir_edit.text().strip())
+            manager = preloaded.get("_resource_manager")
+            if manager is not None:
+                self._resource_manager = manager
+                self._resource_manager_dirs = (k1_dir, k2_dir)
         error = str(preloaded.get("error") or "")
         if error and not preloaded.get("rows"):
             self.library_panel.set_status("Startup library scan unavailable")
@@ -5603,13 +5676,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         try:
             from src.core.qt_core.assets import resource_manager as rm
 
-            manager = rm.ResourceManager()
             k1_dir = self.k1_dir_edit.text().strip()
             k2_dir = self.k2_dir_edit.text().strip()
-            if k1_dir:
-                manager.set_k1_dir(k1_dir)
-            if k2_dir:
-                manager.set_k2_dir(k2_dir)
+            manager = self._get_resource_manager()
             type_map = {
                 "mdl": rm.RES_MDL,
                 "mdx": rm.RES_MDX,
@@ -5625,28 +5694,27 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 "wok": rm.RES_WOK,
             }
             rows = []
-            for game, install in (("K1", manager.get_k1()), ("K2", manager.get_k2())):
-                if install is None:
-                    continue
-                for ext, res_type in type_map.items():
-                    if res_type is None:
+            if manager is not None:
+                for game, install in (("K1", manager.get_k1()), ("K2", manager.get_k2())):
+                    if install is None:
                         continue
-                    try:
-                        names = install.list_resrefs(res_type)
-                    except Exception:
-                        names = []
-                    for name in names:
-                        rows.append(
-                            {
-                                "game": game,
-                                "resref": name,
-                                "type": ext,
-                                "res_type": res_type,
-                                "source": k1_dir if game == "K1" else k2_dir,
-                            }
-                        )
-            self._resource_manager = manager
-            self._resource_manager_dirs = (k1_dir, k2_dir)
+                    for ext, res_type in type_map.items():
+                        if res_type is None:
+                            continue
+                        try:
+                            names = install.list_resrefs(res_type)
+                        except Exception:
+                            names = []
+                        for name in names:
+                            rows.append(
+                                {
+                                    "game": game,
+                                    "resref": name,
+                                    "type": ext,
+                                    "res_type": res_type,
+                                    "source": k1_dir if game == "K1" else k2_dir,
+                                }
+                            )
         except Exception as exc:
             self._log(f"Resource scan error: {exc}", "error")
             rows = []

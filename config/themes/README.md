@@ -19,11 +19,19 @@ older user overrides of a native theme are loaded.
 
 Themes define colours, fonts, icon provider defaults, Matrix bar style, and visual tokens.
 Layouts define window size, panel widths, splitter proportions, toolbar
-visibility, row heights, control density, and button display modes.
+visibility, row heights, control density, button display modes, and optional
+`<dockLayout>` groups that tab or split dock widgets into workspace profiles.
 The unified Content Browser uses the stable `contentBrowser` panel layout id.
 The Scene outliner uses `scene`, and Properties uses `properties`; all three
 are top-level dock widgets so layouts can size them without squeezing the
 viewport through permanent side tabs.
+Visual profile layouts are packaged as normal layout XML files:
+`profile_animation`, `profile_mesh_editing`, `profile_lighting`,
+`profile_cinegraphics`, and `profile_clean`. They are available from the
+toolbar Visual Profile dropdown and the Settings layout selector. Dock group
+entries use the runtime dock keys `content_browser`, `scene`, `properties`,
+`animations`, `nodes`, `lighting`, `cameras`, `module_meshes`, `mesh_tools`,
+`adjust_pivot`, `2das`, and `resources`.
 The older `library` and `animationLibrary` ids remain in packaged layouts for
 user layout compatibility, but new Library and Animation Library entry points
 route through `contentBrowser`.
@@ -77,6 +85,10 @@ Safe editing tips:
 - Use **Apply Theme** or **Apply Layout** for full-application changes. Theme
   Editor previews are local until explicitly applied.
 - Run `python tools/validate_themes.py` after editing packaged defaults.
+
+Viewport command bars use `viewportToolbar.background` and
+`viewportToolbar.border` so the Theme Editor can style their framed surface
+separately from general application toolbars.
 
 ## Module Editor
 

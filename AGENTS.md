@@ -25,6 +25,10 @@ If you get an ImportError, fix the import path — don't ask the user to open Gh
 - `pytest tests/ -x` for quick validation
 - `pytest tests/ -m "not slow"` to skip full-scan tests
 - `pytest tests/test_mcp_full_scan.py` for the complete 6,078-model validation
+- When testing whether application behavior works, show the application on screen
+  whenever practical. Visible testing is required for UI, startup, viewport,
+  theme/layout, and workflow checks because it also helps agents debug what is
+  actually happening in the running app.
 
 ## Change log
 

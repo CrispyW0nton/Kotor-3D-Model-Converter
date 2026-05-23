@@ -139,6 +139,8 @@ def _live_native_palette_colors() -> dict[str, str]:
         "viewport.gridMinor": dark,
         "toolbar.background": window,
         "toolbar.border": mid,
+        "viewportToolbar.background": window,
+        "viewportToolbar.border": mid,
         "button.background": button,
         "button.hover": light,
         "button.pressed": dark,

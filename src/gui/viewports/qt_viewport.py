@@ -6,6 +6,7 @@ import logging
 import math
 import os
 import re
+import subprocess
 import threading
 import time as time_module
 import copy
@@ -73,6 +74,80 @@ from src.mesh_tools.mesh_topology import MeshTopology, normalize_edge
 from src.mesh_tools.mesh_validation import validate_mesh
 
 log = logging.getLogger(__name__)
+
+_GUI_DIR = Path(__file__).resolve().parents[1]
+_ICON_DIR = _GUI_DIR / "icons"
+
+
+def _icon(name: str) -> QtGui.QIcon:
+    for suffix in (".svg", "_16.png", "_24.png", ".png"):
+        path = _ICON_DIR / f"{name}{suffix}"
+        if path.exists():
+            return QtGui.QIcon(path.as_posix())
+    return QtGui.QIcon()
+
+
+def _gpu_brand_icon(brand: str) -> QtGui.QIcon:
+    path = _ICON_DIR / "gpu_branding" / f"{brand}.png"
+    return QtGui.QIcon(path.as_posix()) if path.exists() else QtGui.QIcon()
+
+
+def _branded_control_icon(name: str) -> QtGui.QIcon:
+    path = _ICON_DIR / "branded_controls" / f"{name}.png"
+    return QtGui.QIcon(path.as_posix()) if path.exists() else QtGui.QIcon()
+
+
+def _detect_gpu_brand() -> str:
+    try:
+        output = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=1.5,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        text = f"{output.stdout}\n{output.stderr}".lower()
+    except Exception:
+        text = ""
+    if any(token in text for token in ("nvidia", "geforce", "quadro", "rtx", "gtx")):
+        return "nvidia"
+    if any(token in text for token in ("amd", "radeon", "rx ", "firepro")):
+        return "amd"
+    return "generic"
+
+
+def _gpu_icon_name() -> str:
+    brand = _detect_gpu_brand()
+    if brand == "nvidia":
+        return "nvidia"
+    if brand == "amd":
+        return "amd"
+    return "generic"
+
+
+def _gpu_icon() -> QtGui.QIcon:
+    brand = _gpu_icon_name()
+    if brand in {"nvidia", "amd"}:
+        icon = _gpu_brand_icon(brand)
+        if not icon.isNull():
+            return icon
+    return _icon("viewport_gpu")
+
+
+def _navigation_profile_icon(profile: object) -> QtGui.QIcon:
+    profile_key = normalize_viewport_navigation_profile(profile)
+    if profile_key == "3dsmax":
+        return _branded_control_icon("3dsmax")
+    if profile_key == "blender":
+        return _branded_control_icon("blender")
+    if profile_key == "maya":
+        return _branded_control_icon("maya")
+    return QtGui.QIcon()
 
 
 # ── T401: Joint-dot overlay constants ──────────────────────────────────────
@@ -756,9 +831,7 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def set_navigation_profile(self, profile: object) -> None:
         self._navigation_profile = normalize_viewport_navigation_profile(profile)
-        if hasattr(self, "navigation_button"):
-            self.navigation_button.setText(self._navigation_button_text())
-            self.navigation_button.setToolTip(self._navigation_tooltip())
+        self._sync_navigation_button()
 
     def _toolbar_text(self, full: str, compact: str) -> str:
         return compact if self._compact_controls else full
@@ -781,6 +854,22 @@ class QtViewportWidget(QtWidgets.QWidget):
             return "[S]" if self._compact_controls else "[Scale]"
         return "[T]" if self._compact_controls else "[Translate]"
 
+    def _gimbal_mode_icon_name(self) -> str:
+        mode = self._transform_gizmo.mode
+        if mode == GizmoMode.ROTATE:
+            return "viewport_rotate"
+        if mode == GizmoMode.SCALE:
+            return "viewport_scale"
+        return "viewport_translate"
+
+    def _sync_gimbal_mode_button(self) -> None:
+        button = getattr(self, "gimbal_mode_button", None)
+        if button is None:
+            return
+        button.setIcon(_icon(self._gimbal_mode_icon_name()))
+        button.setText("")
+        button.setToolTip(f"Cycle gimbal mode: {self._transform_gizmo.mode.value.title()}")
+
     def _navigation_tooltip(self) -> str:
         label = viewport_profile_label(self._navigation_profile)
         controls = {
@@ -790,6 +879,32 @@ class QtViewportWidget(QtWidgets.QWidget):
         }.get(self._navigation_profile, "")
         return f"Viewport navigation profile: {label}\n{controls}"
 
+    def _select_navigation_profile(self, profile: object) -> None:
+        self.set_navigation_profile(profile)
+
+    def _build_navigation_menu(self) -> QtWidgets.QMenu:
+        menu = QtWidgets.QMenu(self)
+        for profile in ("3dsmax", "blender", "maya"):
+            label = viewport_profile_label(profile)
+            action = menu.addAction(_navigation_profile_icon(profile), label)
+            action.setCheckable(True)
+            action.setData(profile)
+            action.triggered.connect(lambda _checked=False, value=profile: self._select_navigation_profile(value))
+        return menu
+
+    def _sync_navigation_button(self) -> None:
+        button = getattr(self, "navigation_button", None)
+        if button is None:
+            return
+        button.setIcon(_navigation_profile_icon(self._navigation_profile))
+        button.setText("")
+        button.setToolTip(self._navigation_tooltip())
+        menu = button.menu()
+        if menu is not None:
+            for action in menu.actions():
+                profile = action.data()
+                action.setChecked(profile == self._navigation_profile)
+
     def _build(self) -> None:
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -798,6 +913,8 @@ class QtViewportWidget(QtWidgets.QWidget):
 
         tb = QtWidgets.QFrame()
         tb.setObjectName("ViewportToolbar")
+        tb.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        tb.setLineWidth(1)
         tb.setMinimumHeight(30)
         self.viewport_toolbar = tb
         row = QtFlowLayout(
@@ -808,37 +925,81 @@ class QtViewportWidget(QtWidgets.QWidget):
         )
         row.setContentsMargins(4 if self._compact_controls else 5, 3, 4 if self._compact_controls else 5, 3)
 
-        self.wire_button = self._button(
-            self._toolbar_text("Wire  W", "W"),
-            self.toggle_wireframe,
+        self.renderer_button = self._icon_button(
+            "GPU",
+            self.toggle_gpu_renderer,
+            "viewport_gpu",
             checkable=True,
-            tooltip="Wireframe (W)",
+            active=True,
+            tooltip="GPU renderer",
         )
-        self.bones_button = self._button(
-            self._toolbar_text("Bones  B", "B"),
+        self.renderer_button.setObjectName("ViewportGpuButton")
+        self.renderer_button.setIcon(_gpu_icon())
+        self.renderer_button.setIconSize(QtCore.QSize(28, 20))
+        self.renderer_button.setFixedWidth(34)
+        self.renderer_button.setMinimumWidth(34)
+        self.renderer_button.setMaximumWidth(34)
+        self.renderer_button.setStyleSheet("QPushButton#ViewportGpuButton { padding: 0px; }")
+        self.solid_button = self._icon_button(
+            "Solid",
+            lambda _checked=False: self.set_shade_mode("solid"),
+            "viewport_solid",
+            checkable=True,
+            active=True,
+            tooltip="Solid mesh",
+        )
+        self.wire_button = self._icon_button(
+            "Wire  W",
+            lambda _checked=False: self.set_shade_mode("wire"),
+            "viewport_wire",
+            checkable=True,
+            tooltip="Wireframe only (W)",
+        )
+        self.solid_wire_button = self._icon_button(
+            "Solid + Wire",
+            lambda _checked=False: self.set_shade_mode("both"),
+            "viewport_solid_wire",
+            checkable=True,
+            tooltip="Solid mesh with wireframe overlay",
+        )
+        self.bones_button = self._icon_button(
+            "Bones  B",
             self.toggle_bones,
+            "viewport_bones",
             checkable=True,
             tooltip="Bones (B)",
         )
-        self.texture_button = self._button(
-            self._toolbar_text("Texture  T", "Tex"),
+        self.texture_button = self._icon_button(
+            "Texture  T",
             self.toggle_texture,
+            "viewport_texture",
             checkable=True,
             active=True,
             tooltip="Texture (T)",
         )
-        self.grid_button = self._button(
-            self._toolbar_text("Grid", "Grid"),
+        self.grid_button = self._icon_button(
+            "Grid",
             self.toggle_grid,
+            "viewport_grid",
             checkable=True,
             active=True,
             tooltip="Show or hide the viewport grid",
         )
-        self.renderer_button = self._button("GPU", self.toggle_gpu_renderer, checkable=True, active=True)
-        self.joint_dot_button = self._button("Dots", self.toggle_joint_dots, checkable=True, active=True)
-        self.joint_dot_button.setToolTip("Show or hide AccuRig joint-dot handles")
-        self.heatmap_button = self._button("Heat", self.toggle_weight_heatmap, checkable=True)
-        self.heatmap_button.setToolTip("Show selected-bone weight heat-map")
+        self.joint_dot_button = self._icon_button(
+            "Dots",
+            self.toggle_joint_dots,
+            "viewport_dots",
+            checkable=True,
+            active=True,
+            tooltip="Show or hide AccuRig joint-dot handles",
+        )
+        self.heatmap_button = self._icon_button(
+            "Heat",
+            self.toggle_weight_heatmap,
+            "viewport_heat",
+            checkable=True,
+            tooltip="Show selected-bone weight heat-map",
+        )
         self.xray_button = self._button(
             self._toolbar_text("X-Ray  Alt+X", "X"),
             self.toggle_xray,
@@ -847,82 +1008,108 @@ class QtViewportWidget(QtWidgets.QWidget):
         )
         self.xray_button.setVisible(False)
         self.xray_button.setEnabled(False)
+        row.addWidget(self.renderer_button)
+        row.addWidget(self.solid_button)
         row.addWidget(self.wire_button)
+        row.addWidget(self.solid_wire_button)
         row.addWidget(self.bones_button)
         row.addWidget(self.texture_button)
         row.addWidget(self.grid_button)
-        row.addWidget(self.renderer_button)
         row.addWidget(self.joint_dot_button)
         row.addWidget(self.heatmap_button)
         row.addWidget(self._separator())
 
-        self.shade_combo = QtWidgets.QComboBox()
-        self.shade_combo.addItems(["Solid", "Wire", "Both"])
-        self.shade_combo.setFixedHeight(22)
-        if self._compact_controls:
-            self.shade_combo.setFixedWidth(58)
-        row.addWidget(self.shade_combo)
-        self.render_mode_combo = QtWidgets.QComboBox()
-        self.render_mode_combo.addItems(["Realistic", "Shaded", "Flat"])
-        self.render_mode_combo.setFixedHeight(22)
-        if self._compact_controls:
-            self.render_mode_combo.setFixedWidth(76)
-        self.render_mode_combo.setToolTip("GPU render mode")
-        row.addWidget(self.render_mode_combo)
-        row.addWidget(self._button(self._toolbar_text("Frame  F", "F"), self.frame_all, tooltip="Frame all (F)"))
-        row.addWidget(self._button(self._toolbar_text("Camera  R", "R"), self.reset_camera, tooltip="Reset camera (R)"))
-        self.walkmesh_button = self._button(
-            self._toolbar_text("WalkMesh", "Walk"),
+        self.render_realistic_button = self._icon_button(
+            "Realistic",
+            lambda _checked=False: self.set_render_mode("realistic"),
+            "viewport_render_realistic",
+            checkable=True,
+            active=True,
+            tooltip="Realistic shader",
+        )
+        self.render_shaded_button = self._icon_button(
+            "Shaded",
+            lambda _checked=False: self.set_render_mode("shaded"),
+            "viewport_render_shaded",
+            checkable=True,
+            tooltip="Shaded shader",
+        )
+        self.render_flat_button = self._icon_button(
+            "Flat",
+            lambda _checked=False: self.set_render_mode("flat"),
+            "viewport_render_flat",
+            checkable=True,
+            tooltip="Flat shader",
+        )
+        row.addWidget(self.render_realistic_button)
+        row.addWidget(self.render_shaded_button)
+        row.addWidget(self.render_flat_button)
+        row.addWidget(self._separator())
+        row.addWidget(self._icon_button("Frame  F", self.frame_all, "viewport_frame", tooltip="Frame all (F)"))
+        self.walkmesh_button = self._icon_button(
+            "WalkMesh",
             self.toggle_walkmesh,
+            "viewport_wire",
             checkable=True,
             tooltip="Walkmesh overlay",
         )
-        row.addWidget(self.walkmesh_button)
+        self.walkmesh_button.hide()
         row.addWidget(self._separator())
-        self.gimbal_button = self._button(
-            self._toolbar_text("Gimbal  G", "G"),
+        self.gimbal_button = self._icon_button(
+            "Gimbal  G",
             self.toggle_gimbal,
+            "viewport_gimbal",
             checkable=True,
             active=True,
             tooltip="Gimbal (G)",
         )
         row.addWidget(self.gimbal_button)
-        self.gimbal_mode_button = self._button(
+        self.gimbal_mode_button = self._icon_button(
             self._gimbal_mode_button_text(),
             self.cycle_gimbal_mode,
+            self._gimbal_mode_icon_name(),
             tooltip="Cycle gimbal mode",
         )
+        self._sync_gimbal_mode_button()
         row.addWidget(self.gimbal_mode_button)
-        self.axis_mode_control = AxisModeControl(self, compact=self._compact_controls)
-        self.axis_mode_control.axisModeChanged.connect(self.set_axis_mode)
-        row.addWidget(self.axis_mode_control)
-        self.measure_button = self._button(
-            self._toolbar_text("Measure", "Meas"),
+        self.measure_button = self._icon_button(
+            "Measure",
             self.toggle_measurement_mode,
+            "viewport_measure",
             checkable=True,
             tooltip="Distance measurement tool",
         )
         row.addWidget(self.measure_button)
-        row.addWidget(self._button(self._toolbar_text("UV View", "UV"), self.open_uv_viewer, tooltip="Open UV view"))
-        row.addWidget(self._separator())
-        self.navigation_button = self._button(self._navigation_button_text(), self._cycle_navigation_profile)
-        self.navigation_button.setToolTip(self._navigation_tooltip())
+        self.uv_button = self._icon_button(
+            "UV View",
+            self.open_uv_viewer,
+            "viewport_uv",
+            tooltip="Open UV view",
+        )
+        row.addWidget(self.uv_button)
+        self.navigation_button = QtWidgets.QToolButton()
+        self.navigation_button.setObjectName("ViewportNavigationButton")
+        self.navigation_button.setProperty("_gr_ignore_layout_button_mode", True)
+        self.navigation_button.setFixedSize(34, 22)
+        self.navigation_button.setIconSize(QtCore.QSize(22, 18))
+        self.navigation_button.setCursor(QtCore.Qt.PointingHandCursor)
+        self.navigation_button.setPopupMode(QtWidgets.QToolButton.InstantPopup)
+        self.navigation_button.setMenu(self._build_navigation_menu())
+        self._sync_navigation_button()
         row.addWidget(self.navigation_button)
-        row.addWidget(self._separator())
-        self.camera_view_combo = QtWidgets.QComboBox()
-        self.camera_view_combo.addItem("Perspective", "")
-        self.camera_view_combo.addItems(["Top", "Front", "Side"])
-        self.camera_view_combo.setFixedHeight(22)
-        self.camera_view_combo.setToolTip("Viewport camera")
-        self.camera_view_combo.currentIndexChanged.connect(lambda _index=0: self._on_camera_view_combo_changed())
-        row.addWidget(self.camera_view_combo)
-        self.lock_camera_button = self._button(
-            self._toolbar_text("Lock View To Camera", "Lock"),
+        self.lock_camera_button = self._icon_button(
+            "Lock View To Camera",
             self.set_lock_view_to_camera,
+            "viewport_lock_camera",
             checkable=True,
             tooltip="Lock viewport navigation to the active scene camera",
         )
         row.addWidget(self.lock_camera_button)
+        row.addWidget(self._separator())
+        self.axis_mode_control = AxisModeControl(self, compact=self._compact_controls)
+        self.axis_mode_control.label.hide()
+        self.axis_mode_control.axisModeChanged.connect(self.set_axis_mode)
+        row.addWidget(self.axis_mode_control)
 
         self.canvas = QtWidgets.QLabel("Empty Scene")
         self.canvas.setObjectName("ViewportCanvas")
@@ -933,13 +1120,14 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.canvas.setMouseTracking(True)
         self.canvas.setScaledContents(False)
         self.canvas.installEventFilter(self)
-        self.shade_combo.currentTextChanged.connect(self._on_shade_change)
-        self.render_mode_combo.currentTextChanged.connect(self._on_render_mode_change)
         self._renderer.show_bones = self.bones_button.isChecked()
         self._renderer.show_texture = self.texture_button.isChecked()
-        self._renderer.show_wireframe = self.wire_button.isChecked()
+        self._renderer.show_solid = True
+        self._renderer.show_wireframe = False
         self._renderer.show_grid = self.grid_button.isChecked()
-        self._renderer.render_mode = self.render_mode_combo.currentText().lower()
+        self._renderer.render_mode = "realistic"
+        self._sync_shade_buttons()
+        self._sync_render_mode_buttons()
 
         toolbar_scroll = make_horizontal_overflow_area(
             tb,
@@ -1041,18 +1229,45 @@ class QtViewportWidget(QtWidgets.QWidget):
         button.clicked.connect(lambda checked=False: callback(checked) if checkable else callback())
         return button
 
+    def _icon_button(
+        self,
+        text: str,
+        callback,
+        icon_name: str,
+        *,
+        checkable: bool = False,
+        active: bool = False,
+        tooltip: Optional[str] = None,
+    ) -> QtWidgets.QPushButton:
+        button = self._button(
+            "",
+            callback,
+            checkable=checkable,
+            active=active,
+            tooltip=tooltip or text,
+        )
+        button.setProperty("_gr_full_text", text)
+        button.setProperty("_gr_ignore_layout_button_mode", True)
+        button.setIcon(_icon(icon_name))
+        button.setIconSize(QtCore.QSize(18, 18))
+        button.setFixedWidth(30)
+        button.setMinimumWidth(30)
+        button.setMaximumWidth(30)
+        button.setToolTip(tooltip or text)
+        return button
+
     def apply_ghost_theme(self, theme) -> None:
         self._current_theme = theme
         toolbar = self.findChild(QtWidgets.QFrame, "ViewportToolbar")
         if toolbar is not None:
             toolbar.setStyleSheet(
-                f"#ViewportToolbar {{ background:{theme.color('toolbar.background')}; "
-                f"border:0; border-bottom:1px solid {theme.color('toolbar.border')}; }}"
+                f"#ViewportToolbar {{ background:{theme.color('viewportToolbar.background', theme.color('toolbar.background'))}; "
+                f"border:1px solid {theme.color('viewportToolbar.border', theme.color('toolbar.border'))}; }}"
             )
         toolbar_scroll = getattr(self, "viewport_toolbar_scroll", None)
         if toolbar_scroll is not None:
             toolbar_scroll.setStyleSheet(
-                f"QScrollArea {{ background:{theme.color('toolbar.background')}; border:0; }}"
+                f"QScrollArea {{ background:{theme.color('viewportToolbar.background', theme.color('toolbar.background'))}; border:0; }}"
             )
         combo_style = (
             f"QComboBox {{ background:{theme.color('input.background')}; "
@@ -1063,7 +1278,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             f"QComboBox QAbstractItemView {{ background:{theme.color('panel.backgroundAlt', theme.color('panel.altBackground'))}; "
             f"color:{theme.color('text.primary')}; selection-background-color:{theme.color('selection.background')}; }}"
         )
-        for combo_name in ("shade_combo", "render_mode_combo", "camera_view_combo"):
+        for combo_name in ():
             combo = getattr(self, combo_name, None)
             if combo is not None:
                 combo.setStyleSheet(combo_style)
@@ -1212,7 +1427,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._renderer._frame_norms_cache = {}
             self._use_gpu = True
             self.renderer_button.setChecked(True)
-            self.renderer_button.setText("GPU")
+            self.renderer_button.setToolTip("GPU renderer")
             self.canvas.setPixmap(QtGui.QPixmap())
             self.canvas.setText("Empty Scene")
             self._update_uv_viewer_model()
@@ -1227,8 +1442,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gpu_upload_total = int(getattr(model, "_gr_gpu_prebuilt_mesh_count", 0) or 0)
         self._renderer.show_texture = self.texture_button.isChecked()
         self._renderer.show_bones = self.bones_button.isChecked()
-        self._renderer.show_wireframe = self.wire_button.isChecked()
-        self._on_shade_change(self.shade_combo.currentText())
+        self._sync_shade_buttons()
+        self._sync_render_mode_buttons()
 
         search_dirs = []
         seen_dirs: set[str] = set()
@@ -1636,20 +1851,61 @@ class QtViewportWidget(QtWidgets.QWidget):
         return self._renderer.tex_cache
 
     def toggle_wireframe(self, checked: Optional[bool] = None) -> None:
-        self._renderer.show_wireframe = bool(checked) if checked is not None else not self._renderer.show_wireframe
-        if self._renderer.show_wireframe:
-            mode = "Both" if self._renderer.show_solid else "Wire"
+        if checked is False:
+            self.set_shade_mode("solid")
         else:
-            if not self._renderer.show_solid:
-                self._renderer.show_solid = True
-            mode = "Solid"
-        self.shade_combo.blockSignals(True)
-        self.shade_combo.setCurrentText(mode)
-        self.shade_combo.blockSignals(False)
-        self.wire_button.blockSignals(True)
-        self.wire_button.setChecked(self._renderer.show_wireframe)
-        self.wire_button.blockSignals(False)
+            self.set_shade_mode("wire")
+
+    def set_shade_mode(self, mode: str) -> None:
+        mode_key = (mode or "solid").strip().lower()
+        if mode_key in {"wireframe", "wire"}:
+            self._renderer.show_solid = False
+            self._renderer.show_wireframe = True
+        elif mode_key in {"both", "solid+wire", "solid_wire"}:
+            self._renderer.show_solid = True
+            self._renderer.show_wireframe = True
+        else:
+            self._renderer.show_solid = True
+            self._renderer.show_wireframe = False
+        self._sync_shade_buttons()
         self._request_render()
+
+    def _sync_shade_buttons(self) -> None:
+        state = {
+            "solid_button": self._renderer.show_solid and not self._renderer.show_wireframe,
+            "wire_button": self._renderer.show_wireframe and not self._renderer.show_solid,
+            "solid_wire_button": self._renderer.show_solid and self._renderer.show_wireframe,
+        }
+        for name, checked in state.items():
+            button = getattr(self, name, None)
+            if button is None:
+                continue
+            button.blockSignals(True)
+            button.setChecked(checked)
+            button.blockSignals(False)
+
+    def set_render_mode(self, mode: str) -> None:
+        mode_key = (mode or "realistic").strip().lower()
+        if mode_key not in {"realistic", "shaded", "flat"}:
+            mode_key = "realistic"
+        self._renderer.render_mode = mode_key
+        self.toggle_gpu_renderer(True)
+        self._sync_render_mode_buttons()
+        self._request_render(fast=True)
+
+    def _sync_render_mode_buttons(self) -> None:
+        active = getattr(self._renderer, "render_mode", "realistic") or "realistic"
+        for mode, name in (
+            ("realistic", "render_realistic_button"),
+            ("shaded", "render_shaded_button"),
+            ("flat", "render_flat_button"),
+        ):
+            button = getattr(self, name, None)
+            if button is None:
+                continue
+            button.blockSignals(True)
+            button.setChecked(active == mode)
+            button.blockSignals(False)
 
     def toggle_bones(self, checked: Optional[bool] = None) -> None:
         self._renderer.show_bones = bool(checked) if checked is not None else not self._renderer.show_bones
@@ -1924,7 +2180,7 @@ class QtViewportWidget(QtWidgets.QWidget):
     def toggle_gpu_renderer(self, checked: Optional[bool] = None) -> None:
         self._use_gpu = True
         self.renderer_button.setChecked(True)
-        self.renderer_button.setText("GPU")
+        self.renderer_button.setToolTip("GPU renderer")
         self._request_render(fast=True)
 
     def toggle_xray(self, checked: Optional[bool] = None) -> None:
@@ -2295,7 +2551,7 @@ class QtViewportWidget(QtWidgets.QWidget):
     def cycle_gimbal_mode(self) -> None:
         self._transform_gizmo.cycle_mode()
         self._sync_legacy_gimbal_mode()
-        self.gimbal_mode_button.setText(self._gimbal_mode_button_text())
+        self._sync_gimbal_mode_button()
         self._sync_transform_typein_bar()
         self.statusMessage.emit(f"Gizmo: {self._transform_gizmo.mode.value.title()}")
         self._request_render()
@@ -2308,7 +2564,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         else:
             self._transform_gizmo.set_mode(GizmoMode.TRANSLATE)
         self._sync_legacy_gimbal_mode()
-        self.gimbal_mode_button.setText(self._gimbal_mode_button_text())
+        self._sync_gimbal_mode_button()
         self._sync_transform_typein_bar()
         self.statusMessage.emit(f"Gizmo: {self._transform_gizmo.mode.value.title()}")
         self._request_render(fast=True)
@@ -2316,7 +2572,7 @@ class QtViewportWidget(QtWidgets.QWidget):
     def _set_transform_gizmo_mode(self, mode: GizmoMode) -> None:
         self._transform_gizmo.set_mode(mode)
         self._sync_legacy_gimbal_mode()
-        self.gimbal_mode_button.setText(self._gimbal_mode_button_text())
+        self._sync_gimbal_mode_button()
         self._sync_transform_typein_bar()
         self.statusMessage.emit(f"Gizmo: {mode.value.title()}")
         self._request_render(fast=True)
@@ -5070,24 +5326,13 @@ class QtViewportWidget(QtWidgets.QWidget):
             return
         self._use_gpu = True
         self.renderer_button.setChecked(True)
-        self.renderer_button.setText("GPU" if gpu_active else "GPU!")
+        self.renderer_button.setToolTip("GPU renderer" if gpu_active else "GPU renderer unavailable")
 
     def _on_shade_change(self, text: str) -> None:
-        mode = "Wireframe" if text == "Wire" else text
-        self._renderer.show_solid = mode in ("Solid", "Both")
-        self._renderer.show_wireframe = mode in ("Wireframe", "Both")
-        self.wire_button.blockSignals(True)
-        self.wire_button.setChecked(self._renderer.show_wireframe)
-        self.wire_button.blockSignals(False)
-        self._request_render()
+        self.set_shade_mode(text)
 
     def _on_render_mode_change(self, text: str) -> None:
-        mode = (text or "Realistic").strip().lower()
-        if mode not in {"realistic", "shaded", "flat"}:
-            mode = "realistic"
-        self._renderer.render_mode = mode
-        self.toggle_gpu_renderer(True)
-        self._request_render(fast=True)
+        self.set_render_mode(text)
 
     @staticmethod
     def _point_in_triangle(px: float, py: float, a, b, c) -> bool:

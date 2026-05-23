@@ -14,12 +14,34 @@ KNOWN_PANELS = {
     "properties",
     "animationLibrary",
     "meshTools",
+    "nodes",
+    "lighting",
+    "cameras",
+    "moduleMeshes",
+    "adjustPivot",
+    "2das",
+    "resources",
     "outputLog",
     "pythonTerminal",
-    "lighting",
-    "camera",
-    "moduleMeshes",
 }
+
+KNOWN_DOCKS = {
+    "content_browser",
+    "scene",
+    "properties",
+    "animations",
+    "nodes",
+    "lighting",
+    "cameras",
+    "module_meshes",
+    "mesh_tools",
+    "adjust_pivot",
+    "2das",
+    "resources",
+}
+
+VALID_DOCK_AREAS = {"left", "right", "bottom", "top"}
+VALID_DOCK_MODES = {"tabbed", "vertical", "horizontal"}
 
 
 class LayoutValidator:
@@ -50,6 +72,20 @@ class LayoutValidator:
             preferred_height = self._check_int(warnings, f"{panel_id} preferredHeight", panel.get("preferredHeight"), 0, 3000)
             if min_height is not None and preferred_height is not None and preferred_height < min_height:
                 warnings.append(f"Panel '{panel_id}' preferredHeight is smaller than minHeight.")
+        for group in root.findall("./dockLayout/group"):
+            group_id = (group.get("id") or "").strip()
+            area = (group.get("area") or "left").strip()
+            mode = (group.get("mode") or "tabbed").strip()
+            if not group_id:
+                warnings.append("Dock layout group is missing required attribute 'id'.")
+            if area not in VALID_DOCK_AREAS:
+                warnings.append(f"Dock group '{group_id}' uses unsupported area '{area}'.")
+            if mode not in VALID_DOCK_MODES:
+                warnings.append(f"Dock group '{group_id}' uses unsupported mode '{mode}'.")
+            for dock in group.findall("./dock"):
+                dock_id = (dock.get("id") or "").strip()
+                if dock_id and dock_id not in KNOWN_DOCKS:
+                    warnings.append(f"Unknown dock id '{dock_id}' will be ignored by older builds.")
         viewport_toolbar = root.find("./viewport/toolbar")
         if viewport_toolbar is not None:
             mode = (viewport_toolbar.get("buttonMode") or "text").strip()

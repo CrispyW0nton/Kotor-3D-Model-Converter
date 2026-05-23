@@ -333,11 +333,13 @@ def test_prelaunch_library_payload_scans_before_main_window(tmp_path, monkeypatc
     )
     calls = []
 
+    resource_manager = object()
+
     def fake_scan(k1_dir, k2_dir):
         calls.append((k1_dir, k2_dir))
-        return [{"game": "K1", "resref": "pmbam", "source": k1_dir}]
+        return resource_manager, [{"game": "K1", "resref": "pmbam", "source": k1_dir}]
 
-    monkeypatch.setattr(qt_main_window, "_scan_library_rows_sync", fake_scan)
+    monkeypatch.setattr(qt_main_window, "_index_game_libraries_sync", fake_scan)
     statuses = []
     payload = qt_main_window._build_prelaunch_library_input(
         app_root,
@@ -348,6 +350,7 @@ def test_prelaunch_library_payload_scans_before_main_window(tmp_path, monkeypatc
     assert payload["foo"] == "bar"
     assert calls == [("C:/Games/KOTOR", "C:/Games/KOTOR2")]
     assert payload["preloaded_library"]["detection_attempted"] is True
+    assert payload["preloaded_library"]["_resource_manager"] is resource_manager
     assert payload["preloaded_library"]["rows"][0]["resref"] == "pmbam"
     assert any(title == "Indexing game libraries" for title, _detail in statuses)
 
@@ -361,11 +364,28 @@ def test_preloaded_library_skips_post_show_auto_detect_timer() -> None:
     assert "self._preloaded_library" in init_source
     assert 'if not self._preloaded_library.get("detection_attempted")' in init_source
     assert "QtCore.QTimer.singleShot(250, self._auto_detect_dirs_on_startup)" in init_source
+    assert 'preloaded.get("_resource_manager")' in inspect.getsource(
+        QtGhostRiggerMainWindow._apply_preloaded_library
+    )
+    assert "manager = self._get_resource_manager()" in inspect.getsource(
+        QtGhostRiggerMainWindow._populate_resource_panel
+    )
     assert "self._suppress_theme_progress_toast = True" in init_source
     assert "QtCore.QTimer.singleShot(1200, self._enable_theme_progress_toasts)" in init_source
     assert "self._suppress_theme_progress_toast = False" in inspect.getsource(
         QtGhostRiggerMainWindow._enable_theme_progress_toasts
     )
+
+
+def test_main_window_exposes_visual_profile_dropdown() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    command_bar_source = inspect.getsource(QtGhostRiggerMainWindow._make_command_bar)
+    assert "self.visual_profile_combo = QtWidgets.QComboBox()" in command_bar_source
+    assert "_populate_visual_profile_combo" in command_bar_source
+    assert "_on_visual_profile_selected" in inspect.getsource(QtGhostRiggerMainWindow)
 
 
 def test_startup_splash_uses_themed_embedded_progress() -> None:

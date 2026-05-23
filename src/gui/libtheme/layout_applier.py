@@ -41,6 +41,9 @@ class LayoutApplier(QtCore.QObject):
             self._apply_density_metrics(layout, window)
             self._apply_toolbars(layout, window)
             self._notify_layout_aware_widgets(layout, window)
+            sync_top_rows = getattr(window, "_sync_reserved_top_rows", None)
+            if callable(sync_top_rows):
+                sync_top_rows()
         finally:
             window.setUpdatesEnabled(True)
             window.update()
@@ -153,6 +156,63 @@ class LayoutApplier(QtCore.QObject):
                     if key == "mesh_tools":
                         dock.setVisible(panel.visible)
                     dock.resize(panel.preferred_width, max(520, panel.preferred_height))
+        self._apply_dock_groups(layout, window)
+
+    def _apply_dock_groups(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
+        groups = getattr(layout, "dock_groups", [])
+        docks = getattr(window, "_detachable_panels", {})
+        if not groups or not isinstance(docks, dict):
+            return
+        area_map = {
+            "left": QtCore.Qt.LeftDockWidgetArea,
+            "right": QtCore.Qt.RightDockWidgetArea,
+            "bottom": QtCore.Qt.BottomDockWidgetArea,
+            "top": QtCore.Qt.TopDockWidgetArea,
+        }
+        split_map = {
+            "vertical": QtCore.Qt.Vertical,
+            "horizontal": QtCore.Qt.Horizontal,
+        }
+        for group in groups:
+            dock_pairs = [(key, docks[key]) for key in group.docks if key in docks and docks.get(key) is not None]
+            if not dock_pairs:
+                continue
+            group_docks = [dock for _key, dock in dock_pairs]
+            area = area_map.get(group.area, QtCore.Qt.LeftDockWidgetArea)
+            anchor = group_docks[0]
+            for key, dock in dock_pairs:
+                return_to_main = getattr(window, "_return_detachable_panel_to_main_window", None)
+                if callable(return_to_main):
+                    try:
+                        host = getattr(window, "_host_for_dock_key", lambda _key: None)(key)
+                        if dock.isFloating() or host is not None:
+                            return_to_main(key)
+                    except RuntimeError:
+                        continue
+                try:
+                    window.addDockWidget(area, dock)
+                    dock.setVisible(bool(group.visible))
+                except RuntimeError:
+                    continue
+            if group.mode == "tabbed":
+                for dock in group_docks[1:]:
+                    try:
+                        window.tabifyDockWidget(anchor, dock)
+                    except RuntimeError:
+                        continue
+                active_key = group.active if group.active in group.docks else group.docks[0]
+                active = docks.get(active_key)
+                if active is not None:
+                    active.raise_()
+            elif group.mode in split_map:
+                orientation = split_map[group.mode]
+                previous = anchor
+                for dock in group_docks[1:]:
+                    try:
+                        window.splitDockWidget(previous, dock, orientation)
+                        previous = dock
+                    except RuntimeError:
+                        continue
 
     def _apply_density_metrics(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
         margin = layout.spacing_value("margin", 4)

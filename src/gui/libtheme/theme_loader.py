@@ -163,6 +163,8 @@ class ThemeLoader:
         fill("scrollbar.handle", colors.get("panel.border", "#404040"))
         fill("viewport.gridMajor", colors.get("panel.border", "#404040"))
         fill("viewport.gridMinor", colors.get("toolbar.border", colors.get("panel.border", "#303030")))
+        fill("viewportToolbar.background", colors.get("toolbar.background", colors.get("panel.background", "#202020")))
+        fill("viewportToolbar.border", colors.get("toolbar.border", colors.get("panel.border", "#404040")))
         fill("transformBar.background", colors.get("toolbar.background", colors.get("panel.background", "#202020")))
         fill("transformBar.border", colors.get("toolbar.border", colors.get("panel.border", "#404040")))
         fill("splash.background", colors.get("window.background", "#202020"))

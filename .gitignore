@@ -141,6 +141,8 @@ Thumbs.db
 # Keep PNGs inside assets folder
 !assets/**/*.png
 !src/gui/icons/*.png
+!src/gui/icons/branded_controls/*.png
+!src/gui/icons/gpu_branding/*.png
 !tests/golden/screens/*.png
 
 # ── Spreadsheets / audit scripts (inessential) ──────────────────────────────

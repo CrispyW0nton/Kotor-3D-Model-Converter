@@ -58,7 +58,8 @@ painted widgets should expose `apply_ghost_theme(theme)` and read tokens with
 ## Layout XML
 
 Layouts define structure only: window size, panel widths/heights, splitter
-proportions, toolbar visibility, toolbar button mode, and viewport density.
+proportions, toolbar visibility, toolbar button mode, viewport density, and
+optional dock group topology.
 
 Required root attributes:
 
@@ -67,11 +68,32 @@ Required root attributes:
 ```
 
 Known panel ids include `contentBrowser`, `scene`, `library`, `modules`,
-`properties`, `animationLibrary`, `meshTools`, `outputLog`, and
+`properties`, `animationLibrary`, `meshTools`, `nodes`, `lighting`, `cameras`,
+`moduleMeshes`, `adjustPivot`, `2das`, `resources`, `outputLog`, and
 `pythonTerminal`. The `contentBrowser`, `scene`, and `properties` ids control
 top-level dock widgets around the central viewport; the older `library` and
 `animationLibrary` ids remain valid for user layout compatibility. Unknown ids
 warn but do not crash, so future panels can be added safely.
+
+Dock topology is optional and lives under `<dockLayout>`. Groups can be
+`tabbed`, `vertical`, or `horizontal`, and use runtime dock keys:
+`content_browser`, `scene`, `properties`, `animations`, `nodes`, `lighting`,
+`cameras`, `module_meshes`, `mesh_tools`, `adjust_pivot`, `2das`, and
+`resources`.
+
+```xml
+<dockLayout>
+    <group id="lightingCameras" area="right" mode="tabbed" active="lighting">
+        <dock id="lighting"/>
+        <dock id="cameras"/>
+    </group>
+</dockLayout>
+```
+
+Packaged visual profile layouts are normal layout XML files:
+`profile_animation`, `profile_mesh_editing`, `profile_lighting`,
+`profile_cinegraphics`, and `profile_clean`. They appear in the toolbar Visual
+Profile dropdown and in Settings -> Theme / Layout.
 
 Supported button modes:
 
@@ -131,7 +153,8 @@ Core colour tokens include:
 - `panel.background`, `panel.backgroundAlt`, `panel.border`,
   `panel.headerBackground`, `panel.headerText`
 - `groupbox.border`, `groupbox.title`
-- `toolbar.background`, `toolbar.border`
+- `toolbar.background`, `toolbar.border`, `viewportToolbar.background`,
+  `viewportToolbar.border`
 - `button.background`, `button.text`, `button.hover`, `button.pressed`,
   `button.checked`, `button.checkedText`, `button.disabledBackground`,
   `button.disabledText`
