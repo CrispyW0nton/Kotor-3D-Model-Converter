@@ -1,9 +1,18 @@
-"""UE/FBX source animation importer facade.
+"""FBX Animation Importer - Retarget Workbench Production Path.
 
-The importer is backend-neutral for tests and future tool integrations. A real
-FBX backend must provide evaluated global matrices; if none is configured, the
-public import function fails explicitly instead of pretending raw channels are
-safe enough.
+Backend: Blender 4.2 headless (``bpy.ops.import_scene.fbx``).
+Pipeline: FBX -> Blender Headless -> Sampled JSON -> SourceSkeletonClip.
+Output: ``SourceSkeletonClip`` for animation retargeting.
+
+IMPORTANT: this is the production animation backend. Keep core logic stable.
+IMPORTANT: this module is not using Autodesk FBX SDK; see ``fbx_backend.py`` for
+optional SDK probing and backend selection.
+IMPORTANT: this is an animation-only pipeline, not generic mesh/geometry import.
+
+The importer remains backend-neutral for tests and future tool integrations. A
+real FBX backend must provide evaluated global matrices; if none is configured,
+the public import function fails explicitly instead of pretending raw channels
+are safe enough.
 """
 
 from __future__ import annotations

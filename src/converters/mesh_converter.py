@@ -1,7 +1,18 @@
-"""
-Mesh Converters
-OBJ ↔ KotorModel,  FBX → KotorModel,  KotorModel → OBJ/FBX
-TGA ↔ TPC texture conversion
+"""Legacy generic mesh converters.
+
+OBJ <-> KotorModel, FBX -> KotorModel, KotorModel -> OBJ/FBX, and TGA <-> TPC
+texture conversion.
+
+Legacy Generic Mesh FBX Importer - NOT FOR ANIMATION PIPELINE
+
+Fallback chain: pyassimp -> assimp_py -> trimesh.
+Purpose: geometry conversion for legacy mesh workflows.
+Output: static mesh/model data; this path is not the Retarget Workbench
+``SourceSkeletonClip`` animation pipeline.
+
+IMPORTANT: not used by the Retarget Workbench animation pipeline.
+IMPORTANT: not a replacement for ``src.core.retargeting.fbx_importer``.
+IMPORTANT: keep this quarantined from animation retargeting workflows.
 """
 
 import os, struct, math, logging
