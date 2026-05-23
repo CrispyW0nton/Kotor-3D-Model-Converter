@@ -15,7 +15,11 @@ def _qapp():
     return QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
 
-def _sample_clip():
+def _sample_clip(
+    *,
+    child_local_position: tuple[float, float, float] = (1.0, 0.0, 0.0),
+    child_global_position: tuple[float, float, float] = (1.0, 0.0, 0.0),
+):
     from src.core.retargeting.source_animation import (
         SourcePose,
         SourceSkeletonClip,
@@ -24,9 +28,9 @@ def _sample_clip():
     )
 
     root_local = Transform()
-    child_local = Transform(position=(1.0, 0.0, 0.0))
+    child_local = Transform(position=child_local_position)
     root_global = Transform()
-    child_global = Transform(position=(1.0, 0.0, 0.0))
+    child_global = Transform(position=child_global_position)
     nodes = [
         SourceSkeletonNode("Root", None, 0, root_local, root_global),
         SourceSkeletonNode("RHand", "Root", 1, child_local, child_global),
@@ -99,6 +103,7 @@ def test_source_clip_preview_model_preserves_imported_skeleton_for_viewport() ->
     root = model.root_node.children[0]
     assert [node.name for node in root.children] == ["RHand"]
     assert getattr(root.children[0], "external_world_position") == (1.0, 0.0, 0.0)
+    assert getattr(root.children[0], "_gr_source_clip_preview_position") == (1.0, 0.0, 0.0)
     bb_min, bb_max = getattr(model, "_gr_render_bounds")
     assert bb_min[0] < bb_max[0]
     assert bb_min[1] < bb_max[1]
@@ -156,6 +161,33 @@ def test_retarget_window_source_clip_preview_populates_animation_list() -> None:
         assert window.panel.anim_list.currentItem().data(QtCore.Qt.UserRole) is not None
         assert window.source_viewport.model is not None
         assert getattr(window.source_viewport.model, "_gr_source_clip_preview") is True
+        assert window.source_viewport._renderer._anim_pose is None
+    finally:
+        window.close()
+
+
+def test_retarget_window_source_animation_playback_uses_compact_preview_positions() -> None:
+    _qapp()
+    from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
+
+    clip = _sample_clip(child_local_position=(100.0, 0.0, 0.0), child_global_position=(1.0, 0.0, 0.0))
+    window = QtAnimationRetargetWindow()
+    try:
+        previewed: list[str] = []
+        window.previewRequested.connect(previewed.append)
+        window.set_source_clip_preview(clip)
+
+        item = window.panel.anim_list.currentItem()
+        assert item is not None
+        window.panel.anim_list.itemDoubleClicked.emit(item)
+
+        pose = window.source_viewport._renderer._anim_pose
+        assert pose is not None
+        assert pose.nodes["rhand"].position == (1.0, 0.0, 0.0)
+        assert previewed == []
+
+        window.panel._preview()
+        assert previewed == ["root|Unreal Take|Base Layer"]
     finally:
         window.close()
 

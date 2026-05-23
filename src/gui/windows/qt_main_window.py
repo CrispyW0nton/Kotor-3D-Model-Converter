@@ -2970,6 +2970,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             lambda: self._retarget_import_external_model("target")
         )
         self.animation_retarget_window.previewRequested.connect(self._retarget_workbench_preview_from_window)
+        self.animation_retarget_window.sourceAnimationPlayRequested.connect(
+            self._retarget_workbench_play_source_animation_from_window
+        )
         self.animation_retarget_window.applyRequested.connect(self._retarget_apply)
         self.animation_retarget_window.stopRequested.connect(self._retarget_stop)
         self.animation_retarget_panel = self.animation_retarget_window
@@ -5322,6 +5325,30 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             controller.set_source_kotor_animation_slot(anim_name)
         self._apply_retarget_workbench_mode_status()
         self._preview_retarget_animation()
+
+    def _retarget_workbench_play_source_animation_from_window(self, anim_name: str) -> None:
+        controller = getattr(self, "retarget_workbench_controller", None)
+        window = getattr(self, "animation_retarget_window", None)
+        if controller is None or window is None or not anim_name:
+            return
+        mode_name = str(getattr(getattr(controller.state, "mode", None), "name", "") or "")
+        if mode_name != "UNREAL_TO_KOTOR":
+            return
+        clip = getattr(controller.state, "source_clip", None)
+        source_path = str(getattr(clip, "source_path", "") or "")
+        if not source_path:
+            return
+        try:
+            loaded = controller.load_source_clip(source_path, clip_name=anim_name)
+            if hasattr(window, "set_source_clip_preview"):
+                mesh_model = getattr(window, "_source_clip_mesh_model", None)
+                window.set_source_clip_preview(loaded, mesh_model=mesh_model)
+            if hasattr(window, "play_source_clip_animation"):
+                window.play_source_clip_animation(anim_name)
+            self._apply_retarget_workbench_mode_status()
+        except Exception as exc:
+            self._log(f"UE/FBX source animation playback load failed: {exc}", "error")
+            QtWidgets.QMessageBox.critical(self, "Play Source Animation", str(exc))
 
     def _retarget_target_label(self) -> str:
         model = self._retarget_target_model

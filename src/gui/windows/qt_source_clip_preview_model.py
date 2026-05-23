@@ -82,6 +82,8 @@ def build_source_clip_preview_model(clip: SourceSkeletonClip, mesh_model: KotorM
         preview_node.parent = parent
         parent.children.append(preview_node)
 
+    _apply_compact_preview_positions(root)
+
     mesh_bounds = _append_mesh_preview_nodes(root, mesh_model)
     bounds = _merge_bounds(_bounds_from_clip(clip), mesh_bounds)
     model.bb_min, model.bb_max = bounds
@@ -90,6 +92,27 @@ def build_source_clip_preview_model(clip: SourceSkeletonClip, mesh_model: KotorM
     setattr(model, "_gr_render_bounds", bounds)
     setattr(model, "_gr_source_clip_mesh_count", len([n for n in model.all_nodes() if getattr(n, "_gr_fbx_mesh_preview_node", False)]))
     return model
+
+
+def _apply_compact_preview_positions(root: ModelNode) -> None:
+    stack = list(getattr(root, "children", []) or [])
+    while stack:
+        node = stack.pop()
+        child_world = getattr(node, "external_world_position", None)
+        if child_world is not None:
+            parent = getattr(node, "parent", None)
+            parent_world = getattr(parent, "external_world_position", None)
+            if parent_world is not None:
+                compact = (
+                    float(child_world[0]) - float(parent_world[0]),
+                    float(child_world[1]) - float(parent_world[1]),
+                    float(child_world[2]) - float(parent_world[2]),
+                )
+            else:
+                compact = _finite_position(child_world)
+            node.position = compact
+            node._gr_source_clip_preview_position = compact
+        stack.extend(getattr(node, "children", []) or [])
 
 
 def _source_clip_animation_rows(clip: SourceSkeletonClip) -> list[SourceClipPreviewAnimation]:

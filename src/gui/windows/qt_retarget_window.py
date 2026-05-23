@@ -30,6 +30,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
     previewRequested = QtCore.Signal(str)
     applyRequested = QtCore.Signal(str)
     stopRequested = QtCore.Signal()
+    sourceAnimationPlayRequested = QtCore.Signal(str)
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
@@ -43,6 +44,11 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self._navigation_profile = DEFAULT_VIEWPORT_NAVIGATION_PROFILE
         self._source_clip_preview_clip = None
         self._source_clip_mesh_model = None
+        self._source_clip_play_name = ""
+        self._source_clip_play_clock = QtCore.QElapsedTimer()
+        self._source_clip_play_timer = QtCore.QTimer(self)
+        self._source_clip_play_timer.setInterval(33)
+        self._source_clip_play_timer.timeout.connect(self._tick_source_clip_playback)
         self._build_actions()
         self._build_menu()
         self._build_statusbar()
@@ -90,7 +96,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.apply_action.setShortcut("Ctrl+Return")
         self.apply_action.triggered.connect(lambda: self.applyRequested.emit(self.panel.selected_animation()))
         self.stop_action = QtGui.QAction("Stop Preview", self)
-        self.stop_action.triggered.connect(self.stopRequested.emit)
+        self.stop_action.triggered.connect(self._stop_requested)
         self.frame_source_action = QtGui.QAction("Frame Source", self)
         self.frame_source_action.triggered.connect(lambda: self.source_viewport.frame_all())
         self.frame_target_action = QtGui.QAction("Frame Target", self)
@@ -165,7 +171,8 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.panel.targetExternalImportRequested.connect(self.targetExternalImportRequested.emit)
         self.panel.previewRequested.connect(self.previewRequested.emit)
         self.panel.applyRequested.connect(self.applyRequested.emit)
-        self.panel.stopRequested.connect(self.stopRequested.emit)
+        self.panel.stopRequested.connect(self._stop_requested)
+        self.panel.sourceAnimationPlayRequested.connect(self.play_source_clip_animation)
 
         viewport_split = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         viewport_split.setChildrenCollapsible(False)
@@ -312,7 +319,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             self.source_viewport.bones_button.blockSignals(False)
         self.source_viewport.toggle_bones(True)
         self.source_viewport.set_joint_dot_enabled(True)
-        self._set_source_clip_pose(clip, 0.0)
+        self.source_viewport.clear_animation_pose()
         self.source_viewport.frame_all()
         node_count = int(getattr(preview_model, "_gr_source_clip_node_count", 0) or 0)
         mesh_count = int(getattr(preview_model, "_gr_source_clip_mesh_count", 0) or 0)
@@ -333,6 +340,24 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         if animation_name and str(animation_name) != str(getattr(clip, "clip_name", "")):
             return
         self._set_source_clip_pose(clip, time_seconds)
+
+    def play_source_clip_animation(self, animation_name: str) -> None:
+        clip = self._source_clip_preview_clip
+        if clip is None:
+            self.statusBar().showMessage("No imported source clip is loaded.")
+            return
+        current_name = str(getattr(clip, "clip_name", "") or "")
+        if animation_name and animation_name != current_name:
+            self.sourceAnimationPlayRequested.emit(animation_name)
+            self.statusBar().showMessage(f"Loading source animation: {animation_name}")
+            return
+        self._source_clip_play_name = current_name
+        self._set_source_clip_pose(clip, 0.0)
+        duration = float(getattr(clip, "duration_seconds", 0.0) or 0.0)
+        if duration > 0.0 and len(getattr(clip, "sampled_poses", []) or []) > 1:
+            self._source_clip_play_clock.restart()
+            self._source_clip_play_timer.start()
+        self.statusBar().showMessage(f"Playing source animation: {current_name}")
 
     def set_target_model(self, model, game_tag: str = "") -> None:
         if game_tag:
@@ -370,6 +395,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.target_viewport.set_animation_pose(pose, name=name, time=time, length=length)
 
     def clear_poses(self) -> None:
+        self._source_clip_play_timer.stop()
         self.source_viewport.clear_animation_pose()
         self.target_viewport.clear_animation_pose()
 
@@ -379,10 +405,20 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         except Exception:
             return
         pose = AnimPose(time=float(getattr(source_pose, "time_seconds", time_seconds) or time_seconds))
+        model = getattr(self.source_viewport, "model", None)
         for node_name, transform in (getattr(source_pose, "local_transforms", {}) or {}).items():
+            preview_node = None
+            if model is not None and hasattr(model, "find_node"):
+                try:
+                    preview_node = model.find_node(str(node_name))
+                except Exception:
+                    preview_node = None
+            position = getattr(preview_node, "_gr_source_clip_preview_position", None)
+            if position is None and preview_node is not None:
+                position = getattr(preview_node, "position", (0.0, 0.0, 0.0))
             pose.nodes[str(node_name).lower()] = NodePose(
                 name=str(node_name),
-                position=tuple(float(v) for v in getattr(transform, "position", (0.0, 0.0, 0.0))[:3]),
+                position=tuple(float(v) for v in (position or (0.0, 0.0, 0.0))[:3]),
                 rotation=tuple(float(v) for v in getattr(transform, "rotation", (0.0, 0.0, 0.0, 1.0))[:4]),
                 scale=1.0,
             )
@@ -392,6 +428,22 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             time=pose.time,
             length=float(getattr(clip, "duration_seconds", 0.0) or 0.0),
         )
+
+    def _tick_source_clip_playback(self) -> None:
+        clip = self._source_clip_preview_clip
+        if clip is None:
+            self._source_clip_play_timer.stop()
+            return
+        duration = float(getattr(clip, "duration_seconds", 0.0) or 0.0)
+        if duration <= 0.0:
+            self._source_clip_play_timer.stop()
+            return
+        elapsed = max(0.0, self._source_clip_play_clock.elapsed() / 1000.0)
+        self._set_source_clip_pose(clip, elapsed % duration)
+
+    def _stop_requested(self) -> None:
+        self._source_clip_play_timer.stop()
+        self.stopRequested.emit()
 
     def _tool_mode_changed(self) -> None:
         active = self.tool_action_group.checkedAction()

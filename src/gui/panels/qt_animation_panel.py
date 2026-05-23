@@ -164,6 +164,7 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
     applyRequested = QtCore.Signal(str)
     stopRequested = QtCore.Signal()
     animationSelected = QtCore.Signal(str)
+    sourceAnimationPlayRequested = QtCore.Signal(str)
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
@@ -211,7 +212,7 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
         layout.addWidget(heading("Animations"))
         self.anim_list = QtWidgets.QListWidget()
         self.anim_list.currentTextChanged.connect(self.animationSelected.emit)
-        self.anim_list.itemDoubleClicked.connect(lambda _item: self._preview())
+        self.anim_list.itemDoubleClicked.connect(lambda _item: self._play_source_animation())
         layout.addWidget(self.anim_list, 1)
         return column
 
@@ -459,6 +460,9 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
 
     def _preview(self) -> None:
         self.previewRequested.emit(self.selected_animation())
+
+    def _play_source_animation(self) -> None:
+        self.sourceAnimationPlayRequested.emit(self.selected_animation())
 
     def _apply(self) -> None:
         self.applyRequested.emit(self.selected_animation())
