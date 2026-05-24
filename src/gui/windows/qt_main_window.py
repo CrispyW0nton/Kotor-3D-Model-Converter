@@ -423,6 +423,10 @@ class ResourceModelLoadWorker(QtCore.QObject):
             if model is None:
                 raise RuntimeError(f"Could not parse {self.game}:{self.resref}.mdl")
             model.game_version = game_version
+            model._gr_source_mdl_bytes = mdl
+            model._gr_source_mdx_bytes = mdx
+            model._gr_source_resref = self.resref
+            model._gr_source_game = self.game
             self.progress.emit("Preparing GPU mesh buffers in RAM", 4, 5)
             _prebuild_gpu_mesh_data_for_model(model)
             self.progress.emit("Handing model to viewport", 5, 5)
