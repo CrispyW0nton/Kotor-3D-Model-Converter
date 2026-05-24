@@ -1422,6 +1422,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.settings_data.get("default_import_placement") or "auto_offset"
         )
         self._session_model_double_click_choice = ""
+        self._syncing_scene_skeleton_selection = False
         self._current_model = None
         self._model_path = ""
         self._current_game = ""
@@ -3340,7 +3341,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             scroll=False,
         )
         self.viewport_label = self.viewport.canvas
-        self.skeleton_panel.nodeSelected.connect(self.viewport.set_selected_node)
+        self.skeleton_panel.nodeSelected.connect(self._on_skeleton_node_selected)
         self.viewport.nodeSelected.connect(self.properties_panel.show_node)
         self.viewport.nodeSelected.connect(self._on_viewport_scene_node_selected)
         self.viewport.nodeSelected.connect(self.module_geometry_panel.show_node)
@@ -4061,6 +4062,15 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             pass
 
     def _select_scene_object(self, object_id: str) -> None:
+        if getattr(self, "_syncing_scene_skeleton_selection", False):
+            return
+        self._syncing_scene_skeleton_selection = True
+        try:
+            self._select_scene_object_impl(object_id)
+        finally:
+            self._syncing_scene_skeleton_selection = False
+
+    def _select_scene_object_impl(self, object_id: str) -> None:
         for obj in self.scene_manager.active_scene.objects:
             obj.selected = obj.id == object_id
         if hasattr(self, "viewport"):
@@ -4068,6 +4078,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
         if obj is not None:
             self._activate_scene_object_model(obj)
+            self._sync_skeleton_root_for_scene_object(obj)
             if hasattr(self, "properties_panel"):
                 show_scene_object = getattr(self.properties_panel, "show_scene_object", None)
                 if callable(show_scene_object):
@@ -4076,6 +4087,56 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._refresh_adjust_pivot_panel()
         if hasattr(self, "scene_outliner_panel"):
             self.scene_outliner_panel.set_scene(self.scene_manager.active_scene)
+
+    def _runtime_model_for_scene_object(self, obj):
+        return (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
+
+    def _scene_object_for_runtime_node(self, node):
+        if node is None:
+            return None
+        for obj in self.scene_manager.active_scene.objects:
+            if getattr(obj, "object_type", "") != "model":
+                continue
+            model = self._runtime_model_for_scene_object(obj)
+            if model is None:
+                continue
+            if node is getattr(model, "root_node", None):
+                return obj
+            try:
+                nodes = list(model.all_nodes()) if hasattr(model, "all_nodes") else []
+            except Exception:
+                nodes = []
+            if any(candidate is node for candidate in nodes):
+                return obj
+        return None
+
+    def _sync_skeleton_root_for_scene_object(self, obj) -> None:
+        panel = getattr(self, "skeleton_panel", None)
+        if panel is None or obj is None:
+            return
+        model = self._runtime_model_for_scene_object(obj)
+        root = getattr(model, "root_node", None)
+        if model is None or root is None:
+            return
+        try:
+            if getattr(panel, "_current_model", None) is not model:
+                panel.load_model(model)
+            panel.select_node(root, emit=False)
+        except Exception:
+            log.debug("Could not sync scene object root into skeleton panel", exc_info=True)
+
+    def _on_skeleton_node_selected(self, node) -> None:
+        obj = self._scene_object_for_runtime_node(node)
+        if obj is not None and node is getattr(self._runtime_model_for_scene_object(obj), "root_node", None):
+            if not getattr(self, "_syncing_scene_skeleton_selection", False):
+                self._syncing_scene_skeleton_selection = True
+                try:
+                    self._select_scene_object_impl(obj.id)
+                finally:
+                    self._syncing_scene_skeleton_selection = False
+            return
+        if hasattr(self, "viewport"):
+            self.viewport.set_selected_node(node)
 
     def _delete_scene_object(self, object_id: str) -> None:
         self.scene_manager.remove_object(object_id)
@@ -4130,6 +4191,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
             if obj is not None:
                 self._activate_scene_object_model(obj)
+                self._sync_skeleton_root_for_scene_object(obj)
                 show_scene_object = getattr(self.properties_panel, "show_scene_object", None)
                 if callable(show_scene_object):
                     show_scene_object(obj)

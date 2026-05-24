@@ -47,6 +47,7 @@ class QtSkeletonPanel(QtWidgets.QWidget):
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
         self._all_items: dict[QtWidgets.QTreeWidgetItem, object] = {}
+        self._suppress_selection_emit = False
         self._build()
 
     def _build(self) -> None:
@@ -94,6 +95,7 @@ class QtSkeletonPanel(QtWidgets.QWidget):
         root.addWidget(self.tree, 1)
 
     def load_model(self, model) -> None:
+        self._current_model = model
         self.tree.clear()
         self._all_items.clear()
         if not model or not getattr(model, "root_node", None):
@@ -140,6 +142,8 @@ class QtSkeletonPanel(QtWidgets.QWidget):
     def _on_selection_changed(self) -> None:
         selected = self.tree.selectedItems()
         self.selection_label.setText(f"{len(selected)} selected" if len(selected) > 1 else "")
+        if self._suppress_selection_emit:
+            return
         nodes = [self._all_items[item] for item in selected if item in self._all_items]
         if nodes:
             self.nodeSelected.emit(nodes[0])
@@ -162,12 +166,21 @@ class QtSkeletonPanel(QtWidgets.QWidget):
     def clear_selection(self) -> None:
         self.tree.clearSelection()
 
-    def select_node(self, node) -> None:
-        for item, candidate in self._all_items.items():
-            if candidate is node:
-                self.tree.setCurrentItem(item)
-                item.setSelected(True)
-                break
+    def select_node(self, node, *, emit: bool = True) -> None:
+        self._suppress_selection_emit = not emit
+        try:
+            self.tree.clearSelection()
+            if node is None:
+                self.selection_label.setText("")
+                return
+            for item, candidate in self._all_items.items():
+                if candidate is node:
+                    self.tree.setCurrentItem(item)
+                    item.setSelected(True)
+                    self.tree.scrollToItem(item)
+                    break
+        finally:
+            self._suppress_selection_emit = False
 
     def get_selected_nodes(self) -> list:
         return [self._all_items[item] for item in self.tree.selectedItems() if item in self._all_items]

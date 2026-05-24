@@ -96,8 +96,7 @@ class QtPythonTerminalPanel(QtWidgets.QWidget):
         self.output = QtWidgets.QPlainTextEdit()
         self.output.setReadOnly(True)
         self.output.setMinimumHeight(0)
-        self.output.setMaximumHeight(180)
-        self.output.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Ignored)
+        self.output.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.output.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
         self.output.setObjectName("PythonTerminalOutput")
 
@@ -290,8 +289,7 @@ class QtLogPanel(QtWidgets.QWidget):
         self.text = QtWidgets.QTextEdit()
         self.text.setReadOnly(True)
         self.text.setMinimumHeight(0)
-        self.text.setMaximumHeight(180)
-        self.text.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Ignored)
+        self.text.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
 
         self.log_footer = QtWidgets.QFrame()
         self.log_footer.setObjectName("LogFooter")
@@ -317,7 +315,7 @@ class QtLogPanel(QtWidgets.QWidget):
         self.content_splitter.setStretchFactor(1, 2)
         self.content_splitter.setSizes([900, 520])
 
-        root.addWidget(self.content_splitter)
+        root.addWidget(self.content_splitter, 1)
 
     def apply_ghost_theme(self, theme) -> None:
         self.terminal.apply_ghost_theme(theme)

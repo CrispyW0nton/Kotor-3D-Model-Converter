@@ -112,6 +112,19 @@ def test_log_panel_embeds_python_terminal():
             panel.terminal.copy_button,
             panel.terminal.clear_button,
         ))
+        panel.resize(760, 420)
+        app.processEvents()
+        log_text_height = panel.text.height()
+        terminal_output_height = panel.terminal.output.height()
+        panel_bottom = panel.rect().bottom()
+        log_footer_bottom = panel.log_footer.mapTo(panel, panel.log_footer.rect().bottomLeft()).y()
+        terminal_input_bottom = panel.terminal.input_row_host.mapTo(
+            panel, panel.terminal.input_row_host.rect().bottomLeft()
+        ).y()
+        assert log_text_height > 180
+        assert terminal_output_height > 180
+        assert panel_bottom - log_footer_bottom <= 2
+        assert panel_bottom - terminal_input_bottom <= 2
         panel.log("left side still logs", "info")
         assert "left side still logs" in panel.get_text()
         panel.terminal.input.setText("1 + 2")

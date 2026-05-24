@@ -1131,6 +1131,51 @@ def test_qt_lighting_panel_select_light_syncs_from_viewport_without_emitting() -
     assert panel.tree.selectedItems() == []
 
 
+def test_qt_skeleton_panel_can_sync_root_without_emitting_selection() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_properties_panel import QtSkeletonPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    child = SimpleNamespace(name="head", type_label="dummy", is_mesh=False, children=[])
+    root = SimpleNamespace(name="N_Bith", type_label="dummy", is_mesh=False, children=[child])
+    model = SimpleNamespace(
+        root_node=root,
+        node_count=lambda: 2,
+        mesh_nodes=lambda: [],
+    )
+    panel = QtSkeletonPanel()
+    emitted = []
+    panel.nodeSelected.connect(emitted.append)
+    panel.load_model(model)
+
+    panel.select_node(root, emit=False)
+
+    assert emitted == []
+    assert panel.tree.currentItem().text(0).endswith("N_Bith")
+    assert panel.get_selected_nodes() == [root]
+
+
+def test_main_window_routes_scene_root_skeleton_selection_through_scene_object() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    init_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    select_source = inspect.getsource(QtGhostRiggerMainWindow._select_scene_object_impl)
+    skeleton_source = inspect.getsource(QtGhostRiggerMainWindow._on_skeleton_node_selected)
+    viewport_source = inspect.getsource(QtGhostRiggerMainWindow._on_viewport_scene_node_selected)
+
+    assert "self.skeleton_panel.nodeSelected.connect(self._on_skeleton_node_selected)" in init_source
+    assert "self._sync_skeleton_root_for_scene_object(obj)" in select_source
+    assert "node is getattr(self._runtime_model_for_scene_object(obj), \"root_node\", None)" in skeleton_source
+    assert "self._select_scene_object_impl(obj.id)" in skeleton_source
+    assert "self.viewport.set_selected_node(node)" in skeleton_source
+    assert "self._sync_skeleton_root_for_scene_object(obj)" in viewport_source
+
+
 def test_cinematic_camera_model_links_focal_length_and_fov() -> None:
     import math
     import pytest
