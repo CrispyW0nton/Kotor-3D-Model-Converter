@@ -39,13 +39,54 @@ def _material_info(material):
     }
 
 
+def _mesh_skin_info(obj):
+    """Return bone-map metadata for Blender vertex-group skin weights."""
+
+    used_group_indices = set()
+    for vertex in obj.data.vertices:
+        for group_weight in vertex.groups:
+            if float(group_weight.weight) > 1e-8:
+                used_group_indices.add(int(group_weight.group))
+    if not used_group_indices:
+        return False, {}, []
+
+    groups = list(obj.vertex_groups)
+    bone_map = []
+    group_to_bone = {}
+    for group_index in sorted(used_group_indices):
+        if group_index < 0 or group_index >= len(groups):
+            continue
+        local_index = len(bone_map)
+        group_to_bone[group_index] = local_index
+        bone_map.append(str(groups[group_index].name))
+    return bool(bone_map), group_to_bone, bone_map
+
+
+def _vertex_skin(vertex, group_to_bone):
+    influences = []
+    for group_weight in vertex.groups:
+        bone_index = group_to_bone.get(int(group_weight.group))
+        weight = float(group_weight.weight)
+        if bone_index is None or weight <= 1e-8:
+            continue
+        influences.append({"bone_index": int(bone_index), "weight": weight})
+    influences.sort(key=lambda item: float(item["weight"]), reverse=True)
+    influences = influences[:4]
+    total = sum(float(item["weight"]) for item in influences)
+    if total > 1e-8:
+        for item in influences:
+            item["weight"] = float(item["weight"]) / total
+    return influences
+
+
 def _extract_mesh_object(obj, depsgraph):
     evaluated = obj.evaluated_get(depsgraph)
-    mesh = evaluated.to_mesh()
+    is_skin, group_to_bone, bone_map = _mesh_skin_info(obj)
+    mesh = obj.data if is_skin else evaluated.to_mesh()
     try:
         mesh.calc_loop_triangles()
         uv_layer = mesh.uv_layers.active.data if mesh.uv_layers.active is not None else None
-        world = evaluated.matrix_world
+        world = obj.matrix_world if is_skin else evaluated.matrix_world
         normal_matrix = world.to_3x3().inverted_safe().transposed()
         materials = [_material_info(material) for material in obj.data.materials]
         if not materials:
@@ -56,6 +97,7 @@ def _extract_mesh_object(obj, depsgraph):
         uvs = []
         faces = []
         face_mats = []
+        skin_data = []
         for tri in mesh.loop_triangles:
             face = []
             for loop_index in tri.loops:
@@ -70,12 +112,17 @@ def _extract_mesh_object(obj, depsgraph):
                     uvs.append([float(uv.x), 1.0 - float(uv.y)])
                 else:
                     uvs.append([0.0, 0.0])
+                if is_skin:
+                    skin_data.append(_vertex_skin(vertex, group_to_bone))
                 face.append(len(vertices) - 1)
             faces.append(face)
             face_mats.append(int(tri.material_index))
         return {
             "name": obj.name,
             "matrix_world": _matrix_rows(world),
+            "is_skin": bool(is_skin),
+            "bone_map": bone_map,
+            "skin_data": skin_data,
             "vertices": vertices,
             "normals": normals,
             "uvs": uvs,
@@ -84,7 +131,8 @@ def _extract_mesh_object(obj, depsgraph):
             "materials": materials,
         }
     finally:
-        evaluated.to_mesh_clear()
+        if not is_skin:
+            evaluated.to_mesh_clear()
 
 
 def main():

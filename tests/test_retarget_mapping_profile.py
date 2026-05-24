@@ -12,6 +12,7 @@ from src.core.geometry.model_data import Animation, KotorModel, ModelNode
 from src.core.retargeting.fbx_importer import classify_source_node_name
 from src.core.retargeting.retarget_mapping import (
     detect_side,
+    suggest_mixamo_to_aurora_mapping,
     suggest_initial_mapping,
     suggest_source_roles,
     suggest_ue5_to_aurora_mapping,
@@ -224,6 +225,59 @@ def test_verified_ue5_to_aurora_mapping_uses_rename_map_and_target_casing() -> N
     assert pairs["hand_r"] == "Rhand_g"
     assert pairs["ball_l"] == "lfootT_g"
     assert pairs["ball_r"] == "rfootT_g"
+    assert "headhook" not in {entry.target_node.lower() for entry in profile.mappings}
+    assert profile.metadata["recommended_rotation_transfer_mode"] == "exact_segment_correction"
+    assert profile.metadata["key_unmapped_reference_nodes"] is True
+
+    report = validate_retarget_profile(profile, clip, target)
+    assert report.success is True
+
+
+def test_verified_mixamo_to_aurora_mapping_uses_family_specific_policy() -> None:
+    mixamo_names = [
+        "mixamorig:Hips",
+        "mixamorig:Spine",
+        "mixamorig:Spine1",
+        "mixamorig:Spine2",
+        "mixamorig:Neck",
+        "mixamorig:Head",
+        "mixamorig:RightShoulder",
+        "mixamorig:RightArm",
+        "mixamorig:RightForeArm",
+        "mixamorig:RightHand",
+        "mixamorig:RightHandMiddle1",
+        "mixamorig:RightHandMiddle3",
+        "mixamorig:LeftShoulder",
+        "mixamorig:LeftArm",
+        "mixamorig:LeftForeArm",
+        "mixamorig:LeftHand",
+        "mixamorig:LeftHandMiddle1",
+        "mixamorig:LeftHandMiddle3",
+        "mixamorig:RightUpLeg",
+        "mixamorig:RightLeg",
+        "mixamorig:RightFoot",
+        "mixamorig:RightToeBase",
+        "mixamorig:LeftUpLeg",
+        "mixamorig:LeftLeg",
+        "mixamorig:LeftFoot",
+        "mixamorig:LeftToeBase",
+    ]
+    clip = _source_clip(mixamo_names)
+    target = load_model_from_file(
+        "tests/fixtures/kotor_stock/k1/pmbam.mdl",
+        "tests/fixtures/kotor_stock/k1/pmbam.mdx",
+    )
+
+    profile = suggest_mixamo_to_aurora_mapping(clip, target)
+    pairs = {entry.source_node: entry.target_node for entry in profile.mappings}
+
+    assert profile.metadata["generated_by"] == "verified_mixamo_to_aurora_mapping"
+    assert profile.metadata["source_skeleton_family"] == "mixamo"
+    assert pairs["mixamorig:RightHand"] == "Rhand_g"
+    assert pairs["mixamorig:LeftHand"] == "Lhand_g"
+    assert pairs["mixamorig:RightFoot"] == "rfoot_g"
+    assert pairs["mixamorig:LeftFoot"] == "lfoot_g"
+    assert "handconjure" not in {entry.target_node.lower() for entry in profile.mappings}
     assert "headhook" not in {entry.target_node.lower() for entry in profile.mappings}
     assert profile.metadata["recommended_rotation_transfer_mode"] == "exact_segment_correction"
     assert profile.metadata["key_unmapped_reference_nodes"] is True

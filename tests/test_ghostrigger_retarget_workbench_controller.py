@@ -200,6 +200,55 @@ def _ue5_source_clip_for_verified_auto_profile() -> SourceSkeletonClip:
     )
 
 
+def _mixamo_source_clip_for_verified_auto_profile() -> SourceSkeletonClip:
+    names = [
+        "mixamorig:Hips",
+        "mixamorig:Spine",
+        "mixamorig:Spine1",
+        "mixamorig:Spine2",
+        "mixamorig:Neck",
+        "mixamorig:Head",
+        "mixamorig:RightShoulder",
+        "mixamorig:RightArm",
+        "mixamorig:RightForeArm",
+        "mixamorig:RightHand",
+        "mixamorig:RightHandMiddle1",
+        "mixamorig:RightHandMiddle3",
+        "mixamorig:LeftShoulder",
+        "mixamorig:LeftArm",
+        "mixamorig:LeftForeArm",
+        "mixamorig:LeftHand",
+        "mixamorig:LeftHandMiddle1",
+        "mixamorig:LeftHandMiddle3",
+        "mixamorig:RightUpLeg",
+        "mixamorig:RightLeg",
+        "mixamorig:RightFoot",
+        "mixamorig:RightToeBase",
+        "mixamorig:LeftUpLeg",
+        "mixamorig:LeftLeg",
+        "mixamorig:LeftFoot",
+        "mixamorig:LeftToeBase",
+    ]
+    nodes = [
+        SourceSkeletonNode(name, None, index, Transform(), Transform(), classification="deform")
+        for index, name in enumerate(names)
+    ]
+    pose = SourcePose(
+        time_seconds=0.0,
+        local_transforms={node.name: node.rest_local for node in nodes},
+        global_transforms={node.name: node.rest_global for node in nodes},
+    )
+    return SourceSkeletonClip(
+        source_path="draw sword 1.fbx",
+        clip_name="Armature|mixamo.com|Layer0",
+        duration_seconds=1.0,
+        sample_rate=30.0,
+        nodes=nodes,
+        rest_pose=pose,
+        sampled_poses=[pose],
+    )
+
+
 def _target_model_for_auto_profile() -> KotorModel:
     root = ModelNode(name="root")
     pelvis = ModelNode(name="pelvis_g")
@@ -388,6 +437,36 @@ def test_unreal_to_kotor_auto_generates_verified_ue5_profile_and_solver_options(
     assert controller.state.solver_options is not None
     assert controller.state.solver_options.rotation_transfer_mode == "exact_segment_correction"
     assert controller.state.solver_options.key_unmapped_reference_nodes is True
+    assert ue.state.retarget_profile is profile
+    assert ue.state.solver_options is controller.state.solver_options
+
+
+def test_unreal_to_kotor_auto_generates_verified_mixamo_profile_and_solver_options() -> None:
+    ue = FakePreviewController()
+    controller = RetargetWorkbenchController(ue_to_kotor_controller=ue)
+
+    controller.set_source_clip(_mixamo_source_clip_for_verified_auto_profile())
+    controller.set_target_model(_pmbam_target_model_for_verified_auto_profile())
+
+    profile = controller.state.retarget_profile
+    assert profile is not None
+    assert profile.metadata["generated_by"] == "verified_mixamo_to_aurora_mapping"
+    assert profile.metadata["source_skeleton_family"] == "mixamo"
+    assert profile.metadata["recommended_rotation_transfer_mode"] == "exact_segment_correction"
+    assert {entry.target_node for entry in profile.mappings} >= {
+        "pelvis_g",
+        "torso_g",
+        "torsoUpr_g",
+        "Lforearm_g",
+        "Lhand_g",
+        "Rforearm_g",
+        "Rhand_g",
+        "lfoot_g",
+        "rfoot_g",
+    }
+    assert "handconjure" not in {entry.target_node.lower() for entry in profile.mappings}
+    assert controller.state.solver_options is not None
+    assert controller.state.solver_options.rotation_transfer_mode == "exact_segment_correction"
     assert ue.state.retarget_profile is profile
     assert ue.state.solver_options is controller.state.solver_options
 

@@ -8,6 +8,7 @@ import sys
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+import pytest
 from PySide6 import QtCore, QtWidgets
 
 
@@ -29,7 +30,7 @@ def _sample_clip(
         Transform,
     )
 
-    root_local = Transform()
+    root_local = Transform(rotation=root_rotation)
     child_local = Transform(position=child_local_position)
     root_global = Transform(rotation=root_rotation)
     child_global = Transform(position=child_global_position)
@@ -164,6 +165,50 @@ def test_source_clip_preview_model_can_include_fbx_mesh_geometry() -> None:
     assert mesh_nodes[0].faces == [(0, 1, 2)]
 
 
+def test_source_clip_preview_model_preserves_fbx_skin_weights_for_playback() -> None:
+    from src.converters.blender_fbx_mesh_importer import model_from_blender_fbx_mesh_payload
+    from src.core.geometry.model_data import GameVersion
+    from src.gui.qt_lib.windows.qt_source_clip_preview_model import build_source_clip_preview_model
+
+    mesh_model = model_from_blender_fbx_mesh_payload(
+        {
+            "success": True,
+            "armatures": ["root"],
+            "actions": [{"name": "root|Unreal Take|Base Layer"}],
+            "meshes": [
+                {
+                    "name": "Body",
+                    "is_skin": True,
+                    "bone_map": ["Root", "RHand"],
+                    "skin_data": [
+                        [{"bone_index": 0, "weight": 1.0}],
+                        [{"bone_index": 1, "weight": 0.75}, {"bone_index": 0, "weight": 0.25}],
+                        [{"bone_index": 1, "weight": 1.0}],
+                    ],
+                    "vertices": [[-1, 0, 0], [1, 0, 0], [0, 0, 2]],
+                    "normals": [[0, 1, 0], [0, 1, 0], [0, 1, 0]],
+                    "uvs": [[0, 0], [1, 0], [0.5, 1]],
+                    "faces": [[0, 1, 2]],
+                    "materials": [{"name": "BodyMat", "texture": "Body_D", "diffuse": [0.5, 0.6, 0.7]}],
+                }
+            ],
+        },
+        model_name="source_body",
+        game_version=GameVersion.K1,
+    )
+
+    model = build_source_clip_preview_model(_sample_clip(), mesh_model=mesh_model)
+    mesh_nodes = [node for node in model.all_nodes() if getattr(node, "_gr_fbx_mesh_preview_node", False)]
+
+    assert len(mesh_nodes) == 1
+    assert mesh_nodes[0].is_skin is True
+    assert getattr(mesh_nodes[0], "_gr_fbx_mesh_preview_skinned") is True
+    assert mesh_nodes[0].bone_map == ["Root", "RHand"]
+    assert len(mesh_nodes[0].skin_data) == len(mesh_nodes[0].vertices)
+    assert mesh_nodes[0].skin_data[1].influences[0].bone_index == 1
+    assert mesh_nodes[0].skin_data[1].influences[0].weight == pytest.approx(0.75)
+
+
 def test_retarget_window_source_clip_preview_populates_animation_list() -> None:
     _qapp()
     from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
@@ -204,7 +249,7 @@ def test_retarget_window_source_animation_playback_uses_compact_preview_position
         pose = window.source_viewport._renderer._anim_pose
         assert pose is not None
         assert pose.nodes["rhand"].position == (1.0, 0.0, 0.0)
-        assert pose.nodes["root"].rotation == (0.0, 0.0, 0.0, 1.0)
+        assert pose.nodes["root"].rotation == pytest.approx((0.0, 0.0, 0.70710678, 0.70710678))
         assert previewed == []
 
         window.panel._preview()

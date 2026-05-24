@@ -202,9 +202,10 @@ def _append_mesh_preview_nodes(root: ModelNode, mesh_model: KotorModel | None) -
 
     points: list[tuple[float, float, float]] = []
     for index, source in enumerate(mesh_nodes):
+        is_skin = bool(getattr(source, "is_skin", False) and getattr(source, "bone_map", None) and getattr(source, "skin_data", None))
         node = ModelNode(
             name=str(getattr(source, "name", "") or f"fbx_mesh_{index}")[:32],
-            flags=int(NodeFlags.HEADER | NodeFlags.MESH),
+            flags=int(NodeFlags.HEADER | (NodeFlags.SKIN if is_skin else NodeFlags.MESH)),
             parent=root,
         )
         node.vertices = [tuple(float(c) for c in vertex[:3]) for vertex in (getattr(source, "vertices", []) or [])]
@@ -217,7 +218,11 @@ def _append_mesh_preview_nodes(root: ModelNode, mesh_model: KotorModel | None) -
         node.render = True
         node._imported = True
         node.vertex_space = 1
+        if is_skin:
+            node.bone_map = [str(name) for name in (getattr(source, "bone_map", []) or [])]
+            node.skin_data = list(getattr(source, "skin_data", []) or [])
         node._gr_fbx_mesh_preview_node = True
+        node._gr_fbx_mesh_preview_skinned = bool(is_skin)
         node.compute_bounds()
         root.children.append(node)
         points.extend(node.vertices)

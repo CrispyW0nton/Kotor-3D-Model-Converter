@@ -572,6 +572,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         pose = AnimPose(time=float(getattr(source_pose, "time_seconds", time_seconds) or time_seconds))
         model = getattr(self.source_viewport, "model", None)
         global_transforms = getattr(source_pose, "global_transforms", {}) or {}
+        local_transforms = getattr(source_pose, "local_transforms", {}) or {}
         for node_name, transform in global_transforms.items():
             preview_node = None
             if model is not None and hasattr(model, "find_node"):
@@ -580,10 +581,12 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
                 except Exception:
                     preview_node = None
             position = self._source_clip_pose_delta(preview_node, str(node_name), global_transforms, transform)
+            local_transform = local_transforms.get(node_name)
+            rotation = getattr(local_transform, "rotation", None) if local_transform is not None else None
             pose.nodes[str(node_name).lower()] = NodePose(
                 name=str(node_name),
                 position=tuple(float(v) for v in (position or (0.0, 0.0, 0.0))[:3]),
-                rotation=(0.0, 0.0, 0.0, 1.0),
+                rotation=tuple(float(v) for v in (rotation or (0.0, 0.0, 0.0, 1.0))[:4]),
                 scale=1.0,
             )
         self.source_viewport.set_animation_pose(

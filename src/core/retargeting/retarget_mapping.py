@@ -17,11 +17,13 @@ from .retarget_output_naming import (
 from .retarget_profile import RetargetMappingEntry, RetargetProfile
 from .reverse_renamer import ReverseRenameSpec, load_reverse_rename_spec
 from .source_animation import SourceSkeletonClip
+from .mixamo_source_adapter import MixamoSourceAdapter, is_mixamo_skeleton
 from .ue5_source_adapter import UE5SourceAdapter
 
 
 HELPER_CLASSIFICATIONS = {"twist", "ik", "helper"}
 UE5_TO_AURORA_MIN_CORE_MAPPING_COUNT = 19
+MIXAMO_TO_AURORA_MIN_CORE_MAPPING_COUNT = 18
 
 _UE5_EXACT_ROLE_BY_SOURCE = {
     "attach": "root",
@@ -235,6 +237,76 @@ def suggest_ue5_to_aurora_mapping(
             "recommended_rotation_transfer_mode": "exact_segment_correction",
             "key_unmapped_reference_nodes": True,
             "basis_conversion": "ue5_to_aurora_negate_xy",
+        },
+    )
+
+
+def suggest_mixamo_to_aurora_mapping(
+    source_clip: SourceSkeletonClip,
+    target_model: KotorModel,
+    *,
+    adapter: MixamoSourceAdapter | None = None,
+) -> RetargetProfile:
+    """Build the verified Mixamo humanoid -> Aurora profile used by the Workbench.
+
+    Mixamo rigs use names like ``mixamorig:LeftArm`` rather than UE5 Manny names
+    like ``upperarm_l``.  The generic role mapper is too loose for that family
+    and can map hands/feet to Aurora helpers.  This profile keeps Mixamo as a
+    first-class source family while feeding the same R3.B/segment-correction
+    preview and export path used by the verified UE5 workflow.
+    """
+
+    source_names = [node.name for node in source_clip.nodes]
+    if not is_mixamo_skeleton(source_names):
+        raise ValueError("Source clip does not look like a Mixamo humanoid skeleton.")
+
+    target_nodes = list(target_model.all_nodes())
+    adapter_result = (adapter or MixamoSourceAdapter()).adapt(
+        source_names,
+        [node.name for node in target_nodes],
+    )
+
+    mappings: list[RetargetMappingEntry] = []
+    for decision in adapter_result.mapped:
+        if not decision.target_bone or not decision.role:
+            continue
+        mappings.append(
+            RetargetMappingEntry(
+                role=decision.role,
+                source_node=decision.source_bone,
+                target_node=decision.target_bone,
+                side=decision.side or "center",
+                notes=decision.reason,
+            )
+        )
+
+    if len(mappings) < MIXAMO_TO_AURORA_MIN_CORE_MAPPING_COUNT:
+        raise ValueError(
+            "Verified Mixamo → Aurora mapping found too few usable core mappings "
+            f"({len(mappings)} < {MIXAMO_TO_AURORA_MIN_CORE_MAPPING_COUNT})."
+        )
+
+    return RetargetProfile(
+        version=1,
+        name="verified_mixamo_to_aurora_profile",
+        source_clip_hint=source_clip.source_path,
+        target_model_hint=target_model.name,
+        source_reference={"mode": "clip_rest"},
+        target_reference={"mode": "target_rest"},
+        mappings=mappings,
+        ignored_source_nodes=[decision.source_bone for decision in adapter_result.ignored],
+        twist_sources={},
+        metadata={
+            "generated_by": "verified_mixamo_to_aurora_mapping",
+            "source_adapter": "MixamoSourceAdapter",
+            "source_skeleton_family": "mixamo",
+            "mapped_count": len(mappings),
+            "ignored_count": len(adapter_result.ignored),
+            "unmapped_count": len(adapter_result.unmapped),
+            "unmapped_source_nodes": [decision.source_bone for decision in adapter_result.unmapped],
+            "recommended_rotation_transfer_mode": "exact_segment_correction",
+            "key_unmapped_reference_nodes": True,
+            "basis_conversion": "blender_fbx_to_aurora_negate_xy",
         },
     )
 

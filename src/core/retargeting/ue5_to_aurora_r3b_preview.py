@@ -37,6 +37,11 @@ from .source_animation import (
 
 
 VERIFIED_UE5_TO_AURORA_PROFILE_GENERATOR = "verified_ue5_to_aurora_mapping"
+VERIFIED_MIXAMO_TO_AURORA_PROFILE_GENERATOR = "verified_mixamo_to_aurora_mapping"
+VERIFIED_SOURCE_TO_AURORA_PROFILE_GENERATORS = {
+    VERIFIED_UE5_TO_AURORA_PROFILE_GENERATOR,
+    VERIFIED_MIXAMO_TO_AURORA_PROFILE_GENERATOR,
+}
 EXACT_PM_BAM_SEGMENT_PAIRS = (
     ("upperarm", "forearm"),
     ("forearm", "hand"),
@@ -57,13 +62,11 @@ class R3BPayloadBuildResult:
 
 
 def should_use_r3b_preview_path(profile: RetargetProfile) -> bool:
-    """Return True when ``profile`` is the verified UE5 -> Aurora mapping."""
+    """Return True when ``profile`` uses a verified source-family mapping."""
 
     normalized = normalize_retarget_profile(profile)
-    return (
-        str(normalized.metadata.get("generated_by") or "")
-        == VERIFIED_UE5_TO_AURORA_PROFILE_GENERATOR
-    )
+    generated_by = str(normalized.metadata.get("generated_by") or "")
+    return generated_by in VERIFIED_SOURCE_TO_AURORA_PROFILE_GENERATORS
 
 
 def build_r3b_ue5_to_aurora_retarget_result(

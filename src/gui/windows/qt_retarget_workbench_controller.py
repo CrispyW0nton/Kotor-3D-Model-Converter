@@ -20,6 +20,7 @@ from src.core.retargeting.kotor_to_unreal_preview import (
 )
 from src.core.retargeting.retarget_mapping import (
     suggest_initial_mapping,
+    suggest_mixamo_to_aurora_mapping,
     suggest_ue5_to_aurora_mapping,
 )
 from src.core.retargeting.retarget_output_naming import (
@@ -386,23 +387,31 @@ class RetargetWorkbenchController:
             return
         if self.state.retarget_profile is not None and not self.state.retarget_profile_is_auto:
             return
+        verified_failures: list[str] = []
         try:
             profile = suggest_ue5_to_aurora_mapping(source_clip, target_model)
-            solver_options = _verified_ue5_to_aurora_solver_options(profile)
+            solver_options = _verified_source_to_aurora_solver_options(profile)
             profile_kind = "verified UE5 → Aurora"
         except Exception as exc:
-            self._log(
-                f"Verified UE5 → Aurora profile suggestion unavailable: {exc}. "
-                "Falling back to generic role-based mapping.",
-                "warning",
-            )
+            verified_failures.append(f"UE5: {exc}")
             try:
-                profile = suggest_initial_mapping(source_clip, target_model)
-                solver_options = None
-                profile_kind = "generic"
-            except Exception as fallback_exc:
-                self._log(f"Automatic retarget profile suggestion failed: {fallback_exc}", "warning")
-                return
+                profile = suggest_mixamo_to_aurora_mapping(source_clip, target_model)
+                solver_options = _verified_source_to_aurora_solver_options(profile)
+                profile_kind = "verified Mixamo → Aurora"
+            except Exception as mixamo_exc:
+                verified_failures.append(f"Mixamo: {mixamo_exc}")
+                self._log(
+                    "Verified source-family profile suggestion unavailable "
+                    f"({'; '.join(verified_failures)}). Falling back to generic role-based mapping.",
+                    "warning",
+                )
+                try:
+                    profile = suggest_initial_mapping(source_clip, target_model)
+                    solver_options = None
+                    profile_kind = "generic"
+                except Exception as fallback_exc:
+                    self._log(f"Automatic retarget profile suggestion failed: {fallback_exc}", "warning")
+                    return
         self.state.retarget_profile = profile
         self.state.solver_options = solver_options
         self.state.retarget_profile_is_auto = True
@@ -813,8 +822,8 @@ def _human_kind(kind: str) -> str:
     return labels.get(kind, kind.replace("_", " "))
 
 
-def _verified_ue5_to_aurora_solver_options(profile: Any) -> RetargetSolverOptions:
-    """Return the solver policy proven for the UE5/Manny -> PMBAM workflow."""
+def _verified_source_to_aurora_solver_options(profile: Any) -> RetargetSolverOptions:
+    """Return the solver policy proven for verified FBX-source -> PMBAM workflows."""
 
     metadata = dict(getattr(profile, "metadata", {}) or {})
     return RetargetSolverOptions(
