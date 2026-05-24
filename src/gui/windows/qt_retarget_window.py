@@ -8,7 +8,8 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.core.animation.animation_engine import AnimPose, NodePose
 from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationRetargetPanel
-from src.gui.qt_lib.rendering.qt_gpu_renderer import GpuRenderer
+from src.gui.qt_lib.rendering.qt_gpu_renderer import create_viewport_renderer
+from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.viewports.qt_viewport import QtRetargetViewportWidget, QtViewportWidget
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 from src.gui.qt_lib.windows.qt_source_clip_preview_model import build_source_clip_preview_model
@@ -41,6 +42,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self._source_game = "K1"
         self._target_game = "K1"
         self._navigation_profile = DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+        self._renderer_settings = RendererSettings.from_settings(getattr(parent, "settings_data", {}) or {})
         self._source_clip_preview_clip = None
         self._source_clip_mesh_model = None
         self._retarget_docks: dict[str, QtWidgets.QDockWidget] = {}
@@ -178,7 +180,9 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
 
         self.source_viewport = QtRetargetViewportWidget(self)
         self.target_viewport = QtRetargetViewportWidget(self)
-        self._shared_gpu_renderer = GpuRenderer()
+        self.source_viewport.set_renderer_settings(self._renderer_settings)
+        self.target_viewport.set_renderer_settings(self._renderer_settings)
+        self._shared_gpu_renderer = create_viewport_renderer(self._renderer_settings)
         self.source_viewport.set_shared_gpu_renderer(self._shared_gpu_renderer)
         self.target_viewport.set_shared_gpu_renderer(self._shared_gpu_renderer)
         self.source_viewport.set_dual_viewport_mode(True)
@@ -210,6 +214,15 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         central_layout.addWidget(self.panel.controls_widget, 0)
         self.setCentralWidget(central)
         self._build_retarget_docks()
+
+    def set_renderer_settings(self, settings: RendererSettings | dict | None) -> None:
+        self._renderer_settings = settings if isinstance(settings, RendererSettings) else RendererSettings.from_settings(settings or {})
+        apply_settings = getattr(getattr(self, "_shared_gpu_renderer", None), "set_settings", None)
+        if callable(apply_settings):
+            apply_settings(self._renderer_settings)
+        for viewport in (getattr(self, "source_viewport", None), getattr(self, "target_viewport", None)):
+            if viewport is not None:
+                viewport.set_renderer_settings(self._renderer_settings)
 
     def _build_workbench_controls(self) -> QtWidgets.QWidget:
         box = QtWidgets.QFrame(self)

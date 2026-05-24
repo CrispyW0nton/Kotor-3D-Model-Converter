@@ -76,6 +76,7 @@ from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow
 from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditorWindow
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
+from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.libtheme import LayoutManager, ThemeManager
 from src.gui.libtheme.style_tokens import FALLBACK_STYLES, LEGACY_MATRIX_COLORS
 from src.gui.libtheme.theme_editor_window import ThemeEditorWindow
@@ -1388,6 +1389,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.settings_data.setdefault("show_adjust_pivot_toolbox", True)
         self.settings_data.setdefault("autoscan", True)
         self.settings_data.setdefault("fbx_sdk", {})
+        RendererSettings.apply_defaults(self.settings_data)
         self._preloaded_library = dict(self.startup_input.get("preloaded_library") or {})
         self._suppress_theme_progress_toast = True
         self.theme_manager = ThemeManager(self.app_root, self.settings_data, self)
@@ -3309,6 +3311,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._stack_content_browser_under_scene()
 
         self.viewport = QtMainViewportWidget(self)
+        self.viewport.set_renderer_settings(RendererSettings.from_settings(self.settings_data))
         self.viewport.set_navigation_profile(
             self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
         )
@@ -7928,6 +7931,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._configure_theme_watcher()
         viewport = getattr(self, "viewport", None)
         if viewport is not None:
+            viewport.set_renderer_settings(RendererSettings.from_settings(values))
             viewport.set_navigation_profile(
                 normalize_viewport_navigation_profile(
                     values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
@@ -7935,6 +7939,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             )
         retarget_window = getattr(self, "animation_retarget_window", None)
         if retarget_window is not None:
+            set_renderer_settings = getattr(retarget_window, "set_renderer_settings", None)
+            if callable(set_renderer_settings):
+                set_renderer_settings(RendererSettings.from_settings(values))
             retarget_window.set_navigation_profile(
                 normalize_viewport_navigation_profile(
                     values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
@@ -7942,6 +7949,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             )
         unreal_window = getattr(self, "unreal_animator_window", None)
         if unreal_window is not None:
+            set_renderer_settings = getattr(unreal_window, "set_renderer_settings", None)
+            if callable(set_renderer_settings):
+                set_renderer_settings(RendererSettings.from_settings(values))
             unreal_window.set_navigation_profile(
                 normalize_viewport_navigation_profile(
                     values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)

@@ -18,6 +18,9 @@ from src.gui.qt_lib.rendering.viewport_navigation import (
     VIEWPORT_NAVIGATION_PROFILES,
     normalize_viewport_navigation_profile,
 )
+from src.gui.qt_lib.rendering.renderer_backend import RendererBackend, renderer_backend_label
+from src.gui.qt_lib.rendering.renderer_factory import renderer_capabilities_snapshot
+from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.dialogs.qt_dialogs import show_viewport_navigation_reference
 from src.measurement.unit_settings import MeasurementSettings
 from src.measurement.unit_system import CANONICAL_UNITS, UNIT_SYMBOLS
@@ -113,6 +116,30 @@ class QtSettingsDialog(QtWidgets.QDialog):
 
         self.autoscan_check = QtWidgets.QCheckBox("Scan library on startup")
         general_root.addWidget(self.autoscan_check)
+        renderer_group = QtWidgets.QGroupBox("Renderer")
+        renderer_form = QtWidgets.QFormLayout(renderer_group)
+        renderer_form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+        renderer_form.setHorizontalSpacing(8)
+        renderer_form.setVerticalSpacing(6)
+        self.renderer_backend_combo = QtWidgets.QComboBox()
+        self._renderer_capability_text: dict[str, str] = {}
+        for caps in renderer_capabilities_snapshot():
+            label = renderer_backend_label(RendererBackend(caps.backend_id))
+            status = caps.status_text()
+            self._renderer_capability_text[caps.backend_id] = status
+            self.renderer_backend_combo.addItem(f"{label} - {status}", caps.backend_id)
+        self.renderer_fallback_check = QtWidgets.QCheckBox("Allow renderer fallback")
+        self.renderer_diagnostics_check = QtWidgets.QCheckBox("Show renderer diagnostics")
+        self.renderer_safe_mode_check = QtWidgets.QCheckBox("Force safe mode")
+        self.renderer_status_label = QtWidgets.QLabel()
+        self.renderer_status_label.setWordWrap(True)
+        self.renderer_backend_combo.currentIndexChanged.connect(self._update_renderer_status)
+        renderer_form.addRow("Renderer:", self.renderer_backend_combo)
+        renderer_form.addRow("", self.renderer_fallback_check)
+        renderer_form.addRow("", self.renderer_diagnostics_check)
+        renderer_form.addRow("", self.renderer_safe_mode_check)
+        renderer_form.addRow("Status:", self.renderer_status_label)
+        general_root.addWidget(renderer_group)
         general_root.addStretch(1)
         self.settings_tabs.addTab(self._scroll_tab_page(general_page), "General")
 
@@ -297,6 +324,12 @@ class QtSettingsDialog(QtWidgets.QDialog):
         index = self.viewport_navigation_profile.findData(profile_key)
         self.viewport_navigation_profile.setCurrentIndex(max(index, 0))
         self.autoscan_check.setChecked(bool(self.settings.get("autoscan", False)))
+        renderer_settings = RendererSettings.from_settings(self.settings)
+        self._set_combo_data(self.renderer_backend_combo, renderer_settings.backend.value)
+        self.renderer_fallback_check.setChecked(renderer_settings.allow_fallback)
+        self.renderer_diagnostics_check.setChecked(renderer_settings.show_renderer_diagnostics)
+        self.renderer_safe_mode_check.setChecked(renderer_settings.force_safe_mode)
+        self._update_renderer_status()
         self._set_combo_data(self.theme_mode_combo, self.theme_layout_settings.theme_mode)
         self._set_combo_data(self.theme_combo, self.theme_layout_settings.selected_theme)
         self._set_combo_data(self.light_theme_combo, self.theme_layout_settings.os_light_theme)
@@ -344,6 +377,13 @@ class QtSettingsDialog(QtWidgets.QDialog):
             "mdlops_path": self.mdlops_path.text().strip(),
             "viewport_navigation_profile": self.viewport_navigation_profile.currentData(),
             "autoscan": self.autoscan_check.isChecked(),
+            "renderer": {
+                "backend": self.renderer_backend_combo.currentData(),
+                "preferred_windows_backend": RendererSettings.from_settings(self.settings).preferred_windows_backend.value,
+                "allow_fallback": self.renderer_fallback_check.isChecked(),
+                "show_renderer_diagnostics": self.renderer_diagnostics_check.isChecked(),
+                "force_safe_mode": self.renderer_safe_mode_check.isChecked(),
+            },
             "theme_layout": {
                 "theme_mode": self.theme_mode_combo.currentData(),
                 "selected_theme": self.theme_combo.currentData(),
@@ -372,6 +412,12 @@ class QtSettingsDialog(QtWidgets.QDialog):
     def _set_combo_data(combo: QtWidgets.QComboBox, value: object) -> None:
         index = combo.findData(value)
         combo.setCurrentIndex(max(index, 0))
+
+    def _update_renderer_status(self) -> None:
+        backend_id = str(self.renderer_backend_combo.currentData() or RendererBackend.AUTOMATIC.value)
+        status = self._renderer_capability_text.get(backend_id, "Available")
+        suffix = " Restart may be required for a real backend switch." if backend_id != RendererBackend.AUTOMATIC.value else ""
+        self.renderer_status_label.setText(f"{status}.{suffix}")
 
     def _preview_theme(self) -> None:
         if self.theme_manager is None:

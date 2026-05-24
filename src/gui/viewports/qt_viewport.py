@@ -20,7 +20,9 @@ from src.gui.qt_lib.rendering.qt_gpu_renderer import (
     GpuRenderer,
     clear_prebuilt_static_gpu_mesh_data,
     clear_prebuilt_static_gpu_model_data,
+    create_viewport_renderer,
 )
+from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.viewports.qt_uv_viewer import QtUVViewerWindow
 from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
 from src.gui.qt_lib.rendering.viewport_navigation import (
@@ -624,11 +626,13 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._fast_drag_enabled = False
         self._uv_viewer: Optional[QtUVViewerWindow] = None
         self._use_gpu = True
-        self._gpu_renderer: Optional[GpuRenderer] = None
+        self._renderer_settings = RendererSettings()
+        self._gpu_renderer: Optional[object] = None
         self._owns_gpu_renderer = True
         self._gpu_tex_preload_model_id = 0
         self._gpu_upload_total = 0
         self._gpu_upload_model_id = 0
+        self._last_renderer_backend_id = ""
         self._selection_orbit_bounds: Optional[tuple[tuple[float, float, float], tuple[float, float, float]]] = None
         self._selection_orbit_bounds_node_id = 0
         self._navigation_profile = DEFAULT_VIEWPORT_NAVIGATION_PROFILE
@@ -1911,6 +1915,19 @@ class QtViewportWidget(QtWidgets.QWidget):
         elif self._gpu_renderer is not None:
             self._apply_native_palette_to_renderers()
 
+    def set_renderer_settings(self, settings: RendererSettings | dict | None) -> None:
+        self._renderer_settings = settings if isinstance(settings, RendererSettings) else RendererSettings.from_settings(settings or {})
+        if self._gpu_renderer is not None and self._owns_gpu_renderer:
+            apply_settings = getattr(self._gpu_renderer, "set_settings", None)
+            if callable(apply_settings):
+                apply_settings(self._renderer_settings)
+            else:
+                shutdown = getattr(self._gpu_renderer, "shutdown", None) or getattr(self._gpu_renderer, "release", None)
+                if callable(shutdown):
+                    shutdown()
+                self._gpu_renderer = None
+        self._request_render(fast=True)
+
     def set_game_library(self, library, game_tag: str = "K1") -> None:
         self._renderer.tex_cache.set_game_library(library, game_tag)
 
@@ -2889,7 +2906,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             if self.model is not None:
                 try:
                     if self._gpu_renderer is None:
-                        self._gpu_renderer = GpuRenderer()
+                        self._gpu_renderer = create_viewport_renderer(self._renderer_settings)
                     self._preload_gpu_textures()
                     tex_cache = getattr(ren, "tex_cache", None)
                     textures = {
@@ -4760,7 +4777,7 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def _render_gpu_frame(self, w: int, h: int):
         if self._gpu_renderer is None:
-            self._gpu_renderer = GpuRenderer()
+            self._gpu_renderer = create_viewport_renderer(self._renderer_settings)
             theme = getattr(self, "_current_theme", None)
             if theme is not None and hasattr(self._gpu_renderer, "set_theme_colors"):
                 self._gpu_renderer.set_theme_colors(theme)
@@ -4819,6 +4836,18 @@ class QtViewportWidget(QtWidgets.QWidget):
             anim_time=float(getattr(self._renderer, "_anim_time", 0.0)),
             anim_base_pose=getattr(self._renderer, "_anim_base_pose", None),
         )
+        diagnostics = {}
+        get_diagnostics = getattr(self._gpu_renderer, "get_diagnostics", None)
+        if callable(get_diagnostics):
+            try:
+                diagnostics = get_diagnostics() or {}
+            except Exception:
+                diagnostics = {}
+        backend_id = str(diagnostics.get("backend_id") or getattr(self._gpu_renderer, "backend_id", "") or "")
+        if backend_id and backend_id != self._last_renderer_backend_id:
+            self._last_renderer_backend_id = backend_id
+            label = str(diagnostics.get("name") or backend_id)
+            self.statusMessage.emit(f"Renderer: {label}")
         if getattr(self._gpu_renderer, "deferred_mesh_uploads", False):
             model_id = id(self.model)
 
@@ -5499,7 +5528,16 @@ class QtViewportWidget(QtWidgets.QWidget):
             return
         self._use_gpu = True
         self.renderer_button.setChecked(True)
-        self.renderer_button.setToolTip("GPU renderer" if gpu_active else "GPU renderer unavailable")
+        backend = ""
+        if self._gpu_renderer is not None:
+            get_diagnostics = getattr(self._gpu_renderer, "get_diagnostics", None)
+            if callable(get_diagnostics):
+                try:
+                    backend = str((get_diagnostics() or {}).get("name") or "")
+                except Exception:
+                    backend = ""
+        label = f"GPU renderer: {backend}" if backend else "GPU renderer"
+        self.renderer_button.setToolTip(label if gpu_active else "GPU renderer unavailable")
 
     def _on_shade_change(self, text: str) -> None:
         self.set_shade_mode(text)
