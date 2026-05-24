@@ -36,6 +36,19 @@ class ModernGLRenderer(GpuRenderer):
             supports_hot_switch=True,
         )
 
+    def create_surface_widget(self, parent=None):
+        from PySide6 import QtCore, QtWidgets
+
+        widget = QtWidgets.QLabel("Empty Scene", parent)
+        widget.setObjectName("ModernGLViewportSurface")
+        widget.setAlignment(QtCore.Qt.AlignCenter)
+        widget.setMinimumSize(120, 100)
+        widget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        widget.setFocusPolicy(QtCore.Qt.StrongFocus)
+        widget.setMouseTracking(True)
+        widget.setScaledContents(False)
+        return widget
+
     def shutdown(self) -> None:
         self.release()
 
@@ -51,4 +64,3 @@ class ModernGLRenderer(GpuRenderer):
             "gpu": getattr(ctx, "info", {}).get("GL_RENDERER") if ctx is not None else None,
             "vendor": getattr(ctx, "info", {}).get("GL_VENDOR") if ctx is not None else None,
         }
-

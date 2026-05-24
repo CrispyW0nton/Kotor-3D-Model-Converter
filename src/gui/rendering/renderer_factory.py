@@ -107,6 +107,7 @@ class FallbackViewportRenderer:
         "_failed",
         "_pending_attrs",
         "_last_diagnostics",
+        "_surface_widget",
     }
 
     def __init__(self, settings: RendererSettings | None = None):
@@ -117,6 +118,7 @@ class FallbackViewportRenderer:
         object.__setattr__(self, "_failed", {})
         object.__setattr__(self, "_pending_attrs", {})
         object.__setattr__(self, "_last_diagnostics", {})
+        object.__setattr__(self, "_surface_widget", None)
         log.info("RendererFactory: Requested backend = %s", self._order[0].name)
 
     @property
@@ -188,6 +190,35 @@ class FallbackViewportRenderer:
         log.info("RendererFactory: Falling back to NULL_DIAGNOSTIC")
         return renderer
 
+    @property
+    def active_renderer(self):
+        return object.__getattribute__(self, "_active")
+
+    @property
+    def active_backend(self):
+        return object.__getattribute__(self, "_active_backend")
+
+    def create_surface_widget(self, parent=None):
+        renderer = object.__getattribute__(self, "_active") or self._activate_next()
+        create = getattr(renderer, "create_surface_widget", None)
+        if callable(create):
+            widget = create(parent)
+        else:
+            from PySide6 import QtCore, QtWidgets
+
+            widget = QtWidgets.QLabel("Empty Scene", parent)
+            widget.setAlignment(QtCore.Qt.AlignCenter)
+            widget.setFocusPolicy(QtCore.Qt.StrongFocus)
+            widget.setMouseTracking(True)
+        object.__setattr__(self, "_surface_widget", widget)
+        return widget
+
+    def initialize(self, viewport_widget=None, scene_context=None) -> None:
+        renderer = object.__getattribute__(self, "_active") or self._activate_next()
+        initialize = getattr(renderer, "initialize", None)
+        if callable(initialize):
+            initialize(viewport_widget, scene_context)
+
     def render(self, scene, camera, W: int, H: int, *args, **kwargs):
         while True:
             renderer = object.__getattribute__(self, "_active") or self._activate_next()
@@ -224,6 +255,7 @@ class FallbackViewportRenderer:
         object.__setattr__(self, "_active", None)
         object.__setattr__(self, "_active_backend", None)
         object.__setattr__(self, "_failed", {})
+        object.__setattr__(self, "_surface_widget", None)
         log.info("RendererFactory: Requested backend = %s", self._order[0].name)
 
     def shutdown(self) -> None:
@@ -233,6 +265,7 @@ class FallbackViewportRenderer:
             if callable(shutdown):
                 shutdown()
         object.__setattr__(self, "_active", None)
+        object.__setattr__(self, "_surface_widget", None)
 
     def release(self) -> None:
         self.shutdown()

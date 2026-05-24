@@ -148,6 +148,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
     "rendering": (
         "accel",
         "gpu_renderer",
+        "mesh_render_data",
         "direct3d_renderer",
         "moderngl_renderer",
         "null_renderer",
@@ -184,6 +185,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "qt_transform_typein_bar",
         "qt_uv_viewer",
         "qt_viewport",
+        "viewport_host",
         "viewcube",
         "viewcube_math",
     ),

@@ -24,6 +24,7 @@ from src.gui.qt_lib.rendering.qt_gpu_renderer import (
 )
 from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.viewports.qt_uv_viewer import QtUVViewerWindow
+from src.gui.qt_lib.viewports.viewport_host import RendererSurfaceHost
 from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
 from src.gui.qt_lib.rendering.viewport_navigation import (
     DEFAULT_VIEWPORT_NAVIGATION_PROFILE,
@@ -1134,7 +1135,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.axis_mode_control.axisModeChanged.connect(self.set_axis_mode)
         row.addWidget(self.axis_mode_control)
 
-        self.canvas = QtWidgets.QLabel("Empty Scene")
+        self.canvas = RendererSurfaceHost(self)
         self.canvas.setObjectName("ViewportCanvas")
         self.canvas.setAlignment(QtCore.Qt.AlignCenter)
         self.canvas.setMinimumSize(120 if self._compact_controls else 180, 100 if self._compact_controls else 140)
@@ -1143,6 +1144,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.canvas.setMouseTracking(True)
         self.canvas.setScaledContents(False)
         self.canvas.installEventFilter(self)
+        self._install_label_renderer_surface("modern_gl")
         self._renderer.show_bones = self.bones_button.isChecked()
         self._renderer.show_texture = self.texture_button.isChecked()
         self._renderer.show_solid = True
@@ -1217,6 +1219,64 @@ class QtViewportWidget(QtWidgets.QWidget):
             viewcube=self._viewcube_visible,
             transform_typein=self._transform_typein_visible,
         )
+
+    def _install_label_renderer_surface(self, backend_id: str = "modern_gl") -> None:
+        label = QtWidgets.QLabel("Empty Scene", self.canvas)
+        label.setObjectName("ViewportImageSurface")
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        label.setMinimumSize(120 if self._compact_controls else 180, 100 if self._compact_controls else 140)
+        label.setSizePolicy(QtWidgets.QSizePolicy.Ignored if self._compact_controls else QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        label.setFocusPolicy(QtCore.Qt.StrongFocus)
+        label.setMouseTracking(True)
+        label.setScaledContents(False)
+        self.canvas.set_renderer_surface(label, backend_id=backend_id, live_surface=False)
+        self.canvas.install_input_bridge(self)
+
+    def _active_renderer_backend_id(self) -> str:
+        renderer = self._gpu_renderer
+        if renderer is None:
+            return str(getattr(self._renderer_settings.backend, "value", self._renderer_settings.backend))
+        diagnostics = {}
+        get_diagnostics = getattr(renderer, "get_diagnostics", None)
+        if callable(get_diagnostics):
+            try:
+                diagnostics = get_diagnostics() or {}
+            except Exception:
+                diagnostics = {}
+        return str(diagnostics.get("backend_id") or getattr(renderer, "backend_id", "") or "")
+
+    def _renderer_uses_live_surface(self, backend_id: str) -> bool:
+        return str(backend_id or "").startswith("wgpu_")
+
+    def _sync_renderer_surface(self, *, force: bool = False) -> None:
+        if self._gpu_renderer is None:
+            if force or self.canvas.current_surface() is None:
+                self._install_label_renderer_surface("modern_gl")
+            return
+        backend_id = self._active_renderer_backend_id()
+        if not backend_id:
+            backend_id = str(getattr(self._gpu_renderer, "backend_id", "") or "")
+        live_surface = self._renderer_uses_live_surface(backend_id)
+        if (
+            not force
+            and self.canvas.current_surface() is not None
+            and self.canvas.surface_backend_id() == backend_id
+            and self.canvas.is_live_surface() == live_surface
+        ):
+            return
+        if live_surface:
+            create_surface = getattr(self._gpu_renderer, "create_surface_widget", None)
+            if callable(create_surface):
+                try:
+                    surface = create_surface(self.canvas)
+                    backend_id = self._active_renderer_backend_id() or backend_id
+                    live_surface = self._renderer_uses_live_surface(backend_id)
+                    self.canvas.set_renderer_surface(surface, backend_id=backend_id, live_surface=live_surface)
+                    self.canvas.install_input_bridge(self)
+                    return
+                except Exception as exc:
+                    log.info("WGPU surface creation failed, falling back through renderer factory: %s", exc)
+        self._install_label_renderer_surface(backend_id or "modern_gl")
 
     def take_viewport_toolbar(self) -> QtWidgets.QWidget | None:
         """Detach the viewport tool strip so the application shell can host it."""
@@ -4007,8 +4067,11 @@ class QtViewportWidget(QtWidgets.QWidget):
             index = -1
         self.set_navigation_profile(order[(index + 1) % len(order)])
 
+    def _is_viewport_event_source(self, obj) -> bool:
+        return obj is self.canvas or obj is self.canvas.current_surface()
+
     def eventFilter(self, obj, event):  # noqa: N802 - Qt override
-        if obj is self.canvas:
+        if self._is_viewport_event_source(obj):
             et = event.type()
             if et == QtCore.QEvent.Resize:
                 size = (event.size().width(), event.size().height())
@@ -4743,7 +4806,10 @@ class QtViewportWidget(QtWidgets.QWidget):
             QtGui.QImage.Format_RGBA8888,
         ).copy()
         self._pixmap = QtGui.QPixmap.fromImage(qimg)
-        self.canvas.setPixmap(self._pixmap)
+        if self.canvas.is_live_surface():
+            self.canvas.set_overlay_pixmap(self._pixmap)
+        else:
+            self.canvas.setPixmap(self._pixmap)
         rendered_size = (w, h)
         self._last_rendered_canvas_size = rendered_size
         current_size = (max(8, self.canvas.width()), max(8, self.canvas.height()))
@@ -4783,6 +4849,9 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._gpu_renderer.set_theme_colors(theme)
             else:
                 self._apply_native_palette_to_renderers()
+            self._sync_renderer_surface(force=True)
+        else:
+            self._sync_renderer_surface()
         self._preload_gpu_textures()
         tex_cache = getattr(self._renderer, "tex_cache", None)
         textures = {
@@ -4826,6 +4895,10 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gpu_renderer.selected_nodes = list(getattr(self, "_selected_meshes", []) or [])
         self._gpu_renderer.show_grid = bool(getattr(self._renderer, "show_grid", True))
         self._gpu_renderer.cull_faces = False
+        try:
+            self._gpu_renderer.surface_host_diagnostics = self.canvas.diagnostics()
+        except Exception:
+            pass
         img = self._gpu_renderer.render(
             self.model,
             self.camera,
@@ -4844,6 +4917,11 @@ class QtViewportWidget(QtWidgets.QWidget):
             except Exception:
                 diagnostics = {}
         backend_id = str(diagnostics.get("backend_id") or getattr(self._gpu_renderer, "backend_id", "") or "")
+        if backend_id and (
+            self.canvas.surface_backend_id() != backend_id
+            or self.canvas.is_live_surface() != self._renderer_uses_live_surface(backend_id)
+        ):
+            self._sync_renderer_surface(force=True)
         if backend_id and backend_id != self._last_renderer_backend_id:
             self._last_renderer_backend_id = backend_id
             label = str(diagnostics.get("name") or backend_id)

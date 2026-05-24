@@ -23,6 +23,9 @@ class IViewportRenderer(ABC):
     def initialize(self, viewport_widget=None, scene_context=None) -> None:
         return None
 
+    def create_surface_widget(self, parent=None):
+        return None
+
     def resize(self, width: int, height: int, device_pixel_ratio: float = 1.0) -> None:
         return None
 
@@ -59,4 +62,3 @@ class IViewportRenderer(ABC):
 
     def invalidate_all(self) -> None:
         return None
-

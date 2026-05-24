@@ -1,9 +1,8 @@
 """wgpu-py renderer backend for the Qt viewport.
 
-This backend uses rendercanvas' Qt widget as the WGPU presentation surface while
-preserving GhostRigger's current viewport contract of returning a PIL image to
-the Qt overlay compositor.  The first pass is intentionally conservative:
-background clear plus a WGPU grid, with ModernGL kept as the full scene fallback.
+This backend uses rendercanvas' Qt widget as the WGPU presentation surface.
+ModernGL remains GhostRigger's complete scene renderer; WGPU currently provides
+live-surface clear/grid plus basic untextured mesh rendering.
 """
 
 from __future__ import annotations
@@ -38,6 +37,17 @@ class _WgpuBackendSpec:
     backend: RendererBackend
     name: str
     wgpu_backend_type: str
+
+
+@dataclass
+class WgpuMeshResource:
+    vertex_buffer: object
+    index_buffer: object | None
+    vertex_count: int
+    index_count: int
+    vertex_stride: int
+    bounds: tuple[tuple[float, float, float], tuple[float, float, float]]
+    source_revision: tuple[int, int, int]
 
 
 def _hex_to_rgb_float(value: str, fallback: tuple[float, float, float]) -> tuple[float, float, float]:
@@ -182,18 +192,71 @@ finally:
 class WgpuResourceCache:
     """Renderer-owned WGPU resources keyed by GhostRigger object identity."""
 
-    def __init__(self) -> None:
-        self.meshes: dict[int, object] = {}
+    def __init__(self, renderer: "WgpuRenderer") -> None:
+        self._renderer = renderer
+        self.meshes: dict[int, WgpuMeshResource] = {}
         self.textures: dict[int, object] = {}
+        self.uploaded_vertex_count = 0
+        self.uploaded_index_count = 0
 
-    def upload_mesh(self, mesh_id: int, mesh_data) -> None:
-        self.meshes[int(mesh_id)] = mesh_data
+    def get_or_upload_mesh(self, mesh_data) -> WgpuMeshResource | None:
+        mesh_id = int(mesh_data.mesh_id)
+        cached = self.meshes.get(mesh_id)
+        if cached is not None and cached.source_revision == mesh_data.source_revision:
+            return cached
+        return self.upload_mesh(mesh_id, mesh_data)
+
+    def upload_mesh(self, mesh_id: int, mesh_data) -> WgpuMeshResource | None:
+        import numpy as np
+        import wgpu
+
+        device = self._renderer.device
+        if device is None:
+            return None
+        positions = np.asarray(mesh_data.positions, dtype=np.float32)
+        if positions.ndim != 2 or positions.shape[1] != 3 or len(positions) == 0:
+            return None
+        normals = mesh_data.normals
+        if normals is None:
+            normals = np.zeros_like(positions, dtype=np.float32)
+            normals[:, 2] = 1.0
+        normals = np.asarray(normals, dtype=np.float32)
+        if normals.shape != positions.shape:
+            fixed = np.zeros_like(positions, dtype=np.float32)
+            fixed[:, 2] = 1.0
+            rows = min(len(fixed), len(normals))
+            if rows:
+                fixed[:rows, :] = normals[:rows, :3]
+            normals = fixed
+        packed = np.ascontiguousarray(np.column_stack((positions, normals)), dtype=np.float32)
+        vertex_buffer = device.create_buffer_with_data(data=packed, usage=wgpu.BufferUsage.VERTEX)
+        index_buffer = None
+        index_count = 0
+        if mesh_data.indices is not None and len(mesh_data.indices):
+            indices = np.ascontiguousarray(mesh_data.indices, dtype=np.uint32)
+            index_buffer = device.create_buffer_with_data(data=indices, usage=wgpu.BufferUsage.INDEX)
+            index_count = int(len(indices))
+        mins = positions.min(axis=0)
+        maxs = positions.max(axis=0)
+        resource = WgpuMeshResource(
+            vertex_buffer=vertex_buffer,
+            index_buffer=index_buffer,
+            vertex_count=int(len(positions)),
+            index_count=index_count,
+            vertex_stride=24,
+            bounds=(tuple(float(v) for v in mins), tuple(float(v) for v in maxs)),
+            source_revision=mesh_data.source_revision,
+        )
+        self.meshes[int(mesh_id)] = resource
+        self._recount()
+        return resource
 
     def get_mesh_resource(self, mesh_id: int):
         return self.meshes.get(int(mesh_id))
 
     def release_mesh(self, mesh_id: int) -> None:
         self.meshes.pop(int(mesh_id), None)
+        self._recount()
 
     def upload_texture(self, texture_id: int, texture_data) -> None:
         self.textures[int(texture_id)] = texture_data
@@ -201,6 +264,12 @@ class WgpuResourceCache:
     def invalidate_all(self) -> None:
         self.meshes.clear()
         self.textures.clear()
+        self.uploaded_vertex_count = 0
+        self.uploaded_index_count = 0
+
+    def _recount(self) -> None:
+        self.uploaded_vertex_count = sum(int(item.vertex_count) for item in self.meshes.values())
+        self.uploaded_index_count = sum(int(item.index_count) for item in self.meshes.values())
 
 
 class WgpuRenderer(NullDiagnosticRenderer):
@@ -228,17 +297,31 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.queue = None
         self.context = None
         self.format = None
+        self.depth_format = "depth24plus"
+        self.depth_texture = None
+        self.depth_view = None
+        self._depth_size = (0, 0)
         self.pipeline_grid = None
         self.grid_bind_group = None
         self.grid_uniform_buffer = None
         self.grid_vertex_buffer = None
         self.grid_vertex_count = 0
-        self.resource_cache = WgpuResourceCache()
+        self.pipeline_mesh = None
+        self.mesh_bind_group = None
+        self.mesh_uniform_buffer = None
+        self.resource_cache = WgpuResourceCache(self)
         self.initialized = False
+        self.live_surface = False
+        self.mesh_pipeline_status = "not created"
+        self.grid_pipeline_status = "not created"
         self.last_error = ""
         self._last_size = (0, 0, 1.0)
         self._last_capabilities: RendererCapabilities | None = None
         self._clear_logged = False
+        self._active_scene = None
+        self._active_camera = None
+        self._active_anim_pose = None
+        self.surface_host_diagnostics: dict[str, object] = {}
         self.perf = {"last_frame_ms": 0.0, "backend": self.backend_id, "tri_count": 0}
         self.show_grid = True
         self.grid_minor_color = (58 / 255.0, 64 / 255.0, 72 / 255.0)
@@ -326,7 +409,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 available=True,
                 reason="",
                 api="WGPU",
-                supports_scene_meshes=False,
+                supports_scene_meshes=True,
                 supports_textures=False,
                 supports_grid=True,
                 supports_overlays=True,
@@ -389,6 +472,10 @@ class WgpuRenderer(NullDiagnosticRenderer):
         log.info("WgpuRenderer: rendercanvas QRenderWidget created")
         return widget
 
+    def create_surface_widget(self, parent=None):
+        self.canvas = self.create_viewport_widget(parent)
+        return self.canvas
+
     def _ensure_backend_env(self) -> None:
         if self.initialized or not self._spec.wgpu_backend_type:
             return
@@ -409,6 +496,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
         try:
             import wgpu
 
+            if viewport_widget is None and self.canvas is not None:
+                viewport_widget = self.canvas
             if viewport_widget is None:
                 viewport_widget = self.create_viewport_widget(None)
             self.canvas = viewport_widget
@@ -424,7 +513,9 @@ class WgpuRenderer(NullDiagnosticRenderer):
             self.context.configure(device=self.device, format=self.format)
             log.info("WgpuRenderer: device created")
             log.info("WgpuRenderer: canvas/context configured")
+            self.live_surface = viewport_widget is not None
             self._create_grid_pipeline()
+            self._create_mesh_pipeline()
             self.canvas.request_draw(self._draw_to_canvas)
             self.initialized = True
         except Exception as exc:
@@ -443,9 +534,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 pass
             try:
                 # A QRenderWidget only receives a real physical size after it is
-                # shown.  GhostRigger's current renderer contract still renders
-                # through an internal widget and returns a PIL frame, so seed the
-                # rendercanvas size record for that hidden surface.
+                # shown. Seed rendercanvas for offscreen/early resize calls.
                 self.canvas._size_info.set_physical_size(
                     max(1, int(round(width * device_pixel_ratio))),
                     max(1, int(round(height * device_pixel_ratio))),
@@ -453,6 +542,29 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 )
             except Exception:
                 pass
+        self._ensure_depth_texture(
+            max(1, int(round(width * float(device_pixel_ratio or 1.0)))),
+            max(1, int(round(height * float(device_pixel_ratio or 1.0)))),
+        )
+
+    def _ensure_depth_texture(self, width: int, height: int) -> None:
+        import wgpu
+
+        if self.device is None or width <= 0 or height <= 0:
+            return
+        size = (int(width), int(height))
+        if self.depth_texture is not None and self._depth_size == size:
+            return
+        self.depth_texture = self.device.create_texture(
+            size=(size[0], size[1], 1),
+            usage=wgpu.TextureUsage.RENDER_ATTACHMENT,
+            dimension=wgpu.TextureDimension.d2,
+            format=self.depth_format,
+            mip_level_count=1,
+            sample_count=1,
+        )
+        self.depth_view = self.depth_texture.create_view()
+        self._depth_size = size
 
     def _create_grid_pipeline(self) -> None:
         import numpy as np
@@ -511,7 +623,11 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 ],
             },
             primitive={"topology": wgpu.PrimitiveTopology.line_list},
-            depth_stencil=None,
+            depth_stencil={
+                "format": self.depth_format,
+                "depth_write_enabled": False,
+                "depth_compare": wgpu.CompareFunction.less_equal,
+            },
             multisample=None,
             fragment={
                 "module": shader,
@@ -519,23 +635,72 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 "targets": [{"format": self.format}],
             },
         )
+        self.grid_pipeline_status = "ready"
+
+    def _create_mesh_pipeline(self) -> None:
+        import wgpu
+
+        self.mesh_uniform_buffer = self.device.create_buffer(
+            size=80,
+            usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST,
+        )
+        bind_group_layout = self.device.create_bind_group_layout(
+            entries=[
+                {
+                    "binding": 0,
+                    "visibility": wgpu.ShaderStage.VERTEX | wgpu.ShaderStage.FRAGMENT,
+                    "buffer": {"type": wgpu.BufferBindingType.uniform},
+                }
+            ]
+        )
+        self.mesh_bind_group = self.device.create_bind_group(
+            layout=bind_group_layout,
+            entries=[
+                {
+                    "binding": 0,
+                    "resource": {"buffer": self.mesh_uniform_buffer, "offset": 0, "size": 80},
+                }
+            ],
+        )
+        pipeline_layout = self.device.create_pipeline_layout(bind_group_layouts=[bind_group_layout])
+        shader = self.device.create_shader_module(code=_MESH_BASIC_WGSL)
+        self.pipeline_mesh = self.device.create_render_pipeline(
+            layout=pipeline_layout,
+            vertex={
+                "module": shader,
+                "entry_point": "vs_main",
+                "buffers": [
+                    {
+                        "array_stride": 24,
+                        "step_mode": wgpu.VertexStepMode.vertex,
+                        "attributes": [
+                            {"format": wgpu.VertexFormat.float32x3, "offset": 0, "shader_location": 0},
+                            {"format": wgpu.VertexFormat.float32x3, "offset": 12, "shader_location": 1},
+                        ],
+                    }
+                ],
+            },
+            primitive={
+                "topology": wgpu.PrimitiveTopology.triangle_list,
+                "front_face": wgpu.FrontFace.cw,
+                "cull_mode": wgpu.CullMode.none,
+            },
+            depth_stencil={
+                "format": self.depth_format,
+                "depth_write_enabled": True,
+                "depth_compare": wgpu.CompareFunction.less,
+            },
+            multisample=None,
+            fragment={
+                "module": shader,
+                "entry_point": "fs_main",
+                "targets": [{"format": self.format}],
+            },
+        )
+        self.mesh_pipeline_status = "ready"
 
     def _camera_mvp(self, camera, width: int, height: int) -> bytes:
-        import numpy as np
-
-        eye_attr = getattr(camera, "eye", (0.0, 5.0, 3.0))
-        eye = tuple(eye_attr() if callable(eye_attr) else eye_attr)
-        target_attr = getattr(camera, "target", (0.0, 0.0, 0.0))
-        target = tuple(target_attr() if callable(target_attr) else target_attr)
-        up_attr = getattr(camera, "up", None)
-        up = tuple(up_attr() if callable(up_attr) else up_attr) if up_attr is not None else (0.0, 0.0, 1.0)
-        fov = float(getattr(camera, "fov", 45.0))
-        near = float(getattr(camera, "near", getattr(camera, "_near", 0.01)))
-        far = float(getattr(camera, "far", getattr(camera, "_far", 2000.0)))
-        proj = _mat4_perspective_wgpu(math.radians(fov), width / max(1, height), near, far)
-        view = _mat4_lookat(eye, target, up)
-        mvp = (proj @ view @ np.eye(4, dtype=np.float32)).astype(np.float32)
-        return _mat4_tobytes(mvp)
+        return _mat4_tobytes(self._camera_mvp_matrix(camera, width, height))
 
     def _draw_to_canvas(self) -> None:
         import wgpu
@@ -543,6 +708,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         if self.context is None or self.device is None:
             return
         width, height = self.canvas.get_physical_size()
+        self._ensure_depth_texture(int(width), int(height))
         view = self.context.get_current_texture().create_view()
         encoder = self.device.create_command_encoder()
         render_pass = encoder.begin_render_pass(
@@ -554,7 +720,15 @@ class WgpuRenderer(NullDiagnosticRenderer):
                     "load_op": wgpu.LoadOp.clear,
                     "store_op": wgpu.StoreOp.store,
                 }
-            ]
+            ],
+            depth_stencil_attachment={
+                "view": self.depth_view,
+                "depth_clear_value": 1.0,
+                "depth_load_op": wgpu.LoadOp.clear,
+                "depth_store_op": wgpu.StoreOp.store,
+            }
+            if self.depth_view is not None
+            else None,
         )
         if self.show_grid and self.pipeline_grid is not None and self.grid_vertex_buffer is not None:
             self.queue.write_buffer(self.grid_uniform_buffer, 0, self._camera_mvp(self._active_camera, width, height))
@@ -562,8 +736,67 @@ class WgpuRenderer(NullDiagnosticRenderer):
             render_pass.set_bind_group(0, self.grid_bind_group)
             render_pass.set_vertex_buffer(0, self.grid_vertex_buffer)
             render_pass.draw(self.grid_vertex_count, 1, 0, 0)
+        self._draw_meshes(render_pass, width, height)
         render_pass.end()
         self.queue.submit([encoder.finish()])
+
+    def _draw_meshes(self, render_pass, width: int, height: int) -> None:
+        import wgpu
+
+        if self.pipeline_mesh is None or self.mesh_uniform_buffer is None or self.mesh_bind_group is None:
+            return
+        if self._active_scene is None:
+            self.perf["tri_count"] = 0
+            return
+        try:
+            from src.gui.rendering.mesh_render_data import iter_mesh_render_data
+        except Exception as exc:
+            self.last_error = f"mesh adapter unavailable: {exc}"
+            return
+
+        mvp = self._camera_mvp_matrix(self._active_camera, width, height)
+        tri_count = 0
+        for mesh_data in iter_mesh_render_data(self._active_scene, anim_pose=self._active_anim_pose):
+            try:
+                resource = self.resource_cache.get_or_upload_mesh(mesh_data)
+                if resource is None:
+                    continue
+                uniform = self._mesh_uniform_bytes(mvp, mesh_data.material_color)
+                self.queue.write_buffer(self.mesh_uniform_buffer, 0, uniform)
+                render_pass.set_pipeline(self.pipeline_mesh)
+                render_pass.set_bind_group(0, self.mesh_bind_group)
+                render_pass.set_vertex_buffer(0, resource.vertex_buffer)
+                if resource.index_buffer is not None and resource.index_count > 0:
+                    render_pass.set_index_buffer(resource.index_buffer, wgpu.IndexFormat.uint32)
+                    render_pass.draw_indexed(resource.index_count, 1, 0, 0, 0)
+                    tri_count += resource.index_count // 3
+                else:
+                    render_pass.draw(resource.vertex_count, 1, 0, 0)
+                    tri_count += resource.vertex_count // 3
+            except Exception as exc:
+                log.warning("WgpuRenderer: skipped mesh %s: %s", getattr(mesh_data.source, "name", mesh_data.mesh_id), exc)
+        self.perf["tri_count"] = int(tri_count)
+
+    def _camera_mvp_matrix(self, camera, width: int, height: int):
+        import numpy as np
+
+        eye_attr = getattr(camera, "eye", (0.0, 5.0, 3.0)) if camera is not None else (0.0, 5.0, 3.0)
+        eye = tuple(eye_attr() if callable(eye_attr) else eye_attr)
+        target_attr = getattr(camera, "target", (0.0, 0.0, 0.0)) if camera is not None else (0.0, 0.0, 0.0)
+        target = tuple(target_attr() if callable(target_attr) else target_attr)
+        up_attr = getattr(camera, "up", None) if camera is not None else None
+        up = tuple(up_attr() if callable(up_attr) else up_attr) if up_attr is not None else (0.0, 0.0, 1.0)
+        fov = float(getattr(camera, "fov", 45.0)) if camera is not None else 45.0
+        near = float(getattr(camera, "near", getattr(camera, "_near", 0.01))) if camera is not None else 0.01
+        far = float(getattr(camera, "far", getattr(camera, "_far", 2000.0))) if camera is not None else 2000.0
+        proj = _mat4_perspective_wgpu(math.radians(fov), width / max(1, height), near, far)
+        view = _mat4_lookat(eye, target, up)
+        return (proj @ view @ np.eye(4, dtype=np.float32)).astype(np.float32)
+
+    def _mesh_uniform_bytes(self, mvp, color: tuple[float, float, float, float]) -> bytes:
+        import numpy as np
+
+        return np.asarray(mvp, dtype=np.float32).reshape(4, 4).T.tobytes() + np.asarray(color, dtype=np.float32).tobytes()
 
     def render(self, scene, camera, W: int, H: int, *args, **kwargs):
         if W <= 0 or H <= 0:
@@ -573,6 +806,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
             from PIL import Image
 
             self._active_camera = camera
+            self._active_scene = scene
+            self._active_anim_pose = kwargs.get("anim_pose")
             if not self.initialized:
                 self.initialize()
             self.resize(int(W), int(H), 1.0)
@@ -580,7 +815,14 @@ class WgpuRenderer(NullDiagnosticRenderer):
             self.canvas.force_draw()
             payload = getattr(self.canvas, "_last_image", None)
             if not payload:
-                raise RuntimeError("WGPU render pass presented without bitmap readback")
+                img = Image.new("RGBA", (int(W), int(H)), (0, 0, 0, 0))
+                self.perf["last_frame_ms"] = (time.perf_counter() - t0) * 1000.0
+                self.perf["backend"] = self.backend_id
+                self.last_error = ""
+                if not self._clear_logged:
+                    log.info("WgpuRenderer: live clear/grid/mesh pass OK")
+                    self._clear_logged = True
+                return img
             _qimage, data = payload
             img = Image.fromarray(data)
             if img.mode != "RGBA":
@@ -621,7 +863,14 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.grid_bind_group = None
         self.grid_uniform_buffer = None
         self.grid_vertex_buffer = None
+        self.pipeline_mesh = None
+        self.mesh_bind_group = None
+        self.mesh_uniform_buffer = None
+        self.depth_texture = None
+        self.depth_view = None
+        self._depth_size = (0, 0)
         self.initialized = False
+        self.live_surface = False
         self.resource_cache.invalidate_all()
 
     def clear_caches(self) -> None:
@@ -659,10 +908,20 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "api": "WGPU",
             "backend": self._spec.wgpu_backend_type or "auto",
             "format": self.format or caps.details.get("format"),
+            "surface_format": self.format or caps.details.get("format"),
+            "depth_format": self.depth_format,
             "adapter": adapter_info,
             "initialized": self.initialized,
+            "visible_surface_type": type(self.canvas).__name__ if self.canvas is not None else "",
+            "live_surface": self.live_surface,
             "supports_grid": True,
-            "supports_scene_meshes": False,
+            "supports_scene_meshes": True,
+            "grid_pipeline_status": self.grid_pipeline_status,
+            "mesh_pipeline_status": self.mesh_pipeline_status,
+            "uploaded_mesh_count": len(self.resource_cache.meshes),
+            "uploaded_vertex_count": self.resource_cache.uploaded_vertex_count,
+            "uploaded_index_count": self.resource_cache.uploaded_index_count,
+            "surface_host": dict(getattr(self, "surface_host_diagnostics", {}) or {}),
             "last_error": self.last_error,
         }
 
@@ -696,5 +955,42 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     return vec4<f32>(input.color, 1.0);
+}
+"""
+
+
+_MESH_BASIC_WGSL = """
+struct Locals {
+    mvp: mat4x4<f32>,
+    color: vec4<f32>,
+};
+
+@group(0) @binding(0)
+var<uniform> locals: Locals;
+
+struct VertexInput {
+    @location(0) position: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+};
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) normal: vec3<f32>,
+};
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+    var out: VertexOutput;
+    out.position = locals.mvp * vec4<f32>(input.position, 1.0);
+    out.normal = normalize(input.normal);
+    return out;
+}
+
+@fragment
+fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+    let light_dir = normalize(vec3<f32>(0.35, 0.55, 0.75));
+    let ndotl = max(dot(normalize(input.normal), light_dir), 0.0);
+    let shade = 0.38 + ndotl * 0.62;
+    return vec4<f32>(locals.color.rgb * shade, locals.color.a);
 }
 """

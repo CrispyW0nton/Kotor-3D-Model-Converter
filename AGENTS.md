@@ -24,12 +24,12 @@ If you get an ImportError, fix the import path — don't ask the user to open Gh
 4. Identify the divergence
 5. Fix the code
 6. Re-run compare_model_pipelines to confirm the fix
-7. Run the full scan on affected model category to check for regressions
+7. Run only targeted regression checks by default. Do not run broad/full scans unless the user explicitly approves them for that task.
 
 ## When running tests:
-- `pytest tests/ -x` for quick validation
-- `pytest tests/ -m "not slow"` to skip full-scan tests
-- `pytest tests/test_mcp_full_scan.py` for the complete 6,078-model validation
+- Prefer `python -m py_compile ...`, targeted single test files, or specific `pytest path::test_name` cases tied to the change.
+- Do not run broad suites such as `pytest tests/`, `pytest tests/ -x`, `pytest tests/ -m "not slow"`, or full-scan tests unless the user explicitly asks for them.
+- Do not run `pytest tests/test_mcp_full_scan.py` unless the user explicitly asks for the complete 6,078-model validation.
 - When testing whether application behavior works, launch the actual
   GhostRigger application and test it on screen. Visible testing is required
   for UI, startup, viewport, theme/layout, and workflow checks. Do not replace

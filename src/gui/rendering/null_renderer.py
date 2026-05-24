@@ -56,6 +56,17 @@ class NullDiagnosticRenderer(IViewportRenderer):
             diagnostic_only=True,
         )
 
+    def create_surface_widget(self, parent=None):
+        from PySide6 import QtCore, QtWidgets
+
+        widget = QtWidgets.QLabel("Null Diagnostic Renderer", parent)
+        widget.setObjectName("NullDiagnosticViewportSurface")
+        widget.setAlignment(QtCore.Qt.AlignCenter)
+        widget.setFocusPolicy(QtCore.Qt.StrongFocus)
+        widget.setMouseTracking(True)
+        widget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        return widget
+
     def render(self, scene, camera, W: int, H: int, *args, **kwargs):
         if W <= 0 or H <= 0:
             return None
@@ -106,4 +117,3 @@ class NullDiagnosticRenderer(IViewportRenderer):
             "backend": "diagnostic",
             **self._diagnostics,
         }
-
