@@ -24,6 +24,14 @@ class RendererCapabilities:
     supported_display_modes: tuple[str, ...] = field(default_factory=tuple)
     supported_display_options: tuple[str, ...] = field(default_factory=tuple)
     fallback_display_modes: dict[str, str] = field(default_factory=dict)
+    supports_object_picking: bool = False
+    supports_cpu_ray_picking: bool = False
+    supports_gpu_id_picking: bool = False
+    supports_selection_highlight: bool = False
+    supports_gizmo_drawing: bool = False
+    supports_gizmo_interaction: bool = False
+    supports_marquee_selection: bool = False
+    supports_subobject_selection: bool = False
     details: dict[str, object] = field(default_factory=dict)
 
     def status_text(self) -> str:

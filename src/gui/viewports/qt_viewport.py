@@ -22,7 +22,9 @@ from src.gui.qt_lib.rendering.qt_gpu_renderer import (
     clear_prebuilt_static_gpu_model_data,
     create_viewport_renderer,
 )
+from src.gui.qt_lib.rendering.renderer_backend import normalize_renderer_backend, renderer_backend_label
 from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
+from src.gui.qt_lib.rendering.picking import CpuMeshPickingProvider, PickRequest, ray_triangle_intersection
 from src.gui.qt_lib.rendering.viewport_display import (
     ViewportDisplayMode,
     ViewportDisplayOptions,
@@ -537,6 +539,7 @@ class QtViewportWidget(QtWidgets.QWidget):
     cameraChanged = QtCore.Signal()
     activeCameraChanged = QtCore.Signal(object)
     statusMessage = QtCore.Signal(str)
+    renderStateChanged = QtCore.Signal(str)
     gpuUploadProgress = QtCore.Signal(int, int)
     _texturePrewarmFinished = QtCore.Signal(object)
     _deferredTxiFinished = QtCore.Signal(object)
@@ -604,6 +607,15 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._transform_gizmo = TransformGizmo(
             TransformController(self._evict_transform_cache, self.angle_snap, self.percent_snap)
         )
+        self._picking_provider = CpuMeshPickingProvider(
+            mesh_nodes=lambda _scene: list(self._renderer._iter_visible_mesh_nodes()),
+            projected_bounds=self._projected_mesh_bounds,
+            ray_builder=ray_from_mouse,
+            point_in_triangle=self._point_in_triangle,
+            bounds_from_points=lambda points: self._bounds_from_points(points, min_extent=0.05),
+        )
+        self._last_pick_hit = None
+        self._last_pick_diagnostics: dict[str, object] = {}
         self.transform_reference_controller = TransformReferenceController()
         self._pivot_edit_mode = "affect_object_only"
         self._pick_reference_waiting = False
@@ -640,6 +652,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gpu_upload_total = 0
         self._gpu_upload_model_id = 0
         self._last_renderer_backend_id = ""
+        self._last_render_state_text = ""
         self._last_display_mode_warning = ""
         self._selection_orbit_bounds: Optional[tuple[tuple[float, float, float], tuple[float, float, float]]] = None
         self._selection_orbit_bounds_node_id = 0
@@ -1982,9 +1995,21 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._gpu_renderer.set_theme_colors(theme)
         elif self._gpu_renderer is not None:
             self._apply_native_palette_to_renderers()
+        self._emit_render_state_changed()
 
     def set_renderer_settings(self, settings: RendererSettings | dict | None) -> None:
-        self._renderer_settings = settings if isinstance(settings, RendererSettings) else RendererSettings.from_settings(settings or {})
+        if isinstance(settings, RendererSettings):
+            self._renderer_settings = settings
+        elif all(hasattr(settings, attr) for attr in ("backend", "preferred_windows_backend", "allow_fallback", "show_renderer_diagnostics", "force_safe_mode")):
+            self._renderer_settings = RendererSettings(
+                backend=self._normalized_renderer_backend(getattr(settings, "backend", None)),
+                preferred_windows_backend=self._normalized_renderer_backend(getattr(settings, "preferred_windows_backend", None)),
+                allow_fallback=bool(getattr(settings, "allow_fallback", True)),
+                show_renderer_diagnostics=bool(getattr(settings, "show_renderer_diagnostics", True)),
+                force_safe_mode=bool(getattr(settings, "force_safe_mode", False)),
+            )
+        else:
+            self._renderer_settings = RendererSettings.from_settings(settings or {})
         if self._gpu_renderer is not None and self._owns_gpu_renderer:
             apply_settings = getattr(self._gpu_renderer, "set_settings", None)
             if callable(apply_settings):
@@ -1996,6 +2021,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._gpu_renderer = None
         if self._gpu_renderer is not None:
             self._sync_renderer_surface(force=True)
+        self._emit_render_state_changed()
         self._request_render(fast=True)
 
     def set_game_library(self, library, game_tag: str = "K1") -> None:
@@ -2029,8 +2055,75 @@ class QtViewportWidget(QtWidgets.QWidget):
             setattr(self._gpu_renderer, "show_grid", bool(options.show_grid))
         self._sync_display_buttons()
         self._refresh_display_button_availability()
+        self._emit_render_state_changed()
         if announce:
             self.statusMessage.emit(f"Viewport display: {options.display_mode.value.replace('_', ' ').title()}")
+
+    @staticmethod
+    def _display_mode_label(options: ViewportDisplayOptions) -> str:
+        mode = options.display_mode.value.replace("_", " ").title()
+        extras: list[str] = []
+        if options.show_edged_faces or options.show_wire_overlay:
+            extras.append("Edges")
+        if options.xray:
+            extras.append("X-Ray")
+        if options.show_lightmaps and options.display_mode not in {
+            ViewportDisplayMode.TEXTURED_LIGHTMAPPED,
+            ViewportDisplayMode.FULL_MATERIAL,
+        }:
+            extras.append("Lightmaps")
+        return f"{mode} ({', '.join(extras)})" if extras else mode
+
+    @staticmethod
+    def _renderer_label_for_backend(backend: object) -> str:
+        try:
+            return renderer_backend_label(QtViewportWidget._normalized_renderer_backend(backend))
+        except Exception:
+            return str(backend or "Unknown Renderer").replace("_", " ").title()
+
+    @staticmethod
+    def _normalized_renderer_backend(backend: object):
+        return normalize_renderer_backend(getattr(backend, "value", backend))
+
+    def _active_renderer_backend(self):
+        renderer = getattr(self, "_gpu_renderer", None)
+        backend = None
+        if renderer is not None:
+            backend = getattr(renderer, "active_backend", None)
+            if backend is None:
+                diagnostics = {}
+                get_diagnostics = getattr(renderer, "get_diagnostics", None)
+                if callable(get_diagnostics):
+                    try:
+                        diagnostics = get_diagnostics() or {}
+                    except Exception:
+                        diagnostics = {}
+                backend = diagnostics.get("backend_id") or getattr(renderer, "backend_id", None)
+        if backend is None:
+            backend = "modern_gl"
+        return backend
+
+    def _active_renderer_status_label(self) -> str:
+        return self._renderer_label_for_backend(self._active_renderer_backend())
+
+    def _configured_renderer_status_label(self) -> str:
+        settings = getattr(self, "_renderer_settings", RendererSettings())
+        return self._renderer_label_for_backend(getattr(settings, "backend", None))
+
+    def render_state_status_text(self) -> str:
+        configured_backend = getattr(getattr(self, "_renderer_settings", RendererSettings()), "backend", None)
+        active_backend = self._active_renderer_backend()
+        renderer_label = self._configured_renderer_status_label()
+        if self._normalized_renderer_backend(active_backend) != self._normalized_renderer_backend(configured_backend):
+            renderer_label = f"{renderer_label} (Active: {self._active_renderer_status_label()})"
+        return f"Renderer: {renderer_label} | Display: {self._display_mode_label(self.display_options)}"
+
+    def _emit_render_state_changed(self) -> None:
+        text = self.render_state_status_text()
+        if text == self._last_render_state_text:
+            return
+        self._last_render_state_text = text
+        self.renderStateChanged.emit(text)
 
     def _display_mode_for_current_controls(self) -> ViewportDisplayMode:
         if not bool(getattr(self._renderer, "show_solid", True)) and bool(getattr(self._renderer, "show_wireframe", False)):
@@ -2424,6 +2517,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._use_gpu = True
         self.renderer_button.setChecked(True)
         self.renderer_button.setToolTip("GPU renderer")
+        self._emit_render_state_changed()
         self._request_render(fast=True)
 
     def toggle_xray(self, checked: Optional[bool] = None) -> None:
@@ -4986,6 +5080,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gpu_renderer.selected_nodes = list(getattr(self, "_selected_meshes", []) or [])
         self._gpu_renderer.show_grid = bool(getattr(self._renderer, "show_grid", True))
         self._gpu_renderer.cull_faces = False
+        gizmo_render_data = self._build_transform_gizmo_render_data(w, h)
         try:
             self._gpu_renderer.surface_host_diagnostics = self.canvas.diagnostics()
         except Exception:
@@ -4997,6 +5092,8 @@ class QtViewportWidget(QtWidgets.QWidget):
             h,
             textures=textures,
             display_options=self.display_options,
+            gizmo_render_data=gizmo_render_data,
+            picking_diagnostics=self._viewport_picking_diagnostics(),
             anim_pose=getattr(self._renderer, "_anim_pose", None),
             anim_time=float(getattr(self._renderer, "_anim_time", 0.0)),
             anim_base_pose=getattr(self._renderer, "_anim_base_pose", None),
@@ -5019,6 +5116,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             label = str(diagnostics.get("name") or backend_id)
             self.statusMessage.emit(f"Renderer: {label}")
             self._refresh_display_button_availability()
+            self._emit_render_state_changed()
         warning = str(diagnostics.get("last_display_mode_warning") or "")
         if warning and warning != self._last_display_mode_warning:
             self._last_display_mode_warning = warning
@@ -5123,6 +5221,33 @@ class QtViewportWidget(QtWidgets.QWidget):
             log.debug("Transform gizmo overlay draw failed: %s", exc)
             return img
 
+    def _build_transform_gizmo_render_data(self, w: int, h: int):
+        if not self._ensure_renderer_gimbal_state():
+            return None
+        node = self._active_gizmo_node()
+        if node is None:
+            return None
+        try:
+            wp = self._gizmo_world_position(node)
+            setattr(node, "_gr_gizmo_world_position", wp)
+        except Exception:
+            pass
+        self._sync_transform_reference_for_node(node)
+        self._transform_gizmo.set_selected_object(node)
+        self._transform_gizmo.renderer.AXIS_COLORS = {
+            "X": tuple(getattr(self._renderer, "gimbal_x_color", (220, 60, 60)))[:3] + (255,),
+            "Y": tuple(getattr(self._renderer, "gimbal_y_color", (60, 220, 80)))[:3] + (255,),
+            "Z": tuple(getattr(self._renderer, "gimbal_z_color", (70, 135, 240)))[:3] + (255,),
+        }
+        self._transform_gizmo.renderer.HILITE = (
+            tuple(getattr(self._renderer, "gimbal_active_color", (255, 235, 80)))[:3] + (255,)
+        )
+        try:
+            return self._transform_gizmo.build_render_data(self.camera, self._renderer._proj, w, h)
+        except Exception as exc:
+            log.debug("Transform gizmo render data build failed: %s", exc)
+            return None
+
     def _draw_transform_gizmo(self, draw, w: int, h: int) -> None:
         if not self._ensure_renderer_gimbal_state():
             return
@@ -5148,6 +5273,38 @@ class QtViewportWidget(QtWidgets.QWidget):
             tuple(getattr(self._renderer, "gimbal_active_color", (255, 235, 80)))[:3] + (255,)
         )
         self._transform_gizmo.draw(draw, self.camera, self._renderer._proj, w, h)
+
+    def _viewport_picking_diagnostics(self) -> dict[str, object]:
+        selected = [node for node in getattr(self, "_selected_meshes", []) or [] if node is not None]
+        active = getattr(self._renderer, "selected_node", None)
+        last_pick = dict(getattr(self, "_last_pick_diagnostics", {}) or {})
+        picking_method = str(
+            last_pick.get("method")
+            or ("GPU ID" if self._gpu_renderer_supports_gpu_picking() else getattr(self._picking_provider, "method", "CPU raycast"))
+        )
+        return {
+            "picking_provider_active": self._picking_provider is not None,
+            "picking_method": picking_method,
+            "last_pick": last_pick,
+            "selected_object_count": 1 if active is not None and not selected else len(selected),
+            "selected_node_count": len(getattr(self, "_selected_joint_nodes", []) or []),
+            "gizmo_hover_target": getattr(self._transform_gizmo, "hovered_handle", None),
+            "active_gizmo_tool": getattr(getattr(self._transform_gizmo, "mode", None), "value", ""),
+            "active_axis_mode": str(getattr(getattr(self, "transform_reference_controller", None), "axis_mode", "")),
+            "device_pixel_ratio": float(self.canvas.devicePixelRatioF()),
+            "surface_widget_class": type(self.canvas.current_surface()).__name__ if self.canvas.current_surface() is not None else "",
+            "input_bridge_installed": self.canvas.input_bridge_installed(),
+        }
+
+    def _gpu_renderer_supports_gpu_picking(self) -> bool:
+        renderer = getattr(self, "_gpu_renderer", None)
+        if renderer is None:
+            return False
+        try:
+            caps = renderer.get_capabilities() if hasattr(renderer, "get_capabilities") else None
+            return bool(getattr(caps, "supports_gpu_id_picking", False))
+        except Exception:
+            return False
 
     def _draw_measurement_overlay(self, draw, w: int, h: int) -> None:
         try:
@@ -5905,30 +6062,7 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     @staticmethod
     def _ray_triangle_intersection(origin, direction, v0, v1, v2) -> float | None:
-        eps = 1.0e-8
-        ox, oy, oz = float(origin[0]), float(origin[1]), float(origin[2])
-        dx, dy, dz = float(direction[0]), float(direction[1]), float(direction[2])
-        ax, ay, az = float(v0[0]), float(v0[1]), float(v0[2])
-        bx, by, bz = float(v1[0]), float(v1[1]), float(v1[2])
-        cx, cy, cz = float(v2[0]), float(v2[1]), float(v2[2])
-
-        e1x, e1y, e1z = bx - ax, by - ay, bz - az
-        e2x, e2y, e2z = cx - ax, cy - ay, cz - az
-        px, py, pz = dy * e2z - dz * e2y, dz * e2x - dx * e2z, dx * e2y - dy * e2x
-        det = e1x * px + e1y * py + e1z * pz
-        if abs(det) < eps:
-            return None
-        inv_det = 1.0 / det
-        tx, ty, tz = ox - ax, oy - ay, oz - az
-        u = (tx * px + ty * py + tz * pz) * inv_det
-        if u < -eps or u > 1.0 + eps:
-            return None
-        qx, qy, qz = ty * e1z - tz * e1y, tz * e1x - tx * e1z, tx * e1y - ty * e1x
-        v = (dx * qx + dy * qy + dz * qz) * inv_det
-        if v < -eps or u + v > 1.0 + eps:
-            return None
-        t = (e2x * qx + e2y * qy + e2z * qz) * inv_det
-        return t if t > eps else None
+        return ray_triangle_intersection(origin, direction, v0, v1, v2)
 
     def _mesh_hit_test_detail(self, sx: int, sy: int):
         if self.model is None:
@@ -5941,60 +6075,77 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._renderer._frame_view = self._renderer._cam_view_matrix()
         except Exception:
             pass
-        best = None
-        best_face_bounds = None
-        best_t = float("inf")
         try:
-            ray_origin, ray_direction = ray_from_mouse((sx, sy), self.camera, width, height)
+            dpr = float(self.canvas.devicePixelRatioF())
         except Exception:
-            ray_origin = ray_direction = None
+            dpr = 1.0
+        request = PickRequest(
+            x=int(sx),
+            y=int(sy),
+            viewport_width=int(width),
+            viewport_height=int(height),
+            device_pixel_ratio=dpr,
+            camera=self.camera,
+            selection_mode=str(getattr(getattr(self, "mesh_selection_state", None), "mode", "object")),
+            include_hidden=False,
+            include_locked=False,
+            modifiers=None,
+            display_options=getattr(self, "display_options", None),
+        )
+        gpu_result = self._mesh_gpu_pick_hit(request)
+        if gpu_result is not None:
+            return gpu_result
         try:
-            nodes = list(self._renderer._iter_visible_mesh_nodes())
-        except Exception:
-            nodes = []
-        for node in nodes:
-            if getattr(node, "_gr_hidden", False):
-                continue
-            try:
-                bounds = self._projected_mesh_bounds(node, width, height)
-                if bounds is None:
-                    continue
-                min_x, min_y, max_x, max_y, world_verts, projected = bounds
-                if sx < min_x or sx > max_x or sy < min_y or sy > max_y:
-                    continue
-                for face in getattr(node, "faces", []) or []:
-                    try:
-                        i0, i1, i2 = int(face[0]), int(face[1]), int(face[2])
-                        if i0 < 0 or i1 < 0 or i2 < 0:
-                            continue
-                        v0, v1, v2 = world_verts[i0], world_verts[i1], world_verts[i2]
-                        hit_t = (
-                            self._ray_triangle_intersection(ray_origin, ray_direction, v0, v1, v2)
-                            if ray_origin is not None and ray_direction is not None
-                            else None
-                        )
-                        if hit_t is None:
-                            p0, p1, p2 = projected[i0], projected[i1], projected[i2]
-                            if p0 is None or p1 is None or p2 is None:
-                                continue
-                            if not self._point_in_triangle(sx, sy, p0, p1, p2):
-                                continue
-                            hit_t = max(1.0e-6, (p0[2] + p1[2] + p2[2]) / 3.0)
-                        if hit_t >= best_t:
-                            continue
-                        best_t = hit_t
-                        best = node
-                        best_face_bounds = self._bounds_from_points(
-                            [world_verts[i0], world_verts[i1], world_verts[i2]],
-                            min_extent=0.05,
-                        )
-                    except Exception:
-                        continue
-            except Exception:
-                continue
-        if best is None:
+            hit = self._picking_provider.pick(request, self.model, self.camera)
+        except Exception as exc:
+            self._last_pick_diagnostics = {
+                "method": "CPU raycast",
+                "result": "error",
+                "error": str(exc),
+                "x": int(sx),
+                "y": int(sy),
+                "device_pixel_ratio": dpr,
+            }
+            log.debug("Mesh picking failed: %s", exc)
             return None
-        return best, best_face_bounds
+        self._last_pick_hit = hit
+        self._last_pick_diagnostics = dict(hit.diagnostic or {})
+        if not hit.hit or hit.object_ref is None:
+            return None
+        return hit.object_ref, hit.diagnostic.get("face_bounds")
+
+    def _mesh_gpu_pick_hit(self, request: PickRequest):
+        renderer = getattr(self, "_gpu_renderer", None)
+        if renderer is None:
+            return None
+        try:
+            caps = renderer.get_capabilities() if hasattr(renderer, "get_capabilities") else None
+        except Exception:
+            caps = None
+        if not bool(getattr(caps, "supports_gpu_id_picking", False)):
+            return None
+        pick = getattr(renderer, "pick", None)
+        if not callable(pick):
+            return None
+        try:
+            hit = pick(request, self.model, self.camera)
+        except Exception as exc:
+            self._last_pick_diagnostics = {
+                "method": "GPU ID",
+                "result": "error",
+                "error": str(exc),
+                "fallback": "CPU raycast",
+            }
+            log.debug("GPU mesh picking failed; falling back to CPU: %s", exc)
+            return None
+        self._last_pick_hit = hit
+        self._last_pick_diagnostics = dict(getattr(hit, "diagnostic", {}) or {})
+        if self._last_pick_diagnostics.get("result") == "unavailable":
+            self._last_pick_diagnostics["fallback"] = "CPU raycast"
+            return None
+        if bool(getattr(hit, "hit", False)) and getattr(hit, "object_ref", None) is not None:
+            return hit.object_ref, hit.diagnostic.get("face_bounds")
+        return (None, None) if bool(self._last_pick_diagnostics) else None
 
     def _pick_reference_hit_test(self, sx: int, sy: int):
         camera_node = self._camera_hit_test(sx, sy)

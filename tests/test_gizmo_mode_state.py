@@ -50,3 +50,21 @@ def test_rotate_renderer_keeps_x_y_z_ring_handles() -> None:
     handles = gizmo.draw(ImageDraw.Draw(image, "RGBA"), DummyCamera(), _projector, 200, 160)
 
     assert {"ROTATE_X", "ROTATE_Y", "ROTATE_Z"}.issubset({handle["name"] for handle in handles})
+
+
+def test_gizmo_builds_renderer_neutral_draw_commands_for_wgpu() -> None:
+    node = SimpleNamespace(position=(0.0, 0.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0))
+    gizmo = TransformGizmo()
+    gizmo.set_selected_object(node)
+
+    translate_data = gizmo.build_render_data(DummyCamera(), _projector, 200, 160)
+    assert translate_data.active_tool == "translate"
+    assert {"TRANSLATE_X", "TRANSLATE_Y", "TRANSLATE_Z"}.issubset({cmd.pick_id for cmd in translate_data.commands})
+
+    gizmo.set_mode(GizmoMode.ROTATE)
+    rotate_data = gizmo.build_render_data(DummyCamera(), _projector, 200, 160)
+    assert {"ROTATE_X", "ROTATE_Y", "ROTATE_Z"}.issubset({cmd.pick_id for cmd in rotate_data.commands})
+
+    gizmo.set_mode(GizmoMode.SCALE)
+    scale_data = gizmo.build_render_data(DummyCamera(), _projector, 200, 160)
+    assert {"SCALE_X", "SCALE_Y", "SCALE_Z", "SCALE_UNIFORM"}.issubset({cmd.pick_id for cmd in scale_data.commands})

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import os
+import struct
 from pathlib import Path
+
+import pytest
 
 from src.gui.libtheme.layout_loader import LayoutLoader
 from src.gui.libtheme.collapsible_group import CollapsibleGroupBox
@@ -20,6 +23,17 @@ from src.gui.qt_lib.viewports.qt_transform_typein_bar import transform_bar_style
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _rgb_float(value: str) -> tuple[float, float, float]:
+    value = value.lstrip("#")
+    return tuple(int(value[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+
+
+def _srgb_to_linear(value: float) -> float:
+    if value <= 0.04045:
+        return value / 12.92
+    return ((value + 0.055) / 1.055) ** 2.4
 
 
 def test_packaged_themes_load_and_validate() -> None:
@@ -642,6 +656,98 @@ def test_viewport_chrome_and_renderer_use_theme_tokens() -> None:
     assert renderer.viewport_background == expected_background
     assert renderer.grid_minor_color == expected_grid
     assert renderer.grid_x_axis_color == expected_axis
+
+
+def test_wgpu_renderer_uses_theme_tokens_for_viewport_overlays() -> None:
+    from src.gui.rendering.renderer_backend import RendererBackend
+    from src.gui.rendering.wgpu_renderer import WgpuRenderer
+
+    theme = ThemeLoader().load_file(ROOT / "config" / "themes" / "themes" / "classic.xml")
+    assert theme is not None
+    renderer = WgpuRenderer(RendererBackend.WGPU_AUTO)
+
+    renderer.set_theme_colors(theme)
+
+    assert renderer.viewport_background == pytest.approx(_rgb_float(theme.color("viewport.background")))
+    assert renderer.grid_minor_color == pytest.approx(_rgb_float(theme.color("viewport.gridMinor")))
+    assert renderer.grid_major_color == pytest.approx(_rgb_float(theme.color("viewport.gridMajor")))
+    assert renderer.wire_color == pytest.approx(_rgb_float(theme.color("accent.primary")))
+    assert renderer.selected_edge_color == pytest.approx(_rgb_float(theme.color("selection.background")))
+    assert renderer.hidden_line_color == pytest.approx(_rgb_float(theme.color("viewport.border")))
+    assert renderer.missing_texture_color_b == pytest.approx(_rgb_float(theme.color("viewport.background")))
+    assert renderer.get_diagnostics()["viewport_theme_colors"]["wire"] == pytest.approx(renderer.wire_color)
+
+
+def test_wgpu_renderer_uses_native_palette_for_viewport_overlays() -> None:
+    from src.gui.rendering.renderer_backend import RendererBackend
+    from src.gui.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer(RendererBackend.WGPU_AUTO)
+
+    renderer.set_native_palette_colors(
+        base=(235, 238, 242),
+        text=(30, 34, 40),
+        highlight=(0, 120, 215),
+    )
+
+    assert renderer.viewport_background == pytest.approx((235 / 255.0, 238 / 255.0, 242 / 255.0))
+    assert renderer.grid_minor_color == pytest.approx((198 / 255.0, 201 / 255.0, 206 / 255.0))
+    assert renderer.grid_major_color == pytest.approx((174 / 255.0, 177 / 255.0, 181 / 255.0))
+    assert renderer.wire_color == pytest.approx((0.0, 120 / 255.0, 215 / 255.0))
+    assert renderer.selected_edge_color == pytest.approx(renderer.wire_color)
+    assert renderer.missing_texture_color_a == pytest.approx(renderer.wire_color)
+    assert renderer.missing_texture_color_b == pytest.approx(renderer.viewport_background)
+
+
+def test_wgpu_renderer_linearizes_viewport_colours_for_srgb_surfaces() -> None:
+    from src.gui.rendering.renderer_backend import RendererBackend
+    from src.gui.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer(RendererBackend.WGPU_AUTO)
+    renderer.format = "bgra8unorm-srgb"
+    background = (23 / 255.0, 25 / 255.0, 28 / 255.0)
+
+    assert renderer._target_rgb(background) == pytest.approx(tuple(_srgb_to_linear(channel) for channel in background))
+    assert renderer._target_rgba((*background, 1.0))[:3] == pytest.approx(renderer._target_rgb(background))
+
+    mvp = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+    color = (1 / 255.0, 0.0, 0.0, 1.0)
+    pick_uniform = renderer._line_uniform_bytes(mvp, color, target_color=False)
+    assert struct.unpack("4f", pick_uniform[64:80]) == pytest.approx(color)
+
+    renderer.format = "bgra8unorm"
+    assert renderer._target_rgb(background) == pytest.approx(background)
+
+
+def test_viewport_emits_persistent_render_state_status() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.rendering.renderer_backend import RendererBackend
+    from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    viewport = QtViewportWidget()
+    seen: list[str] = []
+    viewport.renderStateChanged.connect(seen.append)
+    try:
+        initial = viewport.render_state_status_text()
+        assert "Renderer:" in initial
+        assert "Display:" in initial
+
+        viewport.set_shade_mode("wire")
+
+        assert seen
+        assert "Renderer:" in seen[-1]
+        assert "Display: Wireframe" in seen[-1]
+
+        viewport.set_renderer_settings(RendererSettings(backend=RendererBackend.WGPU_VULKAN))
+        assert "Renderer: WGPU Vulkan" in viewport.render_state_status_text()
+    finally:
+        viewport.deleteLater()
+        app.processEvents()
 
 
 def test_renderer_has_native_theme_overlay_defaults_without_theme_apply() -> None:

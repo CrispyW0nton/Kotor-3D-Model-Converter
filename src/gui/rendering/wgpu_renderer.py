@@ -26,6 +26,7 @@ from src.gui.rendering.renderer_capabilities import (
     WGPU_FALLBACK_DISPLAY_MODES,
     RendererCapabilities,
 )
+from src.gui.rendering.picking import PickHit
 from src.gui.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions, normalize_display_mode
 
 log = logging.getLogger(__name__)
@@ -98,6 +99,42 @@ def _hex_to_rgb_float(value: str, fallback: tuple[float, float, float]) -> tuple
         )
     except ValueError:
         return fallback
+
+
+def _rgb_float(color: tuple[int, int, int]) -> tuple[float, float, float]:
+    return tuple(max(0.0, min(1.0, float(v) / 255.0)) for v in color[:3])
+
+
+def _blend_rgb(a: tuple[int, int, int], b: tuple[int, int, int], t: float) -> tuple[int, int, int]:
+    t = max(0.0, min(1.0, float(t)))
+    return tuple(int(round(float(a[i]) * (1.0 - t) + float(b[i]) * t)) for i in range(3))
+
+
+def _relative_luma(color: tuple[int, int, int]) -> float:
+    r, g, b = (max(0, min(255, int(v))) / 255.0 for v in color)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _rgba8(color: tuple[float, float, float], alpha: int = 255) -> bytes:
+    return bytes([*(max(0, min(255, int(round(c * 255.0)))) for c in color[:3]), max(0, min(255, int(alpha)))])
+
+
+def _srgb_channel_to_linear(value: float) -> float:
+    value = max(0.0, min(1.0, float(value)))
+    if value <= 0.04045:
+        return value / 12.92
+    return ((value + 0.055) / 1.055) ** 2.4
+
+
+def _srgb_to_linear(color: tuple[float, ...]) -> tuple[float, ...]:
+    converted = tuple(_srgb_channel_to_linear(float(channel)) for channel in color[:3])
+    if len(color) >= 4:
+        return (*converted, float(color[3]))
+    return converted
+
+
+def _format_is_srgb(format_name: object) -> bool:
+    return "srgb" in str(format_name or "").lower()
 
 
 def _mat4_perspective_wgpu(fov_y: float, aspect: float, near: float, far: float):
@@ -540,9 +577,11 @@ class WgpuResourceCache:
             return self._white_lightmap
         if kind == "missing_checker" or bool(getattr(self._renderer, "show_missing_texture_checker", False)):
             if self._missing_checker is None:
+                a = _rgba8(getattr(self._renderer, "missing_texture_color_a", (1.0, 0.0, 1.0)))
+                b = _rgba8(getattr(self._renderer, "missing_texture_color_b", (0.0, 0.0, 0.0)))
                 self._missing_checker = self._upload_rgba8_texture(
                     "__fallback_missing_checker__",
-                    bytes([255, 0, 255, 255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 0, 255, 255]),
+                    a + b + b + a,
                     2,
                     2,
                     source_revision=(0, 2, 2),
@@ -638,6 +677,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.pipeline_mesh_cutout = None
         self.pipeline_mesh_blend = None
         self.pipeline_lines = None
+        self.pipeline_gizmo_lines = None
+        self.pipeline_pick = None
         self.mesh_pipeline_layout = None
         self.line_bind_group_layout = None
         self.line_bind_group = None
@@ -653,6 +694,9 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.alpha_pipeline_status = "not created"
         self.mesh_pipeline_status = "not created"
         self.line_pipeline_status = "not created"
+        self.gizmo_pipeline_status = "not created"
+        self.pick_pipeline_status = "not created"
+        self.last_pick_diagnostics: dict[str, object] = {}
         self.grid_pipeline_status = "not created"
         self.last_error = ""
         self.last_display_mode_warning = ""
@@ -665,6 +709,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self._active_textures: dict = {}
         self._active_display_options = ViewportDisplayOptions()
         self._effective_display_options = self._active_display_options
+        self._active_gizmo_render_data = None
+        self._active_picking_diagnostics: dict[str, object] = {}
         self._display_mode_downgrade = ""
         self.surface_host_diagnostics: dict[str, object] = {}
         self.perf = {"last_frame_ms": 0.0, "backend": self.backend_id, "tri_count": 0}
@@ -677,11 +723,16 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.force_untextured = False
         self.disable_lightmaps = False
         self.disable_alpha_blend = False
-        self._last_render_counts = {"opaque": 0, "cutout": 0, "blended": 0, "edges": 0}
+        self._last_render_counts = {"opaque": 0, "cutout": 0, "blended": 0, "edges": 0, "selected_edges": 0, "gizmo_lines": 0}
         self.grid_minor_color = (58 / 255.0, 64 / 255.0, 72 / 255.0)
         self.grid_major_color = (82 / 255.0, 90 / 255.0, 102 / 255.0)
         self.grid_x_axis_color = (118 / 255.0, 54 / 255.0, 54 / 255.0)
         self.grid_y_axis_color = (62 / 255.0, 112 / 255.0, 68 / 255.0)
+        self.wire_color = (0.18, 0.62, 0.95)
+        self.hidden_line_color = (0.02, 0.025, 0.03)
+        self.selected_edge_color = (1.0, 0.78, 0.08)
+        self.missing_texture_color_a = (1.0, 0.0, 1.0)
+        self.missing_texture_color_b = (0.0, 0.0, 0.0)
 
     @staticmethod
     def probe_availability(backend: RendererBackend = RendererBackend.WGPU_AUTO) -> RendererCapabilities:
@@ -770,6 +821,14 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 supports_hot_switch=True,
                 requires_restart=True,
                 diagnostic_only=False,
+                supports_object_picking=True,
+                supports_cpu_ray_picking=True,
+                supports_gpu_id_picking=True,
+                supports_selection_highlight=True,
+                supports_gizmo_drawing=True,
+                supports_gizmo_interaction=True,
+                supports_marquee_selection=True,
+                supports_subobject_selection=True,
                 supported_display_modes=WGPU_DISPLAY_MODES,
                 supported_display_options=(
                     "show_grid",
@@ -814,6 +873,14 @@ class WgpuRenderer(NullDiagnosticRenderer):
             supports_hot_switch=True,
             requires_restart=True,
             diagnostic_only=False,
+            supports_object_picking=False,
+            supports_cpu_ray_picking=False,
+            supports_gpu_id_picking=False,
+            supports_selection_highlight=False,
+            supports_gizmo_drawing=False,
+            supports_gizmo_interaction=False,
+            supports_marquee_selection=False,
+            supports_subobject_selection=False,
             supported_display_modes=(),
             supported_display_options=(),
             fallback_display_modes=WGPU_FALLBACK_DISPLAY_MODES,
@@ -894,6 +961,18 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 self.line_pipeline_status = f"unavailable: {exc}"
                 self.last_display_mode_warning = f"WGPU line pipeline unavailable: {exc}"
                 log.warning("WgpuRenderer: line pipeline unavailable: %s", exc)
+            try:
+                self._create_gizmo_line_pipeline()
+            except Exception as exc:
+                self.pipeline_gizmo_lines = None
+                self.gizmo_pipeline_status = f"unavailable: {exc}"
+                log.warning("WgpuRenderer: gizmo line pipeline unavailable: %s", exc)
+            try:
+                self._create_pick_pipeline()
+            except Exception as exc:
+                self.pipeline_pick = None
+                self.pick_pipeline_status = f"unavailable: {exc}"
+                log.warning("WgpuRenderer: pick pipeline unavailable: %s", exc)
             self.canvas.request_draw(self._draw_to_canvas)
             self.initialized = True
         except Exception as exc:
@@ -944,6 +1023,15 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.depth_view = self.depth_texture.create_view()
         self._depth_size = size
 
+    def _target_rgb(self, color: tuple[float, ...]) -> tuple[float, float, float]:
+        rgb = tuple(max(0.0, min(1.0, float(channel))) for channel in color[:3])
+        return _srgb_to_linear(rgb) if _format_is_srgb(self.format) else rgb
+
+    def _target_rgba(self, color: tuple[float, ...]) -> tuple[float, float, float, float]:
+        rgb = self._target_rgb(color)
+        alpha = float(color[3]) if len(color) >= 4 else 1.0
+        return (*rgb, max(0.0, min(1.0, alpha)))
+
     def _create_grid_pipeline(self) -> None:
         import numpy as np
         import wgpu
@@ -953,10 +1041,12 @@ class WgpuRenderer(NullDiagnosticRenderer):
         rows: list[tuple[float, float, float, float, float, float]] = []
         for i in range(-extent, extent + 1):
             color = self.grid_x_axis_color if i == 0 else (self.grid_major_color if i % major_every == 0 else self.grid_minor_color)
+            color = self._target_rgb(color)
             rows.append((-extent, i, 0.0, *color))
             rows.append((extent, i, 0.0, *color))
         for i in range(-extent, extent + 1):
             color = self.grid_y_axis_color if i == 0 else (self.grid_major_color if i % major_every == 0 else self.grid_minor_color)
+            color = self._target_rgb(color)
             rows.append((i, -extent, 0.0, *color))
             rows.append((i, extent, 0.0, *color))
 
@@ -1204,6 +1294,82 @@ class WgpuRenderer(NullDiagnosticRenderer):
         )
         self.line_pipeline_status = "ready"
 
+    def _create_gizmo_line_pipeline(self) -> None:
+        import wgpu
+
+        if self.line_bind_group_layout is None:
+            self._create_line_pipeline()
+        pipeline_layout = self.device.create_pipeline_layout(bind_group_layouts=[self.line_bind_group_layout])
+        shader = self.device.create_shader_module(code=_LINE_WGSL)
+        self.pipeline_gizmo_lines = self.device.create_render_pipeline(
+            label="WGPU gizmo overlay lines",
+            layout=pipeline_layout,
+            vertex={
+                "module": shader,
+                "entry_point": "vs_main",
+                "buffers": [
+                    {
+                        "array_stride": 12,
+                        "step_mode": wgpu.VertexStepMode.vertex,
+                        "attributes": [
+                            {"format": wgpu.VertexFormat.float32x3, "offset": 0, "shader_location": 0},
+                        ],
+                    }
+                ],
+            },
+            primitive={"topology": wgpu.PrimitiveTopology.line_list},
+            depth_stencil={
+                "format": self.depth_format,
+                "depth_write_enabled": False,
+                "depth_compare": wgpu.CompareFunction.always,
+            },
+            multisample=None,
+            fragment={
+                "module": shader,
+                "entry_point": "fs_main",
+                "targets": [{"format": self.format}],
+            },
+        )
+        self.gizmo_pipeline_status = "ready"
+
+    def _create_pick_pipeline(self) -> None:
+        import wgpu
+
+        if self.line_bind_group_layout is None:
+            self._create_line_pipeline()
+        pipeline_layout = self.device.create_pipeline_layout(bind_group_layouts=[self.line_bind_group_layout])
+        shader = self.device.create_shader_module(code=_PICK_WGSL)
+        self.pipeline_pick = self.device.create_render_pipeline(
+            label="WGPU object ID picking",
+            layout=pipeline_layout,
+            vertex={
+                "module": shader,
+                "entry_point": "vs_main",
+                "buffers": [
+                    {
+                        "array_stride": 40,
+                        "step_mode": wgpu.VertexStepMode.vertex,
+                        "attributes": [
+                            {"format": wgpu.VertexFormat.float32x3, "offset": 0, "shader_location": 0},
+                        ],
+                    }
+                ],
+            },
+            primitive={"topology": wgpu.PrimitiveTopology.triangle_list},
+            depth_stencil={
+                "format": self.depth_format,
+                "depth_write_enabled": True,
+                "depth_compare": wgpu.CompareFunction.less_equal,
+            },
+            multisample=None,
+            fragment={
+                "module": shader,
+                "entry_point": "fs_main",
+                "targets": [{"format": "rgba8unorm"}],
+            },
+        )
+        self.pick_pipeline_status = "ready"
+
     def _camera_mvp(self, camera, width: int, height: int) -> bytes:
         return _mat4_tobytes(self._camera_mvp_matrix(camera, width, height))
 
@@ -1221,7 +1387,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 {
                     "view": view,
                     "resolve_target": None,
-                    "clear_value": (*tuple(self.viewport_background[:3]), 1.0),
+                    "clear_value": self._target_rgba((*tuple(self.viewport_background[:3]), 1.0)),
                     "load_op": wgpu.LoadOp.clear,
                     "store_op": wgpu.StoreOp.store,
                 }
@@ -1242,6 +1408,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             render_pass.set_vertex_buffer(0, self.grid_vertex_buffer)
             render_pass.draw(self.grid_vertex_count, 1, 0, 0)
         self._draw_meshes(render_pass, width, height)
+        self._last_render_counts["gizmo_lines"] = self._draw_gizmo_lines(render_pass, width, height)
         render_pass.end()
         self.queue.submit([encoder.finish()])
 
@@ -1354,7 +1521,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         cutout = [item for item in draw_items if item[0] in {"MASK", "CUTOUT"}]
         blended = [item for item in draw_items if item[0] == "BLEND"]
         blended.sort(key=lambda item: item[1], reverse=True)
-        counts = {"opaque": 0, "cutout": 0, "blended": 0, "edges": 0}
+        counts = {"opaque": 0, "cutout": 0, "blended": 0, "edges": 0, "selected_edges": 0, "gizmo_lines": 0}
 
         if draw_surface:
             for pass_name, items, pipeline in (
@@ -1367,6 +1534,15 @@ class WgpuRenderer(NullDiagnosticRenderer):
                     counts[pass_name] += 1
         if edge_overlay:
             counts["edges"] = self._draw_edge_items(render_pass, edge_items, mvp, mode)
+        selected_edge_items = [item for item in edge_items if self._is_selected_mesh_data(item)]
+        if selected_edge_items:
+            counts["selected_edges"] = self._draw_edge_items(
+                render_pass,
+                selected_edge_items,
+                mvp,
+                mode,
+                color=(*tuple(self.selected_edge_color[:3]), 1.0),
+            )
         self.perf["tri_count"] = int(tri_count)
         self._last_render_counts = counts
         if bool(getattr(self, "debug_texture_uploads", False)):
@@ -1410,13 +1586,23 @@ class WgpuRenderer(NullDiagnosticRenderer):
             log.warning("WgpuRenderer: skipped mesh %s: %s", getattr(mesh_data.source, "name", mesh_data.mesh_id), exc)
             return 0
 
-    def _draw_edge_items(self, render_pass, mesh_items, mvp, mode: ViewportDisplayMode) -> int:
+    def _is_selected_mesh_data(self, mesh_data) -> bool:
+        node = getattr(mesh_data, "source", None)
+        selected_ids = {id(item) for item in (getattr(self, "selected_nodes", []) or [])}
+        selected = getattr(self, "selected_node", None)
+        return bool(node is selected or id(node) in selected_ids or getattr(node, "_gr_selected", False))
+
+    def _draw_edge_items(self, render_pass, mesh_items, mvp, mode: ViewportDisplayMode, *, color=None) -> int:
         import wgpu
 
         if self.pipeline_lines is None or self.line_uniform_buffer is None or self.line_bind_group is None:
             self.last_display_mode_warning = "WGPU line pipeline unavailable; edge overlay skipped."
             return 0
-        color = (0.02, 0.025, 0.03, 1.0) if mode is ViewportDisplayMode.HIDDEN_LINE else (0.05, 0.42, 0.85, 1.0)
+        color = color or (
+            (*tuple(self.hidden_line_color[:3]), 1.0)
+            if mode is ViewportDisplayMode.HIDDEN_LINE
+            else (*tuple(self.wire_color[:3]), 1.0)
+        )
         uniform = self._line_uniform_bytes(mvp, color)
         self.queue.write_buffer(self.line_uniform_buffer, 0, uniform)
         render_pass.set_pipeline(self.pipeline_lines)
@@ -1435,6 +1621,240 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 self.last_display_mode_warning = f"WGPU edge overlay skipped: {exc}"
                 log.warning("WgpuRenderer: skipped edge overlay: %s", exc)
         return drawn
+
+    def _draw_gizmo_lines(self, render_pass, width: int, height: int) -> int:
+        import numpy as np
+
+        if self.pipeline_gizmo_lines is None or self.line_uniform_buffer is None or self.line_bind_group is None:
+            if self._active_gizmo_render_data is not None:
+                self.gizmo_pipeline_status = self.gizmo_pipeline_status or "not created"
+            return 0
+        render_data = self._active_gizmo_render_data
+        commands = tuple(getattr(render_data, "commands", ()) or ())
+        if not commands:
+            return 0
+        try:
+            import wgpu
+
+            mvp = self._camera_mvp_matrix(self._active_camera, width, height)
+            render_pass.set_pipeline(self.pipeline_gizmo_lines)
+            render_pass.set_bind_group(0, self.line_bind_group)
+            drawn = 0
+            for command in commands:
+                vertices = self._line_vertices_from_gizmo_command(command)
+                if not vertices:
+                    continue
+                color = tuple(float(v) for v in getattr(command, "colour", (1.0, 1.0, 1.0, 1.0))[:4])
+                uniform = self._line_uniform_bytes(mvp, color)
+                self.queue.write_buffer(self.line_uniform_buffer, 0, uniform)
+                data = np.asarray(vertices, dtype=np.float32).reshape(-1, 3)
+                vertex_buffer = self.device.create_buffer_with_data(data=data, usage=wgpu.BufferUsage.VERTEX)
+                render_pass.set_vertex_buffer(0, vertex_buffer)
+                render_pass.draw(int(len(data)), 1, 0, 0)
+                drawn += int(len(data) // 2)
+            self.gizmo_pipeline_status = "ready"
+            return drawn
+        except Exception as exc:
+            self.gizmo_pipeline_status = f"draw failed: {exc}"
+            self.last_display_mode_warning = f"WGPU gizmo overlay skipped: {exc}"
+            log.warning("WgpuRenderer: skipped gizmo overlay: %s", exc)
+            return 0
+
+    @staticmethod
+    def _line_vertices_from_gizmo_command(command) -> list[tuple[float, float, float]]:
+        points = [tuple(float(v) for v in tuple(point)[:3]) for point in (getattr(command, "points", ()) or ())]
+        if len(points) < 2:
+            return []
+        kind = str(getattr(command, "kind", "line") or "line").lower()
+        if kind == "polyline":
+            out: list[tuple[float, float, float]] = []
+            for a, b in zip(points, points[1:]):
+                out.extend((a, b))
+            return out
+        return [points[0], points[1]]
+
+    def pick(self, request, scene=None, camera=None) -> PickHit:
+        """GPU object-ID picking for WGPU surfaces.
+
+        The viewport owns selection policy; this method only renders an
+        offscreen ID pass and returns the node hit by the requested pixel.
+        """
+
+        import numpy as np
+        import wgpu
+
+        scene = scene if scene is not None else self._active_scene
+        camera = camera if camera is not None else getattr(request, "camera", None) or self._active_camera
+        width = max(1, int(getattr(request, "viewport_width", 0) or self._last_size[0] or 1))
+        height = max(1, int(getattr(request, "viewport_height", 0) or self._last_size[1] or 1))
+        x = max(0, min(width - 1, int(getattr(request, "x", 0) or 0)))
+        y = max(0, min(height - 1, int(getattr(request, "y", 0) or 0)))
+        diagnostic = {
+            "method": "WGPU GPU ID",
+            "x": x,
+            "y": y,
+            "viewport_size": (width, height),
+            "device_pixel_ratio": float(getattr(request, "device_pixel_ratio", 1.0) or 1.0),
+            "pipeline_status": self.pick_pipeline_status,
+        }
+        if scene is None or camera is None:
+            diagnostic["result"] = "unavailable"
+            diagnostic["reason"] = "missing scene or camera"
+            self.last_pick_diagnostics = diagnostic
+            return PickHit(renderer_backend=self.backend_id, diagnostic=diagnostic)
+        if self.device is None or self.queue is None or not self.initialized:
+            diagnostic["result"] = "unavailable"
+            diagnostic["reason"] = "WGPU renderer is not initialized"
+            self.last_pick_diagnostics = diagnostic
+            return PickHit(renderer_backend=self.backend_id, diagnostic=diagnostic)
+        if self.pipeline_pick is None or self.line_uniform_buffer is None or self.line_bind_group is None:
+            diagnostic["result"] = "unavailable"
+            diagnostic["reason"] = self.pick_pipeline_status or "pick pipeline unavailable"
+            self.last_pick_diagnostics = diagnostic
+            return PickHit(renderer_backend=self.backend_id, diagnostic=diagnostic)
+
+        try:
+            from src.gui.rendering.mesh_render_data import iter_mesh_render_data
+        except Exception as exc:
+            diagnostic["result"] = "unavailable"
+            diagnostic["reason"] = f"mesh adapter unavailable: {exc}"
+            self.last_pick_diagnostics = diagnostic
+            return PickHit(renderer_backend=self.backend_id, diagnostic=diagnostic)
+
+        id_to_mesh: dict[int, object] = {}
+        mesh_rows = []
+        next_id = 1
+        for mesh_data in iter_mesh_render_data(scene, anim_pose=self._active_anim_pose, textures={}):
+            node = getattr(mesh_data, "source", None)
+            if node is None:
+                continue
+            if not bool(getattr(request, "include_hidden", False)) and bool(getattr(node, "_gr_hidden", False)):
+                continue
+            if not bool(getattr(request, "include_locked", False)) and bool(getattr(node, "_gr_scene_object_locked", False)):
+                continue
+            if next_id > 0xFFFFFF:
+                break
+            id_to_mesh[next_id] = mesh_data
+            mesh_rows.append((next_id, mesh_data))
+            next_id += 1
+        diagnostic["candidate_count"] = len(mesh_rows)
+        if not mesh_rows:
+            diagnostic["result"] = "miss"
+            self.last_pick_diagnostics = diagnostic
+            return PickHit(renderer_backend=self.backend_id, diagnostic=diagnostic)
+
+        pick_texture = self.device.create_texture(
+            size=(width, height, 1),
+            usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC,
+            dimension=wgpu.TextureDimension.d2,
+            format="rgba8unorm",
+            mip_level_count=1,
+            sample_count=1,
+        )
+        depth_texture = self.device.create_texture(
+            size=(width, height, 1),
+            usage=wgpu.TextureUsage.RENDER_ATTACHMENT,
+            dimension=wgpu.TextureDimension.d2,
+            format=self.depth_format,
+            mip_level_count=1,
+            sample_count=1,
+        )
+        read_buffer = self.device.create_buffer(
+            size=256,
+            usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ,
+        )
+        encoder = self.device.create_command_encoder()
+        render_pass = encoder.begin_render_pass(
+            color_attachments=[
+                {
+                    "view": pick_texture.create_view(),
+                    "resolve_target": None,
+                    "clear_value": (0.0, 0.0, 0.0, 1.0),
+                    "load_op": wgpu.LoadOp.clear,
+                    "store_op": wgpu.StoreOp.store,
+                }
+            ],
+            depth_stencil_attachment={
+                "view": depth_texture.create_view(),
+                "depth_clear_value": 1.0,
+                "depth_load_op": wgpu.LoadOp.clear,
+                "depth_store_op": wgpu.StoreOp.store,
+            },
+        )
+        mvp = self._camera_mvp_matrix(camera, width, height)
+        render_pass.set_pipeline(self.pipeline_pick)
+        render_pass.set_bind_group(0, self.line_bind_group)
+        drawn = 0
+        for pick_id, mesh_data in mesh_rows:
+            try:
+                resource = self.resource_cache.get_or_upload_mesh(mesh_data)
+                if resource is None:
+                    continue
+                color = self._pick_id_to_color(pick_id)
+                self.queue.write_buffer(self.line_uniform_buffer, 0, self._line_uniform_bytes(mvp, color, target_color=False))
+                render_pass.set_vertex_buffer(0, resource.vertex_buffer)
+                if resource.index_buffer is not None and resource.index_count > 0:
+                    render_pass.set_index_buffer(resource.index_buffer, wgpu.IndexFormat.uint32)
+                    render_pass.draw_indexed(resource.index_count, 1, 0, 0, 0)
+                    drawn += resource.index_count // 3
+                else:
+                    render_pass.draw(resource.vertex_count, 1, 0, 0)
+                    drawn += resource.vertex_count // 3
+            except Exception as exc:
+                diagnostic.setdefault("skipped", []).append(str(exc))
+                continue
+        render_pass.end()
+        encoder.copy_texture_to_buffer(
+            {"texture": pick_texture, "origin": (x, y, 0)},
+            {"buffer": read_buffer, "offset": 0, "bytes_per_row": 256, "rows_per_image": 1},
+            (1, 1, 1),
+        )
+        self.queue.submit([encoder.finish()])
+        read_buffer.map_sync(wgpu.MapMode.READ, 0, 256)
+        try:
+            pixel = bytes(read_buffer.read_mapped(0, 4, copy=True))
+        finally:
+            read_buffer.unmap()
+        pick_id = self._pick_id_from_rgba(pixel)
+        diagnostic["drawn_triangles"] = drawn
+        diagnostic["raw_rgba"] = tuple(int(v) for v in pixel[:4])
+        diagnostic["pick_id"] = int(pick_id)
+        mesh_data = id_to_mesh.get(pick_id)
+        if mesh_data is None:
+            diagnostic["result"] = "miss"
+            self.last_pick_diagnostics = diagnostic
+            return PickHit(renderer_backend=self.backend_id, screen_position=(x, y), diagnostic=diagnostic)
+        node = getattr(mesh_data, "source", None)
+        diagnostic["result"] = str(getattr(node, "name", id(node)))
+        self.last_pick_diagnostics = diagnostic
+        return PickHit(
+            hit=True,
+            object_id=id(node),
+            object_ref=node,
+            mesh_id=id(node),
+            node_id=getattr(node, "name", id(node)),
+            screen_position=(x, y),
+            hit_kind="mesh",
+            renderer_backend=self.backend_id,
+            diagnostic=diagnostic,
+        )
+
+    @staticmethod
+    def _pick_id_to_color(pick_id: int) -> tuple[float, float, float, float]:
+        value = max(0, min(0xFFFFFF, int(pick_id)))
+        return (
+            float(value & 0xFF) / 255.0,
+            float((value >> 8) & 0xFF) / 255.0,
+            float((value >> 16) & 0xFF) / 255.0,
+            1.0,
+        )
+
+    @staticmethod
+    def _pick_id_from_rgba(pixel: bytes | bytearray | memoryview) -> int:
+        raw = bytes(pixel)
+        if len(raw) < 3:
+            return 0
+        return int(raw[0]) | (int(raw[1]) << 8) | (int(raw[2]) << 16)
 
     def _mesh_sort_depth(self, mesh_data, camera) -> float:
         try:
@@ -1528,9 +1948,10 @@ class WgpuRenderer(NullDiagnosticRenderer):
             + params.tobytes()
         )
 
-    def _line_uniform_bytes(self, mvp, color: tuple[float, float, float, float]) -> bytes:
+    def _line_uniform_bytes(self, mvp, color: tuple[float, float, float, float], *, target_color: bool = True) -> bytes:
         import numpy as np
 
+        color = self._target_rgba(color) if target_color else tuple(float(v) for v in color[:4])
         return (
             np.asarray(mvp, dtype=np.float32).reshape(4, 4).T.tobytes()
             + np.asarray(color, dtype=np.float32).tobytes()
@@ -1549,6 +1970,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
             self._active_textures = dict(kwargs.get("textures") or {})
             raw_options = kwargs.get("display_options", None)
             self._active_display_options = raw_options if isinstance(raw_options, ViewportDisplayOptions) else self._display_options_from_legacy_flags()
+            self._active_gizmo_render_data = kwargs.get("gizmo_render_data")
+            self._active_picking_diagnostics = dict(kwargs.get("picking_diagnostics") or {})
             self.show_grid = bool(self._active_display_options.show_grid)
             if not self.initialized:
                 self.initialize()
@@ -1609,6 +2032,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.pipeline_mesh_cutout = None
         self.pipeline_mesh_blend = None
         self.pipeline_lines = None
+        self.pipeline_gizmo_lines = None
+        self.pipeline_pick = None
         self.mesh_pipeline_layout = None
         self.line_bind_group_layout = None
         self.line_bind_group = None
@@ -1637,17 +2062,62 @@ class WgpuRenderer(NullDiagnosticRenderer):
     def invalidate_all(self) -> None:
         self.resource_cache.invalidate_all()
 
+    def _refresh_themed_resources(self) -> None:
+        self.resource_cache._missing_checker = None
+        if self.initialized:
+            self._create_grid_pipeline()
+
     def set_theme_colors(self, theme) -> None:
         self.viewport_background = _hex_to_rgb_float(theme.color("viewport.background"), self.viewport_background)
         self.grid_minor_color = _hex_to_rgb_float(theme.color("viewport.gridMinor"), self.grid_minor_color)
         self.grid_major_color = _hex_to_rgb_float(theme.color("viewport.gridMajor"), self.grid_major_color)
         self.grid_x_axis_color = _hex_to_rgb_float(theme.color("error"), self.grid_x_axis_color)
         self.grid_y_axis_color = _hex_to_rgb_float(theme.color("success"), self.grid_y_axis_color)
-        if self.initialized:
-            self._create_grid_pipeline()
+        self.wire_color = _hex_to_rgb_float(theme.color("accent.primary"), self.wire_color)
+        self.selected_edge_color = _hex_to_rgb_float(
+            theme.color("selection.background", theme.color("accent.primary")),
+            self.selected_edge_color,
+        )
+        self.hidden_line_color = _hex_to_rgb_float(
+            theme.color("viewport.border", theme.color("panel.border", theme.color("text.secondary"))),
+            self.hidden_line_color,
+        )
+        self.missing_texture_color_a = _hex_to_rgb_float(
+            theme.color("accent.secondary", theme.color("accent.primary")),
+            self.missing_texture_color_a,
+        )
+        self.missing_texture_color_b = _hex_to_rgb_float(theme.color("viewport.background"), self.missing_texture_color_b)
+        self._refresh_themed_resources()
+
+    def reset_theme_colors(self) -> None:
+        self.viewport_background = (23 / 255.0, 25 / 255.0, 28 / 255.0)
+        self.grid_minor_color = (58 / 255.0, 64 / 255.0, 72 / 255.0)
+        self.grid_major_color = (82 / 255.0, 90 / 255.0, 102 / 255.0)
+        self.grid_x_axis_color = (118 / 255.0, 54 / 255.0, 54 / 255.0)
+        self.grid_y_axis_color = (62 / 255.0, 112 / 255.0, 68 / 255.0)
+        self.wire_color = (0.18, 0.62, 0.95)
+        self.hidden_line_color = (0.02, 0.025, 0.03)
+        self.selected_edge_color = (1.0, 0.78, 0.08)
+        self.missing_texture_color_a = (1.0, 0.0, 1.0)
+        self.missing_texture_color_b = (0.0, 0.0, 0.0)
+        self._refresh_themed_resources()
 
     def set_native_palette_colors(self, *, base, text, highlight) -> None:
-        self.viewport_background = tuple(max(0.0, min(1.0, float(v) / 255.0)) for v in base[:3])
+        bg = tuple(int(v) for v in base[:3])
+        fg = tuple(int(v) for v in text[:3])
+        hi = tuple(int(v) for v in highlight[:3])
+        is_dark = _relative_luma(bg) < 0.45
+        self.viewport_background = _rgb_float(bg)
+        self.grid_minor_color = _rgb_float(_blend_rgb(bg, fg, 0.12 if is_dark else 0.18))
+        self.grid_major_color = _rgb_float(_blend_rgb(bg, fg, 0.22 if is_dark else 0.30))
+        self.grid_x_axis_color = _rgb_float((210, 70, 70) if is_dark else (160, 30, 30))
+        self.grid_y_axis_color = _rgb_float((70, 180, 90) if is_dark else (40, 130, 55))
+        self.wire_color = _rgb_float(hi)
+        self.selected_edge_color = _rgb_float(hi)
+        self.hidden_line_color = _rgb_float(_blend_rgb(bg, fg, 0.32 if is_dark else 0.40))
+        self.missing_texture_color_a = _rgb_float(hi)
+        self.missing_texture_color_b = _rgb_float(bg)
+        self._refresh_themed_resources()
 
     def get_diagnostics(self) -> dict:
         caps = self.get_capabilities()
@@ -1668,17 +2138,68 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "supports_grid": True,
             "supports_scene_meshes": True,
             "supports_textures": True,
+            "supports_object_picking": True,
+            "supports_cpu_ray_picking": True,
+            "supports_gpu_id_picking": True,
+            "supports_selection_highlight": True,
+            "supports_gizmo_drawing": True,
+            "supports_gizmo_interaction": True,
             "supported_display_modes": WGPU_DISPLAY_MODES,
             "fallback_display_modes": dict(WGPU_FALLBACK_DISPLAY_MODES),
             "viewport_display": self._active_display_options.diagnostics(),
             "effective_viewport_display": self._effective_display_options.diagnostics(),
+            "viewport_theme_colors": {
+                "background": tuple(self.viewport_background),
+                "grid_minor": tuple(self.grid_minor_color),
+                "grid_major": tuple(self.grid_major_color),
+                "grid_x_axis": tuple(self.grid_x_axis_color),
+                "grid_y_axis": tuple(self.grid_y_axis_color),
+                "wire": tuple(self.wire_color),
+                "hidden_line": tuple(self.hidden_line_color),
+                "selection": tuple(self.selected_edge_color),
+                "missing_texture_a": tuple(self.missing_texture_color_a),
+                "missing_texture_b": tuple(self.missing_texture_color_b),
+            },
+            "viewport_render_colors": {
+                "target_color_space": "srgb" if _format_is_srgb(self.format) else "linear",
+                "background": tuple(self._target_rgb(self.viewport_background)),
+                "grid_minor": tuple(self._target_rgb(self.grid_minor_color)),
+                "grid_major": tuple(self._target_rgb(self.grid_major_color)),
+                "wire": tuple(self._target_rgb(self.wire_color)),
+                "hidden_line": tuple(self._target_rgb(self.hidden_line_color)),
+                "selection": tuple(self._target_rgb(self.selected_edge_color)),
+            },
             "display_mode_downgrade": self._display_mode_downgrade,
             "last_display_mode_warning": self.last_display_mode_warning,
+            "picking_provider_active": bool(self._active_picking_diagnostics.get("picking_provider_active", False)),
+            "picking_method": self._active_picking_diagnostics.get("picking_method", "WGPU GPU ID"),
+            "last_pick": dict(self.last_pick_diagnostics or self._active_picking_diagnostics.get("last_pick", {}) or {}),
+            "gpu_pick_pipeline_status": self.pick_pipeline_status,
+            "selected_object_count": int(self._active_picking_diagnostics.get("selected_object_count", 0) or 0),
+            "selected_node_count": int(self._active_picking_diagnostics.get("selected_node_count", 0) or 0),
+            "selection_highlight_pipeline_status": "ready" if self.pipeline_lines is not None else self.line_pipeline_status,
+            "gizmo_render_pipeline_status": self.gizmo_pipeline_status,
+            "gizmo_hover_target": self._active_picking_diagnostics.get("gizmo_hover_target"),
+            "active_gizmo_tool": self._active_picking_diagnostics.get("active_gizmo_tool"),
+            "active_axis_mode": self._active_picking_diagnostics.get("active_axis_mode"),
+            "device_pixel_ratio": self._active_picking_diagnostics.get(
+                "device_pixel_ratio",
+                (getattr(self, "surface_host_diagnostics", {}) or {}).get("device_pixel_ratio", 1.0),
+            ),
+            "surface_widget_class": self._active_picking_diagnostics.get(
+                "surface_widget_class",
+                (getattr(self, "surface_host_diagnostics", {}) or {}).get("current_surface_widget_class", ""),
+            ),
+            "input_bridge_installed": self._active_picking_diagnostics.get(
+                "input_bridge_installed",
+                (getattr(self, "surface_host_diagnostics", {}) or {}).get("input_bridge_installed", False),
+            ),
             "grid_pipeline_status": self.grid_pipeline_status,
             "mesh_pipeline_status": self.mesh_pipeline_status,
             "textured_mesh_pipeline_status": self.textured_mesh_pipeline_status,
             "solid_pipeline_status": self.mesh_pipeline_status,
             "line_pipeline_status": self.line_pipeline_status,
+            "gizmo_pipeline_status": self.gizmo_pipeline_status,
             "edge_overlay_status": "ready" if self.pipeline_lines is not None else self.line_pipeline_status,
             "opaque_pipeline_status": "ready" if self.pipeline_mesh is not None else "not created",
             "alpha_cutout_pipeline_status": "ready" if self.pipeline_mesh_cutout is not None else "not created",
@@ -1738,6 +2259,37 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
 
 _LINE_WGSL = """
+struct Locals {
+    mvp: mat4x4<f32>,
+    color: vec4<f32>,
+};
+
+@group(0) @binding(0)
+var<uniform> locals: Locals;
+
+struct VertexInput {
+    @location(0) position: vec3<f32>,
+};
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+};
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+    var out: VertexOutput;
+    out.position = locals.mvp * vec4<f32>(input.position, 1.0);
+    return out;
+}
+
+@fragment
+fn fs_main(_input: VertexOutput) -> @location(0) vec4<f32> {
+    return locals.color;
+}
+"""
+
+
+_PICK_WGSL = """
 struct Locals {
     mvp: mat4x4<f32>,
     color: vec4<f32>,

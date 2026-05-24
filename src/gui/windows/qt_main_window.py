@@ -3353,6 +3353,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport.nodeMoved.connect(self.properties_panel.show_node)
         self.viewport.nodeMoved.connect(self._on_viewport_scene_node_moved)
         self.viewport.statusMessage.connect(self.statusBar().showMessage)
+        self.viewport.renderStateChanged.connect(self._on_viewport_render_state_changed)
         self.viewport.axis_mode_control.axisModeChanged.connect(self._persist_axis_mode)
         self.viewport.nodeMoved.connect(self.module_geometry_panel.show_node)
         self.viewport.meshVisibilityChanged.connect(self.module_geometry_panel.refresh_module_mesh_rows)
@@ -3763,7 +3764,25 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         )
 
     def _build_statusbar(self):
-        self.statusBar().showMessage("Ready")
+        status = self.statusBar()
+        self.viewport_render_state_label = QtWidgets.QLabel(self)
+        self.viewport_render_state_label.setObjectName("ViewportRenderStateStatus")
+        self.viewport_render_state_label.setMinimumWidth(280)
+        self.viewport_render_state_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.viewport_render_state_label.setToolTip("Active viewport renderer and display mode")
+        status.addPermanentWidget(self.viewport_render_state_label, 0)
+        self._on_viewport_render_state_changed(
+            self.viewport.render_state_status_text() if hasattr(self, "viewport") else "Renderer: Unknown | Display: Unknown"
+        )
+        status.showMessage("Ready")
+
+    @QtCore.Slot(str)
+    def _on_viewport_render_state_changed(self, text: str) -> None:
+        label = getattr(self, "viewport_render_state_label", None)
+        if label is not None:
+            value = str(text or "Renderer: Unknown | Display: Unknown")
+            label.setText(value)
+            label.setToolTip(value)
 
     def _scene_path_filter(self) -> str:
         return "GhostRigger Scene (*.kmax);;All files (*.*)"

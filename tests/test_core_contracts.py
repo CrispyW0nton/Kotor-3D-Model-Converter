@@ -1176,6 +1176,22 @@ def test_main_window_routes_scene_root_skeleton_selection_through_scene_object()
     assert "self._sync_skeleton_root_for_scene_object(obj)" in viewport_source
 
 
+def test_main_statusbar_has_persistent_viewport_render_state() -> None:
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    viewport_source = inspect.getsource(QtViewportWidget)
+    layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    status_source = inspect.getsource(QtGhostRiggerMainWindow._build_statusbar)
+
+    assert "renderStateChanged" in viewport_source
+    assert "render_state_status_text" in viewport_source
+    assert "_configured_renderer_status_label" in viewport_source
+    assert "viewport.renderStateChanged.connect(self._on_viewport_render_state_changed)" in layout_source
+    assert "viewport_render_state_label" in status_source
+    assert "addPermanentWidget" in status_source
+
+
 def test_cinematic_camera_model_links_focal_length_and_fov() -> None:
     import math
     import pytest

@@ -36,6 +36,9 @@ class IViewportRenderer(ABC):
     def render_overlay(self, overlay_context) -> None:
         return None
 
+    def pick(self, request, scene=None, camera=None):
+        return None
+
     def shutdown(self) -> None:
         release = getattr(self, "release", None)
         if callable(release):

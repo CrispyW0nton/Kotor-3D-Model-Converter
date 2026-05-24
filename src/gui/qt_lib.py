@@ -35,6 +35,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "uv_preview_window",
     ),
     "gizmo": (
+        "gizmo_draw_data",
         "gizmo_mode",
         "gizmo_picker",
         "gizmo_renderer",
@@ -152,6 +153,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "direct3d_renderer",
         "moderngl_renderer",
         "null_renderer",
+        "picking",
         "qt_accel",
         "qt_gpu_renderer",
         "renderer_backend",
