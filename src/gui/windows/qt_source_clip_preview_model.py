@@ -13,7 +13,7 @@ from src.core.geometry.model_data import (
     ModelNode,
     NodeFlags,
 )
-from src.core.retargeting.source_animation import SourceSkeletonClip, Transform
+from src.core.retargeting.source_animation import SourceSkeletonClip, Transform, quat_to_matrix_xyzw
 
 
 @dataclass(frozen=True)
@@ -84,7 +84,7 @@ def build_source_clip_preview_model(clip: SourceSkeletonClip, mesh_model: KotorM
         preview_node.parent = parent
         parent.children.append(preview_node)
 
-    _apply_compact_preview_positions(root)
+    _apply_compact_preview_positions(root, clip)
 
     mesh_bounds = _append_mesh_preview_nodes(root, mesh_model)
     bounds = _merge_bounds(_bounds_from_clip(clip), mesh_bounds)
@@ -96,25 +96,64 @@ def build_source_clip_preview_model(clip: SourceSkeletonClip, mesh_model: KotorM
     return model
 
 
-def _apply_compact_preview_positions(root: ModelNode) -> None:
+def _apply_compact_preview_positions(root: ModelNode, clip: SourceSkeletonClip) -> None:
+    rest_globals = getattr(getattr(clip, "rest_pose", None), "global_transforms", {}) or {}
     stack = list(getattr(root, "children", []) or [])
     while stack:
         node = stack.pop()
-        child_world = getattr(node, "external_world_position", None)
-        if child_world is not None:
+        if getattr(node, "external_world_position", None) is not None:
             parent = getattr(node, "parent", None)
-            parent_world = getattr(parent, "external_world_position", None)
-            if parent_world is not None:
-                compact = (
-                    float(child_world[0]) - float(parent_world[0]),
-                    float(child_world[1]) - float(parent_world[1]),
-                    float(child_world[2]) - float(parent_world[2]),
-                )
-            else:
-                compact = _finite_position(child_world)
+            parent_name = None
+            if parent is not None and not getattr(parent, "_gr_source_clip_preview_root", False):
+                parent_name = str(getattr(parent, "name", "") or "")
+            compact = source_clip_parent_local_position(str(getattr(node, "name", "") or ""), parent_name, rest_globals)
             node.position = compact
             node._gr_source_clip_preview_position = compact
         stack.extend(getattr(node, "children", []) or [])
+
+
+def source_clip_parent_local_position(
+    node_name: str,
+    parent_name: str | None,
+    global_transforms: dict[str, Transform],
+) -> tuple[float, float, float]:
+    """Return a node position in parent-local coordinates from global source transforms.
+
+    FBX imports can carry animation data in a different unit scale than the raw
+    local keys. The global transforms are the normalized preview truth, so derive
+    a parent-local offset from them by rotating the world delta into the parent
+    frame. A plain child_world - parent_world delta is still world-space and will
+    be rotated a second time by the hierarchical viewport pose.
+    """
+
+    transform = global_transforms.get(node_name)
+    if transform is None:
+        return (0.0, 0.0, 0.0)
+    position = _finite_position(getattr(transform, "position", (0.0, 0.0, 0.0)))
+    parent_transform = global_transforms.get(parent_name) if parent_name else None
+    if parent_transform is None:
+        return position
+    parent_position = _finite_position(getattr(parent_transform, "position", (0.0, 0.0, 0.0)))
+    delta = (
+        position[0] - parent_position[0],
+        position[1] - parent_position[1],
+        position[2] - parent_position[2],
+    )
+    return _rotate_world_delta_to_parent_local(delta, getattr(parent_transform, "rotation", (0.0, 0.0, 0.0, 1.0)))
+
+
+def _rotate_world_delta_to_parent_local(
+    delta: tuple[float, float, float],
+    parent_rotation: Iterable[float],
+) -> tuple[float, float, float]:
+    matrix = quat_to_matrix_xyzw(_finite_quat(parent_rotation))
+    # The quaternion matrix rotates parent-local vectors into world space. Its
+    # transpose rotates a world-space offset back into the parent frame.
+    return (
+        float(matrix[0, 0] * delta[0] + matrix[1, 0] * delta[1] + matrix[2, 0] * delta[2]),
+        float(matrix[0, 1] * delta[0] + matrix[1, 1] * delta[1] + matrix[2, 1] * delta[2]),
+        float(matrix[0, 2] * delta[0] + matrix[1, 2] * delta[1] + matrix[2, 2] * delta[2]),
+    )
 
 
 def _source_clip_animation_rows(clip: SourceSkeletonClip) -> list[SourceClipPreviewAnimation]:

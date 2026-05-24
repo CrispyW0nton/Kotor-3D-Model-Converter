@@ -193,6 +193,27 @@ def test_source_clip_preview_model_preserves_imported_skeleton_for_viewport() ->
     assert bb_min[2] < bb_max[2]
 
 
+def test_source_clip_preview_model_derives_parent_local_offsets_from_global_pose() -> None:
+    from src.gui.qt_lib.windows.qt_source_clip_preview_model import build_source_clip_preview_model
+
+    model = build_source_clip_preview_model(
+        _sample_clip(
+            child_local_position=(100.0, 0.0, 0.0),
+            child_global_position=(0.0, 1.0, 0.0),
+            root_rotation=(0.0, 0.0, 0.70710678, 0.70710678),
+        )
+    )
+
+    root = model.find_node("Root")
+    rhand = model.find_node("RHand")
+
+    assert root is not None
+    assert rhand is not None
+    assert root.rotation == pytest.approx((0.0, 0.0, 0.70710678, 0.70710678))
+    assert rhand.position == pytest.approx((1.0, 0.0, 0.0), abs=1e-6)
+    assert getattr(rhand, "_gr_source_clip_preview_position") == pytest.approx((1.0, 0.0, 0.0), abs=1e-6)
+
+
 def test_source_clip_preview_model_can_include_fbx_mesh_geometry() -> None:
     from src.converters.blender_fbx_mesh_importer import model_from_blender_fbx_mesh_payload
     from src.core.geometry.model_data import GameVersion
@@ -299,7 +320,7 @@ def test_retarget_window_source_animation_playback_uses_compact_preview_position
 
     clip = _sample_clip(
         child_local_position=(100.0, 0.0, 0.0),
-        child_global_position=(1.0, 0.0, 0.0),
+        child_global_position=(0.0, 1.0, 0.0),
         root_rotation=(0.0, 0.0, 0.70710678, 0.70710678),
     )
     window = QtAnimationRetargetWindow()
@@ -314,7 +335,7 @@ def test_retarget_window_source_animation_playback_uses_compact_preview_position
 
         pose = window.source_viewport._renderer._anim_pose
         assert pose is not None
-        assert pose.nodes["rhand"].position == (1.0, 0.0, 0.0)
+        assert pose.nodes["rhand"].position == pytest.approx((1.0, 0.0, 0.0), abs=1e-6)
         assert pose.nodes["root"].rotation == pytest.approx((0.0, 0.0, 0.70710678, 0.70710678))
         assert previewed == []
 

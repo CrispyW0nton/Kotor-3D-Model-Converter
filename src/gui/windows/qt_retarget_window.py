@@ -12,7 +12,10 @@ from src.gui.qt_lib.rendering.qt_gpu_renderer import create_viewport_renderer
 from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.viewports.qt_viewport import QtRetargetViewportWidget, QtViewportWidget
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
-from src.gui.qt_lib.windows.qt_source_clip_preview_model import build_source_clip_preview_model
+from src.gui.qt_lib.windows.qt_source_clip_preview_model import (
+    build_source_clip_preview_model,
+    source_clip_parent_local_position,
+)
 from src.gui.qt_lib.windows.qt_retarget_workbench_controller import populate_retarget_mode_combo
 from src.core.retargeting.retarget_output_naming import KotorOutputAnimationNameMode
 
@@ -599,20 +602,11 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.sourceAnimationTimeChanged.emit(str(getattr(clip, "clip_name", "") or ""), float(pose.time))
 
     def _source_clip_pose_delta(self, preview_node, node_name: str, global_transforms: dict, transform) -> tuple[float, float, float]:
-        position = tuple(float(v) for v in getattr(transform, "position", (0.0, 0.0, 0.0))[:3])
         parent_name = None
         parent = getattr(preview_node, "parent", None)
         if parent is not None and not getattr(parent, "_gr_source_clip_preview_root", False):
             parent_name = str(getattr(parent, "name", "") or "")
-        parent_transform = global_transforms.get(parent_name) if parent_name else None
-        if parent_transform is None:
-            return position
-        parent_position = tuple(float(v) for v in getattr(parent_transform, "position", (0.0, 0.0, 0.0))[:3])
-        return (
-            position[0] - parent_position[0],
-            position[1] - parent_position[1],
-            position[2] - parent_position[2],
-        )
+        return source_clip_parent_local_position(node_name, parent_name, global_transforms)
 
     def _tick_source_clip_playback(self) -> None:
         clip = self._source_clip_preview_clip
