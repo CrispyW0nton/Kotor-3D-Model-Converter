@@ -5,7 +5,8 @@ from __future__ import annotations
 import time
 
 from src.gui.rendering.renderer_backend import RendererBackend
-from src.gui.rendering.renderer_capabilities import RendererCapabilities
+from src.gui.rendering.renderer_capabilities import DIAGNOSTIC_DISPLAY_MODES, RendererCapabilities
+from src.gui.rendering.viewport_display import ViewportDisplayOptions
 from src.gui.rendering.renderer_interface import IViewportRenderer
 
 
@@ -33,6 +34,7 @@ class NullDiagnosticRenderer(IViewportRenderer):
         self.selected_nodes = []
         self.show_grid = True
         self.cull_faces = False
+        self.display_options = ViewportDisplayOptions()
         self.deferred_mesh_uploads = False
         self._mesh_cache = {}
         self.viewport_background = (23 / 255.0, 25 / 255.0, 28 / 255.0)
@@ -54,6 +56,8 @@ class NullDiagnosticRenderer(IViewportRenderer):
             supports_overlays=True,
             supports_hot_switch=True,
             diagnostic_only=True,
+            supported_display_modes=DIAGNOSTIC_DISPLAY_MODES,
+            supported_display_options=(),
         )
 
     def create_surface_widget(self, parent=None):
@@ -70,6 +74,9 @@ class NullDiagnosticRenderer(IViewportRenderer):
     def render(self, scene, camera, W: int, H: int, *args, **kwargs):
         if W <= 0 or H <= 0:
             return None
+        options = kwargs.get("display_options")
+        if isinstance(options, ViewportDisplayOptions):
+            self.display_options = options
         t0 = time.perf_counter()
         try:
             from PIL import Image, ImageDraw
@@ -79,7 +86,9 @@ class NullDiagnosticRenderer(IViewportRenderer):
         img = Image.new("RGBA", (int(W), int(H)), (*rgb, 255))
         draw = ImageDraw.Draw(img, "RGBA")
         draw.text((12, 12), "Null Diagnostic Renderer", fill=(220, 225, 230, 220))
+        draw.text((12, 30), f"Display: {self.display_options.display_mode.value}", fill=(180, 190, 200, 200))
         self.perf["last_frame_ms"] = (time.perf_counter() - t0) * 1000.0
+        self._diagnostics["viewport_display"] = self.display_options.diagnostics()
         return img
 
     def set_theme_colors(self, theme) -> None:
@@ -115,5 +124,7 @@ class NullDiagnosticRenderer(IViewportRenderer):
             "available": True,
             "api": "None",
             "backend": "diagnostic",
+            "viewport_display": self.display_options.diagnostics(),
+            "supported_display_modes": DIAGNOSTIC_DISPLAY_MODES,
             **self._diagnostics,
         }

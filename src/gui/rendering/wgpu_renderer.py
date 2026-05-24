@@ -21,7 +21,12 @@ from typing import ClassVar
 
 from src.gui.rendering.null_renderer import NullDiagnosticRenderer
 from src.gui.rendering.renderer_backend import RendererBackend
-from src.gui.rendering.renderer_capabilities import RendererCapabilities
+from src.gui.rendering.renderer_capabilities import (
+    WGPU_DISPLAY_MODES,
+    WGPU_FALLBACK_DISPLAY_MODES,
+    RendererCapabilities,
+)
+from src.gui.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions, normalize_display_mode
 
 log = logging.getLogger(__name__)
 
@@ -44,8 +49,10 @@ class _WgpuBackendSpec:
 class WgpuMeshResource:
     vertex_buffer: object
     index_buffer: object | None
+    edge_index_buffer: object | None
     vertex_count: int
     index_count: int
+    edge_index_count: int
     vertex_stride: int
     bounds: tuple[tuple[float, float, float], tuple[float, float, float]]
     source_revision: tuple[int, int, int]
@@ -236,6 +243,7 @@ class WgpuResourceCache:
         self.materials: dict[str, WgpuMaterialResource] = {}
         self.uploaded_vertex_count = 0
         self.uploaded_index_count = 0
+        self.uploaded_edge_index_count = 0
         self.texture_memory_bytes = 0
         self.fallback_texture_count = 0
         self.missing_texture_count = 0
@@ -281,17 +289,27 @@ class WgpuResourceCache:
         vertex_buffer = device.create_buffer_with_data(data=packed, usage=wgpu.BufferUsage.VERTEX)
         index_buffer = None
         index_count = 0
+        edge_index_buffer = None
+        edge_index_count = 0
         if mesh_data.indices is not None and len(mesh_data.indices):
             indices = np.ascontiguousarray(mesh_data.indices, dtype=np.uint32)
             index_buffer = device.create_buffer_with_data(data=indices, usage=wgpu.BufferUsage.INDEX)
             index_count = int(len(indices))
+            edge_indices = self._build_edge_indices(indices, len(positions))
+        else:
+            edge_indices = self._build_edge_indices(None, len(positions))
+        if edge_indices is not None and len(edge_indices):
+            edge_index_buffer = device.create_buffer_with_data(data=edge_indices, usage=wgpu.BufferUsage.INDEX)
+            edge_index_count = int(len(edge_indices))
         mins = positions.min(axis=0)
         maxs = positions.max(axis=0)
         resource = WgpuMeshResource(
             vertex_buffer=vertex_buffer,
             index_buffer=index_buffer,
+            edge_index_buffer=edge_index_buffer,
             vertex_count=int(len(positions)),
             index_count=index_count,
+            edge_index_count=edge_index_count,
             vertex_stride=40,
             bounds=(tuple(float(v) for v in mins), tuple(float(v) for v in maxs)),
             source_revision=mesh_data.source_revision,
@@ -299,6 +317,34 @@ class WgpuResourceCache:
         self.meshes[int(mesh_id)] = resource
         self._recount()
         return resource
+
+    def _build_edge_indices(self, indices, vertex_count: int):
+        import numpy as np
+
+        if vertex_count <= 1:
+            return None
+        if indices is None:
+            tri_indices = np.arange(vertex_count, dtype=np.uint32)
+        else:
+            tri_indices = np.asarray(indices, dtype=np.uint32).reshape(-1)
+        if len(tri_indices) < 3:
+            return None
+        edge_set: set[tuple[int, int]] = set()
+        out: list[int] = []
+        usable = len(tri_indices) - (len(tri_indices) % 3)
+        for i in range(0, usable, 3):
+            tri = [int(tri_indices[i]), int(tri_indices[i + 1]), int(tri_indices[i + 2])]
+            if any(v < 0 or v >= vertex_count for v in tri):
+                continue
+            for a, b in ((tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])):
+                key = (a, b) if a <= b else (b, a)
+                if key in edge_set:
+                    continue
+                edge_set.add(key)
+                out.extend((a, b))
+        if not out:
+            return None
+        return np.ascontiguousarray(out, dtype=np.uint32)
 
     def _coerce_uvs(self, values, count: int):
         import numpy as np
@@ -535,6 +581,7 @@ class WgpuResourceCache:
         self.materials.clear()
         self.uploaded_vertex_count = 0
         self.uploaded_index_count = 0
+        self.uploaded_edge_index_count = 0
         self.texture_memory_bytes = 0
         self.fallback_texture_count = 0
         self.missing_texture_count = 0
@@ -548,6 +595,7 @@ class WgpuResourceCache:
     def _recount(self) -> None:
         self.uploaded_vertex_count = sum(int(item.vertex_count) for item in self.meshes.values())
         self.uploaded_index_count = sum(int(item.index_count) for item in self.meshes.values())
+        self.uploaded_edge_index_count = sum(int(item.edge_index_count) for item in self.meshes.values())
         self.texture_memory_bytes = sum(int(item.byte_size) for item in self.textures.values())
         self.lightmap_texture_count = sum(1 for item in self.textures.values() if item.lightmap)
 
@@ -589,7 +637,11 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.pipeline_mesh = None
         self.pipeline_mesh_cutout = None
         self.pipeline_mesh_blend = None
+        self.pipeline_lines = None
         self.mesh_pipeline_layout = None
+        self.line_bind_group_layout = None
+        self.line_bind_group = None
+        self.line_uniform_buffer = None
         self.mesh_bind_group_layout = None
         self.texture_bind_group_layout = None
         self.mesh_bind_group = None
@@ -600,8 +652,10 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.textured_mesh_pipeline_status = "not created"
         self.alpha_pipeline_status = "not created"
         self.mesh_pipeline_status = "not created"
+        self.line_pipeline_status = "not created"
         self.grid_pipeline_status = "not created"
         self.last_error = ""
+        self.last_display_mode_warning = ""
         self._last_size = (0, 0, 1.0)
         self._last_capabilities: RendererCapabilities | None = None
         self._clear_logged = False
@@ -609,6 +663,9 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self._active_camera = None
         self._active_anim_pose = None
         self._active_textures: dict = {}
+        self._active_display_options = ViewportDisplayOptions()
+        self._effective_display_options = self._active_display_options
+        self._display_mode_downgrade = ""
         self.surface_host_diagnostics: dict[str, object] = {}
         self.perf = {"last_frame_ms": 0.0, "backend": self.backend_id, "tri_count": 0}
         self.show_grid = True
@@ -620,7 +677,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.force_untextured = False
         self.disable_lightmaps = False
         self.disable_alpha_blend = False
-        self._last_render_counts = {"opaque": 0, "cutout": 0, "blended": 0}
+        self._last_render_counts = {"opaque": 0, "cutout": 0, "blended": 0, "edges": 0}
         self.grid_minor_color = (58 / 255.0, 64 / 255.0, 72 / 255.0)
         self.grid_major_color = (82 / 255.0, 90 / 255.0, 102 / 255.0)
         self.grid_x_axis_color = (118 / 255.0, 54 / 255.0, 54 / 255.0)
@@ -713,6 +770,20 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 supports_hot_switch=True,
                 requires_restart=True,
                 diagnostic_only=False,
+                supported_display_modes=WGPU_DISPLAY_MODES,
+                supported_display_options=(
+                    "show_grid",
+                    "show_wire_overlay",
+                    "show_edged_faces",
+                    "show_textures",
+                    "show_lightmaps",
+                    "show_material_colour",
+                    "show_alpha",
+                    "two_sided",
+                    "force_unlit",
+                    "force_flat_colour",
+                ),
+                fallback_display_modes=WGPU_FALLBACK_DISPLAY_MODES,
                 details=details,
             )
         WgpuRenderer._probe_cache[backend] = caps
@@ -743,6 +814,9 @@ class WgpuRenderer(NullDiagnosticRenderer):
             supports_hot_switch=True,
             requires_restart=True,
             diagnostic_only=False,
+            supported_display_modes=(),
+            supported_display_options=(),
+            fallback_display_modes=WGPU_FALLBACK_DISPLAY_MODES,
             details=details,
         )
 
@@ -813,6 +887,13 @@ class WgpuRenderer(NullDiagnosticRenderer):
             self.live_surface = viewport_widget is not None
             self._create_grid_pipeline()
             self._create_mesh_pipeline()
+            try:
+                self._create_line_pipeline()
+            except Exception as exc:
+                self.pipeline_lines = None
+                self.line_pipeline_status = f"unavailable: {exc}"
+                self.last_display_mode_warning = f"WGPU line pipeline unavailable: {exc}"
+                log.warning("WgpuRenderer: line pipeline unavailable: %s", exc)
             self.canvas.request_draw(self._draw_to_canvas)
             self.initialized = True
         except Exception as exc:
@@ -1065,6 +1146,64 @@ class WgpuRenderer(NullDiagnosticRenderer):
             },
         )
 
+    def _create_line_pipeline(self) -> None:
+        import wgpu
+
+        self.line_uniform_buffer = self.device.create_buffer(
+            size=80,
+            usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST,
+        )
+        self.line_bind_group_layout = self.device.create_bind_group_layout(
+            entries=[
+                {
+                    "binding": 0,
+                    "visibility": wgpu.ShaderStage.VERTEX | wgpu.ShaderStage.FRAGMENT,
+                    "buffer": {"type": wgpu.BufferBindingType.uniform},
+                }
+            ]
+        )
+        self.line_bind_group = self.device.create_bind_group(
+            layout=self.line_bind_group_layout,
+            entries=[
+                {
+                    "binding": 0,
+                    "resource": {"buffer": self.line_uniform_buffer, "offset": 0, "size": 80},
+                }
+            ],
+        )
+        pipeline_layout = self.device.create_pipeline_layout(bind_group_layouts=[self.line_bind_group_layout])
+        shader = self.device.create_shader_module(code=_LINE_WGSL)
+        self.pipeline_lines = self.device.create_render_pipeline(
+            label="WGPU mesh edge lines",
+            layout=pipeline_layout,
+            vertex={
+                "module": shader,
+                "entry_point": "vs_main",
+                "buffers": [
+                    {
+                        "array_stride": 40,
+                        "step_mode": wgpu.VertexStepMode.vertex,
+                        "attributes": [
+                            {"format": wgpu.VertexFormat.float32x3, "offset": 0, "shader_location": 0},
+                        ],
+                    }
+                ],
+            },
+            primitive={"topology": wgpu.PrimitiveTopology.line_list},
+            depth_stencil={
+                "format": self.depth_format,
+                "depth_write_enabled": False,
+                "depth_compare": wgpu.CompareFunction.less_equal,
+            },
+            multisample=None,
+            fragment={
+                "module": shader,
+                "entry_point": "fs_main",
+                "targets": [{"format": self.format}],
+            },
+        )
+        self.line_pipeline_status = "ready"
+
     def _camera_mvp(self, camera, width: int, height: int) -> bytes:
         return _mat4_tobytes(self._camera_mvp_matrix(camera, width, height))
 
@@ -1106,6 +1245,50 @@ class WgpuRenderer(NullDiagnosticRenderer):
         render_pass.end()
         self.queue.submit([encoder.finish()])
 
+    def _display_options_from_legacy_flags(self) -> ViewportDisplayOptions:
+        if bool(getattr(self, "show_wireframe", False)) and not bool(getattr(self, "show_solid", True)):
+            mode = ViewportDisplayMode.WIREFRAME
+        else:
+            render_mode = str(getattr(self, "render_mode", "realistic") or "realistic").lower()
+            if render_mode == "flat":
+                mode = ViewportDisplayMode.SOLID
+            elif render_mode == "shaded":
+                mode = ViewportDisplayMode.SHADED
+            elif bool(getattr(self, "show_texture", True)) and bool(getattr(self, "show_lightmap_map", True)):
+                mode = ViewportDisplayMode.TEXTURED_LIGHTMAPPED
+            elif bool(getattr(self, "show_texture", True)):
+                mode = ViewportDisplayMode.TEXTURED
+            else:
+                mode = ViewportDisplayMode.SOLID
+        return ViewportDisplayOptions(
+            display_mode=mode,
+            show_grid=bool(getattr(self, "show_grid", True)),
+            show_wire_overlay=bool(getattr(self, "show_wireframe", False) and getattr(self, "show_solid", True)),
+            show_edged_faces=bool(getattr(self, "show_wireframe", False) and getattr(self, "show_solid", True)),
+            show_textures=bool(getattr(self, "show_texture", True)),
+            show_lightmaps=bool(getattr(self, "show_lightmap_map", True)),
+            show_alpha=not bool(getattr(self, "disable_alpha_blend", False)),
+            two_sided=not bool(getattr(self, "cull_faces", False)),
+            force_flat_colour=str(getattr(self, "render_mode", "") or "").lower() == "flat",
+        )
+
+    def _coerce_display_options(self, options: ViewportDisplayOptions) -> ViewportDisplayOptions:
+        mode = normalize_display_mode(options.display_mode)
+        warning = ""
+        if mode is ViewportDisplayMode.FULL_MATERIAL:
+            mode = ViewportDisplayMode.TEXTURED_LIGHTMAPPED
+            warning = "WGPU uses basic material mode; advanced TXI/env/specular effects remain ModernGL-only."
+        elif mode in {ViewportDisplayMode.NORMALS_DEBUG, ViewportDisplayMode.UV_DEBUG}:
+            mode = ViewportDisplayMode.SHADED if mode is ViewportDisplayMode.NORMALS_DEBUG else ViewportDisplayMode.TEXTURED
+            warning = f"WGPU debug mode is deferred; using {mode.value}."
+        elif mode is ViewportDisplayMode.BOUNDING_BOX:
+            mode = ViewportDisplayMode.SOLID
+            warning = "WGPU bounding-box display is deferred; using solid mode."
+        coerced = options.with_changes(display_mode=mode)
+        self._display_mode_downgrade = "" if coerced.display_mode is options.display_mode else f"{options.display_mode.value}->{coerced.display_mode.value}"
+        self.last_display_mode_warning = warning
+        return coerced
+
     def _draw_meshes(self, render_pass, width: int, height: int) -> None:
         import wgpu
 
@@ -1120,9 +1303,31 @@ class WgpuRenderer(NullDiagnosticRenderer):
             self.last_error = f"mesh adapter unavailable: {exc}"
             return
 
+        display_options = self._coerce_display_options(self._active_display_options)
+        self._effective_display_options = display_options
+        mode = display_options.display_mode
+        draw_surface = mode is not ViewportDisplayMode.WIREFRAME
+        edge_only = mode is ViewportDisplayMode.WIREFRAME
+        edge_overlay = bool(
+            edge_only
+            or mode is ViewportDisplayMode.HIDDEN_LINE
+            or display_options.show_wire_overlay
+            or display_options.show_edged_faces
+        )
+        force_untextured = (
+            bool(getattr(self, "force_untextured", False))
+            or not display_options.show_textures
+            or mode is ViewportDisplayMode.HIDDEN_LINE
+        )
+        force_no_lightmaps = (
+            bool(getattr(self, "disable_lightmaps", False))
+            or not display_options.show_lightmaps
+            or mode not in {ViewportDisplayMode.TEXTURED_LIGHTMAPPED, ViewportDisplayMode.FULL_MATERIAL}
+        )
         mvp = self._camera_mvp_matrix(self._active_camera, width, height)
         tri_count = 0
         draw_items = []
+        edge_items = []
         for mesh_data in iter_mesh_render_data(
             self._active_scene,
             anim_pose=self._active_anim_pose,
@@ -1132,30 +1337,36 @@ class WgpuRenderer(NullDiagnosticRenderer):
             if material_data is None:
                 continue
             alpha_mode = str(getattr(material_data, "alpha_mode", "OPAQUE") or "OPAQUE").upper()
-            if bool(getattr(self, "disable_alpha_blend", False)) and alpha_mode == "BLEND":
+            if (bool(getattr(self, "disable_alpha_blend", False)) or not display_options.show_alpha) and alpha_mode == "BLEND":
                 alpha_mode = "OPAQUE"
-            if bool(getattr(self, "force_untextured", False)):
+            if force_untextured:
                 material_data = self._untextured_material(material_data)
                 alpha_mode = str(getattr(material_data, "alpha_mode", "OPAQUE") or "OPAQUE").upper()
+            elif force_no_lightmaps:
+                material_data = self._without_lightmap_material(material_data)
             sort_depth = 0.0
             if alpha_mode == "BLEND":
                 sort_depth = self._mesh_sort_depth(mesh_data, self._active_camera)
             draw_items.append((alpha_mode, sort_depth, mesh_data, material_data))
+            edge_items.append(mesh_data)
 
         opaque = [item for item in draw_items if item[0] == "OPAQUE"]
         cutout = [item for item in draw_items if item[0] in {"MASK", "CUTOUT"}]
         blended = [item for item in draw_items if item[0] == "BLEND"]
         blended.sort(key=lambda item: item[1], reverse=True)
-        counts = {"opaque": 0, "cutout": 0, "blended": 0}
+        counts = {"opaque": 0, "cutout": 0, "blended": 0, "edges": 0}
 
-        for pass_name, items, pipeline in (
-            ("opaque", opaque, self.pipeline_mesh),
-            ("cutout", cutout, self.pipeline_mesh_cutout or self.pipeline_mesh),
-            ("blended", blended, self.pipeline_mesh_blend or self.pipeline_mesh),
-        ):
-            for _alpha_mode, _depth, mesh_data, material_data in items:
-                tri_count += self._draw_mesh_item(render_pass, pipeline, mesh_data, material_data, mvp, pass_name)
-                counts[pass_name] += 1
+        if draw_surface:
+            for pass_name, items, pipeline in (
+                ("opaque", opaque, self.pipeline_mesh),
+                ("cutout", cutout, self.pipeline_mesh_cutout or self.pipeline_mesh),
+                ("blended", blended, self.pipeline_mesh_blend or self.pipeline_mesh),
+            ):
+                for _alpha_mode, _depth, mesh_data, material_data in items:
+                    tri_count += self._draw_mesh_item(render_pass, pipeline, mesh_data, material_data, mvp, pass_name, display_options)
+                    counts[pass_name] += 1
+        if edge_overlay:
+            counts["edges"] = self._draw_edge_items(render_pass, edge_items, mvp, mode)
         self.perf["tri_count"] = int(tri_count)
         self._last_render_counts = counts
         if bool(getattr(self, "debug_texture_uploads", False)):
@@ -1166,7 +1377,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 counts["blended"],
             )
 
-    def _draw_mesh_item(self, render_pass, pipeline, mesh_data, material_data, mvp, pass_name: str) -> int:
+    def _draw_mesh_item(self, render_pass, pipeline, mesh_data, material_data, mvp, pass_name: str, display_options: ViewportDisplayOptions) -> int:
         import wgpu
 
         if pipeline is None:
@@ -1182,6 +1393,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 mvp,
                 getattr(material_data, "base_color_rgba", mesh_data.material_color),
                 material,
+                display_options,
             )
             self.queue.write_buffer(self.mesh_uniform_buffer, 0, uniform)
             render_pass.set_pipeline(pipeline)
@@ -1197,6 +1409,32 @@ class WgpuRenderer(NullDiagnosticRenderer):
         except Exception as exc:
             log.warning("WgpuRenderer: skipped mesh %s: %s", getattr(mesh_data.source, "name", mesh_data.mesh_id), exc)
             return 0
+
+    def _draw_edge_items(self, render_pass, mesh_items, mvp, mode: ViewportDisplayMode) -> int:
+        import wgpu
+
+        if self.pipeline_lines is None or self.line_uniform_buffer is None or self.line_bind_group is None:
+            self.last_display_mode_warning = "WGPU line pipeline unavailable; edge overlay skipped."
+            return 0
+        color = (0.02, 0.025, 0.03, 1.0) if mode is ViewportDisplayMode.HIDDEN_LINE else (0.05, 0.42, 0.85, 1.0)
+        uniform = self._line_uniform_bytes(mvp, color)
+        self.queue.write_buffer(self.line_uniform_buffer, 0, uniform)
+        render_pass.set_pipeline(self.pipeline_lines)
+        render_pass.set_bind_group(0, self.line_bind_group)
+        drawn = 0
+        for mesh_data in mesh_items:
+            try:
+                resource = self.resource_cache.get_or_upload_mesh(mesh_data)
+                if resource is None or resource.edge_index_buffer is None or resource.edge_index_count <= 0:
+                    continue
+                render_pass.set_vertex_buffer(0, resource.vertex_buffer)
+                render_pass.set_index_buffer(resource.edge_index_buffer, wgpu.IndexFormat.uint32)
+                render_pass.draw_indexed(resource.edge_index_count, 1, 0, 0, 0)
+                drawn += resource.edge_index_count // 2
+            except Exception as exc:
+                self.last_display_mode_warning = f"WGPU edge overlay skipped: {exc}"
+                log.warning("WgpuRenderer: skipped edge overlay: %s", exc)
+        return drawn
 
     def _mesh_sort_depth(self, mesh_data, camera) -> float:
         try:
@@ -1222,6 +1460,16 @@ class WgpuRenderer(NullDiagnosticRenderer):
             source_revision=(material_data.source_revision[0], 0, 0, material_data.source_revision[3]),
         )
 
+    def _without_lightmap_material(self, material_data):
+        from dataclasses import replace
+
+        return replace(
+            material_data,
+            lightmap_texture_data=None,
+            lightmap_texture_id="",
+            source_revision=(material_data.source_revision[0], material_data.source_revision[1], 0, material_data.source_revision[3]),
+        )
+
     def _camera_mvp_matrix(self, camera, width: int, height: int):
         import numpy as np
 
@@ -1238,26 +1486,54 @@ class WgpuRenderer(NullDiagnosticRenderer):
         view = _mat4_lookat(eye, target, up)
         return (proj @ view @ np.eye(4, dtype=np.float32)).astype(np.float32)
 
-    def _mesh_uniform_bytes(self, mvp, color: tuple[float, float, float, float], material) -> bytes:
+    def _mesh_uniform_bytes(self, mvp, color: tuple[float, float, float, float], material, display_options: ViewportDisplayOptions) -> bytes:
         import numpy as np
 
         alpha_mode = str(getattr(material, "alpha_mode", "OPAQUE") or "OPAQUE").upper()
         alpha_mode_value = 1.0 if alpha_mode in {"MASK", "CUTOUT"} else 2.0 if alpha_mode == "BLEND" else 0.0
+        mode = display_options.display_mode
+        use_diffuse = bool(
+            display_options.show_textures
+            and mode in {
+                ViewportDisplayMode.SOLID,
+                ViewportDisplayMode.SHADED,
+                ViewportDisplayMode.SMOOTH_SHADED,
+                ViewportDisplayMode.TEXTURED,
+                ViewportDisplayMode.TEXTURED_LIGHTMAPPED,
+                ViewportDisplayMode.FULL_MATERIAL,
+            }
+            and getattr(material, "diffuse_texture_resource", None) is not None
+        )
+        use_lightmap = bool(
+            display_options.show_lightmaps
+            and mode in {ViewportDisplayMode.TEXTURED_LIGHTMAPPED, ViewportDisplayMode.FULL_MATERIAL}
+            and bool(getattr(material, "has_lightmap", False))
+            and not bool(getattr(self, "disable_lightmaps", False))
+        )
         flags = np.asarray(
             (
-                1.0 if getattr(material, "diffuse_texture_resource", None) is not None else 0.0,
-                1.0 if bool(getattr(material, "has_lightmap", False)) and not bool(getattr(self, "disable_lightmaps", False)) else 0.0,
+                1.0 if use_diffuse else 0.0,
+                1.0 if use_lightmap else 0.0,
                 alpha_mode_value,
                 float(getattr(material, "alpha_cutoff", 0.5) or 0.5),
             ),
             dtype=np.float32,
         )
-        params = np.asarray((2.0, 0.0, 0.0, 0.0), dtype=np.float32)
+        shade_mode = 1.0 if display_options.force_flat_colour or mode is ViewportDisplayMode.SOLID else 2.0 if mode in {ViewportDisplayMode.SHADED, ViewportDisplayMode.SMOOTH_SHADED} else 0.0
+        params = np.asarray((2.0, shade_mode, 0.0, 0.0), dtype=np.float32)
         return (
             np.asarray(mvp, dtype=np.float32).reshape(4, 4).T.tobytes()
             + np.asarray(color, dtype=np.float32).tobytes()
             + flags.tobytes()
             + params.tobytes()
+        )
+
+    def _line_uniform_bytes(self, mvp, color: tuple[float, float, float, float]) -> bytes:
+        import numpy as np
+
+        return (
+            np.asarray(mvp, dtype=np.float32).reshape(4, 4).T.tobytes()
+            + np.asarray(color, dtype=np.float32).tobytes()
         )
 
     def render(self, scene, camera, W: int, H: int, *args, **kwargs):
@@ -1271,6 +1547,9 @@ class WgpuRenderer(NullDiagnosticRenderer):
             self._active_scene = scene
             self._active_anim_pose = kwargs.get("anim_pose")
             self._active_textures = dict(kwargs.get("textures") or {})
+            raw_options = kwargs.get("display_options", None)
+            self._active_display_options = raw_options if isinstance(raw_options, ViewportDisplayOptions) else self._display_options_from_legacy_flags()
+            self.show_grid = bool(self._active_display_options.show_grid)
             if not self.initialized:
                 self.initialize()
             self.resize(int(W), int(H), 1.0)
@@ -1329,7 +1608,11 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.pipeline_mesh = None
         self.pipeline_mesh_cutout = None
         self.pipeline_mesh_blend = None
+        self.pipeline_lines = None
         self.mesh_pipeline_layout = None
+        self.line_bind_group_layout = None
+        self.line_bind_group = None
+        self.line_uniform_buffer = None
         self.mesh_bind_group_layout = None
         self.texture_bind_group_layout = None
         self.mesh_bind_group = None
@@ -1385,9 +1668,18 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "supports_grid": True,
             "supports_scene_meshes": True,
             "supports_textures": True,
+            "supported_display_modes": WGPU_DISPLAY_MODES,
+            "fallback_display_modes": dict(WGPU_FALLBACK_DISPLAY_MODES),
+            "viewport_display": self._active_display_options.diagnostics(),
+            "effective_viewport_display": self._effective_display_options.diagnostics(),
+            "display_mode_downgrade": self._display_mode_downgrade,
+            "last_display_mode_warning": self.last_display_mode_warning,
             "grid_pipeline_status": self.grid_pipeline_status,
             "mesh_pipeline_status": self.mesh_pipeline_status,
             "textured_mesh_pipeline_status": self.textured_mesh_pipeline_status,
+            "solid_pipeline_status": self.mesh_pipeline_status,
+            "line_pipeline_status": self.line_pipeline_status,
+            "edge_overlay_status": "ready" if self.pipeline_lines is not None else self.line_pipeline_status,
             "opaque_pipeline_status": "ready" if self.pipeline_mesh is not None else "not created",
             "alpha_cutout_pipeline_status": "ready" if self.pipeline_mesh_cutout is not None else "not created",
             "alpha_pipeline_status": self.alpha_pipeline_status,
@@ -1396,6 +1688,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "uploaded_texture_count": len(self.resource_cache.textures),
             "uploaded_vertex_count": self.resource_cache.uploaded_vertex_count,
             "uploaded_index_count": self.resource_cache.uploaded_index_count,
+            "uploaded_edge_index_count": self.resource_cache.uploaded_edge_index_count,
             "texture_memory_estimate_bytes": self.resource_cache.texture_memory_bytes,
             "fallback_texture_count": self.resource_cache.fallback_texture_count,
             "missing_texture_count": self.resource_cache.missing_texture_count,
@@ -1440,6 +1733,37 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     return vec4<f32>(input.color, 1.0);
+}
+"""
+
+
+_LINE_WGSL = """
+struct Locals {
+    mvp: mat4x4<f32>,
+    color: vec4<f32>,
+};
+
+@group(0) @binding(0)
+var<uniform> locals: Locals;
+
+struct VertexInput {
+    @location(0) position: vec3<f32>,
+};
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+};
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+    var out: VertexOutput;
+    out.position = locals.mvp * vec4<f32>(input.position, 1.0);
+    return out;
+}
+
+@fragment
+fn fs_main(_input: VertexOutput) -> @location(0) vec4<f32> {
+    return locals.color;
 }
 """
 
@@ -1489,7 +1813,17 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let diffuse_sample = textureSample(diffuse_tex, diffuse_sampler, input.uv0);
-    var out_color = vec4<f32>(diffuse_sample.rgb * locals.color.rgb, diffuse_sample.a * locals.color.a);
+    var sampled = diffuse_sample;
+    if (locals.flags.x < 0.5) {
+        sampled = vec4<f32>(1.0, 1.0, 1.0, 1.0);
+    }
+    var out_color = vec4<f32>(sampled.rgb * locals.color.rgb, sampled.a * locals.color.a);
+    if (locals.params.y > 1.5) {
+        let n = normalize(input.normal);
+        let light = normalize(vec3<f32>(0.45, 0.35, 0.82));
+        let ndotl = max(dot(n, light), 0.0);
+        out_color = vec4<f32>(out_color.rgb * (0.45 + ndotl * 0.55), out_color.a);
+    }
     if (locals.flags.y > 0.5) {
         let lightmap_sample = textureSample(lightmap_tex, lightmap_sampler, input.uv1);
         out_color = vec4<f32>(out_color.rgb * lightmap_sample.rgb * locals.params.x, out_color.a);

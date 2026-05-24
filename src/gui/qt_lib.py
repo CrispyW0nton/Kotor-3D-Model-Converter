@@ -159,6 +159,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "renderer_factory",
         "renderer_interface",
         "renderer_settings",
+        "viewport_display",
         "viewport_core",
         "viewport_navigation",
         "wgpu_renderer",

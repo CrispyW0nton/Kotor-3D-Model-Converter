@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from src.gui.rendering.gpu_renderer import GpuRenderer
 from src.gui.rendering.renderer_backend import RendererBackend
-from src.gui.rendering.renderer_capabilities import RendererCapabilities
+from src.gui.rendering.renderer_capabilities import MODERNGL_DISPLAY_MODES, RendererCapabilities
 
 
 class ModernGLRenderer(GpuRenderer):
@@ -34,6 +34,19 @@ class ModernGLRenderer(GpuRenderer):
             supports_grid=True,
             supports_overlays=True,
             supports_hot_switch=True,
+            supported_display_modes=MODERNGL_DISPLAY_MODES,
+            supported_display_options=(
+                "show_grid",
+                "show_wire_overlay",
+                "show_edged_faces",
+                "show_textures",
+                "show_lightmaps",
+                "show_material_colour",
+                "show_alpha",
+                "two_sided",
+                "force_unlit",
+                "force_flat_colour",
+            ),
         )
 
     def create_surface_widget(self, parent=None):
@@ -60,6 +73,8 @@ class ModernGLRenderer(GpuRenderer):
             "available": bool(getattr(self, "_gpu_available", False)),
             "api": "OpenGL",
             "backend": "ModernGL",
+            "viewport_display": getattr(getattr(self, "display_options", None), "diagnostics", lambda: {})(),
+            "mature_material_path": True,
             "version_code": getattr(ctx, "version_code", None),
             "gpu": getattr(ctx, "info", {}).get("GL_RENDERER") if ctx is not None else None,
             "vendor": getattr(ctx, "info", {}).get("GL_VENDOR") if ctx is not None else None,

@@ -46,7 +46,18 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let diffuse_sample = textureSample(diffuse_tex, diffuse_sampler, input.uv0);
-    var out_color = vec4<f32>(diffuse_sample.rgb * locals.color.rgb, diffuse_sample.a * locals.color.a);
+    var sampled = diffuse_sample;
+    if (locals.flags.x < 0.5) {
+        sampled = vec4<f32>(1.0, 1.0, 1.0, 1.0);
+    }
+    var out_color = vec4<f32>(sampled.rgb * locals.color.rgb, sampled.a * locals.color.a);
+
+    if (locals.params.y > 1.5) {
+        let n = normalize(input.normal);
+        let light = normalize(vec3<f32>(0.45, 0.35, 0.82));
+        let ndotl = max(dot(n, light), 0.0);
+        out_color = vec4<f32>(out_color.rgb * (0.45 + ndotl * 0.55), out_color.a);
+    }
 
     if (locals.flags.y > 0.5) {
         let lightmap_sample = textureSample(lightmap_tex, lightmap_sampler, input.uv1);

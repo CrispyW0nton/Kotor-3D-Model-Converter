@@ -4991,7 +4991,8 @@ class GpuRenderer:
                textures: Optional[Dict[str, 'Image.Image']] = None,
                anim_pose=None,
                anim_time: float = 0.0,
-               anim_base_pose=None) -> Optional['Image.Image']:
+               anim_base_pose=None,
+               display_options=None) -> Optional['Image.Image']:
         """
         Render `model` from `camera` into a W×H PIL RGBA image.
 
@@ -5016,6 +5017,8 @@ class GpuRenderer:
         if W <= 0 or H <= 0:
             return None
         textures = textures or {}
+        if display_options is not None:
+            self.display_options = display_options
 
         if self._ensure_context():
             result = self._render_gpu(model, camera, W, H, textures, anim_pose, anim_time,

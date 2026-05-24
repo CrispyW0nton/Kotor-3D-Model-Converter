@@ -23,6 +23,10 @@ from src.gui.qt_lib.rendering.qt_gpu_renderer import (
     create_viewport_renderer,
 )
 from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
+from src.gui.qt_lib.rendering.viewport_display import (
+    ViewportDisplayMode,
+    ViewportDisplayOptions,
+)
 from src.gui.qt_lib.viewports.qt_uv_viewer import QtUVViewerWindow
 from src.gui.qt_lib.viewports.viewport_host import RendererSurfaceHost
 from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
@@ -557,6 +561,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.camera = ArcBallCamera()
         self._renderer = FrameRenderer(self.camera)
         self._renderer.show_gimbal = bool(getattr(self._renderer, "show_gimbal", True))
+        self.display_options = ViewportDisplayOptions()
+        setattr(self._renderer, "display_options", self.display_options)
         self.model = None
         self._scene_instances: list = []
         self._scene_model = None
@@ -634,6 +640,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gpu_upload_total = 0
         self._gpu_upload_model_id = 0
         self._last_renderer_backend_id = ""
+        self._last_display_mode_warning = ""
         self._selection_orbit_bounds: Optional[tuple[tuple[float, float, float], tuple[float, float, float]]] = None
         self._selection_orbit_bounds_node_id = 0
         self._navigation_profile = DEFAULT_VIEWPORT_NAVIGATION_PROFILE
@@ -1151,6 +1158,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._renderer.show_wireframe = False
         self._renderer.show_grid = self.grid_button.isChecked()
         self._renderer.render_mode = "realistic"
+        self._set_display_options(self._rebuild_display_options_from_renderer(), announce=False)
         self._sync_shade_buttons()
         self._sync_render_mode_buttons()
 
@@ -2003,6 +2011,92 @@ class QtViewportWidget(QtWidgets.QWidget):
     def tex_cache(self):
         return self._renderer.tex_cache
 
+    def _set_display_options(self, options: ViewportDisplayOptions, *, announce: bool = True) -> None:
+        self.display_options = options
+        setattr(self._renderer, "display_options", options)
+        self._renderer.show_grid = bool(options.show_grid)
+        self._renderer.show_texture = bool(options.show_textures)
+        self._renderer.show_lightmap_map = bool(options.show_lightmaps)
+        if options.display_mode is ViewportDisplayMode.WIREFRAME:
+            self._renderer.show_solid = False
+            self._renderer.show_wireframe = True
+        else:
+            self._renderer.show_solid = True
+            self._renderer.show_wireframe = bool(options.show_wire_overlay or options.show_edged_faces)
+        self._xray_mode = bool(options.xray)
+        if self._gpu_renderer is not None:
+            setattr(self._gpu_renderer, "display_options", options)
+            setattr(self._gpu_renderer, "show_grid", bool(options.show_grid))
+        self._sync_display_buttons()
+        self._refresh_display_button_availability()
+        if announce:
+            self.statusMessage.emit(f"Viewport display: {options.display_mode.value.replace('_', ' ').title()}")
+
+    def _display_mode_for_current_controls(self) -> ViewportDisplayMode:
+        if not bool(getattr(self._renderer, "show_solid", True)) and bool(getattr(self._renderer, "show_wireframe", False)):
+            return ViewportDisplayMode.WIREFRAME
+        render_mode = str(getattr(self._renderer, "render_mode", "realistic") or "realistic").lower()
+        if render_mode == "flat":
+            return ViewportDisplayMode.SOLID
+        if render_mode == "shaded":
+            return ViewportDisplayMode.SHADED
+        if bool(getattr(self._renderer, "show_texture", True)):
+            return ViewportDisplayMode.FULL_MATERIAL if bool(getattr(self._renderer, "show_lightmap_map", False)) else ViewportDisplayMode.TEXTURED
+        return ViewportDisplayMode.SOLID
+
+    def _rebuild_display_options_from_renderer(self) -> ViewportDisplayOptions:
+        return self.display_options.with_changes(
+            display_mode=self._display_mode_for_current_controls(),
+            show_grid=bool(getattr(self._renderer, "show_grid", True)),
+            show_wire_overlay=bool(getattr(self._renderer, "show_solid", True) and getattr(self._renderer, "show_wireframe", False)),
+            show_edged_faces=bool(getattr(self._renderer, "show_solid", True) and getattr(self._renderer, "show_wireframe", False)),
+            show_textures=bool(getattr(self._renderer, "show_texture", True)),
+            show_lightmaps=bool(getattr(self._renderer, "show_lightmap_map", False)),
+            xray=bool(getattr(self, "_xray_mode", False)),
+            force_flat_colour=str(getattr(self._renderer, "render_mode", "") or "").lower() == "flat",
+        )
+
+    def _sync_display_buttons(self) -> None:
+        self._sync_shade_buttons()
+        self._sync_render_mode_buttons()
+        for name, value in (
+            ("texture_button", self.display_options.show_textures),
+            ("grid_button", self.display_options.show_grid),
+            ("xray_button", self.display_options.xray),
+        ):
+            button = getattr(self, name, None)
+            if button is None:
+                continue
+            button.blockSignals(True)
+            button.setChecked(bool(value))
+            button.blockSignals(False)
+
+    def _refresh_display_button_availability(self) -> None:
+        caps = None
+        renderer = self._gpu_renderer
+        if renderer is not None and hasattr(renderer, "get_capabilities"):
+            try:
+                caps = renderer.get_capabilities()
+            except Exception:
+                caps = None
+        if caps is None:
+            return
+        diagnostic_only = bool(getattr(caps, "diagnostic_only", False))
+        for button_name in (
+            "solid_button",
+            "wire_button",
+            "solid_wire_button",
+            "texture_button",
+            "render_realistic_button",
+            "render_shaded_button",
+            "render_flat_button",
+        ):
+            button = getattr(self, button_name, None)
+            if button is not None:
+                button.setEnabled(not diagnostic_only)
+        if diagnostic_only:
+            self.statusMessage.emit("Null Diagnostic renderer does not draw scene display modes.")
+
     def toggle_wireframe(self, checked: Optional[bool] = None) -> None:
         if checked is False:
             self.set_shade_mode("solid")
@@ -2020,7 +2114,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         else:
             self._renderer.show_solid = True
             self._renderer.show_wireframe = False
-        self._sync_shade_buttons()
+        self._set_display_options(self._rebuild_display_options_from_renderer())
         self._request_render()
 
     def _sync_shade_buttons(self) -> None:
@@ -2043,7 +2137,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             mode_key = "realistic"
         self._renderer.render_mode = mode_key
         self.toggle_gpu_renderer(True)
-        self._sync_render_mode_buttons()
+        self._set_display_options(self._rebuild_display_options_from_renderer())
         self._request_render(fast=True)
 
     def _sync_render_mode_buttons(self) -> None:
@@ -2066,19 +2160,13 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def toggle_texture(self, checked: Optional[bool] = None) -> None:
         self._renderer.show_texture = bool(checked) if checked is not None else not self._renderer.show_texture
-        self.texture_button.blockSignals(True)
-        self.texture_button.setChecked(self._renderer.show_texture)
-        self.texture_button.blockSignals(False)
+        self._set_display_options(self._rebuild_display_options_from_renderer())
         self._request_render()
 
     def toggle_grid(self, checked: Optional[bool] = None) -> None:
         enabled = bool(checked) if checked is not None else not bool(getattr(self._renderer, "show_grid", True))
         self._renderer.show_grid = enabled
-        if self._gpu_renderer is not None:
-            self._gpu_renderer.show_grid = enabled
-        self.grid_button.blockSignals(True)
-        self.grid_button.setChecked(enabled)
-        self.grid_button.blockSignals(False)
+        self._set_display_options(self.display_options.with_changes(show_grid=enabled))
         self._request_render(fast=True)
 
     def set_lighting_mode(self, mode: str) -> None:
@@ -2118,6 +2206,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         setattr(self._renderer, attr, bool(enabled))
         if self._gpu_renderer is not None:
             setattr(self._gpu_renderer, attr, bool(enabled))
+        if attr == "show_lightmap_map":
+            self._set_display_options(self._rebuild_display_options_from_renderer())
         self._request_render()
 
     def set_lightmap_settings(self, intensity: float, mode: str) -> None:
@@ -2338,9 +2428,7 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def toggle_xray(self, checked: Optional[bool] = None) -> None:
         self._xray_mode = bool(checked) if checked is not None else not self._xray_mode
-        self.xray_button.blockSignals(True)
-        self.xray_button.setChecked(self._xray_mode)
-        self.xray_button.blockSignals(False)
+        self._set_display_options(self.display_options.with_changes(xray=self._xray_mode))
         self._request_render(fast=True)
 
     def toggle_joint_dots(self, checked: Optional[bool] = None) -> None:
@@ -4893,6 +4981,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gpu_renderer.show_light_gizmos = bool(getattr(self._renderer, "show_light_gizmos", True))
         self._gpu_renderer.show_wireframe = bool(self._renderer.show_wireframe)
         self._gpu_renderer.render_mode = str(getattr(self._renderer, "render_mode", "realistic") or "realistic")
+        self._gpu_renderer.display_options = self.display_options
         self._gpu_renderer.selected_node = getattr(self._renderer, "selected_node", None)
         self._gpu_renderer.selected_nodes = list(getattr(self, "_selected_meshes", []) or [])
         self._gpu_renderer.show_grid = bool(getattr(self._renderer, "show_grid", True))
@@ -4907,6 +4996,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             w,
             h,
             textures=textures,
+            display_options=self.display_options,
             anim_pose=getattr(self._renderer, "_anim_pose", None),
             anim_time=float(getattr(self._renderer, "_anim_time", 0.0)),
             anim_base_pose=getattr(self._renderer, "_anim_base_pose", None),
@@ -4928,6 +5018,13 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._last_renderer_backend_id = backend_id
             label = str(diagnostics.get("name") or backend_id)
             self.statusMessage.emit(f"Renderer: {label}")
+            self._refresh_display_button_availability()
+        warning = str(diagnostics.get("last_display_mode_warning") or "")
+        if warning and warning != self._last_display_mode_warning:
+            self._last_display_mode_warning = warning
+            self.statusMessage.emit(warning)
+        elif not warning:
+            self._last_display_mode_warning = ""
         if getattr(self._gpu_renderer, "deferred_mesh_uploads", False):
             model_id = id(self.model)
 
