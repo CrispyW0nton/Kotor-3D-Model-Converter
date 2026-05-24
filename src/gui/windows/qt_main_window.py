@@ -1412,6 +1412,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._batch_thread: Optional[QtCore.QThread] = None
         self._batch_worker: Optional[QtCore.QObject] = None
         self._floating_dock_hosts: dict[str, QtFloatingDockHost] = {}
+        self._dock_toggle_actions: dict[str, QtGui.QAction] = {}
         self._dock_rehosting = False
         self._library_rows: list[dict] = []
         self.scene_manager = KMaxSceneManager()
@@ -1653,6 +1654,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             QFrame#CommandBar QToolButton#CommandStripMenuButton:hover {{
                 background: {C['border']};
                 color: {C['accent']};
+                border-color: {C['accent']};
+            }}
+            QFrame#CommandBar QToolButton#CommandStripButton:checked {{
+                background: {C['accent2']};
+                color: {C['text']};
                 border-color: {C['accent']};
             }}
             QComboBox#VisualProfileCombo {{
@@ -1915,7 +1921,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.uv_action.triggered.connect(self._open_uv_viewer)
         self.diag_action = QtGui.QAction(self._icon("diag"), "Diagnostics...", self)
         self.diag_action.setShortcut("Ctrl+D")
-        self.diag_action.triggered.connect(self._show_diagnostics_panel)
+        self._configure_dock_toggle_action(self.diag_action, "diagnostics", self._show_diagnostics_panel)
         self.fbx_sdk_status_action = QtGui.QAction("FBX SDK Status", self)
         self.fbx_sdk_status_action.triggered.connect(self._show_fbx_sdk_status)
         self.fbx_sdk_setup_action = QtGui.QAction("Autodesk FBX SDK Setup...", self)
@@ -1949,7 +1955,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.unreal_animator_action.triggered.connect(self._open_unreal_animator_window)
         self.sequence_editor_action = QtGui.QAction(self._icon("sequence"), "Sequence Editor", self)
         self.sequence_editor_action.setShortcut("Ctrl+Alt+Q")
-        self.sequence_editor_action.triggered.connect(self._show_sequence_editor_dock)
+        self._configure_dock_toggle_action(self.sequence_editor_action, "sequence_editor", self._show_sequence_editor_dock)
         self.sequence_editor_window_action = QtGui.QAction(self._icon("anims"), "Sequence Editor (Window)...", self)
         self.sequence_editor_window_action.triggered.connect(self._open_sequence_editor_window)
         self.modules_action = QtGui.QAction(self._icon("modular"), "Open Module Editor", self)
@@ -1961,27 +1967,47 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.blueprint_editor_action = QtGui.QAction(self._icon("library"), "Blueprint Editor...", self)
         self.blueprint_editor_action.triggered.connect(self._open_blueprint_editor_window)
         self.content_browser_action = QtGui.QAction(self._icon("library"), "Open Content Browser", self)
-        self.content_browser_action.triggered.connect(lambda: self._show_content_browser("All"))
+        self._configure_dock_toggle_action(
+            self.content_browser_action,
+            "content_browser",
+            lambda: self._show_content_browser("All"),
+        )
         self.scene_panel_action = QtGui.QAction(self._icon("scene"), "Scene Information", self)
-        self.scene_panel_action.triggered.connect(lambda: self._show_workspace_dock("scene"))
+        self._configure_dock_toggle_action(self.scene_panel_action, "scene", lambda: self._show_workspace_dock("scene"))
         self.properties_panel_action = QtGui.QAction(self._icon("props"), "Open Properties", self)
-        self.properties_panel_action.triggered.connect(lambda: self._show_workspace_dock("properties"))
+        self._configure_dock_toggle_action(
+            self.properties_panel_action,
+            "properties",
+            lambda: self._show_workspace_dock("properties"),
+        )
         self.nodes_panel_action = QtGui.QAction(self._icon("skeleton"), "Open Nodes Panel", self)
-        self.nodes_panel_action.triggered.connect(lambda: self._show_detachable_panel("nodes"))
+        self._configure_dock_toggle_action(self.nodes_panel_action, "nodes", lambda: self._show_workspace_dock("nodes"))
         self.lighting_panel_action = QtGui.QAction(self._icon("lights"), "Open Lighting Panel", self)
-        self.lighting_panel_action.triggered.connect(lambda: self._show_detachable_panel("lighting"))
+        self._configure_dock_toggle_action(self.lighting_panel_action, "lighting", lambda: self._show_workspace_dock("lighting"))
         self.camera_panel_action = QtGui.QAction(self._icon("cameras"), "Open Camera Panel", self)
-        self.camera_panel_action.triggered.connect(lambda: self._show_detachable_panel("cameras"))
+        self._configure_dock_toggle_action(self.camera_panel_action, "cameras", lambda: self._show_workspace_dock("cameras"))
         self.render_frame_action = QtGui.QAction("Render Camera Still...", self)
         self.render_frame_action.triggered.connect(self._open_render_frame_dialog)
         self.twoda_panel_action = QtGui.QAction(self._icon("twoda"), "Open 2DA Browser", self)
-        self.twoda_panel_action.triggered.connect(lambda: self._show_detachable_panel("2das"))
+        self._configure_dock_toggle_action(self.twoda_panel_action, "2das", lambda: self._show_workspace_dock("2das"))
         self.resources_panel_action = QtGui.QAction(self._icon("resources"), "Open Resource Browser", self)
-        self.resources_panel_action.triggered.connect(lambda: self._show_detachable_panel("resources"))
-        self.module_meshes_panel_action = QtGui.QAction(self._icon("props"), "Open Module Meshes", self)
-        self.module_meshes_panel_action.triggered.connect(lambda: self._show_detachable_panel("module_meshes"))
-        self.adjust_pivot_panel_action = QtGui.QAction("Open Adjust Pivot", self)
-        self.adjust_pivot_panel_action.triggered.connect(lambda: self._show_detachable_panel("adjust_pivot"))
+        self._configure_dock_toggle_action(
+            self.resources_panel_action,
+            "resources",
+            lambda: self._show_workspace_dock("resources"),
+        )
+        self.module_meshes_panel_action = QtGui.QAction(self._icon("module_meshes"), "Open Module Meshes", self)
+        self._configure_dock_toggle_action(
+            self.module_meshes_panel_action,
+            "module_meshes",
+            lambda: self._show_workspace_dock("module_meshes"),
+        )
+        self.adjust_pivot_panel_action = QtGui.QAction(self._icon("viewport_gimbal"), "Open Adjust Pivot", self)
+        self._configure_dock_toggle_action(
+            self.adjust_pivot_panel_action,
+            "adjust_pivot",
+            lambda: self._show_workspace_dock("adjust_pivot"),
+        )
         self.set_mdlops_action = QtGui.QAction("Set MDLOps Path...", self)
         self.set_mdlops_action.triggered.connect(self._set_mdlops)
         self.compile_action = QtGui.QAction("Compile ASCII MDL to Binary", self)
@@ -2292,8 +2318,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._tool_button("Scene Information", self.scene_panel_action, "scene", compact=True))
         layout.addWidget(self._tool_button("Properties", self.properties_panel_action, "props", compact=True))
         layout.addWidget(self._tool_button("Sequence Editor", self.sequence_editor_action, "sequence", compact=True))
+        layout.addWidget(self._tool_button("Nodes", self.nodes_panel_action, "skeleton", compact=True))
         layout.addWidget(self._tool_button("Lighting", self.lighting_panel_action, "lights", compact=True))
         layout.addWidget(self._tool_button("Cameras", self.camera_panel_action, "cameras", compact=True))
+        layout.addWidget(self._tool_button("Module Meshes", self.module_meshes_panel_action, "module_meshes", compact=True))
+        layout.addWidget(self._tool_button("Adjust Pivot", self.adjust_pivot_panel_action, "viewport_gimbal", compact=True))
+        layout.addWidget(self._tool_button("2DA Browser", self.twoda_panel_action, "twoda", compact=True))
+        layout.addWidget(self._tool_button("Resource Browser", self.resources_panel_action, "resources", compact=True))
         layout.addWidget(self._tool_button("Diagnostics  Ctrl+D", self.diag_action, "diag", compact=True))
 
         self.visual_profile_combo = QtWidgets.QComboBox()
@@ -2480,12 +2511,47 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         button.setProperty("accent", accent)
         button.setProperty("compact", compact)
+        if action.isCheckable():
+            button.setCheckable(True)
+            button.setChecked(action.isChecked())
+            action.toggled.connect(button.setChecked)
         button.clicked.connect(action.trigger)
         if action.shortcut():
             button.setToolTip(f"{action.text()} ({action.shortcut().toString()})")
         else:
             button.setToolTip(action.text())
         return button
+
+    def _configure_dock_toggle_action(self, action: QtGui.QAction, key: str, show_callback) -> None:
+        action.setCheckable(True)
+        action.triggered.connect(lambda checked=False, k=key, callback=show_callback: self._toggle_dock_action(k, checked, callback))
+        self._dock_toggle_actions[key] = action
+
+    def _toggle_dock_action(self, key: str, checked: bool, show_callback) -> None:
+        dock = getattr(self, "_detachable_panels", {}).get(key)
+        if dock is None:
+            self._not_migrated(key)
+            self._sync_dock_toggle_action(key, False)
+            return
+        if checked:
+            show_callback()
+        else:
+            host = self._host_for_dock_key(key)
+            if host is not None and key in getattr(host, "dock_keys", []):
+                dock.hide()
+                if not any(
+                    panel_key != key and getattr(self._detachable_panels.get(panel_key), "isVisible", lambda: False)()
+                    for panel_key in getattr(host, "dock_keys", [])
+                ):
+                    host.hide()
+            else:
+                dock.hide()
+
+    def _sync_dock_toggle_action(self, key: str, checked: bool) -> None:
+        action = getattr(self, "_dock_toggle_actions", {}).get(key)
+        if action is None:
+            return
+        action.setChecked(bool(checked))
 
     def _menu_button(
         self,
@@ -2560,6 +2626,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             if self.resource_panel.listbox.count() == 0:
                 self._populate_resource_panel()
         dock.show()
+        self._sync_dock_toggle_action(key, True)
         dock.setFloating(True)
         self._promote_detached_panel_window(key, dock)
 
@@ -2568,6 +2635,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if dock is None:
             self._not_migrated(key)
             return
+        if key == "resources" and getattr(self.resource_panel, "listbox", None) is not None:
+            if self.resource_panel.listbox.count() == 0:
+                self._populate_resource_panel()
         host = self._host_for_dock_key(key)
         if host is not None:
             host.show()
@@ -2575,11 +2645,39 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             host.activateWindow()
             dock.show()
             dock.raise_()
+            self._sync_dock_toggle_action(key, True)
             return
         if dock.isFloating():
             dock.setFloating(False)
         dock.show()
+        self._tab_workspace_dock_with_visible_peer(key, dock)
         dock.raise_()
+        self._sync_dock_toggle_action(key, True)
+
+    def _tab_workspace_dock_with_visible_peer(self, key: str, dock: QtWidgets.QDockWidget) -> None:
+        if key in {"content_browser", "scene"}:
+            return
+        if dock.isFloating():
+            return
+        area = self.dockWidgetArea(dock)
+        if area == QtCore.Qt.NoDockWidgetArea:
+            area = self._default_dock_area_for_key(key)
+        for anchor_key, anchor in getattr(self, "_detachable_panels", {}).items():
+            if anchor_key == key or anchor is dock or not _qt_object_alive(anchor):
+                continue
+            if not anchor.isVisible() or anchor.isFloating():
+                continue
+            if self.dockWidgetArea(anchor) != area:
+                continue
+            if key in {"nodes", "2das", "resources"} and anchor_key not in {"content_browser", "scene", "nodes", "2das", "resources"}:
+                continue
+            if key in {"properties", "lighting", "cameras", "diagnostics", "module_meshes", "mesh_tools", "adjust_pivot"} and anchor_key in {"content_browser", "scene", "nodes", "2das", "resources"}:
+                continue
+            try:
+                self.tabifyDockWidget(anchor, dock)
+                return
+            except RuntimeError:
+                return
 
     def _detachable_dock_for_key(self, key: str, dock: Optional[QtWidgets.QDockWidget] = None):
         candidate = dock if _qt_object_alive(dock) else getattr(self, "_detachable_panels", {}).get(key)
@@ -2894,6 +2992,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         dock = self._detachable_dock_for_key(key, dock)
         if dock is None:
             return
+        self._sync_dock_toggle_action(key, visible)
         if key == "adjust_pivot":
             self.settings_data["show_adjust_pivot_toolbox"] = bool(visible)
             try:
@@ -3178,7 +3277,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport.cameraSelectionChanged.connect(self.camera_panel.select_camera_object)
         self.module_geometry_panel.moduleMeshesSelected.connect(self.viewport.set_selected_meshes)
         self.module_geometry_panel.moduleMeshVisibilityChanged.connect(self.viewport.refresh_view)
-        self.module_geometry_panel.moduleMeshesWindowRequested.connect(lambda: self._show_detachable_panel("module_meshes"))
         self.properties_panel.positionApplied.connect(
             lambda node, _x, _y, _z: self.viewport.refresh_node_transform(node)
         )
@@ -4395,7 +4493,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._not_migrated("Diagnostics")
             return
         panel.run_diagnostics(self._current_model)
-        self._show_detachable_panel("diagnostics")
+        self._show_workspace_dock("diagnostics")
 
     def _configure_python_terminal_context(self) -> None:
         terminal = getattr(getattr(self, "log_panel", None), "terminal", None)

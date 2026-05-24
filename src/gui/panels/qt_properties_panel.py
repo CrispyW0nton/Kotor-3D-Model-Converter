@@ -275,15 +275,6 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
 
-        header = QtWidgets.QHBoxLayout()
-        header.setContentsMargins(0, 0, 0, 0)
-        header.addStretch(1)
-        self.open_module_meshes_window_button = QtWidgets.QPushButton("Open Window")
-        self.open_module_meshes_window_button.setToolTip("Open Module Meshes as a detachable dock window")
-        self.open_module_meshes_window_button.clicked.connect(self.moduleMeshesWindowRequested.emit)
-        header.addWidget(self.open_module_meshes_window_button)
-        layout.addLayout(header)
-
         self.module_browser_tabs = QtWidgets.QTabWidget()
         mesh_page = QtWidgets.QWidget()
         mesh_layout = QtWidgets.QVBoxLayout(mesh_page)
@@ -403,8 +394,6 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         if not isinstance(tree, QtWidgets.QTreeWidget):
             return
         menu = QtWidgets.QMenu(tree)
-        open_action = menu.addAction("Open Module Meshes Window")
-        menu.addSeparator()
         hide_action = menu.addAction("Hide Selected")
         unhide_action = menu.addAction("Unhide Selected")
         hide_unselected_action = menu.addAction("Hide Unselected")
@@ -415,9 +404,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         hide_unselected_action.setEnabled(bool(self._mesh_items or self._null_mesh_items or self._walkmesh_items))
         unhide_all_action.setEnabled(bool(self._mesh_items or self._null_mesh_items or self._walkmesh_items))
         chosen = menu.exec(tree.viewport().mapToGlobal(pos))
-        if chosen is open_action:
-            self.moduleMeshesWindowRequested.emit()
-        elif chosen is hide_action:
+        if chosen is hide_action:
             self._set_selected_meshes_hidden(True)
         elif chosen is unhide_action:
             self._set_selected_meshes_hidden(False)

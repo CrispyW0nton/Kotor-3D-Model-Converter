@@ -29,6 +29,7 @@ class I:
     REFRESH = "refresh"
     CLOTH = "cloth"
     MODULAR = "modular"
+    MODULE_MESHES = "module_meshes"
     DIAG = "diag"
     TEXTURE = "texture"
     LIBRARY = "library"
@@ -73,6 +74,8 @@ LABEL_TO_ICON: dict[str, str] = {
     "cloth": I.CLOTH,
     "modular": I.MODULAR,
     "modules": I.MODULAR,
+    "module meshes": I.MODULE_MESHES,
+    "module_meshes": I.MODULE_MESHES,
     "diag": I.DIAG,
     "tex": I.TEXTURE,
     "texture": I.TEXTURE,

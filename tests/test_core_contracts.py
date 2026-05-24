@@ -1383,6 +1383,7 @@ def test_main_window_moves_rig_panel_to_modules_window() -> None:
 
 def test_main_window_exposes_module_meshes_as_detachable_dock() -> None:
     import inspect
+    from pathlib import Path
 
     from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
@@ -1397,8 +1398,10 @@ def test_main_window_exposes_module_meshes_as_detachable_dock() -> None:
     assert "self.module_geometry_panel.set_module_browser_only(True)" in layout_source
     assert '"module_meshes"' in layout_source
     assert "self.module_meshes_panel_action" in actions_source
+    assert 'self._icon("module_meshes")' in actions_source
     assert "modules_menu.addAction(self.module_meshes_panel_action)" in menu_source
     assert "self.module_geometry_panel.show_model(model)" in refresh_source
+    assert (Path("src/gui/icons/module_meshes.svg")).exists()
     assert hasattr(QtPropertiesPanel, "set_module_browser_only")
 
 
@@ -1414,7 +1417,7 @@ def test_main_window_exposes_adjust_pivot_in_modules_menu() -> None:
     assert "self.adjust_pivot_panel = AdjustPivotPanel(self)" in layout_source
     assert '"adjust_pivot"' in layout_source
     assert "self.adjust_pivot_panel_action" in actions_source
-    assert 'self._show_detachable_panel("adjust_pivot")' in actions_source
+    assert 'self._show_workspace_dock("adjust_pivot")' in actions_source
     assert "modules_menu.addAction(self.adjust_pivot_panel_action)" in menu_source
 
 
@@ -1479,7 +1482,7 @@ def test_regular_properties_panel_can_omit_module_mesh_tab() -> None:
     panel.refresh_module_mesh_rows()
 
 
-def test_module_mesh_panel_can_request_detachable_window() -> None:
+def test_module_mesh_panel_omits_redundant_open_window_control() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
     import inspect
@@ -1487,20 +1490,14 @@ def test_module_mesh_panel_can_request_detachable_window() -> None:
     from PySide6 import QtWidgets
 
     from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
-    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     panel = QtPropertiesPanel()
-    requests = []
-    panel.moduleMeshesWindowRequested.connect(lambda: requests.append(True))
 
-    panel.open_module_meshes_window_button.click()
-
-    assert requests == [True]
+    assert not hasattr(panel, "open_module_meshes_window_button")
     panel_source = inspect.getsource(QtPropertiesPanel._show_module_browser_context_menu)
-    layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
-    assert "Open Module Meshes Window" in panel_source
-    assert "moduleMeshesWindowRequested.connect(lambda: self._show_detachable_panel(\"module_meshes\"))" in layout_source
+    assert "Open Module Meshes Window" not in panel_source
+    assert "moduleMeshesWindowRequested.emit" not in panel_source
 
 
 def test_qt_overflow_helpers_scroll_dense_toolbar_rows() -> None:
@@ -1537,6 +1534,9 @@ def test_main_window_command_bar_is_fixed_and_docks_are_scrollable() -> None:
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
     command_source = inspect.getsource(QtGhostRiggerMainWindow._make_command_bar)
+    actions_source = inspect.getsource(QtGhostRiggerMainWindow._build_actions)
+    button_source = inspect.getsource(QtGhostRiggerMainWindow._tool_button)
+    visibility_source = inspect.getsource(QtGhostRiggerMainWindow._on_detachable_panel_visibility)
     dock_source = inspect.getsource(QtGhostRiggerMainWindow._create_detachable_panel)
 
     assert "CommandBarScroll" not in command_source
@@ -1611,7 +1611,7 @@ def test_main_window_moves_utility_tabs_to_tools_windows() -> None:
 
     diagnostics_source = inspect.getsource(QtGhostRiggerMainWindow._show_diagnostics_panel)
     assert "panel.run_diagnostics(self._current_model)" in diagnostics_source
-    assert 'self._show_detachable_panel("diagnostics")' in diagnostics_source
+    assert 'self._show_workspace_dock("diagnostics")' in diagnostics_source
 
     assert QtDiagnosticsPanel.__name__ == "QtDiagnosticsPanel"
     assert QtDiagnosticsWindow.__name__ == "QtDiagnosticsWindow"
@@ -1666,15 +1666,45 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
     command_source = inspect.getsource(QtGhostRiggerMainWindow._make_command_bar)
+    actions_source = inspect.getsource(QtGhostRiggerMainWindow._build_actions)
     button_source = inspect.getsource(QtGhostRiggerMainWindow._tool_button)
     menu_source = inspect.getsource(QtGhostRiggerMainWindow._menu_button)
+    visibility_source = inspect.getsource(QtGhostRiggerMainWindow._on_detachable_panel_visibility)
 
     assert 'layout.addWidget(self._tool_button("Scene Information", self.scene_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Properties", self.properties_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Sequence Editor", self.sequence_editor_action' in command_source
+    assert 'layout.addWidget(self._tool_button("Nodes", self.nodes_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Lighting", self.lighting_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Cameras", self.camera_panel_action' in command_source
+    assert 'layout.addWidget(self._tool_button("Module Meshes", self.module_meshes_panel_action' in command_source
+    assert 'layout.addWidget(self._tool_button("Adjust Pivot", self.adjust_pivot_panel_action' in command_source
+    assert 'layout.addWidget(self._tool_button("2DA Browser", self.twoda_panel_action' in command_source
+    assert 'layout.addWidget(self._tool_button("Resource Browser", self.resources_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Diagnostics  Ctrl+D", self.diag_action' in command_source
+    assert actions_source.count("self._configure_dock_toggle_action(") >= 12
+    for action_name in (
+        "content_browser_action",
+        "scene_panel_action",
+        "properties_panel_action",
+        "sequence_editor_action",
+        "nodes_panel_action",
+        "lighting_panel_action",
+        "camera_panel_action",
+        "module_meshes_panel_action",
+        "adjust_pivot_panel_action",
+        "twoda_panel_action",
+        "resources_panel_action",
+        "diag_action",
+    ):
+        assert f"self.{action_name}" in actions_source
+    assert "button.setCheckable(True)" in button_source
+    assert "action.toggled.connect(button.setChecked)" in button_source
+    assert "self._sync_dock_toggle_action(key, visible)" in visibility_source
+    workspace_source = inspect.getsource(QtGhostRiggerMainWindow._show_workspace_dock)
+    tab_source = inspect.getsource(QtGhostRiggerMainWindow._tab_workspace_dock_with_visible_peer)
+    assert "self._tab_workspace_dock_with_visible_peer(key, dock)" in workspace_source
+    assert "self.tabifyDockWidget(anchor, dock)" in tab_source
     assert '"Anims  Ctrl+A"' not in command_source
     assert command_source.index("layout.addStretch(1)") < command_source.index('"Scene Information"')
     assert "button.setFixedSize(30, 22)" in button_source
@@ -1703,6 +1733,7 @@ def test_sequence_and_diagnostics_use_detachable_dock_registry() -> None:
 
     layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
     sequence_source = inspect.getsource(QtGhostRiggerMainWindow._show_sequence_editor_dock)
+    diagnostics_source = inspect.getsource(QtGhostRiggerMainWindow._show_diagnostics_panel)
     default_area_source = inspect.getsource(QtGhostRiggerMainWindow._default_dock_area_for_key)
 
     assert '"sequence_editor": (1180, 720)' in layout_source
@@ -1712,6 +1743,7 @@ def test_sequence_and_diagnostics_use_detachable_dock_registry() -> None:
     assert "self.diagnostics_dock = self._create_detachable_panel(" in layout_source
     assert '"diagnostics",' in layout_source
     assert 'self._show_workspace_dock("sequence_editor")' in sequence_source
+    assert 'self._show_workspace_dock("diagnostics")' in diagnostics_source
     assert 'key in {"output_log", "sequence_editor"}' in default_area_source
 
 

@@ -331,6 +331,11 @@ class QtStylesheetBuilder:
         QFrame#CommandBar QToolButton#CommandStripMenuButton:pressed {{
             background: {c('button.pressed')};
         }}
+        QFrame#CommandBar QToolButton#CommandStripButton:checked {{
+            background: {c('button.checked')};
+            color: {c('button.checkedText', c('button.text'))};
+            border-color: {c('accent.primary')};
+        }}
         QComboBox#VisualProfileCombo {{
             background: {c('viewportToolbar.background', c('input.background'))};
             color: {c('input.text')};
