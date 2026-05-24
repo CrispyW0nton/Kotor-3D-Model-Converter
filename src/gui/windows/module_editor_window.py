@@ -539,6 +539,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def apply_ghost_theme(self, theme) -> None:
         if theme is None:
             return
+        if getattr(theme, "is_native", lambda: False)():
+            self.apply_native_theme()
+            return
         stylesheet = ""
         try:
             from src.gui.libtheme.qt_stylesheet_builder import QtStylesheetBuilder
@@ -552,6 +555,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             hook = getattr(widget, "apply_ghost_theme", None)
             if callable(hook):
                 hook(theme)
+
+    def apply_native_theme(self) -> None:
+        self.setStyleSheet("")
+        for widget in self.findChildren(QtWidgets.QWidget):
+            widget.setStyleSheet("")
+        for widget in self.findChildren(QtWidgets.QWidget):
+            hook = getattr(widget, "apply_native_theme", None)
+            if callable(hook):
+                hook()
 
     def apply_ghost_layout(self, layout) -> None:
         if layout is None:

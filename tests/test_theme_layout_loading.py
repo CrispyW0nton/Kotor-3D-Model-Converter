@@ -449,18 +449,17 @@ def test_matrix_bar_media_is_header_only_and_crop_aware() -> None:
     assert "matrixBar.cropX" in inspect.getsource(QtGhostRiggerMainWindow._matrix_bar_settings)
 
 
-def test_main_window_reserves_command_bar_overflow_height() -> None:
+def test_main_window_reserves_fixed_command_bar_height() -> None:
     import inspect
 
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
-    sync_source = inspect.getsource(QtGhostRiggerMainWindow._sync_command_bar_scroll_height)
     reserved_source = inspect.getsource(QtGhostRiggerMainWindow._sync_reserved_top_rows)
     apply_source = inspect.getsource(LayoutApplier.apply_layout)
 
-    assert "command_bar_scroll" in sync_source
-    assert "PM_ScrollBarExtent" in sync_source
-    assert "_sync_command_bar_scroll_height(height)" in reserved_source
+    assert "command_bar_scroll" not in reserved_source
+    assert "PM_ScrollBarExtent" not in reserved_source
+    assert "host_height = max(36, height, host.sizeHint().height())" in reserved_source
     assert "_sync_reserved_top_rows" in apply_source
 
 

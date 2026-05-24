@@ -41,8 +41,6 @@ from src.gui.qt_lib.panels.qt_camera_panel import QtCameraPanel
 from src.gui.qt_lib.panels.qt_mesh_tools_panel import QtMeshToolsPanel
 from src.gui.qt_lib.panels.adjust_pivot_panel import AdjustPivotPanel
 from src.gui.qt_lib.assets.qt_theme import (
-    QtFlowLayout,
-    make_horizontal_overflow_area,
     make_scrollable_panel,
     update_legacy_palette,
 )
@@ -55,7 +53,7 @@ from src.gui.qt_lib.panels.qt_animation_panel import (
 )
 from src.gui.qt_lib.windows.qt_blueprint_editor import QtBlueprintEditorWindow
 from src.gui.qt_lib.panels.qt_character_builder_panel import QtCharacterBuilderWindow
-from src.gui.qt_lib.panels.qt_diagnostics_panel import QtDiagnosticsWindow
+from src.gui.qt_lib.panels.qt_diagnostics_panel import QtDiagnosticsPanel, QtDiagnosticsWindow
 from src.gui.qt_lib.dialogs.qt_dialogs import show_about, show_format_reference, show_ipc_info, show_viewport_navigation_reference
 from src.gui.qt_lib.dialogs.add_model_to_scene_dialog import AddModelToSceneChoice, AddModelToSceneDialog
 from src.gui.qt_lib.dialogs.qt_lightmap_baker_dialog import QtLightmapBakerDialog
@@ -1622,15 +1620,48 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 padding: 2px 8px;
                 font-size: 8pt;
             }}
-            QFrame#HeaderBar, QFrame#CommandBar {{
+            QFrame#HeaderBar, QFrame#CommandBar, QFrame#CommandBarHost {{
                 background: transparent;
             }}
             QFrame#HeaderBar {{
                 border-bottom: 1px solid #102019;
             }}
-            QFrame#CommandBar {{
+            QFrame#CommandBarHost {{
                 border-top: 1px solid #102019;
                 border-bottom: 1px solid {C['border']};
+            }}
+            QFrame#CommandBar {{
+                border: 0;
+            }}
+            QFrame#CommandBar QToolButton#CommandStripButton,
+            QFrame#CommandBar QToolButton#CommandStripMenuButton {{
+                background: {C['panel2']};
+                color: {C['text']};
+                border: 1px solid {C['border']};
+                border-radius: 2px;
+                padding: 1px;
+                min-height: 20px;
+                max-height: 20px;
+                min-width: 28px;
+                max-width: 28px;
+            }}
+            QFrame#CommandBar QToolButton#CommandStripMenuButton {{
+                min-width: 32px;
+                max-width: 32px;
+            }}
+            QFrame#CommandBar QToolButton#CommandStripButton:hover,
+            QFrame#CommandBar QToolButton#CommandStripMenuButton:hover {{
+                background: {C['border']};
+                color: {C['accent']};
+                border-color: {C['accent']};
+            }}
+            QComboBox#VisualProfileCombo {{
+                background: {C['panel2']};
+                color: {C['text']};
+                border: 1px solid {C['border']};
+                border-radius: 2px;
+                padding: 1px 7px;
+                min-height: 18px;
             }}
             QFrame#LogHeader {{
                 background: {C['bg']};
@@ -1650,10 +1681,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 font-size: 7pt;
             }}
             QLabel#ModelPill {{
-                background: {C['bg']};
-                color: {C['accent']};
-                border: 1px solid {C['border']};
-                padding: 4px 10px;
+                background: transparent;
+                color: {C['text']};
+                border: 0;
+                padding: 2px 6px;
                 font-weight: bold;
             }}
             QSplitter::handle {{
@@ -1742,6 +1773,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             ("settings", getattr(self, "settings_action", None)),
             ("anims", getattr(self, "anims_action", None)),
             ("diag", getattr(self, "diag_action", None)),
+            ("scene", getattr(self, "scene_panel_action", None)),
+            ("props", getattr(self, "properties_panel_action", None)),
+            ("sequence", getattr(self, "sequence_editor_action", None)),
+            ("lights", getattr(self, "lighting_panel_action", None)),
+            ("cameras", getattr(self, "camera_panel_action", None)),
         ):
             if action is not None:
                 action.setIcon(self._icon(name))
@@ -1787,7 +1823,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._log(f"Layout file reloaded: {Path(path).name}", "success")
 
     def _build_actions(self):
-        self.new_scene_action = QtGui.QAction("New Scene", self)
+        self.new_scene_action = QtGui.QAction(self._icon("new_scene"), "New Scene", self)
         self.new_scene_action.setShortcut("Ctrl+N")
         self.new_scene_action.triggered.connect(self._new_scene)
         self.open_scene_action = QtGui.QAction(self._icon("open"), "Open Scene...", self)
@@ -1911,7 +1947,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.unreal_animator_action = QtGui.QAction(self._icon("anims"), "Unreal Animator...", self)
         self.unreal_animator_action.setShortcut("Ctrl+Shift+U")
         self.unreal_animator_action.triggered.connect(self._open_unreal_animator_window)
-        self.sequence_editor_action = QtGui.QAction(self._icon("anims"), "Sequence Editor (Dock)", self)
+        self.sequence_editor_action = QtGui.QAction(self._icon("sequence"), "Sequence Editor", self)
         self.sequence_editor_action.setShortcut("Ctrl+Alt+Q")
         self.sequence_editor_action.triggered.connect(self._show_sequence_editor_dock)
         self.sequence_editor_window_action = QtGui.QAction(self._icon("anims"), "Sequence Editor (Window)...", self)
@@ -1926,15 +1962,15 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.blueprint_editor_action.triggered.connect(self._open_blueprint_editor_window)
         self.content_browser_action = QtGui.QAction(self._icon("library"), "Open Content Browser", self)
         self.content_browser_action.triggered.connect(lambda: self._show_content_browser("All"))
-        self.scene_panel_action = QtGui.QAction("Open Scene", self)
+        self.scene_panel_action = QtGui.QAction(self._icon("scene"), "Scene Information", self)
         self.scene_panel_action.triggered.connect(lambda: self._show_workspace_dock("scene"))
         self.properties_panel_action = QtGui.QAction(self._icon("props"), "Open Properties", self)
         self.properties_panel_action.triggered.connect(lambda: self._show_workspace_dock("properties"))
         self.nodes_panel_action = QtGui.QAction(self._icon("skeleton"), "Open Nodes Panel", self)
         self.nodes_panel_action.triggered.connect(lambda: self._show_detachable_panel("nodes"))
-        self.lighting_panel_action = QtGui.QAction("Open Lighting Panel", self)
+        self.lighting_panel_action = QtGui.QAction(self._icon("lights"), "Open Lighting Panel", self)
         self.lighting_panel_action.triggered.connect(lambda: self._show_detachable_panel("lighting"))
-        self.camera_panel_action = QtGui.QAction("Open Camera Panel", self)
+        self.camera_panel_action = QtGui.QAction(self._icon("cameras"), "Open Camera Panel", self)
         self.camera_panel_action.triggered.connect(lambda: self._show_detachable_panel("cameras"))
         self.render_frame_action = QtGui.QAction("Render Camera Still...", self)
         self.render_frame_action.triggered.connect(self._open_render_frame_dialog)
@@ -2195,21 +2231,39 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         return header
 
     def _make_command_bar(self) -> QtWidgets.QWidget:
-        bar = QtWidgets.QFrame()
+        host = QtWidgets.QFrame()
+        host.setObjectName("CommandBarHost")
+        host.setMinimumHeight(36)
+        self.command_bar_host = host
+
+        host_layout = QtWidgets.QHBoxLayout(host)
+        host_layout.setContentsMargins(0, 0, 0, 0)
+        host_layout.setSpacing(6)
+
+        bar = QtWidgets.QFrame(host)
         bar.setObjectName("CommandBar")
         bar.setMinimumHeight(36)
         self.command_bar = bar
 
-        layout = QtFlowLayout(bar, margin=0, hspacing=5, vspacing=4)
+        layout = QtWidgets.QHBoxLayout(bar)
         layout.setContentsMargins(10, 4, 10, 4)
+        layout.setSpacing(5)
+
+        self.model_pill = QtWidgets.QLabel("// Untitled Scene")
+        self.model_pill.setObjectName("ModelPill")
+        self.model_pill.setMinimumWidth(170)
+        self.model_pill.setMaximumWidth(260)
+        self.model_pill.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.model_pill.setToolTip("Active KMAX scene.")
+        layout.addWidget(self.model_pill, 0, QtCore.Qt.AlignVCenter)
 
         layout.addWidget(self._tool_button("Open Scene  Ctrl+O", self.open_scene_action, "open"))
+        layout.addWidget(self._tool_button("New Scene  Ctrl+N", self.new_scene_action, "new_scene"))
         layout.addWidget(self._tool_button("Save  Ctrl+S", self.save_scene_action, "save"))
         layout.addWidget(self._tool_button("Auto-Rig  R", self.autorig_action, "autorig"))
         layout.addWidget(self._tool_button("Character Builder", self.character_builder_action, "charbuilder"))
         layout.addWidget(self._tool_button("Modules", self.modules_action, "modular"))
         layout.addWidget(self._tool_button("Tex Dir", self.texture_dir_action, "texture"))
-        layout.addWidget(self._separator())
 
         import_button = self._menu_button("Import", "import", [
             self.import_obj_action,
@@ -2231,39 +2285,27 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         ])
         layout.addWidget(import_button)
         layout.addWidget(export_button)
-        layout.addWidget(self._separator())
 
-        self.model_pill = QtWidgets.QLabel("// Untitled Scene")
-        self.model_pill.setObjectName("ModelPill")
-        self.model_pill.setMinimumWidth(154)
-        self.model_pill.setAlignment(QtCore.Qt.AlignCenter)
-        self.model_pill.setToolTip("Active KMAX scene.")
-        layout.addWidget(self.model_pill)
-
+        layout.addStretch(1)
         layout.addWidget(self._tool_button("Settings  F2", self.settings_action, "settings", compact=True))
-        layout.addWidget(self._separator())
+        layout.addWidget(self._tool_button("Content", self.content_browser_action, "library", compact=True))
+        layout.addWidget(self._tool_button("Scene Information", self.scene_panel_action, "scene", compact=True))
+        layout.addWidget(self._tool_button("Properties", self.properties_panel_action, "props", compact=True))
+        layout.addWidget(self._tool_button("Sequence Editor", self.sequence_editor_action, "sequence", compact=True))
+        layout.addWidget(self._tool_button("Lighting", self.lighting_panel_action, "lights", compact=True))
+        layout.addWidget(self._tool_button("Cameras", self.camera_panel_action, "cameras", compact=True))
+        layout.addWidget(self._tool_button("Diagnostics  Ctrl+D", self.diag_action, "diag", compact=True))
+
         self.visual_profile_combo = QtWidgets.QComboBox()
         self.visual_profile_combo.setObjectName("VisualProfileCombo")
         self.visual_profile_combo.setToolTip("Apply a saved visual profile layout.")
         self.visual_profile_combo.setMinimumWidth(170)
         self._populate_visual_profile_combo()
         self.visual_profile_combo.currentIndexChanged.connect(self._on_visual_profile_selected)
-        layout.addWidget(self.visual_profile_combo)
-        layout.addWidget(self._tool_button("Content", self.content_browser_action, "library", compact=True))
-        layout.addWidget(self._tool_button("Scene", self.scene_panel_action, "props", compact=True))
-        layout.addWidget(self._tool_button("Props", self.properties_panel_action, "props", compact=True))
-        layout.addWidget(self._tool_button("Anims  Ctrl+A", self.anims_action, "anims", compact=True))
-        layout.addWidget(self._tool_button("Sequence", self.sequence_editor_action, "anims", compact=True))
-        layout.addWidget(self._tool_button("Lights", self.lighting_panel_action, "", compact=True))
-        layout.addWidget(self._tool_button("Cameras", self.camera_panel_action, "", compact=True))
-        layout.addWidget(self._tool_button("Diag  Ctrl+D", self.diag_action, "diag", compact=True))
-        self.command_bar_scroll = make_horizontal_overflow_area(
-            bar,
-            "CommandBarScroll",
-            height=max(42, bar.sizeHint().height()),
-            parent=self,
-        )
-        return self.command_bar_scroll
+        bar.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        host_layout.addWidget(bar, 1)
+        host_layout.addWidget(self.visual_profile_combo, 0, QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        return host
 
     def _populate_visual_profile_combo(self) -> None:
         combo = getattr(self, "visual_profile_combo", None)
@@ -2327,23 +2369,17 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             toolbar.setMaximumHeight(height)
             band.setFixedHeight(height)
 
-    def _sync_command_bar_scroll_height(self, content_height: int) -> None:
-        scroll = getattr(self, "command_bar_scroll", None)
-        if scroll is None:
-            return
-        scrollbar_height = scroll.style().pixelMetric(QtWidgets.QStyle.PM_ScrollBarExtent, None, scroll)
-        frame = scroll.frameWidth() * 2
-        height = max(42, int(content_height) + max(14, scrollbar_height) + frame + 2)
-        scroll.setMinimumHeight(height)
-        scroll.setMaximumHeight(height)
-
     def _sync_reserved_top_rows(self) -> None:
         command_bar = getattr(self, "command_bar", None)
         if command_bar is not None:
             height = self._height_for_wrapping_widget(command_bar, max(36, command_bar.sizeHint().height()))
             command_bar.setMinimumHeight(height)
             command_bar.setMaximumHeight(height)
-            self._sync_command_bar_scroll_height(height)
+            host = getattr(self, "command_bar_host", None)
+            if host is not None:
+                host_height = max(36, height, host.sizeHint().height())
+                host.setMinimumHeight(host_height)
+                host.setMaximumHeight(host_height)
         self._sync_viewport_toolbar_band()
         top_shell = getattr(self, "reserved_top_shell", None)
         if top_shell is not None:
@@ -2430,11 +2466,18 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         icon_name: str = "",
         accent: bool = False,
         compact: bool = False,
-    ) -> QtWidgets.QPushButton:
-        button = QtWidgets.QPushButton(text)
+    ) -> QtWidgets.QToolButton:
+        button = QtWidgets.QToolButton()
+        button.setObjectName("CommandStripButton")
+        button.setText(text)
         button.setProperty("_gr_full_text", text)
+        button.setProperty("_gr_ignore_layout_button_mode", True)
         if icon_name:
-            button.setIcon(self._icon(icon_name, 16))
+            button.setIcon(self._icon(icon_name, 18))
+        button.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)
+        button.setIconSize(QtCore.QSize(18, 18))
+        button.setFixedSize(30, 22)
+        button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         button.setProperty("accent", accent)
         button.setProperty("compact", compact)
         button.clicked.connect(action.trigger)
@@ -2451,10 +2494,17 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         actions: list[Optional[QtGui.QAction]],
     ) -> QtWidgets.QToolButton:
         button = QtWidgets.QToolButton()
-        button.setText(f"{text}  v")
+        button.setObjectName("CommandStripMenuButton")
+        button.setText(text)
         button.setProperty("_gr_full_text", text)
-        button.setIcon(self._icon(icon_name, 16))
+        button.setProperty("_gr_ignore_layout_button_mode", True)
+        button.setIcon(self._icon(icon_name, 18))
+        button.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)
+        button.setIconSize(QtCore.QSize(18, 18))
+        button.setFixedSize(34, 22)
+        button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         button.setPopupMode(QtWidgets.QToolButton.InstantPopup)
+        button.setToolTip(text)
         menu = QtWidgets.QMenu(button)
         for action in actions:
             self._add_menu_action(menu, action)
@@ -2745,7 +2795,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     def _default_dock_area_for_key(self, key: str):
         if key in {"content_browser", "scene", "nodes", "2das", "resources"}:
             return QtCore.Qt.LeftDockWidgetArea
-        if key == "output_log":
+        if key in {"output_log", "sequence_editor"}:
             return QtCore.Qt.BottomDockWidgetArea
         return QtCore.Qt.RightDockWidgetArea
 
@@ -2938,8 +2988,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.texture_tool_window = QtTextureToolWindow(self)
         self.texture_panel = self.texture_tool_window.texture_panel
         self.normal_map_panel = self.texture_tool_window.normal_map_panel
-        self.diagnostics_window = QtDiagnosticsWindow(self._get_model, self)
-        self.diagnostics_panel = self.diagnostics_window.panel
+        self.diagnostics_window = None
+        self.diagnostics_panel = QtDiagnosticsPanel(self._get_model, self)
         self.animations_panel = QtAnimationsPanel(self)
         self.animations_panel.animationSelected.connect(self._handle_animation_selected)
         self.animations_panel.animationActionRequested.connect(self._handle_animation_action)
@@ -3007,6 +3057,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             "adjust_pivot": (320, 420),
             "2das": (980, 640),
             "resources": (980, 640),
+            "sequence_editor": (1180, 720),
+            "diagnostics": (760, 560),
         }
         self.content_browser_dock = self._create_detachable_panel(
             "content_browser",
@@ -3044,6 +3096,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.adjust_pivot_dock = self._create_detachable_panel("adjust_pivot", "Adjust Pivot", self.adjust_pivot_panel, QtCore.Qt.RightDockWidgetArea)
         self._create_detachable_panel("2das", "2DA Browser", self.twoda_panel, QtCore.Qt.LeftDockWidgetArea)
         self._create_detachable_panel("resources", "Resource Browser", self.resource_panel, QtCore.Qt.LeftDockWidgetArea)
+        self.diagnostics_dock = self._create_detachable_panel(
+            "diagnostics",
+            "Diagnostics",
+            self.diagnostics_panel,
+            QtCore.Qt.RightDockWidgetArea,
+            scroll=False,
+        )
         for dock in (self.content_browser_dock, self.scene_dock, self.properties_dock):
             dock.show()
         self._stack_content_browser_under_scene()
@@ -3064,6 +3123,22 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.adjust_pivot_dock.show()
         self.viewport.setMinimumWidth(420)
         self.viewport.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self.sequence_editor_docked_window = SequenceEditorWindow(
+            self,
+            self.viewport,
+            self.app_root,
+            self,
+            docked=True,
+        )
+        self.sequence_editor_docked_window.setWindowFlags(QtCore.Qt.Widget)
+        self.sequence_editor_docked_window.menuBar().setVisible(False)
+        self.sequence_editor_dock = self._create_detachable_panel(
+            "sequence_editor",
+            "Sequence Editor",
+            self.sequence_editor_docked_window,
+            QtCore.Qt.BottomDockWidgetArea,
+            scroll=False,
+        )
         self.viewport_label = self.viewport.canvas
         self.skeleton_panel.nodeSelected.connect(self.viewport.set_selected_node)
         self.viewport.nodeSelected.connect(self.properties_panel.show_node)
@@ -4315,14 +4390,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         dialog.exec()
 
     def _show_diagnostics_panel(self):
-        window = getattr(self, "diagnostics_window", None)
-        if window is None:
+        panel = getattr(self, "diagnostics_panel", None)
+        if panel is None:
             self._not_migrated("Diagnostics")
             return
-        window.run_diagnostics(self._current_model)
-        window.show()
-        window.raise_()
-        window.activateWindow()
+        panel.run_diagnostics(self._current_model)
+        self._show_detachable_panel("diagnostics")
 
     def _configure_python_terminal_context(self) -> None:
         terminal = getattr(getattr(self, "log_panel", None), "terminal", None)
@@ -6612,24 +6685,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         dock = getattr(self, "sequence_editor_dock", None)
         editor = getattr(self, "sequence_editor_docked_window", None)
         if dock is None or editor is None:
-            dock = QtWidgets.QDockWidget("GhostRigger Sequence Editor", self)
-            dock.setObjectName("SequenceEditorDock")
-            dock.setAllowedAreas(
-                QtCore.Qt.LeftDockWidgetArea
-                | QtCore.Qt.RightDockWidgetArea
-                | QtCore.Qt.BottomDockWidgetArea
-            )
-            editor = SequenceEditorWindow(self, getattr(self, "viewport", None), self.app_root, dock, docked=True)
-            editor.setWindowFlags(QtCore.Qt.Widget)
-            editor.menuBar().setVisible(False)
-            dock.setWidget(editor)
-            self.addDockWidget(QtCore.Qt.BottomDockWidgetArea, dock)
-            self.sequence_editor_dock = dock
-            self.sequence_editor_docked_window = editor
-        else:
-            editor.set_docked_preview(True, getattr(self, "viewport", None))
-        dock.show()
-        dock.raise_()
+            self._not_migrated("Sequence Editor")
+            return
+        editor.set_docked_preview(True, getattr(self, "viewport", None))
+        self._show_workspace_dock("sequence_editor")
 
     def _reload_unreal_animator_window(self) -> None:
         global QtUnrealAnimatorWindow

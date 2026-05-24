@@ -1531,7 +1531,7 @@ def test_qt_overflow_helpers_scroll_dense_toolbar_rows() -> None:
     assert panel_scroll.verticalScrollBarPolicy() == QtCore.Qt.ScrollBarAsNeeded
 
 
-def test_main_window_command_bar_and_docks_are_scrollable() -> None:
+def test_main_window_command_bar_is_fixed_and_docks_are_scrollable() -> None:
     import inspect
 
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
@@ -1539,8 +1539,9 @@ def test_main_window_command_bar_and_docks_are_scrollable() -> None:
     command_source = inspect.getsource(QtGhostRiggerMainWindow._make_command_bar)
     dock_source = inspect.getsource(QtGhostRiggerMainWindow._create_detachable_panel)
 
-    assert "make_horizontal_overflow_area(" in command_source
-    assert '"CommandBarScroll"' in command_source
+    assert "CommandBarScroll" not in command_source
+    assert "host_layout.addWidget(bar, 1)" in command_source
+    assert "visual_profile_combo" in command_source
     assert "make_scrollable_panel(widget" in dock_source
     assert 'f"{key}DockScroll"' in dock_source
 
@@ -1565,7 +1566,7 @@ def test_viewport_and_character_builder_toolbars_are_scrollable() -> None:
 def test_main_window_moves_utility_tabs_to_tools_windows() -> None:
     import inspect
 
-    from src.gui.qt_lib.panels.qt_diagnostics_panel import QtDiagnosticsWindow
+    from src.gui.qt_lib.panels.qt_diagnostics_panel import QtDiagnosticsPanel, QtDiagnosticsWindow
     from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow
     from src.gui.qt_lib.windows.qt_blueprint_editor import QtBlueprintEditorWindow
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
@@ -1579,11 +1580,11 @@ def test_main_window_moves_utility_tabs_to_tools_windows() -> None:
     ):
         assert tab_expr not in source
     assert "self.texture_tool_window = QtTextureToolWindow(self)" in source
-    assert "self.diagnostics_window = QtDiagnosticsWindow(self._get_model, self)" in source
+    assert "self.diagnostics_panel = QtDiagnosticsPanel(self._get_model, self)" in source
+    assert "self.diagnostics_dock = self._create_detachable_panel(" in source
     assert "self.blueprint_window = QtBlueprintEditorWindow(self)" in source
     assert "self.texture_panel = self.texture_tool_window.texture_panel" in source
     assert "self.normal_map_panel = self.texture_tool_window.normal_map_panel" in source
-    assert "self.diagnostics_panel = self.diagnostics_window.panel" in source
     assert "self.blueprint_panel = self.blueprint_window.panel" in source
 
     actions_source = inspect.getsource(QtGhostRiggerMainWindow._build_actions)
@@ -1603,15 +1604,16 @@ def test_main_window_moves_utility_tabs_to_tools_windows() -> None:
     model_menu_block = menu_source.split("mdlops_menu = self.menuBar().addMenu", 1)[0]
     assert "self.diag_action" not in model_menu_block
 
-    for method_name in (
-        "_show_diagnostics_panel",
-        "_open_texture_tool_window",
-        "_open_blueprint_editor_window",
-    ):
+    for method_name in ("_open_texture_tool_window", "_open_blueprint_editor_window"):
         open_source = inspect.getsource(getattr(QtGhostRiggerMainWindow, method_name))
         assert "window.show()" in open_source
         assert "window.raise_()" in open_source
 
+    diagnostics_source = inspect.getsource(QtGhostRiggerMainWindow._show_diagnostics_panel)
+    assert "panel.run_diagnostics(self._current_model)" in diagnostics_source
+    assert 'self._show_detachable_panel("diagnostics")' in diagnostics_source
+
+    assert QtDiagnosticsPanel.__name__ == "QtDiagnosticsPanel"
     assert QtDiagnosticsWindow.__name__ == "QtDiagnosticsWindow"
     assert QtTextureToolWindow.__name__ == "QtTextureToolWindow"
     assert QtBlueprintEditorWindow.__name__ == "QtBlueprintEditorWindow"
@@ -1656,6 +1658,61 @@ def test_main_window_routes_library_and_animation_library_to_content_browser() -
     assert 'self._show_right_tab("Blueprint")' not in module_source
 
     assert QtContentBrowserPanel.__name__ == "QtContentBrowserPanel"
+
+
+def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    command_source = inspect.getsource(QtGhostRiggerMainWindow._make_command_bar)
+    button_source = inspect.getsource(QtGhostRiggerMainWindow._tool_button)
+    menu_source = inspect.getsource(QtGhostRiggerMainWindow._menu_button)
+
+    assert 'layout.addWidget(self._tool_button("Scene Information", self.scene_panel_action' in command_source
+    assert 'layout.addWidget(self._tool_button("Properties", self.properties_panel_action' in command_source
+    assert 'layout.addWidget(self._tool_button("Sequence Editor", self.sequence_editor_action' in command_source
+    assert 'layout.addWidget(self._tool_button("Lighting", self.lighting_panel_action' in command_source
+    assert 'layout.addWidget(self._tool_button("Cameras", self.camera_panel_action' in command_source
+    assert 'layout.addWidget(self._tool_button("Diagnostics  Ctrl+D", self.diag_action' in command_source
+    assert '"Anims  Ctrl+A"' not in command_source
+    assert command_source.index("layout.addStretch(1)") < command_source.index('"Scene Information"')
+    assert "button.setFixedSize(30, 22)" in button_source
+    assert "button.setIconSize(QtCore.QSize(18, 18))" in button_source
+    assert "button.setFixedSize(34, 22)" in menu_source
+
+
+def test_viewport_toolbar_flow_layout_centers_rows() -> None:
+    import inspect
+
+    from src.gui.qt_lib.assets.qt_theme import QtFlowLayout
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    flow_source = inspect.getsource(QtFlowLayout)
+    viewport_source = inspect.getsource(QtViewportWidget._build)
+
+    assert "horizontal_alignment" in flow_source
+    assert "QtCore.Qt.AlignHCenter" in viewport_source
+    assert "(max_width - current_width) // 2" in flow_source
+
+
+def test_sequence_and_diagnostics_use_detachable_dock_registry() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    sequence_source = inspect.getsource(QtGhostRiggerMainWindow._show_sequence_editor_dock)
+    default_area_source = inspect.getsource(QtGhostRiggerMainWindow._default_dock_area_for_key)
+
+    assert '"sequence_editor": (1180, 720)' in layout_source
+    assert '"diagnostics": (760, 560)' in layout_source
+    assert "self.sequence_editor_dock = self._create_detachable_panel(" in layout_source
+    assert '"sequence_editor",' in layout_source
+    assert "self.diagnostics_dock = self._create_detachable_panel(" in layout_source
+    assert '"diagnostics",' in layout_source
+    assert 'self._show_workspace_dock("sequence_editor")' in sequence_source
+    assert 'key in {"output_log", "sequence_editor"}' in default_area_source
 
 
 def test_main_window_bottom_area_is_resizable_splitter() -> None:

@@ -292,15 +292,52 @@ class QtStylesheetBuilder:
             color: {c('panel.headerText')};
             border-bottom: 1px solid {c('panel.border')};
         }}
-        QFrame#HeaderBar, QFrame#CommandBar {{
+        QFrame#HeaderBar, QFrame#CommandBar, QFrame#CommandBarHost {{
             background: transparent;
         }}
         QFrame#HeaderBar {{
             border-bottom: 1px solid {c('toolbar.border')};
         }}
-        QFrame#CommandBar {{
+        QFrame#CommandBarHost {{
             border-top: 1px solid {c('toolbar.border')};
             border-bottom: 1px solid {c('panel.border')};
+        }}
+        QFrame#CommandBar {{
+            border: 0;
+        }}
+        QFrame#CommandBar QToolButton#CommandStripButton,
+        QFrame#CommandBar QToolButton#CommandStripMenuButton {{
+            background: {c('viewportToolbar.background', c('button.background'))};
+            color: {c('button.text')};
+            border: 1px solid {c('viewportToolbar.border', c('panel.border'))};
+            border-radius: {min(radius, 2)}px;
+            padding: 1px;
+            min-height: {max(20, m('button.height', 20))}px;
+            max-height: {max(20, m('button.height', 20))}px;
+            min-width: {max(28, m('button.height', 20) + 8)}px;
+            max-width: {max(28, m('button.height', 20) + 8)}px;
+        }}
+        QFrame#CommandBar QToolButton#CommandStripMenuButton {{
+            min-width: {max(32, m('button.height', 20) + 12)}px;
+            max-width: {max(32, m('button.height', 20) + 12)}px;
+        }}
+        QFrame#CommandBar QToolButton#CommandStripButton:hover,
+        QFrame#CommandBar QToolButton#CommandStripMenuButton:hover {{
+            background: {c('button.hover')};
+            color: {c('accent.primary')};
+            border-color: {c('accent.primary')};
+        }}
+        QFrame#CommandBar QToolButton#CommandStripButton:pressed,
+        QFrame#CommandBar QToolButton#CommandStripMenuButton:pressed {{
+            background: {c('button.pressed')};
+        }}
+        QComboBox#VisualProfileCombo {{
+            background: {c('viewportToolbar.background', c('input.background'))};
+            color: {c('input.text')};
+            border: 1px solid {c('viewportToolbar.border', c('input.border'))};
+            border-radius: {min(radius, 2)}px;
+            min-height: {max(18, m('button.height', 18))}px;
+            padding: 1px 7px;
         }}
         QFrame#LogHeader, QFrame#PythonTerminalHeader {{
             background: {c('window.background')};
@@ -321,11 +358,10 @@ class QtStylesheetBuilder:
             font-size: {max(8, default_font.size - 1)}pt;
         }}
         QLabel#ModelPill {{
-            background: {c('window.background')};
-            color: {c('accent.primary')};
-            border: 1px solid {c('panel.border')};
-            border-radius: {radius}px;
-            padding: 4px 10px;
+            background: transparent;
+            color: {c('text.primary')};
+            border: 0;
+            padding: 2px 6px;
             font-weight: bold;
         }}
         QScrollBar:vertical, QScrollBar:horizontal {{

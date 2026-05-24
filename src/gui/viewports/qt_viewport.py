@@ -922,6 +922,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             margin=0,
             hspacing=2 if self._compact_controls else 3,
             vspacing=2,
+            horizontal_alignment=QtCore.Qt.AlignHCenter,
         )
         row.setContentsMargins(4 if self._compact_controls else 5, 3, 4 if self._compact_controls else 5, 3)
 

@@ -89,8 +89,11 @@ class LayoutApplier(QtCore.QObject):
     def _apply_toolbars(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
         main_toolbar = layout.toolbar("main")
         command_bar = getattr(window, "command_bar", None)
+        command_bar_host = getattr(window, "command_bar_host", None)
         if command_bar is not None:
             command_bar.setVisible(main_toolbar.visible)
+            if command_bar_host is not None:
+                command_bar_host.setVisible(main_toolbar.visible)
             command_bar.setMinimumHeight(main_toolbar.height)
             layout_obj = command_bar.layout()
             if layout_obj is not None and layout_obj.hasHeightForWidth():
