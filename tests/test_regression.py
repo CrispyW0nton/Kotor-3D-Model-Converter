@@ -1078,6 +1078,75 @@ def test_gpu_renderer_uploads_skin_node_local_palette() -> None:
     assert "self._skin_uploader.bone_index(_bmname)" not in source
 
 
+def test_hover_overlay_skin_vertices_match_gpu_palette_path(monkeypatch) -> None:
+    from src.core.qt_core.geometry.model_data import BoneWeight, VertexSkinData
+    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
+
+    root = SimpleNamespace(
+        name="Root",
+        parent=None,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    extra = SimpleNamespace(
+        name="ExtraNode",
+        parent=root,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    arm = SimpleNamespace(
+        name="Arm",
+        parent=extra,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    qbones = [
+        (1.0, 0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0, 0.0),
+    ]
+    tbones = [
+        (0.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0),
+        (5.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0),
+    ]
+    skin_node = SimpleNamespace(
+        name="SkinMesh",
+        parent=root,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        vertices=[(1.0, 0.0, 0.0)],
+        faces=[(0, 0, 0)],
+        is_skin=True,
+        is_dangly=False,
+        vertex_space=0,
+        bone_map=["Arm"],
+        qbone_list=qbones,
+        tbone_list=tbones,
+        skin_data=[VertexSkinData([BoneWeight(0, 1.0)])],
+    )
+    model = SimpleNamespace(
+        name="pmbam",
+        supermodel="S_Female02",
+        all_nodes=lambda: [root, extra, arm, skin_node],
+    )
+    pose = SimpleNamespace(nodes={
+        "arm": SimpleNamespace(
+            position=(0.0, 0.0, 0.0),
+            rotation=(0.0, 0.0, 0.0, 1.0),
+        )
+    })
+
+    monkeypatch.setenv("GHOSTRIGGER_SKIN_FORMULA", "G5_FULL_REF")
+    renderer = FrameRenderer(ArcBallCamera())
+    renderer.model = model
+    renderer._anim_pose = pose
+
+    assert renderer._get_world_verts_for_node(skin_node)[0] == pytest.approx((6.0, 0.0, 0.0))
+
+
 def test_cpu_skin_bind_pose_applies_node_local_transform() -> None:
     from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
 
