@@ -23,6 +23,7 @@ class ThemeLayoutSettings:
     user_layout_dir: str = ""
     panel_sizes: dict[str, int] = field(default_factory=dict)
     splitter_sizes: dict[str, list[int]] = field(default_factory=dict)
+    layout_overrides: dict[str, dict] = field(default_factory=dict)
 
     @classmethod
     def from_settings(cls, settings: dict) -> "ThemeLayoutSettings":
@@ -43,6 +44,7 @@ class ThemeLayoutSettings:
             user_layout_dir=str(raw.get("user_layout_dir") or ""),
             panel_sizes=dict(raw.get("panel_sizes") or {}),
             splitter_sizes={key: list(value) for key, value in dict(raw.get("splitter_sizes") or {}).items()},
+            layout_overrides=dict(raw.get("layout_overrides") or {}),
         )
 
     def to_dict(self) -> dict:

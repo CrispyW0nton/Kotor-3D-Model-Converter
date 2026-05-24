@@ -418,8 +418,11 @@ def test_main_window_exposes_visual_profile_dropdown() -> None:
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
     command_bar_source = inspect.getsource(QtGhostRiggerMainWindow._make_command_bar)
+    combo_source = inspect.getsource(QtGhostRiggerMainWindow._populate_visual_profile_combo)
     assert "self.visual_profile_combo = QtWidgets.QComboBox()" in command_bar_source
     assert "_populate_visual_profile_combo" in command_bar_source
+    assert 'layout.id == "default"' in combo_source
+    assert "continue" in combo_source
     assert "_on_visual_profile_selected" in inspect.getsource(QtGhostRiggerMainWindow)
 
 

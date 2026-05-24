@@ -1737,6 +1737,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                     palette_color = self.palette().window().color()
                     panel._background = palette_color
                 panel.update()
+        for widget in self.findChildren(QtWidgets.QWidget):
+            hook = getattr(widget, "apply_native_theme", None)
+            if callable(hook):
+                hook()
 
     def _on_theme_changed(self, theme) -> None:
         update_legacy_palette(theme)
@@ -1937,6 +1941,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.anims_action = QtGui.QAction(self._icon("anims"), "Animation Library", self)
         self.anims_action.setShortcut("Ctrl+A")
         self.anims_action.triggered.connect(lambda: self._show_content_browser("Animation"))
+        self.animation_browser_dock_action = QtGui.QAction(self._icon("anims"), "Animation Browser", self)
+        self._configure_dock_toggle_action(
+            self.animation_browser_dock_action,
+            "animations",
+            lambda: self._show_workspace_dock("animations"),
+        )
         self.retarget_workbench_action = QtGui.QAction(self._icon("anims"), "Animation Retargeting Workbench...", self)
         self.retarget_workbench_action.setShortcut("Ctrl+Shift+A")
         self.retarget_workbench_action.triggered.connect(self._open_animation_retarget_window)
@@ -2283,13 +2293,15 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.model_pill.setToolTip("Active KMAX scene.")
         layout.addWidget(self.model_pill, 0, QtCore.Qt.AlignVCenter)
 
-        layout.addWidget(self._tool_button("Open Scene  Ctrl+O", self.open_scene_action, "open"))
         layout.addWidget(self._tool_button("New Scene  Ctrl+N", self.new_scene_action, "new_scene"))
+        layout.addWidget(self._tool_button("Open Scene  Ctrl+O", self.open_scene_action, "open"))
         layout.addWidget(self._tool_button("Save  Ctrl+S", self.save_scene_action, "save"))
         layout.addWidget(self._tool_button("Auto-Rig  R", self.autorig_action, "autorig"))
         layout.addWidget(self._tool_button("Character Builder", self.character_builder_action, "charbuilder"))
         layout.addWidget(self._tool_button("Modules", self.modules_action, "modular"))
+        layout.addWidget(self._tool_button("Animation Browser", self.animation_browser_dock_action, "anims"))
         layout.addWidget(self._tool_button("Tex Dir", self.texture_dir_action, "texture"))
+        layout.addWidget(self._tool_button("Settings  F2", self.settings_action, "settings", compact=True))
 
         import_button = self._menu_button("Import", "import", [
             self.import_obj_action,
@@ -2313,7 +2325,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(export_button)
 
         layout.addStretch(1)
-        layout.addWidget(self._tool_button("Settings  F2", self.settings_action, "settings", compact=True))
         layout.addWidget(self._tool_button("Content", self.content_browser_action, "library", compact=True))
         layout.addWidget(self._tool_button("Scene Information", self.scene_panel_action, "scene", compact=True))
         layout.addWidget(self._tool_button("Properties", self.properties_panel_action, "props", compact=True))
@@ -2346,6 +2357,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         try:
             combo.clear()
             for layout in self.layout_manager.available_layouts():
+                if layout.id == "default":
+                    continue
                 combo.addItem(layout.name, layout.id)
             selected = self.layout_manager.settings.selected_layout
             index = combo.findData(selected)
@@ -2629,6 +2642,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._sync_dock_toggle_action(key, True)
         dock.setFloating(True)
         self._promote_detached_panel_window(key, dock)
+        self._persist_selected_layout_dock_state()
 
     def _show_workspace_dock(self, key: str) -> None:
         dock = getattr(self, "_detachable_panels", {}).get(key)
@@ -2646,6 +2660,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             dock.show()
             dock.raise_()
             self._sync_dock_toggle_action(key, True)
+            self._persist_selected_layout_dock_state()
             return
         if dock.isFloating():
             dock.setFloating(False)
@@ -2653,6 +2668,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._tab_workspace_dock_with_visible_peer(key, dock)
         dock.raise_()
         self._sync_dock_toggle_action(key, True)
+        self._persist_selected_layout_dock_state()
 
     def _tab_workspace_dock_with_visible_peer(self, key: str, dock: QtWidgets.QDockWidget) -> None:
         if key in {"content_browser", "scene"}:
@@ -2983,6 +2999,91 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             "height": max(120, height),
             "floating": bool(dock.isFloating() or host is not None),
         }
+        try:
+            save_settings(self.settings_path, self.settings_data)
+        except Exception:
+            pass
+        self._persist_selected_layout_dock_state()
+
+    def _profile_panel_id_for_dock_key(self, key: str) -> str:
+        return {
+            "content_browser": "contentBrowser",
+            "scene": "scene",
+            "properties": "properties",
+            "animations": "animationLibrary",
+            "nodes": "nodes",
+            "lighting": "lighting",
+            "cameras": "cameras",
+            "module_meshes": "moduleMeshes",
+            "mesh_tools": "meshTools",
+            "adjust_pivot": "adjustPivot",
+            "2das": "2das",
+            "resources": "resources",
+            "diagnostics": "diagnostics",
+            "sequence_editor": "sequenceEditor",
+        }.get(key, key)
+
+    def _dock_area_name(self, area) -> str:
+        if area == QtCore.Qt.RightDockWidgetArea:
+            return "right"
+        if area == QtCore.Qt.BottomDockWidgetArea:
+            return "bottom"
+        if area == QtCore.Qt.TopDockWidgetArea:
+            return "top"
+        return "left"
+
+    def _persist_selected_layout_dock_state(self) -> None:
+        if bool(getattr(self, "_applying_ghost_layout", False)):
+            return
+        layout_id = str(getattr(self.layout_manager.settings, "selected_layout", "") or "default")
+        docks = getattr(self, "_detachable_panels", {})
+        if not isinstance(docks, dict):
+            return
+        panels: dict[str, dict] = {}
+        for key, dock in docks.items():
+            if not _qt_object_alive(dock):
+                continue
+            panel_id = self._profile_panel_id_for_dock_key(key)
+            area_name = self._dock_area_name(self.dockWidgetArea(dock))
+            panels[panel_id] = {
+                "visible": bool(dock.isVisible()),
+                "region": area_name,
+                "min_width": max(120, dock.minimumWidth()),
+                "preferred_width": max(120, dock.width()),
+                "min_height": max(80, dock.minimumHeight()),
+                "preferred_height": max(120, dock.height()),
+            }
+
+        visited: set[str] = set()
+        groups: list[dict] = []
+        for key, dock in docks.items():
+            if key in visited or not _qt_object_alive(dock) or not dock.isVisible() or dock.isFloating():
+                continue
+            tabbed = [
+                other_key
+                for other_key, other_dock in docks.items()
+                if other_key != key
+                and _qt_object_alive(other_dock)
+                and other_dock in self.tabifiedDockWidgets(dock)
+                and other_dock.isVisible()
+            ]
+            group_docks = [key, *tabbed]
+            visited.update(group_docks)
+            groups.append(
+                {
+                    "id": f"user_{self._dock_area_name(self.dockWidgetArea(dock))}_{len(groups) + 1}",
+                    "area": self._dock_area_name(self.dockWidgetArea(dock)),
+                    "mode": "tabbed" if len(group_docks) > 1 else "tabbed",
+                    "visible": True,
+                    "active": key,
+                    "docks": group_docks,
+                }
+            )
+
+        theme_layout = self.settings_data.setdefault("theme_layout", {})
+        overrides = theme_layout.setdefault("layout_overrides", {})
+        overrides[layout_id] = {"panels": panels, "dock_groups": groups}
+        self.layout_manager.settings.layout_overrides = dict(overrides)
         try:
             save_settings(self.settings_path, self.settings_data)
         except Exception:

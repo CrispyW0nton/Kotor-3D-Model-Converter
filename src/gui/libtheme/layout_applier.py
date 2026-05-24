@@ -31,6 +31,7 @@ class LayoutApplier(QtCore.QObject):
     def apply_layout(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
         start = time.perf_counter()
         window.setUpdatesEnabled(False)
+        setattr(window, "_applying_ghost_layout", True)
         try:
             if not window.isMaximized():
                 window.resize(layout.main_width, layout.main_height)
@@ -45,6 +46,7 @@ class LayoutApplier(QtCore.QObject):
             if callable(sync_top_rows):
                 sync_top_rows()
         finally:
+            setattr(window, "_applying_ghost_layout", False)
             window.setUpdatesEnabled(True)
             window.update()
         self.layoutChanged.emit(layout)
@@ -159,6 +161,8 @@ class LayoutApplier(QtCore.QObject):
                 ("adjust_pivot", "adjustPivot"),
                 ("2das", "2das"),
                 ("resources", "resources"),
+                ("diagnostics", "diagnostics"),
+                ("sequence_editor", "sequenceEditor"),
             ):
                 dock = docks.get(key)
                 if dock is not None:

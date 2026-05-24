@@ -59,7 +59,22 @@ def test_packaged_layouts_load_and_affect_metrics() -> None:
     assert layouts["wide"].viewport.preferred_width > layouts["compact"].viewport.preferred_width
     assert layouts["default"].dock_groups
     assert layouts["profile_lighting"].dock_groups[1].docks == ["lighting", "cameras", "properties"]
+    assert layouts["profile_animation"].name == "Animation"
+    assert layouts["profile_mesh_editing"].name == "Mesh Editing"
+    assert layouts["profile_lighting"].name == "Lighting"
+    assert layouts["profile_cinegraphics"].name == "Cinegraphics"
+    assert layouts["profile_clean"].name == "Default"
+    assert all("Visual Profile" not in layouts[layout_id].name for layout_id in (
+        "profile_animation",
+        "profile_mesh_editing",
+        "profile_lighting",
+        "profile_cinegraphics",
+        "profile_clean",
+    ))
     assert layouts["profile_clean"].panel("contentBrowser").visible is False
+    assert layouts["profile_clean"].panel("outputLog").visible is True
+    assert layouts["profile_clean"].panel("pythonTerminal").visible is True
+    assert layouts["profile_clean"].panel("outputLog").preferred_height < layouts["default"].panel("outputLog").preferred_height
     assert layouts["profile_mesh_editing"].panel("nodes").visible is False
 
 
@@ -157,6 +172,48 @@ def test_layout_apply_hides_optional_detachable_docks_not_declared_by_layout() -
         assert window._detachable_panels["resources"].isHidden()  # type: ignore[attr-defined]
         window.deleteLater()
     app.processEvents()
+
+
+def test_layout_manager_merges_user_dock_profile_overrides() -> None:
+    manager = LayoutManager(
+        ROOT,
+        {
+            "theme_layout": {
+                "selected_layout": "profile_clean",
+                "layout_overrides": {
+                    "profile_clean": {
+                        "panels": {
+                            "nodes": {
+                                "visible": True,
+                                "region": "left",
+                                "min_width": 260,
+                                "preferred_width": 420,
+                                "min_height": 160,
+                                "preferred_height": 520,
+                            }
+                        },
+                        "dock_groups": [
+                            {
+                                "id": "user_left_1",
+                                "area": "left",
+                                "mode": "tabbed",
+                                "visible": True,
+                                "active": "nodes",
+                                "docks": ["nodes", "2das"],
+                            }
+                        ],
+                    }
+                },
+            }
+        },
+    )
+
+    layout = manager.get_layout("profile_clean")
+
+    assert layout.panel("contentBrowser").visible is False
+    assert layout.panel("nodes").visible is True
+    assert layout.panel("nodes").preferred_width == 420
+    assert [group.docks for group in layout.dock_groups] == [["nodes", "2das"]]
 
 
 def test_stylesheet_builds_from_matrix_theme() -> None:

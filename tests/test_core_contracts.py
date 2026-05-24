@@ -1652,6 +1652,7 @@ def test_main_window_routes_library_and_animation_library_to_content_browser() -
     assert "self.content_browser_action" in actions_source
     assert "self.scene_panel_action" in actions_source
     assert "self.properties_panel_action" in actions_source
+    assert "self.animation_browser_dock_action" in actions_source
 
     module_source = inspect.getsource(QtGhostRiggerMainWindow._handle_module_action)
     assert 'self._open_blueprint_editor_window()' in module_source
@@ -1674,6 +1675,7 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
     assert 'layout.addWidget(self._tool_button("Scene Information", self.scene_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Properties", self.properties_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Sequence Editor", self.sequence_editor_action' in command_source
+    assert 'layout.addWidget(self._tool_button("Animation Browser", self.animation_browser_dock_action' in command_source
     assert 'layout.addWidget(self._tool_button("Nodes", self.nodes_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Lighting", self.lighting_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Cameras", self.camera_panel_action' in command_source
@@ -1682,12 +1684,13 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
     assert 'layout.addWidget(self._tool_button("2DA Browser", self.twoda_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Resource Browser", self.resources_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Diagnostics  Ctrl+D", self.diag_action' in command_source
-    assert actions_source.count("self._configure_dock_toggle_action(") >= 12
+    assert actions_source.count("self._configure_dock_toggle_action(") >= 13
     for action_name in (
         "content_browser_action",
         "scene_panel_action",
         "properties_panel_action",
         "sequence_editor_action",
+        "animation_browser_dock_action",
         "nodes_panel_action",
         "lighting_panel_action",
         "camera_panel_action",
@@ -1706,6 +1709,9 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
     assert "self._tab_workspace_dock_with_visible_peer(key, dock)" in workspace_source
     assert "self.tabifyDockWidget(anchor, dock)" in tab_source
     assert '"Anims  Ctrl+A"' not in command_source
+    assert command_source.index('"New Scene  Ctrl+N"') < command_source.index('"Open Scene  Ctrl+O"')
+    assert command_source.index('"Settings  F2"') < command_source.index("layout.addStretch(1)")
+    assert command_source.index('"Animation Browser"') < command_source.index("layout.addStretch(1)")
     assert command_source.index("layout.addStretch(1)") < command_source.index('"Scene Information"')
     assert "button.setFixedSize(30, 22)" in button_source
     assert "button.setIconSize(QtCore.QSize(18, 18))" in button_source

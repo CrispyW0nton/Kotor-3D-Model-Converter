@@ -1,4 +1,4 @@
-<layout id="profile_clean" name="Visual Profile: Default No Toolboxes" version="1">
+<layout id="profile_clean" name="Default" version="1">
     <mainWindow width="1500" height="880" maximized="false"/>
     <toolbars>
         <toolbar id="main" visible="true" buttonMode="iconText" iconSize="18" height="40"/>
@@ -19,8 +19,8 @@
         <panel id="adjustPivot" region="right" visible="false" minWidth="260" preferredWidth="320"/>
         <panel id="2das" region="left" visible="false" minWidth="420" preferredWidth="720"/>
         <panel id="resources" region="left" visible="false" minWidth="420" preferredWidth="720"/>
-        <panel id="outputLog" region="bottom" visible="false" minHeight="100" preferredHeight="140"/>
-        <panel id="pythonTerminal" region="bottom" visible="false" minHeight="100" preferredHeight="140"/>
+        <panel id="outputLog" region="bottom" visible="true" minHeight="96" preferredHeight="134"/>
+        <panel id="pythonTerminal" region="bottom" visible="true" minHeight="96" preferredHeight="134"/>
     </panels>
     <dockLayout/>
     <viewport>

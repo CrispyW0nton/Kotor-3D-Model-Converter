@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
 from pathlib import Path
 
 from PySide6 import QtCore, QtWidgets
 
 from .layout_applier import LayoutApplier
 from .layout_loader import LayoutLoader
-from .layout_model import LayoutDefinition
+from .layout_model import DockGroupLayout, LayoutDefinition, PanelLayout
 from .theme_settings import ThemeLayoutSettings, user_config_root
 
 log = logging.getLogger(__name__)
@@ -56,7 +57,8 @@ class LayoutManager(QtCore.QObject):
 
     def get_layout(self, layout_id: str | None = None) -> LayoutDefinition:
         requested = layout_id or self.settings.selected_layout
-        return self.layouts.get(requested) or self.layouts.get("default") or next(iter(self.layouts.values()))
+        layout = self.layouts.get(requested) or self.layouts.get("default") or next(iter(self.layouts.values()))
+        return self._layout_with_user_override(layout)
 
     def apply_current_layout(self, window: QtWidgets.QMainWindow) -> LayoutDefinition:
         layout = self.get_layout()
@@ -82,3 +84,43 @@ class LayoutManager(QtCore.QObject):
 
     def to_settings(self) -> dict:
         return self.settings.to_dict()
+
+    def _layout_with_user_override(self, layout: LayoutDefinition) -> LayoutDefinition:
+        override = dict(self.settings.layout_overrides.get(layout.id) or {})
+        if not override:
+            return layout
+        merged = deepcopy(layout)
+        for panel_id, panel_data in dict(override.get("panels") or {}).items():
+            if not isinstance(panel_data, dict):
+                continue
+            base = merged.panels.get(panel_id) or PanelLayout(id=panel_id)
+            merged.panels[panel_id] = PanelLayout(
+                id=panel_id,
+                region=str(panel_data.get("region") or base.region),
+                visible=bool(panel_data.get("visible", base.visible)),
+                min_width=int(panel_data.get("min_width") or base.min_width),
+                preferred_width=int(panel_data.get("preferred_width") or base.preferred_width),
+                min_height=int(panel_data.get("min_height") or base.min_height),
+                preferred_height=int(panel_data.get("preferred_height") or base.preferred_height),
+                collapsed=bool(panel_data.get("collapsed", base.collapsed)),
+            )
+        dock_groups = []
+        for group_data in list(override.get("dock_groups") or []):
+            if not isinstance(group_data, dict):
+                continue
+            docks = [str(dock) for dock in group_data.get("docks") or [] if str(dock)]
+            if not docks:
+                continue
+            dock_groups.append(
+                DockGroupLayout(
+                    id=str(group_data.get("id") or "userDockGroup"),
+                    area=str(group_data.get("area") or "left"),
+                    mode=str(group_data.get("mode") or "tabbed"),
+                    visible=bool(group_data.get("visible", True)),
+                    active=str(group_data.get("active") or docks[0]),
+                    docks=docks,
+                )
+            )
+        if dock_groups:
+            merged.dock_groups = dock_groups
+        return merged

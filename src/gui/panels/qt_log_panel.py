@@ -13,7 +13,7 @@ from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from src.gui.qt_lib.assets.qt_theme import C
+from src.gui.qt_lib.assets.qt_theme import C, icon
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +34,27 @@ class _PythonInput(QtWidgets.QLineEdit):
             event.accept()
             return
         super().keyPressEvent(event)
+
+
+def _make_log_tool_button(
+    icon_name: str,
+    tooltip: str,
+    *,
+    object_name: str = "LogPanelIconButton",
+) -> QtWidgets.QToolButton:
+    button = QtWidgets.QToolButton()
+    button.setObjectName(object_name)
+    button.setAutoRaise(False)
+    button.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)
+    button.setIcon(icon(icon_name, 18))
+    button.setIconSize(QtCore.QSize(18, 18))
+    button.setFixedSize(34, 24)
+    button.setToolTip(tooltip)
+    button.setAccessibleName(tooltip)
+    button.setProperty("compact", True)
+    button.setProperty("_gr_ignore_layout_button_mode", True)
+    button.setProperty("_gr_full_text", tooltip)
+    return button
 
 
 class QtPythonTerminalPanel(QtWidgets.QWidget):
@@ -62,6 +83,7 @@ class QtPythonTerminalPanel(QtWidgets.QWidget):
 
         header = QtWidgets.QFrame()
         header.setObjectName("PythonTerminalHeader")
+        header.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
         row = QtWidgets.QHBoxLayout(header)
         row.setContentsMargins(4, 2, 4, 2)
         row.setSpacing(4)
@@ -73,17 +95,24 @@ class QtPythonTerminalPanel(QtWidgets.QWidget):
 
         self.output = QtWidgets.QPlainTextEdit()
         self.output.setReadOnly(True)
-        self.output.setMinimumHeight(118)
-        self.output.setMaximumHeight(220)
+        self.output.setMinimumHeight(0)
+        self.output.setMaximumHeight(180)
+        self.output.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Ignored)
         self.output.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
         self.output.setObjectName("PythonTerminalOutput")
 
-        input_row = QtWidgets.QHBoxLayout()
+        self.input_row_host = QtWidgets.QFrame()
+        self.input_row_host.setObjectName("PythonTerminalInputRow")
+        self.input_row_host.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        input_row = QtWidgets.QHBoxLayout(self.input_row_host)
         input_row.setContentsMargins(0, 2, 0, 0)
         input_row.setSpacing(4)
         prompt = QtWidgets.QLabel(">>>")
         prompt.setStyleSheet(f"color:{C['accent2']}; font-family:monospace;")
         self.input = _PythonInput()
+        self.input.setObjectName("PythonCommandInput")
+        self.input.setMinimumHeight(24)
+        self.input.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
         self.input.setPlaceholderText("Enter Python and press Return")
         self.input.returnPressed.connect(self._execute_input)
         self.input.historyPrevious.connect(self._history_previous)
@@ -91,27 +120,61 @@ class QtPythonTerminalPanel(QtWidgets.QWidget):
         input_row.addWidget(prompt)
         input_row.addWidget(self.input, 1)
 
-        footer = QtWidgets.QFrame()
-        footer.setObjectName("PythonTerminalFooter")
-        footer_row = QtWidgets.QHBoxLayout(footer)
-        footer_row.setContentsMargins(4, 2, 4, 2)
-        footer_row.setSpacing(4)
-        footer_row.addStretch(1)
-
-        self.run_button = QtWidgets.QPushButton("Run")
-        self.copy_button = QtWidgets.QPushButton("Copy")
-        self.clear_button = QtWidgets.QPushButton("Clear")
+        self.run_button = _make_log_tool_button(
+            "python_run",
+            "Run Python command",
+            object_name="PythonTerminalIconButton",
+        )
+        self.copy_button = _make_log_tool_button(
+            "python_copy",
+            "Copy Python output",
+            object_name="PythonTerminalIconButton",
+        )
+        self.clear_button = _make_log_tool_button(
+            "python_clear",
+            "Clear Python output",
+            object_name="PythonTerminalIconButton",
+        )
         for button in (self.run_button, self.copy_button, self.clear_button):
-            button.setProperty("compact", True)
-            footer_row.addWidget(button)
+            input_row.addWidget(button)
         self.run_button.clicked.connect(self._execute_input)
         self.copy_button.clicked.connect(self._copy_to_clipboard)
         self.clear_button.clicked.connect(self.clear)
 
         root.addWidget(header)
         root.addWidget(self.output, 1)
-        root.addLayout(input_row)
-        root.addWidget(footer)
+        root.addWidget(self.input_row_host)
+        self.apply_native_theme()
+
+    def apply_ghost_theme(self, theme) -> None:
+        if theme is not None and getattr(theme, "is_native", lambda: False)():
+            self.apply_native_theme()
+            return
+        background = theme.color("panel.backgroundAlt", theme.color("input.background"))
+        text = theme.color("input.text")
+        border = theme.color("input.focusBorder", theme.color("input.border"))
+        radius = theme.metric("border.radius", 3)
+        self.input.setStyleSheet(
+            "QLineEdit#PythonCommandInput { "
+            f"background: {background}; color: {text}; "
+            f"border: 1px solid {border}; border-radius: {radius}px; "
+            "padding: 4px 6px; "
+            "}"
+        )
+
+    def apply_native_theme(self) -> None:
+        palette = self.input.palette()
+        base = palette.color(QtGui.QPalette.Base)
+        lighter = base.lighter(132 if base.lightness() < 150 else 108)
+        text = palette.color(QtGui.QPalette.Text)
+        border = palette.color(QtGui.QPalette.Highlight)
+        self.input.setStyleSheet(
+            "QLineEdit#PythonCommandInput { "
+            f"background: {lighter.name()}; color: {text.name()}; "
+            f"border: 1px solid {border.name()}; border-radius: 3px; "
+            "padding: 4px 6px; "
+            "}"
+        )
 
     def set_context(self, **values: object) -> None:
         self._namespace.update(values)
@@ -207,6 +270,7 @@ class QtLogPanel(QtWidgets.QWidget):
 
         header = QtWidgets.QFrame()
         header.setObjectName("LogHeader")
+        header.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
         row = QtWidgets.QHBoxLayout(header)
         row.setContentsMargins(4, 2, 4, 2)
         row.setSpacing(4)
@@ -216,31 +280,32 @@ class QtLogPanel(QtWidgets.QWidget):
         row.addWidget(self.title_label)
         row.addStretch(1)
 
-        self.save_button = QtWidgets.QPushButton("Save")
-        self.copy_button = QtWidgets.QPushButton("Copy")
-        self.clear_button = QtWidgets.QPushButton("Clear")
+        self.save_button = _make_log_tool_button("log_save", "Save output log")
+        self.copy_button = _make_log_tool_button("log_copy", "Copy output log")
+        self.clear_button = _make_log_tool_button("log_clear", "Clear output log")
         self.save_button.clicked.connect(self._save_log)
         self.copy_button.clicked.connect(self._copy_to_clipboard)
         self.clear_button.clicked.connect(self.clear)
 
         self.text = QtWidgets.QTextEdit()
         self.text.setReadOnly(True)
-        self.text.setMinimumHeight(118)
-        self.text.setMaximumHeight(220)
+        self.text.setMinimumHeight(0)
+        self.text.setMaximumHeight(180)
+        self.text.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Ignored)
 
-        footer = QtWidgets.QFrame()
-        footer.setObjectName("LogFooter")
-        footer_row = QtWidgets.QHBoxLayout(footer)
+        self.log_footer = QtWidgets.QFrame()
+        self.log_footer.setObjectName("LogFooter")
+        self.log_footer.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        footer_row = QtWidgets.QHBoxLayout(self.log_footer)
         footer_row.setContentsMargins(4, 2, 4, 2)
         footer_row.setSpacing(4)
         footer_row.addStretch(1)
         for button in (self.save_button, self.copy_button, self.clear_button):
-            button.setProperty("compact", True)
             footer_row.addWidget(button)
 
         log_layout.addWidget(header)
         log_layout.addWidget(self.text, 1)
-        log_layout.addWidget(footer)
+        log_layout.addWidget(self.log_footer)
 
         self.terminal = QtPythonTerminalPanel(self)
         self.terminal.set_context(log_panel=self, parent_widget=self.parentWidget())
@@ -253,6 +318,12 @@ class QtLogPanel(QtWidgets.QWidget):
         self.content_splitter.setSizes([900, 520])
 
         root.addWidget(self.content_splitter)
+
+    def apply_ghost_theme(self, theme) -> None:
+        self.terminal.apply_ghost_theme(theme)
+
+    def apply_native_theme(self) -> None:
+        self.terminal.apply_native_theme()
 
     def log(self, msg: str, level: str = "info") -> None:
         stamp = QtCore.QTime.currentTime().toString("HH:mm:ss")

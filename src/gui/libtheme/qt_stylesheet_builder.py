@@ -270,6 +270,31 @@ class QtStylesheetBuilder:
             min-height: {max(16, m('button.height', 16))}px;
             min-width: {m('button.minWidth', 64)}px;
         }}
+        QToolButton#LogPanelIconButton,
+        QToolButton#PythonTerminalIconButton {{
+            background: {c('viewportToolbar.background', c('button.background'))};
+            border: 1px solid {c('viewportToolbar.border', c('panel.border'))};
+            border-radius: {min(radius, 2)}px;
+            padding: 1px;
+            min-width: 34px;
+            max-width: 34px;
+            min-height: 24px;
+            max-height: 24px;
+        }}
+        QToolButton#LogPanelIconButton:hover,
+        QToolButton#PythonTerminalIconButton:hover {{
+            background: {c('button.hover')};
+            border-color: {c('accent.primary')};
+        }}
+        QToolButton#LogPanelIconButton:pressed,
+        QToolButton#PythonTerminalIconButton:pressed {{
+            background: {c('button.pressed')};
+        }}
+        QLineEdit#PythonCommandInput {{
+            background: {panel_alt};
+            color: {c('input.text')};
+            border-color: {c('input.focusBorder', c('input.border'))};
+        }}
         QToolButton#CollapsibleGroupToggle {{
             min-width: 16px;
             max-width: 16px;
