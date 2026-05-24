@@ -1,0 +1,27 @@
+{
+  "window_visible": true,
+  "dock_keys": [
+    "animations",
+    "information",
+    "mapping",
+    "overrides",
+    "transfer"
+  ],
+  "visible_docks": {
+    "animations": true,
+    "mapping": true,
+    "information": true,
+    "transfer": true,
+    "overrides": true
+  },
+  "source_toolbar_visible": false,
+  "target_toolbar_visible": false,
+  "source_typein_visible": false,
+  "target_typein_visible": false,
+  "source_viewcube_visible": false,
+  "target_viewcube_visible": false,
+  "central_size": [
+    812,
+    887
+  ]
+}

@@ -20,8 +20,11 @@ from src.gui.qt_lib.rendering.qt_gpu_renderer import (
     GpuRenderer,
     clear_prebuilt_static_gpu_mesh_data,
     clear_prebuilt_static_gpu_model_data,
+    create_viewport_renderer,
 )
+from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.viewports.qt_uv_viewer import QtUVViewerWindow
+from src.gui.qt_lib.viewports.viewport_host import RendererSurfaceHost
 from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
 from src.gui.qt_lib.rendering.viewport_navigation import (
     DEFAULT_VIEWPORT_NAVIGATION_PROFILE,
@@ -34,6 +37,18 @@ from src.gui.qt_lib.gizmo.transform_controller import TransformController
 from src.gui.qt_lib.gizmo.transform_gizmo import TransformGizmo
 from src.gui.qt_lib.gizmo.transform_math import multiply_quaternions, ray_from_mouse, rotate_vector
 from src.gui.qt_lib.viewports.qt_transform_typein_bar import QtTransformTypeInBar
+from src.gui.qt_lib.viewports.viewcube import (
+    VIEWCUBE_MARGIN,
+    VIEWCUBE_MIN_CANVAS_H,
+    VIEWCUBE_MIN_CANVAS_W,
+    ViewCubeWidget,
+)
+from src.gui.qt_lib.viewports.viewcube_math import (
+    ViewAction,
+    action_from_view_name,
+    target_for_action,
+    view_orientation_quaternion,
+)
 from src.gui.qt_lib.panels.axis_mode_control import AxisModeControl
 from src.gui.camera.camera_controller import CameraController
 from src.gui.camera.camera_gizmo_renderer import CameraGizmoRenderer
@@ -502,6 +517,9 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     DEFAULT_THUMBNAIL_ENABLED = False
     DEFAULT_COMPACT_CONTROLS = False
+    DEFAULT_VIEWPORT_TOOLBAR_VISIBLE = True
+    DEFAULT_VIEWCUBE_VISIBLE = True
+    DEFAULT_TRANSFORM_TYPEIN_VISIBLE = True
     VIEWPORT_ROLE = "base"
 
     modelChanged = QtCore.Signal(object)
@@ -533,6 +551,9 @@ class QtViewportWidget(QtWidgets.QWidget):
             compact_controls = self.DEFAULT_COMPACT_CONTROLS
         self.viewport_role = self.VIEWPORT_ROLE
         self._compact_controls = bool(compact_controls)
+        self._viewport_toolbar_visible = bool(self.DEFAULT_VIEWPORT_TOOLBAR_VISIBLE)
+        self._viewcube_visible = bool(self.DEFAULT_VIEWCUBE_VISIBLE)
+        self._transform_typein_visible = bool(self.DEFAULT_TRANSFORM_TYPEIN_VISIBLE)
         self.camera = ArcBallCamera()
         self._renderer = FrameRenderer(self.camera)
         self._renderer.show_gimbal = bool(getattr(self._renderer, "show_gimbal", True))
@@ -606,11 +627,13 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._fast_drag_enabled = False
         self._uv_viewer: Optional[QtUVViewerWindow] = None
         self._use_gpu = True
-        self._gpu_renderer: Optional[GpuRenderer] = None
+        self._renderer_settings = RendererSettings()
+        self._gpu_renderer: Optional[object] = None
         self._owns_gpu_renderer = True
         self._gpu_tex_preload_model_id = 0
         self._gpu_upload_total = 0
         self._gpu_upload_model_id = 0
+        self._last_renderer_backend_id = ""
         self._selection_orbit_bounds: Optional[tuple[tuple[float, float, float], tuple[float, float, float]]] = None
         self._selection_orbit_bounds_node_id = 0
         self._navigation_profile = DEFAULT_VIEWPORT_NAVIGATION_PROFILE
@@ -922,6 +945,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             margin=0,
             hspacing=2 if self._compact_controls else 3,
             vspacing=2,
+            horizontal_alignment=QtCore.Qt.AlignHCenter,
         )
         row.setContentsMargins(4 if self._compact_controls else 5, 3, 4 if self._compact_controls else 5, 3)
 
@@ -1111,7 +1135,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.axis_mode_control.axisModeChanged.connect(self.set_axis_mode)
         row.addWidget(self.axis_mode_control)
 
-        self.canvas = QtWidgets.QLabel("Empty Scene")
+        self.canvas = RendererSurfaceHost(self)
         self.canvas.setObjectName("ViewportCanvas")
         self.canvas.setAlignment(QtCore.Qt.AlignCenter)
         self.canvas.setMinimumSize(120 if self._compact_controls else 180, 100 if self._compact_controls else 140)
@@ -1120,6 +1144,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.canvas.setMouseTracking(True)
         self.canvas.setScaledContents(False)
         self.canvas.installEventFilter(self)
+        self._install_label_renderer_surface("modern_gl")
         self._renderer.show_bones = self.bones_button.isChecked()
         self._renderer.show_texture = self.texture_button.isChecked()
         self._renderer.show_solid = True
@@ -1173,11 +1198,13 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._reposition_thumbnail()
 
         # ── T404: Snap-view button cluster (top-center) ────────────────
-        # Floating bar with 6 view-preset buttons + Persp/Ortho toggle.
-        # Wired to a smooth 200 ms interpolation rather than instant snap.
-        self._snap_view_widget = _FloatingSnapViewWidget(self.canvas)
-        self._snap_view_widget.viewSelected.connect(self._snap_to_view)
-        self._snap_view_widget.orthoToggled.connect(self.set_ortho_mode)
+        # ViewCube overlay replaces the old visible snap buttons while
+        # preserving their command layer below.
+        self._viewcube_widget = ViewCubeWidget(self.canvas, camera_state=self._viewcube_camera_state)
+        self._viewcube_widget.viewActionRequested.connect(self.execute_view_action)
+        self._viewcube_widget.orientationRequested.connect(self.animate_to_orientation)
+        self._viewcube_widget.dragOrbitRequested.connect(self.orbit_from_viewcube_drag)
+        self._snap_view_widget = self._viewcube_widget
         # Animation state — driven by a QTimer at ~60 Hz for 200 ms.
         self._snap_anim_timer = QtCore.QTimer(self)
         self._snap_anim_timer.setInterval(int(1000.0 / SNAP_VIEW_INTERP_HZ))
@@ -1186,7 +1213,70 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._snap_anim_from = (0.0, 0.0)   # (azimuth, elevation)
         self._snap_anim_to = (0.0, 0.0)
         self._ortho_mode: bool = False
-        self._reposition_snap_view()
+        self._reposition_viewcube()
+        self.set_viewport_chrome_visible(
+            toolbar=self._viewport_toolbar_visible,
+            viewcube=self._viewcube_visible,
+            transform_typein=self._transform_typein_visible,
+        )
+
+    def _install_label_renderer_surface(self, backend_id: str = "modern_gl") -> None:
+        label = QtWidgets.QLabel("Empty Scene", self.canvas)
+        label.setObjectName("ViewportImageSurface")
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        label.setMinimumSize(120 if self._compact_controls else 180, 100 if self._compact_controls else 140)
+        label.setSizePolicy(QtWidgets.QSizePolicy.Ignored if self._compact_controls else QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        label.setFocusPolicy(QtCore.Qt.StrongFocus)
+        label.setMouseTracking(True)
+        label.setScaledContents(False)
+        self.canvas.set_renderer_surface(label, backend_id=backend_id, live_surface=False)
+        self.canvas.install_input_bridge(self)
+
+    def _active_renderer_backend_id(self) -> str:
+        renderer = self._gpu_renderer
+        if renderer is None:
+            return str(getattr(self._renderer_settings.backend, "value", self._renderer_settings.backend))
+        diagnostics = {}
+        get_diagnostics = getattr(renderer, "get_diagnostics", None)
+        if callable(get_diagnostics):
+            try:
+                diagnostics = get_diagnostics() or {}
+            except Exception:
+                diagnostics = {}
+        return str(diagnostics.get("backend_id") or getattr(renderer, "backend_id", "") or "")
+
+    def _renderer_uses_live_surface(self, backend_id: str) -> bool:
+        return str(backend_id or "").startswith("wgpu_")
+
+    def _sync_renderer_surface(self, *, force: bool = False) -> None:
+        if self._gpu_renderer is None:
+            if force or self.canvas.current_surface() is None:
+                self._install_label_renderer_surface("modern_gl")
+            return
+        backend_id = self._active_renderer_backend_id()
+        if not backend_id:
+            backend_id = str(getattr(self._gpu_renderer, "backend_id", "") or "")
+        live_surface = self._renderer_uses_live_surface(backend_id)
+        if (
+            not force
+            and self.canvas.current_surface() is not None
+            and self.canvas.surface_backend_id() == backend_id
+            and self.canvas.is_live_surface() == live_surface
+        ):
+            return
+        if live_surface:
+            create_surface = getattr(self._gpu_renderer, "create_surface_widget", None)
+            if callable(create_surface):
+                try:
+                    surface = create_surface(self.canvas)
+                    backend_id = self._active_renderer_backend_id() or backend_id
+                    live_surface = self._renderer_uses_live_surface(backend_id)
+                    self.canvas.set_renderer_surface(surface, backend_id=backend_id, live_surface=live_surface)
+                    self.canvas.install_input_bridge(self)
+                    return
+                except Exception as exc:
+                    log.info("WGPU surface creation failed, falling back through renderer factory: %s", exc)
+        self._install_label_renderer_surface(backend_id or "modern_gl")
 
     def take_viewport_toolbar(self) -> QtWidgets.QWidget | None:
         """Detach the viewport tool strip so the application shell can host it."""
@@ -1204,6 +1294,53 @@ class QtViewportWidget(QtWidgets.QWidget):
         toolbar_scroll.deleteLater()
         self.viewport_toolbar_scroll = None
         return toolbar
+
+    def set_viewport_chrome_visible(
+        self,
+        *,
+        toolbar: bool | None = None,
+        viewcube: bool | None = None,
+        transform_typein: bool | None = None,
+    ) -> None:
+        """Show or hide optional viewport UI chrome for embedded workflows."""
+
+        if toolbar is not None:
+            self._viewport_toolbar_visible = bool(toolbar)
+        if viewcube is not None:
+            self._viewcube_visible = bool(viewcube)
+        if transform_typein is not None:
+            self._transform_typein_visible = bool(transform_typein)
+        self._sync_viewport_chrome_visibility()
+        self._request_render(fast=True)
+
+    def _sync_viewport_chrome_visibility(self) -> None:
+        toolbar_scroll = getattr(self, "viewport_toolbar_scroll", None)
+        if toolbar_scroll is not None:
+            toolbar_scroll.setVisible(self._viewport_toolbar_visible)
+        toolbar = self.findChild(QtWidgets.QFrame, "ViewportToolbar")
+        if toolbar is not None:
+            toolbar.setVisible(self._viewport_toolbar_visible)
+        typein = getattr(self, "transform_typein_bar", None)
+        if typein is not None:
+            typein.setVisible(self._transform_typein_visible)
+        cube = getattr(self, "_viewcube_widget", None)
+        if cube is not None:
+            if self._viewcube_visible:
+                self._reposition_viewcube()
+            else:
+                cube.hide()
+
+    @property
+    def viewport_toolbar_chrome_visible(self) -> bool:
+        return bool(self._viewport_toolbar_visible)
+
+    @property
+    def viewcube_chrome_visible(self) -> bool:
+        return bool(self._viewcube_visible)
+
+    @property
+    def transform_typein_chrome_visible(self) -> bool:
+        return bool(self._transform_typein_visible)
 
     def _button(
         self,
@@ -1351,12 +1488,12 @@ class QtViewportWidget(QtWidgets.QWidget):
         toolbar = self.findChild(QtWidgets.QFrame, "ViewportToolbar")
         toolbar_layout = layout.toolbar("viewport")
         if toolbar is not None:
-            toolbar.setVisible(toolbar_layout.visible and layout.viewport.toolbar_visible)
+            toolbar.setVisible(self._viewport_toolbar_visible and toolbar_layout.visible and layout.viewport.toolbar_visible)
             toolbar.setMinimumHeight(toolbar_layout.height)
             toolbar.setMaximumHeight(16777215)
         toolbar_scroll = getattr(self, "viewport_toolbar_scroll", None)
         if toolbar_scroll is not None:
-            toolbar_scroll.setVisible(toolbar_layout.visible and layout.viewport.toolbar_visible)
+            toolbar_scroll.setVisible(self._viewport_toolbar_visible and toolbar_layout.visible and layout.viewport.toolbar_visible)
             toolbar_scroll.setFixedHeight(max(toolbar_layout.height + 14, toolbar_layout.height))
             parent = toolbar_scroll.parentWidget()
             if parent is not None and parent.objectName() == "ViewportToolbarBand":
@@ -1384,6 +1521,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             self.transform_typein_bar.apply_ghost_layout(layout)
         if hasattr(self, "axis_mode_control"):
             self.axis_mode_control.apply_ghost_layout(layout)
+        self._sync_viewport_chrome_visibility()
 
     def _separator(self) -> QtWidgets.QFrame:
         sep = QtWidgets.QFrame()
@@ -1836,6 +1974,21 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._gpu_renderer.set_theme_colors(theme)
         elif self._gpu_renderer is not None:
             self._apply_native_palette_to_renderers()
+
+    def set_renderer_settings(self, settings: RendererSettings | dict | None) -> None:
+        self._renderer_settings = settings if isinstance(settings, RendererSettings) else RendererSettings.from_settings(settings or {})
+        if self._gpu_renderer is not None and self._owns_gpu_renderer:
+            apply_settings = getattr(self._gpu_renderer, "set_settings", None)
+            if callable(apply_settings):
+                apply_settings(self._renderer_settings)
+            else:
+                shutdown = getattr(self._gpu_renderer, "shutdown", None) or getattr(self._gpu_renderer, "release", None)
+                if callable(shutdown):
+                    shutdown()
+                self._gpu_renderer = None
+        if self._gpu_renderer is not None:
+            self._sync_renderer_surface(force=True)
+        self._request_render(fast=True)
 
     def set_game_library(self, library, game_tag: str = "K1") -> None:
         self._renderer.tex_cache.set_game_library(library, game_tag)
@@ -2689,9 +2842,12 @@ class QtViewportWidget(QtWidgets.QWidget):
         cw = max(0, self.canvas.width())
         x = cw - THUMBNAIL_WIDTH_PX - THUMBNAIL_MARGIN_PX
         y = THUMBNAIL_MARGIN_PX
+        viewcube = getattr(self, "_viewcube_widget", None)
+        if viewcube is not None and viewcube.isVisible():
+            y = max(y, viewcube.y() + viewcube.height() + THUMBNAIL_MARGIN_PX)
         # Guard against collapsing canvases: if the widget would clip
         # off-screen, hide it rather than render half-off.
-        if x < THUMBNAIL_MARGIN_PX or self.canvas.height() < THUMBNAIL_HEIGHT_PX + 2 * THUMBNAIL_MARGIN_PX:
+        if x < THUMBNAIL_MARGIN_PX or y + THUMBNAIL_HEIGHT_PX + THUMBNAIL_MARGIN_PX > self.canvas.height():
             self._thumbnail_widget.hide()
             return
         self._thumbnail_widget.move(x, y)
@@ -2812,7 +2968,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             if self.model is not None:
                 try:
                     if self._gpu_renderer is None:
-                        self._gpu_renderer = GpuRenderer()
+                        self._gpu_renderer = create_viewport_renderer(self._renderer_settings)
                     self._preload_gpu_textures()
                     tex_cache = getattr(ren, "tex_cache", None)
                     textures = {
@@ -3913,19 +4069,21 @@ class QtViewportWidget(QtWidgets.QWidget):
             index = -1
         self.set_navigation_profile(order[(index + 1) % len(order)])
 
+    def _is_viewport_event_source(self, obj) -> bool:
+        return obj is self.canvas or obj is self.canvas.current_surface()
+
     def eventFilter(self, obj, event):  # noqa: N802 - Qt override
-        if obj is self.canvas:
+        if self._is_viewport_event_source(obj):
             et = event.type()
             if et == QtCore.QEvent.Resize:
                 size = (event.size().width(), event.size().height())
                 if size != self._last_canvas_size:
                     self._last_canvas_size = size
                     self._request_render()
-                # T403: keep the mini-thumbnail pinned to the top-right
-                # corner as the canvas resizes.
+                # Keep the ViewCube pinned to the viewport overlay corner.
+                self._reposition_viewcube()
+                # Keep the mini-thumbnail nearby without covering the cube.
                 self._reposition_thumbnail()
-                # T404: keep the snap-view bar pinned top-center.
-                self._reposition_snap_view()
                 return False
             if et == QtCore.QEvent.FocusOut:
                 self._snap_key_down = False
@@ -4360,31 +4518,118 @@ class QtViewportWidget(QtWidgets.QWidget):
         return True
 
     # ── T404: Snap-view interpolation + Persp/Ortho ───────────────────
-    def _reposition_snap_view(self) -> None:
-        """Pin the snap-view bar to the top-center of the canvas."""
-        if not hasattr(self, "_snap_view_widget") or self._snap_view_widget is None:
+    def _reposition_viewcube(self) -> None:
+        """Pin the ViewCube to the top-right viewport overlay area."""
+        cube = getattr(self, "_viewcube_widget", None)
+        if cube is None:
             return
-        bar = self._snap_view_widget
-        bar.adjustSize()
-        bw, bh = bar.width(), bar.height()
+        if not getattr(self, "_viewcube_visible", True):
+            cube.hide()
+            return
+        cube.adjustSize()
         cw = max(0, self.canvas.width())
-        if cw < bw + 2 * SNAP_VIEW_BAR_MARGIN:
-            bar.hide()
+        ch = max(0, self.canvas.height())
+        if cw < VIEWCUBE_MIN_CANVAS_W or ch < VIEWCUBE_MIN_CANVAS_H:
+            cube.hide()
             return
-        x = max(SNAP_VIEW_BAR_MARGIN, (cw - bw) // 2)
-        y = SNAP_VIEW_BAR_MARGIN
-        bar.move(x, y)
-        bar.show()
-        bar.raise_()
+        x = max(VIEWCUBE_MARGIN, cw - cube.width() - VIEWCUBE_MARGIN)
+        y = VIEWCUBE_MARGIN
+        cube.move(x, y)
+        cube.show()
+        cube.raise_()
+
+    def _reposition_snap_view(self) -> None:
+        """Backward-compatible name for older tests/extensions."""
+        self._reposition_viewcube()
+
+    def _viewcube_camera_state(self) -> tuple[float, float, bool]:
+        return (
+            float(getattr(self.camera, "azimuth", 90.0)),
+            float(getattr(self.camera, "elevation", 20.0)),
+            bool(getattr(self, "_ortho_mode", False)),
+        )
+
+    def execute_view_action(self, action: object) -> None:
+        """Route ViewCube and legacy commands through the existing camera."""
+        try:
+            view_action = action if isinstance(action, ViewAction) else ViewAction(str(action))
+        except ValueError:
+            return
+        if view_action is ViewAction.PERSPECTIVE:
+            self.set_view_perspective()
+            return
+        if view_action is ViewAction.HOME:
+            self.set_view_home()
+            return
+        target = target_for_action(view_action)
+        if target is not None:
+            self.animate_to_orientation(*target)
+
+    def animate_to_orientation(self, azimuth: float, elevation: float) -> None:
+        """Smoothly interpolate the arcball camera to an azimuth/elevation."""
+        if self.is_camera_view_active() and not self._lock_view_to_camera:
+            self.switch_to_perspective()
+        from_az = float(self.camera.azimuth)
+        from_el = float(self.camera.elevation)
+        to_az, to_el = float(azimuth), float(elevation)
+        delta_az = ((to_az - from_az) + 540.0) % 360.0 - 180.0
+        self._snap_anim_from = (from_az, from_el)
+        self._snap_anim_to = (from_az + delta_az, to_el)
+        self._snap_anim_t0 = time_module.perf_counter()
+        if not self._snap_anim_timer.isActive():
+            self._snap_anim_timer.start()
+
+    def orbit_from_viewcube_drag(self, daz: float, del_: float) -> None:
+        """Orbit the existing camera in response to a ViewCube drag."""
+        if self._snap_anim_timer.isActive():
+            self._snap_anim_timer.stop()
+        if self.is_camera_view_active() and not self._lock_view_to_camera:
+            self.switch_to_perspective()
+        self.camera.orbit(float(daz), float(del_))
+        if self.is_camera_view_active() and self._lock_view_to_camera:
+            self.update_camera_from_view()
+        self._renderer.is_interactive = self._fast_drag_enabled
+        if hasattr(self, "_viewcube_widget") and self._viewcube_widget is not None:
+            self._viewcube_widget.update()
+        self._request_render(fast=True)
+
+    def get_orientation_quaternion(self) -> tuple[float, float, float, float]:
+        return view_orientation_quaternion(self.camera.azimuth, self.camera.elevation)
+
+    def set_view_front(self) -> None:
+        self.execute_view_action(ViewAction.FRONT)
+
+    def set_view_back(self) -> None:
+        self.execute_view_action(ViewAction.BACK)
+
+    def set_view_left(self) -> None:
+        self.execute_view_action(ViewAction.LEFT)
+
+    def set_view_right(self) -> None:
+        self.execute_view_action(ViewAction.RIGHT)
+
+    def set_view_top(self) -> None:
+        self.execute_view_action(ViewAction.TOP)
+
+    def set_view_bottom(self) -> None:
+        self.execute_view_action(ViewAction.BOTTOM)
+
+    def set_view_perspective(self) -> None:
+        self.set_ortho_mode(not self._ortho_mode)
+        if self.is_camera_view_active():
+            self.switch_to_perspective()
+        else:
+            self._request_render(fast=True)
+
+    def set_view_home(self) -> None:
+        self.reset_camera()
 
     def _snap_to_view(self, view: str) -> None:
-        """Smoothly interpolate the camera to a named preset view.
-
-        Implementation: a 200 ms tween over (azimuth, elevation) driven
-        by a QTimer at ~60 Hz.  Distance and target are preserved so
-        the user's framing isn't clobbered when they snap to a side
-        view.
-        """
+        """Legacy snap-view entry point retained for shortcuts/extensions."""
+        action = action_from_view_name(view)
+        if action is not None:
+            self.execute_view_action(action)
+            return
         target = SNAP_VIEW_PRESETS.get(view)
         if target is None:
             return
@@ -4420,6 +4665,10 @@ class QtViewportWidget(QtWidgets.QWidget):
             # Snap to exact target to defeat float drift.
             self.camera.azimuth   = to_az % 360.0
             self.camera.elevation = to_el
+        if self.is_camera_view_active() and self._lock_view_to_camera:
+            self.update_camera_from_view()
+        if hasattr(self, "_viewcube_widget") and self._viewcube_widget is not None:
+            self._viewcube_widget.update()
         self._request_render(fast=True)
 
     def set_ortho_mode(self, ortho: bool) -> None:
@@ -4459,11 +4708,13 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self.camera.distance = float(saved_dist)
         # Keep the snap-view bar's toggle button in sync if the call
         # came from somewhere other than the bar itself.
-        if hasattr(self, "_snap_view_widget") and self._snap_view_widget is not None:
+        if hasattr(self, "_snap_view_widget") and self._snap_view_widget is not None and hasattr(self._snap_view_widget, "ortho_button"):
             btn = self._snap_view_widget.ortho_button
             with QtCore.QSignalBlocker(btn):
                 btn.setChecked(new_val)
                 btn.setText("Ortho" if new_val else "Persp")
+        if hasattr(self, "_viewcube_widget") and self._viewcube_widget is not None:
+            self._viewcube_widget.update()
         self._request_render()
 
     @property
@@ -4471,6 +4722,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         return self._ortho_mode
 
     def _request_render(self, fast: bool = False) -> None:
+        if hasattr(self, "_viewcube_widget") and self._viewcube_widget is not None:
+            self._viewcube_widget.update()
         self._render_pending = True
         now = time_module.perf_counter()
         min_interval_ms = 33 if self._dual_viewport_mode else 16
@@ -4555,7 +4808,10 @@ class QtViewportWidget(QtWidgets.QWidget):
             QtGui.QImage.Format_RGBA8888,
         ).copy()
         self._pixmap = QtGui.QPixmap.fromImage(qimg)
-        self.canvas.setPixmap(self._pixmap)
+        if self.canvas.is_live_surface():
+            self.canvas.set_overlay_pixmap(self._pixmap)
+        else:
+            self.canvas.setPixmap(self._pixmap)
         rendered_size = (w, h)
         self._last_rendered_canvas_size = rendered_size
         current_size = (max(8, self.canvas.width()), max(8, self.canvas.height()))
@@ -4589,12 +4845,15 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def _render_gpu_frame(self, w: int, h: int):
         if self._gpu_renderer is None:
-            self._gpu_renderer = GpuRenderer()
+            self._gpu_renderer = create_viewport_renderer(self._renderer_settings)
             theme = getattr(self, "_current_theme", None)
             if theme is not None and hasattr(self._gpu_renderer, "set_theme_colors"):
                 self._gpu_renderer.set_theme_colors(theme)
             else:
                 self._apply_native_palette_to_renderers()
+            self._sync_renderer_surface(force=True)
+        else:
+            self._sync_renderer_surface()
         self._preload_gpu_textures()
         tex_cache = getattr(self._renderer, "tex_cache", None)
         textures = {
@@ -4638,6 +4897,10 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gpu_renderer.selected_nodes = list(getattr(self, "_selected_meshes", []) or [])
         self._gpu_renderer.show_grid = bool(getattr(self._renderer, "show_grid", True))
         self._gpu_renderer.cull_faces = False
+        try:
+            self._gpu_renderer.surface_host_diagnostics = self.canvas.diagnostics()
+        except Exception:
+            pass
         img = self._gpu_renderer.render(
             self.model,
             self.camera,
@@ -4648,6 +4911,23 @@ class QtViewportWidget(QtWidgets.QWidget):
             anim_time=float(getattr(self._renderer, "_anim_time", 0.0)),
             anim_base_pose=getattr(self._renderer, "_anim_base_pose", None),
         )
+        diagnostics = {}
+        get_diagnostics = getattr(self._gpu_renderer, "get_diagnostics", None)
+        if callable(get_diagnostics):
+            try:
+                diagnostics = get_diagnostics() or {}
+            except Exception:
+                diagnostics = {}
+        backend_id = str(diagnostics.get("backend_id") or getattr(self._gpu_renderer, "backend_id", "") or "")
+        if backend_id and (
+            self.canvas.surface_backend_id() != backend_id
+            or self.canvas.is_live_surface() != self._renderer_uses_live_surface(backend_id)
+        ):
+            self._sync_renderer_surface(force=True)
+        if backend_id and backend_id != self._last_renderer_backend_id:
+            self._last_renderer_backend_id = backend_id
+            label = str(diagnostics.get("name") or backend_id)
+            self.statusMessage.emit(f"Renderer: {label}")
         if getattr(self._gpu_renderer, "deferred_mesh_uploads", False):
             model_id = id(self.model)
 
@@ -5234,6 +5514,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         back to a direct ``update()`` so the overlay reflects state
         changes immediately even on minimal viewports.
         """
+        if hasattr(self, "_viewcube_widget") and self._viewcube_widget is not None:
+            self._viewcube_widget.update()
         try:
             if (
                 hasattr(self, "_render_timer")
@@ -5326,7 +5608,16 @@ class QtViewportWidget(QtWidgets.QWidget):
             return
         self._use_gpu = True
         self.renderer_button.setChecked(True)
-        self.renderer_button.setToolTip("GPU renderer" if gpu_active else "GPU renderer unavailable")
+        backend = ""
+        if self._gpu_renderer is not None:
+            get_diagnostics = getattr(self._gpu_renderer, "get_diagnostics", None)
+            if callable(get_diagnostics):
+                try:
+                    backend = str((get_diagnostics() or {}).get("name") or "")
+                except Exception:
+                    backend = ""
+        label = f"GPU renderer: {backend}" if backend else "GPU renderer"
+        self.renderer_button.setToolTip(label if gpu_active else "GPU renderer unavailable")
 
     def _on_shade_change(self, text: str) -> None:
         self.set_shade_mode(text)
@@ -6948,6 +7239,9 @@ class QtRetargetViewportWidget(QtViewportWidget):
 
     VIEWPORT_ROLE = "retarget"
     DEFAULT_THUMBNAIL_ENABLED = False
+    DEFAULT_VIEWPORT_TOOLBAR_VISIBLE = False
+    DEFAULT_VIEWCUBE_VISIBLE = False
+    DEFAULT_TRANSFORM_TYPEIN_VISIBLE = False
 
 
 class QtUnrealAnimatorViewportWidget(QtViewportWidget):

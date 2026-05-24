@@ -33,9 +33,16 @@ class SequenceViewportPanel(QtWidgets.QWidget):
         model = getattr(self.source_viewport, "model", None)
         if model is not None:
             self.viewport.set_model(model)
+        renderer_settings = getattr(self.source_viewport, "_renderer_settings", None)
+        if renderer_settings is not None and hasattr(self.viewport, "set_renderer_settings"):
+            self.viewport.set_renderer_settings(renderer_settings)
         settings = getattr(self.source_viewport, "measurement_settings", None)
         if settings is not None:
             self.viewport.set_measurement_settings(settings)
+
+    def set_renderer_settings(self, settings: object) -> None:
+        if hasattr(self.viewport, "set_renderer_settings"):
+            self.viewport.set_renderer_settings(settings)
 
     def set_warning(self, text: str) -> None:
         self.warning_label.setText(text or "")

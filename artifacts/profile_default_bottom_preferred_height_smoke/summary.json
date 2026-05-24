@@ -1,0 +1,12 @@
+{
+  "profile_name": "Default",
+  "output_min_height": 96,
+  "python_min_height": 96,
+  "output_preferred_height": 134,
+  "python_preferred_height": 134,
+  "splitter_sizes_after_apply": [
+    511,
+    134
+  ],
+  "bottom_is_at_least_134": true
+}

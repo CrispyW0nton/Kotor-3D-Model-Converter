@@ -1,0 +1,57 @@
+{
+  "artifacts": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\content_browser_import_grid_smoke",
+  "preloaded_rows": 6071,
+  "missing_exact_searches": [
+    {
+      "resref": "n_t3m4",
+      "visible_count": 0,
+      "window": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\content_browser_import_grid_smoke\\missing_n_t3m4_search_window.png",
+      "canvas": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\content_browser_import_grid_smoke\\missing_n_t3m4_search_canvas.png",
+      "content_browser": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\content_browser_import_grid_smoke\\missing_n_t3m4_search_content_browser.png"
+    }
+  ],
+  "cases": [
+    {
+      "game": "K2",
+      "resref": "p_t3m4",
+      "visible_count_after_filter": 1,
+      "load_started": false,
+      "scene_objects": [],
+      "viewport_show_grid": true,
+      "gpu_show_grid": true,
+      "bounds": null,
+      "camera": {
+        "target": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "distance": 5.0
+      },
+      "window": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\content_browser_import_grid_smoke\\K2_p_t3m4_content_browser_window.png",
+      "canvas": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\content_browser_import_grid_smoke\\K2_p_t3m4_content_browser_canvas.png",
+      "content_browser": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\content_browser_import_grid_smoke\\K2_p_t3m4_content_browser_content_browser.png"
+    },
+    {
+      "game": "K1",
+      "resref": "n_yoda",
+      "visible_count_after_filter": 1,
+      "load_started": false,
+      "scene_objects": [],
+      "viewport_show_grid": true,
+      "gpu_show_grid": true,
+      "bounds": null,
+      "camera": {
+        "target": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "distance": 5.0
+      },
+      "window": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\content_browser_import_grid_smoke\\K1_n_yoda_content_browser_window.png",
+      "canvas": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\content_browser_import_grid_smoke\\K1_n_yoda_content_browser_canvas.png",
+      "content_browser": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\content_browser_import_grid_smoke\\K1_n_yoda_content_browser_content_browser.png"
+    }
+  ]
+}

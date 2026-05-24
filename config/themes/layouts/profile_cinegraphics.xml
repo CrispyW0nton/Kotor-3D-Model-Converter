@@ -1,4 +1,4 @@
-<layout id="profile_cinegraphics" name="Visual Profile: Cinegraphics" version="1">
+<layout id="profile_cinegraphics" name="Cinegraphics" version="1">
     <mainWindow width="1760" height="980" maximized="false"/>
     <toolbars>
         <toolbar id="main" visible="true" buttonMode="iconText" iconSize="18" height="40"/>
@@ -7,10 +7,10 @@
     <panels>
         <panel id="contentBrowser" region="left" visible="false" minWidth="260" preferredWidth="340" minHeight="260" preferredHeight="420"/>
         <panel id="scene" region="left" visible="true" minWidth="240" preferredWidth="300" minHeight="180" preferredHeight="320"/>
-        <panel id="library" region="left" visible="true" minWidth="280" preferredWidth="390"/>
-        <panel id="modules" region="left" visible="true" minWidth="280" preferredWidth="390"/>
+        <panel id="library" region="left" visible="false" minWidth="280" preferredWidth="390"/>
+        <panel id="modules" region="left" visible="false" minWidth="280" preferredWidth="390"/>
         <panel id="properties" region="right" visible="true" minWidth="300" preferredWidth="360"/>
-        <panel id="animationLibrary" region="right" visible="true" minWidth="320" preferredWidth="410"/>
+        <panel id="animationLibrary" region="right" visible="false" minWidth="320" preferredWidth="410"/>
         <panel id="meshTools" region="right" visible="false" minWidth="260" preferredWidth="340"/>
         <panel id="nodes" region="left" visible="false" minWidth="260" preferredWidth="360"/>
         <panel id="lighting" region="right" visible="true" minWidth="320" preferredWidth="420"/>
@@ -25,23 +25,11 @@
     <dockLayout>
         <group id="shotScene" area="left" mode="tabbed" visible="true" active="scene">
             <dock id="scene"/>
-            <dock id="content_browser"/>
         </group>
         <group id="cameraLighting" area="right" mode="tabbed" visible="true" active="cameras">
             <dock id="cameras"/>
             <dock id="lighting"/>
             <dock id="properties"/>
-            <dock id="animations"/>
-        </group>
-        <group id="dataBrowsers" area="left" mode="tabbed" visible="false" active="resources">
-            <dock id="nodes"/>
-            <dock id="2das"/>
-            <dock id="resources"/>
-        </group>
-        <group id="meshEditing" area="right" mode="tabbed" visible="false" active="mesh_tools">
-            <dock id="module_meshes"/>
-            <dock id="mesh_tools"/>
-            <dock id="adjust_pivot"/>
         </group>
     </dockLayout>
     <viewport>

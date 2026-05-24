@@ -31,6 +31,7 @@ class LayoutApplier(QtCore.QObject):
     def apply_layout(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
         start = time.perf_counter()
         window.setUpdatesEnabled(False)
+        setattr(window, "_applying_ghost_layout", True)
         try:
             if not window.isMaximized():
                 window.resize(layout.main_width, layout.main_height)
@@ -45,6 +46,7 @@ class LayoutApplier(QtCore.QObject):
             if callable(sync_top_rows):
                 sync_top_rows()
         finally:
+            setattr(window, "_applying_ghost_layout", False)
             window.setUpdatesEnabled(True)
             window.update()
         self.layoutChanged.emit(layout)
@@ -89,8 +91,11 @@ class LayoutApplier(QtCore.QObject):
     def _apply_toolbars(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
         main_toolbar = layout.toolbar("main")
         command_bar = getattr(window, "command_bar", None)
+        command_bar_host = getattr(window, "command_bar_host", None)
         if command_bar is not None:
             command_bar.setVisible(main_toolbar.visible)
+            if command_bar_host is not None:
+                command_bar_host.setVisible(main_toolbar.visible)
             command_bar.setMinimumHeight(main_toolbar.height)
             layout_obj = command_bar.layout()
             if layout_obj is not None and layout_obj.hasHeightForWidth():
@@ -148,13 +153,24 @@ class LayoutApplier(QtCore.QObject):
         if isinstance(docks, dict):
             for key, panel_id in (
                 ("animations", "animationLibrary"),
+                ("nodes", "nodes"),
+                ("lighting", "lighting"),
+                ("cameras", "cameras"),
+                ("module_meshes", "moduleMeshes"),
                 ("mesh_tools", "meshTools"),
+                ("adjust_pivot", "adjustPivot"),
+                ("2das", "2das"),
+                ("resources", "resources"),
+                ("diagnostics", "diagnostics"),
+                ("sequence_editor", "sequenceEditor"),
             ):
                 dock = docks.get(key)
-                panel = layout.panel(panel_id)
                 if dock is not None:
-                    if key == "mesh_tools":
-                        dock.setVisible(panel.visible)
+                    panel = layout.panel(panel_id)
+                    if panel_id not in layout.panels:
+                        dock.setVisible(False)
+                        continue
+                    dock.setVisible(panel.visible)
                     dock.resize(panel.preferred_width, max(520, panel.preferred_height))
         self._apply_dock_groups(layout, window)
 

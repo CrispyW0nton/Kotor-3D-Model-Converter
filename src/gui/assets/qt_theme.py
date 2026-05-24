@@ -58,11 +58,13 @@ class QtFlowLayout(QtWidgets.QLayout):
         margin: int = 0,
         hspacing: int = 4,
         vspacing: int = 3,
+        horizontal_alignment: QtCore.Qt.AlignmentFlag = QtCore.Qt.AlignLeft,
     ) -> None:
         super().__init__(parent)
         self._items: list[QtWidgets.QLayoutItem] = []
         self._hspacing = int(hspacing)
         self._vspacing = int(vspacing)
+        self._horizontal_alignment = horizontal_alignment
         self.setContentsMargins(margin, margin, margin, margin)
 
     def addItem(self, item: QtWidgets.QLayoutItem) -> None:  # noqa: N802 - Qt API
@@ -111,30 +113,49 @@ class QtFlowLayout(QtWidgets.QLayout):
     def _do_layout(self, rect: QtCore.QRect, *, test_only: bool) -> int:
         left, top, right, bottom = self.getContentsMargins()
         effective = rect.adjusted(left, top, -right, -bottom)
-        x = effective.x()
-        y = effective.y()
+        rows: list[tuple[list[tuple[QtWidgets.QLayoutItem, QtCore.QSize]], int, int]] = []
+        row: list[tuple[QtWidgets.QLayoutItem, QtCore.QSize]] = []
+        row_width = 0
         line_height = 0
-        max_x = effective.right()
+        max_width = max(1, effective.width())
         for item in self._items:
             widget = item.widget()
             if widget is not None and not widget.isVisible():
                 continue
             hint = item.sizeHint()
-            next_x = x + hint.width()
-            if x > effective.x() and next_x > max_x:
-                x = effective.x()
-                y += line_height + self._vspacing
-                next_x = x + hint.width()
+            next_width = hint.width() if not row else row_width + self._hspacing + hint.width()
+            if row and next_width > max_width:
+                rows.append((row, row_width, line_height))
+                row = []
+                row_width = 0
                 line_height = 0
-            if not test_only:
-                item.setGeometry(QtCore.QRect(QtCore.QPoint(x, y), hint))
-            x = next_x + self._hspacing
+                next_width = hint.width()
+            row.append((item, hint))
+            row_width = next_width
             line_height = max(line_height, hint.height())
-        return y + line_height + bottom - rect.y()
+        if row:
+            rows.append((row, row_width, line_height))
+
+        y = effective.y()
+        for row_items, current_width, current_height in rows:
+            x = effective.x()
+            if self._horizontal_alignment & QtCore.Qt.AlignHCenter:
+                x += max(0, (max_width - current_width) // 2)
+            if not test_only:
+                for item, hint in row_items:
+                    item.setGeometry(QtCore.QRect(QtCore.QPoint(x, y), hint))
+                    x += hint.width() + self._hspacing
+            y += current_height + self._vspacing
+        if rows:
+            y -= self._vspacing
+        return y + bottom - rect.y()
 
 
 def icon(name: str, size: int = 16) -> QtGui.QIcon:
     icons_dir = _GUI_DIR / "icons"
+    path = icons_dir / f"{name}.svg"
+    if path.exists():
+        return QtGui.QIcon(str(path))
     path = icons_dir / f"{name}_{size}.png"
     if path.exists():
         return QtGui.QIcon(str(path))

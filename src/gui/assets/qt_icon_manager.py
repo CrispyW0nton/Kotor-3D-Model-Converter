@@ -19,7 +19,9 @@ _cache: dict[str, QtGui.QIcon] = {}
 
 
 class I:
+    NEW_SCENE = "new_scene"
     OPEN = "open"
+    SAVE = "save"
     IMPORT = "import"
     EXPORT = "export"
     AUTORIG = "autorig"
@@ -27,6 +29,7 @@ class I:
     REFRESH = "refresh"
     CLOTH = "cloth"
     MODULAR = "modular"
+    MODULE_MESHES = "module_meshes"
     DIAG = "diag"
     TEXTURE = "texture"
     LIBRARY = "library"
@@ -34,6 +37,9 @@ class I:
     SKELETON = "skeleton"
     PROPS = "props"
     ANIMS = "anims"
+    SEQUENCE = "sequence"
+    LIGHTS = "lights"
+    CAMERAS = "cameras"
     RIG = "rig"
     NORMALMAP = "normalmap"
     RESOURCES = "resources"
@@ -55,7 +61,9 @@ class I:
 
 
 LABEL_TO_ICON: dict[str, str] = {
+    "new scene": I.NEW_SCENE,
     "open": I.OPEN,
+    "save": I.SAVE,
     "import": I.IMPORT,
     "export": I.EXPORT,
     "auto-rig": I.AUTORIG,
@@ -66,6 +74,8 @@ LABEL_TO_ICON: dict[str, str] = {
     "cloth": I.CLOTH,
     "modular": I.MODULAR,
     "modules": I.MODULAR,
+    "module meshes": I.MODULE_MESHES,
+    "module_meshes": I.MODULE_MESHES,
     "diag": I.DIAG,
     "tex": I.TEXTURE,
     "texture": I.TEXTURE,
@@ -79,6 +89,9 @@ LABEL_TO_ICON: dict[str, str] = {
     "properties": I.PROPS,
     "anims": I.ANIMS,
     "anim": I.ANIMS,
+    "sequence": I.SEQUENCE,
+    "lights": I.LIGHTS,
+    "cameras": I.CAMERAS,
     "normalmap": I.NORMALMAP,
     "normmap": I.NORMALMAP,
     "search": I.SEARCH,
@@ -91,7 +104,6 @@ LABEL_TO_ICON: dict[str, str] = {
     "deep scan": I.REFRESH,
     "auto-detect": I.SEARCH,
     "copy": I.PROPS,
-    "save": I.OPEN,
     "character builder": I.CHARBUILDER,
     "charbuilder": I.CHARBUILDER,
     "template": I.TEMPLATE,
@@ -115,6 +127,11 @@ def get(name: str, size: int = 16) -> QtGui.QIcon:
     key = f"{name}_{size}"
     if key in _cache:
         return _cache[key]
+    path = ICONS_DIR / f"{name}.svg"
+    if path.exists():
+        icon = QtGui.QIcon(str(path))
+        _cache[key] = icon
+        return icon
     path = ICONS_DIR / f"{name}_{size}.png"
     if not path.exists():
         path = ICONS_DIR / f"{name}_24.png"

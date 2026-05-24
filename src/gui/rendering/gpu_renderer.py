@@ -193,6 +193,7 @@ _GR_GPU_PROBE = os.environ.get('GHOSTRIGGER_VIEWPORT_PROBE', '').strip().lower()
 _GR_GPU_PROBE_SEEN: set = set()
 
 _GL_STATE_TRACE_ENV = 'GHOSTRIGGER_GL_STATE_TRACE'
+_GL_DEBUG_ERRORS_ENV = 'GHOSTRIGGER_GL_DEBUG_ERRORS'
 _GL_STATE_TRACE_TRUE = ('1', 'true', 'yes', 'on')
 _GL_STATE_TRACE_FALSE = ('', '0', 'false', 'no', 'off')
 _GL_BACKEND_ENV = 'GHOSTRIGGER_GL_BACKEND'
@@ -4219,6 +4220,8 @@ class GpuRenderer:
 
     #: Legacy diagnostic switch; the Qt viewport does not use CPU rendering.
     force_cpu: bool = False
+    name: str = "ModernGL / OpenGL 3.3"
+    backend_id: str = "modern_gl"
 
     def __init__(self):
         self._ctx: Optional['moderngl.Context'] = None
@@ -4466,8 +4469,18 @@ class GpuRenderer:
                     pass
             self._u = _u
             self._gpu_available = True
-            log.info("GpuRenderer: ModernGL %s context GL %s",
-                     _ctx_backend, self._ctx.version_code)
+            log.info("%s: Context GL %s initialized (%s)",
+                     self.__class__.__name__, self._ctx.version_code, _ctx_backend)
+            try:
+                info = getattr(self._ctx, "info", {}) or {}
+                log.info(
+                    "RendererDiagnostics: GPU=%s, API=OpenGL, Backend=%s, FeatureLevel=GL%s",
+                    info.get("GL_RENDERER", "unknown"),
+                    _ctx_backend,
+                    self._ctx.version_code,
+                )
+            except Exception:
+                pass
             return True
         except Exception as e:
             log.info(f"GpuRenderer: GPU init failed ({e}) - viewport GPU rendering unavailable")
@@ -4618,6 +4631,51 @@ class GpuRenderer:
         self._fbo_simple_w = 0
         self._fbo_simple_h = 0
         self._fbo_msaa = False
+
+    def _reset_frame_state(self, ctx, width: int, height: int) -> None:
+        """Reset mutable GL state that can leak between scene/grid/overlay passes."""
+        try:
+            ctx.viewport = (0, 0, int(width), int(height))
+        except Exception:
+            pass
+        try:
+            ctx.scissor = None
+        except Exception:
+            pass
+        try:
+            ctx.disable(moderngl.BLEND)
+            ctx.disable(moderngl.SCISSOR_TEST)
+            ctx.disable(moderngl.POLYGON_OFFSET_FILL)
+            ctx.enable(moderngl.DEPTH_TEST)
+        except Exception:
+            pass
+        try:
+            ctx.depth_func = '<='
+            ctx.depth_mask = True
+        except Exception:
+            pass
+        try:
+            ctx.front_face = 'cw'
+        except Exception:
+            pass
+        try:
+            ctx.wireframe = False
+        except Exception:
+            pass
+
+    def _debug_log_gl_error(self, label: str) -> None:
+        raw = os.environ.get(_GL_DEBUG_ERRORS_ENV, "").strip().lower()
+        if raw not in _GL_STATE_TRACE_TRUE:
+            return
+        ctx = self._ctx
+        if ctx is None:
+            return
+        try:
+            err = getattr(ctx, "error", None)
+            if err:
+                log.debug("ModernGLRenderer: GL error after %s: %s", label, err)
+        except Exception:
+            pass
 
     def _ensure_grid_vao(self):
         if not (_NUMPY and self._ctx is not None and self._grid_prog is not None):
@@ -5066,18 +5124,12 @@ class GpuRenderer:
                 fbo = self._fbo_simple
 
             fbo.use()
-            # ModernGL keeps viewport/scissor as context state. After loading a
-            # model into a newly laid-out Qt viewport, stale dimensions can leave
-            # part of the framebuffer cleared but undrawn until a window resize.
-            ctx.viewport = (0, 0, W, H)
-            try:
-                ctx.scissor = None
-            except Exception:
-                pass
+            self._reset_frame_state(ctx, W, H)
             # PERF-READBACK: Clear with OPAQUE background (alpha=1.0) so that
             # the readback path can skip the expensive alpha compositing step
             # (saves ~19ms/frame at 800x600).  Keep this in sync with viewport._BG.
             ctx.clear(*self.viewport_background, 1.0)
+            self._debug_log_gl_error("frame clear")
             ctx.enable(moderngl.DEPTH_TEST)
             # v7.0 FIX (Finding 5.8 — reone context.cpp cross-ref):
             # reone uses GL_LEQUAL (not GL_LESS) to match KotOR engine behavior.

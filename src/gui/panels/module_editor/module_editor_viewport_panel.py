@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.core.level import KMapProject
 from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
@@ -15,6 +15,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("ModuleEditorViewportPanel")
+        self._current_theme = None
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(6, 8, 6, 0)
         root.setSpacing(6)
@@ -102,6 +103,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if hasattr(self.viewport, "set_navigation_profile"):
             self.viewport.set_navigation_profile(profile)
 
+    def set_renderer_settings(self, settings: object) -> None:
+        if hasattr(self.viewport, "set_renderer_settings"):
+            self.viewport.set_renderer_settings(settings)
+
     def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:  # noqa: N802 - Qt API
         toolbar_scroll = getattr(self.viewport, "viewport_toolbar_scroll", None)
         if watched is toolbar_scroll and event.type() in {
@@ -136,6 +141,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             index = root_layout.indexOf(toolbar_scroll)
             root_layout.insertWidget(index + 1 if index >= 0 else 1, gap)
         gap.setFixedHeight(max(4, int(gap_height)))
+        self._apply_viewport_toolbar_theme()
 
     def _embedded_viewport_toolbar_height(self, toolbar_scroll: QtWidgets.QScrollArea) -> int:
         minimum_height = 64
@@ -169,6 +175,108 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if 0 <= row < len(self._row_ids):
             self.itemSelected.emit(self._row_ids[row])
 
+    def apply_ghost_theme(self, theme) -> None:
+        if theme is not None and getattr(theme, "is_native", lambda: False)():
+            self.apply_native_theme()
+            return
+        self._current_theme = theme
+        viewport_hook = getattr(self.viewport, "apply_ghost_theme", None)
+        if callable(viewport_hook):
+            viewport_hook(theme)
+        self._apply_viewport_toolbar_theme()
+
+    def _apply_viewport_toolbar_theme(self) -> None:
+        theme = getattr(self, "_current_theme", None)
+        if theme is None:
+            return
+        toolbar_bg = theme.color("viewportToolbar.background", theme.color("toolbar.background"))
+        toolbar_border = theme.color("viewportToolbar.border", theme.color("toolbar.border"))
+        panel_bg = theme.color("window.background")
+        self.viewport_toolbar_frame.setStyleSheet(
+            "QFrame#ModuleViewportTopTools { "
+            f"background:{panel_bg}; "
+            f"border:1px solid {toolbar_border}; "
+            "}"
+        )
+        toolbar_scroll = getattr(self.viewport, "viewport_toolbar_scroll", None)
+        if toolbar_scroll is not None:
+            toolbar_scroll.setStyleSheet(
+                "QScrollArea#ViewportToolbarScroll { "
+                f"background:{toolbar_bg}; "
+                "border:0; "
+                "}"
+            )
+            toolbar_scroll.viewport().setStyleSheet(f"background:{toolbar_bg};")
+        toolbar = getattr(self.viewport, "viewport_toolbar", None)
+        if toolbar is not None:
+            toolbar.setStyleSheet(
+                "QFrame#ViewportToolbar { "
+                f"background:{toolbar_bg}; "
+                f"border:1px solid {toolbar_border}; "
+                "}"
+            )
+        gap = getattr(self, "_viewport_toolbar_gap", None)
+        if gap is not None:
+            gap.setStyleSheet(f"background:{panel_bg};")
+
+    def apply_native_theme(self) -> None:
+        self._current_theme = None
+        palette = QtWidgets.QApplication.palette()
+        toolbar_bg = palette.color(QtGui.QPalette.ColorRole.Window).name()
+        toolbar_border = palette.color(QtGui.QPalette.ColorRole.Mid).name()
+        self.viewport_toolbar_frame.setStyleSheet(
+            "QFrame#ModuleViewportTopTools { "
+            f"background:{toolbar_bg}; "
+            f"border:1px solid {toolbar_border}; "
+            "}"
+        )
+        toolbar_scroll = getattr(self.viewport, "viewport_toolbar_scroll", None)
+        if toolbar_scroll is not None:
+            toolbar_scroll.setStyleSheet(
+                "QScrollArea#ViewportToolbarScroll { "
+                f"background:{toolbar_bg}; "
+                "border:0; "
+                "}"
+            )
+            toolbar_scroll.viewport().setStyleSheet(f"background:{toolbar_bg};")
+        toolbar = getattr(self.viewport, "viewport_toolbar", None)
+        if toolbar is not None:
+            toolbar.setStyleSheet(
+                "QFrame#ViewportToolbar { "
+                f"background:{toolbar_bg}; "
+                f"border:1px solid {toolbar_border}; "
+                "}"
+            )
+        gap = getattr(self, "_viewport_toolbar_gap", None)
+        if gap is not None:
+            gap.setStyleSheet(f"background:{toolbar_bg};")
+        viewport_hook = getattr(self.viewport, "apply_native_theme", None)
+        if callable(viewport_hook):
+            viewport_hook()
+        self._apply_native_toolbar_palette()
+
+    def _apply_native_toolbar_palette(self) -> None:
+        palette = QtWidgets.QApplication.palette()
+        toolbar_bg = palette.color(QtGui.QPalette.ColorRole.Window).name()
+        toolbar_border = palette.color(QtGui.QPalette.ColorRole.Mid).name()
+        toolbar_scroll = getattr(self.viewport, "viewport_toolbar_scroll", None)
+        if toolbar_scroll is not None:
+            toolbar_scroll.setStyleSheet(
+                "QScrollArea#ViewportToolbarScroll { "
+                f"background:{toolbar_bg}; "
+                "border:0; "
+                "}"
+            )
+            toolbar_scroll.viewport().setStyleSheet(f"background:{toolbar_bg};")
+        toolbar = getattr(self.viewport, "viewport_toolbar", None)
+        if toolbar is not None:
+            toolbar.setStyleSheet(
+                "QFrame#ViewportToolbar { "
+                f"background:{toolbar_bg}; "
+                f"border:1px solid {toolbar_border}; "
+                "}"
+            )
+
     def apply_ghost_layout(self, layout) -> None:
         self.splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", 6))
         self.viewport.setMinimumWidth(layout.viewport.min_width)
@@ -176,5 +284,6 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.layout().setContentsMargins(margin, margin + 6, margin, 0)
         self.viewport_toolbar.setSpacing(max(5, layout.spacing_value("toolbarSpacing", 4)))
         self._ensure_embedded_viewport_toolbar_gap(max(5, layout.spacing_value("panelSpacing", 4) + 1))
+        self._apply_viewport_toolbar_theme()
         self.scene_table.verticalHeader().setDefaultSectionSize(layout.spacing_value("tableRowHeight", 22))
         self.scene_table.setMaximumHeight(max(80, min(128, layout.spacing_value("tableRowHeight", 22) * 4 + 34)))

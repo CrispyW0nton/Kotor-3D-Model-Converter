@@ -184,15 +184,25 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
 
         self.source_box = self._make_model_box("Source")
         self.target_box = self._make_model_box("Target")
+        self.animation_section = self._make_animation_column()
+        self.info_section = self._make_information_section()
+        self.transfer_section = self._make_transfer_section()
+        self.assignment_section = self._make_assignment_column()
 
         content = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         content.setChildrenCollapsible(False)
-        content.addWidget(self._make_animation_column())
-        content.addWidget(self._make_assignment_column())
+        content.addWidget(self.animation_section)
+        content.addWidget(self.assignment_section)
         content.setSizes([320, 520])
         root.addWidget(content, 1)
 
+        self.controls_widget = self._make_controls_widget()
+        root.addWidget(self.controls_widget)
+
+    def _make_controls_widget(self) -> QtWidgets.QWidget:
+        widget = QtWidgets.QWidget()
         controls = QtWidgets.QHBoxLayout()
+        controls.setContentsMargins(0, 0, 0, 0)
         controls.setSpacing(6)
         for label, slot in (
             ("Play", self._play_source_animation),
@@ -214,7 +224,8 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
                 button.setObjectName("exportAssignedRetargetAnimationsButton")
             button.clicked.connect(slot)
             controls.addWidget(button, 1)
-        root.addLayout(controls)
+        widget.setLayout(controls)
+        return widget
 
     def _make_animation_column(self) -> QtWidgets.QWidget:
         column = QtWidgets.QWidget()
@@ -237,7 +248,11 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(column)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
+        layout.addWidget(self.info_section, 1)
+        layout.addWidget(self.transfer_section, 0)
+        return column
 
+    def _make_information_section(self) -> QtWidgets.QWidget:
         info_box = QtWidgets.QGroupBox("Information")
         info_layout = QtWidgets.QVBoxLayout(info_box)
         info_layout.setContentsMargins(6, 6, 6, 6)
@@ -245,8 +260,9 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
         self.info.setReadOnly(True)
         self.info.setMinimumHeight(82)
         info_layout.addWidget(self.info)
-        layout.addWidget(info_box, 1)
+        return info_box
 
+    def _make_transfer_section(self) -> QtWidgets.QWidget:
         options = QtWidgets.QGroupBox("Transfer")
         opt_layout = QtWidgets.QVBoxLayout(options)
         opt_layout.setContentsMargins(6, 6, 6, 6)
@@ -258,8 +274,8 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
         self.material_keys.setChecked(True)
         for box in (self.preserve_scale, self.ignore_scale, self.material_keys):
             opt_layout.addWidget(box)
-        layout.addWidget(options, 0)
-        return column
+        opt_layout.addStretch(1)
+        return options
 
     def _make_model_box(self, title: str) -> QtWidgets.QGroupBox:
         box = QtWidgets.QGroupBox(title)

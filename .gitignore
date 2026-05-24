@@ -259,6 +259,7 @@ claude_desktop_config.json
 
 # ── Internal markdown files ───────────────────────────────────────────────────
 AGENTDECOMPILE_INTEGRATION.md
+AGENTS.md
 CONTEXT_SNAPSHOT.md
 RESEARCH_FINDINGS.md
 SYSTEM_DESIGN.md

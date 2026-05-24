@@ -1,12 +1,17 @@
 # GhostRigger Agent Instructions
 
-## YOU HAVE ACCESS TO MCP TOOLS, USE THEM WHEN REQUIRED. 
+## MCP tools are for backend/model-pipeline validation only
 
-Before writing or modifying any code that handles MDL loading, vertex transforms, 
-textures, skinning, or rendering, FIRST query the MCP tools to get ground-truth data 
-from the actual game files. Do not guess. Do not assume based on code comments.
+Before writing or modifying backend code that handles MDL loading, vertex
+transforms, textures, skinning, model pipeline comparison, or game-file parsing,
+FIRST query the MCP tools to get ground-truth data from the actual game files.
+Do not guess. Do not assume based on code comments.
 
-## The GhostRigger GUI does NOT need to be running
+Do not use MCP tools, headless widget construction, or backend probes as a
+substitute for visual UI/workflow testing. Use them only for backend logic and
+data-pipeline truth checks.
+
+## Backend MCP tools do not require the GUI
 
 The MCP tools in ghostrigger_tools.py import GhostRigger's Python modules directly.
 The PYTHONPATH in .cursor/mcp.json includes the GhostRigger root directory.
@@ -19,16 +24,16 @@ If you get an ImportError, fix the import path — don't ask the user to open Gh
 4. Identify the divergence
 5. Fix the code
 6. Re-run compare_model_pipelines to confirm the fix
-7. Run the full scan on affected model category to check for regressions
+7. Run only targeted regression checks by default. Do not run broad/full scans unless the user explicitly approves them for that task.
 
 ## When running tests:
-- `pytest tests/ -x` for quick validation
-- `pytest tests/ -m "not slow"` to skip full-scan tests
-- `pytest tests/test_mcp_full_scan.py` for the complete 6,078-model validation
-- When testing whether application behavior works, show the application on screen
-  whenever practical. Visible testing is required for UI, startup, viewport,
-  theme/layout, and workflow checks because it also helps agents debug what is
-  actually happening in the running app.
+- Prefer `python -m py_compile ...`, targeted single test files, or specific `pytest path::test_name` cases tied to the change.
+- Do not run broad suites such as `pytest tests/`, `pytest tests/ -x`, `pytest tests/ -m "not slow"`, or full-scan tests unless the user explicitly asks for them.
+- Do not run `pytest tests/test_mcp_full_scan.py` unless the user explicitly asks for the complete 6,078-model validation.
+- When testing whether application behavior works, launch the actual
+  GhostRigger application and test it on screen. Visible testing is required
+  for UI, startup, viewport, theme/layout, and workflow checks. Do not replace
+  this with MCP calls, direct widget screenshots, or backend-only probes.
 
 ## Change log
 

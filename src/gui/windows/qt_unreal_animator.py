@@ -13,7 +13,8 @@ from src.core.qt_core.geometry.model_data import ModelNode, NodeFlags, is_animat
 from src.unreal.animation_retargeting import build_bone_map, retarget_animation, retarget_pose
 from src.unreal import UnrealSkeletonAsset, load_quinn_fbx_model, load_quinn_skeleton_asset, unreal_skeleton_model
 
-from src.gui.qt_lib.rendering.qt_gpu_renderer import GpuRenderer
+from src.gui.qt_lib.rendering.qt_gpu_renderer import create_viewport_renderer
+from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.assets.qt_theme import heading
 from src.gui.qt_lib.panels.qt_ue5_rig_export_panel import QtUE5RigExportPanel
 from src.gui.qt_lib.viewports.qt_viewport import QtUnrealAnimatorViewportWidget
@@ -198,6 +199,7 @@ class QtUnrealAnimatorWindow(QtWidgets.QMainWindow):
         self.resize(1380, 860)
         self.setMinimumSize(940, 620)
         self._navigation_profile = DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+        self._renderer_settings = RendererSettings.from_settings(getattr(parent, "settings_data", {}) or {})
         self._library_rows: list[dict] = []
         self._source_model = None
         self._source_game = ""
@@ -278,7 +280,9 @@ class QtUnrealAnimatorWindow(QtWidgets.QMainWindow):
         self.source_viewport.set_animation_supermodel_hud_placement("bottom")
         for viewport in (self.source_viewport, self.target_viewport):
             viewport.set_hidden_bone_name_fragments(("dummy", "hook"))
-        self._shared_gpu_renderer = GpuRenderer()
+        self.source_viewport.set_renderer_settings(self._renderer_settings)
+        self.target_viewport.set_renderer_settings(self._renderer_settings)
+        self._shared_gpu_renderer = create_viewport_renderer(self._renderer_settings)
         self.source_viewport.set_shared_gpu_renderer(self._shared_gpu_renderer)
         self.target_viewport.set_shared_gpu_renderer(self._shared_gpu_renderer)
         self.source_viewport.set_dual_viewport_mode(True)
@@ -303,6 +307,15 @@ class QtUnrealAnimatorWindow(QtWidgets.QMainWindow):
         root.setStretchFactor(1, 0)
         root.setSizes([500, 300])
         self.setCentralWidget(root)
+
+    def set_renderer_settings(self, settings: RendererSettings | dict | None) -> None:
+        self._renderer_settings = settings if isinstance(settings, RendererSettings) else RendererSettings.from_settings(settings or {})
+        apply_settings = getattr(getattr(self, "_shared_gpu_renderer", None), "set_settings", None)
+        if callable(apply_settings):
+            apply_settings(self._renderer_settings)
+        for viewport in (getattr(self, "source_viewport", None), getattr(self, "target_viewport", None)):
+            if viewport is not None:
+                viewport.set_renderer_settings(self._renderer_settings)
 
     def _source_group(self) -> QtWidgets.QWidget:
         box = QtWidgets.QWidget()

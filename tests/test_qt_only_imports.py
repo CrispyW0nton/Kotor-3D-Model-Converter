@@ -80,7 +80,51 @@ def test_log_panel_embeds_python_terminal():
         assert panel.content_splitter.count() == 2
         assert isinstance(panel.terminal, QtPythonTerminalPanel)
         assert panel.save_button.parent().objectName() == "LogFooter"
-        assert panel.terminal.run_button.parent().objectName() == "PythonTerminalFooter"
+        assert panel.terminal.run_button.parent().objectName() == "PythonTerminalInputRow"
+        for button in (panel.save_button, panel.copy_button, panel.clear_button):
+            assert isinstance(button, QtWidgets.QToolButton)
+            assert button.objectName() == "LogPanelIconButton"
+            assert button.text() == ""
+            assert not button.icon().isNull()
+            assert button.property("_gr_ignore_layout_button_mode") is True
+        for button in (panel.terminal.run_button, panel.terminal.copy_button, panel.terminal.clear_button):
+            assert isinstance(button, QtWidgets.QToolButton)
+            assert button.objectName() == "PythonTerminalIconButton"
+            assert button.text() == ""
+            assert not button.icon().isNull()
+            assert button.property("_gr_ignore_layout_button_mode") is True
+        assert panel.terminal.input.objectName() == "PythonCommandInput"
+        assert "QLineEdit#PythonCommandInput" in panel.terminal.input.styleSheet()
+        panel.resize(760, 72)
+        panel.show()
+        app.processEvents()
+        log_text_bottom = panel.text.mapTo(panel, panel.text.rect().bottomLeft()).y()
+        log_footer_top = panel.log_footer.mapTo(panel, panel.log_footer.rect().topLeft()).y()
+        terminal_output_bottom = panel.terminal.output.mapTo(panel, panel.terminal.output.rect().bottomLeft()).y()
+        terminal_input_top = panel.terminal.input_row_host.mapTo(panel, panel.terminal.input_row_host.rect().topLeft()).y()
+        assert log_text_bottom <= log_footer_top
+        assert terminal_output_bottom <= terminal_input_top
+        assert all(button.isVisible() for button in (
+            panel.save_button,
+            panel.copy_button,
+            panel.clear_button,
+            panel.terminal.run_button,
+            panel.terminal.copy_button,
+            panel.terminal.clear_button,
+        ))
+        panel.resize(760, 420)
+        app.processEvents()
+        log_text_height = panel.text.height()
+        terminal_output_height = panel.terminal.output.height()
+        panel_bottom = panel.rect().bottom()
+        log_footer_bottom = panel.log_footer.mapTo(panel, panel.log_footer.rect().bottomLeft()).y()
+        terminal_input_bottom = panel.terminal.input_row_host.mapTo(
+            panel, panel.terminal.input_row_host.rect().bottomLeft()
+        ).y()
+        assert log_text_height > 180
+        assert terminal_output_height > 180
+        assert panel_bottom - log_footer_bottom <= 2
+        assert panel_bottom - terminal_input_bottom <= 2
         panel.log("left side still logs", "info")
         assert "left side still logs" in panel.get_text()
         panel.terminal.input.setText("1 + 2")

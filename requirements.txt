@@ -14,6 +14,24 @@ PyOpenGL>=3.1.0
 PyOpenGL_accelerate>=3.1.0
 moderngl>=5.8.0
 
+# ── Modern optional GPU renderer backend ────────────────────────────────────
+# WGPU enables modern GPU backend routing.
+# On Windows this can route through Direct3D 12 where supported.
+#
+# IMPORTANT:
+#   GhostRigger must still launch when these packages are absent.
+#   The renderer backend system must detect missing WGPU dependencies and
+#   safely fall back to ModernGL / OpenGL 3.3.
+#
+# Used by:
+#   WGPU Auto
+#   WGPU Direct3D 12
+#   WGPU Vulkan
+#   WGPU OpenGL
+wgpu>=0.31
+rendercanvas>=2.6
+glfw>=2.7
+
 # Keep headless OpenCV because the GUI is handled by Qt/PySide6.
 # This avoids pulling in OpenCV's own GUI/Qt stack.
 opencv-python-headless>=4.8.0
@@ -71,6 +89,9 @@ pygltflib>=1.15.0
 # GhostRigger does not bundle or redistribute Autodesk SDK binaries.
 # Install the matching Autodesk FBX Python SDK for your Python version/platform,
 # then configure the path inside GhostRigger.
+
+# For building bindings if your python version doesnt work with fbx out of the box.
+sip>=6.6.0
 
 # ── IPC / HTTP server ────────────────────────────────────────────────────────
 flask>=2.3.0

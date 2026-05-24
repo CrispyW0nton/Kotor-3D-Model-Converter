@@ -59,7 +59,161 @@ def test_packaged_layouts_load_and_affect_metrics() -> None:
     assert layouts["wide"].viewport.preferred_width > layouts["compact"].viewport.preferred_width
     assert layouts["default"].dock_groups
     assert layouts["profile_lighting"].dock_groups[1].docks == ["lighting", "cameras", "properties"]
+    assert layouts["profile_animation"].name == "Animation"
+    assert layouts["profile_mesh_editing"].name == "Mesh Editing"
+    assert layouts["profile_lighting"].name == "Lighting"
+    assert layouts["profile_cinegraphics"].name == "Cinegraphics"
+    assert layouts["profile_clean"].name == "Default"
+    assert all("Visual Profile" not in layouts[layout_id].name for layout_id in (
+        "profile_animation",
+        "profile_mesh_editing",
+        "profile_lighting",
+        "profile_cinegraphics",
+        "profile_clean",
+    ))
     assert layouts["profile_clean"].panel("contentBrowser").visible is False
+    assert layouts["profile_clean"].panel("outputLog").visible is True
+    assert layouts["profile_clean"].panel("pythonTerminal").visible is True
+    assert layouts["profile_clean"].panel("outputLog").preferred_height < layouts["default"].panel("outputLog").preferred_height
+    assert layouts["profile_mesh_editing"].panel("nodes").visible is False
+
+
+def test_visual_profile_dock_groups_stay_workflow_scoped() -> None:
+    loader = LayoutLoader()
+    layouts = loader.load_dir(ROOT / "config" / "themes" / "layouts")
+
+    expected = {
+        "profile_animation": [
+            ["scene", "content_browser"],
+            ["animations", "properties", "nodes"],
+        ],
+        "profile_mesh_editing": [
+            ["scene", "content_browser"],
+            ["module_meshes", "mesh_tools", "adjust_pivot", "properties"],
+        ],
+        "profile_lighting": [
+            ["scene"],
+            ["lighting", "cameras", "properties"],
+        ],
+        "profile_cinegraphics": [
+            ["scene"],
+            ["cameras", "lighting", "properties"],
+        ],
+        "profile_clean": [],
+    }
+
+    for profile_id, groups in expected.items():
+        layout = layouts[profile_id]
+        assert [group.docks for group in layout.dock_groups] == groups
+        assert all(group.visible for group in layout.dock_groups)
+
+
+def test_visual_profile_apply_hides_detachable_docks_outside_profile() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    layout = LayoutLoader().load_file(ROOT / "config" / "themes" / "layouts" / "profile_lighting.xml")
+    assert layout is not None
+
+    window = QtWidgets.QMainWindow()
+    window._detachable_panels = {}  # type: ignore[attr-defined]
+    for key in (
+        "animations",
+        "nodes",
+        "lighting",
+        "cameras",
+        "module_meshes",
+        "mesh_tools",
+        "adjust_pivot",
+        "2das",
+        "resources",
+    ):
+        dock = QtWidgets.QDockWidget(key, window)
+        dock.setWidget(QtWidgets.QLabel(key))
+        dock.show()
+        window._detachable_panels[key] = dock  # type: ignore[attr-defined]
+
+    LayoutApplier()._apply_panels(layout, window)
+
+    assert not window._detachable_panels["lighting"].isHidden()  # type: ignore[attr-defined]
+    assert not window._detachable_panels["cameras"].isHidden()  # type: ignore[attr-defined]
+    assert window._detachable_panels["animations"].isHidden()  # type: ignore[attr-defined]
+    assert window._detachable_panels["nodes"].isHidden()  # type: ignore[attr-defined]
+    assert window._detachable_panels["module_meshes"].isHidden()  # type: ignore[attr-defined]
+    assert window._detachable_panels["adjust_pivot"].isHidden()  # type: ignore[attr-defined]
+    window.deleteLater()
+    app.processEvents()
+
+
+def test_layout_apply_hides_optional_detachable_docks_not_declared_by_layout() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    for layout_name in ("compact.xml", "cinematic.xml"):
+        layout = LayoutLoader().load_file(ROOT / "config" / "themes" / "layouts" / layout_name)
+        assert layout is not None
+
+        window = QtWidgets.QMainWindow()
+        window._detachable_panels = {}  # type: ignore[attr-defined]
+        for key in ("nodes", "2das", "resources"):
+            dock = QtWidgets.QDockWidget(key, window)
+            dock.setWidget(QtWidgets.QLabel(key))
+            dock.show()
+            window._detachable_panels[key] = dock  # type: ignore[attr-defined]
+
+        LayoutApplier()._apply_panels(layout, window)
+
+        assert window._detachable_panels["nodes"].isHidden()  # type: ignore[attr-defined]
+        assert window._detachable_panels["2das"].isHidden()  # type: ignore[attr-defined]
+        assert window._detachable_panels["resources"].isHidden()  # type: ignore[attr-defined]
+        window.deleteLater()
+    app.processEvents()
+
+
+def test_layout_manager_merges_user_dock_profile_overrides() -> None:
+    manager = LayoutManager(
+        ROOT,
+        {
+            "theme_layout": {
+                "selected_layout": "profile_clean",
+                "layout_overrides": {
+                    "profile_clean": {
+                        "panels": {
+                            "nodes": {
+                                "visible": True,
+                                "region": "left",
+                                "min_width": 260,
+                                "preferred_width": 420,
+                                "min_height": 160,
+                                "preferred_height": 520,
+                            }
+                        },
+                        "dock_groups": [
+                            {
+                                "id": "user_left_1",
+                                "area": "left",
+                                "mode": "tabbed",
+                                "visible": True,
+                                "active": "nodes",
+                                "docks": ["nodes", "2das"],
+                            }
+                        ],
+                    }
+                },
+            }
+        },
+    )
+
+    layout = manager.get_layout("profile_clean")
+
+    assert layout.panel("contentBrowser").visible is False
+    assert layout.panel("nodes").visible is True
+    assert layout.panel("nodes").preferred_width == 420
+    assert [group.docks for group in layout.dock_groups] == [["nodes", "2das"]]
 
 
 def test_stylesheet_builds_from_matrix_theme() -> None:
@@ -449,18 +603,17 @@ def test_matrix_bar_media_is_header_only_and_crop_aware() -> None:
     assert "matrixBar.cropX" in inspect.getsource(QtGhostRiggerMainWindow._matrix_bar_settings)
 
 
-def test_main_window_reserves_command_bar_overflow_height() -> None:
+def test_main_window_reserves_fixed_command_bar_height() -> None:
     import inspect
 
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
-    sync_source = inspect.getsource(QtGhostRiggerMainWindow._sync_command_bar_scroll_height)
     reserved_source = inspect.getsource(QtGhostRiggerMainWindow._sync_reserved_top_rows)
     apply_source = inspect.getsource(LayoutApplier.apply_layout)
 
-    assert "command_bar_scroll" in sync_source
-    assert "PM_ScrollBarExtent" in sync_source
-    assert "_sync_command_bar_scroll_height(height)" in reserved_source
+    assert "command_bar_scroll" not in reserved_source
+    assert "PM_ScrollBarExtent" not in reserved_source
+    assert "host_height = max(36, height, host.sizeHint().height())" in reserved_source
     assert "_sync_reserved_top_rows" in apply_source
 
 

@@ -9,7 +9,9 @@ from PySide6 import QtGui
 from .theme_model import Theme
 
 _QTA_MAP = {
+    "new_scene": "fa5s.folder-plus",
     "open": "fa5s.folder-open",
+    "save": "fa5s.save",
     "autorig": "fa5s.magic",
     "charbuilder": "fa5s.user-cog",
     "modular": "fa5s.cubes",
@@ -18,9 +20,13 @@ _QTA_MAP = {
     "export": "fa5s.file-export",
     "settings": "fa5s.cog",
     "anims": "fa5s.film",
+    "sequence": "fa5s.stream",
     "diag": "fa5s.stethoscope",
     "library": "fa5s.book",
     "props": "fa5s.sliders-h",
+    "scene": "fa5s.layer-group",
+    "lights": "fa5s.lightbulb",
+    "cameras": "fa5s.camera",
 }
 
 
@@ -44,6 +50,9 @@ class ThemeIconManager:
         return icon
 
     def _build_icon(self, name: str, theme: Theme | None = None, size: int = 16) -> QtGui.QIcon:
+        path = self.icon_dir / f"{name}.svg"
+        if path.exists():
+            return QtGui.QIcon(str(path))
         if theme is not None and theme.icons.provider == "qtawesome":
             qta_name = _QTA_MAP.get(name)
             if qta_name:

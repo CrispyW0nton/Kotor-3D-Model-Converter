@@ -607,21 +607,16 @@ def test_t403_set_thumbnail_none_clears_pixmap():
 
 
 # ── T404 ▸ Snap-view button cluster ─────────────────────────────────────────
-def test_t404_snap_view_widget_exists():
-    """The viewport hosts a floating snap-view bar with 6 view buttons + ortho."""
-    from src.gui.qt_lib.viewports.qt_viewport import _FloatingSnapViewWidget
+def test_t404_viewcube_widget_exists():
+    """The viewport hosts a floating ViewCube overlay."""
+    from src.gui.qt_lib.viewports.viewcube import ViewCubeWidget
     app, w = _make_widget()
     try:
-        bar = w._snap_view_widget
-        assert isinstance(bar, _FloatingSnapViewWidget)
+        cube = w._viewcube_widget
+        assert isinstance(cube, ViewCubeWidget)
         # Floating child of the canvas so it overlays the render.
-        assert bar.parent() is w.canvas
-        # The 7th button is the Persp/Ortho toggle.
-        buttons = bar.findChildren(__import__("PySide6").QtWidgets.QPushButton)
-        assert len(buttons) == 7
-        # First 6 are view presets; last is the ortho toggle.
-        assert bar.ortho_button is buttons[-1]
-        assert bar.ortho_button.isCheckable()
+        assert cube.parent() is w.canvas
+        assert w._snap_view_widget is cube
     finally:
         w.deleteLater()
 
@@ -663,6 +658,37 @@ def test_t404_snap_to_view_unknown_preset_is_noop():
         w.deleteLater()
 
 
+def test_t404_viewcube_actions_match_legacy_orientation_presets():
+    """The ViewCube action map preserves the old F/B/L/R/T/Bo targets."""
+    from src.gui.qt_lib.viewports.viewcube_math import ViewAction
+
+    app, w = _make_widget()
+    expected = {
+        ViewAction.FRONT: (90.0, 0.0),
+        ViewAction.BACK: (270.0, 0.0),
+        ViewAction.LEFT: (180.0, 0.0),
+        ViewAction.RIGHT: (0.0, 0.0),
+        ViewAction.TOP: (90.0, 85.0),
+        ViewAction.BOTTOM: (90.0, -85.0),
+    }
+    try:
+        for action, (azimuth, elevation) in expected.items():
+            w.camera.azimuth = 12.0
+            w.camera.elevation = 3.0
+            w.execute_view_action(action)
+            w._snap_anim_t0 -= 1.0
+            w._snap_anim_tick()
+            assert abs((w.camera.azimuth - azimuth) % 360.0) < 1e-6
+            assert abs(w.camera.elevation - elevation) < 1e-6
+        assert w.ortho_mode is False
+        w.execute_view_action(ViewAction.PERSPECTIVE)
+        assert w.ortho_mode is True
+        w.execute_view_action(ViewAction.PERSPECTIVE)
+        assert w.ortho_mode is False
+    finally:
+        w.deleteLater()
+
+
 def test_t404_ortho_toggle_round_trip():
     """Toggling ortho on then off restores the original perspective FOV."""
     app, w = _make_widget()
@@ -686,15 +712,15 @@ def test_t404_ortho_toggle_round_trip():
 
 
 def test_t404_ortho_button_label_tracks_state():
-    """The Persp/Ortho button label flips with the toggle state."""
+    """The ViewCube reads the current projection state from the viewport."""
     app, w = _make_widget()
     try:
-        btn = w._snap_view_widget.ortho_button
-        assert btn.text() == "Persp"
+        cube = w._viewcube_widget
+        assert cube.camera_state()[2] is False
         w.set_ortho_mode(True)
-        assert btn.text() == "Ortho"
+        assert cube.camera_state()[2] is True
         w.set_ortho_mode(False)
-        assert btn.text() == "Persp"
+        assert cube.camera_state()[2] is False
     finally:
         w.deleteLater()
 
@@ -741,22 +767,18 @@ def test_t404_snap_view_hidden_when_canvas_too_narrow():
         w.deleteLater()
 
 
-def test_t404_snap_view_button_signals():
-    """View buttons emit `viewSelected` with the correct preset key."""
+def test_t404_viewcube_face_region_requests_orientation():
+    """ViewCube face regions request the same target as the old view buttons."""
+    from src.gui.qt_lib.viewports.viewcube_math import FACE_DIRECTIONS, ViewAction, ViewCubeRegion
+
     app, w = _make_widget()
     try:
-        bar = w._snap_view_widget
         captured = []
-        bar.viewSelected.connect(lambda k: captured.append(k))
-        # Locate buttons by tooltip
-        from PySide6 import QtWidgets
-        for btn in bar.findChildren(QtWidgets.QPushButton):
-            if btn.toolTip() == "Top view":
-                btn.click()
-                break
-        else:
-            assert False, "Top view button not found"
-        assert captured == ["top"]
+        w._viewcube_widget.orientationRequested.connect(lambda az, el: captured.append((az, el)))
+        w._viewcube_widget._activate_region(
+            ViewCubeRegion("face", "top", FACE_DIRECTIONS[ViewAction.TOP], ViewAction.TOP, "TOP")
+        )
+        assert captured == [(90.0, 85.0)]
     finally:
         w.deleteLater()
 

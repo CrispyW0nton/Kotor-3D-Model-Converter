@@ -1,4 +1,4 @@
-<layout id="profile_mesh_editing" name="Visual Profile: Mesh Editing" version="1">
+<layout id="profile_mesh_editing" name="Mesh Editing" version="1">
     <mainWindow width="1720" height="940" maximized="false"/>
     <toolbars>
         <toolbar id="main" visible="true" buttonMode="iconText" iconSize="18" height="40"/>
@@ -12,7 +12,7 @@
         <panel id="properties" region="right" visible="true" minWidth="300" preferredWidth="380"/>
         <panel id="animationLibrary" region="right" visible="false" minWidth="300" preferredWidth="390"/>
         <panel id="meshTools" region="right" visible="true" minWidth="300" preferredWidth="400"/>
-        <panel id="nodes" region="left" visible="true" minWidth="260" preferredWidth="360"/>
+        <panel id="nodes" region="left" visible="false" minWidth="260" preferredWidth="360"/>
         <panel id="lighting" region="right" visible="false" minWidth="320" preferredWidth="420"/>
         <panel id="cameras" region="right" visible="false" minWidth="340" preferredWidth="440"/>
         <panel id="moduleMeshes" region="right" visible="true" minWidth="380" preferredWidth="560"/>
@@ -32,18 +32,6 @@
             <dock id="mesh_tools"/>
             <dock id="adjust_pivot"/>
             <dock id="properties"/>
-        </group>
-        <group id="nodeData" area="left" mode="tabbed" visible="true" active="nodes">
-            <dock id="nodes"/>
-            <dock id="2das"/>
-            <dock id="resources"/>
-        </group>
-        <group id="lightingCameras" area="right" mode="tabbed" visible="false" active="lighting">
-            <dock id="lighting"/>
-            <dock id="cameras"/>
-        </group>
-        <group id="animation" area="right" mode="tabbed" visible="false" active="animations">
-            <dock id="animations"/>
         </group>
     </dockLayout>
     <viewport>

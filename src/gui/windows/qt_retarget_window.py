@@ -8,8 +8,9 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.core.animation.animation_engine import AnimPose, NodePose
 from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationRetargetPanel
-from src.gui.qt_lib.rendering.qt_gpu_renderer import GpuRenderer
-from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+from src.gui.qt_lib.rendering.qt_gpu_renderer import create_viewport_renderer
+from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
+from src.gui.qt_lib.viewports.qt_viewport import QtRetargetViewportWidget, QtViewportWidget
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 from src.gui.qt_lib.windows.qt_source_clip_preview_model import build_source_clip_preview_model
 from src.gui.qt_lib.windows.qt_retarget_workbench_controller import populate_retarget_mode_combo
@@ -43,6 +44,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self._source_game = "K1"
         self._target_game = "K1"
         self._navigation_profile = DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+        self._renderer_settings = RendererSettings.from_settings(getattr(parent, "settings_data", {}) or {})
         self._source_clip_preview_clip = None
         self._source_clip_mesh_model = None
         self._source_clip_play_name = ""
@@ -50,6 +52,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self._source_clip_play_timer = QtCore.QTimer(self)
         self._source_clip_play_timer.setInterval(33)
         self._source_clip_play_timer.timeout.connect(self._tick_source_clip_playback)
+        self._retarget_docks: dict[str, QtWidgets.QDockWidget] = {}
         self._build_actions()
         self._build_menu()
         self._build_statusbar()
@@ -67,6 +70,20 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             hook = getattr(viewport, "apply_ghost_theme", None)
             if callable(hook):
                 hook(theme)
+        dock_style = (
+            "QDockWidget {"
+            f"  background:{theme.color('panel.backgroundAlt', theme.color('panel.altBackground'))};"
+            f"  color:{theme.color('text.primary')};"
+            f"  border:1px solid {theme.color('panel.border')};"
+            "}"
+            "QDockWidget::title {"
+            f"  background:{theme.color('toolbar.background')};"
+            f"  color:{theme.color('text.primary')};"
+            "  padding:4px 8px;"
+            "}"
+        )
+        for dock in getattr(self, "_retarget_docks", {}).values():
+            dock.setStyleSheet(dock_style)
         self.statusBar().setStyleSheet(
             f"background:{theme.color('toolbar.background')}; color:{theme.color('text.secondary')};"
         )
@@ -75,6 +92,8 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.resize(layout.main_width, layout.main_height)
         for splitter in self.findChildren(QtWidgets.QSplitter):
             splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", 6))
+        for dock in getattr(self, "_retarget_docks", {}).values():
+            dock.setMinimumWidth(max(220, layout.viewport.preferred_width // 4))
         button_height = max(22, layout.toolbar("viewport").height - 8)
         for button in self.findChildren(QtWidgets.QPushButton):
             button.setMinimumHeight(button_height)
@@ -102,6 +121,18 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.frame_source_action.triggered.connect(lambda: self.source_viewport.frame_all())
         self.frame_target_action = QtGui.QAction("Frame Target", self)
         self.frame_target_action.triggered.connect(lambda: self.target_viewport.frame_all())
+        self.viewport_toolbar_action = QtGui.QAction("Viewport Toolbar", self)
+        self.viewport_toolbar_action.setCheckable(True)
+        self.viewport_toolbar_action.setChecked(False)
+        self.viewport_toolbar_action.toggled.connect(lambda checked: self._set_viewport_chrome(toolbar=checked))
+        self.viewcube_action = QtGui.QAction("ViewCube", self)
+        self.viewcube_action.setCheckable(True)
+        self.viewcube_action.setChecked(False)
+        self.viewcube_action.toggled.connect(lambda checked: self._set_viewport_chrome(viewcube=checked))
+        self.transform_typein_action = QtGui.QAction("Transform Type-In", self)
+        self.transform_typein_action.setCheckable(True)
+        self.transform_typein_action.setChecked(False)
+        self.transform_typein_action.toggled.connect(lambda checked: self._set_viewport_chrome(transform_typein=checked))
         self.vertex_tweak_action = QtGui.QAction("Vertex", self)
         self.skin_paint_action = QtGui.QAction("Skin Paint", self)
         self.weight_balance_action = QtGui.QAction("Weights", self)
@@ -127,9 +158,14 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         retarget_menu.addAction(self.preview_action)
         retarget_menu.addAction(self.apply_action)
         retarget_menu.addAction(self.stop_action)
-        view_menu = self.menuBar().addMenu("View")
-        view_menu.addAction(self.frame_source_action)
-        view_menu.addAction(self.frame_target_action)
+        self.view_menu = self.menuBar().addMenu("View")
+        self.view_menu.addAction(self.frame_source_action)
+        self.view_menu.addAction(self.frame_target_action)
+        self.view_menu.addSeparator()
+        self.view_menu.addAction(self.viewport_toolbar_action)
+        self.view_menu.addAction(self.viewcube_action)
+        self.view_menu.addAction(self.transform_typein_action)
+        self.view_menu.addSeparator()
         tools_menu = self.menuBar().addMenu("Tools")
         mode_menu = tools_menu.addMenu("Workbench Tools")
         mode_menu.addAction(self.vertex_tweak_action)
@@ -149,17 +185,18 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         central_layout.setSpacing(4)
         central_layout.addWidget(self._build_workbench_controls(), 0)
 
-        root = QtWidgets.QSplitter(QtCore.Qt.Vertical)
-        root.setChildrenCollapsible(False)
-        self.source_viewport = QtViewportWidget(self)
-        self.target_viewport = QtViewportWidget(self)
-        self._shared_gpu_renderer = GpuRenderer()
+        self.source_viewport = QtRetargetViewportWidget(self)
+        self.target_viewport = QtRetargetViewportWidget(self)
+        self.source_viewport.set_renderer_settings(self._renderer_settings)
+        self.target_viewport.set_renderer_settings(self._renderer_settings)
+        self._shared_gpu_renderer = create_viewport_renderer(self._renderer_settings)
         self.source_viewport.set_shared_gpu_renderer(self._shared_gpu_renderer)
         self.target_viewport.set_shared_gpu_renderer(self._shared_gpu_renderer)
         self.source_viewport.set_dual_viewport_mode(True)
         self.target_viewport.set_dual_viewport_mode(True)
         self.source_viewport.set_navigation_profile(self._navigation_profile)
         self.target_viewport.set_navigation_profile(self._navigation_profile)
+        self._sync_viewport_chrome_actions()
 
         self.panel = QtAnimationRetargetPanel(self)
         self.panel.sourceCurrentRequested.connect(self.sourceCurrentRequested.emit)
@@ -182,11 +219,22 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         viewport_split.addWidget(self._viewport_group(self.panel.target_box, self.target_viewport))
         viewport_split.setSizes([640, 640])
 
+        root = QtWidgets.QSplitter(QtCore.Qt.Vertical)
+        root.setChildrenCollapsible(False)
         root.addWidget(viewport_split)
         root.addWidget(self.panel)
         root.setSizes([560, 260])
         central_layout.addWidget(root, 1)
         self.setCentralWidget(central)
+
+    def set_renderer_settings(self, settings: RendererSettings | dict | None) -> None:
+        self._renderer_settings = settings if isinstance(settings, RendererSettings) else RendererSettings.from_settings(settings or {})
+        apply_settings = getattr(getattr(self, "_shared_gpu_renderer", None), "set_settings", None)
+        if callable(apply_settings):
+            apply_settings(self._renderer_settings)
+        for viewport in (getattr(self, "source_viewport", None), getattr(self, "target_viewport", None)):
+            if viewport is not None:
+                viewport.set_renderer_settings(self._renderer_settings)
 
     def _build_workbench_controls(self) -> QtWidgets.QWidget:
         box = QtWidgets.QFrame(self)
@@ -260,6 +308,75 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         outer.addLayout(details)
         return box
 
+    def _build_overrides_panel(self) -> QtWidgets.QWidget:
+        box = QtWidgets.QWidget(self)
+        layout = QtWidgets.QFormLayout(box)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
+        layout.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+
+        self.kotor_output_name_mode_combo = QtWidgets.QComboBox(box)
+        self.kotor_output_name_mode_combo.setObjectName("kotorOutputNameModeComboBox")
+        self.kotor_output_name_mode_combo.addItem("Vanilla slot override", KotorOutputAnimationNameMode.VANILLA_SLOT.value)
+        self.kotor_output_name_mode_combo.addItem("Custom animation patch", KotorOutputAnimationNameMode.CUSTOM_PATCH.value)
+        self.target_kotor_animation_slot_combo = QtWidgets.QComboBox(box)
+        self.target_kotor_animation_slot_combo.setObjectName("targetKotorAnimationSlotComboBox")
+        self.target_kotor_animation_slot_combo.setEditable(True)
+        self.target_kotor_animation_slot_combo.setMinimumWidth(160)
+        self.custom_kotor_animation_name_edit = QtWidgets.QLineEdit(box)
+        self.custom_kotor_animation_name_edit.setObjectName("customKotorAnimationNameLineEdit")
+        self.custom_kotor_animation_name_edit.setPlaceholderText("gr_spin_attack_01")
+        self.output_unreal_clip_name_edit = QtWidgets.QLineEdit(box)
+        self.output_unreal_clip_name_edit.setObjectName("outputUnrealClipNameLineEdit")
+        self.output_unreal_clip_name_edit.setPlaceholderText("pmbam_pause1")
+        self.retarget_output_display_label_edit = QtWidgets.QLineEdit(box)
+        self.retarget_output_display_label_edit.setObjectName("retargetOutputDisplayLabelLineEdit")
+        self.retarget_output_display_label_edit.setPlaceholderText("Display label / notes")
+
+        layout.addRow("Output type", self.kotor_output_name_mode_combo)
+        layout.addRow("Vanilla slot", self.target_kotor_animation_slot_combo)
+        layout.addRow("Custom patch", self.custom_kotor_animation_name_edit)
+        layout.addRow("UE clip", self.output_unreal_clip_name_edit)
+        layout.addRow("Label / notes", self.retarget_output_display_label_edit)
+        return box
+
+    def _build_retarget_docks(self) -> None:
+        self._retarget_docks = {}
+        animations = self._create_retarget_dock("animations", "Animations", self.panel.animation_section)
+        info = self._create_retarget_dock("information", "Information", self.panel.info_section)
+        transfer = self._create_retarget_dock("transfer", "Transfer", self.panel.transfer_section)
+        overrides = self._create_retarget_dock("overrides", "Overrides", self._build_overrides_panel())
+
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, animations)
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, info)
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, transfer)
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, overrides)
+        self.tabifyDockWidget(info, transfer)
+        self.tabifyDockWidget(info, overrides)
+        info.raise_()
+        self.resizeDocks([animations], [300], QtCore.Qt.Horizontal)
+        self.resizeDocks([info], [190], QtCore.Qt.Vertical)
+
+    def _create_retarget_dock(self, key: str, title: str, widget: QtWidgets.QWidget) -> QtWidgets.QDockWidget:
+        dock = QtWidgets.QDockWidget(title, self)
+        dock.setObjectName(f"Retarget{key.title().replace('_', '')}Dock")
+        dock.setWidget(widget)
+        dock.setAllowedAreas(
+            QtCore.Qt.LeftDockWidgetArea
+            | QtCore.Qt.RightDockWidgetArea
+            | QtCore.Qt.BottomDockWidgetArea
+        )
+        dock.setFeatures(
+            QtWidgets.QDockWidget.DockWidgetClosable
+            | QtWidgets.QDockWidget.DockWidgetMovable
+            | QtWidgets.QDockWidget.DockWidgetFloatable
+        )
+        self._retarget_docks[key] = dock
+        view_menu = getattr(self, "view_menu", None)
+        if view_menu is not None:
+            view_menu.addAction(dock.toggleViewAction())
+        return dock
+
     def _viewport_group(
         self,
         selector: QtWidgets.QWidget,
@@ -287,6 +404,37 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             self.source_viewport.set_navigation_profile(self._navigation_profile)
         if hasattr(self, "target_viewport"):
             self.target_viewport.set_navigation_profile(self._navigation_profile)
+
+    def _set_viewport_chrome(
+        self,
+        *,
+        toolbar: bool | None = None,
+        viewcube: bool | None = None,
+        transform_typein: bool | None = None,
+    ) -> None:
+        for viewport in (getattr(self, "source_viewport", None), getattr(self, "target_viewport", None)):
+            if viewport is None:
+                continue
+            viewport.set_viewport_chrome_visible(
+                toolbar=toolbar,
+                viewcube=viewcube,
+                transform_typein=transform_typein,
+            )
+        self._sync_viewport_chrome_actions()
+
+    def _sync_viewport_chrome_actions(self) -> None:
+        viewport = getattr(self, "source_viewport", None)
+        if viewport is None:
+            return
+        for action, value in (
+            (getattr(self, "viewport_toolbar_action", None), getattr(viewport, "viewport_toolbar_chrome_visible", False)),
+            (getattr(self, "viewcube_action", None), getattr(viewport, "viewcube_chrome_visible", False)),
+            (getattr(self, "transform_typein_action", None), getattr(viewport, "transform_typein_chrome_visible", False)),
+        ):
+            if action is None:
+                continue
+            with QtCore.QSignalBlocker(action):
+                action.setChecked(bool(value))
 
     def set_source_resource_context(self, manager, game_tag: str = "K1") -> None:
         self._resource_manager = manager

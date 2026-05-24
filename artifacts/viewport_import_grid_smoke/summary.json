@@ -1,0 +1,152 @@
+{
+  "artifacts": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\viewport_import_grid_smoke",
+  "cases": [
+    {
+      "scene_objects": 1,
+      "viewport_show_grid": true,
+      "gpu_show_grid": true,
+      "composite_bounds": {
+        "bb_min": [
+          -0.36860000201658355,
+          -0.5259490949101746,
+          0.00018334714112844264
+        ],
+        "bb_max": [
+          0.37243689660233525,
+          0.6143324026416308,
+          1.034836009144783
+        ],
+        "radius": 0.8518361074621342
+      },
+      "first_scene_root": {
+        "name": "P_T3M4",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "source_position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "gpu_transform": true
+      },
+      "camera": {
+        "target": [
+          0.0019184472928758523,
+          0.0441916538657281,
+          0.5175096781429558
+        ],
+        "distance": 1.9403765437780705
+      },
+      "game": "K2",
+      "resref": "p_t3m4",
+      "source_bounds": {
+        "bb_min": [
+          -0.36860000201658355,
+          -0.5259490949101746,
+          0.00018334714112844264
+        ],
+        "bb_max": [
+          0.37243689660233525,
+          0.6143324026416308,
+          1.034836009144783
+        ],
+        "radius": 0.8518361074621342
+      },
+      "window": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\viewport_import_grid_smoke\\K2_p_t3m4_window.png",
+      "canvas": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\viewport_import_grid_smoke\\K2_p_t3m4_canvas.png"
+    },
+    {
+      "scene_objects": 1,
+      "viewport_show_grid": true,
+      "gpu_show_grid": true,
+      "composite_bounds": {
+        "bb_min": [
+          -0.4159014804115667,
+          -0.1847319593606831,
+          -0.00505903078499223
+        ],
+        "bb_max": [
+          0.4170655662243403,
+          0.1438967695362547,
+          0.774257077980359
+        ],
+        "radius": 0.44337890366032107
+      },
+      "first_scene_root": {
+        "name": "N_Yoda",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "source_position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "gpu_transform": true
+      },
+      "camera": {
+        "target": [
+          0.0005820429063868038,
+          -0.020417594912214204,
+          0.3845990235976834
+        ],
+        "distance": 1.2032005656773657
+      },
+      "game": "K1",
+      "resref": "n_yoda",
+      "source_bounds": {
+        "bb_min": [
+          -0.4159014804115667,
+          -0.1847319593606831,
+          -0.0050590511495541
+        ],
+        "bb_max": [
+          0.4170655662243403,
+          0.14389692589536185,
+          0.7742570812720927
+        ],
+        "radius": 0.44337885591237003
+      },
+      "window": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\viewport_import_grid_smoke\\K1_n_yoda_window.png",
+      "canvas": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\viewport_import_grid_smoke\\K1_n_yoda_canvas.png"
+    }
+  ],
+  "empty": {
+    "window": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\viewport_import_grid_smoke\\00_empty_window.png",
+    "canvas": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\viewport_import_grid_smoke\\00_empty_canvas.png",
+    "scene_objects": 0,
+    "viewport_show_grid": true,
+    "gpu_show_grid": true,
+    "composite_bounds": null,
+    "first_scene_root": {
+      "name": "",
+      "position": null,
+      "scale": null,
+      "source_position": null,
+      "gpu_transform": null
+    },
+    "camera": {
+      "target": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "distance": 5.0
+    }
+  }
+}

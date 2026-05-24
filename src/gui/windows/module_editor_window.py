@@ -21,6 +21,7 @@ from src.gui.panels.module_editor.porter_tab import PorterTab
 from src.gui.panels.module_editor.rooms_tab import RoomsTab
 from src.gui.panels.module_editor.validation_panel import ModuleValidationPanel
 from src.gui.panels.module_editor.walkmesh_tab import WalkmeshTab
+from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 
 
@@ -46,6 +47,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._build_menus()
         self._build_ui()
         self._connect()
+        self.set_renderer_settings(RendererSettings.from_settings(getattr(parent, "settings_data", {}) or {}))
         self.set_navigation_profile(
             getattr(parent, "settings_data", {}).get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
             if parent is not None
@@ -287,6 +289,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def set_library_rows(self, rows: list[dict[str, Any]]) -> None:
         self._library_rows = [dict(row) for row in rows]
         self.asset_browser.set_rows(self._library_rows)
+
+    def set_renderer_settings(self, settings: RendererSettings | dict | None) -> None:
+        renderer_settings = settings if isinstance(settings, RendererSettings) else RendererSettings.from_settings(settings or {})
+        viewport_panel = getattr(self, "viewport_panel", None)
+        if viewport_panel is not None and hasattr(viewport_panel, "set_renderer_settings"):
+            viewport_panel.set_renderer_settings(renderer_settings)
 
     def import_selected_library_asset(self) -> None:
         row = self.asset_browser.selected_row()
@@ -539,6 +547,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def apply_ghost_theme(self, theme) -> None:
         if theme is None:
             return
+        if getattr(theme, "is_native", lambda: False)():
+            self.apply_native_theme()
+            return
         stylesheet = ""
         try:
             from src.gui.libtheme.qt_stylesheet_builder import QtStylesheetBuilder
@@ -552,6 +563,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             hook = getattr(widget, "apply_ghost_theme", None)
             if callable(hook):
                 hook(theme)
+
+    def apply_native_theme(self) -> None:
+        self.setStyleSheet("")
+        for widget in self.findChildren(QtWidgets.QWidget):
+            widget.setStyleSheet("")
+        for widget in self.findChildren(QtWidgets.QWidget):
+            hook = getattr(widget, "apply_native_theme", None)
+            if callable(hook):
+                hook()
 
     def apply_ghost_layout(self, layout) -> None:
         if layout is None:
