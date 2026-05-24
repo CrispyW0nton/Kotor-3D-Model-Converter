@@ -32,19 +32,6 @@
             <dock id="properties"/>
             <dock id="nodes"/>
         </group>
-        <group id="technicalBrowsers" area="left" mode="tabbed" visible="false" active="resources">
-            <dock id="2das"/>
-            <dock id="resources"/>
-        </group>
-        <group id="lightingCameras" area="right" mode="tabbed" visible="false" active="cameras">
-            <dock id="lighting"/>
-            <dock id="cameras"/>
-        </group>
-        <group id="meshEditing" area="right" mode="tabbed" visible="false" active="mesh_tools">
-            <dock id="module_meshes"/>
-            <dock id="mesh_tools"/>
-            <dock id="adjust_pivot"/>
-        </group>
     </dockLayout>
     <viewport>
         <region id="mainViewport" minWidth="560" preferredWidth="900"/>

@@ -78,13 +78,46 @@ def test_content_browser_splitter_keeps_user_adjusted_pane_sizes() -> None:
     panel._apply_initial_splitter_sizes()
     initial = panel.splitter.sizes()
 
-    panel.splitter.setSizes([180, 360, 220])
+    panel.splitter.setSizes([240, 520])
     panel._on_splitter_moved(180, 1)
     moved = panel.splitter.sizes()
     panel.apply_ghost_layout(Layout())
 
     assert moved != initial
     assert panel.splitter.sizes() == moved
+
+
+def test_content_browser_stacks_navigation_and_details_in_left_sidebar() -> None:
+    _qapp()
+
+    from PySide6 import QtWidgets
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+
+    assert panel.splitter.count() == 2
+    assert panel.splitter.widget(0) is panel.sidebar
+    assert panel.splitter.widget(1) is panel.asset_area
+    assert panel.sidebar.layout().indexOf(panel.nav_tree) < panel.sidebar.layout().indexOf(panel.details)
+    assert panel.details.parentWidget() is panel.sidebar
+    assert panel.asset_view.parentWidget() is panel.asset_area
+
+    labels = {label.text() for label in panel.findChildren(QtWidgets.QLabel)}
+    assert {"Asset Type", "Game", "Source", "Tags", "Updated", "Compatibility"} <= labels
+
+
+def test_content_browser_stop_button_emits_animation_stop_without_selection() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    actions = []
+    panel.libraryActionRequested.connect(actions.append)
+
+    panel.stop_button.click()
+
+    assert actions == ["Stop"]
 
 
 def test_content_browser_keeps_scanned_animations_when_scene_selection_changes() -> None:

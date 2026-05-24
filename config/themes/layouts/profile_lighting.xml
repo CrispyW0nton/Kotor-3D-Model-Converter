@@ -5,10 +5,10 @@
         <toolbar id="viewport" visible="true" buttonMode="textBesideIcon" iconSize="16" height="34"/>
     </toolbars>
     <panels>
-        <panel id="contentBrowser" region="left" visible="true" minWidth="260" preferredWidth="340" minHeight="260" preferredHeight="420"/>
+        <panel id="contentBrowser" region="left" visible="false" minWidth="260" preferredWidth="340" minHeight="260" preferredHeight="420"/>
         <panel id="scene" region="left" visible="true" minWidth="240" preferredWidth="320" minHeight="180" preferredHeight="260"/>
-        <panel id="library" region="left" visible="true" minWidth="280" preferredWidth="390"/>
-        <panel id="modules" region="left" visible="true" minWidth="280" preferredWidth="390"/>
+        <panel id="library" region="left" visible="false" minWidth="280" preferredWidth="390"/>
+        <panel id="modules" region="left" visible="false" minWidth="280" preferredWidth="390"/>
         <panel id="properties" region="right" visible="true" minWidth="300" preferredWidth="360"/>
         <panel id="animationLibrary" region="right" visible="false" minWidth="300" preferredWidth="390"/>
         <panel id="meshTools" region="right" visible="false" minWidth="260" preferredWidth="340"/>
@@ -23,27 +23,13 @@
         <panel id="pythonTerminal" region="bottom" visible="true" minHeight="120" preferredHeight="170"/>
     </panels>
     <dockLayout>
-        <group id="sceneLibrary" area="left" mode="vertical" visible="true" active="scene">
+        <group id="scene" area="left" mode="tabbed" visible="true" active="scene">
             <dock id="scene"/>
-            <dock id="content_browser"/>
         </group>
         <group id="lightingCameras" area="right" mode="tabbed" visible="true" active="lighting">
             <dock id="lighting"/>
             <dock id="cameras"/>
             <dock id="properties"/>
-        </group>
-        <group id="dataBrowsers" area="left" mode="tabbed" visible="false" active="nodes">
-            <dock id="nodes"/>
-            <dock id="2das"/>
-            <dock id="resources"/>
-        </group>
-        <group id="meshEditing" area="right" mode="tabbed" visible="false" active="mesh_tools">
-            <dock id="module_meshes"/>
-            <dock id="mesh_tools"/>
-            <dock id="adjust_pivot"/>
-        </group>
-        <group id="animation" area="right" mode="tabbed" visible="false" active="animations">
-            <dock id="animations"/>
         </group>
     </dockLayout>
     <viewport>

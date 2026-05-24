@@ -5962,6 +5962,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._log(f"Animation library refreshed: {count} scene/current animation rows", "info")
             return
         panel = getattr(self, "content_browser_panel", getattr(self, "animation_library_panel", None))
+        if action == "Stop":
+            self._handle_animation_action("Stop", "")
+            return
         entry = panel.selected_entry() if panel is not None and hasattr(panel, "selected_entry") else None
         if not entry:
             QtWidgets.QMessageBox.information(self, "Animation Library", "Select an animation entry first.")

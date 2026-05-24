@@ -1,0 +1,20 @@
+{
+  "compact": {
+    "content_browser": true,
+    "scene": true,
+    "properties": true,
+    "animations": true,
+    "nodes": false,
+    "2das": false,
+    "resources": false
+  },
+  "cinematic": {
+    "content_browser": true,
+    "scene": true,
+    "properties": true,
+    "animations": true,
+    "nodes": false,
+    "2das": false,
+    "resources": false
+  }
+}

@@ -60,6 +60,103 @@ def test_packaged_layouts_load_and_affect_metrics() -> None:
     assert layouts["default"].dock_groups
     assert layouts["profile_lighting"].dock_groups[1].docks == ["lighting", "cameras", "properties"]
     assert layouts["profile_clean"].panel("contentBrowser").visible is False
+    assert layouts["profile_mesh_editing"].panel("nodes").visible is False
+
+
+def test_visual_profile_dock_groups_stay_workflow_scoped() -> None:
+    loader = LayoutLoader()
+    layouts = loader.load_dir(ROOT / "config" / "themes" / "layouts")
+
+    expected = {
+        "profile_animation": [
+            ["scene", "content_browser"],
+            ["animations", "properties", "nodes"],
+        ],
+        "profile_mesh_editing": [
+            ["scene", "content_browser"],
+            ["module_meshes", "mesh_tools", "adjust_pivot", "properties"],
+        ],
+        "profile_lighting": [
+            ["scene"],
+            ["lighting", "cameras", "properties"],
+        ],
+        "profile_cinegraphics": [
+            ["scene"],
+            ["cameras", "lighting", "properties"],
+        ],
+        "profile_clean": [],
+    }
+
+    for profile_id, groups in expected.items():
+        layout = layouts[profile_id]
+        assert [group.docks for group in layout.dock_groups] == groups
+        assert all(group.visible for group in layout.dock_groups)
+
+
+def test_visual_profile_apply_hides_detachable_docks_outside_profile() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    layout = LayoutLoader().load_file(ROOT / "config" / "themes" / "layouts" / "profile_lighting.xml")
+    assert layout is not None
+
+    window = QtWidgets.QMainWindow()
+    window._detachable_panels = {}  # type: ignore[attr-defined]
+    for key in (
+        "animations",
+        "nodes",
+        "lighting",
+        "cameras",
+        "module_meshes",
+        "mesh_tools",
+        "adjust_pivot",
+        "2das",
+        "resources",
+    ):
+        dock = QtWidgets.QDockWidget(key, window)
+        dock.setWidget(QtWidgets.QLabel(key))
+        dock.show()
+        window._detachable_panels[key] = dock  # type: ignore[attr-defined]
+
+    LayoutApplier()._apply_panels(layout, window)
+
+    assert not window._detachable_panels["lighting"].isHidden()  # type: ignore[attr-defined]
+    assert not window._detachable_panels["cameras"].isHidden()  # type: ignore[attr-defined]
+    assert window._detachable_panels["animations"].isHidden()  # type: ignore[attr-defined]
+    assert window._detachable_panels["nodes"].isHidden()  # type: ignore[attr-defined]
+    assert window._detachable_panels["module_meshes"].isHidden()  # type: ignore[attr-defined]
+    assert window._detachable_panels["adjust_pivot"].isHidden()  # type: ignore[attr-defined]
+    window.deleteLater()
+    app.processEvents()
+
+
+def test_layout_apply_hides_optional_detachable_docks_not_declared_by_layout() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    for layout_name in ("compact.xml", "cinematic.xml"):
+        layout = LayoutLoader().load_file(ROOT / "config" / "themes" / "layouts" / layout_name)
+        assert layout is not None
+
+        window = QtWidgets.QMainWindow()
+        window._detachable_panels = {}  # type: ignore[attr-defined]
+        for key in ("nodes", "2das", "resources"):
+            dock = QtWidgets.QDockWidget(key, window)
+            dock.setWidget(QtWidgets.QLabel(key))
+            dock.show()
+            window._detachable_panels[key] = dock  # type: ignore[attr-defined]
+
+        LayoutApplier()._apply_panels(layout, window)
+
+        assert window._detachable_panels["nodes"].isHidden()  # type: ignore[attr-defined]
+        assert window._detachable_panels["2das"].isHidden()  # type: ignore[attr-defined]
+        assert window._detachable_panels["resources"].isHidden()  # type: ignore[attr-defined]
+        window.deleteLater()
+    app.processEvents()
 
 
 def test_stylesheet_builds_from_matrix_theme() -> None:

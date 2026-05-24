@@ -22,28 +22,7 @@
         <panel id="outputLog" region="bottom" visible="false" minHeight="100" preferredHeight="140"/>
         <panel id="pythonTerminal" region="bottom" visible="false" minHeight="100" preferredHeight="140"/>
     </panels>
-    <dockLayout>
-        <group id="startupTools" area="left" mode="tabbed" visible="false" active="content_browser">
-            <dock id="scene"/>
-            <dock id="content_browser"/>
-            <dock id="properties"/>
-            <dock id="animations"/>
-        </group>
-        <group id="dataBrowsers" area="left" mode="tabbed" visible="false" active="nodes">
-            <dock id="nodes"/>
-            <dock id="2das"/>
-            <dock id="resources"/>
-        </group>
-        <group id="lightingCameras" area="right" mode="tabbed" visible="false" active="lighting">
-            <dock id="lighting"/>
-            <dock id="cameras"/>
-        </group>
-        <group id="meshEditing" area="right" mode="tabbed" visible="false" active="mesh_tools">
-            <dock id="module_meshes"/>
-            <dock id="mesh_tools"/>
-            <dock id="adjust_pivot"/>
-        </group>
-    </dockLayout>
+    <dockLayout/>
     <viewport>
         <region id="mainViewport" minWidth="900" preferredWidth="1180"/>
         <toolbar visible="true" buttonMode="textBesideIcon" compact="false"/>

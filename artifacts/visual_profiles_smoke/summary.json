@@ -1,0 +1,72 @@
+{
+  "profile_animation": {
+    "content_browser": true,
+    "scene": true,
+    "properties": true,
+    "animations": true,
+    "nodes": true,
+    "lighting": false,
+    "cameras": false,
+    "module_meshes": false,
+    "mesh_tools": false,
+    "adjust_pivot": false,
+    "2das": false,
+    "resources": false
+  },
+  "profile_mesh_editing": {
+    "content_browser": true,
+    "scene": true,
+    "properties": true,
+    "animations": false,
+    "nodes": false,
+    "lighting": false,
+    "cameras": false,
+    "module_meshes": true,
+    "mesh_tools": true,
+    "adjust_pivot": true,
+    "2das": false,
+    "resources": false
+  },
+  "profile_lighting": {
+    "content_browser": false,
+    "scene": true,
+    "properties": true,
+    "animations": false,
+    "nodes": false,
+    "lighting": true,
+    "cameras": true,
+    "module_meshes": false,
+    "mesh_tools": false,
+    "adjust_pivot": false,
+    "2das": false,
+    "resources": false
+  },
+  "profile_cinegraphics": {
+    "content_browser": false,
+    "scene": true,
+    "properties": true,
+    "animations": false,
+    "nodes": false,
+    "lighting": true,
+    "cameras": true,
+    "module_meshes": false,
+    "mesh_tools": false,
+    "adjust_pivot": false,
+    "2das": false,
+    "resources": false
+  },
+  "profile_clean": {
+    "content_browser": false,
+    "scene": false,
+    "properties": false,
+    "animations": false,
+    "nodes": false,
+    "lighting": false,
+    "cameras": false,
+    "module_meshes": false,
+    "mesh_tools": false,
+    "adjust_pivot": false,
+    "2das": false,
+    "resources": false
+  }
+}

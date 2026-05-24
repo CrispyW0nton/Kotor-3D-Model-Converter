@@ -151,13 +151,22 @@ class LayoutApplier(QtCore.QObject):
         if isinstance(docks, dict):
             for key, panel_id in (
                 ("animations", "animationLibrary"),
+                ("nodes", "nodes"),
+                ("lighting", "lighting"),
+                ("cameras", "cameras"),
+                ("module_meshes", "moduleMeshes"),
                 ("mesh_tools", "meshTools"),
+                ("adjust_pivot", "adjustPivot"),
+                ("2das", "2das"),
+                ("resources", "resources"),
             ):
                 dock = docks.get(key)
-                panel = layout.panel(panel_id)
                 if dock is not None:
-                    if key == "mesh_tools":
-                        dock.setVisible(panel.visible)
+                    panel = layout.panel(panel_id)
+                    if panel_id not in layout.panels:
+                        dock.setVisible(False)
+                        continue
+                    dock.setVisible(panel.visible)
                     dock.resize(panel.preferred_width, max(520, panel.preferred_height))
         self._apply_dock_groups(layout, window)
 

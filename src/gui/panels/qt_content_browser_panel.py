@@ -151,9 +151,36 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self.nav_tree.setMinimumWidth(96)
         self.nav_tree.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         self.nav_tree.itemSelectionChanged.connect(self._on_navigation_changed)
-        self.splitter.addWidget(self.nav_tree)
+
+        self.details = QtWidgets.QWidget()
+        self.details.setObjectName("contentBrowserDetails")
+        self.details.setMinimumWidth(112)
+        self.details.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+        details_layout = QtWidgets.QVBoxLayout(self.details)
+        details_layout.setContentsMargins(0, 0, 0, 0)
+        details_layout.setSpacing(5)
+        self.detail_title = QtWidgets.QLabel("Select an asset")
+        self.detail_title.setProperty("heading", True)
+        self.detail_text = QtWidgets.QPlainTextEdit()
+        self.detail_text.setReadOnly(True)
+        self.detail_text.setMaximumBlockCount(80)
+        details_layout.addWidget(self.detail_title)
+        details_layout.addWidget(self.detail_text, 1)
+        self._build_action_buttons(details_layout)
+
+        self.sidebar = QtWidgets.QWidget()
+        self.sidebar.setObjectName("contentBrowserSidebar")
+        self.sidebar.setMinimumWidth(126)
+        self.sidebar.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+        sidebar_layout = QtWidgets.QVBoxLayout(self.sidebar)
+        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setSpacing(5)
+        sidebar_layout.addWidget(self.nav_tree, 2)
+        sidebar_layout.addWidget(self.details, 3)
+        self.splitter.addWidget(self.sidebar)
 
         center = QtWidgets.QWidget()
+        self.asset_area = center
         center.setMinimumWidth(180)
         center.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         center_layout = QtWidgets.QVBoxLayout(center)
@@ -176,23 +203,6 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self.count_label = QtWidgets.QLabel("")
         center_layout.addWidget(self.count_label)
         self.splitter.addWidget(center)
-
-        self.details = QtWidgets.QWidget()
-        self.details.setObjectName("contentBrowserDetails")
-        self.details.setMinimumWidth(112)
-        self.details.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
-        details_layout = QtWidgets.QVBoxLayout(self.details)
-        details_layout.setContentsMargins(0, 0, 0, 0)
-        details_layout.setSpacing(5)
-        self.detail_title = QtWidgets.QLabel("Select an asset")
-        self.detail_title.setProperty("heading", True)
-        self.detail_text = QtWidgets.QPlainTextEdit()
-        self.detail_text.setReadOnly(True)
-        self.detail_text.setMaximumBlockCount(80)
-        details_layout.addWidget(self.detail_title)
-        details_layout.addWidget(self.detail_text, 1)
-        self._build_action_buttons(details_layout)
-        self.splitter.addWidget(self.details)
 
         status_row = QtWidgets.QHBoxLayout()
         self.status_label = QtWidgets.QLabel("No game directory set")
@@ -256,16 +266,27 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self.compat_filter = QtWidgets.QComboBox()
         self.compat_filter.addItems(["All Compatibility", "Current Game", "Cross-Game"])
         self.compat_filter.currentTextChanged.connect(self._apply_filter)
-        for combo in (
-            self.type_filter,
-            self.game_filter,
-            self.source_filter,
-            self.tag_filter,
-            self.recency_filter,
-            self.compat_filter,
+        for label, combo in (
+            ("Asset Type", self.type_filter),
+            ("Game", self.game_filter),
+            ("Source", self.source_filter),
+            ("Tags", self.tag_filter),
+            ("Updated", self.recency_filter),
+            ("Compatibility", self.compat_filter),
         ):
-            filters.addWidget(combo)
+            filters.addLayout(self._labeled_filter(label, combo))
         layout.addLayout(filters)
+
+    def _labeled_filter(self, text: str, combo: QtWidgets.QComboBox) -> QtWidgets.QVBoxLayout:
+        wrapper = QtWidgets.QVBoxLayout()
+        wrapper.setContentsMargins(0, 0, 0, 0)
+        wrapper.setSpacing(2)
+        label = QtWidgets.QLabel(text)
+        label.setBuddy(combo)
+        combo.setAccessibleName(text)
+        wrapper.addWidget(label)
+        wrapper.addWidget(combo)
+        return wrapper
 
     def _build_action_buttons(self, layout: QtWidgets.QVBoxLayout) -> None:
         self.primary_button = self._compact_action_button("Open")
@@ -275,6 +296,7 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
 
         grid = QtWidgets.QGridLayout()
         self.preview_button = self._compact_action_button("Preview")
+        self.stop_button = self._compact_action_button("Stop")
         self.apply_button = self._compact_action_button("Apply Animation")
         self.extract_button = self._compact_action_button("Extract")
         self.level_button = self._compact_action_button("Add to Scene")
@@ -284,6 +306,7 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self.target_button = self._compact_action_button("Retarget Target")
         buttons = [
             self.preview_button,
+            self.stop_button,
             self.apply_button,
             self.extract_button,
             self.level_button,
@@ -296,6 +319,7 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
             button.setProperty("compact", True)
             grid.addWidget(button, index // 2, index % 2)
         self.preview_button.clicked.connect(lambda: self.libraryActionRequested.emit("Preview"))
+        self.stop_button.clicked.connect(lambda: self.libraryActionRequested.emit("Stop"))
         self.apply_button.clicked.connect(lambda: self.libraryActionRequested.emit("Load"))
         self.extract_button.clicked.connect(self.extract_selected)
         self.level_button.clicked.connect(self.import_selected_to_level)
@@ -390,7 +414,7 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         panel = layout.panel("contentBrowser")
         self.setMinimumWidth(panel.min_width)
         spacing = layout.spacing_value("panelSpacing", 5)
-        for widget in (self, self.details):
+        for widget in (self, self.sidebar, self.details):
             widget_layout = widget.layout()
             if widget_layout is not None:
                 widget_layout.setSpacing(spacing)
@@ -407,10 +431,9 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         width = max(1, self.splitter.width())
         if width < 120:
             return
-        nav = max(112, min(190, int(width * 0.22)))
-        details = max(132, min(240, int(width * 0.26)))
-        center = max(180, width - nav - details)
-        self.splitter.setSizes([nav, center, details])
+        sidebar = max(180, min(320, int(width * 0.26)))
+        center = max(180, width - sidebar)
+        self.splitter.setSizes([sidebar, center])
         self._splitter_layout_applied = True
 
     def _rebuild_assets(self) -> None:
@@ -573,6 +596,7 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self.primary_button.setText("Preview" if is_animation else "Open")
         self.primary_button.setEnabled(asset is not None)
         self.preview_button.setEnabled(is_animation)
+        self.stop_button.setEnabled(True)
         self.apply_button.setEnabled(is_animation)
         self.export_button.setEnabled(is_animation)
         self.inspect_button.setEnabled(asset is not None)
@@ -600,11 +624,14 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         menu = QtWidgets.QMenu(self)
         if asset.asset_type == "Animation":
             preview_action = menu.addAction("Preview Animation")
+            stop_action = menu.addAction("Stop Preview")
             load_action = menu.addAction("Load in Current Animations")
             export_action = menu.addAction("Export Animation")
             chosen = menu.exec(self.asset_view.mapToGlobal(pos))
             if chosen is preview_action:
                 self.libraryActionRequested.emit("Preview")
+            elif chosen is stop_action:
+                self.libraryActionRequested.emit("Stop")
             elif chosen is load_action:
                 self.libraryActionRequested.emit("Load")
             elif chosen is export_action:
