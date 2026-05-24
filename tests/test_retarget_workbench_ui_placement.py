@@ -98,6 +98,66 @@ def test_retarget_workbench_source_target_boxes_have_search_and_external_import(
         window.close()
 
 
+def test_retarget_workbench_uses_internal_docks_and_quiet_viewports() -> None:
+    _qapp()
+    from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
+
+    window = QtAnimationRetargetWindow()
+    try:
+        docks = getattr(window, "_retarget_docks", {})
+        assert set(docks) == {"animations", "mapping", "information", "transfer", "overrides"}
+        assert docks["animations"].widget() is window.panel.animation_section
+        assert docks["mapping"].widget() is window.panel.mapping_section
+        assert docks["information"].widget() is window.panel.info_section
+        assert docks["transfer"].widget() is window.panel.transfer_section
+        assert window.findChild(QtWidgets.QDockWidget, "RetargetOverridesDock") is docks["overrides"]
+
+        for viewport in (window.source_viewport, window.target_viewport):
+            assert viewport.viewport_role == "retarget"
+            toolbar = viewport.findChild(QtWidgets.QFrame, "ViewportToolbar")
+            assert toolbar is not None
+            assert viewport.viewport_toolbar_scroll.isVisible() is False
+            assert toolbar.isVisible() is False
+            assert viewport.transform_typein_bar.isVisible() is False
+            assert viewport._viewcube_widget.isVisible() is False
+    finally:
+        window.close()
+
+
+def test_retarget_workbench_view_menu_toggles_viewport_chrome() -> None:
+    app = _qapp()
+    from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
+
+    window = QtAnimationRetargetWindow()
+    try:
+        window.show()
+        app.processEvents()
+
+        assert window.viewport_toolbar_action.isCheckable()
+        assert window.viewcube_action.isCheckable()
+        assert window.transform_typein_action.isCheckable()
+        assert window.viewport_toolbar_action.isChecked() is False
+        assert window.viewcube_action.isChecked() is False
+        assert window.transform_typein_action.isChecked() is False
+
+        window.viewport_toolbar_action.trigger()
+        window.viewcube_action.trigger()
+        window.transform_typein_action.trigger()
+        for viewport in (window.source_viewport, window.target_viewport):
+            toolbar = viewport.findChild(QtWidgets.QFrame, "ViewportToolbar")
+            assert viewport.viewport_toolbar_chrome_visible is True
+            assert viewport.viewcube_chrome_visible is True
+            assert viewport.transform_typein_chrome_visible is True
+            assert toolbar.isVisible() is True
+            assert viewport.viewport_toolbar_scroll.isVisible() is True
+            assert viewport.transform_typein_bar.isVisible() is True
+        assert window.viewport_toolbar_action.isChecked() is True
+        assert window.viewcube_action.isChecked() is True
+        assert window.transform_typein_action.isChecked() is True
+    finally:
+        window.close()
+
+
 def test_retarget_window_source_clip_preview_populates_source_viewport() -> None:
     _qapp()
     from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow

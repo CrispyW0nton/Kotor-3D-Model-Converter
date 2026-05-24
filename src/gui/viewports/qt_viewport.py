@@ -514,6 +514,9 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     DEFAULT_THUMBNAIL_ENABLED = False
     DEFAULT_COMPACT_CONTROLS = False
+    DEFAULT_VIEWPORT_TOOLBAR_VISIBLE = True
+    DEFAULT_VIEWCUBE_VISIBLE = True
+    DEFAULT_TRANSFORM_TYPEIN_VISIBLE = True
     VIEWPORT_ROLE = "base"
 
     modelChanged = QtCore.Signal(object)
@@ -545,6 +548,9 @@ class QtViewportWidget(QtWidgets.QWidget):
             compact_controls = self.DEFAULT_COMPACT_CONTROLS
         self.viewport_role = self.VIEWPORT_ROLE
         self._compact_controls = bool(compact_controls)
+        self._viewport_toolbar_visible = bool(self.DEFAULT_VIEWPORT_TOOLBAR_VISIBLE)
+        self._viewcube_visible = bool(self.DEFAULT_VIEWCUBE_VISIBLE)
+        self._transform_typein_visible = bool(self.DEFAULT_TRANSFORM_TYPEIN_VISIBLE)
         self.camera = ArcBallCamera()
         self._renderer = FrameRenderer(self.camera)
         self._renderer.show_gimbal = bool(getattr(self._renderer, "show_gimbal", True))
@@ -1202,6 +1208,11 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._snap_anim_to = (0.0, 0.0)
         self._ortho_mode: bool = False
         self._reposition_viewcube()
+        self.set_viewport_chrome_visible(
+            toolbar=self._viewport_toolbar_visible,
+            viewcube=self._viewcube_visible,
+            transform_typein=self._transform_typein_visible,
+        )
 
     def take_viewport_toolbar(self) -> QtWidgets.QWidget | None:
         """Detach the viewport tool strip so the application shell can host it."""
@@ -1219,6 +1230,53 @@ class QtViewportWidget(QtWidgets.QWidget):
         toolbar_scroll.deleteLater()
         self.viewport_toolbar_scroll = None
         return toolbar
+
+    def set_viewport_chrome_visible(
+        self,
+        *,
+        toolbar: bool | None = None,
+        viewcube: bool | None = None,
+        transform_typein: bool | None = None,
+    ) -> None:
+        """Show or hide optional viewport UI chrome for embedded workflows."""
+
+        if toolbar is not None:
+            self._viewport_toolbar_visible = bool(toolbar)
+        if viewcube is not None:
+            self._viewcube_visible = bool(viewcube)
+        if transform_typein is not None:
+            self._transform_typein_visible = bool(transform_typein)
+        self._sync_viewport_chrome_visibility()
+        self._request_render(fast=True)
+
+    def _sync_viewport_chrome_visibility(self) -> None:
+        toolbar_scroll = getattr(self, "viewport_toolbar_scroll", None)
+        if toolbar_scroll is not None:
+            toolbar_scroll.setVisible(self._viewport_toolbar_visible)
+        toolbar = self.findChild(QtWidgets.QFrame, "ViewportToolbar")
+        if toolbar is not None:
+            toolbar.setVisible(self._viewport_toolbar_visible)
+        typein = getattr(self, "transform_typein_bar", None)
+        if typein is not None:
+            typein.setVisible(self._transform_typein_visible)
+        cube = getattr(self, "_viewcube_widget", None)
+        if cube is not None:
+            if self._viewcube_visible:
+                self._reposition_viewcube()
+            else:
+                cube.hide()
+
+    @property
+    def viewport_toolbar_chrome_visible(self) -> bool:
+        return bool(self._viewport_toolbar_visible)
+
+    @property
+    def viewcube_chrome_visible(self) -> bool:
+        return bool(self._viewcube_visible)
+
+    @property
+    def transform_typein_chrome_visible(self) -> bool:
+        return bool(self._transform_typein_visible)
 
     def _button(
         self,
@@ -1366,12 +1424,12 @@ class QtViewportWidget(QtWidgets.QWidget):
         toolbar = self.findChild(QtWidgets.QFrame, "ViewportToolbar")
         toolbar_layout = layout.toolbar("viewport")
         if toolbar is not None:
-            toolbar.setVisible(toolbar_layout.visible and layout.viewport.toolbar_visible)
+            toolbar.setVisible(self._viewport_toolbar_visible and toolbar_layout.visible and layout.viewport.toolbar_visible)
             toolbar.setMinimumHeight(toolbar_layout.height)
             toolbar.setMaximumHeight(16777215)
         toolbar_scroll = getattr(self, "viewport_toolbar_scroll", None)
         if toolbar_scroll is not None:
-            toolbar_scroll.setVisible(toolbar_layout.visible and layout.viewport.toolbar_visible)
+            toolbar_scroll.setVisible(self._viewport_toolbar_visible and toolbar_layout.visible and layout.viewport.toolbar_visible)
             toolbar_scroll.setFixedHeight(max(toolbar_layout.height + 14, toolbar_layout.height))
             parent = toolbar_scroll.parentWidget()
             if parent is not None and parent.objectName() == "ViewportToolbarBand":
@@ -1399,6 +1457,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             self.transform_typein_bar.apply_ghost_layout(layout)
         if hasattr(self, "axis_mode_control"):
             self.axis_mode_control.apply_ghost_layout(layout)
+        self._sync_viewport_chrome_visibility()
 
     def _separator(self) -> QtWidgets.QFrame:
         sep = QtWidgets.QFrame()
@@ -4382,6 +4441,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         cube = getattr(self, "_viewcube_widget", None)
         if cube is None:
             return
+        if not getattr(self, "_viewcube_visible", True):
+            cube.hide()
+            return
         cube.adjustSize()
         cw = max(0, self.canvas.width())
         ch = max(0, self.canvas.height())
@@ -7059,6 +7121,9 @@ class QtRetargetViewportWidget(QtViewportWidget):
 
     VIEWPORT_ROLE = "retarget"
     DEFAULT_THUMBNAIL_ENABLED = False
+    DEFAULT_VIEWPORT_TOOLBAR_VISIBLE = False
+    DEFAULT_VIEWCUBE_VISIBLE = False
+    DEFAULT_TRANSFORM_TYPEIN_VISIBLE = False
 
 
 class QtUnrealAnimatorViewportWidget(QtViewportWidget):
