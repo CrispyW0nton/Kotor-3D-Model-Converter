@@ -1394,6 +1394,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.settings_data.setdefault("show_adjust_pivot_toolbox", True)
         self.settings_data.setdefault("autoscan", True)
         self.settings_data.setdefault("fbx_sdk", {})
+        self.settings_data.setdefault("mixamo_companion_mesh_path", "")
         RendererSettings.apply_defaults(self.settings_data)
         self._preloaded_library = dict(self.startup_input.get("preloaded_library") or {})
         self._suppress_theme_progress_toast = True
@@ -3230,6 +3231,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.animation_retarget_window.previewRequested.connect(self._retarget_workbench_preview_from_window)
         self.animation_retarget_window.sourceAnimationPlayRequested.connect(
             self._retarget_workbench_play_source_animation_from_window
+        )
+        self.animation_retarget_window.sourceAnimationTimeChanged.connect(
+            self._retarget_workbench_sync_target_time_from_source
         )
         self.animation_retarget_window.applyRequested.connect(self._retarget_workbench_apply_from_window)
         self.animation_retarget_window.pauseRequested.connect(self._retarget_pause)
@@ -5696,7 +5700,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 controller.set_target_model(self._retarget_target_model)
             self._refresh_target_kotor_animation_slots()
             if controller.can_preview():
-                preview = controller.preview(auto_play=True, show_node_overlay=True)
+                preview = controller.preview(auto_play=False, show_node_overlay=True)
                 if preview is not None:
                     self._log(f"Retargeted source animation to target preview: {anim_name}", "success")
             elif getattr(controller, "last_error", ""):
@@ -5705,6 +5709,24 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         except Exception as exc:
             self._log(f"UE/FBX source animation playback load failed: {exc}", "error")
             QtWidgets.QMessageBox.critical(self, "Play Source Animation", str(exc))
+
+    def _retarget_workbench_sync_target_time_from_source(self, animation_name: str, time_seconds: float) -> None:
+        controller = getattr(self, "retarget_workbench_controller", None)
+        if controller is None:
+            return
+        mode_name = str(getattr(getattr(controller.state, "mode", None), "name", "") or "")
+        if mode_name not in {"UNREAL_TO_KOTOR", "KOTOR_TO_KOTOR"}:
+            return
+        preview = getattr(controller.state, "last_preview_result", None)
+        if preview is None:
+            return
+        adapter = self._ensure_retarget_workbench_target_viewport_adapter()
+        if adapter is None or not hasattr(adapter, "set_time"):
+            return
+        try:
+            adapter.set_time(float(time_seconds))
+        except Exception as exc:
+            self._log(f"Retarget target time sync failed: {exc}", "warning")
 
     def _retarget_workbench_apply_from_window(self, anim_name: str) -> None:
         controller = getattr(self, "retarget_workbench_controller", None)
@@ -7358,8 +7380,39 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 from src.converters.blender_fbx_mesh_importer import import_fbx_mesh_with_blender
 
                 mesh_model = import_fbx_mesh_with_blender(str(path), game_version=self._game_version())
+                try:
+                    from src.core.retargeting.mixamo_companion_mesh import is_mixamo_companion_mesh_filename
+
+                    if is_mixamo_companion_mesh_filename(path):
+                        self.settings_data["mixamo_companion_mesh_path"] = str(Path(path).resolve())
+                        save_settings(self.settings_path, self.settings_data)
+                        self._log(f"Stored Mixamo companion mesh reference: {Path(path).name}", "info")
+                except Exception as store_exc:
+                    self._log(f"Could not store Mixamo companion mesh reference: {store_exc}", "warning")
             except Exception as exc:
                 self._log(f"UE/FBX source mesh preview unavailable: {exc}", "warning")
+                try:
+                    from src.core.retargeting.mixamo_companion_mesh import find_mixamo_companion_mesh_path
+                    from src.converters.blender_fbx_mesh_importer import import_fbx_mesh_with_blender
+
+                    companion = find_mixamo_companion_mesh_path(
+                        path,
+                        [getattr(node, "name", "") for node in (getattr(clip, "nodes", []) or [])],
+                        configured_mesh_path=self.settings_data.get("mixamo_companion_mesh_path"),
+                    )
+                    if companion is not None:
+                        mesh_model = import_fbx_mesh_with_blender(str(companion), game_version=self._game_version())
+                        self.settings_data["mixamo_companion_mesh_path"] = str(Path(companion).resolve())
+                        save_settings(self.settings_path, self.settings_data)
+                        self._log(
+                            f"Using Mixamo companion source mesh preview <- {companion.name}",
+                            "info",
+                        )
+                except Exception as companion_exc:
+                    self._log(
+                        f"Mixamo companion source mesh preview unavailable: {companion_exc}",
+                        "warning",
+                    )
             self._texture_dir = texture_dir
             if window is not None:
                 window.set_texture_dir(texture_dir)

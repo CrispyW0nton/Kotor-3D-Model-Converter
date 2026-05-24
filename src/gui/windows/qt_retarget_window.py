@@ -33,6 +33,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
     pauseRequested = QtCore.Signal()
     stopRequested = QtCore.Signal()
     sourceAnimationPlayRequested = QtCore.Signal(str)
+    sourceAnimationTimeChanged = QtCore.Signal(str, float)
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
@@ -595,6 +596,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             time=pose.time,
             length=float(getattr(clip, "duration_seconds", 0.0) or 0.0),
         )
+        self.sourceAnimationTimeChanged.emit(str(getattr(clip, "clip_name", "") or ""), float(pose.time))
 
     def _source_clip_pose_delta(self, preview_node, node_name: str, global_transforms: dict, transform) -> tuple[float, float, float]:
         position = tuple(float(v) for v in getattr(transform, "position", (0.0, 0.0, 0.0))[:3])

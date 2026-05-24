@@ -307,6 +307,11 @@ def suggest_mixamo_to_aurora_mapping(
             "recommended_rotation_transfer_mode": "exact_segment_correction",
             "key_unmapped_reference_nodes": True,
             "basis_conversion": "blender_fbx_to_aurora_negate_xy",
+            "source_reference_mode": "source_rest",
+            "source_reference_note": (
+                "Mixamo action clips commonly start in an authored pose, so the R3.B writer "
+                "uses the FBX bind/rest pose as the motion reference instead of clip frame 0."
+            ),
         },
     )
 

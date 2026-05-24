@@ -78,8 +78,74 @@ def test_unreal_source_fbx_import_routes_to_source_clip_before_mesh_conversion()
     assert fbx_source_route in source
     assert "controller.load_source_clip(path)" in source
     assert "import_fbx_mesh_with_blender" in source
+    assert "find_mixamo_companion_mesh_path" in source
+    assert "configured_mesh_path=self.settings_data.get(\"mixamo_companion_mesh_path\")" in source
+    assert "self.settings_data[\"mixamo_companion_mesh_path\"]" in source
     assert "window.set_source_clip_preview(clip, mesh_model=mesh_model)" in source
     assert source.index(fbx_source_route) < source.index("model = self._load_external_retarget_model(path)")
+
+
+def test_mixamo_companion_mesh_finder_uses_sibling_x_bot(tmp_path) -> None:
+    from src.core.retargeting.mixamo_companion_mesh import find_mixamo_companion_mesh_path
+
+    animation = tmp_path / "draw sword 1.fbx"
+    companion = tmp_path / "X Bot.fbx"
+    animation.write_bytes(b"anim")
+    companion.write_bytes(b"mesh")
+    bones = [
+        "mixamorig:Hips",
+        "mixamorig:Spine",
+        "mixamorig:Spine1",
+        "mixamorig:Spine2",
+        "mixamorig:LeftArm",
+        "mixamorig:RightArm",
+        "mixamorig:LeftUpLeg",
+        "mixamorig:RightUpLeg",
+    ]
+
+    assert find_mixamo_companion_mesh_path(animation, bones) == companion
+
+
+def test_mixamo_companion_mesh_finder_prefers_remembered_x_bot(tmp_path) -> None:
+    from src.core.retargeting.mixamo_companion_mesh import find_mixamo_companion_mesh_path
+
+    anim_dir = tmp_path / "anims"
+    mesh_dir = tmp_path / "native"
+    anim_dir.mkdir()
+    mesh_dir.mkdir()
+    animation = anim_dir / "sword and shield attack.fbx"
+    sibling = anim_dir / "X Bot.fbx"
+    remembered = mesh_dir / "X Bot.fbx"
+    animation.write_bytes(b"anim")
+    sibling.write_bytes(b"sibling")
+    remembered.write_bytes(b"remembered")
+    bones = [
+        "mixamorig:Hips",
+        "mixamorig:Spine",
+        "mixamorig:Spine1",
+        "mixamorig:Spine2",
+        "mixamorig:LeftArm",
+        "mixamorig:RightArm",
+        "mixamorig:LeftUpLeg",
+        "mixamorig:RightUpLeg",
+    ]
+
+    assert find_mixamo_companion_mesh_path(
+        animation,
+        bones,
+        configured_mesh_path=remembered,
+    ) == remembered
+
+
+def test_mixamo_companion_mesh_finder_ignores_non_mixamo(tmp_path) -> None:
+    from src.core.retargeting.mixamo_companion_mesh import find_mixamo_companion_mesh_path
+
+    animation = tmp_path / "run.fbx"
+    companion = tmp_path / "X Bot.fbx"
+    animation.write_bytes(b"anim")
+    companion.write_bytes(b"mesh")
+
+    assert find_mixamo_companion_mesh_path(animation, ["pelvis", "spine_01", "upperarm_l"]) is None
 
 
 def test_kotor_to_unreal_target_fbx_import_routes_to_unreal_skeleton_before_mesh_conversion() -> None:

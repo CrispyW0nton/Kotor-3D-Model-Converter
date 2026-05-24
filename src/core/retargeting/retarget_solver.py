@@ -55,6 +55,8 @@ class RetargetSolverOptions:
     allow_pelvis_vertical_translation: bool = False
     key_unmapped_reference_nodes: bool = False
     basis_conversion: Optional[BasisConversion] = None
+    source_reference_mode: Optional[str] = None
+    hybrid_limb_source_rest_weight: Optional[float] = None
     validate_profile: bool = True
     strict: bool = True
     kotor_output_name_mode: KotorOutputAnimationNameMode = KotorOutputAnimationNameMode.VANILLA_SLOT

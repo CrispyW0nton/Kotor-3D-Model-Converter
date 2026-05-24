@@ -281,6 +281,7 @@ def test_verified_mixamo_to_aurora_mapping_uses_family_specific_policy() -> None
     assert "headhook" not in {entry.target_node.lower() for entry in profile.mappings}
     assert profile.metadata["recommended_rotation_transfer_mode"] == "exact_segment_correction"
     assert profile.metadata["key_unmapped_reference_nodes"] is True
+    assert profile.metadata["source_reference_mode"] == "source_rest"
 
     report = validate_retarget_profile(profile, clip, target)
     assert report.success is True

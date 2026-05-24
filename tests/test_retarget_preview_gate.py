@@ -404,6 +404,52 @@ def test_verified_ue5_profile_uses_r3b_writer_path(monkeypatch: pytest.MonkeyPat
     assert any("R3.B hybrid local-basis" in warning for warning in preview.warnings)
 
 
+def test_verified_mixamo_profile_passes_source_rest_reference_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.core.retargeting.aurora_animation_writer import AuroraAnimationWriter, CTRL_ORIENTATION
+
+    source = _source_clip(
+        [("mixamorig:Hips", None)],
+        [{"mixamorig:Hips": Transform()}, {"mixamorig:Hips": Transform()}],
+    )
+    target = _target_model([("pelvis_g", None, (0.0, 0.0, 0.0), None)], anims=("pause1",))
+    profile = _profile([RetargetMappingEntry("pelvis", "mixamorig:Hips", "pelvis_g")])
+    profile.name = "verified_mixamo_to_aurora_profile"
+    profile.metadata["generated_by"] = "verified_mixamo_to_aurora_mapping"
+    profile.metadata["source_reference_mode"] = "source_rest"
+
+    captured: dict[str, object] = {}
+
+    def fake_build_animation(self, *, payload, model, slot_name, **kwargs):
+        captured["kwargs"] = kwargs
+        return Animation(
+            name=slot_name,
+            length=source.duration_seconds,
+            anim_root=model.root_node.name,
+            nodes=[
+                ModelNode(
+                    name=node.name,
+                    controllers=[
+                        {
+                            "type": CTRL_ORIENTATION,
+                            "name": "orientation",
+                            "columns": 4,
+                            "times": [0.0, 1.0],
+                            "values": [list(node.rotation), list(node.rotation)],
+                        }
+                    ],
+                )
+                for node in model.all_nodes()
+            ],
+        )
+
+    monkeypatch.setattr(AuroraAnimationWriter, "build_animation_from_r3a", fake_build_animation)
+    monkeypatch.setattr(AuroraAnimationWriter, "_validate_export_motion_amplitude", lambda *_args, **_kwargs: [])
+
+    build_retarget_preview(RetargetPreviewRequest(source, target, profile))
+
+    assert captured["kwargs"]["source_reference_mode"] == "source_rest"
+
+
 def test_verified_ue5_profile_applies_exact_segment_correction(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.core.retargeting.aurora_animation_writer import AuroraAnimationWriter, CTRL_ORIENTATION
 

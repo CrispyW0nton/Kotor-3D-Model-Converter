@@ -831,6 +831,16 @@ def _verified_source_to_aurora_solver_options(profile: Any) -> RetargetSolverOpt
             metadata.get("recommended_rotation_transfer_mode") or "exact_segment_correction"
         ),
         key_unmapped_reference_nodes=bool(metadata.get("key_unmapped_reference_nodes", True)),
+        source_reference_mode=(
+            str(metadata.get("source_reference_mode")).strip()
+            if metadata.get("source_reference_mode") is not None
+            else None
+        ),
+        hybrid_limb_source_rest_weight=(
+            float(metadata["hybrid_limb_source_rest_weight"])
+            if metadata.get("hybrid_limb_source_rest_weight") is not None
+            else None
+        ),
         basis_conversion=BasisConversion(
             source_basis=(
                 (-1.0, 0.0, 0.0),

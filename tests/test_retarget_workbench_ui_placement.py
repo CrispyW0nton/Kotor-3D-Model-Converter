@@ -282,7 +282,11 @@ def test_workbench_source_playback_auto_retargets_to_workbench_target_viewport()
     assert "window.play_source_clip_animation(anim_name)" in source
     assert "self._apply_retarget_workbench_animation_assignment(anim_name)" in source
     assert "self._ensure_retarget_workbench_target_viewport_adapter()" in source
-    assert "controller.preview(auto_play=True, show_node_overlay=True)" in source
+    assert "controller.preview(auto_play=False, show_node_overlay=True)" in source
+    assert "_retarget_workbench_sync_target_time_from_source" in inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    assert "adapter.set_time(float(time_seconds))" in inspect.getsource(
+        QtGhostRiggerMainWindow._retarget_workbench_sync_target_time_from_source
+    )
     assert "window.target_viewport" in adapter_source
     assert "preview_controller.viewport = adapter" in adapter_source
     assert "workbench_controller.viewport = adapter" in adapter_source

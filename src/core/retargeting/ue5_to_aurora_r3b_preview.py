@@ -43,6 +43,8 @@ VERIFIED_SOURCE_TO_AURORA_PROFILE_GENERATORS = {
     VERIFIED_MIXAMO_TO_AURORA_PROFILE_GENERATOR,
 }
 EXACT_PM_BAM_SEGMENT_PAIRS = (
+    ("spine", "chest"),
+    ("clavicle", "upperarm"),
     ("upperarm", "forearm"),
     ("forearm", "hand"),
     ("hand", "middle_base"),
@@ -115,6 +117,21 @@ def build_r3b_ue5_to_aurora_retarget_result(
         *reference_pair.warnings,
         *payload_result.warnings,
     ]
+    profile_metadata = dict(getattr(normalized_profile, "metadata", {}) or {})
+    source_reference_mode = str(
+        opts.source_reference_mode
+        or profile_metadata.get("source_reference_mode")
+        or "hybrid_limb_source_rest"
+    )
+    hybrid_weight_raw = (
+        opts.hybrid_limb_source_rest_weight
+        if opts.hybrid_limb_source_rest_weight is not None
+        else profile_metadata.get("hybrid_limb_source_rest_weight", 0.35)
+    )
+    try:
+        hybrid_weight = float(hybrid_weight_raw)
+    except (TypeError, ValueError):
+        hybrid_weight = 0.35
     writer = AuroraAnimationWriter()
     animation = writer.build_animation_from_r3a(
         payload=payload_result.payload,
@@ -122,8 +139,8 @@ def build_r3b_ue5_to_aurora_retarget_result(
         slot_name=normalized_profile.animation_slot,
         fps=float(source_clip.sample_rate or 30.0),
         write_zero_position_controllers=False,
-        source_reference_mode="hybrid_limb_source_rest",
-        hybrid_limb_source_rest_weight=0.35,
+        source_reference_mode=source_reference_mode,
+        hybrid_limb_source_rest_weight=hybrid_weight,
         warnings=warnings,
     )
     corrected_segments = apply_verified_pmbam_segment_pose_correction(
@@ -136,7 +153,7 @@ def build_r3b_ue5_to_aurora_retarget_result(
     if corrected_segments:
         warnings.append(
             "R3.B exact PMBAM segment correction aligned "
-            f"{corrected_segments} limb/hand/foot segment tracks against the source clip."
+            f"{corrected_segments} spine/shoulder/limb/hand/foot segment tracks against the source clip."
         )
     amplitude_issues = writer._validate_export_motion_amplitude(payload_result.payload, animation)
     if amplitude_issues:
