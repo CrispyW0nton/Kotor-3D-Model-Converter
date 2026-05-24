@@ -28,6 +28,10 @@ from .retarget_solver import (
     retarget_source_clip_to_aurora_animation,
 )
 from .source_animation import SourceSkeletonClip, normalize_quat_xyzw, quat_dot_xyzw
+from .ue5_to_aurora_r3b_preview import (
+    build_r3b_ue5_to_aurora_retarget_result,
+    should_use_r3b_preview_path,
+)
 
 
 class RetargetPreviewError(ValueError):
@@ -137,13 +141,22 @@ def build_retarget_preview(request: RetargetPreviewRequest) -> RetargetPreviewRe
         solver_options = request.solver_options
 
     try:
-        solver_result = retarget_source_clip_to_aurora_animation(
-            source_clip=request.source_clip,
-            target_model=request.target_model,
-            profile=profile,
-            supermodel_chain=request.supermodel_chain,
-            options=solver_options,
-        )
+        if should_use_r3b_preview_path(profile):
+            solver_result = build_r3b_ue5_to_aurora_retarget_result(
+                source_clip=request.source_clip,
+                target_model=request.target_model,
+                profile=profile,
+                supermodel_chain=request.supermodel_chain,
+                options=solver_options,
+            )
+        else:
+            solver_result = retarget_source_clip_to_aurora_animation(
+                source_clip=request.source_clip,
+                target_model=request.target_model,
+                profile=profile,
+                supermodel_chain=request.supermodel_chain,
+                options=solver_options,
+            )
     except RetargetSolveError as exc:
         raise RetargetPreviewError(f"Cannot preview retargeted animation: {exc}") from exc
     validation = validate_animation_block_against_model(
