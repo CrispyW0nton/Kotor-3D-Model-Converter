@@ -175,6 +175,8 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "qt_transform_typein_bar",
         "qt_uv_viewer",
         "qt_viewport",
+        "viewcube",
+        "viewcube_math",
     ),
     "windows": (
         "module_editor_window",

@@ -34,6 +34,18 @@ from src.gui.qt_lib.gizmo.transform_controller import TransformController
 from src.gui.qt_lib.gizmo.transform_gizmo import TransformGizmo
 from src.gui.qt_lib.gizmo.transform_math import multiply_quaternions, ray_from_mouse, rotate_vector
 from src.gui.qt_lib.viewports.qt_transform_typein_bar import QtTransformTypeInBar
+from src.gui.qt_lib.viewports.viewcube import (
+    VIEWCUBE_MARGIN,
+    VIEWCUBE_MIN_CANVAS_H,
+    VIEWCUBE_MIN_CANVAS_W,
+    ViewCubeWidget,
+)
+from src.gui.qt_lib.viewports.viewcube_math import (
+    ViewAction,
+    action_from_view_name,
+    target_for_action,
+    view_orientation_quaternion,
+)
 from src.gui.qt_lib.panels.axis_mode_control import AxisModeControl
 from src.gui.camera.camera_controller import CameraController
 from src.gui.camera.camera_gizmo_renderer import CameraGizmoRenderer
@@ -1174,11 +1186,13 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._reposition_thumbnail()
 
         # ── T404: Snap-view button cluster (top-center) ────────────────
-        # Floating bar with 6 view-preset buttons + Persp/Ortho toggle.
-        # Wired to a smooth 200 ms interpolation rather than instant snap.
-        self._snap_view_widget = _FloatingSnapViewWidget(self.canvas)
-        self._snap_view_widget.viewSelected.connect(self._snap_to_view)
-        self._snap_view_widget.orthoToggled.connect(self.set_ortho_mode)
+        # ViewCube overlay replaces the old visible snap buttons while
+        # preserving their command layer below.
+        self._viewcube_widget = ViewCubeWidget(self.canvas, camera_state=self._viewcube_camera_state)
+        self._viewcube_widget.viewActionRequested.connect(self.execute_view_action)
+        self._viewcube_widget.orientationRequested.connect(self.animate_to_orientation)
+        self._viewcube_widget.dragOrbitRequested.connect(self.orbit_from_viewcube_drag)
+        self._snap_view_widget = self._viewcube_widget
         # Animation state — driven by a QTimer at ~60 Hz for 200 ms.
         self._snap_anim_timer = QtCore.QTimer(self)
         self._snap_anim_timer.setInterval(int(1000.0 / SNAP_VIEW_INTERP_HZ))
@@ -1187,7 +1201,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._snap_anim_from = (0.0, 0.0)   # (azimuth, elevation)
         self._snap_anim_to = (0.0, 0.0)
         self._ortho_mode: bool = False
-        self._reposition_snap_view()
+        self._reposition_viewcube()
 
     def take_viewport_toolbar(self) -> QtWidgets.QWidget | None:
         """Detach the viewport tool strip so the application shell can host it."""
@@ -2690,9 +2704,12 @@ class QtViewportWidget(QtWidgets.QWidget):
         cw = max(0, self.canvas.width())
         x = cw - THUMBNAIL_WIDTH_PX - THUMBNAIL_MARGIN_PX
         y = THUMBNAIL_MARGIN_PX
+        viewcube = getattr(self, "_viewcube_widget", None)
+        if viewcube is not None and viewcube.isVisible():
+            y = max(y, viewcube.y() + viewcube.height() + THUMBNAIL_MARGIN_PX)
         # Guard against collapsing canvases: if the widget would clip
         # off-screen, hide it rather than render half-off.
-        if x < THUMBNAIL_MARGIN_PX or self.canvas.height() < THUMBNAIL_HEIGHT_PX + 2 * THUMBNAIL_MARGIN_PX:
+        if x < THUMBNAIL_MARGIN_PX or y + THUMBNAIL_HEIGHT_PX + THUMBNAIL_MARGIN_PX > self.canvas.height():
             self._thumbnail_widget.hide()
             return
         self._thumbnail_widget.move(x, y)
@@ -3922,11 +3939,10 @@ class QtViewportWidget(QtWidgets.QWidget):
                 if size != self._last_canvas_size:
                     self._last_canvas_size = size
                     self._request_render()
-                # T403: keep the mini-thumbnail pinned to the top-right
-                # corner as the canvas resizes.
+                # Keep the ViewCube pinned to the viewport overlay corner.
+                self._reposition_viewcube()
+                # Keep the mini-thumbnail nearby without covering the cube.
                 self._reposition_thumbnail()
-                # T404: keep the snap-view bar pinned top-center.
-                self._reposition_snap_view()
                 return False
             if et == QtCore.QEvent.FocusOut:
                 self._snap_key_down = False
@@ -4361,31 +4377,115 @@ class QtViewportWidget(QtWidgets.QWidget):
         return True
 
     # ── T404: Snap-view interpolation + Persp/Ortho ───────────────────
-    def _reposition_snap_view(self) -> None:
-        """Pin the snap-view bar to the top-center of the canvas."""
-        if not hasattr(self, "_snap_view_widget") or self._snap_view_widget is None:
+    def _reposition_viewcube(self) -> None:
+        """Pin the ViewCube to the top-right viewport overlay area."""
+        cube = getattr(self, "_viewcube_widget", None)
+        if cube is None:
             return
-        bar = self._snap_view_widget
-        bar.adjustSize()
-        bw, bh = bar.width(), bar.height()
+        cube.adjustSize()
         cw = max(0, self.canvas.width())
-        if cw < bw + 2 * SNAP_VIEW_BAR_MARGIN:
-            bar.hide()
+        ch = max(0, self.canvas.height())
+        if cw < VIEWCUBE_MIN_CANVAS_W or ch < VIEWCUBE_MIN_CANVAS_H:
+            cube.hide()
             return
-        x = max(SNAP_VIEW_BAR_MARGIN, (cw - bw) // 2)
-        y = SNAP_VIEW_BAR_MARGIN
-        bar.move(x, y)
-        bar.show()
-        bar.raise_()
+        x = max(VIEWCUBE_MARGIN, cw - cube.width() - VIEWCUBE_MARGIN)
+        y = VIEWCUBE_MARGIN
+        cube.move(x, y)
+        cube.show()
+        cube.raise_()
+
+    def _reposition_snap_view(self) -> None:
+        """Backward-compatible name for older tests/extensions."""
+        self._reposition_viewcube()
+
+    def _viewcube_camera_state(self) -> tuple[float, float, bool]:
+        return (
+            float(getattr(self.camera, "azimuth", 90.0)),
+            float(getattr(self.camera, "elevation", 20.0)),
+            bool(getattr(self, "_ortho_mode", False)),
+        )
+
+    def execute_view_action(self, action: object) -> None:
+        """Route ViewCube and legacy commands through the existing camera."""
+        try:
+            view_action = action if isinstance(action, ViewAction) else ViewAction(str(action))
+        except ValueError:
+            return
+        if view_action is ViewAction.PERSPECTIVE:
+            self.set_view_perspective()
+            return
+        if view_action is ViewAction.HOME:
+            self.set_view_home()
+            return
+        target = target_for_action(view_action)
+        if target is not None:
+            self.animate_to_orientation(*target)
+
+    def animate_to_orientation(self, azimuth: float, elevation: float) -> None:
+        """Smoothly interpolate the arcball camera to an azimuth/elevation."""
+        if self.is_camera_view_active() and not self._lock_view_to_camera:
+            self.switch_to_perspective()
+        from_az = float(self.camera.azimuth)
+        from_el = float(self.camera.elevation)
+        to_az, to_el = float(azimuth), float(elevation)
+        delta_az = ((to_az - from_az) + 540.0) % 360.0 - 180.0
+        self._snap_anim_from = (from_az, from_el)
+        self._snap_anim_to = (from_az + delta_az, to_el)
+        self._snap_anim_t0 = time_module.perf_counter()
+        if not self._snap_anim_timer.isActive():
+            self._snap_anim_timer.start()
+
+    def orbit_from_viewcube_drag(self, daz: float, del_: float) -> None:
+        """Orbit the existing camera in response to a ViewCube drag."""
+        if self._snap_anim_timer.isActive():
+            self._snap_anim_timer.stop()
+        if self.is_camera_view_active() and not self._lock_view_to_camera:
+            self.switch_to_perspective()
+        self.camera.orbit(float(daz), float(del_))
+        if self.is_camera_view_active() and self._lock_view_to_camera:
+            self.update_camera_from_view()
+        self._renderer.is_interactive = self._fast_drag_enabled
+        if hasattr(self, "_viewcube_widget") and self._viewcube_widget is not None:
+            self._viewcube_widget.update()
+        self._request_render(fast=True)
+
+    def get_orientation_quaternion(self) -> tuple[float, float, float, float]:
+        return view_orientation_quaternion(self.camera.azimuth, self.camera.elevation)
+
+    def set_view_front(self) -> None:
+        self.execute_view_action(ViewAction.FRONT)
+
+    def set_view_back(self) -> None:
+        self.execute_view_action(ViewAction.BACK)
+
+    def set_view_left(self) -> None:
+        self.execute_view_action(ViewAction.LEFT)
+
+    def set_view_right(self) -> None:
+        self.execute_view_action(ViewAction.RIGHT)
+
+    def set_view_top(self) -> None:
+        self.execute_view_action(ViewAction.TOP)
+
+    def set_view_bottom(self) -> None:
+        self.execute_view_action(ViewAction.BOTTOM)
+
+    def set_view_perspective(self) -> None:
+        self.set_ortho_mode(not self._ortho_mode)
+        if self.is_camera_view_active():
+            self.switch_to_perspective()
+        else:
+            self._request_render(fast=True)
+
+    def set_view_home(self) -> None:
+        self.reset_camera()
 
     def _snap_to_view(self, view: str) -> None:
-        """Smoothly interpolate the camera to a named preset view.
-
-        Implementation: a 200 ms tween over (azimuth, elevation) driven
-        by a QTimer at ~60 Hz.  Distance and target are preserved so
-        the user's framing isn't clobbered when they snap to a side
-        view.
-        """
+        """Legacy snap-view entry point retained for shortcuts/extensions."""
+        action = action_from_view_name(view)
+        if action is not None:
+            self.execute_view_action(action)
+            return
         target = SNAP_VIEW_PRESETS.get(view)
         if target is None:
             return
@@ -4421,6 +4521,10 @@ class QtViewportWidget(QtWidgets.QWidget):
             # Snap to exact target to defeat float drift.
             self.camera.azimuth   = to_az % 360.0
             self.camera.elevation = to_el
+        if self.is_camera_view_active() and self._lock_view_to_camera:
+            self.update_camera_from_view()
+        if hasattr(self, "_viewcube_widget") and self._viewcube_widget is not None:
+            self._viewcube_widget.update()
         self._request_render(fast=True)
 
     def set_ortho_mode(self, ortho: bool) -> None:
@@ -4460,11 +4564,13 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self.camera.distance = float(saved_dist)
         # Keep the snap-view bar's toggle button in sync if the call
         # came from somewhere other than the bar itself.
-        if hasattr(self, "_snap_view_widget") and self._snap_view_widget is not None:
+        if hasattr(self, "_snap_view_widget") and self._snap_view_widget is not None and hasattr(self._snap_view_widget, "ortho_button"):
             btn = self._snap_view_widget.ortho_button
             with QtCore.QSignalBlocker(btn):
                 btn.setChecked(new_val)
                 btn.setText("Ortho" if new_val else "Persp")
+        if hasattr(self, "_viewcube_widget") and self._viewcube_widget is not None:
+            self._viewcube_widget.update()
         self._request_render()
 
     @property
@@ -4472,6 +4578,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         return self._ortho_mode
 
     def _request_render(self, fast: bool = False) -> None:
+        if hasattr(self, "_viewcube_widget") and self._viewcube_widget is not None:
+            self._viewcube_widget.update()
         self._render_pending = True
         now = time_module.perf_counter()
         min_interval_ms = 33 if self._dual_viewport_mode else 16
@@ -5235,6 +5343,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         back to a direct ``update()`` so the overlay reflects state
         changes immediately even on minimal viewports.
         """
+        if hasattr(self, "_viewcube_widget") and self._viewcube_widget is not None:
+            self._viewcube_widget.update()
         try:
             if (
                 hasattr(self, "_render_timer")

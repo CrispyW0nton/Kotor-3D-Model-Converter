@@ -1,0 +1,32 @@
+{
+  "window_visible": true,
+  "command_bar_present": true,
+  "button_order": [
+    "New Scene  Ctrl+N",
+    "Open Scene  Ctrl+O",
+    "Save  Ctrl+S",
+    "Auto-Rig  R",
+    "Character Builder",
+    "Modules",
+    "Tex Dir",
+    "Settings  F2",
+    "Import",
+    "Export",
+    "Content",
+    "Scene Information",
+    "Properties",
+    "Sequence Editor",
+    "Animation Browser",
+    "Nodes",
+    "Lighting",
+    "Cameras",
+    "Module Meshes",
+    "Adjust Pivot",
+    "2DA Browser",
+    "Resource Browser",
+    "Diagnostics  Ctrl+D"
+  ],
+  "animation_browser_index": 14,
+  "sequence_editor_index": 13,
+  "nodes_index": 15
+}

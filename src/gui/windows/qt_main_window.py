@@ -2299,7 +2299,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._tool_button("Auto-Rig  R", self.autorig_action, "autorig"))
         layout.addWidget(self._tool_button("Character Builder", self.character_builder_action, "charbuilder"))
         layout.addWidget(self._tool_button("Modules", self.modules_action, "modular"))
-        layout.addWidget(self._tool_button("Animation Browser", self.animation_browser_dock_action, "anims"))
         layout.addWidget(self._tool_button("Tex Dir", self.texture_dir_action, "texture"))
         layout.addWidget(self._tool_button("Settings  F2", self.settings_action, "settings", compact=True))
 
@@ -2329,6 +2328,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._tool_button("Scene Information", self.scene_panel_action, "scene", compact=True))
         layout.addWidget(self._tool_button("Properties", self.properties_panel_action, "props", compact=True))
         layout.addWidget(self._tool_button("Sequence Editor", self.sequence_editor_action, "sequence", compact=True))
+        layout.addWidget(self._tool_button("Animation Browser", self.animation_browser_dock_action, "anims", compact=True))
         layout.addWidget(self._tool_button("Nodes", self.nodes_panel_action, "skeleton", compact=True))
         layout.addWidget(self._tool_button("Lighting", self.lighting_panel_action, "lights", compact=True))
         layout.addWidget(self._tool_button("Cameras", self.camera_panel_action, "cameras", compact=True))

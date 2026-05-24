@@ -1711,8 +1711,10 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
     assert '"Anims  Ctrl+A"' not in command_source
     assert command_source.index('"New Scene  Ctrl+N"') < command_source.index('"Open Scene  Ctrl+O"')
     assert command_source.index('"Settings  F2"') < command_source.index("layout.addStretch(1)")
-    assert command_source.index('"Animation Browser"') < command_source.index("layout.addStretch(1)")
     assert command_source.index("layout.addStretch(1)") < command_source.index('"Scene Information"')
+    assert command_source.index("layout.addStretch(1)") < command_source.index('"Animation Browser"')
+    assert command_source.index('"Sequence Editor"') < command_source.index('"Animation Browser"')
+    assert command_source.index('"Animation Browser"') < command_source.index('"Nodes"')
     assert "button.setFixedSize(30, 22)" in button_source
     assert "button.setIconSize(QtCore.QSize(18, 18))" in button_source
     assert "button.setFixedSize(34, 22)" in menu_source
