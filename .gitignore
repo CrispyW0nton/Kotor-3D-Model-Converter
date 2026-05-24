@@ -114,6 +114,7 @@ pytest.ini
 .pytest_tmp*/
 
 # ── Audit / render output (generated artefacts) ───────────────────────────────
+artifacts/
 audit_output/
 logs/
 Logs/
