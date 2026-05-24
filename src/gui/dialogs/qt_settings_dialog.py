@@ -379,7 +379,7 @@ class QtSettingsDialog(QtWidgets.QDialog):
             "autoscan": self.autoscan_check.isChecked(),
             "renderer": {
                 "backend": self.renderer_backend_combo.currentData(),
-                "preferred_windows_backend": RendererSettings.from_settings(self.settings).preferred_windows_backend.value,
+                "preferred_windows_backend": RendererBackend.MODERNGL_GL330.value,
                 "allow_fallback": self.renderer_fallback_check.isChecked(),
                 "show_renderer_diagnostics": self.renderer_diagnostics_check.isChecked(),
                 "force_safe_mode": self.renderer_safe_mode_check.isChecked(),

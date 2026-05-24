@@ -10,7 +10,7 @@ from src.gui.rendering.renderer_backend import RendererBackend, normalize_render
 @dataclass(frozen=True)
 class RendererSettings:
     backend: RendererBackend = RendererBackend.AUTOMATIC
-    preferred_windows_backend: RendererBackend = RendererBackend.WGPU_D3D12
+    preferred_windows_backend: RendererBackend = RendererBackend.MODERNGL_GL330
     allow_fallback: bool = True
     show_renderer_diagnostics: bool = True
     force_safe_mode: bool = False
@@ -21,7 +21,7 @@ class RendererSettings:
         return cls(
             backend=normalize_renderer_backend(values.get("backend", RendererBackend.AUTOMATIC.value)),
             preferred_windows_backend=normalize_renderer_backend(
-                values.get("preferred_windows_backend", RendererBackend.WGPU_D3D12.value)
+                values.get("preferred_windows_backend", RendererBackend.MODERNGL_GL330.value)
             ),
             allow_fallback=bool(values.get("allow_fallback", True)),
             show_renderer_diagnostics=bool(values.get("show_renderer_diagnostics", True)),
@@ -48,4 +48,3 @@ class RendererSettings:
             renderer.get("preferred_windows_backend")
         ).value
         return settings
-

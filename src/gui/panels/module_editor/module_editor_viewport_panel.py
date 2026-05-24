@@ -103,6 +103,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if hasattr(self.viewport, "set_navigation_profile"):
             self.viewport.set_navigation_profile(profile)
 
+    def set_renderer_settings(self, settings: object) -> None:
+        if hasattr(self.viewport, "set_renderer_settings"):
+            self.viewport.set_renderer_settings(settings)
+
     def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:  # noqa: N802 - Qt API
         toolbar_scroll = getattr(self.viewport, "viewport_toolbar_scroll", None)
         if watched is toolbar_scroll and event.type() in {

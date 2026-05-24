@@ -43,7 +43,7 @@ def fallback_order(settings: RendererSettings) -> list[RendererBackend]:
 
     requested = settings.backend
     if requested == RendererBackend.AUTOMATIC:
-        requested = settings.preferred_windows_backend if platform.system().lower() == "windows" else RendererBackend.WGPU_AUTO
+        requested = RendererBackend.MODERNGL_GL330
 
     if not settings.allow_fallback:
         return [requested, RendererBackend.NULL_DIAGNOSTIC]
@@ -255,6 +255,7 @@ class FallbackViewportRenderer:
         object.__setattr__(self, "_active", None)
         object.__setattr__(self, "_active_backend", None)
         object.__setattr__(self, "_failed", {})
+        object.__setattr__(self, "_last_diagnostics", {})
         object.__setattr__(self, "_surface_widget", None)
         log.info("RendererFactory: Requested backend = %s", self._order[0].name)
 

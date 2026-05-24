@@ -1986,6 +1986,8 @@ class QtViewportWidget(QtWidgets.QWidget):
                 if callable(shutdown):
                     shutdown()
                 self._gpu_renderer = None
+        if self._gpu_renderer is not None:
+            self._sync_renderer_surface(force=True)
         self._request_render(fast=True)
 
     def set_game_library(self, library, game_tag: str = "K1") -> None:

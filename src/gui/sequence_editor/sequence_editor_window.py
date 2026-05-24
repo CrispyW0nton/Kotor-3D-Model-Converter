@@ -216,6 +216,11 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self._sync_preview_target()
         self._apply_layout_mode(self.layout_combo.currentText())
 
+    def set_renderer_settings(self, settings: object) -> None:
+        panel = getattr(self, "viewport_panel", None)
+        if panel is not None and hasattr(panel, "set_renderer_settings"):
+            panel.set_renderer_settings(settings)
+
     def _preview_viewport(self):
         if self.docked_preview:
             return self.source_viewport

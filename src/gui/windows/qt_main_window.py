@@ -6579,6 +6579,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             )
             self.module_editor_window = window
             window.set_library_rows(getattr(self, "_library_rows", []) or [])
+        window.set_renderer_settings(RendererSettings.from_settings(self.settings_data))
         window.set_navigation_profile(
             self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
         )
@@ -6944,6 +6945,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 window.set_docked_preview(False, window.source_viewport)
             except Exception:
                 pass
+        window.set_renderer_settings(RendererSettings.from_settings(self.settings_data))
         window.show()
         window.raise_()
         window.activateWindow()
@@ -7863,6 +7865,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         """
         if self._character_builder_window is None:
             self._character_builder_window = QtCharacterBuilderWindow(self)
+        self._character_builder_window.set_renderer_settings(RendererSettings.from_settings(self.settings_data))
         self._character_builder_window.show()
         self._character_builder_window.raise_()
         self._character_builder_window.activateWindow()
@@ -7959,11 +7962,27 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             )
         module_editor_window = getattr(self, "module_editor_window", None)
         if module_editor_window is not None:
+            set_renderer_settings = getattr(module_editor_window, "set_renderer_settings", None)
+            if callable(set_renderer_settings):
+                set_renderer_settings(RendererSettings.from_settings(values))
             module_editor_window.set_navigation_profile(
                 normalize_viewport_navigation_profile(
                     values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
                 )
             )
+        character_builder_window = getattr(self, "_character_builder_window", None)
+        if character_builder_window is not None:
+            set_renderer_settings = getattr(character_builder_window, "set_renderer_settings", None)
+            if callable(set_renderer_settings):
+                set_renderer_settings(RendererSettings.from_settings(values))
+        for sequence_window in (
+            getattr(self, "sequence_editor_window", None),
+            getattr(self, "sequence_editor_docked_window", None),
+        ):
+            if sequence_window is not None:
+                set_renderer_settings = getattr(sequence_window, "set_renderer_settings", None)
+                if callable(set_renderer_settings):
+                    set_renderer_settings(RendererSettings.from_settings(values))
         new_dirs = (str(values.get("k1_dir") or "").strip(), str(values.get("k2_dir") or "").strip())
         if hasattr(self, "k1_dir_edit"):
             self.k1_dir_edit.setText(new_dirs[0])

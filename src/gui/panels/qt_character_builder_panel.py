@@ -472,6 +472,11 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if layout_manager is not None:
             self.apply_ghost_layout(layout_manager.current_layout or layout_manager.get_layout())
 
+    def set_renderer_settings(self, settings: object) -> None:
+        viewport = getattr(self, "viewport", None)
+        if viewport is not None and hasattr(viewport, "set_renderer_settings"):
+            viewport.set_renderer_settings(settings)
+
     def apply_ghost_theme(self, theme) -> None:
         update_legacy_palette(theme)
         self.setStyleSheet("")
