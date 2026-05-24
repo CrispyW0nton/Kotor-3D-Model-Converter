@@ -16,6 +16,7 @@ import sys
 import time
 from dataclasses import dataclass
 from importlib import util as importlib_util
+from pathlib import Path
 from typing import ClassVar
 
 from src.gui.rendering.null_renderer import NullDiagnosticRenderer
@@ -48,6 +49,34 @@ class WgpuMeshResource:
     vertex_stride: int
     bounds: tuple[tuple[float, float, float], tuple[float, float, float]]
     source_revision: tuple[int, int, int]
+
+
+@dataclass
+class WgpuTextureResource:
+    texture: object
+    texture_view: object
+    sampler: object
+    width: int
+    height: int
+    format: str
+    source_id: str
+    source_revision: tuple[int, int, int]
+    label: str
+    byte_size: int
+    fallback: bool = False
+    lightmap: bool = False
+
+
+@dataclass
+class WgpuMaterialResource:
+    bind_group: object
+    diffuse_texture_resource: WgpuTextureResource
+    lightmap_texture_resource: WgpuTextureResource
+    alpha_mode: str
+    alpha_cutoff: float
+    double_sided: bool
+    has_lightmap: bool
+    source_revision: tuple[int, int, int, int]
 
 
 def _hex_to_rgb_float(value: str, fallback: tuple[float, float, float]) -> tuple[float, float, float]:
@@ -110,6 +139,14 @@ def _mat4_tobytes(m) -> bytes:
     import numpy as np
 
     return np.asarray(m, dtype=np.float32).reshape(4, 4).T.tobytes()
+
+
+def _load_mesh_shader() -> str:
+    shader_path = Path(__file__).resolve().parent / "shaders" / "wgpu_mesh_textured.wgsl"
+    try:
+        return shader_path.read_text(encoding="utf-8")
+    except Exception:
+        return _MESH_TEXTURED_WGSL
 
 
 def _adapter_info_dict(adapter) -> dict[str, object]:
@@ -195,9 +232,19 @@ class WgpuResourceCache:
     def __init__(self, renderer: "WgpuRenderer") -> None:
         self._renderer = renderer
         self.meshes: dict[int, WgpuMeshResource] = {}
-        self.textures: dict[int, object] = {}
+        self.textures: dict[str, WgpuTextureResource] = {}
+        self.materials: dict[str, WgpuMaterialResource] = {}
         self.uploaded_vertex_count = 0
         self.uploaded_index_count = 0
+        self.texture_memory_bytes = 0
+        self.fallback_texture_count = 0
+        self.missing_texture_count = 0
+        self.lightmap_texture_count = 0
+        self.last_texture_upload_error = ""
+        self.last_material_binding_error = ""
+        self._white_diffuse: WgpuTextureResource | None = None
+        self._white_lightmap: WgpuTextureResource | None = None
+        self._missing_checker: WgpuTextureResource | None = None
 
     def get_or_upload_mesh(self, mesh_data) -> WgpuMeshResource | None:
         mesh_id = int(mesh_data.mesh_id)
@@ -228,7 +275,9 @@ class WgpuResourceCache:
             if rows:
                 fixed[:rows, :] = normals[:rows, :3]
             normals = fixed
-        packed = np.ascontiguousarray(np.column_stack((positions, normals)), dtype=np.float32)
+        uvs0 = self._coerce_uvs(getattr(mesh_data, "uvs0", None), len(positions))
+        uvs1 = self._coerce_uvs(getattr(mesh_data, "uvs1", None), len(positions))
+        packed = np.ascontiguousarray(np.column_stack((positions, normals, uvs0, uvs1)), dtype=np.float32)
         vertex_buffer = device.create_buffer_with_data(data=packed, usage=wgpu.BufferUsage.VERTEX)
         index_buffer = None
         index_count = 0
@@ -243,7 +292,7 @@ class WgpuResourceCache:
             index_buffer=index_buffer,
             vertex_count=int(len(positions)),
             index_count=index_count,
-            vertex_stride=24,
+            vertex_stride=40,
             bounds=(tuple(float(v) for v in mins), tuple(float(v) for v in maxs)),
             source_revision=mesh_data.source_revision,
         )
@@ -251,25 +300,256 @@ class WgpuResourceCache:
         self._recount()
         return resource
 
+    def _coerce_uvs(self, values, count: int):
+        import numpy as np
+
+        fixed = np.full((count, 2), 0.5, dtype=np.float32)
+        if values is None:
+            return fixed
+        try:
+            arr = np.asarray(values, dtype=np.float32)
+            if arr.ndim != 2 or arr.shape[1] < 2:
+                return fixed
+            rows = min(count, len(arr))
+            if rows:
+                fixed[:rows, :] = arr[:rows, :2]
+        except Exception:
+            return fixed
+        return fixed
+
     def get_mesh_resource(self, mesh_id: int):
         return self.meshes.get(int(mesh_id))
+
+    def get_or_upload_texture(
+        self,
+        texture_data,
+        *,
+        fallback_kind: str = "diffuse",
+        lightmap: bool = False,
+    ) -> WgpuTextureResource:
+        texture_id = str(getattr(texture_data, "texture_id", "") or "")
+        source_revision = tuple(getattr(texture_data, "source_revision", (0, 0, 0)) or (0, 0, 0))
+        if not texture_id or texture_data is None or getattr(texture_data, "source", None) is None:
+            self.missing_texture_count += 1
+            log.debug("WgpuResourceCache: using fallback texture for %s", texture_id or fallback_kind)
+            return self._fallback_texture("lightmap" if lightmap else fallback_kind, lightmap=lightmap)
+        cached = self.textures.get(texture_id)
+        if cached is not None and cached.source_revision == source_revision:
+            return cached
+        try:
+            from src.gui.rendering.mesh_render_data import texture_image_to_rgba8
+
+            converted = texture_image_to_rgba8(texture_data)
+            if converted is None:
+                raise ValueError("texture adapter returned no RGBA8 data")
+            width, height, rgba = converted
+            resource = self._upload_rgba8_texture(
+                texture_id,
+                rgba,
+                width,
+                height,
+                source_revision=source_revision,
+                label=str(getattr(texture_data, "name", texture_id) or texture_id),
+                lightmap=lightmap,
+            )
+            self.textures[texture_id] = resource
+            self._recount()
+            if bool(getattr(self._renderer, "debug_texture_uploads", False)):
+                log.info("WgpuResourceCache: uploaded texture %s %sx%s rgba8", texture_id, width, height)
+            return resource
+        except Exception as exc:
+            self.last_texture_upload_error = f"{texture_id}: {exc}"
+            log.warning("WgpuResourceCache: using fallback texture for %s: %s", texture_id, exc)
+            return self._fallback_texture("lightmap" if lightmap else fallback_kind, lightmap=lightmap)
+
+    def get_or_create_material(self, material_data) -> WgpuMaterialResource | None:
+        material_id = str(getattr(material_data, "material_id", "") or id(material_data))
+        source_revision = tuple(getattr(material_data, "source_revision", (0, 0, 0, 0)) or (0, 0, 0, 0))
+        cached = self.materials.get(material_id)
+        if cached is not None and cached.source_revision == source_revision:
+            return cached
+        try:
+            diffuse_data = getattr(material_data, "diffuse_texture_data", None)
+            diffuse = self.get_or_upload_texture(
+                diffuse_data,
+                fallback_kind="diffuse",
+                lightmap=False,
+            ) if diffuse_data is not None else self._fallback_texture("diffuse")
+            lightmap_data = getattr(material_data, "lightmap_texture_data", None)
+            has_lightmap = lightmap_data is not None and getattr(lightmap_data, "source", None) is not None
+            lightmap = (
+                self.get_or_upload_texture(lightmap_data, fallback_kind="lightmap", lightmap=True)
+                if has_lightmap
+                else self._fallback_texture("lightmap", lightmap=True)
+            )
+            layout = self._renderer.texture_bind_group_layout
+            if layout is None:
+                raise RuntimeError("texture bind group layout is not ready")
+            bind_group = self._renderer.device.create_bind_group(
+                layout=layout,
+                entries=[
+                    {"binding": 0, "resource": diffuse.texture_view},
+                    {"binding": 1, "resource": diffuse.sampler},
+                    {"binding": 2, "resource": lightmap.texture_view},
+                    {"binding": 3, "resource": lightmap.sampler},
+                ],
+            )
+            resource = WgpuMaterialResource(
+                bind_group=bind_group,
+                diffuse_texture_resource=diffuse,
+                lightmap_texture_resource=lightmap,
+                alpha_mode=str(getattr(material_data, "alpha_mode", "OPAQUE") or "OPAQUE"),
+                alpha_cutoff=float(getattr(material_data, "alpha_cutoff", 0.5) or 0.5),
+                double_sided=bool(getattr(material_data, "double_sided", False)),
+                has_lightmap=has_lightmap,
+                source_revision=source_revision,
+            )
+            self.materials[material_id] = resource
+            return resource
+        except Exception as exc:
+            self.last_material_binding_error = f"{material_id}: {exc}"
+            log.warning("WgpuResourceCache: material bind failed for %s: %s", material_id, exc)
+            return None
+
+    def _upload_rgba8_texture(
+        self,
+        texture_id: str,
+        rgba: bytes,
+        width: int,
+        height: int,
+        *,
+        source_revision: tuple[int, int, int],
+        label: str,
+        lightmap: bool = False,
+        fallback: bool = False,
+    ) -> WgpuTextureResource:
+        import wgpu
+
+        device = self._renderer.device
+        if device is None:
+            raise RuntimeError("WGPU device is not ready")
+        texture = device.create_texture(
+            label=label,
+            size=(int(width), int(height), 1),
+            usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST,
+            dimension=wgpu.TextureDimension.d2,
+            format=wgpu.TextureFormat.rgba8unorm,
+            mip_level_count=1,
+            sample_count=1,
+        )
+        row_bytes = int(width) * 4
+        aligned_row_bytes = ((row_bytes + 255) // 256) * 256
+        upload_row_bytes = aligned_row_bytes if int(height) > 1 else row_bytes
+        upload_bytes = rgba
+        if int(height) > 1 and aligned_row_bytes != row_bytes:
+            padded = bytearray(aligned_row_bytes * int(height))
+            for row in range(int(height)):
+                src0 = row * row_bytes
+                dst0 = row * aligned_row_bytes
+                padded[dst0 : dst0 + row_bytes] = rgba[src0 : src0 + row_bytes]
+            upload_bytes = bytes(padded)
+        device.queue.write_texture(
+            {"texture": texture, "mip_level": 0, "origin": (0, 0, 0)},
+            upload_bytes,
+            {"offset": 0, "bytes_per_row": upload_row_bytes, "rows_per_image": int(height)},
+            (int(width), int(height), 1),
+        )
+        sampler = device.create_sampler(
+            address_mode_u=wgpu.AddressMode.clamp_to_edge if lightmap else wgpu.AddressMode.repeat,
+            address_mode_v=wgpu.AddressMode.clamp_to_edge if lightmap else wgpu.AddressMode.repeat,
+            address_mode_w=wgpu.AddressMode.clamp_to_edge,
+            mag_filter=wgpu.FilterMode.linear,
+            min_filter=wgpu.FilterMode.linear,
+            mipmap_filter=wgpu.MipmapFilterMode.nearest,
+        )
+        return WgpuTextureResource(
+            texture=texture,
+            texture_view=texture.create_view(),
+            sampler=sampler,
+            width=int(width),
+            height=int(height),
+            format="rgba8unorm",
+            source_id=texture_id,
+            source_revision=source_revision,
+            label=label,
+            byte_size=int(width) * int(height) * 4,
+            fallback=fallback,
+            lightmap=lightmap,
+        )
+
+    def _fallback_texture(self, kind: str, *, lightmap: bool = False) -> WgpuTextureResource:
+        if kind == "lightmap":
+            if self._white_lightmap is None:
+                self._white_lightmap = self._upload_rgba8_texture(
+                    "__fallback_lightmap__",
+                    bytes([255, 255, 255, 255]),
+                    1,
+                    1,
+                    source_revision=(0, 1, 1),
+                    label="WGPU white lightmap fallback",
+                    lightmap=True,
+                    fallback=True,
+                )
+                self.fallback_texture_count += 1
+            return self._white_lightmap
+        if kind == "missing_checker" or bool(getattr(self._renderer, "show_missing_texture_checker", False)):
+            if self._missing_checker is None:
+                self._missing_checker = self._upload_rgba8_texture(
+                    "__fallback_missing_checker__",
+                    bytes([255, 0, 255, 255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 0, 255, 255]),
+                    2,
+                    2,
+                    source_revision=(0, 2, 2),
+                    label="WGPU missing texture checker",
+                    fallback=True,
+                )
+                self.fallback_texture_count += 1
+            return self._missing_checker
+        if self._white_diffuse is None:
+            self._white_diffuse = self._upload_rgba8_texture(
+                "__fallback_diffuse__",
+                bytes([255, 255, 255, 255]),
+                1,
+                1,
+                source_revision=(0, 1, 1),
+                label="WGPU white diffuse fallback",
+                fallback=True,
+            )
+            self.fallback_texture_count += 1
+        return self._white_diffuse
 
     def release_mesh(self, mesh_id: int) -> None:
         self.meshes.pop(int(mesh_id), None)
         self._recount()
 
-    def upload_texture(self, texture_id: int, texture_data) -> None:
-        self.textures[int(texture_id)] = texture_data
+    def invalidate_texture(self, texture_id: str) -> None:
+        self.textures.pop(str(texture_id), None)
+        self._recount()
+
+    def invalidate_material(self, material_id: str) -> None:
+        self.materials.pop(str(material_id), None)
 
     def invalidate_all(self) -> None:
         self.meshes.clear()
         self.textures.clear()
+        self.materials.clear()
         self.uploaded_vertex_count = 0
         self.uploaded_index_count = 0
+        self.texture_memory_bytes = 0
+        self.fallback_texture_count = 0
+        self.missing_texture_count = 0
+        self.lightmap_texture_count = 0
+        self.last_texture_upload_error = ""
+        self.last_material_binding_error = ""
+        self._white_diffuse = None
+        self._white_lightmap = None
+        self._missing_checker = None
 
     def _recount(self) -> None:
         self.uploaded_vertex_count = sum(int(item.vertex_count) for item in self.meshes.values())
         self.uploaded_index_count = sum(int(item.index_count) for item in self.meshes.values())
+        self.texture_memory_bytes = sum(int(item.byte_size) for item in self.textures.values())
+        self.lightmap_texture_count = sum(1 for item in self.textures.values() if item.lightmap)
 
 
 class WgpuRenderer(NullDiagnosticRenderer):
@@ -307,11 +587,18 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.grid_vertex_buffer = None
         self.grid_vertex_count = 0
         self.pipeline_mesh = None
+        self.pipeline_mesh_cutout = None
+        self.pipeline_mesh_blend = None
+        self.mesh_pipeline_layout = None
+        self.mesh_bind_group_layout = None
+        self.texture_bind_group_layout = None
         self.mesh_bind_group = None
         self.mesh_uniform_buffer = None
         self.resource_cache = WgpuResourceCache(self)
         self.initialized = False
         self.live_surface = False
+        self.textured_mesh_pipeline_status = "not created"
+        self.alpha_pipeline_status = "not created"
         self.mesh_pipeline_status = "not created"
         self.grid_pipeline_status = "not created"
         self.last_error = ""
@@ -321,9 +608,19 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self._active_scene = None
         self._active_camera = None
         self._active_anim_pose = None
+        self._active_textures: dict = {}
         self.surface_host_diagnostics: dict[str, object] = {}
         self.perf = {"last_frame_ms": 0.0, "backend": self.backend_id, "tri_count": 0}
         self.show_grid = True
+        self.show_texture = True
+        self.show_diffuse_map = True
+        self.show_lightmap_map = True
+        self.show_missing_texture_checker = False
+        self.debug_texture_uploads = False
+        self.force_untextured = False
+        self.disable_lightmaps = False
+        self.disable_alpha_blend = False
+        self._last_render_counts = {"opaque": 0, "cutout": 0, "blended": 0}
         self.grid_minor_color = (58 / 255.0, 64 / 255.0, 72 / 255.0)
         self.grid_major_color = (82 / 255.0, 90 / 255.0, 102 / 255.0)
         self.grid_x_axis_color = (118 / 255.0, 54 / 255.0, 54 / 255.0)
@@ -410,7 +707,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 reason="",
                 api="WGPU",
                 supports_scene_meshes=True,
-                supports_textures=False,
+                supports_textures=True,
                 supports_grid=True,
                 supports_overlays=True,
                 supports_hot_switch=True,
@@ -641,10 +938,10 @@ class WgpuRenderer(NullDiagnosticRenderer):
         import wgpu
 
         self.mesh_uniform_buffer = self.device.create_buffer(
-            size=80,
+            size=112,
             usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST,
         )
-        bind_group_layout = self.device.create_bind_group_layout(
+        self.mesh_bind_group_layout = self.device.create_bind_group_layout(
             entries=[
                 {
                     "binding": 0,
@@ -653,29 +950,99 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 }
             ]
         )
-        self.mesh_bind_group = self.device.create_bind_group(
-            layout=bind_group_layout,
+        self.texture_bind_group_layout = self.device.create_bind_group_layout(
             entries=[
                 {
                     "binding": 0,
-                    "resource": {"buffer": self.mesh_uniform_buffer, "offset": 0, "size": 80},
+                    "visibility": wgpu.ShaderStage.FRAGMENT,
+                    "texture": {"sample_type": wgpu.TextureSampleType.float, "view_dimension": wgpu.TextureViewDimension.d2},
+                },
+                {
+                    "binding": 1,
+                    "visibility": wgpu.ShaderStage.FRAGMENT,
+                    "sampler": {"type": wgpu.SamplerBindingType.filtering},
+                },
+                {
+                    "binding": 2,
+                    "visibility": wgpu.ShaderStage.FRAGMENT,
+                    "texture": {"sample_type": wgpu.TextureSampleType.float, "view_dimension": wgpu.TextureViewDimension.d2},
+                },
+                {
+                    "binding": 3,
+                    "visibility": wgpu.ShaderStage.FRAGMENT,
+                    "sampler": {"type": wgpu.SamplerBindingType.filtering},
+                },
+            ]
+        )
+        self.mesh_bind_group = self.device.create_bind_group(
+            layout=self.mesh_bind_group_layout,
+            entries=[
+                {
+                    "binding": 0,
+                    "resource": {"buffer": self.mesh_uniform_buffer, "offset": 0, "size": 112},
                 }
             ],
         )
-        pipeline_layout = self.device.create_pipeline_layout(bind_group_layouts=[bind_group_layout])
-        shader = self.device.create_shader_module(code=_MESH_BASIC_WGSL)
-        self.pipeline_mesh = self.device.create_render_pipeline(
-            layout=pipeline_layout,
+        self.mesh_pipeline_layout = self.device.create_pipeline_layout(
+            bind_group_layouts=[self.mesh_bind_group_layout, self.texture_bind_group_layout]
+        )
+        shader = self.device.create_shader_module(code=_load_mesh_shader())
+        self.pipeline_mesh = self._create_textured_pipeline(
+            shader,
+            blend=False,
+            depth_write=True,
+            alpha_label="opaque",
+        )
+        self.pipeline_mesh_cutout = self._create_textured_pipeline(
+            shader,
+            blend=False,
+            depth_write=True,
+            alpha_label="cutout",
+        )
+        self.pipeline_mesh_blend = self._create_textured_pipeline(
+            shader,
+            blend=True,
+            depth_write=False,
+            alpha_label="blend",
+        )
+        self.mesh_pipeline_status = "ready"
+        self.textured_mesh_pipeline_status = "ready"
+        self.alpha_pipeline_status = "ready"
+        log.info("WgpuRenderer: textured mesh pipeline created")
+
+    def _create_textured_pipeline(self, shader, *, blend: bool, depth_write: bool, alpha_label: str):
+        import wgpu
+
+        target = {"format": self.format}
+        if blend:
+            target["blend"] = {
+                "color": {
+                    "src_factor": wgpu.BlendFactor.src_alpha,
+                    "dst_factor": wgpu.BlendFactor.one_minus_src_alpha,
+                    "operation": wgpu.BlendOperation.add,
+                },
+                "alpha": {
+                    "src_factor": wgpu.BlendFactor.one,
+                    "dst_factor": wgpu.BlendFactor.one_minus_src_alpha,
+                    "operation": wgpu.BlendOperation.add,
+                },
+            }
+            target["write_mask"] = wgpu.ColorWrite.ALL
+        return self.device.create_render_pipeline(
+            label=f"WGPU textured mesh {alpha_label}",
+            layout=self.mesh_pipeline_layout,
             vertex={
                 "module": shader,
                 "entry_point": "vs_main",
                 "buffers": [
                     {
-                        "array_stride": 24,
+                        "array_stride": 40,
                         "step_mode": wgpu.VertexStepMode.vertex,
                         "attributes": [
                             {"format": wgpu.VertexFormat.float32x3, "offset": 0, "shader_location": 0},
                             {"format": wgpu.VertexFormat.float32x3, "offset": 12, "shader_location": 1},
+                            {"format": wgpu.VertexFormat.float32x2, "offset": 24, "shader_location": 2},
+                            {"format": wgpu.VertexFormat.float32x2, "offset": 32, "shader_location": 3},
                         ],
                     }
                 ],
@@ -687,17 +1054,16 @@ class WgpuRenderer(NullDiagnosticRenderer):
             },
             depth_stencil={
                 "format": self.depth_format,
-                "depth_write_enabled": True,
-                "depth_compare": wgpu.CompareFunction.less,
+                "depth_write_enabled": bool(depth_write),
+                "depth_compare": wgpu.CompareFunction.less_equal,
             },
             multisample=None,
             fragment={
                 "module": shader,
                 "entry_point": "fs_main",
-                "targets": [{"format": self.format}],
+                "targets": [target],
             },
         )
-        self.mesh_pipeline_status = "ready"
 
     def _camera_mvp(self, camera, width: int, height: int) -> bytes:
         return _mat4_tobytes(self._camera_mvp_matrix(camera, width, height))
@@ -756,26 +1122,105 @@ class WgpuRenderer(NullDiagnosticRenderer):
 
         mvp = self._camera_mvp_matrix(self._active_camera, width, height)
         tri_count = 0
-        for mesh_data in iter_mesh_render_data(self._active_scene, anim_pose=self._active_anim_pose):
-            try:
-                resource = self.resource_cache.get_or_upload_mesh(mesh_data)
-                if resource is None:
-                    continue
-                uniform = self._mesh_uniform_bytes(mvp, mesh_data.material_color)
-                self.queue.write_buffer(self.mesh_uniform_buffer, 0, uniform)
-                render_pass.set_pipeline(self.pipeline_mesh)
-                render_pass.set_bind_group(0, self.mesh_bind_group)
-                render_pass.set_vertex_buffer(0, resource.vertex_buffer)
-                if resource.index_buffer is not None and resource.index_count > 0:
-                    render_pass.set_index_buffer(resource.index_buffer, wgpu.IndexFormat.uint32)
-                    render_pass.draw_indexed(resource.index_count, 1, 0, 0, 0)
-                    tri_count += resource.index_count // 3
-                else:
-                    render_pass.draw(resource.vertex_count, 1, 0, 0)
-                    tri_count += resource.vertex_count // 3
-            except Exception as exc:
-                log.warning("WgpuRenderer: skipped mesh %s: %s", getattr(mesh_data.source, "name", mesh_data.mesh_id), exc)
+        draw_items = []
+        for mesh_data in iter_mesh_render_data(
+            self._active_scene,
+            anim_pose=self._active_anim_pose,
+            textures=self._active_textures,
+        ):
+            material_data = getattr(mesh_data, "material", None)
+            if material_data is None:
+                continue
+            alpha_mode = str(getattr(material_data, "alpha_mode", "OPAQUE") or "OPAQUE").upper()
+            if bool(getattr(self, "disable_alpha_blend", False)) and alpha_mode == "BLEND":
+                alpha_mode = "OPAQUE"
+            if bool(getattr(self, "force_untextured", False)):
+                material_data = self._untextured_material(material_data)
+                alpha_mode = str(getattr(material_data, "alpha_mode", "OPAQUE") or "OPAQUE").upper()
+            sort_depth = 0.0
+            if alpha_mode == "BLEND":
+                sort_depth = self._mesh_sort_depth(mesh_data, self._active_camera)
+            draw_items.append((alpha_mode, sort_depth, mesh_data, material_data))
+
+        opaque = [item for item in draw_items if item[0] == "OPAQUE"]
+        cutout = [item for item in draw_items if item[0] in {"MASK", "CUTOUT"}]
+        blended = [item for item in draw_items if item[0] == "BLEND"]
+        blended.sort(key=lambda item: item[1], reverse=True)
+        counts = {"opaque": 0, "cutout": 0, "blended": 0}
+
+        for pass_name, items, pipeline in (
+            ("opaque", opaque, self.pipeline_mesh),
+            ("cutout", cutout, self.pipeline_mesh_cutout or self.pipeline_mesh),
+            ("blended", blended, self.pipeline_mesh_blend or self.pipeline_mesh),
+        ):
+            for _alpha_mode, _depth, mesh_data, material_data in items:
+                tri_count += self._draw_mesh_item(render_pass, pipeline, mesh_data, material_data, mvp, pass_name)
+                counts[pass_name] += 1
         self.perf["tri_count"] = int(tri_count)
+        self._last_render_counts = counts
+        if bool(getattr(self, "debug_texture_uploads", False)):
+            log.info(
+                "WgpuRenderer: rendered opaque=%s cutout=%s blended=%s",
+                counts["opaque"],
+                counts["cutout"],
+                counts["blended"],
+            )
+
+    def _draw_mesh_item(self, render_pass, pipeline, mesh_data, material_data, mvp, pass_name: str) -> int:
+        import wgpu
+
+        if pipeline is None:
+            return 0
+        try:
+            resource = self.resource_cache.get_or_upload_mesh(mesh_data)
+            if resource is None:
+                return 0
+            material = self.resource_cache.get_or_create_material(material_data)
+            if material is None:
+                return 0
+            uniform = self._mesh_uniform_bytes(
+                mvp,
+                getattr(material_data, "base_color_rgba", mesh_data.material_color),
+                material,
+            )
+            self.queue.write_buffer(self.mesh_uniform_buffer, 0, uniform)
+            render_pass.set_pipeline(pipeline)
+            render_pass.set_bind_group(0, self.mesh_bind_group)
+            render_pass.set_bind_group(1, material.bind_group)
+            render_pass.set_vertex_buffer(0, resource.vertex_buffer)
+            if resource.index_buffer is not None and resource.index_count > 0:
+                render_pass.set_index_buffer(resource.index_buffer, wgpu.IndexFormat.uint32)
+                render_pass.draw_indexed(resource.index_count, 1, 0, 0, 0)
+                return resource.index_count // 3
+            render_pass.draw(resource.vertex_count, 1, 0, 0)
+            return resource.vertex_count // 3
+        except Exception as exc:
+            log.warning("WgpuRenderer: skipped mesh %s: %s", getattr(mesh_data.source, "name", mesh_data.mesh_id), exc)
+            return 0
+
+    def _mesh_sort_depth(self, mesh_data, camera) -> float:
+        try:
+            import numpy as np
+
+            pos = np.asarray(mesh_data.positions, dtype=np.float32)
+            center = pos.mean(axis=0)
+            eye_attr = getattr(camera, "eye", (0.0, 5.0, 3.0)) if camera is not None else (0.0, 5.0, 3.0)
+            eye = np.asarray(tuple(eye_attr() if callable(eye_attr) else eye_attr), dtype=np.float32)
+            return float(np.linalg.norm(center - eye))
+        except Exception:
+            return 0.0
+
+    def _untextured_material(self, material_data):
+        from dataclasses import replace
+
+        return replace(
+            material_data,
+            diffuse_texture_data=None,
+            lightmap_texture_data=None,
+            diffuse_texture_id="",
+            lightmap_texture_id="",
+            source_revision=(material_data.source_revision[0], 0, 0, material_data.source_revision[3]),
+        )
 
     def _camera_mvp_matrix(self, camera, width: int, height: int):
         import numpy as np
@@ -793,10 +1238,27 @@ class WgpuRenderer(NullDiagnosticRenderer):
         view = _mat4_lookat(eye, target, up)
         return (proj @ view @ np.eye(4, dtype=np.float32)).astype(np.float32)
 
-    def _mesh_uniform_bytes(self, mvp, color: tuple[float, float, float, float]) -> bytes:
+    def _mesh_uniform_bytes(self, mvp, color: tuple[float, float, float, float], material) -> bytes:
         import numpy as np
 
-        return np.asarray(mvp, dtype=np.float32).reshape(4, 4).T.tobytes() + np.asarray(color, dtype=np.float32).tobytes()
+        alpha_mode = str(getattr(material, "alpha_mode", "OPAQUE") or "OPAQUE").upper()
+        alpha_mode_value = 1.0 if alpha_mode in {"MASK", "CUTOUT"} else 2.0 if alpha_mode == "BLEND" else 0.0
+        flags = np.asarray(
+            (
+                1.0 if getattr(material, "diffuse_texture_resource", None) is not None else 0.0,
+                1.0 if bool(getattr(material, "has_lightmap", False)) and not bool(getattr(self, "disable_lightmaps", False)) else 0.0,
+                alpha_mode_value,
+                float(getattr(material, "alpha_cutoff", 0.5) or 0.5),
+            ),
+            dtype=np.float32,
+        )
+        params = np.asarray((2.0, 0.0, 0.0, 0.0), dtype=np.float32)
+        return (
+            np.asarray(mvp, dtype=np.float32).reshape(4, 4).T.tobytes()
+            + np.asarray(color, dtype=np.float32).tobytes()
+            + flags.tobytes()
+            + params.tobytes()
+        )
 
     def render(self, scene, camera, W: int, H: int, *args, **kwargs):
         if W <= 0 or H <= 0:
@@ -808,6 +1270,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             self._active_camera = camera
             self._active_scene = scene
             self._active_anim_pose = kwargs.get("anim_pose")
+            self._active_textures = dict(kwargs.get("textures") or {})
             if not self.initialized:
                 self.initialize()
             self.resize(int(W), int(H), 1.0)
@@ -864,6 +1327,11 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.grid_uniform_buffer = None
         self.grid_vertex_buffer = None
         self.pipeline_mesh = None
+        self.pipeline_mesh_cutout = None
+        self.pipeline_mesh_blend = None
+        self.mesh_pipeline_layout = None
+        self.mesh_bind_group_layout = None
+        self.texture_bind_group_layout = None
         self.mesh_bind_group = None
         self.mesh_uniform_buffer = None
         self.depth_texture = None
@@ -916,11 +1384,28 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "live_surface": self.live_surface,
             "supports_grid": True,
             "supports_scene_meshes": True,
+            "supports_textures": True,
             "grid_pipeline_status": self.grid_pipeline_status,
             "mesh_pipeline_status": self.mesh_pipeline_status,
+            "textured_mesh_pipeline_status": self.textured_mesh_pipeline_status,
+            "opaque_pipeline_status": "ready" if self.pipeline_mesh is not None else "not created",
+            "alpha_cutout_pipeline_status": "ready" if self.pipeline_mesh_cutout is not None else "not created",
+            "alpha_pipeline_status": self.alpha_pipeline_status,
             "uploaded_mesh_count": len(self.resource_cache.meshes),
+            "uploaded_material_count": len(self.resource_cache.materials),
+            "uploaded_texture_count": len(self.resource_cache.textures),
             "uploaded_vertex_count": self.resource_cache.uploaded_vertex_count,
             "uploaded_index_count": self.resource_cache.uploaded_index_count,
+            "texture_memory_estimate_bytes": self.resource_cache.texture_memory_bytes,
+            "fallback_texture_count": self.resource_cache.fallback_texture_count,
+            "missing_texture_count": self.resource_cache.missing_texture_count,
+            "lightmap_texture_count": self.resource_cache.lightmap_texture_count,
+            "alpha_material_count": sum(
+                1 for item in self.resource_cache.materials.values() if item.alpha_mode in {"MASK", "CUTOUT", "BLEND"}
+            ),
+            "last_texture_upload_error": self.resource_cache.last_texture_upload_error,
+            "last_material_binding_error": self.resource_cache.last_material_binding_error,
+            "last_render_counts": dict(self._last_render_counts),
             "surface_host": dict(getattr(self, "surface_host_diagnostics", {}) or {}),
             "last_error": self.last_error,
         }
@@ -955,6 +1440,64 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     return vec4<f32>(input.color, 1.0);
+}
+"""
+
+
+_MESH_TEXTURED_WGSL = """
+struct Locals {
+    mvp: mat4x4<f32>,
+    color: vec4<f32>,
+    flags: vec4<f32>,
+    params: vec4<f32>,
+};
+
+@group(0) @binding(0)
+var<uniform> locals: Locals;
+
+@group(1) @binding(0)
+var diffuse_tex: texture_2d<f32>;
+@group(1) @binding(1)
+var diffuse_sampler: sampler;
+@group(1) @binding(2)
+var lightmap_tex: texture_2d<f32>;
+@group(1) @binding(3)
+var lightmap_sampler: sampler;
+
+struct VertexInput {
+    @location(0) position: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) uv0: vec2<f32>,
+    @location(3) uv1: vec2<f32>,
+};
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv0: vec2<f32>,
+    @location(1) uv1: vec2<f32>,
+};
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+    var out: VertexOutput;
+    out.position = locals.mvp * vec4<f32>(input.position, 1.0);
+    out.uv0 = vec2<f32>(input.uv0.x, 1.0 - input.uv0.y);
+    out.uv1 = vec2<f32>(input.uv1.x, 1.0 - input.uv1.y);
+    return out;
+}
+
+@fragment
+fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+    let diffuse_sample = textureSample(diffuse_tex, diffuse_sampler, input.uv0);
+    var out_color = vec4<f32>(diffuse_sample.rgb * locals.color.rgb, diffuse_sample.a * locals.color.a);
+    if (locals.flags.y > 0.5) {
+        let lightmap_sample = textureSample(lightmap_tex, lightmap_sampler, input.uv1);
+        out_color = vec4<f32>(out_color.rgb * lightmap_sample.rgb * locals.params.x, out_color.a);
+    }
+    if (locals.flags.z > 0.5 && locals.flags.z < 1.5 && out_color.a < locals.flags.w) {
+        discard;
+    }
+    return out_color;
 }
 """
 
