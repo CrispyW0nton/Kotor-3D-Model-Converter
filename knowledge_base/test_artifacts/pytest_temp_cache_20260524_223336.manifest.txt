@@ -1,0 +1,142 @@
+GhostRigger pytest/root temp cache archive
+Created: 2026-05-24T22:33:37.8122523-07:00
+Workspace: C:\Users\NewAdmin\Documents\GDeveloper\Workspaces\Kotor-3D-Model-Converter-qt
+Archive: C:\Users\NewAdmin\Documents\GDeveloper\Workspaces\Kotor-3D-Model-Converter-qt\knowledge_base\test_artifacts\pytest_temp_cache_20260524_223336.zip
+Directories discovered: 129
+Directories archived: 128
+Directories skipped: 1
+Files archived: 3727
+Bytes archived: 31470900
+
+Archived directories:
+- .pytest_cache files=5 bytes=122875
+- .pytest_tmp_anim_depth_order files=42 bytes=20963
+- .pytest_tmp_anim_depth_order_gate files=51 bytes=22457
+- .pytest_tmp_anim_tree files=2 bytes=8
+- .pytest_tmp_anim_tree_export files=51 bytes=18694
+- .pytest_tmp_audit_targeted files=91 bytes=509867
+- .pytest_tmp_basis files=17 bytes=735943
+- .pytest_tmp_case_export_gates files=77 bytes=19515
+- .pytest_tmp_case_preserve files=24 bytes=1020223
+- .pytest_tmp_case_writer_roundtrip files=68 bytes=1038398
+- .pytest_tmp_controller_semantics files=2 bytes=53
+- .pytest_tmp_custom_anim_name_smoke files=54 bytes=10136
+- .pytest_tmp_custom_anim_name_targeted files=115 bytes=214366
+- .pytest_tmp_day45v6 files=6 bytes=2644373
+- .pytest_tmp_export_job files=4 bytes=61
+- .pytest_tmp_export_job_final files=37 bytes=327
+- .pytest_tmp_export_job_retarget files=33 bytes=266
+- .pytest_tmp_export_job_smoke files=78 bytes=28869
+- .pytest_tmp_export_job_targeted files=140 bytes=555433
+- .pytest_tmp_fbx_backend_smoke files=1 bytes=8
+- .pytest_tmp_fbx_exporter files=4 bytes=4666116
+- .pytest_tmp_fbx_import_backend files=1 bytes=8
+- .pytest_tmp_fbx_import_backend_smoke files=1 bytes=8
+- .pytest_tmp_fbx_mesh_inspect files=2 bytes=723828
+- .pytest_tmp_fbx_mesh_smoke files=1 bytes=8
+- .pytest_tmp_full_controller_gate files=99 bytes=707936
+- .pytest_tmp_full_pose_controllers files=20 bytes=688356
+- .pytest_tmp_game_resource_provider files=2 bytes=6
+- .pytest_tmp_game_resource_provider_smoke files=9 bytes=8427
+- .pytest_tmp_idle_axis files=18 bytes=666718
+- .pytest_tmp_idle_axis_final files=21 bytes=824569
+- .pytest_tmp_idle_calibrated files=21 bytes=824569
+- .pytest_tmp_idle_fix files=20 bytes=821768
+- .pytest_tmp_idle_fix_writer files=18 bytes=666704
+- .pytest_tmp_kotor_to_kotor_smoke files=40 bytes=316
+- .pytest_tmp_kotor_to_kotor_targeted files=115 bytes=214310
+- .pytest_tmp_kotor_to_unreal_slice files=4 bytes=596
+- .pytest_tmp_kotor_to_unreal_smoke files=15 bytes=707
+- .pytest_tmp_kotor_to_unreal_targeted files=119 bytes=214934
+- .pytest_tmp_live_case_single files=4 bytes=331924
+- .pytest_tmp_lordvader_blender_fbx files=1 bytes=8
+- .pytest_tmp_lordvader_fbx_smoke files=1 bytes=8
+- .pytest_tmp_lordvader_final_smoke files=1 bytes=8
+- .pytest_tmp_lordvader_latest files=4 bytes=4359
+- .pytest_tmp_lordvader_sync files=88 bytes=102087
+- .pytest_tmp_lordvader_ui files=6 bytes=1183
+- .pytest_tmp_mdl_anim_roundtrip files=42 bytes=16649
+- .pytest_tmp_mdl_subtype_gate files=44 bytes=16621
+- .pytest_tmp_mesh_preserve files=28 bytes=1433482
+- .pytest_tmp_mesh_preserve_gates files=77 bytes=21795
+- .pytest_tmp_mesh_preserve_roundtrip files=72 bytes=1453979
+- .pytest_tmp_mixamo_attack files=9 bytes=882
+- .pytest_tmp_mixamo_attack_smoke files=9 bytes=882
+- .pytest_tmp_mixamo_companion files=4 bytes=16
+- .pytest_tmp_mixamo_retarget files=2 bytes=845
+- .pytest_tmp_mixamo_retarget_smoke files=0 bytes=0
+- .pytest_tmp_model_header files=2 bytes=8
+- .pytest_tmp_model_header_export files=49 bytes=17657
+- .pytest_tmp_model_header_gate files=51 bytes=17623
+- .pytest_tmp_motion_amp_gate files=81 bytes=1461785
+- .pytest_tmp_motion_amp_writer files=30 bytes=1439478
+- .pytest_tmp_partner_fbx_import files=1 bytes=8
+- .pytest_tmp_partner_k2ue files=4 bytes=596
+- .pytest_tmp_partner_qt_theme files=5 bytes=1108
+- .pytest_tmp_partner_regression files=1 bytes=13
+- .pytest_tmp_partner_retarget_smoke files=37 bytes=292
+- .pytest_tmp_partner_ui_smoke files=1 bytes=75
+- .pytest_tmp_pmbam_ue_path files=2 bytes=845
+- .pytest_tmp_pmbam_ue_smoke files=40 bytes=316
+- .pytest_tmp_preview_export files=28 bytes=228
+- .pytest_tmp_preview_export_ui files=0 bytes=0
+- .pytest_tmp_project_model files=3 bytes=8360
+- .pytest_tmp_project_targeted files=94 bytes=518317
+- .pytest_tmp_r3b files=16 bytes=685087
+- .pytest_tmp_r3b_bridge_smoke files=2 bytes=845
+- .pytest_tmp_r3b_exact_export_smoke files=44 bytes=377
+- .pytest_tmp_r3b_exact_smoke files=2 bytes=845
+- .pytest_tmp_r3b_final files=24 bytes=867147
+- .pytest_tmp_resource_browser_smoke files=2 bytes=6
+- .pytest_tmp_resource_browser_targeted files=134 bytes=223749
+- .pytest_tmp_resource_provider_targeted files=134 bytes=223791
+- .pytest_tmp_retarget_assignment_modes files=7 bytes=50
+- .pytest_tmp_retarget_assignment_smoke files=34 bytes=274
+- .pytest_tmp_retarget_assignment_targeted files=46 bytes=159933
+- .pytest_tmp_retarget_auto_preview_smoke files=34 bytes=274
+- .pytest_tmp_retarget_auto_profile files=2 bytes=845
+- .pytest_tmp_retarget_auto_profile_smoke files=36 bytes=1119
+- .pytest_tmp_retarget_calibration_full files=83 bytes=19197
+- .pytest_tmp_retarget_calibration_gates files=2 bytes=845
+- .pytest_tmp_retarget_export_external_smoke files=1 bytes=8
+- .pytest_tmp_retarget_export_source files=36 bytes=284
+- .pytest_tmp_retarget_fps files=7 bytes=37
+- .pytest_tmp_retarget_fps_smoke files=7 bytes=37
+- .pytest_tmp_retarget_game_library_export_smoke files=40 bytes=345
+- .pytest_tmp_retarget_gate files=2 bytes=8
+- .pytest_tmp_retarget_gates files=83 bytes=19778
+- .pytest_tmp_retarget_output_naming files=7 bytes=50
+- .pytest_tmp_retarget_output_naming_final files=7 bytes=50
+- .pytest_tmp_retarget_preview files=0 bytes=0
+- .pytest_tmp_retarget_profile files=2 bytes=845
+- .pytest_tmp_retarget_root_motion_smoke files=37 bytes=1439623
+- .pytest_tmp_retarget_selector_targeted files=72 bytes=177440
+- .pytest_tmp_retarget_source_anim_smoke files=1 bytes=8
+- .pytest_tmp_retarget_source_global_smoke files=1 bytes=8
+- .pytest_tmp_retarget_source_playback_smoke files=1 bytes=8
+- .pytest_tmp_retarget_workbench_ux_targeted files=115 bytes=214506
+- .pytest_tmp_roundtrip files=2 bytes=8
+- .pytest_tmp_roundtrip_core files=2 bytes=8
+- .pytest_tmp_roundtrip_segment files=42 bytes=16631
+- .pytest_tmp_roundtrip_segment_revert files=42 bytes=16757
+- .pytest_tmp_roundtrip_sync files=2 bytes=8
+- .pytest_tmp_scope_audit files=7 bytes=8421
+- .pytest_tmp_slot_export_gate files=7 bytes=1261
+- .pytest_tmp_sprint35 files=26 bytes=875771
+- .pytest_tmp_sprint35_phase2 files=27 bytes=926682
+- .pytest_tmp_taxonomy_premerge files=28 bytes=356
+- .pytest_tmp_taxonomy_wide files=28 bytes=356
+- .pytest_tmp_ue_fbx_available_clips files=1 bytes=8
+- .pytest_tmp_ue_fbx_import files=0 bytes=0
+- .pytest_tmp_ue5_rig_export files=17 bytes=14268
+- .pytest_tmp_unity_bridge files=0 bytes=0
+- .pytest_tmp_validation_bus_smoke files=31 bytes=8588
+- .pytest_tmp_validation_bus_targeted files=94 bytes=518632
+- .pytest_tmp_viewport files=8 bytes=181994
+- .pytest_tmp_writer_pose_gate files=51 bytes=19274
+- .pytest_tmp_writer_preview_gate files=28 bytes=228
+- .pytest_tmp_xbot_source_pose files=7 bytes=37
+- .pytest_tmp_xbot_source_pose_smoke files=7 bytes=37
+
+Skipped directories:
+- .pytest_tmp_mainmenu_contract: Access to the path 'C:\Users\NewAdmin\Documents\GDeveloper\Workspaces\Kotor-3D-Model-Converter-qt\.pytest_tmp_mainmenu_contract' is denied.
