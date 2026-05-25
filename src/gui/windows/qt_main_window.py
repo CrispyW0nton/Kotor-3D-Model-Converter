@@ -5700,7 +5700,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 controller.set_target_model(self._retarget_target_model)
             self._refresh_target_kotor_animation_slots()
             if controller.can_preview():
-                preview = controller.preview(auto_play=False, show_node_overlay=True)
+                show_nodes = True
+                if hasattr(window, "retarget_bones_visible"):
+                    show_nodes = bool(window.retarget_bones_visible())
+                preview = controller.preview(auto_play=False, show_node_overlay=show_nodes)
                 if preview is not None:
                     self._log(f"Retargeted source animation to target preview: {anim_name}", "success")
             elif getattr(controller, "last_error", ""):
@@ -6815,6 +6818,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         window.custom_kotor_animation_name_edit.textChanged.connect(self._on_custom_kotor_animation_name_changed)
         window.output_unreal_clip_name_edit.textChanged.connect(self._on_output_unreal_clip_name_changed)
         window.retarget_output_display_label_edit.textChanged.connect(self._on_retarget_output_display_label_changed)
+        window.rootMotionToggled.connect(self._on_retarget_root_motion_toggled)
         self._retarget_workbench_controls_connected = True
 
     def _retarget_workbench_widget(self, name: str):
@@ -6989,6 +6993,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         controller.set_output_display_label(text)
         self._apply_retarget_workbench_mode_status()
 
+    def _on_retarget_root_motion_toggled(self, enabled: bool) -> None:
+        controller = getattr(self, "retarget_workbench_controller", None)
+        if controller is None:
+            return
+        controller.set_root_motion_enabled(enabled)
+        self._apply_retarget_workbench_mode_status()
+
     def _load_retarget_source_clip(self):
         path, _selected = QtWidgets.QFileDialog.getOpenFileName(
             self,
@@ -7041,7 +7052,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._not_migrated("Preview Retarget")
             return
         try:
-            preview = controller.preview(auto_play=True, show_node_overlay=True)
+            window = getattr(self, "animation_retarget_window", None)
+            show_nodes = True
+            if window is not None and hasattr(window, "retarget_bones_visible"):
+                show_nodes = bool(window.retarget_bones_visible())
+            preview = controller.preview(auto_play=True, show_node_overlay=show_nodes)
             self._apply_retarget_workbench_mode_status()
             if preview is None and getattr(controller, "last_error", ""):
                 self.statusBar().showMessage("Retarget preview failed")

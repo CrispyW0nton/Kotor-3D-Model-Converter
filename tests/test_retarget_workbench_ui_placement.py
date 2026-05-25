@@ -62,6 +62,9 @@ def test_retarget_workbench_controls_live_in_retarget_window() -> None:
         assert window.findChild(QtWidgets.QComboBox, "targetKotorAnimationSlotComboBox") is not None
         assert window.findChild(QtWidgets.QLineEdit, "customKotorAnimationNameLineEdit") is not None
         assert window.findChild(QtWidgets.QLineEdit, "outputUnrealClipNameLineEdit") is not None
+        assert window.findChild(QtWidgets.QCheckBox, "retargetBonesToggle") is not None
+        assert window.findChild(QtWidgets.QCheckBox, "retargetGizmoToggle") is not None
+        assert window.findChild(QtWidgets.QCheckBox, "retargetRootMotionToggle") is not None
         assert window.findChild(QtWidgets.QFrame, "retargetOutputGlobalControls").isVisible() is False
         assert not any(
             box.title() == "Source Bone / Target Bone"
@@ -188,6 +191,34 @@ def test_retarget_window_source_clip_preview_populates_source_viewport() -> None
         window.close()
 
 
+def test_retarget_window_overlay_toggles_scope_source_clip_preview() -> None:
+    _qapp()
+    from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
+
+    window = QtAnimationRetargetWindow()
+    try:
+        window.set_retarget_bones_visible(False)
+        window.set_retarget_gizmo_visible(False)
+        window.set_source_clip_preview(_sample_source_clip())
+
+        for viewport in (window.source_viewport, window.target_viewport):
+            assert viewport.bones_button.isChecked() is False
+            assert viewport._renderer.show_bones is False
+            assert viewport.joint_dot_enabled is False
+            assert viewport.gimbal_button.isChecked() is False
+            assert viewport._renderer.show_gimbal is False
+            assert viewport._transform_gizmo.visible is False
+
+        window.set_retarget_bones_visible(True)
+        window.set_retarget_gizmo_visible(True)
+        assert window.source_viewport._renderer.show_bones is True
+        assert window.target_viewport._renderer.show_bones is True
+        assert window.source_viewport._renderer.show_gimbal is True
+        assert window.target_viewport._renderer.show_gimbal is True
+    finally:
+        window.close()
+
+
 def test_retarget_window_animation_rows_have_assignable_output_names() -> None:
     _qapp()
     from src.core.retargeting.retarget_output_naming import KotorOutputAnimationNameMode
@@ -282,7 +313,7 @@ def test_workbench_source_playback_auto_retargets_to_workbench_target_viewport()
     assert "window.play_source_clip_animation(anim_name)" in source
     assert "self._apply_retarget_workbench_animation_assignment(anim_name)" in source
     assert "self._ensure_retarget_workbench_target_viewport_adapter()" in source
-    assert "controller.preview(auto_play=False, show_node_overlay=True)" in source
+    assert "controller.preview(auto_play=False, show_node_overlay=show_nodes)" in source
     assert "_retarget_workbench_sync_target_time_from_source" in inspect.getsource(QtGhostRiggerMainWindow._build_layout)
     assert "adapter.set_time(float(time_seconds))" in inspect.getsource(
         QtGhostRiggerMainWindow._retarget_workbench_sync_target_time_from_source

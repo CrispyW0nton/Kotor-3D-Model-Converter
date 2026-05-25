@@ -184,6 +184,7 @@ def retarget_source_clip_to_aurora_animation(
         entry.target_node: ([], [])
         for entry in normalized_profile.mappings
     }
+    position_tracks: Dict[str, tuple[List[float], List[tuple[float, float, float]]]] = {}
     if opts.key_unmapped_reference_nodes:
         for target_node in target_nodes:
             orientation_tracks.setdefault(target_node.name, ([], []))
@@ -211,6 +212,10 @@ def retarget_source_clip_to_aurora_animation(
             if local_translation_result.warning and not root_warning_seen:
                 warnings.append(local_translation_result.warning)
                 root_warning_seen = True
+            if local_translation_result.wrote_controller:
+                times, values = position_tracks.setdefault(target_name, ([], []))
+                times.append(float(source_pose.time_seconds))
+                values.append(tuple(float(value) for value in local_translation_result.position))
 
             if source_name is not None:
                 desired_world_rotation = _desired_target_world_rotation(
@@ -266,6 +271,7 @@ def retarget_source_clip_to_aurora_animation(
         transition_time=resolved_transtime,
         anim_root=resolved_anim_root,
         orientation_tracks=orientation_tracks,
+        position_tracks=position_tracks,
     )
 
     structural = validate_animation_block_against_model(target_model, animation, strict=True)
@@ -291,7 +297,7 @@ def retarget_source_clip_to_aurora_animation(
         sample_count=len(source_poses),
         mapped_node_count=len(target_to_source),
         generated_orientation_track_count=len(animation.nodes),
-        generated_position_track_count=0,
+        generated_position_track_count=sum(1 for _times, values in position_tracks.values() if values),
         stripped_root_translation=stripped_root_translation,
         max_quaternion_norm_error=max_norm_error,
         max_adjacent_rotation_degrees=max_adjacent_degrees,
@@ -581,6 +587,7 @@ def _build_animation_block(
     transition_time: float,
     anim_root: str,
     orientation_tracks: Dict[str, tuple[List[float], List[tuple[float, float, float, float]]]],
+    position_tracks: Dict[str, tuple[List[float], List[tuple[float, float, float]]]],
 ) -> Animation:
     animation = Animation(
         name=slot_name,
@@ -588,21 +595,36 @@ def _build_animation_block(
         transition_time=transition_time,
         anim_root=anim_root,
     )
-    for node_name, (times, values) in orientation_tracks.items():
-        if not times or not values:
+    for node_name in dict.fromkeys([*orientation_tracks.keys(), *position_tracks.keys()]):
+        orient_times, orient_values = orientation_tracks.get(node_name, ([], []))
+        pos_times, pos_values = position_tracks.get(node_name, ([], []))
+        if not orient_values and not pos_values:
             continue
+        controllers = []
+        if pos_times and pos_values:
+            controllers.append(
+                {
+                    "type": 8,
+                    "name": "position",
+                    "columns": 3,
+                    "times": [float(value) for value in pos_times],
+                    "values": [[float(component) for component in value] for value in pos_values],
+                }
+            )
+        if orient_times and orient_values:
+            controllers.append(
+                {
+                    "type": 20,
+                    "name": "orientation",
+                    "columns": 4,
+                    "times": [float(value) for value in orient_times],
+                    "values": [list(normalize_quat_xyzw(value)) for value in orient_values],
+                }
+            )
         animation.nodes.append(
             ModelNode(
                 name=node_name,
-                controllers=[
-                    {
-                        "type": 20,
-                        "name": "orientation",
-                        "columns": 4,
-                        "times": [float(value) for value in times],
-                        "values": [list(normalize_quat_xyzw(value)) for value in values],
-                    }
-                ],
+                controllers=controllers,
             )
         )
     return animation

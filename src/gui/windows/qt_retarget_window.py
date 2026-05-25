@@ -37,6 +37,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
     stopRequested = QtCore.Signal()
     sourceAnimationPlayRequested = QtCore.Signal(str)
     sourceAnimationTimeChanged = QtCore.Signal(str, float)
+    rootMotionToggled = QtCore.Signal(bool)
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
@@ -201,6 +202,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.source_viewport.set_navigation_profile(self._navigation_profile)
         self.target_viewport.set_navigation_profile(self._navigation_profile)
         self._sync_viewport_chrome_actions()
+        self._apply_retarget_view_toggles()
 
         self.panel = QtAnimationRetargetPanel(self)
         self.panel.sourceCurrentRequested.connect(self.sourceCurrentRequested.emit)
@@ -262,6 +264,32 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.retarget_workbench_status_label.setObjectName("retargetWorkbenchStatusLabel")
         top.addWidget(self.retarget_workbench_status_label, 4)
         outer.addLayout(top)
+
+        toggles = QtWidgets.QHBoxLayout()
+        toggles.setContentsMargins(0, 0, 0, 0)
+        toggles.setSpacing(10)
+        self.retarget_bones_toggle = QtWidgets.QCheckBox("Bones", box)
+        self.retarget_bones_toggle.setObjectName("retargetBonesToggle")
+        self.retarget_bones_toggle.setChecked(True)
+        self.retarget_bones_toggle.setToolTip("Show bone and joint overlays in the Retarget Workbench viewports.")
+        self.retarget_gizmo_toggle = QtWidgets.QCheckBox("Gizmo", box)
+        self.retarget_gizmo_toggle.setObjectName("retargetGizmoToggle")
+        self.retarget_gizmo_toggle.setChecked(True)
+        self.retarget_gizmo_toggle.setToolTip("Show transform gizmos in the Retarget Workbench viewports.")
+        self.retarget_root_motion_toggle = QtWidgets.QCheckBox("Root motion", box)
+        self.retarget_root_motion_toggle.setObjectName("retargetRootMotionToggle")
+        self.retarget_root_motion_toggle.setChecked(False)
+        self.retarget_root_motion_toggle.setToolTip(
+            "Enable root movement tracks for retargeted animation. Leave off for in-place KOTOR previews."
+        )
+        self.retarget_bones_toggle.toggled.connect(self.set_retarget_bones_visible)
+        self.retarget_gizmo_toggle.toggled.connect(self.set_retarget_gizmo_visible)
+        self.retarget_root_motion_toggle.toggled.connect(self.rootMotionToggled.emit)
+        toggles.addWidget(self.retarget_bones_toggle)
+        toggles.addWidget(self.retarget_gizmo_toggle)
+        toggles.addWidget(self.retarget_root_motion_toggle)
+        toggles.addStretch(1)
+        outer.addLayout(toggles)
 
         self.retarget_output_global_controls = QtWidgets.QFrame(box)
         self.retarget_output_global_controls.setObjectName("retargetOutputGlobalControls")
@@ -457,6 +485,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             self.source_viewport.set_resource_manager(self._resource_manager, self._source_game)
         self.panel.set_source_model(model)
         self.source_viewport.load_model(model, self._texture_dir)
+        self._apply_retarget_view_toggles()
         self._refresh_cloth_tool()
         self.statusBar().showMessage(f"Source: {getattr(model, 'name', 'None') if model else 'None'}")
 
@@ -470,12 +499,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.panel.set_source_model(preview_model)
         self.panel.select_animation(str(getattr(clip, "clip_name", "") or ""))
         self.source_viewport.load_model(preview_model, self._texture_dir)
-        if hasattr(self.source_viewport, "bones_button"):
-            self.source_viewport.bones_button.blockSignals(True)
-            self.source_viewport.bones_button.setChecked(True)
-            self.source_viewport.bones_button.blockSignals(False)
-        self.source_viewport.toggle_bones(True)
-        self.source_viewport.set_joint_dot_enabled(True)
+        self._apply_retarget_view_toggles()
         self.source_viewport.clear_animation_pose()
         self.source_viewport.frame_all()
         node_count = int(getattr(preview_model, "_gr_source_clip_node_count", 0) or 0)
@@ -489,6 +513,71 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         )
         self._refresh_cloth_tool()
         self.statusBar().showMessage(f"Source clip preview: {getattr(clip, 'clip_name', 'Source Clip')}")
+
+    def retarget_bones_visible(self) -> bool:
+        return bool(getattr(self, "retarget_bones_toggle", None) and self.retarget_bones_toggle.isChecked())
+
+    def retarget_gizmo_visible(self) -> bool:
+        return bool(getattr(self, "retarget_gizmo_toggle", None) and self.retarget_gizmo_toggle.isChecked())
+
+    def root_motion_enabled(self) -> bool:
+        return bool(
+            getattr(self, "retarget_root_motion_toggle", None)
+            and self.retarget_root_motion_toggle.isChecked()
+        )
+
+    def set_retarget_bones_visible(self, visible: bool) -> None:
+        if hasattr(self, "retarget_bones_toggle"):
+            with QtCore.QSignalBlocker(self.retarget_bones_toggle):
+                self.retarget_bones_toggle.setChecked(bool(visible))
+        for viewport in (getattr(self, "source_viewport", None), getattr(self, "target_viewport", None)):
+            self._set_viewport_bones_visible(viewport, bool(visible))
+
+    def set_retarget_gizmo_visible(self, visible: bool) -> None:
+        if hasattr(self, "retarget_gizmo_toggle"):
+            with QtCore.QSignalBlocker(self.retarget_gizmo_toggle):
+                self.retarget_gizmo_toggle.setChecked(bool(visible))
+        for viewport in (getattr(self, "source_viewport", None), getattr(self, "target_viewport", None)):
+            self._set_viewport_gizmo_visible(viewport, bool(visible))
+
+    def _apply_retarget_view_toggles(self) -> None:
+        self.set_retarget_bones_visible(self.retarget_bones_visible())
+        self.set_retarget_gizmo_visible(self.retarget_gizmo_visible())
+
+    def _set_viewport_bones_visible(self, viewport, visible: bool) -> None:
+        if viewport is None:
+            return
+        if hasattr(viewport, "bones_button"):
+            viewport.bones_button.blockSignals(True)
+            viewport.bones_button.setChecked(bool(visible))
+            viewport.bones_button.blockSignals(False)
+        toggle = getattr(viewport, "toggle_bones", None)
+        if callable(toggle):
+            toggle(bool(visible))
+        dots = getattr(viewport, "set_joint_dot_enabled", None)
+        if callable(dots):
+            dots(bool(visible))
+
+    def _set_viewport_gizmo_visible(self, viewport, visible: bool) -> None:
+        if viewport is None:
+            return
+        if hasattr(viewport, "gimbal_button"):
+            viewport.gimbal_button.blockSignals(True)
+            viewport.gimbal_button.setChecked(bool(visible))
+            viewport.gimbal_button.blockSignals(False)
+        setter = getattr(viewport, "_set_renderer_gimbal_visible", None)
+        if callable(setter):
+            setter(bool(visible))
+        else:
+            renderer = getattr(viewport, "_renderer", None)
+            if renderer is not None:
+                renderer.show_gimbal = bool(visible)
+            gizmo = getattr(viewport, "_transform_gizmo", None)
+            if gizmo is not None:
+                gizmo.visible = bool(visible)
+        request = getattr(viewport, "_request_render", None)
+        if callable(request):
+            request(fast=True)
 
     def set_source_clip_animation_pose(self, animation_name: str, time_seconds: float = 0.0) -> None:
         clip = self._source_clip_preview_clip
@@ -526,6 +615,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             self.target_viewport.set_resource_manager(self._resource_manager, self._target_game)
         self.panel.set_target_model(model)
         self.target_viewport.load_model(model, self._texture_dir)
+        self._apply_retarget_view_toggles()
         self._refresh_cloth_tool()
         self.statusBar().showMessage(f"Target: {getattr(model, 'name', 'None') if model else 'None'}")
 

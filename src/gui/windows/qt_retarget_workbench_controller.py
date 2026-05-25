@@ -66,6 +66,7 @@ class RetargetWorkbenchState:
     target_model: Any | None = None
     retarget_profile: Any | None = None
     solver_options: RetargetSolverOptions | None = None
+    root_motion_enabled: bool = False
 
     # Future KOTOR source modes.
     source_kotor_model: Any | None = None
@@ -225,6 +226,19 @@ class RetargetWorkbenchController:
         self.invalidate_preview("UE output animation clip name changed")
         self.update_enabled()
 
+    def set_root_motion_enabled(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if self.state.root_motion_enabled == enabled:
+            self._push_solver_options()
+            self.update_enabled()
+            return
+        self.state.root_motion_enabled = enabled
+        self._push_solver_options()
+        self.invalidate_preview(
+            "root movement enabled" if enabled else "root movement disabled"
+        )
+        self.update_enabled()
+
     def available_target_kotor_slots(self) -> list[str]:
         try:
             return list(get_valid_animation_slots(self.current_target_model()))
@@ -323,6 +337,7 @@ class RetargetWorkbenchController:
             raise RetargetWorkbenchError(self.not_implemented_message("preview"))
         controller = self._require_ue_to_kotor_controller()
         self._push_output_naming()
+        self._push_solver_options()
         result = controller.preview_retarget(auto_play=auto_play, show_node_overlay=show_node_overlay)
         self._sync_from_ue_controller()
         self.last_error = str(getattr(controller, "last_error", "") or "")
@@ -465,7 +480,16 @@ class RetargetWorkbenchController:
 
     def _push_solver_options(self) -> None:
         if self.ue_to_kotor_controller is not None and hasattr(self.ue_to_kotor_controller, "set_solver_options"):
-            self.ue_to_kotor_controller.set_solver_options(self.state.solver_options)
+            self.ue_to_kotor_controller.set_solver_options(self._effective_solver_options())
+
+    def _effective_solver_options(self) -> RetargetSolverOptions | None:
+        desired_policy = "copy_source_root" if self.state.root_motion_enabled else "in_place"
+        options = self.state.solver_options
+        if options is None:
+            return RetargetSolverOptions(root_translation_policy=desired_policy) if self.state.root_motion_enabled else None
+        if getattr(options, "root_translation_policy", "in_place") == desired_policy:
+            return options
+        return replace(options, root_translation_policy=desired_policy)
 
     def _can_preview_kotor_to_kotor(self) -> bool:
         return bool(
@@ -534,6 +558,7 @@ class RetargetWorkbenchController:
                     target_model=self.current_target_model(),
                     retarget_profile=self.state.retarget_profile,
                     output_naming=self.state.output_naming,
+                    solver_options=self._effective_solver_options(),
                     auto_play=auto_play,
                     enable_numeric_audit=True,
                 )
@@ -634,6 +659,7 @@ class RetargetWorkbenchController:
                     target_skeleton=self.state.target_unreal_skeleton,
                     retarget_profile=self._current_kotor_to_unreal_profile(),
                     output_naming=self.state.output_naming or RetargetOutputNaming(),
+                    root_motion_policy="copy_source_root" if self.state.root_motion_enabled else "in_place",
                 )
             )
             self.state.last_kotor_to_unreal_preview_result = result

@@ -471,6 +471,25 @@ def test_unreal_to_kotor_auto_generates_verified_mixamo_profile_and_solver_optio
     assert ue.state.solver_options is controller.state.solver_options
 
 
+def test_root_motion_toggle_pushes_effective_solver_policy_and_invalidates_preview() -> None:
+    controller, ue, _preview_action, _export_action = _ready_controller()
+    controller.state.last_preview_result = SimpleNamespace(preview_audit=SimpleNamespace(passed=True))
+    controller.state.last_export_result = SimpleNamespace()
+
+    controller.set_root_motion_enabled(True)
+
+    assert controller.state.root_motion_enabled is True
+    assert ue.state.solver_options is not None
+    assert ue.state.solver_options.root_translation_policy == "copy_source_root"
+    assert controller.state.last_preview_result is None
+    assert controller.state.last_export_result is None
+    assert "root movement enabled" in controller.state.last_preview_invalidated_reason
+
+    controller.set_root_motion_enabled(False)
+    assert controller.state.root_motion_enabled is False
+    assert ue.state.solver_options is None
+
+
 def test_mode_dropdown_contains_all_modes_and_defaults_to_unreal_to_kotor() -> None:
     combo = FakeCombo()
 

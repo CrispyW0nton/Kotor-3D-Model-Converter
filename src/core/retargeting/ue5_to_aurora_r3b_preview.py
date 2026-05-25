@@ -139,6 +139,7 @@ def build_r3b_ue5_to_aurora_retarget_result(
         slot_name=normalized_profile.animation_slot,
         fps=float(source_clip.sample_rate or 30.0),
         write_zero_position_controllers=False,
+        write_root_position_controllers=opts.root_translation_policy != "in_place",
         source_reference_mode=source_reference_mode,
         hybrid_limb_source_rest_weight=hybrid_weight,
         warnings=warnings,
@@ -170,6 +171,7 @@ def build_r3b_ue5_to_aurora_retarget_result(
         source_clip=source_clip,
         profile=normalized_profile,
         warnings=warnings,
+        root_translation_policy=opts.root_translation_policy,
     )
     return RetargetResult(
         animation_block=animation,
@@ -400,6 +402,7 @@ def _build_report(
     source_clip: SourceSkeletonClip,
     profile: RetargetProfile,
     warnings: list[str],
+    root_translation_policy: str,
 ) -> RetargetSolveReport:
     orientation_count = 0
     position_count = 0
@@ -432,7 +435,7 @@ def _build_report(
         mapped_node_count=len(profile.mappings),
         generated_orientation_track_count=orientation_count,
         generated_position_track_count=position_count,
-        stripped_root_translation=True,
+        stripped_root_translation=str(root_translation_policy or "in_place") == "in_place",
         max_quaternion_norm_error=max_norm_error,
         max_adjacent_rotation_degrees=max_adjacent_degrees,
         warnings=list(warnings),
