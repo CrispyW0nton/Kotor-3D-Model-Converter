@@ -5127,41 +5127,74 @@ class FrameRenderer:
         if palette is None or len(palette) == 0:
             return None
 
+        arrays = self._skin_numpy_arrays_for_node(node)
+        if arrays is None:
+            return None
+        vertices_h, bone_indices, weights = arrays
+        bone_count = int(palette.shape[0])
+        if bone_count <= 0:
+            return None
+
+        skinned = np.zeros_like(vertices_h, dtype=np.float32)
+        weight_total = np.zeros((vertices_h.shape[0],), dtype=np.float32)
+        for slot in range(min(4, bone_indices.shape[1])):
+            slot_weights = weights[:, slot]
+            valid = (slot_weights >= np.float32(0.0001)) & (bone_indices[:, slot] >= 0) & (bone_indices[:, slot] < bone_count)
+            if not bool(np.any(valid)):
+                continue
+            matrices = palette[bone_indices[valid, slot]]
+            transformed = np.einsum("nij,nj->ni", matrices, vertices_h[valid], optimize=True)
+            skinned[valid] += slot_weights[valid, None] * transformed
+            weight_total[valid] += slot_weights[valid]
+
+        fallback = weight_total < np.float32(0.0001)
+        if bool(np.any(fallback)):
+            skinned[fallback] = vertices_h[fallback]
+        result = [tuple(float(value) for value in row[:3]) for row in skinned]
+        self._gpu_parity_skin_verts_cache[node_id] = result
+        return result
+
+    def _skin_numpy_arrays_for_node(self, node: 'ModelNode'):
+        """Return cached homogeneous vertices, bone indices, and weights.
+
+        Imported FBX preview meshes can be large (Mixamo's X Bot is ~147k
+        vertices). Building these compact arrays once keeps focused playback
+        from spending most of its frame budget walking Python skin structures.
+        """
+
+        vertices = getattr(node, "vertices", []) or []
+        skin_data = list(getattr(node, "skin_data", []) or [])
+        vertex_count = len(vertices)
+        if vertex_count <= 0 or len(skin_data) < vertex_count:
+            return None
+        cache_key = (id(vertices), id(getattr(node, "skin_data", None)), vertex_count, len(skin_data))
+        cache = getattr(node, "_gr_skin_numpy_arrays_cache", None)
+        if isinstance(cache, tuple) and len(cache) == 2 and cache[0] == cache_key:
+            return cache[1]
         try:
-            verts = np.asarray(getattr(node, "vertices", []) or [], dtype=np.float32)
+            verts = np.asarray(vertices, dtype=np.float32)
         except Exception:
             return None
         if verts.ndim != 2 or verts.shape[0] == 0 or verts.shape[1] < 3:
             return None
-        verts = verts[:, :3]
-        skin_data = list(getattr(node, "skin_data", []) or [])
-        if len(skin_data) < len(verts):
-            return None
-
-        result: List[Tuple[float, float, float]] = []
-        bone_count = int(palette.shape[0])
-        for vi, vertex in enumerate(verts):
-            vh = np.array([float(vertex[0]), float(vertex[1]), float(vertex[2]), 1.0], dtype=np.float32)
-            skinned = np.zeros(4, dtype=np.float32)
-            weight_total = 0.0
-            influences = list(getattr(skin_data[vi], "influences", []) or [])[:4]
-            for influence in influences:
+        vertices_h = np.ones((verts.shape[0], 4), dtype=np.float32)
+        vertices_h[:, :3] = verts[:, :3]
+        bone_indices = np.full((verts.shape[0], 4), -1, dtype=np.int32)
+        weights = np.zeros((verts.shape[0], 4), dtype=np.float32)
+        for vi, skin in enumerate(skin_data[: verts.shape[0]]):
+            for slot, influence in enumerate(list(getattr(skin, "influences", []) or [])[:4]):
                 try:
-                    bone_index = int(getattr(influence, "bone_index", 0))
-                    weight = float(getattr(influence, "weight", 0.0))
+                    bone_indices[vi, slot] = int(getattr(influence, "bone_index", -1))
+                    weights[vi, slot] = float(getattr(influence, "weight", 0.0))
                 except Exception:
-                    continue
-                if bone_index < 0 or bone_index >= bone_count or weight < 0.0001:
-                    continue
-                skinned += np.float32(weight) * (palette[bone_index] @ vh)
-                weight_total += weight
-            if weight_total < 0.0001:
-                result.append((float(vertex[0]), float(vertex[1]), float(vertex[2])))
-            else:
-                result.append((float(skinned[0]), float(skinned[1]), float(skinned[2])))
-
-        self._gpu_parity_skin_verts_cache[node_id] = result
-        return result
+                    bone_indices[vi, slot] = -1
+                    weights[vi, slot] = 0.0
+        arrays = (vertices_h, bone_indices, weights)
+        try:
+            setattr(node, "_gr_skin_numpy_arrays_cache", (cache_key, arrays))
+        except Exception:
+            pass
+        return arrays
 
     def _get_world_verts_for_node(self, node: 'ModelNode') -> List[Tuple]:
         """

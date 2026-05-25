@@ -574,6 +574,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._selected_meshes: list = []
         self._hovered_mesh_node = None
         self._hovered_mesh_face_bounds = None
+        self._suspend_mesh_hover_during_animation = False
         self._pan_dragging = False
         self._nav_dragging = ""
         self._nav_button = QtCore.Qt.NoButton
@@ -6129,6 +6130,15 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._hovered_mesh_face_bounds = None
                 self._request_render(fast=True)
             return
+        if (
+            self._suspend_mesh_hover_during_animation
+            and getattr(self._renderer, "_anim_pose", None) is not None
+        ):
+            if self._hovered_mesh_node is not None:
+                self._hovered_mesh_node = None
+                self._hovered_mesh_face_bounds = None
+                self._request_render(fast=True)
+            return
         if self._transform_gizmo.hovered_handle or self._measurement_mode:
             return
         x, y = int(event.position().x()), int(event.position().y())
@@ -7242,6 +7252,14 @@ class QtRetargetViewportWidget(QtViewportWidget):
     DEFAULT_VIEWPORT_TOOLBAR_VISIBLE = False
     DEFAULT_VIEWCUBE_VISIBLE = False
     DEFAULT_TRANSFORM_TYPEIN_VISIBLE = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Retarget playback may drive a large imported FBX skin on every frame.
+        # Mesh hover picking walks projected/skinned triangles, so suspend it
+        # only while an animation pose is live. Static pause/inspection still
+        # keeps the normal hover affordance.
+        self._suspend_mesh_hover_during_animation = True
 
 
 class QtUnrealAnimatorViewportWidget(QtViewportWidget):

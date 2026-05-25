@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import os
 import sys
+from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -296,6 +297,54 @@ def test_source_clip_preview_model_preserves_fbx_skin_weights_for_playback() -> 
     assert mesh_nodes[0].skin_data[1].influences[0].weight == pytest.approx(0.75)
 
 
+def test_renderer_caches_numpy_skin_arrays_for_large_imported_preview_meshes() -> None:
+    from src.converters.blender_fbx_mesh_importer import model_from_blender_fbx_mesh_payload
+    from src.core.geometry.model_data import GameVersion
+    from src.gui.qt_lib.rendering.viewport_core import FrameRenderer
+    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera
+    from src.gui.qt_lib.windows.qt_source_clip_preview_model import build_source_clip_preview_model
+
+    mesh_model = model_from_blender_fbx_mesh_payload(
+        {
+            "success": True,
+            "armatures": ["root"],
+            "actions": [{"name": "root|Unreal Take|Base Layer"}],
+            "meshes": [
+                {
+                    "name": "Body",
+                    "is_skin": True,
+                    "bone_map": ["Root", "RHand"],
+                    "skin_data": [
+                        [{"bone_index": 0, "weight": 1.0}],
+                        [{"bone_index": 1, "weight": 0.75}, {"bone_index": 0, "weight": 0.25}],
+                        [{"bone_index": 1, "weight": 1.0}],
+                    ],
+                    "vertices": [[-1, 0, 0], [1, 0, 0], [0, 0, 2]],
+                    "normals": [[0, 1, 0], [0, 1, 0], [0, 1, 0]],
+                    "uvs": [[0, 0], [1, 0], [0.5, 1]],
+                    "faces": [[0, 1, 2]],
+                    "materials": [{"name": "BodyMat", "texture": "Body_D", "diffuse": [0.5, 0.6, 0.7]}],
+                }
+            ],
+        },
+        model_name="source_body",
+        game_version=GameVersion.K1,
+    )
+    model = build_source_clip_preview_model(_sample_clip(), mesh_model=mesh_model)
+    mesh_node = next(node for node in model.all_nodes() if getattr(node, "_gr_fbx_mesh_preview_node", False))
+    renderer = FrameRenderer(ArcBallCamera())
+
+    first = renderer._skin_numpy_arrays_for_node(mesh_node)
+    second = renderer._skin_numpy_arrays_for_node(mesh_node)
+
+    assert first is second
+    vertices_h, bone_indices, weights = first
+    assert vertices_h.shape == (3, 4)
+    assert bone_indices.tolist() == [[0, -1, -1, -1], [1, 0, -1, -1], [1, -1, -1, -1]]
+    assert weights[1, 0] == pytest.approx(0.75)
+    assert weights[1, 1] == pytest.approx(0.25)
+
+
 def test_retarget_window_source_clip_preview_populates_animation_list() -> None:
     _qapp()
     from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
@@ -312,6 +361,26 @@ def test_retarget_window_source_clip_preview_populates_animation_list() -> None:
         assert window.source_viewport._renderer._anim_pose is None
     finally:
         window.close()
+
+
+def test_retarget_viewport_skips_mesh_hover_hit_tests_during_animation_playback() -> None:
+    _qapp()
+    from src.gui.qt_lib.viewports.qt_viewport import QtRetargetViewportWidget
+
+    viewport = QtRetargetViewportWidget()
+    try:
+        viewport.model = SimpleNamespace()
+        viewport._renderer._anim_pose = object()
+        viewport._hovered_mesh_node = object()
+        viewport._hovered_mesh_face_bounds = ((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
+        viewport._mesh_hit_test_detail = lambda *_args, **_kwargs: pytest.fail("hover hit test should be suspended during retarget playback")
+
+        viewport._update_mesh_hover(object())
+
+        assert viewport._hovered_mesh_node is None
+        assert viewport._hovered_mesh_face_bounds is None
+    finally:
+        viewport.close()
 
 
 def test_retarget_window_source_animation_playback_uses_compact_preview_positions() -> None:
