@@ -205,8 +205,6 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         self._mesh_items: dict[QtWidgets.QTreeWidgetItem, object] = {}
         self._walkmesh_items: dict[QtWidgets.QTreeWidgetItem, object] = {}
         self._null_mesh_items: dict[QtWidgets.QTreeWidgetItem, object] = {}
-        self._hovered_module_mesh_item: QtWidgets.QTreeWidgetItem | None = None
-        self._hovered_module_mesh_brushes: dict[int, tuple[QtGui.QBrush, QtGui.QBrush]] = {}
         self._suppress_mesh_signal = False
         self._module_browser_enabled = bool(module_browser_enabled)
         self._current_node = None
@@ -854,7 +852,6 @@ class QtPropertiesPanel(QtWidgets.QWidget):
             return
         self._suppress_mesh_signal = True
         try:
-            self.clear_module_mesh_hover()
             self.module_mesh_tree.clear()
             self.module_walkmesh_tree.clear()
             self.module_null_mesh_tree.clear()
@@ -903,53 +900,6 @@ class QtPropertiesPanel(QtWidgets.QWidget):
             self.module_walkmesh_count.setText(f"{walk_count:,} walkmesh(es)" if walk_count else "No walkmeshes.")
         finally:
             self._suppress_mesh_signal = False
-
-    def _module_mesh_item_for_node(self, node) -> tuple[QtWidgets.QTreeWidgetItem, QtWidgets.QTreeWidget, int] | None:
-        if node is None:
-            return None
-        node_id = id(node)
-        for tree, items, tab in (
-            (self.module_mesh_tree, self._mesh_items, 0),
-            (self.module_null_mesh_tree, self._null_mesh_items, 1),
-            (self.module_walkmesh_tree, self._walkmesh_items, 2),
-        ):
-            for item, candidate in items.items():
-                if id(candidate) == node_id:
-                    return item, tree, tab
-        return None
-
-    def clear_module_mesh_hover(self) -> None:
-        item = self._hovered_module_mesh_item
-        if item is not None:
-            for column, (background, foreground) in self._hovered_module_mesh_brushes.items():
-                item.setBackground(column, background)
-                item.setForeground(column, foreground)
-        self._hovered_module_mesh_item = None
-        self._hovered_module_mesh_brushes = {}
-
-    def hover_module_mesh(self, node) -> None:
-        if not self._module_browser_enabled or self.module_tab is None:
-            return
-        match = self._module_mesh_item_for_node(node)
-        item = match[0] if match is not None else None
-        if item is self._hovered_module_mesh_item:
-            return
-        self.clear_module_mesh_hover()
-        if match is None:
-            return
-        item, tree, tab = match
-        highlight = self.palette().color(QtGui.QPalette.ColorRole.Highlight)
-        highlighted_text = self.palette().color(QtGui.QPalette.ColorRole.HighlightedText)
-        self._hovered_module_mesh_item = item
-        self._hovered_module_mesh_brushes = {
-            column: (item.background(column), item.foreground(column))
-            for column in range(tree.columnCount())
-        }
-        for column in range(tree.columnCount()):
-            item.setBackground(column, QtGui.QBrush(highlight))
-            item.setForeground(column, QtGui.QBrush(highlighted_text))
-        if self.module_browser_tabs.currentIndex() == tab:
-            tree.scrollToItem(item, QtWidgets.QAbstractItemView.PositionAtCenter)
 
     def _filter_module_meshes(self, text: str) -> None:
         if not self._module_browser_enabled:
@@ -1045,13 +995,6 @@ class QtPropertiesPanel(QtWidgets.QWidget):
     def _refresh_module_mesh_rows(self) -> None:
         if not self._module_browser_enabled:
             return
-        hovered_node = None
-        if self._hovered_module_mesh_item is not None:
-            for items in (self._mesh_items, self._null_mesh_items, self._walkmesh_items):
-                hovered_node = items.get(self._hovered_module_mesh_item)
-                if hovered_node is not None:
-                    break
-            self.clear_module_mesh_hover()
         for tree, items in (
             (self.module_mesh_tree, self._mesh_items),
             (self.module_null_mesh_tree, self._null_mesh_items),
@@ -1064,8 +1007,6 @@ class QtPropertiesPanel(QtWidgets.QWidget):
                 brush = QtGui.QBrush(QtGui.QColor(C["text2"] if hidden else C["text"]))
                 for column in range(tree.columnCount()):
                     item.setForeground(column, brush)
-        if hovered_node is not None:
-            self.hover_module_mesh(hovered_node)
 
     def refresh_module_mesh_rows(self) -> None:
         self._refresh_module_mesh_rows()

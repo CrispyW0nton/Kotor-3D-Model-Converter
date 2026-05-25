@@ -412,6 +412,35 @@ def test_preloaded_library_skips_post_show_auto_detect_timer() -> None:
     )
 
 
+def test_startup_windows_use_primary_screen_not_cursor_screen() -> None:
+    import inspect
+
+    _qapp()
+
+    from PySide6 import QtGui
+    from src.gui.qt_lib.windows.qt_main_window import (
+        QtGhostRiggerMainWindow,
+        QtStartupSplash,
+        _primary_screen_available_geometry,
+    )
+
+    primary = QtGui.QGuiApplication.primaryScreen()
+    if primary is not None:
+        assert _primary_screen_available_geometry() == primary.availableGeometry()
+
+    splash_source = inspect.getsource(QtStartupSplash._center_on_screen)
+    place_source = inspect.getsource(QtGhostRiggerMainWindow._place_on_primary_startup_screen)
+    init_source = inspect.getsource(QtGhostRiggerMainWindow.__init__)
+
+    assert "_primary_screen_available_geometry()" in splash_source
+    assert "_primary_screen_available_geometry()" in place_source
+    assert "self._place_on_primary_startup_screen()" in init_source
+    assert "QCursor" not in splash_source
+    assert "screenAt" not in splash_source
+    assert "QCursor" not in place_source
+    assert "screenAt" not in place_source
+
+
 def test_main_window_exposes_visual_profile_dropdown() -> None:
     import inspect
 

@@ -648,66 +648,6 @@ def test_module_mesh_properties_panel_lists_selects_and_hides_meshes() -> None:
     assert mesh_b._gr_hidden is True
 
 
-def test_module_mesh_properties_panel_highlights_hovered_mesh_without_selecting() -> None:
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-    from PySide6 import QtGui, QtWidgets
-
-    from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
-
-    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-    panel = QtPropertiesPanel()
-    meshes = [
-        SimpleNamespace(
-            name=f"room_{index}",
-            is_mesh=True,
-            vertices=[(0, 0, 0), (1, 0, 0), (0, 1, 0)],
-            faces=[(0, 1, 2)],
-            texture="wall01",
-            position=(0.0, 0.0, 0.0),
-            rotation=(0.0, 0.0, 0.0, 1.0),
-        )
-        for index in range(2)
-    ]
-    model = SimpleNamespace(
-        name="m01aa_01a",
-        game_version="K1",
-        supermodel="NULL",
-        classification="tile",
-        animations=[],
-        mesh_nodes=lambda: meshes,
-        all_nodes=lambda: meshes,
-        bone_nodes=lambda: [],
-        texture_list=lambda: ["wall01"],
-    )
-
-    panel.show_model(model)
-    first_item = panel.module_mesh_tree.topLevelItem(0)
-    second_item = panel.module_mesh_tree.topLevelItem(1)
-    original_background = second_item.background(0)
-
-    panel.hover_module_mesh(meshes[1])
-
-    highlight = panel.palette().color(QtGui.QPalette.ColorRole.Highlight)
-    assert panel._hovered_module_mesh_item is second_item
-    assert second_item.background(0).color() == highlight
-    assert panel.module_mesh_tree.selectedItems() == []
-
-    panel._set_meshes_hidden([meshes[1]], True)
-    assert panel._hovered_module_mesh_item is second_item
-    assert second_item.background(0).color() == highlight
-    assert panel.module_mesh_tree.selectedItems() == []
-
-    panel.hover_module_mesh(meshes[0])
-
-    assert panel._hovered_module_mesh_item is first_item
-    assert second_item.background(0) == original_background
-
-    panel.hover_module_mesh(None)
-
-    assert panel._hovered_module_mesh_item is None
-
-
 def test_module_mesh_properties_panel_supports_multi_select_all() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -2104,7 +2044,8 @@ def test_main_window_exposes_module_meshes_as_detachable_dock() -> None:
     assert 'self._icon("module_meshes")' in actions_source
     assert "modules_menu.addAction(self.module_meshes_panel_action)" in menu_source
     assert "self.module_geometry_panel.show_model(self._active_viewport_model())" in refresh_source
-    assert "self.viewport.meshHovered.connect(self.module_geometry_panel.hover_module_mesh)" in layout_source
+    assert "self.viewport.meshSelectionChanged.connect(self.module_geometry_panel.select_module_meshes)" in layout_source
+    assert "meshHovered.connect(self.module_geometry_panel" not in layout_source
     assert (Path("src/gui/icons/module_meshes.svg")).exists()
     assert hasattr(QtPropertiesPanel, "set_module_browser_only")
 

@@ -1,0 +1,60 @@
+{
+  "primary_screen": "2795E",
+  "primary_available_geometry": [
+    0,
+    0,
+    1920,
+    1040
+  ],
+  "splash_screen": "2795E",
+  "splash_frame_geometry": [
+    600,
+    370,
+    720,
+    300
+  ],
+  "splash_intersects_primary": true,
+  "main_window_screen": "2795E",
+  "main_window_frame_geometry": [
+    210,
+    49,
+    1500,
+    911
+  ],
+  "main_window_intersects_primary": true,
+  "main_window_center_on_primary": true,
+  "renderer_backend_for_smoke": "",
+  "screens": [
+    {
+      "name": "2795E",
+      "available_geometry": [
+        0,
+        0,
+        1920,
+        1040
+      ]
+    },
+    {
+      "name": "HP E231",
+      "available_geometry": [
+        916,
+        -1080,
+        1920,
+        1080
+      ]
+    },
+    {
+      "name": "HP LA2306",
+      "available_geometry": [
+        1920,
+        0,
+        1920,
+        1080
+      ]
+    }
+  ],
+  "screenshots": [
+    "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\startup_primary_screen_smoke\\splash_primary_screen_clean.png",
+    "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\startup_primary_screen_smoke\\main_window_primary_screen_clean.png"
+  ]
+}

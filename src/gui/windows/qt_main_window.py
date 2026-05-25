@@ -169,6 +169,16 @@ def _native_splash_palette_colors() -> dict[str, str]:
     }
 
 
+def _primary_screen_available_geometry() -> Optional[QtCore.QRect]:
+    screen = QtGui.QGuiApplication.primaryScreen()
+    if screen is None:
+        screens = QtGui.QGuiApplication.screens()
+        screen = screens[0] if screens else None
+    if screen is None:
+        return None
+    return QtCore.QRect(screen.availableGeometry())
+
+
 class _ThemeColorOverride:
     def __init__(self, theme, colors: dict[str, str]) -> None:
         self._theme = theme
@@ -1191,10 +1201,9 @@ class QtStartupSplash(QtWidgets.QWidget):
             self.progress_panel.set_busy(title, detail)
 
     def _center_on_screen(self) -> None:
-        screen = QtGui.QGuiApplication.primaryScreen()
-        if screen is None:
+        geometry = _primary_screen_available_geometry()
+        if geometry is None:
             return
-        geometry = screen.availableGeometry()
         self.move(geometry.center() - self.rect().center())
 
 
@@ -1469,6 +1478,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         initial_layout = self.layout_manager.get_layout()
         self.resize(initial_layout.main_width, initial_layout.main_height)
         self.setMinimumSize(1100, 700)
+        self._place_on_primary_startup_screen()
         update_legacy_palette(self.theme_manager.get_theme())
         self._build_actions()
         self._diagnostics_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+D"), self)
@@ -1500,6 +1510,19 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def _enable_theme_progress_toasts(self) -> None:
         self._suppress_theme_progress_toast = False
+
+    def _place_on_primary_startup_screen(self) -> None:
+        geometry = _primary_screen_available_geometry()
+        if geometry is None:
+            return
+        size = self.size()
+        if not size.isValid() or size.isEmpty():
+            size = self.sizeHint()
+        width = max(1, min(int(size.width()), int(geometry.width())))
+        height = max(1, min(int(size.height()), int(geometry.height())))
+        x = geometry.x() + max(0, (geometry.width() - width) // 2)
+        y = geometry.y() + max(0, (geometry.height() - height) // 2)
+        self.setGeometry(x, y, width, height)
 
     def moveEvent(self, event):
         super().moveEvent(event)
@@ -3361,7 +3384,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport.nodeSelected.connect(self.module_geometry_panel.show_node)
         self.viewport.nodeSelected.connect(self.module_geometry_panel.select_module_mesh)
         self.viewport.meshSelectionChanged.connect(self.module_geometry_panel.select_module_meshes)
-        self.viewport.meshHovered.connect(self.module_geometry_panel.hover_module_mesh)
         self.viewport.nodeMoved.connect(self.properties_panel.show_node)
         self.viewport.nodeMoved.connect(self._on_viewport_scene_node_moved)
         self.viewport.statusMessage.connect(self.statusBar().showMessage)
