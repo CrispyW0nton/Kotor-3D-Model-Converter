@@ -213,6 +213,7 @@ def test_viewport_toolbar_primary_controls_are_icon_only():
             w.solid_button,
             w.wire_button,
             w.solid_wire_button,
+            w.mesh_hover_button,
             w.bones_button,
             w.texture_button,
             w.grid_button,
@@ -333,6 +334,33 @@ def test_t401_setter_enabled_toggle():
         assert w.joint_dot_enabled is False
         w.set_joint_dot_enabled(True)
         assert w.joint_dot_enabled is True
+    finally:
+        w.deleteLater()
+
+
+def test_viewport_toolbar_mesh_hover_button_controls_hover_helper():
+    """The viewport exposes mesh hover highlighting as an explicit toolbar toggle."""
+    app, w = _make_widget()
+    try:
+        assert hasattr(w, "mesh_hover_button")
+        assert w.mesh_hover_enabled is True
+        assert w.mesh_hover_button.isChecked() is True
+        assert not w.mesh_hover_button.icon().isNull()
+
+        sentinel = object()
+        w._hovered_mesh_node = sentinel
+        w._hovered_mesh_face_bounds = ((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
+        w.mesh_hover_button.click()
+
+        assert w.mesh_hover_enabled is False
+        assert w.mesh_hover_button.isChecked() is False
+        assert w._hovered_mesh_node is None
+        assert w._hovered_mesh_face_bounds is None
+
+        w.set_mesh_hover_enabled(True)
+
+        assert w.mesh_hover_enabled is True
+        assert w.mesh_hover_button.isChecked() is True
     finally:
         w.deleteLater()
 

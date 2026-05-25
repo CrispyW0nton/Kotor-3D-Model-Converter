@@ -1101,6 +1101,168 @@ def test_qt_viewport_can_pick_light_gizmos() -> None:
     assert viewport._light_hit_test(140, 160) is None
 
 
+def test_qt_viewport_preserves_module_mesh_node_selection_under_scene_root_tags() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    root = ModelNode(name="M01aa_01a")
+    root._gr_scene_object_root = True
+    root._gr_scene_object_id = "scene-module"
+    mesh = ModelNode(
+        name="Object3234",
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        faces=[(0, 1, 2)],
+    )
+    mesh.parent = root
+    mesh._gr_scene_object_root_ref = root
+    mesh._gr_scene_object_id = "scene-module"
+    viewport = QtViewportWidget()
+    viewport._gpu_renderer = SimpleNamespace(selected_node=None, selected_nodes=[])
+    try:
+        viewport.set_selected_node(mesh, orbit_bounds=((0.0, 0.0, 0.0), (1.0, 1.0, 0.0)))
+
+        assert viewport._renderer.selected_node is mesh
+        assert viewport._gpu_renderer.selected_node is mesh
+        assert viewport._gpu_renderer.selected_nodes == [mesh]
+        assert viewport.get_selected_meshes() == [mesh]
+        assert getattr(mesh, "_gr_selected", False) is True
+    finally:
+        viewport.deleteLater()
+
+
+def test_qt_viewport_preserves_light_node_selection_under_scene_root_tags() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    root = ModelNode(name="M01aa_01a")
+    root._gr_scene_object_root = True
+    root._gr_scene_object_id = "scene-module"
+    light = SimpleNamespace(
+        name="AuroraLight223",
+        is_light=True,
+        position=(1.0, 2.0, 3.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=root,
+        _gr_scene_object_root_ref=root,
+        _gr_scene_object_id="scene-module",
+    )
+    viewport = QtViewportWidget()
+    viewport._gpu_renderer = SimpleNamespace(selected_node=None, selected_nodes=[])
+    viewport._gizmo_world_position = lambda node: tuple(getattr(node, "position", (0.0, 0.0, 0.0)))
+    try:
+        viewport.set_selected_node(light)
+
+        assert viewport._renderer.selected_node is light
+        assert viewport._gpu_renderer.selected_node is light
+        assert viewport._gpu_renderer.selected_nodes == []
+        assert viewport.get_selected_meshes() == []
+        assert getattr(light, "_gr_gizmo_world_position", None) == (1.0, 2.0, 3.0)
+    finally:
+        viewport.deleteLater()
+
+
+def test_qt_viewport_preserves_null_helper_selection_under_scene_root_tags() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    root = ModelNode(name="M01aa_01a")
+    root._gr_scene_object_root = True
+    root._gr_scene_object_id = "scene-module"
+    helper = SimpleNamespace(
+        name="RoomNull01",
+        parent=root,
+        _gr_scene_object_root_ref=root,
+        _gr_scene_object_id="scene-module",
+        position=(2.0, 3.0, 4.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    viewport = QtViewportWidget()
+    viewport._gizmo_world_position = lambda node: tuple(getattr(node, "position", (0.0, 0.0, 0.0)))
+    try:
+        viewport.set_selected_node(helper)
+
+        assert viewport._renderer.selected_node is helper
+        assert viewport.get_selected_meshes() == []
+        assert getattr(helper, "_gr_gizmo_world_position", None) == (2.0, 3.0, 4.0)
+    finally:
+        viewport.deleteLater()
+
+
+def test_moderngl_selection_stays_on_explicit_node_without_scene_child_expansion() -> None:
+    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
+
+    root = SimpleNamespace(
+        name="M01aa_01a",
+        _gr_scene_object_root=True,
+        _gr_scene_object_id="scene-module",
+    )
+    child = SimpleNamespace(
+        name="Object3234",
+        _gr_scene_object_id="scene-module",
+        _gr_scene_object_root_ref=root,
+    )
+    other = SimpleNamespace(name="Other", _gr_scene_object_id="other")
+    renderer = GpuRenderer()
+    renderer.selected_node = root
+
+    assert renderer._is_node_selected_for_render(root) is True
+    assert renderer._is_node_selected_for_render(child) is False
+    assert renderer._is_node_selected_for_render(other) is False
+
+
+def test_moderngl_child_selection_does_not_select_sibling_meshes_or_lights() -> None:
+    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
+
+    root = SimpleNamespace(
+        name="M01aa_01a",
+        _gr_scene_object_root=True,
+        _gr_scene_object_id="scene-module",
+    )
+    selected_mesh = SimpleNamespace(
+        name="Object3234",
+        _gr_scene_object_id="scene-module",
+        _gr_scene_object_root_ref=root,
+    )
+    sibling_mesh = SimpleNamespace(
+        name="Object3258",
+        _gr_scene_object_id="scene-module",
+        _gr_scene_object_root_ref=root,
+    )
+    sibling_light = SimpleNamespace(
+        name="AuroraLight273",
+        is_light=True,
+        _gr_scene_object_id="scene-module",
+        _gr_scene_object_root_ref=root,
+    )
+    renderer = GpuRenderer()
+    renderer.selected_node = selected_mesh
+
+    assert renderer._is_node_selected_for_render(selected_mesh) is True
+    assert renderer._is_node_selected_for_render(sibling_mesh) is False
+    assert renderer._is_node_selected_for_render(sibling_light) is False
+
+    renderer.selected_node = sibling_light
+
+    assert renderer._is_node_selected_for_render(sibling_light) is True
+    assert renderer._is_node_selected_for_render(selected_mesh) is False
+    assert renderer._is_node_selected_for_render(sibling_mesh) is False
+
+
 def test_qt_lighting_panel_select_light_syncs_from_viewport_without_emitting() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -1125,6 +1287,30 @@ def test_qt_lighting_panel_select_light_syncs_from_viewport_without_emitting() -
     assert panel.radius_spin.value() == 11.75
 
     panel.select_light(None)
+
+    assert emitted == []
+    assert panel._selected is None
+    assert panel.tree.selectedItems() == []
+
+
+def test_qt_lighting_panel_clears_when_viewport_selects_non_light() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    light = SimpleNamespace(name="AuroraLight223", is_light=True, light_kind="point", light_radius=11.75)
+    mesh = SimpleNamespace(name="Object3258", vertices=[(0.0, 0.0, 0.0)], faces=[(0, 0, 0)])
+    panel = QtLightingPanel()
+    emitted = []
+    panel.lightSelected.connect(emitted.append)
+    panel.set_model(SimpleNamespace(all_nodes=lambda: [light, mesh]))
+    panel.select_light(light)
+    emitted.clear()
+
+    panel.select_light(mesh)
 
     assert emitted == []
     assert panel._selected is None

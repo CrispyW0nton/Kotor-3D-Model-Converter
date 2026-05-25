@@ -360,7 +360,7 @@ class QtLightingPanel(QtWidgets.QWidget):
 
     def select_light(self, node) -> None:
         if node is not None and not bool(getattr(node, "is_light", False)):
-            return
+            node = None
         light = self.manager.find_by_original(node)
         self.manager.select_single(light.original_ref if light else None)
         self._selected = node if light else None

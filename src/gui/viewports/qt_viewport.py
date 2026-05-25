@@ -581,6 +581,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._mesh_box_start = None
         self._mesh_box_selecting = False
         self._selected_meshes: list = []
+        self._mesh_hover_enabled = True
         self._hovered_mesh_node = None
         self._hovered_mesh_face_bounds = None
         self._pan_dragging = False
@@ -1006,6 +1007,14 @@ class QtViewportWidget(QtWidgets.QWidget):
             checkable=True,
             tooltip="Solid mesh with wireframe overlay",
         )
+        self.mesh_hover_button = self._icon_button(
+            "Mesh Hover",
+            self.toggle_mesh_hover,
+            "viewport_mesh_hover",
+            checkable=True,
+            active=True,
+            tooltip="Mesh hover highlight",
+        )
         self.bones_button = self._icon_button(
             "Bones  B",
             self.toggle_bones,
@@ -1056,6 +1065,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         row.addWidget(self.solid_button)
         row.addWidget(self.wire_button)
         row.addWidget(self.solid_wire_button)
+        row.addWidget(self.mesh_hover_button)
         row.addWidget(self.bones_button)
         row.addWidget(self.texture_button)
         row.addWidget(self.grid_button)
@@ -2567,6 +2577,34 @@ class QtViewportWidget(QtWidgets.QWidget):
         enabled = bool(checked) if checked is not None else not self._weight_heatmap_enabled
         self.set_weight_heatmap_enabled(enabled)
 
+    @property
+    def mesh_hover_enabled(self) -> bool:
+        return bool(getattr(self, "_mesh_hover_enabled", True))
+
+    def set_mesh_hover_enabled(self, enabled: bool) -> None:
+        """Enable or disable the viewport mesh hover outline helper."""
+        new_value = bool(enabled)
+        if self._mesh_hover_enabled == new_value:
+            if hasattr(self, "mesh_hover_button"):
+                self.mesh_hover_button.blockSignals(True)
+                self.mesh_hover_button.setChecked(new_value)
+                self.mesh_hover_button.blockSignals(False)
+            return
+        self._mesh_hover_enabled = new_value
+        if not new_value:
+            self._hovered_mesh_node = None
+            self._hovered_mesh_face_bounds = None
+        if hasattr(self, "mesh_hover_button"):
+            self.mesh_hover_button.blockSignals(True)
+            self.mesh_hover_button.setChecked(new_value)
+            self.mesh_hover_button.blockSignals(False)
+        self._request_render(fast=True)
+
+    def toggle_mesh_hover(self, checked: Optional[bool] = None) -> None:
+        """Toolbar toggle for the mesh hover outline helper."""
+        enabled = bool(checked) if checked is not None else not self.mesh_hover_enabled
+        self.set_mesh_hover_enabled(enabled)
+
     def toggle_walkmesh(self, checked: Optional[bool] = None) -> None:
         if self._renderer._walkmesh_overlay is None:
             parent = self.window()
@@ -3238,9 +3276,6 @@ class QtViewportWidget(QtWidgets.QWidget):
             return None
 
     def set_selected_node(self, node, orbit_bounds=None) -> None:
-        scene_root = self._scene_root_for_node(node)
-        if scene_root is not None:
-            node = scene_root
         if node is not None and self._renderer.is_hidden_bone_name(getattr(node, "name", "")):
             node = None
         if node is not None and bool(getattr(node, "is_camera", False)):
@@ -3258,6 +3293,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._selected_meshes = []
         self._set_selection_orbit_bounds(node, orbit_bounds)
         self._renderer.selected_node = node
+        if self._gpu_renderer is not None:
+            self._gpu_renderer.selected_node = node
+            self._gpu_renderer.selected_nodes = []
         if node is None:
             self._selected_joint_nodes = []
             self._renderer._ext_skel_selected_node = None
@@ -3668,6 +3706,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         active = clean_nodes[0] if clean_nodes else None
         self._set_selection_orbit_bounds(active, orbit_bounds if len(clean_nodes) == 1 else None)
         self._renderer.selected_node = active
+        if self._gpu_renderer is not None:
+            self._gpu_renderer.selected_node = active
+            self._gpu_renderer.selected_nodes = list(clean_nodes)
         if active is None:
             self._transform_gizmo.clear_selection()
         else:
@@ -6451,6 +6492,12 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._request_render(fast=True)
 
     def _update_mesh_hover(self, event) -> None:
+        if not self.mesh_hover_enabled:
+            if self._hovered_mesh_node is not None:
+                self._hovered_mesh_node = None
+                self._hovered_mesh_face_bounds = None
+                self._request_render(fast=True)
+            return
         if self.model is None:
             if self._hovered_mesh_node is not None:
                 self._hovered_mesh_node = None
@@ -7270,6 +7317,8 @@ class QtViewportWidget(QtWidgets.QWidget):
             return False
 
     def _draw_hovered_mesh_outline(self, draw, w: int, h: int) -> None:
+        if not self.mesh_hover_enabled:
+            return
         node = getattr(self, "_hovered_mesh_node", None)
         if node is None or getattr(node, "_gr_hidden", False):
             return

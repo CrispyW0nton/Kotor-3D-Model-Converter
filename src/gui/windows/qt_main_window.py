@@ -3381,6 +3381,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.lighting_panel.lightSelected.connect(self.viewport.set_selected_node)
         self.lighting_panel.lightmapBakeRequested.connect(self._open_lightmap_baker)
         self.viewport.nodeSelected.connect(self.lighting_panel.select_light)
+        self._sync_lighting_helper_visibility_to_viewport()
         self.camera_panel.cameraSelected.connect(self.viewport.set_selected_node)
         self.camera_panel.cameraChanged.connect(self._on_camera_panel_changed)
         self.camera_panel.cameraChanged.connect(lambda: self._record_camera_event(None))
@@ -4139,6 +4140,20 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._update_scene_chrome()
         self._refresh_adjust_pivot_panel()
 
+    def _active_viewport_model(self):
+        viewport = getattr(self, "viewport", None)
+        model = getattr(viewport, "model", None) if viewport is not None else None
+        return model or getattr(self, "_current_model", None)
+
+    def _sync_lighting_helper_visibility_to_viewport(self) -> None:
+        panel = getattr(self, "lighting_panel", None)
+        viewport = getattr(self, "viewport", None)
+        if panel is None or viewport is None or not hasattr(viewport, "set_light_helper_visibility"):
+            return
+        helpers = bool(getattr(getattr(panel, "show_helpers_check", None), "isChecked", lambda: True)())
+        volumes = bool(getattr(getattr(panel, "show_volumes_check", None), "isChecked", lambda: False)())
+        viewport.set_light_helper_visibility(helpers, volumes)
+
     def _refresh_scene_animation_entries(self) -> None:
         panel = getattr(self, "content_browser_panel", getattr(self, "animation_library_panel", None))
         if panel is None or not hasattr(panel, "set_scene_animation_entries"):
@@ -4722,9 +4737,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if hasattr(self, "skeleton_panel"):
             self.skeleton_panel.load_model(model)
         if hasattr(self, "lighting_panel"):
-            self.lighting_panel.set_model(model)
+            self.lighting_panel.set_model(self._active_viewport_model())
+            self._sync_lighting_helper_visibility_to_viewport()
         if hasattr(self, "camera_panel"):
-            self.camera_panel.set_model(model)
+            self.camera_panel.set_model(self._active_viewport_model())
             self.camera_panel.manager = self.viewport.camera_manager
             self.camera_panel.refresh()
         if getattr(self, "sequence_editor_window", None) is not None:
@@ -4741,7 +4757,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if hasattr(self, "properties_panel"):
             self.properties_panel.show_model(model)
         if hasattr(self, "module_geometry_panel"):
-            self.module_geometry_panel.show_model(model)
+            self.module_geometry_panel.show_model(self._active_viewport_model())
         if hasattr(self, "animations_panel"):
             self.animations_panel.load_model(model)
         if hasattr(self, "animation_retarget_panel"):
@@ -7779,15 +7795,16 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if hasattr(self, "skeleton_panel"):
             self.skeleton_panel.load_model(model)
         if hasattr(self, "lighting_panel"):
-            self.lighting_panel.set_model(model)
+            self.lighting_panel.set_model(self._active_viewport_model())
+            self._sync_lighting_helper_visibility_to_viewport()
         if hasattr(self, "camera_panel"):
-            self.camera_panel.set_model(model)
+            self.camera_panel.set_model(self._active_viewport_model())
             self.camera_panel.manager = self.viewport.camera_manager
             self.camera_panel.refresh()
         if hasattr(self, "properties_panel"):
             self.properties_panel.show_model(model)
         if hasattr(self, "module_geometry_panel"):
-            self.module_geometry_panel.show_model(model)
+            self.module_geometry_panel.show_model(self._active_viewport_model())
         if hasattr(self, "animations_panel"):
             self.animations_panel.load_model(model)
         if hasattr(self, "animation_retarget_panel"):
@@ -7995,13 +8012,18 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 getattr(self.viewport, "_renderer", None),
             )
             proxy_node = _walkmesh_overlay_node_from_wok(source, label, offset)
-            extra_nodes = [
-                node
-                for node in (getattr(self._current_model, "_gr_extra_module_mesh_nodes", []) or [])
-                if not getattr(node, "_gr_walkmesh_overlay_proxy", False)
-            ]
-            extra_nodes.append(proxy_node)
-            setattr(self._current_model, "_gr_extra_module_mesh_nodes", extra_nodes)
+            target_models = []
+            for model in (self._current_model, self._active_viewport_model()):
+                if model is not None and id(model) not in {id(existing) for existing in target_models}:
+                    target_models.append(model)
+            for model in target_models:
+                extra_nodes = [
+                    node
+                    for node in (getattr(model, "_gr_extra_module_mesh_nodes", []) or [])
+                    if not getattr(node, "_gr_walkmesh_overlay_proxy", False)
+                ]
+                extra_nodes.append(proxy_node)
+                setattr(model, "_gr_extra_module_mesh_nodes", extra_nodes)
             self.viewport.load_walkmesh(source, world_offset=offset)
             overlay = getattr(getattr(self.viewport, "_renderer", None), "_walkmesh_overlay", None)
             if overlay is not None:
@@ -8010,7 +8032,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.viewport.walkmesh_button.setChecked(True)
             self.viewport._request_render()
             if hasattr(self, "module_geometry_panel"):
-                self.module_geometry_panel.show_model(self._current_model)
+                self.module_geometry_panel.show_model(self._active_viewport_model())
             self._log(f"Walkmesh loaded: {label}", "success")
             return True
         except Exception as exc:
