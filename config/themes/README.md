@@ -90,7 +90,9 @@ Viewport command bars use `viewportToolbar.background` and
 `viewportToolbar.border` so the Theme Editor can style their framed surface
 separately from general application toolbars.
 
-Viewport helpers use `viewport.helper.meshHover`, `viewport.helper.light`,
+Viewport selection uses `viewport.selection` for the shared WGPU/ModernGL-style
+yellow selected-object edge/helper accent. Viewport helpers use
+`viewport.helper.meshHover`, `viewport.helper.light`,
 `viewport.helper.lightSelected`, `viewport.helper.camera`,
 `viewport.helper.cameraSelected`, `viewport.helper.null`, and
 `viewport.helper.nullSelected` so mesh hover, light, camera, and NULL helper

@@ -781,8 +781,17 @@ class QtViewportWidget(QtWidgets.QWidget):
                 )
             except Exception:
                 pass
-        wp, _wo, _is_id = self._renderer._node_world_transform(node)
-        return (float(wp[0]), float(wp[1]), float(wp[2]))
+        try:
+            wp, _wo, _is_id = self._renderer._node_world_transform(node)
+            return (float(wp[0]), float(wp[1]), float(wp[2]))
+        except Exception:
+            pos = getattr(node, "position", None)
+            if pos is None:
+                return None
+            try:
+                return tuple(float(v) for v in tuple(pos)[:3])
+            except Exception:
+                return None
 
     @staticmethod
     def _quat_conjugate(quat) -> tuple[float, float, float, float]:

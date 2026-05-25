@@ -44,6 +44,7 @@ from src.gui.lighting.light_gizmo_renderer import LIGHT_HELPER_COLORS
 log = logging.getLogger(__name__)
 
 _WGPU_BACKEND_ENV = "WGPU_BACKEND_TYPE"
+SELECTION_YELLOW = (1.0, 210 / 255.0, 63 / 255.0)
 _WGPU_BACKENDS = {
     RendererBackend.WGPU_D3D12: "D3D12",
     RendererBackend.WGPU_VULKAN: "Vulkan",
@@ -1091,7 +1092,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.wire_color = (0.18, 0.62, 0.95)
         self.hidden_line_color = (0.02, 0.025, 0.03)
         self.hovered_edge_color = (0.0, 215 / 255.0, 181 / 255.0)
-        self.selected_edge_color = (1.0, 0.78, 0.08)
+        self.selected_edge_color = SELECTION_YELLOW
         self.null_helper_color = (0.64, 0.72, 0.82)
         self.light_helper_palette = dict(LIGHT_HELPER_COLORS)
         self.light_helper_palette["light"] = LIGHT_HELPER_COLORS["point"]
@@ -3199,10 +3200,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
             theme.color("viewport.helper.meshHover", theme.color("accent.secondary", "#00D7B5")),
             self.hovered_edge_color,
         )
-        self.selected_edge_color = _hex_to_rgb_float(
-            theme.color("selection.background", theme.color("accent.primary")),
-            self.selected_edge_color,
-        )
+        selection_color = theme.color("viewport.selection", "#FFD23F")
+        self.selected_edge_color = _hex_to_rgb_float(selection_color, self.selected_edge_color)
         self.hidden_line_color = _hex_to_rgb_float(
             theme.color("viewport.border", theme.color("panel.border", theme.color("text.secondary"))),
             self.hidden_line_color,
@@ -3215,10 +3214,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             theme.color("viewport.helper.light", theme.color("warning")),
             self.light_helper_palette.get("light", (1.0, 0.82, 0.10)),
         )
-        light_selected = _hex_to_rgb_float(
-            theme.color("viewport.helper.lightSelected", theme.color("selection.background")),
-            (0.90, 0.95, 1.0),
-        )
+        light_selected = _hex_to_rgb_float(selection_color, self.selected_edge_color)
         self.light_helper_palette = {
             **LIGHT_HELPER_COLORS,
             "light": light_color,
@@ -3242,7 +3238,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.wire_color = (0.18, 0.62, 0.95)
         self.hidden_line_color = (0.02, 0.025, 0.03)
         self.hovered_edge_color = (0.0, 215 / 255.0, 181 / 255.0)
-        self.selected_edge_color = (1.0, 0.78, 0.08)
+        self.selected_edge_color = SELECTION_YELLOW
         self.null_helper_color = (0.64, 0.72, 0.82)
         self.light_helper_palette = {**LIGHT_HELPER_COLORS, "light": LIGHT_HELPER_COLORS["point"]}
         self.light_resource = None
@@ -3263,7 +3259,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.grid_y_axis_color = _rgb_float((70, 180, 90) if is_dark else (40, 130, 55))
         self.wire_color = _rgb_float(hi)
         self.hovered_edge_color = (0.0, 215 / 255.0, 181 / 255.0)
-        self.selected_edge_color = _rgb_float(hi)
+        self.selected_edge_color = SELECTION_YELLOW
         self.hidden_line_color = _rgb_float(_blend_rgb(bg, fg, 0.32 if is_dark else 0.40))
         self.null_helper_color = _rgb_float(_blend_rgb(bg, fg, 0.70 if is_dark else 0.55))
         light_color = _rgb_float((255, 210, 64))

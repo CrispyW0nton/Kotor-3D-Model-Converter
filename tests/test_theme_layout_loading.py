@@ -673,7 +673,7 @@ def test_wgpu_renderer_uses_theme_tokens_for_viewport_overlays() -> None:
     assert renderer.grid_major_color == pytest.approx(_rgb_float(theme.color("viewport.gridMajor")))
     assert renderer.wire_color == pytest.approx(_rgb_float(theme.color("accent.primary")))
     assert renderer.hovered_edge_color == pytest.approx(_rgb_float(theme.color("viewport.helper.meshHover")))
-    assert renderer.selected_edge_color == pytest.approx(_rgb_float(theme.color("selection.background")))
+    assert renderer.selected_edge_color == pytest.approx(_rgb_float(theme.color("viewport.selection")))
     assert renderer.hidden_line_color == pytest.approx(_rgb_float(theme.color("viewport.border")))
     assert renderer.missing_texture_color_b == pytest.approx(_rgb_float(theme.color("viewport.background")))
     assert renderer.get_diagnostics()["viewport_theme_colors"]["wire"] == pytest.approx(renderer.wire_color)
@@ -696,7 +696,7 @@ def test_wgpu_renderer_uses_native_palette_for_viewport_overlays() -> None:
     assert renderer.grid_major_color == pytest.approx((174 / 255.0, 177 / 255.0, 181 / 255.0))
     assert renderer.wire_color == pytest.approx((0.0, 120 / 255.0, 215 / 255.0))
     assert renderer.hovered_edge_color == pytest.approx((0.0, 215 / 255.0, 181 / 255.0))
-    assert renderer.selected_edge_color == pytest.approx(renderer.wire_color)
+    assert renderer.selected_edge_color == pytest.approx((1.0, 210 / 255.0, 63 / 255.0))
     assert renderer.missing_texture_color_a == pytest.approx(renderer.wire_color)
     assert renderer.missing_texture_color_b == pytest.approx(renderer.viewport_background)
 

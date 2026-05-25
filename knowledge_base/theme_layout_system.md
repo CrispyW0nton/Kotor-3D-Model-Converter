@@ -169,8 +169,8 @@ Core colour tokens include:
 - `scrollbar.background`, `scrollbar.handle`
 - `selection.background`, `selection.text`
 - `viewport.background`, `viewport.gridMajor`, `viewport.gridMinor`,
-  `viewport.text`, `viewport.helper.meshHover`, `viewport.helper.light`,
-  `viewport.helper.lightSelected`, `viewport.helper.camera`,
+  `viewport.text`, `viewport.selection`, `viewport.helper.meshHover`,
+  `viewport.helper.light`, `viewport.helper.lightSelected`, `viewport.helper.camera`,
   `viewport.helper.cameraSelected`, `viewport.helper.null`,
   `viewport.helper.nullSelected`
 - `transformBar.background`, `transformBar.border`
