@@ -15,10 +15,10 @@ from typing import Iterable
 
 import numpy as np
 
-from src.core.geometry.model_data import Animation, KotorModel
+from src.core.geometry.model_data import Animation, KotorModel, ModelNode
 from src.core.validation.animation_block_validator import validate_animation_block_against_model
 
-from .aurora_animation_writer import AuroraAnimationWriter
+from .aurora_animation_writer import CTRL_POSITION, AuroraAnimationWriter
 from .coordinate import BasisConversion
 from .reference_pose import build_reference_pose_pair
 from .retarget_mapping import validate_retarget_profile
@@ -139,11 +139,23 @@ def build_r3b_ue5_to_aurora_retarget_result(
         slot_name=normalized_profile.animation_slot,
         fps=float(source_clip.sample_rate or 30.0),
         write_zero_position_controllers=False,
-        write_root_position_controllers=opts.root_translation_policy != "in_place",
+        write_root_position_controllers=False,
         source_reference_mode=source_reference_mode,
         hybrid_limb_source_rest_weight=hybrid_weight,
         warnings=warnings,
     )
+    if opts.root_translation_policy != "in_place":
+        copied_root_motion = apply_r3b_source_root_motion_to_target_root(
+            animation=animation,
+            source_clip=source_clip,
+            target_model=target_model,
+            profile=normalized_profile,
+            basis_conversion=opts.basis_conversion,
+        )
+        if copied_root_motion:
+            warnings.append(
+                "R3.B root movement enabled: copied source root motion onto the target model root only."
+            )
     corrected_segments = apply_verified_pmbam_segment_pose_correction(
         animation=animation,
         source_clip=source_clip,
@@ -179,6 +191,76 @@ def build_r3b_ue5_to_aurora_retarget_result(
         report=report,
         warnings=warnings,
     )
+
+
+def apply_r3b_source_root_motion_to_target_root(
+    *,
+    animation: Animation,
+    source_clip: SourceSkeletonClip,
+    target_model: KotorModel,
+    profile: RetargetProfile,
+    basis_conversion: BasisConversion | None = None,
+) -> bool:
+    """Copy source root displacement onto the Aurora model root only.
+
+    The verified R3.B bridge intentionally pins each target node's location to
+    the target bind pose so PMBAM does not receive destructive pelvis/limb
+    translation tracks.  When the Workbench root movement toggle is enabled,
+    the safe exception is the top-level model root: moving that node carries the
+    whole target character across the floor while preserving child bind offsets.
+    The emitted Aurora position keys are bind-relative deltas.
+    """
+
+    target_root = getattr(target_model, "root_node", None)
+    if target_root is None or not source_clip.sampled_poses:
+        return False
+    source_root_name = _select_source_root_motion_node(source_clip, profile, target_root.name)
+    if not source_root_name:
+        return False
+
+    converted_poses = [
+        _convert_pose_for_segment_correction(pose, basis_conversion)
+        for pose in source_clip.sampled_poses
+    ]
+    first_pose = converted_poses[0]
+    first_transform = first_pose.global_transforms.get(source_root_name)
+    if first_transform is None:
+        return False
+
+    start_time = float(first_pose.time_seconds)
+    reference = np.asarray(first_transform.position, dtype=np.float64)
+    times: list[float] = []
+    values: list[list[float]] = []
+    moved = False
+    for pose in converted_poses:
+        transform = pose.global_transforms.get(source_root_name)
+        if transform is None:
+            continue
+        delta = np.asarray(transform.position, dtype=np.float64) - reference
+        if float(np.linalg.norm(delta)) > 1e-5:
+            moved = True
+        times.append(round(max(0.0, float(pose.time_seconds) - start_time), 7))
+        values.append([float(value) for value in delta[:3]])
+    if len(times) < 2 or not moved:
+        return False
+
+    anim_node = _animation_node_for(animation, target_root.name)
+    anim_node.controllers = [
+        ctrl
+        for ctrl in getattr(anim_node, "controllers", []) or []
+        if not (ctrl.get("type") == CTRL_POSITION or str(ctrl.get("name", "")).lower() == "position")
+    ]
+    anim_node.controllers.insert(
+        0,
+        {
+            "type": CTRL_POSITION,
+            "name": "position",
+            "columns": 3,
+            "times": times,
+            "values": values,
+        },
+    )
+    return True
 
 
 def apply_verified_pmbam_segment_pose_correction(
@@ -440,6 +522,65 @@ def _build_report(
         max_adjacent_rotation_degrees=max_adjacent_degrees,
         warnings=list(warnings),
     )
+
+
+def _animation_node_for(animation: Animation, node_name: str) -> ModelNode:
+    wanted = str(node_name or "").lower()
+    for anim_node in getattr(animation, "nodes", []) or []:
+        if str(getattr(anim_node, "name", "") or "").lower() == wanted:
+            return anim_node
+    anim_node = ModelNode(name=node_name, controllers=[])
+    animation.nodes.append(anim_node)
+    return anim_node
+
+
+def _select_source_root_motion_node(
+    source_clip: SourceSkeletonClip,
+    profile: RetargetProfile,
+    target_root_name: str,
+) -> str | None:
+    by_name = {node.name.lower(): node.name for node in source_clip.nodes}
+    candidates: list[str] = []
+
+    target_root_key = str(target_root_name or "").lower()
+    for entry in normalize_retarget_profile(profile).mappings:
+        role = str(entry.role or "").lower()
+        target = str(entry.target_node or "").lower()
+        if target == target_root_key or role in {"root", "pelvis", "hips"}:
+            actual = by_name.get(str(entry.source_node or "").lower())
+            if actual and actual not in candidates:
+                candidates.append(actual)
+
+    for node in source_clip.nodes:
+        key = str(node.name or "").lower()
+        if (
+            node.parent_name is None
+            or str(node.classification or "").lower() == "root"
+            or "root" in key
+            or "hips" in key
+        ) and node.name not in candidates:
+            candidates.append(node.name)
+
+    if not candidates:
+        return None
+    return max(candidates, key=lambda name: _source_node_motion_distance(source_clip, name))
+
+
+def _source_node_motion_distance(source_clip: SourceSkeletonClip, node_name: str) -> float:
+    if len(source_clip.sampled_poses) < 2:
+        return 0.0
+    first = source_clip.sampled_poses[0].global_transforms.get(node_name)
+    if first is None:
+        return 0.0
+    reference = np.asarray(first.position, dtype=np.float64)
+    max_distance = 0.0
+    for pose in source_clip.sampled_poses[1:]:
+        transform = pose.global_transforms.get(node_name)
+        if transform is None:
+            continue
+        current = np.asarray(transform.position, dtype=np.float64)
+        max_distance = max(max_distance, float(np.linalg.norm(current - reference)))
+    return max_distance
 
 
 def _mapped_exact_segments(profile: RetargetProfile) -> list[tuple[str, str, str, str]]:

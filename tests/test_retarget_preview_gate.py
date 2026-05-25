@@ -19,6 +19,7 @@ from src.core.retargeting.retarget_preview import (
     capture_retarget_preview_angles,
 )
 from src.core.retargeting.retarget_profile import RetargetMappingEntry, RetargetProfile
+from src.core.retargeting.retarget_solver import RetargetSolverOptions
 from src.core.retargeting.source_animation import SourcePose, SourceSkeletonClip, SourceSkeletonNode, Transform, normalize_quat_xyzw, quat_dot_xyzw
 
 
@@ -448,6 +449,132 @@ def test_verified_mixamo_profile_passes_source_rest_reference_policy(monkeypatch
     build_retarget_preview(RetargetPreviewRequest(source, target, profile))
 
     assert captured["kwargs"]["source_reference_mode"] == "source_rest"
+
+
+def test_verified_mixamo_root_motion_moves_target_root_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.core.retargeting.aurora_animation_writer import AuroraAnimationWriter, CTRL_ORIENTATION
+
+    source = _source_clip(
+        [("armature_root", None), ("mixamorig:Hips", "armature_root")],
+        [
+            {
+                "armature_root": Transform(),
+                "mixamorig:Hips": Transform(position=(0.0, 0.0, 0.0)),
+            },
+            {
+                "armature_root": Transform(),
+                "mixamorig:Hips": Transform(position=(2.0, 0.0, 0.0)),
+            },
+        ],
+    )
+    target = _target_model(
+        [
+            ("PMBAM", None, (0.0, 0.0, 0.0), None),
+            ("pelvis_g", "PMBAM", (0.0, 0.0, 1.0), None),
+        ],
+        anims=("pause1",),
+    )
+    profile = _profile([RetargetMappingEntry("pelvis", "mixamorig:Hips", "pelvis_g")])
+    profile.name = "verified_mixamo_to_aurora_profile"
+    profile.metadata["generated_by"] = "verified_mixamo_to_aurora_mapping"
+    profile.metadata["source_reference_mode"] = "source_rest"
+
+    def fake_build_animation(self, *, model, slot_name, **_kwargs):
+        return Animation(
+            name=slot_name,
+            length=source.duration_seconds,
+            anim_root=model.root_node.name,
+            nodes=[
+                ModelNode(
+                    name=node.name,
+                    controllers=[
+                        {
+                            "type": CTRL_ORIENTATION,
+                            "name": "orientation",
+                            "columns": 4,
+                            "times": [0.0, 1.0],
+                            "values": [list(node.rotation), list(node.rotation)],
+                        }
+                    ],
+                )
+                for node in model.all_nodes()
+            ],
+        )
+
+    monkeypatch.setattr(AuroraAnimationWriter, "build_animation_from_r3a", fake_build_animation)
+    monkeypatch.setattr(AuroraAnimationWriter, "_validate_export_motion_amplitude", lambda *_args, **_kwargs: [])
+
+    preview = build_retarget_preview(
+        RetargetPreviewRequest(
+            source,
+            target,
+            profile,
+            solver_options=RetargetSolverOptions(root_translation_policy="copy_source_root"),
+        )
+    )
+
+    root_node = next(node for node in preview.animation_block.nodes if node.name == "PMBAM")
+    pelvis_node = next(node for node in preview.animation_block.nodes if node.name == "pelvis_g")
+    root_position = next(controller for controller in root_node.controllers if controller["name"] == "position")
+
+    assert root_position["values"] == [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]]
+    assert all(controller["name"] != "position" for controller in pelvis_node.controllers)
+    assert preview.preview_audit.passed is True
+    assert preview.preview_audit.allow_root_motion is True
+    assert preview.solver_report.generated_position_track_count == 1
+    assert preview.solver_report.stripped_root_translation is False
+    assert any("root movement enabled" in warning for warning in preview.warnings)
+
+
+def test_verified_mixamo_root_motion_stays_in_place_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.core.retargeting.aurora_animation_writer import AuroraAnimationWriter, CTRL_ORIENTATION
+
+    source = _source_clip(
+        [("mixamorig:Hips", None)],
+        [
+            {"mixamorig:Hips": Transform(position=(0.0, 0.0, 0.0))},
+            {"mixamorig:Hips": Transform(position=(2.0, 0.0, 0.0))},
+        ],
+    )
+    target = _target_model([("PMBAM", None, (0.0, 0.0, 0.0), None), ("pelvis_g", "PMBAM", (0.0, 0.0, 1.0), None)])
+    profile = _profile([RetargetMappingEntry("pelvis", "mixamorig:Hips", "pelvis_g")])
+    profile.name = "verified_mixamo_to_aurora_profile"
+    profile.metadata["generated_by"] = "verified_mixamo_to_aurora_mapping"
+    profile.metadata["source_reference_mode"] = "source_rest"
+
+    def fake_build_animation(self, *, model, slot_name, **_kwargs):
+        return Animation(
+            name=slot_name,
+            length=source.duration_seconds,
+            anim_root=model.root_node.name,
+            nodes=[
+                ModelNode(
+                    name=node.name,
+                    controllers=[
+                        {
+                            "type": CTRL_ORIENTATION,
+                            "name": "orientation",
+                            "columns": 4,
+                            "times": [0.0, 1.0],
+                            "values": [list(node.rotation), list(node.rotation)],
+                        }
+                    ],
+                )
+                for node in model.all_nodes()
+            ],
+        )
+
+    monkeypatch.setattr(AuroraAnimationWriter, "build_animation_from_r3a", fake_build_animation)
+    monkeypatch.setattr(AuroraAnimationWriter, "_validate_export_motion_amplitude", lambda *_args, **_kwargs: [])
+
+    preview = build_retarget_preview(RetargetPreviewRequest(source, target, profile))
+    root_node = next(node for node in preview.animation_block.nodes if node.name == "PMBAM")
+
+    assert all(controller["name"] != "position" for controller in root_node.controllers)
+    assert preview.preview_audit.root_drift_distance <= 1e-4
+    assert preview.preview_audit.allow_root_motion is False
+    assert preview.solver_report.generated_position_track_count == 0
+    assert preview.solver_report.stripped_root_translation is True
 
 
 def test_verified_ue5_profile_applies_exact_segment_correction(monkeypatch: pytest.MonkeyPatch) -> None:
