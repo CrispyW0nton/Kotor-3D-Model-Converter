@@ -21,6 +21,7 @@
         <color name="viewport.gridMajor" value="#4E5A53"/>
         <color name="viewport.gridMinor" value="#39443E"/>
         <color name="viewport.text" value="#F0F0F0"/>
+        <color name="viewport.helper.meshHover" value="#00D7B5"/>
         <color name="viewport.helper.light" value="#FFD24A"/>
         <color name="viewport.helper.lightSelected" value="#F0F8FF"/>
         <color name="viewport.helper.camera" value="#D7E0E5"/>

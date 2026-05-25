@@ -12,6 +12,7 @@
         <color name="viewport.background" value="#101318"/>
         <color name="viewport.border" value="#364151"/>
         <color name="viewport.text" value="#AAB5C2"/>
+        <color name="viewport.helper.meshHover" value="#00D7B5"/>
         <color name="viewport.helper.light" value="#FFD24A"/>
         <color name="viewport.helper.lightSelected" value="#D7EBFF"/>
         <color name="viewport.helper.camera" value="#AAB5C2"/>

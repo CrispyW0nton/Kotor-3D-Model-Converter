@@ -648,6 +648,66 @@ def test_module_mesh_properties_panel_lists_selects_and_hides_meshes() -> None:
     assert mesh_b._gr_hidden is True
 
 
+def test_module_mesh_properties_panel_highlights_hovered_mesh_without_selecting() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtGui, QtWidgets
+
+    from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtPropertiesPanel()
+    meshes = [
+        SimpleNamespace(
+            name=f"room_{index}",
+            is_mesh=True,
+            vertices=[(0, 0, 0), (1, 0, 0), (0, 1, 0)],
+            faces=[(0, 1, 2)],
+            texture="wall01",
+            position=(0.0, 0.0, 0.0),
+            rotation=(0.0, 0.0, 0.0, 1.0),
+        )
+        for index in range(2)
+    ]
+    model = SimpleNamespace(
+        name="m01aa_01a",
+        game_version="K1",
+        supermodel="NULL",
+        classification="tile",
+        animations=[],
+        mesh_nodes=lambda: meshes,
+        all_nodes=lambda: meshes,
+        bone_nodes=lambda: [],
+        texture_list=lambda: ["wall01"],
+    )
+
+    panel.show_model(model)
+    first_item = panel.module_mesh_tree.topLevelItem(0)
+    second_item = panel.module_mesh_tree.topLevelItem(1)
+    original_background = second_item.background(0)
+
+    panel.hover_module_mesh(meshes[1])
+
+    highlight = panel.palette().color(QtGui.QPalette.ColorRole.Highlight)
+    assert panel._hovered_module_mesh_item is second_item
+    assert second_item.background(0).color() == highlight
+    assert panel.module_mesh_tree.selectedItems() == []
+
+    panel._set_meshes_hidden([meshes[1]], True)
+    assert panel._hovered_module_mesh_item is second_item
+    assert second_item.background(0).color() == highlight
+    assert panel.module_mesh_tree.selectedItems() == []
+
+    panel.hover_module_mesh(meshes[0])
+
+    assert panel._hovered_module_mesh_item is first_item
+    assert second_item.background(0) == original_background
+
+    panel.hover_module_mesh(None)
+
+    assert panel._hovered_module_mesh_item is None
+
+
 def test_module_mesh_properties_panel_supports_multi_select_all() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -883,6 +943,7 @@ def test_qt_viewport_exposes_mesh_multiselect_box_and_ctrl_a() -> None:
     source = inspect.getsource(QtViewportWidget)
 
     assert "meshSelectionChanged = QtCore.Signal(list)" in source
+    assert "meshHovered = QtCore.Signal(object)" in source
     assert "def set_selected_meshes" in source
     assert "def select_all_meshes" in source
     assert "QtCore.Qt.Key_A" in source
@@ -906,8 +967,14 @@ def test_qt_viewport_mesh_pick_requires_real_triangle_and_hover_outline() -> Non
 
     assert "self._hovered_mesh_node = None" in source
     assert "_update_mesh_hover(event)" in source
-    assert "_draw_hovered_mesh_outline(draw, w, h)" in overlay_source
-    assert "_ray_triangle_intersection" in pick_source
+    assert "self.meshHovered.emit(node)" in source
+    assert "self.meshHovered.emit(None)" in source
+    assert "_mesh_hit_test_detail(x, y, allow_gpu=False)" in source
+    assert "_draw_selected_model_outline(draw, w, h)" in overlay_source
+    assert "_draw_hovered_mesh_outline(draw, w, h)" in inspect.getsource(QtViewportWidget._draw_selected_model_outline)
+    assert "_ray_triangle_intersection" in source
+    assert "allow_gpu: bool = True" in pick_source
+    assert "if allow_gpu:" in pick_source
     assert "area + dist2" not in pick_source
     assert "_hit_test_model_bounds" not in release_source
 
@@ -1175,6 +1242,85 @@ def test_qt_viewport_preserves_module_mesh_node_selection_under_scene_root_tags(
         viewport.deleteLater()
 
 
+def test_wgpu_gpu_pick_miss_falls_back_to_cpu_mesh_picker() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.rendering.picking import PickHit
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    mesh = SimpleNamespace(name="CM_Floor")
+    viewport = QtViewportWidget()
+    viewport.model = SimpleNamespace()
+    viewport._gpu_renderer = SimpleNamespace(
+        get_capabilities=lambda: SimpleNamespace(supports_gpu_id_picking=True),
+        pick=lambda *_args, **_kwargs: PickHit(
+            hit=False,
+            renderer_backend="wgpu_d3d12",
+            diagnostic={"method": "WGPU GPU ID", "result": "miss"},
+        ),
+    )
+
+    class _CpuPicker:
+        def __init__(self) -> None:
+            self.called = False
+
+        def pick(self, request, scene, camera):
+            self.called = True
+            return PickHit(
+                hit=True,
+                object_ref=mesh,
+                hit_kind="mesh",
+                diagnostic={"method": "CPU raycast", "face_bounds": ((0, 0, 0), (1, 1, 0))},
+            )
+
+    cpu_picker = _CpuPicker()
+    viewport._picking_provider = cpu_picker
+    try:
+        hit = viewport._mesh_hit_test_detail(10, 12)
+
+        assert cpu_picker.called is True
+        assert hit == (mesh, ((0, 0, 0), (1, 1, 0)))
+        assert viewport._last_pick_diagnostics["method"] == "CPU raycast"
+    finally:
+        viewport.deleteLater()
+
+
+def test_wgpu_helper_hit_test_selects_screen_space_helpers_before_meshes() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    helper = SimpleNamespace(
+        name="Waypoint_Helper",
+        type_label="dummy",
+        position=(1.0, 2.0, 3.0),
+        vertices=[],
+        faces=[],
+    )
+    mesh = SimpleNamespace(
+        name="CM_Floor",
+        is_mesh=True,
+        vertices=[(0, 0, 0), (1, 0, 0), (0, 1, 0)],
+        faces=[(0, 1, 2)],
+    )
+    viewport = QtViewportWidget()
+    viewport.model = SimpleNamespace(all_nodes=lambda: [mesh, helper])
+    viewport._gpu_renderer = SimpleNamespace(backend_id="wgpu_d3d12")
+    viewport._renderer._node_world_transform = lambda node: (node.position, (0, 0, 0, 1), True)
+    viewport._renderer._proj = lambda _x, _y, _z, _w, _h: (100, 100, 2.0)
+    try:
+        assert viewport._helper_hit_test(104, 103) is helper
+        assert viewport._helper_hit_test(150, 150) is None
+    finally:
+        viewport.deleteLater()
+
+
 def test_qt_viewport_preserves_light_node_selection_under_scene_root_tags() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -1354,6 +1500,43 @@ def test_wgpu_mesh_hover_uses_explicit_hovered_node_and_toggle() -> None:
     renderer.show_mesh_hover = True
     hovered._gr_hidden = True
     assert renderer._is_hovered_mesh_data(SimpleNamespace(source=hovered)) is False
+
+
+def test_qt_mesh_hover_uses_cpu_pick_even_when_gpu_pick_is_available() -> None:
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    hovered = SimpleNamespace(name="CM_Walls1")
+    calls = []
+
+    class _Position:
+        def x(self):
+            return 42
+
+        def y(self):
+            return 64
+
+    viewport = SimpleNamespace(
+        mesh_hover_enabled=True,
+        model=object(),
+        _transform_gizmo=SimpleNamespace(hovered_handle=None),
+        _measurement_mode=False,
+        _hovered_mesh_node=None,
+        _hovered_mesh_face_bounds=None,
+        meshHovered=SimpleNamespace(emit=lambda node: calls.append(("hover", node))),
+        _request_render=lambda fast=False: calls.append(("render", fast)),
+    )
+
+    def pick_detail(x, y, *, allow_gpu=True):
+        calls.append(("pick", x, y, allow_gpu))
+        return hovered, ((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
+
+    viewport._mesh_hit_test_detail = pick_detail
+
+    QtViewportWidget._update_mesh_hover(viewport, SimpleNamespace(position=lambda: _Position()))
+
+    assert ("pick", 42, 64, False) in calls
+    assert viewport._hovered_mesh_node is hovered
+    assert calls[-1] == ("render", True)
 
 
 def test_wgpu_light_volume_helpers_match_moderngl_editor_sizes() -> None:
@@ -1920,7 +2103,8 @@ def test_main_window_exposes_module_meshes_as_detachable_dock() -> None:
     assert "self.module_meshes_panel_action" in actions_source
     assert 'self._icon("module_meshes")' in actions_source
     assert "modules_menu.addAction(self.module_meshes_panel_action)" in menu_source
-    assert "self.module_geometry_panel.show_model(model)" in refresh_source
+    assert "self.module_geometry_panel.show_model(self._active_viewport_model())" in refresh_source
+    assert "self.viewport.meshHovered.connect(self.module_geometry_panel.hover_module_mesh)" in layout_source
     assert (Path("src/gui/icons/module_meshes.svg")).exists()
     assert hasattr(QtPropertiesPanel, "set_module_browser_only")
 

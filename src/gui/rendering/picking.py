@@ -28,10 +28,15 @@ class PickRequest:
 @dataclass(frozen=True)
 class PickHit:
     hit: bool = False
+    kind: str = ""
     object_id: object | None = None
     object_ref: object | None = None
     mesh_id: object | None = None
     node_id: object | None = None
+    light_id: object | None = None
+    camera_id: object | None = None
+    helper_id: object | None = None
+    bone_id: object | None = None
     face_index: int | None = None
     vertex_index: int | None = None
     edge_index: object | None = None
@@ -40,6 +45,9 @@ class PickHit:
     normal: Vec3 | None = None
     screen_position: tuple[int, int] | None = None
     hit_kind: str = ""
+    source_backend: str = ""
+    raw_id: int | None = None
+    diagnostic_reason: str = ""
     renderer_backend: str = "cpu"
     diagnostic: dict[str, object] = field(default_factory=dict)
 
@@ -214,6 +222,7 @@ class CpuMeshPickingProvider:
                     best_face_bounds = self.bounds_from_points([v0, v1, v2]) if self.bounds_from_points is not None else None
                     best = PickHit(
                         hit=True,
+                        kind="mesh",
                         object_id=id(node),
                         object_ref=node,
                         mesh_id=id(node),
@@ -224,6 +233,7 @@ class CpuMeshPickingProvider:
                         normal=triangle_normal(v0, v1, v2),
                         screen_position=(int(request.x), int(request.y)),
                         hit_kind="mesh",
+                        source_backend="cpu",
                         renderer_backend="cpu",
                         diagnostic=diagnostic,
                     )

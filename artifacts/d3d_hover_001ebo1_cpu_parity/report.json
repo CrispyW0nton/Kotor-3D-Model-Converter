@@ -1,0 +1,71 @@
+{
+  "module": "K2:001ebo1",
+  "backend": "wgpu_d3d12",
+  "mesh_count": 19,
+  "unique_cpu_hover_candidates": 6,
+  "hover_steps": [
+    {
+      "point": [
+        610,
+        135
+      ],
+      "cpu_hit": "CM_Floor",
+      "hovered_node": ""
+    },
+    {
+      "point": [
+        706,
+        135
+      ],
+      "cpu_hit": "CM_Junk1",
+      "hovered_node": "CM_Junk1"
+    },
+    {
+      "point": [
+        834,
+        135
+      ],
+      "cpu_hit": "CM_Walls1",
+      "hovered_node": "CM_Walls1"
+    },
+    {
+      "point": [
+        930,
+        135
+      ],
+      "cpu_hit": "CM_Junk2",
+      "hovered_node": "CM_Junk2"
+    },
+    {
+      "point": [
+        962,
+        167
+      ],
+      "cpu_hit": "CM_Walls2",
+      "hovered_node": "CM_Walls2"
+    },
+    {
+      "point": [
+        418,
+        327
+      ],
+      "cpu_hit": "CM_Pipe",
+      "hovered_node": "CM_Pipe"
+    }
+  ],
+  "final_hovered_node": "CM_Junk1",
+  "last_render_counts": {
+    "opaque": 19,
+    "cutout": 0,
+    "blended": 0,
+    "edges": 0,
+    "hovered_edges": 81,
+    "selected_edges": 0,
+    "skeleton_lines": 0,
+    "joint_markers": 0,
+    "light_helper_lines": 128,
+    "light_volume_lines": 672,
+    "gizmo_lines": 6
+  },
+  "screenshot": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\d3d_hover_001ebo1_cpu_parity\\wgpu_d3d12_hover_multi_mesh.png"
+}

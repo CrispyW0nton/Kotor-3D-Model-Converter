@@ -532,6 +532,7 @@ class QtViewportWidget(QtWidgets.QWidget):
     nodeSelected = QtCore.Signal(object)
     nodeMoved = QtCore.Signal(object)
     meshSelectionChanged = QtCore.Signal(list)
+    meshHovered = QtCore.Signal(object)
     meshSubobjectSelectionChanged = QtCore.Signal(object)
     meshVisibilityChanged = QtCore.Signal()
     measurementSettingsChanged = QtCore.Signal(dict)
@@ -617,6 +618,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         )
         self._last_pick_hit = None
         self._last_pick_diagnostics: dict[str, object] = {}
+        self._last_selection_source = "startup"
         self.transform_reference_controller = TransformReferenceController()
         self._pivot_edit_mode = "affect_object_only"
         self._pick_reference_waiting = False
@@ -3275,7 +3277,8 @@ class QtViewportWidget(QtWidgets.QWidget):
             log.debug("Thumbnail QImage conversion failed: %s", exc)
             return None
 
-    def set_selected_node(self, node, orbit_bounds=None) -> None:
+    def set_selected_node(self, node, orbit_bounds=None, *, source: str = "viewport") -> None:
+        self._last_selection_source = str(source or "viewport")
         if node is not None and self._renderer.is_hidden_bone_name(getattr(node, "name", "")):
             node = None
         if node is not None and bool(getattr(node, "is_camera", False)):
@@ -3686,7 +3689,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         faces = getattr(node, "faces", []) or []
         return bool(verts and faces)
 
-    def set_selected_meshes(self, nodes: list, orbit_bounds=None) -> None:
+    def set_selected_meshes(self, nodes: list, orbit_bounds=None, *, source: str = "viewport") -> None:
+        self._last_selection_source = str(source or "viewport")
         clean_nodes = []
         seen = set()
         for node in nodes or []:
@@ -5305,10 +5309,11 @@ class QtViewportWidget(QtWidgets.QWidget):
             if self._renderer.show_walkmesh:
                 self._renderer._draw_walkmesh_overlay(draw, w, h)
             self._draw_camera_helpers(draw, w, h)
+            self._draw_wgpu_helper_markers(draw, w, h)
             if self._ensure_renderer_gimbal_state():
                 self._draw_transform_gizmo(draw, w, h)
             self._draw_measurement_overlay(draw, w, h)
-            self._draw_hovered_mesh_outline(draw, w, h)
+            self._draw_selected_model_outline(draw, w, h)
             self._draw_mesh_subobject_selection(draw, w, h)
             self._draw_joint_marquee(draw)
             self._renderer._draw_axes(draw, w, h)
@@ -5403,10 +5408,24 @@ class QtViewportWidget(QtWidgets.QWidget):
             last_pick.get("method")
             or ("GPU ID" if self._gpu_renderer_supports_gpu_picking() else getattr(self._picking_provider, "method", "CPU raycast"))
         )
+        active_kind = self._selection_kind_for_node(active)
+        selected_ids = {
+            "object_id": getattr(active, "_gr_scene_object_id", None) if active is not None else None,
+            "node_id": getattr(active, "name", None) if active is not None else None,
+            "mesh_id": getattr(active, "name", None) if active is not None and self._is_selectable_mesh_node(active) else None,
+            "light_id": getattr(active, "_gr_light_id", None) if active is not None and bool(getattr(active, "is_light", False)) else None,
+            "camera_id": getattr(active, "_gr_camera_id", None) if active is not None and bool(getattr(active, "is_camera", False)) else None,
+            "helper_id": getattr(active, "name", None) if active is not None and active_kind == "helper" else None,
+        }
         return {
             "picking_provider_active": self._picking_provider is not None,
             "picking_method": picking_method,
             "last_pick": last_pick,
+            "active_selection_kind": active_kind,
+            "selected_display_name": str(getattr(active, "_gr_scene_object_name", getattr(active, "name", "")) or ""),
+            "selection_source": str(getattr(self, "_last_selection_source", "") or ""),
+            "selected_ids": selected_ids,
+            "selected_yellow_rgba": (255, 212, 0, 230),
             "selected_object_count": 1 if active is not None and not selected else len(selected),
             "selected_node_count": len(getattr(self, "_selected_joint_nodes", []) or []),
             "gizmo_hover_target": getattr(self._transform_gizmo, "hovered_handle", None),
@@ -5416,6 +5435,36 @@ class QtViewportWidget(QtWidgets.QWidget):
             "surface_widget_class": type(self.canvas.current_surface()).__name__ if self.canvas.current_surface() is not None else "",
             "input_bridge_installed": self.canvas.input_bridge_installed(),
         }
+
+    def _renderer_is_wgpu_like(self) -> bool:
+        renderer = getattr(self, "_gpu_renderer", None)
+        if renderer is None:
+            return False
+        try:
+            backend_id = str(getattr(renderer, "backend_id", "") or "")
+            if "wgpu" in backend_id or "direct3d" in backend_id:
+                return True
+            diagnostics = renderer.get_diagnostics() if hasattr(renderer, "get_diagnostics") else {}
+            backend_id = str((diagnostics or {}).get("backend_id") or "")
+            name = str((diagnostics or {}).get("name") or "")
+            return "wgpu" in backend_id.lower() or "direct3d" in backend_id.lower() or "wgpu" in name.lower()
+        except Exception:
+            return False
+
+    def _selection_kind_for_node(self, node) -> str:
+        if node is None:
+            return "none"
+        if bool(getattr(node, "is_light", False)):
+            return "light"
+        if bool(getattr(node, "is_camera", False)):
+            return "camera"
+        if self._is_selectable_mesh_node(node):
+            return "mesh"
+        if self._is_general_helper_node(node):
+            return "helper"
+        if bool(getattr(node, "_gr_scene_object_root", False)):
+            return "scene_node"
+        return "scene_node"
 
     def _gpu_renderer_supports_gpu_picking(self) -> bool:
         renderer = getattr(self, "_gpu_renderer", None)
@@ -5446,6 +5495,32 @@ class QtViewportWidget(QtWidgets.QWidget):
             )
         except Exception as exc:
             log.debug("Camera helper draw failed: %s", exc)
+
+    def _draw_wgpu_helper_markers(self, draw, w: int, h: int) -> None:
+        if not self._renderer_is_wgpu_like() or self.model is None:
+            return
+        try:
+            nodes = list(self.model.all_nodes()) if hasattr(self.model, "all_nodes") else []
+        except Exception:
+            return
+        selected = getattr(self._renderer, "selected_node", None)
+        base = tuple(int(v) for v in tuple(getattr(self._camera_helper_renderer, "camera_color", (180, 210, 220, 210)))[:4])
+        selected_color = (255, 212, 0, 235)
+        for node in nodes:
+            if not self._is_general_helper_node(node):
+                continue
+            if bool(getattr(node, "_gr_hidden", False)):
+                continue
+            try:
+                x, y, _depth = self._renderer._proj(*self._helper_world_position(node), w, h)
+            except Exception:
+                continue
+            size = 7 if node is selected else 5
+            color = selected_color if node is selected else base
+            fill = (color[0], color[1], color[2], 65 if node is selected else 42)
+            pts = [(x, y - size), (x + size, y), (x, y + size), (x - size, y), (x, y - size)]
+            draw.polygon(pts, fill=fill)
+            draw.line(pts, fill=color, width=2 if node is selected else 1)
 
     def _draw_active_camera_overlays(self, draw, w: int, h: int) -> None:
         try:
@@ -6185,7 +6260,7 @@ class QtViewportWidget(QtWidgets.QWidget):
     def _ray_triangle_intersection(origin, direction, v0, v1, v2) -> float | None:
         return ray_triangle_intersection(origin, direction, v0, v1, v2)
 
-    def _mesh_hit_test_detail(self, sx: int, sy: int):
+    def _mesh_hit_test_detail(self, sx: int, sy: int, *, allow_gpu: bool = True):
         if self.model is None:
             return None
         width = max(1, self.canvas.width())
@@ -6213,9 +6288,10 @@ class QtViewportWidget(QtWidgets.QWidget):
             modifiers=None,
             display_options=getattr(self, "display_options", None),
         )
-        gpu_result = self._mesh_gpu_pick_hit(request)
-        if gpu_result is not None:
-            return gpu_result
+        if allow_gpu:
+            gpu_result = self._mesh_gpu_pick_hit(request)
+            if gpu_result is not None:
+                return gpu_result
         try:
             hit = self._picking_provider.pick(request, self.model, self.camera)
         except Exception as exc:
@@ -6266,7 +6342,9 @@ class QtViewportWidget(QtWidgets.QWidget):
             return None
         if bool(getattr(hit, "hit", False)) and getattr(hit, "object_ref", None) is not None:
             return hit.object_ref, hit.diagnostic.get("face_bounds")
-        return (None, None) if bool(self._last_pick_diagnostics) else None
+        if bool(self._last_pick_diagnostics):
+            self._last_pick_diagnostics["fallback"] = "CPU raycast"
+        return None
 
     def _pick_reference_hit_test(self, sx: int, sy: int):
         camera_node = self._camera_hit_test(sx, sy)
@@ -6337,6 +6415,74 @@ class QtViewportWidget(QtWidgets.QWidget):
             if node is not None:
                 setattr(node, "_gr_camera_target_handle", True)
         return getattr(camera, "original_ref", None)
+
+    def _helper_hit_test(self, sx: int, sy: int, radius: int = 12):
+        if self.model is None or not self._renderer_is_wgpu_like():
+            return None
+        width = max(1, self.canvas.width())
+        height = max(1, self.canvas.height())
+        try:
+            nodes = list(self.model.all_nodes()) if hasattr(self.model, "all_nodes") else []
+        except Exception:
+            nodes = []
+        best = None
+        best_score = float("inf")
+        limit2 = float(max(4, int(radius)) ** 2)
+        for node in nodes:
+            if not self._is_general_helper_node(node):
+                continue
+            if bool(getattr(node, "_gr_hidden", False)) or bool(getattr(node, "_gr_scene_object_locked", False)):
+                continue
+            try:
+                world_pos = self._helper_world_position(node)
+                proj = self._renderer._proj(float(world_pos[0]), float(world_pos[1]), float(world_pos[2]), width, height)
+            except Exception:
+                proj = None
+            if proj is None:
+                continue
+            dx = float(proj[0]) - float(sx)
+            dy = float(proj[1]) - float(sy)
+            dist2 = dx * dx + dy * dy
+            if dist2 > limit2:
+                continue
+            depth = max(0.0, float(proj[2]))
+            selected_bonus = 8.0 if node is getattr(self._renderer, "selected_node", None) else 0.0
+            score = dist2 + depth * 0.001 - selected_bonus
+            if score < best_score:
+                best_score = score
+                best = node
+        if best is not None:
+            self._last_pick_diagnostics = {
+                "method": "CPU helper screen-space",
+                "result": str(getattr(best, "name", id(best))),
+                "hit_kind": "helper",
+                "x": int(sx),
+                "y": int(sy),
+            }
+        return best
+
+    def _helper_world_position(self, node) -> tuple[float, float, float]:
+        try:
+            wp, _wo, _is_id = self._renderer._node_world_transform(node)
+            return tuple(float(v) for v in wp[:3])
+        except Exception:
+            pos = getattr(node, "position", (0.0, 0.0, 0.0))
+            return tuple(float(v) for v in tuple(pos)[:3])
+
+    def _is_general_helper_node(self, node) -> bool:
+        if node is None:
+            return False
+        if bool(getattr(node, "is_light", False)) or bool(getattr(node, "is_camera", False)):
+            return False
+        if self._is_selectable_mesh_node(node):
+            return False
+        if bool(getattr(node, "_gr_scene_object_root", False)):
+            return False
+        type_label = str(getattr(node, "type_label", "") or getattr(node, "node_type", "") or "").strip().lower()
+        name = str(getattr(node, "name", "") or "").strip().lower()
+        if type_label in {"dummy", "emitter", "reference", "locator", "helper", "sound", "waypoint", "trigger"}:
+            return True
+        return name.endswith(("_dummy", "_dum", "_helper", "_locator", "_emit", "_emitter"))
 
     def _set_mesh_hidden(self, node, hidden: bool) -> None:
         if node is None:
@@ -6498,24 +6644,27 @@ class QtViewportWidget(QtWidgets.QWidget):
             if self._hovered_mesh_node is not None:
                 self._hovered_mesh_node = None
                 self._hovered_mesh_face_bounds = None
+                self.meshHovered.emit(None)
                 self._request_render(fast=True)
             return
         if self.model is None:
             if self._hovered_mesh_node is not None:
                 self._hovered_mesh_node = None
                 self._hovered_mesh_face_bounds = None
+                self.meshHovered.emit(None)
                 self._request_render(fast=True)
             return
         if self._transform_gizmo.hovered_handle or self._measurement_mode:
             return
         x, y = int(event.position().x()), int(event.position().y())
-        hit = self._mesh_hit_test_detail(x, y)
+        hit = self._mesh_hit_test_detail(x, y, allow_gpu=False)
         node = hit[0] if hit is not None else None
         face_bounds = hit[1] if hit is not None else None
         if node is self._hovered_mesh_node and face_bounds == self._hovered_mesh_face_bounds:
             return
         self._hovered_mesh_node = node
         self._hovered_mesh_face_bounds = face_bounds
+        self.meshHovered.emit(node)
         self._request_render(fast=True)
 
     def _begin_transform_gizmo_drag(self, x: int, y: int) -> bool:
@@ -6984,6 +7133,12 @@ class QtViewportWidget(QtWidgets.QWidget):
         light_node = self._light_hit_test(x, y)
         if light_node is not None:
             self.set_selected_node(light_node)
+            if self.on_bone_selected:
+                self.on_bone_selected(None)
+            return
+        helper_node = self._helper_hit_test(x, y)
+        if helper_node is not None:
+            self.set_selected_node(helper_node)
             if self.on_bone_selected:
                 self.on_bone_selected(None)
             return

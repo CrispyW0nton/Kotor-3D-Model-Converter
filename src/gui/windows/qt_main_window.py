@@ -3361,6 +3361,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport.nodeSelected.connect(self.module_geometry_panel.show_node)
         self.viewport.nodeSelected.connect(self.module_geometry_panel.select_module_mesh)
         self.viewport.meshSelectionChanged.connect(self.module_geometry_panel.select_module_meshes)
+        self.viewport.meshHovered.connect(self.module_geometry_panel.hover_module_mesh)
         self.viewport.nodeMoved.connect(self.properties_panel.show_node)
         self.viewport.nodeMoved.connect(self._on_viewport_scene_node_moved)
         self.viewport.statusMessage.connect(self.statusBar().showMessage)
@@ -3379,11 +3380,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.lighting_panel.helperVisibilityChanged.connect(self.viewport.set_light_helper_visibility)
         self.lighting_panel.lightChanged.connect(self.viewport.refresh_lighting)
         self.lighting_panel.lightChanged.connect(lambda payload=None: self._record_lighting_event(payload))
-        self.lighting_panel.lightSelected.connect(self.viewport.set_selected_node)
+        self.lighting_panel.lightSelected.connect(lambda node: self.viewport.set_selected_node(node, source="lighting panel"))
         self.lighting_panel.lightmapBakeRequested.connect(self._open_lightmap_baker)
         self.viewport.nodeSelected.connect(self.lighting_panel.select_light)
         self._sync_lighting_helper_visibility_to_viewport()
-        self.camera_panel.cameraSelected.connect(self.viewport.set_selected_node)
+        self.camera_panel.cameraSelected.connect(lambda node: self.viewport.set_selected_node(node, source="camera panel"))
         self.camera_panel.cameraChanged.connect(self._on_camera_panel_changed)
         self.camera_panel.cameraChanged.connect(lambda: self._record_camera_event(None))
         self.camera_panel.activeCameraRequested.connect(self.viewport.switch_to_camera)
@@ -8045,7 +8046,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if selected and any(bool(getattr(node, "_gr_hidden", False)) for node in selected):
             return
         if hasattr(self, "viewport"):
-            self.viewport.set_selected_meshes(selected)
+            try:
+                self.viewport.set_selected_meshes(selected, source="module mesh panel")
+            except TypeError:
+                self.viewport.set_selected_meshes(selected)
 
     def _sync_walkmesh_overlay_visibility(self) -> None:
         renderer = getattr(getattr(self, "viewport", None), "_renderer", None)

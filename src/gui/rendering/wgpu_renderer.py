@@ -759,12 +759,13 @@ class WgpuResourceCache:
         device = self._renderer.device
         if device is None:
             raise RuntimeError("WGPU device is not ready")
+        texture_format = self._texture_format(lightmap=lightmap)
         texture = device.create_texture(
             label=label,
             size=(int(width), int(height), 1),
             usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST,
             dimension=wgpu.TextureDimension.d2,
-            format=wgpu.TextureFormat.rgba8unorm,
+            format=texture_format,
             mip_level_count=1,
             sample_count=1,
         )
@@ -800,7 +801,7 @@ class WgpuResourceCache:
             sampler=sampler,
             width=int(width),
             height=int(height),
-            format="rgba8unorm",
+            format=str(texture_format),
             source_id=texture_id,
             source_revision=source_revision,
             label=label,
@@ -808,6 +809,14 @@ class WgpuResourceCache:
             fallback=fallback,
             lightmap=lightmap,
         )
+
+    @staticmethod
+    def _texture_format(*, lightmap: bool):
+        import wgpu
+
+        if lightmap:
+            return wgpu.TextureFormat.rgba8unorm
+        return getattr(wgpu.TextureFormat, "rgba8unorm_srgb", "rgba8unorm-srgb")
 
     def _fallback_texture(self, kind: str, *, lightmap: bool = False) -> WgpuTextureResource:
         if kind == "lightmap":
@@ -1073,6 +1082,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self._last_lighting_upload_time_ms = 0.0
         self._last_light_shader_active = False
         self._gizmo_line_cache: dict[tuple, tuple[object, int]] = {}
+        self._frame_line_uniform_refs: list[tuple[object, object]] = []
         self._pick_resources: WgpuPickResources | None = None
         self.grid_minor_color = (58 / 255.0, 64 / 255.0, 72 / 255.0)
         self.grid_major_color = (82 / 255.0, 90 / 255.0, 102 / 255.0)
@@ -1084,7 +1094,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.selected_edge_color = (1.0, 0.78, 0.08)
         self.null_helper_color = (0.64, 0.72, 0.82)
         self.light_helper_palette = dict(LIGHT_HELPER_COLORS)
-        self.light_helper_palette["light"] = (1.0, 0.82, 0.10)
+        self.light_helper_palette["light"] = LIGHT_HELPER_COLORS["point"]
         self.missing_texture_color_a = (1.0, 0.0, 1.0)
         self.missing_texture_color_b = (0.0, 0.0, 0.0)
 
@@ -2419,14 +2429,13 @@ class WgpuRenderer(NullDiagnosticRenderer):
             return (0, 0)
         mvp = self._camera_mvp_matrix(self._active_camera, width, height)
         render_pass.set_pipeline(self.pipeline_gizmo_lines)
-        render_pass.set_bind_group(0, self.line_bind_group)
 
         def draw_batches(batches) -> int:
             drawn = 0
             for color, buffer, vertex_count in batches:
                 if buffer is None or vertex_count <= 0:
                     continue
-                self.queue.write_buffer(self.line_uniform_buffer, 0, self._line_uniform_bytes(mvp, color))
+                self._set_line_uniform(render_pass, mvp, color)
                 render_pass.set_vertex_buffer(0, buffer)
                 render_pass.draw(int(vertex_count), 1, 0, 0)
                 self.profiler.add("draw_calls", 1)
@@ -2761,21 +2770,33 @@ class WgpuRenderer(NullDiagnosticRenderer):
         mesh_data = id_to_mesh.get(pick_id)
         if mesh_data is None:
             diagnostic["result"] = "miss"
+            diagnostic["reason"] = "raw ID did not decode to a WGPU mesh pick row"
             self.last_pick_diagnostics = diagnostic
             self.profiler.last.pick_pass_ms = pick_ms
-            return PickHit(renderer_backend=self.backend_id, screen_position=(x, y), diagnostic=diagnostic)
+            return PickHit(
+                renderer_backend=self.backend_id,
+                source_backend=self.backend_id,
+                raw_id=int(pick_id),
+                diagnostic_reason=str(diagnostic["reason"]),
+                screen_position=(x, y),
+                diagnostic=diagnostic,
+            )
         node = getattr(mesh_data, "source", None)
         diagnostic["result"] = str(getattr(node, "name", id(node)))
+        diagnostic["hit_kind"] = "mesh"
         self.last_pick_diagnostics = diagnostic
         self.profiler.last.pick_pass_ms = pick_ms
         return PickHit(
             hit=True,
+            kind="mesh",
             object_id=id(node),
             object_ref=node,
             mesh_id=id(node),
             node_id=getattr(node, "name", id(node)),
             screen_position=(x, y),
             hit_kind="mesh",
+            source_backend=self.backend_id,
+            raw_id=int(pick_id),
             renderer_backend=self.backend_id,
             diagnostic=diagnostic,
         )
@@ -2966,11 +2987,39 @@ class WgpuRenderer(NullDiagnosticRenderer):
             + np.asarray(color, dtype=np.float32).tobytes()
         )
 
+    def _set_line_uniform(self, render_pass, mvp, color: tuple[float, float, float, float], *, target_color: bool = True) -> None:
+        uniform = self._line_uniform_bytes(mvp, color, target_color=target_color)
+        try:
+            import numpy as np
+            import wgpu
+
+            if self.device is None or self.line_bind_group_layout is None:
+                raise RuntimeError("line uniform layout unavailable")
+            buffer = self.device.create_buffer_with_data(
+                data=np.frombuffer(uniform, dtype=np.uint8),
+                usage=wgpu.BufferUsage.UNIFORM,
+            )
+            bind_group = self.device.create_bind_group(
+                layout=self.line_bind_group_layout,
+                entries=[
+                    {
+                        "binding": 0,
+                        "resource": {"buffer": buffer, "offset": 0, "size": 80},
+                    }
+                ],
+            )
+            self._frame_line_uniform_refs.append((buffer, bind_group))
+            render_pass.set_bind_group(0, bind_group)
+        except Exception:
+            self.queue.write_buffer(self.line_uniform_buffer, 0, uniform)
+            render_pass.set_bind_group(0, self.line_bind_group)
+
     def render(self, scene, camera, W: int, H: int, *args, **kwargs):
         if W <= 0 or H <= 0:
             return None
         t0 = time.perf_counter()
         self.profiler.begin_frame()
+        self._frame_line_uniform_refs = []
         try:
             from PIL import Image
 
@@ -3147,7 +3196,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.grid_y_axis_color = _hex_to_rgb_float(theme.color("success"), self.grid_y_axis_color)
         self.wire_color = _hex_to_rgb_float(theme.color("accent.primary"), self.wire_color)
         self.hovered_edge_color = _hex_to_rgb_float(
-            theme.color("accent.secondary", theme.color("accent.primary")),
+            theme.color("viewport.helper.meshHover", theme.color("accent.secondary", "#00D7B5")),
             self.hovered_edge_color,
         )
         self.selected_edge_color = _hex_to_rgb_float(
@@ -3173,8 +3222,6 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.light_helper_palette = {
             **LIGHT_HELPER_COLORS,
             "light": light_color,
-            "point": light_color,
-            "aurora_point": light_color,
             "selected": light_selected,
         }
         self.light_resource = None
@@ -3197,7 +3244,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.hovered_edge_color = (0.0, 215 / 255.0, 181 / 255.0)
         self.selected_edge_color = (1.0, 0.78, 0.08)
         self.null_helper_color = (0.64, 0.72, 0.82)
-        self.light_helper_palette = {**LIGHT_HELPER_COLORS, "light": (1.0, 0.82, 0.10), "point": (1.0, 0.82, 0.10), "aurora_point": (1.0, 0.82, 0.10)}
+        self.light_helper_palette = {**LIGHT_HELPER_COLORS, "light": LIGHT_HELPER_COLORS["point"]}
         self.light_resource = None
         self._light_resource_revision_key = 0
         self.missing_texture_color_a = (1.0, 0.0, 1.0)
@@ -3215,12 +3262,12 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.grid_x_axis_color = _rgb_float((210, 70, 70) if is_dark else (160, 30, 30))
         self.grid_y_axis_color = _rgb_float((70, 180, 90) if is_dark else (40, 130, 55))
         self.wire_color = _rgb_float(hi)
-        self.hovered_edge_color = _rgb_float(hi)
+        self.hovered_edge_color = (0.0, 215 / 255.0, 181 / 255.0)
         self.selected_edge_color = _rgb_float(hi)
         self.hidden_line_color = _rgb_float(_blend_rgb(bg, fg, 0.32 if is_dark else 0.40))
         self.null_helper_color = _rgb_float(_blend_rgb(bg, fg, 0.70 if is_dark else 0.55))
         light_color = _rgb_float((255, 210, 64))
-        self.light_helper_palette = {**LIGHT_HELPER_COLORS, "light": light_color, "point": light_color, "aurora_point": light_color}
+        self.light_helper_palette = {**LIGHT_HELPER_COLORS, "light": light_color}
         self.light_resource = None
         self._light_resource_revision_key = 0
         self.missing_texture_color_a = _rgb_float(hi)
@@ -3303,7 +3350,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 "hidden_line": tuple(self.hidden_line_color),
                 "hover": tuple(self.hovered_edge_color),
                 "selection": tuple(self.selected_edge_color),
-                "light_helper": tuple(self.light_helper_palette.get("light", (1.0, 0.82, 0.10))),
+                "light_helper": tuple(self.light_helper_palette.get("point", self.light_helper_palette.get("light", LIGHT_HELPER_COLORS["point"]))),
                 "null_helper": tuple(self.null_helper_color),
                 "missing_texture_a": tuple(self.missing_texture_color_a),
                 "missing_texture_b": tuple(self.missing_texture_color_b),
@@ -3317,7 +3364,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 "hidden_line": tuple(self._target_rgb(self.hidden_line_color)),
                 "hover": tuple(self._target_rgb(self.hovered_edge_color)),
                 "selection": tuple(self._target_rgb(self.selected_edge_color)),
-                "light_helper": tuple(self._target_rgb(self.light_helper_palette.get("light", (1.0, 0.82, 0.10)))),
+                "light_helper": tuple(self._target_rgb(self.light_helper_palette.get("point", self.light_helper_palette.get("light", LIGHT_HELPER_COLORS["point"])))),
                 "null_helper": tuple(self._target_rgb(self.null_helper_color)),
             },
             "display_mode_downgrade": self._display_mode_downgrade,

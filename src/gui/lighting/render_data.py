@@ -318,7 +318,7 @@ def _helper_color(light: SceneLightRenderData, palette: dict[str, Color] | None 
     color = tuple(max(0.0, min(1.0, float(base[i]))) for i in range(3))
     if not light.enabled:
         color = tuple(c * 0.38 for c in color)
-    if light.selected or light.hovered:
+    if light.hovered:
         color = tuple(min(1.0, c * LIGHT_HELPER_SELECTED_BOOST) for c in color)
     if light.active_selected:
         color = palette.get("selected", (0.90, 0.95, 1.0))
@@ -380,7 +380,7 @@ def _volume_lines(light: SceneLightRenderData) -> list[Vec3]:
             light.position,
             _v_add(light.position, _v_mul(forward, LIGHT_HELPER_DIRECTION_LENGTH * 0.6)),
         ]
-    radius = LIGHT_HELPER_POINT_RADIUS * (1.2 if light.selected else 1.0)
+    radius = LIGHT_HELPER_POINT_RADIUS * (1.2 if light.active_selected else 1.0)
     rows = _ring(light.position, (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), radius, steps=28)
     rows.extend(_ring(light.position, (1.0, 0.0, 0.0), (0.0, 0.0, 1.0), radius, steps=28))
     rows.extend(_ring(light.position, (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), radius, steps=28))

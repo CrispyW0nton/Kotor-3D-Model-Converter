@@ -163,6 +163,7 @@ class ThemeLoader:
         fill("scrollbar.handle", colors.get("panel.border", "#404040"))
         fill("viewport.gridMajor", colors.get("panel.border", "#404040"))
         fill("viewport.gridMinor", colors.get("toolbar.border", colors.get("panel.border", "#303030")))
+        fill("viewport.helper.meshHover", colors.get("accent.secondary", "#00D7B5"))
         fill("viewport.helper.light", colors.get("warning", "#FFD24A"))
         fill("viewport.helper.lightSelected", colors.get("selection.background", colors.get("accent.primary", "#E6F2FF")))
         fill("viewport.helper.camera", colors.get("viewport.text", colors.get("text.secondary", "#B4D2DC")))
