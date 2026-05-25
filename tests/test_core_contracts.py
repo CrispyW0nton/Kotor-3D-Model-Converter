@@ -1754,6 +1754,85 @@ def test_wgpu_lightmaps_remain_single_level_linear_clamped(monkeypatch) -> None:
     assert captured["samplers"][0]["lod_max_clamp"] == 0.0
 
 
+def test_wgpu_render_normals_smooth_compatible_uv_seam_duplicates() -> None:
+    import numpy as np
+
+    from src.gui.qt_lib.rendering.mesh_render_data import smooth_render_normals
+
+    positions = np.asarray(
+        [
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ],
+        dtype=np.float32,
+    )
+    normals = np.asarray(
+        [
+            (0.0, 0.0, 1.0),
+            (0.0, 0.24, 0.97),
+            (0.0, 0.0, 1.0),
+            (0.0, 0.24, 0.97),
+        ],
+        dtype=np.float32,
+    )
+
+    smoothed = smooth_render_normals(positions, normals, np.asarray([0, 2, 3, 1, 3, 2], dtype=np.uint32))
+
+    assert smoothed[0].tolist() == pytest.approx(smoothed[1].tolist(), abs=1e-5)
+    assert np.linalg.norm(smoothed[0]) == pytest.approx(1.0)
+
+
+def test_wgpu_render_normals_preserve_hard_edge_duplicate_vertices() -> None:
+    from src.gui.qt_lib.rendering.mesh_render_data import smooth_render_normals
+
+    positions = [
+        (0.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+    ]
+    normals = [
+        (0.0, 0.0, 1.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 0.0, 1.0),
+        (1.0, 0.0, 0.0),
+    ]
+
+    smoothed = smooth_render_normals(positions, normals, [0, 2, 3, 1, 3, 2])
+
+    assert smoothed[0].tolist() == pytest.approx([0.0, 0.0, 1.0])
+    assert smoothed[1].tolist() == pytest.approx([1.0, 0.0, 0.0])
+
+
+def test_wgpu_render_data_generates_area_weighted_normals_when_missing() -> None:
+    import numpy as np
+
+    from src.gui.qt_lib.rendering.mesh_render_data import iter_mesh_render_data
+
+    node = SimpleNamespace(
+        name="missing_normals",
+        vertices=[(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        normals=[],
+        uvs=[],
+        uvs_lm=[],
+        faces=[(0, 1, 2)],
+        face_uvs=[],
+        is_skin=False,
+        vertex_space=1,
+        render=True,
+        texture="",
+        alpha=1.0,
+    )
+    model = SimpleNamespace(all_nodes=lambda: [node])
+
+    rows = list(iter_mesh_render_data(model, textures={}))
+
+    assert len(rows) == 1
+    np.testing.assert_allclose(rows[0].normals, np.asarray([(0.0, 0.0, 1.0)] * 3, dtype=np.float32), atol=1e-6)
+
+
 def test_wgpu_external_lighting_snapshot_receives_renderer_helper_palette(monkeypatch) -> None:
     from src.gui.qt_lib.lighting.render_data import SceneLightingRenderData
     from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer

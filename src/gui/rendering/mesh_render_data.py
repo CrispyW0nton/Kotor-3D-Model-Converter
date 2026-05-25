@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -206,6 +207,7 @@ def _extract_node_arrays(node, *, anim_pose=None):
             uvs0 = np.asarray(vdata[:, 6:8], dtype=np.float32) if vdata.shape[1] >= 8 else None
             uvs1 = np.asarray(vdata[:, 8:10], dtype=np.float32) if vdata.shape[1] >= 10 else None
             indices = np.asarray(idx_arr, dtype=np.uint32) if idx_arr is not None and len(idx_arr) else None
+            normals = smooth_render_normals(positions, normals, indices)
             bone_indices = None
             bone_weights = None
             if getattr(node, "is_skin", False) and vdata.shape[1] >= 22:
@@ -218,13 +220,137 @@ def _extract_node_arrays(node, *, anim_pose=None):
         return None, None, None, None, None, None, None
     normals = np.asarray(getattr(node, "normals", []) or [], dtype=np.float32)
     if normals.ndim != 2 or normals.shape[1] != 3 or len(normals) != len(verts):
-        normals = np.zeros_like(verts, dtype=np.float32)
-        normals[:, 2] = 1.0
+        normals = None
     uvs0 = _node_uv_array(node, "uvs", len(verts))
     uvs1 = _node_uv_array(node, "uvs_lm", len(verts))
     faces = getattr(node, "faces", []) or []
     indices = np.asarray([int(i) for face in faces for i in tuple(face)[:3]], dtype=np.uint32)
+    normals = smooth_render_normals(verts, normals, indices)
     return verts, normals, uvs0, uvs1, indices, None, None
+
+
+def smooth_render_normals(
+    positions,
+    normals=None,
+    indices=None,
+    *,
+    crease_degrees: float = 62.0,
+    position_epsilon: float = 1.0e-5,
+):
+    """Return render normals smoothed across compatible coincident vertices.
+
+    KotOR binary meshes often duplicate positions at UV/lightmap seams. Averaging
+    compatible duplicate normals removes artificial D3D faceting while the crease
+    test preserves intentional hard edges, which is the smoothing-group behavior
+    WGPU needs before buffer upload.
+    """
+
+    import numpy as np
+
+    pos = np.asarray(positions, dtype=np.float32)
+    if pos.ndim != 2 or pos.shape[1] != 3 or len(pos) == 0:
+        return normals
+
+    authored = _coerce_normal_array(normals, len(pos))
+    face_accum = _area_weighted_normal_accum(pos, indices)
+    base = authored if authored is not None else face_accum
+    base = _normalize_rows(base, fallback=face_accum)
+
+    buckets: dict[tuple[int, int, int], list[int]] = {}
+    scale = 1.0 / max(float(position_epsilon), 1.0e-9)
+    for idx, vertex in enumerate(pos):
+        key = tuple(int(round(float(component) * scale)) for component in vertex[:3])
+        buckets.setdefault(key, []).append(idx)
+
+    cos_crease = math.cos(math.radians(max(0.0, min(180.0, float(crease_degrees)))))
+    smoothed = base.copy()
+    weights = np.linalg.norm(face_accum, axis=1)
+    weights = np.where(weights > 1.0e-8, weights, 1.0)
+    for members in buckets.values():
+        if len(members) <= 1:
+            continue
+        member_normals = base[members]
+        for member in members:
+            ref = base[member]
+            dots = member_normals @ ref
+            compatible = [members[i] for i, dot in enumerate(dots) if float(dot) >= cos_crease]
+            if len(compatible) <= 1:
+                continue
+            accum = np.zeros(3, dtype=np.float64)
+            for other in compatible:
+                accum += base[other].astype(np.float64) * float(weights[other])
+            length = float(np.linalg.norm(accum))
+            if length > 1.0e-8:
+                smoothed[member] = (accum / length).astype(np.float32)
+
+    return _normalize_rows(smoothed, fallback=base).astype(np.float32)
+
+
+def _coerce_normal_array(normals, count: int):
+    import numpy as np
+
+    if normals is None:
+        return None
+    try:
+        arr = np.asarray(normals, dtype=np.float32)
+    except Exception:
+        return None
+    if arr.ndim != 2 or arr.shape[1] < 3 or len(arr) != count:
+        return None
+    arr = arr[:, :3]
+    if not np.all(np.isfinite(arr)):
+        arr = arr.copy()
+        arr[~np.all(np.isfinite(arr), axis=1)] = 0.0
+    if np.count_nonzero(np.linalg.norm(arr, axis=1) > 1.0e-8) == 0:
+        return None
+    return arr
+
+
+def _area_weighted_normal_accum(positions, indices):
+    import numpy as np
+
+    pos = np.asarray(positions, dtype=np.float64)
+    accum = np.zeros((len(pos), 3), dtype=np.float64)
+    if indices is None:
+        tri_indices = np.arange(len(pos), dtype=np.uint32)
+    else:
+        tri_indices = np.asarray(indices, dtype=np.uint32).reshape(-1)
+    usable = (len(tri_indices) // 3) * 3
+    for i0, i1, i2 in tri_indices[:usable].reshape((-1, 3)):
+        if int(i0) >= len(pos) or int(i1) >= len(pos) or int(i2) >= len(pos):
+            continue
+        if i0 == i1 or i1 == i2 or i0 == i2:
+            continue
+        v0 = pos[int(i0)]
+        v1 = pos[int(i1)]
+        v2 = pos[int(i2)]
+        normal = np.cross(v1 - v0, v2 - v0)
+        if float(np.dot(normal, normal)) <= 1.0e-18:
+            continue
+        accum[int(i0)] += normal
+        accum[int(i1)] += normal
+        accum[int(i2)] += normal
+    return accum.astype(np.float32)
+
+
+def _normalize_rows(values, *, fallback=None):
+    import numpy as np
+
+    arr = np.asarray(values, dtype=np.float32).copy()
+    if arr.ndim != 2 or arr.shape[1] != 3:
+        return arr
+    fallback_arr = np.asarray(fallback, dtype=np.float32) if fallback is not None else None
+    for idx in range(len(arr)):
+        row = arr[idx]
+        length = float(np.linalg.norm(row))
+        if length <= 1.0e-8 and fallback_arr is not None and idx < len(fallback_arr):
+            row = fallback_arr[idx]
+            length = float(np.linalg.norm(row))
+        if length <= 1.0e-8:
+            arr[idx] = (0.0, 0.0, 1.0)
+        else:
+            arr[idx] = row / length
+    return arr
 
 
 def _extract_skinning(
