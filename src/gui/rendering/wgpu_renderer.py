@@ -26,6 +26,16 @@ from src.gui.rendering.renderer_capabilities import (
     WGPU_FALLBACK_DISPLAY_MODES,
     RendererCapabilities,
 )
+from src.gui.rendering.renderer_performance import (
+    TextureResidencyInfo,
+    bounds_intersects_frustum,
+    extract_frustum_planes,
+    group_render_batches,
+    instancing_summary,
+    texture_array_groups,
+)
+from src.gui.rendering.renderer_profiler import RendererProfiler
+from src.gui.rendering.renderer_settings import RendererSettings
 from src.gui.rendering.picking import PickHit
 from src.gui.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions, normalize_display_mode
 
@@ -112,6 +122,15 @@ class WgpuSkinResource:
     matrix_count: int
     max_bones: int
     byte_size: int
+
+
+@dataclass
+class WgpuPickResources:
+    width: int
+    height: int
+    pick_texture: object
+    depth_texture: object
+    read_buffer: object
 
 
 def _hex_to_rgb_float(value: str, fallback: tuple[float, float, float]) -> tuple[float, float, float]:
@@ -339,6 +358,13 @@ class WgpuResourceCache:
         self.last_material_binding_error = ""
         self.last_skinning_error = ""
         self.uploaded_bone_matrix_count = 0
+        self.cache_hits = 0
+        self.cache_misses = 0
+        self.mesh_upload_count = 0
+        self.texture_upload_count = 0
+        self.buffer_upload_count = 0
+        self.bind_group_creation_count = 0
+        self.last_invalidation_reason = ""
         self._white_diffuse: WgpuTextureResource | None = None
         self._white_lightmap: WgpuTextureResource | None = None
         self._missing_checker: WgpuTextureResource | None = None
@@ -347,7 +373,9 @@ class WgpuResourceCache:
         mesh_id = int(mesh_data.mesh_id)
         cached = self.meshes.get(mesh_id)
         if cached is not None and cached.source_revision == mesh_data.source_revision:
+            self.cache_hits += 1
             return cached
+        self.cache_misses += 1
         return self.upload_mesh(mesh_id, mesh_data)
 
     def upload_mesh(self, mesh_id: int, mesh_data) -> WgpuMeshResource | None:
@@ -394,6 +422,7 @@ class WgpuResourceCache:
         packed["bone_indices"] = bone_indices
         packed["bone_weights"] = bone_weights
         vertex_buffer = device.create_buffer_with_data(data=packed.tobytes(), usage=wgpu.BufferUsage.VERTEX)
+        self.buffer_upload_count += 1
         index_buffer = None
         index_count = 0
         edge_index_buffer = None
@@ -401,12 +430,14 @@ class WgpuResourceCache:
         if mesh_data.indices is not None and len(mesh_data.indices):
             indices = np.ascontiguousarray(mesh_data.indices, dtype=np.uint32)
             index_buffer = device.create_buffer_with_data(data=indices, usage=wgpu.BufferUsage.INDEX)
+            self.buffer_upload_count += 1
             index_count = int(len(indices))
             edge_indices = self._build_edge_indices(indices, len(positions))
         else:
             edge_indices = self._build_edge_indices(None, len(positions))
         if edge_indices is not None and len(edge_indices):
             edge_index_buffer = device.create_buffer_with_data(data=edge_indices, usage=wgpu.BufferUsage.INDEX)
+            self.buffer_upload_count += 1
             edge_index_count = int(len(edge_indices))
         mins = positions.min(axis=0)
         maxs = positions.max(axis=0)
@@ -422,6 +453,7 @@ class WgpuResourceCache:
             source_revision=mesh_data.source_revision,
         )
         self.meshes[int(mesh_id)] = resource
+        self.mesh_upload_count += 1
         self._recount()
         return resource
 
@@ -445,6 +477,7 @@ class WgpuResourceCache:
         source_revision = tuple(getattr(mesh_data, "source_revision", ()) or ())
         cached = self.skins.get(mesh_id)
         if cached is None or cached.source_revision != source_revision:
+            self.cache_misses += 1
             max_bones = int(MAX_BONES)
             byte_size = max_bones * 16 * 4
             palette_buffer = device.create_buffer(
@@ -461,6 +494,7 @@ class WgpuResourceCache:
                     }
                 ],
             )
+            self.bind_group_creation_count += 1
             uploader = MatrixPaletteUploader(max_bones=max_bones)
             uploader.build_inverse_bind_pose(model)
             cached = WgpuSkinResource(
@@ -477,15 +511,24 @@ class WgpuResourceCache:
 
         pose_revision = self._pose_revision(anim_pose, mesh_data)
         if cached.pose_revision != pose_revision:
+            started = time.perf_counter()
             palette = cached.uploader.compute_skin_node_palette(mesh_data.source, anim_pose)
             payload = cached.uploader.as_flat_bytes()
             if not payload:
                 self.last_skinning_error = f"empty WGPU skin palette for {getattr(mesh_data.source, 'name', mesh_id)}"
                 return None
             self._renderer.queue.write_buffer(cached.palette_buffer, 0, payload[: cached.byte_size])
+            self.buffer_upload_count += 1
             cached.pose_revision = pose_revision
             cached.matrix_count = min(len(palette), cached.max_bones)
             self.uploaded_bone_matrix_count = max(self.uploaded_bone_matrix_count, int(cached.matrix_count))
+            profiler = getattr(self._renderer, "profiler", None)
+            if profiler is not None:
+                profiler.add("skeleton_pose_upload_count", 1)
+                if bool(getattr(profiler, "enabled", False)):
+                    profiler.current.animation_pose_upload_ms += (time.perf_counter() - started) * 1000.0
+        else:
+            self.cache_hits += 1
         return cached
 
     def _build_edge_indices(self, indices, vertex_count: int):
@@ -601,7 +644,9 @@ class WgpuResourceCache:
             return self._fallback_texture("lightmap" if lightmap else fallback_kind, lightmap=lightmap)
         cached = self.textures.get(texture_id)
         if cached is not None and cached.source_revision == source_revision:
+            self.cache_hits += 1
             return cached
+        self.cache_misses += 1
         try:
             from src.gui.rendering.mesh_render_data import texture_image_to_rgba8
 
@@ -633,7 +678,9 @@ class WgpuResourceCache:
         source_revision = tuple(getattr(material_data, "source_revision", (0, 0, 0, 0)) or (0, 0, 0, 0))
         cached = self.materials.get(material_id)
         if cached is not None and cached.source_revision == source_revision:
+            self.cache_hits += 1
             return cached
+        self.cache_misses += 1
         try:
             diffuse_data = getattr(material_data, "diffuse_texture_data", None)
             diffuse = self.get_or_upload_texture(
@@ -660,6 +707,7 @@ class WgpuResourceCache:
                     {"binding": 3, "resource": lightmap.sampler},
                 ],
             )
+            self.bind_group_creation_count += 1
             resource = WgpuMaterialResource(
                 bind_group=bind_group,
                 diffuse_texture_resource=diffuse,
@@ -720,6 +768,7 @@ class WgpuResourceCache:
             {"offset": 0, "bytes_per_row": upload_row_bytes, "rows_per_image": int(height)},
             (int(width), int(height), 1),
         )
+        self.texture_upload_count += 1
         sampler = device.create_sampler(
             address_mode_u=wgpu.AddressMode.clamp_to_edge if lightmap else wgpu.AddressMode.repeat,
             address_mode_v=wgpu.AddressMode.clamp_to_edge if lightmap else wgpu.AddressMode.repeat,
@@ -789,16 +838,19 @@ class WgpuResourceCache:
     def release_mesh(self, mesh_id: int) -> None:
         self.meshes.pop(int(mesh_id), None)
         self.skins.pop(int(mesh_id), None)
+        self.last_invalidation_reason = f"mesh released: {mesh_id}"
         self._recount()
 
     def invalidate_texture(self, texture_id: str) -> None:
         self.textures.pop(str(texture_id), None)
+        self.last_invalidation_reason = f"texture invalidated: {texture_id}"
         self._recount()
 
     def invalidate_material(self, material_id: str) -> None:
         self.materials.pop(str(material_id), None)
+        self.last_invalidation_reason = f"material invalidated: {material_id}"
 
-    def invalidate_all(self) -> None:
+    def invalidate_all(self, reason: str = "all renderer resources invalidated") -> None:
         self.meshes.clear()
         self.skins.clear()
         self.textures.clear()
@@ -814,6 +866,13 @@ class WgpuResourceCache:
         self.last_material_binding_error = ""
         self.last_skinning_error = ""
         self.uploaded_bone_matrix_count = 0
+        self.cache_hits = 0
+        self.cache_misses = 0
+        self.mesh_upload_count = 0
+        self.texture_upload_count = 0
+        self.buffer_upload_count = 0
+        self.bind_group_creation_count = 0
+        self.last_invalidation_reason = str(reason or "all renderer resources invalidated")
         self._white_diffuse = None
         self._white_lightmap = None
         self._missing_checker = None
@@ -833,8 +892,9 @@ class WgpuRenderer(NullDiagnosticRenderer):
     _probe_cache: ClassVar[dict[RendererBackend, RendererCapabilities]] = {}
     _device_created: ClassVar[bool] = False
 
-    def __init__(self, backend: RendererBackend = RendererBackend.WGPU_AUTO):
+    def __init__(self, backend: RendererBackend = RendererBackend.WGPU_AUTO, settings: RendererSettings | None = None):
         super().__init__()
+        settings = settings or RendererSettings()
         self._spec = _WgpuBackendSpec(
             backend=backend,
             name={
@@ -882,6 +942,18 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.mesh_bind_group = None
         self.mesh_uniform_buffer = None
         self.resource_cache = WgpuResourceCache(self)
+        self.profiler = RendererProfiler(enabled=bool(settings.wgpu_profile_frames))
+        self.enable_batching = bool(settings.wgpu_enable_batching)
+        self.enable_instancing = bool(settings.wgpu_enable_instancing)
+        self.enable_frustum_culling = bool(settings.wgpu_enable_frustum_culling)
+        self.enable_lazy_upload = bool(settings.wgpu_enable_lazy_upload)
+        self.enable_texture_arrays = bool(settings.wgpu_enable_texture_arrays)
+        self.enable_texture_atlas = bool(settings.wgpu_enable_texture_atlas)
+        self.enable_dynamic_quality = bool(settings.wgpu_dynamic_quality)
+        self.max_texture_memory_mb = int(settings.wgpu_max_texture_memory_mb)
+        self.max_uploads_per_frame = int(settings.wgpu_max_uploads_per_frame)
+        self.dynamic_quality_large_scene_threshold = int(settings.dynamic_quality_large_scene_threshold)
+        self.dynamic_quality_simplify_while_navigating = bool(settings.dynamic_quality_simplify_while_navigating)
         self.initialized = False
         self.live_surface = False
         self.textured_mesh_pipeline_status = "not created"
@@ -910,6 +982,15 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self._display_mode_downgrade = ""
         self.surface_host_diagnostics: dict[str, object] = {}
         self.perf = {"last_frame_ms": 0.0, "backend": self.backend_id, "tri_count": 0}
+        self.performance_audit = {
+            "bottlenecks": [
+                "mesh adapter iteration happens on the Python render path",
+                "per-mesh uniform writes remain necessary until instance buffers are active",
+                "transparent meshes are sorted at mesh level only",
+                "general KotOR textures remain individual sampled textures",
+            ],
+            "stage9_status": "profiling, batching order, culling, cache stats, pick reuse, and gizmo buffer reuse enabled",
+        }
         self.show_grid = True
         self.show_texture = True
         self.show_diffuse_map = True
@@ -936,6 +1017,22 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.last_animation_error = ""
         self._active_skinned_mesh_count = 0
         self._active_cpu_skinned_mesh_count = 0
+        self._active_total_mesh_count = 0
+        self._active_visible_mesh_count = 0
+        self._active_culled_mesh_count = 0
+        self._last_batch_count = 0
+        self._last_material_group_count = 0
+        self._last_instance_group_count = 0
+        self._last_instance_count = 0
+        self._last_alpha_sort_ms = 0.0
+        self._last_alpha_object_count = 0
+        self._last_pipeline_switch_count = 0
+        self._last_texture_array_eligible_groups = 0
+        self._last_texture_array_eligible_textures = 0
+        self._pending_uploads_count = 0
+        self._last_upload_error = ""
+        self._gizmo_line_cache: dict[tuple, tuple[object, int]] = {}
+        self._pick_resources: WgpuPickResources | None = None
         self.grid_minor_color = (58 / 255.0, 64 / 255.0, 72 / 255.0)
         self.grid_major_color = (82 / 255.0, 90 / 255.0, 102 / 255.0)
         self.grid_x_axis_color = (118 / 255.0, 54 / 255.0, 54 / 255.0)
@@ -1052,6 +1149,14 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 skinned_shader_status="available",
                 supports_marquee_selection=True,
                 supports_subobject_selection=True,
+                supports_batching=True,
+                supports_instancing=True,
+                supports_texture_streaming=True,
+                supports_texture_arrays=False,
+                supports_atlas=False,
+                supports_frustum_culling=True,
+                supports_gpu_timing=False,
+                supports_dynamic_quality=True,
                 supported_display_modes=WGPU_DISPLAY_MODES,
                 supported_display_options=(
                     "show_grid",
@@ -1115,6 +1220,14 @@ class WgpuRenderer(NullDiagnosticRenderer):
             skinned_shader_status="unavailable",
             supports_marquee_selection=False,
             supports_subobject_selection=False,
+            supports_batching=False,
+            supports_instancing=False,
+            supports_texture_streaming=False,
+            supports_texture_arrays=False,
+            supports_atlas=False,
+            supports_frustum_culling=False,
+            supports_gpu_timing=False,
+            supports_dynamic_quality=False,
             supported_display_modes=(),
             supported_display_options=(),
             fallback_display_modes=WGPU_FALLBACK_DISPLAY_MODES,
@@ -1694,13 +1807,18 @@ class WgpuRenderer(NullDiagnosticRenderer):
             render_pass.set_bind_group(0, self.grid_bind_group)
             render_pass.set_vertex_buffer(0, self.grid_vertex_buffer)
             render_pass.draw(self.grid_vertex_count, 1, 0, 0)
-        self._draw_meshes(render_pass, width, height)
-        skeleton_counts = self._draw_skeleton_overlay(render_pass, width, height)
+            self.profiler.add("draw_calls", 1)
+        with self.profiler.section("cpu_prepare"):
+            self._draw_meshes(render_pass, width, height)
+        with self.profiler.section("skeleton"):
+            skeleton_counts = self._draw_skeleton_overlay(render_pass, width, height)
         self._last_render_counts["skeleton_lines"] = skeleton_counts[0]
         self._last_render_counts["joint_markers"] = skeleton_counts[1]
-        self._last_render_counts["gizmo_lines"] = self._draw_gizmo_lines(render_pass, width, height)
+        with self.profiler.section("gizmo"):
+            self._last_render_counts["gizmo_lines"] = self._draw_gizmo_lines(render_pass, width, height)
         render_pass.end()
-        self.queue.submit([encoder.finish()])
+        with self.profiler.section("gpu_submit"):
+            self.queue.submit([encoder.finish()])
 
     def _display_options_from_legacy_flags(self) -> ViewportDisplayOptions:
         if bool(getattr(self, "show_wireframe", False)) and not bool(getattr(self, "show_solid", True)):
@@ -1782,9 +1900,19 @@ class WgpuRenderer(NullDiagnosticRenderer):
             or mode not in {ViewportDisplayMode.TEXTURED_LIGHTMAPPED, ViewportDisplayMode.FULL_MATERIAL}
         )
         mvp = self._camera_mvp_matrix(self._active_camera, width, height)
+        frustum_planes = None
+        if bool(getattr(self, "enable_frustum_culling", True)):
+            try:
+                frustum_planes = extract_frustum_planes(mvp)
+            except Exception as exc:
+                self.last_display_mode_warning = f"WGPU frustum culling disabled for this frame: {exc}"
+                frustum_planes = None
         tri_count = 0
         skinned_mesh_count = 0
         cpu_skinned_mesh_count = 0
+        total_mesh_count = 0
+        visible_mesh_count = 0
+        culled_mesh_count = 0
         draw_items = []
         edge_items = []
         for mesh_data in iter_mesh_render_data(
@@ -1794,6 +1922,11 @@ class WgpuRenderer(NullDiagnosticRenderer):
             textures=self._active_textures,
             allow_cpu_skinning=False,
         ):
+            total_mesh_count += 1
+            if frustum_planes is not None and self._mesh_data_outside_frustum(mesh_data, frustum_planes):
+                culled_mesh_count += 1
+                continue
+            visible_mesh_count += 1
             material_data = getattr(mesh_data, "material", None)
             if material_data is None:
                 continue
@@ -1821,7 +1954,11 @@ class WgpuRenderer(NullDiagnosticRenderer):
         opaque = [item for item in draw_items if item[0] == "OPAQUE"]
         cutout = [item for item in draw_items if item[0] in {"MASK", "CUTOUT"}]
         blended = [item for item in draw_items if item[0] == "BLEND"]
+        alpha_sort_started = time.perf_counter()
         blended.sort(key=lambda item: item[1], reverse=True)
+        self._last_alpha_sort_ms = (time.perf_counter() - alpha_sort_started) * 1000.0
+        self._last_alpha_object_count = len(blended)
+        instance_stats = instancing_summary(draw_items) if bool(getattr(self, "enable_instancing", True)) else {"instance_group_count": 0, "instance_count": 0}
         counts = {
             "opaque": 0,
             "cutout": 0,
@@ -1832,16 +1969,35 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "joint_markers": 0,
             "gizmo_lines": 0,
         }
+        batch_count = 0
+        material_group_keys: set[str] = set()
+        pipeline_switch_count = 0
+        last_pipeline_key = None
+
+        def draw_pass(pass_name: str, items: list, pipeline) -> None:
+            nonlocal tri_count, batch_count, pipeline_switch_count, last_pipeline_key
+            if not items:
+                return
+            pipeline_key = pass_name
+            if bool(getattr(self, "enable_batching", True)) and pass_name != "blended":
+                batches = group_render_batches(items, pipeline_key=pipeline_key, category=pass_name)
+                batch_count += len(batches)
+                ordered_items = [row for batch in batches for row in batch.items]
+            else:
+                batch_count += len(items)
+                ordered_items = items
+            if last_pipeline_key != pipeline_key:
+                pipeline_switch_count += 1
+                last_pipeline_key = pipeline_key
+            for _alpha_mode, _depth, mesh_data, material_data in ordered_items:
+                material_group_keys.add(str(getattr(material_data, "material_id", "") or id(material_data)))
+                tri_count += self._draw_mesh_item(render_pass, pipeline, mesh_data, material_data, mvp, pass_name, display_options)
+                counts[pass_name] += 1
 
         if draw_surface:
-            for pass_name, items, pipeline in (
-                ("opaque", opaque, self.pipeline_mesh),
-                ("cutout", cutout, self.pipeline_mesh_cutout or self.pipeline_mesh),
-                ("blended", blended, self.pipeline_mesh_blend or self.pipeline_mesh),
-            ):
-                for _alpha_mode, _depth, mesh_data, material_data in items:
-                    tri_count += self._draw_mesh_item(render_pass, pipeline, mesh_data, material_data, mvp, pass_name, display_options)
-                    counts[pass_name] += 1
+            draw_pass("opaque", opaque, self.pipeline_mesh)
+            draw_pass("cutout", cutout, self.pipeline_mesh_cutout or self.pipeline_mesh)
+            draw_pass("blended", blended, self.pipeline_mesh_blend or self.pipeline_mesh)
         if edge_overlay:
             counts["edges"] = self._draw_edge_items(render_pass, edge_items, mvp, mode)
         selected_edge_items = [item for item in edge_items if self._is_selected_mesh_data(item)]
@@ -1856,6 +2012,25 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.perf["tri_count"] = int(tri_count)
         self._active_skinned_mesh_count = int(skinned_mesh_count)
         self._active_cpu_skinned_mesh_count = int(cpu_skinned_mesh_count)
+        self._active_total_mesh_count = int(total_mesh_count)
+        self._active_visible_mesh_count = int(visible_mesh_count)
+        self._active_culled_mesh_count = int(culled_mesh_count)
+        self._last_batch_count = int(batch_count)
+        self._last_material_group_count = len(material_group_keys)
+        self._last_instance_group_count = int(instance_stats.get("instance_group_count", 0))
+        self._last_instance_count = int(instance_stats.get("instance_count", 0))
+        self._last_pipeline_switch_count = int(pipeline_switch_count)
+        self._update_texture_residency_diagnostics()
+        self.profiler.set("mesh_count", total_mesh_count)
+        self.profiler.set("visible_mesh_count", visible_mesh_count)
+        self.profiler.set("culled_mesh_count", culled_mesh_count)
+        self.profiler.set("batch_count", batch_count)
+        self.profiler.set("material_group_count", len(material_group_keys))
+        self.profiler.set("pipeline_switch_count", pipeline_switch_count)
+        self.profiler.set("instance_group_count", self._last_instance_group_count)
+        self.profiler.set("instance_count", self._last_instance_count)
+        self.profiler.set("alpha_object_count", self._last_alpha_object_count)
+        self.profiler.set("alpha_sort_ms", self._last_alpha_sort_ms)
         self._last_render_counts.update(counts)
         if bool(getattr(self, "debug_texture_uploads", False)):
             log.info(
@@ -1908,14 +2083,17 @@ class WgpuRenderer(NullDiagnosticRenderer):
             render_pass.set_pipeline(pipeline)
             render_pass.set_bind_group(0, self.mesh_bind_group)
             render_pass.set_bind_group(1, material.bind_group)
+            self.profiler.add("texture_bind_count", 1)
             if skin_resource is not None:
                 render_pass.set_bind_group(2, skin_resource.bind_group)
             render_pass.set_vertex_buffer(0, resource.vertex_buffer)
             if resource.index_buffer is not None and resource.index_count > 0:
                 render_pass.set_index_buffer(resource.index_buffer, wgpu.IndexFormat.uint32)
                 render_pass.draw_indexed(resource.index_count, 1, 0, 0, 0)
+                self.profiler.add("draw_calls", 1)
                 return resource.index_count // 3
             render_pass.draw(resource.vertex_count, 1, 0, 0)
+            self.profiler.add("draw_calls", 1)
             return resource.vertex_count // 3
         except Exception as exc:
             log.warning("WgpuRenderer: skipped mesh %s: %s", getattr(mesh_data.source, "name", mesh_data.mesh_id), exc)
@@ -1958,6 +2136,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 render_pass.set_vertex_buffer(0, resource.vertex_buffer)
                 render_pass.set_index_buffer(resource.edge_index_buffer, wgpu.IndexFormat.uint32)
                 render_pass.draw_indexed(resource.edge_index_count, 1, 0, 0, 0)
+                self.profiler.add("draw_calls", 1)
                 drawn += resource.edge_index_count // 2
             except Exception as exc:
                 self.last_display_mode_warning = f"WGPU edge overlay skipped: {exc}"
@@ -1983,17 +2162,29 @@ class WgpuRenderer(NullDiagnosticRenderer):
             render_pass.set_bind_group(0, self.line_bind_group)
             drawn = 0
             for command in commands:
-                vertices = self._line_vertices_from_gizmo_command(command)
-                if not vertices:
+                cache_key = self._gizmo_command_cache_key(command)
+                cached = self._gizmo_line_cache.get(cache_key)
+                if cached is None:
+                    vertices = self._line_vertices_from_gizmo_command(command)
+                    if not vertices:
+                        continue
+                    data = np.asarray(vertices, dtype=np.float32).reshape(-1, 3)
+                    vertex_buffer = self.device.create_buffer_with_data(data=data, usage=wgpu.BufferUsage.VERTEX)
+                    cached = (vertex_buffer, int(len(data)))
+                    if len(self._gizmo_line_cache) > 256:
+                        self._gizmo_line_cache.clear()
+                    self._gizmo_line_cache[cache_key] = cached
+                    self.resource_cache.buffer_upload_count += 1
+                vertex_buffer, vertex_count = cached
+                if vertex_count <= 0:
                     continue
                 color = tuple(float(v) for v in getattr(command, "colour", (1.0, 1.0, 1.0, 1.0))[:4])
                 uniform = self._line_uniform_bytes(mvp, color)
                 self.queue.write_buffer(self.line_uniform_buffer, 0, uniform)
-                data = np.asarray(vertices, dtype=np.float32).reshape(-1, 3)
-                vertex_buffer = self.device.create_buffer_with_data(data=data, usage=wgpu.BufferUsage.VERTEX)
                 render_pass.set_vertex_buffer(0, vertex_buffer)
-                render_pass.draw(int(len(data)), 1, 0, 0)
-                drawn += int(len(data) // 2)
+                render_pass.draw(int(vertex_count), 1, 0, 0)
+                self.profiler.add("draw_calls", 1)
+                drawn += int(vertex_count // 2)
             self.gizmo_pipeline_status = "ready"
             return drawn
         except Exception as exc:
@@ -2028,6 +2219,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 self.queue.write_buffer(self.line_uniform_buffer, 0, self._line_uniform_bytes(mvp, color))
                 render_pass.set_vertex_buffer(0, buffer)
                 render_pass.draw(int(vertex_count), 1, 0, 0)
+                self.profiler.add("draw_calls", 1)
                 return int(vertex_count // 2)
 
             line_count += draw_buffer(resource.line_vertex_buffer, resource.line_vertex_count, (0.52, 0.60, 0.70, 0.86))
@@ -2110,6 +2302,11 @@ class WgpuRenderer(NullDiagnosticRenderer):
             return out
         return [points[0], points[1]]
 
+    @staticmethod
+    def _gizmo_command_cache_key(command) -> tuple:
+        points = tuple(tuple(round(float(v), 6) for v in tuple(point)[:3]) for point in (getattr(command, "points", ()) or ()))
+        return (str(getattr(command, "kind", "line") or "line").lower(), points)
+
     def pick(self, request, scene=None, camera=None) -> PickHit:
         """GPU object-ID picking for WGPU surfaces.
 
@@ -2119,6 +2316,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
 
         import numpy as np
         import wgpu
+        pick_started = time.perf_counter()
 
         scene = scene if scene is not None else self._active_scene
         camera = camera if camera is not None else getattr(request, "camera", None) or self._active_camera
@@ -2186,26 +2384,10 @@ class WgpuRenderer(NullDiagnosticRenderer):
             self.last_pick_diagnostics = diagnostic
             return PickHit(renderer_backend=self.backend_id, diagnostic=diagnostic)
 
-        pick_texture = self.device.create_texture(
-            size=(width, height, 1),
-            usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC,
-            dimension=wgpu.TextureDimension.d2,
-            format="rgba8unorm",
-            mip_level_count=1,
-            sample_count=1,
-        )
-        depth_texture = self.device.create_texture(
-            size=(width, height, 1),
-            usage=wgpu.TextureUsage.RENDER_ATTACHMENT,
-            dimension=wgpu.TextureDimension.d2,
-            format=self.depth_format,
-            mip_level_count=1,
-            sample_count=1,
-        )
-        read_buffer = self.device.create_buffer(
-            size=256,
-            usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ,
-        )
+        resources = self._ensure_pick_resources(width, height)
+        pick_texture = resources.pick_texture
+        depth_texture = resources.depth_texture
+        read_buffer = resources.read_buffer
         encoder = self.device.create_command_encoder()
         render_pass = encoder.begin_render_pass(
             color_attachments=[
@@ -2259,17 +2441,21 @@ class WgpuRenderer(NullDiagnosticRenderer):
         finally:
             read_buffer.unmap()
         pick_id = self._pick_id_from_rgba(pixel)
+        pick_ms = (time.perf_counter() - pick_started) * 1000.0
         diagnostic["drawn_triangles"] = drawn
+        diagnostic["pick_pass_ms"] = round(pick_ms, 3)
         diagnostic["raw_rgba"] = tuple(int(v) for v in pixel[:4])
         diagnostic["pick_id"] = int(pick_id)
         mesh_data = id_to_mesh.get(pick_id)
         if mesh_data is None:
             diagnostic["result"] = "miss"
             self.last_pick_diagnostics = diagnostic
+            self.profiler.last.pick_pass_ms = pick_ms
             return PickHit(renderer_backend=self.backend_id, screen_position=(x, y), diagnostic=diagnostic)
         node = getattr(mesh_data, "source", None)
         diagnostic["result"] = str(getattr(node, "name", id(node)))
         self.last_pick_diagnostics = diagnostic
+        self.profiler.last.pick_pass_ms = pick_ms
         return PickHit(
             hit=True,
             object_id=id(node),
@@ -2281,6 +2467,37 @@ class WgpuRenderer(NullDiagnosticRenderer):
             renderer_backend=self.backend_id,
             diagnostic=diagnostic,
         )
+
+    def _ensure_pick_resources(self, width: int, height: int) -> WgpuPickResources:
+        import wgpu
+
+        cached = self._pick_resources
+        if cached is not None and cached.width == int(width) and cached.height == int(height):
+            return cached
+        if self.device is None:
+            raise RuntimeError("WGPU device is not ready")
+        pick_texture = self.device.create_texture(
+            size=(int(width), int(height), 1),
+            usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC,
+            dimension=wgpu.TextureDimension.d2,
+            format="rgba8unorm",
+            mip_level_count=1,
+            sample_count=1,
+        )
+        depth_texture = self.device.create_texture(
+            size=(int(width), int(height), 1),
+            usage=wgpu.TextureUsage.RENDER_ATTACHMENT,
+            dimension=wgpu.TextureDimension.d2,
+            format=self.depth_format,
+            mip_level_count=1,
+            sample_count=1,
+        )
+        read_buffer = self.device.create_buffer(
+            size=256,
+            usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ,
+        )
+        self._pick_resources = WgpuPickResources(int(width), int(height), pick_texture, depth_texture, read_buffer)
+        return self._pick_resources
 
     @staticmethod
     def _pick_id_to_color(pick_id: int) -> tuple[float, float, float, float]:
@@ -2310,6 +2527,37 @@ class WgpuRenderer(NullDiagnosticRenderer):
             return float(np.linalg.norm(center - eye))
         except Exception:
             return 0.0
+
+    def _mesh_data_outside_frustum(self, mesh_data, frustum_planes) -> bool:
+        try:
+            import numpy as np
+
+            positions = np.asarray(getattr(mesh_data, "positions", None), dtype=np.float32)
+            if positions.ndim != 2 or positions.shape[1] < 3 or len(positions) <= 0:
+                return False
+            mins = tuple(float(v) for v in positions[:, :3].min(axis=0))
+            maxs = tuple(float(v) for v in positions[:, :3].max(axis=0))
+            return not bounds_intersects_frustum((mins, maxs), frustum_planes)
+        except Exception:
+            return False
+
+    def _update_texture_residency_diagnostics(self) -> None:
+        textures = [
+            TextureResidencyInfo(
+                texture_id=str(resource.source_id),
+                width=int(resource.width),
+                height=int(resource.height),
+                format=str(resource.format),
+                byte_size=int(resource.byte_size),
+                resident=True,
+                lightmap=bool(resource.lightmap),
+            )
+            for resource in self.resource_cache.textures.values()
+        ]
+        groups = texture_array_groups(textures)
+        eligible = [texture for group in groups.values() for texture in group]
+        self._last_texture_array_eligible_groups = sum(1 for group in groups.values() if len(group) > 1)
+        self._last_texture_array_eligible_textures = len(eligible)
 
     def _untextured_material(self, material_data):
         from dataclasses import replace
@@ -2404,6 +2652,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         if W <= 0 or H <= 0:
             return None
         t0 = time.perf_counter()
+        self.profiler.begin_frame()
         try:
             from PIL import Image
 
@@ -2444,6 +2693,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 img = Image.new("RGBA", (int(W), int(H)), (0, 0, 0, 0))
                 self.perf["last_frame_ms"] = (time.perf_counter() - t0) * 1000.0
                 self.perf["backend"] = self.backend_id
+                self._finalize_profiler_frame()
                 self.last_error = ""
                 if not self._clear_logged:
                     log.info("WgpuRenderer: live clear/grid/mesh pass OK")
@@ -2455,6 +2705,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 img = img.convert("RGBA")
             self.perf["last_frame_ms"] = (time.perf_counter() - t0) * 1000.0
             self.perf["backend"] = self.backend_id
+            self._finalize_profiler_frame()
             if not self._clear_logged:
                 log.info("WgpuRenderer: clear/grid pass OK")
                 self._clear_logged = True
@@ -2462,8 +2713,23 @@ class WgpuRenderer(NullDiagnosticRenderer):
             return img.copy()
         except Exception as exc:
             self.last_error = str(exc)
+            self._finalize_profiler_frame()
             log.info("WgpuRenderer: render failed: %s", exc)
             return None
+
+    def _finalize_profiler_frame(self) -> None:
+        vertex_index_bytes = int(self.resource_cache.uploaded_vertex_count) * 72 + int(self.resource_cache.uploaded_index_count + self.resource_cache.uploaded_edge_index_count) * 4
+        texture_bytes = int(self.resource_cache.texture_memory_bytes)
+        self.profiler.set("buffer_upload_count", self.resource_cache.buffer_upload_count)
+        self.profiler.set("texture_upload_count", self.resource_cache.texture_upload_count)
+        self.profiler.set("bind_group_creation_count", self.resource_cache.bind_group_creation_count)
+        self.profiler.set("pending_uploads", self._pending_uploads_count)
+        self.profiler.set("cache_hits", self.resource_cache.cache_hits)
+        self.profiler.set("cache_misses", self.resource_cache.cache_misses)
+        self.profiler.set("estimated_texture_memory_bytes", texture_bytes)
+        self.profiler.set("estimated_vertex_index_memory_bytes", vertex_index_bytes)
+        self.profiler.set("estimated_gpu_memory_bytes", texture_bytes + vertex_index_bytes)
+        self.profiler.end_frame(fallback_frame_ms=float(self.perf.get("last_frame_ms", 0.0) or 0.0))
 
     def render_overlay(self, overlay_context) -> None:
         return None
@@ -2511,23 +2777,28 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.mesh_uniform_buffer = None
         self.depth_texture = None
         self.depth_view = None
+        self._pick_resources = None
+        self._gizmo_line_cache.clear()
         self._depth_size = (0, 0)
         self.initialized = False
         self.live_surface = False
-        self.resource_cache.invalidate_all()
+        self.resource_cache.invalidate_all("renderer shutdown")
 
     def clear_caches(self) -> None:
-        self.resource_cache.invalidate_all()
+        self.resource_cache.invalidate_all("manual cache clear")
+        self._gizmo_line_cache.clear()
 
     def invalidate_node(self, node) -> None:
         if node is not None:
             self.resource_cache.release_mesh(id(node))
 
     def invalidate_node_cache(self) -> None:
-        self.resource_cache.invalidate_all()
+        self.resource_cache.invalidate_all("node cache invalidated")
+        self._gizmo_line_cache.clear()
 
     def invalidate_all(self) -> None:
-        self.resource_cache.invalidate_all()
+        self.resource_cache.invalidate_all("renderer invalidate_all")
+        self._gizmo_line_cache.clear()
 
     def _refresh_themed_resources(self) -> None:
         self.resource_cache._missing_checker = None
@@ -2611,6 +2882,28 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "supports_selection_highlight": True,
             "supports_gizmo_drawing": True,
             "supports_gizmo_interaction": True,
+            "supports_batching": True,
+            "supports_instancing": True,
+            "supports_texture_streaming": True,
+            "supports_texture_arrays": False,
+            "supports_atlas": False,
+            "supports_frustum_culling": True,
+            "supports_gpu_timing": False,
+            "supports_dynamic_quality": True,
+            "performance_settings": {
+                "enable_batching": bool(self.enable_batching),
+                "enable_instancing": bool(self.enable_instancing),
+                "enable_frustum_culling": bool(self.enable_frustum_culling),
+                "enable_lazy_upload": bool(self.enable_lazy_upload),
+                "enable_texture_arrays": bool(self.enable_texture_arrays),
+                "enable_texture_atlas": bool(self.enable_texture_atlas),
+                "profile_frames": bool(self.profiler.enabled),
+                "dynamic_quality": bool(self.enable_dynamic_quality),
+                "max_texture_memory_mb": int(self.max_texture_memory_mb),
+                "max_uploads_per_frame": int(self.max_uploads_per_frame),
+            },
+            "performance": self.profiler.diagnostics(),
+            "performance_audit": dict(self.performance_audit),
             "skeleton_overlay_supported": True,
             "joint_dot_overlay_supported": True,
             "bone_selection_supported": True,
@@ -2705,9 +2998,43 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "uploaded_index_count": self.resource_cache.uploaded_index_count,
             "uploaded_edge_index_count": self.resource_cache.uploaded_edge_index_count,
             "texture_memory_estimate_bytes": self.resource_cache.texture_memory_bytes,
+            "vertex_index_memory_estimate_bytes": int(self.resource_cache.uploaded_vertex_count) * 72
+            + int(self.resource_cache.uploaded_index_count + self.resource_cache.uploaded_edge_index_count) * 4,
+            "estimated_gpu_memory_bytes": int(self.resource_cache.texture_memory_bytes)
+            + int(self.resource_cache.uploaded_vertex_count) * 72
+            + int(self.resource_cache.uploaded_index_count + self.resource_cache.uploaded_edge_index_count) * 4,
             "fallback_texture_count": self.resource_cache.fallback_texture_count,
             "missing_texture_count": self.resource_cache.missing_texture_count,
             "lightmap_texture_count": self.resource_cache.lightmap_texture_count,
+            "resource_cache_hits": self.resource_cache.cache_hits,
+            "resource_cache_misses": self.resource_cache.cache_misses,
+            "mesh_upload_count": self.resource_cache.mesh_upload_count,
+            "texture_upload_count": self.resource_cache.texture_upload_count,
+            "buffer_upload_count": self.resource_cache.buffer_upload_count,
+            "bind_group_creation_count": self.resource_cache.bind_group_creation_count,
+            "last_cache_invalidation_reason": self.resource_cache.last_invalidation_reason,
+            "total_mesh_count": int(self._active_total_mesh_count),
+            "visible_mesh_count": int(self._active_visible_mesh_count),
+            "culled_mesh_count": int(self._active_culled_mesh_count),
+            "batch_count": int(self._last_batch_count),
+            "material_group_count": int(self._last_material_group_count),
+            "instance_group_count": int(self._last_instance_group_count),
+            "instance_count": int(self._last_instance_count),
+            "pipeline_switch_count": int(self._last_pipeline_switch_count),
+            "pending_uploads": int(self._pending_uploads_count),
+            "alpha_object_count": int(self._last_alpha_object_count),
+            "alpha_sort_time_ms": round(float(self._last_alpha_sort_ms), 3),
+            "alpha_sort_mode": "mesh-depth stable descending",
+            "texture_array_status": "prepared; disabled by default" if not self.enable_texture_arrays else "eligible groups tracked",
+            "texture_array_eligible_groups": int(self._last_texture_array_eligible_groups),
+            "texture_array_eligible_textures": int(self._last_texture_array_eligible_textures),
+            "texture_atlas_status": "prepared; disabled by default",
+            "instancing_status": "prepared; conservative grouping diagnostics active",
+            "batching_status": "enabled" if self.enable_batching else "disabled",
+            "frustum_culling_status": "enabled" if self.enable_frustum_culling else "disabled",
+            "lazy_upload_status": "visible resources uploaded on first draw; hidden/off-frustum resources deferred",
+            "gizmo_buffer_cache_size": len(self._gizmo_line_cache),
+            "pick_resource_size": (self._pick_resources.width, self._pick_resources.height) if self._pick_resources is not None else (0, 0),
             "alpha_material_count": sum(
                 1 for item in self.resource_cache.materials.values() if item.alpha_mode in {"MASK", "CUTOUT", "BLEND"}
             ),

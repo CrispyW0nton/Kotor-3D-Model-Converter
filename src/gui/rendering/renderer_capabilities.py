@@ -43,6 +43,14 @@ class RendererCapabilities:
     skinned_shader_status: str = ""
     supports_marquee_selection: bool = False
     supports_subobject_selection: bool = False
+    supports_batching: bool = False
+    supports_instancing: bool = False
+    supports_texture_streaming: bool = False
+    supports_texture_arrays: bool = False
+    supports_atlas: bool = False
+    supports_frustum_culling: bool = False
+    supports_gpu_timing: bool = False
+    supports_dynamic_quality: bool = False
     details: dict[str, object] = field(default_factory=dict)
 
     def status_text(self) -> str:

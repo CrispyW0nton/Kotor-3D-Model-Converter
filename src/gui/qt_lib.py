@@ -164,6 +164,8 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "renderer_capabilities",
         "renderer_factory",
         "renderer_interface",
+        "renderer_performance",
+        "renderer_profiler",
         "renderer_settings",
         "skeleton_render_data",
         "viewport_display",

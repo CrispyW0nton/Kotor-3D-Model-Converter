@@ -295,6 +295,11 @@ class RendererService(QtCore.QObject):
                 bone_selection_supported=True,
                 skinned_mesh_supported=True,
                 animation_preview_supported=True,
+                supports_batching=True,
+                supports_instancing=True,
+                supports_texture_streaming=True,
+                supports_frustum_culling=True,
+                supports_dynamic_quality=True,
             )
         return RendererCapabilities(
             backend_id=RendererBackend.MODERNGL_GL330.value,

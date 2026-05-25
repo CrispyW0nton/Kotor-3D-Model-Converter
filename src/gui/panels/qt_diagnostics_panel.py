@@ -28,9 +28,18 @@ class QtDiagnosticsPanel(QtWidgets.QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
 
+        button_row = QtWidgets.QHBoxLayout()
         self.run_button = QtWidgets.QPushButton("Run Diagnostics")
         self.run_button.clicked.connect(lambda: self.run_diagnostics(None))
-        layout.addWidget(self.run_button)
+        button_row.addWidget(self.run_button)
+        self.copy_renderer_button = QtWidgets.QPushButton("Copy Renderer Diagnostics")
+        self.copy_renderer_button.clicked.connect(self.copy_renderer_diagnostics)
+        button_row.addWidget(self.copy_renderer_button)
+        self.copy_performance_button = QtWidgets.QPushButton("Copy Performance Report")
+        self.copy_performance_button.clicked.connect(self.copy_performance_report)
+        button_row.addWidget(self.copy_performance_button)
+        button_row.addStretch(1)
+        layout.addLayout(button_row)
 
         self.text = QtWidgets.QPlainTextEdit()
         self.text.setReadOnly(True)
@@ -128,6 +137,9 @@ class QtDiagnosticsPanel(QtWidgets.QWidget):
                 )
                 if snapshot.unsupported_active_feature_warnings:
                     lines.append(f"Unsupported feature warning: {snapshot.unsupported_active_feature_warnings}")
+                performance_lines = self._performance_report_lines(renderer)
+                if performance_lines:
+                    lines.extend(["", "Performance / Resources", *performance_lines])
             except Exception as exc:
                 lines.append(f"Integration diagnostics unavailable: {exc}")
         registry = self._tool_registry
@@ -141,6 +153,73 @@ class QtDiagnosticsPanel(QtWidgets.QWidget):
             except Exception as exc:
                 lines.append(f"Tool registry unavailable: {exc}")
         return lines
+
+    @QtCore.Slot()
+    def copy_renderer_diagnostics(self) -> None:
+        report = self._renderer_report()
+        QtWidgets.QApplication.clipboard().setText(report)
+
+    @QtCore.Slot()
+    def copy_performance_report(self) -> None:
+        renderer = self._renderer_diagnostics()
+        report = "\n".join(["Performance / Resources", *self._performance_report_lines(renderer)])
+        QtWidgets.QApplication.clipboard().setText(report)
+
+    def _renderer_diagnostics(self) -> dict[str, Any]:
+        service = self._diagnostics_service
+        if service is None:
+            return {}
+        try:
+            return dict(service.snapshot().renderer_diagnostics or {})
+        except Exception as exc:
+            return {"error": str(exc)}
+
+    def _renderer_report(self) -> str:
+        renderer = self._renderer_diagnostics()
+        lines = ["Renderer Diagnostics"]
+        for key in sorted(renderer):
+            value = renderer.get(key)
+            if isinstance(value, dict):
+                lines.append(f"{key}:")
+                for sub_key in sorted(value):
+                    lines.append(f"  {sub_key}: {value.get(sub_key)}")
+            else:
+                lines.append(f"{key}: {value}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _performance_report_lines(renderer: dict[str, Any]) -> list[str]:
+        perf = dict(renderer.get("performance") or {})
+        lines = [
+            f"Active renderer: {renderer.get('name') or renderer.get('backend_id') or 'unknown'}",
+            f"Frame time: {perf.get('frame_time_ms', 0.0)} ms ({perf.get('fps_estimate', 0.0)} FPS)",
+            f"Draw calls: {perf.get('draw_calls', renderer.get('draw_calls', 0))}",
+            f"Batches: {renderer.get('batch_count', perf.get('batch_count', 0))}",
+            f"Instances: {renderer.get('instance_count', perf.get('instance_count', 0))}",
+            f"Visible meshes / total meshes: {renderer.get('visible_mesh_count', perf.get('visible_mesh_count', 0))} / {renderer.get('total_mesh_count', perf.get('mesh_count', 0))}",
+            f"Culled meshes: {renderer.get('culled_mesh_count', perf.get('culled_mesh_count', 0))}",
+            f"Uploaded meshes: {renderer.get('uploaded_mesh_count', 0)}",
+            f"Uploaded textures: {renderer.get('uploaded_texture_count', 0)}",
+            f"Texture memory estimate: {QtDiagnosticsPanel._bytes_with_mb(renderer.get('texture_memory_estimate_bytes', perf.get('estimated_texture_memory_bytes', 0)))}",
+            f"Vertex/index memory estimate: {QtDiagnosticsPanel._bytes_with_mb(renderer.get('vertex_index_memory_estimate_bytes', perf.get('estimated_vertex_index_memory_bytes', 0)))}",
+            f"Cache hits/misses: {renderer.get('resource_cache_hits', perf.get('cache_hits', 0))} / {renderer.get('resource_cache_misses', perf.get('cache_misses', 0))}",
+            f"Pending uploads: {renderer.get('pending_uploads', perf.get('pending_uploads', 0))}",
+            f"Last upload error: {renderer.get('last_texture_upload_error') or renderer.get('last_upload_error') or 'none'}",
+            f"Pick pass time: {perf.get('pick_pass_ms', 0.0)} ms",
+            f"Alpha sort count/time: {renderer.get('alpha_object_count', perf.get('alpha_object_count', 0))} / {renderer.get('alpha_sort_time_ms', perf.get('alpha_sort_ms', 0.0))} ms",
+            f"Skeleton pose uploads/time: {perf.get('skeleton_pose_upload_count', 0)} / {perf.get('animation_pose_upload_ms', 0.0)} ms",
+            f"Fallback reason: {renderer.get('reason') or renderer.get('last_display_mode_warning') or 'none'}",
+        ]
+        return lines
+
+    @staticmethod
+    def _bytes_with_mb(value: Any) -> str:
+        try:
+            byte_count = int(value or 0)
+        except Exception:
+            byte_count = 0
+        mb = byte_count / (1024.0 * 1024.0)
+        return f"{byte_count} bytes ({mb:.2f} MB)"
 
 
 class QtDiagnosticsWindow(QtWidgets.QMainWindow):

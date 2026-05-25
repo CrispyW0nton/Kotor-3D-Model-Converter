@@ -17,11 +17,11 @@ from src.gui.rendering.wgpu_renderer import WgpuRenderer
 log = logging.getLogger(__name__)
 
 
-def _renderer_for_backend(backend: RendererBackend):
+def _renderer_for_backend(backend: RendererBackend, settings: RendererSettings | None = None):
     if backend == RendererBackend.MODERNGL_GL330:
         return ModernGLRenderer()
     if backend in {RendererBackend.WGPU_AUTO, RendererBackend.WGPU_D3D12, RendererBackend.WGPU_VULKAN, RendererBackend.WGPU_OPENGL}:
-        return WgpuRenderer(backend)
+        return WgpuRenderer(backend, settings=settings)
     if backend in {RendererBackend.DIRECT3D_HARDWARE, RendererBackend.DIRECT3D_WARP}:
         return Direct3DRenderer(backend)
     if backend == RendererBackend.NULL_DIAGNOSTIC:
@@ -171,7 +171,7 @@ class FallbackViewportRenderer:
         for backend in object.__getattribute__(self, "_order"):
             if backend in failed:
                 continue
-            renderer = _renderer_for_backend(backend)
+            renderer = _renderer_for_backend(backend, object.__getattribute__(self, "_settings"))
             caps = renderer.get_capabilities()
             if not renderer.is_available():
                 reason = caps.reason or "not available"
