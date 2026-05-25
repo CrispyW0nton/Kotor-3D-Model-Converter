@@ -1632,6 +1632,128 @@ def test_wgpu_canvas_draw_sizes_depth_from_current_surface_texture() -> None:
     assert "view = current_texture.create_view()" in source
 
 
+def test_wgpu_diffuse_textures_upload_capped_linear_mips(monkeypatch) -> None:
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuResourceCache, WgpuRenderer
+
+    captured = {"writes": [], "samplers": []}
+
+    class _Texture:
+        def create_view(self):
+            return object()
+
+    class _Queue:
+        def write_texture(self, destination, data, layout, size):
+            captured["writes"].append(
+                {
+                    "mip": destination["mip_level"],
+                    "size": tuple(size),
+                    "bytes_per_row": layout["bytes_per_row"],
+                    "data_size": len(data),
+                }
+            )
+
+    class _Device:
+        def __init__(self):
+            self.queue = _Queue()
+
+        def create_texture(self, **kwargs):
+            captured["texture"] = kwargs
+            return _Texture()
+
+        def create_sampler(self, **kwargs):
+            captured["samplers"].append(kwargs)
+            return object()
+
+    fake_wgpu = SimpleNamespace(
+        TextureUsage=SimpleNamespace(TEXTURE_BINDING=1, COPY_DST=2),
+        TextureDimension=SimpleNamespace(d2="2d"),
+        TextureFormat=SimpleNamespace(rgba8unorm="rgba8unorm", rgba8unorm_srgb="rgba8unorm-srgb"),
+        AddressMode=SimpleNamespace(clamp_to_edge="clamp", repeat="repeat"),
+        FilterMode=SimpleNamespace(linear="linear"),
+        MipmapFilterMode=SimpleNamespace(nearest="nearest", linear="linear"),
+    )
+    monkeypatch.setitem(__import__("sys").modules, "wgpu", fake_wgpu)
+
+    renderer = WgpuRenderer()
+    renderer.device = _Device()
+    cache = WgpuResourceCache(renderer)
+    rgba = bytes([96, 80, 64, 255]) * (16 * 16)
+
+    resource = cache._upload_rgba8_texture(
+        "diffuse",
+        rgba,
+        16,
+        16,
+        source_revision=(1, 16, 16),
+        label="diffuse",
+    )
+
+    assert resource.mip_level_count == 3
+    assert captured["texture"]["mip_level_count"] == 3
+    assert [write["size"] for write in captured["writes"]] == [(16, 16, 1), (8, 8, 1), (4, 4, 1)]
+    assert captured["samplers"][0]["address_mode_u"] == "repeat"
+    assert captured["samplers"][0]["mipmap_filter"] == "linear"
+    assert captured["samplers"][0]["lod_max_clamp"] == 2.0
+
+
+def test_wgpu_lightmaps_remain_single_level_linear_clamped(monkeypatch) -> None:
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuResourceCache, WgpuRenderer
+
+    captured = {"writes": [], "samplers": []}
+
+    class _Texture:
+        def create_view(self):
+            return object()
+
+    class _Queue:
+        def write_texture(self, destination, data, layout, size):
+            captured["writes"].append({"mip": destination["mip_level"], "size": tuple(size)})
+
+    class _Device:
+        def __init__(self):
+            self.queue = _Queue()
+
+        def create_texture(self, **kwargs):
+            captured["texture"] = kwargs
+            return _Texture()
+
+        def create_sampler(self, **kwargs):
+            captured["samplers"].append(kwargs)
+            return object()
+
+    fake_wgpu = SimpleNamespace(
+        TextureUsage=SimpleNamespace(TEXTURE_BINDING=1, COPY_DST=2),
+        TextureDimension=SimpleNamespace(d2="2d"),
+        TextureFormat=SimpleNamespace(rgba8unorm="rgba8unorm", rgba8unorm_srgb="rgba8unorm-srgb"),
+        AddressMode=SimpleNamespace(clamp_to_edge="clamp", repeat="repeat"),
+        FilterMode=SimpleNamespace(linear="linear"),
+        MipmapFilterMode=SimpleNamespace(nearest="nearest", linear="linear"),
+    )
+    monkeypatch.setitem(__import__("sys").modules, "wgpu", fake_wgpu)
+
+    renderer = WgpuRenderer()
+    renderer.device = _Device()
+    cache = WgpuResourceCache(renderer)
+    rgba = bytes([255, 255, 255, 255]) * (16 * 16)
+
+    resource = cache._upload_rgba8_texture(
+        "lightmap",
+        rgba,
+        16,
+        16,
+        source_revision=(1, 16, 16),
+        label="lightmap",
+        lightmap=True,
+    )
+
+    assert resource.mip_level_count == 1
+    assert captured["texture"]["mip_level_count"] == 1
+    assert [write["size"] for write in captured["writes"]] == [(16, 16, 1)]
+    assert captured["samplers"][0]["address_mode_u"] == "clamp"
+    assert captured["samplers"][0]["mipmap_filter"] == "nearest"
+    assert captured["samplers"][0]["lod_max_clamp"] == 0.0
+
+
 def test_wgpu_external_lighting_snapshot_receives_renderer_helper_palette(monkeypatch) -> None:
     from src.gui.qt_lib.lighting.render_data import SceneLightingRenderData
     from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer

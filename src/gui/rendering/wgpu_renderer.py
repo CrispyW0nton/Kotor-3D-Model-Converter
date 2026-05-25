@@ -79,6 +79,7 @@ class WgpuTextureResource:
     sampler: object
     width: int
     height: int
+    mip_level_count: int
     format: str
     source_id: str
     source_revision: tuple[int, int, int]
@@ -761,32 +762,37 @@ class WgpuResourceCache:
         if device is None:
             raise RuntimeError("WGPU device is not ready")
         texture_format = self._texture_format(lightmap=lightmap)
+        mip_chain = self._rgba8_mip_chain(rgba, int(width), int(height), lightmap=lightmap)
+        mip_count = max(1, len(mip_chain))
         texture = device.create_texture(
             label=label,
             size=(int(width), int(height), 1),
             usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST,
             dimension=wgpu.TextureDimension.d2,
             format=texture_format,
-            mip_level_count=1,
+            mip_level_count=mip_count,
             sample_count=1,
         )
-        row_bytes = int(width) * 4
-        aligned_row_bytes = ((row_bytes + 255) // 256) * 256
-        upload_row_bytes = aligned_row_bytes if int(height) > 1 else row_bytes
-        upload_bytes = rgba
-        if int(height) > 1 and aligned_row_bytes != row_bytes:
-            padded = bytearray(aligned_row_bytes * int(height))
-            for row in range(int(height)):
-                src0 = row * row_bytes
-                dst0 = row * aligned_row_bytes
-                padded[dst0 : dst0 + row_bytes] = rgba[src0 : src0 + row_bytes]
-            upload_bytes = bytes(padded)
-        device.queue.write_texture(
-            {"texture": texture, "mip_level": 0, "origin": (0, 0, 0)},
-            upload_bytes,
-            {"offset": 0, "bytes_per_row": upload_row_bytes, "rows_per_image": int(height)},
-            (int(width), int(height), 1),
-        )
+        byte_size = 0
+        for mip_level, (mip_width, mip_height, mip_rgba) in enumerate(mip_chain):
+            row_bytes = int(mip_width) * 4
+            aligned_row_bytes = ((row_bytes + 255) // 256) * 256
+            upload_row_bytes = aligned_row_bytes if int(mip_height) > 1 else row_bytes
+            upload_bytes = mip_rgba
+            if int(mip_height) > 1 and aligned_row_bytes != row_bytes:
+                padded = bytearray(aligned_row_bytes * int(mip_height))
+                for row in range(int(mip_height)):
+                    src0 = row * row_bytes
+                    dst0 = row * aligned_row_bytes
+                    padded[dst0 : dst0 + row_bytes] = mip_rgba[src0 : src0 + row_bytes]
+                upload_bytes = bytes(padded)
+            device.queue.write_texture(
+                {"texture": texture, "mip_level": int(mip_level), "origin": (0, 0, 0)},
+                upload_bytes,
+                {"offset": 0, "bytes_per_row": upload_row_bytes, "rows_per_image": int(mip_height)},
+                (int(mip_width), int(mip_height), 1),
+            )
+            byte_size += int(mip_width) * int(mip_height) * 4
         self.texture_upload_count += 1
         sampler = device.create_sampler(
             address_mode_u=wgpu.AddressMode.clamp_to_edge if lightmap else wgpu.AddressMode.repeat,
@@ -794,7 +800,9 @@ class WgpuResourceCache:
             address_mode_w=wgpu.AddressMode.clamp_to_edge,
             mag_filter=wgpu.FilterMode.linear,
             min_filter=wgpu.FilterMode.linear,
-            mipmap_filter=wgpu.MipmapFilterMode.nearest,
+            mipmap_filter=wgpu.MipmapFilterMode.nearest if lightmap else wgpu.MipmapFilterMode.linear,
+            lod_min_clamp=0.0,
+            lod_max_clamp=float(max(0, mip_count - 1)),
         )
         return WgpuTextureResource(
             texture=texture,
@@ -802,14 +810,48 @@ class WgpuResourceCache:
             sampler=sampler,
             width=int(width),
             height=int(height),
+            mip_level_count=mip_count,
             format=str(texture_format),
             source_id=texture_id,
             source_revision=source_revision,
             label=label,
-            byte_size=int(width) * int(height) * 4,
+            byte_size=byte_size,
             fallback=fallback,
             lightmap=lightmap,
         )
+
+    @staticmethod
+    def _rgba8_mip_chain(
+        rgba: bytes,
+        width: int,
+        height: int,
+        *,
+        lightmap: bool = False,
+    ) -> list[tuple[int, int, bytes]]:
+        base = (int(width), int(height), bytes(rgba))
+        if lightmap or width <= 4 or height <= 4:
+            return [base]
+        try:
+            from PIL import Image
+
+            max_dim = max(int(width), int(height))
+            max_level = min(6, max(0, int(math.log2(max_dim)) - 2)) if max_dim > 4 else 0
+            if max_level <= 0:
+                return [base]
+            image = Image.frombytes("RGBA", (int(width), int(height)), bytes(rgba))
+            resample = getattr(Image, "Resampling", Image).LANCZOS
+            chain = [base]
+            for _level in range(1, max_level + 1):
+                next_width = max(1, chain[-1][0] // 2)
+                next_height = max(1, chain[-1][1] // 2)
+                if next_width == chain[-1][0] and next_height == chain[-1][1]:
+                    break
+                mip = image.resize((next_width, next_height), resample)
+                chain.append((next_width, next_height, mip.tobytes()))
+                image = mip
+            return chain
+        except Exception:
+            return [base]
 
     @staticmethod
     def _texture_format(*, lightmap: bool):
