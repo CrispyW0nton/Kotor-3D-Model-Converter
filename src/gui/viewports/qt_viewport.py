@@ -2374,10 +2374,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         setattr(self._renderer, "shader_complexity_mode", value)
         if self._gpu_renderer is not None:
             setattr(self._gpu_renderer, "shader_complexity_mode", value)
-        if value != "off":
-            self.set_lighting_mode("shader_complexity")
-        else:
-            self._request_render()
+        self._request_render()
 
     def set_light_helper_visibility(self, helpers: bool, volumes: bool) -> None:
         for target in (self._renderer, self._gpu_renderer):

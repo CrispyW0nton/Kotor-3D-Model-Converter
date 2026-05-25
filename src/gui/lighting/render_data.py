@@ -136,7 +136,10 @@ def build_scene_lighting_render_data(
 
 
 def light_kind_int(light_type: str) -> int:
-    kind = str(light_type or "point").strip().lower().replace("aurora_", "")
+    raw = str(light_type or "point").strip().lower()
+    if raw == "aurora_ambient":
+        return 0
+    kind = raw.replace("aurora_", "")
     if kind == "directional":
         return 1
     if kind == "spot":

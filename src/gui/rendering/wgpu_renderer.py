@@ -1880,8 +1880,15 @@ class WgpuRenderer(NullDiagnosticRenderer):
         if self.context is None or self.device is None:
             return
         width, height = self.canvas.get_physical_size()
+        current_texture = self.context.get_current_texture()
+        try:
+            tex_size = tuple(int(v) for v in tuple(current_texture.size)[:2])
+            if tex_size[0] > 0 and tex_size[1] > 0:
+                width, height = tex_size
+        except Exception:
+            pass
         self._ensure_depth_texture(int(width), int(height))
-        view = self.context.get_current_texture().create_view()
+        view = current_texture.create_view()
         encoder = self.device.create_command_encoder()
         render_pass = encoder.begin_render_pass(
             color_attachments=[
@@ -2374,8 +2381,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
 
             ambient = tuple(float(v) for v in tuple(getattr(lighting, "ambient_color_rgb", (0.06, 0.06, 0.06)))[:3])
             scene_enabled = 1.0 if self._scene_lighting_enabled(lighting, self._effective_display_options) else 0.0
-            diffuse_enabled = 1.0 if bool(getattr(lighting, "diffuse_enabled", True)) else 0.0
-            specular_enabled = 1.0 if bool(getattr(lighting, "specular_enabled", True)) else 0.0
+            mode_id = float(self._lighting_mode_id(str(getattr(lighting, "mode", getattr(self, "lighting_mode", "scene")) or "scene")))
+            complexity_id = float(self._shader_complexity_id(str(getattr(lighting, "complexity", getattr(self, "shader_complexity_mode", "off")) or "off")))
             uniform = np.asarray(
                 (
                     max(0.0, ambient[0]),
@@ -2384,8 +2391,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
                     max(0.0, float(getattr(lighting, "global_intensity", 1.0) or 1.0)),
                     float(len(upload_lights)),
                     scene_enabled,
-                    diffuse_enabled,
-                    specular_enabled,
+                    mode_id,
+                    complexity_id,
                 ),
                 dtype=np.float32,
             )
@@ -2418,6 +2425,34 @@ class WgpuRenderer(NullDiagnosticRenderer):
             self._last_lighting_error = str(exc)
             log.warning("WgpuRenderer: lighting upload failed: %s", exc)
             return None
+
+    @staticmethod
+    def _lighting_mode_id(mode: str) -> int:
+        normalized = str(mode or "scene").strip().lower()
+        return {
+            "scene": 0,
+            "photoreal_preview": 0,
+            "unlit": 1,
+            "fullbright": 2,
+            "lightmap_preview": 3,
+            "diffuse_only": 4,
+            "normal_only": 5,
+            "specular_only": 6,
+            "environment_only": 7,
+            "shader_complexity": 8,
+        }.get(normalized, 0)
+
+    @staticmethod
+    def _shader_complexity_id(mode: str) -> int:
+        normalized = str(mode or "off").strip().lower()
+        return {
+            "off": 0,
+            "basic": 1,
+            "overdraw": 2,
+            "texture_cost": 3,
+            "lighting_cost": 4,
+            "full_complexity": 5,
+        }.get(normalized, 0)
 
     def _upload_light_line_batches(self, batches) -> list[tuple[tuple[float, float, float, float], object, int]]:
         import wgpu

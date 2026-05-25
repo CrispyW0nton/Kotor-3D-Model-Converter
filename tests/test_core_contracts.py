@@ -1602,6 +1602,36 @@ def test_wgpu_scene_lighting_only_drives_realistic_base_modes() -> None:
     assert renderer._scene_lighting_enabled(lighting, ViewportDisplayOptions(display_mode=ViewportDisplayMode.SOLID)) is False
 
 
+def test_qt_viewport_shader_complexity_does_not_override_lighting_mode() -> None:
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    calls = []
+    viewport = SimpleNamespace(
+        _renderer=SimpleNamespace(lighting_mode="scene"),
+        _gpu_renderer=SimpleNamespace(lighting_mode="scene"),
+        _request_render=lambda: calls.append("render"),
+    )
+
+    QtViewportWidget.set_shader_complexity_mode(viewport, "lighting_cost")
+
+    assert viewport._renderer.shader_complexity_mode == "lighting_cost"
+    assert viewport._gpu_renderer.shader_complexity_mode == "lighting_cost"
+    assert viewport._renderer.lighting_mode == "scene"
+    assert viewport._gpu_renderer.lighting_mode == "scene"
+    assert calls == ["render"]
+
+
+def test_wgpu_canvas_draw_sizes_depth_from_current_surface_texture() -> None:
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    source = inspect.getsource(WgpuRenderer._draw_to_canvas)
+
+    assert "current_texture = self.context.get_current_texture()" in source
+    assert "current_texture.size" in source
+    assert "self._ensure_depth_texture(int(width), int(height))" in source
+    assert "view = current_texture.create_view()" in source
+
+
 def test_wgpu_external_lighting_snapshot_receives_renderer_helper_palette(monkeypatch) -> None:
     from src.gui.qt_lib.lighting.render_data import SceneLightingRenderData
     from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer

@@ -97,7 +97,7 @@ fn scene_light_shade(normal: vec3<f32>, world_position: vec3<f32>) -> vec3<f32> 
         }
         let kind = i32(light.flags.y + 0.5);
         let color = light.color_intensity.rgb * light.color_intensity.a;
-        if (kind == 4 || light.flags.z > 0.5) {
+        if (kind == 4) {
             accum = accum + color;
             continue;
         }
@@ -136,6 +136,29 @@ fn scene_light_shade(normal: vec3<f32>, world_position: vec3<f32>) -> vec3<f32> 
     return clamp(accum, vec3<f32>(0.0), vec3<f32>(2.0));
 }
 
+fn odyssey_display_tone(color: vec3<f32>) -> vec3<f32> {
+    return pow(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), vec3<f32>(1.18));
+}
+
+fn shader_complexity_color(complexity_id: i32, has_diffuse: f32, has_lightmap: f32, scene_enabled: f32, light_count: f32, alpha: f32) -> vec3<f32> {
+    if (complexity_id == 2) {
+        return vec3<f32>(0.08, clamp(0.20 + alpha * 0.65, 0.0, 1.0), 0.95);
+    }
+    if (complexity_id == 3) {
+        let texture_cost = clamp(0.20 + has_diffuse * 0.35 + has_lightmap * 0.35, 0.0, 1.0);
+        return vec3<f32>(texture_cost, 0.28, 1.0 - texture_cost * 0.45);
+    }
+    if (complexity_id == 4) {
+        let lighting_cost = clamp(scene_enabled * (0.25 + light_count / 12.0), 0.0, 1.0);
+        return vec3<f32>(lighting_cost, 0.18 + lighting_cost * 0.35, 1.0 - lighting_cost);
+    }
+    if (complexity_id == 5) {
+        let total = clamp(0.20 + has_diffuse * 0.18 + has_lightmap * 0.22 + scene_enabled * (0.20 + light_count / 24.0), 0.0, 1.0);
+        return vec3<f32>(total, 0.30 + total * 0.35, 1.0 - total * 0.75);
+    }
+    return vec3<f32>(0.16, 0.72, 0.30);
+}
+
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let diffuse_sample = textureSample(diffuse_tex, diffuse_sampler, input.uv0);
@@ -144,19 +167,38 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         sampled = vec4<f32>(1.0, 1.0, 1.0, 1.0);
     }
     var out_color = vec4<f32>(sampled.rgb * locals.color.rgb, sampled.a * locals.color.a);
+    let n = normalize(input.normal);
+    let mode_id = i32(lighting_state.flags.z + 0.5);
+    let complexity_id = i32(lighting_state.flags.w + 0.5);
 
-    if (lighting_state.flags.y > 0.5) {
-        let n = normalize(input.normal);
+    if (mode_id == 8) {
+        out_color = vec4<f32>(
+            shader_complexity_color(complexity_id, locals.flags.x, locals.flags.y, lighting_state.flags.y, lighting_state.flags.x, out_color.a),
+            out_color.a
+        );
+    } else if (mode_id == 5) {
+        out_color = vec4<f32>(n * 0.5 + vec3<f32>(0.5), 1.0);
+    } else if (mode_id == 3) {
+        if (locals.flags.y > 0.5) {
+            let lightmap_sample = textureSample(lightmap_tex, lightmap_sampler, input.uv1);
+            out_color = vec4<f32>(lightmap_sample.rgb, out_color.a);
+        } else {
+            out_color = vec4<f32>(vec3<f32>(0.0), out_color.a);
+        }
+    } else if (mode_id == 6 || mode_id == 7) {
+        out_color = vec4<f32>(vec3<f32>(0.035), out_color.a);
+    } else if (mode_id == 1 || mode_id == 2 || mode_id == 4) {
+        out_color = vec4<f32>(out_color.rgb, out_color.a);
+    } else if (lighting_state.flags.y > 0.5) {
         out_color = vec4<f32>(out_color.rgb * scene_light_shade(n, input.world_position), out_color.a);
     } else if (locals.params.y > 1.5) {
-        let n = normalize(input.normal);
         let light = normalize(vec3<f32>(0.45, 0.35, 0.82));
         let ndotl = max(dot(n, light), 0.0);
         let soft_shade = clamp(0.76 + ndotl * 0.24, 0.70, 1.0);
         out_color = vec4<f32>(out_color.rgb * soft_shade, 1.0);
     }
 
-    if (locals.flags.y > 0.5) {
+    if (locals.flags.y > 0.5 && mode_id != 1 && mode_id != 2 && mode_id != 3 && mode_id != 4 && mode_id != 5 && mode_id != 6 && mode_id != 7 && mode_id != 8) {
         let lightmap_sample = textureSample(lightmap_tex, lightmap_sampler, input.uv1);
         let lm_strength = clamp(locals.params.x, 0.0, 4.0);
         if (locals.params.z > 2.5) {
@@ -171,6 +213,10 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
     if (locals.flags.z > 0.5 && locals.flags.z < 1.5 && out_color.a < locals.flags.w) {
         discard;
+    }
+
+    if (mode_id != 3 && mode_id != 5 && mode_id != 8) {
+        out_color = vec4<f32>(odyssey_display_tone(out_color.rgb), out_color.a);
     }
 
     if (locals.params.w > 0.5) {
