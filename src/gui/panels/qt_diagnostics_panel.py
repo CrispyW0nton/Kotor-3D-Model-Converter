@@ -6,6 +6,8 @@ from typing import Any, Callable, Optional
 
 from PySide6 import QtCore, QtWidgets
 
+from src.gui.qt_lib.rendering.hardware_info import collect_hardware_diagnostics
+
 
 class QtDiagnosticsPanel(QtWidgets.QWidget):
     """Small model diagnostics view used by ``QtMainWindow``.
@@ -64,7 +66,7 @@ class QtDiagnosticsPanel(QtWidgets.QWidget):
 
         if model is None:
             lines = ["No model loaded."]
-            integration_lines = self._integration_report_lines()
+            integration_lines = self._integration_report_lines(force=True)
             if integration_lines:
                 lines.extend(["", "Module Integration / Tool Compatibility", *integration_lines])
             report = "\n".join(lines)
@@ -98,7 +100,7 @@ class QtDiagnosticsPanel(QtWidgets.QWidget):
         if hook_names:
             lines.append("Hooks: " + ", ".join(sorted(hook_names, key=str.lower)))
 
-        integration_lines = self._integration_report_lines()
+        integration_lines = self._integration_report_lines(force=True)
         if integration_lines:
             lines.extend(["", "Module Integration / Tool Compatibility", *integration_lines])
 
@@ -116,12 +118,15 @@ class QtDiagnosticsPanel(QtWidgets.QWidget):
         except Exception:
             return []
 
-    def _integration_report_lines(self) -> list[str]:
+    def _integration_report_lines(self, *, force: bool = False) -> list[str]:
         lines: list[str] = []
         service = self._diagnostics_service
         if service is not None:
             try:
-                snapshot = service.snapshot()
+                try:
+                    snapshot = service.snapshot(force=force)
+                except TypeError:
+                    snapshot = service.snapshot()
                 renderer = snapshot.renderer_diagnostics
                 lines.extend(
                     [
@@ -140,6 +145,16 @@ class QtDiagnosticsPanel(QtWidgets.QWidget):
                 performance_lines = self._performance_report_lines(renderer)
                 if performance_lines:
                     lines.extend(["", "Performance / Resources", *performance_lines])
+                hardware = collect_hardware_diagnostics(
+                    renderer_diagnostics=renderer,
+                    target_fps=int(
+                        (renderer.get("frame_governor") or {}).get(
+                            "target_fps",
+                            (renderer.get("performance_settings") or {}).get("target_fps", 60),
+                        )
+                    ),
+                )
+                lines.extend(["", "Processor / Hardware", *hardware.lines()])
             except Exception as exc:
                 lines.append(f"Integration diagnostics unavailable: {exc}")
         registry = self._tool_registry
@@ -210,6 +225,14 @@ class QtDiagnosticsPanel(QtWidgets.QWidget):
             f"Vertex/index memory estimate: {QtDiagnosticsPanel._bytes_with_mb(renderer.get('vertex_index_memory_estimate_bytes', perf.get('estimated_vertex_index_memory_bytes', 0)))}",
             f"Cache hits/misses: {renderer.get('resource_cache_hits', perf.get('cache_hits', 0))} / {renderer.get('resource_cache_misses', perf.get('cache_misses', 0))}",
             f"Pending uploads: {renderer.get('pending_uploads', perf.get('pending_uploads', 0))}",
+            f"Queue rebuilds/hits: {(renderer.get('render_queue_cache') or {}).get('rebuild_count', 0)} / {(renderer.get('render_queue_cache') or {}).get('hit_count', 0)}",
+            f"Queue rebuilt this frame: {renderer.get('queue_rebuilt_this_frame', perf.get('queue_rebuilt', False))}",
+            f"Mesh uploads this frame: {renderer.get('mesh_uploads_this_frame', perf.get('mesh_uploads_this_frame', 0))}",
+            f"Texture uploads this frame: {renderer.get('texture_uploads_this_frame', perf.get('texture_uploads_this_frame', 0))}",
+            f"Buffer uploads this frame: {renderer.get('buffer_uploads_this_frame', perf.get('buffer_uploads_this_frame', 0))}",
+            f"Bind groups this frame: {renderer.get('bind_groups_this_frame', perf.get('bind_groups_this_frame', 0))}",
+            f"Overlay rebuilds: {(renderer.get('overlay') or {}).get('rebuild_rate_hz', 0.0)} / sec",
+            f"Frame governor: {(renderer.get('frame_governor') or {}).get('idle_mode', 'unknown')} @ {(renderer.get('frame_governor') or {}).get('target_fps', 0)} FPS",
             f"Last upload error: {renderer.get('last_texture_upload_error') or renderer.get('last_upload_error') or 'none'}",
             f"Pick pass time: {perf.get('pick_pass_ms', 0.0)} ms",
             f"Alpha sort count/time: {renderer.get('alpha_object_count', perf.get('alpha_object_count', 0))} / {renderer.get('alpha_sort_time_ms', perf.get('alpha_sort_ms', 0.0))} ms",

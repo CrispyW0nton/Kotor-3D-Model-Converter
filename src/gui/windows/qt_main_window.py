@@ -76,6 +76,9 @@ from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow
 from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditorWindow
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
+from src.gui.qt_lib.rendering.hardware_info import collect_hardware_diagnostics
+from src.gui.qt_lib.rendering.renderer_backend import RendererBackend, renderer_backend_label
+from src.gui.qt_lib.rendering.renderer_factory import renderer_capabilities_snapshot
 from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.integration.editor_services import (
     ActiveViewportService,
@@ -103,6 +106,24 @@ _SPLASH_SURFACE_STYLES = {"matte", "bevelled", "glossy", "flat"}
 
 _GUI_DIR = Path(__file__).resolve().parents[1]
 _QT_ICON_DIR = (_GUI_DIR / "icons").as_posix()
+_WGPU_BACKEND_TYPES = {
+    RendererBackend.WGPU_D3D12.value: "D3D12",
+    RendererBackend.WGPU_VULKAN.value: "Vulkan",
+    RendererBackend.WGPU_OPENGL.value: "OpenGL",
+}
+
+
+def _wgpu_backend_type(backend_id: object) -> str:
+    return _WGPU_BACKEND_TYPES.get(str(backend_id or ""), "")
+
+
+def _wgpu_backend_restart_required(
+    old_settings: RendererSettings,
+    new_settings: RendererSettings,
+) -> bool:
+    old_type = _wgpu_backend_type(old_settings.backend.value)
+    new_type = _wgpu_backend_type(new_settings.backend.value)
+    return bool(old_type and new_type and old_type != new_type)
 
 
 def _lighten_hex(value: str, factor: float = 1.18) -> str:
@@ -1410,6 +1431,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.settings_data.setdefault("fbx_sdk", {})
         RendererSettings.apply_defaults(self.settings_data)
         self._preloaded_library = dict(self.startup_input.get("preloaded_library") or {})
+        self._preloaded_hardware_diagnostics = dict(self.startup_input.get("hardware_diagnostics") or {})
+        self._preloaded_renderer_capabilities = list(self.startup_input.get("renderer_capabilities") or [])
         self._suppress_theme_progress_toast = True
         self.theme_manager = ThemeManager(self.app_root, self.settings_data, self)
         self.layout_manager = LayoutManager(self.app_root, self.settings_data, self)
@@ -8118,6 +8141,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self,
                 theme_manager=self.theme_manager,
                 layout_manager=self.layout_manager,
+                hardware_diagnostics=self._preloaded_hardware_diagnostics,
+                renderer_capabilities=self._preloaded_renderer_capabilities,
             )
             dialog.setModal(False)
             dialog.setWindowModality(QtCore.Qt.NonModal)
@@ -8157,9 +8182,17 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._log(f"Theme/layout settings save failed: {exc}", "error")
 
     def _save_settings_data(self, values: dict):
+        values = dict(values or {})
+        restart_after_save = bool(values.pop("__restart_after_save", False))
         old_dirs = (
             self.k1_dir_edit.text().strip() if hasattr(self, "k1_dir_edit") else "",
             self.k2_dir_edit.text().strip() if hasattr(self, "k2_dir_edit") else "",
+        )
+        old_renderer_settings = RendererSettings.from_settings(self.settings_data)
+        new_renderer_settings = RendererSettings.from_settings(values)
+        renderer_restart_required = _wgpu_backend_restart_required(
+            old_renderer_settings,
+            new_renderer_settings,
         )
         self.settings_data = values
         self.theme_manager.settings = ThemeLayoutSettings.from_settings(values)
@@ -8173,8 +8206,14 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.layout_manager.apply_current_layout(self)
         self._configure_theme_watcher()
         viewport = getattr(self, "viewport", None)
-        if viewport is not None:
-            viewport.set_renderer_settings(RendererSettings.from_settings(values))
+        if viewport is not None and not renderer_restart_required:
+            viewport.set_renderer_settings(new_renderer_settings)
+            viewport.set_navigation_profile(
+                normalize_viewport_navigation_profile(
+                    values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
+                )
+            )
+        elif viewport is not None:
             viewport.set_navigation_profile(
                 normalize_viewport_navigation_profile(
                     values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
@@ -8183,8 +8222,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         retarget_window = getattr(self, "animation_retarget_window", None)
         if retarget_window is not None:
             set_renderer_settings = getattr(retarget_window, "set_renderer_settings", None)
-            if callable(set_renderer_settings):
-                set_renderer_settings(RendererSettings.from_settings(values))
+            if callable(set_renderer_settings) and not renderer_restart_required:
+                set_renderer_settings(new_renderer_settings)
             retarget_window.set_navigation_profile(
                 normalize_viewport_navigation_profile(
                     values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
@@ -8193,8 +8232,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         unreal_window = getattr(self, "unreal_animator_window", None)
         if unreal_window is not None:
             set_renderer_settings = getattr(unreal_window, "set_renderer_settings", None)
-            if callable(set_renderer_settings):
-                set_renderer_settings(RendererSettings.from_settings(values))
+            if callable(set_renderer_settings) and not renderer_restart_required:
+                set_renderer_settings(new_renderer_settings)
             unreal_window.set_navigation_profile(
                 normalize_viewport_navigation_profile(
                     values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
@@ -8203,8 +8242,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         module_editor_window = getattr(self, "module_editor_window", None)
         if module_editor_window is not None:
             set_renderer_settings = getattr(module_editor_window, "set_renderer_settings", None)
-            if callable(set_renderer_settings):
-                set_renderer_settings(RendererSettings.from_settings(values))
+            if callable(set_renderer_settings) and not renderer_restart_required:
+                set_renderer_settings(new_renderer_settings)
             module_editor_window.set_navigation_profile(
                 normalize_viewport_navigation_profile(
                     values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
@@ -8213,16 +8252,23 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         character_builder_window = getattr(self, "_character_builder_window", None)
         if character_builder_window is not None:
             set_renderer_settings = getattr(character_builder_window, "set_renderer_settings", None)
-            if callable(set_renderer_settings):
-                set_renderer_settings(RendererSettings.from_settings(values))
+            if callable(set_renderer_settings) and not renderer_restart_required:
+                set_renderer_settings(new_renderer_settings)
         for sequence_window in (
             getattr(self, "sequence_editor_window", None),
             getattr(self, "sequence_editor_docked_window", None),
         ):
             if sequence_window is not None:
                 set_renderer_settings = getattr(sequence_window, "set_renderer_settings", None)
-                if callable(set_renderer_settings):
-                    set_renderer_settings(RendererSettings.from_settings(values))
+                if callable(set_renderer_settings) and not renderer_restart_required:
+                    set_renderer_settings(new_renderer_settings)
+        if renderer_restart_required:
+            old_label = renderer_backend_label(old_renderer_settings.backend)
+            new_label = renderer_backend_label(new_renderer_settings.backend)
+            self._log(
+                f"Renderer change saved for next launch: {old_label} -> {new_label}. Restart required for WGPU_BACKEND_TYPE.",
+                "warning",
+            )
         new_dirs = (str(values.get("k1_dir") or "").strip(), str(values.get("k2_dir") or "").strip())
         if hasattr(self, "k1_dir_edit"):
             self.k1_dir_edit.setText(new_dirs[0])
@@ -8242,6 +8288,34 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._log("Settings saved.", "success")
         except Exception as exc:
             self._log(f"Settings save failed: {exc}", "error")
+            restart_after_save = False
+        if restart_after_save:
+            QtCore.QTimer.singleShot(0, self._restart_application_after_settings_save)
+
+    def _restart_application_after_settings_save(self) -> None:
+        if not self._prompt_save_dirty_scene():
+            self._log("Renderer restart cancelled because the current scene was not closed.", "warning")
+            return
+        program, args = self._restart_command()
+        ok = QtCore.QProcess.startDetached(program, args, str(self.app_root))
+        if not ok:
+            self._log("Automatic restart failed. Close and reopen GhostRigger to apply the renderer change.", "error")
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Restart Failed",
+                "GhostRigger could not restart automatically. Close and reopen the application to apply the renderer change.",
+            )
+            return
+        self._log("Restarting GhostRigger to apply renderer backend change.", "success")
+        QtCore.QTimer.singleShot(100, QtWidgets.QApplication.quit)
+
+    def _restart_command(self) -> tuple[str, list[str]]:
+        if getattr(sys, "frozen", False):
+            return sys.executable, list(sys.argv[1:])
+        script = Path(sys.argv[0])
+        if not script.is_absolute():
+            script = (Path.cwd() / script).resolve()
+        return sys.executable, [str(script), *sys.argv[1:]]
 
     def _apply_measurement_settings(self) -> None:
         settings = MeasurementSettings.from_dict(self.settings_data.get("measurement", {}))
@@ -8301,6 +8375,26 @@ def run(app_root: Optional[str] = None, startup_input: Optional[dict] = None) ->
 
     update_prelaunch_status("Preparing startup", "Detecting game installs before the main window opens...")
     prepared_input = _build_prelaunch_library_input(root, startup_input, update_prelaunch_status)
+    update_prelaunch_status("Scanning renderers", "Capturing renderer backend availability before Settings opens...")
+    try:
+        prepared_input["renderer_capabilities"] = [caps.to_dict() for caps in renderer_capabilities_snapshot()]
+    except Exception as exc:
+        log.warning("Renderer capability pre-start scan failed: %s", exc)
+        prepared_input["renderer_capabilities"] = []
+    update_prelaunch_status("Scanning hardware", "Capturing CPU, GPU, renderer, and frame pacing diagnostics...")
+    renderer_settings = RendererSettings.from_settings(settings_data)
+    try:
+        hardware = collect_hardware_diagnostics(
+            renderer_diagnostics={
+                "backend_id": renderer_settings.backend.value,
+                "name": renderer_settings.backend.value,
+            },
+            target_fps=renderer_settings.target_fps,
+        )
+        prepared_input["hardware_diagnostics"] = hardware.to_dict()
+    except Exception as exc:
+        log.warning("Hardware diagnostics pre-start scan failed: %s", exc)
+        prepared_input["hardware_diagnostics"] = {"unavailable_reason": str(exc)}
     app.processEvents()
     win = QtGhostRiggerMainWindow(root, startup_input=prepared_input)
     win.show()

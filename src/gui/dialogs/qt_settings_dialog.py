@@ -19,11 +19,23 @@ from src.gui.qt_lib.rendering.viewport_navigation import (
     normalize_viewport_navigation_profile,
 )
 from src.gui.qt_lib.rendering.renderer_backend import RendererBackend, renderer_backend_label
-from src.gui.qt_lib.rendering.renderer_factory import renderer_capabilities_snapshot
+from src.gui.qt_lib.rendering.renderer_capabilities import RendererCapabilities
+from src.gui.qt_lib.rendering.hardware_info import HardwareDiagnostics
 from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.dialogs.qt_dialogs import show_viewport_navigation_reference
 from src.measurement.unit_settings import MeasurementSettings
 from src.measurement.unit_system import CANONICAL_UNITS, UNIT_SYMBOLS
+
+
+_WGPU_BACKEND_TYPES = {
+    RendererBackend.WGPU_D3D12.value: "D3D12",
+    RendererBackend.WGPU_VULKAN.value: "Vulkan",
+    RendererBackend.WGPU_OPENGL.value: "OpenGL",
+}
+
+
+def _wgpu_backend_type(backend_id: object) -> str:
+    return _WGPU_BACKEND_TYPES.get(str(backend_id or ""), "")
 
 
 class QtSettingsDialog(QtWidgets.QDialog):
@@ -37,6 +49,8 @@ class QtSettingsDialog(QtWidgets.QDialog):
         *,
         theme_manager: ThemeManager | None = None,
         layout_manager: LayoutManager | None = None,
+        hardware_diagnostics: dict | HardwareDiagnostics | None = None,
+        renderer_capabilities: list[dict] | list[RendererCapabilities] | None = None,
     ):
         super().__init__(parent)
         self.setWindowTitle("Settings")
@@ -46,6 +60,9 @@ class QtSettingsDialog(QtWidgets.QDialog):
         self.theme_manager = theme_manager
         self.layout_manager = layout_manager
         self.theme_layout_settings = ThemeLayoutSettings.from_settings(self.settings)
+        self._hardware_diagnostics = self._coerce_hardware_diagnostics(hardware_diagnostics)
+        self._renderer_capabilities = self._coerce_renderer_capabilities(renderer_capabilities)
+        self._renderer_caps_by_id = {caps.backend_id: caps for caps in self._renderer_capabilities}
         self._build()
         self._load_values()
 
@@ -123,7 +140,7 @@ class QtSettingsDialog(QtWidgets.QDialog):
         renderer_form.setVerticalSpacing(6)
         self.renderer_backend_combo = QtWidgets.QComboBox()
         self._renderer_capability_text: dict[str, str] = {}
-        for caps in renderer_capabilities_snapshot():
+        for caps in self._renderer_capabilities:
             label = renderer_backend_label(RendererBackend(caps.backend_id))
             status = caps.status_text()
             self._renderer_capability_text[caps.backend_id] = status
@@ -131,6 +148,18 @@ class QtSettingsDialog(QtWidgets.QDialog):
         self.renderer_fallback_check = QtWidgets.QCheckBox("Allow renderer fallback")
         self.renderer_diagnostics_check = QtWidgets.QCheckBox("Show renderer diagnostics")
         self.renderer_safe_mode_check = QtWidgets.QCheckBox("Force safe mode")
+        self.renderer_target_fps_spin = QtWidgets.QSpinBox()
+        self.renderer_target_fps_spin.setRange(15, 240)
+        self.renderer_target_fps_spin.setSingleStep(5)
+        self.renderer_idle_mode_combo = QtWidgets.QComboBox()
+        self.renderer_idle_mode_combo.addItem("Dirty only", "dirty_only")
+        self.renderer_idle_mode_combo.addItem("Continuous", "continuous")
+        self.renderer_throttle_diagnostics_check = QtWidgets.QCheckBox("Throttle diagnostics")
+        self.renderer_diagnostics_hz_spin = QtWidgets.QDoubleSpinBox()
+        self.renderer_diagnostics_hz_spin.setRange(0.1, 30.0)
+        self.renderer_diagnostics_hz_spin.setDecimals(1)
+        self.renderer_diagnostics_hz_spin.setSingleStep(0.5)
+        self.renderer_overlay_dirty_check = QtWidgets.QCheckBox("Dirty overlay rendering")
         self.renderer_status_label = QtWidgets.QLabel()
         self.renderer_status_label.setWordWrap(True)
         self.renderer_backend_combo.currentIndexChanged.connect(self._update_renderer_status)
@@ -138,10 +167,25 @@ class QtSettingsDialog(QtWidgets.QDialog):
         renderer_form.addRow("", self.renderer_fallback_check)
         renderer_form.addRow("", self.renderer_diagnostics_check)
         renderer_form.addRow("", self.renderer_safe_mode_check)
+        renderer_form.addRow("Target FPS:", self.renderer_target_fps_spin)
+        renderer_form.addRow("Idle Rendering:", self.renderer_idle_mode_combo)
+        renderer_form.addRow("", self.renderer_throttle_diagnostics_check)
+        renderer_form.addRow("Diagnostics Hz:", self.renderer_diagnostics_hz_spin)
+        renderer_form.addRow("", self.renderer_overlay_dirty_check)
         renderer_form.addRow("Status:", self.renderer_status_label)
         general_root.addWidget(renderer_group)
         general_root.addStretch(1)
         self.settings_tabs.addTab(self._scroll_tab_page(general_page), "General")
+
+        hardware_page = QtWidgets.QWidget()
+        hardware_root = QtWidgets.QVBoxLayout(hardware_page)
+        hardware_root.setContentsMargins(8, 8, 8, 8)
+        hardware_root.setSpacing(6)
+        self.hardware_text = QtWidgets.QPlainTextEdit()
+        self.hardware_text.setReadOnly(True)
+        self.hardware_text.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        hardware_root.addWidget(self.hardware_text, 1)
+        self.settings_tabs.addTab(self._scroll_tab_page(hardware_page), "Hardware")
 
         theme_layout_page = QtWidgets.QWidget()
         theme_layout_root = QtWidgets.QVBoxLayout(theme_layout_page)
@@ -329,7 +373,13 @@ class QtSettingsDialog(QtWidgets.QDialog):
         self.renderer_fallback_check.setChecked(renderer_settings.allow_fallback)
         self.renderer_diagnostics_check.setChecked(renderer_settings.show_renderer_diagnostics)
         self.renderer_safe_mode_check.setChecked(renderer_settings.force_safe_mode)
+        self.renderer_target_fps_spin.setValue(int(renderer_settings.target_fps))
+        self._set_combo_data(self.renderer_idle_mode_combo, renderer_settings.idle_render_mode)
+        self.renderer_throttle_diagnostics_check.setChecked(renderer_settings.throttle_diagnostics)
+        self.renderer_diagnostics_hz_spin.setValue(float(renderer_settings.diagnostics_hz))
+        self.renderer_overlay_dirty_check.setChecked(renderer_settings.overlay_dirty_rendering)
         self._update_renderer_status()
+        self._load_cached_hardware_text()
         self._set_combo_data(self.theme_mode_combo, self.theme_layout_settings.theme_mode)
         self._set_combo_data(self.theme_combo, self.theme_layout_settings.selected_theme)
         self._set_combo_data(self.light_theme_combo, self.theme_layout_settings.os_light_theme)
@@ -354,6 +404,56 @@ class QtSettingsDialog(QtWidgets.QDialog):
         self.percent_snap_enabled_check.setChecked(measurement.percent_snap_enabled)
         self.percent_snap_increment_combo.setCurrentText(f"{measurement.percent_snap_increment_percent:g}%")
 
+    def _load_cached_hardware_text(self) -> None:
+        if self._hardware_diagnostics is None:
+            self.hardware_text.setPlainText(
+                "Hardware diagnostics were not captured during startup.\n"
+                "Restart GhostRigger to refresh the pre-start hardware snapshot."
+            )
+            return
+        self.hardware_text.setPlainText("\n".join(self._hardware_diagnostics.lines()))
+
+    @staticmethod
+    def _coerce_hardware_diagnostics(value: dict | HardwareDiagnostics | None) -> HardwareDiagnostics | None:
+        if isinstance(value, HardwareDiagnostics):
+            return value
+        if isinstance(value, dict) and value:
+            return HardwareDiagnostics.from_dict(value)
+        return None
+
+    @staticmethod
+    def _coerce_renderer_capabilities(
+        value: list[dict] | list[RendererCapabilities] | None,
+    ) -> list[RendererCapabilities]:
+        if value:
+            caps: list[RendererCapabilities] = []
+            for entry in value:
+                if isinstance(entry, RendererCapabilities):
+                    caps.append(entry)
+                elif isinstance(entry, dict):
+                    caps.append(RendererCapabilities.from_dict(entry))
+            if caps:
+                return caps
+        return [
+            RendererCapabilities(
+                backend_id=backend.value,
+                name=renderer_backend_label(backend),
+                available=True,
+                reason="Cached renderer availability was not captured during startup",
+                supports_hot_switch=True,
+            )
+            for backend in (
+                RendererBackend.AUTOMATIC,
+                RendererBackend.MODERNGL_GL330,
+                RendererBackend.WGPU_AUTO,
+                RendererBackend.WGPU_D3D12,
+                RendererBackend.WGPU_VULKAN,
+                RendererBackend.WGPU_OPENGL,
+                RendererBackend.DIRECT3D_HARDWARE,
+                RendererBackend.NULL_DIAGNOSTIC,
+            )
+        ]
+
     def values(self) -> dict:
         measurement = MeasurementSettings.from_dict(
             {
@@ -369,6 +469,7 @@ class QtSettingsDialog(QtWidgets.QDialog):
                 "percent_snap_increment_percent": self._percent_snap_increment_value(),
             }
         )
+        current_renderer = RendererSettings.from_settings(self.settings)
         return {
             **self.settings,
             "k1_dir": self.k1_dir.text().strip(),
@@ -383,6 +484,27 @@ class QtSettingsDialog(QtWidgets.QDialog):
                 "allow_fallback": self.renderer_fallback_check.isChecked(),
                 "show_renderer_diagnostics": self.renderer_diagnostics_check.isChecked(),
                 "force_safe_mode": self.renderer_safe_mode_check.isChecked(),
+                "target_fps": self.renderer_target_fps_spin.value(),
+                "idle_render_mode": self.renderer_idle_mode_combo.currentData(),
+                "throttle_diagnostics": self.renderer_throttle_diagnostics_check.isChecked(),
+                "diagnostics_hz": self.renderer_diagnostics_hz_spin.value(),
+                "overlay_dirty_rendering": self.renderer_overlay_dirty_check.isChecked(),
+                "wgpu": {
+                    "enable_batching": current_renderer.wgpu_enable_batching,
+                    "enable_instancing": current_renderer.wgpu_enable_instancing,
+                    "enable_frustum_culling": current_renderer.wgpu_enable_frustum_culling,
+                    "enable_lazy_upload": current_renderer.wgpu_enable_lazy_upload,
+                    "enable_texture_arrays": current_renderer.wgpu_enable_texture_arrays,
+                    "enable_texture_atlas": current_renderer.wgpu_enable_texture_atlas,
+                    "pick_on_demand_only": current_renderer.wgpu_pick_on_demand_only,
+                    "cache_render_queue": current_renderer.wgpu_cache_render_queue,
+                    "cache_draw_items": current_renderer.wgpu_cache_draw_items,
+                    "profile_cpu_frames": current_renderer.wgpu_profile_frames,
+                    "profile_gpu_frames": current_renderer.wgpu_profile_gpu_frames,
+                    "dynamic_quality": current_renderer.wgpu_dynamic_quality,
+                    "max_texture_memory_mb": current_renderer.wgpu_max_texture_memory_mb,
+                    "max_uploads_per_frame": current_renderer.wgpu_max_uploads_per_frame,
+                },
             },
             "theme_layout": {
                 "theme_mode": self.theme_mode_combo.currentData(),
@@ -416,8 +538,21 @@ class QtSettingsDialog(QtWidgets.QDialog):
     def _update_renderer_status(self) -> None:
         backend_id = str(self.renderer_backend_combo.currentData() or RendererBackend.AUTOMATIC.value)
         status = self._renderer_capability_text.get(backend_id, "Available")
-        suffix = " Restart may be required for a real backend switch." if backend_id != RendererBackend.AUTOMATIC.value else ""
+        current_settings = RendererSettings.from_settings(self.settings)
+        candidate = self.values()
+        candidate.setdefault("renderer", {})
+        candidate["renderer"]["backend"] = backend_id
+        restart_needed = self._renderer_restart_required(current_settings, RendererSettings.from_settings(candidate))
+        if restart_needed:
+            suffix = " Restart required to apply this WGPU backend."
+        else:
+            suffix = " Restart may be required for a real backend switch." if backend_id != RendererBackend.AUTOMATIC.value else ""
         self.renderer_status_label.setText(f"{status}.{suffix}")
+
+    def _renderer_restart_required(self, old_settings: RendererSettings, new_settings: RendererSettings) -> bool:
+        old_type = _wgpu_backend_type(old_settings.backend.value)
+        new_type = _wgpu_backend_type(new_settings.backend.value)
+        return bool(old_type and new_type and old_type != new_type)
 
     def _preview_theme(self) -> None:
         if self.theme_manager is None:
@@ -567,6 +702,27 @@ class QtSettingsDialog(QtWidgets.QDialog):
 
     def _save(self) -> None:
         values = self.values()
+        old_settings = RendererSettings.from_settings(self.settings)
+        new_settings = RendererSettings.from_settings(values)
+        restart_after_save = False
+        if self._renderer_restart_required(old_settings, new_settings):
+            old_label = renderer_backend_label(old_settings.backend)
+            new_label = renderer_backend_label(new_settings.backend)
+            QtWidgets.QMessageBox.information(
+                self,
+                "Restart Required",
+                (
+                    "GhostRigger must be restarted before this renderer change can be enabled.\n\n"
+                    f"Current renderer: {old_label}\n"
+                    f"Selected renderer: {new_label}\n\n"
+                    "WGPU_BACKEND_TYPE is read before the first WGPU device is created, "
+                    "so switching WGPU D3D12, Vulkan, or OpenGL backends cannot be applied live. "
+                    "The setting will be saved and GhostRigger will restart now."
+                ),
+            )
+            restart_after_save = True
+        if restart_after_save:
+            values["__restart_after_save"] = True
         self.settingsSaved.emit(values)
         self.accept()
 

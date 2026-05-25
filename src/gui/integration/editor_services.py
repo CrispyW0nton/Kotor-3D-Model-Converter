@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import time
 from typing import Any, Callable
 
 from PySide6 import QtCore
@@ -388,11 +389,18 @@ class DiagnosticsService(QtCore.QObject):
         self.renderer_service = renderer_service
         self.registry = registry
         self.event_bus = event_bus or viewport_service.event_bus
+        self._snapshot_cache: DiagnosticsSnapshot | None = None
+        self._snapshot_cache_time = 0.0
+        self.diagnostics_hz = 2.0
 
-    def snapshot(self) -> DiagnosticsSnapshot:
+    def snapshot(self, *, force: bool = False) -> DiagnosticsSnapshot:
+        now = time.perf_counter()
+        min_interval = 1.0 / max(0.1, float(getattr(self, "diagnostics_hz", 2.0) or 2.0))
+        if not force and self._snapshot_cache is not None and now - self._snapshot_cache_time < min_interval:
+            return self._snapshot_cache
         viewport = self.viewport_service.get_active_viewport()
         renderer_diag = self.renderer_service.get_diagnostics()
-        return DiagnosticsSnapshot(
+        snapshot = DiagnosticsSnapshot(
             active_viewport=type(viewport).__name__ if viewport is not None else "None",
             active_renderer=str(renderer_diag.get("name") or renderer_diag.get("backend_id") or "Unknown"),
             registered_tools=len(getattr(self.registry, "tools", {}) or {}),
@@ -403,3 +411,6 @@ class DiagnosticsService(QtCore.QObject):
             unsupported_active_feature_warnings=self.event_bus.last_unsupported_feature_warning,
             renderer_diagnostics=renderer_diag,
         )
+        self._snapshot_cache = snapshot
+        self._snapshot_cache_time = now
+        return snapshot

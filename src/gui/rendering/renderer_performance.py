@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import math
-from typing import Iterable, Sequence
+import time
+from typing import Callable, Iterable, Sequence
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,168 @@ class RenderBatch:
     @property
     def visible_count(self) -> int:
         return len(self.items)
+
+
+@dataclass
+class RenderQueueCache:
+    """Small revision-key cache for persistent WGPU draw-item queues."""
+
+    revision_key: tuple | None = None
+    draw_items: list = field(default_factory=list)
+    edge_items: list = field(default_factory=list)
+    metadata: dict[str, object] = field(default_factory=dict)
+    rebuild_count: int = 0
+    hit_count: int = 0
+    last_rebuild_reason: str = ""
+
+    def invalidate(self, reason: str = "") -> None:
+        self.revision_key = None
+        self.draw_items = []
+        self.edge_items = []
+        self.metadata = {}
+        self.last_rebuild_reason = str(reason or "invalidated")
+
+    def get_or_build(
+        self,
+        revision_key: tuple,
+        builder: Callable[[], tuple[list, list, dict[str, object]]],
+        *,
+        reason: str = "",
+    ) -> tuple[list, list, dict[str, object], bool]:
+        key = tuple(revision_key or ())
+        if self.revision_key == key:
+            self.hit_count += 1
+            return self.draw_items, self.edge_items, self.metadata, False
+        draw_items, edge_items, metadata = builder()
+        self.revision_key = key
+        self.draw_items = list(draw_items or [])
+        self.edge_items = list(edge_items or [])
+        self.metadata = dict(metadata or {})
+        self.rebuild_count += 1
+        self.last_rebuild_reason = str(reason or "revision changed")
+        return self.draw_items, self.edge_items, self.metadata, True
+
+    def diagnostics(self) -> dict[str, object]:
+        return {
+            "revision_key_active": self.revision_key is not None,
+            "draw_item_count": len(self.draw_items),
+            "edge_item_count": len(self.edge_items),
+            "rebuild_count": int(self.rebuild_count),
+            "hit_count": int(self.hit_count),
+            "last_rebuild_reason": self.last_rebuild_reason,
+        }
+
+
+class ViewportFrameGovernor:
+    """Dirty-state frame pacing for the Qt viewport render loop."""
+
+    DIRTY_FLAGS = (
+        "scene",
+        "camera",
+        "overlay",
+        "resources",
+        "selection",
+        "lighting",
+        "gizmo",
+        "diagnostics",
+    )
+
+    def __init__(self, target_fps: int = 60, *, idle_mode: str = "dirty_only") -> None:
+        self.target_fps = max(1, int(target_fps or 60))
+        self.idle_mode = str(idle_mode or "dirty_only")
+        self.active_interaction = False
+        self.animation_playing = False
+        self.dirty_flags = {name: False for name in self.DIRTY_FLAGS}
+        self.last_frame_time = 0.0
+        self.last_render_reason = ""
+        self.pending_reason = ""
+        self.active_reason = ""
+        self.frames_skipped = 0
+        self.frames_rendered = 0
+
+    @property
+    def frame_interval_s(self) -> float:
+        return 1.0 / max(1, int(self.target_fps))
+
+    @property
+    def dirty(self) -> bool:
+        return any(self.dirty_flags.values())
+
+    def set_target_fps(self, fps: int) -> None:
+        self.target_fps = max(1, int(fps or 60))
+
+    def set_idle_mode(self, mode: str | bool = "dirty_only") -> None:
+        if isinstance(mode, bool):
+            self.idle_mode = "dirty_only" if mode else "continuous"
+        else:
+            self.idle_mode = str(mode or "dirty_only")
+
+    def request_redraw(self, reason: str = "", **dirty_flags: bool) -> None:
+        reason = str(reason or "redraw requested")
+        self.pending_reason = reason
+        matched = False
+        for name, value in dirty_flags.items():
+            if name in self.dirty_flags and bool(value):
+                self.dirty_flags[name] = True
+                matched = True
+        if not matched:
+            self.dirty_flags["scene"] = True
+
+    def begin_interaction(self, reason: str = "") -> None:
+        self.active_interaction = True
+        self.active_reason = str(reason or "interaction")
+        self.request_redraw(self.active_reason, camera=True, overlay=True)
+
+    def end_interaction(self, reason: str = "") -> None:
+        self.active_interaction = False
+        self.active_reason = ""
+        self.request_redraw(str(reason or "interaction ended"), camera=True, overlay=True)
+
+    def set_animation_playing(self, playing: bool, reason: str = "animation") -> None:
+        self.animation_playing = bool(playing)
+        if playing:
+            self.request_redraw(reason, scene=True)
+
+    def should_render_now(self, now: float | None = None) -> bool:
+        now = time.perf_counter() if now is None else float(now)
+        active = bool(self.active_interaction or self.animation_playing)
+        if not self.dirty and self.idle_mode == "dirty_only" and not active:
+            self.frames_skipped += 1
+            return False
+        elapsed = now - float(self.last_frame_time or 0.0)
+        if self.last_frame_time and elapsed < self.frame_interval_s:
+            self.frames_skipped += 1
+            return False
+        return True
+
+    def delay_until_next_frame_ms(self, now: float | None = None) -> int:
+        now = time.perf_counter() if now is None else float(now)
+        if not self.last_frame_time:
+            return 0
+        remaining = self.frame_interval_s - (now - self.last_frame_time)
+        return max(1, int(math.ceil(max(0.0, remaining) * 1000.0)))
+
+    def mark_clean_after_render(self, reason: str = "", now: float | None = None) -> None:
+        self.frames_rendered += 1
+        self.last_frame_time = time.perf_counter() if now is None else float(now)
+        self.last_render_reason = str(reason or self.pending_reason or self.active_reason or "render")
+        self.pending_reason = ""
+        for name in self.dirty_flags:
+            self.dirty_flags[name] = False
+
+    def diagnostics(self) -> dict[str, object]:
+        return {
+            "target_fps": int(self.target_fps),
+            "idle_mode": self.idle_mode,
+            "active_interaction": bool(self.active_interaction),
+            "animation_playing": bool(self.animation_playing),
+            "dirty": bool(self.dirty),
+            "dirty_flags": dict(self.dirty_flags),
+            "last_render_reason": self.last_render_reason,
+            "pending_reason": self.pending_reason,
+            "frames_rendered": int(self.frames_rendered),
+            "frames_skipped": int(self.frames_skipped),
+        }
 
 
 @dataclass

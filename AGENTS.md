@@ -42,6 +42,11 @@ When working on renderer behavior for imported modules, use `K2:001ebo1` /
 another module. It is the baseline module for OpenGL-vs-D3D lighting,
 lightmap, texture, and material parity checks.
 
+## Animation test fixture
+
+When testing animations, use `N_DarthMalak` with the `walk` animation looped
+unless the user explicitly names another model or animation.
+
 ## Change log
 
 After any fix or software change is successfully completed, update `CHANGES.md`

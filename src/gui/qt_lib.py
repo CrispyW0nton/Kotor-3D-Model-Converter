@@ -154,6 +154,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
     "rendering": (
         "accel",
         "gpu_renderer",
+        "hardware_info",
         "mesh_render_data",
         "direct3d_renderer",
         "moderngl_renderer",

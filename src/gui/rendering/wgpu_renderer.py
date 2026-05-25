@@ -28,6 +28,7 @@ from src.gui.rendering.renderer_capabilities import (
     RendererCapabilities,
 )
 from src.gui.rendering.renderer_performance import (
+    RenderQueueCache,
     TextureResidencyInfo,
     bounds_intersects_frustum,
     extract_frustum_planes,
@@ -1023,6 +1024,9 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.enable_lazy_upload = bool(settings.wgpu_enable_lazy_upload)
         self.enable_texture_arrays = bool(settings.wgpu_enable_texture_arrays)
         self.enable_texture_atlas = bool(settings.wgpu_enable_texture_atlas)
+        self.pick_on_demand_only = bool(settings.wgpu_pick_on_demand_only)
+        self.cache_render_queue = bool(settings.wgpu_cache_render_queue)
+        self.cache_draw_items = bool(settings.wgpu_cache_draw_items)
         self.enable_dynamic_quality = bool(settings.wgpu_dynamic_quality)
         self.max_texture_memory_mb = int(settings.wgpu_max_texture_memory_mb)
         self.max_uploads_per_frame = int(settings.wgpu_max_uploads_per_frame)
@@ -1119,6 +1123,14 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self._last_pipeline_switch_count = 0
         self._last_texture_array_eligible_groups = 0
         self._last_texture_array_eligible_textures = 0
+        self._render_queue_cache = RenderQueueCache()
+        self._last_queue_rebuilt = False
+        self._last_queue_rebuild_reason = ""
+        self._last_mesh_uploads_this_frame = 0
+        self._last_texture_uploads_this_frame = 0
+        self._last_buffer_uploads_this_frame = 0
+        self._last_bind_groups_this_frame = 0
+        self._last_readback_skipped = False
         self._pending_uploads_count = 0
         self._last_upload_error = ""
         self._last_lighting_invalidation_reason = ""
@@ -1128,6 +1140,12 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self._gizmo_line_cache: dict[tuple, tuple[object, int]] = {}
         self._frame_line_uniform_refs: list[tuple[object, object]] = []
         self._frame_mesh_uniform_refs: list[tuple[object, object]] = []
+        self._mesh_uniform_stride = 256
+        self._line_uniform_stride = 256
+        self._mesh_uniform_capacity = 0
+        self._line_uniform_capacity = 0
+        self._mesh_uniform_cursor = 0
+        self._line_uniform_cursor = 0
         self._pick_resources: WgpuPickResources | None = None
         self.grid_minor_color = (58 / 255.0, 64 / 255.0, 72 / 255.0)
         self.grid_major_color = (82 / 255.0, 90 / 255.0, 102 / 255.0)
@@ -1557,9 +1575,10 @@ class WgpuRenderer(NullDiagnosticRenderer):
         import wgpu
 
         self.mesh_uniform_buffer = self.device.create_buffer(
-            size=112,
+            size=self._mesh_uniform_stride * 256,
             usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST,
         )
+        self._mesh_uniform_capacity = 256
         self.light_buffer = self.device.create_buffer(
             size=int(self.max_wgpu_lights) * 64,
             usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST,
@@ -1573,7 +1592,11 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 {
                     "binding": 0,
                     "visibility": wgpu.ShaderStage.VERTEX | wgpu.ShaderStage.FRAGMENT,
-                    "buffer": {"type": wgpu.BufferBindingType.uniform},
+                    "buffer": {
+                        "type": wgpu.BufferBindingType.uniform,
+                        "has_dynamic_offset": True,
+                        "min_binding_size": 112,
+                    },
                 },
                 {
                     "binding": 1,
@@ -1767,15 +1790,20 @@ class WgpuRenderer(NullDiagnosticRenderer):
         import wgpu
 
         self.line_uniform_buffer = self.device.create_buffer(
-            size=80,
+            size=self._line_uniform_stride * 256,
             usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST,
         )
+        self._line_uniform_capacity = 256
         self.line_bind_group_layout = self.device.create_bind_group_layout(
             entries=[
                 {
                     "binding": 0,
                     "visibility": wgpu.ShaderStage.VERTEX | wgpu.ShaderStage.FRAGMENT,
-                    "buffer": {"type": wgpu.BufferBindingType.uniform},
+                    "buffer": {
+                        "type": wgpu.BufferBindingType.uniform,
+                        "has_dynamic_offset": True,
+                        "min_binding_size": 80,
+                    },
                 }
             ]
         )
@@ -2063,46 +2091,78 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 self.last_display_mode_warning = f"WGPU frustum culling disabled for this frame: {exc}"
                 frustum_planes = None
         tri_count = 0
-        skinned_mesh_count = 0
-        cpu_skinned_mesh_count = 0
-        total_mesh_count = 0
         visible_mesh_count = 0
         culled_mesh_count = 0
+        queue_key = self._render_queue_revision_key(
+            display_options,
+            force_untextured=force_untextured,
+            force_no_lightmaps=force_no_lightmaps,
+        )
+
+        def build_queue() -> tuple[list, list, dict[str, object]]:
+            draw_rows = []
+            edge_rows = []
+            total = 0
+            skinned = 0
+            cpu_skinned = 0
+            for mesh_data in iter_mesh_render_data(
+                self._active_scene,
+                anim_pose=self._active_anim_pose,
+                anim_base_pose=self._active_anim_base_pose,
+                textures=self._active_textures,
+                allow_cpu_skinning=False,
+            ):
+                total += 1
+                material_data = getattr(mesh_data, "material", None)
+                if material_data is None:
+                    continue
+                if bool(getattr(mesh_data, "is_skinned", False)):
+                    skinned += 1
+                    if bool(getattr(mesh_data, "skinning_cpu_fallback", False)):
+                        cpu_skinned += 1
+                    warning = str(getattr(mesh_data, "skinning_warning", "") or "")
+                    if warning:
+                        self.last_skinning_error = warning
+                alpha_mode = str(getattr(material_data, "alpha_mode", "OPAQUE") or "OPAQUE").upper()
+                if (bool(getattr(self, "disable_alpha_blend", False)) or not display_options.show_alpha) and alpha_mode == "BLEND":
+                    alpha_mode = "OPAQUE"
+                if force_untextured:
+                    material_data = self._untextured_material(material_data)
+                    alpha_mode = str(getattr(material_data, "alpha_mode", "OPAQUE") or "OPAQUE").upper()
+                elif force_no_lightmaps:
+                    material_data = self._without_lightmap_material(material_data)
+                center = self._mesh_sort_center(mesh_data)
+                draw_rows.append((alpha_mode, center, mesh_data, material_data))
+                edge_rows.append(mesh_data)
+            return draw_rows, edge_rows, {
+                "total_mesh_count": total,
+                "skinned_mesh_count": skinned,
+                "cpu_skinned_mesh_count": cpu_skinned,
+            }
+
+        if bool(getattr(self, "cache_render_queue", True)) and bool(getattr(self, "cache_draw_items", True)):
+            draw_items_all, edge_items_all, queue_meta, rebuilt = self._render_queue_cache.get_or_build(
+                queue_key,
+                build_queue,
+                reason="scene/display/resource revision changed",
+            )
+        else:
+            draw_items_all, edge_items_all, queue_meta = build_queue()
+            rebuilt = True
+        self._last_queue_rebuilt = bool(rebuilt)
+        self._last_queue_rebuild_reason = self._render_queue_cache.last_rebuild_reason if rebuilt else ""
+
+        total_mesh_count = int(queue_meta.get("total_mesh_count", len(edge_items_all)) or 0)
+        skinned_mesh_count = int(queue_meta.get("skinned_mesh_count", 0) or 0)
+        cpu_skinned_mesh_count = int(queue_meta.get("cpu_skinned_mesh_count", 0) or 0)
         draw_items = []
         edge_items = []
-        for mesh_data in iter_mesh_render_data(
-            self._active_scene,
-            anim_pose=self._active_anim_pose,
-            anim_base_pose=self._active_anim_base_pose,
-            textures=self._active_textures,
-            allow_cpu_skinning=False,
-        ):
-            total_mesh_count += 1
+        for alpha_mode, center, mesh_data, material_data in draw_items_all:
             if frustum_planes is not None and self._mesh_data_outside_frustum(mesh_data, frustum_planes):
                 culled_mesh_count += 1
                 continue
             visible_mesh_count += 1
-            material_data = getattr(mesh_data, "material", None)
-            if material_data is None:
-                continue
-            if bool(getattr(mesh_data, "is_skinned", False)):
-                skinned_mesh_count += 1
-                if bool(getattr(mesh_data, "skinning_cpu_fallback", False)):
-                    cpu_skinned_mesh_count += 1
-                warning = str(getattr(mesh_data, "skinning_warning", "") or "")
-                if warning:
-                    self.last_skinning_error = warning
-            alpha_mode = str(getattr(material_data, "alpha_mode", "OPAQUE") or "OPAQUE").upper()
-            if (bool(getattr(self, "disable_alpha_blend", False)) or not display_options.show_alpha) and alpha_mode == "BLEND":
-                alpha_mode = "OPAQUE"
-            if force_untextured:
-                material_data = self._untextured_material(material_data)
-                alpha_mode = str(getattr(material_data, "alpha_mode", "OPAQUE") or "OPAQUE").upper()
-            elif force_no_lightmaps:
-                material_data = self._without_lightmap_material(material_data)
-            sort_depth = 0.0
-            if alpha_mode == "BLEND":
-                sort_depth = self._mesh_sort_depth(mesh_data, self._active_camera)
+            sort_depth = self._mesh_sort_depth_from_center(center, self._active_camera) if alpha_mode == "BLEND" else 0.0
             draw_items.append((alpha_mode, sort_depth, mesh_data, material_data))
             edge_items.append(mesh_data)
 
@@ -2578,7 +2638,6 @@ class WgpuRenderer(NullDiagnosticRenderer):
 
             mvp = self._camera_mvp_matrix(self._active_camera, width, height)
             render_pass.set_pipeline(self.pipeline_gizmo_lines)
-            render_pass.set_bind_group(0, self.line_bind_group)
             drawn = 0
             for command in commands:
                 cache_key = self._gizmo_command_cache_key(command)
@@ -2598,8 +2657,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 if vertex_count <= 0:
                     continue
                 color = tuple(float(v) for v in getattr(command, "colour", (1.0, 1.0, 1.0, 1.0))[:4])
-                uniform = self._line_uniform_bytes(mvp, color)
-                self.queue.write_buffer(self.line_uniform_buffer, 0, uniform)
+                self._set_line_uniform(render_pass, mvp, color)
                 render_pass.set_vertex_buffer(0, vertex_buffer)
                 render_pass.draw(int(vertex_count), 1, 0, 0)
                 self.profiler.add("draw_calls", 1)
@@ -2628,14 +2686,13 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 return (0, 0)
             mvp = self._camera_mvp_matrix(self._active_camera, width, height)
             render_pass.set_pipeline(self.pipeline_gizmo_lines)
-            render_pass.set_bind_group(0, self.line_bind_group)
             line_count = 0
             marker_count = 0
 
             def draw_buffer(buffer, vertex_count: int, color: tuple[float, float, float, float]) -> int:
                 if buffer is None or vertex_count <= 0:
                     return 0
-                self.queue.write_buffer(self.line_uniform_buffer, 0, self._line_uniform_bytes(mvp, color))
+                self._set_line_uniform(render_pass, mvp, color)
                 render_pass.set_vertex_buffer(0, buffer)
                 render_pass.draw(int(vertex_count), 1, 0, 0)
                 self.profiler.add("draw_calls", 1)
@@ -2736,6 +2793,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         import numpy as np
         import wgpu
         pick_started = time.perf_counter()
+        self._begin_uniform_frame()
 
         scene = scene if scene is not None else self._active_scene
         camera = camera if camera is not None else getattr(request, "camera", None) or self._active_camera
@@ -2827,7 +2885,6 @@ class WgpuRenderer(NullDiagnosticRenderer):
         )
         mvp = self._camera_mvp_matrix(camera, width, height)
         render_pass.set_pipeline(self.pipeline_pick)
-        render_pass.set_bind_group(0, self.line_bind_group)
         drawn = 0
         for pick_id, mesh_data in mesh_rows:
             try:
@@ -2835,7 +2892,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 if resource is None:
                     continue
                 color = self._pick_id_to_color(pick_id)
-                self.queue.write_buffer(self.line_uniform_buffer, 0, self._line_uniform_bytes(mvp, color, target_color=False))
+                self._set_line_uniform(render_pass, mvp, color, target_color=False)
                 render_pass.set_vertex_buffer(0, resource.vertex_buffer)
                 if resource.index_buffer is not None and resource.index_count > 0:
                     render_pass.set_index_buffer(resource.index_buffer, wgpu.IndexFormat.uint32)
@@ -2953,11 +3010,71 @@ class WgpuRenderer(NullDiagnosticRenderer):
 
             pos = np.asarray(mesh_data.positions, dtype=np.float32)
             center = pos.mean(axis=0)
-            eye_attr = getattr(camera, "eye", (0.0, 5.0, 3.0)) if camera is not None else (0.0, 5.0, 3.0)
-            eye = np.asarray(tuple(eye_attr() if callable(eye_attr) else eye_attr), dtype=np.float32)
-            return float(np.linalg.norm(center - eye))
+            return self._mesh_sort_depth_from_center(center, camera)
         except Exception:
             return 0.0
+
+    def _mesh_sort_center(self, mesh_data):
+        try:
+            import numpy as np
+
+            cached = getattr(mesh_data, "_wgpu_sort_center", None)
+            if cached is not None:
+                return cached
+            pos = np.asarray(mesh_data.positions, dtype=np.float32)
+            center = pos.mean(axis=0)
+            try:
+                setattr(mesh_data, "_wgpu_sort_center", center)
+            except Exception:
+                pass
+            return center
+        except Exception:
+            return (0.0, 0.0, 0.0)
+
+    @staticmethod
+    def _mesh_sort_depth_from_center(center, camera) -> float:
+        try:
+            import numpy as np
+
+            eye_attr = getattr(camera, "eye", (0.0, 5.0, 3.0)) if camera is not None else (0.0, 5.0, 3.0)
+            eye = np.asarray(tuple(eye_attr() if callable(eye_attr) else eye_attr), dtype=np.float32)
+            return float(np.linalg.norm(np.asarray(center, dtype=np.float32) - eye))
+        except Exception:
+            return 0.0
+
+    def _render_queue_revision_key(
+        self,
+        display_options: ViewportDisplayOptions,
+        *,
+        force_untextured: bool,
+        force_no_lightmaps: bool,
+    ) -> tuple:
+        anim_pose = self._active_anim_pose
+        anim_time = 0.0
+        try:
+            anim_time = round(float(getattr(anim_pose, "time", 0.0) or 0.0), 5)
+        except Exception:
+            anim_time = 0.0
+        texture_key = tuple(
+            sorted((str(key), id(value)) for key, value in (self._active_textures or {}).items())
+        )
+        return (
+            id(self._active_scene),
+            id(anim_pose),
+            anim_time,
+            id(self._active_anim_base_pose),
+            texture_key,
+            str(getattr(display_options.display_mode, "value", display_options.display_mode)),
+            bool(display_options.show_alpha),
+            bool(display_options.show_textures),
+            bool(display_options.show_lightmaps),
+            bool(display_options.force_flat_colour),
+            bool(display_options.force_unlit),
+            bool(force_untextured),
+            bool(force_no_lightmaps),
+            bool(getattr(self, "disable_alpha_blend", False)),
+            bool(getattr(self, "cull_faces", False)),
+        )
 
     def _mesh_data_outside_frustum(self, mesh_data, frustum_planes) -> bool:
         try:
@@ -3095,77 +3212,108 @@ class WgpuRenderer(NullDiagnosticRenderer):
 
     def _set_mesh_uniform(self, render_pass, uniform: bytes) -> None:
         try:
-            import numpy as np
-            import wgpu
-
-            if (
-                self.device is None
-                or self.mesh_bind_group_layout is None
-                or self.light_buffer is None
-                or self.lighting_uniform_buffer is None
-            ):
-                raise RuntimeError("mesh uniform layout unavailable")
-            buffer = self.device.create_buffer_with_data(
-                data=np.frombuffer(uniform, dtype=np.uint8),
-                usage=wgpu.BufferUsage.UNIFORM,
-            )
-            bind_group = self.device.create_bind_group(
-                layout=self.mesh_bind_group_layout,
-                entries=[
-                    {
-                        "binding": 0,
-                        "resource": {"buffer": buffer, "offset": 0, "size": 112},
-                    },
-                    {
-                        "binding": 1,
-                        "resource": {"buffer": self.light_buffer, "offset": 0, "size": int(self.max_wgpu_lights) * 64},
-                    },
-                    {
-                        "binding": 2,
-                        "resource": {"buffer": self.lighting_uniform_buffer, "offset": 0, "size": 32},
-                    },
-                ],
-            )
-            self._frame_mesh_uniform_refs.append((buffer, bind_group))
-            render_pass.set_bind_group(0, bind_group)
+            offset = self._write_mesh_uniform(uniform)
+            render_pass.set_bind_group(0, self.mesh_bind_group, [offset])
         except Exception:
             self.queue.write_buffer(self.mesh_uniform_buffer, 0, uniform)
-            render_pass.set_bind_group(0, self.mesh_bind_group)
+            render_pass.set_bind_group(0, self.mesh_bind_group, [0])
 
     def _set_line_uniform(self, render_pass, mvp, color: tuple[float, float, float, float], *, target_color: bool = True) -> None:
         uniform = self._line_uniform_bytes(mvp, color, target_color=target_color)
         try:
-            import numpy as np
-            import wgpu
-
-            if self.device is None or self.line_bind_group_layout is None:
-                raise RuntimeError("line uniform layout unavailable")
-            buffer = self.device.create_buffer_with_data(
-                data=np.frombuffer(uniform, dtype=np.uint8),
-                usage=wgpu.BufferUsage.UNIFORM,
-            )
-            bind_group = self.device.create_bind_group(
-                layout=self.line_bind_group_layout,
-                entries=[
-                    {
-                        "binding": 0,
-                        "resource": {"buffer": buffer, "offset": 0, "size": 80},
-                    }
-                ],
-            )
-            self._frame_line_uniform_refs.append((buffer, bind_group))
-            render_pass.set_bind_group(0, bind_group)
+            offset = self._write_line_uniform(uniform)
+            render_pass.set_bind_group(0, self.line_bind_group, [offset])
         except Exception:
             self.queue.write_buffer(self.line_uniform_buffer, 0, uniform)
-            render_pass.set_bind_group(0, self.line_bind_group)
+            render_pass.set_bind_group(0, self.line_bind_group, [0])
+
+    def _begin_uniform_frame(self) -> None:
+        self._mesh_uniform_cursor = 0
+        self._line_uniform_cursor = 0
+        self._frame_line_uniform_refs = []
+        self._frame_mesh_uniform_refs = []
+
+    def _write_mesh_uniform(self, uniform: bytes) -> int:
+        slot = int(self._mesh_uniform_cursor)
+        self._ensure_mesh_uniform_slots(slot + 1)
+        offset = slot * self._mesh_uniform_stride
+        self.queue.write_buffer(self.mesh_uniform_buffer, offset, uniform)
+        self._mesh_uniform_cursor = slot + 1
+        return offset
+
+    def _write_line_uniform(self, uniform: bytes) -> int:
+        slot = int(self._line_uniform_cursor)
+        self._ensure_line_uniform_slots(slot + 1)
+        offset = slot * self._line_uniform_stride
+        self.queue.write_buffer(self.line_uniform_buffer, offset, uniform)
+        self._line_uniform_cursor = slot + 1
+        return offset
+
+    def _ensure_mesh_uniform_slots(self, required_slots: int) -> None:
+        if self.device is None or self.mesh_bind_group_layout is None:
+            raise RuntimeError("mesh uniform layout unavailable")
+        if self.mesh_uniform_buffer is not None and int(self._mesh_uniform_capacity) >= int(required_slots):
+            return
+        import wgpu
+
+        old = (self.mesh_uniform_buffer, self.mesh_bind_group)
+        capacity = max(256, int(self._mesh_uniform_capacity or 0))
+        while capacity < int(required_slots):
+            capacity *= 2
+        self.mesh_uniform_buffer = self.device.create_buffer(
+            size=self._mesh_uniform_stride * capacity,
+            usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST,
+        )
+        self.mesh_bind_group = self.device.create_bind_group(
+            layout=self.mesh_bind_group_layout,
+            entries=[
+                {"binding": 0, "resource": {"buffer": self.mesh_uniform_buffer, "offset": 0, "size": 112}},
+                {"binding": 1, "resource": {"buffer": self.light_buffer, "offset": 0, "size": int(self.max_wgpu_lights) * 64}},
+                {"binding": 2, "resource": {"buffer": self.lighting_uniform_buffer, "offset": 0, "size": 32}},
+            ],
+        )
+        self._mesh_uniform_capacity = capacity
+        self.resource_cache.bind_group_creation_count += 1
+        if old[0] is not None and old[1] is not None:
+            self._frame_mesh_uniform_refs.append(old)
+
+    def _ensure_line_uniform_slots(self, required_slots: int) -> None:
+        if self.device is None or self.line_bind_group_layout is None:
+            raise RuntimeError("line uniform layout unavailable")
+        if self.line_uniform_buffer is not None and int(self._line_uniform_capacity) >= int(required_slots):
+            return
+        import wgpu
+
+        old = (self.line_uniform_buffer, self.line_bind_group)
+        capacity = max(256, int(self._line_uniform_capacity or 0))
+        while capacity < int(required_slots):
+            capacity *= 2
+        self.line_uniform_buffer = self.device.create_buffer(
+            size=self._line_uniform_stride * capacity,
+            usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST,
+        )
+        self.line_bind_group = self.device.create_bind_group(
+            layout=self.line_bind_group_layout,
+            entries=[{"binding": 0, "resource": {"buffer": self.line_uniform_buffer, "offset": 0, "size": 80}}],
+        )
+        self._line_uniform_capacity = capacity
+        self.resource_cache.bind_group_creation_count += 1
+        if old[0] is not None and old[1] is not None:
+            self._frame_line_uniform_refs.append(old)
 
     def render(self, scene, camera, W: int, H: int, *args, **kwargs):
         if W <= 0 or H <= 0:
             return None
         t0 = time.perf_counter()
         self.profiler.begin_frame()
-        self._frame_line_uniform_refs = []
-        self._frame_mesh_uniform_refs = []
+        counter_start = (
+            int(self.resource_cache.mesh_upload_count),
+            int(self.resource_cache.texture_upload_count),
+            int(self.resource_cache.buffer_upload_count),
+            int(self.resource_cache.bind_group_creation_count),
+        )
+        self._last_readback_skipped = False
+        self._begin_uniform_frame()
         try:
             from PIL import Image
 
@@ -3204,11 +3352,24 @@ class WgpuRenderer(NullDiagnosticRenderer):
             self.resize(int(W), int(H), 1.0)
             self.canvas.request_draw(self._draw_to_canvas)
             self.canvas.force_draw()
+            if bool(getattr(self, "live_surface", False)):
+                img = Image.new("RGBA", (int(W), int(H)), (0, 0, 0, 0))
+                self._last_readback_skipped = True
+                self.perf["last_frame_ms"] = (time.perf_counter() - t0) * 1000.0
+                self.perf["backend"] = self.backend_id
+                self._record_frame_resource_deltas(counter_start)
+                self._finalize_profiler_frame()
+                self.last_error = ""
+                if not self._clear_logged:
+                    log.info("WgpuRenderer: live surface render pass OK; CPU readback skipped")
+                    self._clear_logged = True
+                return img
             payload = getattr(self.canvas, "_last_image", None)
             if not payload:
                 img = Image.new("RGBA", (int(W), int(H)), (0, 0, 0, 0))
                 self.perf["last_frame_ms"] = (time.perf_counter() - t0) * 1000.0
                 self.perf["backend"] = self.backend_id
+                self._record_frame_resource_deltas(counter_start)
                 self._finalize_profiler_frame()
                 self.last_error = ""
                 if not self._clear_logged:
@@ -3221,6 +3382,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 img = img.convert("RGBA")
             self.perf["last_frame_ms"] = (time.perf_counter() - t0) * 1000.0
             self.perf["backend"] = self.backend_id
+            self._record_frame_resource_deltas(counter_start)
             self._finalize_profiler_frame()
             if not self._clear_logged:
                 log.info("WgpuRenderer: clear/grid pass OK")
@@ -3229,6 +3391,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             return img.copy()
         except Exception as exc:
             self.last_error = str(exc)
+            self._record_frame_resource_deltas(counter_start)
             self._finalize_profiler_frame()
             log.info("WgpuRenderer: render failed: %s", exc)
             return None
@@ -3239,6 +3402,12 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.profiler.set("buffer_upload_count", self.resource_cache.buffer_upload_count)
         self.profiler.set("texture_upload_count", self.resource_cache.texture_upload_count)
         self.profiler.set("bind_group_creation_count", self.resource_cache.bind_group_creation_count)
+        self.profiler.set("mesh_uploads_this_frame", self._last_mesh_uploads_this_frame)
+        self.profiler.set("texture_uploads_this_frame", self._last_texture_uploads_this_frame)
+        self.profiler.set("buffer_uploads_this_frame", self._last_buffer_uploads_this_frame)
+        self.profiler.set("bind_groups_this_frame", self._last_bind_groups_this_frame)
+        self.profiler.set("queue_rebuilt", bool(self._last_queue_rebuilt))
+        self.profiler.set("readback_skipped", bool(self._last_readback_skipped))
         self.profiler.set("pending_uploads", self._pending_uploads_count)
         self.profiler.set("cache_hits", self.resource_cache.cache_hits)
         self.profiler.set("cache_misses", self.resource_cache.cache_misses)
@@ -3246,6 +3415,12 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.profiler.set("estimated_vertex_index_memory_bytes", vertex_index_bytes)
         self.profiler.set("estimated_gpu_memory_bytes", texture_bytes + vertex_index_bytes)
         self.profiler.end_frame(fallback_frame_ms=float(self.perf.get("last_frame_ms", 0.0) or 0.0))
+
+    def _record_frame_resource_deltas(self, start: tuple[int, int, int, int]) -> None:
+        self._last_mesh_uploads_this_frame = max(0, int(self.resource_cache.mesh_upload_count) - int(start[0]))
+        self._last_texture_uploads_this_frame = max(0, int(self.resource_cache.texture_upload_count) - int(start[1]))
+        self._last_buffer_uploads_this_frame = max(0, int(self.resource_cache.buffer_upload_count) - int(start[2]))
+        self._last_bind_groups_this_frame = max(0, int(self.resource_cache.bind_group_creation_count) - int(start[3]))
 
     def render_overlay(self, overlay_context) -> None:
         return None
@@ -3303,9 +3478,11 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.initialized = False
         self.live_surface = False
         self.resource_cache.invalidate_all("renderer shutdown")
+        self._render_queue_cache.invalidate("renderer shutdown")
 
     def clear_caches(self) -> None:
         self.resource_cache.invalidate_all("manual cache clear")
+        self._render_queue_cache.invalidate("manual cache clear")
         self._gizmo_line_cache.clear()
 
     def invalidate_lighting(self, reason: str = "lighting changed") -> None:
@@ -3316,15 +3493,18 @@ class WgpuRenderer(NullDiagnosticRenderer):
     def invalidate_node(self, node) -> None:
         if node is not None:
             self.resource_cache.release_mesh(id(node))
+            self._render_queue_cache.invalidate(f"node invalidated: {getattr(node, 'name', id(node))}")
 
     def invalidate_node_cache(self) -> None:
         self.resource_cache.invalidate_all("node cache invalidated")
+        self._render_queue_cache.invalidate("node cache invalidated")
         self.light_resource = None
         self._light_resource_revision_key = 0
         self._gizmo_line_cache.clear()
 
     def invalidate_all(self) -> None:
         self.resource_cache.invalidate_all("renderer invalidate_all")
+        self._render_queue_cache.invalidate("renderer invalidate_all")
         self.light_resource = None
         self._light_resource_revision_key = 0
         self._gizmo_line_cache.clear()
@@ -3460,7 +3640,11 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 "enable_lazy_upload": bool(self.enable_lazy_upload),
                 "enable_texture_arrays": bool(self.enable_texture_arrays),
                 "enable_texture_atlas": bool(self.enable_texture_atlas),
+                "pick_on_demand_only": bool(self.pick_on_demand_only),
+                "cache_render_queue": bool(self.cache_render_queue),
+                "cache_draw_items": bool(self.cache_draw_items),
                 "profile_frames": bool(self.profiler.enabled),
+                "profile_gpu_frames": False,
                 "dynamic_quality": bool(self.enable_dynamic_quality),
                 "max_texture_memory_mb": int(self.max_texture_memory_mb),
                 "max_uploads_per_frame": int(self.max_uploads_per_frame),
@@ -3583,7 +3767,14 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "texture_upload_count": self.resource_cache.texture_upload_count,
             "buffer_upload_count": self.resource_cache.buffer_upload_count,
             "bind_group_creation_count": self.resource_cache.bind_group_creation_count,
+            "mesh_uploads_this_frame": int(self._last_mesh_uploads_this_frame),
+            "texture_uploads_this_frame": int(self._last_texture_uploads_this_frame),
+            "buffer_uploads_this_frame": int(self._last_buffer_uploads_this_frame),
+            "bind_groups_this_frame": int(self._last_bind_groups_this_frame),
             "last_cache_invalidation_reason": self.resource_cache.last_invalidation_reason,
+            "render_queue_cache": self._render_queue_cache.diagnostics(),
+            "queue_rebuilt_this_frame": bool(self._last_queue_rebuilt),
+            "last_queue_rebuild_reason": self._last_queue_rebuild_reason,
             "total_mesh_count": int(self._active_total_mesh_count),
             "visible_mesh_count": int(self._active_visible_mesh_count),
             "culled_mesh_count": int(self._active_culled_mesh_count),
@@ -3605,6 +3796,12 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "frustum_culling_status": "enabled" if self.enable_frustum_culling else "disabled",
             "lazy_upload_status": "visible resources uploaded on first draw; hidden/off-frustum resources deferred",
             "gizmo_buffer_cache_size": len(self._gizmo_line_cache),
+            "uniform_buffer_mode": "dynamic-offset frame ring",
+            "mesh_uniform_slots_used": int(self._mesh_uniform_cursor),
+            "line_uniform_slots_used": int(self._line_uniform_cursor),
+            "readback_skipped": bool(self._last_readback_skipped),
+            "frame_governor": dict(getattr(self, "viewport_frame_governor_diagnostics", {}) or {}),
+            "overlay": dict(getattr(self, "viewport_overlay_diagnostics", {}) or {}),
             "pick_resource_size": (self._pick_resources.width, self._pick_resources.height) if self._pick_resources is not None else (0, 0),
             "alpha_material_count": sum(
                 1 for item in self.resource_cache.materials.values() if item.alpha_mode in {"MASK", "CUTOUT", "BLEND"}

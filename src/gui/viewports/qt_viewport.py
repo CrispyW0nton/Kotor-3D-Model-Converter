@@ -23,6 +23,7 @@ from src.gui.qt_lib.rendering.qt_gpu_renderer import (
     create_viewport_renderer,
 )
 from src.gui.qt_lib.rendering.renderer_backend import normalize_renderer_backend, renderer_backend_label
+from src.gui.qt_lib.rendering.renderer_performance import ViewportFrameGovernor
 from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.rendering.picking import CpuMeshPickingProvider, PickRequest, ray_triangle_intersection
 from src.gui.qt_lib.rendering.viewport_display import (
@@ -649,6 +650,10 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._uv_viewer: Optional[QtUVViewerWindow] = None
         self._use_gpu = True
         self._renderer_settings = RendererSettings()
+        self._frame_governor = ViewportFrameGovernor(
+            self._renderer_settings.target_fps,
+            idle_mode=self._renderer_settings.idle_render_mode,
+        )
         self._gpu_renderer: Optional[object] = None
         self._owns_gpu_renderer = True
         self._gpu_tex_preload_model_id = 0
@@ -711,6 +716,14 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._fps_last_wall = time_module.perf_counter()
         self._fps_display = 0.0
         self._fast_frame_until = 0.0
+        self._last_performance_overlay_label = ""
+        self._last_performance_overlay_update_wall = 0.0
+        self._overlay_rebuild_count = 0
+        self._overlay_rebuild_rate_hz = 0.0
+        self._overlay_rebuild_window_started = time_module.perf_counter()
+        self._gpu_texture_snapshot_key = None
+        self._gpu_texture_snapshot_cache: dict = {}
+        self._gpu_texture_snapshot_rebuilds = 0
 
         self._render_timer = QtCore.QTimer(self)
         self._render_timer.setSingleShot(True)
@@ -2056,9 +2069,17 @@ class QtViewportWidget(QtWidgets.QWidget):
                 allow_fallback=bool(getattr(settings, "allow_fallback", True)),
                 show_renderer_diagnostics=bool(getattr(settings, "show_renderer_diagnostics", True)),
                 force_safe_mode=bool(getattr(settings, "force_safe_mode", False)),
+                target_fps=int(getattr(settings, "target_fps", 60) or 60),
+                idle_render_mode=str(getattr(settings, "idle_render_mode", "dirty_only") or "dirty_only"),
+                throttle_diagnostics=bool(getattr(settings, "throttle_diagnostics", True)),
+                diagnostics_hz=float(getattr(settings, "diagnostics_hz", 2.0) or 2.0),
+                overlay_dirty_rendering=bool(getattr(settings, "overlay_dirty_rendering", True)),
             )
         else:
             self._renderer_settings = RendererSettings.from_settings(settings or {})
+        if hasattr(self, "_frame_governor"):
+            self._frame_governor.set_target_fps(self._renderer_settings.target_fps)
+            self._frame_governor.set_idle_mode(self._renderer_settings.idle_render_mode)
         if self._gpu_renderer is not None and self._owns_gpu_renderer:
             apply_settings = getattr(self._gpu_renderer, "set_settings", None)
             if callable(apply_settings):
@@ -4354,10 +4375,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._snap_key_down = False
                 return False
             if et == QtCore.QEvent.Leave:
-                if self._hovered_mesh_node is not None:
-                    self._hovered_mesh_node = None
-                    self._hovered_mesh_face_bounds = None
-                    self._request_render(fast=True)
+                self._clear_mesh_hover(reason="viewport leave")
                 return False
             if et == QtCore.QEvent.MouseButtonPress:
                 self.canvas.setFocus()
@@ -4402,11 +4420,12 @@ class QtViewportWidget(QtWidgets.QWidget):
                 if self.is_camera_view_active() and not self._lock_view_to_camera:
                     return True
                 steps = event.angleDelta().y() / 120.0
+                hover_cleared = self._clear_mesh_hover(request=False)
                 self.camera.zoom(steps)
                 if self.is_camera_view_active() and self._lock_view_to_camera:
                     self.update_camera_from_view()
                 self._renderer.is_interactive = False
-                self._request_render()
+                self._request_render(reason="camera zoom", camera=True, overlay=True, selection=hover_cleared)
                 return True
             if et == QtCore.QEvent.KeyPress:
                 key = event.key()
@@ -4561,6 +4580,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._mx = int(event.position().x())
         self._my = int(event.position().y())
         self._renderer._hovered_bone = None
+        self._clear_mesh_hover(reason=f"camera {action} started")
+        self._frame_governor.begin_interaction(f"camera {action}")
 
     def _drag_navigation(self, event) -> None:
         x, y = int(event.position().x()), int(event.position().y())
@@ -4575,14 +4596,15 @@ class QtViewportWidget(QtWidgets.QWidget):
         if self.is_camera_view_active() and self._lock_view_to_camera:
             self.update_camera_from_view()
         self._renderer.is_interactive = self._fast_drag_enabled
-        self._request_render(fast=True)
+        self._request_render(fast=True, reason=f"camera {self._nav_dragging}", camera=True, overlay=True)
 
     def _release_navigation(self, _event) -> None:
         self._nav_dragging = ""
         self._nav_button = QtCore.Qt.NoButton
         self._renderer.is_interactive = False
         self._fast_frame_until = 0.0
-        self._request_render()
+        self._frame_governor.end_interaction("camera interaction ended")
+        self._request_render(reason="camera interaction ended", camera=True, overlay=True)
 
     def _handle_view_key(self, event) -> bool:
         key = event.key()
@@ -4841,6 +4863,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._snap_anim_from = (from_az, from_el)
         self._snap_anim_to = (from_az + delta_az, to_el)
         self._snap_anim_t0 = time_module.perf_counter()
+        self._frame_governor.set_animation_playing(True, "viewcube snap animation")
         if not self._snap_anim_timer.isActive():
             self._snap_anim_timer.start()
 
@@ -4856,7 +4879,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._renderer.is_interactive = self._fast_drag_enabled
         if hasattr(self, "_viewcube_widget") and self._viewcube_widget is not None:
             self._viewcube_widget.update()
-        self._request_render(fast=True)
+        self._request_render(fast=True, reason="viewcube orbit", camera=True, overlay=True)
 
     def get_orientation_quaternion(self) -> tuple[float, float, float, float]:
         return view_orientation_quaternion(self.camera.azimuth, self.camera.elevation)
@@ -4908,6 +4931,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._snap_anim_from = (from_az, from_el)
         self._snap_anim_to = (to_az_resolved, to_el)
         self._snap_anim_t0 = time_module.perf_counter()
+        self._frame_governor.set_animation_playing(True, "snap view animation")
         if not self._snap_anim_timer.isActive():
             self._snap_anim_timer.start()
 
@@ -4927,6 +4951,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.camera.elevation = from_el + (to_el - from_el) * ease
         if t >= 1.0:
             self._snap_anim_timer.stop()
+            self._frame_governor.set_animation_playing(False)
             # Snap to exact target to defeat float drift.
             self.camera.azimuth   = to_az % 360.0
             self.camera.elevation = to_el
@@ -4986,19 +5011,24 @@ class QtViewportWidget(QtWidgets.QWidget):
     def ortho_mode(self) -> bool:
         return self._ortho_mode
 
-    def _request_render(self, fast: bool = False) -> None:
-        if hasattr(self, "_viewcube_widget") and self._viewcube_widget is not None:
+    def _request_render(self, fast: bool = False, reason: str = "viewport change", **dirty_flags: bool) -> None:
+        if hasattr(self, "_viewcube_widget") and self._viewcube_widget is not None and (fast or dirty_flags.get("camera")):
             self._viewcube_widget.update()
         self._render_pending = True
         now = time_module.perf_counter()
-        min_interval_ms = 33 if self._dual_viewport_mode else 16
+        governor = getattr(self, "_frame_governor", None)
+        if governor is not None:
+            governor.request_redraw(reason, **(dirty_flags or {"scene": True}))
+        min_interval_ms = max(1, int(round(1000.0 / max(1, int(getattr(self._renderer_settings, "target_fps", 60) or 60)))))
+        if getattr(self, "_dual_viewport_mode", False):
+            min_interval_ms = max(min_interval_ms, 33)
         if fast:
             self._fast_frame_until = max(self._fast_frame_until, now + 0.08)
             elapsed_ms = (now - self._last_render_wall) * 1000.0 if self._last_render_wall else min_interval_ms
             delay = max(1, int(min_interval_ms - elapsed_ms))
         else:
             elapsed_ms = (now - self._last_render_wall) * 1000.0 if self._last_render_wall else min_interval_ms
-            delay = max(16, int(min_interval_ms - elapsed_ms))
+            delay = max(min_interval_ms, int(min_interval_ms - elapsed_ms))
         if self._render_timer.isActive():
             delay = min(delay, max(1, self._render_timer.remainingTime()))
         self._render_timer.start(delay)
@@ -5043,10 +5073,17 @@ class QtViewportWidget(QtWidgets.QWidget):
     def _render_now(self) -> None:
         if not self._render_pending:
             return
+        now = time_module.perf_counter()
+        governor = getattr(self, "_frame_governor", None)
+        if governor is not None and not governor.should_render_now(now):
+            if self._render_pending and (governor.dirty or governor.active_interaction or governor.animation_playing):
+                self._render_timer.start(governor.delay_until_next_frame_ms(now))
+            return
         self._render_pending = False
         w = max(8, self.canvas.width())
         h = max(8, self.canvas.height())
         t0 = time_module.perf_counter()
+        render_reason = str(getattr(governor, "pending_reason", "") or "viewport render")
         try:
             img = self._render_frame(w, h)
         except Exception as exc:
@@ -5054,6 +5091,8 @@ class QtViewportWidget(QtWidgets.QWidget):
             img = None
         self._last_render_ms = (time_module.perf_counter() - t0) * 1000.0
         self._last_render_wall = time_module.perf_counter()
+        if governor is not None:
+            governor.mark_clean_after_render(render_reason, self._last_render_wall)
         if img is None:
             if self.model is None:
                 self.canvas.setText("GPU render unavailable\nEmpty Scene")
@@ -5120,23 +5159,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         else:
             self._sync_renderer_surface()
         self._preload_gpu_textures()
-        tex_cache = getattr(self._renderer, "tex_cache", None)
-        textures = {
-            key: value
-            for key, value in getattr(tex_cache, "_cache", {}).items()
-            if value is not None
-        }
-        try:
-            from PIL import Image
-
-            nodes = self.model.all_nodes() if hasattr(self.model, "all_nodes") else []
-            for node in nodes:
-                override_path = str(getattr(node, "_gr_baked_lightmap_preview_path", "") or getattr(node, "_gr_baked_lightmap_path", "") or "")
-                override_name = str(getattr(node, "_gr_baked_lightmap_preview_name", "") or "")
-                if override_path and override_name and os.path.isfile(override_path):
-                    textures[override_name.lower()] = Image.open(override_path).convert("RGBA")
-        except Exception:
-            pass
+        textures = self._gpu_texture_snapshot()
         self._gpu_renderer.interactive = bool(
             self._renderer.is_interactive
             or self._pan_dragging
@@ -5212,6 +5235,11 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._gpu_renderer.surface_host_diagnostics = self.canvas.diagnostics()
         except Exception:
             pass
+        try:
+            self._gpu_renderer.viewport_frame_governor_diagnostics = self._frame_governor.diagnostics()
+            self._gpu_renderer.viewport_overlay_diagnostics = self._overlay_diagnostics()
+        except Exception:
+            pass
         img = self._gpu_renderer.render(
             self.model,
             self.camera,
@@ -5282,6 +5310,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         """
         if img is None:
             return None
+        overlay_started = time_module.perf_counter()
         try:
             from PIL import ImageDraw
 
@@ -5325,10 +5354,30 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._renderer._draw_axes(draw, w, h)
             self._renderer._draw_stats(draw, w, h)
             self._draw_active_camera_overlays(draw, w, h)
+            self._record_overlay_rebuild(time_module.perf_counter() - overlay_started)
             return img
         except Exception as exc:
             log.debug("Qt GPU overlay draw failed: %s", exc)
             return img
+
+    def _record_overlay_rebuild(self, elapsed_s: float = 0.0) -> None:
+        self._overlay_rebuild_count += 1
+        now = time_module.perf_counter()
+        window = max(1.0e-6, now - float(getattr(self, "_overlay_rebuild_window_started", now)))
+        if window >= 1.0:
+            self._overlay_rebuild_rate_hz = self._overlay_rebuild_count / window
+            self._overlay_rebuild_count = 0
+            self._overlay_rebuild_window_started = now
+        self._last_overlay_rebuild_ms = float(elapsed_s) * 1000.0
+
+    def _overlay_diagnostics(self) -> dict[str, object]:
+        return {
+            "dirty_rendering": bool(getattr(self._renderer_settings, "overlay_dirty_rendering", True)),
+            "rebuild_rate_hz": round(float(getattr(self, "_overlay_rebuild_rate_hz", 0.0)), 2),
+            "last_rebuild_ms": round(float(getattr(self, "_last_overlay_rebuild_ms", 0.0)), 3),
+            "texture_snapshot_rebuilds": int(getattr(self, "_gpu_texture_snapshot_rebuilds", 0)),
+            "live_overlay_layer": bool(self.canvas.is_live_surface()) if hasattr(self, "canvas") else False,
+        }
 
     def _draw_cpu_overlays(self, img, w: int, h: int, *, gpu_base: bool = False):
         return self._draw_gpu_viewport_overlays(img, w, h)
@@ -5963,51 +6012,6 @@ class QtViewportWidget(QtWidgets.QWidget):
     def joint_dot_opacity(self) -> float:
         return self._joint_dot_opacity
 
-    def _request_render(self, fast: bool = False) -> None:
-        """Best-effort viewport refresh used by joint-dot setters.
-
-        Reuses the existing render-coalescing timer when available; falls
-        back to a direct ``update()`` so the overlay reflects state
-        changes immediately even on minimal viewports.
-        """
-        if hasattr(self, "_viewcube_widget") and self._viewcube_widget is not None:
-            self._viewcube_widget.update()
-        try:
-            if (
-                hasattr(self, "_render_timer")
-                and self._render_timer is not None
-                and hasattr(self, "_last_render_wall")
-            ):
-                self._render_pending = True
-                now = time_module.perf_counter()
-                min_interval_ms = 33 if getattr(self, "_dual_viewport_mode", False) else 16
-                if fast:
-                    self._fast_frame_until = max(
-                        getattr(self, "_fast_frame_until", 0.0),
-                        now + 0.08,
-                    )
-                    elapsed_ms = (
-                        (now - self._last_render_wall) * 1000.0
-                        if self._last_render_wall else min_interval_ms
-                    )
-                    delay = max(1, int(min_interval_ms - elapsed_ms))
-                else:
-                    elapsed_ms = (
-                        (now - self._last_render_wall) * 1000.0
-                        if self._last_render_wall else min_interval_ms
-                    )
-                    delay = max(16, int(min_interval_ms - elapsed_ms))
-                if self._render_timer.isActive():
-                    delay = min(delay, max(1, self._render_timer.remainingTime()))
-                self._render_timer.start(delay)
-                return
-        except Exception:
-            pass
-        try:
-            self.update()
-        except Exception:
-            pass
-
     def _update_fps(self) -> None:
         now = time_module.perf_counter()
         delta = max(0.0, now - self._fps_last_wall)
@@ -6030,7 +6034,16 @@ class QtViewportWidget(QtWidgets.QWidget):
             if fps <= 0.0 and self._last_render_ms > 0.0:
                 fps = 1000.0 / max(self._last_render_ms, 1.0)
             mode = "fast" if time_module.perf_counter() < self._fast_frame_until else "hq"
-            label = f"{fps:4.0f} fps  {self._last_render_ms:4.0f} ms  {mode}"
+            now = time_module.perf_counter()
+            hz = max(0.1, float(getattr(self._renderer_settings, "diagnostics_hz", 2.0) or 2.0))
+            if (
+                not getattr(self._renderer_settings, "throttle_diagnostics", True)
+                or now - float(getattr(self, "_last_performance_overlay_update_wall", 0.0)) >= (1.0 / hz)
+                or not getattr(self, "_last_performance_overlay_label", "")
+            ):
+                self._last_performance_overlay_label = f"{fps:4.0f} fps  {self._last_render_ms:4.0f} ms  {mode}"
+                self._last_performance_overlay_update_wall = now
+            label = self._last_performance_overlay_label
             text_w = self._renderer._hud_text_width(label) if hasattr(self._renderer, "_hud_text_width") else len(label) * 7
             x = max(8, w - text_w - 20)
             y = max(8, h - 50)
@@ -6058,6 +6071,41 @@ class QtViewportWidget(QtWidgets.QWidget):
         # uploads whatever is already resident. Missing textures render with the
         # GPU fallback material until the background pass emits a refresh.
         self._gpu_tex_preload_model_id = id(model)
+
+    def _gpu_texture_snapshot(self) -> dict:
+        tex_cache = getattr(self._renderer, "tex_cache", None)
+        cache = getattr(tex_cache, "_cache", {}) if tex_cache is not None else {}
+        live_items = tuple(sorted((str(key), id(value)) for key, value in cache.items() if value is not None))
+        baked_items: list[tuple[str, str, float]] = []
+        try:
+            nodes = self.model.all_nodes() if hasattr(self.model, "all_nodes") else []
+            for node in nodes:
+                override_path = str(getattr(node, "_gr_baked_lightmap_preview_path", "") or getattr(node, "_gr_baked_lightmap_path", "") or "")
+                override_name = str(getattr(node, "_gr_baked_lightmap_preview_name", "") or "")
+                if override_path and override_name and os.path.isfile(override_path):
+                    try:
+                        mtime = os.path.getmtime(override_path)
+                    except OSError:
+                        mtime = 0.0
+                    baked_items.append((override_name.lower(), override_path, float(mtime)))
+        except Exception:
+            baked_items = []
+        key = (live_items, tuple(sorted(baked_items)))
+        if key == self._gpu_texture_snapshot_key:
+            return self._gpu_texture_snapshot_cache
+        textures = {key: value for key, value in cache.items() if value is not None}
+        if baked_items:
+            try:
+                from PIL import Image
+
+                for override_name, override_path, _mtime in baked_items:
+                    textures[override_name] = Image.open(override_path).convert("RGBA")
+            except Exception:
+                pass
+        self._gpu_texture_snapshot_key = key
+        self._gpu_texture_snapshot_cache = textures
+        self._gpu_texture_snapshot_rebuilds += 1
+        return textures
 
     def _set_renderer_badge(self, gpu_active: bool) -> None:
         if not hasattr(self, "renderer_button"):
@@ -6645,20 +6693,27 @@ class QtViewportWidget(QtWidgets.QWidget):
         if handle != before:
             self._request_render(fast=True)
 
+    def _clear_mesh_hover(self, *, request: bool = True, reason: str = "mesh hover cleared") -> bool:
+        if self._hovered_mesh_node is None and self._hovered_mesh_face_bounds is None:
+            return False
+        self._hovered_mesh_node = None
+        self._hovered_mesh_face_bounds = None
+        try:
+            if self._gpu_renderer is not None:
+                self._gpu_renderer.hovered_node = None
+        except Exception:
+            pass
+        self.meshHovered.emit(None)
+        if request:
+            self._request_render(fast=True, reason=reason, overlay=True, selection=True)
+        return True
+
     def _update_mesh_hover(self, event) -> None:
         if not self.mesh_hover_enabled:
-            if self._hovered_mesh_node is not None:
-                self._hovered_mesh_node = None
-                self._hovered_mesh_face_bounds = None
-                self.meshHovered.emit(None)
-                self._request_render(fast=True)
+            self._clear_mesh_hover(reason="mesh hover disabled")
             return
         if self.model is None:
-            if self._hovered_mesh_node is not None:
-                self._hovered_mesh_node = None
-                self._hovered_mesh_face_bounds = None
-                self.meshHovered.emit(None)
-                self._request_render(fast=True)
+            self._clear_mesh_hover(reason="mesh hover model cleared")
             return
         if self._transform_gizmo.hovered_handle or self._measurement_mode:
             return
@@ -6671,7 +6726,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._hovered_mesh_node = node
         self._hovered_mesh_face_bounds = face_bounds
         self.meshHovered.emit(node)
-        self._request_render(fast=True)
+        self._request_render(fast=True, reason="mesh hover changed", overlay=True, selection=True)
 
     def _begin_transform_gizmo_drag(self, x: int, y: int) -> bool:
         node = self._active_gizmo_node()
@@ -6694,9 +6749,11 @@ class QtViewportWidget(QtWidgets.QWidget):
             return False
         self._transform_gizmo_dragging = True
         self._gimbal_dragging = False
+        self._clear_mesh_hover(reason="gizmo drag started")
         self._transform_gizmo.begin_drag(handle, (x, y), self.camera)
         self._renderer.is_interactive = True
-        self._request_render(fast=True)
+        self._frame_governor.begin_interaction("gizmo drag")
+        self._request_render(fast=True, reason="gizmo drag started", gizmo=True, overlay=True)
         return True
 
     def _cancel_transform_gizmo_drag(self) -> None:
@@ -6704,12 +6761,14 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._transform_gizmo_dragging = False
         self._renderer.is_interactive = False
         self._renderer._wt_cache.clear()
-        self._request_render()
+        self._frame_governor.end_interaction("gizmo drag cancelled")
+        self._request_render(reason="gizmo drag cancelled", gizmo=True, overlay=True)
 
     def _commit_transform_gizmo_drag(self) -> None:
         before, after, node = self._transform_gizmo.end_drag()
         self._transform_gizmo_dragging = False
         self._renderer.is_interactive = False
+        self._frame_governor.end_interaction("gizmo drag ended")
         self._renderer._wt_cache.clear()
         if node is not None and before is not None and after is not None:
             self._commit_node_transform(
@@ -6729,7 +6788,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 after_pivot_rotation=after.pivot_rotation,
             )
             self._notify_node_moved(node)
-        self._request_render()
+        self._request_render(reason="gizmo drag ended", gizmo=True, selection=True, overlay=True)
 
     def _press_lmb(self, event) -> None:
         x, y = int(event.position().x()), int(event.position().y())
@@ -6855,7 +6914,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             node = getattr(self._renderer, "selected_node", None)
             if node is not None:
                 self._notify_node_moved(node)
-            self._request_render(fast=True)
+            self._request_render(fast=True, reason="gizmo drag", gizmo=True, camera=True, overlay=True)
             return
         if self._gimbal_dragging and self._renderer.selected_node:
             if (

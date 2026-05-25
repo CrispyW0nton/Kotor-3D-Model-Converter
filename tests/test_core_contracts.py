@@ -1467,7 +1467,7 @@ def test_qt_mesh_hover_uses_cpu_pick_even_when_gpu_pick_is_available() -> None:
         _hovered_mesh_node=None,
         _hovered_mesh_face_bounds=None,
         meshHovered=SimpleNamespace(emit=lambda node: calls.append(("hover", node))),
-        _request_render=lambda fast=False: calls.append(("render", fast)),
+        _request_render=lambda fast=False, **kwargs: calls.append(("render", fast, kwargs)),
     )
 
     def pick_detail(x, y, *, allow_gpu=True):
@@ -1480,7 +1480,43 @@ def test_qt_mesh_hover_uses_cpu_pick_even_when_gpu_pick_is_available() -> None:
 
     assert ("pick", 42, 64, False) in calls
     assert viewport._hovered_mesh_node is hovered
-    assert calls[-1] == ("render", True)
+    assert calls[-1][0:2] == ("render", True)
+    assert calls[-1][2]["reason"] == "mesh hover changed"
+
+
+def test_qt_viewport_clears_mesh_hover_during_camera_navigation() -> None:
+    import inspect
+    from types import SimpleNamespace
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    source = inspect.getsource(QtViewportWidget._press_navigation)
+    wheel_source = inspect.getsource(QtViewportWidget.eventFilter)
+    hover_source = inspect.getsource(QtViewportWidget._update_mesh_hover)
+
+    assert "_clear_mesh_hover" in source
+    assert "_clear_mesh_hover(request=False)" in wheel_source
+    assert "mesh hover changed" in hover_source
+    assert "snap view animation" not in hover_source
+
+    calls = []
+    viewport = SimpleNamespace(
+        _hovered_mesh_node=object(),
+        _hovered_mesh_face_bounds=((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)),
+        _gpu_renderer=SimpleNamespace(hovered_node=object()),
+        meshHovered=SimpleNamespace(emit=lambda node: calls.append(("hover", node))),
+        _request_render=lambda fast=False, **kwargs: calls.append(("render", fast, kwargs)),
+    )
+
+    cleared = QtViewportWidget._clear_mesh_hover(viewport, reason="camera orbit started")
+
+    assert cleared is True
+    assert viewport._hovered_mesh_node is None
+    assert viewport._hovered_mesh_face_bounds is None
+    assert viewport._gpu_renderer.hovered_node is None
+    assert ("hover", None) in calls
+    assert calls[-1][0:2] == ("render", True)
+    assert calls[-1][2]["reason"] == "camera orbit started"
 
 
 def test_wgpu_light_volume_helpers_match_moderngl_editor_sizes() -> None:
@@ -1932,8 +1968,8 @@ def test_wgpu_mesh_draw_uses_per_draw_uniforms_for_selected_fill() -> None:
     uniform_source = inspect.getsource(WgpuRenderer._set_mesh_uniform)
 
     assert "self._set_mesh_uniform(render_pass, uniform)" in draw_source
-    assert "self._frame_mesh_uniform_refs = []" in render_source
-    assert "self._frame_mesh_uniform_refs.append((buffer, bind_group))" in uniform_source
+    assert "self._begin_uniform_frame()" in render_source
+    assert "render_pass.set_bind_group(0, self.mesh_bind_group, [offset])" in uniform_source
 
 
 def test_wgpu_mesh_hover_edges_are_translucent_and_isolated_from_selection_edges() -> None:
