@@ -46,9 +46,24 @@ class MeshRenderData:
     material_color: tuple[float, float, float, float]
     world_matrix: object
     source_revision: tuple[int, int, int]
+    bone_indices: object | None = None
+    bone_weights: object | None = None
+    max_influences: int = 0
+    skeleton_id: int = 0
+    skin_revision: int = 0
+    bind_shape_matrix: object | None = None
+    is_skinned: bool = False
+    skinning_cpu_fallback: bool = False
+    skinning_warning: str = ""
 
 
-def iter_mesh_render_data(model, *, anim_pose=None, textures: dict | None = None) -> Iterable[MeshRenderData]:
+def iter_mesh_render_data(
+    model,
+    *,
+    anim_pose=None,
+    anim_base_pose=None,
+    textures: dict | None = None,
+) -> Iterable[MeshRenderData]:
     """Yield mesh draw data without storing renderer resources on scene nodes."""
 
     if model is None:
@@ -68,7 +83,31 @@ def iter_mesh_render_data(model, *, anim_pose=None, textures: dict | None = None
             continue
         if positions is None or len(positions) == 0:
             continue
+        skinning = _extract_skinning(node, len(positions), skeleton_id=id(model))
+        skinning_cpu_fallback = False
+        if anim_pose is not None and getattr(skinning, "is_skinned", False):
+            try:
+                from src.gui.rendering.skeleton_render_data import cpu_skin_positions
+
+                skinned_positions = cpu_skin_positions(
+                    node,
+                    positions,
+                    skinning,
+                    anim_pose,
+                    model=model,
+                    anim_base_pose=anim_base_pose,
+                )
+                if skinned_positions is not positions:
+                    positions = skinned_positions
+                    skinning_cpu_fallback = True
+            except Exception:
+                pass
         material = _material_data(node, textures)
+        source_revision = _node_revision(node)
+        if getattr(skinning, "is_skinned", False):
+            source_revision = (*source_revision, int(getattr(skinning, "skin_revision", 0) or 0))
+        if skinning_cpu_fallback:
+            source_revision = (*source_revision, int(round(float(getattr(anim_pose, "time", 0.0) or 0.0) * 1000.0)))
         rows.append(
             MeshRenderData(
                 mesh_id=id(node),
@@ -81,7 +120,16 @@ def iter_mesh_render_data(model, *, anim_pose=None, textures: dict | None = None
                 material=material,
                 material_color=material.base_color_rgba,
                 world_matrix=np.eye(4, dtype=np.float32),
-                source_revision=_node_revision(node),
+                source_revision=source_revision,
+                bone_indices=getattr(skinning, "bone_indices", None),
+                bone_weights=getattr(skinning, "bone_weights", None),
+                max_influences=int(getattr(skinning, "max_influences", 0) or 0),
+                skeleton_id=int(getattr(skinning, "skeleton_id", 0) or 0),
+                skin_revision=int(getattr(skinning, "skin_revision", 0) or 0),
+                bind_shape_matrix=getattr(skinning, "bind_shape_matrix", None),
+                is_skinned=bool(getattr(skinning, "is_skinned", False)),
+                skinning_cpu_fallback=bool(skinning_cpu_fallback),
+                skinning_warning=str(getattr(skinning, "warning", "") or ""),
             )
         )
     return rows
@@ -144,6 +192,26 @@ def _extract_node_arrays(node, *, anim_pose=None):
     faces = getattr(node, "faces", []) or []
     indices = np.asarray([int(i) for face in faces for i in tuple(face)[:3]], dtype=np.uint32)
     return verts, normals, uvs0, uvs1, indices
+
+
+def _extract_skinning(node, vertex_count: int, *, skeleton_id: int = 0):
+    try:
+        from src.gui.rendering.skeleton_render_data import extract_skinning_arrays
+
+        return extract_skinning_arrays(node, vertex_count, skeleton_id=skeleton_id)
+    except Exception:
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            bone_indices=None,
+            bone_weights=None,
+            max_influences=0,
+            skeleton_id=skeleton_id,
+            skin_revision=0,
+            bind_shape_matrix=None,
+            is_skinned=False,
+            warning="skin adapter unavailable",
+        )
 
 
 def texture_image_to_rgba8(texture_data: TextureRenderData | None) -> tuple[int, int, bytes] | None:

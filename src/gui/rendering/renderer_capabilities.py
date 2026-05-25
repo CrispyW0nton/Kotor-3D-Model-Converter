@@ -30,6 +30,17 @@ class RendererCapabilities:
     supports_selection_highlight: bool = False
     supports_gizmo_drawing: bool = False
     supports_gizmo_interaction: bool = False
+    skeleton_overlay_supported: bool = False
+    joint_dot_overlay_supported: bool = False
+    bone_selection_supported: bool = False
+    skinned_mesh_supported: bool = False
+    gpu_skinning_supported: bool = False
+    cpu_skinning_fallback_supported: bool = False
+    animation_preview_supported: bool = False
+    skin_weight_heatmap_supported: bool = False
+    max_supported_bones: int = 0
+    bone_matrix_buffer_type: str = ""
+    skinned_shader_status: str = ""
     supports_marquee_selection: bool = False
     supports_subobject_selection: bool = False
     details: dict[str, object] = field(default_factory=dict)

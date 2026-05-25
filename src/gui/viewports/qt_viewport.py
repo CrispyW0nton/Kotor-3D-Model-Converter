@@ -5079,8 +5079,27 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gpu_renderer.selected_node = getattr(self._renderer, "selected_node", None)
         self._gpu_renderer.selected_nodes = list(getattr(self, "_selected_meshes", []) or [])
         self._gpu_renderer.show_grid = bool(getattr(self._renderer, "show_grid", True))
+        self._gpu_renderer.show_bones = bool(getattr(self._renderer, "show_bones", False))
+        self._gpu_renderer.show_joint_dots = bool(getattr(self, "_joint_dot_enabled", True))
+        self._gpu_renderer._hovered_bone = getattr(self._renderer, "_hovered_bone", None)
         self._gpu_renderer.cull_faces = False
         gizmo_render_data = self._build_transform_gizmo_render_data(w, h)
+        skeleton_render_data = None
+        if bool(getattr(self._renderer, "show_bones", False)):
+            try:
+                from src.gui.qt_lib.rendering.skeleton_render_data import build_skeleton_render_data
+
+                skeleton_render_data = build_skeleton_render_data(
+                    self.model,
+                    anim_pose=getattr(self._renderer, "_anim_pose", None),
+                    selected_node=getattr(self._renderer, "selected_node", None),
+                    selected_nodes=list(getattr(self, "_selected_joint_nodes", []) or []),
+                    hovered_node=getattr(self._renderer, "_hovered_bone", None),
+                    show_dots=bool(getattr(self, "_joint_dot_enabled", True)),
+                    show_links=True,
+                )
+            except Exception as exc:
+                log.debug("WGPU skeleton render data build failed: %s", exc)
         try:
             self._gpu_renderer.surface_host_diagnostics = self.canvas.diagnostics()
         except Exception:
@@ -5093,6 +5112,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             textures=textures,
             display_options=self.display_options,
             gizmo_render_data=gizmo_render_data,
+            skeleton_render_data=skeleton_render_data,
             picking_diagnostics=self._viewport_picking_diagnostics(),
             anim_pose=getattr(self._renderer, "_anim_pose", None),
             anim_time=float(getattr(self._renderer, "_anim_time", 0.0)),

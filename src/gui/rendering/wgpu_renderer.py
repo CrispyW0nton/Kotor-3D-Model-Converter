@@ -87,6 +87,21 @@ class WgpuMaterialResource:
     source_revision: tuple[int, int, int, int]
 
 
+@dataclass
+class WgpuSkeletonResource:
+    line_vertex_buffer: object | None
+    joint_marker_vertex_buffer: object | None
+    selected_line_vertex_buffer: object | None
+    selected_marker_vertex_buffer: object | None
+    line_vertex_count: int
+    joint_marker_vertex_count: int
+    selected_line_vertex_count: int
+    selected_marker_vertex_count: int
+    bone_count: int
+    joint_count: int
+    revision: int
+
+
 def _hex_to_rgb_float(value: str, fallback: tuple[float, float, float]) -> tuple[float, float, float]:
     raw = str(value or "").strip().lstrip("#")
     if len(raw) != 6:
@@ -117,6 +132,23 @@ def _relative_luma(color: tuple[int, int, int]) -> float:
 
 def _rgba8(color: tuple[float, float, float], alpha: int = 255) -> bytes:
     return bytes([*(max(0, min(255, int(round(c * 255.0)))) for c in color[:3]), max(0, min(255, int(alpha)))])
+
+
+def _point_distance(a, b) -> float:
+    return math.sqrt(sum((float(a[i]) - float(b[i])) ** 2 for i in range(3)))
+
+
+def _joint_marker_segments(point, *, selected: bool = False) -> list[tuple[float, float, float]]:
+    x, y, z = (float(v) for v in tuple(point)[:3])
+    r = 0.045 if selected else 0.030
+    return [
+        (x - r, y, z),
+        (x + r, y, z),
+        (x, y - r, z),
+        (x, y + r, z),
+        (x, y, z - r),
+        (x, y, z + r),
+    ]
 
 
 def _srgb_channel_to_linear(value: float) -> float:
@@ -679,6 +711,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.pipeline_lines = None
         self.pipeline_gizmo_lines = None
         self.pipeline_pick = None
+        self.skeleton_resource: WgpuSkeletonResource | None = None
         self.mesh_pipeline_layout = None
         self.line_bind_group_layout = None
         self.line_bind_group = None
@@ -706,6 +739,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self._active_scene = None
         self._active_camera = None
         self._active_anim_pose = None
+        self._active_anim_base_pose = None
+        self._active_skeleton_render_data = None
         self._active_textures: dict = {}
         self._active_display_options = ViewportDisplayOptions()
         self._effective_display_options = self._active_display_options
@@ -723,7 +758,23 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.force_untextured = False
         self.disable_lightmaps = False
         self.disable_alpha_blend = False
-        self._last_render_counts = {"opaque": 0, "cutout": 0, "blended": 0, "edges": 0, "selected_edges": 0, "gizmo_lines": 0}
+        self._last_render_counts = {
+            "opaque": 0,
+            "cutout": 0,
+            "blended": 0,
+            "edges": 0,
+            "selected_edges": 0,
+            "skeleton_lines": 0,
+            "joint_markers": 0,
+            "gizmo_lines": 0,
+        }
+        self.skeleton_overlay_pipeline_status = "not created"
+        self.skinned_mesh_pipeline_status = "cpu fallback"
+        self.gpu_skinning_status = "deferred"
+        self.last_skinning_error = ""
+        self.last_animation_error = ""
+        self._active_skinned_mesh_count = 0
+        self._active_cpu_skinned_mesh_count = 0
         self.grid_minor_color = (58 / 255.0, 64 / 255.0, 72 / 255.0)
         self.grid_major_color = (82 / 255.0, 90 / 255.0, 102 / 255.0)
         self.grid_x_axis_color = (118 / 255.0, 54 / 255.0, 54 / 255.0)
@@ -827,6 +878,17 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 supports_selection_highlight=True,
                 supports_gizmo_drawing=True,
                 supports_gizmo_interaction=True,
+                skeleton_overlay_supported=True,
+                joint_dot_overlay_supported=True,
+                bone_selection_supported=True,
+                skinned_mesh_supported=True,
+                gpu_skinning_supported=False,
+                cpu_skinning_fallback_supported=True,
+                animation_preview_supported=True,
+                skin_weight_heatmap_supported=False,
+                max_supported_bones=128,
+                bone_matrix_buffer_type="cpu-palette",
+                skinned_shader_status="deferred",
                 supports_marquee_selection=True,
                 supports_subobject_selection=True,
                 supported_display_modes=WGPU_DISPLAY_MODES,
@@ -879,6 +941,17 @@ class WgpuRenderer(NullDiagnosticRenderer):
             supports_selection_highlight=False,
             supports_gizmo_drawing=False,
             supports_gizmo_interaction=False,
+            skeleton_overlay_supported=False,
+            joint_dot_overlay_supported=False,
+            bone_selection_supported=False,
+            skinned_mesh_supported=False,
+            gpu_skinning_supported=False,
+            cpu_skinning_fallback_supported=False,
+            animation_preview_supported=False,
+            skin_weight_heatmap_supported=False,
+            max_supported_bones=0,
+            bone_matrix_buffer_type="",
+            skinned_shader_status="unavailable",
             supports_marquee_selection=False,
             supports_subobject_selection=False,
             supported_display_modes=(),
@@ -1408,6 +1481,9 @@ class WgpuRenderer(NullDiagnosticRenderer):
             render_pass.set_vertex_buffer(0, self.grid_vertex_buffer)
             render_pass.draw(self.grid_vertex_count, 1, 0, 0)
         self._draw_meshes(render_pass, width, height)
+        skeleton_counts = self._draw_skeleton_overlay(render_pass, width, height)
+        self._last_render_counts["skeleton_lines"] = skeleton_counts[0]
+        self._last_render_counts["joint_markers"] = skeleton_counts[1]
         self._last_render_counts["gizmo_lines"] = self._draw_gizmo_lines(render_pass, width, height)
         render_pass.end()
         self.queue.submit([encoder.finish()])
@@ -1493,16 +1569,26 @@ class WgpuRenderer(NullDiagnosticRenderer):
         )
         mvp = self._camera_mvp_matrix(self._active_camera, width, height)
         tri_count = 0
+        skinned_mesh_count = 0
+        cpu_skinned_mesh_count = 0
         draw_items = []
         edge_items = []
         for mesh_data in iter_mesh_render_data(
             self._active_scene,
             anim_pose=self._active_anim_pose,
+            anim_base_pose=self._active_anim_base_pose,
             textures=self._active_textures,
         ):
             material_data = getattr(mesh_data, "material", None)
             if material_data is None:
                 continue
+            if bool(getattr(mesh_data, "is_skinned", False)):
+                skinned_mesh_count += 1
+                if bool(getattr(mesh_data, "skinning_cpu_fallback", False)):
+                    cpu_skinned_mesh_count += 1
+                warning = str(getattr(mesh_data, "skinning_warning", "") or "")
+                if warning:
+                    self.last_skinning_error = warning
             alpha_mode = str(getattr(material_data, "alpha_mode", "OPAQUE") or "OPAQUE").upper()
             if (bool(getattr(self, "disable_alpha_blend", False)) or not display_options.show_alpha) and alpha_mode == "BLEND":
                 alpha_mode = "OPAQUE"
@@ -1521,7 +1607,16 @@ class WgpuRenderer(NullDiagnosticRenderer):
         cutout = [item for item in draw_items if item[0] in {"MASK", "CUTOUT"}]
         blended = [item for item in draw_items if item[0] == "BLEND"]
         blended.sort(key=lambda item: item[1], reverse=True)
-        counts = {"opaque": 0, "cutout": 0, "blended": 0, "edges": 0, "selected_edges": 0, "gizmo_lines": 0}
+        counts = {
+            "opaque": 0,
+            "cutout": 0,
+            "blended": 0,
+            "edges": 0,
+            "selected_edges": 0,
+            "skeleton_lines": 0,
+            "joint_markers": 0,
+            "gizmo_lines": 0,
+        }
 
         if draw_surface:
             for pass_name, items, pipeline in (
@@ -1544,7 +1639,9 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 color=(*tuple(self.selected_edge_color[:3]), 1.0),
             )
         self.perf["tri_count"] = int(tri_count)
-        self._last_render_counts = counts
+        self._active_skinned_mesh_count = int(skinned_mesh_count)
+        self._active_cpu_skinned_mesh_count = int(cpu_skinned_mesh_count)
+        self._last_render_counts.update(counts)
         if bool(getattr(self, "debug_texture_uploads", False)):
             log.info(
                 "WgpuRenderer: rendered opaque=%s cutout=%s blended=%s",
@@ -1660,6 +1757,101 @@ class WgpuRenderer(NullDiagnosticRenderer):
             log.warning("WgpuRenderer: skipped gizmo overlay: %s", exc)
             return 0
 
+    def _draw_skeleton_overlay(self, render_pass, width: int, height: int) -> tuple[int, int]:
+        if self.pipeline_gizmo_lines is None or self.line_uniform_buffer is None or self.line_bind_group is None:
+            if self._active_skeleton_render_data is not None:
+                self.skeleton_overlay_pipeline_status = self.gizmo_pipeline_status or "not created"
+            return (0, 0)
+        skeleton = self._active_skeleton_render_data
+        if skeleton is None or not tuple(getattr(skeleton, "bones", ()) or ()):
+            return (0, 0)
+        try:
+            import wgpu
+
+            resource = self._get_or_upload_skeleton_resource(skeleton)
+            if resource is None:
+                return (0, 0)
+            mvp = self._camera_mvp_matrix(self._active_camera, width, height)
+            render_pass.set_pipeline(self.pipeline_gizmo_lines)
+            render_pass.set_bind_group(0, self.line_bind_group)
+            line_count = 0
+            marker_count = 0
+
+            def draw_buffer(buffer, vertex_count: int, color: tuple[float, float, float, float]) -> int:
+                if buffer is None or vertex_count <= 0:
+                    return 0
+                self.queue.write_buffer(self.line_uniform_buffer, 0, self._line_uniform_bytes(mvp, color))
+                render_pass.set_vertex_buffer(0, buffer)
+                render_pass.draw(int(vertex_count), 1, 0, 0)
+                return int(vertex_count // 2)
+
+            line_count += draw_buffer(resource.line_vertex_buffer, resource.line_vertex_count, (0.52, 0.60, 0.70, 0.86))
+            line_count += draw_buffer(resource.selected_line_vertex_buffer, resource.selected_line_vertex_count, (1.0, 0.82, 0.12, 1.0))
+            marker_count += draw_buffer(resource.joint_marker_vertex_buffer, resource.joint_marker_vertex_count, (0.66, 0.72, 0.80, 0.92))
+            marker_count += draw_buffer(resource.selected_marker_vertex_buffer, resource.selected_marker_vertex_count, (1.0, 0.88, 0.14, 1.0))
+            self.skeleton_overlay_pipeline_status = "ready"
+            return (line_count, marker_count)
+        except Exception as exc:
+            self.skeleton_overlay_pipeline_status = f"draw failed: {exc}"
+            self.last_display_mode_warning = f"WGPU skeleton overlay skipped: {exc}"
+            log.warning("WgpuRenderer: skipped skeleton overlay: %s", exc)
+            return (0, 0)
+
+    def _get_or_upload_skeleton_resource(self, skeleton) -> WgpuSkeletonResource | None:
+        import numpy as np
+        import wgpu
+
+        revision = int(getattr(skeleton, "revision", 0) or 0)
+        cached = self.skeleton_resource
+        if cached is not None and cached.revision == revision:
+            return cached
+        if self.device is None:
+            return None
+
+        lines: list[tuple[float, float, float]] = []
+        joints: list[tuple[float, float, float]] = []
+        selected_lines: list[tuple[float, float, float]] = []
+        selected_joints: list[tuple[float, float, float]] = []
+        show_links = bool(getattr(skeleton, "show_links", True))
+        show_dots = bool(getattr(skeleton, "show_dots", True))
+        for bone in tuple(getattr(skeleton, "bones", ()) or ()):
+            if not bool(getattr(bone, "visible", True)):
+                continue
+            head = tuple(float(v) for v in tuple(getattr(bone, "head_position", (0.0, 0.0, 0.0)))[:3])
+            tail = tuple(float(v) for v in tuple(getattr(bone, "tail_position", head))[:3])
+            target_lines = selected_lines if (bool(getattr(bone, "selected", False)) or bool(getattr(bone, "hovered", False))) else lines
+            target_joints = selected_joints if (bool(getattr(bone, "selected", False)) or bool(getattr(bone, "hovered", False))) else joints
+            if show_links and _point_distance(head, tail) > 1e-5:
+                target_lines.extend((tail, head))
+            if show_dots:
+                target_joints.extend(_joint_marker_segments(head, selected=target_joints is selected_joints))
+
+        def make_buffer(vertices):
+            if not vertices:
+                return None, 0
+            data = np.asarray(vertices, dtype=np.float32).reshape(-1, 3)
+            return self.device.create_buffer_with_data(data=data, usage=wgpu.BufferUsage.VERTEX), int(len(data))
+
+        line_buffer, line_count = make_buffer(lines)
+        joint_buffer, joint_count = make_buffer(joints)
+        selected_line_buffer, selected_line_count = make_buffer(selected_lines)
+        selected_marker_buffer, selected_marker_count = make_buffer(selected_joints)
+        resource = WgpuSkeletonResource(
+            line_vertex_buffer=line_buffer,
+            joint_marker_vertex_buffer=joint_buffer,
+            selected_line_vertex_buffer=selected_line_buffer,
+            selected_marker_vertex_buffer=selected_marker_buffer,
+            line_vertex_count=line_count,
+            joint_marker_vertex_count=joint_count,
+            selected_line_vertex_count=selected_line_count,
+            selected_marker_vertex_count=selected_marker_count,
+            bone_count=len(tuple(getattr(skeleton, "bones", ()) or ())),
+            joint_count=(joint_count + selected_marker_count) // 6,
+            revision=revision,
+        )
+        self.skeleton_resource = resource
+        return resource
+
     @staticmethod
     def _line_vertices_from_gizmo_command(command) -> list[tuple[float, float, float]]:
         points = [tuple(float(v) for v in tuple(point)[:3]) for point in (getattr(command, "points", ()) or ())]
@@ -1724,7 +1916,12 @@ class WgpuRenderer(NullDiagnosticRenderer):
         id_to_mesh: dict[int, object] = {}
         mesh_rows = []
         next_id = 1
-        for mesh_data in iter_mesh_render_data(scene, anim_pose=self._active_anim_pose, textures={}):
+        for mesh_data in iter_mesh_render_data(
+            scene,
+            anim_pose=self._active_anim_pose,
+            anim_base_pose=self._active_anim_base_pose,
+            textures={},
+        ):
             node = getattr(mesh_data, "source", None)
             if node is None:
                 continue
@@ -1967,6 +2164,24 @@ class WgpuRenderer(NullDiagnosticRenderer):
             self._active_camera = camera
             self._active_scene = scene
             self._active_anim_pose = kwargs.get("anim_pose")
+            self._active_anim_base_pose = kwargs.get("anim_base_pose")
+            self._active_skeleton_render_data = kwargs.get("skeleton_render_data")
+            if self._active_skeleton_render_data is None and bool(getattr(self, "show_bones", False)):
+                try:
+                    from src.gui.rendering.skeleton_render_data import build_skeleton_render_data
+
+                    self._active_skeleton_render_data = build_skeleton_render_data(
+                        scene,
+                        anim_pose=self._active_anim_pose,
+                        selected_node=getattr(self, "selected_node", None),
+                        selected_nodes=getattr(self, "selected_nodes", None),
+                        hovered_node=getattr(self, "_hovered_bone", None),
+                        show_dots=bool(getattr(self, "show_joint_dots", True)),
+                        show_links=True,
+                    )
+                except Exception as exc:
+                    self._active_skeleton_render_data = None
+                    self.last_animation_error = str(exc)
             self._active_textures = dict(kwargs.get("textures") or {})
             raw_options = kwargs.get("display_options", None)
             self._active_display_options = raw_options if isinstance(raw_options, ViewportDisplayOptions) else self._display_options_from_legacy_flags()
@@ -2034,6 +2249,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.pipeline_lines = None
         self.pipeline_gizmo_lines = None
         self.pipeline_pick = None
+        self.skeleton_resource = None
         self.mesh_pipeline_layout = None
         self.line_bind_group_layout = None
         self.line_bind_group = None
@@ -2144,6 +2360,17 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "supports_selection_highlight": True,
             "supports_gizmo_drawing": True,
             "supports_gizmo_interaction": True,
+            "skeleton_overlay_supported": True,
+            "joint_dot_overlay_supported": True,
+            "bone_selection_supported": True,
+            "skinned_mesh_supported": True,
+            "gpu_skinning_supported": False,
+            "cpu_skinning_fallback_supported": True,
+            "animation_preview_supported": True,
+            "skin_weight_heatmap_supported": False,
+            "max_supported_bones": 128,
+            "bone_matrix_buffer_type": "cpu-palette",
+            "skinned_shader_status": self.skinned_mesh_pipeline_status,
             "supported_display_modes": WGPU_DISPLAY_MODES,
             "fallback_display_modes": dict(WGPU_FALLBACK_DISPLAY_MODES),
             "viewport_display": self._active_display_options.diagnostics(),
@@ -2179,6 +2406,9 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "selected_node_count": int(self._active_picking_diagnostics.get("selected_node_count", 0) or 0),
             "selection_highlight_pipeline_status": "ready" if self.pipeline_lines is not None else self.line_pipeline_status,
             "gizmo_render_pipeline_status": self.gizmo_pipeline_status,
+            "skeleton_overlay_pipeline_status": self.skeleton_overlay_pipeline_status,
+            "skinned_mesh_pipeline_status": self.skinned_mesh_pipeline_status,
+            "gpu_skinning_status": self.gpu_skinning_status,
             "gizmo_hover_target": self._active_picking_diagnostics.get("gizmo_hover_target"),
             "active_gizmo_tool": self._active_picking_diagnostics.get("active_gizmo_tool"),
             "active_axis_mode": self._active_picking_diagnostics.get("active_axis_mode"),
@@ -2204,6 +2434,19 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "opaque_pipeline_status": "ready" if self.pipeline_mesh is not None else "not created",
             "alpha_cutout_pipeline_status": "ready" if self.pipeline_mesh_cutout is not None else "not created",
             "alpha_pipeline_status": self.alpha_pipeline_status,
+            "active_animation_clip": str(getattr(self._active_skeleton_render_data, "active_clip_name", "") or getattr(self, "_active_anim_name", "")),
+            "animation_time": float(getattr(self._active_anim_pose, "time", 0.0) or 0.0) if self._active_anim_pose is not None else 0.0,
+            "animation_playing": bool(self._active_anim_pose is not None),
+            "skeleton_count": 1 if self._active_skeleton_render_data is not None else 0,
+            "bone_count": len(tuple(getattr(self._active_skeleton_render_data, "bones", ()) or ())) if self._active_skeleton_render_data is not None else 0,
+            "selected_bone_count": len(tuple(getattr(self._active_skeleton_render_data, "selected_bone_ids", ()) or ())) if self._active_skeleton_render_data is not None else 0,
+            "skinned_mesh_count": int(self._active_skinned_mesh_count),
+            "cpu_skinned_mesh_count": int(self._active_cpu_skinned_mesh_count),
+            "uploaded_bone_matrix_count": 0,
+            "max_bone_matrices_supported": 128,
+            "pose_revision": int(getattr(self._active_skeleton_render_data, "revision", 0) or 0) if self._active_skeleton_render_data is not None else 0,
+            "last_skinning_error": self.last_skinning_error,
+            "last_animation_error": self.last_animation_error,
             "uploaded_mesh_count": len(self.resource_cache.meshes),
             "uploaded_material_count": len(self.resource_cache.materials),
             "uploaded_texture_count": len(self.resource_cache.textures),
