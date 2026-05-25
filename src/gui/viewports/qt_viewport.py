@@ -7128,6 +7128,13 @@ class QtViewportWidget(QtWidgets.QWidget):
                 if self.on_bone_selected:
                     self.on_bone_selected(None)
                 return
+        mesh_hit = self._mesh_hit_test_detail(x, y, allow_gpu=False)
+        if mesh_hit is not None:
+            mesh_node, face_bounds = mesh_hit
+            self.set_selected_node(mesh_node, orbit_bounds=face_bounds)
+            if self.on_bone_selected:
+                self.on_bone_selected(None)
+            return
         camera_node = self._camera_hit_test(x, y)
         if camera_node is not None:
             if event.modifiers() & (QtCore.Qt.ControlModifier | QtCore.Qt.ShiftModifier):
@@ -7148,13 +7155,6 @@ class QtViewportWidget(QtWidgets.QWidget):
         helper_node = self._helper_hit_test(x, y)
         if helper_node is not None:
             self.set_selected_node(helper_node)
-            if self.on_bone_selected:
-                self.on_bone_selected(None)
-            return
-        mesh_hit = self._mesh_hit_test_detail(x, y)
-        if mesh_hit is not None:
-            mesh_node, face_bounds = mesh_hit
-            self.set_selected_node(mesh_node, orbit_bounds=face_bounds)
             if self.on_bone_selected:
                 self.on_bone_selected(None)
             return
@@ -7488,6 +7488,10 @@ class QtViewportWidget(QtWidgets.QWidget):
         node = getattr(self, "_hovered_mesh_node", None)
         if node is None or getattr(node, "_gr_hidden", False):
             return
+        if node is getattr(self._renderer, "selected_node", None):
+            return
+        if any(node is selected for selected in getattr(self, "_selected_meshes", []) or []):
+            return
         try:
             bounds = self._projected_mesh_bounds(node, w, h)
             if bounds is None:
@@ -7521,10 +7525,10 @@ class QtViewportWidget(QtWidgets.QWidget):
                         outline_edges.append(((float(p0[0]), float(p0[1])), (float(p1[0]), float(p1[1]))))
             if not outline_edges:
                 return
-            shadow = (0, 0, 0, 155)
-            glow = (0, 215, 181, 230)
+            shadow = (0, 0, 0, 105)
+            glow = (0, 190, 165, 165)
             for p0, p1 in outline_edges:
-                draw.line([p0, p1], fill=shadow, width=5)
+                draw.line([p0, p1], fill=shadow, width=4)
             for p0, p1 in outline_edges:
                 draw.line([p0, p1], fill=glow, width=2)
         except Exception as exc:

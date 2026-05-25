@@ -1034,6 +1034,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.selected_nodes = []
         self.hovered_node = None
         self.show_mesh_hover = True
+        self.show_mesh_hover_edges = False
         self.scene_ambient = 0.06
         self.lighting_mode = "scene"
         self.shader_complexity_mode = "basic"
@@ -1084,6 +1085,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self._last_light_shader_active = False
         self._gizmo_line_cache: dict[tuple, tuple[object, int]] = {}
         self._frame_line_uniform_refs: list[tuple[object, object]] = []
+        self._frame_mesh_uniform_refs: list[tuple[object, object]] = []
         self._pick_resources: WgpuPickResources | None = None
         self.grid_minor_color = (58 / 255.0, 64 / 255.0, 72 / 255.0)
         self.grid_major_color = (82 / 255.0, 90 / 255.0, 102 / 255.0)
@@ -1092,6 +1094,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.wire_color = (0.18, 0.62, 0.95)
         self.hidden_line_color = (0.02, 0.025, 0.03)
         self.hovered_edge_color = (0.0, 215 / 255.0, 181 / 255.0)
+        self.hovered_edge_alpha = 0.45
         self.selected_edge_color = SELECTION_YELLOW
         self.null_helper_color = (0.64, 0.72, 0.82)
         self.light_helper_palette = dict(LIGHT_HELPER_COLORS)
@@ -1771,7 +1774,23 @@ class WgpuRenderer(NullDiagnosticRenderer):
             fragment={
                 "module": shader,
                 "entry_point": "fs_main",
-                "targets": [{"format": self.format}],
+                "targets": [
+                    {
+                        "format": self.format,
+                        "blend": {
+                            "color": {
+                                "src_factor": wgpu.BlendFactor.src_alpha,
+                                "dst_factor": wgpu.BlendFactor.one_minus_src_alpha,
+                                "operation": wgpu.BlendOperation.add,
+                            },
+                            "alpha": {
+                                "src_factor": wgpu.BlendFactor.one,
+                                "dst_factor": wgpu.BlendFactor.one_minus_src_alpha,
+                                "operation": wgpu.BlendOperation.add,
+                            },
+                        },
+                    }
+                ],
             },
         )
         self.line_pipeline_status = "ready"
@@ -2088,14 +2107,17 @@ class WgpuRenderer(NullDiagnosticRenderer):
             draw_pass("blended", blended, self.pipeline_mesh_blend or self.pipeline_mesh)
         if edge_overlay:
             counts["edges"] = self._draw_edge_items(render_pass, edge_items, mvp, mode)
-        hovered_edge_items = [item for item in edge_items if self._is_hovered_mesh_data(item)]
+        hovered_edge_items = [
+            item for item in edge_items
+            if bool(getattr(self, "show_mesh_hover_edges", False)) and self._is_hovered_mesh_data(item)
+        ]
         if hovered_edge_items:
             counts["hovered_edges"] = self._draw_edge_items(
                 render_pass,
                 hovered_edge_items,
                 mvp,
                 mode,
-                color=(*tuple(self.hovered_edge_color[:3]), 1.0),
+                color=(*tuple(self.hovered_edge_color[:3]), float(getattr(self, "hovered_edge_alpha", 0.45))),
             )
         selected_edge_items = [item for item in edge_items if self._is_selected_mesh_data(item)]
         if selected_edge_items:
@@ -2175,10 +2197,10 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 getattr(material_data, "base_color_rgba", mesh_data.material_color),
                 material,
                 display_options,
+                selected=self._is_selected_mesh_data(mesh_data),
             )
-            self.queue.write_buffer(self.mesh_uniform_buffer, 0, uniform)
             render_pass.set_pipeline(pipeline)
-            render_pass.set_bind_group(0, self.mesh_bind_group)
+            self._set_mesh_uniform(render_pass, uniform)
             render_pass.set_bind_group(1, material.bind_group)
             self.profiler.add("texture_bind_count", 1)
             if skin_resource is not None:
@@ -2228,10 +2250,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
             if mode is ViewportDisplayMode.HIDDEN_LINE
             else (*tuple(self.wire_color[:3]), 1.0)
         )
-        uniform = self._line_uniform_bytes(mvp, color)
-        self.queue.write_buffer(self.line_uniform_buffer, 0, uniform)
         render_pass.set_pipeline(self.pipeline_lines)
-        render_pass.set_bind_group(0, self.line_bind_group)
+        self._set_line_uniform(render_pass, mvp, color)
         drawn = 0
         for mesh_data in mesh_items:
             try:
@@ -2931,7 +2951,15 @@ class WgpuRenderer(NullDiagnosticRenderer):
         view = _mat4_lookat(eye, target, up)
         return (proj @ view @ np.eye(4, dtype=np.float32)).astype(np.float32)
 
-    def _mesh_uniform_bytes(self, mvp, color: tuple[float, float, float, float], material, display_options: ViewportDisplayOptions) -> bytes:
+    def _mesh_uniform_bytes(
+        self,
+        mvp,
+        color: tuple[float, float, float, float],
+        material,
+        display_options: ViewportDisplayOptions,
+        *,
+        selected: bool = False,
+    ) -> bytes:
         import numpy as np
 
         alpha_mode = str(getattr(material, "alpha_mode", "OPAQUE") or "OPAQUE").upper()
@@ -2971,7 +2999,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         lm_mode_name = str(getattr(self._active_lighting_render_data, "lm_mode", getattr(self, "lightmap_mode", "baked")) or "baked").lower()
         lm_mode = {"baked": 0.0, "dynamic_preview": 1.0, "hybrid": 2.0, "debug": 3.0, "phong": 1.0, "emissive": 2.0}.get(lm_mode_name, 0.0)
         lm_intensity = max(0.0, min(4.0, float(getattr(self._active_lighting_render_data, "lm_intensity", getattr(self, "lightmap_intensity", 0.55)) or 0.0)))
-        params = np.asarray((lm_intensity, shade_mode, lm_mode, 0.0), dtype=np.float32)
+        params = np.asarray((lm_intensity, shade_mode, lm_mode, 1.0 if selected else 0.0), dtype=np.float32)
         return (
             np.asarray(mvp, dtype=np.float32).reshape(4, 4).T.tobytes()
             + np.asarray(color, dtype=np.float32).tobytes()
@@ -2987,6 +3015,45 @@ class WgpuRenderer(NullDiagnosticRenderer):
             np.asarray(mvp, dtype=np.float32).reshape(4, 4).T.tobytes()
             + np.asarray(color, dtype=np.float32).tobytes()
         )
+
+    def _set_mesh_uniform(self, render_pass, uniform: bytes) -> None:
+        try:
+            import numpy as np
+            import wgpu
+
+            if (
+                self.device is None
+                or self.mesh_bind_group_layout is None
+                or self.light_buffer is None
+                or self.lighting_uniform_buffer is None
+            ):
+                raise RuntimeError("mesh uniform layout unavailable")
+            buffer = self.device.create_buffer_with_data(
+                data=np.frombuffer(uniform, dtype=np.uint8),
+                usage=wgpu.BufferUsage.UNIFORM,
+            )
+            bind_group = self.device.create_bind_group(
+                layout=self.mesh_bind_group_layout,
+                entries=[
+                    {
+                        "binding": 0,
+                        "resource": {"buffer": buffer, "offset": 0, "size": 112},
+                    },
+                    {
+                        "binding": 1,
+                        "resource": {"buffer": self.light_buffer, "offset": 0, "size": int(self.max_wgpu_lights) * 64},
+                    },
+                    {
+                        "binding": 2,
+                        "resource": {"buffer": self.lighting_uniform_buffer, "offset": 0, "size": 32},
+                    },
+                ],
+            )
+            self._frame_mesh_uniform_refs.append((buffer, bind_group))
+            render_pass.set_bind_group(0, bind_group)
+        except Exception:
+            self.queue.write_buffer(self.mesh_uniform_buffer, 0, uniform)
+            render_pass.set_bind_group(0, self.mesh_bind_group)
 
     def _set_line_uniform(self, render_pass, mvp, color: tuple[float, float, float, float], *, target_color: bool = True) -> None:
         uniform = self._line_uniform_bytes(mvp, color, target_color=target_color)
@@ -3021,6 +3088,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         t0 = time.perf_counter()
         self.profiler.begin_frame()
         self._frame_line_uniform_refs = []
+        self._frame_mesh_uniform_refs = []
         try:
             from PIL import Image
 
@@ -3238,6 +3306,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.wire_color = (0.18, 0.62, 0.95)
         self.hidden_line_color = (0.02, 0.025, 0.03)
         self.hovered_edge_color = (0.0, 215 / 255.0, 181 / 255.0)
+        self.hovered_edge_alpha = 0.45
         self.selected_edge_color = SELECTION_YELLOW
         self.null_helper_color = (0.64, 0.72, 0.82)
         self.light_helper_palette = {**LIGHT_HELPER_COLORS, "light": LIGHT_HELPER_COLORS["point"]}
@@ -3259,6 +3328,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.grid_y_axis_color = _rgb_float((70, 180, 90) if is_dark else (40, 130, 55))
         self.wire_color = _rgb_float(hi)
         self.hovered_edge_color = (0.0, 215 / 255.0, 181 / 255.0)
+        self.hovered_edge_alpha = 0.45
         self.selected_edge_color = SELECTION_YELLOW
         self.hidden_line_color = _rgb_float(_blend_rgb(bg, fg, 0.32 if is_dark else 0.40))
         self.null_helper_color = _rgb_float(_blend_rgb(bg, fg, 0.70 if is_dark else 0.55))
@@ -3345,6 +3415,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 "wire": tuple(self.wire_color),
                 "hidden_line": tuple(self.hidden_line_color),
                 "hover": tuple(self.hovered_edge_color),
+                "hover_alpha": float(getattr(self, "hovered_edge_alpha", 0.45)),
                 "selection": tuple(self.selected_edge_color),
                 "light_helper": tuple(self.light_helper_palette.get("point", self.light_helper_palette.get("light", LIGHT_HELPER_COLORS["point"]))),
                 "null_helper": tuple(self.null_helper_color),
@@ -3669,6 +3740,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     }
     if (locals.flags.z > 0.5 && locals.flags.z < 1.5 && out_color.a < locals.flags.w) {
         discard;
+    }
+    if (locals.params.w > 0.5) {
+        out_color = vec4<f32>(mix(out_color.rgb, vec3<f32>(1.0, 0.78, 0.12), 0.45), out_color.a);
     }
     return out_color;
 }

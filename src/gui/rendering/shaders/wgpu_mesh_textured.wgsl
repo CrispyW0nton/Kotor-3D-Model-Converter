@@ -149,5 +149,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
+    if (locals.params.w > 0.5) {
+        out_color = vec4<f32>(mix(out_color.rgb, vec3<f32>(1.0, 0.78, 0.12), 0.45), out_color.a);
+    }
+
     return out_color;
 }

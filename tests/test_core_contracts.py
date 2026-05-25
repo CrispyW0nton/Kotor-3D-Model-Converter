@@ -910,11 +910,15 @@ def test_qt_viewport_mesh_pick_requires_real_triangle_and_hover_outline() -> Non
     assert "self.meshHovered.emit(node)" in source
     assert "self.meshHovered.emit(None)" in source
     assert "_mesh_hit_test_detail(x, y, allow_gpu=False)" in source
+    assert "_mesh_hit_test_detail(x, y, allow_gpu=False)" in release_source
     assert "_draw_selected_model_outline(draw, w, h)" in overlay_source
+    hover_outline_source = inspect.getsource(QtViewportWidget._draw_hovered_mesh_outline)
     assert "_draw_hovered_mesh_outline(draw, w, h)" in inspect.getsource(QtViewportWidget._draw_selected_model_outline)
+    assert 'node is getattr(self._renderer, "selected_node", None)' in hover_outline_source
     assert "_ray_triangle_intersection" in source
     assert "allow_gpu: bool = True" in pick_source
     assert "if allow_gpu:" in pick_source
+    assert release_source.index("_mesh_hit_test_detail(x, y, allow_gpu=False)") < release_source.index("_light_hit_test(x, y)")
     assert "area + dist2" not in pick_source
     assert "_hit_test_model_bounds" not in release_source
 
@@ -1644,6 +1648,77 @@ def test_wgpu_material_uniforms_respect_diffuse_toggle_and_display_options() -> 
     data = renderer._mesh_uniform_bytes(np.eye(4, dtype=np.float32), (1.0, 1.0, 1.0, 1.0), material, shaded)
     params = np.frombuffer(data[96:112], dtype=np.float32)
     assert params[1] == 2.0
+
+
+def test_wgpu_mesh_uniform_marks_selected_mesh_for_shader_fill() -> None:
+    import numpy as np
+
+    from src.gui.qt_lib.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    material = SimpleNamespace(
+        diffuse_texture_resource=object(),
+        has_lightmap=False,
+        alpha_mode="OPAQUE",
+        alpha_cutoff=0.5,
+    )
+    options = ViewportDisplayOptions(display_mode=ViewportDisplayMode.TEXTURED, show_textures=True)
+
+    unselected = renderer._mesh_uniform_bytes(
+        np.eye(4, dtype=np.float32),
+        (1.0, 1.0, 1.0, 1.0),
+        material,
+        options,
+        selected=False,
+    )
+    selected = renderer._mesh_uniform_bytes(
+        np.eye(4, dtype=np.float32),
+        (1.0, 1.0, 1.0, 1.0),
+        material,
+        options,
+        selected=True,
+    )
+
+    assert np.frombuffer(unselected[96:112], dtype=np.float32)[3] == 0.0
+    assert np.frombuffer(selected[96:112], dtype=np.float32)[3] == 1.0
+
+
+def test_wgpu_mesh_shaders_apply_moderngl_selected_yellow_fill() -> None:
+    from src.gui.qt_lib.rendering import wgpu_renderer
+
+    expected = "mix(out_color.rgb, vec3<f32>(1.0, 0.78, 0.12), 0.45)"
+
+    assert expected in wgpu_renderer._load_mesh_shader()
+    assert expected in wgpu_renderer._load_skinned_mesh_shader()
+
+
+def test_wgpu_mesh_draw_uses_per_draw_uniforms_for_selected_fill() -> None:
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    draw_source = inspect.getsource(WgpuRenderer._draw_mesh_item)
+    render_source = inspect.getsource(WgpuRenderer.render)
+    uniform_source = inspect.getsource(WgpuRenderer._set_mesh_uniform)
+
+    assert "self._set_mesh_uniform(render_pass, uniform)" in draw_source
+    assert "self._frame_mesh_uniform_refs = []" in render_source
+    assert "self._frame_mesh_uniform_refs.append((buffer, bind_group))" in uniform_source
+
+
+def test_wgpu_mesh_hover_edges_are_translucent_and_isolated_from_selection_edges() -> None:
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    draw_source = inspect.getsource(WgpuRenderer._draw_meshes)
+    edge_source = inspect.getsource(WgpuRenderer._draw_edge_items)
+    pipeline_source = inspect.getsource(WgpuRenderer._create_line_pipeline)
+
+    assert renderer.hovered_edge_alpha < 1.0
+    assert renderer.show_mesh_hover_edges is False
+    assert 'getattr(self, "show_mesh_hover_edges", False)' in draw_source
+    assert 'getattr(self, "hovered_edge_alpha", 0.45)' in draw_source
+    assert "self._set_line_uniform(render_pass, mvp, color)" in edge_source
+    assert "wgpu.BlendFactor.src_alpha" in pipeline_source
 
 
 def test_wgpu_render_consumes_mesh_hover_payload() -> None:
