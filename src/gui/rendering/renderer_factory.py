@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import platform
+import inspect
 from typing import Iterable
 
 from src.gui.rendering.direct3d_renderer import Direct3DRenderer
@@ -37,6 +38,22 @@ def _dedupe(backends: Iterable[RendererBackend]) -> list[RendererBackend]:
     return result
 
 
+def _render_kwargs_for(renderer, kwargs: dict) -> dict:
+    try:
+        signature = inspect.signature(renderer.render)
+    except (TypeError, ValueError):
+        return kwargs
+    parameters = signature.parameters.values()
+    if any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters):
+        return kwargs
+    accepted = {
+        name
+        for name, parameter in signature.parameters.items()
+        if parameter.kind in {inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY}
+    }
+    return {key: value for key, value in kwargs.items() if key in accepted}
+
+
 def fallback_order(settings: RendererSettings) -> list[RendererBackend]:
     if settings.force_safe_mode:
         return [RendererBackend.MODERNGL_GL330, RendererBackend.NULL_DIAGNOSTIC]
@@ -44,6 +61,9 @@ def fallback_order(settings: RendererSettings) -> list[RendererBackend]:
     requested = settings.backend
     if requested == RendererBackend.AUTOMATIC:
         requested = RendererBackend.MODERNGL_GL330
+
+    if requested == RendererBackend.MODERNGL_GL330:
+        return [RendererBackend.MODERNGL_GL330, RendererBackend.NULL_DIAGNOSTIC]
 
     if not settings.allow_fallback:
         return [requested, RendererBackend.NULL_DIAGNOSTIC]
@@ -224,7 +244,7 @@ class FallbackViewportRenderer:
             renderer = object.__getattribute__(self, "_active") or self._activate_next()
             backend = object.__getattribute__(self, "_active_backend")
             try:
-                result = renderer.render(scene, camera, W, H, *args, **kwargs)
+                result = renderer.render(scene, camera, W, H, *args, **_render_kwargs_for(renderer, kwargs))
             except Exception as exc:
                 result = None
                 object.__getattribute__(self, "_failed")[backend] = str(exc)

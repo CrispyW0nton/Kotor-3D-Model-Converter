@@ -133,6 +133,21 @@ class WgpuPickResources:
     read_buffer: object
 
 
+@dataclass
+class WgpuLightResource:
+    light_buffer: object | None
+    lighting_uniform_buffer: object | None
+    revision: int
+    light_count: int
+    uploaded_light_count: int
+    max_lights: int
+    helper_batches: list[tuple[tuple[float, float, float, float], object, int]]
+    volume_batches: list[tuple[tuple[float, float, float, float], object, int]]
+    selected_light_id: int
+    unsupported_light_types: int
+    upload_time_ms: float
+
+
 def _hex_to_rgb_float(value: str, fallback: tuple[float, float, float]) -> tuple[float, float, float]:
     raw = str(value or "").strip().lstrip("#")
     if len(raw) != 6:
@@ -941,6 +956,10 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.texture_bind_group_layout = None
         self.mesh_bind_group = None
         self.mesh_uniform_buffer = None
+        self.light_buffer = None
+        self.lighting_uniform_buffer = None
+        self.light_resource: WgpuLightResource | None = None
+        self.max_wgpu_lights = 64
         self.resource_cache = WgpuResourceCache(self)
         self.profiler = RendererProfiler(enabled=bool(settings.wgpu_profile_frames))
         self.enable_batching = bool(settings.wgpu_enable_batching)
@@ -978,6 +997,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self._active_display_options = ViewportDisplayOptions()
         self._effective_display_options = self._active_display_options
         self._active_gizmo_render_data = None
+        self._active_lighting_render_data = None
         self._active_picking_diagnostics: dict[str, object] = {}
         self._display_mode_downgrade = ""
         self.surface_host_diagnostics: dict[str, object] = {}
@@ -995,6 +1015,13 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.show_texture = True
         self.show_diffuse_map = True
         self.show_lightmap_map = True
+        self.show_light_gizmos = True
+        self.show_light_radius_volumes = False
+        self.scene_ambient = 0.06
+        self.lighting_mode = "scene"
+        self.shader_complexity_mode = "basic"
+        self.lightmap_intensity = 0.55
+        self.lightmap_mode = "baked"
         self.show_missing_texture_checker = False
         self.debug_texture_uploads = False
         self.force_untextured = False
@@ -1008,6 +1035,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "selected_edges": 0,
             "skeleton_lines": 0,
             "joint_markers": 0,
+            "light_helper_lines": 0,
+            "light_volume_lines": 0,
             "gizmo_lines": 0,
         }
         self.skeleton_overlay_pipeline_status = "not created"
@@ -1031,6 +1060,10 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self._last_texture_array_eligible_textures = 0
         self._pending_uploads_count = 0
         self._last_upload_error = ""
+        self._last_lighting_invalidation_reason = ""
+        self._last_lighting_error = ""
+        self._last_lighting_upload_time_ms = 0.0
+        self._last_light_shader_active = False
         self._gizmo_line_cache: dict[tuple, tuple[object, int]] = {}
         self._pick_resources: WgpuPickResources | None = None
         self.grid_minor_color = (58 / 255.0, 64 / 255.0, 72 / 255.0)
@@ -1459,13 +1492,31 @@ class WgpuRenderer(NullDiagnosticRenderer):
             size=112,
             usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST,
         )
+        self.light_buffer = self.device.create_buffer(
+            size=int(self.max_wgpu_lights) * 64,
+            usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST,
+        )
+        self.lighting_uniform_buffer = self.device.create_buffer(
+            size=32,
+            usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST,
+        )
         self.mesh_bind_group_layout = self.device.create_bind_group_layout(
             entries=[
                 {
                     "binding": 0,
                     "visibility": wgpu.ShaderStage.VERTEX | wgpu.ShaderStage.FRAGMENT,
                     "buffer": {"type": wgpu.BufferBindingType.uniform},
-                }
+                },
+                {
+                    "binding": 1,
+                    "visibility": wgpu.ShaderStage.FRAGMENT,
+                    "buffer": {"type": wgpu.BufferBindingType.read_only_storage},
+                },
+                {
+                    "binding": 2,
+                    "visibility": wgpu.ShaderStage.FRAGMENT,
+                    "buffer": {"type": wgpu.BufferBindingType.uniform},
+                },
             ]
         )
         self.texture_bind_group_layout = self.device.create_bind_group_layout(
@@ -1507,7 +1558,15 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 {
                     "binding": 0,
                     "resource": {"buffer": self.mesh_uniform_buffer, "offset": 0, "size": 112},
-                }
+                },
+                {
+                    "binding": 1,
+                    "resource": {"buffer": self.light_buffer, "offset": 0, "size": int(self.max_wgpu_lights) * 64},
+                },
+                {
+                    "binding": 2,
+                    "resource": {"buffer": self.lighting_uniform_buffer, "offset": 0, "size": 32},
+                },
             ],
         )
         self.mesh_pipeline_layout = self.device.create_pipeline_layout(
@@ -1814,6 +1873,10 @@ class WgpuRenderer(NullDiagnosticRenderer):
             skeleton_counts = self._draw_skeleton_overlay(render_pass, width, height)
         self._last_render_counts["skeleton_lines"] = skeleton_counts[0]
         self._last_render_counts["joint_markers"] = skeleton_counts[1]
+        with self.profiler.section("lights"):
+            light_counts = self._draw_light_overlays(render_pass, width, height)
+        self._last_render_counts["light_helper_lines"] = light_counts[0]
+        self._last_render_counts["light_volume_lines"] = light_counts[1]
         with self.profiler.section("gizmo"):
             self._last_render_counts["gizmo_lines"] = self._draw_gizmo_lines(render_pass, width, height)
         render_pass.end()
@@ -1880,6 +1943,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
 
         display_options = self._coerce_display_options(self._active_display_options)
         self._effective_display_options = display_options
+        self._ensure_light_resource()
         mode = display_options.display_mode
         draw_surface = mode is not ViewportDisplayMode.WIREFRAME
         edge_only = mode is ViewportDisplayMode.WIREFRAME
@@ -2142,6 +2206,188 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 self.last_display_mode_warning = f"WGPU edge overlay skipped: {exc}"
                 log.warning("WgpuRenderer: skipped edge overlay: %s", exc)
         return drawn
+
+    def _ensure_light_resource(self) -> WgpuLightResource | None:
+        import numpy as np
+        import wgpu
+
+        if self.device is None or self.queue is None or self.light_buffer is None or self.lighting_uniform_buffer is None:
+            return None
+        lighting = self._active_lighting_render_data
+        if lighting is None:
+            try:
+                from src.gui.lighting.render_data import build_scene_lighting_render_data
+
+                lighting = build_scene_lighting_render_data(
+                    self._active_scene,
+                    selected_node=getattr(self, "selected_node", None),
+                    ambient_color_rgb=float(getattr(self, "scene_ambient", 0.06)),
+                    mode=str(getattr(self, "lighting_mode", "scene") or "scene"),
+                    complexity=str(getattr(self, "shader_complexity_mode", "basic") or "basic"),
+                    show_helpers=bool(getattr(self, "show_light_gizmos", True)),
+                    show_volumes=bool(getattr(self, "show_light_radius_volumes", False)),
+                    diffuse_enabled=bool(getattr(self, "show_diffuse_map", True)),
+                    specular_enabled=bool(getattr(self, "show_specular_map", True)),
+                    normal_enabled=bool(getattr(self, "show_normal_map", True)),
+                    environment_enabled=bool(getattr(self, "show_environment_map", True)),
+                    lightmap_enabled=bool(getattr(self, "show_lightmap_map", True)),
+                    lm_intensity=float(getattr(self, "lightmap_intensity", 0.55)),
+                    lm_mode=str(getattr(self, "lightmap_mode", "baked") or "baked"),
+                )
+                self._active_lighting_render_data = lighting
+            except Exception as exc:
+                self._last_lighting_error = f"lighting snapshot failed: {exc}"
+                return None
+        revision = int(getattr(lighting, "revision", 0) or 0)
+        if self.light_resource is not None and self.light_resource.revision == revision:
+            return self.light_resource
+
+        started = time.perf_counter()
+        try:
+            from src.gui.lighting.render_data import (
+                build_light_helper_line_batches,
+                build_light_volume_line_batches,
+                light_kind_int,
+            )
+
+            all_lights = list(getattr(lighting, "lights", ()) or ())
+            visible_lights = [light for light in all_lights if bool(getattr(light, "visible", True))]
+
+            def score(light) -> float:
+                selected_bonus = 100000.0 if bool(getattr(light, "selected", False)) else 0.0
+                enabled_bonus = 1000.0 if bool(getattr(light, "enabled", True)) else 0.0
+                return selected_bonus + enabled_bonus + float(getattr(light, "radius", 0.0) or 0.0) * max(0.01, float(getattr(light, "intensity", 0.0) or 0.0))
+
+            visible_lights.sort(key=score, reverse=True)
+            max_lights = int(self.max_wgpu_lights)
+            upload_lights = visible_lights[:max_lights]
+            light_rows = np.zeros((max_lights, 16), dtype=np.float32)
+            unsupported = 0
+            selected_light_id = 0
+            for idx, light in enumerate(upload_lights):
+                kind = light_kind_int(str(getattr(light, "light_type", "point") or "point"))
+                if kind == 0 and "unknown" in str(getattr(light, "light_type", "") or "").lower():
+                    unsupported += 1
+                if bool(getattr(light, "selected", False)):
+                    selected_light_id = int(getattr(light, "light_id", idx + 1) or (idx + 1))
+                px, py, pz = tuple(getattr(light, "position", (0.0, 0.0, 0.0)))[:3]
+                dx, dy, dz = tuple(getattr(light, "direction", (0.0, 0.0, -1.0)))[:3]
+                cr, cg, cb = tuple(getattr(light, "color_rgb", (1.0, 1.0, 1.0)))[:3]
+                cone = math.cos(math.radians(float(getattr(light, "cone_angle_degrees", 45.0) or 45.0) * 0.5))
+                light_rows[idx, 0:4] = (float(px), float(py), float(pz), max(0.001, float(getattr(light, "radius", 5.0) or 5.0)))
+                light_rows[idx, 4:8] = (float(dx), float(dy), float(dz), float(cone))
+                light_rows[idx, 8:12] = (max(0.0, float(cr)), max(0.0, float(cg)), max(0.0, float(cb)), max(0.0, float(getattr(light, "intensity", 1.0) or 0.0)))
+                light_rows[idx, 12:16] = (
+                    1.0 if bool(getattr(light, "enabled", True)) else 0.0,
+                    float(kind),
+                    1.0 if bool(getattr(light, "ambient_only", False)) else 0.0,
+                    float(getattr(light, "area_size", 1.0) or 0.0),
+                )
+            self.queue.write_buffer(self.light_buffer, 0, light_rows.tobytes())
+
+            ambient = tuple(float(v) for v in tuple(getattr(lighting, "ambient_color_rgb", (0.06, 0.06, 0.06)))[:3])
+            scene_enabled = 1.0 if self._scene_lighting_enabled(lighting, self._effective_display_options) else 0.0
+            diffuse_enabled = 1.0 if bool(getattr(lighting, "diffuse_enabled", True)) else 0.0
+            specular_enabled = 1.0 if bool(getattr(lighting, "specular_enabled", True)) else 0.0
+            uniform = np.asarray(
+                (
+                    max(0.0, ambient[0]),
+                    max(0.0, ambient[1]),
+                    max(0.0, ambient[2]),
+                    max(0.0, float(getattr(lighting, "global_intensity", 1.0) or 1.0)),
+                    float(len(upload_lights)),
+                    scene_enabled,
+                    diffuse_enabled,
+                    specular_enabled,
+                ),
+                dtype=np.float32,
+            )
+            self.queue.write_buffer(self.lighting_uniform_buffer, 0, uniform.tobytes())
+
+            helper_batches = self._upload_light_line_batches(build_light_helper_line_batches(lighting))
+            volume_batches = self._upload_light_line_batches(build_light_volume_line_batches(lighting))
+            upload_ms = (time.perf_counter() - started) * 1000.0
+            resource = WgpuLightResource(
+                light_buffer=self.light_buffer,
+                lighting_uniform_buffer=self.lighting_uniform_buffer,
+                revision=revision,
+                light_count=len(all_lights),
+                uploaded_light_count=len(upload_lights),
+                max_lights=max_lights,
+                helper_batches=helper_batches,
+                volume_batches=volume_batches,
+                selected_light_id=selected_light_id,
+                unsupported_light_types=unsupported + max(0, len(visible_lights) - max_lights),
+                upload_time_ms=upload_ms,
+            )
+            self.light_resource = resource
+            self._last_lighting_upload_time_ms = upload_ms
+            self._last_lighting_error = ""
+            self._last_light_shader_active = bool(scene_enabled)
+            self.profiler.add("light_buffer_updates", 1)
+            return resource
+        except Exception as exc:
+            self._last_lighting_error = str(exc)
+            log.warning("WgpuRenderer: lighting upload failed: %s", exc)
+            return None
+
+    def _upload_light_line_batches(self, batches) -> list[tuple[tuple[float, float, float, float], object, int]]:
+        import wgpu
+
+        uploaded: list[tuple[tuple[float, float, float, float], object, int]] = []
+        for color, vertices in batches or []:
+            if not vertices:
+                continue
+            buffer, count = self._position_line_buffer(vertices, usage=wgpu.BufferUsage.VERTEX)
+            if buffer is None or count <= 0:
+                continue
+            rgba = (*tuple(float(v) for v in color[:3]), 1.0)
+            uploaded.append((rgba, buffer, count))
+            self.resource_cache.buffer_upload_count += 1
+        return uploaded
+
+    def _position_line_buffer(self, vertices, *, usage):
+        import numpy as np
+
+        if self.device is None or not vertices:
+            return None, 0
+        data = np.zeros((len(vertices), 18), dtype=np.float32)
+        data[:, 0:3] = np.asarray(vertices, dtype=np.float32).reshape(-1, 3)
+        return self.device.create_buffer_with_data(data=data, usage=usage), int(len(vertices))
+
+    def _draw_light_overlays(self, render_pass, width: int, height: int) -> tuple[int, int]:
+        if self.pipeline_gizmo_lines is None or self.line_uniform_buffer is None or self.line_bind_group is None:
+            return (0, 0)
+        resource = self._ensure_light_resource()
+        if resource is None:
+            return (0, 0)
+        mvp = self._camera_mvp_matrix(self._active_camera, width, height)
+        render_pass.set_pipeline(self.pipeline_gizmo_lines)
+        render_pass.set_bind_group(0, self.line_bind_group)
+
+        def draw_batches(batches) -> int:
+            drawn = 0
+            for color, buffer, vertex_count in batches:
+                if buffer is None or vertex_count <= 0:
+                    continue
+                self.queue.write_buffer(self.line_uniform_buffer, 0, self._line_uniform_bytes(mvp, color))
+                render_pass.set_vertex_buffer(0, buffer)
+                render_pass.draw(int(vertex_count), 1, 0, 0)
+                self.profiler.add("draw_calls", 1)
+                drawn += int(vertex_count // 2)
+            return drawn
+
+        helper_lines = draw_batches(resource.helper_batches)
+        volume_lines = draw_batches(resource.volume_batches)
+        return (helper_lines, volume_lines)
+
+    def _scene_lighting_enabled(self, lighting, display_options: ViewportDisplayOptions | None) -> bool:
+        mode = str(getattr(lighting, "mode", getattr(self, "lighting_mode", "scene")) or "scene").lower()
+        if mode in {"unlit", "fullbright", "diffuse_only", "normal_only", "specular_only", "environment_only", "lightmap_preview", "shader_complexity"}:
+            return False
+        if display_options is not None and bool(getattr(display_options, "force_flat_colour", False)):
+            return False
+        return bool(getattr(lighting, "diffuse_enabled", True))
 
     def _draw_gizmo_lines(self, render_pass, width: int, height: int) -> int:
         import numpy as np
@@ -2620,6 +2866,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
             and mode in {ViewportDisplayMode.TEXTURED_LIGHTMAPPED, ViewportDisplayMode.FULL_MATERIAL}
             and bool(getattr(material, "has_lightmap", False))
             and not bool(getattr(self, "disable_lightmaps", False))
+            and str(getattr(self._active_lighting_render_data, "lm_mode", getattr(self, "lightmap_mode", "baked")) or "baked").lower() != "disabled"
+            and bool(getattr(self._active_lighting_render_data, "lightmap_enabled", getattr(self, "show_lightmap_map", True)))
         )
         flags = np.asarray(
             (
@@ -2630,8 +2878,11 @@ class WgpuRenderer(NullDiagnosticRenderer):
             ),
             dtype=np.float32,
         )
-        shade_mode = 1.0 if display_options.force_flat_colour or mode is ViewportDisplayMode.SOLID else 2.0 if mode in {ViewportDisplayMode.SHADED, ViewportDisplayMode.SMOOTH_SHADED} else 0.0
-        params = np.asarray((2.0, shade_mode, 0.0, 0.0), dtype=np.float32)
+        shade_mode = 1.0 if display_options.force_flat_colour else 2.0 if mode in {ViewportDisplayMode.SHADED, ViewportDisplayMode.SMOOTH_SHADED} else 0.0
+        lm_mode_name = str(getattr(self._active_lighting_render_data, "lm_mode", getattr(self, "lightmap_mode", "baked")) or "baked").lower()
+        lm_mode = {"baked": 0.0, "dynamic_preview": 1.0, "hybrid": 2.0, "debug": 3.0, "phong": 1.0, "emissive": 2.0}.get(lm_mode_name, 0.0)
+        lm_intensity = max(0.0, min(4.0, float(getattr(self._active_lighting_render_data, "lm_intensity", getattr(self, "lightmap_intensity", 0.55)) or 0.0)))
+        params = np.asarray((lm_intensity, shade_mode, lm_mode, 0.0), dtype=np.float32)
         return (
             np.asarray(mvp, dtype=np.float32).reshape(4, 4).T.tobytes()
             + np.asarray(color, dtype=np.float32).tobytes()
@@ -2681,6 +2932,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             raw_options = kwargs.get("display_options", None)
             self._active_display_options = raw_options if isinstance(raw_options, ViewportDisplayOptions) else self._display_options_from_legacy_flags()
             self._active_gizmo_render_data = kwargs.get("gizmo_render_data")
+            self._active_lighting_render_data = kwargs.get("lighting_render_data")
             self._active_picking_diagnostics = dict(kwargs.get("picking_diagnostics") or {})
             self.show_grid = bool(self._active_display_options.show_grid)
             if not self.initialized:
@@ -2775,6 +3027,9 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.texture_bind_group_layout = None
         self.mesh_bind_group = None
         self.mesh_uniform_buffer = None
+        self.light_buffer = None
+        self.lighting_uniform_buffer = None
+        self.light_resource = None
         self.depth_texture = None
         self.depth_view = None
         self._pick_resources = None
@@ -2788,16 +3043,22 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.resource_cache.invalidate_all("manual cache clear")
         self._gizmo_line_cache.clear()
 
+    def invalidate_lighting(self, reason: str = "lighting changed") -> None:
+        self.light_resource = None
+        self._last_lighting_invalidation_reason = str(reason or "lighting changed")
+
     def invalidate_node(self, node) -> None:
         if node is not None:
             self.resource_cache.release_mesh(id(node))
 
     def invalidate_node_cache(self) -> None:
         self.resource_cache.invalidate_all("node cache invalidated")
+        self.light_resource = None
         self._gizmo_line_cache.clear()
 
     def invalidate_all(self) -> None:
         self.resource_cache.invalidate_all("renderer invalidate_all")
+        self.light_resource = None
         self._gizmo_line_cache.clear()
 
     def _refresh_themed_resources(self) -> None:
@@ -2882,6 +3143,9 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "supports_selection_highlight": True,
             "supports_gizmo_drawing": True,
             "supports_gizmo_interaction": True,
+            "supports_scene_lighting": True,
+            "supports_light_helpers": True,
+            "supports_light_volumes": True,
             "supports_batching": True,
             "supports_instancing": True,
             "supports_texture_streaming": True,
@@ -2904,6 +3168,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             },
             "performance": self.profiler.diagnostics(),
             "performance_audit": dict(self.performance_audit),
+            "lighting": self._lighting_diagnostics(),
             "skeleton_overlay_supported": True,
             "joint_dot_overlay_supported": True,
             "bone_selection_supported": True,
@@ -3043,6 +3308,47 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "last_render_counts": dict(self._last_render_counts),
             "surface_host": dict(getattr(self, "surface_host_diagnostics", {}) or {}),
             "last_error": self.last_error,
+        }
+
+    def _lighting_diagnostics(self) -> dict[str, object]:
+        lighting = self._active_lighting_render_data
+        resource = self.light_resource
+        perf = self.profiler.diagnostics()
+        selected = ""
+        if lighting is not None:
+            for light in tuple(getattr(lighting, "lights", ()) or ()):
+                if bool(getattr(light, "selected", False)):
+                    selected = str(getattr(light, "name", "") or getattr(light, "node_id", "") or "")
+                    break
+        return {
+            "mode": str(getattr(lighting, "mode", getattr(self, "lighting_mode", "scene")) or "scene"),
+            "complexity": str(getattr(lighting, "complexity", getattr(self, "shader_complexity_mode", "basic")) or "basic"),
+            "rig": str(getattr(lighting, "rig", "kotor_original") or "kotor_original"),
+            "total_scene_lights": len(tuple(getattr(lighting, "lights", ()) or ())) if lighting is not None else 0,
+            "enabled_lights": len(tuple(getattr(lighting, "enabled_lights", ()) or ())) if lighting is not None else 0,
+            "uploaded_lights": int(getattr(resource, "uploaded_light_count", 0) or 0),
+            "max_wgpu_lights": int(self.max_wgpu_lights),
+            "helpers_visible": bool(getattr(lighting, "show_helpers", getattr(self, "show_light_gizmos", True))),
+            "volumes_visible": bool(getattr(lighting, "show_volumes", getattr(self, "show_light_radius_volumes", False))),
+            "selected_light": selected,
+            "selected_light_id": int(getattr(resource, "selected_light_id", 0) or 0),
+            "light_buffer_revision": int(getattr(resource, "revision", 0) or 0),
+            "light_buffer_upload_time_ms": round(float(getattr(resource, "upload_time_ms", self._last_lighting_upload_time_ms) or 0.0), 3),
+            "wgpu_light_shader_status": "active" if self._last_light_shader_active else "inactive",
+            "unsupported_light_types_count": int(getattr(resource, "unsupported_light_types", 0) or 0),
+            "last_lighting_error": self._last_lighting_error,
+            "last_redraw_reason": self._last_lighting_invalidation_reason,
+            "helper_draw_calls": len(tuple(getattr(resource, "helper_batches", ()) or ())),
+            "volume_draw_calls": len(tuple(getattr(resource, "volume_batches", ()) or ())),
+            "lighting_shader_active": bool(self._last_light_shader_active),
+            "light_buffer_updates": int(perf.get("light_buffer_updates", 0) or 0) if isinstance(perf, dict) else 0,
+            "diffuse_enabled": bool(getattr(lighting, "diffuse_enabled", getattr(self, "show_diffuse_map", True))),
+            "specular_enabled": bool(getattr(lighting, "specular_enabled", getattr(self, "show_specular_map", True))),
+            "normal_enabled": bool(getattr(lighting, "normal_enabled", getattr(self, "show_normal_map", True))),
+            "environment_enabled": bool(getattr(lighting, "environment_enabled", getattr(self, "show_environment_map", True))),
+            "lightmap_enabled": bool(getattr(lighting, "lightmap_enabled", getattr(self, "show_lightmap_map", True))),
+            "lm_intensity": float(getattr(lighting, "lm_intensity", getattr(self, "lightmap_intensity", 0.55)) or 0.0),
+            "lm_mode": str(getattr(lighting, "lm_mode", getattr(self, "lightmap_mode", "baked")) or "baked"),
         }
 
 

@@ -2368,7 +2368,11 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def refresh_lighting(self) -> None:
         if self._gpu_renderer is not None:
-            self._gpu_renderer.clear_caches()
+            invalidate = getattr(self._gpu_renderer, "invalidate_lighting", None)
+            if callable(invalidate):
+                invalidate("lighting changed")
+            else:
+                self._gpu_renderer.clear_caches()
         self._request_render()
 
     def refresh_cameras(self) -> None:
@@ -5101,6 +5105,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gpu_renderer.lightmap_intensity = float(getattr(self._renderer, "lightmap_intensity", 0.55))
         self._gpu_renderer.lightmap_mode = str(getattr(self._renderer, "lightmap_mode", "baked") or "baked")
         self._gpu_renderer.show_light_gizmos = bool(getattr(self._renderer, "show_light_gizmos", True))
+        self._gpu_renderer.show_light_radius_volumes = bool(getattr(self._renderer, "show_light_radius_volumes", False))
         self._gpu_renderer.show_wireframe = bool(self._renderer.show_wireframe)
         self._gpu_renderer.render_mode = str(getattr(self._renderer, "render_mode", "realistic") or "realistic")
         self._gpu_renderer.display_options = self.display_options
@@ -5128,6 +5133,30 @@ class QtViewportWidget(QtWidgets.QWidget):
                 )
             except Exception as exc:
                 log.debug("WGPU skeleton render data build failed: %s", exc)
+        lighting_render_data = None
+        try:
+            from src.gui.qt_lib.lighting.render_data import build_scene_lighting_render_data
+
+            lighting_render_data = build_scene_lighting_render_data(
+                self.model,
+                selected_node=getattr(self._renderer, "selected_node", None),
+                hovered_node=getattr(self._renderer, "_hovered_light", None),
+                ambient_color_rgb=float(getattr(self._renderer, "scene_ambient", 0.06)),
+                mode=str(getattr(self._renderer, "lighting_mode", "scene") or "scene"),
+                rig=str(getattr(self._renderer, "lighting_rig", "kotor_original") or "kotor_original"),
+                complexity=str(getattr(self._renderer, "shader_complexity_mode", "basic") or "basic"),
+                show_helpers=bool(getattr(self._renderer, "show_light_gizmos", True)),
+                show_volumes=bool(getattr(self._renderer, "show_light_radius_volumes", False)),
+                diffuse_enabled=bool(getattr(self._renderer, "show_diffuse_map", True)),
+                specular_enabled=bool(getattr(self._renderer, "show_specular_map", True)),
+                normal_enabled=bool(getattr(self._renderer, "show_normal_map", True)),
+                environment_enabled=bool(getattr(self._renderer, "show_environment_map", True)),
+                lightmap_enabled=bool(getattr(self._renderer, "show_lightmap_map", True)),
+                lm_intensity=float(getattr(self._renderer, "lightmap_intensity", 0.55)),
+                lm_mode=str(getattr(self._renderer, "lightmap_mode", "baked") or "baked"),
+            )
+        except Exception as exc:
+            log.debug("WGPU lighting render data build failed: %s", exc)
         try:
             self._gpu_renderer.surface_host_diagnostics = self.canvas.diagnostics()
         except Exception:
@@ -5141,6 +5170,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             display_options=self.display_options,
             gizmo_render_data=gizmo_render_data,
             skeleton_render_data=skeleton_render_data,
+            lighting_render_data=lighting_render_data,
             picking_diagnostics=self._viewport_picking_diagnostics(),
             anim_pose=getattr(self._renderer, "_anim_pose", None),
             anim_time=float(getattr(self._renderer, "_anim_time", 0.0)),
@@ -6210,6 +6240,8 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def _light_hit_test(self, sx: int, sy: int, radius: int = 12):
         if self.model is None:
+            return None
+        if not bool(getattr(self._renderer, "show_light_gizmos", True)):
             return None
         width = max(1, self.canvas.width())
         height = max(1, self.canvas.height())

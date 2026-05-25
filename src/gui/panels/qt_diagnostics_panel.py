@@ -190,10 +190,16 @@ class QtDiagnosticsPanel(QtWidgets.QWidget):
     @staticmethod
     def _performance_report_lines(renderer: dict[str, Any]) -> list[str]:
         perf = dict(renderer.get("performance") or {})
+        lighting = dict(renderer.get("lighting") or {})
+        render_counts = dict(renderer.get("last_render_counts") or {})
         lines = [
             f"Active renderer: {renderer.get('name') or renderer.get('backend_id') or 'unknown'}",
             f"Frame time: {perf.get('frame_time_ms', 0.0)} ms ({perf.get('fps_estimate', 0.0)} FPS)",
             f"Draw calls: {perf.get('draw_calls', renderer.get('draw_calls', 0))}",
+            f"Light buffer updates: {lighting.get('light_buffer_updates', perf.get('light_buffer_updates', 0))}",
+            f"Light helper draw calls: {lighting.get('helper_draw_calls', 0)}",
+            f"Light volume draw calls: {lighting.get('volume_draw_calls', 0)}",
+            f"Light helper/volume lines: {render_counts.get('light_helper_lines', 0)} / {render_counts.get('light_volume_lines', 0)}",
             f"Batches: {renderer.get('batch_count', perf.get('batch_count', 0))}",
             f"Instances: {renderer.get('instance_count', perf.get('instance_count', 0))}",
             f"Visible meshes / total meshes: {renderer.get('visible_mesh_count', perf.get('visible_mesh_count', 0))} / {renderer.get('total_mesh_count', perf.get('mesh_count', 0))}",

@@ -73,6 +73,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "light_manager",
         "light_model",
         "light_picker",
+        "render_data",
         "light_selection",
         "light_types",
         "lighting_rig_presets",
