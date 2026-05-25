@@ -85,25 +85,31 @@ fn scene_light_shade(normal: vec3<f32>, world_position: vec3<f32>) -> vec3<f32> 
             let delta = light.position_radius.xyz - world_position;
             let distance = length(delta);
             let radius = max(light.position_radius.w, 0.001);
-            if (distance >= radius) {
+            if (distance > radius) {
                 continue;
             }
             light_dir = delta / max(distance, 0.0001);
-            attenuation = pow(clamp(1.0 - distance / radius, 0.0, 1.0), 2.0);
+            let falloff = clamp(1.0 - distance / radius, 0.0, 1.0);
+            attenuation = falloff * falloff;
+            if (kind == 3) {
+                attenuation = mix(attenuation, falloff, clamp(light.flags.w * 0.25, 0.0, 0.6));
+            }
             if (kind == 2) {
                 let spot_dir = normalize(light.direction_cone.xyz);
                 let cone = dot(normalize(world_position - light.position_radius.xyz), spot_dir);
                 let cone_cos = light.direction_cone.w;
                 let spot = smoothstep(cone_cos, min(1.0, cone_cos + 0.18), cone);
                 attenuation = attenuation * spot;
-            } else if (kind == 3) {
-                attenuation = mix(attenuation, sqrt(max(attenuation, 0.0)), clamp(light.flags.w * 0.25, 0.0, 0.6));
             }
         }
-        let ndotl = max(dot(normal, light_dir), 0.0);
-        accum = accum + color * ndotl * attenuation;
+        if (light.flags.z > 0.5) {
+            accum = accum + color * attenuation;
+        } else {
+            let ndotl = max(dot(normal, light_dir), 0.0);
+            accum = accum + color * ndotl * attenuation;
+        }
     }
-    return clamp(accum / (vec3<f32>(1.0) + accum * 0.25), vec3<f32>(0.03), vec3<f32>(2.0));
+    return clamp(accum, vec3<f32>(0.0), vec3<f32>(2.0));
 }
 
 @fragment
@@ -122,7 +128,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let n = normalize(input.normal);
         let light = normalize(vec3<f32>(0.45, 0.35, 0.82));
         let ndotl = max(dot(n, light), 0.0);
-        out_color = vec4<f32>(out_color.rgb * (0.45 + ndotl * 0.55), out_color.a);
+        let soft_shade = clamp(0.76 + ndotl * 0.24, 0.70, 1.0);
+        out_color = vec4<f32>(out_color.rgb * soft_shade, 1.0);
     }
 
     if (locals.flags.y > 0.5) {

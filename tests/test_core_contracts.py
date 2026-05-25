@@ -777,6 +777,7 @@ def test_module_mesh_properties_panel_lists_coloaded_walkmesh_overlay_nodes() ->
         faces=[(0, 1, 2)],
         texture="walkmesh",
         _gr_walkmesh_overlay_proxy=True,
+        _gr_hidden=True,
     )
     model = SimpleNamespace(
         name="m01aa_01a",
@@ -797,6 +798,7 @@ def test_module_mesh_properties_panel_lists_coloaded_walkmesh_overlay_nodes() ->
 
     assert panel.module_walkmesh_tree.topLevelItemCount() == 1
     assert panel.module_walkmesh_tree.topLevelItem(0).text(0) == "m01aa_01a_overlay"
+    assert panel.module_walkmesh_tree.topLevelItem(0).text(4) == "no"
     panel.module_walkmesh_tree.setCurrentItem(panel.module_walkmesh_tree.topLevelItem(0))
     assert selected_batches[-1] == [overlay_node]
 
@@ -833,6 +835,44 @@ def test_coloaded_walkmesh_overlay_aligns_to_existing_model_walkmesh_bounds() ->
     assert proxy.faces == [(0, 1, 2)]
     assert proxy.face_mats == [7]
     assert proxy._gr_walkmesh_overlay_proxy is True
+    assert proxy._gr_hidden is True
+
+
+def test_coloaded_walkmesh_overlay_visibility_syncs_renderer_state() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    proxy = SimpleNamespace(_gr_hidden=True)
+    renderer = SimpleNamespace(_walkmesh_overlay=SimpleNamespace(_gr_module_node=proxy), show_walkmesh=True)
+    button_states = []
+    button = SimpleNamespace(setChecked=lambda checked: button_states.append(bool(checked)))
+    window = SimpleNamespace(viewport=SimpleNamespace(_renderer=renderer, walkmesh_button=button))
+
+    QtGhostRiggerMainWindow._sync_walkmesh_overlay_visibility(window)
+
+    assert renderer.show_walkmesh is False
+    assert button_states[-1] is False
+
+    proxy._gr_hidden = False
+    QtGhostRiggerMainWindow._sync_walkmesh_overlay_visibility(window)
+
+    assert renderer.show_walkmesh is True
+    assert button_states[-1] is True
+
+
+def test_hidden_module_mesh_panel_selection_is_not_forwarded_to_viewport() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    calls = []
+    viewport = SimpleNamespace(set_selected_meshes=lambda nodes: calls.append(list(nodes)))
+    window = SimpleNamespace(viewport=viewport)
+    hidden = SimpleNamespace(name="001ebo1_overlay", _gr_hidden=True)
+    visible = SimpleNamespace(name="WALK1", _gr_hidden=False)
+
+    QtGhostRiggerMainWindow._on_module_meshes_selected_from_panel(window, [hidden])
+    assert calls == []
+
+    QtGhostRiggerMainWindow._on_module_meshes_selected_from_panel(window, [visible])
+    assert calls == [[visible]]
 
 
 def test_qt_viewport_exposes_mesh_multiselect_box_and_ctrl_a() -> None:
@@ -1261,6 +1301,239 @@ def test_moderngl_child_selection_does_not_select_sibling_meshes_or_lights() -> 
     assert renderer._is_node_selected_for_render(sibling_light) is True
     assert renderer._is_node_selected_for_render(selected_mesh) is False
     assert renderer._is_node_selected_for_render(sibling_mesh) is False
+
+
+def test_wgpu_light_helper_line_buffer_matches_gizmo_line_stride(monkeypatch) -> None:
+    import numpy as np
+
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    captured = {}
+
+    class _Device:
+        def create_buffer_with_data(self, *, data, usage):
+            captured["shape"] = tuple(data.shape)
+            captured["data"] = np.asarray(data, dtype=np.float32).copy()
+            captured["usage"] = usage
+            return SimpleNamespace(data=captured["data"])
+
+    fake_wgpu = SimpleNamespace(BufferUsage=SimpleNamespace(VERTEX=7))
+    monkeypatch.setitem(__import__("sys").modules, "wgpu", fake_wgpu)
+
+    renderer = WgpuRenderer()
+    renderer.device = _Device()
+
+    buffer, count = renderer._position_line_buffer(
+        [(1.0, 2.0, 3.0), (4.0, 5.0, 6.0)],
+        usage=fake_wgpu.BufferUsage.VERTEX,
+    )
+
+    assert buffer is not None
+    assert count == 2
+    assert captured["shape"] == (2, 3)
+    assert captured["usage"] == fake_wgpu.BufferUsage.VERTEX
+    assert captured["data"].tolist() == [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+
+
+def test_wgpu_mesh_hover_uses_explicit_hovered_node_and_toggle() -> None:
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    hovered = SimpleNamespace(name="Object3258")
+    sibling = SimpleNamespace(name="AuroraLight273", is_light=True)
+
+    renderer.hovered_node = hovered
+    renderer.show_mesh_hover = True
+
+    assert renderer._is_hovered_mesh_data(SimpleNamespace(source=hovered)) is True
+    assert renderer._is_hovered_mesh_data(SimpleNamespace(source=sibling)) is False
+
+    renderer.show_mesh_hover = False
+    assert renderer._is_hovered_mesh_data(SimpleNamespace(source=hovered)) is False
+
+    renderer.show_mesh_hover = True
+    hovered._gr_hidden = True
+    assert renderer._is_hovered_mesh_data(SimpleNamespace(source=hovered)) is False
+
+
+def test_wgpu_light_volume_helpers_match_moderngl_editor_sizes() -> None:
+    from src.gui.qt_lib.lighting.light_gizmo_renderer import LIGHT_HELPER_POINT_RADIUS, LIGHT_HELPER_SPOT_LENGTH
+    from src.gui.qt_lib.lighting.render_data import SceneLightRenderData, build_light_volume_line_batches
+
+    point = SceneLightRenderData(
+        light_id=1,
+        node_id="point",
+        name="AuroraLight001",
+        enabled=True,
+        light_type="aurora_point",
+        position=(0.0, 0.0, 0.0),
+        direction=(0.0, 0.0, -1.0),
+        color_rgb=(1.0, 1.0, 1.0),
+        intensity=1.0,
+        radius=50.0,
+        cone_angle_degrees=45.0,
+        area_size=8.0,
+        ambient_only=False,
+        cast_shadows=True,
+        group="",
+        selected=False,
+        hovered=False,
+        visible=True,
+        revision=0,
+    )
+    spot = SceneLightRenderData(
+        **{
+            **point.__dict__,
+            "light_id": 2,
+            "node_id": "spot",
+            "name": "Spot",
+            "light_type": "spot",
+            "radius": 80.0,
+        }
+    )
+
+    batches = build_light_volume_line_batches(
+        SimpleNamespace(lights=(point, spot), show_helpers=True, show_volumes=True)
+    )
+    vertices_by_color = [vertices for _color, vertices in batches]
+    all_vertices = [vertex for vertices in vertices_by_color for vertex in vertices]
+
+    assert max(abs(vertex[0]) for vertex in all_vertices) <= LIGHT_HELPER_POINT_RADIUS + 0.001
+    assert min(vertex[2] for vertex in all_vertices) >= -LIGHT_HELPER_SPOT_LENGTH - 0.001
+
+
+def test_wgpu_light_helper_color_uses_theme_palette_not_light_tint() -> None:
+    from src.gui.qt_lib.lighting.render_data import SceneLightRenderData, build_light_helper_line_batches
+
+    light = SceneLightRenderData(
+        light_id=1,
+        node_id="point",
+        name="AuroraLight001",
+        enabled=True,
+        light_type="aurora_point",
+        position=(0.0, 0.0, 0.0),
+        direction=(0.0, 0.0, -1.0),
+        color_rgb=(0.05, 0.2, 1.0),
+        intensity=1.0,
+        radius=5.0,
+        cone_angle_degrees=45.0,
+        area_size=1.0,
+        ambient_only=False,
+        cast_shadows=True,
+        group="",
+        selected=False,
+        hovered=False,
+        visible=True,
+        revision=0,
+    )
+
+    batches = build_light_helper_line_batches(
+        SimpleNamespace(
+            lights=(light,),
+            show_helpers=True,
+            helper_palette={"point": (1.0, 0.82, 0.10), "aurora_point": (1.0, 0.82, 0.10)},
+        )
+    )
+
+    assert batches
+    assert batches[0][0] == (1.0, 0.82, 0.10)
+
+
+def test_light_picker_hits_visible_projected_light_volume_ring() -> None:
+    from src.gui.qt_lib.lighting.light_picker import LightPicker
+
+    node = SimpleNamespace(
+        is_light=True,
+        light_kind="aurora_point",
+        light_radius=4.0,
+        position=(0.0, 0.0, 1.0),
+    )
+
+    def project(x, y, z, _width, _height):
+        return (100.0 + x * 20.0, 100.0 + y * 20.0, float(z))
+
+    def world_transform(light):
+        return light.position, (0.0, 0.0, 0.0, 1.0), False
+
+    picker = LightPicker(max_screen_distance=8)
+
+    assert picker.hit_test([node], 113, 100, 400, 300, project, world_transform, include_volumes=False) is None
+    assert picker.hit_test([node], 113, 100, 400, 300, project, world_transform, include_volumes=True) is node
+    assert picker.hit_test([node], 113, 100, 400, 300, project, world_transform) is node
+
+
+def test_wgpu_scene_lighting_only_drives_realistic_base_modes() -> None:
+    from src.gui.qt_lib.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    lighting = SimpleNamespace(mode="scene", diffuse_enabled=True)
+
+    assert renderer._scene_lighting_enabled(lighting, ViewportDisplayOptions(display_mode=ViewportDisplayMode.FULL_MATERIAL)) is True
+    assert renderer._scene_lighting_enabled(lighting, ViewportDisplayOptions(display_mode=ViewportDisplayMode.TEXTURED)) is True
+    assert renderer._scene_lighting_enabled(lighting, ViewportDisplayOptions(display_mode=ViewportDisplayMode.SHADED)) is False
+    assert renderer._scene_lighting_enabled(lighting, ViewportDisplayOptions(display_mode=ViewportDisplayMode.SOLID)) is False
+
+
+def test_wgpu_external_lighting_snapshot_receives_renderer_helper_palette(monkeypatch) -> None:
+    from src.gui.qt_lib.lighting.render_data import SceneLightingRenderData
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    monkeypatch.setitem(__import__("sys").modules, "wgpu", SimpleNamespace())
+    renderer = WgpuRenderer()
+    renderer.device = object()
+    renderer.queue = object()
+    renderer.light_buffer = object()
+    renderer.lighting_uniform_buffer = object()
+    renderer._active_lighting_render_data = SceneLightingRenderData()
+    renderer.light_helper_palette = {"light": (1.0, 0.82, 0.10), "point": (1.0, 0.82, 0.10)}
+
+    assert renderer._ensure_light_resource() is None
+    assert renderer._active_lighting_render_data.helper_palette["light"] == (1.0, 0.82, 0.10)
+
+
+def test_wgpu_material_uniforms_respect_diffuse_toggle_and_display_options() -> None:
+    import numpy as np
+
+    from src.gui.qt_lib.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    material = SimpleNamespace(
+        diffuse_texture_resource=object(),
+        has_lightmap=False,
+        alpha_mode="OPAQUE",
+        alpha_cutoff=0.5,
+    )
+    options = ViewportDisplayOptions(display_mode=ViewportDisplayMode.TEXTURED, show_textures=True)
+
+    renderer.show_diffuse_map = False
+    data = renderer._mesh_uniform_bytes(np.eye(4, dtype=np.float32), (1.0, 1.0, 1.0, 1.0), material, options)
+    flags = np.frombuffer(data[80:96], dtype=np.float32)
+    assert flags[0] == 0.0
+
+    renderer.show_diffuse_map = True
+    data = renderer._mesh_uniform_bytes(np.eye(4, dtype=np.float32), (1.0, 1.0, 1.0, 1.0), material, options)
+    flags = np.frombuffer(data[80:96], dtype=np.float32)
+    assert flags[0] == 1.0
+
+    shaded = ViewportDisplayOptions(display_mode=ViewportDisplayMode.SHADED)
+    data = renderer._mesh_uniform_bytes(np.eye(4, dtype=np.float32), (1.0, 1.0, 1.0, 1.0), material, shaded)
+    params = np.frombuffer(data[96:112], dtype=np.float32)
+    assert params[1] == 2.0
+
+
+def test_wgpu_render_consumes_mesh_hover_payload() -> None:
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    source = inspect.getsource(WgpuRenderer.render)
+    viewport_source = inspect.getsource(QtViewportWidget._render_gpu_frame)
+
+    assert 'self.hovered_node = kwargs.get("hovered_node")' in source
+    assert 'self.show_mesh_hover = bool(kwargs.get("show_mesh_hover"' in source
+    assert 'hovered_node=getattr(self, "_hovered_mesh_node", None)' in viewport_source
+    assert 'show_mesh_hover=bool(getattr(self, "mesh_hover_enabled", True))' in viewport_source
 
 
 def test_qt_lighting_panel_select_light_syncs_from_viewport_without_emitting() -> None:

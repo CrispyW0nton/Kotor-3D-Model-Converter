@@ -42,6 +42,7 @@ class SceneLightRenderData:
     hovered: bool
     visible: bool
     revision: int
+    active_selected: bool = False
     original_ref: object | None = field(default=None, compare=False)
 
 
@@ -62,6 +63,7 @@ class SceneLightingRenderData:
     lightmap_enabled: bool = True
     lm_intensity: float = 0.55
     lm_mode: str = "baked"
+    helper_palette: dict[str, Color] = field(default_factory=dict, compare=False)
     revision: int = 0
 
     @property
@@ -88,6 +90,7 @@ def build_scene_lighting_render_data(
     lightmap_enabled: bool = True,
     lm_intensity: float = 0.55,
     lm_mode: str = "baked",
+    helper_palette: dict[str, Color] | None = None,
 ) -> SceneLightingRenderData:
     lights = tuple(
         _light_from_node(node, index, selected_node=selected_node, hovered_node=hovered_node)
@@ -109,6 +112,7 @@ def build_scene_lighting_render_data(
         lm_mode,
         global_intensity,
         _ambient_tuple(ambient_color_rgb),
+        tuple(sorted((str(k), tuple(round(v, 5) for v in _color(c))) for k, c in (helper_palette or {}).items())),
     )
     return SceneLightingRenderData(
         lights=lights,
@@ -126,6 +130,7 @@ def build_scene_lighting_render_data(
         lightmap_enabled=bool(lightmap_enabled),
         lm_intensity=max(0.0, float(lm_intensity)),
         lm_mode=str(lm_mode or "baked").strip().lower(),
+        helper_palette={str(k).strip().lower(): _color(v) for k, v in (helper_palette or {}).items()},
         revision=revision,
     )
 
@@ -150,7 +155,7 @@ def build_light_helper_line_batches(lighting: SceneLightingRenderData | None) ->
     for light in lighting.lights:
         if not light.visible:
             continue
-        color = _helper_color(light)
+        color = _helper_color(light, getattr(lighting, "helper_palette", None))
         vertices = _marker_lines(light)
         if not vertices:
             continue
@@ -165,7 +170,7 @@ def build_light_volume_line_batches(lighting: SceneLightingRenderData | None) ->
     for light in lighting.lights:
         if not light.visible:
             continue
-        color = _helper_color(light)
+        color = _helper_color(light, getattr(lighting, "helper_palette", None))
         vertices = _volume_lines(light)
         if not vertices:
             continue
@@ -201,11 +206,11 @@ def _light_from_node(
     ambient_only = bool(getattr(node, "light_ambient_only", False))
     if ambient_only and light_type in {"point", "aurora_point"}:
         light_type = "aurora_ambient"
-    selected = bool(
+    active_selected = bool(
         node is selected_node
-        or bool(getattr(node, "_gr_light_selected", False))
         or bool(getattr(node, "_gr_light_metadata", {}).get("active_selection", False))
     )
+    selected = active_selected or bool(getattr(node, "_gr_light_selected", False))
     return SceneLightRenderData(
         light_id=index,
         node_id=str(getattr(node, "_gr_light_id", "") or id(node)),
@@ -223,6 +228,7 @@ def _light_from_node(
         cast_shadows=bool(getattr(node, "light_shadow", True)),
         group=str(getattr(node, "_gr_light_group_id", "") or ""),
         selected=selected,
+        active_selected=active_selected,
         hovered=node is hovered_node,
         visible=not bool(getattr(node, "_gr_light_hidden", False)) and not bool(getattr(node, "_gr_light_deleted", False)),
         revision=int(getattr(node, "_gr_light_revision", 0) or 0),
@@ -237,6 +243,7 @@ def _lighting_revision(lights: tuple[SceneLightRenderData, ...], *settings: obje
             light.enabled,
             light.visible,
             light.selected,
+            light.active_selected,
             light.light_type,
             tuple(round(v, 5) for v in light.position),
             tuple(round(v, 5) for v in light.direction),
@@ -299,16 +306,22 @@ def _rotate_vec_by_quat(v: Vec3, q: tuple[float, float, float, float]) -> Vec3:
         return (0.0, 0.0, -1.0)
 
 
-def _helper_color(light: SceneLightRenderData) -> Color:
+def _helper_color(light: SceneLightRenderData, palette: dict[str, Color] | None = None) -> Color:
     helper_kind = light.light_type.replace("aurora_", "")
-    base = LIGHT_HELPER_COLORS.get(helper_kind, LIGHT_HELPER_COLORS["point"])
-    color = tuple(max(0.0, min(1.0, float(base[i]) * max(0.25, light.color_rgb[i]))) for i in range(3))
+    palette = palette or {}
+    base = (
+        palette.get(light.light_type)
+        or palette.get(helper_kind)
+        or palette.get("light")
+        or LIGHT_HELPER_COLORS.get(helper_kind, LIGHT_HELPER_COLORS["point"])
+    )
+    color = tuple(max(0.0, min(1.0, float(base[i]))) for i in range(3))
     if not light.enabled:
         color = tuple(c * 0.38 for c in color)
     if light.selected or light.hovered:
         color = tuple(min(1.0, c * LIGHT_HELPER_SELECTED_BOOST) for c in color)
-    if light.selected:
-        color = (0.90, 0.95, 1.0)
+    if light.active_selected:
+        color = palette.get("selected", (0.90, 0.95, 1.0))
     return color  # type: ignore[return-value]
 
 
@@ -332,27 +345,45 @@ def _volume_lines(light: SceneLightRenderData) -> list[Vec3]:
             _v_add(_v_sub(target, _v_mul(forward, head)), _v_mul(right, head * 0.45)),
             target,
             _v_add(_v_sub(target, _v_mul(forward, head)), _v_mul(right, -head * 0.45)),
+            _v_add(target, _v_mul(right, -head * 0.35)),
+            _v_add(target, _v_mul(right, head * 0.35)),
+            _v_add(target, _v_mul(up, -head * 0.35)),
+            _v_add(target, _v_mul(up, head * 0.35)),
         ]
     if kind == "spot":
-        length = min(max(light.radius, LIGHT_HELPER_SPOT_LENGTH), 500.0)
-        cap_radius = min(math.tan(math.radians(light.cone_angle_degrees * 0.5)) * length, max(length, LIGHT_HELPER_SPOT_CAP_MAX_RADIUS))
+        length = LIGHT_HELPER_SPOT_LENGTH
+        cap_radius = min(
+            math.tan(math.radians(light.cone_angle_degrees * 0.5)) * length,
+            LIGHT_HELPER_SPOT_CAP_MAX_RADIUS,
+        )
         cap = _v_add(light.position, _v_mul(forward, length))
-        rows = _ring(cap, right, up, cap_radius, steps=24)
+        rows = _ring(cap, right, up, cap_radius, steps=20)
         for sx, sy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
             edge = _v_add(cap, _v_add(_v_mul(right, cap_radius * sx), _v_mul(up, cap_radius * sy)))
             rows.extend((light.position, edge))
         return rows
     if kind == "area":
-        half = max(LIGHT_HELPER_AREA_SIZE, light.area_size) * 0.5
+        half = LIGHT_HELPER_AREA_SIZE * 0.5
         c0 = _v_add(light.position, _v_add(_v_mul(right, -half), _v_mul(up, -half)))
         c1 = _v_add(light.position, _v_add(_v_mul(right, half), _v_mul(up, -half)))
         c2 = _v_add(light.position, _v_add(_v_mul(right, half), _v_mul(up, half)))
         c3 = _v_add(light.position, _v_add(_v_mul(right, -half), _v_mul(up, half)))
-        return [c0, c1, c1, c2, c2, c3, c3, c0]
-    radius = max(LIGHT_HELPER_POINT_RADIUS, min(float(light.radius), 500.0))
-    rows = _ring(light.position, (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), radius, steps=36)
-    rows.extend(_ring(light.position, (1.0, 0.0, 0.0), (0.0, 0.0, 1.0), radius, steps=36))
-    rows.extend(_ring(light.position, (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), radius, steps=36))
+        return [
+            c0,
+            c1,
+            c1,
+            c2,
+            c2,
+            c3,
+            c3,
+            c0,
+            light.position,
+            _v_add(light.position, _v_mul(forward, LIGHT_HELPER_DIRECTION_LENGTH * 0.6)),
+        ]
+    radius = LIGHT_HELPER_POINT_RADIUS * (1.2 if light.selected else 1.0)
+    rows = _ring(light.position, (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), radius, steps=28)
+    rows.extend(_ring(light.position, (1.0, 0.0, 0.0), (0.0, 0.0, 1.0), radius, steps=28))
+    rows.extend(_ring(light.position, (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), radius, steps=28))
     return rows
 
 
@@ -399,4 +430,3 @@ def _v_cross(a: Vec3, b: Vec3) -> Vec3:
 def _v_norm(a: Vec3) -> Vec3:
     length = math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]) or 1.0
     return (a[0] / length, a[1] / length, a[2] / length)
-

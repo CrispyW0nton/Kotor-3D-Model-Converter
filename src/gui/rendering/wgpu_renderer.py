@@ -7,6 +7,7 @@ live-surface clear/grid plus basic untextured mesh rendering.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import math
@@ -38,6 +39,7 @@ from src.gui.rendering.renderer_profiler import RendererProfiler
 from src.gui.rendering.renderer_settings import RendererSettings
 from src.gui.rendering.picking import PickHit
 from src.gui.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions, normalize_display_mode
+from src.gui.lighting.light_gizmo_renderer import LIGHT_HELPER_COLORS
 
 log = logging.getLogger(__name__)
 
@@ -959,6 +961,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.light_buffer = None
         self.lighting_uniform_buffer = None
         self.light_resource: WgpuLightResource | None = None
+        self._light_resource_revision_key = 0
         self.max_wgpu_lights = 64
         self.resource_cache = WgpuResourceCache(self)
         self.profiler = RendererProfiler(enabled=bool(settings.wgpu_profile_frames))
@@ -1017,6 +1020,10 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.show_lightmap_map = True
         self.show_light_gizmos = True
         self.show_light_radius_volumes = False
+        self.selected_node = None
+        self.selected_nodes = []
+        self.hovered_node = None
+        self.show_mesh_hover = True
         self.scene_ambient = 0.06
         self.lighting_mode = "scene"
         self.shader_complexity_mode = "basic"
@@ -1032,6 +1039,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "cutout": 0,
             "blended": 0,
             "edges": 0,
+            "hovered_edges": 0,
             "selected_edges": 0,
             "skeleton_lines": 0,
             "joint_markers": 0,
@@ -1072,7 +1080,11 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.grid_y_axis_color = (62 / 255.0, 112 / 255.0, 68 / 255.0)
         self.wire_color = (0.18, 0.62, 0.95)
         self.hidden_line_color = (0.02, 0.025, 0.03)
+        self.hovered_edge_color = (0.0, 215 / 255.0, 181 / 255.0)
         self.selected_edge_color = (1.0, 0.78, 0.08)
+        self.null_helper_color = (0.64, 0.72, 0.82)
+        self.light_helper_palette = dict(LIGHT_HELPER_COLORS)
+        self.light_helper_palette["light"] = (1.0, 0.82, 0.10)
         self.missing_texture_color_a = (1.0, 0.0, 1.0)
         self.missing_texture_color_b = (0.0, 0.0, 0.0)
 
@@ -2028,6 +2040,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "cutout": 0,
             "blended": 0,
             "edges": 0,
+            "hovered_edges": 0,
             "selected_edges": 0,
             "skeleton_lines": 0,
             "joint_markers": 0,
@@ -2064,6 +2077,15 @@ class WgpuRenderer(NullDiagnosticRenderer):
             draw_pass("blended", blended, self.pipeline_mesh_blend or self.pipeline_mesh)
         if edge_overlay:
             counts["edges"] = self._draw_edge_items(render_pass, edge_items, mvp, mode)
+        hovered_edge_items = [item for item in edge_items if self._is_hovered_mesh_data(item)]
+        if hovered_edge_items:
+            counts["hovered_edges"] = self._draw_edge_items(
+                render_pass,
+                hovered_edge_items,
+                mvp,
+                mode,
+                color=(*tuple(self.hovered_edge_color[:3]), 1.0),
+            )
         selected_edge_items = [item for item in edge_items if self._is_selected_mesh_data(item)]
         if selected_edge_items:
             counts["selected_edges"] = self._draw_edge_items(
@@ -2176,6 +2198,14 @@ class WgpuRenderer(NullDiagnosticRenderer):
         selected = getattr(self, "selected_node", None)
         return bool(node is selected or id(node) in selected_ids or getattr(node, "_gr_selected", False))
 
+    def _is_hovered_mesh_data(self, mesh_data) -> bool:
+        if not bool(getattr(self, "show_mesh_hover", True)):
+            return False
+        node = getattr(mesh_data, "source", None)
+        if node is None or bool(getattr(node, "_gr_hidden", False)):
+            return False
+        return node is getattr(self, "hovered_node", None)
+
     def _draw_edge_items(self, render_pass, mesh_items, mvp, mode: ViewportDisplayMode, *, color=None) -> int:
         import wgpu
 
@@ -2233,13 +2263,39 @@ class WgpuRenderer(NullDiagnosticRenderer):
                     lightmap_enabled=bool(getattr(self, "show_lightmap_map", True)),
                     lm_intensity=float(getattr(self, "lightmap_intensity", 0.55)),
                     lm_mode=str(getattr(self, "lightmap_mode", "baked") or "baked"),
+                    helper_palette=getattr(self, "light_helper_palette", None),
                 )
                 self._active_lighting_render_data = lighting
             except Exception as exc:
                 self._last_lighting_error = f"lighting snapshot failed: {exc}"
                 return None
+        if lighting is not None and not getattr(lighting, "helper_palette", None):
+            try:
+                helper_palette = getattr(self, "light_helper_palette", None) or {}
+                palette_revision = hash(
+                    tuple(sorted((str(k), tuple(round(float(c), 5) for c in v[:3])) for k, v in helper_palette.items()))
+                ) & 0x7FFFFFFF
+                lighting = dataclasses.replace(
+                    lighting,
+                    helper_palette=helper_palette,
+                    revision=(int(getattr(lighting, "revision", 0) or 0) ^ palette_revision) & 0x7FFFFFFF,
+                )
+                self._active_lighting_render_data = lighting
+            except Exception:
+                pass
         revision = int(getattr(lighting, "revision", 0) or 0)
-        if self.light_resource is not None and self.light_resource.revision == revision:
+        display_options = self._effective_display_options or self._active_display_options
+        display_revision = hash(
+            (
+                str(getattr(getattr(display_options, "display_mode", None), "value", getattr(display_options, "display_mode", ""))),
+                bool(getattr(display_options, "force_flat_colour", False)),
+                bool(getattr(display_options, "force_unlit", False)),
+                bool(getattr(display_options, "show_textures", True)),
+                bool(getattr(display_options, "show_lightmaps", False)),
+            )
+        ) & 0x7FFFFFFF
+        revision = (revision ^ display_revision) & 0x7FFFFFFF
+        if self.light_resource is not None and self._light_resource_revision_key == revision:
             return self.light_resource
 
         started = time.perf_counter()
@@ -2268,7 +2324,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 kind = light_kind_int(str(getattr(light, "light_type", "point") or "point"))
                 if kind == 0 and "unknown" in str(getattr(light, "light_type", "") or "").lower():
                     unsupported += 1
-                if bool(getattr(light, "selected", False)):
+                if bool(getattr(light, "active_selected", False)) or (selected_light_id == 0 and bool(getattr(light, "selected", False))):
                     selected_light_id = int(getattr(light, "light_id", idx + 1) or (idx + 1))
                 px, py, pz = tuple(getattr(light, "position", (0.0, 0.0, 0.0)))[:3]
                 dx, dy, dz = tuple(getattr(light, "direction", (0.0, 0.0, -1.0)))[:3]
@@ -2321,6 +2377,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 upload_time_ms=upload_ms,
             )
             self.light_resource = resource
+            self._light_resource_revision_key = revision
             self._last_lighting_upload_time_ms = upload_ms
             self._last_lighting_error = ""
             self._last_light_shader_active = bool(scene_enabled)
@@ -2351,8 +2408,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
 
         if self.device is None or not vertices:
             return None, 0
-        data = np.zeros((len(vertices), 18), dtype=np.float32)
-        data[:, 0:3] = np.asarray(vertices, dtype=np.float32).reshape(-1, 3)
+        data = np.asarray(vertices, dtype=np.float32).reshape(-1, 3)
         return self.device.create_buffer_with_data(data=data, usage=usage), int(len(vertices))
 
     def _draw_light_overlays(self, render_pass, width: int, height: int) -> tuple[int, int]:
@@ -2385,8 +2441,18 @@ class WgpuRenderer(NullDiagnosticRenderer):
         mode = str(getattr(lighting, "mode", getattr(self, "lighting_mode", "scene")) or "scene").lower()
         if mode in {"unlit", "fullbright", "diffuse_only", "normal_only", "specular_only", "environment_only", "lightmap_preview", "shader_complexity"}:
             return False
-        if display_options is not None and bool(getattr(display_options, "force_flat_colour", False)):
-            return False
+        if display_options is not None:
+            if bool(getattr(display_options, "force_flat_colour", False)) or bool(getattr(display_options, "force_unlit", False)):
+                return False
+            base_mode = normalize_display_mode(getattr(display_options, "display_mode", ViewportDisplayMode.FULL_MATERIAL))
+            if base_mode in {
+                ViewportDisplayMode.SOLID,
+                ViewportDisplayMode.SHADED,
+                ViewportDisplayMode.SMOOTH_SHADED,
+                ViewportDisplayMode.WIREFRAME,
+                ViewportDisplayMode.HIDDEN_LINE,
+            }:
+                return False
         return bool(getattr(lighting, "diffuse_enabled", True))
 
     def _draw_gizmo_lines(self, render_pass, width: int, height: int) -> int:
@@ -2851,6 +2917,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         mode = display_options.display_mode
         use_diffuse = bool(
             display_options.show_textures
+            and bool(getattr(self, "show_diffuse_map", True))
             and mode in {
                 ViewportDisplayMode.SOLID,
                 ViewportDisplayMode.SHADED,
@@ -2934,6 +3001,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
             self._active_gizmo_render_data = kwargs.get("gizmo_render_data")
             self._active_lighting_render_data = kwargs.get("lighting_render_data")
             self._active_picking_diagnostics = dict(kwargs.get("picking_diagnostics") or {})
+            self.hovered_node = kwargs.get("hovered_node")
+            self.show_mesh_hover = bool(kwargs.get("show_mesh_hover", getattr(self, "show_mesh_hover", True)))
             self.show_grid = bool(self._active_display_options.show_grid)
             if not self.initialized:
                 self.initialize()
@@ -3030,6 +3099,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.light_buffer = None
         self.lighting_uniform_buffer = None
         self.light_resource = None
+        self._light_resource_revision_key = 0
         self.depth_texture = None
         self.depth_view = None
         self._pick_resources = None
@@ -3045,6 +3115,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
 
     def invalidate_lighting(self, reason: str = "lighting changed") -> None:
         self.light_resource = None
+        self._light_resource_revision_key = 0
         self._last_lighting_invalidation_reason = str(reason or "lighting changed")
 
     def invalidate_node(self, node) -> None:
@@ -3054,11 +3125,13 @@ class WgpuRenderer(NullDiagnosticRenderer):
     def invalidate_node_cache(self) -> None:
         self.resource_cache.invalidate_all("node cache invalidated")
         self.light_resource = None
+        self._light_resource_revision_key = 0
         self._gizmo_line_cache.clear()
 
     def invalidate_all(self) -> None:
         self.resource_cache.invalidate_all("renderer invalidate_all")
         self.light_resource = None
+        self._light_resource_revision_key = 0
         self._gizmo_line_cache.clear()
 
     def _refresh_themed_resources(self) -> None:
@@ -3073,6 +3146,10 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.grid_x_axis_color = _hex_to_rgb_float(theme.color("error"), self.grid_x_axis_color)
         self.grid_y_axis_color = _hex_to_rgb_float(theme.color("success"), self.grid_y_axis_color)
         self.wire_color = _hex_to_rgb_float(theme.color("accent.primary"), self.wire_color)
+        self.hovered_edge_color = _hex_to_rgb_float(
+            theme.color("accent.secondary", theme.color("accent.primary")),
+            self.hovered_edge_color,
+        )
         self.selected_edge_color = _hex_to_rgb_float(
             theme.color("selection.background", theme.color("accent.primary")),
             self.selected_edge_color,
@@ -3081,6 +3158,27 @@ class WgpuRenderer(NullDiagnosticRenderer):
             theme.color("viewport.border", theme.color("panel.border", theme.color("text.secondary"))),
             self.hidden_line_color,
         )
+        self.null_helper_color = _hex_to_rgb_float(
+            theme.color("viewport.helper.null", theme.color("viewport.text")),
+            self.null_helper_color,
+        )
+        light_color = _hex_to_rgb_float(
+            theme.color("viewport.helper.light", theme.color("warning")),
+            self.light_helper_palette.get("light", (1.0, 0.82, 0.10)),
+        )
+        light_selected = _hex_to_rgb_float(
+            theme.color("viewport.helper.lightSelected", theme.color("selection.background")),
+            (0.90, 0.95, 1.0),
+        )
+        self.light_helper_palette = {
+            **LIGHT_HELPER_COLORS,
+            "light": light_color,
+            "point": light_color,
+            "aurora_point": light_color,
+            "selected": light_selected,
+        }
+        self.light_resource = None
+        self._light_resource_revision_key = 0
         self.missing_texture_color_a = _hex_to_rgb_float(
             theme.color("accent.secondary", theme.color("accent.primary")),
             self.missing_texture_color_a,
@@ -3096,7 +3194,12 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.grid_y_axis_color = (62 / 255.0, 112 / 255.0, 68 / 255.0)
         self.wire_color = (0.18, 0.62, 0.95)
         self.hidden_line_color = (0.02, 0.025, 0.03)
+        self.hovered_edge_color = (0.0, 215 / 255.0, 181 / 255.0)
         self.selected_edge_color = (1.0, 0.78, 0.08)
+        self.null_helper_color = (0.64, 0.72, 0.82)
+        self.light_helper_palette = {**LIGHT_HELPER_COLORS, "light": (1.0, 0.82, 0.10), "point": (1.0, 0.82, 0.10), "aurora_point": (1.0, 0.82, 0.10)}
+        self.light_resource = None
+        self._light_resource_revision_key = 0
         self.missing_texture_color_a = (1.0, 0.0, 1.0)
         self.missing_texture_color_b = (0.0, 0.0, 0.0)
         self._refresh_themed_resources()
@@ -3112,8 +3215,14 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.grid_x_axis_color = _rgb_float((210, 70, 70) if is_dark else (160, 30, 30))
         self.grid_y_axis_color = _rgb_float((70, 180, 90) if is_dark else (40, 130, 55))
         self.wire_color = _rgb_float(hi)
+        self.hovered_edge_color = _rgb_float(hi)
         self.selected_edge_color = _rgb_float(hi)
         self.hidden_line_color = _rgb_float(_blend_rgb(bg, fg, 0.32 if is_dark else 0.40))
+        self.null_helper_color = _rgb_float(_blend_rgb(bg, fg, 0.70 if is_dark else 0.55))
+        light_color = _rgb_float((255, 210, 64))
+        self.light_helper_palette = {**LIGHT_HELPER_COLORS, "light": light_color, "point": light_color, "aurora_point": light_color}
+        self.light_resource = None
+        self._light_resource_revision_key = 0
         self.missing_texture_color_a = _rgb_float(hi)
         self.missing_texture_color_b = _rgb_float(bg)
         self._refresh_themed_resources()
@@ -3192,7 +3301,10 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 "grid_y_axis": tuple(self.grid_y_axis_color),
                 "wire": tuple(self.wire_color),
                 "hidden_line": tuple(self.hidden_line_color),
+                "hover": tuple(self.hovered_edge_color),
                 "selection": tuple(self.selected_edge_color),
+                "light_helper": tuple(self.light_helper_palette.get("light", (1.0, 0.82, 0.10))),
+                "null_helper": tuple(self.null_helper_color),
                 "missing_texture_a": tuple(self.missing_texture_color_a),
                 "missing_texture_b": tuple(self.missing_texture_color_b),
             },
@@ -3203,7 +3315,10 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 "grid_major": tuple(self._target_rgb(self.grid_major_color)),
                 "wire": tuple(self._target_rgb(self.wire_color)),
                 "hidden_line": tuple(self._target_rgb(self.hidden_line_color)),
+                "hover": tuple(self._target_rgb(self.hovered_edge_color)),
                 "selection": tuple(self._target_rgb(self.selected_edge_color)),
+                "light_helper": tuple(self._target_rgb(self.light_helper_palette.get("light", (1.0, 0.82, 0.10)))),
+                "null_helper": tuple(self._target_rgb(self.null_helper_color)),
             },
             "display_mode_downgrade": self._display_mode_downgrade,
             "last_display_mode_warning": self.last_display_mode_warning,
@@ -3306,6 +3421,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "last_texture_upload_error": self.resource_cache.last_texture_upload_error,
             "last_material_binding_error": self.resource_cache.last_material_binding_error,
             "last_render_counts": dict(self._last_render_counts),
+            "mesh_hover_enabled": bool(getattr(self, "show_mesh_hover", True)),
+            "hovered_mesh": str(getattr(getattr(self, "hovered_node", None), "name", "") or ""),
             "surface_host": dict(getattr(self, "surface_host_diagnostics", {}) or {}),
             "last_error": self.last_error,
         }

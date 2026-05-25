@@ -20,6 +20,12 @@
         <color name="viewport.text" value="#52616F"/>
         <color name="viewport.gridMajor" value="#CAD5E1"/>
         <color name="viewport.gridMinor" value="#DDE5EE"/>
+        <color name="viewport.helper.light" value="#A36B00"/>
+        <color name="viewport.helper.lightSelected" value="#1F6FEB"/>
+        <color name="viewport.helper.camera" value="#52616F"/>
+        <color name="viewport.helper.cameraSelected" value="#9A6700"/>
+        <color name="viewport.helper.null" value="#687786"/>
+        <color name="viewport.helper.nullSelected" value="#1F6FEB"/>
         <color name="toolbar.background" value="#FFFFFF"/>
         <color name="toolbar.border" value="#C8D1DB"/>
         <color name="button.background" value="#F1F5F8"/>

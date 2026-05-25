@@ -5213,6 +5213,8 @@ class QtViewportWidget(QtWidgets.QWidget):
             skeleton_render_data=skeleton_render_data,
             lighting_render_data=lighting_render_data,
             picking_diagnostics=self._viewport_picking_diagnostics(),
+            hovered_node=getattr(self, "_hovered_mesh_node", None),
+            show_mesh_hover=bool(getattr(self, "mesh_hover_enabled", True)),
             anim_pose=getattr(self._renderer, "_anim_pose", None),
             anim_time=float(getattr(self._renderer, "_anim_time", 0.0)),
             anim_base_pose=getattr(self._renderer, "_anim_base_pose", None),

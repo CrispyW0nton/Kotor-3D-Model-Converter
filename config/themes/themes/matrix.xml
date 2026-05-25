@@ -13,6 +13,12 @@
         <color name="viewport.background" value="#07100C"/>
         <color name="viewport.border" value="#34383F"/>
         <color name="viewport.text" value="#8F9AAA"/>
+        <color name="viewport.helper.light" value="#FFD24A"/>
+        <color name="viewport.helper.lightSelected" value="#E6F2FF"/>
+        <color name="viewport.helper.camera" value="#B4D2DC"/>
+        <color name="viewport.helper.cameraSelected" value="#FFD658"/>
+        <color name="viewport.helper.null" value="#A3B8D1"/>
+        <color name="viewport.helper.nullSelected" value="#FFD658"/>
         <color name="toolbar.background" value="#111916"/>
         <color name="toolbar.border" value="#102019"/>
         <color name="button.background" value="#151D1A"/>

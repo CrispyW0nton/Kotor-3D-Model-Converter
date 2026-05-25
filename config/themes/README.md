@@ -90,6 +90,11 @@ Viewport command bars use `viewportToolbar.background` and
 `viewportToolbar.border` so the Theme Editor can style their framed surface
 separately from general application toolbars.
 
+Viewport helpers use `viewport.helper.light`, `viewport.helper.lightSelected`,
+`viewport.helper.camera`, `viewport.helper.cameraSelected`, `viewport.helper.null`,
+and `viewport.helper.nullSelected` so light, camera, and NULL helper overlays can
+stay readable in both dark and light themes.
+
 ## Module Editor
 
 The standalone Module Editor uses existing theme tokens and layout metrics rather than adding a separate palette. It exposes a `moduleEditor` toolbar layout id for density/button sizing and keeps panels compatible with Default, Matrix, Droid, Dark, Light, Classic plus Default, Compact, Wide, and Cinematic layouts.

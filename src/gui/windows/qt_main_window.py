@@ -319,6 +319,7 @@ def _walkmesh_overlay_node_from_wok(wok_data, label: str, world_offset=(0.0, 0.0
     ]
     node._gr_walkmesh_overlay_proxy = True
     node._gr_walkmesh_source_label = str(label or "")
+    node._gr_hidden = True
     return node
 
 
@@ -3397,7 +3398,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport.cameraChanged.connect(self._sync_camera_panel_from_viewport)
         self.viewport.activeCameraChanged.connect(lambda _node=None: self.camera_panel.refresh())
         self.viewport.cameraSelectionChanged.connect(self.camera_panel.select_camera_object)
-        self.module_geometry_panel.moduleMeshesSelected.connect(self.viewport.set_selected_meshes)
+        self.module_geometry_panel.moduleMeshesSelected.connect(self._on_module_meshes_selected_from_panel)
+        self.module_geometry_panel.moduleMeshVisibilityChanged.connect(self._sync_walkmesh_overlay_visibility)
         self.module_geometry_panel.moduleMeshVisibilityChanged.connect(self.viewport.refresh_view)
         self.module_geometry_panel.moduleMeshVisibilityChanged.connect(lambda: self._invalidate_renderer_resources("module mesh visibility changed"))
         self.properties_panel.positionApplied.connect(
@@ -8028,8 +8030,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             overlay = getattr(getattr(self.viewport, "_renderer", None), "_walkmesh_overlay", None)
             if overlay is not None:
                 setattr(overlay, "_gr_module_node", proxy_node)
-            self.viewport._renderer.show_walkmesh = True
-            self.viewport.walkmesh_button.setChecked(True)
+            self._sync_walkmesh_overlay_visibility()
             self.viewport._request_render()
             if hasattr(self, "module_geometry_panel"):
                 self.module_geometry_panel.show_model(self._active_viewport_model())
@@ -8038,6 +8039,31 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         except Exception as exc:
             log.debug("walkmesh load failed for %s: %s", label, exc)
             return False
+
+    def _on_module_meshes_selected_from_panel(self, nodes: list) -> None:
+        selected = [node for node in (nodes or []) if node is not None]
+        if selected and any(bool(getattr(node, "_gr_hidden", False)) for node in selected):
+            return
+        if hasattr(self, "viewport"):
+            self.viewport.set_selected_meshes(selected)
+
+    def _sync_walkmesh_overlay_visibility(self) -> None:
+        renderer = getattr(getattr(self, "viewport", None), "_renderer", None)
+        overlay = getattr(renderer, "_walkmesh_overlay", None)
+        proxy_node = getattr(overlay, "_gr_module_node", None)
+        if renderer is None or overlay is None or proxy_node is None:
+            return
+        visible = not bool(getattr(proxy_node, "_gr_hidden", False))
+        try:
+            renderer.show_walkmesh = visible
+        except Exception:
+            pass
+        button = getattr(getattr(self, "viewport", None), "walkmesh_button", None)
+        if button is not None:
+            try:
+                button.setChecked(visible)
+            except Exception:
+                pass
 
     def _open_qt_character_builder_window(self):
         """Open (or raise) the M2 AccuRig-style Character Builder window.
