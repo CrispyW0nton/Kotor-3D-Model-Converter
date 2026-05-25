@@ -173,13 +173,37 @@ def build_skeleton_render_data(
     )
 
 
-def extract_skinning_arrays(node, vertex_count: int, *, skeleton_id: int = 0) -> SkinningArrays:
+def extract_skinning_arrays(
+    node,
+    vertex_count: int,
+    *,
+    skeleton_id: int = 0,
+    bone_indices=None,
+    bone_weights=None,
+) -> SkinningArrays:
     """Return normalized up-to-four influence skin arrays for one mesh node."""
 
     import numpy as np
 
     if node is None or vertex_count <= 0 or not bool(getattr(node, "is_skin", False)):
         return SkinningArrays(None, None, skeleton_id=skeleton_id)
+    if bone_indices is not None and bone_weights is not None:
+        indices = np.asarray(bone_indices, dtype=np.uint16)
+        weights = np.asarray(bone_weights, dtype=np.float32)
+        if indices.shape == weights.shape and indices.ndim == 2 and indices.shape[1] >= 4:
+            indices = np.ascontiguousarray(indices[:vertex_count, :4], dtype=np.uint16)
+            weights = np.ascontiguousarray(weights[:vertex_count, :4], dtype=np.float32)
+            if len(indices) == vertex_count:
+                _normalize_weight_rows(weights)
+                return SkinningArrays(
+                    bone_indices=indices,
+                    bone_weights=weights,
+                    max_influences=4,
+                    skeleton_id=skeleton_id,
+                    skin_revision=_skin_revision(node, vertex_count),
+                    bind_shape_matrix=np.eye(4, dtype=np.float32),
+                    is_skinned=True,
+                )
     skin_data = list(getattr(node, "skin_data", []) or [])
     if not skin_data:
         return SkinningArrays(None, None, skeleton_id=skeleton_id)
@@ -223,6 +247,81 @@ def extract_skinning_arrays(node, vertex_count: int, *, skeleton_id: int = 0) ->
         is_skinned=True,
         warning=warning,
     )
+
+
+def cpu_skin_vbo_arrays(
+    node,
+    positions,
+    normals,
+    skinning: SkinningArrays,
+    anim_pose,
+    model=None,
+) -> tuple[object, object | None]:
+    """Apply the same per-skin palette contract used by the ModernGL shader."""
+
+    if node is None or anim_pose is None or not bool(getattr(skinning, "is_skinned", False)):
+        return positions, normals
+    if skinning.bone_indices is None or skinning.bone_weights is None:
+        return positions, normals
+    try:
+        import numpy as np
+        from src.core.animation.gpu_skinning import MatrixPaletteUploader, MAX_BONES
+    except Exception:
+        return positions, normals
+
+    source_model = model or _root_model_from_node(node)
+    if source_model is None:
+        return positions, normals
+    try:
+        uploader = MatrixPaletteUploader(max_bones=MAX_BONES)
+        uploader.build_inverse_bind_pose(source_model)
+        uploader.compute_skin_node_palette(node, anim_pose)
+        palette = uploader.as_numpy_array()
+        if palette is None or len(palette) == 0:
+            return positions, normals
+
+        pos = np.asarray(positions, dtype=np.float32)
+        if pos.ndim != 2 or pos.shape[1] != 3:
+            return positions, normals
+        count = min(len(pos), len(skinning.bone_indices), len(skinning.bone_weights))
+        if count <= 0:
+            return positions, normals
+
+        bone_ids = np.asarray(skinning.bone_indices[:count, :4], dtype=np.int64)
+        bone_ids = np.clip(bone_ids, 0, len(palette) - 1)
+        weights = np.asarray(skinning.bone_weights[:count, :4], dtype=np.float32)
+        bind_pos = np.concatenate([pos[:count], np.ones((count, 1), dtype=np.float32)], axis=1)
+        skinned_pos = np.zeros((count, 4), dtype=np.float32)
+        skinned_norm = None
+
+        norm_arr = None
+        if normals is not None:
+            norm_arr = np.asarray(normals, dtype=np.float32)
+            if norm_arr.ndim == 2 and norm_arr.shape[1] == 3 and len(norm_arr) >= count:
+                skinned_norm = np.zeros((count, 3), dtype=np.float32)
+
+        for slot in range(4):
+            ids = bone_ids[:, slot]
+            w = weights[:, slot].reshape(count, 1)
+            transformed = np.einsum("nij,nj->ni", palette[ids], bind_pos)
+            skinned_pos += transformed * w
+            if skinned_norm is not None and norm_arr is not None:
+                mats3 = palette[ids, :3, :3]
+                transformed_norm = np.einsum("nij,nj->ni", mats3, norm_arr[:count])
+                skinned_norm += transformed_norm * w
+
+        out_pos = np.array(pos, dtype=np.float32, copy=True)
+        out_pos[:count, :] = skinned_pos[:, :3]
+        out_norm = normals
+        if skinned_norm is not None and norm_arr is not None:
+            lengths = np.linalg.norm(skinned_norm, axis=1, keepdims=True)
+            lengths = np.where(lengths < 1e-8, 1.0, lengths)
+            fixed = np.array(norm_arr, dtype=np.float32, copy=True)
+            fixed[:count, :] = skinned_norm / lengths
+            out_norm = fixed
+        return out_pos, out_norm
+    except Exception:
+        return positions, normals
 
 
 def cpu_skin_positions(node, positions, skinning: SkinningArrays, anim_pose, model=None, anim_base_pose=None):
@@ -269,6 +368,18 @@ def cpu_skin_positions(node, positions, skinning: SkinningArrays, anim_pose, mod
         return out
     except Exception:
         return positions
+
+
+def _normalize_weight_rows(weights) -> None:
+    import numpy as np
+
+    sums = np.sum(weights.astype(np.float64), axis=1)
+    for row, total in enumerate(sums):
+        if total > 1e-8:
+            weights[row, :] = weights[row, :] / float(total)
+        else:
+            weights[row, :] = 0.0
+            weights[row, 0] = 1.0
 
 
 def _model_nodes(model) -> list:

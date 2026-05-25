@@ -1266,6 +1266,34 @@ class QtViewportWidget(QtWidgets.QWidget):
                 diagnostics = {}
         return str(diagnostics.get("backend_id") or getattr(renderer, "backend_id", "") or "")
 
+    @property
+    def active_renderer(self):
+        service = getattr(self, "renderer_service", None)
+        if service is not None:
+            viewport_service = getattr(service, "viewport_service", None)
+            get_renderer = getattr(viewport_service, "get_active_renderer", None)
+            if callable(get_renderer):
+                return get_renderer()
+        return self._gpu_renderer or self._renderer
+
+    @property
+    def active_renderer_backend(self) -> str:
+        service = getattr(self, "active_viewport_service", None)
+        get_backend = getattr(service, "get_active_renderer_backend", None)
+        if callable(get_backend):
+            return str(get_backend() or "")
+        return self._active_renderer_backend_id()
+
+    def request_renderer_resource_invalidation(self, reason: str = "") -> None:
+        service = getattr(self, "renderer_service", None)
+        invalidate = getattr(service, "request_resource_invalidation", None)
+        if callable(invalidate):
+            invalidate(reason or "viewport resource invalidation")
+            return
+        if self._gpu_renderer is not None and hasattr(self._gpu_renderer, "clear_caches"):
+            self._gpu_renderer.clear_caches()
+        self.refresh_view()
+
     def _renderer_uses_live_surface(self, backend_id: str) -> bool:
         return str(backend_id or "").startswith("wgpu_")
 

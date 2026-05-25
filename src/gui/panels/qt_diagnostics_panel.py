@@ -21,6 +21,8 @@ class QtDiagnosticsPanel(QtWidgets.QWidget):
     ) -> None:
         super().__init__(parent)
         self._model_getter = model_getter
+        self._diagnostics_service = None
+        self._tool_registry = None
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -36,6 +38,10 @@ class QtDiagnosticsPanel(QtWidgets.QWidget):
         self.text.setPlainText("No diagnostics run yet.")
         layout.addWidget(self.text, 1)
 
+    def set_integration_services(self, *, diagnostics_service: Any = None, registry: Any = None) -> None:
+        self._diagnostics_service = diagnostics_service
+        self._tool_registry = registry
+
     @QtCore.Slot(object)
     def run_diagnostics(self, model: Any = None) -> str:
         """Render a concise diagnostics report for *model*."""
@@ -48,7 +54,11 @@ class QtDiagnosticsPanel(QtWidgets.QWidget):
                 return report
 
         if model is None:
-            report = "No model loaded."
+            lines = ["No model loaded."]
+            integration_lines = self._integration_report_lines()
+            if integration_lines:
+                lines.extend(["", "Module Integration / Tool Compatibility", *integration_lines])
+            report = "\n".join(lines)
             self.text.setPlainText(report)
             return report
 
@@ -79,6 +89,10 @@ class QtDiagnosticsPanel(QtWidgets.QWidget):
         if hook_names:
             lines.append("Hooks: " + ", ".join(sorted(hook_names, key=str.lower)))
 
+        integration_lines = self._integration_report_lines()
+        if integration_lines:
+            lines.extend(["", "Module Integration / Tool Compatibility", *integration_lines])
+
         report = "\n".join(lines)
         self.text.setPlainText(report)
         return report
@@ -92,6 +106,41 @@ class QtDiagnosticsPanel(QtWidgets.QWidget):
             return list(method() or [])
         except Exception:
             return []
+
+    def _integration_report_lines(self) -> list[str]:
+        lines: list[str] = []
+        service = self._diagnostics_service
+        if service is not None:
+            try:
+                snapshot = service.snapshot()
+                renderer = snapshot.renderer_diagnostics
+                lines.extend(
+                    [
+                        f"Active viewport: {snapshot.active_viewport}",
+                        f"Active renderer: {snapshot.active_renderer}",
+                        f"Renderer backend: {renderer.get('backend_id', '') or 'unknown'}",
+                        f"Registered tools/panels: {snapshot.registered_tools}",
+                        f"Last tool action: {snapshot.last_tool_action or 'none'}",
+                        f"Last scene update source: {snapshot.last_scene_update_source or 'none'}",
+                        f"Last cache invalidation: {snapshot.last_cache_invalidation_reason or 'none'}",
+                        f"Last redraw reason: {snapshot.last_renderer_redraw_reason or 'none'}",
+                    ]
+                )
+                if snapshot.unsupported_active_feature_warnings:
+                    lines.append(f"Unsupported feature warning: {snapshot.unsupported_active_feature_warnings}")
+            except Exception as exc:
+                lines.append(f"Integration diagnostics unavailable: {exc}")
+        registry = self._tool_registry
+        if registry is not None:
+            try:
+                for info in registry.all_tools():
+                    wgpu = "WGPU yes" if info.wgpu_supported else "WGPU no"
+                    null = "Null yes" if info.null_supported else "Null no"
+                    limitation = f" - {info.known_limitations}" if info.known_limitations else ""
+                    lines.append(f"- {info.menu_name}: {info.class_name} ({wgpu}, {null}){limitation}")
+            except Exception as exc:
+                lines.append(f"Tool registry unavailable: {exc}")
+        return lines
 
 
 class QtDiagnosticsWindow(QtWidgets.QMainWindow):

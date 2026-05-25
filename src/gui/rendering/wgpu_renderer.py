@@ -102,6 +102,18 @@ class WgpuSkeletonResource:
     revision: int
 
 
+@dataclass
+class WgpuSkinResource:
+    palette_buffer: object
+    bind_group: object
+    uploader: object
+    source_revision: tuple
+    pose_revision: int
+    matrix_count: int
+    max_bones: int
+    byte_size: int
+
+
 def _hex_to_rgb_float(value: str, fallback: tuple[float, float, float]) -> tuple[float, float, float]:
     raw = str(value or "").strip().lstrip("#")
     if len(raw) != 6:
@@ -225,6 +237,11 @@ def _load_mesh_shader() -> str:
         return _MESH_TEXTURED_WGSL
 
 
+def _load_skinned_mesh_shader() -> str:
+    shader_path = Path(__file__).resolve().parent / "shaders" / "wgpu_mesh_skinned.wgsl"
+    return shader_path.read_text(encoding="utf-8")
+
+
 def _adapter_info_dict(adapter) -> dict[str, object]:
     info = getattr(adapter, "info", None)
     if info is None:
@@ -308,6 +325,7 @@ class WgpuResourceCache:
     def __init__(self, renderer: "WgpuRenderer") -> None:
         self._renderer = renderer
         self.meshes: dict[int, WgpuMeshResource] = {}
+        self.skins: dict[int, WgpuSkinResource] = {}
         self.textures: dict[str, WgpuTextureResource] = {}
         self.materials: dict[str, WgpuMaterialResource] = {}
         self.uploaded_vertex_count = 0
@@ -319,6 +337,8 @@ class WgpuResourceCache:
         self.lightmap_texture_count = 0
         self.last_texture_upload_error = ""
         self.last_material_binding_error = ""
+        self.last_skinning_error = ""
+        self.uploaded_bone_matrix_count = 0
         self._white_diffuse: WgpuTextureResource | None = None
         self._white_lightmap: WgpuTextureResource | None = None
         self._missing_checker: WgpuTextureResource | None = None
@@ -354,8 +374,26 @@ class WgpuResourceCache:
             normals = fixed
         uvs0 = self._coerce_uvs(getattr(mesh_data, "uvs0", None), len(positions))
         uvs1 = self._coerce_uvs(getattr(mesh_data, "uvs1", None), len(positions))
-        packed = np.ascontiguousarray(np.column_stack((positions, normals, uvs0, uvs1)), dtype=np.float32)
-        vertex_buffer = device.create_buffer_with_data(data=packed, usage=wgpu.BufferUsage.VERTEX)
+        bone_indices = self._coerce_bone_indices(getattr(mesh_data, "bone_indices", None), len(positions))
+        bone_weights = self._coerce_bone_weights(getattr(mesh_data, "bone_weights", None), len(positions))
+        packed_dtype = np.dtype(
+            [
+                ("position", "<f4", 3),
+                ("normal", "<f4", 3),
+                ("uv0", "<f4", 2),
+                ("uv1", "<f4", 2),
+                ("bone_indices", "<u4", 4),
+                ("bone_weights", "<f4", 4),
+            ]
+        )
+        packed = np.empty(len(positions), dtype=packed_dtype)
+        packed["position"] = positions
+        packed["normal"] = normals
+        packed["uv0"] = uvs0
+        packed["uv1"] = uvs1
+        packed["bone_indices"] = bone_indices
+        packed["bone_weights"] = bone_weights
+        vertex_buffer = device.create_buffer_with_data(data=packed.tobytes(), usage=wgpu.BufferUsage.VERTEX)
         index_buffer = None
         index_count = 0
         edge_index_buffer = None
@@ -379,13 +417,76 @@ class WgpuResourceCache:
             vertex_count=int(len(positions)),
             index_count=index_count,
             edge_index_count=edge_index_count,
-            vertex_stride=40,
+            vertex_stride=72,
             bounds=(tuple(float(v) for v in mins), tuple(float(v) for v in maxs)),
             source_revision=mesh_data.source_revision,
         )
         self.meshes[int(mesh_id)] = resource
         self._recount()
         return resource
+
+    def get_or_update_skin_palette(self, mesh_data, anim_pose, model) -> WgpuSkinResource | None:
+        import wgpu
+
+        if not bool(getattr(mesh_data, "is_skinned", False)) or anim_pose is None:
+            return None
+        device = self._renderer.device
+        layout = getattr(self._renderer, "skin_bind_group_layout", None)
+        if device is None or layout is None:
+            self.last_skinning_error = "WGPU skin bind group layout is not ready"
+            return None
+        try:
+            from src.core.animation.gpu_skinning import MatrixPaletteUploader, MAX_BONES
+        except Exception as exc:
+            self.last_skinning_error = f"WGPU palette builder unavailable: {exc}"
+            return None
+
+        mesh_id = int(mesh_data.mesh_id)
+        source_revision = tuple(getattr(mesh_data, "source_revision", ()) or ())
+        cached = self.skins.get(mesh_id)
+        if cached is None or cached.source_revision != source_revision:
+            max_bones = int(MAX_BONES)
+            byte_size = max_bones * 16 * 4
+            palette_buffer = device.create_buffer(
+                label=f"WGPU skin palette {getattr(mesh_data.source, 'name', mesh_id)}",
+                size=byte_size,
+                usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST,
+            )
+            bind_group = device.create_bind_group(
+                layout=layout,
+                entries=[
+                    {
+                        "binding": 0,
+                        "resource": {"buffer": palette_buffer, "offset": 0, "size": byte_size},
+                    }
+                ],
+            )
+            uploader = MatrixPaletteUploader(max_bones=max_bones)
+            uploader.build_inverse_bind_pose(model)
+            cached = WgpuSkinResource(
+                palette_buffer=palette_buffer,
+                bind_group=bind_group,
+                uploader=uploader,
+                source_revision=source_revision,
+                pose_revision=-1,
+                matrix_count=0,
+                max_bones=max_bones,
+                byte_size=byte_size,
+            )
+            self.skins[mesh_id] = cached
+
+        pose_revision = self._pose_revision(anim_pose, mesh_data)
+        if cached.pose_revision != pose_revision:
+            palette = cached.uploader.compute_skin_node_palette(mesh_data.source, anim_pose)
+            payload = cached.uploader.as_flat_bytes()
+            if not payload:
+                self.last_skinning_error = f"empty WGPU skin palette for {getattr(mesh_data.source, 'name', mesh_id)}"
+                return None
+            self._renderer.queue.write_buffer(cached.palette_buffer, 0, payload[: cached.byte_size])
+            cached.pose_revision = pose_revision
+            cached.matrix_count = min(len(palette), cached.max_bones)
+            self.uploaded_bone_matrix_count = max(self.uploaded_bone_matrix_count, int(cached.matrix_count))
+        return cached
 
     def _build_edge_indices(self, indices, vertex_count: int):
         import numpy as np
@@ -431,6 +532,56 @@ class WgpuResourceCache:
         except Exception:
             return fixed
         return fixed
+
+    def _coerce_bone_indices(self, values, count: int):
+        import numpy as np
+
+        fixed = np.zeros((count, 4), dtype=np.uint32)
+        if values is None:
+            return fixed
+        try:
+            arr = np.asarray(values, dtype=np.uint32)
+            if arr.ndim != 2 or arr.shape[1] < 4:
+                return fixed
+            rows = min(count, len(arr))
+            if rows:
+                fixed[:rows, :] = np.clip(arr[:rows, :4], 0, 127).astype(np.uint32)
+        except Exception:
+            return fixed
+        return fixed
+
+    def _coerce_bone_weights(self, values, count: int):
+        import numpy as np
+
+        fixed = np.zeros((count, 4), dtype=np.float32)
+        fixed[:, 0] = 1.0
+        if values is None:
+            return fixed
+        try:
+            arr = np.asarray(values, dtype=np.float32)
+            if arr.ndim != 2 or arr.shape[1] < 4:
+                return fixed
+            rows = min(count, len(arr))
+            if rows:
+                fixed[:rows, :] = arr[:rows, :4]
+                sub = fixed[:rows, :]
+                sums = sub.sum(axis=1)
+                valid = sums > 1e-8
+                sub[valid] = sub[valid] / sums[valid, None]
+                sub[~valid] = (1.0, 0.0, 0.0, 0.0)
+        except Exception:
+            return fixed
+        return fixed
+
+    def _pose_revision(self, anim_pose, mesh_data) -> int:
+        return hash(
+            (
+                id(anim_pose),
+                int(round(float(getattr(anim_pose, "time", 0.0) or 0.0) * 100000.0)),
+                int(getattr(mesh_data, "skin_revision", 0) or 0),
+                int(mesh_data.mesh_id),
+            )
+        ) & 0x7FFFFFFF
 
     def get_mesh_resource(self, mesh_id: int):
         return self.meshes.get(int(mesh_id))
@@ -637,6 +788,7 @@ class WgpuResourceCache:
 
     def release_mesh(self, mesh_id: int) -> None:
         self.meshes.pop(int(mesh_id), None)
+        self.skins.pop(int(mesh_id), None)
         self._recount()
 
     def invalidate_texture(self, texture_id: str) -> None:
@@ -648,6 +800,7 @@ class WgpuResourceCache:
 
     def invalidate_all(self) -> None:
         self.meshes.clear()
+        self.skins.clear()
         self.textures.clear()
         self.materials.clear()
         self.uploaded_vertex_count = 0
@@ -659,6 +812,8 @@ class WgpuResourceCache:
         self.lightmap_texture_count = 0
         self.last_texture_upload_error = ""
         self.last_material_binding_error = ""
+        self.last_skinning_error = ""
+        self.uploaded_bone_matrix_count = 0
         self._white_diffuse = None
         self._white_lightmap = None
         self._missing_checker = None
@@ -669,6 +824,7 @@ class WgpuResourceCache:
         self.uploaded_edge_index_count = sum(int(item.edge_index_count) for item in self.meshes.values())
         self.texture_memory_bytes = sum(int(item.byte_size) for item in self.textures.values())
         self.lightmap_texture_count = sum(1 for item in self.textures.values() if item.lightmap)
+        self.uploaded_bone_matrix_count = max((int(item.matrix_count) for item in self.skins.values()), default=0)
 
 
 class WgpuRenderer(NullDiagnosticRenderer):
@@ -708,15 +864,20 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.pipeline_mesh = None
         self.pipeline_mesh_cutout = None
         self.pipeline_mesh_blend = None
+        self.pipeline_mesh_skinned = None
+        self.pipeline_mesh_skinned_cutout = None
+        self.pipeline_mesh_skinned_blend = None
         self.pipeline_lines = None
         self.pipeline_gizmo_lines = None
         self.pipeline_pick = None
         self.skeleton_resource: WgpuSkeletonResource | None = None
         self.mesh_pipeline_layout = None
+        self.skinned_mesh_pipeline_layout = None
         self.line_bind_group_layout = None
         self.line_bind_group = None
         self.line_uniform_buffer = None
         self.mesh_bind_group_layout = None
+        self.skin_bind_group_layout = None
         self.texture_bind_group_layout = None
         self.mesh_bind_group = None
         self.mesh_uniform_buffer = None
@@ -769,8 +930,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "gizmo_lines": 0,
         }
         self.skeleton_overlay_pipeline_status = "not created"
-        self.skinned_mesh_pipeline_status = "cpu fallback"
-        self.gpu_skinning_status = "deferred"
+        self.skinned_mesh_pipeline_status = "not created"
+        self.gpu_skinning_status = "not created"
         self.last_skinning_error = ""
         self.last_animation_error = ""
         self._active_skinned_mesh_count = 0
@@ -882,13 +1043,13 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 joint_dot_overlay_supported=True,
                 bone_selection_supported=True,
                 skinned_mesh_supported=True,
-                gpu_skinning_supported=False,
-                cpu_skinning_fallback_supported=True,
+                gpu_skinning_supported=True,
+                cpu_skinning_fallback_supported=False,
                 animation_preview_supported=True,
                 skin_weight_heatmap_supported=False,
                 max_supported_bones=128,
-                bone_matrix_buffer_type="cpu-palette",
-                skinned_shader_status="deferred",
+                bone_matrix_buffer_type="storage-buffer",
+                skinned_shader_status="available",
                 supports_marquee_selection=True,
                 supports_subobject_selection=True,
                 supported_display_modes=WGPU_DISPLAY_MODES,
@@ -1218,6 +1379,15 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 },
             ]
         )
+        self.skin_bind_group_layout = self.device.create_bind_group_layout(
+            entries=[
+                {
+                    "binding": 0,
+                    "visibility": wgpu.ShaderStage.VERTEX,
+                    "buffer": {"type": wgpu.BufferBindingType.read_only_storage},
+                }
+            ]
+        )
         self.mesh_bind_group = self.device.create_bind_group(
             layout=self.mesh_bind_group_layout,
             entries=[
@@ -1229,6 +1399,9 @@ class WgpuRenderer(NullDiagnosticRenderer):
         )
         self.mesh_pipeline_layout = self.device.create_pipeline_layout(
             bind_group_layouts=[self.mesh_bind_group_layout, self.texture_bind_group_layout]
+        )
+        self.skinned_mesh_pipeline_layout = self.device.create_pipeline_layout(
+            bind_group_layouts=[self.mesh_bind_group_layout, self.texture_bind_group_layout, self.skin_bind_group_layout]
         )
         shader = self.device.create_shader_module(code=_load_mesh_shader())
         self.pipeline_mesh = self._create_textured_pipeline(
@@ -1252,9 +1425,42 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.mesh_pipeline_status = "ready"
         self.textured_mesh_pipeline_status = "ready"
         self.alpha_pipeline_status = "ready"
+        try:
+            skinned_shader = self.device.create_shader_module(code=_load_skinned_mesh_shader())
+            self.pipeline_mesh_skinned = self._create_textured_pipeline(
+                skinned_shader,
+                blend=False,
+                depth_write=True,
+                alpha_label="skinned opaque",
+                skinned=True,
+            )
+            self.pipeline_mesh_skinned_cutout = self._create_textured_pipeline(
+                skinned_shader,
+                blend=False,
+                depth_write=True,
+                alpha_label="skinned cutout",
+                skinned=True,
+            )
+            self.pipeline_mesh_skinned_blend = self._create_textured_pipeline(
+                skinned_shader,
+                blend=True,
+                depth_write=False,
+                alpha_label="skinned blend",
+                skinned=True,
+            )
+            self.skinned_mesh_pipeline_status = "ready"
+            self.gpu_skinning_status = "ready"
+        except Exception as exc:
+            self.pipeline_mesh_skinned = None
+            self.pipeline_mesh_skinned_cutout = None
+            self.pipeline_mesh_skinned_blend = None
+            self.skinned_mesh_pipeline_status = f"unavailable: {exc}"
+            self.gpu_skinning_status = "unavailable"
+            self.last_skinning_error = f"WGPU skinned shader unavailable: {exc}"
+            log.warning("WgpuRenderer: skinned mesh pipeline unavailable: %s", exc)
         log.info("WgpuRenderer: textured mesh pipeline created")
 
-    def _create_textured_pipeline(self, shader, *, blend: bool, depth_write: bool, alpha_label: str):
+    def _create_textured_pipeline(self, shader, *, blend: bool, depth_write: bool, alpha_label: str, skinned: bool = False):
         import wgpu
 
         target = {"format": self.format}
@@ -1274,19 +1480,27 @@ class WgpuRenderer(NullDiagnosticRenderer):
             target["write_mask"] = wgpu.ColorWrite.ALL
         return self.device.create_render_pipeline(
             label=f"WGPU textured mesh {alpha_label}",
-            layout=self.mesh_pipeline_layout,
+            layout=self.skinned_mesh_pipeline_layout if skinned else self.mesh_pipeline_layout,
             vertex={
                 "module": shader,
                 "entry_point": "vs_main",
                 "buffers": [
                     {
-                        "array_stride": 40,
+                        "array_stride": 72,
                         "step_mode": wgpu.VertexStepMode.vertex,
                         "attributes": [
                             {"format": wgpu.VertexFormat.float32x3, "offset": 0, "shader_location": 0},
                             {"format": wgpu.VertexFormat.float32x3, "offset": 12, "shader_location": 1},
                             {"format": wgpu.VertexFormat.float32x2, "offset": 24, "shader_location": 2},
                             {"format": wgpu.VertexFormat.float32x2, "offset": 32, "shader_location": 3},
+                            *(
+                                [
+                                    {"format": wgpu.VertexFormat.uint32x4, "offset": 40, "shader_location": 4},
+                                    {"format": wgpu.VertexFormat.float32x4, "offset": 56, "shader_location": 5},
+                                ]
+                                if skinned
+                                else []
+                            ),
                         ],
                     }
                 ],
@@ -1344,7 +1558,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 "entry_point": "vs_main",
                 "buffers": [
                     {
-                        "array_stride": 40,
+                        "array_stride": 72,
                         "step_mode": wgpu.VertexStepMode.vertex,
                         "attributes": [
                             {"format": wgpu.VertexFormat.float32x3, "offset": 0, "shader_location": 0},
@@ -1420,7 +1634,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 "entry_point": "vs_main",
                 "buffers": [
                     {
-                        "array_stride": 40,
+                        "array_stride": 72,
                         "step_mode": wgpu.VertexStepMode.vertex,
                         "attributes": [
                             {"format": wgpu.VertexFormat.float32x3, "offset": 0, "shader_location": 0},
@@ -1578,6 +1792,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             anim_pose=self._active_anim_pose,
             anim_base_pose=self._active_anim_base_pose,
             textures=self._active_textures,
+            allow_cpu_skinning=False,
         ):
             material_data = getattr(mesh_data, "material", None)
             if material_data is None:
@@ -1662,6 +1877,27 @@ class WgpuRenderer(NullDiagnosticRenderer):
             material = self.resource_cache.get_or_create_material(material_data)
             if material is None:
                 return 0
+            skin_resource = None
+            if bool(getattr(mesh_data, "is_skinned", False)) and self._active_anim_pose is not None:
+                skinned_pipeline = self._skinned_pipeline_for_pass(pass_name)
+                if skinned_pipeline is not None:
+                    try:
+                        skin_resource = self.resource_cache.get_or_update_skin_palette(
+                            mesh_data,
+                            self._active_anim_pose,
+                            self._active_scene,
+                        )
+                    except Exception as exc:
+                        self.last_skinning_error = f"WGPU skin palette upload failed: {exc}"
+                        self.gpu_skinning_status = "palette upload failed"
+                        skin_resource = None
+                    if skin_resource is not None:
+                        pipeline = skinned_pipeline
+                        self.gpu_skinning_status = "ready"
+                    else:
+                        self.last_skinning_error = self.last_skinning_error or "WGPU skin palette unavailable; drawing bind pose"
+                else:
+                    self.last_skinning_error = self.skinned_mesh_pipeline_status or "WGPU skinned pipeline unavailable; drawing bind pose"
             uniform = self._mesh_uniform_bytes(
                 mvp,
                 getattr(material_data, "base_color_rgba", mesh_data.material_color),
@@ -1672,6 +1908,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
             render_pass.set_pipeline(pipeline)
             render_pass.set_bind_group(0, self.mesh_bind_group)
             render_pass.set_bind_group(1, material.bind_group)
+            if skin_resource is not None:
+                render_pass.set_bind_group(2, skin_resource.bind_group)
             render_pass.set_vertex_buffer(0, resource.vertex_buffer)
             if resource.index_buffer is not None and resource.index_count > 0:
                 render_pass.set_index_buffer(resource.index_buffer, wgpu.IndexFormat.uint32)
@@ -1682,6 +1920,13 @@ class WgpuRenderer(NullDiagnosticRenderer):
         except Exception as exc:
             log.warning("WgpuRenderer: skipped mesh %s: %s", getattr(mesh_data.source, "name", mesh_data.mesh_id), exc)
             return 0
+
+    def _skinned_pipeline_for_pass(self, pass_name: str):
+        if str(pass_name).lower() == "cutout":
+            return self.pipeline_mesh_skinned_cutout or self.pipeline_mesh_skinned
+        if str(pass_name).lower() == "blended":
+            return self.pipeline_mesh_skinned_blend or self.pipeline_mesh_skinned
+        return self.pipeline_mesh_skinned
 
     def _is_selected_mesh_data(self, mesh_data) -> bool:
         node = getattr(mesh_data, "source", None)
@@ -1921,6 +2166,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             anim_pose=self._active_anim_pose,
             anim_base_pose=self._active_anim_base_pose,
             textures={},
+            allow_cpu_skinning=False,
         ):
             node = getattr(mesh_data, "source", None)
             if node is None:
@@ -2246,15 +2492,20 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.pipeline_mesh = None
         self.pipeline_mesh_cutout = None
         self.pipeline_mesh_blend = None
+        self.pipeline_mesh_skinned = None
+        self.pipeline_mesh_skinned_cutout = None
+        self.pipeline_mesh_skinned_blend = None
         self.pipeline_lines = None
         self.pipeline_gizmo_lines = None
         self.pipeline_pick = None
         self.skeleton_resource = None
         self.mesh_pipeline_layout = None
+        self.skinned_mesh_pipeline_layout = None
         self.line_bind_group_layout = None
         self.line_bind_group = None
         self.line_uniform_buffer = None
         self.mesh_bind_group_layout = None
+        self.skin_bind_group_layout = None
         self.texture_bind_group_layout = None
         self.mesh_bind_group = None
         self.mesh_uniform_buffer = None
@@ -2364,12 +2615,12 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "joint_dot_overlay_supported": True,
             "bone_selection_supported": True,
             "skinned_mesh_supported": True,
-            "gpu_skinning_supported": False,
-            "cpu_skinning_fallback_supported": True,
+            "gpu_skinning_supported": True,
+            "cpu_skinning_fallback_supported": False,
             "animation_preview_supported": True,
             "skin_weight_heatmap_supported": False,
             "max_supported_bones": 128,
-            "bone_matrix_buffer_type": "cpu-palette",
+            "bone_matrix_buffer_type": "storage-buffer",
             "skinned_shader_status": self.skinned_mesh_pipeline_status,
             "supported_display_modes": WGPU_DISPLAY_MODES,
             "fallback_display_modes": dict(WGPU_FALLBACK_DISPLAY_MODES),
@@ -2442,7 +2693,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "selected_bone_count": len(tuple(getattr(self._active_skeleton_render_data, "selected_bone_ids", ()) or ())) if self._active_skeleton_render_data is not None else 0,
             "skinned_mesh_count": int(self._active_skinned_mesh_count),
             "cpu_skinned_mesh_count": int(self._active_cpu_skinned_mesh_count),
-            "uploaded_bone_matrix_count": 0,
+            "uploaded_bone_matrix_count": int(self.resource_cache.uploaded_bone_matrix_count),
             "max_bone_matrices_supported": 128,
             "pose_revision": int(getattr(self._active_skeleton_render_data, "revision", 0) or 0) if self._active_skeleton_render_data is not None else 0,
             "last_skinning_error": self.last_skinning_error,

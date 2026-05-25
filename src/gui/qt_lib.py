@@ -43,6 +43,10 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "transform_gizmo",
         "transform_math",
     ),
+    "integration": (
+        "editor_services",
+        "tool_integration_registry",
+    ),
     "camera": (
         "camera_controller",
         "camera_gizmo_renderer",

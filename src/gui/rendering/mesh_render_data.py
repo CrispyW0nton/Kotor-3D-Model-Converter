@@ -63,6 +63,7 @@ def iter_mesh_render_data(
     anim_pose=None,
     anim_base_pose=None,
     textures: dict | None = None,
+    allow_cpu_skinning: bool = True,
 ) -> Iterable[MeshRenderData]:
     """Yield mesh draw data without storing renderer resources on scene nodes."""
 
@@ -78,27 +79,42 @@ def iter_mesh_render_data(
         if not _node_is_renderable_mesh(node):
             continue
         try:
-            positions, normals, uvs0, uvs1, indices = _extract_node_arrays(node, anim_pose=anim_pose)
+            (
+                positions,
+                normals,
+                uvs0,
+                uvs1,
+                indices,
+                vbo_bone_indices,
+                vbo_bone_weights,
+            ) = _extract_node_arrays(node, anim_pose=anim_pose)
         except Exception:
             continue
         if positions is None or len(positions) == 0:
             continue
-        skinning = _extract_skinning(node, len(positions), skeleton_id=id(model))
+        skinning = _extract_skinning(
+            node,
+            len(positions),
+            skeleton_id=id(model),
+            bone_indices=vbo_bone_indices,
+            bone_weights=vbo_bone_weights,
+        )
         skinning_cpu_fallback = False
-        if anim_pose is not None and getattr(skinning, "is_skinned", False):
+        if allow_cpu_skinning and anim_pose is not None and getattr(skinning, "is_skinned", False):
             try:
-                from src.gui.rendering.skeleton_render_data import cpu_skin_positions
+                from src.gui.rendering.skeleton_render_data import cpu_skin_vbo_arrays
 
-                skinned_positions = cpu_skin_positions(
+                skinned_positions, skinned_normals = cpu_skin_vbo_arrays(
                     node,
                     positions,
+                    normals,
                     skinning,
                     anim_pose,
                     model=model,
-                    anim_base_pose=anim_base_pose,
                 )
                 if skinned_positions is not positions:
                     positions = skinned_positions
+                    normals = skinned_normals
                     skinning_cpu_fallback = True
             except Exception:
                 pass
@@ -171,18 +187,35 @@ def _extract_node_arrays(node, *, anim_pose=None):
 
     world_pos, world_orient = _node_world_transform(node)
     if _build_vbo_data is not None:
-        vdata, idx_arr = _build_vbo_data(node, world_pos, world_orient, anim_pose_node=None)
+        skin_can_lbs = bool(
+            anim_pose is not None
+            and getattr(node, "is_skin", False)
+            and getattr(node, "bone_map", None)
+            and getattr(node, "skin_data", None)
+        )
+        vdata, idx_arr = _build_vbo_data(
+            node,
+            world_pos,
+            world_orient,
+            anim_pose_node=None,
+            apply_skin_node_transform_for_bind=not skin_can_lbs,
+        )
         if vdata is not None:
             positions = np.asarray(vdata[:, 0:3], dtype=np.float32)
             normals = np.asarray(vdata[:, 3:6], dtype=np.float32) if vdata.shape[1] >= 6 else None
             uvs0 = np.asarray(vdata[:, 6:8], dtype=np.float32) if vdata.shape[1] >= 8 else None
             uvs1 = np.asarray(vdata[:, 8:10], dtype=np.float32) if vdata.shape[1] >= 10 else None
             indices = np.asarray(idx_arr, dtype=np.uint32) if idx_arr is not None and len(idx_arr) else None
-            return positions, normals, uvs0, uvs1, indices
+            bone_indices = None
+            bone_weights = None
+            if getattr(node, "is_skin", False) and vdata.shape[1] >= 22:
+                bone_indices = np.rint(vdata[:, 14:18]).astype(np.uint16)
+                bone_weights = np.asarray(vdata[:, 18:22], dtype=np.float32)
+            return positions, normals, uvs0, uvs1, indices, bone_indices, bone_weights
 
     verts = np.asarray(getattr(node, "vertices", getattr(node, "verts", [])) or [], dtype=np.float32)
     if verts.ndim != 2 or verts.shape[1] != 3:
-        return None, None, None, None, None
+        return None, None, None, None, None, None, None
     normals = np.asarray(getattr(node, "normals", []) or [], dtype=np.float32)
     if normals.ndim != 2 or normals.shape[1] != 3 or len(normals) != len(verts):
         normals = np.zeros_like(verts, dtype=np.float32)
@@ -191,14 +224,27 @@ def _extract_node_arrays(node, *, anim_pose=None):
     uvs1 = _node_uv_array(node, "uvs_lm", len(verts))
     faces = getattr(node, "faces", []) or []
     indices = np.asarray([int(i) for face in faces for i in tuple(face)[:3]], dtype=np.uint32)
-    return verts, normals, uvs0, uvs1, indices
+    return verts, normals, uvs0, uvs1, indices, None, None
 
 
-def _extract_skinning(node, vertex_count: int, *, skeleton_id: int = 0):
+def _extract_skinning(
+    node,
+    vertex_count: int,
+    *,
+    skeleton_id: int = 0,
+    bone_indices=None,
+    bone_weights=None,
+):
     try:
         from src.gui.rendering.skeleton_render_data import extract_skinning_arrays
 
-        return extract_skinning_arrays(node, vertex_count, skeleton_id=skeleton_id)
+        return extract_skinning_arrays(
+            node,
+            vertex_count,
+            skeleton_id=skeleton_id,
+            bone_indices=bone_indices,
+            bone_weights=bone_weights,
+        )
     except Exception:
         from types import SimpleNamespace
 

@@ -77,6 +77,15 @@ from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditorWindow
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
 from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
+from src.gui.qt_lib.integration.editor_services import (
+    ActiveViewportService,
+    DiagnosticsService,
+    EditorIntegrationEventBus,
+    RendererService,
+    SceneService,
+    SelectionService,
+)
+from src.gui.qt_lib.integration.tool_integration_registry import build_default_tool_integration_registry
 from src.gui.libtheme import LayoutManager, ThemeManager
 from src.gui.libtheme.style_tokens import FALLBACK_STYLES, LEGACY_MATRIX_COLORS
 from src.gui.libtheme.theme_editor_window import ThemeEditorWindow
@@ -3318,6 +3327,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport.set_axis_mode(self.settings_data.get("last_axis_mode", AxisMode.WORLD.value))
         self.settings_data["last_pivot_edit_mode"] = "affect_object_only"
         self.viewport.set_pivot_edit_mode("affect_object_only")
+        self._install_editor_integration_services()
         self.adjust_pivot_panel.set_pivot_mode(self.viewport.pivot_edit_mode())
         self.adjust_pivot_panel.pivotModeChanged.connect(self._set_pivot_edit_mode)
         self.adjust_pivot_panel.pivotActionRequested.connect(self._apply_pivot_action)
@@ -3354,9 +3364,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport.nodeMoved.connect(self._on_viewport_scene_node_moved)
         self.viewport.statusMessage.connect(self.statusBar().showMessage)
         self.viewport.renderStateChanged.connect(self._on_viewport_render_state_changed)
+        self.viewport.renderStateChanged.connect(self._on_renderer_backend_status_changed)
         self.viewport.axis_mode_control.axisModeChanged.connect(self._persist_axis_mode)
         self.viewport.nodeMoved.connect(self.module_geometry_panel.show_node)
+        self.viewport.nodeMoved.connect(lambda node: self._record_transform_event(node))
         self.viewport.meshVisibilityChanged.connect(self.module_geometry_panel.refresh_module_mesh_rows)
+        self.viewport.meshVisibilityChanged.connect(lambda: self._invalidate_renderer_resources("mesh visibility changed"))
         self.viewport.gpuUploadProgress.connect(self._on_viewport_gpu_upload_progress)
         self.lighting_panel.lightingModeChanged.connect(self.viewport.set_lighting_mode)
         self.lighting_panel.mapToggled.connect(self.viewport.set_texture_map_enabled)
@@ -3364,11 +3377,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.lighting_panel.shaderComplexityChanged.connect(self.viewport.set_shader_complexity_mode)
         self.lighting_panel.helperVisibilityChanged.connect(self.viewport.set_light_helper_visibility)
         self.lighting_panel.lightChanged.connect(self.viewport.refresh_lighting)
+        self.lighting_panel.lightChanged.connect(lambda payload=None: self._record_lighting_event(payload))
         self.lighting_panel.lightSelected.connect(self.viewport.set_selected_node)
         self.lighting_panel.lightmapBakeRequested.connect(self._open_lightmap_baker)
         self.viewport.nodeSelected.connect(self.lighting_panel.select_light)
         self.camera_panel.cameraSelected.connect(self.viewport.set_selected_node)
         self.camera_panel.cameraChanged.connect(self._on_camera_panel_changed)
+        self.camera_panel.cameraChanged.connect(lambda: self._record_camera_event(None))
         self.camera_panel.activeCameraRequested.connect(self.viewport.switch_to_camera)
         self.camera_panel.clearActiveCameraRequested.connect(self.viewport.switch_to_perspective)
         self.camera_panel.createCameraRequested.connect(self.viewport.create_scene_camera)
@@ -3383,8 +3398,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport.cameraSelectionChanged.connect(self.camera_panel.select_camera_object)
         self.module_geometry_panel.moduleMeshesSelected.connect(self.viewport.set_selected_meshes)
         self.module_geometry_panel.moduleMeshVisibilityChanged.connect(self.viewport.refresh_view)
+        self.module_geometry_panel.moduleMeshVisibilityChanged.connect(lambda: self._invalidate_renderer_resources("module mesh visibility changed"))
         self.properties_panel.positionApplied.connect(
             lambda node, _x, _y, _z: self.viewport.refresh_node_transform(node)
+        )
+        self.properties_panel.positionApplied.connect(
+            lambda node, _x, _y, _z: self._record_transform_event(node)
         )
         self.viewport.measurementSettingsChanged.connect(self._merge_measurement_settings)
         self._apply_measurement_settings()
@@ -3776,6 +3795,103 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         )
         status.showMessage("Ready")
 
+    def _install_editor_integration_services(self) -> None:
+        """Install renderer-aware services for existing Qt tools and panels."""
+
+        self.tool_integration_registry = build_default_tool_integration_registry()
+        self.integration_event_bus = EditorIntegrationEventBus(self)
+        self.active_viewport_service = ActiveViewportService(
+            lambda: getattr(self, "viewport", None),
+            scene_getter=lambda: getattr(getattr(self, "scene_manager", None), "active_scene", None),
+            event_bus=self.integration_event_bus,
+            parent=self,
+        )
+        self.renderer_service = RendererService(
+            self.active_viewport_service,
+            event_bus=self.integration_event_bus,
+            parent=self,
+        )
+        self.scene_service = SceneService(
+            lambda: getattr(getattr(self, "scene_manager", None), "active_scene", None),
+            event_bus=self.integration_event_bus,
+        )
+        self.selection_service = SelectionService(
+            self.active_viewport_service,
+            event_bus=self.integration_event_bus,
+        )
+        self.diagnostics_service = DiagnosticsService(
+            self.active_viewport_service,
+            self.renderer_service,
+            self.tool_integration_registry,
+            event_bus=self.integration_event_bus,
+        )
+        viewport = getattr(self, "viewport", None)
+        if viewport is not None:
+            viewport.active_viewport_service = self.active_viewport_service
+            viewport.renderer_service = self.renderer_service
+            viewport.selection_service = self.selection_service
+            viewport.scene_service = self.scene_service
+            viewport.integration_event_bus = self.integration_event_bus
+        diagnostics_panel = getattr(self, "diagnostics_panel", None)
+        if diagnostics_panel is not None and hasattr(diagnostics_panel, "set_integration_services"):
+            diagnostics_panel.set_integration_services(
+                diagnostics_service=self.diagnostics_service,
+                registry=self.tool_integration_registry,
+            )
+
+    def _record_renderer_tool_action(self, tool_id: str, action: str) -> None:
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.record_tool_action(tool_id, action)
+
+    def _invalidate_renderer_resources(self, reason: str) -> None:
+        service = getattr(self, "renderer_service", None)
+        if service is not None:
+            service.request_resource_invalidation(reason)
+
+    def _record_transform_event(self, node) -> None:
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.transformChanged.emit(node)
+            bus.record_scene_update("transform changed", node)
+
+    def _record_pivot_event(self, node) -> None:
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.pivotChanged.emit(node)
+            bus.record_scene_update("pivot changed", node)
+
+    def _record_camera_event(self, camera) -> None:
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.cameraChanged.emit(camera)
+            bus.record_scene_update("camera changed", camera)
+
+    def _record_lighting_event(self, payload) -> None:
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.lightingUpdated.emit(payload)
+            bus.record_scene_update("lighting changed", payload)
+        service = getattr(self, "renderer_service", None)
+        if service is not None:
+            service.request_resource_invalidation("lighting changed")
+
+    @QtCore.Slot(str)
+    def _on_renderer_backend_status_changed(self, text: str) -> None:
+        bus = getattr(self, "integration_event_bus", None)
+        service = getattr(self, "renderer_service", None)
+        if bus is None or service is None:
+            return
+        backend = ""
+        try:
+            backend = service.get_diagnostics().get("backend_id", "") or ""
+        except Exception:
+            backend = ""
+        if backend:
+            bus.rendererBackendChanged.emit(str(backend))
+        if "fallback" in str(text or "").lower():
+            bus.rendererFallbackOccurred.emit(str(text))
+
     @QtCore.Slot(str)
     def _on_viewport_render_state_changed(self, text: str) -> None:
         label = getattr(self, "viewport_render_state_label", None)
@@ -3797,6 +3913,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._refresh_scene_view()
         self.scene_manager.active_scene.mark_clean()
         self._update_scene_chrome()
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.record_scene_update("scene_cleared")
+        self._invalidate_renderer_resources("new empty scene")
         self._log("New empty scene created.", "success")
 
     def _close_scene(self):
@@ -3822,6 +3942,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._refresh_scene_view()
             self.scene_manager.active_scene.mark_clean()
             self._update_scene_chrome()
+            bus = getattr(self, "integration_event_bus", None)
+            if bus is not None:
+                bus.record_scene_update("scene_loaded", scene)
+            self._invalidate_renderer_resources("scene loaded")
             self._log(f"Scene loaded: {path}", "success")
             return True
         except Exception:
@@ -4107,6 +4231,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                     show_scene_object(obj)
         self._update_scene_chrome()
         self._refresh_adjust_pivot_panel()
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.selectionChanged.emit(obj)
+            bus.record_tool_action("scene_information", f"selected scene object: {object_id}")
         if hasattr(self, "scene_outliner_panel"):
             self.scene_outliner_panel.set_scene(self.scene_manager.active_scene)
 
@@ -4187,6 +4315,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             obj.visible = bool(visible)
             self.scene_manager.mark_dirty()
             self._refresh_scene_view()
+            self._invalidate_renderer_resources("scene object visibility changed")
 
     def _set_scene_object_locked(self, object_id: str, locked: bool) -> None:
         obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
@@ -4222,6 +4351,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 obj.selected = False
         self._update_scene_chrome()
         self._refresh_adjust_pivot_panel()
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.selectionChanged.emit(obj if object_id else node)
+            bus.record_tool_action("viewport", "viewport selection changed")
 
     def _on_viewport_scene_node_moved(self, node) -> None:
         object_id = str(getattr(node, "_gr_scene_object_id", "") or "")
@@ -4255,6 +4388,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             log.debug("Could not persist scene pivot edit", exc_info=True)
         self._update_scene_chrome()
         self._refresh_adjust_pivot_panel()
+        self._record_transform_event(node)
+        self._record_pivot_event(node)
         if hasattr(self, "scene_outliner_panel"):
             self.scene_outliner_panel.set_scene(self.scene_manager.active_scene)
 
@@ -4282,6 +4417,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 return
         if hasattr(self, "viewport"):
             self.viewport.set_pivot_edit_mode(mode)
+        self._record_renderer_tool_action("adjust_pivot", f"pivot edit mode: {mode}")
         self._refresh_adjust_pivot_panel()
 
     def _persist_axis_mode(self, mode) -> None:
@@ -4341,6 +4477,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._refresh_scene_view()
             self._refresh_adjust_pivot_panel()
             self._update_scene_chrome()
+            self._record_pivot_event(selected[0] if selected else None)
+            self._invalidate_renderer_resources(f"pivot changed: {action}")
 
     def _require_model(self, action: str):
         if self._current_model is None:
@@ -4437,6 +4575,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self._sync_retarget_preview_target()
             if hasattr(self, "diagnostics_panel"):
                 self.diagnostics_panel.run_diagnostics(None)
+            bus = getattr(self, "integration_event_bus", None)
+            if bus is not None:
+                bus.record_scene_update("model_removed", None)
+            self._invalidate_renderer_resources("model cleared")
             self.props_text.clear()
             return
         self._on_model_loaded(model, path or getattr(model, "name", "model"), "")
@@ -7702,6 +7844,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         else:
             self._log(f"Loaded {name} ({mesh_count} mesh, {node_count} nodes)", "success")
         self.statusBar().showMessage(f"Loaded {name}")
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.record_scene_update("model_imported", model)
+            bus.animationChanged.emit(model)
+        self._invalidate_renderer_resources(f"model loaded: {name}")
         if scene_instance is not None:
             self._log(f"Scene object added: {scene_instance.name}", "success")
 
