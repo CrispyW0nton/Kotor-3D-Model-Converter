@@ -11,6 +11,10 @@ For each completed change, add a dated entry with:
 
 ## 2026-05-26
 
+- WGPU Direct3D Malak animation skinning fix: Split skinned mesh render-data revisions between bind/static vertex buffers and animated LBS input buffers so WGPU D3D12 reuploads raw skin vertices when animation playback starts instead of skinning an already bind-transformed buffer. No roadmap task ID applies.
+  Affected areas: `src/gui/rendering/mesh_render_data.py`, WGPU skinned mesh cache regression coverage.
+  Verification: MCP helper checks `compare_model_pipelines('K1', 'N_DarthMalak')`, `inspect_mdl('K1', 'N_DarthMalak')`, and `inspect_mdl_ghostrigger('K1', 'N_DarthMalak')`; `python -m py_compile src/gui/rendering/mesh_render_data.py tests/test_core_contracts.py`; `pytest tests/test_core_contracts.py::test_wgpu_skinned_mesh_revision_changes_between_bind_and_lbs_modes -q`; visible main-viewport Animations dock run loaded `K1:N_DarthMalak`, played `walk` in OpenGL and WGPU Direct3D 12, reproduced the pre-fix D3D skin explosion under `artifacts/malak_animation_opengl_d3d_visual_20260526/`, then confirmed the fixed D3D run animates without the stretched silhouette under `artifacts/malak_animation_d3d_fix_20260526/`.
+
 - Retarget Workbench animation dock playback controls: Added Play, Pause, Stop, and Loop controls to the Animations dock and connected them to source-viewport animation preview playback through `AnimationEngine`, separate from the full Retarget/Apply workflow. No roadmap task ID applies.
   Affected areas: `src/gui/panels/qt_animation_panel.py`, `src/gui/windows/qt_retarget_window.py`, Retarget Workbench UI regression coverage.
   Verification: `python -m py_compile src/gui/panels/qt_animation_panel.py src/gui/windows/qt_retarget_window.py tests/test_retarget_workbench_ui_placement.py`; `pytest tests/test_retarget_workbench_ui_placement.py -q`; visible Retarget Workbench smoke clicked Play/Pause/Stop with Loop visible and captured the dock under `artifacts/retarget_workbench_animation_controls_20260526/`.

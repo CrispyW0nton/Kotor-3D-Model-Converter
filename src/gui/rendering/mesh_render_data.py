@@ -122,7 +122,12 @@ def iter_mesh_render_data(
         material = _material_data(node, textures)
         source_revision = _node_revision(node)
         if getattr(skinning, "is_skinned", False):
-            source_revision = (*source_revision, int(getattr(skinning, "skin_revision", 0) or 0))
+            skin_lbs_input_mode = 1 if anim_pose is not None else 0
+            source_revision = (
+                *source_revision,
+                int(getattr(skinning, "skin_revision", 0) or 0),
+                skin_lbs_input_mode,
+            )
         if skinning_cpu_fallback:
             source_revision = (*source_revision, int(round(float(getattr(anim_pose, "time", 0.0) or 0.0) * 1000.0)))
         rows.append(

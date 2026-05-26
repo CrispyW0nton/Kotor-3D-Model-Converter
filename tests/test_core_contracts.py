@@ -1869,6 +1869,63 @@ def test_wgpu_render_data_generates_area_weighted_normals_when_missing() -> None
     np.testing.assert_allclose(rows[0].normals, np.asarray([(0.0, 0.0, 1.0)] * 3, dtype=np.float32), atol=1e-6)
 
 
+def test_wgpu_skinned_mesh_revision_changes_between_bind_and_lbs_modes(monkeypatch) -> None:
+    import numpy as np
+
+    from src.gui.qt_lib.rendering import mesh_render_data
+
+    node = SimpleNamespace(
+        name="torso",
+        vertices=[(0.0, 0.0, 0.0)],
+        faces=[(0, 0, 0)],
+        is_skin=True,
+        vertex_space=0,
+        render=True,
+        texture="",
+        alpha=1.0,
+        skin_data=[],
+        bone_map=["pelvis"],
+        _gr_revision=7,
+    )
+    model = SimpleNamespace(all_nodes=lambda: [node])
+    positions = np.asarray([(0.0, 0.0, 0.0)], dtype=np.float32)
+    normals = np.asarray([(0.0, 0.0, 1.0)], dtype=np.float32)
+    uvs = np.asarray([(0.5, 0.5)], dtype=np.float32)
+    indices = np.asarray([0, 0, 0], dtype=np.uint32)
+    bone_indices = np.asarray([[0, 0, 0, 0]], dtype=np.uint16)
+    bone_weights = np.asarray([[1.0, 0.0, 0.0, 0.0]], dtype=np.float32)
+
+    monkeypatch.setattr(
+        mesh_render_data,
+        "_extract_node_arrays",
+        lambda _node, *, anim_pose=None: (
+            positions,
+            normals,
+            uvs,
+            uvs,
+            indices,
+            bone_indices,
+            bone_weights,
+        ),
+    )
+
+    bind_row = list(mesh_render_data.iter_mesh_render_data(model, textures={}, anim_pose=None))[0]
+    animated_row = list(
+        mesh_render_data.iter_mesh_render_data(
+            model,
+            textures={},
+            anim_pose=SimpleNamespace(nodes={}, time=0.25),
+            allow_cpu_skinning=False,
+        )
+    )[0]
+
+    assert bind_row.is_skinned is True
+    assert animated_row.is_skinned is True
+    assert bind_row.source_revision[:-1] == animated_row.source_revision[:-1]
+    assert bind_row.source_revision[-1] == 0
+    assert animated_row.source_revision[-1] == 1
+
+
 def test_wgpu_external_lighting_snapshot_receives_renderer_helper_palette(monkeypatch) -> None:
     from src.gui.qt_lib.lighting.render_data import SceneLightingRenderData
     from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
