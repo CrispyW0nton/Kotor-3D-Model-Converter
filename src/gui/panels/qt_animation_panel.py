@@ -164,6 +164,9 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
     applyRequested = QtCore.Signal(str)
     stopRequested = QtCore.Signal()
     animationSelected = QtCore.Signal(str)
+    animationPreviewRequested = QtCore.Signal(str, bool)
+    animationPauseRequested = QtCore.Signal()
+    animationStopPreviewRequested = QtCore.Signal()
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
@@ -221,9 +224,33 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
         layout.setSpacing(4)
         layout.addWidget(heading("Animations"))
         self.anim_list = QtWidgets.QListWidget()
-        self.anim_list.currentTextChanged.connect(self.animationSelected.emit)
+        self.anim_list.currentTextChanged.connect(self._on_animation_selected)
         self.anim_list.itemDoubleClicked.connect(lambda _item: self._preview())
         layout.addWidget(self.anim_list, 1)
+
+        playback = QtWidgets.QWidget(column)
+        playback.setObjectName("RetargetAnimationPlaybackControls")
+        playback_layout = QtWidgets.QHBoxLayout(playback)
+        playback_layout.setContentsMargins(0, 0, 0, 0)
+        playback_layout.setSpacing(4)
+        self.animation_preview_button = QtWidgets.QPushButton("Play", playback)
+        self.animation_preview_button.setObjectName("previewSourceAnimationButton")
+        self.animation_pause_button = QtWidgets.QPushButton("Pause", playback)
+        self.animation_pause_button.setObjectName("pauseSourceAnimationButton")
+        self.animation_stop_button = QtWidgets.QPushButton("Stop", playback)
+        self.animation_stop_button.setObjectName("stopSourceAnimationButton")
+        self.animation_loop_checkbox = QtWidgets.QCheckBox("Loop", playback)
+        self.animation_loop_checkbox.setObjectName("loopSourceAnimationCheckBox")
+        self.animation_loop_checkbox.setChecked(True)
+        self.animation_preview_button.clicked.connect(self._preview_source_animation)
+        self.animation_pause_button.clicked.connect(self.animationPauseRequested.emit)
+        self.animation_stop_button.clicked.connect(self.animationStopPreviewRequested.emit)
+        playback_layout.addWidget(self.animation_preview_button, 1)
+        playback_layout.addWidget(self.animation_pause_button, 1)
+        playback_layout.addWidget(self.animation_stop_button, 1)
+        playback_layout.addWidget(self.animation_loop_checkbox, 0)
+        layout.addWidget(playback, 0)
+        self._update_animation_playback_controls()
         return column
 
     def _make_mapping_column(self) -> QtWidgets.QWidget:
@@ -389,6 +416,7 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
             self.anim_list.addItem(item)
         if self.anim_list.count() == 1:
             self.anim_list.setCurrentRow(0)
+        self._update_animation_playback_controls()
         self._update_info()
 
     def set_target_model(self, model) -> None:
@@ -435,6 +463,26 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
     def selected_animation(self) -> str:
         item = self.anim_list.currentItem()
         return item.text() if item else ""
+
+    def _on_animation_selected(self, anim_name: str) -> None:
+        self.animationSelected.emit(anim_name)
+        self._update_animation_playback_controls()
+
+    def _preview_source_animation(self) -> None:
+        anim_name = self.selected_animation()
+        if not anim_name:
+            return
+        self.animationPreviewRequested.emit(anim_name, self.animation_loop_checkbox.isChecked())
+
+    def _update_animation_playback_controls(self) -> None:
+        has_animation = bool(self.selected_animation())
+        for button in (
+            getattr(self, "animation_preview_button", None),
+            getattr(self, "animation_pause_button", None),
+            getattr(self, "animation_stop_button", None),
+        ):
+            if button is not None:
+                button.setEnabled(has_animation)
 
     def select_animation(self, anim_name: str) -> bool:
         if not anim_name:

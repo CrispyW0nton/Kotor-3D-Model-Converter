@@ -9,6 +9,20 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-05-26
+
+- Retarget Workbench animation dock playback controls: Added Play, Pause, Stop, and Loop controls to the Animations dock and connected them to source-viewport animation preview playback through `AnimationEngine`, separate from the full Retarget/Apply workflow. No roadmap task ID applies.
+  Affected areas: `src/gui/panels/qt_animation_panel.py`, `src/gui/windows/qt_retarget_window.py`, Retarget Workbench UI regression coverage.
+  Verification: `python -m py_compile src/gui/panels/qt_animation_panel.py src/gui/windows/qt_retarget_window.py tests/test_retarget_workbench_ui_placement.py`; `pytest tests/test_retarget_workbench_ui_placement.py -q`; visible Retarget Workbench smoke clicked Play/Pause/Stop with Loop visible and captured the dock under `artifacts/retarget_workbench_animation_controls_20260526/`.
+
+- Retarget Workbench viewport surface fix: Removed the shared GPU renderer instance from the Animation Retargeting Workbench so the source and target panes each own their own renderer surface while keeping shared renderer settings. This restores the target viewport grid/frame in dual-pane WGPU/Qt runs. No roadmap task ID applies.
+  Affected areas: `src/gui/windows/qt_retarget_window.py`, Retarget Workbench viewport regression coverage.
+  Verification: `python -m py_compile src/gui/windows/qt_retarget_window.py tests/test_retarget_workbench_ui_placement.py`; `pytest tests/test_retarget_workbench_ui_placement.py::test_retarget_workbench_viewports_keep_independent_renderer_surfaces tests/test_retarget_workbench_ui_placement.py::test_retarget_workbench_uses_internal_docks_and_quiet_viewports -q`; visible Retarget Workbench smoke with WGPU Direct3D requested captured both source and target viewport grids/render surfaces under `artifacts/retarget_workbench_viewports_visible_20260526/`.
+
+- Console startup logging formatting: Added a color-aware, column-aligned stderr formatter for the external startup/runtime console, including Windows ANSI virtual-terminal enabling, colored timestamp/level/logger/message fields, and `GHOSTRIGGER_COLOR_LOG` / `NO_COLOR` controls. Theme precache startup messages now use the same logger instead of direct `[GhostRigger]` console prints. File logs remain plain text. No roadmap task ID applies.
+  Affected areas: `main.py`, console/theme logging regression coverage.
+  Verification: `python -m py_compile main.py tests/test_qt_only_imports.py`; `pytest tests/test_qt_only_imports.py::test_console_formatter_keeps_plain_table_layout_without_color tests/test_qt_only_imports.py::test_console_formatter_colors_warning_rows_when_enabled tests/test_qt_only_imports.py::test_theme_precache_uses_startup_logger_instead_of_direct_console_prints -q`.
+
 ## 2026-05-25
 
 - Stage 9A WGPU backend restart guard: Added a Settings save check for explicit WGPU backend-type changes because `WGPU_BACKEND_TYPE` cannot be changed after a WGPU device exists. Switching ModernGL/OpenGL and WGPU Direct3D 12 remains a normal hot swap, but switching an active WGPU Direct3D 12 session to WGPU Vulkan or WGPU OpenGL now shows a restart-required message, saves the selected renderer, and automatically relaunches GhostRigger from the current command line after the existing dirty-scene prompt allows shutdown. No roadmap task ID applies.

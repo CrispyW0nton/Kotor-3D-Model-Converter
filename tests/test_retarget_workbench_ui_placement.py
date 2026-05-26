@@ -47,6 +47,20 @@ def _sample_source_clip():
     )
 
 
+def _sample_kotor_animation_model():
+    from src.core.geometry.model_data import Animation, KotorModel, ModelNode
+
+    root = ModelNode(name="root")
+    return KotorModel(
+        name="N_Test",
+        root_node=root,
+        animations=[
+            Animation(name="pause1", length=1.0),
+            Animation(name="walk", length=1.5),
+        ],
+    )
+
+
 def test_retarget_workbench_controls_live_in_retarget_window() -> None:
     _qapp()
     from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
@@ -120,6 +134,59 @@ def test_retarget_workbench_uses_internal_docks_and_quiet_viewports() -> None:
             assert toolbar.isVisible() is False
             assert viewport.transform_typein_bar.isVisible() is False
             assert viewport._viewcube_widget.isVisible() is False
+    finally:
+        window.close()
+
+
+def test_retarget_workbench_viewports_keep_independent_renderer_surfaces() -> None:
+    _qapp()
+    from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
+
+    window = QtAnimationRetargetWindow()
+    try:
+        assert not hasattr(window, "_shared_gpu_renderer")
+        assert window.source_viewport._owns_gpu_renderer is True
+        assert window.target_viewport._owns_gpu_renderer is True
+        assert window.source_viewport.canvas is not window.target_viewport.canvas
+    finally:
+        window.close()
+
+
+def test_retarget_workbench_animation_dock_exposes_playback_controls() -> None:
+    _qapp()
+    from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
+
+    window = QtAnimationRetargetWindow()
+    try:
+        window.set_source_model(_sample_kotor_animation_model())
+
+        play = window.findChild(QtWidgets.QPushButton, "previewSourceAnimationButton")
+        pause = window.findChild(QtWidgets.QPushButton, "pauseSourceAnimationButton")
+        stop = window.findChild(QtWidgets.QPushButton, "stopSourceAnimationButton")
+        loop = window.findChild(QtWidgets.QCheckBox, "loopSourceAnimationCheckBox")
+
+        assert play is not None
+        assert pause is not None
+        assert stop is not None
+        assert loop is not None
+        assert loop.isChecked() is True
+
+        emitted: list[tuple[str, bool]] = []
+        window.panel.animationPreviewRequested.connect(lambda name, should_loop: emitted.append((name, should_loop)))
+        window.panel.select_animation("walk")
+        assert play.isEnabled() is True
+        assert pause.isEnabled() is True
+        assert stop.isEnabled() is True
+        loop.setChecked(False)
+        play.click()
+
+        assert emitted == [("walk", False)]
+        window.preview_source_animation("walk", loop=False)
+        assert window._source_preview_engine is not None
+        assert window._source_preview_engine.current_animation.name == "walk"
+        assert window._source_preview_timer.isActive()
+        window.stop_source_animation_preview(clear_pose=True)
+        assert window._source_preview_engine is None
     finally:
         window.close()
 
