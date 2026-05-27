@@ -219,6 +219,9 @@ class FallbackViewportRenderer:
         return object.__getattribute__(self, "_active_backend")
 
     def create_surface_widget(self, parent=None):
+        cached = object.__getattribute__(self, "_surface_widget")
+        if cached is not None:
+            return cached
         renderer = object.__getattribute__(self, "_active") or self._activate_next()
         create = getattr(renderer, "create_surface_widget", None)
         if callable(create):
@@ -265,6 +268,8 @@ class FallbackViewportRenderer:
             log.info("RendererFactory: %s unavailable: render returned no image", getattr(backend, "name", backend))
 
     def set_settings(self, settings: RendererSettings) -> None:
+        if settings == object.__getattribute__(self, "_settings"):
+            return
         old = object.__getattribute__(self, "_active")
         if old is not None:
             shutdown = getattr(old, "shutdown", None)

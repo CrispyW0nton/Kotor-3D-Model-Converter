@@ -14,7 +14,14 @@ import subprocess
 import tempfile
 from typing import Any
 
-from src.core.geometry.model_data import GameVersion, KotorModel, ModelNode, NodeFlags
+from src.core.geometry.model_data import (
+    BoneWeight,
+    GameVersion,
+    KotorModel,
+    ModelNode,
+    NodeFlags,
+    VertexSkinData,
+)
 from src.core.retargeting.fbx_exporter import FBXExportFailure, find_blender_executable
 
 
@@ -115,9 +122,10 @@ def model_from_blender_fbx_mesh_payload(
     setattr(model, "_gr_fbx_actions", list(payload.get("actions") or []))
 
     for index, mesh in enumerate(meshes):
+        is_skin = bool(mesh.get("is_skin") and mesh.get("bone_map") and mesh.get("skin_data"))
         node = ModelNode(
             name=str(mesh.get("name") or f"mesh_{index}")[:32],
-            flags=int(NodeFlags.HEADER | NodeFlags.MESH),
+            flags=int(NodeFlags.HEADER | (NodeFlags.SKIN if is_skin else NodeFlags.MESH)),
             parent=root,
         )
         node.vertices = [_triple(vertex) for vertex in mesh.get("vertices") or []]
@@ -133,6 +141,13 @@ def model_from_blender_fbx_mesh_payload(
         node.render = True
         node._imported = True
         node.vertex_space = 1
+        if is_skin:
+            node.bone_map = [str(name) for name in (mesh.get("bone_map") or [])]
+            node.skin_data = [_skin_vertex(row) for row in (mesh.get("skin_data") or [])]
+            if len(node.skin_data) < len(node.vertices):
+                node.skin_data.extend(VertexSkinData() for _ in range(len(node.vertices) - len(node.skin_data)))
+            elif len(node.skin_data) > len(node.vertices):
+                node.skin_data = node.skin_data[: len(node.vertices)]
         node.compute_bounds()
         root.children.append(node)
 
@@ -165,3 +180,21 @@ def _pair(values: Any) -> tuple[float, float]:
 def _face(values: Any) -> tuple[int, int, int]:
     raw = list(values or (0, 0, 0))
     return (int(raw[0]), int(raw[1]), int(raw[2]))
+
+
+def _skin_vertex(values: Any) -> VertexSkinData:
+    influences: list[BoneWeight] = []
+    for entry in list(values or [])[:4]:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            bone_index = int(entry.get("bone_index", 0))
+            weight = float(entry.get("weight", 0.0))
+        except (TypeError, ValueError):
+            continue
+        if bone_index < 0 or weight <= 0.0:
+            continue
+        influences.append(BoneWeight(bone_index=bone_index, weight=weight))
+    skin = VertexSkinData(influences=influences)
+    skin.normalize()
+    return skin

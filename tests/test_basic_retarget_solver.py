@@ -324,6 +324,73 @@ def test_segment_direction_mode_aligns_mapped_limb_segment_when_explicitly_enabl
     assert result.report.segment_pose_errors
 
 
+def test_exact_segment_correction_keys_full_target_hierarchy() -> None:
+    source = _source_clip(
+        [
+            ("upperarm_l", None),
+            ("lowerarm_l", "upperarm_l"),
+            ("hand_l", "lowerarm_l"),
+            ("middle_01_l", "hand_l"),
+            ("middle_03_l", "middle_01_l"),
+        ],
+        [
+            {
+                "upperarm_l": Transform(),
+                "lowerarm_l": Transform(position=(1.0, 0.0, 0.0)),
+                "hand_l": Transform(position=(2.0, 0.0, 0.0)),
+                "middle_01_l": Transform(position=(2.5, 0.0, 0.0)),
+                "middle_03_l": Transform(position=(3.0, 0.0, 0.0)),
+            },
+            {
+                "upperarm_l": Transform(),
+                "lowerarm_l": Transform(position=(0.0, 1.0, 0.0), rotation=_quat_axis("Z", 90.0)),
+                "hand_l": Transform(position=(0.0, 2.0, 0.0), rotation=_quat_axis("Z", 90.0)),
+                "middle_01_l": Transform(position=(0.0, 2.5, 0.0), rotation=_quat_axis("Z", 90.0)),
+                "middle_03_l": Transform(position=(0.0, 3.0, 0.0), rotation=_quat_axis("Z", 90.0)),
+            },
+        ],
+    )
+    target = _target_model(
+        [
+            ("root", None, (0.0, 0.0, 0.0), None),
+            ("lbicep_g", "root", (0.0, 0.0, 0.0), None),
+            ("Lforearm_g", "lbicep_g", (1.0, 0.0, 0.0), None),
+            ("Lhand_g", "Lforearm_g", (1.0, 0.0, 0.0), None),
+            ("LbFngrB_g", "Lhand_g", (0.5, 0.0, 0.0), None),
+            ("LbFngrT_g", "LbFngrB_g", (0.5, 0.0, 0.0), None),
+            ("unmapped_helper", "root", (0.0, 0.0, 1.0), _quat_axis("X", 15.0)),
+        ]
+    )
+    profile = _profile(
+        [
+            RetargetMappingEntry("upperarm", "upperarm_l", "lbicep_g", side="left"),
+            RetargetMappingEntry("forearm", "lowerarm_l", "Lforearm_g", side="left"),
+            RetargetMappingEntry("hand", "hand_l", "Lhand_g", side="left"),
+            RetargetMappingEntry("middle_base", "middle_01_l", "LbFngrB_g", side="left"),
+            RetargetMappingEntry("middle_tip", "middle_03_l", "LbFngrT_g", side="left"),
+        ]
+    )
+
+    result = retarget_source_clip_to_aurora_animation(
+        source_clip=source,
+        target_model=target,
+        profile=profile,
+        options=RetargetSolverOptions(
+            rotation_transfer_mode="exact_segment_correction",
+            key_unmapped_reference_nodes=True,
+        ),
+    )
+    pose = evaluate_aurora_animation_pose(target, result.animation_block, 1.0)
+    keyed_nodes = {node.name for node in result.animation_block.nodes}
+
+    assert keyed_nodes == {node.name for node in target.all_nodes()}
+    assert pose.world_transforms_by_node["Lforearm_g"].position == pytest.approx((0.0, 1.0, 0.0), abs=1e-6)
+    assert pose.world_transforms_by_node["Lhand_g"].position == pytest.approx((0.0, 2.0, 0.0), abs=1e-6)
+    assert pose.world_transforms_by_node["LbFngrB_g"].position == pytest.approx((0.0, 2.5, 0.0), abs=1e-6)
+    assert pose.world_transforms_by_node["unmapped_helper"].position == pytest.approx((0.0, 0.0, 1.0), abs=1e-6)
+    assert result.report.max_segment_direction_error_degrees == pytest.approx(0.0, abs=1e-5)
+
+
 def test_non_root_source_translations_are_ignored() -> None:
     source = _source_clip(
         [("root", None), ("forearm_l", "root")],
@@ -370,6 +437,33 @@ def test_root_motion_is_stripped_by_default() -> None:
 
     assert pose.local_transforms_by_node["root"].position == pytest.approx((5.0, 6.0, 7.0))
     assert result.report.stripped_root_translation is True
+
+
+def test_root_motion_policy_emits_root_position_controller() -> None:
+    source = _source_clip(
+        [("root", None)],
+        [
+            {"root": Transform(position=(0.0, 0.0, 0.0))},
+            {"root": Transform(position=(2.0, 3.0, 4.0))},
+        ],
+    )
+    target = _target_model([("root", None, (5.0, 6.0, 7.0), None)])
+    profile = _profile([RetargetMappingEntry("root", "root", "root")])
+
+    result = retarget_source_clip_to_aurora_animation(
+        source_clip=source,
+        target_model=target,
+        profile=profile,
+        options=RetargetSolverOptions(root_translation_policy="copy_source_root"),
+    )
+    pose = evaluate_aurora_animation_pose(target, result.animation_block, 1.0)
+    root_node = next(node for node in result.animation_block.nodes if node.name == "root")
+    position_controller = next(controller for controller in root_node.controllers if controller["name"] == "position")
+
+    assert position_controller["values"] == [[5.0, 6.0, 7.0], [7.0, 9.0, 11.0]]
+    assert pose.local_transforms_by_node["root"].position == pytest.approx((7.0, 9.0, 11.0))
+    assert result.report.generated_position_track_count == 1
+    assert result.report.stripped_root_translation is False
 
 
 def test_quaternion_hemisphere_continuity() -> None:

@@ -811,6 +811,7 @@ class AuroraAnimationWriter:
         slot_name: str,
         fps: float = 30.0,
         write_zero_position_controllers: bool = True,
+        write_root_position_controllers: bool = True,
         source_reference_mode: str = "hybrid_limb_source_rest",
         hybrid_limb_source_rest_weight: float = 0.35,
         warnings: Optional[List[str]] = None,
@@ -937,7 +938,11 @@ class AuroraAnimationWriter:
                         "values": [[0.0, 0.0, 0.0] for _ in times],
                     }
                 )
-            elif root_motion_present and self._is_root_or_pelvis_node(model, key):
+            elif (
+                write_root_position_controllers
+                and root_motion_present
+                and self._is_root_or_pelvis_node(model, key)
+            ):
                 pos_times, pos_values = position_tracks.get(
                     key,
                     (
@@ -996,9 +1001,13 @@ class AuroraAnimationWriter:
             "R3.6 emits full-hierarchy Aurora orientation controllers, including constant keys for "
             "unmoving target nodes, so in-game playback does not fall back to A-pose branches."
         )
-        if root_motion_present:
+        if root_motion_present and write_root_position_controllers:
             warnings.append(
                 "R3.6 detected source root motion and emitted root/pelvis position controllers."
+            )
+        elif root_motion_present:
+            warnings.append(
+                "R3.6 detected source root motion but left it in-place because root movement is disabled."
             )
         return anim
 

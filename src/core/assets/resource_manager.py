@@ -417,7 +417,13 @@ class ResourceManager:
         mdx = self.get_mdx(name, game) or b''
         try:
             from ..game.kotor_loader import load_model_from_bytes
-            return load_model_from_bytes(mdl, mdx)
+            model = load_model_from_bytes(mdl, mdx)
+            if model is not None:
+                model._gr_source_mdl_bytes = mdl
+                model._gr_source_mdx_bytes = mdx
+                model._gr_source_resref = name
+                model._gr_source_game = game
+            return model
         except Exception as exc:
             log.error(f"ResourceManager.load_model: parse failed for '{name}': {exc}",
                       exc_info=True)

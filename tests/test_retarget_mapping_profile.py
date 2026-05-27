@@ -7,11 +7,15 @@ from pathlib import Path
 import pytest
 
 from src.core.animation.animation_engine import SuperModelResolver
+from src.core.game.kotor_loader import load_model_from_file
 from src.core.geometry.model_data import Animation, KotorModel, ModelNode
 from src.core.retargeting.fbx_importer import classify_source_node_name
 from src.core.retargeting.retarget_mapping import (
     detect_side,
+    suggest_mixamo_to_aurora_mapping,
+    suggest_initial_mapping,
     suggest_source_roles,
+    suggest_ue5_to_aurora_mapping,
     validate_retarget_profile,
 )
 from src.core.retargeting.retarget_profile import (
@@ -160,6 +164,127 @@ def test_source_role_suggestions_classify_ue_style_names() -> None:
     assert "ik_foot_root" not in suggestions
     assert detect_side("upperarm_l") == "left"
     assert detect_side("thigh_r") == "right"
+
+
+def test_initial_mapping_does_not_duplicate_target_nodes() -> None:
+    clip = _source_clip(["root", "spine_01", "spine_02", "spine_04"])
+    target = _target_model(["root", "torso_g"], parents={"torso_g": "root"})
+
+    profile = suggest_initial_mapping(clip, target)
+
+    target_nodes = [entry.target_node.lower() for entry in profile.mappings]
+    assert target_nodes.count("torso_g") == 1
+    assert validate_retarget_profile(profile, clip, target).success is True
+
+
+def test_verified_ue5_to_aurora_mapping_uses_rename_map_and_target_casing() -> None:
+    clip = _source_clip(
+        [
+            "attach",
+            "pelvis",
+            "spine_01",
+            "spine_03",
+            "clavicle_l",
+            "upperarm_l",
+            "lowerarm_l",
+            "hand_l",
+            "middle_01_l",
+            "middle_03_l",
+            "thigh_l",
+            "calf_l",
+            "foot_l",
+            "ball_l",
+            "clavicle_r",
+            "upperarm_r",
+            "lowerarm_r",
+            "hand_r",
+            "middle_01_r",
+            "middle_03_r",
+            "thigh_r",
+            "calf_r",
+            "foot_r",
+            "ball_r",
+            "head",
+            "lowerarm_twist_01_l",
+        ]
+    )
+    target = load_model_from_file(
+        "tests/fixtures/kotor_stock/k1/pmbam.mdl",
+        "tests/fixtures/kotor_stock/k1/pmbam.mdx",
+    )
+
+    profile = suggest_ue5_to_aurora_mapping(clip, target)
+    pairs = {entry.source_node: entry.target_node for entry in profile.mappings}
+
+    assert profile.metadata["generated_by"] == "verified_ue5_to_aurora_mapping"
+    assert pairs["lowerarm_l"] == "Lforearm_g"
+    assert pairs["hand_l"] == "Lhand_g"
+    assert pairs["middle_01_l"] == "LbFngrB_g"
+    assert pairs["middle_03_l"] == "LbFngrT_g"
+    assert pairs["lowerarm_r"] == "Rforearm_g"
+    assert pairs["hand_r"] == "Rhand_g"
+    assert pairs["ball_l"] == "lfootT_g"
+    assert pairs["ball_r"] == "rfootT_g"
+    assert "headhook" not in {entry.target_node.lower() for entry in profile.mappings}
+    assert profile.metadata["recommended_rotation_transfer_mode"] == "exact_segment_correction"
+    assert profile.metadata["key_unmapped_reference_nodes"] is True
+
+    report = validate_retarget_profile(profile, clip, target)
+    assert report.success is True
+
+
+def test_verified_mixamo_to_aurora_mapping_uses_family_specific_policy() -> None:
+    mixamo_names = [
+        "mixamorig:Hips",
+        "mixamorig:Spine",
+        "mixamorig:Spine1",
+        "mixamorig:Spine2",
+        "mixamorig:Neck",
+        "mixamorig:Head",
+        "mixamorig:RightShoulder",
+        "mixamorig:RightArm",
+        "mixamorig:RightForeArm",
+        "mixamorig:RightHand",
+        "mixamorig:RightHandMiddle1",
+        "mixamorig:RightHandMiddle3",
+        "mixamorig:LeftShoulder",
+        "mixamorig:LeftArm",
+        "mixamorig:LeftForeArm",
+        "mixamorig:LeftHand",
+        "mixamorig:LeftHandMiddle1",
+        "mixamorig:LeftHandMiddle3",
+        "mixamorig:RightUpLeg",
+        "mixamorig:RightLeg",
+        "mixamorig:RightFoot",
+        "mixamorig:RightToeBase",
+        "mixamorig:LeftUpLeg",
+        "mixamorig:LeftLeg",
+        "mixamorig:LeftFoot",
+        "mixamorig:LeftToeBase",
+    ]
+    clip = _source_clip(mixamo_names)
+    target = load_model_from_file(
+        "tests/fixtures/kotor_stock/k1/pmbam.mdl",
+        "tests/fixtures/kotor_stock/k1/pmbam.mdx",
+    )
+
+    profile = suggest_mixamo_to_aurora_mapping(clip, target)
+    pairs = {entry.source_node: entry.target_node for entry in profile.mappings}
+
+    assert profile.metadata["generated_by"] == "verified_mixamo_to_aurora_mapping"
+    assert profile.metadata["source_skeleton_family"] == "mixamo"
+    assert pairs["mixamorig:RightHand"] == "Rhand_g"
+    assert pairs["mixamorig:LeftHand"] == "Lhand_g"
+    assert pairs["mixamorig:RightFoot"] == "rfoot_g"
+    assert pairs["mixamorig:LeftFoot"] == "lfoot_g"
+    assert "handconjure" not in {entry.target_node.lower() for entry in profile.mappings}
+    assert "headhook" not in {entry.target_node.lower() for entry in profile.mappings}
+    assert profile.metadata["recommended_rotation_transfer_mode"] == "exact_segment_correction"
+    assert profile.metadata["key_unmapped_reference_nodes"] is True
+    assert profile.metadata["source_reference_mode"] == "source_rest"
+
+    report = validate_retarget_profile(profile, clip, target)
+    assert report.success is True
 
 
 def test_validation_rejects_unknown_source_node() -> None:

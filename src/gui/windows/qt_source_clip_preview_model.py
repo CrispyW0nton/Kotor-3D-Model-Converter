@@ -13,7 +13,7 @@ from src.core.geometry.model_data import (
     ModelNode,
     NodeFlags,
 )
-from src.core.retargeting.source_animation import SourceSkeletonClip, Transform
+from src.core.retargeting.source_animation import SourceSkeletonClip, Transform, quat_to_matrix_xyzw
 
 
 @dataclass(frozen=True)
@@ -69,6 +69,8 @@ def build_source_clip_preview_model(clip: SourceSkeletonClip, mesh_model: KotorM
         if rest_global is not None:
             preview_node.external_world_position = _finite_position(rest_global.position)
         preview_node._source_clip_classification = str(getattr(node, "classification", "") or "deform")
+        if preview_node._source_clip_classification in {"twist", "ik", "helper"}:
+            preview_node._hide_skeleton_overlay = True
         by_name[preview_node.name] = preview_node
 
     for node in getattr(clip, "nodes", []) or []:
@@ -82,6 +84,8 @@ def build_source_clip_preview_model(clip: SourceSkeletonClip, mesh_model: KotorM
         preview_node.parent = parent
         parent.children.append(preview_node)
 
+    _apply_compact_preview_positions(root, clip)
+
     mesh_bounds = _append_mesh_preview_nodes(root, mesh_model)
     bounds = _merge_bounds(_bounds_from_clip(clip), mesh_bounds)
     model.bb_min, model.bb_max = bounds
@@ -90,6 +94,66 @@ def build_source_clip_preview_model(clip: SourceSkeletonClip, mesh_model: KotorM
     setattr(model, "_gr_render_bounds", bounds)
     setattr(model, "_gr_source_clip_mesh_count", len([n for n in model.all_nodes() if getattr(n, "_gr_fbx_mesh_preview_node", False)]))
     return model
+
+
+def _apply_compact_preview_positions(root: ModelNode, clip: SourceSkeletonClip) -> None:
+    rest_globals = getattr(getattr(clip, "rest_pose", None), "global_transforms", {}) or {}
+    stack = list(getattr(root, "children", []) or [])
+    while stack:
+        node = stack.pop()
+        if getattr(node, "external_world_position", None) is not None:
+            parent = getattr(node, "parent", None)
+            parent_name = None
+            if parent is not None and not getattr(parent, "_gr_source_clip_preview_root", False):
+                parent_name = str(getattr(parent, "name", "") or "")
+            compact = source_clip_parent_local_position(str(getattr(node, "name", "") or ""), parent_name, rest_globals)
+            node.position = compact
+            node._gr_source_clip_preview_position = compact
+        stack.extend(getattr(node, "children", []) or [])
+
+
+def source_clip_parent_local_position(
+    node_name: str,
+    parent_name: str | None,
+    global_transforms: dict[str, Transform],
+) -> tuple[float, float, float]:
+    """Return a node position in parent-local coordinates from global source transforms.
+
+    FBX imports can carry animation data in a different unit scale than the raw
+    local keys. The global transforms are the normalized preview truth, so derive
+    a parent-local offset from them by rotating the world delta into the parent
+    frame. A plain child_world - parent_world delta is still world-space and will
+    be rotated a second time by the hierarchical viewport pose.
+    """
+
+    transform = global_transforms.get(node_name)
+    if transform is None:
+        return (0.0, 0.0, 0.0)
+    position = _finite_position(getattr(transform, "position", (0.0, 0.0, 0.0)))
+    parent_transform = global_transforms.get(parent_name) if parent_name else None
+    if parent_transform is None:
+        return position
+    parent_position = _finite_position(getattr(parent_transform, "position", (0.0, 0.0, 0.0)))
+    delta = (
+        position[0] - parent_position[0],
+        position[1] - parent_position[1],
+        position[2] - parent_position[2],
+    )
+    return _rotate_world_delta_to_parent_local(delta, getattr(parent_transform, "rotation", (0.0, 0.0, 0.0, 1.0)))
+
+
+def _rotate_world_delta_to_parent_local(
+    delta: tuple[float, float, float],
+    parent_rotation: Iterable[float],
+) -> tuple[float, float, float]:
+    matrix = quat_to_matrix_xyzw(_finite_quat(parent_rotation))
+    # The quaternion matrix rotates parent-local vectors into world space. Its
+    # transpose rotates a world-space offset back into the parent frame.
+    return (
+        float(matrix[0, 0] * delta[0] + matrix[1, 0] * delta[1] + matrix[2, 0] * delta[2]),
+        float(matrix[0, 1] * delta[0] + matrix[1, 1] * delta[1] + matrix[2, 1] * delta[2]),
+        float(matrix[0, 2] * delta[0] + matrix[1, 2] * delta[1] + matrix[2, 2] * delta[2]),
+    )
 
 
 def _source_clip_animation_rows(clip: SourceSkeletonClip) -> list[SourceClipPreviewAnimation]:
@@ -177,9 +241,10 @@ def _append_mesh_preview_nodes(root: ModelNode, mesh_model: KotorModel | None) -
 
     points: list[tuple[float, float, float]] = []
     for index, source in enumerate(mesh_nodes):
+        is_skin = bool(getattr(source, "is_skin", False) and getattr(source, "bone_map", None) and getattr(source, "skin_data", None))
         node = ModelNode(
             name=str(getattr(source, "name", "") or f"fbx_mesh_{index}")[:32],
-            flags=int(NodeFlags.HEADER | NodeFlags.MESH),
+            flags=int(NodeFlags.HEADER | (NodeFlags.SKIN if is_skin else NodeFlags.MESH)),
             parent=root,
         )
         node.vertices = [tuple(float(c) for c in vertex[:3]) for vertex in (getattr(source, "vertices", []) or [])]
@@ -192,7 +257,11 @@ def _append_mesh_preview_nodes(root: ModelNode, mesh_model: KotorModel | None) -
         node.render = True
         node._imported = True
         node.vertex_space = 1
+        if is_skin:
+            node.bone_map = [str(name) for name in (getattr(source, "bone_map", []) or [])]
+            node.skin_data = list(getattr(source, "skin_data", []) or [])
         node._gr_fbx_mesh_preview_node = True
+        node._gr_fbx_mesh_preview_skinned = bool(is_skin)
         node.compute_bounds()
         root.children.append(node)
         points.extend(node.vertices)

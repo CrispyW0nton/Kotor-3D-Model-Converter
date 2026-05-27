@@ -12,7 +12,10 @@ from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationRetargetPanel
 from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.viewports.qt_viewport import QtRetargetViewportWidget, QtViewportWidget
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
-from src.gui.qt_lib.windows.qt_source_clip_preview_model import build_source_clip_preview_model
+from src.gui.qt_lib.windows.qt_source_clip_preview_model import (
+    build_source_clip_preview_model,
+    source_clip_parent_local_position,
+)
 from src.gui.qt_lib.windows.qt_retarget_workbench_controller import populate_retarget_mode_combo
 from src.core.retargeting.retarget_output_naming import KotorOutputAnimationNameMode
 
@@ -30,7 +33,11 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
     targetExternalImportRequested = QtCore.Signal()
     previewRequested = QtCore.Signal(str)
     applyRequested = QtCore.Signal(str)
+    pauseRequested = QtCore.Signal()
     stopRequested = QtCore.Signal()
+    sourceAnimationPlayRequested = QtCore.Signal(str)
+    sourceAnimationTimeChanged = QtCore.Signal(str, float)
+    rootMotionToggled = QtCore.Signal(bool)
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
@@ -50,6 +57,11 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self._source_preview_timer.timeout.connect(self._tick_source_animation_preview)
         self._source_clip_preview_clip = None
         self._source_clip_mesh_model = None
+        self._source_clip_play_name = ""
+        self._source_clip_play_clock = QtCore.QElapsedTimer()
+        self._source_clip_play_timer = QtCore.QTimer(self)
+        self._source_clip_play_timer.setInterval(33)
+        self._source_clip_play_timer.timeout.connect(self._tick_source_clip_playback)
         self._retarget_docks: dict[str, QtWidgets.QDockWidget] = {}
         self._build_actions()
         self._build_menu()
@@ -114,7 +126,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.apply_action.setShortcut("Ctrl+Return")
         self.apply_action.triggered.connect(lambda: self.applyRequested.emit(self.panel.selected_animation()))
         self.stop_action = QtGui.QAction("Stop Preview", self)
-        self.stop_action.triggered.connect(self.stopRequested.emit)
+        self.stop_action.triggered.connect(self._stop_requested)
         self.frame_source_action = QtGui.QAction("Frame Source", self)
         self.frame_source_action.triggered.connect(lambda: self.source_viewport.frame_all())
         self.frame_target_action = QtGui.QAction("Frame Target", self)
@@ -192,6 +204,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.source_viewport.set_navigation_profile(self._navigation_profile)
         self.target_viewport.set_navigation_profile(self._navigation_profile)
         self._sync_viewport_chrome_actions()
+        self._apply_retarget_view_toggles()
 
         self.panel = QtAnimationRetargetPanel(self)
         self.panel.sourceCurrentRequested.connect(self.sourceCurrentRequested.emit)
@@ -204,7 +217,9 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.panel.targetExternalImportRequested.connect(self.targetExternalImportRequested.emit)
         self.panel.previewRequested.connect(self.previewRequested.emit)
         self.panel.applyRequested.connect(self.applyRequested.emit)
-        self.panel.stopRequested.connect(self.stopRequested.emit)
+        self.panel.pauseRequested.connect(self._pause_requested)
+        self.panel.stopRequested.connect(self._stop_requested)
+        self.panel.sourceAnimationPlayRequested.connect(self._source_animation_play_requested)
         self.panel.animationPreviewRequested.connect(self.preview_source_animation)
         self.panel.animationPauseRequested.connect(self.pause_source_animation_preview)
         self.panel.animationStopPreviewRequested.connect(self.stop_source_animation_preview)
@@ -215,10 +230,13 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         viewport_split.addWidget(self._viewport_group(self.panel.target_box, self.target_viewport))
         viewport_split.setSizes([640, 640])
 
-        central_layout.addWidget(viewport_split, 1)
-        central_layout.addWidget(self.panel.controls_widget, 0)
+        root = QtWidgets.QSplitter(QtCore.Qt.Vertical)
+        root.setChildrenCollapsible(False)
+        root.addWidget(viewport_split)
+        root.addWidget(self.panel)
+        root.setSizes([560, 260])
+        central_layout.addWidget(root, 1)
         self.setCentralWidget(central)
-        self._build_retarget_docks()
 
     def set_renderer_settings(self, settings: RendererSettings | dict | None) -> None:
         self._renderer_settings = settings if isinstance(settings, RendererSettings) else RendererSettings.from_settings(settings or {})
@@ -248,6 +266,65 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.retarget_workbench_status_label.setObjectName("retargetWorkbenchStatusLabel")
         top.addWidget(self.retarget_workbench_status_label, 4)
         outer.addLayout(top)
+
+        toggles = QtWidgets.QHBoxLayout()
+        toggles.setContentsMargins(0, 0, 0, 0)
+        toggles.setSpacing(10)
+        self.retarget_bones_toggle = QtWidgets.QCheckBox("Bones", box)
+        self.retarget_bones_toggle.setObjectName("retargetBonesToggle")
+        self.retarget_bones_toggle.setChecked(True)
+        self.retarget_bones_toggle.setToolTip("Show bone and joint overlays in the Retarget Workbench viewports.")
+        self.retarget_gizmo_toggle = QtWidgets.QCheckBox("Gizmo", box)
+        self.retarget_gizmo_toggle.setObjectName("retargetGizmoToggle")
+        self.retarget_gizmo_toggle.setChecked(True)
+        self.retarget_gizmo_toggle.setToolTip("Show transform gizmos in the Retarget Workbench viewports.")
+        self.retarget_root_motion_toggle = QtWidgets.QCheckBox("Root motion", box)
+        self.retarget_root_motion_toggle.setObjectName("retargetRootMotionToggle")
+        self.retarget_root_motion_toggle.setChecked(False)
+        self.retarget_root_motion_toggle.setToolTip(
+            "Enable root movement tracks for retargeted animation. Leave off for in-place KOTOR previews."
+        )
+        self.retarget_bones_toggle.toggled.connect(self.set_retarget_bones_visible)
+        self.retarget_gizmo_toggle.toggled.connect(self.set_retarget_gizmo_visible)
+        self.retarget_root_motion_toggle.toggled.connect(self.rootMotionToggled.emit)
+        toggles.addWidget(self.retarget_bones_toggle)
+        toggles.addWidget(self.retarget_gizmo_toggle)
+        toggles.addWidget(self.retarget_root_motion_toggle)
+        toggles.addStretch(1)
+        outer.addLayout(toggles)
+
+        self.retarget_output_global_controls = QtWidgets.QFrame(box)
+        self.retarget_output_global_controls.setObjectName("retargetOutputGlobalControls")
+        self.retarget_output_global_controls.setVisible(False)
+        names = QtWidgets.QHBoxLayout(self.retarget_output_global_controls)
+        names.setContentsMargins(0, 0, 0, 0)
+        names.setSpacing(6)
+        self.kotor_output_name_mode_combo = QtWidgets.QComboBox(self.retarget_output_global_controls)
+        self.kotor_output_name_mode_combo.setObjectName("kotorOutputNameModeComboBox")
+        self.kotor_output_name_mode_combo.addItem("Vanilla slot override", KotorOutputAnimationNameMode.VANILLA_SLOT.value)
+        self.kotor_output_name_mode_combo.addItem("Custom animation patch", KotorOutputAnimationNameMode.CUSTOM_PATCH.value)
+        self.target_kotor_animation_slot_combo = QtWidgets.QComboBox(self.retarget_output_global_controls)
+        self.target_kotor_animation_slot_combo.setObjectName("targetKotorAnimationSlotComboBox")
+        self.target_kotor_animation_slot_combo.setEditable(True)
+        self.target_kotor_animation_slot_combo.setMinimumWidth(120)
+        self.custom_kotor_animation_name_edit = QtWidgets.QLineEdit(self.retarget_output_global_controls)
+        self.custom_kotor_animation_name_edit.setObjectName("customKotorAnimationNameLineEdit")
+        self.custom_kotor_animation_name_edit.setPlaceholderText("gr_spin_attack_01")
+        self.output_unreal_clip_name_edit = QtWidgets.QLineEdit(self.retarget_output_global_controls)
+        self.output_unreal_clip_name_edit.setObjectName("outputUnrealClipNameLineEdit")
+        self.output_unreal_clip_name_edit.setPlaceholderText("pmbam_pause1")
+        self.retarget_output_display_label_edit = QtWidgets.QLineEdit(self.retarget_output_global_controls)
+        self.retarget_output_display_label_edit.setObjectName("retargetOutputDisplayLabelLineEdit")
+        self.retarget_output_display_label_edit.setPlaceholderText("Display label / notes")
+        for widget in (
+            self.kotor_output_name_mode_combo,
+            self.target_kotor_animation_slot_combo,
+            self.custom_kotor_animation_name_edit,
+            self.output_unreal_clip_name_edit,
+            self.retarget_output_display_label_edit,
+        ):
+            names.addWidget(widget)
+        outer.addWidget(self.retarget_output_global_controls, 0)
 
         details = QtWidgets.QGridLayout()
         details.setContentsMargins(0, 0, 0, 0)
@@ -300,13 +377,11 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
     def _build_retarget_docks(self) -> None:
         self._retarget_docks = {}
         animations = self._create_retarget_dock("animations", "Animations", self.panel.animation_section)
-        mapping = self._create_retarget_dock("mapping", "Source Bone / Target Bone", self.panel.mapping_section)
         info = self._create_retarget_dock("information", "Information", self.panel.info_section)
         transfer = self._create_retarget_dock("transfer", "Transfer", self.panel.transfer_section)
         overrides = self._create_retarget_dock("overrides", "Overrides", self._build_overrides_panel())
 
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, animations)
-        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, mapping)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, info)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, transfer)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, overrides)
@@ -314,7 +389,6 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.tabifyDockWidget(info, overrides)
         info.raise_()
         self.resizeDocks([animations], [300], QtCore.Qt.Horizontal)
-        self.resizeDocks([mapping], [480], QtCore.Qt.Horizontal)
         self.resizeDocks([info], [190], QtCore.Qt.Vertical)
 
     def _create_retarget_dock(self, key: str, title: str, widget: QtWidgets.QWidget) -> QtWidgets.QDockWidget:
@@ -414,6 +488,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             self.source_viewport.set_resource_manager(self._resource_manager, self._source_game)
         self.panel.set_source_model(model)
         self.source_viewport.load_model(model, self._texture_dir)
+        self._apply_retarget_view_toggles()
         self._refresh_cloth_tool()
         self.statusBar().showMessage(f"Source: {getattr(model, 'name', 'None') if model else 'None'}")
 
@@ -428,13 +503,8 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.panel.set_source_model(preview_model)
         self.panel.select_animation(str(getattr(clip, "clip_name", "") or ""))
         self.source_viewport.load_model(preview_model, self._texture_dir)
-        if hasattr(self.source_viewport, "bones_button"):
-            self.source_viewport.bones_button.blockSignals(True)
-            self.source_viewport.bones_button.setChecked(True)
-            self.source_viewport.bones_button.blockSignals(False)
-        self.source_viewport.toggle_bones(True)
-        self.source_viewport.set_joint_dot_enabled(True)
-        self._set_source_clip_pose(clip, 0.0)
+        self._apply_retarget_view_toggles()
+        self.source_viewport.clear_animation_pose()
         self.source_viewport.frame_all()
         node_count = int(getattr(preview_model, "_gr_source_clip_node_count", 0) or 0)
         mesh_count = int(getattr(preview_model, "_gr_source_clip_mesh_count", 0) or 0)
@@ -448,6 +518,71 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self._refresh_cloth_tool()
         self.statusBar().showMessage(f"Source clip preview: {getattr(clip, 'clip_name', 'Source Clip')}")
 
+    def retarget_bones_visible(self) -> bool:
+        return bool(getattr(self, "retarget_bones_toggle", None) and self.retarget_bones_toggle.isChecked())
+
+    def retarget_gizmo_visible(self) -> bool:
+        return bool(getattr(self, "retarget_gizmo_toggle", None) and self.retarget_gizmo_toggle.isChecked())
+
+    def root_motion_enabled(self) -> bool:
+        return bool(
+            getattr(self, "retarget_root_motion_toggle", None)
+            and self.retarget_root_motion_toggle.isChecked()
+        )
+
+    def set_retarget_bones_visible(self, visible: bool) -> None:
+        if hasattr(self, "retarget_bones_toggle"):
+            with QtCore.QSignalBlocker(self.retarget_bones_toggle):
+                self.retarget_bones_toggle.setChecked(bool(visible))
+        for viewport in (getattr(self, "source_viewport", None), getattr(self, "target_viewport", None)):
+            self._set_viewport_bones_visible(viewport, bool(visible))
+
+    def set_retarget_gizmo_visible(self, visible: bool) -> None:
+        if hasattr(self, "retarget_gizmo_toggle"):
+            with QtCore.QSignalBlocker(self.retarget_gizmo_toggle):
+                self.retarget_gizmo_toggle.setChecked(bool(visible))
+        for viewport in (getattr(self, "source_viewport", None), getattr(self, "target_viewport", None)):
+            self._set_viewport_gizmo_visible(viewport, bool(visible))
+
+    def _apply_retarget_view_toggles(self) -> None:
+        self.set_retarget_bones_visible(self.retarget_bones_visible())
+        self.set_retarget_gizmo_visible(self.retarget_gizmo_visible())
+
+    def _set_viewport_bones_visible(self, viewport, visible: bool) -> None:
+        if viewport is None:
+            return
+        if hasattr(viewport, "bones_button"):
+            viewport.bones_button.blockSignals(True)
+            viewport.bones_button.setChecked(bool(visible))
+            viewport.bones_button.blockSignals(False)
+        toggle = getattr(viewport, "toggle_bones", None)
+        if callable(toggle):
+            toggle(bool(visible))
+        dots = getattr(viewport, "set_joint_dot_enabled", None)
+        if callable(dots):
+            dots(bool(visible))
+
+    def _set_viewport_gizmo_visible(self, viewport, visible: bool) -> None:
+        if viewport is None:
+            return
+        if hasattr(viewport, "gimbal_button"):
+            viewport.gimbal_button.blockSignals(True)
+            viewport.gimbal_button.setChecked(bool(visible))
+            viewport.gimbal_button.blockSignals(False)
+        setter = getattr(viewport, "_set_renderer_gimbal_visible", None)
+        if callable(setter):
+            setter(bool(visible))
+        else:
+            renderer = getattr(viewport, "_renderer", None)
+            if renderer is not None:
+                renderer.show_gimbal = bool(visible)
+            gizmo = getattr(viewport, "_transform_gizmo", None)
+            if gizmo is not None:
+                gizmo.visible = bool(visible)
+        request = getattr(viewport, "_request_render", None)
+        if callable(request):
+            request(fast=True)
+
     def set_source_clip_animation_pose(self, animation_name: str, time_seconds: float = 0.0) -> None:
         clip = self._source_clip_preview_clip
         if clip is None:
@@ -457,6 +592,11 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self._set_source_clip_pose(clip, time_seconds)
 
     def preview_source_animation(self, animation_name: str, loop: bool = True) -> None:
+        clip = self._source_clip_preview_clip
+        current_clip_name = str(getattr(clip, "clip_name", "") or "") if clip is not None else ""
+        if clip is not None and (not animation_name or animation_name == current_clip_name):
+            self.play_source_clip_animation(animation_name)
+            return
         model = getattr(self.panel, "_source_model", None)
         anim_name = str(animation_name or self.selected_animation() or "").strip()
         if model is None:
@@ -483,6 +623,8 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
     def pause_source_animation_preview(self) -> None:
         engine = self._source_preview_engine
         if engine is None or engine.current_animation is None:
+            if self._source_clip_play_timer.isActive():
+                self.pause_source_clip_animation()
             return
         engine.pause()
         if engine.is_playing:
@@ -500,6 +642,8 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         if self._source_preview_engine is not None:
             self._source_preview_engine.stop()
         self._source_preview_engine = None
+        self._source_clip_play_timer.stop()
+        self._source_clip_play_name = ""
         if clear_pose and hasattr(self, "source_viewport"):
             self.source_viewport.clear_animation_pose()
         elif hasattr(self, "statusBar"):
@@ -533,6 +677,27 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             length=length,
         )
 
+    def play_source_clip_animation(self, animation_name: str) -> None:
+        clip = self._source_clip_preview_clip
+        if clip is None:
+            self.statusBar().showMessage("No imported source clip is loaded.")
+            return
+        current_name = str(getattr(clip, "clip_name", "") or "")
+        if animation_name and animation_name != current_name:
+            self.statusBar().showMessage(f"Loading source animation: {animation_name}")
+            return
+        self._source_clip_play_name = current_name
+        self._set_source_clip_pose(clip, 0.0)
+        duration = float(getattr(clip, "duration_seconds", 0.0) or 0.0)
+        if duration > 0.0 and len(getattr(clip, "sampled_poses", []) or []) > 1:
+            self._source_clip_play_clock.restart()
+            self._source_clip_play_timer.start()
+        self.statusBar().showMessage(f"Playing source animation: {current_name}")
+
+    def pause_source_clip_animation(self) -> None:
+        self._source_clip_play_timer.stop()
+        self.statusBar().showMessage("Source animation paused")
+
     def set_target_model(self, model, game_tag: str = "") -> None:
         if game_tag:
             self._target_game = game_tag.upper()
@@ -540,6 +705,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             self.target_viewport.set_resource_manager(self._resource_manager, self._target_game)
         self.panel.set_target_model(model)
         self.target_viewport.load_model(model, self._texture_dir)
+        self._apply_retarget_view_toggles()
         self._refresh_cloth_tool()
         self.statusBar().showMessage(f"Target: {getattr(model, 'name', 'None') if model else 'None'}")
 
@@ -556,6 +722,15 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
     def selected_animation(self) -> str:
         return self.panel.selected_animation()
 
+    def current_animation_assignment(self) -> dict:
+        return self.panel.assignment_for_animation(self.panel.selected_animation())
+
+    def checked_animation_assignments(self) -> list[dict]:
+        return self.panel.checked_animation_assignments()
+
+    def set_animation_assignment(self, anim_name: str, **kwargs) -> None:
+        self.panel.set_animation_assignment(anim_name, **kwargs)
+
     def request_apply_options(self, source_anim, target_model) -> Optional[dict]:
         dialog = QtRetargetApplyDialog(source_anim, target_model, self)
         if dialog.exec() != QtWidgets.QDialog.Accepted:
@@ -569,6 +744,8 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.target_viewport.set_animation_pose(pose, name=name, time=time, length=length)
 
     def clear_poses(self) -> None:
+        self.stop_source_animation_preview(clear_pose=False)
+        self._source_clip_play_timer.stop()
         self.source_viewport.clear_animation_pose()
         self.target_viewport.clear_animation_pose()
 
@@ -578,11 +755,23 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         except Exception:
             return
         pose = AnimPose(time=float(getattr(source_pose, "time_seconds", time_seconds) or time_seconds))
-        for node_name, transform in (getattr(source_pose, "local_transforms", {}) or {}).items():
+        model = getattr(self.source_viewport, "model", None)
+        global_transforms = getattr(source_pose, "global_transforms", {}) or {}
+        local_transforms = getattr(source_pose, "local_transforms", {}) or {}
+        for node_name, transform in global_transforms.items():
+            preview_node = None
+            if model is not None and hasattr(model, "find_node"):
+                try:
+                    preview_node = model.find_node(str(node_name))
+                except Exception:
+                    preview_node = None
+            position = self._source_clip_pose_delta(preview_node, str(node_name), global_transforms, transform)
+            local_transform = local_transforms.get(node_name)
+            rotation = getattr(local_transform, "rotation", None) if local_transform is not None else None
             pose.nodes[str(node_name).lower()] = NodePose(
                 name=str(node_name),
-                position=tuple(float(v) for v in getattr(transform, "position", (0.0, 0.0, 0.0))[:3]),
-                rotation=tuple(float(v) for v in getattr(transform, "rotation", (0.0, 0.0, 0.0, 1.0))[:4]),
+                position=tuple(float(v) for v in (position or (0.0, 0.0, 0.0))[:3]),
+                rotation=tuple(float(v) for v in (rotation or (0.0, 0.0, 0.0, 1.0))[:4]),
                 scale=1.0,
             )
         self.source_viewport.set_animation_pose(
@@ -591,6 +780,47 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             time=pose.time,
             length=float(getattr(clip, "duration_seconds", 0.0) or 0.0),
         )
+        self.sourceAnimationTimeChanged.emit(str(getattr(clip, "clip_name", "") or ""), float(pose.time))
+
+    def _source_clip_pose_delta(self, preview_node, node_name: str, global_transforms: dict, transform) -> tuple[float, float, float]:
+        parent_name = None
+        parent = getattr(preview_node, "parent", None)
+        if parent is not None and not getattr(parent, "_gr_source_clip_preview_root", False):
+            parent_name = str(getattr(parent, "name", "") or "")
+        return source_clip_parent_local_position(node_name, parent_name, global_transforms)
+
+    def _tick_source_clip_playback(self) -> None:
+        clip = self._source_clip_preview_clip
+        if clip is None:
+            self._source_clip_play_timer.stop()
+            return
+        duration = float(getattr(clip, "duration_seconds", 0.0) or 0.0)
+        if duration <= 0.0:
+            self._source_clip_play_timer.stop()
+            return
+        elapsed = max(0.0, self._source_clip_play_clock.elapsed() / 1000.0)
+        self._set_source_clip_pose(clip, elapsed % duration)
+
+    def _source_animation_play_requested(self, animation_name: str) -> None:
+        clip = self._source_clip_preview_clip
+        current_name = str(getattr(clip, "clip_name", "") or "") if clip is not None else ""
+        if clip is not None and (not animation_name or animation_name == current_name):
+            self.play_source_clip_animation(animation_name)
+        else:
+            self.stop_source_animation_preview(clear_pose=False)
+            self.statusBar().showMessage(f"Loading source animation: {animation_name}")
+        self.sourceAnimationPlayRequested.emit(animation_name)
+
+    def _pause_requested(self) -> None:
+        self.pause_source_animation_preview()
+        if self._source_clip_play_timer.isActive():
+            self.pause_source_clip_animation()
+        self.pauseRequested.emit()
+
+    def _stop_requested(self) -> None:
+        self.clear_poses()
+        self.statusBar().showMessage("Preview stopped")
+        self.stopRequested.emit()
 
     def _tool_mode_changed(self) -> None:
         active = self.tool_action_group.checkedAction()

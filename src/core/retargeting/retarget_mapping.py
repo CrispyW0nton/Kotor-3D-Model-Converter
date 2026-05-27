@@ -15,10 +15,41 @@ from .retarget_output_naming import (
     validate_custom_kotor_animation_name,
 )
 from .retarget_profile import RetargetMappingEntry, RetargetProfile
+from .reverse_renamer import ReverseRenameSpec, load_reverse_rename_spec
 from .source_animation import SourceSkeletonClip
+from .mixamo_source_adapter import MixamoSourceAdapter, is_mixamo_skeleton
+from .ue5_source_adapter import UE5SourceAdapter
 
 
 HELPER_CLASSIFICATIONS = {"twist", "ik", "helper"}
+UE5_TO_AURORA_MIN_CORE_MAPPING_COUNT = 19
+MIXAMO_TO_AURORA_MIN_CORE_MAPPING_COUNT = 18
+
+_UE5_EXACT_ROLE_BY_SOURCE = {
+    "attach": "root",
+    "root": "root",
+    "pelvis": "pelvis",
+    "spine_01": "spine",
+    "spine_03": "chest",
+    "clavicle_l": "clavicle",
+    "clavicle_r": "clavicle",
+    "upperarm_l": "upperarm",
+    "upperarm_r": "upperarm",
+    "lowerarm_l": "forearm",
+    "lowerarm_r": "forearm",
+    "hand_l": "hand",
+    "hand_r": "hand",
+    "thigh_l": "thigh",
+    "thigh_r": "thigh",
+    "calf_l": "calf",
+    "calf_r": "calf",
+    "foot_l": "foot",
+    "foot_r": "foot",
+    "ball_l": "toe",
+    "ball_r": "toe",
+}
+
+_FINGER_ROLE_PREFIXES = ("index", "middle", "ring", "pinky", "thumb")
 
 
 @dataclass
@@ -88,11 +119,16 @@ def suggest_initial_mapping(source_clip: SourceSkeletonClip, target_model: Kotor
         target_by_key.setdefault((role, None), target_name)
 
     mappings: List[RetargetMappingEntry] = []
+    used_targets: set[str] = set()
     for source_name, role in source_roles.items():
         side = detect_side(source_name)
         target_name = target_by_key.get((role, side)) or target_by_key.get((role, None))
         if not target_name:
             continue
+        target_key = target_name.lower()
+        if target_key in used_targets:
+            continue
+        used_targets.add(target_key)
         mappings.append(
             RetargetMappingEntry(
                 role=role,
@@ -115,6 +151,168 @@ def suggest_initial_mapping(source_clip: SourceSkeletonClip, target_model: Kotor
         ],
         twist_sources={},
         metadata={"generated_by": "suggest_initial_mapping"},
+    )
+
+
+def suggest_ue5_to_aurora_mapping(
+    source_clip: SourceSkeletonClip,
+    target_model: KotorModel,
+    *,
+    spec: ReverseRenameSpec | None = None,
+    adapter: UE5SourceAdapter | None = None,
+) -> RetargetProfile:
+    """Build the verified UE5 Manny/Quinn -> Aurora profile used by the Workbench.
+
+    This path is deliberately narrower than :func:`suggest_initial_mapping`.
+    It consumes the reverse rename policy that was validated for the PMBAM idle
+    retarget workflow, resolves every target name back to the target model's
+    exact Aurora casing, and avoids helper/hook guesses such as ``headhook``.
+    """
+
+    reverse_spec = spec or load_reverse_rename_spec()
+    source_names = [node.name for node in source_clip.nodes]
+    target_nodes = list(target_model.all_nodes())
+    target_name_by_key = {node.name.lower(): node.name for node in target_nodes}
+    adapter_result = (adapter or UE5SourceAdapter()).adapt(
+        source_names,
+        reverse_spec,
+        [node.name for node in target_nodes],
+    )
+
+    source_class_by_key = {node.name.lower(): node.classification for node in source_clip.nodes}
+    mappings: list[RetargetMappingEntry] = []
+    for decision in adapter_result.mapped:
+        target_key = str(decision.target_bone or "").lower()
+        target_name = target_name_by_key.get(target_key)
+        if not target_name:
+            continue
+        source_name = _source_name_with_original_case(decision.source_bone, source_names)
+        mappings.append(
+            RetargetMappingEntry(
+                role=_ue5_verified_role(decision.source_bone),
+                source_node=source_name,
+                target_node=target_name,
+                side=detect_side(decision.source_bone),
+                allow_helper_mapping=(
+                    decision.action == "alias"
+                    or source_class_by_key.get(decision.source_bone.lower()) in HELPER_CLASSIFICATIONS
+                ),
+                notes=decision.reason,
+            )
+        )
+
+    ignored = [
+        _source_name_with_original_case(decision.source_bone, source_names)
+        for decision in [*adapter_result.dropped, *adapter_result.collapsed]
+    ]
+    unmapped = [
+        _source_name_with_original_case(decision.source_bone, source_names)
+        for decision in adapter_result.unmapped
+    ]
+    if len(mappings) < UE5_TO_AURORA_MIN_CORE_MAPPING_COUNT:
+        raise ValueError(
+            "Verified UE5 → Aurora mapping found too few usable core mappings "
+            f"({len(mappings)} < {UE5_TO_AURORA_MIN_CORE_MAPPING_COUNT})."
+        )
+
+    return RetargetProfile(
+        version=1,
+        name="verified_ue5_to_aurora_profile",
+        source_clip_hint=source_clip.source_path,
+        target_model_hint=target_model.name,
+        source_reference={"mode": "clip_rest"},
+        target_reference={"mode": "target_rest"},
+        mappings=mappings,
+        ignored_source_nodes=ignored,
+        twist_sources={},
+        metadata={
+            "generated_by": "verified_ue5_to_aurora_mapping",
+            "source_adapter": "UE5SourceAdapter",
+            "rename_map": str(reverse_spec.path or ""),
+            "mapped_count": len(mappings),
+            "dropped_count": len(adapter_result.dropped),
+            "collapsed_count": len(adapter_result.collapsed),
+            "unmapped_count": len(adapter_result.unmapped),
+            "unmapped_source_nodes": unmapped,
+            "recommended_rotation_transfer_mode": "exact_segment_correction",
+            "key_unmapped_reference_nodes": True,
+            "basis_conversion": "ue5_to_aurora_negate_xy",
+        },
+    )
+
+
+def suggest_mixamo_to_aurora_mapping(
+    source_clip: SourceSkeletonClip,
+    target_model: KotorModel,
+    *,
+    adapter: MixamoSourceAdapter | None = None,
+) -> RetargetProfile:
+    """Build the verified Mixamo humanoid -> Aurora profile used by the Workbench.
+
+    Mixamo rigs use names like ``mixamorig:LeftArm`` rather than UE5 Manny names
+    like ``upperarm_l``.  The generic role mapper is too loose for that family
+    and can map hands/feet to Aurora helpers.  This profile keeps Mixamo as a
+    first-class source family while feeding the same R3.B/segment-correction
+    preview and export path used by the verified UE5 workflow.
+    """
+
+    source_names = [node.name for node in source_clip.nodes]
+    if not is_mixamo_skeleton(source_names):
+        raise ValueError("Source clip does not look like a Mixamo humanoid skeleton.")
+
+    target_nodes = list(target_model.all_nodes())
+    adapter_result = (adapter or MixamoSourceAdapter()).adapt(
+        source_names,
+        [node.name for node in target_nodes],
+    )
+
+    mappings: list[RetargetMappingEntry] = []
+    for decision in adapter_result.mapped:
+        if not decision.target_bone or not decision.role:
+            continue
+        mappings.append(
+            RetargetMappingEntry(
+                role=decision.role,
+                source_node=decision.source_bone,
+                target_node=decision.target_bone,
+                side=decision.side or "center",
+                notes=decision.reason,
+            )
+        )
+
+    if len(mappings) < MIXAMO_TO_AURORA_MIN_CORE_MAPPING_COUNT:
+        raise ValueError(
+            "Verified Mixamo → Aurora mapping found too few usable core mappings "
+            f"({len(mappings)} < {MIXAMO_TO_AURORA_MIN_CORE_MAPPING_COUNT})."
+        )
+
+    return RetargetProfile(
+        version=1,
+        name="verified_mixamo_to_aurora_profile",
+        source_clip_hint=source_clip.source_path,
+        target_model_hint=target_model.name,
+        source_reference={"mode": "clip_rest"},
+        target_reference={"mode": "target_rest"},
+        mappings=mappings,
+        ignored_source_nodes=[decision.source_bone for decision in adapter_result.ignored],
+        twist_sources={},
+        metadata={
+            "generated_by": "verified_mixamo_to_aurora_mapping",
+            "source_adapter": "MixamoSourceAdapter",
+            "source_skeleton_family": "mixamo",
+            "mapped_count": len(mappings),
+            "ignored_count": len(adapter_result.ignored),
+            "unmapped_count": len(adapter_result.unmapped),
+            "unmapped_source_nodes": [decision.source_bone for decision in adapter_result.unmapped],
+            "recommended_rotation_transfer_mode": "exact_segment_correction",
+            "key_unmapped_reference_nodes": True,
+            "basis_conversion": "blender_fbx_to_aurora_negate_xy",
+            "source_reference_mode": "source_rest",
+            "source_reference_note": (
+                "Mixamo action clips commonly start in an authored pose, so the R3.B writer "
+                "uses the FBX bind/rest pose as the motion reference instead of clip frame 0."
+            ),
+        },
     )
 
 
@@ -196,6 +394,26 @@ def validate_retarget_profile(
 
 def _normalize_name(name: str) -> str:
     return str(name or "").strip().lower().replace(" ", "_")
+
+
+def _source_name_with_original_case(source_key: str, source_names: list[str]) -> str:
+    wanted = str(source_key or "").lower()
+    for name in source_names:
+        if str(name or "").lower() == wanted:
+            return str(name)
+    return str(source_key or "")
+
+
+def _ue5_verified_role(source_name: str) -> str:
+    text = str(source_name or "").strip().lower()
+    if text in _UE5_EXACT_ROLE_BY_SOURCE:
+        return _UE5_EXACT_ROLE_BY_SOURCE[text]
+    for prefix in _FINGER_ROLE_PREFIXES:
+        if text.startswith(f"{prefix}_01"):
+            return f"{prefix}_base"
+        if text.startswith(f"{prefix}_03"):
+            return f"{prefix}_tip"
+    return _role_from_name(text) or text
 
 
 def _role_from_name(name: str) -> Optional[str]:

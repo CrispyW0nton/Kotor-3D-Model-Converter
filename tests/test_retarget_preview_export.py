@@ -79,10 +79,14 @@ class SpyWriter:
         success: bool = True,
         mutate_model: bool = False,
         expected_final_mdl: Path | None = None,
+        expected_source_mdl_bytes: bytes | None = None,
+        expected_source_mdx_bytes: bytes | None = None,
     ) -> None:
         self.success = success
         self.mutate_model = mutate_model
         self.expected_final_mdl = expected_final_mdl
+        self.expected_source_mdl_bytes = expected_source_mdl_bytes
+        self.expected_source_mdx_bytes = expected_source_mdx_bytes
         self.calls: list[tuple[object, Animation]] = []
 
     def inject_animation_block(self, request, animation_block: Animation):
@@ -91,6 +95,11 @@ class SpyWriter:
             assert request.output_mdl != self.expected_final_mdl
             assert not self.expected_final_mdl.exists()
             assert request.output_mdl.parent.name.startswith(".ghostrigger_export_")
+        if self.expected_source_mdl_bytes is not None:
+            assert request.target_mdl.read_bytes() == self.expected_source_mdl_bytes
+        if self.expected_source_mdx_bytes is not None:
+            assert request.target_mdx is not None
+            assert request.target_mdx.read_bytes() == self.expected_source_mdx_bytes
         if self.mutate_model:
             request.target_model_override.animations.append(Animation(name="mutated", length=1.0))
             animation_block.name = "mutated"
@@ -166,6 +175,29 @@ def test_export_uses_staged_paths_before_final_promotion(tmp_path: Path) -> None
     assert request.output_mdx_path.read_bytes() == b"out mdx"
     assert result.export_job_result is not None
     assert result.export_job_result.kind == "retarget_mdl_mdx"
+
+
+def test_game_library_target_bytes_are_staged_as_original_mdl_source(tmp_path: Path) -> None:
+    target = KotorModel(
+        name="pmbam",
+        root_node=ModelNode(name="root"),
+        animations=[Animation(name="pause1", length=1.0)],
+    )
+    target._gr_source_mdl_bytes = b"game library mdl"
+    target._gr_source_mdx_bytes = b"game library mdx"
+    target._gr_source_resref = "pmbam"
+    request = _request(tmp_path, target=target)
+    writer = SpyWriter(
+        expected_source_mdl_bytes=b"game library mdl",
+        expected_source_mdx_bytes=b"game library mdx",
+        expected_final_mdl=request.output_mdl_path,
+    )
+
+    result = export_retarget_preview_override(request, writer=writer)
+
+    assert result.mdl_path == request.output_mdl_path
+    assert request.output_mdl_path.read_bytes() == b"out mdl"
+    assert not (request.output_mdl_path.parent / "_original_target").exists()
 
 
 def test_original_target_model_is_not_mutated(tmp_path: Path) -> None:

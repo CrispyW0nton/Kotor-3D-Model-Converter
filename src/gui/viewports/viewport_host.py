@@ -195,4 +195,3 @@ class RendererSurfaceHost(QtWidgets.QWidget):
         for child in self.findChildren(QtWidgets.QWidget, options=QtCore.Qt.FindDirectChildrenOnly):
             if child is not self._surface_widget and child is not self._overlay_label:
                 child.raise_()
-

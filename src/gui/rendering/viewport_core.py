@@ -146,6 +146,21 @@ try:
 except ImportError:
     _NUMPY = False
 
+try:
+    from src.core.qt_core.animation.gpu_skinning import (
+        MatrixPaletteUploader as _MatrixPaletteUploader,
+        MAX_BONES as _SKIN_MAX_BONES,
+    )
+except ImportError:
+    try:
+        from core.qt_core.animation.gpu_skinning import (  # type: ignore[no-redef]
+            MatrixPaletteUploader as _MatrixPaletteUploader,
+            MAX_BONES as _SKIN_MAX_BONES,
+        )
+    except ImportError:
+        _MatrixPaletteUploader = None  # type: ignore[assignment]
+        _SKIN_MAX_BONES = 128
+
 # ── Acceleration layer (accel.py + tex_atlas.py) ─────────────────────────────
 # Provides Numba JIT / NumPy barycentric rasterizers that are 17–40× faster
 # than the PIL AFFINE path and vectorised projection / frustum-cull utilities.
@@ -3513,6 +3528,10 @@ class FrameRenderer:
         self._anim_base_pose = None  # Optional[AnimPose]
         self._bone_transforms_cache: Optional[Dict] = None
         self._bone_transforms_pose_id: int = -1
+        self._gpu_parity_skin_uploader = None
+        self._gpu_parity_skin_model_id: int = -1
+        self._gpu_parity_skin_pose_id: int = -1
+        self._gpu_parity_skin_verts_cache: Dict[int, List[Tuple[float, float, float]]] = {}
         self._dangly_sims: Dict[int, 'DanglySimulator'] = {}
         self._dangly_last_time: float = 0.0
 
@@ -3695,6 +3714,8 @@ class FrameRenderer:
         # Invalidate per-pose bone-transforms cache
         self._bone_transforms_cache = None
         self._bone_transforms_pose_id = -1
+        self._gpu_parity_skin_pose_id = -1
+        self._gpu_parity_skin_verts_cache = {}
         # Ensure next frame renders at full quality (not LOD/interactive mode)
         self.is_interactive = False
         # Request a redraw so every animation frame is actually rendered.
@@ -3722,6 +3743,10 @@ class FrameRenderer:
         self._anim_pose = None   # clear animation pose when model changes
         self._bone_transforms_cache = None   # invalidate bone-transform cache
         self._bone_transforms_pose_id = -1
+        self._gpu_parity_skin_uploader = None
+        self._gpu_parity_skin_model_id = -1
+        self._gpu_parity_skin_pose_id = -1
+        self._gpu_parity_skin_verts_cache = {}
         self._outlier_skin_nodes: set = set()   # node ids to skip for accessory models
         # Clear dangly simulators: new model may have different nodes
         self._dangly_sims = {}
@@ -5068,6 +5093,127 @@ class FrameRenderer:
             return _bind_fallback()
         return (rx, ry, rz)
 
+    def _gpu_parity_skinned_world_verts_for_node(self, node: 'ModelNode') -> Optional[List[Tuple[float, float, float]]]:
+        """Return animated skin verts using the same palette contract as GPU draws."""
+        if (
+            _MatrixPaletteUploader is None
+            or not _NUMPY
+            or self.model is None
+            or self._anim_pose is None
+            or not getattr(node, "is_skin", False)
+            or not getattr(node, "bone_map", None)
+            or not getattr(node, "skin_data", None)
+            or not getattr(node, "vertices", None)
+        ):
+            return None
+
+        model_id = id(self.model)
+        pose_id = id(self._anim_pose)
+        node_id = id(node)
+        if (
+            self._gpu_parity_skin_model_id == model_id
+            and self._gpu_parity_skin_pose_id == pose_id
+            and node_id in self._gpu_parity_skin_verts_cache
+        ):
+            return self._gpu_parity_skin_verts_cache[node_id]
+
+        if self._gpu_parity_skin_model_id != model_id or self._gpu_parity_skin_uploader is None:
+            try:
+                uploader = _MatrixPaletteUploader(max_bones=_SKIN_MAX_BONES)
+                uploader.build_inverse_bind_pose(self.model)
+            except Exception as exc:
+                log.debug("GPU-parity overlay skin uploader build failed: %s", exc)
+                self._gpu_parity_skin_uploader = None
+                self._gpu_parity_skin_model_id = -1
+                return None
+            self._gpu_parity_skin_uploader = uploader
+            self._gpu_parity_skin_model_id = model_id
+            self._gpu_parity_skin_pose_id = -1
+            self._gpu_parity_skin_verts_cache = {}
+
+        if self._gpu_parity_skin_pose_id != pose_id:
+            self._gpu_parity_skin_pose_id = pose_id
+            self._gpu_parity_skin_verts_cache = {}
+
+        try:
+            uploader = self._gpu_parity_skin_uploader
+            uploader.compute_skin_node_palette(node, self._anim_pose)
+            palette = uploader.as_numpy_array()
+        except Exception as exc:
+            log.debug("GPU-parity overlay skin palette failed for %s: %s", getattr(node, "name", "?"), exc)
+            return None
+        if palette is None or len(palette) == 0:
+            return None
+
+        arrays = self._skin_numpy_arrays_for_node(node)
+        if arrays is None:
+            return None
+        vertices_h, bone_indices, weights = arrays
+        bone_count = int(palette.shape[0])
+        if bone_count <= 0:
+            return None
+
+        skinned = np.zeros_like(vertices_h, dtype=np.float32)
+        weight_total = np.zeros((vertices_h.shape[0],), dtype=np.float32)
+        for slot in range(min(4, bone_indices.shape[1])):
+            slot_weights = weights[:, slot]
+            valid = (slot_weights >= np.float32(0.0001)) & (bone_indices[:, slot] >= 0) & (bone_indices[:, slot] < bone_count)
+            if not bool(np.any(valid)):
+                continue
+            matrices = palette[bone_indices[valid, slot]]
+            transformed = np.einsum("nij,nj->ni", matrices, vertices_h[valid], optimize=True)
+            skinned[valid] += slot_weights[valid, None] * transformed
+            weight_total[valid] += slot_weights[valid]
+
+        fallback = weight_total < np.float32(0.0001)
+        if bool(np.any(fallback)):
+            skinned[fallback] = vertices_h[fallback]
+        result = [tuple(float(value) for value in row[:3]) for row in skinned]
+        self._gpu_parity_skin_verts_cache[node_id] = result
+        return result
+
+    def _skin_numpy_arrays_for_node(self, node: 'ModelNode'):
+        """Return cached homogeneous vertices, bone indices, and weights.
+
+        Imported FBX preview meshes can be large (Mixamo's X Bot is ~147k
+        vertices). Building these compact arrays once keeps focused playback
+        from spending most of its frame budget walking Python skin structures.
+        """
+
+        vertices = getattr(node, "vertices", []) or []
+        skin_data = list(getattr(node, "skin_data", []) or [])
+        vertex_count = len(vertices)
+        if vertex_count <= 0 or len(skin_data) < vertex_count:
+            return None
+        cache_key = (id(vertices), id(getattr(node, "skin_data", None)), vertex_count, len(skin_data))
+        cache = getattr(node, "_gr_skin_numpy_arrays_cache", None)
+        if isinstance(cache, tuple) and len(cache) == 2 and cache[0] == cache_key:
+            return cache[1]
+        try:
+            verts = np.asarray(vertices, dtype=np.float32)
+        except Exception:
+            return None
+        if verts.ndim != 2 or verts.shape[0] == 0 or verts.shape[1] < 3:
+            return None
+        vertices_h = np.ones((verts.shape[0], 4), dtype=np.float32)
+        vertices_h[:, :3] = verts[:, :3]
+        bone_indices = np.full((verts.shape[0], 4), -1, dtype=np.int32)
+        weights = np.zeros((verts.shape[0], 4), dtype=np.float32)
+        for vi, skin in enumerate(skin_data[: verts.shape[0]]):
+            for slot, influence in enumerate(list(getattr(skin, "influences", []) or [])[:4]):
+                try:
+                    bone_indices[vi, slot] = int(getattr(influence, "bone_index", -1))
+                    weights[vi, slot] = float(getattr(influence, "weight", 0.0))
+                except Exception:
+                    bone_indices[vi, slot] = -1
+                    weights[vi, slot] = 0.0
+        arrays = (vertices_h, bone_indices, weights)
+        try:
+            setattr(node, "_gr_skin_numpy_arrays_cache", (cache_key, arrays))
+        except Exception:
+            pass
+        return arrays
+
     def _get_world_verts_for_node(self, node: 'ModelNode') -> List[Tuple]:
         """
         Get all world-space vertices for a node, using LBS when an animation
@@ -5113,6 +5259,9 @@ class FrameRenderer:
         # Imported FBX skins are stored in model/world bind coordinates, but
         # still need LBS when a live pose is driving their bone_map.
         if node.is_skin and self._anim_pose is not None and node.bone_map and node.skin_data:
+            gpu_parity_verts = self._gpu_parity_skinned_world_verts_for_node(node)
+            if gpu_parity_verts is not None:
+                return gpu_parity_verts
             bone_transforms = self._build_bone_transforms(node)
             if bone_transforms:
                 return [self._lbs_vertex(node, i, bone_transforms)
@@ -5140,6 +5289,9 @@ class FrameRenderer:
         # ── SKIN nodes: authored bind frame, optionally deformed by LBS ───────
         if node.is_skin:
             if self._anim_pose is not None and node.bone_map and node.skin_data:
+                gpu_parity_verts = self._gpu_parity_skinned_world_verts_for_node(node)
+                if gpu_parity_verts is not None:
+                    return gpu_parity_verts
                 bone_transforms = self._build_bone_transforms(node)
                 if bone_transforms:
                     return [self._lbs_vertex(node, i, bone_transforms)

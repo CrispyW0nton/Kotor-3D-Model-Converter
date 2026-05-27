@@ -21,7 +21,7 @@ from .retarget_calibration import (
     current_source_basis_for_frame,
     transfer_calibrated_frame_delta,
 )
-from .retarget_frame_audit import audit_retarget_reference_frames
+from .retarget_frame_audit import SEGMENT_ROLE_PAIRS, audit_retarget_reference_frames
 from .retarget_frames import transfer_reference_frame_delta
 from .retarget_mapping import HELPER_CLASSIFICATIONS, validate_retarget_profile
 from .retarget_output_naming import (
@@ -55,6 +55,8 @@ class RetargetSolverOptions:
     allow_pelvis_vertical_translation: bool = False
     key_unmapped_reference_nodes: bool = False
     basis_conversion: Optional[BasisConversion] = None
+    source_reference_mode: Optional[str] = None
+    hybrid_limb_source_rest_weight: Optional[float] = None
     validate_profile: bool = True
     strict: bool = True
     kotor_output_name_mode: KotorOutputAnimationNameMode = KotorOutputAnimationNameMode.VANILLA_SLOT
@@ -173,6 +175,7 @@ def retarget_source_clip_to_aurora_animation(
     source_poses = _sample_source_poses(source_clip, opts.sample_rate)
     target_to_source = {entry.target_node: entry.source_node for entry in normalized_profile.mappings}
     mapped_segments = _mapped_segments(normalized_profile)
+    target_nodes = target_model.all_nodes()
 
     converted_reference_source = _convert_source_pose(reference_pair.source_pose, opts.basis_conversion)
     converted_source_poses = [_convert_source_pose(pose, opts.basis_conversion) for pose in source_poses]
@@ -181,11 +184,13 @@ def retarget_source_clip_to_aurora_animation(
         entry.target_node: ([], [])
         for entry in normalized_profile.mappings
     }
+    position_tracks: Dict[str, tuple[List[float], List[tuple[float, float, float]]]] = {}
+    if opts.key_unmapped_reference_nodes:
+        for target_node in target_nodes:
+            orientation_tracks.setdefault(target_node.name, ([], []))
     previous_quat_by_target: Dict[str, tuple[float, float, float, float]] = {}
     stripped_root_translation = False
     root_warning_seen = False
-
-    target_nodes = target_model.all_nodes()
 
     for source_pose in converted_source_poses:
         target_fk_world_rotation: Dict[str, tuple[float, float, float, float]] = {}
@@ -207,6 +212,10 @@ def retarget_source_clip_to_aurora_animation(
             if local_translation_result.warning and not root_warning_seen:
                 warnings.append(local_translation_result.warning)
                 root_warning_seen = True
+            if local_translation_result.wrote_controller:
+                times, values = position_tracks.setdefault(target_name, ([], []))
+                times.append(float(source_pose.time_seconds))
+                values.append(tuple(float(value) for value in local_translation_result.position))
 
             if source_name is not None:
                 desired_world_rotation = _desired_target_world_rotation(
@@ -262,6 +271,7 @@ def retarget_source_clip_to_aurora_animation(
         transition_time=resolved_transtime,
         anim_root=resolved_anim_root,
         orientation_tracks=orientation_tracks,
+        position_tracks=position_tracks,
     )
 
     structural = validate_animation_block_against_model(target_model, animation, strict=True)
@@ -287,7 +297,7 @@ def retarget_source_clip_to_aurora_animation(
         sample_count=len(source_poses),
         mapped_node_count=len(target_to_source),
         generated_orientation_track_count=len(animation.nodes),
-        generated_position_track_count=0,
+        generated_position_track_count=sum(1 for _times, values in position_tracks.values() if values),
         stripped_root_translation=stripped_root_translation,
         max_quaternion_norm_error=max_norm_error,
         max_adjacent_rotation_degrees=max_adjacent_degrees,
@@ -356,7 +366,7 @@ def _desired_target_world_rotation(
                     calibrated_frame=calibrated_frame,
                     target_reference_rotation=target_reference_pair.target_global_transforms[target_node_name].rotation,
                 )
-    elif mode == "segment_direction":
+    elif mode in {"segment_direction", "exact_segment_correction"}:
         segment_rotation = _segment_direction_world_rotation(
             source_pose=source_pose,
             source_reference_pose=source_reference_pose,
@@ -401,14 +411,8 @@ def _mapped_segments(profile: RetargetProfile) -> List[_MappedSegment]:
 
     pairs = (
         ("clavicle", "upperarm"),
-        ("upperarm", "forearm"),
-        ("forearm", "hand"),
-        ("thigh", "calf"),
-        ("calf", "foot"),
-        ("foot", "toe"),
-        ("spine", "chest"),
+        *SEGMENT_ROLE_PAIRS,
         ("chest", "neck"),
-        ("neck", "head"),
     )
     segments: List[_MappedSegment] = []
     for parent_role, child_role in pairs:
@@ -583,6 +587,7 @@ def _build_animation_block(
     transition_time: float,
     anim_root: str,
     orientation_tracks: Dict[str, tuple[List[float], List[tuple[float, float, float, float]]]],
+    position_tracks: Dict[str, tuple[List[float], List[tuple[float, float, float]]]],
 ) -> Animation:
     animation = Animation(
         name=slot_name,
@@ -590,21 +595,36 @@ def _build_animation_block(
         transition_time=transition_time,
         anim_root=anim_root,
     )
-    for node_name, (times, values) in orientation_tracks.items():
-        if not times or not values:
+    for node_name in dict.fromkeys([*orientation_tracks.keys(), *position_tracks.keys()]):
+        orient_times, orient_values = orientation_tracks.get(node_name, ([], []))
+        pos_times, pos_values = position_tracks.get(node_name, ([], []))
+        if not orient_values and not pos_values:
             continue
+        controllers = []
+        if pos_times and pos_values:
+            controllers.append(
+                {
+                    "type": 8,
+                    "name": "position",
+                    "columns": 3,
+                    "times": [float(value) for value in pos_times],
+                    "values": [[float(component) for component in value] for value in pos_values],
+                }
+            )
+        if orient_times and orient_values:
+            controllers.append(
+                {
+                    "type": 20,
+                    "name": "orientation",
+                    "columns": 4,
+                    "times": [float(value) for value in orient_times],
+                    "values": [list(normalize_quat_xyzw(value)) for value in orient_values],
+                }
+            )
         animation.nodes.append(
             ModelNode(
                 name=node_name,
-                controllers=[
-                    {
-                        "type": 20,
-                        "name": "orientation",
-                        "columns": 4,
-                        "times": [float(value) for value in times],
-                        "values": [list(normalize_quat_xyzw(value)) for value in values],
-                    }
-                ],
+                controllers=controllers,
             )
         )
     return animation
@@ -643,7 +663,7 @@ def _audit_segment_pose_errors(
     mapped_segments: List[_MappedSegment],
     mode: str,
 ) -> List[SegmentPoseError]:
-    if mode not in {"segment_direction", "calibrated_frame_delta"} or not mapped_segments:
+    if mode not in {"segment_direction", "calibrated_frame_delta", "exact_segment_correction"} or not mapped_segments:
         return []
     errors: List[SegmentPoseError] = []
     for source_pose in source_poses:

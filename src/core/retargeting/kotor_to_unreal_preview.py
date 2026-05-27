@@ -92,18 +92,23 @@ def build_kotor_to_unreal_preview(request: KotorToUnrealPreviewRequest) -> Kotor
         request.target_skeleton,
         root_motion_policy=request.root_motion_policy,
     )
-    root_stripped = ValidationReport(
+    root_policy_message = (
+        "Root horizontal translation is stripped by default for KOTOR → Unreal in-place preview."
+        if request.root_motion_policy == "in_place"
+        else "Root movement is enabled for this KOTOR → Unreal preview."
+    )
+    root_policy_report = ValidationReport(
         issues=[
             ValidationIssue(
                 severity=ValidationSeverity.INFO,
                 subsystem=ValidationSubsystem.RETARGET,
                 code="kotor_to_unreal.root_motion_policy",
-                message="Root horizontal translation is stripped by default for KOTOR → Unreal in-place preview.",
+                message=root_policy_message,
             )
         ],
         source="retarget.kotor_to_unreal.preview",
     )
-    report = merge_validation_reports(profile_report, clip_report, root_stripped)
+    report = merge_validation_reports(profile_report, clip_report, root_policy_report)
     if report.has_blocking:
         raise ValueError("; ".join(issue.message for issue in report.blocking_issues))
     return KotorToUnrealPreviewResult(

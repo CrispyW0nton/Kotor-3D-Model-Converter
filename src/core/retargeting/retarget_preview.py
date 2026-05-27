@@ -28,6 +28,10 @@ from .retarget_solver import (
     retarget_source_clip_to_aurora_animation,
 )
 from .source_animation import SourceSkeletonClip, normalize_quat_xyzw, quat_dot_xyzw
+from .ue5_to_aurora_r3b_preview import (
+    build_r3b_ue5_to_aurora_retarget_result,
+    should_use_r3b_preview_path,
+)
 
 
 class RetargetPreviewError(ValueError):
@@ -67,6 +71,7 @@ class RetargetPreviewAudit:
     output_name_mode: KotorOutputAnimationNameMode = KotorOutputAnimationNameMode.VANILLA_SLOT
     requires_custom_animation_patch: bool = False
     output_display_label: str | None = None
+    allow_root_motion: bool = False
 
     @property
     def passed(self) -> bool:
@@ -74,7 +79,7 @@ class RetargetPreviewAudit:
             not self.finite_transform_failures
             and not self.non_root_translation_deviations
             and not self.missing_controller_nodes
-            and self.root_drift_distance <= 1e-4
+            and (self.allow_root_motion or self.root_drift_distance <= 1e-4)
         )
 
 
@@ -137,13 +142,22 @@ def build_retarget_preview(request: RetargetPreviewRequest) -> RetargetPreviewRe
         solver_options = request.solver_options
 
     try:
-        solver_result = retarget_source_clip_to_aurora_animation(
-            source_clip=request.source_clip,
-            target_model=request.target_model,
-            profile=profile,
-            supermodel_chain=request.supermodel_chain,
-            options=solver_options,
-        )
+        if should_use_r3b_preview_path(profile):
+            solver_result = build_r3b_ue5_to_aurora_retarget_result(
+                source_clip=request.source_clip,
+                target_model=request.target_model,
+                profile=profile,
+                supermodel_chain=request.supermodel_chain,
+                options=solver_options,
+            )
+        else:
+            solver_result = retarget_source_clip_to_aurora_animation(
+                source_clip=request.source_clip,
+                target_model=request.target_model,
+                profile=profile,
+                supermodel_chain=request.supermodel_chain,
+                options=solver_options,
+            )
     except RetargetSolveError as exc:
         raise RetargetPreviewError(f"Cannot preview retargeted animation: {exc}") from exc
     validation = validate_animation_block_against_model(
@@ -171,6 +185,7 @@ def build_retarget_preview(request: RetargetPreviewRequest) -> RetargetPreviewRe
             model=preview_model,
             animation_block=animation_for_preview,
         )
+        audit.allow_root_motion = _root_motion_enabled(solver_options)
         if not audit.passed:
             raise RetargetPreviewError(_format_audit_failure(animation_for_preview.name, audit))
     if resolved_output is not None:
@@ -419,7 +434,13 @@ def _format_audit_failure(slot_name: str, audit: RetargetPreviewAudit) -> str:
         )
     if audit.missing_controller_nodes:
         details.append(f"unknown controller node '{audit.missing_controller_nodes[0]}'")
-    if audit.root_drift_distance > 1e-4:
+    if audit.root_drift_distance > 1e-4 and not audit.allow_root_motion:
         details.append(f"root drift distance {audit.root_drift_distance:.6g} exceeds tolerance")
     suffix = " ".join(details) if details else "unknown audit failure"
     return f"Retarget preview audit failed for slot '{slot_name}': {suffix}. Preview was not applied to the viewport."
+
+
+def _root_motion_enabled(solver_options: RetargetSolverOptions | None) -> bool:
+    if solver_options is None:
+        return False
+    return str(getattr(solver_options, "root_translation_policy", "in_place") or "in_place") != "in_place"

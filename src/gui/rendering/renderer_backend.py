@@ -59,4 +59,3 @@ def renderer_backend_label(backend: RendererBackend) -> str:
         RendererBackend.DIRECT3D_WARP: "Direct3D WARP Experimental",
         RendererBackend.NULL_DIAGNOSTIC: "Null Diagnostic",
     }[backend]
-

@@ -90,7 +90,7 @@ pygltflib>=1.15.0
 # Install the matching Autodesk FBX Python SDK for your Python version/platform,
 # then configure the path inside GhostRigger.
 
-# For building bindings if your python version doesnt work with fbx out of the box. 
+# For building bindings if your python version doesnt work with fbx out of the box.
 sip>=6.6.0
 
 # ── IPC / HTTP server ────────────────────────────────────────────────────────

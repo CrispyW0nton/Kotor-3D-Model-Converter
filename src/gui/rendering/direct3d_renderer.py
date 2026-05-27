@@ -55,4 +55,3 @@ class Direct3DRenderer(NullDiagnosticRenderer):
             "backend": "hardware" if self._backend == RendererBackend.DIRECT3D_HARDWARE else "warp",
             "reason": self._reason(),
         }
-

@@ -51,6 +51,8 @@ class RetargetPreviewExportRequest:
     roundtrip_tolerance: float = 1e-4
     kotor_output_name_mode: KotorOutputAnimationNameMode = KotorOutputAnimationNameMode.VANILLA_SLOT
     requires_custom_animation_patch: bool = False
+    target_mdl_bytes: bytes | None = None
+    target_mdx_bytes: bytes | None = None
 
     def __post_init__(self) -> None:
         self.output_mdl_path = Path(self.output_mdl_path)
@@ -85,8 +87,7 @@ def export_retarget_preview_override(
             "Output MDX path must match the MDL basename "
             f"({request.output_mdl_path.with_suffix('.mdx')})."
         )
-    target_mdl = _target_mdl_path(request.original_target_model)
-    target_mdx = _target_mdx_path(request.original_target_model, target_mdl)
+    _validate_target_source_available(request)
     warnings = _basename_warnings(request.original_target_model, request.output_mdl_path)
     output_mode = _request_output_mode(request, preview)
     requires_custom_patch = _request_requires_custom_patch(request, preview)
@@ -109,6 +110,7 @@ def export_retarget_preview_override(
     injection_holder: dict[str, Any] = {}
 
     def _writer(context: ExportJobContext) -> None:
+        target_mdl, target_mdx = _resolve_target_source_paths(request, context.staging_dir)
         tmp_json = _write_staged_preview_payload(context.staging_dir)
         staged_mdl = context.staged_path_for(request.output_mdl_path)
         staged_manifest = (
@@ -219,14 +221,59 @@ def _validate_preview_for_export(preview: RetargetPreviewResult | None) -> None:
         raise RetargetPreviewExportError("Retarget preview has no KOTOR animation slot name.")
 
 
-def _target_mdl_path(model: Any) -> Path:
+def _validate_target_source_available(request: RetargetPreviewExportRequest) -> None:
+    if _has_target_mdl_file(request.original_target_model) or _target_source_mdl_bytes(request) is not None:
+        return
+    raise RetargetPreviewExportError(
+        "Original target model has no source MDL path or cached game-library MDL bytes. "
+        "Load the target from the Game Library or from an MDL file before exporting."
+    )
+
+
+def _resolve_target_source_paths(
+    request: RetargetPreviewExportRequest,
+    staging_dir: Path,
+) -> tuple[Path, Path | None]:
+    target_mdl = _target_mdl_path(request.original_target_model, required=False)
+    if target_mdl is not None:
+        return target_mdl, _target_mdx_path(request.original_target_model, target_mdl)
+
+    mdl_bytes = _target_source_mdl_bytes(request)
+    if mdl_bytes is None:
+        raise RetargetPreviewExportError(
+            "Original target model has no source MDL path or cached game-library MDL bytes. "
+            "Load the target from the Game Library or from an MDL file before exporting."
+        )
+    source_dir = staging_dir / "_original_target"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    stem = _safe_target_source_stem(request.original_target_model)
+    target_mdl = source_dir / f"{stem}.mdl"
+    target_mdl.write_bytes(mdl_bytes)
+
+    mdx_bytes = _target_source_mdx_bytes(request)
+    target_mdx = None
+    if mdx_bytes:
+        target_mdx = source_dir / f"{stem}.mdx"
+        target_mdx.write_bytes(mdx_bytes)
+    return target_mdl, target_mdx
+
+
+def _has_target_mdl_file(model: Any) -> bool:
+    return _target_mdl_path(model, required=False) is not None
+
+
+def _target_mdl_path(model: Any, *, required: bool = True) -> Path | None:
     raw = str(getattr(model, "mdl_path", "") or "").strip()
     if not raw:
+        if not required:
+            return None
         raise RetargetPreviewExportError(
             "Original target model has no source MDL path. Load the target from an MDL file before exporting."
         )
     path = Path(raw)
     if not path.exists():
+        if not required:
+            return None
         raise RetargetPreviewExportError(f"Original target MDL path is not available: {raw}")
     return path
 
@@ -237,6 +284,61 @@ def _target_mdx_path(model: Any, target_mdl: Path) -> Path | None:
         return Path(raw)
     guessed = target_mdl.with_suffix(".mdx")
     return guessed if guessed.exists() else None
+
+
+def _target_source_mdl_bytes(request: RetargetPreviewExportRequest) -> bytes | None:
+    return _coerce_optional_bytes(request.target_mdl_bytes) or _model_source_bytes(
+        request.original_target_model,
+        (
+            "_gr_source_mdl_bytes",
+            "_gr_original_mdl_bytes",
+            "source_mdl_bytes",
+            "_source_mdl_bytes",
+        ),
+    )
+
+
+def _target_source_mdx_bytes(request: RetargetPreviewExportRequest) -> bytes | None:
+    return _coerce_optional_bytes(request.target_mdx_bytes) or _model_source_bytes(
+        request.original_target_model,
+        (
+            "_gr_source_mdx_bytes",
+            "_gr_original_mdx_bytes",
+            "source_mdx_bytes",
+            "_source_mdx_bytes",
+        ),
+    )
+
+
+def _model_source_bytes(model: Any, attribute_names: tuple[str, ...]) -> bytes | None:
+    for name in attribute_names:
+        value = _coerce_optional_bytes(getattr(model, name, None))
+        if value is not None:
+            return value
+    return None
+
+
+def _coerce_optional_bytes(value: Any) -> bytes | None:
+    if value is None:
+        return None
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, bytearray):
+        return bytes(value)
+    if isinstance(value, memoryview):
+        return value.tobytes()
+    return None
+
+
+def _safe_target_source_stem(model: Any) -> str:
+    raw = str(
+        getattr(model, "_gr_source_resref", "")
+        or getattr(model, "resref", "")
+        or getattr(model, "name", "")
+        or "target_model"
+    ).strip()
+    cleaned = "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in raw).strip("._")
+    return cleaned or "target_model"
 
 
 def _game_tag(model: Any) -> str:

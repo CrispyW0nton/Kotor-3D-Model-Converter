@@ -1381,6 +1381,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
         return widget
 
     def create_surface_widget(self, parent=None):
+        if self.canvas is not None:
+            return self.canvas
         self.canvas = self.create_viewport_widget(parent)
         return self.canvas
 

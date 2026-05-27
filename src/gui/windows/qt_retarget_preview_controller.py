@@ -39,6 +39,7 @@ class RetargetPreviewUiState:
     target_model: Any | None = None
     retarget_profile: RetargetProfile | None = None
     output_naming: RetargetOutputNaming | None = None
+    solver_options: Any | None = None
     last_preview_result: RetargetPreviewResult | None = None
     last_preview_is_current: bool = False
 
@@ -194,6 +195,11 @@ class RetargetPreviewUiController:
         self._mark_preview_stale()
         self.update_enabled()
 
+    def set_solver_options(self, options: Any | None) -> None:
+        self.state.solver_options = options
+        self._mark_preview_stale()
+        self.update_enabled()
+
     def invalidate_preview(self) -> None:
         """Mark the stored preview stale after external target/session changes."""
 
@@ -266,6 +272,7 @@ class RetargetPreviewUiController:
                 target_model=self.current_target_model(),
                 profile=self.state.retarget_profile,
                 output_naming=self.state.output_naming,
+                solver_options=self.state.solver_options,
                 auto_play=auto_play,
             )
             preview = self._build_preview(request)
