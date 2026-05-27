@@ -1677,6 +1677,14 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             QFrame#HeaderBar, QFrame#CommandBar, QFrame#CommandBarHost {{
                 background: transparent;
             }}
+            QMainWindow::separator {{
+                background: {C['border']};
+                width: 4px;
+                height: 4px;
+            }}
+            QMainWindow::separator:hover {{
+                background: {C['border']};
+            }}
             QFrame#HeaderBar {{
                 border-bottom: 1px solid #102019;
             }}
@@ -1777,8 +1785,19 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     def apply_native_theme(self) -> None:
         for widget in self.findChildren(QtWidgets.QWidget):
             widget.setStyleSheet("")
-        self.setStyleSheet("")
         theme = self.theme_manager.current_theme or self.theme_manager.get_theme()
+        self.setStyleSheet(
+            f"""
+            QMainWindow::separator {{
+                background: {theme.color('panel.border', C['border'])};
+                width: 4px;
+                height: 4px;
+            }}
+            QMainWindow::separator:hover {{
+                background: {theme.color('panel.border', C['border'])};
+            }}
+            """
+        )
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "apply_native_theme"):
             viewport.apply_native_theme()

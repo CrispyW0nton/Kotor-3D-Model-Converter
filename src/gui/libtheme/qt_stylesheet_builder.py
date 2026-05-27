@@ -411,6 +411,14 @@ class QtStylesheetBuilder:
         QSplitter::handle {{
             background: {c('panel.border')};
         }}
+        QMainWindow::separator {{
+            background: {c('panel.border')};
+            width: 4px;
+            height: 4px;
+        }}
+        QMainWindow::separator:hover {{
+            background: {c('panel.border')};
+        }}
         QStatusBar {{
             min-height: {m('statusbar.height', 24)}px;
         }}

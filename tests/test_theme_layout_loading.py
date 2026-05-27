@@ -203,12 +203,15 @@ def test_layout_apply_leaves_content_browser_width_user_resizable() -> None:
     window.content_browser_dock.setMaximumWidth(510)  # type: ignore[attr-defined]
     window.scene_dock = QtWidgets.QDockWidget("Scene", window)  # type: ignore[attr-defined]
     window.properties_dock = QtWidgets.QDockWidget("Properties", window)  # type: ignore[attr-defined]
+    window.properties_dock.setMaximumWidth(510)  # type: ignore[attr-defined]
     window.log_panel = QtWidgets.QWidget(window)  # type: ignore[attr-defined]
 
     LayoutApplier()._apply_panels(layout, window)
 
     assert window.content_browser_dock.minimumWidth() == 0  # type: ignore[attr-defined]
     assert window.content_browser_dock.maximumWidth() >= 1000000  # type: ignore[attr-defined]
+    assert window.properties_dock.minimumWidth() == layout.panel("properties").min_width  # type: ignore[attr-defined]
+    assert window.properties_dock.maximumWidth() >= 1000000  # type: ignore[attr-defined]
     window.deleteLater()
 
 
@@ -263,6 +266,13 @@ def test_stylesheet_builds_from_matrix_theme() -> None:
     assert "QMainWindow" in stylesheet
     assert "#00FF7A" in stylesheet
     assert "QSplitter::handle" in stylesheet
+    assert "QMainWindow::separator" in stylesheet
+    separator_start = stylesheet.index("QMainWindow::separator")
+    separator_rule = stylesheet[separator_start : stylesheet.index("}", separator_start)]
+    assert theme.color("panel.border") in separator_rule
+    assert theme.color("accent.primary") not in separator_rule
+    assert "width: 4px" in stylesheet
+    assert "height: 4px" in stylesheet
 
 
 def test_default_theme_uses_native_qt_styling() -> None:
@@ -639,6 +649,19 @@ def test_matrix_bar_media_is_header_only_and_crop_aware() -> None:
     assert "command_bar" not in apply_source
     assert "command_bar" not in native_source
     assert "matrixBar.cropX" in inspect.getsource(QtGhostRiggerMainWindow._matrix_bar_settings)
+
+
+def test_main_window_native_theme_keeps_dock_separator_grip() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    native_source = inspect.getsource(QtGhostRiggerMainWindow.apply_native_theme)
+
+    assert "QMainWindow::separator" in native_source
+    assert "panel.border" in native_source
+    assert "width: 4px" in native_source
+    assert "height: 4px" in native_source
 
 
 def test_main_window_reserves_fixed_command_bar_height() -> None:
