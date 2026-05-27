@@ -227,6 +227,23 @@ def test_qt_viewport_grid_toggle_controls_cpu_and_gpu_paths() -> None:
     assert '"grid_button"' in menu_source
 
 
+def test_main_window_help_menu_uses_real_about_dialog() -> None:
+    import inspect
+
+    from src.gui.qt_lib.dialogs.qt_dialogs import QtAboutDialog, show_about
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    action_source = inspect.getsource(QtGhostRiggerMainWindow._build_actions)
+    menu_source = inspect.getsource(QtGhostRiggerMainWindow._build_menu)
+    about_source = inspect.getsource(show_about)
+
+    assert "self.about_action" in action_source
+    assert "About GhostRigger..." in action_source
+    assert "help_menu.addAction(self.about_action)" in menu_source
+    assert "QtAboutDialog(parent)" in about_source
+    assert hasattr(QtAboutDialog, "apply_ghost_theme")
+
+
 def test_qt_viewport_performance_overlay_stacks_above_stats_badge() -> None:
     import inspect
 

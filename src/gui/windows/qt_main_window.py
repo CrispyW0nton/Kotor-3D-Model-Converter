@@ -2111,6 +2111,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.notify_gmodular_action.triggered.connect(self._ipc_notify_saved)
         self.refresh_gmodular_action = QtGui.QAction("Refresh GModular Viewport", self)
         self.refresh_gmodular_action.triggered.connect(self._ipc_refresh_gmodular)
+        self.about_action = QtGui.QAction("About GhostRigger...", self)
+        self.about_action.triggered.connect(lambda: show_about(self))
 
         self.quit_action = QtGui.QAction("Exit", self)
         self.quit_action.setShortcut("Alt+F4")
@@ -2182,13 +2184,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         mdlops_menu.addAction(self.decompile_action)
 
         help_menu = self.menuBar().addMenu("Help")
-        about_action = QtGui.QAction("About", self)
-        about_action.triggered.connect(lambda: show_about(self))
         format_action = QtGui.QAction("KotOR MDL Format Reference", self)
         format_action.triggered.connect(lambda: show_format_reference(self))
         viewport_controls_action = QtGui.QAction("Viewport Navigation Controls", self)
         viewport_controls_action.triggered.connect(lambda: show_viewport_navigation_reference(self))
-        help_menu.addAction(about_action)
+        help_menu.addAction(self.about_action)
         help_menu.addAction(viewport_controls_action)
         help_menu.addAction(format_action)
         diagnostics_menu = help_menu.addMenu("Diagnostics")

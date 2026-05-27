@@ -100,6 +100,70 @@ def test_theme_defaults_prefer_default_ui_variants() -> None:
     assert manager.select_theme("missing", apply=False).id == "default"
 
 
+def test_about_dialog_reports_runtime_details_and_copies_summary() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.dialogs.qt_dialogs import QtAboutDialog
+
+    class FakeViewport:
+        def render_state_status_text(self) -> str:
+            return "Renderer: WGPU Direct3D 12 | Display: Textured"
+
+    class FakeThemeManager:
+        def __init__(self):
+            self._theme = ThemeLoader().load_file(ROOT / "config" / "themes" / "themes" / "default_matrix.xml")
+
+        def get_theme(self):
+            return self._theme
+
+    class FakeParent(QtWidgets.QWidget):
+        APP_TITLE = "GhostRigger-K1-K2  //  Odyssey Engine Pipeline v6.1"
+        APP_VERSION = "6.1.0"
+
+        def __init__(self):
+            super().__init__()
+            self.app_root = ROOT
+            self.viewport = FakeViewport()
+            self.theme_manager = FakeThemeManager()
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    parent = FakeParent()
+    dialog = QtAboutDialog(parent)
+    try:
+        dialog.apply_ghost_theme(parent.theme_manager.get_theme())
+
+        version = dialog.findChild(QtWidgets.QLabel, "AboutVersionValue")
+        renderer = dialog.findChild(QtWidgets.QLabel, "AboutRendererValue")
+        theme = dialog.findChild(QtWidgets.QLabel, "AboutThemeValue")
+        bioware = dialog.findChild(QtWidgets.QPushButton, "AboutCompanyBioWareButton")
+        obsidian = dialog.findChild(QtWidgets.QPushButton, "AboutCompanyObsidianButton")
+        lucasarts = dialog.findChild(QtWidgets.QPushButton, "AboutCompanyLucasArtsButton")
+
+        assert dialog.minimumWidth() >= 900
+        assert dialog.minimumHeight() >= 650
+        assert version is not None and "6.1.0" in version.text()
+        assert renderer is not None and "WGPU Direct3D 12" in renderer.text()
+        assert theme is not None and "default_matrix" in theme.text()
+        assert "#00FF7A" in dialog.styleSheet()
+        assert bioware is not None and bioware.property("creditUrl") == "https://www.bioware.com/"
+        assert obsidian is not None and obsidian.property("creditUrl") == "https://www.obsidian.net/"
+        assert lucasarts is not None and lucasarts.property("creditUrl") == "https://www.lucasfilm.com/what-we-do/games/"
+        assert "LordVaderCW" in dialog._details_text
+        assert "CrispyW0nton / ShaolinGhost" in dialog._details_text
+        assert "PyKotor / OpenKotOR" in dialog._details_text
+        assert "PySide6 / Qt" in dialog._details_text
+
+        dialog.copy_details()
+        assert "GhostRigger-K1-K2" in app.clipboard().text()
+        assert "Renderer: WGPU Direct3D 12" in app.clipboard().text()
+    finally:
+        dialog.deleteLater()
+        parent.deleteLater()
+        app.processEvents()
+
+
 def test_packaged_layouts_load_and_affect_metrics() -> None:
     loader = LayoutLoader()
     layouts = loader.load_dir(ROOT / "config" / "themes" / "layouts")
