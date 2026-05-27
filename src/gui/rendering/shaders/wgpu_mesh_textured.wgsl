@@ -1,5 +1,6 @@
 struct Locals {
     mvp: mat4x4<f32>,
+    model: mat4x4<f32>,
     color: vec4<f32>,
     flags: vec4<f32>,
     params: vec4<f32>,
@@ -53,9 +54,10 @@ struct VertexOutput {
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    out.position = locals.mvp * vec4<f32>(input.position, 1.0);
-    out.normal = normalize(input.normal);
-    out.world_position = input.position;
+    let world_position = locals.model * vec4<f32>(input.position, 1.0);
+    out.position = locals.mvp * world_position;
+    out.normal = normalize((locals.model * vec4<f32>(input.normal, 0.0)).xyz);
+    out.world_position = world_position.xyz;
     // TextureCache supplies bottom-up RGBA images. KotOR UV V=0 is texture top,
     // so WGPU uses the same V flip as the established ModernGL path.
     out.uv0 = vec2<f32>(input.uv0.x, 1.0 - input.uv0.y);

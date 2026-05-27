@@ -137,9 +137,13 @@ class LayoutApplier(QtCore.QObject):
                 continue
             panel = layout.panel(panel_id)
             widget.setVisible(panel.visible)
-            if panel_id != "outputLog" and panel.min_width:
+            user_resizable_width = panel_id == "contentBrowser"
+            if panel_id != "outputLog" and panel.min_width and not user_resizable_width:
                 widget.setMinimumWidth(panel.min_width)
-            if panel_id != "outputLog" and panel.preferred_width:
+            if user_resizable_width:
+                widget.setMinimumWidth(0)
+                widget.setMaximumWidth(16777215)
+            elif panel_id != "outputLog" and panel.preferred_width:
                 widget.setMaximumWidth(max(panel.preferred_width + 220, panel.min_width))
             if panel.min_height:
                 widget.setMinimumHeight(panel.min_height)

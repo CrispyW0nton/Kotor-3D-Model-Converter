@@ -90,7 +90,7 @@ def test_content_browser_splitter_keeps_user_adjusted_pane_sizes() -> None:
 def test_content_browser_stacks_navigation_and_details_in_left_sidebar() -> None:
     _qapp()
 
-    from PySide6 import QtWidgets
+    from PySide6 import QtCore, QtWidgets
     from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
 
     panel = QtContentBrowserPanel()
@@ -98,12 +98,258 @@ def test_content_browser_stacks_navigation_and_details_in_left_sidebar() -> None
     assert panel.splitter.count() == 2
     assert panel.splitter.widget(0) is panel.sidebar
     assert panel.splitter.widget(1) is panel.asset_area
-    assert panel.sidebar.layout().indexOf(panel.nav_tree) < panel.sidebar.layout().indexOf(panel.details)
-    assert panel.details.parentWidget() is panel.sidebar
+    assert panel.sidebar_splitter.orientation() == QtCore.Qt.Vertical
+    assert panel.sidebar_splitter.count() == 2
+    assert panel.sidebar_splitter.widget(0) is panel.nav_tree
+    assert panel.sidebar_splitter.widget(1) is panel.details
+    assert panel.nav_tree.parentWidget() is panel.sidebar_splitter
+    assert panel.details.parentWidget() is panel.sidebar_splitter
+    assert panel.sidebar.layout().indexOf(panel.sidebar_splitter) >= 0
     assert panel.asset_view.parentWidget() is panel.asset_area
 
     labels = {label.text() for label in panel.findChildren(QtWidgets.QLabel)}
     assert {"Asset Type", "Game", "Source", "Tags", "Updated", "Compatibility"} <= labels
+
+
+def test_content_browser_docked_layout_can_shrink_without_stealing_viewport() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {"game": "K1", "resref": "c_turret02", "source": "swkotor"},
+        {"game": "K2", "resref": "c_mk2_drd", "source": "swkotor2"},
+    ])
+    panel.resize(320, 520)
+    panel._apply_initial_splitter_sizes()
+
+    assert panel.minimumSizeHint().width() <= 320
+    assert panel.splitter.sizes()[0] < panel.splitter.sizes()[1]
+
+
+def test_content_browser_layout_does_not_cap_user_resize_range() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    class Layout:
+        def panel(self, _name):
+            return type("Panel", (), {"min_width": 260, "preferred_width": 420})()
+
+        def spacing_value(self, _name, default=0):
+            return default
+
+    panel = QtContentBrowserPanel()
+    panel.apply_ghost_layout(Layout())
+
+    assert panel.minimumWidth() == 0
+    assert panel.maximumWidth() >= 1000000
+
+
+def test_content_browser_refines_kotor_model_categories_and_metadata() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {"game": "K1", "resref": "c_turret02", "category": "Creature", "source": "swkotor"},
+        {"game": "K2", "resref": "c_mk2_drd", "category": "Creature", "source": "swkotor2"},
+        {"game": "K2", "resref": "c_holominer01", "category": "Creature", "source": "swkotor2"},
+        {"game": "K1", "resref": "c_rancor", "category": "Creature", "source": "swkotor"},
+        {"game": "K1", "resref": "n_darthmalak", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "pmbam", "category": "Character", "source": "swkotor"},
+        {"game": "K2", "resref": "p_kreia", "category": "Character", "source": "swkotor2"},
+        {"game": "K1", "resref": "p_candh03", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "p_candh", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "p_candbb", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "p_candba", "category": "Character", "source": "swkotor"},
+        {"game": "K2", "resref": "p_atrisbb", "category": "Character", "source": "swkotor2"},
+        {"game": "K2", "resref": "s_female02", "category": "Character", "source": "swkotor2"},
+        {"game": "K1", "resref": "or_tatroom", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "tree_base", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "gi_waypoint01", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "a_debug_marker", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "spawnpoint", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "sol_start", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "shirt_003", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "shirt_002", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "shirt_001", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "plcaa", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "mydoor", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "mydoor2", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "c_emsphere", "category": "Creature", "source": "swkotor"},
+        {"game": "K1", "resref": "c_emcube", "category": "Creature", "source": "swkotor"},
+        {"game": "K1", "resref": "c_embsphere", "category": "Creature", "source": "swkotor"},
+        {"game": "K1", "resref": "c_embcube", "category": "Creature", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_footlker", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "i_mask_001", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "w_blstrpstl_001", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "dor_metal01", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "fx_explosion", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "fxmuzzle", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "fxc_droid_arm", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "v_skybox01", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "comm_w_m01", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "child_f", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "child_m", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "czerka_com_h", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "planet_taris", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "watersuit", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "spacesuit", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "twilek_f01", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "sith_officer", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "rep_soldier", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "old_republic01", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "stunt_escape01", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_astro02", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_atromech", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "skyboxbase", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "mgf_swoop", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "mgb_turret", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "mg_track", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "mainmenu01", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "maingui", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_alien01", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_alien02", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_alien03", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_alien05", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_commf", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_commfb", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_commm", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_commmb", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_gammorean", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_jawa", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_rakata", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_repofff", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_repoffm", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_selkath", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_sithhoff_f", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_sithoff_m", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_sithsoldier", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_twilekf", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_twilekm", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_wookie", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "l_wookief", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "xunknown_asset_001", "category": "Character", "source": "swkotor"},
+    ])
+
+    by_name = {asset.name: asset for asset in panel.visible_assets()}
+    assert by_name["c_turret02"].category == "Turrets"
+    assert by_name["c_mk2_drd"].category == "Droids"
+    assert by_name["c_mk2_drd"].metadata["species"] == "Droid"
+    assert by_name["c_holominer01"].category == "Holograms"
+    assert by_name["c_holominer01"].metadata["variant"] == "Hologram"
+    assert by_name["c_rancor"].category == "Creatures"
+    assert by_name["n_darthmalak"].category == "NPCs"
+    assert by_name["pmbam"].category == "Player Characters"
+    assert by_name["p_kreia"].category == "Party Members"
+    for name in ("p_candh03", "p_candh", "p_candbb", "p_candba", "p_atrisbb"):
+        assert by_name[name].category == "Party Members"
+    assert by_name["s_female02"].category == "Supermodels"
+    assert by_name["or_tatroom"].category == "Environment"
+    assert by_name["tree_base"].category == "Environment"
+    assert by_name["gi_waypoint01"].category == "Engine Items"
+    assert by_name["a_debug_marker"].category == "Engine Items"
+    assert by_name["a_debug_marker"].metadata["role"] == "Engine Marker"
+    for name in (
+        "spawnpoint", "sol_start", "shirt_003", "shirt_002", "shirt_001",
+        "plcaa", "mydoor", "mydoor2", "c_emsphere", "c_emcube",
+        "c_embsphere", "c_embcube",
+    ):
+        assert by_name[name].category == "Engine Items"
+    assert by_name["plc_footlker"].category == "Placeables"
+    assert by_name["i_mask_001"].category == "Inventory"
+    assert by_name["w_blstrpstl_001"].category == "Weapons"
+    assert by_name["dor_metal01"].category == "Doors"
+    assert by_name["fx_explosion"].category == "Visual FX"
+    assert by_name["fxmuzzle"].category == "Visual FX"
+    assert by_name["fxc_droid_arm"].category == "Visual FX"
+    assert by_name["v_skybox01"].category == "Visuals"
+    assert by_name["comm_w_m01"].category == "Commoners"
+    assert by_name["comm_w_m01"].metadata["role"] == "Commoner"
+    for name in ("child_f", "child_m", "czerka_com_h"):
+        assert by_name[name].category == "Commoners"
+    assert by_name["planet_taris"].category == "Planets"
+    assert by_name["watersuit"].category == "Misc Models"
+    assert by_name["spacesuit"].category == "Misc Models"
+    assert by_name["twilek_f01"].category == "Misc Models"
+    assert by_name["sith_officer"].category == "Misc Models"
+    assert by_name["rep_soldier"].category == "Misc Models"
+    assert by_name["old_republic01"].category == "Misc Models"
+    assert by_name["stunt_escape01"].category == "Stunts"
+    assert by_name["l_astro02"].category == "Droids"
+    assert by_name["l_atromech"].category == "Droids"
+    assert by_name["skyboxbase"].category == "Skyboxes"
+    for name in ("mgf_swoop", "mgb_turret", "mg_track"):
+        assert by_name[name].category == "Minigame"
+    assert by_name["mainmenu01"].category == "Menus"
+    assert by_name["maingui"].category == "GUI"
+    for name in (
+        "l_alien01", "l_alien02", "l_alien03", "l_alien05", "l_commf",
+        "l_commfb", "l_commm", "l_commmb", "l_gammorean", "l_jawa",
+        "l_rakata", "l_repofff", "l_repoffm", "l_selkath", "l_sithhoff_f",
+        "l_sithoff_m", "l_sithsoldier", "l_twilekf", "l_twilekm",
+        "l_wookie", "l_wookief",
+    ):
+        assert by_name[name].category == "Level Assets"
+    assert by_name["xunknown_asset_001"].category == "Uncategorised"
+
+    folders = [
+        panel.nav_tree.topLevelItem(index)
+        for index in range(panel.nav_tree.topLevelItemCount())
+        if panel.nav_tree.topLevelItem(index).text(0) == "Folders / Categories"
+    ][0]
+    nav_categories = [folders.child(index).text(0) for index in range(folders.childCount())]
+    assert nav_categories[:27] == [
+        "Player Characters",
+        "Party Members",
+        "Commoners",
+        "NPCs",
+        "Droids",
+        "Turrets",
+        "Creatures",
+        "Holograms",
+        "Supermodels",
+        "Level Assets",
+        "Environment",
+        "Skyboxes",
+        "Minigame",
+        "Menus",
+        "GUI",
+        "Placeables",
+        "Doors",
+        "Engine Items",
+        "Inventory",
+        "Weapons",
+        "Visual FX",
+        "Visuals",
+        "Planets",
+        "Misc Models",
+        "Stunts",
+        "Uncategorised",
+        "Templates",
+    ]
+
+
+def test_content_browser_primary_activation_requests_clear_scene_load() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([{"game": "K1", "resref": "n_darthmalak", "source": "swkotor"}])
+    emitted = []
+    legacy_loads = []
+    panel.primarySceneLoadRequested.connect(lambda row: emitted.append(row))
+    panel.loadRequested.connect(lambda resref, game: legacy_loads.append((resref, game)))
+
+    panel.asset_view.setCurrentItem(panel.asset_view.topLevelItem(0))
+    panel._activate_selected()
+
+    assert emitted and emitted[0]["resref"] == "n_darthmalak"
+    assert legacy_loads == []
 
 
 def test_content_browser_stop_button_emits_animation_stop_without_selection() -> None:

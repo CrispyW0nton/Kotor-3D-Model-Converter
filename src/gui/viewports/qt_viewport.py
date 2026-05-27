@@ -721,11 +721,13 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._overlay_rebuild_count = 0
         self._overlay_rebuild_rate_hz = 0.0
         self._overlay_rebuild_window_started = time_module.perf_counter()
+        self._skip_overlay_pixmap_update = False
         self._gpu_texture_snapshot_key = None
         self._gpu_texture_snapshot_cache: dict = {}
         self._gpu_texture_snapshot_rebuilds = 0
 
         self._render_timer = QtCore.QTimer(self)
+        self._render_timer.setTimerType(QtCore.Qt.PreciseTimer)
         self._render_timer.setSingleShot(True)
         self._render_timer.timeout.connect(self._render_now)
         self._last_rendered_canvas_size = (0, 0)
@@ -4320,8 +4322,14 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._fast_frame_until = max(self._fast_frame_until, time_module.perf_counter() + 0.12)
         self._request_render(fast=True)
 
+    def set_animation_playback_active(self, active: bool, reason: str = "animation playback") -> None:
+        self._frame_governor.set_animation_playing(bool(active), reason)
+        if active:
+            self._request_render(fast=True, reason=reason, scene=True)
+
     def clear_animation_pose(self) -> None:
         self._renderer.set_animation_pose(None)
+        self._frame_governor.set_animation_playing(False)
         self._fast_frame_until = 0.0
         self._request_render()
 
@@ -5025,7 +5033,10 @@ class QtViewportWidget(QtWidgets.QWidget):
         if fast:
             self._fast_frame_until = max(self._fast_frame_until, now + 0.08)
             elapsed_ms = (now - self._last_render_wall) * 1000.0 if self._last_render_wall else min_interval_ms
-            delay = max(1, int(min_interval_ms - elapsed_ms))
+            if governor is not None and governor.animation_playing:
+                delay = 1
+            else:
+                delay = max(1, int(min_interval_ms - elapsed_ms))
         else:
             elapsed_ms = (now - self._last_render_wall) * 1000.0 if self._last_render_wall else min_interval_ms
             delay = max(min_interval_ms, int(min_interval_ms - elapsed_ms))
@@ -5075,7 +5086,11 @@ class QtViewportWidget(QtWidgets.QWidget):
             return
         now = time_module.perf_counter()
         governor = getattr(self, "_frame_governor", None)
-        if governor is not None and not governor.should_render_now(now):
+        if (
+            governor is not None
+            and not governor.animation_playing
+            and not governor.should_render_now(now)
+        ):
             if self._render_pending and (governor.dirty or governor.active_interaction or governor.animation_playing):
                 self._render_timer.start(governor.delay_until_next_frame_ms(now))
             return
@@ -5104,6 +5119,13 @@ class QtViewportWidget(QtWidgets.QWidget):
         if img.mode != "RGBA":
             img = img.convert("RGBA")
         self._update_fps()
+        if self.canvas.is_live_surface() and bool(getattr(self, "_skip_overlay_pixmap_update", False)):
+            rendered_size = (w, h)
+            self._last_rendered_canvas_size = rendered_size
+            current_size = (max(8, self.canvas.width()), max(8, self.canvas.height()))
+            if current_size != rendered_size:
+                self._request_render()
+            return
         qimg = QtGui.QImage(
             img.tobytes("raw", "RGBA"),
             img.width,
@@ -5123,15 +5145,40 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._request_render()
 
     def _render_frame(self, w: int, h: int):
+        self._skip_overlay_pixmap_update = False
         self._use_gpu = True
         img = self._render_gpu_frame(w, h)
         if img is None:
             self._set_renderer_badge(False)
             return None
         self._set_renderer_badge(True)
+        if self._can_skip_live_overlay_rebuild():
+            self._skip_overlay_pixmap_update = True
+            return img
         img = self._draw_gpu_viewport_overlays(img, w, h)
         img = self._draw_performance_overlay(img, w, h)
         return img
+
+    def _can_skip_live_overlay_rebuild(self) -> bool:
+        if not self.canvas.is_live_surface():
+            return False
+        if not bool(getattr(self._renderer_settings, "overlay_dirty_rendering", True)):
+            return False
+        if self._pixmap is None:
+            return False
+        governor = getattr(self, "_frame_governor", None)
+        dirty_flags = dict(getattr(governor, "dirty_flags", {}) or {})
+        if any(bool(dirty_flags.get(name, False)) for name in ("camera", "overlay", "resources", "selection", "lighting", "gizmo", "diagnostics")):
+            return False
+        if bool(getattr(self, "_xray_mode", False) or getattr(self, "_weight_heatmap_enabled", False)):
+            return False
+        if governor is not None and governor.animation_playing:
+            return bool(dirty_flags.get("scene", False))
+        if bool(getattr(self._renderer, "show_bones", False) or getattr(self._renderer, "show_walkmesh", False)):
+            return False
+        if getattr(self._renderer, "_ext_skeleton", None) is not None:
+            return False
+        return bool(dirty_flags.get("scene", False))
 
     def _draw_xray_grid_overlay(self, img, w: int, h: int):
         if img is None:
@@ -7593,6 +7640,12 @@ class QtViewportWidget(QtWidgets.QWidget):
     def _draw_selected_model_outline(self, draw, w: int, h: int) -> None:
         if self.model is None or not self._is_selected_model_root(getattr(self._renderer, "selected_node", None)):
             self._draw_hovered_mesh_outline(draw, w, h)
+            return
+        if (
+            self.canvas.is_live_surface()
+            and getattr(self._renderer, "_anim_pose", None) is not None
+            and any(bool(getattr(node, "is_skin", False)) for node in (self.model.mesh_nodes() if hasattr(self.model, "mesh_nodes") else []))
+        ):
             return
         try:
             mesh_nodes = self.model.mesh_nodes() if hasattr(self.model, "mesh_nodes") else []

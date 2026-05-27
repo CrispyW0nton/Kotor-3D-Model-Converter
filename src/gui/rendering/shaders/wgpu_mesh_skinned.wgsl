@@ -1,5 +1,6 @@
 struct Locals {
     mvp: mat4x4<f32>,
+    model: mat4x4<f32>,
     color: vec4<f32>,
     flags: vec4<f32>,
     params: vec4<f32>,
@@ -78,9 +79,9 @@ fn skin_normal(input: VertexInput) -> vec3<f32> {
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    let skinned_position = skin_position(input);
+    let skinned_position = locals.model * skin_position(input);
     out.position = locals.mvp * skinned_position;
-    out.normal = skin_normal(input);
+    out.normal = normalize((locals.model * vec4<f32>(skin_normal(input), 0.0)).xyz);
     out.world_position = skinned_position.xyz;
     out.uv0 = vec2<f32>(input.uv0.x, 1.0 - input.uv0.y);
     out.uv1 = vec2<f32>(input.uv1.x, 1.0 - input.uv1.y);

@@ -1883,7 +1883,7 @@ def test_wgpu_skinned_mesh_revision_changes_between_bind_and_lbs_modes(monkeypat
         render=True,
         texture="",
         alpha=1.0,
-        skin_data=[],
+        skin_data=[{"weights": [(0, 1.0)]}],
         bone_map=["pelvis"],
         _gr_revision=7,
     )
@@ -1906,6 +1906,7 @@ def test_wgpu_skinned_mesh_revision_changes_between_bind_and_lbs_modes(monkeypat
             indices,
             bone_indices,
             bone_weights,
+            np.eye(4, dtype=np.float32),
         ),
     )
 
@@ -1924,6 +1925,194 @@ def test_wgpu_skinned_mesh_revision_changes_between_bind_and_lbs_modes(monkeypat
     assert bind_row.source_revision[:-1] == animated_row.source_revision[:-1]
     assert bind_row.source_revision[-1] == 0
     assert animated_row.source_revision[-1] == 1
+
+
+def test_wgpu_animation_queue_key_uses_mode_not_pose_time() -> None:
+    from src.gui.qt_lib.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    renderer._active_scene = object()
+    renderer._active_anim_base_pose = object()
+    renderer._active_textures = {}
+    options = ViewportDisplayOptions(display_mode=ViewportDisplayMode.TEXTURED)
+
+    renderer._active_anim_pose = SimpleNamespace(time=0.1)
+    first = renderer._render_queue_revision_key(
+        options,
+        force_untextured=False,
+        force_no_lightmaps=True,
+    )
+    renderer._active_anim_pose = SimpleNamespace(time=0.6)
+    second = renderer._render_queue_revision_key(
+        options,
+        force_untextured=False,
+        force_no_lightmaps=True,
+    )
+    renderer._active_anim_pose = None
+    stopped = renderer._render_queue_revision_key(
+        options,
+        force_untextured=False,
+        force_no_lightmaps=True,
+    )
+
+    assert first == second
+    assert first != stopped
+
+
+def test_animation_skinning_profiles_resolve_content_browser_families() -> None:
+    from src.core.qt_core.animation.animation_engine import AnimationEngine
+    from src.core.animation.skinning_profiles import resolve_skinning_profile
+    from src.core.qt_core.geometry.model_data import KotorModel
+
+    local_character = resolve_skinning_profile("N_DarthMalak", "NULL", [], inherited_animation=False)
+    skinned_droid = resolve_skinning_profile("P_HK47", "NULL", ["TorsoHoses", "L_hose"], inherited_animation=False, has_skin=True)
+    rigid_droid = resolve_skinning_profile("P_T3M3", "NULL", [], inherited_animation=False, has_skin=False)
+    bith = resolve_skinning_profile("N_Bith", "S_Male02", [], inherited_animation=True)
+    carth = resolve_skinning_profile("P_CarthBB", "S_Female02", [], inherited_animation=True)
+    head = resolve_skinning_profile("PMHC01", "S_Female02", ["talkdummy"], inherited_animation=True, taxonomy="head")
+    creature = resolve_skinning_profile("C_Rancor", "NULL", ["cameramaster"], inherited_animation=False)
+
+    assert local_character.module_name.endswith("generated_character_skinning")
+    assert local_character.resref == "n_darthmalak"
+    assert skinned_droid.module_name.endswith("generated_character_skinning")
+    assert skinned_droid.resref == "p_hk47"
+    assert rigid_droid.module_name.endswith("generated_character_skinning")
+    assert rigid_droid.resref == "p_t3m3"
+    assert bith.module_name.endswith("generated_character_skinning")
+    assert bith.species == "bith"
+    assert carth.module_name.endswith("generated_character_skinning")
+    assert head.module_name.endswith("generated_character_skinning")
+    assert creature.module_name.endswith("generated_character_skinning")
+
+    model = KotorModel(name="N_DarthMalak", supermodel="NULL")
+    engine = AnimationEngine(model)
+    assert engine.skinning_profile.module_name.endswith("generated_character_skinning")
+    assert engine.skinning_profile.resref == "n_darthmalak"
+    assert engine.skinning_profile.skin_node_count > 0
+
+
+def test_animation_skinning_profiles_include_generated_character_registry() -> None:
+    from src.core.animation.skinning_profiles import resolve_skinning_profile
+    from src.core.animation.skinning_profiles.generated_character_skinning import (
+        CHARACTER_SKINNING_PROFILE_ROWS as COMPAT_PROFILE_ROWS,
+    )
+    from src.core.animation.skinning_profiles.types.generated_character_skinning import (
+        CHARACTER_SKINNING_PROFILE_BY_KEY,
+        CHARACTER_SKINNING_PROFILE_ROWS,
+    )
+
+    assert COMPAT_PROFILE_ROWS is CHARACTER_SKINNING_PROFILE_ROWS
+    assert len(CHARACTER_SKINNING_PROFILE_ROWS) >= 600
+    assert not any(str(row["resref"]).startswith(("gi_", "or_")) for row in CHARACTER_SKINNING_PROFILE_ROWS)
+    assert CHARACTER_SKINNING_PROFILE_BY_KEY["k1:n_darthmalak"]["skin_node_count"] > 0
+
+    malak = resolve_skinning_profile("N_DarthMalak", "NULL", [], inherited_animation=False)
+    hk47 = resolve_skinning_profile("P_HK47", "NULL", ["TorsoHoses"], inherited_animation=False)
+    t3 = resolve_skinning_profile("P_T3M3", "NULL", [], inherited_animation=False)
+
+    assert malak.key == "k1:n_darthmalak"
+    assert hk47.key == "k1:p_hk47"
+    assert hk47.skin_node_count > 0
+    assert t3.key == "k1:p_t3m3"
+    assert t3.rigid_animated is True
+    assert t3.requires_skin is False
+
+
+def test_animation_skinning_profiles_load_typed_profile_directories() -> None:
+    from src.core.animation.skinning_profiles import (
+        SKINNING_PROFILES,
+        SKINNING_SPECIES_PROFILES,
+        resolve_skinning_profile,
+    )
+
+    module_names = {profile.module_name for profile in SKINNING_PROFILES}
+
+    assert "src.core.animation.skinning_profiles.types.characters.human" in module_names
+    assert "src.core.animation.skinning_profiles.types.droids.t3m3" in module_names
+    assert "src.core.animation.skinning_profiles.types.droids.t3m4" in module_names
+    assert "src.core.animation.skinning_profiles.types.specialcase.malak" in module_names
+    assert "src.core.animation.skinning_profiles.types.generated_character_skinning" not in module_names
+    assert ".types.characters." in SKINNING_SPECIES_PROFILES["human"].module_name
+    assert ".types.droids." in SKINNING_SPECIES_PROFILES["utility_droid"].module_name
+    assert ".types.droids." in SKINNING_SPECIES_PROFILES["droid"].module_name
+    assert ".types.supermodels." in SKINNING_SPECIES_PROFILES["supermodel"].module_name
+
+    t3m4 = resolve_skinning_profile("P_T3M4", "NULL", [], inherited_animation=False, has_skin=False)
+    malak = resolve_skinning_profile("N_DarthMalak", "NULL", [], inherited_animation=False)
+
+    assert t3m4.module_name == "src.core.animation.skinning_profiles.types.generated_character_skinning"
+    assert t3m4.rigid_animated is True
+    assert malak.module_name == "src.core.animation.skinning_profiles.types.generated_character_skinning"
+
+
+def test_animation_skinning_profiles_mark_party_character_weight_policies() -> None:
+    from src.core.animation.skinning_profiles import resolve_skinning_profile
+
+    party_cases = {
+        ("K1", "P_CarthBB", "S_Female02", True): ("human", "authored_normalized_top4"),
+        ("K1", "P_Zaalbar", "N_WookieM", True): ("wookie", "authored_normalized_top4"),
+        ("K1", "P_T3M3", "NULL", False): ("utility_droid", "rigid_node_animation"),
+        ("K2", "P_G0T0", "NULL", False): ("utility_droid", "rigid_node_animation"),
+        ("K2", "P_HK47", "NULL", True): ("droid", "authored_normalized_top4"),
+    }
+
+    for (game, resref, supermodel, has_skin), (species, weight_policy) in party_cases.items():
+        profile = resolve_skinning_profile(
+            resref,
+            supermodel,
+            [],
+            inherited_animation=has_skin,
+            has_skin=has_skin,
+            metadata={"game": game},
+        )
+
+        assert profile.content_group == "party_character"
+        assert profile.species == species
+        assert profile.weight_policy == weight_policy
+        assert profile.max_influences == 4
+
+
+def test_qt_viewport_exposes_animation_playback_governor_and_live_overlay_skip() -> None:
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    viewport_source = inspect.getsource(QtViewportWidget)
+    init_source = inspect.getsource(QtGhostRiggerMainWindow.__init__)
+    play_source = inspect.getsource(QtGhostRiggerMainWindow._handle_animation_action)
+    tick_source = inspect.getsource(QtGhostRiggerMainWindow._tick_animation)
+
+    assert "def set_animation_playback_active" in viewport_source
+    assert "self._frame_governor.set_animation_playing(bool(active), reason)" in viewport_source
+    assert "def _can_skip_live_overlay_rebuild" in viewport_source
+    assert 'dirty_flags.get("scene", False)' in viewport_source
+    assert "self._skip_overlay_pixmap_update = True" in viewport_source
+    assert "governor is not None and governor.animation_playing" in viewport_source
+    assert "and not governor.animation_playing" in viewport_source
+    assert "self.canvas.is_live_surface()" in viewport_source
+    assert 'getattr(self._renderer, "_anim_pose", None) is not None' in viewport_source
+    assert "self._render_timer.setTimerType(QtCore.Qt.PreciseTimer)" in viewport_source
+    assert "self._animation_timer.setTimerType(QtCore.Qt.PreciseTimer)" in init_source
+    assert "self._animation_timer.setInterval(30)" in init_source
+    assert "self._animation_status_last_update = 0.0" in init_source
+    assert 'self.viewport.set_animation_playback_active(True, "animation playback")' in play_source
+    assert "self.viewport.set_animation_playback_active(False)" in play_source
+    assert "should_update_status" in tick_source
+    assert ">= 0.20" in tick_source
+    assert "self.viewport.set_animation_playback_active(False)" in tick_source
+
+
+def test_main_model_load_uses_inherited_animation_panel_loader() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    loaded_source = inspect.getsource(QtGhostRiggerMainWindow._on_model_loaded)
+    retarget_source = inspect.getsource(QtGhostRiggerMainWindow._activate_retarget_target_model)
+    library_source = inspect.getsource(QtGhostRiggerMainWindow._activate_animation_entry_model)
+
+    assert "self._load_animation_panel_model(model)" in loaded_source
+    assert "self.animations_panel.load_model(model)" not in loaded_source
+    assert "self._load_animation_panel_model(model)" in retarget_source
+    assert "self._load_animation_panel_model(model)" in library_source
 
 
 def test_wgpu_external_lighting_snapshot_receives_renderer_helper_palette(monkeypatch) -> None:
@@ -1960,18 +2149,31 @@ def test_wgpu_material_uniforms_respect_diffuse_toggle_and_display_options() -> 
 
     renderer.show_diffuse_map = False
     data = renderer._mesh_uniform_bytes(np.eye(4, dtype=np.float32), (1.0, 1.0, 1.0, 1.0), material, options)
-    flags = np.frombuffer(data[80:96], dtype=np.float32)
+    assert len(data) == 176
+    flags = np.frombuffer(data[144:160], dtype=np.float32)
     assert flags[0] == 0.0
 
     renderer.show_diffuse_map = True
     data = renderer._mesh_uniform_bytes(np.eye(4, dtype=np.float32), (1.0, 1.0, 1.0, 1.0), material, options)
-    flags = np.frombuffer(data[80:96], dtype=np.float32)
+    flags = np.frombuffer(data[144:160], dtype=np.float32)
     assert flags[0] == 1.0
 
     shaded = ViewportDisplayOptions(display_mode=ViewportDisplayMode.SHADED)
     data = renderer._mesh_uniform_bytes(np.eye(4, dtype=np.float32), (1.0, 1.0, 1.0, 1.0), material, shaded)
-    params = np.frombuffer(data[96:112], dtype=np.float32)
+    params = np.frombuffer(data[160:176], dtype=np.float32)
     assert params[1] == 2.0
+
+    model_matrix = np.eye(4, dtype=np.float32)
+    model_matrix[0, 3] = 7.0
+    data = renderer._mesh_uniform_bytes(
+        np.eye(4, dtype=np.float32),
+        (1.0, 1.0, 1.0, 1.0),
+        material,
+        options,
+        model_matrix=model_matrix,
+    )
+    decoded_model = np.frombuffer(data[64:128], dtype=np.float32).reshape(4, 4).T
+    assert decoded_model[0, 3] == 7.0
 
 
 def test_wgpu_mesh_uniform_marks_selected_mesh_for_shader_fill() -> None:
@@ -2004,8 +2206,8 @@ def test_wgpu_mesh_uniform_marks_selected_mesh_for_shader_fill() -> None:
         selected=True,
     )
 
-    assert np.frombuffer(unselected[96:112], dtype=np.float32)[3] == 0.0
-    assert np.frombuffer(selected[96:112], dtype=np.float32)[3] == 1.0
+    assert np.frombuffer(unselected[160:176], dtype=np.float32)[3] == 0.0
+    assert np.frombuffer(selected[160:176], dtype=np.float32)[3] == 1.0
 
 
 def test_wgpu_mesh_shaders_apply_moderngl_selected_yellow_fill() -> None:
@@ -2015,6 +2217,8 @@ def test_wgpu_mesh_shaders_apply_moderngl_selected_yellow_fill() -> None:
 
     assert expected in wgpu_renderer._load_mesh_shader()
     assert expected in wgpu_renderer._load_skinned_mesh_shader()
+    assert "locals.model * vec4<f32>(input.position, 1.0)" in wgpu_renderer._load_mesh_shader()
+    assert "locals.model * skin_position(input)" in wgpu_renderer._load_skinned_mesh_shader()
 
 
 def test_wgpu_mesh_draw_uses_per_draw_uniforms_for_selected_fill() -> None:

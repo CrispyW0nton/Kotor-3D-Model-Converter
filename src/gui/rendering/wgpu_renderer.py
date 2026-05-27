@@ -1595,7 +1595,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                     "buffer": {
                         "type": wgpu.BufferBindingType.uniform,
                         "has_dynamic_offset": True,
-                        "min_binding_size": 112,
+                        "min_binding_size": 176,
                     },
                 },
                 {
@@ -1648,7 +1648,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             entries=[
                 {
                     "binding": 0,
-                    "resource": {"buffer": self.mesh_uniform_buffer, "offset": 0, "size": 112},
+                    "resource": {"buffer": self.mesh_uniform_buffer, "offset": 0, "size": 176},
                 },
                 {
                     "binding": 1,
@@ -2307,6 +2307,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 material,
                 display_options,
                 selected=self._is_selected_mesh_data(mesh_data),
+                model_matrix=self._mesh_model_matrix(mesh_data),
             )
             render_pass.set_pipeline(pipeline)
             self._set_mesh_uniform(render_pass, uniform)
@@ -2334,6 +2335,39 @@ class WgpuRenderer(NullDiagnosticRenderer):
             return self.pipeline_mesh_skinned_blend or self.pipeline_mesh_skinned
         return self.pipeline_mesh_skinned
 
+    def _mesh_model_matrix(self, mesh_data):
+        import numpy as np
+
+        if bool(getattr(mesh_data, "is_skinned", False)):
+            return np.eye(4, dtype=np.float32)
+        if self._active_anim_pose is not None:
+            try:
+                from src.gui.rendering.mesh_render_data import node_world_matrix
+
+                return np.asarray(
+                    node_world_matrix(getattr(mesh_data, "source", None), anim_pose=self._active_anim_pose),
+                    dtype=np.float32,
+                )
+            except Exception:
+                pass
+        try:
+            return np.asarray(getattr(mesh_data, "world_matrix", None), dtype=np.float32).reshape(4, 4)
+        except Exception:
+            return np.eye(4, dtype=np.float32)
+
+    def _mesh_mvp_matrix(self, mvp, mesh_data):
+        import numpy as np
+
+        try:
+            projection_view = np.asarray(mvp, dtype=np.float32).reshape(4, 4)
+        except Exception:
+            projection_view = np.eye(4, dtype=np.float32)
+        try:
+            model = np.asarray(self._mesh_model_matrix(mesh_data), dtype=np.float32).reshape(4, 4)
+        except Exception:
+            model = np.eye(4, dtype=np.float32)
+        return projection_view @ model
+
     def _is_selected_mesh_data(self, mesh_data) -> bool:
         node = getattr(mesh_data, "source", None)
         selected_ids = {id(item) for item in (getattr(self, "selected_nodes", []) or [])}
@@ -2360,13 +2394,13 @@ class WgpuRenderer(NullDiagnosticRenderer):
             else (*tuple(self.wire_color[:3]), 1.0)
         )
         render_pass.set_pipeline(self.pipeline_lines)
-        self._set_line_uniform(render_pass, mvp, color)
         drawn = 0
         for mesh_data in mesh_items:
             try:
                 resource = self.resource_cache.get_or_upload_mesh(mesh_data)
                 if resource is None or resource.edge_index_buffer is None or resource.edge_index_count <= 0:
                     continue
+                self._set_line_uniform(render_pass, self._mesh_mvp_matrix(mvp, mesh_data), color)
                 render_pass.set_vertex_buffer(0, resource.vertex_buffer)
                 render_pass.set_index_buffer(resource.edge_index_buffer, wgpu.IndexFormat.uint32)
                 render_pass.draw_indexed(resource.edge_index_count, 1, 0, 0, 0)
@@ -2892,7 +2926,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 if resource is None:
                     continue
                 color = self._pick_id_to_color(pick_id)
-                self._set_line_uniform(render_pass, mvp, color, target_color=False)
+                self._set_line_uniform(render_pass, self._mesh_mvp_matrix(mvp, mesh_data), color, target_color=False)
                 render_pass.set_vertex_buffer(0, resource.vertex_buffer)
                 if resource.index_buffer is not None and resource.index_count > 0:
                     render_pass.set_index_buffer(resource.index_buffer, wgpu.IndexFormat.uint32)
@@ -3049,19 +3083,13 @@ class WgpuRenderer(NullDiagnosticRenderer):
         force_untextured: bool,
         force_no_lightmaps: bool,
     ) -> tuple:
-        anim_pose = self._active_anim_pose
-        anim_time = 0.0
-        try:
-            anim_time = round(float(getattr(anim_pose, "time", 0.0) or 0.0), 5)
-        except Exception:
-            anim_time = 0.0
+        anim_active = self._active_anim_pose is not None
         texture_key = tuple(
             sorted((str(key), id(value)) for key, value in (self._active_textures or {}).items())
         )
         return (
             id(self._active_scene),
-            id(anim_pose),
-            anim_time,
+            bool(anim_active),
             id(self._active_anim_base_pose),
             texture_key,
             str(getattr(display_options.display_mode, "value", display_options.display_mode)),
@@ -3075,6 +3103,26 @@ class WgpuRenderer(NullDiagnosticRenderer):
             bool(getattr(self, "disable_alpha_blend", False)),
             bool(getattr(self, "cull_faces", False)),
         )
+
+    @staticmethod
+    def _scene_has_rigid_animation_meshes(scene) -> bool:
+        try:
+            nodes = scene.all_nodes() if hasattr(scene, "all_nodes") else scene.mesh_nodes()
+        except Exception:
+            nodes = getattr(scene, "nodes", []) or []
+        for node in nodes or []:
+            try:
+                if (
+                    getattr(node, "render", True) is not False
+                    and bool(getattr(node, "vertices", getattr(node, "verts", [])))
+                    and bool(getattr(node, "faces", []))
+                    and not bool(getattr(node, "is_skin", False))
+                    and int(getattr(node, "vertex_space", 0) or 0) != 2
+                ):
+                    return True
+            except Exception:
+                continue
+        return False
 
     def _mesh_data_outside_frustum(self, mesh_data, frustum_planes) -> bool:
         try:
@@ -3153,6 +3201,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         display_options: ViewportDisplayOptions,
         *,
         selected: bool = False,
+        model_matrix=None,
     ) -> bytes:
         import numpy as np
 
@@ -3196,6 +3245,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         params = np.asarray((lm_intensity, shade_mode, lm_mode, 1.0 if selected else 0.0), dtype=np.float32)
         return (
             np.asarray(mvp, dtype=np.float32).reshape(4, 4).T.tobytes()
+            + np.asarray(model_matrix if model_matrix is not None else np.eye(4, dtype=np.float32), dtype=np.float32).reshape(4, 4).T.tobytes()
             + np.asarray(color, dtype=np.float32).tobytes()
             + flags.tobytes()
             + params.tobytes()
@@ -3267,7 +3317,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.mesh_bind_group = self.device.create_bind_group(
             layout=self.mesh_bind_group_layout,
             entries=[
-                {"binding": 0, "resource": {"buffer": self.mesh_uniform_buffer, "offset": 0, "size": 112}},
+                {"binding": 0, "resource": {"buffer": self.mesh_uniform_buffer, "offset": 0, "size": 176}},
                 {"binding": 1, "resource": {"buffer": self.light_buffer, "offset": 0, "size": int(self.max_wgpu_lights) * 64}},
                 {"binding": 2, "resource": {"buffer": self.lighting_uniform_buffer, "offset": 0, "size": 32}},
             ],

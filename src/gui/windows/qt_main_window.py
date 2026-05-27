@@ -1479,6 +1479,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._animation_engine = None
         self._animation_loop = False
         self._animation_last_tick: Optional[float] = None
+        self._animation_status_last_update = 0.0
         self._retarget_source_model = None
         self._retarget_target_model = None
         self._retarget_engine = None
@@ -1490,7 +1491,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.sequence_editor_docked_window: Optional[SequenceEditorWindow] = None
         self._matrix_engine = QtMatrixEngine(self, fps=12)
         self._animation_timer = QtCore.QTimer(self)
-        self._animation_timer.setInterval(33)
+        self._animation_timer.setTimerType(QtCore.Qt.PreciseTimer)
+        self._animation_timer.setInterval(30)
         self._animation_timer.timeout.connect(self._tick_animation)
         self._retarget_timer = QtCore.QTimer(self)
         self._retarget_timer.setInterval(33)
@@ -3104,10 +3106,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 continue
             panel_id = self._profile_panel_id_for_dock_key(key)
             area_name = self._dock_area_name(self.dockWidgetArea(dock))
+            min_width = 0 if key == "content_browser" else max(120, dock.minimumWidth())
             panels[panel_id] = {
                 "visible": bool(dock.isVisible()),
                 "region": area_name,
-                "min_width": max(120, dock.minimumWidth()),
+                "min_width": min_width,
                 "preferred_width": max(120, dock.width()),
                 "min_height": max(80, dock.minimumHeight()),
                 "preferred_height": max(120, dock.height()),
@@ -3215,6 +3218,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.content_browser_panel.scanRequested.connect(self._scan_library)
         self.content_browser_panel.deepScanRequested.connect(self._scan_library)
         self.content_browser_panel.loadRequested.connect(self._start_resource_load)
+        self.content_browser_panel.primarySceneLoadRequested.connect(self._load_content_browser_primary_scene_model)
         self.content_browser_panel.extractRequested.connect(self._extract_library_row)
         self.content_browser_panel.levelEditorImportRequested.connect(self._send_library_row_to_module_editor)
         self.content_browser_panel.retargetSourceRequested.connect(
@@ -4243,7 +4247,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return
         self._current_model = model
         if hasattr(self, "animations_panel"):
-            self.animations_panel.load_model(model)
+            self._load_animation_panel_model(model)
         if hasattr(self, "animation_retarget_panel"):
             game = str(getattr(getattr(obj, "source_ref", None), "game", "") or self._infer_game_from_model(model)).upper()
             self.animation_retarget_panel.set_texture_dir(self._texture_dir)
@@ -4544,10 +4548,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._invalidate_renderer_resources(f"pivot changed: {action}")
 
     def _require_model(self, action: str):
-        if self._current_model is None:
+        model = self._current_model or self._active_viewport_model()
+        if model is not None and self._current_model is None:
+            self._current_model = model
+        if model is None:
             QtWidgets.QMessageBox.information(self, action, "Load or import a model first.")
             return None
-        return self._current_model
+        return model
 
     def _model_worker_is_running(self) -> bool:
         thread = self._worker_thread
@@ -4807,7 +4814,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if hasattr(self, "module_geometry_panel"):
             self.module_geometry_panel.show_model(self._active_viewport_model())
         if hasattr(self, "animations_panel"):
-            self.animations_panel.load_model(model)
+            self._load_animation_panel_model(model)
         if hasattr(self, "animation_retarget_panel"):
             self.animation_retarget_panel.set_texture_dir(self._texture_dir)
             game = (self._current_game or self._infer_game_from_model(model)).upper()
@@ -4978,7 +4985,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             animations.append(replacement)
         model.animations = animations
         if hasattr(self, "animations_panel"):
-            self.animations_panel.load_model(model, select_name=target_name)
+            self._load_animation_panel_model(model, select_name=target_name)
         self._populate_animation_library_from_current_model()
         self._show_content_browser("Animation")
         self._log(f"Animation override: {source_name} -> {target_name}", "success")
@@ -5909,7 +5916,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._set_model_internal(model, self._retarget_target_label())
         else:
             if hasattr(self, "animations_panel"):
-                self.animations_panel.load_model(model)
+                self._load_animation_panel_model(model)
         self._populate_animation_library_from_current_model()
         if hasattr(self, "animations_panel"):
             self.animations_panel.select_animation(selected_anim)
@@ -6045,6 +6052,33 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         model = self._current_model
         if not model or not anim_name:
             return
+        try:
+            from src.core.qt_core.animation.animation_engine import AnimationEngine, SuperModelResolver
+
+            mgr = self._get_resource_manager()
+            if mgr is not None:
+                SuperModelResolver.configure(mgr)
+            engine = AnimationEngine(model)
+            for entry in engine.list_all_animations():
+                if str(entry.get("name", "") or "") != anim_name:
+                    continue
+                inherited = bool(entry.get("inherited"))
+                source = str(entry.get("source") or getattr(model, "name", ""))
+                inherited_text = f"\nInherited from: {source}" if inherited else ""
+                self.animations_panel.info.setPlainText(
+                    f"{anim_name}\n"
+                    f"Length: {float(entry.get('length') or 0.0):.3f} s\n"
+                    f"Keys: {int(entry.get('key_count') or 0)}  "
+                    f"Nodes: {int(entry.get('node_count') or 0)}  "
+                    f"Events: {int(entry.get('event_count') or 0)}"
+                    f"{inherited_text}"
+                )
+                self.animations_panel.seek.blockSignals(True)
+                self.animations_panel.seek.setValue(0)
+                self.animations_panel.seek.blockSignals(False)
+                return
+        except Exception:
+            log.debug("Inherited animation metadata lookup failed", exc_info=True)
         for anim in getattr(model, "animations", []) or []:
             if getattr(anim, "name", "") != anim_name:
                 continue
@@ -6070,18 +6104,24 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if action == "Export Binary MDL":
             self._export_mdl_binary()
             return
-        animations = getattr(model, "animations", []) or []
-        if not animations:
+        try:
+            from src.core.qt_core.animation.animation_engine import AnimationEngine, SuperModelResolver
+
+            mgr = self._get_resource_manager()
+            if mgr is not None:
+                SuperModelResolver.configure(mgr)
+            if self._animation_engine is None or getattr(self._animation_engine, "model", None) is not model:
+                self._animation_engine = AnimationEngine(model)
+            animation_entries = self._animation_engine.list_all_animations()
+        except Exception:
+            animation_entries = []
+        if not animation_entries and not (getattr(model, "animations", []) or []):
             QtWidgets.QMessageBox.information(self, "Animations", "No animations available on this model.")
             return
         if not anim_name and action not in {"Stop", "Loop"}:
             QtWidgets.QMessageBox.information(self, "Animations", "Select an animation first.")
             return
         try:
-            from src.core.qt_core.animation.animation_engine import AnimationEngine
-
-            if self._animation_engine is None or getattr(self._animation_engine, "model", None) is not model:
-                self._animation_engine = AnimationEngine(model)
             if action == "Play":
                 ok = self._animation_engine.play(anim_name, loop=self._animation_loop, blend=False)
                 if ok:
@@ -6089,7 +6129,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                         self.viewport.set_anim_base_pose(self._animation_engine.evaluate(0.0))
                     except Exception:
                         pass
+                    if hasattr(self.viewport, "set_animation_playback_active"):
+                        self.viewport.set_animation_playback_active(True, "animation playback")
                     self._animation_last_tick = None
+                    self._animation_status_last_update = 0.0
                     self._animation_timer.start()
                 self.animations_panel.info.setPlainText(
                     f"Playing {anim_name}" if ok else f"Animation not found: {anim_name}"
@@ -6098,7 +6141,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             elif action == "Stop":
                 self._animation_timer.stop()
                 self._animation_last_tick = None
+                self._animation_status_last_update = 0.0
                 self._animation_engine.stop()
+                if hasattr(self.viewport, "set_animation_playback_active"):
+                    self.viewport.set_animation_playback_active(False)
                 if hasattr(self.viewport, "clear_animation_pose"):
                     self.viewport.clear_animation_pose()
                 self.animations_panel.info.setPlainText("Animation stopped.")
@@ -6114,6 +6160,42 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         except Exception as exc:
             self._log(f"Animation action error: {exc}", "error")
             QtWidgets.QMessageBox.critical(self, "Animations", str(exc))
+
+    def _load_animation_panel_model(self, model, select_name: str = "") -> None:
+        self.animations_panel.load_model(model, select_name=select_name)
+        if model is None:
+            return
+        try:
+            from src.core.qt_core.animation.animation_engine import AnimationEngine, SuperModelResolver
+
+            mgr = self._get_resource_manager()
+            if mgr is not None:
+                SuperModelResolver.configure(mgr)
+            engine = AnimationEngine(model)
+            entries = engine.list_all_animations()
+        except Exception:
+            log.debug("Inherited animation panel load failed", exc_info=True)
+            return
+        existing = {
+            self.animations_panel.listbox.item(index).text().lower()
+            for index in range(self.animations_panel.listbox.count())
+        }
+        inherited_count = 0
+        for entry in entries:
+            name = str(entry.get("name") or "")
+            if not name or name.lower() in existing:
+                continue
+            self.animations_panel.listbox.addItem(name)
+            existing.add(name.lower())
+            if bool(entry.get("inherited")):
+                inherited_count += 1
+        total = self.animations_panel.listbox.count()
+        if inherited_count:
+            self.animations_panel.info.setPlainText(f"{total} animation(s), {inherited_count} inherited")
+        else:
+            self.animations_panel.info.setPlainText(f"{total} animation(s)")
+        if select_name:
+            self.animations_panel.select_animation(select_name)
 
     def _request_bake_animation_options(self, anim_name: str) -> Optional[dict]:
         dialog = QtWidgets.QDialog(self)
@@ -6173,7 +6255,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             animations.append(baked)
         self._animation_engine = None
         if hasattr(self, "animations_panel"):
-            self.animations_panel.load_model(model, select_name=baked.name)
+            self._load_animation_panel_model(model, select_name=baked.name)
             self.animations_panel.info.setPlainText(
                 f"Baked {anim_name} -> {baked.name}\n"
                 f"{len(getattr(baked, 'nodes', []) or [])} nodes @ {int(options['fps'])} fps"
@@ -6352,6 +6434,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if engine is None or not engine.is_playing:
             self._animation_timer.stop()
             self._animation_last_tick = None
+            self._animation_status_last_update = 0.0
             return
         now = time.perf_counter()
         if self._animation_last_tick is None:
@@ -6371,7 +6454,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 time=engine.current_time,
                 length=anim_length,
             )
-        if anim_length > 0 and hasattr(self, "animations_panel"):
+        should_update_status = (
+            anim_length > 0
+            and hasattr(self, "animations_panel")
+            and (now - float(getattr(self, "_animation_status_last_update", 0.0) or 0.0)) >= 0.20
+        )
+        if should_update_status:
+            self._animation_status_last_update = now
             pct = max(0, min(100, int((engine.current_time / anim_length) * 100.0)))
             self.animations_panel.seek.blockSignals(True)
             self.animations_panel.seek.setValue(pct)
@@ -6382,6 +6471,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if not still_playing:
             self._animation_timer.stop()
             self._animation_last_tick = None
+            self._animation_status_last_update = 0.0
+            if hasattr(self.viewport, "set_animation_playback_active"):
+                self.viewport.set_animation_playback_active(False)
 
     def _export_selected_animation(self, anim_name: str):
         model = self._require_model("Export Animation")
@@ -6542,7 +6634,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return
         self._current_model = model
         if hasattr(self, "animations_panel"):
-            self.animations_panel.load_model(model)
+            self._load_animation_panel_model(model)
 
     def _populate_resource_panel(self):
         if not hasattr(self, "resource_panel"):
@@ -7594,11 +7686,27 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return
         self._start_resource_load(row["resref"], row["game"])
 
-    def _start_resource_load(self, resref: str, game: str):
+    def _load_content_browser_primary_scene_model(self, row: dict) -> None:
+        resref = str(row.get("resref") or "")
+        game = str(row.get("game") or "")
+        if resref:
+            self._start_resource_load(resref, game, import_action="clear")
+
+    def _start_resource_load(self, resref: str, game: str, import_action: str = ""):
         if self._model_worker_is_running():
             self._log("A model is already loading.", "warning")
             return
-        action = self._choose_model_import_action(f"{game}:{resref}")
+        action = str(import_action or "").strip().lower()
+        if action in {"clear", "clear_and_load", "clear scene and load"}:
+            if not self._prompt_save_dirty_scene():
+                return
+            action = "clear"
+            self._pending_scene_import_placement = "origin"
+        elif action in {"add", "add_to_scene", "add to existing scene"}:
+            action = "add"
+            self._pending_scene_import_placement = str(self.settings_data.get("default_import_placement") or "auto_offset")
+        else:
+            action = self._choose_model_import_action(f"{game}:{resref}")
         if action == "cancel":
             return
         self._pending_scene_import_action = action
@@ -7854,7 +7962,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if hasattr(self, "module_geometry_panel"):
             self.module_geometry_panel.show_model(self._active_viewport_model())
         if hasattr(self, "animations_panel"):
-            self.animations_panel.load_model(model)
+            self._load_animation_panel_model(model)
         if hasattr(self, "animation_retarget_panel"):
             self.animation_retarget_panel.set_texture_dir(self._texture_dir)
             game = (self._current_game or self._infer_game_from_model(model)).upper()

@@ -188,6 +188,30 @@ def test_layout_apply_hides_optional_detachable_docks_not_declared_by_layout() -
     app.processEvents()
 
 
+def test_layout_apply_leaves_content_browser_width_user_resizable() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    layout = LayoutLoader().load_file(ROOT / "config" / "themes" / "layouts" / "default.xml")
+    assert layout is not None
+
+    window = QtWidgets.QMainWindow()
+    window.content_browser_dock = QtWidgets.QDockWidget("Content Browser", window)  # type: ignore[attr-defined]
+    window.content_browser_dock.setMinimumWidth(500)  # type: ignore[attr-defined]
+    window.content_browser_dock.setMaximumWidth(510)  # type: ignore[attr-defined]
+    window.scene_dock = QtWidgets.QDockWidget("Scene", window)  # type: ignore[attr-defined]
+    window.properties_dock = QtWidgets.QDockWidget("Properties", window)  # type: ignore[attr-defined]
+    window.log_panel = QtWidgets.QWidget(window)  # type: ignore[attr-defined]
+
+    LayoutApplier()._apply_panels(layout, window)
+
+    assert window.content_browser_dock.minimumWidth() == 0  # type: ignore[attr-defined]
+    assert window.content_browser_dock.maximumWidth() >= 1000000  # type: ignore[attr-defined]
+    window.deleteLater()
+
+
 def test_layout_manager_merges_user_dock_profile_overrides() -> None:
     manager = LayoutManager(
         ROOT,

@@ -9,7 +9,12 @@ from typing import Optional
 from PySide6 import QtCore, QtWidgets
 
 from src.gui.qt_lib.assets.qt_theme import icon
-from src.gui.qt_lib.panels.qt_library_panel import enrich_library_rows, infer_model_category
+from src.gui.qt_lib.panels.qt_library_panel import (
+    MODEL_CATEGORY_ORDER,
+    content_browser_metadata_for_resref,
+    enrich_library_rows,
+    infer_model_category,
+)
 
 
 ASSET_TYPES = ("All", "Model", "Animation", "Texture", "Blueprint", "Module", "Scene")
@@ -45,9 +50,10 @@ class ContentAssetDescriptor:
 def descriptor_from_library_row(row: dict) -> ContentAssetDescriptor:
     item = dict(row)
     category = str(item.get("category") or infer_model_category(str(item.get("resref", ""))))
-    asset_type = "Module" if category == "Module" else "Blueprint" if category == "Template" else "Model"
+    asset_type = "Module" if category == "Modules" else "Blueprint" if category == "Templates" else "Model"
     source = str(item.get("source", ""))
     name = str(item.get("resref", ""))
+    taxonomy_metadata = content_browser_metadata_for_resref(name, category)
     return ContentAssetDescriptor(
         asset_type=asset_type,
         name=name,
@@ -59,8 +65,9 @@ def descriptor_from_library_row(row: dict) -> ContentAssetDescriptor:
             "area": item.get("area_label") or item.get("area_name") or "",
             "module": item.get("module_code") or "",
             "class": item.get("model_class") or "",
+            **taxonomy_metadata,
         },
-        tags=tuple(str(value) for value in (category, item.get("location", "")) if value),
+        tags=tuple(str(value) for value in (category, *taxonomy_metadata.values(), item.get("location", "")) if value),
     )
 
 
@@ -112,6 +119,7 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
     """Unreal-style browser that owns models, animations, and future asset rows."""
 
     loadRequested = QtCore.Signal(str, str)
+    primarySceneLoadRequested = QtCore.Signal(dict)
     extractRequested = QtCore.Signal(dict)
     retargetSourceRequested = QtCore.Signal(dict)
     retargetTargetRequested = QtCore.Signal(dict)
@@ -148,14 +156,14 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self.nav_tree = QtWidgets.QTreeWidget()
         self.nav_tree.setHeaderHidden(True)
         self.nav_tree.setObjectName("contentBrowserNavigation")
-        self.nav_tree.setMinimumWidth(96)
-        self.nav_tree.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+        self.nav_tree.setMinimumWidth(72)
+        self.nav_tree.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Expanding)
         self.nav_tree.itemSelectionChanged.connect(self._on_navigation_changed)
 
         self.details = QtWidgets.QWidget()
         self.details.setObjectName("contentBrowserDetails")
-        self.details.setMinimumWidth(112)
-        self.details.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+        self.details.setMinimumWidth(72)
+        self.details.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Expanding)
         details_layout = QtWidgets.QVBoxLayout(self.details)
         details_layout.setContentsMargins(0, 0, 0, 0)
         details_layout.setSpacing(5)
@@ -170,18 +178,25 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
 
         self.sidebar = QtWidgets.QWidget()
         self.sidebar.setObjectName("contentBrowserSidebar")
-        self.sidebar.setMinimumWidth(126)
-        self.sidebar.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+        self.sidebar.setMinimumWidth(96)
+        self.sidebar.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Expanding)
         sidebar_layout = QtWidgets.QVBoxLayout(self.sidebar)
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
         sidebar_layout.setSpacing(5)
-        sidebar_layout.addWidget(self.nav_tree, 2)
-        sidebar_layout.addWidget(self.details, 3)
+        self.sidebar_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
+        self.sidebar_splitter.setObjectName("contentBrowserSidebarSplitter")
+        self.sidebar_splitter.setChildrenCollapsible(False)
+        self.sidebar_splitter.setOpaqueResize(True)
+        self.sidebar_splitter.addWidget(self.nav_tree)
+        self.sidebar_splitter.addWidget(self.details)
+        self.sidebar_splitter.setStretchFactor(0, 2)
+        self.sidebar_splitter.setStretchFactor(1, 3)
+        sidebar_layout.addWidget(self.sidebar_splitter, 1)
         self.splitter.addWidget(self.sidebar)
 
         center = QtWidgets.QWidget()
         self.asset_area = center
-        center.setMinimumWidth(180)
+        center.setMinimumWidth(96)
         center.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         center_layout = QtWidgets.QVBoxLayout(center)
         center_layout.setContentsMargins(0, 0, 0, 0)
@@ -193,6 +208,8 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self.asset_view.setSortingEnabled(True)
         self.asset_view.setRootIsDecorated(False)
         self.asset_view.setAlternatingRowColors(True)
+        self.asset_view.header().setStretchLastSection(False)
+        self.asset_view.header().setMinimumSectionSize(32)
         self.asset_view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.asset_view.setDragEnabled(True)
         self.asset_view.itemDoubleClicked.connect(lambda _item, _column: self._activate_selected())
@@ -206,18 +223,23 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
 
         status_row = QtWidgets.QHBoxLayout()
         self.status_label = QtWidgets.QLabel("No game directory set")
+        self.status_label.setMinimumWidth(0)
+        self.status_label.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
         status_row.addWidget(self.status_label, 1)
         self.scan_anims_button = QtWidgets.QPushButton("Scan Animations")
         self.scan_anims_button.setProperty("compact", True)
+        self._make_status_button_shrinkable(self.scan_anims_button)
         self.scan_anims_button.clicked.connect(lambda: self.libraryActionRequested.emit("Scan Animations"))
         status_row.addWidget(self.scan_anims_button)
         self.refresh_anims_button = QtWidgets.QPushButton("Refresh Animations")
         self.refresh_anims_button.setProperty("compact", True)
+        self._make_status_button_shrinkable(self.refresh_anims_button)
         self.refresh_anims_button.clicked.connect(lambda: self.libraryActionRequested.emit("Refresh"))
         status_row.addWidget(self.refresh_anims_button)
         for label, fmt in (("Batch OBJ", "obj"), ("Batch ASCII", "ascii"), ("Batch TGA", "tga")):
             button = QtWidgets.QPushButton(label)
             button.setProperty("compact", True)
+            self._make_status_button_shrinkable(button)
             button.clicked.connect(lambda _checked=False, f=fmt: self.batchRequested.emit(f, self.visible_rows()))
             status_row.addWidget(button)
         self.deep_button = QtWidgets.QPushButton("Deep Scan")
@@ -225,6 +247,8 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self.scan_button.setProperty("accent", True)
         self.deep_button.setProperty("compact", True)
         self.scan_button.setProperty("compact", True)
+        self._make_status_button_shrinkable(self.deep_button)
+        self._make_status_button_shrinkable(self.scan_button)
         self.deep_button.clicked.connect(self.deepScanRequested.emit)
         self.scan_button.clicked.connect(self.scanRequested.emit)
         status_row.addWidget(self.deep_button)
@@ -235,6 +259,10 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self._apply_filter()
         QtCore.QTimer.singleShot(0, self._apply_initial_splitter_sizes)
 
+    def _make_status_button_shrinkable(self, button: QtWidgets.QPushButton) -> None:
+        button.setMinimumWidth(0)
+        button.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
+
     def _build_filters(self, layout: QtWidgets.QVBoxLayout) -> None:
         search_row = QtWidgets.QHBoxLayout()
         self.search_edit = QtWidgets.QLineEdit()
@@ -242,12 +270,16 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self.search_edit.textChanged.connect(self._apply_filter)
         clear = QtWidgets.QPushButton("x")
         clear.setProperty("compact", True)
+        clear.setMinimumWidth(0)
+        clear.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
         clear.clicked.connect(self.search_edit.clear)
         search_row.addWidget(self.search_edit, 1)
         search_row.addWidget(clear)
         layout.addLayout(search_row)
 
-        filters = QtWidgets.QHBoxLayout()
+        filters = QtWidgets.QGridLayout()
+        filters.setHorizontalSpacing(5)
+        filters.setVerticalSpacing(3)
         self.type_filter = QtWidgets.QComboBox()
         self.type_filter.addItems(ASSET_TYPES)
         self.type_filter.currentTextChanged.connect(self._apply_filter)
@@ -258,7 +290,38 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self.source_filter.addItem("All Sources")
         self.source_filter.currentTextChanged.connect(self._apply_filter)
         self.tag_filter = QtWidgets.QComboBox()
-        self.tag_filter.addItems(["All Tags", "Characters", "Modules", "Templates", "Current Model"])
+        self.tag_filter.addItems([
+            "All Tags",
+            "Player Characters",
+            "Party Members",
+            "Commoners",
+            "NPCs",
+            "Droids",
+            "Turrets",
+            "Creatures",
+            "Holograms",
+            "Supermodels",
+            "Modules",
+            "Level Assets",
+            "Environment",
+            "Skyboxes",
+            "Minigame",
+            "Menus",
+            "GUI",
+            "Placeables",
+            "Doors",
+            "Engine Items",
+            "Inventory",
+            "Weapons",
+            "Visual FX",
+            "Visuals",
+            "Planets",
+            "Misc Models",
+            "Stunts",
+            "Uncategorised",
+            "Templates",
+            "Current Model",
+        ])
         self.tag_filter.currentTextChanged.connect(self._apply_filter)
         self.recency_filter = QtWidgets.QComboBox()
         self.recency_filter.addItems(["Any Time", "Recent First"])
@@ -274,7 +337,12 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
             ("Updated", self.recency_filter),
             ("Compatibility", self.compat_filter),
         ):
-            filters.addLayout(self._labeled_filter(label, combo))
+            self._make_combo_shrinkable(combo)
+            column = len([None for _ in range(filters.count())]) % 3
+            row = filters.count() // 3
+            filters.addLayout(self._labeled_filter(label, combo), row, column)
+        for column in range(3):
+            filters.setColumnStretch(column, 1)
         layout.addLayout(filters)
 
     def _labeled_filter(self, text: str, combo: QtWidgets.QComboBox) -> QtWidgets.QVBoxLayout:
@@ -283,10 +351,17 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         wrapper.setSpacing(2)
         label = QtWidgets.QLabel(text)
         label.setBuddy(combo)
+        label.setMinimumWidth(0)
         combo.setAccessibleName(text)
         wrapper.addWidget(label)
         wrapper.addWidget(combo)
         return wrapper
+
+    def _make_combo_shrinkable(self, combo: QtWidgets.QComboBox) -> None:
+        combo.setMinimumWidth(0)
+        combo.setMinimumContentsLength(1)
+        combo.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        combo.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
 
     def _build_action_buttons(self, layout: QtWidgets.QVBoxLayout) -> None:
         self.primary_button = self._compact_action_button("Open")
@@ -411,14 +486,15 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         return None
 
     def apply_ghost_layout(self, layout) -> None:
-        panel = layout.panel("contentBrowser")
-        self.setMinimumWidth(panel.min_width)
+        self.setMinimumWidth(0)
+        self.setMaximumWidth(16777215)
         spacing = layout.spacing_value("panelSpacing", 5)
         for widget in (self, self.sidebar, self.details):
             widget_layout = widget.layout()
             if widget_layout is not None:
                 widget_layout.setSpacing(spacing)
         self.splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", 6))
+        self.sidebar_splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", 6))
         if not self._splitter_user_adjusted and not self._splitter_layout_applied:
             self._apply_initial_splitter_sizes()
 
@@ -431,8 +507,8 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         width = max(1, self.splitter.width())
         if width < 120:
             return
-        sidebar = max(180, min(320, int(width * 0.26)))
-        center = max(180, width - sidebar)
+        sidebar = max(112, min(240, int(width * 0.30)))
+        center = max(96, width - sidebar)
         self.splitter.setSizes([sidebar, center])
         self._splitter_layout_applied = True
 
@@ -467,7 +543,7 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
             item = QtWidgets.QTreeWidgetItem([asset_type])
             item.setData(0, QtCore.Qt.UserRole, ("type", asset_type))
             self.nav_tree.addTopLevelItem(item)
-        categories = sorted({asset.category for asset in self._assets if asset.category})
+        categories = sorted({asset.category for asset in self._assets if asset.category}, key=self._category_sort_key)
         if categories:
             folders = QtWidgets.QTreeWidgetItem(["Folders / Categories"])
             folders.setData(0, QtCore.Qt.UserRole, ("type", "All"))
@@ -494,6 +570,12 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
             yield root
             for child_index in range(root.childCount()):
                 yield root.child(child_index)
+
+    def _category_sort_key(self, category: str) -> tuple[int, str]:
+        try:
+            return (MODEL_CATEGORY_ORDER.index(category), category)
+        except ValueError:
+            return (len(MODEL_CATEGORY_ORDER), category)
 
     def _on_navigation_changed(self) -> None:
         item = self.nav_tree.currentItem()
@@ -547,8 +629,33 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
     def _matches_tag(self, asset: ContentAssetDescriptor, tag: str) -> bool:
         haystack = " ".join([asset.category, asset.source, *asset.tags]).lower()
         mapping = {
-            "Characters": "character",
+            "Player Characters": "player characters",
+            "Party Members": "party members",
+            "Commoners": "commoners",
+            "NPCs": "npcs",
+            "Droids": "droids",
+            "Turrets": "turrets",
+            "Creatures": "creatures",
+            "Holograms": "holograms",
+            "Supermodels": "supermodels",
             "Modules": "module",
+            "Level Assets": "level assets",
+            "Environment": "environment",
+            "Skyboxes": "skyboxes",
+            "Minigame": "minigame",
+            "Menus": "menus",
+            "GUI": "gui",
+            "Placeables": "placeables",
+            "Doors": "doors",
+            "Engine Items": "engine items",
+            "Inventory": "inventory",
+            "Weapons": "weapons",
+            "Visual FX": "visual fx",
+            "Visuals": "visuals",
+            "Planets": "planets",
+            "Misc Models": "misc models",
+            "Stunts": "stunts",
+            "Uncategorised": "uncategorised",
             "Templates": "template",
             "Current Model": "current model",
         }
@@ -561,12 +668,18 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
             return icon("cat_module", 16)
         if asset.asset_type == "Blueprint":
             return icon("skeleton", 16)
-        if asset.category == "Creature":
+        if asset.category in {"Creatures", "Droids", "Turrets", "Holograms"}:
             return icon("cat_creature", 16)
-        if asset.category == "Character":
+        if asset.category in {"NPCs", "Party Members", "Player Characters", "Commoners", "Supermodels"}:
             return icon("cat_character", 16)
-        if asset.category == "Item/Armor/Weapons":
+        if asset.category in {"Inventory", "Weapons", "Placeables", "Item/Armor/Weapons"}:
             return icon("cat_item", 16)
+        if asset.category in {
+            "Environment", "Doors", "Engine Items", "Visual FX", "Visuals", "Planets",
+            "Misc Models", "Stunts", "Skyboxes", "Minigame", "Menus", "GUI",
+            "Level Assets", "Uncategorised",
+        }:
+            return icon("cat_other", 16)
         return icon("library", 16)
 
     def _update_details(self) -> None:
@@ -612,7 +725,7 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
             return
         row = asset.row
         if row.get("resref"):
-            self.loadRequested.emit(str(row.get("resref", "")), str(row.get("game", "")))
+            self.primarySceneLoadRequested.emit(dict(row))
 
     def _show_context_menu(self, pos: QtCore.QPoint) -> None:
         item = self.asset_view.itemAt(pos)
