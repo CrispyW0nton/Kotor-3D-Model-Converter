@@ -2248,8 +2248,25 @@ def test_wgpu_mesh_hover_edges_are_translucent_and_isolated_from_selection_edges
     assert renderer.show_mesh_hover_edges is False
     assert 'getattr(self, "show_mesh_hover_edges", False)' in draw_source
     assert 'getattr(self, "hovered_edge_alpha", 0.45)' in draw_source
-    assert "self._set_line_uniform(render_pass, mvp, color)" in edge_source
+    assert "self._set_line_uniform(render_pass, self._mesh_mvp_matrix(mvp, mesh_data), color)" in edge_source
     assert "wgpu.BlendFactor.src_alpha" in pipeline_source
+
+
+def test_wgpu_skinned_edge_overlay_uses_skin_palette_during_animation() -> None:
+    from src.gui.qt_lib.rendering import wgpu_renderer
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    create_source = inspect.getsource(WgpuRenderer._create_skinned_line_pipeline)
+    edge_source = inspect.getsource(WgpuRenderer._draw_edge_items)
+
+    assert "pipeline_lines_skinned" in create_source
+    assert "_SKINNED_LINE_WGSL" in create_source
+    assert "self.skin_bind_group_layout" in create_source
+    assert "get_or_update_skin_palette" in edge_source
+    assert "render_pass.set_bind_group(1, skin_resource.bind_group)" in edge_source
+    assert "pipeline = self.pipeline_lines_skinned" in edge_source
+    assert "@group(1) @binding(0)" in wgpu_renderer._SKINNED_LINE_WGSL
+    assert "locals.mvp * skin_position(input)" in wgpu_renderer._SKINNED_LINE_WGSL
 
 
 def test_wgpu_render_consumes_mesh_hover_payload() -> None:

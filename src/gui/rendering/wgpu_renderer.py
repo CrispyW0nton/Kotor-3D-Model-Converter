@@ -998,6 +998,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.pipeline_mesh_skinned_cutout = None
         self.pipeline_mesh_skinned_blend = None
         self.pipeline_lines = None
+        self.pipeline_lines_skinned = None
         self.pipeline_gizmo_lines = None
         self.pipeline_pick = None
         self.skeleton_resource: WgpuSkeletonResource | None = None
@@ -1038,6 +1039,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.alpha_pipeline_status = "not created"
         self.mesh_pipeline_status = "not created"
         self.line_pipeline_status = "not created"
+        self.skinned_line_pipeline_status = "not created"
         self.gizmo_pipeline_status = "not created"
         self.pick_pipeline_status = "not created"
         self.last_pick_diagnostics: dict[str, object] = {}
@@ -1424,7 +1426,9 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 self._create_line_pipeline()
             except Exception as exc:
                 self.pipeline_lines = None
+                self.pipeline_lines_skinned = None
                 self.line_pipeline_status = f"unavailable: {exc}"
+                self.skinned_line_pipeline_status = f"unavailable: {exc}"
                 self.last_display_mode_warning = f"WGPU line pipeline unavailable: {exc}"
                 log.warning("WgpuRenderer: line pipeline unavailable: %s", exc)
             try:
@@ -1864,6 +1868,71 @@ class WgpuRenderer(NullDiagnosticRenderer):
             },
         )
         self.line_pipeline_status = "ready"
+        self._create_skinned_line_pipeline()
+
+    def _create_skinned_line_pipeline(self) -> None:
+        import wgpu
+
+        if self.line_bind_group_layout is None or self.skin_bind_group_layout is None:
+            self.skinned_line_pipeline_status = "unavailable: line or skin bind group layout missing"
+            return
+        try:
+            pipeline_layout = self.device.create_pipeline_layout(
+                bind_group_layouts=[self.line_bind_group_layout, self.skin_bind_group_layout]
+            )
+            shader = self.device.create_shader_module(code=_SKINNED_LINE_WGSL)
+            self.pipeline_lines_skinned = self.device.create_render_pipeline(
+                label="WGPU skinned mesh edge lines",
+                layout=pipeline_layout,
+                vertex={
+                    "module": shader,
+                    "entry_point": "vs_main",
+                    "buffers": [
+                        {
+                            "array_stride": 72,
+                            "step_mode": wgpu.VertexStepMode.vertex,
+                            "attributes": [
+                                {"format": wgpu.VertexFormat.float32x3, "offset": 0, "shader_location": 0},
+                                {"format": wgpu.VertexFormat.uint32x4, "offset": 40, "shader_location": 4},
+                                {"format": wgpu.VertexFormat.float32x4, "offset": 56, "shader_location": 5},
+                            ],
+                        }
+                    ],
+                },
+                primitive={"topology": wgpu.PrimitiveTopology.line_list},
+                depth_stencil={
+                    "format": self.depth_format,
+                    "depth_write_enabled": False,
+                    "depth_compare": wgpu.CompareFunction.less_equal,
+                },
+                multisample=None,
+                fragment={
+                    "module": shader,
+                    "entry_point": "fs_main",
+                    "targets": [
+                        {
+                            "format": self.format,
+                            "blend": {
+                                "color": {
+                                    "src_factor": wgpu.BlendFactor.src_alpha,
+                                    "dst_factor": wgpu.BlendFactor.one_minus_src_alpha,
+                                    "operation": wgpu.BlendOperation.add,
+                                },
+                                "alpha": {
+                                    "src_factor": wgpu.BlendFactor.one,
+                                    "dst_factor": wgpu.BlendFactor.one_minus_src_alpha,
+                                    "operation": wgpu.BlendOperation.add,
+                                },
+                            },
+                        }
+                    ],
+                },
+            )
+            self.skinned_line_pipeline_status = "ready"
+        except Exception as exc:
+            self.pipeline_lines_skinned = None
+            self.skinned_line_pipeline_status = f"unavailable: {exc}"
+            log.warning("WgpuRenderer: skinned line pipeline unavailable: %s", exc)
 
     def _create_gizmo_line_pipeline(self) -> None:
         import wgpu
@@ -2393,14 +2462,39 @@ class WgpuRenderer(NullDiagnosticRenderer):
             if mode is ViewportDisplayMode.HIDDEN_LINE
             else (*tuple(self.wire_color[:3]), 1.0)
         )
-        render_pass.set_pipeline(self.pipeline_lines)
         drawn = 0
         for mesh_data in mesh_items:
             try:
                 resource = self.resource_cache.get_or_upload_mesh(mesh_data)
                 if resource is None or resource.edge_index_buffer is None or resource.edge_index_count <= 0:
                     continue
+                pipeline = self.pipeline_lines
+                skin_resource = None
+                if bool(getattr(mesh_data, "is_skinned", False)) and self._active_anim_pose is not None:
+                    if self.pipeline_lines_skinned is not None:
+                        try:
+                            skin_resource = self.resource_cache.get_or_update_skin_palette(
+                                mesh_data,
+                                self._active_anim_pose,
+                                self._active_scene,
+                            )
+                        except Exception as exc:
+                            self.last_skinning_error = f"WGPU edge skin palette upload failed: {exc}"
+                            skin_resource = None
+                        if skin_resource is not None:
+                            pipeline = self.pipeline_lines_skinned
+                            self.skinned_line_pipeline_status = "ready"
+                        else:
+                            self.last_skinning_error = self.last_skinning_error or "WGPU edge skin palette unavailable; drawing bind-pose edges"
+                    else:
+                        self.last_skinning_error = (
+                            self.skinned_line_pipeline_status
+                            or "WGPU skinned edge pipeline unavailable; drawing bind-pose edges"
+                        )
+                render_pass.set_pipeline(pipeline)
                 self._set_line_uniform(render_pass, self._mesh_mvp_matrix(mvp, mesh_data), color)
+                if skin_resource is not None:
+                    render_pass.set_bind_group(1, skin_resource.bind_group)
                 render_pass.set_vertex_buffer(0, resource.vertex_buffer)
                 render_pass.set_index_buffer(resource.edge_index_buffer, wgpu.IndexFormat.uint32)
                 render_pass.draw_indexed(resource.edge_index_count, 1, 0, 0, 0)
@@ -3526,6 +3620,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.pipeline_mesh_skinned_cutout = None
         self.pipeline_mesh_skinned_blend = None
         self.pipeline_lines = None
+        self.pipeline_lines_skinned = None
         self.pipeline_gizmo_lines = None
         self.pipeline_pick = None
         self.skeleton_resource = None
@@ -3780,6 +3875,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "gizmo_render_pipeline_status": self.gizmo_pipeline_status,
             "skeleton_overlay_pipeline_status": self.skeleton_overlay_pipeline_status,
             "skinned_mesh_pipeline_status": self.skinned_mesh_pipeline_status,
+            "skinned_edge_overlay_status": self.skinned_line_pipeline_status,
             "gpu_skinning_status": self.gpu_skinning_status,
             "gizmo_hover_target": self._active_picking_diagnostics.get("gizmo_hover_target"),
             "active_gizmo_tool": self._active_picking_diagnostics.get("active_gizmo_tool"),
@@ -3803,6 +3899,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "line_pipeline_status": self.line_pipeline_status,
             "gizmo_pipeline_status": self.gizmo_pipeline_status,
             "edge_overlay_status": "ready" if self.pipeline_lines is not None else self.line_pipeline_status,
+            "skinned_edge_pipeline_status": self.skinned_line_pipeline_status,
             "opaque_pipeline_status": "ready" if self.pipeline_mesh is not None else "not created",
             "alpha_cutout_pipeline_status": "ready" if self.pipeline_mesh_cutout is not None else "not created",
             "alpha_pipeline_status": self.alpha_pipeline_status,
@@ -3984,6 +4081,52 @@ struct VertexOutput {
 fn vs_main(input: VertexInput) -> VertexOutput {
     var out: VertexOutput;
     out.position = locals.mvp * vec4<f32>(input.position, 1.0);
+    return out;
+}
+
+@fragment
+fn fs_main(_input: VertexOutput) -> @location(0) vec4<f32> {
+    return locals.color;
+}
+"""
+
+
+_SKINNED_LINE_WGSL = """
+struct Locals {
+    mvp: mat4x4<f32>,
+    color: vec4<f32>,
+};
+
+@group(0) @binding(0)
+var<uniform> locals: Locals;
+
+@group(1) @binding(0)
+var<storage, read> bone_palette: array<mat4x4<f32>>;
+
+struct VertexInput {
+    @location(0) position: vec3<f32>,
+    @location(4) bone_indices: vec4<u32>,
+    @location(5) bone_weights: vec4<f32>,
+};
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+};
+
+fn skin_position(input: VertexInput) -> vec4<f32> {
+    let p = vec4<f32>(input.position, 1.0);
+    var out = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    out = out + (bone_palette[input.bone_indices.x] * p) * input.bone_weights.x;
+    out = out + (bone_palette[input.bone_indices.y] * p) * input.bone_weights.y;
+    out = out + (bone_palette[input.bone_indices.z] * p) * input.bone_weights.z;
+    out = out + (bone_palette[input.bone_indices.w] * p) * input.bone_weights.w;
+    return vec4<f32>(out.xyz, 1.0);
+}
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+    var out: VertexOutput;
+    out.position = locals.mvp * skin_position(input);
     return out;
 }
 
