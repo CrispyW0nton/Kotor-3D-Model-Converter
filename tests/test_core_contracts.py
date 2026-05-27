@@ -2444,7 +2444,7 @@ def test_qt_skeleton_panel_can_sync_root_without_emitting_selection() -> None:
 
     from PySide6 import QtWidgets
 
-    from src.gui.qt_lib.panels.qt_properties_panel import QtSkeletonPanel
+    from src.gui.qt_lib.panels.qt_skeleton_panel import QtSkeletonPanel
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     child = SimpleNamespace(name="head", type_label="dummy", is_mesh=False, children=[])
@@ -2464,6 +2464,64 @@ def test_qt_skeleton_panel_can_sync_root_without_emitting_selection() -> None:
     assert emitted == []
     assert panel.tree.currentItem().text(0).endswith("N_Bith")
     assert panel.get_selected_nodes() == [root]
+
+
+def test_qt_skeleton_panel_uses_detailed_browser_columns_and_icons() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtGui, QtWidgets
+
+    from src.gui.qt_lib.panels.qt_skeleton_panel import QtSkeletonPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    hook = SimpleNamespace(name="rhandhook", type_label="dummy", is_mesh=False, children=[], attachments=["w_lghtsbr"])
+    mesh = SimpleNamespace(
+        name="torso_g",
+        type_label="trimesh",
+        is_mesh=True,
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+        faces=[(0, 1, 1)],
+        children=[],
+    )
+    root = SimpleNamespace(name="P_CarthBB", type_label="dummy", is_mesh=False, children=[hook, mesh])
+    hook.parent = root
+    mesh.parent = root
+    model = SimpleNamespace(root_node=root, node_count=lambda: 3, mesh_nodes=lambda: [mesh])
+
+    panel = QtSkeletonPanel()
+    panel.load_model(model)
+
+    assert [panel.tree.headerItem().text(index) for index in range(panel.tree.columnCount())] == [
+        "Node",
+        "Role",
+        "Mesh",
+        "Verts",
+        "Faces",
+        "Children",
+        "Attach",
+    ]
+    assert panel.tree.header().sectionResizeMode(0) == QtWidgets.QHeaderView.Stretch
+    assert panel.tree.header().sectionResizeMode(1) == QtWidgets.QHeaderView.ResizeToContents
+
+    root_item = panel.tree.topLevelItem(0)
+    hook_item = root_item.child(0)
+    mesh_item = root_item.child(1)
+    assert not root_item.icon(0).isNull()
+    assert hook_item.text(1) == "Hook"
+    assert hook_item.text(6) == "1"
+    assert mesh_item.text(1) == "Mesh"
+    assert mesh_item.text(2) == "trimesh"
+    assert mesh_item.text(3) == "2"
+    assert mesh_item.text(4) == "1"
+    option = QtWidgets.QStyleOptionViewItem()
+    option.initFrom(panel.tree)
+    option.fontMetrics = QtGui.QFontMetrics(panel.tree.font())
+    assert panel.tree.itemDelegate().sizeHint(option, panel.tree.model().index(0, 0)).height() >= 24
+
+    panel._filter("torso")
+    assert root_item.isHidden() is False
+    assert hook_item.isHidden() is True
+    assert mesh_item.isHidden() is False
 
 
 def test_main_window_routes_scene_root_skeleton_selection_through_scene_object() -> None:

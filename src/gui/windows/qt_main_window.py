@@ -46,7 +46,8 @@ from src.gui.qt_lib.assets.qt_theme import (
     update_legacy_palette,
 )
 from src.gui.qt_lib.assets.qt_matrix_background import QtMatrixEngine, QtMatrixLabel, QtMatrixPanel
-from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel, QtSkeletonPanel
+from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
+from src.gui.qt_lib.panels.qt_skeleton_panel import QtSkeletonPanel
 from src.gui.qt_lib.panels.qt_scene_outliner_panel import QtSceneOutlinerPanel
 from src.gui.qt_lib.viewports.qt_viewport import QtMainViewportWidget
 from src.gui.qt_lib.panels.qt_animation_panel import (
