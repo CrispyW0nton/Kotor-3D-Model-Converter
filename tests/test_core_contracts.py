@@ -2890,12 +2890,24 @@ def test_main_window_command_bar_is_fixed_and_docks_are_scrollable() -> None:
     button_source = inspect.getsource(QtGhostRiggerMainWindow._tool_button)
     visibility_source = inspect.getsource(QtGhostRiggerMainWindow._on_detachable_panel_visibility)
     dock_source = inspect.getsource(QtGhostRiggerMainWindow._create_detachable_panel)
+    init_source = inspect.getsource(QtGhostRiggerMainWindow.__init__)
+    top_level_source = inspect.getsource(QtGhostRiggerMainWindow._on_detachable_panel_top_level_changed)
+    show_detachable_source = inspect.getsource(QtGhostRiggerMainWindow._show_detachable_panel)
+    new_host_source = inspect.getsource(QtGhostRiggerMainWindow._move_detachable_panel_to_new_host)
 
     assert "CommandBarScroll" not in command_source
     assert "host_layout.addWidget(bar, 1)" in command_source
     assert "visual_profile_combo" in command_source
     assert "make_scrollable_panel(widget" in dock_source
     assert 'f"{key}DockScroll"' in dock_source
+    assert "QtWidgets.QMainWindow.AllowNestedDocks" in init_source
+    assert "QtWidgets.QMainWindow.AllowTabbedDocks" in init_source
+    assert "QtWidgets.QMainWindow.GroupedDragging" in init_source
+    assert "QtWidgets.QDockWidget.DockWidgetFloatable" in dock_source
+    assert "_promote_detached_panel_window" not in top_level_source
+    assert "dock.setFloating(True)" in show_detachable_source
+    assert "_promote_detached_panel_window" not in show_detachable_source
+    assert "QtFloatingDockHost(self, dock.windowTitle(), key)" in new_host_source
 
 
 def test_viewport_and_character_builder_toolbars_are_scrollable() -> None:

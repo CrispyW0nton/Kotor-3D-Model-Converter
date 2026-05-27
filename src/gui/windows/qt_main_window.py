@@ -1243,6 +1243,10 @@ class QtFloatingDockHost(QtWidgets.QMainWindow):
         except Exception:
             pass
         self.setDockNestingEnabled(True)
+        self._dock_fill_placeholder = QtWidgets.QWidget(self)
+        self._dock_fill_placeholder.setObjectName(f"{host_key}DockFillPlaceholder")
+        self._dock_fill_placeholder.setFixedSize(0, 0)
+        self.setCentralWidget(self._dock_fill_placeholder)
         self.setDockOptions(
             QtWidgets.QMainWindow.AnimatedDocks
             | QtWidgets.QMainWindow.AllowNestedDocks
@@ -1288,28 +1292,15 @@ class QtFloatingDockHost(QtWidgets.QMainWindow):
                 except Exception:
                     pass
             dock.setParent(self)
-            central_dock = self.centralWidget()
-            if isinstance(central_dock, QtWidgets.QDockWidget) and central_dock is not dock:
-                self.takeCentralWidget()
-                existing_key = self._key_for_dock(central_dock)
-                self.addDockWidget(self._default_area_for_key(existing_key), central_dock)
             existing_docks = [
                 existing
                 for existing in self.findChildren(QtWidgets.QDockWidget)
                 if existing is not dock and _qt_object_alive(existing)
             ]
-            if not existing_docks:
-                try:
-                    self.removeDockWidget(dock)
-                except Exception:
-                    pass
-                self.setCentralWidget(dock)
-                self._relax_dock_size_limits(dock)
-            else:
-                self.addDockWidget(area, dock)
-                self._relax_dock_size_limits(dock)
-                if tabify:
-                    self.tabifyDockWidget(existing_docks[-1], dock)
+            self.addDockWidget(area, dock)
+            self._relax_dock_size_limits(dock)
+            if tabify and existing_docks:
+                self.tabifyDockWidget(existing_docks[-1], dock)
             dock.show()
             if key not in self.dock_keys:
                 self.dock_keys.append(key)
@@ -1356,8 +1347,6 @@ class QtFloatingDockHost(QtWidgets.QMainWindow):
         ]
 
     def _expand_dock_layout(self) -> None:
-        if isinstance(self.centralWidget(), QtWidgets.QDockWidget):
-            return
         docks = self._dock_widgets()
         if not docks:
             return
@@ -1372,18 +1361,7 @@ class QtFloatingDockHost(QtWidgets.QMainWindow):
             pass
 
     def _promote_single_dock_to_central(self) -> None:
-        if isinstance(self.centralWidget(), QtWidgets.QDockWidget):
-            return
-        docks = self._dock_widgets()
-        if len(docks) != 1:
-            return
-        dock = docks[0]
-        try:
-            self.removeDockWidget(dock)
-            self.setCentralWidget(dock)
-            dock.show()
-        except Exception:
-            pass
+        self._expand_dock_layout()
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
         super().resizeEvent(event)
@@ -1417,6 +1395,20 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def __init__(self, app_root: Optional[Path] = None, startup_input: Optional[dict] = None):
         super().__init__()
+        self.setDockNestingEnabled(True)
+        self.setDockOptions(
+            QtWidgets.QMainWindow.AnimatedDocks
+            | QtWidgets.QMainWindow.AllowNestedDocks
+            | QtWidgets.QMainWindow.AllowTabbedDocks
+            | QtWidgets.QMainWindow.GroupedDragging
+        )
+        all_dock_areas = (
+            QtCore.Qt.LeftDockWidgetArea
+            | QtCore.Qt.RightDockWidgetArea
+            | QtCore.Qt.TopDockWidgetArea
+            | QtCore.Qt.BottomDockWidgetArea
+        )
+        self.setTabPosition(all_dock_areas, QtWidgets.QTabWidget.North)
         self.app_root = app_root or Path(__file__).resolve().parents[2]
         self.startup_input = startup_input or {}
         self.settings_path = self.app_root / "settings.json"
@@ -2702,7 +2694,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         dock.show()
         self._sync_dock_toggle_action(key, True)
         dock.setFloating(True)
-        self._promote_detached_panel_window(key, dock)
         self._persist_selected_layout_dock_state()
 
     def _show_workspace_dock(self, key: str) -> None:
@@ -2764,8 +2755,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         dock = self._detachable_dock_for_key(key)
         if dock is None:
             return
-        if floating and not self._dock_rehosting:
-            QtCore.QTimer.singleShot(0, lambda k=key: self._promote_detached_panel_window(k))
         self._remember_detachable_panel_state(key, dock)
 
     def _promote_detached_panel_window(self, key: str, dock: Optional[QtWidgets.QDockWidget] = None) -> None:

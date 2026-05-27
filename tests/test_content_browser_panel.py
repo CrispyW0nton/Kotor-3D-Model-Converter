@@ -440,7 +440,8 @@ def test_floating_content_browser_host_resizes_single_dock() -> None:
     for _ in range(8):
         QtWidgets.QApplication.processEvents()
 
-    assert host.centralWidget() is dock
+    assert host.centralWidget() is not dock
+    assert host.dockWidgetArea(dock) == QtCore.Qt.LeftDockWidgetArea
     assert dock.width() >= 900
 
     host.resize(1180, 560)
@@ -501,11 +502,12 @@ def test_floating_dock_host_can_combine_detached_panels() -> None:
     }
 
     content_host.add_detachable_dock("content_browser", content_dock, QtCore.Qt.LeftDockWidgetArea)
-    assert content_host.centralWidget() is content_dock
+    assert content_host.centralWidget() is not content_dock
+    assert content_host.dockWidgetArea(content_dock) == QtCore.Qt.LeftDockWidgetArea
     properties_host.add_detachable_dock("properties", properties_dock, QtCore.Qt.RightDockWidgetArea)
     content_host.add_detachable_dock("properties", properties_dock, QtCore.Qt.RightDockWidgetArea)
 
-    assert content_host.centralWidget() is None
+    assert content_host.centralWidget() is not None
     assert content_host.dock_keys == ["content_browser", "properties"]
     assert properties_host.dock_keys == []
     assert owner._floating_dock_hosts["properties"] is content_host
