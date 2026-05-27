@@ -920,8 +920,8 @@ def test_qt_viewport_mesh_pick_requires_real_triangle_and_hover_outline() -> Non
     assert "hull =" not in selected_outline_source
     assert "255, 212, 0, 230" not in selected_outline_source
     assert 'node is getattr(self._renderer, "selected_node", None)' in hover_outline_source
-    assert "_mesh_hover_suppressed_for_animation()" in hover_outline_source
-    assert "_mesh_hover_suppressed_for_animation()" in hover_update_source
+    assert "_mesh_hover_suppressed_for_animation(self)" in hover_outline_source
+    assert "_mesh_hover_suppressed_for_animation(self)" in hover_update_source
     assert "animation hover suppressed" in hover_update_source
     assert "self._renderer._get_world_verts_for_node(node)" in projected_bounds_source
     assert "cpu_skin_vbo_arrays" not in source

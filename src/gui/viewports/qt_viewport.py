@@ -6764,8 +6764,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         if not self.mesh_hover_enabled:
             self._clear_mesh_hover(reason="mesh hover disabled")
             return
-        if self._mesh_hover_suppressed_for_animation():
-            self._clear_mesh_hover(reason="animation hover suppressed")
+        if QtViewportWidget._mesh_hover_suppressed_for_animation(self):
+            QtViewportWidget._clear_mesh_hover(self, reason="animation hover suppressed")
             return
         if self.model is None:
             self._clear_mesh_hover(reason="mesh hover model cleared")
@@ -7596,7 +7596,7 @@ class QtViewportWidget(QtWidgets.QWidget):
     def _draw_hovered_mesh_outline(self, draw, w: int, h: int) -> None:
         if not self.mesh_hover_enabled:
             return
-        if self._mesh_hover_suppressed_for_animation():
+        if QtViewportWidget._mesh_hover_suppressed_for_animation(self):
             return
         node = getattr(self, "_hovered_mesh_node", None)
         if node is None or getattr(node, "_gr_hidden", False):
