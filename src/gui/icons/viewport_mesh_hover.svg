@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <defs>
+    <linearGradient id="meshFace" x1="5" y1="4" x2="19" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2F4052"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="hoverGlow" x1="4" y1="20" x2="20" y2="4" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00D7B5"/>
+      <stop offset="1" stop-color="#FFE066"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#meshFace)" d="M12 3.2 4.2 7.6v8.8l7.8 4.4 7.8-4.4V7.6z"/>
+  <path fill="#526173" d="M4.2 7.6 12 12l7.8-4.4L12 3.2z"/>
+  <g fill="none" stroke="#AEB8C5" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" opacity="0.9">
+    <path d="M4.2 7.6 12 3.2l7.8 4.4v8.8L12 20.8l-7.8-4.4z"/>
+    <path d="M4.2 7.6 12 12l7.8-4.4M12 12v8.8M4.2 16.4 12 12l7.8 4.4"/>
+    <path d="M8.1 5.4v13.2M15.9 5.4v13.2"/>
+  </g>
+  <path fill="none" stroke="#071311" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity="0.55" d="M5.2 6.9 12 3.1l6.8 3.8v8.2L12 20.9l-6.8-5.8z"/>
+  <path fill="none" stroke="url(#hoverGlow)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M5.2 6.9 12 3.1l6.8 3.8v8.2L12 20.9l-6.8-5.8z"/>
+  <circle cx="18.2" cy="5.8" r="2.2" fill="#FFE066" stroke="#0B1220" stroke-width="1"/>
+</svg>

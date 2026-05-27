@@ -35,6 +35,18 @@ If you get an ImportError, fix the import path — don't ask the user to open Gh
   for UI, startup, viewport, theme/layout, and workflow checks. Do not replace
   this with MCP calls, direct widget screenshots, or backend-only probes.
 
+## Renderer module test fixture
+
+When working on renderer behavior for imported modules, use `K2:001ebo1` /
+`001EBO1` as the primary visible test module unless the user explicitly names
+another module. It is the baseline module for OpenGL-vs-D3D lighting,
+lightmap, texture, and material parity checks.
+
+## Animation test fixture
+
+When testing animations, use `N_DarthMalak` with the `walk` animation looped
+unless the user explicitly names another model or animation.
+
 ## Change log
 
 After any fix or software change is successfully completed, update `CHANGES.md`

@@ -1,0 +1,1350 @@
+{
+  "module": "K2:001ebo1",
+  "artifacts": {
+    "01_wgpu_d3d12_realistic": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\d3d_parity_001ebo1\\01_wgpu_d3d12_realistic.png",
+    "02_wgpu_d3d12_mesh_hover": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\d3d_parity_001ebo1\\02_wgpu_d3d12_mesh_hover.png",
+    "03_wgpu_d3d12_light_selected": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\d3d_parity_001ebo1\\03_wgpu_d3d12_light_selected.png",
+    "04_moderngl_realistic_reference": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\d3d_parity_001ebo1\\04_moderngl_realistic_reference.png"
+  },
+  "events": [
+    "forced wgpu_d3d12 renderer",
+    "loaded module"
+  ],
+  "diagnostics": {
+    "d3d_realistic": {
+      "name": "WGPU Direct3D 12",
+      "backend_id": "wgpu_d3d12",
+      "available": true,
+      "api": "WGPU",
+      "backend": "D3D12",
+      "format": "rgba8unorm-srgb",
+      "surface_format": "rgba8unorm-srgb",
+      "depth_format": "depth24plus",
+      "adapter": {
+        "vendor": "32.0.15.8088",
+        "device": "NVIDIA GeForce GTX 1060 6GB"
+      },
+      "initialized": true,
+      "visible_surface_type": "QRenderWidget",
+      "live_surface": true,
+      "supports_grid": true,
+      "supports_scene_meshes": true,
+      "supports_textures": true,
+      "supports_object_picking": true,
+      "supports_cpu_ray_picking": true,
+      "supports_gpu_id_picking": true,
+      "supports_selection_highlight": true,
+      "supports_gizmo_drawing": true,
+      "supports_gizmo_interaction": true,
+      "supports_scene_lighting": true,
+      "supports_light_helpers": true,
+      "supports_light_volumes": true,
+      "supports_batching": true,
+      "supports_instancing": true,
+      "supports_texture_streaming": true,
+      "supports_texture_arrays": false,
+      "supports_atlas": false,
+      "supports_frustum_culling": true,
+      "supports_gpu_timing": false,
+      "supports_dynamic_quality": true,
+      "performance_settings": {
+        "enable_batching": true,
+        "enable_instancing": true,
+        "enable_frustum_culling": true,
+        "enable_lazy_upload": true,
+        "enable_texture_arrays": false,
+        "enable_texture_atlas": false,
+        "profile_frames": false,
+        "dynamic_quality": true,
+        "max_texture_memory_mb": 512,
+        "max_uploads_per_frame": 16
+      },
+      "performance": {
+        "frame_time_ms": 43.08,
+        "fps_estimate": 23.21,
+        "cpu_prepare_ms": 0.0,
+        "gpu_submit_ms": 0.0,
+        "pick_pass_ms": 0.0,
+        "overlay_ms": 0.0,
+        "gizmo_ms": 0.0,
+        "skeleton_ms": 0.0,
+        "animation_pose_upload_ms": 0.0,
+        "alpha_sort_ms": 0.001,
+        "draw_calls": 30,
+        "mesh_count": 19,
+        "visible_mesh_count": 19,
+        "culled_mesh_count": 0,
+        "material_group_count": 19,
+        "texture_bind_count": 19,
+        "buffer_upload_count": 73,
+        "texture_upload_count": 18,
+        "bind_group_creation_count": 19,
+        "pipeline_switch_count": 1,
+        "batch_count": 19,
+        "instance_group_count": 0,
+        "instance_count": 0,
+        "alpha_object_count": 0,
+        "skeleton_pose_upload_count": 0,
+        "pending_uploads": 0,
+        "cache_hits": 78,
+        "cache_misses": 55,
+        "estimated_gpu_memory_bytes": 3593380,
+        "estimated_texture_memory_bytes": 2834432,
+        "estimated_vertex_index_memory_bytes": 758948
+      },
+      "performance_audit": {
+        "bottlenecks": [
+          "mesh adapter iteration happens on the Python render path",
+          "per-mesh uniform writes remain necessary until instance buffers are active",
+          "transparent meshes are sorted at mesh level only",
+          "general KotOR textures remain individual sampled textures"
+        ],
+        "stage9_status": "profiling, batching order, culling, cache stats, pick reuse, and gizmo buffer reuse enabled"
+      },
+      "lighting": {
+        "mode": "scene",
+        "complexity": "off",
+        "rig": "kotor_original",
+        "total_scene_lights": 8,
+        "enabled_lights": 8,
+        "uploaded_lights": 8,
+        "max_wgpu_lights": 64,
+        "helpers_visible": true,
+        "volumes_visible": true,
+        "selected_light": "AuroraLight04",
+        "selected_light_id": 1,
+        "light_buffer_revision": 635990017,
+        "light_buffer_upload_time_ms": 2.163,
+        "wgpu_light_shader_status": "active",
+        "unsupported_light_types_count": 0,
+        "last_lighting_error": "",
+        "last_redraw_reason": "",
+        "helper_draw_calls": 2,
+        "volume_draw_calls": 2,
+        "lighting_shader_active": true,
+        "light_buffer_updates": 0,
+        "diffuse_enabled": true,
+        "specular_enabled": true,
+        "normal_enabled": true,
+        "environment_enabled": true,
+        "lightmap_enabled": false,
+        "lm_intensity": 0.55,
+        "lm_mode": "disabled"
+      },
+      "skeleton_overlay_supported": true,
+      "joint_dot_overlay_supported": true,
+      "bone_selection_supported": true,
+      "skinned_mesh_supported": true,
+      "gpu_skinning_supported": true,
+      "cpu_skinning_fallback_supported": false,
+      "animation_preview_supported": true,
+      "skin_weight_heatmap_supported": false,
+      "max_supported_bones": 128,
+      "bone_matrix_buffer_type": "storage-buffer",
+      "skinned_shader_status": "ready",
+      "supported_display_modes": [
+        "wireframe",
+        "hidden_line",
+        "solid",
+        "shaded",
+        "smooth_shaded",
+        "textured",
+        "textured_lightmapped"
+      ],
+      "fallback_display_modes": {
+        "full_material": "textured_lightmapped",
+        "bounding_box": "solid",
+        "normals_debug": "shaded",
+        "uv_debug": "textured"
+      },
+      "viewport_display": {
+        "display_mode": "textured",
+        "show_grid": true,
+        "show_wire_overlay": false,
+        "show_edged_faces": false,
+        "show_textures": true,
+        "show_lightmaps": false,
+        "show_material_colour": true,
+        "show_alpha": true,
+        "xray": false,
+        "two_sided": true,
+        "show_normals": false,
+        "show_bounds": false,
+        "force_unlit": false,
+        "force_flat_colour": false
+      },
+      "effective_viewport_display": {
+        "display_mode": "textured",
+        "show_grid": true,
+        "show_wire_overlay": false,
+        "show_edged_faces": false,
+        "show_textures": true,
+        "show_lightmaps": false,
+        "show_material_colour": true,
+        "show_alpha": true,
+        "xray": false,
+        "two_sided": true,
+        "show_normals": false,
+        "show_bounds": false,
+        "force_unlit": false,
+        "force_flat_colour": false
+      },
+      "viewport_theme_colors": {
+        "background": [
+          0.1411764705882353,
+          0.1411764705882353,
+          0.1411764705882353
+        ],
+        "grid_minor": [
+          0.23529411764705882,
+          0.23529411764705882,
+          0.23529411764705882
+        ],
+        "grid_major": [
+          0.3176470588235294,
+          0.3176470588235294,
+          0.3176470588235294
+        ],
+        "grid_x_axis": [
+          0.8235294117647058,
+          0.27450980392156865,
+          0.27450980392156865
+        ],
+        "grid_y_axis": [
+          0.27450980392156865,
+          0.7058823529411765,
+          0.35294117647058826
+        ],
+        "wire": [
+          0.18823529411764706,
+          0.5490196078431373,
+          0.7764705882352941
+        ],
+        "hidden_line": [
+          0.396078431372549,
+          0.396078431372549,
+          0.396078431372549
+        ],
+        "hover": [
+          0.18823529411764706,
+          0.5490196078431373,
+          0.7764705882352941
+        ],
+        "selection": [
+          0.18823529411764706,
+          0.5490196078431373,
+          0.7764705882352941
+        ],
+        "light_helper": [
+          1.0,
+          0.8235294117647058,
+          0.25098039215686274
+        ],
+        "null_helper": [
+          0.7019607843137254,
+          0.7019607843137254,
+          0.7019607843137254
+        ],
+        "missing_texture_a": [
+          0.18823529411764706,
+          0.5490196078431373,
+          0.7764705882352941
+        ],
+        "missing_texture_b": [
+          0.1411764705882353,
+          0.1411764705882353,
+          0.1411764705882353
+        ]
+      },
+      "viewport_render_colors": {
+        "target_color_space": "srgb",
+        "background": [
+          0.017641954488384078,
+          0.017641954488384078,
+          0.017641954488384078
+        ],
+        "grid_minor": [
+          0.04518620438567554,
+          0.04518620438567554,
+          0.04518620438567554
+        ],
+        "grid_major": [
+          0.0822827071298148,
+          0.0822827071298148,
+          0.0822827071298148
+        ],
+        "wire": [
+          0.0295568344378088,
+          0.26225065752969623,
+          0.5647115057049292
+        ],
+        "hidden_line": [
+          0.1301364766903643,
+          0.1301364766903643,
+          0.1301364766903643
+        ],
+        "hover": [
+          0.0295568344378088,
+          0.26225065752969623,
+          0.5647115057049292
+        ],
+        "selection": [
+          0.0295568344378088,
+          0.26225065752969623,
+          0.5647115057049292
+        ],
+        "light_helper": [
+          1.0,
+          0.6444796819705821,
+          0.05126945837404324
+        ],
+        "null_helper": [
+          0.45078578283822346,
+          0.45078578283822346,
+          0.45078578283822346
+        ]
+      },
+      "display_mode_downgrade": "",
+      "last_display_mode_warning": "",
+      "picking_provider_active": true,
+      "picking_method": "GPU ID",
+      "last_pick": {},
+      "gpu_pick_pipeline_status": "ready",
+      "selected_object_count": 1,
+      "selected_node_count": 1,
+      "selection_highlight_pipeline_status": "ready",
+      "gizmo_render_pipeline_status": "ready",
+      "skeleton_overlay_pipeline_status": "not created",
+      "skinned_mesh_pipeline_status": "ready",
+      "gpu_skinning_status": "ready",
+      "gizmo_hover_target": null,
+      "active_gizmo_tool": "translate",
+      "active_axis_mode": "",
+      "device_pixel_ratio": 1.0,
+      "surface_widget_class": "QRenderWidget",
+      "input_bridge_installed": true,
+      "grid_pipeline_status": "ready",
+      "mesh_pipeline_status": "ready",
+      "textured_mesh_pipeline_status": "ready",
+      "solid_pipeline_status": "ready",
+      "line_pipeline_status": "ready",
+      "gizmo_pipeline_status": "ready",
+      "edge_overlay_status": "ready",
+      "opaque_pipeline_status": "ready",
+      "alpha_cutout_pipeline_status": "ready",
+      "alpha_pipeline_status": "ready",
+      "active_animation_clip": "",
+      "animation_time": 0.0,
+      "animation_playing": false,
+      "skeleton_count": 0,
+      "bone_count": 0,
+      "selected_bone_count": 0,
+      "skinned_mesh_count": 0,
+      "cpu_skinned_mesh_count": 0,
+      "uploaded_bone_matrix_count": 0,
+      "max_bone_matrices_supported": 128,
+      "pose_revision": 0,
+      "last_skinning_error": "",
+      "last_animation_error": "",
+      "uploaded_mesh_count": 19,
+      "uploaded_material_count": 19,
+      "uploaded_texture_count": 17,
+      "uploaded_vertex_count": 8838,
+      "uploaded_index_count": 10917,
+      "uploaded_edge_index_count": 19736,
+      "texture_memory_estimate_bytes": 2834432,
+      "vertex_index_memory_estimate_bytes": 758948,
+      "estimated_gpu_memory_bytes": 3593380,
+      "fallback_texture_count": 1,
+      "missing_texture_count": 0,
+      "lightmap_texture_count": 0,
+      "resource_cache_hits": 78,
+      "resource_cache_misses": 55,
+      "mesh_upload_count": 19,
+      "texture_upload_count": 18,
+      "buffer_upload_count": 73,
+      "bind_group_creation_count": 19,
+      "last_cache_invalidation_reason": "node cache invalidated",
+      "total_mesh_count": 19,
+      "visible_mesh_count": 19,
+      "culled_mesh_count": 0,
+      "batch_count": 19,
+      "material_group_count": 19,
+      "instance_group_count": 0,
+      "instance_count": 0,
+      "pipeline_switch_count": 1,
+      "pending_uploads": 0,
+      "alpha_object_count": 0,
+      "alpha_sort_time_ms": 0.001,
+      "alpha_sort_mode": "mesh-depth stable descending",
+      "texture_array_status": "prepared; disabled by default",
+      "texture_array_eligible_groups": 3,
+      "texture_array_eligible_textures": 17,
+      "texture_atlas_status": "prepared; disabled by default",
+      "instancing_status": "prepared; conservative grouping diagnostics active",
+      "batching_status": "enabled",
+      "frustum_culling_status": "enabled",
+      "lazy_upload_status": "visible resources uploaded on first draw; hidden/off-frustum resources deferred",
+      "gizmo_buffer_cache_size": 12,
+      "pick_resource_size": [
+        0,
+        0
+      ],
+      "alpha_material_count": 0,
+      "last_texture_upload_error": "",
+      "last_material_binding_error": "",
+      "last_render_counts": {
+        "opaque": 19,
+        "cutout": 0,
+        "blended": 0,
+        "edges": 0,
+        "hovered_edges": 0,
+        "selected_edges": 0,
+        "skeleton_lines": 0,
+        "joint_markers": 0,
+        "light_helper_lines": 128,
+        "light_volume_lines": 672,
+        "gizmo_lines": 6
+      },
+      "mesh_hover_enabled": true,
+      "hovered_mesh": "",
+      "surface_host": {
+        "current_surface_widget_class": "QRenderWidget",
+        "surface_size": [
+          1584,
+          556
+        ],
+        "device_pixel_ratio": 1.0,
+        "input_bridge_installed": true,
+        "overlay_layer_active": true,
+        "live_surface": true,
+        "backend_id": "wgpu_d3d12"
+      },
+      "last_error": ""
+    },
+    "d3d_hover": {
+      "name": "WGPU Direct3D 12",
+      "backend_id": "wgpu_d3d12",
+      "available": true,
+      "api": "WGPU",
+      "backend": "D3D12",
+      "format": "rgba8unorm-srgb",
+      "surface_format": "rgba8unorm-srgb",
+      "depth_format": "depth24plus",
+      "adapter": {
+        "vendor": "32.0.15.8088",
+        "device": "NVIDIA GeForce GTX 1060 6GB"
+      },
+      "initialized": true,
+      "visible_surface_type": "QRenderWidget",
+      "live_surface": true,
+      "supports_grid": true,
+      "supports_scene_meshes": true,
+      "supports_textures": true,
+      "supports_object_picking": true,
+      "supports_cpu_ray_picking": true,
+      "supports_gpu_id_picking": true,
+      "supports_selection_highlight": true,
+      "supports_gizmo_drawing": true,
+      "supports_gizmo_interaction": true,
+      "supports_scene_lighting": true,
+      "supports_light_helpers": true,
+      "supports_light_volumes": true,
+      "supports_batching": true,
+      "supports_instancing": true,
+      "supports_texture_streaming": true,
+      "supports_texture_arrays": false,
+      "supports_atlas": false,
+      "supports_frustum_culling": true,
+      "supports_gpu_timing": false,
+      "supports_dynamic_quality": true,
+      "performance_settings": {
+        "enable_batching": true,
+        "enable_instancing": true,
+        "enable_frustum_culling": true,
+        "enable_lazy_upload": true,
+        "enable_texture_arrays": false,
+        "enable_texture_atlas": false,
+        "profile_frames": false,
+        "dynamic_quality": true,
+        "max_texture_memory_mb": 512,
+        "max_uploads_per_frame": 16
+      },
+      "performance": {
+        "frame_time_ms": 39.507,
+        "fps_estimate": 25.31,
+        "cpu_prepare_ms": 0.0,
+        "gpu_submit_ms": 0.0,
+        "pick_pass_ms": 0.0,
+        "overlay_ms": 0.0,
+        "gizmo_ms": 0.0,
+        "skeleton_ms": 0.0,
+        "animation_pose_upload_ms": 0.0,
+        "alpha_sort_ms": 0.002,
+        "draw_calls": 30,
+        "mesh_count": 19,
+        "visible_mesh_count": 19,
+        "culled_mesh_count": 0,
+        "material_group_count": 19,
+        "texture_bind_count": 19,
+        "buffer_upload_count": 73,
+        "texture_upload_count": 18,
+        "bind_group_creation_count": 19,
+        "pipeline_switch_count": 1,
+        "batch_count": 19,
+        "instance_group_count": 0,
+        "instance_count": 0,
+        "alpha_object_count": 0,
+        "skeleton_pose_upload_count": 0,
+        "pending_uploads": 0,
+        "cache_hits": 154,
+        "cache_misses": 55,
+        "estimated_gpu_memory_bytes": 3593380,
+        "estimated_texture_memory_bytes": 2834432,
+        "estimated_vertex_index_memory_bytes": 758948
+      },
+      "performance_audit": {
+        "bottlenecks": [
+          "mesh adapter iteration happens on the Python render path",
+          "per-mesh uniform writes remain necessary until instance buffers are active",
+          "transparent meshes are sorted at mesh level only",
+          "general KotOR textures remain individual sampled textures"
+        ],
+        "stage9_status": "profiling, batching order, culling, cache stats, pick reuse, and gizmo buffer reuse enabled"
+      },
+      "lighting": {
+        "mode": "scene",
+        "complexity": "off",
+        "rig": "kotor_original",
+        "total_scene_lights": 8,
+        "enabled_lights": 8,
+        "uploaded_lights": 8,
+        "max_wgpu_lights": 64,
+        "helpers_visible": true,
+        "volumes_visible": true,
+        "selected_light": "AuroraLight04",
+        "selected_light_id": 1,
+        "light_buffer_revision": 635990017,
+        "light_buffer_upload_time_ms": 2.163,
+        "wgpu_light_shader_status": "active",
+        "unsupported_light_types_count": 0,
+        "last_lighting_error": "",
+        "last_redraw_reason": "",
+        "helper_draw_calls": 2,
+        "volume_draw_calls": 2,
+        "lighting_shader_active": true,
+        "light_buffer_updates": 0,
+        "diffuse_enabled": true,
+        "specular_enabled": true,
+        "normal_enabled": true,
+        "environment_enabled": true,
+        "lightmap_enabled": false,
+        "lm_intensity": 0.55,
+        "lm_mode": "disabled"
+      },
+      "skeleton_overlay_supported": true,
+      "joint_dot_overlay_supported": true,
+      "bone_selection_supported": true,
+      "skinned_mesh_supported": true,
+      "gpu_skinning_supported": true,
+      "cpu_skinning_fallback_supported": false,
+      "animation_preview_supported": true,
+      "skin_weight_heatmap_supported": false,
+      "max_supported_bones": 128,
+      "bone_matrix_buffer_type": "storage-buffer",
+      "skinned_shader_status": "ready",
+      "supported_display_modes": [
+        "wireframe",
+        "hidden_line",
+        "solid",
+        "shaded",
+        "smooth_shaded",
+        "textured",
+        "textured_lightmapped"
+      ],
+      "fallback_display_modes": {
+        "full_material": "textured_lightmapped",
+        "bounding_box": "solid",
+        "normals_debug": "shaded",
+        "uv_debug": "textured"
+      },
+      "viewport_display": {
+        "display_mode": "textured",
+        "show_grid": true,
+        "show_wire_overlay": false,
+        "show_edged_faces": false,
+        "show_textures": true,
+        "show_lightmaps": false,
+        "show_material_colour": true,
+        "show_alpha": true,
+        "xray": false,
+        "two_sided": true,
+        "show_normals": false,
+        "show_bounds": false,
+        "force_unlit": false,
+        "force_flat_colour": false
+      },
+      "effective_viewport_display": {
+        "display_mode": "textured",
+        "show_grid": true,
+        "show_wire_overlay": false,
+        "show_edged_faces": false,
+        "show_textures": true,
+        "show_lightmaps": false,
+        "show_material_colour": true,
+        "show_alpha": true,
+        "xray": false,
+        "two_sided": true,
+        "show_normals": false,
+        "show_bounds": false,
+        "force_unlit": false,
+        "force_flat_colour": false
+      },
+      "viewport_theme_colors": {
+        "background": [
+          0.1411764705882353,
+          0.1411764705882353,
+          0.1411764705882353
+        ],
+        "grid_minor": [
+          0.23529411764705882,
+          0.23529411764705882,
+          0.23529411764705882
+        ],
+        "grid_major": [
+          0.3176470588235294,
+          0.3176470588235294,
+          0.3176470588235294
+        ],
+        "grid_x_axis": [
+          0.8235294117647058,
+          0.27450980392156865,
+          0.27450980392156865
+        ],
+        "grid_y_axis": [
+          0.27450980392156865,
+          0.7058823529411765,
+          0.35294117647058826
+        ],
+        "wire": [
+          0.18823529411764706,
+          0.5490196078431373,
+          0.7764705882352941
+        ],
+        "hidden_line": [
+          0.396078431372549,
+          0.396078431372549,
+          0.396078431372549
+        ],
+        "hover": [
+          0.18823529411764706,
+          0.5490196078431373,
+          0.7764705882352941
+        ],
+        "selection": [
+          0.18823529411764706,
+          0.5490196078431373,
+          0.7764705882352941
+        ],
+        "light_helper": [
+          1.0,
+          0.8235294117647058,
+          0.25098039215686274
+        ],
+        "null_helper": [
+          0.7019607843137254,
+          0.7019607843137254,
+          0.7019607843137254
+        ],
+        "missing_texture_a": [
+          0.18823529411764706,
+          0.5490196078431373,
+          0.7764705882352941
+        ],
+        "missing_texture_b": [
+          0.1411764705882353,
+          0.1411764705882353,
+          0.1411764705882353
+        ]
+      },
+      "viewport_render_colors": {
+        "target_color_space": "srgb",
+        "background": [
+          0.017641954488384078,
+          0.017641954488384078,
+          0.017641954488384078
+        ],
+        "grid_minor": [
+          0.04518620438567554,
+          0.04518620438567554,
+          0.04518620438567554
+        ],
+        "grid_major": [
+          0.0822827071298148,
+          0.0822827071298148,
+          0.0822827071298148
+        ],
+        "wire": [
+          0.0295568344378088,
+          0.26225065752969623,
+          0.5647115057049292
+        ],
+        "hidden_line": [
+          0.1301364766903643,
+          0.1301364766903643,
+          0.1301364766903643
+        ],
+        "hover": [
+          0.0295568344378088,
+          0.26225065752969623,
+          0.5647115057049292
+        ],
+        "selection": [
+          0.0295568344378088,
+          0.26225065752969623,
+          0.5647115057049292
+        ],
+        "light_helper": [
+          1.0,
+          0.6444796819705821,
+          0.05126945837404324
+        ],
+        "null_helper": [
+          0.45078578283822346,
+          0.45078578283822346,
+          0.45078578283822346
+        ]
+      },
+      "display_mode_downgrade": "",
+      "last_display_mode_warning": "",
+      "picking_provider_active": true,
+      "picking_method": "WGPU GPU ID",
+      "last_pick": {
+        "method": "WGPU GPU ID",
+        "x": 316,
+        "y": 139,
+        "viewport_size": [
+          1584,
+          556
+        ],
+        "device_pixel_ratio": 1.0,
+        "pipeline_status": "ready",
+        "candidate_count": 19,
+        "drawn_triangles": 3639,
+        "pick_pass_ms": 31.296,
+        "raw_rgba": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "pick_id": 0,
+        "result": "miss"
+      },
+      "gpu_pick_pipeline_status": "ready",
+      "selected_object_count": 1,
+      "selected_node_count": 1,
+      "selection_highlight_pipeline_status": "ready",
+      "gizmo_render_pipeline_status": "ready",
+      "skeleton_overlay_pipeline_status": "not created",
+      "skinned_mesh_pipeline_status": "ready",
+      "gpu_skinning_status": "ready",
+      "gizmo_hover_target": null,
+      "active_gizmo_tool": "translate",
+      "active_axis_mode": "",
+      "device_pixel_ratio": 1.0,
+      "surface_widget_class": "QRenderWidget",
+      "input_bridge_installed": true,
+      "grid_pipeline_status": "ready",
+      "mesh_pipeline_status": "ready",
+      "textured_mesh_pipeline_status": "ready",
+      "solid_pipeline_status": "ready",
+      "line_pipeline_status": "ready",
+      "gizmo_pipeline_status": "ready",
+      "edge_overlay_status": "ready",
+      "opaque_pipeline_status": "ready",
+      "alpha_cutout_pipeline_status": "ready",
+      "alpha_pipeline_status": "ready",
+      "active_animation_clip": "",
+      "animation_time": 0.0,
+      "animation_playing": false,
+      "skeleton_count": 0,
+      "bone_count": 0,
+      "selected_bone_count": 0,
+      "skinned_mesh_count": 0,
+      "cpu_skinned_mesh_count": 0,
+      "uploaded_bone_matrix_count": 0,
+      "max_bone_matrices_supported": 128,
+      "pose_revision": 0,
+      "last_skinning_error": "",
+      "last_animation_error": "",
+      "uploaded_mesh_count": 19,
+      "uploaded_material_count": 19,
+      "uploaded_texture_count": 17,
+      "uploaded_vertex_count": 8838,
+      "uploaded_index_count": 10917,
+      "uploaded_edge_index_count": 19736,
+      "texture_memory_estimate_bytes": 2834432,
+      "vertex_index_memory_estimate_bytes": 758948,
+      "estimated_gpu_memory_bytes": 3593380,
+      "fallback_texture_count": 1,
+      "missing_texture_count": 0,
+      "lightmap_texture_count": 0,
+      "resource_cache_hits": 154,
+      "resource_cache_misses": 55,
+      "mesh_upload_count": 19,
+      "texture_upload_count": 18,
+      "buffer_upload_count": 73,
+      "bind_group_creation_count": 19,
+      "last_cache_invalidation_reason": "node cache invalidated",
+      "total_mesh_count": 19,
+      "visible_mesh_count": 19,
+      "culled_mesh_count": 0,
+      "batch_count": 19,
+      "material_group_count": 19,
+      "instance_group_count": 0,
+      "instance_count": 0,
+      "pipeline_switch_count": 1,
+      "pending_uploads": 0,
+      "alpha_object_count": 0,
+      "alpha_sort_time_ms": 0.002,
+      "alpha_sort_mode": "mesh-depth stable descending",
+      "texture_array_status": "prepared; disabled by default",
+      "texture_array_eligible_groups": 3,
+      "texture_array_eligible_textures": 17,
+      "texture_atlas_status": "prepared; disabled by default",
+      "instancing_status": "prepared; conservative grouping diagnostics active",
+      "batching_status": "enabled",
+      "frustum_culling_status": "enabled",
+      "lazy_upload_status": "visible resources uploaded on first draw; hidden/off-frustum resources deferred",
+      "gizmo_buffer_cache_size": 12,
+      "pick_resource_size": [
+        1584,
+        556
+      ],
+      "alpha_material_count": 0,
+      "last_texture_upload_error": "",
+      "last_material_binding_error": "",
+      "last_render_counts": {
+        "opaque": 19,
+        "cutout": 0,
+        "blended": 0,
+        "edges": 0,
+        "hovered_edges": 0,
+        "selected_edges": 0,
+        "skeleton_lines": 0,
+        "joint_markers": 0,
+        "light_helper_lines": 128,
+        "light_volume_lines": 672,
+        "gizmo_lines": 6
+      },
+      "mesh_hover_enabled": true,
+      "hovered_mesh": "",
+      "surface_host": {
+        "current_surface_widget_class": "QRenderWidget",
+        "surface_size": [
+          1584,
+          556
+        ],
+        "device_pixel_ratio": 1.0,
+        "input_bridge_installed": true,
+        "overlay_layer_active": true,
+        "live_surface": true,
+        "backend_id": "wgpu_d3d12"
+      },
+      "last_error": ""
+    },
+    "d3d_light_selected": {
+      "name": "WGPU Direct3D 12",
+      "backend_id": "wgpu_d3d12",
+      "available": true,
+      "api": "WGPU",
+      "backend": "D3D12",
+      "format": "rgba8unorm-srgb",
+      "surface_format": "rgba8unorm-srgb",
+      "depth_format": "depth24plus",
+      "adapter": {
+        "vendor": "32.0.15.8088",
+        "device": "NVIDIA GeForce GTX 1060 6GB"
+      },
+      "initialized": true,
+      "visible_surface_type": "QRenderWidget",
+      "live_surface": true,
+      "supports_grid": true,
+      "supports_scene_meshes": true,
+      "supports_textures": true,
+      "supports_object_picking": true,
+      "supports_cpu_ray_picking": true,
+      "supports_gpu_id_picking": true,
+      "supports_selection_highlight": true,
+      "supports_gizmo_drawing": true,
+      "supports_gizmo_interaction": true,
+      "supports_scene_lighting": true,
+      "supports_light_helpers": true,
+      "supports_light_volumes": true,
+      "supports_batching": true,
+      "supports_instancing": true,
+      "supports_texture_streaming": true,
+      "supports_texture_arrays": false,
+      "supports_atlas": false,
+      "supports_frustum_culling": true,
+      "supports_gpu_timing": false,
+      "supports_dynamic_quality": true,
+      "performance_settings": {
+        "enable_batching": true,
+        "enable_instancing": true,
+        "enable_frustum_culling": true,
+        "enable_lazy_upload": true,
+        "enable_texture_arrays": false,
+        "enable_texture_atlas": false,
+        "profile_frames": false,
+        "dynamic_quality": true,
+        "max_texture_memory_mb": 512,
+        "max_uploads_per_frame": 16
+      },
+      "performance": {
+        "frame_time_ms": 45.237,
+        "fps_estimate": 22.11,
+        "cpu_prepare_ms": 0.0,
+        "gpu_submit_ms": 0.0,
+        "pick_pass_ms": 0.0,
+        "overlay_ms": 0.0,
+        "gizmo_ms": 0.0,
+        "skeleton_ms": 0.0,
+        "animation_pose_upload_ms": 0.0,
+        "alpha_sort_ms": 0.001,
+        "draw_calls": 30,
+        "mesh_count": 19,
+        "visible_mesh_count": 19,
+        "culled_mesh_count": 0,
+        "material_group_count": 19,
+        "texture_bind_count": 19,
+        "buffer_upload_count": 83,
+        "texture_upload_count": 18,
+        "bind_group_creation_count": 19,
+        "pipeline_switch_count": 1,
+        "batch_count": 19,
+        "instance_group_count": 0,
+        "instance_count": 0,
+        "alpha_object_count": 0,
+        "skeleton_pose_upload_count": 0,
+        "pending_uploads": 0,
+        "cache_hits": 230,
+        "cache_misses": 55,
+        "estimated_gpu_memory_bytes": 3593380,
+        "estimated_texture_memory_bytes": 2834432,
+        "estimated_vertex_index_memory_bytes": 758948
+      },
+      "performance_audit": {
+        "bottlenecks": [
+          "mesh adapter iteration happens on the Python render path",
+          "per-mesh uniform writes remain necessary until instance buffers are active",
+          "transparent meshes are sorted at mesh level only",
+          "general KotOR textures remain individual sampled textures"
+        ],
+        "stage9_status": "profiling, batching order, culling, cache stats, pick reuse, and gizmo buffer reuse enabled"
+      },
+      "lighting": {
+        "mode": "scene",
+        "complexity": "off",
+        "rig": "kotor_original",
+        "total_scene_lights": 8,
+        "enabled_lights": 8,
+        "uploaded_lights": 8,
+        "max_wgpu_lights": 64,
+        "helpers_visible": true,
+        "volumes_visible": true,
+        "selected_light": "AuroraLight166",
+        "selected_light_id": 4,
+        "light_buffer_revision": 1958431333,
+        "light_buffer_upload_time_ms": 4.035,
+        "wgpu_light_shader_status": "active",
+        "unsupported_light_types_count": 0,
+        "last_lighting_error": "",
+        "last_redraw_reason": "",
+        "helper_draw_calls": 2,
+        "volume_draw_calls": 2,
+        "lighting_shader_active": true,
+        "light_buffer_updates": 0,
+        "diffuse_enabled": true,
+        "specular_enabled": true,
+        "normal_enabled": true,
+        "environment_enabled": true,
+        "lightmap_enabled": false,
+        "lm_intensity": 0.55,
+        "lm_mode": "disabled"
+      },
+      "skeleton_overlay_supported": true,
+      "joint_dot_overlay_supported": true,
+      "bone_selection_supported": true,
+      "skinned_mesh_supported": true,
+      "gpu_skinning_supported": true,
+      "cpu_skinning_fallback_supported": false,
+      "animation_preview_supported": true,
+      "skin_weight_heatmap_supported": false,
+      "max_supported_bones": 128,
+      "bone_matrix_buffer_type": "storage-buffer",
+      "skinned_shader_status": "ready",
+      "supported_display_modes": [
+        "wireframe",
+        "hidden_line",
+        "solid",
+        "shaded",
+        "smooth_shaded",
+        "textured",
+        "textured_lightmapped"
+      ],
+      "fallback_display_modes": {
+        "full_material": "textured_lightmapped",
+        "bounding_box": "solid",
+        "normals_debug": "shaded",
+        "uv_debug": "textured"
+      },
+      "viewport_display": {
+        "display_mode": "textured",
+        "show_grid": true,
+        "show_wire_overlay": false,
+        "show_edged_faces": false,
+        "show_textures": true,
+        "show_lightmaps": false,
+        "show_material_colour": true,
+        "show_alpha": true,
+        "xray": false,
+        "two_sided": true,
+        "show_normals": false,
+        "show_bounds": false,
+        "force_unlit": false,
+        "force_flat_colour": false
+      },
+      "effective_viewport_display": {
+        "display_mode": "textured",
+        "show_grid": true,
+        "show_wire_overlay": false,
+        "show_edged_faces": false,
+        "show_textures": true,
+        "show_lightmaps": false,
+        "show_material_colour": true,
+        "show_alpha": true,
+        "xray": false,
+        "two_sided": true,
+        "show_normals": false,
+        "show_bounds": false,
+        "force_unlit": false,
+        "force_flat_colour": false
+      },
+      "viewport_theme_colors": {
+        "background": [
+          0.1411764705882353,
+          0.1411764705882353,
+          0.1411764705882353
+        ],
+        "grid_minor": [
+          0.23529411764705882,
+          0.23529411764705882,
+          0.23529411764705882
+        ],
+        "grid_major": [
+          0.3176470588235294,
+          0.3176470588235294,
+          0.3176470588235294
+        ],
+        "grid_x_axis": [
+          0.8235294117647058,
+          0.27450980392156865,
+          0.27450980392156865
+        ],
+        "grid_y_axis": [
+          0.27450980392156865,
+          0.7058823529411765,
+          0.35294117647058826
+        ],
+        "wire": [
+          0.18823529411764706,
+          0.5490196078431373,
+          0.7764705882352941
+        ],
+        "hidden_line": [
+          0.396078431372549,
+          0.396078431372549,
+          0.396078431372549
+        ],
+        "hover": [
+          0.18823529411764706,
+          0.5490196078431373,
+          0.7764705882352941
+        ],
+        "selection": [
+          0.18823529411764706,
+          0.5490196078431373,
+          0.7764705882352941
+        ],
+        "light_helper": [
+          1.0,
+          0.8235294117647058,
+          0.25098039215686274
+        ],
+        "null_helper": [
+          0.7019607843137254,
+          0.7019607843137254,
+          0.7019607843137254
+        ],
+        "missing_texture_a": [
+          0.18823529411764706,
+          0.5490196078431373,
+          0.7764705882352941
+        ],
+        "missing_texture_b": [
+          0.1411764705882353,
+          0.1411764705882353,
+          0.1411764705882353
+        ]
+      },
+      "viewport_render_colors": {
+        "target_color_space": "srgb",
+        "background": [
+          0.017641954488384078,
+          0.017641954488384078,
+          0.017641954488384078
+        ],
+        "grid_minor": [
+          0.04518620438567554,
+          0.04518620438567554,
+          0.04518620438567554
+        ],
+        "grid_major": [
+          0.0822827071298148,
+          0.0822827071298148,
+          0.0822827071298148
+        ],
+        "wire": [
+          0.0295568344378088,
+          0.26225065752969623,
+          0.5647115057049292
+        ],
+        "hidden_line": [
+          0.1301364766903643,
+          0.1301364766903643,
+          0.1301364766903643
+        ],
+        "hover": [
+          0.0295568344378088,
+          0.26225065752969623,
+          0.5647115057049292
+        ],
+        "selection": [
+          0.0295568344378088,
+          0.26225065752969623,
+          0.5647115057049292
+        ],
+        "light_helper": [
+          1.0,
+          0.6444796819705821,
+          0.05126945837404324
+        ],
+        "null_helper": [
+          0.45078578283822346,
+          0.45078578283822346,
+          0.45078578283822346
+        ]
+      },
+      "display_mode_downgrade": "",
+      "last_display_mode_warning": "",
+      "picking_provider_active": true,
+      "picking_method": "WGPU GPU ID",
+      "last_pick": {
+        "method": "WGPU GPU ID",
+        "x": 316,
+        "y": 139,
+        "viewport_size": [
+          1584,
+          556
+        ],
+        "device_pixel_ratio": 1.0,
+        "pipeline_status": "ready",
+        "candidate_count": 19,
+        "drawn_triangles": 3639,
+        "pick_pass_ms": 31.296,
+        "raw_rgba": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "pick_id": 0,
+        "result": "miss"
+      },
+      "gpu_pick_pipeline_status": "ready",
+      "selected_object_count": 1,
+      "selected_node_count": 1,
+      "selection_highlight_pipeline_status": "ready",
+      "gizmo_render_pipeline_status": "ready",
+      "skeleton_overlay_pipeline_status": "not created",
+      "skinned_mesh_pipeline_status": "ready",
+      "gpu_skinning_status": "ready",
+      "gizmo_hover_target": null,
+      "active_gizmo_tool": "translate",
+      "active_axis_mode": "",
+      "device_pixel_ratio": 1.0,
+      "surface_widget_class": "QRenderWidget",
+      "input_bridge_installed": true,
+      "grid_pipeline_status": "ready",
+      "mesh_pipeline_status": "ready",
+      "textured_mesh_pipeline_status": "ready",
+      "solid_pipeline_status": "ready",
+      "line_pipeline_status": "ready",
+      "gizmo_pipeline_status": "ready",
+      "edge_overlay_status": "ready",
+      "opaque_pipeline_status": "ready",
+      "alpha_cutout_pipeline_status": "ready",
+      "alpha_pipeline_status": "ready",
+      "active_animation_clip": "",
+      "animation_time": 0.0,
+      "animation_playing": false,
+      "skeleton_count": 0,
+      "bone_count": 0,
+      "selected_bone_count": 0,
+      "skinned_mesh_count": 0,
+      "cpu_skinned_mesh_count": 0,
+      "uploaded_bone_matrix_count": 0,
+      "max_bone_matrices_supported": 128,
+      "pose_revision": 0,
+      "last_skinning_error": "",
+      "last_animation_error": "",
+      "uploaded_mesh_count": 19,
+      "uploaded_material_count": 19,
+      "uploaded_texture_count": 17,
+      "uploaded_vertex_count": 8838,
+      "uploaded_index_count": 10917,
+      "uploaded_edge_index_count": 19736,
+      "texture_memory_estimate_bytes": 2834432,
+      "vertex_index_memory_estimate_bytes": 758948,
+      "estimated_gpu_memory_bytes": 3593380,
+      "fallback_texture_count": 1,
+      "missing_texture_count": 0,
+      "lightmap_texture_count": 0,
+      "resource_cache_hits": 230,
+      "resource_cache_misses": 55,
+      "mesh_upload_count": 19,
+      "texture_upload_count": 18,
+      "buffer_upload_count": 83,
+      "bind_group_creation_count": 19,
+      "last_cache_invalidation_reason": "node cache invalidated",
+      "total_mesh_count": 19,
+      "visible_mesh_count": 19,
+      "culled_mesh_count": 0,
+      "batch_count": 19,
+      "material_group_count": 19,
+      "instance_group_count": 0,
+      "instance_count": 0,
+      "pipeline_switch_count": 1,
+      "pending_uploads": 0,
+      "alpha_object_count": 0,
+      "alpha_sort_time_ms": 0.001,
+      "alpha_sort_mode": "mesh-depth stable descending",
+      "texture_array_status": "prepared; disabled by default",
+      "texture_array_eligible_groups": 3,
+      "texture_array_eligible_textures": 17,
+      "texture_atlas_status": "prepared; disabled by default",
+      "instancing_status": "prepared; conservative grouping diagnostics active",
+      "batching_status": "enabled",
+      "frustum_culling_status": "enabled",
+      "lazy_upload_status": "visible resources uploaded on first draw; hidden/off-frustum resources deferred",
+      "gizmo_buffer_cache_size": 18,
+      "pick_resource_size": [
+        1584,
+        556
+      ],
+      "alpha_material_count": 0,
+      "last_texture_upload_error": "",
+      "last_material_binding_error": "",
+      "last_render_counts": {
+        "opaque": 19,
+        "cutout": 0,
+        "blended": 0,
+        "edges": 0,
+        "hovered_edges": 0,
+        "selected_edges": 0,
+        "skeleton_lines": 0,
+        "joint_markers": 0,
+        "light_helper_lines": 128,
+        "light_volume_lines": 672,
+        "gizmo_lines": 6
+      },
+      "mesh_hover_enabled": true,
+      "hovered_mesh": "",
+      "surface_host": {
+        "current_surface_widget_class": "QRenderWidget",
+        "surface_size": [
+          1584,
+          556
+        ],
+        "device_pixel_ratio": 1.0,
+        "input_bridge_installed": true,
+        "overlay_layer_active": true,
+        "live_surface": true,
+        "backend_id": "wgpu_d3d12"
+      },
+      "last_error": ""
+    },
+    "modern_gl_reference": {
+      "name": "ModernGL / OpenGL 3.3",
+      "backend_id": "modern_gl",
+      "available": true,
+      "api": "OpenGL",
+      "backend": "ModernGL",
+      "viewport_display": {
+        "display_mode": "textured",
+        "show_grid": true,
+        "show_wire_overlay": false,
+        "show_edged_faces": false,
+        "show_textures": true,
+        "show_lightmaps": false,
+        "show_material_colour": true,
+        "show_alpha": true,
+        "xray": false,
+        "two_sided": true,
+        "show_normals": false,
+        "show_bounds": false,
+        "force_unlit": false,
+        "force_flat_colour": false
+      },
+      "mature_material_path": true,
+      "version_code": 330,
+      "gpu": "NVIDIA GeForce GTX 1060 6GB/PCIe/SSE2",
+      "vendor": "NVIDIA Corporation"
+    }
+  },
+  "selection": {
+    "click_point": [
+      653,
+      147
+    ],
+    "hit_light": "AuroraLight166",
+    "selected_node": "AuroraLight166",
+    "selected_light_flags": [
+      "AuroraLight166"
+    ],
+    "active_light_flags": [
+      "AuroraLight166"
+    ],
+    "selected_count": 1,
+    "active_count": 1
+  },
+  "hover": {
+    "point": [
+      316,
+      139
+    ],
+    "hit_node": "",
+    "viewport_hovered_node": "",
+    "renderer_hovered_node": "",
+    "face_bounds": "None"
+  },
+  "errors": [],
+  "model": {
+    "name": "Untitled Scene",
+    "mesh_count": 19,
+    "node_count": 61,
+    "light_count": 8
+  }
+}

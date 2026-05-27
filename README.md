@@ -238,15 +238,14 @@ groups in [`pyproject.toml`](pyproject.toml):
 ### 4.4 Themes and layouts
 
 GhostRigger now has XML-driven theme and layout support across the Qt shell and
-major tool windows. The original green high-contrast look is preserved as the
-selectable **Matrix** theme, but it is no longer hardcoded as the only
-application style.
-
-Packaged themes live in `config/themes/themes/`: `default.xml`, `matrix.xml`,
-`droid.xml`, `dark.xml`, `light.xml`, and `classic.xml`. **Default** opts out
-of generated GhostRigger QSS so Qt uses platform/native widget styling.
-**Droid** is the dark graphite startup-console look with grey controls and
-Matrix-green accents. Packaged layouts live in
+major tool windows. Packaged themes are Default-derived: `default.xml`,
+`default_matrix.xml`, `default_droid.xml`, `default_dark.xml`,
+`default_light.xml`, and `default_classic.xml`. **Default** opts out of
+generated GhostRigger QSS so Qt uses platform/native widget styling, and the
+`default_*` colour variants keep that native widget geometry while applying
+palette colours and custom-widget tokens. **Default Droid** is the dark
+graphite startup-console look with grey controls and Matrix-green accents.
+Packaged layouts live in
 `config/themes/layouts/`: `default.xml`, `compact.xml`, `wide.xml`, and
 `cinematic.xml`.
 

@@ -143,6 +143,7 @@ class QtLightingPanel(QtWidgets.QWidget):
         self.tree.setIconSize(QtCore.QSize(16, 16))
         self.tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.tree.itemSelectionChanged.connect(self._on_tree_selection)
+        self.tree.itemClicked.connect(self._on_tree_item_clicked)
         self.tree.itemChanged.connect(self._on_item_changed)
         self.tree.itemDoubleClicked.connect(lambda item, _col=0: self.lightSelected.emit(item.data(0, QtCore.Qt.UserRole)))
         self.tree.customContextMenuRequested.connect(self._show_context_menu)
@@ -360,7 +361,7 @@ class QtLightingPanel(QtWidgets.QWidget):
 
     def select_light(self, node) -> None:
         if node is not None and not bool(getattr(node, "is_light", False)):
-            return
+            node = None
         light = self.manager.find_by_original(node)
         self.manager.select_single(light.original_ref if light else None)
         self._selected = node if light else None
@@ -389,6 +390,20 @@ class QtLightingPanel(QtWidgets.QWidget):
         self.manager.select_many(clean, active=active)
         self._selected = active.original_ref if active is not None else None
         self._load_editor(clean)
+        self.lightSelected.emit(self._selected)
+
+    def _on_tree_item_clicked(self, item: QtWidgets.QTreeWidgetItem, _column: int) -> None:
+        if self._updating or item is None:
+            return
+        light = self._light_from_item(item)
+        if light is None:
+            return
+        if not item.isSelected():
+            self.tree.setCurrentItem(item)
+            item.setSelected(True)
+        self.manager.select_many(self.manager.selected_lights() or [light], active=light)
+        self._selected = light.original_ref
+        self._load_editor(self.manager.selected_lights() or [light])
         self.lightSelected.emit(self._selected)
 
     def _on_item_changed(self, item: QtWidgets.QTreeWidgetItem, column: int) -> None:

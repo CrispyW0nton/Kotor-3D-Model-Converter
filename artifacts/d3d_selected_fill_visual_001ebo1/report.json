@@ -1,0 +1,25 @@
+{
+  "module": "K2:001ebo1",
+  "backend": "wgpu_d3d12",
+  "desktop_visible": true,
+  "mesh_count": 19,
+  "cpu_hover_candidate_count": 241,
+  "hover_point": [
+    63,
+    126
+  ],
+  "hovered_mesh": "",
+  "selected_mesh": "CM_Details1",
+  "selected_faces": 726,
+  "yellowish_pixels_before": 4698,
+  "yellowish_pixels_after": 53351,
+  "yellowish_pixel_delta": 48653,
+  "selected_edges": 1942,
+  "hovered_edges": 0,
+  "mesh_uniform_refs_last_frame": 17,
+  "screenshots": {
+    "before": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\d3d_selected_fill_visual_001ebo1\\04_before_fill_fix.png",
+    "hover": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\d3d_selected_fill_visual_001ebo1\\05_hover_after_fill_fix.png",
+    "selected_yellow_fill": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\d3d_selected_fill_visual_001ebo1\\06_selected_yellow_fill_after_fix.png"
+  }
+}

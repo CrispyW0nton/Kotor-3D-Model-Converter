@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import platform
+import inspect
 from typing import Iterable
 
 from src.gui.rendering.direct3d_renderer import Direct3DRenderer
@@ -17,11 +18,11 @@ from src.gui.rendering.wgpu_renderer import WgpuRenderer
 log = logging.getLogger(__name__)
 
 
-def _renderer_for_backend(backend: RendererBackend):
+def _renderer_for_backend(backend: RendererBackend, settings: RendererSettings | None = None):
     if backend == RendererBackend.MODERNGL_GL330:
         return ModernGLRenderer()
     if backend in {RendererBackend.WGPU_AUTO, RendererBackend.WGPU_D3D12, RendererBackend.WGPU_VULKAN, RendererBackend.WGPU_OPENGL}:
-        return WgpuRenderer(backend)
+        return WgpuRenderer(backend, settings=settings)
     if backend in {RendererBackend.DIRECT3D_HARDWARE, RendererBackend.DIRECT3D_WARP}:
         return Direct3DRenderer(backend)
     if backend == RendererBackend.NULL_DIAGNOSTIC:
@@ -37,6 +38,22 @@ def _dedupe(backends: Iterable[RendererBackend]) -> list[RendererBackend]:
     return result
 
 
+def _render_kwargs_for(renderer, kwargs: dict) -> dict:
+    try:
+        signature = inspect.signature(renderer.render)
+    except (TypeError, ValueError):
+        return kwargs
+    parameters = signature.parameters.values()
+    if any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters):
+        return kwargs
+    accepted = {
+        name
+        for name, parameter in signature.parameters.items()
+        if parameter.kind in {inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY}
+    }
+    return {key: value for key, value in kwargs.items() if key in accepted}
+
+
 def fallback_order(settings: RendererSettings) -> list[RendererBackend]:
     if settings.force_safe_mode:
         return [RendererBackend.MODERNGL_GL330, RendererBackend.NULL_DIAGNOSTIC]
@@ -44,6 +61,9 @@ def fallback_order(settings: RendererSettings) -> list[RendererBackend]:
     requested = settings.backend
     if requested == RendererBackend.AUTOMATIC:
         requested = RendererBackend.MODERNGL_GL330
+
+    if requested == RendererBackend.MODERNGL_GL330:
+        return [RendererBackend.MODERNGL_GL330, RendererBackend.NULL_DIAGNOSTIC]
 
     if not settings.allow_fallback:
         return [requested, RendererBackend.NULL_DIAGNOSTIC]
@@ -171,7 +191,7 @@ class FallbackViewportRenderer:
         for backend in object.__getattribute__(self, "_order"):
             if backend in failed:
                 continue
-            renderer = _renderer_for_backend(backend)
+            renderer = _renderer_for_backend(backend, object.__getattribute__(self, "_settings"))
             caps = renderer.get_capabilities()
             if not renderer.is_available():
                 reason = caps.reason or "not available"
@@ -199,6 +219,9 @@ class FallbackViewportRenderer:
         return object.__getattribute__(self, "_active_backend")
 
     def create_surface_widget(self, parent=None):
+        cached = object.__getattribute__(self, "_surface_widget")
+        if cached is not None:
+            return cached
         renderer = object.__getattribute__(self, "_active") or self._activate_next()
         create = getattr(renderer, "create_surface_widget", None)
         if callable(create):
@@ -224,7 +247,7 @@ class FallbackViewportRenderer:
             renderer = object.__getattribute__(self, "_active") or self._activate_next()
             backend = object.__getattribute__(self, "_active_backend")
             try:
-                result = renderer.render(scene, camera, W, H, *args, **kwargs)
+                result = renderer.render(scene, camera, W, H, *args, **_render_kwargs_for(renderer, kwargs))
             except Exception as exc:
                 result = None
                 object.__getattribute__(self, "_failed")[backend] = str(exc)
@@ -245,6 +268,8 @@ class FallbackViewportRenderer:
             log.info("RendererFactory: %s unavailable: render returned no image", getattr(backend, "name", backend))
 
     def set_settings(self, settings: RendererSettings) -> None:
+        if settings == object.__getattribute__(self, "_settings"):
+            return
         old = object.__getattribute__(self, "_active")
         if old is not None:
             shutdown = getattr(old, "shutdown", None)

@@ -18,16 +18,21 @@ The standalone Module Editor is theme/layout aware. It consumes the active `Them
 User files load after packaged defaults. If ids collide, the user file wins and
 the manager records a diagnostic warning.
 
-Packaged theme ids are `default`, `matrix`, `droid`, `dark`, `light`, and
-`classic`. `default` sets `application.native=true`, which tells the theme
-engine to apply no generated GhostRigger stylesheet and restore the Qt platform
-palette. Native themes still carry neutral colour tokens for editor previews
-and custom-painted startup UI; when an older native user override contains
-saved Matrix fallback values, `ThemeLoader` replaces those stale values with
-the neutral native palette before the Theme Editor displays them. `droid`
-captures the dark graphite startup-console look: grey panels
-and controls, bright Matrix-green accents, high-contrast text, and the default
-Aurebesh Matrix bar font.
+Packaged theme ids are `default`, `default_matrix`, `default_droid`,
+`default_dark`, `default_light`, and `default_classic`. `default` sets
+`application.native=true`, which tells the theme engine to apply no generated
+GhostRigger stylesheet and restore the Qt platform palette. The `default_*`
+variants set
+`application.paletteOnly=true`: they keep the Default/native widget geometry,
+apply no generated GhostRigger QSS, and colour standard widgets through the Qt
+palette while custom GhostRigger widgets consume their normal XML colour
+tokens. Native themes still carry neutral colour tokens for editor previews and
+custom-painted startup UI; when an older native user override contains saved
+Matrix fallback values, `ThemeLoader` replaces those stale values with the
+neutral native palette before the Theme Editor displays them. `default_droid`
+captures the dark graphite startup-console look through the Default-derived
+palette-only path: grey panels and controls, bright Matrix-green accents,
+high-contrast text, and the default Aurebesh Matrix bar font.
 
 ## Theme XML
 
@@ -49,7 +54,7 @@ Recommended sections:
 - `icons`: provider, default button mode, toolbar icon sizes
 - `metrics`: toolbar height, button height, spacing, panel metrics, splitter
   handle width
-- `styles`: application/native mode, tab mode, Matrix bar mode/glyph/font/image
+- `styles`: application/native mode, palette-only mode, tab mode, Matrix bar mode/glyph/font/image
 
 Widgets should consume colors through the application stylesheet first. Custom
 painted widgets should expose `apply_ghost_theme(theme)` and read tokens with
@@ -169,7 +174,10 @@ Core colour tokens include:
 - `scrollbar.background`, `scrollbar.handle`
 - `selection.background`, `selection.text`
 - `viewport.background`, `viewport.gridMajor`, `viewport.gridMinor`,
-  `viewport.text`
+  `viewport.text`, `viewport.selection`, `viewport.helper.meshHover`,
+  `viewport.helper.light`, `viewport.helper.lightSelected`, `viewport.helper.camera`,
+  `viewport.helper.cameraSelected`, `viewport.helper.null`,
+  `viewport.helper.nullSelected`
 - `transformBar.background`, `transformBar.border`
 - `warning`, `error`, `success`, `info`
 

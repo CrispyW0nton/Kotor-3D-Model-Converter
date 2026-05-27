@@ -1553,6 +1553,13 @@ class ArcBallCamera:
 
     def zoom(self, steps: float):
         self.distance = max(0.05, self.distance * (0.9 ** steps))
+        self._sync_close_clip_plane()
+
+    def _sync_close_clip_plane(self):
+        """Keep close zooms from slicing animated/inspected geometry."""
+        close_near = max(0.001, float(self.distance) * 0.02)
+        self._near = max(0.001, min(float(self._near), close_near))
+        self._far = max(float(self._far), float(self.distance) * 4.0 + 1.0)
 
     def pan(self, dx_px: float, dy_px: float, viewport_h: int):
         right, up, fwd, eye = self._view_matrix()
@@ -1636,6 +1643,17 @@ class ArcBallCamera:
         min_dist = max(0.3, max_depth * 1.25)
 
         self.distance = max(fitted_dist, min_dist)
+
+        # Keep GPU projection clipping in step with the framed asset.  The
+        # software path only rejects against the near plane, but WGPU/D3D also
+        # uses the far plane for depth and frustum culling; large modules can
+        # easily outgrow the default 1000-unit clip range.
+        nearest_depth = max(0.001, self.distance - max_depth)
+        farthest_depth = max(1.0, self.distance + max_depth)
+        diag_extent = max(0.01, diag)
+        self._near = max(0.001, min(nearest_depth * 0.25, diag_extent * 0.001, 0.05))
+        self._far = max(1000.0, farthest_depth * 2.0)
+        self._sync_close_clip_plane()
 
     # ── projection helpers ────────────────────────────────────────────
 
@@ -8115,6 +8133,26 @@ class FrameRenderer:
     def _hud_text_width(text: str) -> int:
         return max(18, len(str(text)) * 6)
 
+    def _fit_hud_text(self, text: str, max_width: int | None, *, pad_x: int = 7) -> str:
+        text = str(text or "")
+        if max_width is None or max_width <= 0:
+            return text
+        content_width = max(18, int(max_width) - pad_x * 2)
+        if self._hud_text_width(text) <= content_width:
+            return text
+        ellipsis = "..."
+        if content_width <= self._hud_text_width(ellipsis):
+            return ellipsis
+        max_chars = max(1, (content_width - self._hud_text_width(ellipsis)) // 6)
+        return text[:max_chars].rstrip() + ellipsis
+
+    def _hud_pill_width(self, text: str, *, max_width: int | None = None, pad_x: int = 7) -> int:
+        fitted = self._fit_hud_text(text, max_width, pad_x=pad_x)
+        width = self._hud_text_width(fitted) + pad_x * 2
+        if max_width is not None:
+            width = min(width, max(1, int(max_width)))
+        return width
+
     def _draw_hud_pill(
         self,
         draw: 'ImageDraw.Draw',
@@ -8125,9 +8163,11 @@ class FrameRenderer:
         fill=(30, 34, 40),
         fg=(213, 220, 230),
         outline=(78, 88, 102),
+        max_width: int | None = None,
     ) -> int:
         pad_x = 7
-        width = self._hud_text_width(text) + pad_x * 2
+        text = self._fit_hud_text(text, max_width, pad_x=pad_x)
+        width = self._hud_pill_width(text, max_width=max_width, pad_x=pad_x)
         height = 17
         draw.rectangle([x, y, x + width, y + height], fill=fill, outline=outline)
         draw.text((x + pad_x, y + 4), text, fill=fg)
@@ -8216,26 +8256,82 @@ class FrameRenderer:
         model_name = str(getattr(self.model, "name", "model") or "model")
         if len(model_name) > 34:
             model_name = model_name[:31] + "..."
-        x = 12
+        hud_left = 12
+        hud_gap = 6
+        hud_row_step = 22
+        # Keep top-left HUD content out of the viewcube lane on typical widths,
+        # while still using most of the canvas on compact/offscreen captures.
+        hud_right_limit = max(hud_left + 120, W - 172)
+        hud_max_width = max(96, hud_right_limit - hud_left)
+        x = hud_left
         y = 12
-        x += self._draw_hud_pill(draw, x, y, f"{model_name}  [{gv_str}]", fill=hud_fill, fg=hud_text, outline=hud_outline) + 6
-        x += self._draw_hud_pill(draw, x, y, mode_str, fill=success_fill, fg=success_text, outline=hud_outline) + 6
+        model_label = f"{model_name}  [{gv_str}]"
+        mode_width = self._hud_pill_width(mode_str)
+        model_max_width = max(64, hud_right_limit - x - mode_width - hud_gap)
+        x += self._draw_hud_pill(
+            draw,
+            x,
+            y,
+            model_label,
+            fill=hud_fill,
+            fg=hud_text,
+            outline=hud_outline,
+            max_width=model_max_width,
+        ) + hud_gap
+        if x + mode_width > hud_right_limit:
+            x = hud_left
+            y += hud_row_step
+        x += self._draw_hud_pill(draw, x, y, mode_str, fill=success_fill, fg=success_text, outline=hud_outline) + hud_gap
         if self.show_bones:
-            x += self._draw_hud_pill(draw, x, y, f"Bones {bc}", fill=warning_fill, fg=warning_text, outline=hud_outline) + 6
+            bones_txt = f"Bones {bc}"
+            bones_width = self._hud_pill_width(bones_txt)
+            if x + bones_width > hud_right_limit:
+                x = hud_left
+                y += hud_row_step
+            x += self._draw_hud_pill(draw, x, y, bones_txt, fill=warning_fill, fg=warning_text, outline=hud_outline) + hud_gap
+        stats_row_y = y + hud_row_step
         compact_stats = f"V {vc:,}  F {fc:,}  Skin {skin_nodes}  UV {uv_ok}/{uv_mesh}  Tex {tex_ok}/{tex_total}"
-        self._draw_hud_pill(draw, 12, 34, compact_stats, fill=hud_fill, fg=hud_muted, outline=hud_outline)
+        self._draw_hud_pill(
+            draw,
+            hud_left,
+            stats_row_y,
+            compact_stats,
+            fill=hud_fill,
+            fg=hud_muted,
+            outline=hud_outline,
+            max_width=hud_max_width,
+        )
+        animation_row_y = stats_row_y + hud_row_step
+        if self._anim_pose is not None and self._anim_name:
+            anim_txt = f"\u25b6 {self._anim_name}"
+            if self._anim_length > 0:
+                pct = int(100 * self._anim_time / self._anim_length)
+                anim_txt += f"  {self._anim_time:.3f}/{self._anim_length:.3f}s  [{pct}%]"
+            self._draw_hud_pill(
+                draw,
+                12,
+                animation_row_y,
+                anim_txt,
+                fill=success_fill,
+                fg=success_text,
+                outline=hud_outline,
+                max_width=hud_max_width,
+            )
         # Show render bounds info — use CACHED value (not recomputed every frame)
         rbb_min, rbb_max = self._get_render_bounds()
         dx = rbb_max[0]-rbb_min[0]; dy = rbb_max[1]-rbb_min[1]; dz = rbb_max[2]-rbb_min[2]
         bounds_txt = f"{dx:.2f} x {dy:.2f} x {dz:.2f} m"
+        bounds_max_width = max(80, min(220, W - 24))
+        bounds_width = self._hud_pill_width(bounds_txt, max_width=bounds_max_width)
         self._draw_hud_pill(
             draw,
-            max(12, W - self._hud_text_width(bounds_txt) - 26),
+            max(12, W - bounds_width - 12),
             max(12, H - 28),
             bounds_txt,
             fill=hud_fill,
             fg=hud_muted,
             outline=hud_outline,
+            max_width=bounds_max_width,
         )
         if vc == 0:
             if is_animation_supermodel(self.model):
@@ -8361,26 +8457,20 @@ class FrameRenderer:
             draw.text((W//2 - 220, H//2 - 8), warn, fill=warn_col)
         elif self.show_texture and tex_ok == 0 and tex_total > 0:
             warn = f"⚠ {tex_total} texture(s) referenced but none loaded – set texture directory"
-            self._draw_hud_pill(draw, 12, 58, warn, fill=warning_fill, fg=warning_text, outline=hud_outline)
-
-        # Show animation state in bottom-right corner
-        if self._anim_pose is not None and self._anim_name:
-            anim_txt = f"\u25b6 {self._anim_name}"
-            if self._anim_length > 0:
-                pct = int(100 * self._anim_time / self._anim_length)
-                anim_txt += f"  {self._anim_time:.3f}/{self._anim_length:.3f}s  [{pct}%]"
-            # Estimate text width (~6px per char at 8pt font) and right-align
-            txt_w = len(anim_txt) * 6
+            warn_y = animation_row_y + hud_row_step if (self._anim_pose is not None and self._anim_name) else stats_row_y + hud_row_step
             self._draw_hud_pill(
                 draw,
-                max(12, W - txt_w - 24),
-                max(12, H - 52),
-                anim_txt,
-                fill=success_fill,
-                fg=success_text,
+                hud_left,
+                warn_y,
+                warn,
+                fill=warning_fill,
+                fg=warning_text,
                 outline=hud_outline,
+                max_width=hud_max_width,
             )
-            # Draw a progress bar at the very bottom of the frame
+
+        # Show animation progress without overlapping the bottom-right FPS indicator.
+        if self._anim_pose is not None and self._anim_name:
             bar_h = 4
             bar_y = H - bar_h
             draw.rectangle([0, bar_y, W, H], fill=hud_fill)

@@ -227,6 +227,23 @@ def test_qt_viewport_grid_toggle_controls_cpu_and_gpu_paths() -> None:
     assert '"grid_button"' in menu_source
 
 
+def test_main_window_help_menu_uses_real_about_dialog() -> None:
+    import inspect
+
+    from src.gui.qt_lib.dialogs.qt_dialogs import QtAboutDialog, show_about
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    action_source = inspect.getsource(QtGhostRiggerMainWindow._build_actions)
+    menu_source = inspect.getsource(QtGhostRiggerMainWindow._build_menu)
+    about_source = inspect.getsource(show_about)
+
+    assert "self.about_action" in action_source
+    assert "About GhostRigger..." in action_source
+    assert "help_menu.addAction(self.about_action)" in menu_source
+    assert "QtAboutDialog(parent)" in about_source
+    assert hasattr(QtAboutDialog, "apply_ghost_theme")
+
+
 def test_qt_viewport_performance_overlay_stacks_above_stats_badge() -> None:
     import inspect
 
@@ -239,6 +256,49 @@ def test_qt_viewport_performance_overlay_stacks_above_stats_badge() -> None:
     assert "max(12, H - 28)" in stats_source
     assert "h - 50" in perf_source
     assert "_draw_hud_pill" in perf_source
+    assert "max_width = max(80, w - 16)" in perf_source
+    assert "_hud_pill_width(label, max_width=max_width)" in perf_source
+
+
+def test_viewport_animation_hud_sits_under_model_stats_not_fps_overlay() -> None:
+    import inspect
+
+    from src.gui.qt_lib.rendering.viewport_core import FrameRenderer
+
+    stats_source = inspect.getsource(FrameRenderer._draw_stats)
+
+    assert "hud_right_limit = max(hud_left + 120, W - 172)" in stats_source
+    assert "max_width=hud_max_width" in stats_source
+    assert "animation_row_y = stats_row_y + hud_row_step" in stats_source
+    assert "12,\n                animation_row_y," in stats_source
+    assert "Show animation progress without overlapping the bottom-right FPS indicator" in stats_source
+    assert "H - 52" not in stats_source
+    assert "txt_w = len(anim_txt)" not in stats_source
+    assert "warn_y = animation_row_y + hud_row_step" in stats_source
+
+
+def test_viewport_hud_state_changes_dirty_overlay_immediately() -> None:
+    import inspect
+
+    from src.gui.qt_lib.rendering.renderer_performance import ViewportFrameGovernor
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    load_source = inspect.getsource(QtViewportWidget.load_model)
+    shade_source = inspect.getsource(QtViewportWidget.set_shade_mode)
+    render_mode_source = inspect.getsource(QtViewportWidget.set_render_mode)
+    texture_source = inspect.getsource(QtViewportWidget.toggle_texture)
+    animation_source = inspect.getsource(QtViewportWidget.set_animation_pose)
+    event_filter_source = inspect.getsource(QtViewportWidget.eventFilter)
+    skip_source = inspect.getsource(QtViewportWidget._can_skip_live_overlay_rebuild)
+
+    assert "hud" in ViewportFrameGovernor.DIRTY_FLAGS
+    assert "hud=True" in load_source
+    assert "hud=True" in shade_source
+    assert "hud=True" in render_mode_source
+    assert "hud=True" in texture_source
+    assert "hud=True" in animation_source
+    assert 'reason="viewport resized", overlay=True, hud=True' in event_filter_source
+    assert '"hud"' in skip_source
 
 
 def test_qt_gpu_viewport_resets_render_targets_on_model_load() -> None:
@@ -777,6 +837,7 @@ def test_module_mesh_properties_panel_lists_coloaded_walkmesh_overlay_nodes() ->
         faces=[(0, 1, 2)],
         texture="walkmesh",
         _gr_walkmesh_overlay_proxy=True,
+        _gr_hidden=True,
     )
     model = SimpleNamespace(
         name="m01aa_01a",
@@ -797,6 +858,7 @@ def test_module_mesh_properties_panel_lists_coloaded_walkmesh_overlay_nodes() ->
 
     assert panel.module_walkmesh_tree.topLevelItemCount() == 1
     assert panel.module_walkmesh_tree.topLevelItem(0).text(0) == "m01aa_01a_overlay"
+    assert panel.module_walkmesh_tree.topLevelItem(0).text(4) == "no"
     panel.module_walkmesh_tree.setCurrentItem(panel.module_walkmesh_tree.topLevelItem(0))
     assert selected_batches[-1] == [overlay_node]
 
@@ -833,6 +895,44 @@ def test_coloaded_walkmesh_overlay_aligns_to_existing_model_walkmesh_bounds() ->
     assert proxy.faces == [(0, 1, 2)]
     assert proxy.face_mats == [7]
     assert proxy._gr_walkmesh_overlay_proxy is True
+    assert proxy._gr_hidden is True
+
+
+def test_coloaded_walkmesh_overlay_visibility_syncs_renderer_state() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    proxy = SimpleNamespace(_gr_hidden=True)
+    renderer = SimpleNamespace(_walkmesh_overlay=SimpleNamespace(_gr_module_node=proxy), show_walkmesh=True)
+    button_states = []
+    button = SimpleNamespace(setChecked=lambda checked: button_states.append(bool(checked)))
+    window = SimpleNamespace(viewport=SimpleNamespace(_renderer=renderer, walkmesh_button=button))
+
+    QtGhostRiggerMainWindow._sync_walkmesh_overlay_visibility(window)
+
+    assert renderer.show_walkmesh is False
+    assert button_states[-1] is False
+
+    proxy._gr_hidden = False
+    QtGhostRiggerMainWindow._sync_walkmesh_overlay_visibility(window)
+
+    assert renderer.show_walkmesh is True
+    assert button_states[-1] is True
+
+
+def test_hidden_module_mesh_panel_selection_is_not_forwarded_to_viewport() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    calls = []
+    viewport = SimpleNamespace(set_selected_meshes=lambda nodes: calls.append(list(nodes)))
+    window = SimpleNamespace(viewport=viewport)
+    hidden = SimpleNamespace(name="001ebo1_overlay", _gr_hidden=True)
+    visible = SimpleNamespace(name="WALK1", _gr_hidden=False)
+
+    QtGhostRiggerMainWindow._on_module_meshes_selected_from_panel(window, [hidden])
+    assert calls == []
+
+    QtGhostRiggerMainWindow._on_module_meshes_selected_from_panel(window, [visible])
+    assert calls == [[visible]]
 
 
 def test_qt_viewport_exposes_mesh_multiselect_box_and_ctrl_a() -> None:
@@ -843,6 +943,7 @@ def test_qt_viewport_exposes_mesh_multiselect_box_and_ctrl_a() -> None:
     source = inspect.getsource(QtViewportWidget)
 
     assert "meshSelectionChanged = QtCore.Signal(list)" in source
+    assert "meshHovered = QtCore.Signal(object)" in source
     assert "def set_selected_meshes" in source
     assert "def select_all_meshes" in source
     assert "QtCore.Qt.Key_A" in source
@@ -866,8 +967,28 @@ def test_qt_viewport_mesh_pick_requires_real_triangle_and_hover_outline() -> Non
 
     assert "self._hovered_mesh_node = None" in source
     assert "_update_mesh_hover(event)" in source
-    assert "_draw_hovered_mesh_outline(draw, w, h)" in overlay_source
-    assert "_ray_triangle_intersection" in pick_source
+    assert "self.meshHovered.emit(node)" in source
+    assert "self.meshHovered.emit(None)" in source
+    assert "_mesh_hit_test_detail(x, y, allow_gpu=False)" in source
+    assert "_mesh_hit_test_detail(x, y, allow_gpu=False)" in release_source
+    assert "_draw_selected_model_outline(draw, w, h)" in overlay_source
+    hover_outline_source = inspect.getsource(QtViewportWidget._draw_hovered_mesh_outline)
+    hover_update_source = inspect.getsource(QtViewportWidget._update_mesh_hover)
+    projected_bounds_source = inspect.getsource(QtViewportWidget._projected_mesh_bounds)
+    selected_outline_source = inspect.getsource(QtViewportWidget._draw_selected_model_outline)
+    assert "_draw_hovered_mesh_outline(draw, w, h)" in selected_outline_source
+    assert "hull =" not in selected_outline_source
+    assert "255, 212, 0, 230" not in selected_outline_source
+    assert 'node is getattr(self._renderer, "selected_node", None)' in hover_outline_source
+    assert "_mesh_hover_suppressed_for_animation(self)" in hover_outline_source
+    assert "_mesh_hover_suppressed_for_animation(self)" in hover_update_source
+    assert "animation hover suppressed" in hover_update_source
+    assert "self._renderer._get_world_verts_for_node(node)" in projected_bounds_source
+    assert "cpu_skin_vbo_arrays" not in source
+    assert "_ray_triangle_intersection" in source
+    assert "allow_gpu: bool = True" in pick_source
+    assert "if allow_gpu:" in pick_source
+    assert release_source.index("_mesh_hit_test_detail(x, y, allow_gpu=False)") < release_source.index("_light_hit_test(x, y)")
     assert "area + dist2" not in pick_source
     assert "_hit_test_model_bounds" not in release_source
 
@@ -1101,6 +1222,1169 @@ def test_qt_viewport_can_pick_light_gizmos() -> None:
     assert viewport._light_hit_test(140, 160) is None
 
 
+def test_qt_viewport_preserves_module_mesh_node_selection_under_scene_root_tags() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    root = ModelNode(name="M01aa_01a")
+    root._gr_scene_object_root = True
+    root._gr_scene_object_id = "scene-module"
+    mesh = ModelNode(
+        name="Object3234",
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        faces=[(0, 1, 2)],
+    )
+    mesh.parent = root
+    mesh._gr_scene_object_root_ref = root
+    mesh._gr_scene_object_id = "scene-module"
+    viewport = QtViewportWidget()
+    viewport._gpu_renderer = SimpleNamespace(selected_node=None, selected_nodes=[])
+    try:
+        viewport.set_selected_node(mesh, orbit_bounds=((0.0, 0.0, 0.0), (1.0, 1.0, 0.0)))
+
+        assert viewport._renderer.selected_node is mesh
+        assert viewport._gpu_renderer.selected_node is mesh
+        assert viewport._gpu_renderer.selected_nodes == [mesh]
+        assert viewport.get_selected_meshes() == [mesh]
+        assert getattr(mesh, "_gr_selected", False) is True
+    finally:
+        viewport.deleteLater()
+
+
+def test_wgpu_gpu_pick_miss_falls_back_to_cpu_mesh_picker() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.rendering.picking import PickHit
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    mesh = SimpleNamespace(name="CM_Floor")
+    viewport = QtViewportWidget()
+    viewport.model = SimpleNamespace()
+    viewport._gpu_renderer = SimpleNamespace(
+        get_capabilities=lambda: SimpleNamespace(supports_gpu_id_picking=True),
+        pick=lambda *_args, **_kwargs: PickHit(
+            hit=False,
+            renderer_backend="wgpu_d3d12",
+            diagnostic={"method": "WGPU GPU ID", "result": "miss"},
+        ),
+    )
+
+    class _CpuPicker:
+        def __init__(self) -> None:
+            self.called = False
+
+        def pick(self, request, scene, camera):
+            self.called = True
+            return PickHit(
+                hit=True,
+                object_ref=mesh,
+                hit_kind="mesh",
+                diagnostic={"method": "CPU raycast", "face_bounds": ((0, 0, 0), (1, 1, 0))},
+            )
+
+    cpu_picker = _CpuPicker()
+    viewport._picking_provider = cpu_picker
+    try:
+        hit = viewport._mesh_hit_test_detail(10, 12)
+
+        assert cpu_picker.called is True
+        assert hit == (mesh, ((0, 0, 0), (1, 1, 0)))
+        assert viewport._last_pick_diagnostics["method"] == "CPU raycast"
+    finally:
+        viewport.deleteLater()
+
+
+def test_wgpu_helper_hit_test_selects_screen_space_helpers_before_meshes() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    helper = SimpleNamespace(
+        name="Waypoint_Helper",
+        type_label="dummy",
+        position=(1.0, 2.0, 3.0),
+        vertices=[],
+        faces=[],
+    )
+    mesh = SimpleNamespace(
+        name="CM_Floor",
+        is_mesh=True,
+        vertices=[(0, 0, 0), (1, 0, 0), (0, 1, 0)],
+        faces=[(0, 1, 2)],
+    )
+    viewport = QtViewportWidget()
+    viewport.model = SimpleNamespace(all_nodes=lambda: [mesh, helper])
+    viewport._gpu_renderer = SimpleNamespace(backend_id="wgpu_d3d12")
+    viewport._renderer._node_world_transform = lambda node: (node.position, (0, 0, 0, 1), True)
+    viewport._renderer._proj = lambda _x, _y, _z, _w, _h: (100, 100, 2.0)
+    try:
+        assert viewport._helper_hit_test(104, 103) is helper
+        assert viewport._helper_hit_test(150, 150) is None
+    finally:
+        viewport.deleteLater()
+
+
+def test_qt_viewport_preserves_light_node_selection_under_scene_root_tags() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    root = ModelNode(name="M01aa_01a")
+    root._gr_scene_object_root = True
+    root._gr_scene_object_id = "scene-module"
+    light = SimpleNamespace(
+        name="AuroraLight223",
+        is_light=True,
+        position=(1.0, 2.0, 3.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=root,
+        _gr_scene_object_root_ref=root,
+        _gr_scene_object_id="scene-module",
+    )
+    viewport = QtViewportWidget()
+    viewport._gpu_renderer = SimpleNamespace(selected_node=None, selected_nodes=[])
+    viewport._gizmo_world_position = lambda node: tuple(getattr(node, "position", (0.0, 0.0, 0.0)))
+    try:
+        viewport.set_selected_node(light)
+
+        assert viewport._renderer.selected_node is light
+        assert viewport._gpu_renderer.selected_node is light
+        assert viewport._gpu_renderer.selected_nodes == []
+        assert viewport.get_selected_meshes() == []
+        assert getattr(light, "_gr_gizmo_world_position", None) == (1.0, 2.0, 3.0)
+    finally:
+        viewport.deleteLater()
+
+
+def test_qt_viewport_preserves_null_helper_selection_under_scene_root_tags() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    root = ModelNode(name="M01aa_01a")
+    root._gr_scene_object_root = True
+    root._gr_scene_object_id = "scene-module"
+    helper = SimpleNamespace(
+        name="RoomNull01",
+        parent=root,
+        _gr_scene_object_root_ref=root,
+        _gr_scene_object_id="scene-module",
+        position=(2.0, 3.0, 4.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    viewport = QtViewportWidget()
+    viewport._gizmo_world_position = lambda node: tuple(getattr(node, "position", (0.0, 0.0, 0.0)))
+    try:
+        viewport.set_selected_node(helper)
+
+        assert viewport._renderer.selected_node is helper
+        assert viewport.get_selected_meshes() == []
+        assert getattr(helper, "_gr_gizmo_world_position", None) == (2.0, 3.0, 4.0)
+    finally:
+        viewport.deleteLater()
+
+
+def test_moderngl_selection_stays_on_explicit_node_without_scene_child_expansion() -> None:
+    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
+
+    root = SimpleNamespace(
+        name="M01aa_01a",
+        _gr_scene_object_root=True,
+        _gr_scene_object_id="scene-module",
+    )
+    child = SimpleNamespace(
+        name="Object3234",
+        _gr_scene_object_id="scene-module",
+        _gr_scene_object_root_ref=root,
+    )
+    other = SimpleNamespace(name="Other", _gr_scene_object_id="other")
+    renderer = GpuRenderer()
+    renderer.selected_node = root
+
+    assert renderer._is_node_selected_for_render(root) is True
+    assert renderer._is_node_selected_for_render(child) is False
+    assert renderer._is_node_selected_for_render(other) is False
+
+
+def test_moderngl_child_selection_does_not_select_sibling_meshes_or_lights() -> None:
+    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
+
+    root = SimpleNamespace(
+        name="M01aa_01a",
+        _gr_scene_object_root=True,
+        _gr_scene_object_id="scene-module",
+    )
+    selected_mesh = SimpleNamespace(
+        name="Object3234",
+        _gr_scene_object_id="scene-module",
+        _gr_scene_object_root_ref=root,
+    )
+    sibling_mesh = SimpleNamespace(
+        name="Object3258",
+        _gr_scene_object_id="scene-module",
+        _gr_scene_object_root_ref=root,
+    )
+    sibling_light = SimpleNamespace(
+        name="AuroraLight273",
+        is_light=True,
+        _gr_scene_object_id="scene-module",
+        _gr_scene_object_root_ref=root,
+    )
+    renderer = GpuRenderer()
+    renderer.selected_node = selected_mesh
+
+    assert renderer._is_node_selected_for_render(selected_mesh) is True
+    assert renderer._is_node_selected_for_render(sibling_mesh) is False
+    assert renderer._is_node_selected_for_render(sibling_light) is False
+
+    renderer.selected_node = sibling_light
+
+    assert renderer._is_node_selected_for_render(sibling_light) is True
+    assert renderer._is_node_selected_for_render(selected_mesh) is False
+    assert renderer._is_node_selected_for_render(sibling_mesh) is False
+
+
+def test_wgpu_light_helper_line_buffer_matches_gizmo_line_stride(monkeypatch) -> None:
+    import numpy as np
+
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    captured = {}
+
+    class _Device:
+        def create_buffer_with_data(self, *, data, usage):
+            captured["shape"] = tuple(data.shape)
+            captured["data"] = np.asarray(data, dtype=np.float32).copy()
+            captured["usage"] = usage
+            return SimpleNamespace(data=captured["data"])
+
+    fake_wgpu = SimpleNamespace(BufferUsage=SimpleNamespace(VERTEX=7))
+    monkeypatch.setitem(__import__("sys").modules, "wgpu", fake_wgpu)
+
+    renderer = WgpuRenderer()
+    renderer.device = _Device()
+
+    buffer, count = renderer._position_line_buffer(
+        [(1.0, 2.0, 3.0), (4.0, 5.0, 6.0)],
+        usage=fake_wgpu.BufferUsage.VERTEX,
+    )
+
+    assert buffer is not None
+    assert count == 2
+    assert captured["shape"] == (2, 3)
+    assert captured["usage"] == fake_wgpu.BufferUsage.VERTEX
+    assert captured["data"].tolist() == [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+
+
+def test_wgpu_mesh_hover_uses_explicit_hovered_node_and_toggle() -> None:
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    hovered = SimpleNamespace(name="Object3258")
+    sibling = SimpleNamespace(name="AuroraLight273", is_light=True)
+
+    renderer.hovered_node = hovered
+    renderer.show_mesh_hover = True
+
+    assert renderer._is_hovered_mesh_data(SimpleNamespace(source=hovered)) is True
+    assert renderer._is_hovered_mesh_data(SimpleNamespace(source=sibling)) is False
+
+    renderer.show_mesh_hover = False
+    assert renderer._is_hovered_mesh_data(SimpleNamespace(source=hovered)) is False
+
+    renderer.show_mesh_hover = True
+    hovered._gr_hidden = True
+    assert renderer._is_hovered_mesh_data(SimpleNamespace(source=hovered)) is False
+
+
+def test_qt_mesh_hover_uses_cpu_pick_even_when_gpu_pick_is_available() -> None:
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    hovered = SimpleNamespace(name="CM_Walls1")
+    calls = []
+
+    class _Position:
+        def x(self):
+            return 42
+
+        def y(self):
+            return 64
+
+    viewport = SimpleNamespace(
+        mesh_hover_enabled=True,
+        model=object(),
+        _transform_gizmo=SimpleNamespace(hovered_handle=None),
+        _measurement_mode=False,
+        _hovered_mesh_node=None,
+        _hovered_mesh_face_bounds=None,
+        meshHovered=SimpleNamespace(emit=lambda node: calls.append(("hover", node))),
+        _request_render=lambda fast=False, **kwargs: calls.append(("render", fast, kwargs)),
+    )
+
+    def pick_detail(x, y, *, allow_gpu=True):
+        calls.append(("pick", x, y, allow_gpu))
+        return hovered, ((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
+
+    viewport._mesh_hit_test_detail = pick_detail
+
+    QtViewportWidget._update_mesh_hover(viewport, SimpleNamespace(position=lambda: _Position()))
+
+    assert ("pick", 42, 64, False) in calls
+    assert viewport._hovered_mesh_node is hovered
+    assert calls[-1][0:2] == ("render", True)
+    assert calls[-1][2]["reason"] == "mesh hover changed"
+
+
+def test_qt_mesh_hover_is_suppressed_while_animation_pose_is_active() -> None:
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    calls = []
+
+    class _Position:
+        def x(self):
+            return 42
+
+        def y(self):
+            return 64
+
+    viewport = SimpleNamespace(
+        mesh_hover_enabled=True,
+        model=object(),
+        _renderer=SimpleNamespace(_anim_pose=object()),
+        _transform_gizmo=SimpleNamespace(hovered_handle=None),
+        _measurement_mode=False,
+        _hovered_mesh_node=object(),
+        _hovered_mesh_face_bounds=((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)),
+        _gpu_renderer=SimpleNamespace(hovered_node=object()),
+        meshHovered=SimpleNamespace(emit=lambda node: calls.append(("hover", node))),
+        _request_render=lambda fast=False, **kwargs: calls.append(("render", fast, kwargs)),
+        _mesh_hit_test_detail=lambda *args, **kwargs: calls.append(("pick", args, kwargs)),
+    )
+
+    QtViewportWidget._update_mesh_hover(viewport, SimpleNamespace(position=lambda: _Position()))
+
+    assert viewport._hovered_mesh_node is None
+    assert viewport._hovered_mesh_face_bounds is None
+    assert viewport._gpu_renderer.hovered_node is None
+    assert not any(call[0] == "pick" for call in calls)
+    assert calls[-1][0:2] == ("render", True)
+    assert calls[-1][2]["reason"] == "animation hover suppressed"
+
+
+def test_qt_viewport_clears_mesh_hover_during_camera_navigation() -> None:
+    import inspect
+    from types import SimpleNamespace
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    source = inspect.getsource(QtViewportWidget._press_navigation)
+    wheel_source = inspect.getsource(QtViewportWidget.eventFilter)
+    hover_source = inspect.getsource(QtViewportWidget._update_mesh_hover)
+
+    assert "_clear_mesh_hover" in source
+    assert "_clear_mesh_hover(request=False)" in wheel_source
+    assert "mesh hover changed" in hover_source
+    assert "snap view animation" not in hover_source
+
+    calls = []
+    viewport = SimpleNamespace(
+        _hovered_mesh_node=object(),
+        _hovered_mesh_face_bounds=((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)),
+        _gpu_renderer=SimpleNamespace(hovered_node=object()),
+        meshHovered=SimpleNamespace(emit=lambda node: calls.append(("hover", node))),
+        _request_render=lambda fast=False, **kwargs: calls.append(("render", fast, kwargs)),
+    )
+
+    cleared = QtViewportWidget._clear_mesh_hover(viewport, reason="camera orbit started")
+
+    assert cleared is True
+    assert viewport._hovered_mesh_node is None
+    assert viewport._hovered_mesh_face_bounds is None
+    assert viewport._gpu_renderer.hovered_node is None
+    assert ("hover", None) in calls
+    assert calls[-1][0:2] == ("render", True)
+    assert calls[-1][2]["reason"] == "camera orbit started"
+
+
+def test_wgpu_light_volume_helpers_match_moderngl_editor_sizes() -> None:
+    from src.gui.qt_lib.lighting.light_gizmo_renderer import LIGHT_HELPER_POINT_RADIUS, LIGHT_HELPER_SPOT_LENGTH
+    from src.gui.qt_lib.lighting.render_data import SceneLightRenderData, build_light_volume_line_batches
+
+    point = SceneLightRenderData(
+        light_id=1,
+        node_id="point",
+        name="AuroraLight001",
+        enabled=True,
+        light_type="aurora_point",
+        position=(0.0, 0.0, 0.0),
+        direction=(0.0, 0.0, -1.0),
+        color_rgb=(1.0, 1.0, 1.0),
+        intensity=1.0,
+        radius=50.0,
+        cone_angle_degrees=45.0,
+        area_size=8.0,
+        ambient_only=False,
+        cast_shadows=True,
+        group="",
+        selected=False,
+        hovered=False,
+        visible=True,
+        revision=0,
+    )
+    spot = SceneLightRenderData(
+        **{
+            **point.__dict__,
+            "light_id": 2,
+            "node_id": "spot",
+            "name": "Spot",
+            "light_type": "spot",
+            "radius": 80.0,
+        }
+    )
+
+    batches = build_light_volume_line_batches(
+        SimpleNamespace(lights=(point, spot), show_helpers=True, show_volumes=True)
+    )
+    vertices_by_color = [vertices for _color, vertices in batches]
+    all_vertices = [vertex for vertices in vertices_by_color for vertex in vertices]
+
+    assert max(abs(vertex[0]) for vertex in all_vertices) <= LIGHT_HELPER_POINT_RADIUS + 0.001
+    assert min(vertex[2] for vertex in all_vertices) >= -LIGHT_HELPER_SPOT_LENGTH - 0.001
+
+
+def test_wgpu_light_helper_color_uses_theme_palette_not_light_tint() -> None:
+    from src.gui.qt_lib.lighting.render_data import SceneLightRenderData, build_light_helper_line_batches
+
+    light = SceneLightRenderData(
+        light_id=1,
+        node_id="point",
+        name="AuroraLight001",
+        enabled=True,
+        light_type="aurora_point",
+        position=(0.0, 0.0, 0.0),
+        direction=(0.0, 0.0, -1.0),
+        color_rgb=(0.05, 0.2, 1.0),
+        intensity=1.0,
+        radius=5.0,
+        cone_angle_degrees=45.0,
+        area_size=1.0,
+        ambient_only=False,
+        cast_shadows=True,
+        group="",
+        selected=False,
+        hovered=False,
+        visible=True,
+        revision=0,
+    )
+
+    batches = build_light_helper_line_batches(
+        SimpleNamespace(
+            lights=(light,),
+            show_helpers=True,
+            helper_palette={"point": (1.0, 0.82, 0.10), "aurora_point": (1.0, 0.82, 0.10)},
+        )
+    )
+
+    assert batches
+    assert batches[0][0] == (1.0, 0.82, 0.10)
+
+
+def test_light_picker_hits_visible_projected_light_volume_ring() -> None:
+    from src.gui.qt_lib.lighting.light_picker import LightPicker
+
+    node = SimpleNamespace(
+        is_light=True,
+        light_kind="aurora_point",
+        light_radius=4.0,
+        position=(0.0, 0.0, 1.0),
+    )
+
+    def project(x, y, z, _width, _height):
+        return (100.0 + x * 20.0, 100.0 + y * 20.0, float(z))
+
+    def world_transform(light):
+        return light.position, (0.0, 0.0, 0.0, 1.0), False
+
+    picker = LightPicker(max_screen_distance=8)
+
+    assert picker.hit_test([node], 113, 100, 400, 300, project, world_transform, include_volumes=False) is None
+    assert picker.hit_test([node], 113, 100, 400, 300, project, world_transform, include_volumes=True) is node
+    assert picker.hit_test([node], 113, 100, 400, 300, project, world_transform) is node
+
+
+def test_wgpu_scene_lighting_only_drives_realistic_base_modes() -> None:
+    from src.gui.qt_lib.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    lighting = SimpleNamespace(mode="scene", diffuse_enabled=True)
+
+    assert renderer._scene_lighting_enabled(lighting, ViewportDisplayOptions(display_mode=ViewportDisplayMode.FULL_MATERIAL)) is True
+    assert renderer._scene_lighting_enabled(lighting, ViewportDisplayOptions(display_mode=ViewportDisplayMode.TEXTURED)) is True
+    assert renderer._scene_lighting_enabled(lighting, ViewportDisplayOptions(display_mode=ViewportDisplayMode.SHADED)) is False
+    assert renderer._scene_lighting_enabled(lighting, ViewportDisplayOptions(display_mode=ViewportDisplayMode.SOLID)) is False
+
+
+def test_qt_viewport_shader_complexity_does_not_override_lighting_mode() -> None:
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    calls = []
+    viewport = SimpleNamespace(
+        _renderer=SimpleNamespace(lighting_mode="scene"),
+        _gpu_renderer=SimpleNamespace(lighting_mode="scene"),
+        _request_render=lambda: calls.append("render"),
+    )
+
+    QtViewportWidget.set_shader_complexity_mode(viewport, "lighting_cost")
+
+    assert viewport._renderer.shader_complexity_mode == "lighting_cost"
+    assert viewport._gpu_renderer.shader_complexity_mode == "lighting_cost"
+    assert viewport._renderer.lighting_mode == "scene"
+    assert viewport._gpu_renderer.lighting_mode == "scene"
+    assert calls == ["render"]
+
+
+def test_wgpu_canvas_draw_sizes_depth_from_current_surface_texture() -> None:
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    source = inspect.getsource(WgpuRenderer._draw_to_canvas)
+
+    assert "current_texture = self.context.get_current_texture()" in source
+    assert "current_texture.size" in source
+    assert "self._ensure_depth_texture(int(width), int(height))" in source
+    assert "view = current_texture.create_view()" in source
+
+
+def test_wgpu_diffuse_textures_upload_capped_linear_mips(monkeypatch) -> None:
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuResourceCache, WgpuRenderer
+
+    captured = {"writes": [], "samplers": []}
+
+    class _Texture:
+        def create_view(self):
+            return object()
+
+    class _Queue:
+        def write_texture(self, destination, data, layout, size):
+            captured["writes"].append(
+                {
+                    "mip": destination["mip_level"],
+                    "size": tuple(size),
+                    "bytes_per_row": layout["bytes_per_row"],
+                    "data_size": len(data),
+                }
+            )
+
+    class _Device:
+        def __init__(self):
+            self.queue = _Queue()
+
+        def create_texture(self, **kwargs):
+            captured["texture"] = kwargs
+            return _Texture()
+
+        def create_sampler(self, **kwargs):
+            captured["samplers"].append(kwargs)
+            return object()
+
+    fake_wgpu = SimpleNamespace(
+        TextureUsage=SimpleNamespace(TEXTURE_BINDING=1, COPY_DST=2),
+        TextureDimension=SimpleNamespace(d2="2d"),
+        TextureFormat=SimpleNamespace(rgba8unorm="rgba8unorm", rgba8unorm_srgb="rgba8unorm-srgb"),
+        AddressMode=SimpleNamespace(clamp_to_edge="clamp", repeat="repeat"),
+        FilterMode=SimpleNamespace(linear="linear"),
+        MipmapFilterMode=SimpleNamespace(nearest="nearest", linear="linear"),
+    )
+    monkeypatch.setitem(__import__("sys").modules, "wgpu", fake_wgpu)
+
+    renderer = WgpuRenderer()
+    renderer.device = _Device()
+    cache = WgpuResourceCache(renderer)
+    rgba = bytes([96, 80, 64, 255]) * (16 * 16)
+
+    resource = cache._upload_rgba8_texture(
+        "diffuse",
+        rgba,
+        16,
+        16,
+        source_revision=(1, 16, 16),
+        label="diffuse",
+    )
+
+    assert resource.mip_level_count == 3
+    assert captured["texture"]["mip_level_count"] == 3
+    assert [write["size"] for write in captured["writes"]] == [(16, 16, 1), (8, 8, 1), (4, 4, 1)]
+    assert captured["samplers"][0]["address_mode_u"] == "repeat"
+    assert captured["samplers"][0]["mipmap_filter"] == "linear"
+    assert captured["samplers"][0]["lod_max_clamp"] == 2.0
+
+
+def test_wgpu_lightmaps_remain_single_level_linear_clamped(monkeypatch) -> None:
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuResourceCache, WgpuRenderer
+
+    captured = {"writes": [], "samplers": []}
+
+    class _Texture:
+        def create_view(self):
+            return object()
+
+    class _Queue:
+        def write_texture(self, destination, data, layout, size):
+            captured["writes"].append({"mip": destination["mip_level"], "size": tuple(size)})
+
+    class _Device:
+        def __init__(self):
+            self.queue = _Queue()
+
+        def create_texture(self, **kwargs):
+            captured["texture"] = kwargs
+            return _Texture()
+
+        def create_sampler(self, **kwargs):
+            captured["samplers"].append(kwargs)
+            return object()
+
+    fake_wgpu = SimpleNamespace(
+        TextureUsage=SimpleNamespace(TEXTURE_BINDING=1, COPY_DST=2),
+        TextureDimension=SimpleNamespace(d2="2d"),
+        TextureFormat=SimpleNamespace(rgba8unorm="rgba8unorm", rgba8unorm_srgb="rgba8unorm-srgb"),
+        AddressMode=SimpleNamespace(clamp_to_edge="clamp", repeat="repeat"),
+        FilterMode=SimpleNamespace(linear="linear"),
+        MipmapFilterMode=SimpleNamespace(nearest="nearest", linear="linear"),
+    )
+    monkeypatch.setitem(__import__("sys").modules, "wgpu", fake_wgpu)
+
+    renderer = WgpuRenderer()
+    renderer.device = _Device()
+    cache = WgpuResourceCache(renderer)
+    rgba = bytes([255, 255, 255, 255]) * (16 * 16)
+
+    resource = cache._upload_rgba8_texture(
+        "lightmap",
+        rgba,
+        16,
+        16,
+        source_revision=(1, 16, 16),
+        label="lightmap",
+        lightmap=True,
+    )
+
+    assert resource.mip_level_count == 1
+    assert captured["texture"]["mip_level_count"] == 1
+    assert [write["size"] for write in captured["writes"]] == [(16, 16, 1)]
+    assert captured["samplers"][0]["address_mode_u"] == "clamp"
+    assert captured["samplers"][0]["mipmap_filter"] == "nearest"
+    assert captured["samplers"][0]["lod_max_clamp"] == 0.0
+
+
+def test_wgpu_render_normals_smooth_compatible_uv_seam_duplicates() -> None:
+    import numpy as np
+
+    from src.gui.qt_lib.rendering.mesh_render_data import smooth_render_normals
+
+    positions = np.asarray(
+        [
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ],
+        dtype=np.float32,
+    )
+    normals = np.asarray(
+        [
+            (0.0, 0.0, 1.0),
+            (0.0, 0.24, 0.97),
+            (0.0, 0.0, 1.0),
+            (0.0, 0.24, 0.97),
+        ],
+        dtype=np.float32,
+    )
+
+    smoothed = smooth_render_normals(positions, normals, np.asarray([0, 2, 3, 1, 3, 2], dtype=np.uint32))
+
+    assert smoothed[0].tolist() == pytest.approx(smoothed[1].tolist(), abs=1e-5)
+    assert np.linalg.norm(smoothed[0]) == pytest.approx(1.0)
+
+
+def test_wgpu_render_normals_preserve_hard_edge_duplicate_vertices() -> None:
+    from src.gui.qt_lib.rendering.mesh_render_data import smooth_render_normals
+
+    positions = [
+        (0.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+    ]
+    normals = [
+        (0.0, 0.0, 1.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 0.0, 1.0),
+        (1.0, 0.0, 0.0),
+    ]
+
+    smoothed = smooth_render_normals(positions, normals, [0, 2, 3, 1, 3, 2])
+
+    assert smoothed[0].tolist() == pytest.approx([0.0, 0.0, 1.0])
+    assert smoothed[1].tolist() == pytest.approx([1.0, 0.0, 0.0])
+
+
+def test_wgpu_render_data_generates_area_weighted_normals_when_missing() -> None:
+    import numpy as np
+
+    from src.gui.qt_lib.rendering.mesh_render_data import iter_mesh_render_data
+
+    node = SimpleNamespace(
+        name="missing_normals",
+        vertices=[(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        normals=[],
+        uvs=[],
+        uvs_lm=[],
+        faces=[(0, 1, 2)],
+        face_uvs=[],
+        is_skin=False,
+        vertex_space=1,
+        render=True,
+        texture="",
+        alpha=1.0,
+    )
+    model = SimpleNamespace(all_nodes=lambda: [node])
+
+    rows = list(iter_mesh_render_data(model, textures={}))
+
+    assert len(rows) == 1
+    np.testing.assert_allclose(rows[0].normals, np.asarray([(0.0, 0.0, 1.0)] * 3, dtype=np.float32), atol=1e-6)
+
+
+def test_wgpu_skinned_mesh_revision_changes_between_bind_and_lbs_modes(monkeypatch) -> None:
+    import numpy as np
+
+    from src.gui.qt_lib.rendering import mesh_render_data
+
+    node = SimpleNamespace(
+        name="torso",
+        vertices=[(0.0, 0.0, 0.0)],
+        faces=[(0, 0, 0)],
+        is_skin=True,
+        vertex_space=0,
+        render=True,
+        texture="",
+        alpha=1.0,
+        skin_data=[{"weights": [(0, 1.0)]}],
+        bone_map=["pelvis"],
+        _gr_revision=7,
+    )
+    model = SimpleNamespace(all_nodes=lambda: [node])
+    positions = np.asarray([(0.0, 0.0, 0.0)], dtype=np.float32)
+    normals = np.asarray([(0.0, 0.0, 1.0)], dtype=np.float32)
+    uvs = np.asarray([(0.5, 0.5)], dtype=np.float32)
+    indices = np.asarray([0, 0, 0], dtype=np.uint32)
+    bone_indices = np.asarray([[0, 0, 0, 0]], dtype=np.uint16)
+    bone_weights = np.asarray([[1.0, 0.0, 0.0, 0.0]], dtype=np.float32)
+
+    monkeypatch.setattr(
+        mesh_render_data,
+        "_extract_node_arrays",
+        lambda _node, *, anim_pose=None: (
+            positions,
+            normals,
+            uvs,
+            uvs,
+            indices,
+            bone_indices,
+            bone_weights,
+            np.eye(4, dtype=np.float32),
+        ),
+    )
+
+    bind_row = list(mesh_render_data.iter_mesh_render_data(model, textures={}, anim_pose=None))[0]
+    animated_row = list(
+        mesh_render_data.iter_mesh_render_data(
+            model,
+            textures={},
+            anim_pose=SimpleNamespace(nodes={}, time=0.25),
+            allow_cpu_skinning=False,
+        )
+    )[0]
+
+    assert bind_row.is_skinned is True
+    assert animated_row.is_skinned is True
+    assert bind_row.source_revision[:-1] == animated_row.source_revision[:-1]
+    assert bind_row.source_revision[-1] == 0
+    assert animated_row.source_revision[-1] == 1
+
+
+def test_wgpu_animation_queue_key_uses_mode_not_pose_time() -> None:
+    from src.gui.qt_lib.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    renderer._active_scene = object()
+    renderer._active_anim_base_pose = object()
+    renderer._active_textures = {}
+    options = ViewportDisplayOptions(display_mode=ViewportDisplayMode.TEXTURED)
+
+    renderer._active_anim_pose = SimpleNamespace(time=0.1)
+    first = renderer._render_queue_revision_key(
+        options,
+        force_untextured=False,
+        force_no_lightmaps=True,
+    )
+    renderer._active_anim_pose = SimpleNamespace(time=0.6)
+    second = renderer._render_queue_revision_key(
+        options,
+        force_untextured=False,
+        force_no_lightmaps=True,
+    )
+    renderer._active_anim_pose = None
+    stopped = renderer._render_queue_revision_key(
+        options,
+        force_untextured=False,
+        force_no_lightmaps=True,
+    )
+
+    assert first == second
+    assert first != stopped
+
+
+def test_animation_skinning_profiles_resolve_content_browser_families() -> None:
+    from src.core.qt_core.animation.animation_engine import AnimationEngine
+    from src.core.animation.skinning_profiles import resolve_skinning_profile
+    from src.core.qt_core.geometry.model_data import KotorModel
+
+    local_character = resolve_skinning_profile("N_DarthMalak", "NULL", [], inherited_animation=False)
+    skinned_droid = resolve_skinning_profile("P_HK47", "NULL", ["TorsoHoses", "L_hose"], inherited_animation=False, has_skin=True)
+    rigid_droid = resolve_skinning_profile("P_T3M3", "NULL", [], inherited_animation=False, has_skin=False)
+    bith = resolve_skinning_profile("N_Bith", "S_Male02", [], inherited_animation=True)
+    carth = resolve_skinning_profile("P_CarthBB", "S_Female02", [], inherited_animation=True)
+    head = resolve_skinning_profile("PMHC01", "S_Female02", ["talkdummy"], inherited_animation=True, taxonomy="head")
+    creature = resolve_skinning_profile("C_Rancor", "NULL", ["cameramaster"], inherited_animation=False)
+
+    assert local_character.module_name.endswith("generated_character_skinning")
+    assert local_character.resref == "n_darthmalak"
+    assert skinned_droid.module_name.endswith("generated_character_skinning")
+    assert skinned_droid.resref == "p_hk47"
+    assert rigid_droid.module_name.endswith("generated_character_skinning")
+    assert rigid_droid.resref == "p_t3m3"
+    assert bith.module_name.endswith("generated_character_skinning")
+    assert bith.species == "bith"
+    assert carth.module_name.endswith("generated_character_skinning")
+    assert head.module_name.endswith("generated_character_skinning")
+    assert creature.module_name.endswith("generated_character_skinning")
+
+    model = KotorModel(name="N_DarthMalak", supermodel="NULL")
+    engine = AnimationEngine(model)
+    assert engine.skinning_profile.module_name.endswith("generated_character_skinning")
+    assert engine.skinning_profile.resref == "n_darthmalak"
+    assert engine.skinning_profile.skin_node_count > 0
+
+
+def test_animation_skinning_profiles_include_generated_character_registry() -> None:
+    from src.core.animation.skinning_profiles import resolve_skinning_profile
+    from src.core.animation.skinning_profiles.generated_character_skinning import (
+        CHARACTER_SKINNING_PROFILE_ROWS as COMPAT_PROFILE_ROWS,
+    )
+    from src.core.animation.skinning_profiles.types.generated_character_skinning import (
+        CHARACTER_SKINNING_PROFILE_BY_KEY,
+        CHARACTER_SKINNING_PROFILE_ROWS,
+    )
+
+    assert COMPAT_PROFILE_ROWS is CHARACTER_SKINNING_PROFILE_ROWS
+    assert len(CHARACTER_SKINNING_PROFILE_ROWS) >= 600
+    assert not any(str(row["resref"]).startswith(("gi_", "or_")) for row in CHARACTER_SKINNING_PROFILE_ROWS)
+    assert CHARACTER_SKINNING_PROFILE_BY_KEY["k1:n_darthmalak"]["skin_node_count"] > 0
+
+    malak = resolve_skinning_profile("N_DarthMalak", "NULL", [], inherited_animation=False)
+    hk47 = resolve_skinning_profile("P_HK47", "NULL", ["TorsoHoses"], inherited_animation=False)
+    t3 = resolve_skinning_profile("P_T3M3", "NULL", [], inherited_animation=False)
+
+    assert malak.key == "k1:n_darthmalak"
+    assert hk47.key == "k1:p_hk47"
+    assert hk47.skin_node_count > 0
+    assert t3.key == "k1:p_t3m3"
+    assert t3.rigid_animated is True
+    assert t3.requires_skin is False
+
+
+def test_animation_skinning_profiles_load_typed_profile_directories() -> None:
+    from src.core.animation.skinning_profiles import (
+        SKINNING_PROFILES,
+        SKINNING_SPECIES_PROFILES,
+        resolve_skinning_profile,
+    )
+
+    module_names = {profile.module_name for profile in SKINNING_PROFILES}
+
+    assert "src.core.animation.skinning_profiles.types.characters.human" in module_names
+    assert "src.core.animation.skinning_profiles.types.droids.t3m3" in module_names
+    assert "src.core.animation.skinning_profiles.types.droids.t3m4" in module_names
+    assert "src.core.animation.skinning_profiles.types.specialcase.malak" in module_names
+    assert "src.core.animation.skinning_profiles.types.generated_character_skinning" not in module_names
+    assert ".types.characters." in SKINNING_SPECIES_PROFILES["human"].module_name
+    assert ".types.droids." in SKINNING_SPECIES_PROFILES["utility_droid"].module_name
+    assert ".types.droids." in SKINNING_SPECIES_PROFILES["droid"].module_name
+    assert ".types.supermodels." in SKINNING_SPECIES_PROFILES["supermodel"].module_name
+
+    t3m4 = resolve_skinning_profile("P_T3M4", "NULL", [], inherited_animation=False, has_skin=False)
+    malak = resolve_skinning_profile("N_DarthMalak", "NULL", [], inherited_animation=False)
+
+    assert t3m4.module_name == "src.core.animation.skinning_profiles.types.generated_character_skinning"
+    assert t3m4.rigid_animated is True
+    assert malak.module_name == "src.core.animation.skinning_profiles.types.generated_character_skinning"
+
+
+def test_animation_skinning_profiles_mark_party_character_weight_policies() -> None:
+    from src.core.animation.skinning_profiles import resolve_skinning_profile
+
+    party_cases = {
+        ("K1", "P_CarthBB", "S_Female02", True): ("human", "authored_normalized_top4"),
+        ("K1", "P_Zaalbar", "N_WookieM", True): ("wookie", "authored_normalized_top4"),
+        ("K1", "P_T3M3", "NULL", False): ("utility_droid", "rigid_node_animation"),
+        ("K2", "P_G0T0", "NULL", False): ("utility_droid", "rigid_node_animation"),
+        ("K2", "P_HK47", "NULL", True): ("droid", "authored_normalized_top4"),
+    }
+
+    for (game, resref, supermodel, has_skin), (species, weight_policy) in party_cases.items():
+        profile = resolve_skinning_profile(
+            resref,
+            supermodel,
+            [],
+            inherited_animation=has_skin,
+            has_skin=has_skin,
+            metadata={"game": game},
+        )
+
+        assert profile.content_group == "party_character"
+        assert profile.species == species
+        assert profile.weight_policy == weight_policy
+        assert profile.max_influences == 4
+
+
+def test_qt_viewport_exposes_animation_playback_governor_and_live_overlay_skip() -> None:
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    viewport_source = inspect.getsource(QtViewportWidget)
+    init_source = inspect.getsource(QtGhostRiggerMainWindow.__init__)
+    play_source = inspect.getsource(QtGhostRiggerMainWindow._handle_animation_action)
+    tick_source = inspect.getsource(QtGhostRiggerMainWindow._tick_animation)
+
+    assert "def set_animation_playback_active" in viewport_source
+    assert "self._frame_governor.set_animation_playing(bool(active), reason)" in viewport_source
+    assert "def _can_skip_live_overlay_rebuild" in viewport_source
+    assert 'dirty_flags.get("scene", False)' in viewport_source
+    assert "self._skip_overlay_pixmap_update = True" in viewport_source
+    assert "governor is not None and governor.animation_playing" in viewport_source
+    assert "and not governor.animation_playing" in viewport_source
+    assert "self.canvas.is_live_surface()" in viewport_source
+    assert 'getattr(self._renderer, "_anim_pose", None) is not None' in viewport_source
+    assert "self._render_timer.setTimerType(QtCore.Qt.PreciseTimer)" in viewport_source
+    assert "self._animation_timer.setTimerType(QtCore.Qt.PreciseTimer)" in init_source
+    assert "self._animation_timer.setInterval(30)" in init_source
+    assert "self._animation_status_last_update = 0.0" in init_source
+    assert 'self.viewport.set_animation_playback_active(True, "animation playback")' in play_source
+    assert "self.viewport.set_animation_playback_active(False)" in play_source
+    assert "should_update_status" in tick_source
+    assert ">= 0.20" in tick_source
+    assert "self.viewport.set_animation_playback_active(False)" in tick_source
+
+
+def test_main_model_load_uses_inherited_animation_panel_loader() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    loaded_source = inspect.getsource(QtGhostRiggerMainWindow._on_model_loaded)
+    retarget_source = inspect.getsource(QtGhostRiggerMainWindow._activate_retarget_target_model)
+    library_source = inspect.getsource(QtGhostRiggerMainWindow._activate_animation_entry_model)
+
+    assert "self._load_animation_panel_model(model)" in loaded_source
+    assert "self.animations_panel.load_model(model)" not in loaded_source
+    assert "self._load_animation_panel_model(model)" in retarget_source
+    assert "self._load_animation_panel_model(model)" in library_source
+
+
+def test_wgpu_external_lighting_snapshot_receives_renderer_helper_palette(monkeypatch) -> None:
+    from src.gui.qt_lib.lighting.render_data import SceneLightingRenderData
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    monkeypatch.setitem(__import__("sys").modules, "wgpu", SimpleNamespace())
+    renderer = WgpuRenderer()
+    renderer.device = object()
+    renderer.queue = object()
+    renderer.light_buffer = object()
+    renderer.lighting_uniform_buffer = object()
+    renderer._active_lighting_render_data = SceneLightingRenderData()
+    renderer.light_helper_palette = {"light": (1.0, 0.82, 0.10), "point": (1.0, 0.82, 0.10)}
+
+    assert renderer._ensure_light_resource() is None
+    assert renderer._active_lighting_render_data.helper_palette["light"] == (1.0, 0.82, 0.10)
+
+
+def test_wgpu_material_uniforms_respect_diffuse_toggle_and_display_options() -> None:
+    import numpy as np
+
+    from src.gui.qt_lib.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    material = SimpleNamespace(
+        diffuse_texture_resource=object(),
+        has_lightmap=False,
+        alpha_mode="OPAQUE",
+        alpha_cutoff=0.5,
+    )
+    options = ViewportDisplayOptions(display_mode=ViewportDisplayMode.TEXTURED, show_textures=True)
+
+    renderer.show_diffuse_map = False
+    data = renderer._mesh_uniform_bytes(np.eye(4, dtype=np.float32), (1.0, 1.0, 1.0, 1.0), material, options)
+    assert len(data) == 176
+    flags = np.frombuffer(data[144:160], dtype=np.float32)
+    assert flags[0] == 0.0
+
+    renderer.show_diffuse_map = True
+    data = renderer._mesh_uniform_bytes(np.eye(4, dtype=np.float32), (1.0, 1.0, 1.0, 1.0), material, options)
+    flags = np.frombuffer(data[144:160], dtype=np.float32)
+    assert flags[0] == 1.0
+
+    shaded = ViewportDisplayOptions(display_mode=ViewportDisplayMode.SHADED)
+    data = renderer._mesh_uniform_bytes(np.eye(4, dtype=np.float32), (1.0, 1.0, 1.0, 1.0), material, shaded)
+    params = np.frombuffer(data[160:176], dtype=np.float32)
+    assert params[1] == 2.0
+
+    model_matrix = np.eye(4, dtype=np.float32)
+    model_matrix[0, 3] = 7.0
+    data = renderer._mesh_uniform_bytes(
+        np.eye(4, dtype=np.float32),
+        (1.0, 1.0, 1.0, 1.0),
+        material,
+        options,
+        model_matrix=model_matrix,
+    )
+    decoded_model = np.frombuffer(data[64:128], dtype=np.float32).reshape(4, 4).T
+    assert decoded_model[0, 3] == 7.0
+
+
+def test_wgpu_mesh_uniform_marks_selected_mesh_for_shader_fill() -> None:
+    import numpy as np
+
+    from src.gui.qt_lib.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    material = SimpleNamespace(
+        diffuse_texture_resource=object(),
+        has_lightmap=False,
+        alpha_mode="OPAQUE",
+        alpha_cutoff=0.5,
+    )
+    options = ViewportDisplayOptions(display_mode=ViewportDisplayMode.TEXTURED, show_textures=True)
+
+    unselected = renderer._mesh_uniform_bytes(
+        np.eye(4, dtype=np.float32),
+        (1.0, 1.0, 1.0, 1.0),
+        material,
+        options,
+        selected=False,
+    )
+    selected = renderer._mesh_uniform_bytes(
+        np.eye(4, dtype=np.float32),
+        (1.0, 1.0, 1.0, 1.0),
+        material,
+        options,
+        selected=True,
+    )
+
+    assert np.frombuffer(unselected[160:176], dtype=np.float32)[3] == 0.0
+    assert np.frombuffer(selected[160:176], dtype=np.float32)[3] == 1.0
+
+
+def test_wgpu_mesh_shaders_apply_moderngl_selected_yellow_fill() -> None:
+    from src.gui.qt_lib.rendering import wgpu_renderer
+
+    expected = "mix(out_color.rgb, vec3<f32>(1.0, 0.78, 0.12), 0.45)"
+
+    assert expected in wgpu_renderer._load_mesh_shader()
+    assert expected in wgpu_renderer._load_skinned_mesh_shader()
+    assert "locals.model * vec4<f32>(input.position, 1.0)" in wgpu_renderer._load_mesh_shader()
+    assert "locals.model * skin_position(input)" in wgpu_renderer._load_skinned_mesh_shader()
+
+
+def test_wgpu_mesh_draw_uses_per_draw_uniforms_for_selected_fill() -> None:
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    draw_source = inspect.getsource(WgpuRenderer._draw_mesh_item)
+    render_source = inspect.getsource(WgpuRenderer.render)
+    uniform_source = inspect.getsource(WgpuRenderer._set_mesh_uniform)
+
+    assert "self._set_mesh_uniform(render_pass, uniform)" in draw_source
+    assert "self._begin_uniform_frame()" in render_source
+    assert "render_pass.set_bind_group(0, self.mesh_bind_group, [offset])" in uniform_source
+
+
+def test_wgpu_mesh_hover_edges_are_translucent_and_isolated_from_selection_edges() -> None:
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    draw_source = inspect.getsource(WgpuRenderer._draw_meshes)
+    edge_source = inspect.getsource(WgpuRenderer._draw_edge_items)
+    pipeline_source = inspect.getsource(WgpuRenderer._create_line_pipeline)
+
+    assert renderer.hovered_edge_alpha < 1.0
+    assert renderer.show_mesh_hover_edges is False
+    assert 'getattr(self, "show_mesh_hover_edges", False)' in draw_source
+    assert 'getattr(self, "hovered_edge_alpha", 0.45)' in draw_source
+    assert "self._set_line_uniform(render_pass, self._mesh_mvp_matrix(mvp, mesh_data), color)" in edge_source
+    assert "wgpu.BlendFactor.src_alpha" in pipeline_source
+
+
+def test_wgpu_skinned_edge_overlay_uses_skin_palette_during_animation() -> None:
+    from src.gui.qt_lib.rendering import wgpu_renderer
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    create_source = inspect.getsource(WgpuRenderer._create_skinned_line_pipeline)
+    edge_source = inspect.getsource(WgpuRenderer._draw_edge_items)
+
+    assert "pipeline_lines_skinned" in create_source
+    assert "_SKINNED_LINE_WGSL" in create_source
+    assert "self.skin_bind_group_layout" in create_source
+    assert "get_or_update_skin_palette" in edge_source
+    assert "render_pass.set_bind_group(1, skin_resource.bind_group)" in edge_source
+    assert "pipeline = self.pipeline_lines_skinned" in edge_source
+    assert "@group(1) @binding(0)" in wgpu_renderer._SKINNED_LINE_WGSL
+    assert "locals.mvp * skin_position(input)" in wgpu_renderer._SKINNED_LINE_WGSL
+
+
+def test_wgpu_render_consumes_mesh_hover_payload() -> None:
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    source = inspect.getsource(WgpuRenderer.render)
+    viewport_source = inspect.getsource(QtViewportWidget._render_gpu_frame)
+
+    assert 'self.hovered_node = kwargs.get("hovered_node")' in source
+    assert 'self.show_mesh_hover = bool(kwargs.get("show_mesh_hover"' in source
+    assert 'hovered_node=getattr(self, "_hovered_mesh_node", None)' in viewport_source
+    assert 'show_mesh_hover=bool(getattr(self, "mesh_hover_enabled", True))' in viewport_source
+
+
 def test_qt_lighting_panel_select_light_syncs_from_viewport_without_emitting() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -1125,6 +2409,30 @@ def test_qt_lighting_panel_select_light_syncs_from_viewport_without_emitting() -
     assert panel.radius_spin.value() == 11.75
 
     panel.select_light(None)
+
+    assert emitted == []
+    assert panel._selected is None
+    assert panel.tree.selectedItems() == []
+
+
+def test_qt_lighting_panel_clears_when_viewport_selects_non_light() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    light = SimpleNamespace(name="AuroraLight223", is_light=True, light_kind="point", light_radius=11.75)
+    mesh = SimpleNamespace(name="Object3258", vertices=[(0.0, 0.0, 0.0)], faces=[(0, 0, 0)])
+    panel = QtLightingPanel()
+    emitted = []
+    panel.lightSelected.connect(emitted.append)
+    panel.set_model(SimpleNamespace(all_nodes=lambda: [light, mesh]))
+    panel.select_light(light)
+    emitted.clear()
+
+    panel.select_light(mesh)
 
     assert emitted == []
     assert panel._selected is None
@@ -1174,6 +2482,22 @@ def test_main_window_routes_scene_root_skeleton_selection_through_scene_object()
     assert "self._select_scene_object_impl(obj.id)" in skeleton_source
     assert "self.viewport.set_selected_node(node)" in skeleton_source
     assert "self._sync_skeleton_root_for_scene_object(obj)" in viewport_source
+
+
+def test_main_statusbar_has_persistent_viewport_render_state() -> None:
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    viewport_source = inspect.getsource(QtViewportWidget)
+    layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    status_source = inspect.getsource(QtGhostRiggerMainWindow._build_statusbar)
+
+    assert "renderStateChanged" in viewport_source
+    assert "render_state_status_text" in viewport_source
+    assert "_configured_renderer_status_label" in viewport_source
+    assert "viewport.renderStateChanged.connect(self._on_viewport_render_state_changed)" in layout_source
+    assert "viewport_render_state_label" in status_source
+    assert "addPermanentWidget" in status_source
 
 
 def test_cinematic_camera_model_links_focal_length_and_fov() -> None:
@@ -1445,7 +2769,9 @@ def test_main_window_exposes_module_meshes_as_detachable_dock() -> None:
     assert "self.module_meshes_panel_action" in actions_source
     assert 'self._icon("module_meshes")' in actions_source
     assert "modules_menu.addAction(self.module_meshes_panel_action)" in menu_source
-    assert "self.module_geometry_panel.show_model(model)" in refresh_source
+    assert "self.module_geometry_panel.show_model(self._active_viewport_model())" in refresh_source
+    assert "self.viewport.meshSelectionChanged.connect(self.module_geometry_panel.select_module_meshes)" in layout_source
+    assert "meshHovered.connect(self.module_geometry_panel" not in layout_source
     assert (Path("src/gui/icons/module_meshes.svg")).exists()
     assert hasattr(QtPropertiesPanel, "set_module_browser_only")
 
@@ -1583,12 +2909,24 @@ def test_main_window_command_bar_is_fixed_and_docks_are_scrollable() -> None:
     button_source = inspect.getsource(QtGhostRiggerMainWindow._tool_button)
     visibility_source = inspect.getsource(QtGhostRiggerMainWindow._on_detachable_panel_visibility)
     dock_source = inspect.getsource(QtGhostRiggerMainWindow._create_detachable_panel)
+    init_source = inspect.getsource(QtGhostRiggerMainWindow.__init__)
+    top_level_source = inspect.getsource(QtGhostRiggerMainWindow._on_detachable_panel_top_level_changed)
+    show_detachable_source = inspect.getsource(QtGhostRiggerMainWindow._show_detachable_panel)
+    new_host_source = inspect.getsource(QtGhostRiggerMainWindow._move_detachable_panel_to_new_host)
 
     assert "CommandBarScroll" not in command_source
     assert "host_layout.addWidget(bar, 1)" in command_source
     assert "visual_profile_combo" in command_source
     assert "make_scrollable_panel(widget" in dock_source
     assert 'f"{key}DockScroll"' in dock_source
+    assert "QtWidgets.QMainWindow.AllowNestedDocks" in init_source
+    assert "QtWidgets.QMainWindow.AllowTabbedDocks" in init_source
+    assert "QtWidgets.QMainWindow.GroupedDragging" in init_source
+    assert "QtWidgets.QDockWidget.DockWidgetFloatable" in dock_source
+    assert "_promote_detached_panel_window" not in top_level_source
+    assert "dock.setFloating(True)" in show_detachable_source
+    assert "_promote_detached_panel_window" not in show_detachable_source
+    assert "QtFloatingDockHost(self, dock.windowTitle(), key)" in new_host_source
 
 
 def test_viewport_and_character_builder_toolbars_are_scrollable() -> None:
@@ -2852,3 +4190,87 @@ def test_gpu_vbo_splits_skin_bind_and_animated_input_space() -> None:
     assert "apply_skin_node_transform_for_bind" in source
     assert "not is_skin or bool(apply_skin_node_transform_for_bind)" in source
     assert "elif _node_vs == 1 or is_skin" in source
+
+
+def test_arcball_frame_bounds_expands_clip_range_for_large_assets() -> None:
+    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera
+
+    camera = ArcBallCamera()
+    camera.frame_bounds((-1200.0, -900.0, -200.0), (1200.0, 900.0, 200.0), reset_view=True)
+
+    assert camera._far > 1000.0
+    assert camera._far > camera.distance
+    assert 0.001 <= camera._near <= 0.05
+    assert camera._near < max(0.001, camera.distance - 200.0)
+
+
+def test_arcball_zoom_tightens_near_clip_for_close_animation_inspection() -> None:
+    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera
+
+    camera = ArcBallCamera()
+    camera._near = 0.05
+    camera.distance = 1.0
+
+    camera.zoom(30.0)
+
+    assert camera.distance < 0.1
+    assert camera._near == pytest.approx(0.001)
+    assert camera._far > camera.distance
+
+
+def test_wgpu_frustum_culling_uses_world_space_mesh_bounds() -> None:
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    mesh = SimpleNamespace(
+        positions=np.asarray([(10.0, 10.0, 10.0), (11.0, 11.0, 11.0)], dtype=np.float32),
+        world_matrix=np.asarray(
+            [
+                [1.0, 0.0, 0.0, -10.5],
+                [0.0, 1.0, 0.0, -10.5],
+                [0.0, 0.0, 1.0, -10.5],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+            dtype=np.float32,
+        ),
+        is_skinned=False,
+    )
+    unit_cube_planes = (
+        (1.0, 0.0, 0.0, 1.0),
+        (-1.0, 0.0, 0.0, 1.0),
+        (0.0, 1.0, 0.0, 1.0),
+        (0.0, -1.0, 0.0, 1.0),
+        (0.0, 0.0, 1.0, 1.0),
+        (0.0, 0.0, -1.0, 1.0),
+    )
+
+    assert renderer._mesh_data_outside_frustum(mesh, unit_cube_planes) is False
+
+
+def test_wgpu_frustum_culling_keeps_animated_skinned_meshes_visible() -> None:
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    renderer._active_anim_pose = SimpleNamespace(time=1.0)
+    mesh = SimpleNamespace(
+        positions=np.asarray([(50.0, 50.0, 50.0), (51.0, 51.0, 51.0)], dtype=np.float32),
+        is_skinned=True,
+    )
+    unit_cube_planes = (
+        (1.0, 0.0, 0.0, 1.0),
+        (-1.0, 0.0, 0.0, 1.0),
+        (0.0, 1.0, 0.0, 1.0),
+        (0.0, -1.0, 0.0, 1.0),
+        (0.0, 0.0, 1.0, 1.0),
+        (0.0, 0.0, -1.0, 1.0),
+    )
+
+    assert renderer._mesh_data_outside_frustum(mesh, unit_cube_planes) is False

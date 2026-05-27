@@ -1,10 +1,14 @@
-<theme id="matrix" name="Matrix" version="1" highContrast="true">
+<theme id="default_matrix" name="Default Matrix" version="1" highContrast="true">
     <metadata>
         <author>GhostRigger</author>
-        <description>Classic high-contrast GhostRigger Matrix green theme.</description>
+        <description>Default native UI geometry with Matrix colors.</description>
         <mode>dark</mode>
         <highContrast>true</highContrast>
     </metadata>
+    <styles>
+        <style name="application.paletteOnly" value="true"/>
+        <style name="splash.surfaceStyle" value="matte"/>
+    </styles>
     <colors>
         <color name="window.background" value="#0B0F0D"/>
         <color name="panel.background" value="#111916"/>
@@ -13,6 +17,13 @@
         <color name="viewport.background" value="#07100C"/>
         <color name="viewport.border" value="#34383F"/>
         <color name="viewport.text" value="#8F9AAA"/>
+        <color name="viewport.helper.meshHover" value="#00D7B5"/>
+        <color name="viewport.helper.light" value="#FFD24A"/>
+        <color name="viewport.helper.lightSelected" value="#E6F2FF"/>
+        <color name="viewport.helper.camera" value="#B4D2DC"/>
+        <color name="viewport.helper.cameraSelected" value="#FFD658"/>
+        <color name="viewport.helper.null" value="#A3B8D1"/>
+        <color name="viewport.helper.nullSelected" value="#FFD658"/>
         <color name="toolbar.background" value="#111916"/>
         <color name="toolbar.border" value="#102019"/>
         <color name="button.background" value="#151D1A"/>
@@ -47,7 +58,7 @@
         <color name="success" value="#00FF7A"/>
     </colors>
     <fonts>
-        <font role="default" family="Consolas" size="9"/>
+        <font role="default" family="Segoe UI" size="9"/>
         <font role="monospace" family="Consolas" size="9"/>
         <font role="heading" family="Segoe UI" size="10" weight="bold"/>
         <font role="matrix" family="Aurebesh AF" size="9"/>
@@ -58,25 +69,17 @@
         <size role="toolbar" value="18"/>
         <size role="largeToolbar" value="24"/>
     </icons>
-    <styles>
-        <style name="tab.mode" value="beveled"/>
-    </styles>
     <metrics>
-        <metric name="toolbar.height" value="38"/>
+        <metric name="toolbar.height" value="34"/>
         <metric name="toolbar.iconSize" value="18"/>
-        <metric name="toolbar.spacing" value="5"/>
+        <metric name="toolbar.spacing" value="4"/>
         <metric name="button.height" value="16"/>
         <metric name="button.minWidth" value="64"/>
         <metric name="button.paddingH" value="6"/>
         <metric name="button.paddingV" value="1"/>
         <metric name="panel.margin" value="4"/>
         <metric name="panel.spacing" value="4"/>
-        <metric name="panel.minWidth" value="280"/>
-        <metric name="panel.preferredWidth" value="380"/>
-        <metric name="splitter.handleWidth" value="8"/>
-        <metric name="bottom.preferredHeight" value="220"/>
-        <metric name="bottom.minHeight" value="120"/>
-        <metric name="viewport.minWidth" value="500"/>
-        <metric name="border.radius" value="3"/>
+        <metric name="splitter.handleWidth" value="6"/>
+        <metric name="tab.height" value="14"/>
     </metrics>
 </theme>

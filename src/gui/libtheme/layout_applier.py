@@ -137,10 +137,14 @@ class LayoutApplier(QtCore.QObject):
                 continue
             panel = layout.panel(panel_id)
             widget.setVisible(panel.visible)
-            if panel_id != "outputLog" and panel.min_width:
+            if panel_id != "outputLog" and isinstance(widget, QtWidgets.QDockWidget):
+                widget.setMaximumWidth(16777215)
+            user_resizable_width = panel_id == "contentBrowser"
+            if panel_id != "outputLog" and panel.min_width and not user_resizable_width:
                 widget.setMinimumWidth(panel.min_width)
-            if panel_id != "outputLog" and panel.preferred_width:
-                widget.setMaximumWidth(max(panel.preferred_width + 220, panel.min_width))
+            if user_resizable_width:
+                widget.setMinimumWidth(0)
+                widget.setMaximumWidth(16777215)
             if panel.min_height:
                 widget.setMinimumHeight(panel.min_height)
             if isinstance(widget, QtWidgets.QDockWidget) and panel.preferred_width:
@@ -170,6 +174,7 @@ class LayoutApplier(QtCore.QObject):
                     if panel_id not in layout.panels:
                         dock.setVisible(False)
                         continue
+                    dock.setMaximumWidth(16777215)
                     dock.setVisible(panel.visible)
                     dock.resize(panel.preferred_width, max(520, panel.preferred_height))
         self._apply_dock_groups(layout, window)

@@ -77,7 +77,19 @@ from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow
 from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditorWindow
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
+from src.gui.qt_lib.rendering.hardware_info import collect_hardware_diagnostics
+from src.gui.qt_lib.rendering.renderer_backend import RendererBackend, renderer_backend_label
+from src.gui.qt_lib.rendering.renderer_factory import renderer_capabilities_snapshot
 from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
+from src.gui.qt_lib.integration.editor_services import (
+    ActiveViewportService,
+    DiagnosticsService,
+    EditorIntegrationEventBus,
+    RendererService,
+    SceneService,
+    SelectionService,
+)
+from src.gui.qt_lib.integration.tool_integration_registry import build_default_tool_integration_registry
 from src.gui.libtheme import LayoutManager, ThemeManager
 from src.gui.libtheme.style_tokens import FALLBACK_STYLES, LEGACY_MATRIX_COLORS
 from src.gui.libtheme.theme_editor_window import ThemeEditorWindow
@@ -95,6 +107,24 @@ _SPLASH_SURFACE_STYLES = {"matte", "bevelled", "glossy", "flat"}
 
 _GUI_DIR = Path(__file__).resolve().parents[1]
 _QT_ICON_DIR = (_GUI_DIR / "icons").as_posix()
+_WGPU_BACKEND_TYPES = {
+    RendererBackend.WGPU_D3D12.value: "D3D12",
+    RendererBackend.WGPU_VULKAN.value: "Vulkan",
+    RendererBackend.WGPU_OPENGL.value: "OpenGL",
+}
+
+
+def _wgpu_backend_type(backend_id: object) -> str:
+    return _WGPU_BACKEND_TYPES.get(str(backend_id or ""), "")
+
+
+def _wgpu_backend_restart_required(
+    old_settings: RendererSettings,
+    new_settings: RendererSettings,
+) -> bool:
+    old_type = _wgpu_backend_type(old_settings.backend.value)
+    new_type = _wgpu_backend_type(new_settings.backend.value)
+    return bool(old_type and new_type and old_type != new_type)
 
 
 def _lighten_hex(value: str, factor: float = 1.18) -> str:
@@ -159,6 +189,16 @@ def _native_splash_palette_colors() -> dict[str, str]:
         "input.background": _palette_hex(palette, role.Base),
         "success": _palette_hex(palette, role.Highlight),
     }
+
+
+def _primary_screen_available_geometry() -> Optional[QtCore.QRect]:
+    screen = QtGui.QGuiApplication.primaryScreen()
+    if screen is None:
+        screens = QtGui.QGuiApplication.screens()
+        screen = screens[0] if screens else None
+    if screen is None:
+        return None
+    return QtCore.QRect(screen.availableGeometry())
 
 
 class _ThemeColorOverride:
@@ -311,6 +351,7 @@ def _walkmesh_overlay_node_from_wok(wok_data, label: str, world_offset=(0.0, 0.0
     ]
     node._gr_walkmesh_overlay_proxy = True
     node._gr_walkmesh_source_label = str(label or "")
+    node._gr_hidden = True
     return node
 
 
@@ -1186,10 +1227,9 @@ class QtStartupSplash(QtWidgets.QWidget):
             self.progress_panel.set_busy(title, detail)
 
     def _center_on_screen(self) -> None:
-        screen = QtGui.QGuiApplication.primaryScreen()
-        if screen is None:
+        geometry = _primary_screen_available_geometry()
+        if geometry is None:
             return
-        geometry = screen.availableGeometry()
         self.move(geometry.center() - self.rect().center())
 
 
@@ -1208,6 +1248,10 @@ class QtFloatingDockHost(QtWidgets.QMainWindow):
         except Exception:
             pass
         self.setDockNestingEnabled(True)
+        self._dock_fill_placeholder = QtWidgets.QWidget(self)
+        self._dock_fill_placeholder.setObjectName(f"{host_key}DockFillPlaceholder")
+        self._dock_fill_placeholder.setFixedSize(0, 0)
+        self.setCentralWidget(self._dock_fill_placeholder)
         self.setDockOptions(
             QtWidgets.QMainWindow.AnimatedDocks
             | QtWidgets.QMainWindow.AllowNestedDocks
@@ -1253,28 +1297,15 @@ class QtFloatingDockHost(QtWidgets.QMainWindow):
                 except Exception:
                     pass
             dock.setParent(self)
-            central_dock = self.centralWidget()
-            if isinstance(central_dock, QtWidgets.QDockWidget) and central_dock is not dock:
-                self.takeCentralWidget()
-                existing_key = self._key_for_dock(central_dock)
-                self.addDockWidget(self._default_area_for_key(existing_key), central_dock)
             existing_docks = [
                 existing
                 for existing in self.findChildren(QtWidgets.QDockWidget)
                 if existing is not dock and _qt_object_alive(existing)
             ]
-            if not existing_docks:
-                try:
-                    self.removeDockWidget(dock)
-                except Exception:
-                    pass
-                self.setCentralWidget(dock)
-                self._relax_dock_size_limits(dock)
-            else:
-                self.addDockWidget(area, dock)
-                self._relax_dock_size_limits(dock)
-                if tabify:
-                    self.tabifyDockWidget(existing_docks[-1], dock)
+            self.addDockWidget(area, dock)
+            self._relax_dock_size_limits(dock)
+            if tabify and existing_docks:
+                self.tabifyDockWidget(existing_docks[-1], dock)
             dock.show()
             if key not in self.dock_keys:
                 self.dock_keys.append(key)
@@ -1321,8 +1352,6 @@ class QtFloatingDockHost(QtWidgets.QMainWindow):
         ]
 
     def _expand_dock_layout(self) -> None:
-        if isinstance(self.centralWidget(), QtWidgets.QDockWidget):
-            return
         docks = self._dock_widgets()
         if not docks:
             return
@@ -1337,18 +1366,7 @@ class QtFloatingDockHost(QtWidgets.QMainWindow):
             pass
 
     def _promote_single_dock_to_central(self) -> None:
-        if isinstance(self.centralWidget(), QtWidgets.QDockWidget):
-            return
-        docks = self._dock_widgets()
-        if len(docks) != 1:
-            return
-        dock = docks[0]
-        try:
-            self.removeDockWidget(dock)
-            self.setCentralWidget(dock)
-            dock.show()
-        except Exception:
-            pass
+        self._expand_dock_layout()
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
         super().resizeEvent(event)
@@ -1382,6 +1400,20 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def __init__(self, app_root: Optional[Path] = None, startup_input: Optional[dict] = None):
         super().__init__()
+        self.setDockNestingEnabled(True)
+        self.setDockOptions(
+            QtWidgets.QMainWindow.AnimatedDocks
+            | QtWidgets.QMainWindow.AllowNestedDocks
+            | QtWidgets.QMainWindow.AllowTabbedDocks
+            | QtWidgets.QMainWindow.GroupedDragging
+        )
+        all_dock_areas = (
+            QtCore.Qt.LeftDockWidgetArea
+            | QtCore.Qt.RightDockWidgetArea
+            | QtCore.Qt.TopDockWidgetArea
+            | QtCore.Qt.BottomDockWidgetArea
+        )
+        self.setTabPosition(all_dock_areas, QtWidgets.QTabWidget.North)
         self.app_root = app_root or Path(__file__).resolve().parents[2]
         self.startup_input = startup_input or {}
         self.settings_path = self.app_root / "settings.json"
@@ -1397,6 +1429,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.settings_data.setdefault("mixamo_companion_mesh_path", "")
         RendererSettings.apply_defaults(self.settings_data)
         self._preloaded_library = dict(self.startup_input.get("preloaded_library") or {})
+        self._preloaded_hardware_diagnostics = dict(self.startup_input.get("hardware_diagnostics") or {})
+        self._preloaded_renderer_capabilities = list(self.startup_input.get("renderer_capabilities") or [])
         self._suppress_theme_progress_toast = True
         self.theme_manager = ThemeManager(self.app_root, self.settings_data, self)
         self.layout_manager = LayoutManager(self.app_root, self.settings_data, self)
@@ -1443,6 +1477,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._animation_engine = None
         self._animation_loop = False
         self._animation_last_tick: Optional[float] = None
+        self._animation_status_last_update = 0.0
         self._retarget_source_model = None
         self._retarget_target_model = None
         self._retarget_engine = None
@@ -1454,7 +1489,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.sequence_editor_docked_window: Optional[SequenceEditorWindow] = None
         self._matrix_engine = QtMatrixEngine(self, fps=12)
         self._animation_timer = QtCore.QTimer(self)
-        self._animation_timer.setInterval(33)
+        self._animation_timer.setTimerType(QtCore.Qt.PreciseTimer)
+        self._animation_timer.setInterval(30)
         self._animation_timer.timeout.connect(self._tick_animation)
         self._retarget_timer = QtCore.QTimer(self)
         self._retarget_timer.setInterval(33)
@@ -1465,6 +1501,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         initial_layout = self.layout_manager.get_layout()
         self.resize(initial_layout.main_width, initial_layout.main_height)
         self.setMinimumSize(1100, 700)
+        self._place_on_primary_startup_screen()
         update_legacy_palette(self.theme_manager.get_theme())
         self._build_actions()
         self._diagnostics_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+D"), self)
@@ -1473,7 +1510,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._build_toolbar()
         self._build_layout()
         self.theme_manager.register_theme_aware_widget(self)
-        self.theme_manager.register_theme_aware_widget(self.viewport)
         self.theme_manager.apply_current_theme(self)
         self.layout_manager.apply_current_layout(self)
         self._build_statusbar()
@@ -1496,6 +1532,19 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def _enable_theme_progress_toasts(self) -> None:
         self._suppress_theme_progress_toast = False
+
+    def _place_on_primary_startup_screen(self) -> None:
+        geometry = _primary_screen_available_geometry()
+        if geometry is None:
+            return
+        size = self.size()
+        if not size.isValid() or size.isEmpty():
+            size = self.sizeHint()
+        width = max(1, min(int(size.width()), int(geometry.width())))
+        height = max(1, min(int(size.height()), int(geometry.height())))
+        x = geometry.x() + max(0, (geometry.width() - width) // 2)
+        y = geometry.y() + max(0, (geometry.height() - height) // 2)
+        self.setGeometry(x, y, width, height)
 
     def moveEvent(self, event):
         super().moveEvent(event)
@@ -1633,6 +1682,14 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             QFrame#HeaderBar, QFrame#CommandBar, QFrame#CommandBarHost {{
                 background: transparent;
             }}
+            QMainWindow::separator {{
+                background: {C['border']};
+                width: 4px;
+                height: 4px;
+            }}
+            QMainWindow::separator:hover {{
+                background: {C['border']};
+            }}
             QFrame#HeaderBar {{
                 border-bottom: 1px solid #102019;
             }}
@@ -1733,8 +1790,19 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     def apply_native_theme(self) -> None:
         for widget in self.findChildren(QtWidgets.QWidget):
             widget.setStyleSheet("")
-        self.setStyleSheet("")
         theme = self.theme_manager.current_theme or self.theme_manager.get_theme()
+        self.setStyleSheet(
+            f"""
+            QMainWindow::separator {{
+                background: {theme.color('panel.border', C['border'])};
+                width: 4px;
+                height: 4px;
+            }}
+            QMainWindow::separator:hover {{
+                background: {theme.color('panel.border', C['border'])};
+            }}
+            """
+        )
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "apply_native_theme"):
             viewport.apply_native_theme()
@@ -2049,6 +2117,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.notify_gmodular_action.triggered.connect(self._ipc_notify_saved)
         self.refresh_gmodular_action = QtGui.QAction("Refresh GModular Viewport", self)
         self.refresh_gmodular_action.triggered.connect(self._ipc_refresh_gmodular)
+        self.about_action = QtGui.QAction("About GhostRigger...", self)
+        self.about_action.triggered.connect(lambda: show_about(self))
 
         self.quit_action = QtGui.QAction("Exit", self)
         self.quit_action.setShortcut("Alt+F4")
@@ -2120,13 +2190,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         mdlops_menu.addAction(self.decompile_action)
 
         help_menu = self.menuBar().addMenu("Help")
-        about_action = QtGui.QAction("About", self)
-        about_action.triggered.connect(lambda: show_about(self))
         format_action = QtGui.QAction("KotOR MDL Format Reference", self)
         format_action.triggered.connect(lambda: show_format_reference(self))
         viewport_controls_action = QtGui.QAction("Viewport Navigation Controls", self)
         viewport_controls_action.triggered.connect(lambda: show_viewport_navigation_reference(self))
-        help_menu.addAction(about_action)
+        help_menu.addAction(self.about_action)
         help_menu.addAction(viewport_controls_action)
         help_menu.addAction(format_action)
         diagnostics_menu = help_menu.addMenu("Diagnostics")
@@ -2650,7 +2718,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         dock.show()
         self._sync_dock_toggle_action(key, True)
         dock.setFloating(True)
-        self._promote_detached_panel_window(key, dock)
         self._persist_selected_layout_dock_state()
 
     def _show_workspace_dock(self, key: str) -> None:
@@ -2712,8 +2779,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         dock = self._detachable_dock_for_key(key)
         if dock is None:
             return
-        if floating and not self._dock_rehosting:
-            QtCore.QTimer.singleShot(0, lambda k=key: self._promote_detached_panel_window(k))
         self._remember_detachable_panel_state(key, dock)
 
     def _promote_detached_panel_window(self, key: str, dock: Optional[QtWidgets.QDockWidget] = None) -> None:
@@ -3054,10 +3119,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 continue
             panel_id = self._profile_panel_id_for_dock_key(key)
             area_name = self._dock_area_name(self.dockWidgetArea(dock))
+            min_width = 0 if key == "content_browser" else max(120, dock.minimumWidth())
             panels[panel_id] = {
                 "visible": bool(dock.isVisible()),
                 "region": area_name,
-                "min_width": max(120, dock.minimumWidth()),
+                "min_width": min_width,
                 "preferred_width": max(120, dock.width()),
                 "min_height": max(80, dock.minimumHeight()),
                 "preferred_height": max(120, dock.height()),
@@ -3165,6 +3231,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.content_browser_panel.scanRequested.connect(self._scan_library)
         self.content_browser_panel.deepScanRequested.connect(self._scan_library)
         self.content_browser_panel.loadRequested.connect(self._start_resource_load)
+        self.content_browser_panel.primarySceneLoadRequested.connect(self._load_content_browser_primary_scene_model)
         self.content_browser_panel.extractRequested.connect(self._extract_library_row)
         self.content_browser_panel.levelEditorImportRequested.connect(self._send_library_row_to_module_editor)
         self.content_browser_panel.retargetSourceRequested.connect(
@@ -3331,6 +3398,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport.set_axis_mode(self.settings_data.get("last_axis_mode", AxisMode.WORLD.value))
         self.settings_data["last_pivot_edit_mode"] = "affect_object_only"
         self.viewport.set_pivot_edit_mode("affect_object_only")
+        self._install_editor_integration_services()
         self.adjust_pivot_panel.set_pivot_mode(self.viewport.pivot_edit_mode())
         self.adjust_pivot_panel.pivotModeChanged.connect(self._set_pivot_edit_mode)
         self.adjust_pivot_panel.pivotActionRequested.connect(self._apply_pivot_action)
@@ -3366,9 +3434,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport.nodeMoved.connect(self.properties_panel.show_node)
         self.viewport.nodeMoved.connect(self._on_viewport_scene_node_moved)
         self.viewport.statusMessage.connect(self.statusBar().showMessage)
+        self.viewport.renderStateChanged.connect(self._on_viewport_render_state_changed)
+        self.viewport.renderStateChanged.connect(self._on_renderer_backend_status_changed)
         self.viewport.axis_mode_control.axisModeChanged.connect(self._persist_axis_mode)
         self.viewport.nodeMoved.connect(self.module_geometry_panel.show_node)
+        self.viewport.nodeMoved.connect(lambda node: self._record_transform_event(node))
         self.viewport.meshVisibilityChanged.connect(self.module_geometry_panel.refresh_module_mesh_rows)
+        self.viewport.meshVisibilityChanged.connect(lambda: self._invalidate_renderer_resources("mesh visibility changed"))
         self.viewport.gpuUploadProgress.connect(self._on_viewport_gpu_upload_progress)
         self.lighting_panel.lightingModeChanged.connect(self.viewport.set_lighting_mode)
         self.lighting_panel.mapToggled.connect(self.viewport.set_texture_map_enabled)
@@ -3376,11 +3448,14 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.lighting_panel.shaderComplexityChanged.connect(self.viewport.set_shader_complexity_mode)
         self.lighting_panel.helperVisibilityChanged.connect(self.viewport.set_light_helper_visibility)
         self.lighting_panel.lightChanged.connect(self.viewport.refresh_lighting)
-        self.lighting_panel.lightSelected.connect(self.viewport.set_selected_node)
+        self.lighting_panel.lightChanged.connect(lambda payload=None: self._record_lighting_event(payload))
+        self.lighting_panel.lightSelected.connect(lambda node: self.viewport.set_selected_node(node, source="lighting panel"))
         self.lighting_panel.lightmapBakeRequested.connect(self._open_lightmap_baker)
         self.viewport.nodeSelected.connect(self.lighting_panel.select_light)
-        self.camera_panel.cameraSelected.connect(self.viewport.set_selected_node)
+        self._sync_lighting_helper_visibility_to_viewport()
+        self.camera_panel.cameraSelected.connect(lambda node: self.viewport.set_selected_node(node, source="camera panel"))
         self.camera_panel.cameraChanged.connect(self._on_camera_panel_changed)
+        self.camera_panel.cameraChanged.connect(lambda: self._record_camera_event(None))
         self.camera_panel.activeCameraRequested.connect(self.viewport.switch_to_camera)
         self.camera_panel.clearActiveCameraRequested.connect(self.viewport.switch_to_perspective)
         self.camera_panel.createCameraRequested.connect(self.viewport.create_scene_camera)
@@ -3393,10 +3468,15 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.viewport.cameraChanged.connect(self._sync_camera_panel_from_viewport)
         self.viewport.activeCameraChanged.connect(lambda _node=None: self.camera_panel.refresh())
         self.viewport.cameraSelectionChanged.connect(self.camera_panel.select_camera_object)
-        self.module_geometry_panel.moduleMeshesSelected.connect(self.viewport.set_selected_meshes)
+        self.module_geometry_panel.moduleMeshesSelected.connect(self._on_module_meshes_selected_from_panel)
+        self.module_geometry_panel.moduleMeshVisibilityChanged.connect(self._sync_walkmesh_overlay_visibility)
         self.module_geometry_panel.moduleMeshVisibilityChanged.connect(self.viewport.refresh_view)
+        self.module_geometry_panel.moduleMeshVisibilityChanged.connect(lambda: self._invalidate_renderer_resources("module mesh visibility changed"))
         self.properties_panel.positionApplied.connect(
             lambda node, _x, _y, _z: self.viewport.refresh_node_transform(node)
+        )
+        self.properties_panel.positionApplied.connect(
+            lambda node, _x, _y, _z: self._record_transform_event(node)
         )
         self.viewport.measurementSettingsChanged.connect(self._merge_measurement_settings)
         self._apply_measurement_settings()
@@ -3776,7 +3856,122 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         )
 
     def _build_statusbar(self):
-        self.statusBar().showMessage("Ready")
+        status = self.statusBar()
+        self.viewport_render_state_label = QtWidgets.QLabel(self)
+        self.viewport_render_state_label.setObjectName("ViewportRenderStateStatus")
+        self.viewport_render_state_label.setMinimumWidth(280)
+        self.viewport_render_state_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.viewport_render_state_label.setToolTip("Active viewport renderer and display mode")
+        status.addPermanentWidget(self.viewport_render_state_label, 0)
+        self._on_viewport_render_state_changed(
+            self.viewport.render_state_status_text() if hasattr(self, "viewport") else "Renderer: Unknown | Display: Unknown"
+        )
+        status.showMessage("Ready")
+
+    def _install_editor_integration_services(self) -> None:
+        """Install renderer-aware services for existing Qt tools and panels."""
+
+        self.tool_integration_registry = build_default_tool_integration_registry()
+        self.integration_event_bus = EditorIntegrationEventBus(self)
+        self.active_viewport_service = ActiveViewportService(
+            lambda: getattr(self, "viewport", None),
+            scene_getter=lambda: getattr(getattr(self, "scene_manager", None), "active_scene", None),
+            event_bus=self.integration_event_bus,
+            parent=self,
+        )
+        self.renderer_service = RendererService(
+            self.active_viewport_service,
+            event_bus=self.integration_event_bus,
+            parent=self,
+        )
+        self.scene_service = SceneService(
+            lambda: getattr(getattr(self, "scene_manager", None), "active_scene", None),
+            event_bus=self.integration_event_bus,
+        )
+        self.selection_service = SelectionService(
+            self.active_viewport_service,
+            event_bus=self.integration_event_bus,
+        )
+        self.diagnostics_service = DiagnosticsService(
+            self.active_viewport_service,
+            self.renderer_service,
+            self.tool_integration_registry,
+            event_bus=self.integration_event_bus,
+        )
+        viewport = getattr(self, "viewport", None)
+        if viewport is not None:
+            viewport.active_viewport_service = self.active_viewport_service
+            viewport.renderer_service = self.renderer_service
+            viewport.selection_service = self.selection_service
+            viewport.scene_service = self.scene_service
+            viewport.integration_event_bus = self.integration_event_bus
+        diagnostics_panel = getattr(self, "diagnostics_panel", None)
+        if diagnostics_panel is not None and hasattr(diagnostics_panel, "set_integration_services"):
+            diagnostics_panel.set_integration_services(
+                diagnostics_service=self.diagnostics_service,
+                registry=self.tool_integration_registry,
+            )
+
+    def _record_renderer_tool_action(self, tool_id: str, action: str) -> None:
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.record_tool_action(tool_id, action)
+
+    def _invalidate_renderer_resources(self, reason: str) -> None:
+        service = getattr(self, "renderer_service", None)
+        if service is not None:
+            service.request_resource_invalidation(reason)
+
+    def _record_transform_event(self, node) -> None:
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.transformChanged.emit(node)
+            bus.record_scene_update("transform changed", node)
+
+    def _record_pivot_event(self, node) -> None:
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.pivotChanged.emit(node)
+            bus.record_scene_update("pivot changed", node)
+
+    def _record_camera_event(self, camera) -> None:
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.cameraChanged.emit(camera)
+            bus.record_scene_update("camera changed", camera)
+
+    def _record_lighting_event(self, payload) -> None:
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.lightingUpdated.emit(payload)
+            bus.record_scene_update("lighting changed", payload)
+        service = getattr(self, "renderer_service", None)
+        if service is not None:
+            service.request_resource_invalidation("lighting changed")
+
+    @QtCore.Slot(str)
+    def _on_renderer_backend_status_changed(self, text: str) -> None:
+        bus = getattr(self, "integration_event_bus", None)
+        service = getattr(self, "renderer_service", None)
+        if bus is None or service is None:
+            return
+        backend = ""
+        try:
+            backend = service.get_diagnostics().get("backend_id", "") or ""
+        except Exception:
+            backend = ""
+        if backend:
+            bus.rendererBackendChanged.emit(str(backend))
+        if "fallback" in str(text or "").lower():
+            bus.rendererFallbackOccurred.emit(str(text))
+
+    @QtCore.Slot(str)
+    def _on_viewport_render_state_changed(self, text: str) -> None:
+        label = getattr(self, "viewport_render_state_label", None)
+        if label is not None:
+            value = str(text or "Renderer: Unknown | Display: Unknown")
+            label.setText(value)
+            label.setToolTip(value)
 
     def _scene_path_filter(self) -> str:
         return "GhostRigger Scene (*.kmax);;All files (*.*)"
@@ -3791,6 +3986,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._refresh_scene_view()
         self.scene_manager.active_scene.mark_clean()
         self._update_scene_chrome()
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.record_scene_update("scene_cleared")
+        self._invalidate_renderer_resources("new empty scene")
         self._log("New empty scene created.", "success")
 
     def _close_scene(self):
@@ -3816,6 +4015,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._refresh_scene_view()
             self.scene_manager.active_scene.mark_clean()
             self._update_scene_chrome()
+            bus = getattr(self, "integration_event_bus", None)
+            if bus is not None:
+                bus.record_scene_update("scene_loaded", scene)
+            self._invalidate_renderer_resources("scene loaded")
             self._log(f"Scene loaded: {path}", "success")
             return True
         except Exception:
@@ -4009,6 +4212,20 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._update_scene_chrome()
         self._refresh_adjust_pivot_panel()
 
+    def _active_viewport_model(self):
+        viewport = getattr(self, "viewport", None)
+        model = getattr(viewport, "model", None) if viewport is not None else None
+        return model or getattr(self, "_current_model", None)
+
+    def _sync_lighting_helper_visibility_to_viewport(self) -> None:
+        panel = getattr(self, "lighting_panel", None)
+        viewport = getattr(self, "viewport", None)
+        if panel is None or viewport is None or not hasattr(viewport, "set_light_helper_visibility"):
+            return
+        helpers = bool(getattr(getattr(panel, "show_helpers_check", None), "isChecked", lambda: True)())
+        volumes = bool(getattr(getattr(panel, "show_volumes_check", None), "isChecked", lambda: False)())
+        viewport.set_light_helper_visibility(helpers, volumes)
+
     def _refresh_scene_animation_entries(self) -> None:
         panel = getattr(self, "content_browser_panel", getattr(self, "animation_library_panel", None))
         if panel is None or not hasattr(panel, "set_scene_animation_entries"):
@@ -4050,7 +4267,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return
         self._current_model = model
         if hasattr(self, "animations_panel"):
-            self.animations_panel.load_model(model)
+            self._load_animation_panel_model(model)
         if hasattr(self, "animation_retarget_panel"):
             game = str(getattr(getattr(obj, "source_ref", None), "game", "") or self._infer_game_from_model(model)).upper()
             self.animation_retarget_panel.set_texture_dir(self._texture_dir)
@@ -4101,6 +4318,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                     show_scene_object(obj)
         self._update_scene_chrome()
         self._refresh_adjust_pivot_panel()
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.selectionChanged.emit(obj)
+            bus.record_tool_action("scene_information", f"selected scene object: {object_id}")
         if hasattr(self, "scene_outliner_panel"):
             self.scene_outliner_panel.set_scene(self.scene_manager.active_scene)
 
@@ -4181,6 +4402,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             obj.visible = bool(visible)
             self.scene_manager.mark_dirty()
             self._refresh_scene_view()
+            self._invalidate_renderer_resources("scene object visibility changed")
 
     def _set_scene_object_locked(self, object_id: str, locked: bool) -> None:
         obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
@@ -4216,6 +4438,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 obj.selected = False
         self._update_scene_chrome()
         self._refresh_adjust_pivot_panel()
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.selectionChanged.emit(obj if object_id else node)
+            bus.record_tool_action("viewport", "viewport selection changed")
 
     def _on_viewport_scene_node_moved(self, node) -> None:
         object_id = str(getattr(node, "_gr_scene_object_id", "") or "")
@@ -4249,6 +4475,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             log.debug("Could not persist scene pivot edit", exc_info=True)
         self._update_scene_chrome()
         self._refresh_adjust_pivot_panel()
+        self._record_transform_event(node)
+        self._record_pivot_event(node)
         if hasattr(self, "scene_outliner_panel"):
             self.scene_outliner_panel.set_scene(self.scene_manager.active_scene)
 
@@ -4276,6 +4504,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 return
         if hasattr(self, "viewport"):
             self.viewport.set_pivot_edit_mode(mode)
+        self._record_renderer_tool_action("adjust_pivot", f"pivot edit mode: {mode}")
         self._refresh_adjust_pivot_panel()
 
     def _persist_axis_mode(self, mode) -> None:
@@ -4335,12 +4564,17 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._refresh_scene_view()
             self._refresh_adjust_pivot_panel()
             self._update_scene_chrome()
+            self._record_pivot_event(selected[0] if selected else None)
+            self._invalidate_renderer_resources(f"pivot changed: {action}")
 
     def _require_model(self, action: str):
-        if self._current_model is None:
+        model = self._current_model or self._active_viewport_model()
+        if model is not None and self._current_model is None:
+            self._current_model = model
+        if model is None:
             QtWidgets.QMessageBox.information(self, action, "Load or import a model first.")
             return None
-        return self._current_model
+        return model
 
     def _model_worker_is_running(self) -> bool:
         thread = self._worker_thread
@@ -4431,6 +4665,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self._sync_retarget_preview_target()
             if hasattr(self, "diagnostics_panel"):
                 self.diagnostics_panel.run_diagnostics(None)
+            bus = getattr(self, "integration_event_bus", None)
+            if bus is not None:
+                bus.record_scene_update("model_removed", None)
+            self._invalidate_renderer_resources("model cleared")
             self.props_text.clear()
             return
         self._on_model_loaded(model, path or getattr(model, "name", "model"), "")
@@ -4574,9 +4812,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if hasattr(self, "skeleton_panel"):
             self.skeleton_panel.load_model(model)
         if hasattr(self, "lighting_panel"):
-            self.lighting_panel.set_model(model)
+            self.lighting_panel.set_model(self._active_viewport_model())
+            self._sync_lighting_helper_visibility_to_viewport()
         if hasattr(self, "camera_panel"):
-            self.camera_panel.set_model(model)
+            self.camera_panel.set_model(self._active_viewport_model())
             self.camera_panel.manager = self.viewport.camera_manager
             self.camera_panel.refresh()
         if getattr(self, "sequence_editor_window", None) is not None:
@@ -4593,9 +4832,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if hasattr(self, "properties_panel"):
             self.properties_panel.show_model(model)
         if hasattr(self, "module_geometry_panel"):
-            self.module_geometry_panel.show_model(model)
+            self.module_geometry_panel.show_model(self._active_viewport_model())
         if hasattr(self, "animations_panel"):
-            self.animations_panel.load_model(model)
+            self._load_animation_panel_model(model)
         if hasattr(self, "animation_retarget_panel"):
             self.animation_retarget_panel.set_texture_dir(self._texture_dir)
             game = (self._current_game or self._infer_game_from_model(model)).upper()
@@ -4766,7 +5005,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             animations.append(replacement)
         model.animations = animations
         if hasattr(self, "animations_panel"):
-            self.animations_panel.load_model(model, select_name=target_name)
+            self._load_animation_panel_model(model, select_name=target_name)
         self._populate_animation_library_from_current_model()
         self._show_content_browser("Animation")
         self._log(f"Animation override: {source_name} -> {target_name}", "success")
@@ -5818,7 +6057,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._set_model_internal(model, self._retarget_target_label())
         else:
             if hasattr(self, "animations_panel"):
-                self.animations_panel.load_model(model)
+                self._load_animation_panel_model(model)
         self._populate_animation_library_from_current_model()
         if hasattr(self, "animations_panel"):
             self.animations_panel.select_animation(selected_anim)
@@ -5975,6 +6214,34 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         model = self._current_model
         if not model or not anim_name:
             return
+        try:
+            from src.core.qt_core.animation.animation_engine import AnimationEngine, SuperModelResolver
+
+            mgr = self._get_resource_manager()
+            if mgr is not None:
+                SuperModelResolver.configure(mgr)
+            engine = AnimationEngine(model)
+            for entry in engine.list_all_animations():
+                if str(entry.get("name", "") or "") != anim_name:
+                    continue
+                inherited = bool(entry.get("inherited"))
+                source = str(entry.get("source") or getattr(model, "name", ""))
+                source_type = str(entry.get("source_type") or ("inherited" if inherited else "local"))
+                source_text = f"\nSource: {source_type} ({source})"
+                self.animations_panel.info.setPlainText(
+                    f"{anim_name}\n"
+                    f"Length: {float(entry.get('length') or 0.0):.3f} s\n"
+                    f"Keys: {int(entry.get('key_count') or 0)}  "
+                    f"Nodes: {int(entry.get('node_count') or 0)}  "
+                    f"Events: {int(entry.get('event_count') or 0)}"
+                    f"{source_text}"
+                )
+                self.animations_panel.seek.blockSignals(True)
+                self.animations_panel.seek.setValue(0)
+                self.animations_panel.seek.blockSignals(False)
+                return
+        except Exception:
+            log.debug("Inherited animation metadata lookup failed", exc_info=True)
         for anim in getattr(model, "animations", []) or []:
             if getattr(anim, "name", "") != anim_name:
                 continue
@@ -6000,18 +6267,24 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if action == "Export Binary MDL":
             self._export_mdl_binary()
             return
-        animations = getattr(model, "animations", []) or []
-        if not animations:
+        try:
+            from src.core.qt_core.animation.animation_engine import AnimationEngine, SuperModelResolver
+
+            mgr = self._get_resource_manager()
+            if mgr is not None:
+                SuperModelResolver.configure(mgr)
+            if self._animation_engine is None or getattr(self._animation_engine, "model", None) is not model:
+                self._animation_engine = AnimationEngine(model)
+            animation_entries = self._animation_engine.list_all_animations()
+        except Exception:
+            animation_entries = []
+        if not animation_entries and not (getattr(model, "animations", []) or []):
             QtWidgets.QMessageBox.information(self, "Animations", "No animations available on this model.")
             return
         if not anim_name and action not in {"Stop", "Loop"}:
             QtWidgets.QMessageBox.information(self, "Animations", "Select an animation first.")
             return
         try:
-            from src.core.qt_core.animation.animation_engine import AnimationEngine
-
-            if self._animation_engine is None or getattr(self._animation_engine, "model", None) is not model:
-                self._animation_engine = AnimationEngine(model)
             if action == "Play":
                 ok = self._animation_engine.play(anim_name, loop=self._animation_loop, blend=False)
                 if ok:
@@ -6019,7 +6292,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                         self.viewport.set_anim_base_pose(self._animation_engine.evaluate(0.0))
                     except Exception:
                         pass
+                    if hasattr(self.viewport, "set_animation_playback_active"):
+                        self.viewport.set_animation_playback_active(True, "animation playback")
                     self._animation_last_tick = None
+                    self._animation_status_last_update = 0.0
                     self._animation_timer.start()
                 self.animations_panel.info.setPlainText(
                     f"Playing {anim_name}" if ok else f"Animation not found: {anim_name}"
@@ -6028,7 +6304,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             elif action == "Stop":
                 self._animation_timer.stop()
                 self._animation_last_tick = None
+                self._animation_status_last_update = 0.0
                 self._animation_engine.stop()
+                if hasattr(self.viewport, "set_animation_playback_active"):
+                    self.viewport.set_animation_playback_active(False)
                 if hasattr(self.viewport, "clear_animation_pose"):
                     self.viewport.clear_animation_pose()
                 self.animations_panel.info.setPlainText("Animation stopped.")
@@ -6044,6 +6323,42 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         except Exception as exc:
             self._log(f"Animation action error: {exc}", "error")
             QtWidgets.QMessageBox.critical(self, "Animations", str(exc))
+
+    def _load_animation_panel_model(self, model, select_name: str = "") -> None:
+        self.animations_panel.load_model(model, select_name=select_name)
+        if model is None:
+            return
+        try:
+            from src.core.qt_core.animation.animation_engine import AnimationEngine, SuperModelResolver
+
+            mgr = self._get_resource_manager()
+            if mgr is not None:
+                SuperModelResolver.configure(mgr)
+            engine = AnimationEngine(model)
+            entries = engine.list_all_animations()
+        except Exception:
+            log.debug("Inherited animation panel load failed", exc_info=True)
+            return
+        existing = {
+            self.animations_panel.listbox.item(index).text().lower()
+            for index in range(self.animations_panel.listbox.count())
+        }
+        inherited_count = 0
+        for entry in entries:
+            name = str(entry.get("name") or "")
+            if not name or name.lower() in existing:
+                continue
+            self.animations_panel.listbox.addItem(name)
+            existing.add(name.lower())
+            if bool(entry.get("inherited")):
+                inherited_count += 1
+        total = self.animations_panel.listbox.count()
+        if inherited_count:
+            self.animations_panel.info.setPlainText(f"{total} animation(s), {inherited_count} inherited")
+        else:
+            self.animations_panel.info.setPlainText(f"{total} animation(s)")
+        if select_name:
+            self.animations_panel.select_animation(select_name)
 
     def _request_bake_animation_options(self, anim_name: str) -> Optional[dict]:
         dialog = QtWidgets.QDialog(self)
@@ -6103,7 +6418,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             animations.append(baked)
         self._animation_engine = None
         if hasattr(self, "animations_panel"):
-            self.animations_panel.load_model(model, select_name=baked.name)
+            self._load_animation_panel_model(model, select_name=baked.name)
             self.animations_panel.info.setPlainText(
                 f"Baked {anim_name} -> {baked.name}\n"
                 f"{len(getattr(baked, 'nodes', []) or [])} nodes @ {int(options['fps'])} fps"
@@ -6282,6 +6597,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if engine is None or not engine.is_playing:
             self._animation_timer.stop()
             self._animation_last_tick = None
+            self._animation_status_last_update = 0.0
             return
         now = time.perf_counter()
         if self._animation_last_tick is None:
@@ -6301,7 +6617,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 time=engine.current_time,
                 length=anim_length,
             )
-        if anim_length > 0 and hasattr(self, "animations_panel"):
+        should_update_status = (
+            anim_length > 0
+            and hasattr(self, "animations_panel")
+            and (now - float(getattr(self, "_animation_status_last_update", 0.0) or 0.0)) >= 0.20
+        )
+        if should_update_status:
+            self._animation_status_last_update = now
             pct = max(0, min(100, int((engine.current_time / anim_length) * 100.0)))
             self.animations_panel.seek.blockSignals(True)
             self.animations_panel.seek.setValue(pct)
@@ -6312,6 +6634,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if not still_playing:
             self._animation_timer.stop()
             self._animation_last_tick = None
+            self._animation_status_last_update = 0.0
+            if hasattr(self.viewport, "set_animation_playback_active"):
+                self.viewport.set_animation_playback_active(False)
 
     def _export_selected_animation(self, anim_name: str):
         model = self._require_model("Export Animation")
@@ -6472,7 +6797,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return
         self._current_model = model
         if hasattr(self, "animations_panel"):
-            self.animations_panel.load_model(model)
+            self._load_animation_panel_model(model)
 
     def _populate_resource_panel(self):
         if not hasattr(self, "resource_panel"):
@@ -7625,11 +7950,27 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return
         self._start_resource_load(row["resref"], row["game"])
 
-    def _start_resource_load(self, resref: str, game: str):
+    def _load_content_browser_primary_scene_model(self, row: dict) -> None:
+        resref = str(row.get("resref") or "")
+        game = str(row.get("game") or "")
+        if resref:
+            self._start_resource_load(resref, game, import_action="clear")
+
+    def _start_resource_load(self, resref: str, game: str, import_action: str = ""):
         if self._model_worker_is_running():
             self._log("A model is already loading.", "warning")
             return
-        action = self._choose_model_import_action(f"{game}:{resref}")
+        action = str(import_action or "").strip().lower()
+        if action in {"clear", "clear_and_load", "clear scene and load"}:
+            if not self._prompt_save_dirty_scene():
+                return
+            action = "clear"
+            self._pending_scene_import_placement = "origin"
+        elif action in {"add", "add_to_scene", "add to existing scene"}:
+            action = "add"
+            self._pending_scene_import_placement = str(self.settings_data.get("default_import_placement") or "auto_offset")
+        else:
+            action = self._choose_model_import_action(f"{game}:{resref}")
         if action == "cancel":
             return
         self._pending_scene_import_action = action
@@ -7874,17 +8215,18 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if hasattr(self, "skeleton_panel"):
             self.skeleton_panel.load_model(model)
         if hasattr(self, "lighting_panel"):
-            self.lighting_panel.set_model(model)
+            self.lighting_panel.set_model(self._active_viewport_model())
+            self._sync_lighting_helper_visibility_to_viewport()
         if hasattr(self, "camera_panel"):
-            self.camera_panel.set_model(model)
+            self.camera_panel.set_model(self._active_viewport_model())
             self.camera_panel.manager = self.viewport.camera_manager
             self.camera_panel.refresh()
         if hasattr(self, "properties_panel"):
             self.properties_panel.show_model(model)
         if hasattr(self, "module_geometry_panel"):
-            self.module_geometry_panel.show_model(model)
+            self.module_geometry_panel.show_model(self._active_viewport_model())
         if hasattr(self, "animations_panel"):
-            self.animations_panel.load_model(model)
+            self._load_animation_panel_model(model)
         if hasattr(self, "animation_retarget_panel"):
             self.animation_retarget_panel.set_texture_dir(self._texture_dir)
             game = (self._current_game or self._infer_game_from_model(model)).upper()
@@ -7939,6 +8281,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         else:
             self._log(f"Loaded {name} ({mesh_count} mesh, {node_count} nodes)", "success")
         self.statusBar().showMessage(f"Loaded {name}")
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.record_scene_update("model_imported", model)
+            bus.animationChanged.emit(model)
+        self._invalidate_renderer_resources(f"model loaded: {name}")
         if scene_instance is not None:
             self._log(f"Scene object added: {scene_instance.name}", "success")
 
@@ -8085,27 +8432,59 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 getattr(self.viewport, "_renderer", None),
             )
             proxy_node = _walkmesh_overlay_node_from_wok(source, label, offset)
-            extra_nodes = [
-                node
-                for node in (getattr(self._current_model, "_gr_extra_module_mesh_nodes", []) or [])
-                if not getattr(node, "_gr_walkmesh_overlay_proxy", False)
-            ]
-            extra_nodes.append(proxy_node)
-            setattr(self._current_model, "_gr_extra_module_mesh_nodes", extra_nodes)
+            target_models = []
+            for model in (self._current_model, self._active_viewport_model()):
+                if model is not None and id(model) not in {id(existing) for existing in target_models}:
+                    target_models.append(model)
+            for model in target_models:
+                extra_nodes = [
+                    node
+                    for node in (getattr(model, "_gr_extra_module_mesh_nodes", []) or [])
+                    if not getattr(node, "_gr_walkmesh_overlay_proxy", False)
+                ]
+                extra_nodes.append(proxy_node)
+                setattr(model, "_gr_extra_module_mesh_nodes", extra_nodes)
             self.viewport.load_walkmesh(source, world_offset=offset)
             overlay = getattr(getattr(self.viewport, "_renderer", None), "_walkmesh_overlay", None)
             if overlay is not None:
                 setattr(overlay, "_gr_module_node", proxy_node)
-            self.viewport._renderer.show_walkmesh = True
-            self.viewport.walkmesh_button.setChecked(True)
+            self._sync_walkmesh_overlay_visibility()
             self.viewport._request_render()
             if hasattr(self, "module_geometry_panel"):
-                self.module_geometry_panel.show_model(self._current_model)
+                self.module_geometry_panel.show_model(self._active_viewport_model())
             self._log(f"Walkmesh loaded: {label}", "success")
             return True
         except Exception as exc:
             log.debug("walkmesh load failed for %s: %s", label, exc)
             return False
+
+    def _on_module_meshes_selected_from_panel(self, nodes: list) -> None:
+        selected = [node for node in (nodes or []) if node is not None]
+        if selected and any(bool(getattr(node, "_gr_hidden", False)) for node in selected):
+            return
+        if hasattr(self, "viewport"):
+            try:
+                self.viewport.set_selected_meshes(selected, source="module mesh panel")
+            except TypeError:
+                self.viewport.set_selected_meshes(selected)
+
+    def _sync_walkmesh_overlay_visibility(self) -> None:
+        renderer = getattr(getattr(self, "viewport", None), "_renderer", None)
+        overlay = getattr(renderer, "_walkmesh_overlay", None)
+        proxy_node = getattr(overlay, "_gr_module_node", None)
+        if renderer is None or overlay is None or proxy_node is None:
+            return
+        visible = not bool(getattr(proxy_node, "_gr_hidden", False))
+        try:
+            renderer.show_walkmesh = visible
+        except Exception:
+            pass
+        button = getattr(getattr(self, "viewport", None), "walkmesh_button", None)
+        if button is not None:
+            try:
+                button.setChecked(visible)
+            except Exception:
+                pass
 
     def _open_qt_character_builder_window(self):
         """Open (or raise) the M2 AccuRig-style Character Builder window.
@@ -8134,6 +8513,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self,
                 theme_manager=self.theme_manager,
                 layout_manager=self.layout_manager,
+                hardware_diagnostics=self._preloaded_hardware_diagnostics,
+                renderer_capabilities=self._preloaded_renderer_capabilities,
             )
             dialog.setModal(False)
             dialog.setWindowModality(QtCore.Qt.NonModal)
@@ -8173,9 +8554,17 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._log(f"Theme/layout settings save failed: {exc}", "error")
 
     def _save_settings_data(self, values: dict):
+        values = dict(values or {})
+        restart_after_save = bool(values.pop("__restart_after_save", False))
         old_dirs = (
             self.k1_dir_edit.text().strip() if hasattr(self, "k1_dir_edit") else "",
             self.k2_dir_edit.text().strip() if hasattr(self, "k2_dir_edit") else "",
+        )
+        old_renderer_settings = RendererSettings.from_settings(self.settings_data)
+        new_renderer_settings = RendererSettings.from_settings(values)
+        renderer_restart_required = _wgpu_backend_restart_required(
+            old_renderer_settings,
+            new_renderer_settings,
         )
         self.settings_data = values
         self.theme_manager.settings = ThemeLayoutSettings.from_settings(values)
@@ -8189,8 +8578,14 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.layout_manager.apply_current_layout(self)
         self._configure_theme_watcher()
         viewport = getattr(self, "viewport", None)
-        if viewport is not None:
-            viewport.set_renderer_settings(RendererSettings.from_settings(values))
+        if viewport is not None and not renderer_restart_required:
+            viewport.set_renderer_settings(new_renderer_settings)
+            viewport.set_navigation_profile(
+                normalize_viewport_navigation_profile(
+                    values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
+                )
+            )
+        elif viewport is not None:
             viewport.set_navigation_profile(
                 normalize_viewport_navigation_profile(
                     values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
@@ -8199,8 +8594,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         retarget_window = getattr(self, "animation_retarget_window", None)
         if retarget_window is not None:
             set_renderer_settings = getattr(retarget_window, "set_renderer_settings", None)
-            if callable(set_renderer_settings):
-                set_renderer_settings(RendererSettings.from_settings(values))
+            if callable(set_renderer_settings) and not renderer_restart_required:
+                set_renderer_settings(new_renderer_settings)
             retarget_window.set_navigation_profile(
                 normalize_viewport_navigation_profile(
                     values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
@@ -8209,8 +8604,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         unreal_window = getattr(self, "unreal_animator_window", None)
         if unreal_window is not None:
             set_renderer_settings = getattr(unreal_window, "set_renderer_settings", None)
-            if callable(set_renderer_settings):
-                set_renderer_settings(RendererSettings.from_settings(values))
+            if callable(set_renderer_settings) and not renderer_restart_required:
+                set_renderer_settings(new_renderer_settings)
             unreal_window.set_navigation_profile(
                 normalize_viewport_navigation_profile(
                     values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
@@ -8219,8 +8614,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         module_editor_window = getattr(self, "module_editor_window", None)
         if module_editor_window is not None:
             set_renderer_settings = getattr(module_editor_window, "set_renderer_settings", None)
-            if callable(set_renderer_settings):
-                set_renderer_settings(RendererSettings.from_settings(values))
+            if callable(set_renderer_settings) and not renderer_restart_required:
+                set_renderer_settings(new_renderer_settings)
             module_editor_window.set_navigation_profile(
                 normalize_viewport_navigation_profile(
                     values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
@@ -8229,16 +8624,23 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         character_builder_window = getattr(self, "_character_builder_window", None)
         if character_builder_window is not None:
             set_renderer_settings = getattr(character_builder_window, "set_renderer_settings", None)
-            if callable(set_renderer_settings):
-                set_renderer_settings(RendererSettings.from_settings(values))
+            if callable(set_renderer_settings) and not renderer_restart_required:
+                set_renderer_settings(new_renderer_settings)
         for sequence_window in (
             getattr(self, "sequence_editor_window", None),
             getattr(self, "sequence_editor_docked_window", None),
         ):
             if sequence_window is not None:
                 set_renderer_settings = getattr(sequence_window, "set_renderer_settings", None)
-                if callable(set_renderer_settings):
-                    set_renderer_settings(RendererSettings.from_settings(values))
+                if callable(set_renderer_settings) and not renderer_restart_required:
+                    set_renderer_settings(new_renderer_settings)
+        if renderer_restart_required:
+            old_label = renderer_backend_label(old_renderer_settings.backend)
+            new_label = renderer_backend_label(new_renderer_settings.backend)
+            self._log(
+                f"Renderer change saved for next launch: {old_label} -> {new_label}. Restart required for WGPU_BACKEND_TYPE.",
+                "warning",
+            )
         new_dirs = (str(values.get("k1_dir") or "").strip(), str(values.get("k2_dir") or "").strip())
         if hasattr(self, "k1_dir_edit"):
             self.k1_dir_edit.setText(new_dirs[0])
@@ -8258,6 +8660,34 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._log("Settings saved.", "success")
         except Exception as exc:
             self._log(f"Settings save failed: {exc}", "error")
+            restart_after_save = False
+        if restart_after_save:
+            QtCore.QTimer.singleShot(0, self._restart_application_after_settings_save)
+
+    def _restart_application_after_settings_save(self) -> None:
+        if not self._prompt_save_dirty_scene():
+            self._log("Renderer restart cancelled because the current scene was not closed.", "warning")
+            return
+        program, args = self._restart_command()
+        ok = QtCore.QProcess.startDetached(program, args, str(self.app_root))
+        if not ok:
+            self._log("Automatic restart failed. Close and reopen GhostRigger to apply the renderer change.", "error")
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Restart Failed",
+                "GhostRigger could not restart automatically. Close and reopen the application to apply the renderer change.",
+            )
+            return
+        self._log("Restarting GhostRigger to apply renderer backend change.", "success")
+        QtCore.QTimer.singleShot(100, QtWidgets.QApplication.quit)
+
+    def _restart_command(self) -> tuple[str, list[str]]:
+        if getattr(sys, "frozen", False):
+            return sys.executable, list(sys.argv[1:])
+        script = Path(sys.argv[0])
+        if not script.is_absolute():
+            script = (Path.cwd() / script).resolve()
+        return sys.executable, [str(script), *sys.argv[1:]]
 
     def _apply_measurement_settings(self) -> None:
         settings = MeasurementSettings.from_dict(self.settings_data.get("measurement", {}))
@@ -8317,6 +8747,26 @@ def run(app_root: Optional[str] = None, startup_input: Optional[dict] = None) ->
 
     update_prelaunch_status("Preparing startup", "Detecting game installs before the main window opens...")
     prepared_input = _build_prelaunch_library_input(root, startup_input, update_prelaunch_status)
+    update_prelaunch_status("Scanning renderers", "Capturing renderer backend availability before Settings opens...")
+    try:
+        prepared_input["renderer_capabilities"] = [caps.to_dict() for caps in renderer_capabilities_snapshot()]
+    except Exception as exc:
+        log.warning("Renderer capability pre-start scan failed: %s", exc)
+        prepared_input["renderer_capabilities"] = []
+    update_prelaunch_status("Scanning hardware", "Capturing CPU, GPU, renderer, and frame pacing diagnostics...")
+    renderer_settings = RendererSettings.from_settings(settings_data)
+    try:
+        hardware = collect_hardware_diagnostics(
+            renderer_diagnostics={
+                "backend_id": renderer_settings.backend.value,
+                "name": renderer_settings.backend.value,
+            },
+            target_fps=renderer_settings.target_fps,
+        )
+        prepared_input["hardware_diagnostics"] = hardware.to_dict()
+    except Exception as exc:
+        log.warning("Hardware diagnostics pre-start scan failed: %s", exc)
+        prepared_input["hardware_diagnostics"] = {"unavailable_reason": str(exc)}
     app.processEvents()
     win = QtGhostRiggerMainWindow(root, startup_input=prepared_input)
     win.show()

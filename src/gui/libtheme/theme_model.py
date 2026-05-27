@@ -55,6 +55,9 @@ class Theme:
     def is_native(self) -> bool:
         return self.style("application.native", "false").strip().lower() in {"1", "true", "yes", "native"}
 
+    def is_palette_only(self) -> bool:
+        return self.style("application.paletteOnly", "false").strip().lower() in {"1", "true", "yes", "palette"}
+
     def font(self, role: str = "default") -> ThemeFont:
         fallback = FALLBACK_FONTS.get(role, FALLBACK_FONTS["default"])
         return self.fonts.get(

@@ -43,6 +43,85 @@ def _log_level() -> int:
     return logging.DEBUG if _env_enabled("GHOSTRIGGER_DEBUG_LOG") else logging.INFO
 
 
+_ANSI_RESET = "\033[0m"
+_ANSI_DIM = "\033[2m"
+_ANSI_BOLD = "\033[1m"
+_ANSI_RED = "\033[31m"
+_ANSI_GREEN = "\033[32m"
+_ANSI_YELLOW = "\033[33m"
+_ANSI_BLUE = "\033[34m"
+_ANSI_MAGENTA = "\033[35m"
+_ANSI_CYAN = "\033[36m"
+_ANSI_GRAY = "\033[90m"
+
+
+_LEVEL_COLORS = {
+    logging.DEBUG: _ANSI_GRAY,
+    logging.INFO: _ANSI_CYAN,
+    logging.WARNING: _ANSI_YELLOW,
+    logging.ERROR: _ANSI_RED,
+    logging.CRITICAL: f"{_ANSI_BOLD}{_ANSI_MAGENTA}",
+}
+
+
+def _enable_windows_virtual_terminal(stream) -> bool:
+    """Enable ANSI colors for the Windows console when the host allows it."""
+    if os.name != "nt":
+        return True
+    try:
+        import ctypes
+        import msvcrt
+
+        handle = msvcrt.get_osfhandle(stream.fileno())
+        kernel32 = ctypes.windll.kernel32
+        mode = ctypes.c_uint32()
+        if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            return False
+        enable_virtual_terminal_processing = 0x0004
+        return bool(kernel32.SetConsoleMode(handle, mode.value | enable_virtual_terminal_processing))
+    except Exception:
+        return False
+
+
+def _console_colors_enabled(stream) -> bool:
+    """Return whether startup console logs should include ANSI color."""
+    override = os.environ.get("GHOSTRIGGER_COLOR_LOG", "").strip().lower()
+    if override in {"0", "false", "no", "off", "never"} or "NO_COLOR" in os.environ:
+        return False
+    if override in {"1", "true", "yes", "on", "always", "force"}:
+        return _enable_windows_virtual_terminal(stream) or os.name != "nt"
+    if not getattr(stream, "isatty", lambda: False)():
+        return False
+    return _enable_windows_virtual_terminal(stream) or os.name != "nt"
+
+
+class _ConsoleFormatter(logging.Formatter):
+    """Compact color formatter for the visible startup console."""
+
+    def __init__(self, *, color: bool = True):
+        super().__init__(datefmt="%H:%M:%S")
+        self.color = color
+
+    def _paint(self, text: str, color: str) -> str:
+        if not self.color or not color:
+            return text
+        return f"{color}{text}{_ANSI_RESET}"
+
+    def format(self, record: logging.LogRecord) -> str:
+        created = datetime.datetime.fromtimestamp(record.created).strftime(self.datefmt)
+        level_color = _LEVEL_COLORS.get(record.levelno, _ANSI_CYAN)
+        time_cell = self._paint(created, _ANSI_DIM)
+        level_cell = self._paint(f"{record.levelname:<8}", level_color)
+        logger_cell = self._paint(f"{record.name:<34.34}", _ANSI_BLUE)
+        message = record.getMessage()
+        if record.exc_info:
+            message = f"{message}\n{self.formatException(record.exc_info)}"
+        if record.stack_info:
+            message = f"{message}\n{self.formatStack(record.stack_info)}"
+        message = self._paint(message, level_color if record.levelno >= logging.WARNING else "")
+        return f"{time_cell}  {level_cell}  {logger_cell}  {message}"
+
+
 def _make_log_dir():
     """Create Logs/ folder if it does not exist."""
     try:
@@ -103,9 +182,7 @@ def _setup_logging():
     # ── Console handler: INFO+ ────────────────────────────────────────────
     sh = logging.StreamHandler(sys.stderr)
     sh.setLevel(logging.INFO)
-    sh.setFormatter(logging.Formatter(
-        "%(levelname)-8s %(name)s  %(message)s"
-    ))
+    sh.setFormatter(_ConsoleFormatter(color=_console_colors_enabled(sys.stderr)))
     root_logger.addHandler(sh)
 
     return logfile
@@ -205,13 +282,12 @@ def _precache_themes(app_dir: str, log: logging.Logger) -> None:
     themes.update(user_themes)
     ordered = sorted(themes.values(), key=lambda theme: (theme.id != "default", theme.name.lower(), theme.id))
     if not ordered:
-        print("[GhostRigger] Theme precache: no theme XML files found.", flush=True)
         log.warning("Theme precache skipped; no theme XML files found in %s", packaged_dir)
         return
 
-    print(f"[GhostRigger] Precaching {len(ordered)} theme stylesheet(s)...", flush=True)
+    log.info("Precaching %d theme stylesheet(s)...", len(ordered))
     if user_themes:
-        print(f"[GhostRigger] Theme precache includes {len(user_themes)} user theme(s).", flush=True)
+        log.info("Theme precache includes %d user theme(s).", len(user_themes))
     log.info("Theme precache starting for %d theme(s).", len(ordered))
     result = ThemeApplier.precache_stylesheets(ordered)
     for entry in result["results"]:
@@ -220,20 +296,15 @@ def _precache_themes(app_dir: str, log: logging.Logger) -> None:
         elapsed_ms = float(entry["elapsed_ms"])
         message = str(entry["message"])
         if status == "failed":
-            print(f"[GhostRigger] Theme precache FAILED {theme.id}: {message}", flush=True)
+            log.error("Theme precache FAILED %s: %s", theme.id, message)
         elif status == "cached":
-            print(f"[GhostRigger] Theme precache cached {theme.id}", flush=True)
+            log.info("Theme precache cached %s", theme.id)
         else:
-            print(f"[GhostRigger] Theme precache built {theme.id} in {elapsed_ms:.1f} ms", flush=True)
+            log.info("Theme precache built %s in %.1f ms", theme.id, elapsed_ms)
     built = int(result["built"])
     cached = int(result["cached"])
     failed = int(result["failed"])
     total_ms = float(result["total_ms"])
-    print(
-        f"[GhostRigger] Theme precache complete: {built} built, {cached} cached, "
-        f"{failed} failed in {total_ms:.1f} ms.",
-        flush=True,
-    )
     log.info(
         "Theme precache complete: %d built, %d cached, %d failed in %.1f ms.",
         built,
@@ -286,7 +357,6 @@ def main(argv: list[str] | None = None):
         try:
             _precache_themes(_APP_DIR, log)
         except Exception as _theme_err:
-            print(f"[GhostRigger] Theme precache skipped: {_theme_err}", flush=True)
             log.warning("Theme precache skipped after an unexpected error: %s", _theme_err, exc_info=True)
 
         from src.gui.qt_lib.windows.qt_main_window import run as _run_qt

@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import os
+import struct
 from pathlib import Path
+
+import pytest
 
 from src.gui.libtheme.layout_loader import LayoutLoader
 from src.gui.libtheme.collapsible_group import CollapsibleGroupBox
 from src.gui.libtheme.layout_applier import LayoutApplier, button_mode_to_toolbutton_style
 from src.gui.libtheme.layout_model import ToolbarLayout
 from src.gui.libtheme.qt_stylesheet_builder import QtStylesheetBuilder
-from src.gui.libtheme.style_tokens import FALLBACK_COLORS, FALLBACK_METRICS, FALLBACK_STYLES, LEGACY_MATRIX_COLORS, VALID_BUTTON_MODES
+from src.gui.libtheme.style_tokens import FALLBACK_COLORS, FALLBACK_METRICS, FALLBACK_STYLES, VALID_BUTTON_MODES
 from src.gui.libtheme.theme_applier import ThemeApplier
 from src.gui.libtheme.theme_editor_window import ThemeEditorWindow
 from src.gui.libtheme.theme_loader import ThemeLoader
@@ -22,22 +25,143 @@ from src.gui.qt_lib.viewports.qt_transform_typein_bar import transform_bar_style
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _rgb_float(value: str) -> tuple[float, float, float]:
+    value = value.lstrip("#")
+    return tuple(int(value[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+
+
+def _srgb_to_linear(value: float) -> float:
+    if value <= 0.04045:
+        return value / 12.92
+    return ((value + 0.055) / 1.055) ** 2.4
+
+
 def test_packaged_themes_load_and_validate() -> None:
     loader = ThemeLoader()
     themes = loader.load_dir(ROOT / "config" / "themes" / "themes")
 
-    assert {"default", "matrix", "droid", "dark", "light", "classic"}.issubset(themes)
+    assert {
+        "default",
+        "default_matrix",
+        "default_droid",
+        "default_dark",
+        "default_light",
+        "default_classic",
+    } == set(themes)
     assert themes["default"].name == "Default"
     assert themes["default"].is_native()
-    assert themes["matrix"].name == "Matrix"
-    assert themes["matrix"].color("accent.primary") == "#00FF7A"
-    assert themes["matrix"].legacy_colors()["accent"] == "#00FF7A"
     assert themes["default"].color("splash.accent") != "#00FF7A"
-    assert themes["default"].color("splash.background") != themes["matrix"].color("splash.background")
-    assert not ({value.upper() for value in themes["default"].colors.values()} & {value.upper() for value in LEGACY_MATRIX_COLORS.values()})
-    assert themes["droid"].name == "Droid"
-    assert themes["droid"].color("button.background") == "#4A4A4A"
-    assert themes["droid"].font("matrix").family == "Aurebesh AF"
+    assert themes["default"].color("splash.background") != themes["default_matrix"].color("splash.background")
+    default_core = {
+        themes["default"].color("window.background").upper(),
+        themes["default"].color("panel.background").upper(),
+        themes["default"].color("viewport.background").upper(),
+        themes["default"].color("accent.primary").upper(),
+    }
+    matrix_core = {
+        themes["default_matrix"].color("window.background").upper(),
+        themes["default_matrix"].color("panel.background").upper(),
+        themes["default_matrix"].color("viewport.background").upper(),
+        themes["default_matrix"].color("accent.primary").upper(),
+    }
+    assert not (default_core & matrix_core)
+    assert themes["default_matrix"].is_palette_only()
+    assert not themes["default_matrix"].is_native()
+    assert themes["default_matrix"].color("accent.primary") == "#00FF7A"
+    assert themes["default_matrix"].metric("toolbar.height") == themes["default"].metric("toolbar.height")
+    assert themes["default_droid"].color("button.background") == "#4A4A4A"
+    assert themes["default_droid"].font("matrix").family == "Aurebesh AF"
+    assert themes["default_droid"].font("default").family == themes["default"].font("default").family
+
+
+def test_default_ui_theme_variants_are_palette_only_without_qss() -> None:
+    loader = ThemeLoader()
+    themes = loader.load_dir(ROOT / "config" / "themes" / "themes")
+
+    for theme_id in ("default_matrix", "default_droid", "default_dark", "default_light", "default_classic"):
+        theme = themes[theme_id]
+        assert theme.is_palette_only()
+        assert QtStylesheetBuilder().build(theme) == ""
+        assert ThemeApplier().build_stylesheet(theme) == ""
+        assert theme.metric("button.height") == themes["default"].metric("button.height")
+        assert theme.metric("splitter.handleWidth") == themes["default"].metric("splitter.handleWidth")
+
+
+def test_theme_defaults_prefer_default_ui_variants() -> None:
+    settings = ThemeManager(ROOT, {}).settings
+
+    assert settings.selected_theme == "default"
+    assert settings.os_light_theme == "default_light"
+    assert settings.os_dark_theme == "default_dark"
+
+    manager = ThemeManager(ROOT, {})
+    assert manager.get_theme().id == "default"
+    assert manager.get_theme("missing").id == "default"
+    assert manager.select_theme("missing", apply=False).id == "default"
+
+
+def test_about_dialog_reports_runtime_details_and_copies_summary() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.dialogs.qt_dialogs import QtAboutDialog
+
+    class FakeViewport:
+        def render_state_status_text(self) -> str:
+            return "Renderer: WGPU Direct3D 12 | Display: Textured"
+
+    class FakeThemeManager:
+        def __init__(self):
+            self._theme = ThemeLoader().load_file(ROOT / "config" / "themes" / "themes" / "default_matrix.xml")
+
+        def get_theme(self):
+            return self._theme
+
+    class FakeParent(QtWidgets.QWidget):
+        APP_TITLE = "GhostRigger-K1-K2  //  Odyssey Engine Pipeline v6.1"
+        APP_VERSION = "6.1.0"
+
+        def __init__(self):
+            super().__init__()
+            self.app_root = ROOT
+            self.viewport = FakeViewport()
+            self.theme_manager = FakeThemeManager()
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    parent = FakeParent()
+    dialog = QtAboutDialog(parent)
+    try:
+        dialog.apply_ghost_theme(parent.theme_manager.get_theme())
+
+        version = dialog.findChild(QtWidgets.QLabel, "AboutVersionValue")
+        renderer = dialog.findChild(QtWidgets.QLabel, "AboutRendererValue")
+        theme = dialog.findChild(QtWidgets.QLabel, "AboutThemeValue")
+        bioware = dialog.findChild(QtWidgets.QPushButton, "AboutCompanyBioWareButton")
+        obsidian = dialog.findChild(QtWidgets.QPushButton, "AboutCompanyObsidianButton")
+        lucasarts = dialog.findChild(QtWidgets.QPushButton, "AboutCompanyLucasArtsButton")
+
+        assert dialog.minimumWidth() >= 900
+        assert dialog.minimumHeight() >= 650
+        assert version is not None and "6.1.0" in version.text()
+        assert renderer is not None and "WGPU Direct3D 12" in renderer.text()
+        assert theme is not None and "default_matrix" in theme.text()
+        assert "#00FF7A" in dialog.styleSheet()
+        assert bioware is not None and bioware.property("creditUrl") == "https://www.bioware.com/"
+        assert obsidian is not None and obsidian.property("creditUrl") == "https://www.obsidian.net/"
+        assert lucasarts is not None and lucasarts.property("creditUrl") == "https://www.lucasfilm.com/what-we-do/games/"
+        assert "LordVaderCW" in dialog._details_text
+        assert "CrispyW0nton / ShaolinGhost" in dialog._details_text
+        assert "PyKotor / OpenKotOR" in dialog._details_text
+        assert "PySide6 / Qt" in dialog._details_text
+
+        dialog.copy_details()
+        assert "GhostRigger-K1-K2" in app.clipboard().text()
+        assert "Renderer: WGPU Direct3D 12" in app.clipboard().text()
+    finally:
+        dialog.deleteLater()
+        parent.deleteLater()
+        app.processEvents()
 
 
 def test_packaged_layouts_load_and_affect_metrics() -> None:
@@ -174,6 +298,33 @@ def test_layout_apply_hides_optional_detachable_docks_not_declared_by_layout() -
     app.processEvents()
 
 
+def test_layout_apply_leaves_content_browser_width_user_resizable() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    layout = LayoutLoader().load_file(ROOT / "config" / "themes" / "layouts" / "default.xml")
+    assert layout is not None
+
+    window = QtWidgets.QMainWindow()
+    window.content_browser_dock = QtWidgets.QDockWidget("Content Browser", window)  # type: ignore[attr-defined]
+    window.content_browser_dock.setMinimumWidth(500)  # type: ignore[attr-defined]
+    window.content_browser_dock.setMaximumWidth(510)  # type: ignore[attr-defined]
+    window.scene_dock = QtWidgets.QDockWidget("Scene", window)  # type: ignore[attr-defined]
+    window.properties_dock = QtWidgets.QDockWidget("Properties", window)  # type: ignore[attr-defined]
+    window.properties_dock.setMaximumWidth(510)  # type: ignore[attr-defined]
+    window.log_panel = QtWidgets.QWidget(window)  # type: ignore[attr-defined]
+
+    LayoutApplier()._apply_panels(layout, window)
+
+    assert window.content_browser_dock.minimumWidth() == 0  # type: ignore[attr-defined]
+    assert window.content_browser_dock.maximumWidth() >= 1000000  # type: ignore[attr-defined]
+    assert window.properties_dock.minimumWidth() == layout.panel("properties").min_width  # type: ignore[attr-defined]
+    assert window.properties_dock.maximumWidth() >= 1000000  # type: ignore[attr-defined]
+    window.deleteLater()
+
+
 def test_layout_manager_merges_user_dock_profile_overrides() -> None:
     manager = LayoutManager(
         ROOT,
@@ -216,15 +367,15 @@ def test_layout_manager_merges_user_dock_profile_overrides() -> None:
     assert [group.docks for group in layout.dock_groups] == [["nodes", "2das"]]
 
 
-def test_stylesheet_builds_from_matrix_theme() -> None:
-    theme = ThemeLoader().load_file(ROOT / "config" / "themes" / "themes" / "matrix.xml")
+def test_default_matrix_theme_is_palette_only_without_qss() -> None:
+    theme = ThemeLoader().load_file(ROOT / "config" / "themes" / "themes" / "default_matrix.xml")
     assert theme is not None
 
     stylesheet = QtStylesheetBuilder().build(theme)
 
-    assert "QMainWindow" in stylesheet
-    assert "#00FF7A" in stylesheet
-    assert "QSplitter::handle" in stylesheet
+    assert theme.is_palette_only()
+    assert stylesheet == ""
+    assert theme.color("accent.primary") == "#00FF7A"
 
 
 def test_default_theme_uses_native_qt_styling() -> None:
@@ -245,7 +396,7 @@ def test_packaged_custom_themes_define_spinbox_stepper_tokens() -> None:
     }
 
     for theme_id, theme in themes.items():
-        if theme.is_native():
+        if theme.is_native() or theme.is_palette_only():
             continue
         assert required.issubset(theme.colors), theme_id
         stylesheet = QtStylesheetBuilder().build(theme)
@@ -262,7 +413,7 @@ def test_required_theme_tokens_resolve_for_all_packaged_themes() -> None:
         for token in FALLBACK_COLORS:
             assert theme.color(token).startswith("#"), (theme.id, token)
         stylesheet = QtStylesheetBuilder().build(theme)
-        if theme.is_native():
+        if theme.is_native() or theme.is_palette_only():
             assert stylesheet == ""
         else:
             assert "QPushButton:disabled" in stylesheet
@@ -363,10 +514,10 @@ def test_invalid_theme_and_layout_do_not_crash(tmp_path: Path) -> None:
 
 
 def test_managers_load_packaged_defaults() -> None:
-    theme_manager = ThemeManager(ROOT, {"theme_layout": {"selected_theme": "matrix"}})
+    theme_manager = ThemeManager(ROOT, {"theme_layout": {"selected_theme": "default_matrix"}})
     layout_manager = LayoutManager(ROOT, {"theme_layout": {"selected_layout": "default"}})
 
-    assert theme_manager.get_theme().id == "matrix"
+    assert theme_manager.get_theme().id == "default_matrix"
     assert layout_manager.get_layout().id == "default"
     assert "iconOnly" in VALID_BUTTON_MODES
 
@@ -381,7 +532,7 @@ def test_theme_applier_precache_warms_later_instances() -> None:
 
         assert result["failed"] == 0
         assert result["built"] == len(themes)
-        classic = themes["classic"]
+        classic = themes["default_classic"]
         key = ThemeApplier._theme_cache_key(classic)
         assert key in ThemeApplier._global_stylesheet_cache
 
@@ -389,7 +540,8 @@ def test_theme_applier_precache_warms_later_instances() -> None:
         stylesheet = applier.build_stylesheet(classic)
 
         assert stylesheet == ThemeApplier._global_stylesheet_cache[key]
-        assert applier._stylesheet_cache[key] == stylesheet
+        assert stylesheet == ""
+        assert key not in applier._stylesheet_cache
     finally:
         ThemeApplier._global_stylesheet_cache.clear()
         ThemeApplier._global_stylesheet_cache.update(previous_cache)
@@ -402,7 +554,7 @@ def test_collapsible_group_toggle_stays_small_under_theme_and_layout() -> None:
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     old_stylesheet = app.styleSheet()
-    theme = ThemeLoader().load_file(ROOT / "config" / "themes" / "themes" / "matrix.xml")
+    theme = ThemeLoader().load_file(ROOT / "config" / "themes" / "themes" / "default_matrix.xml")
     assert theme is not None
     container = QtWidgets.QWidget()
     outer = QtWidgets.QVBoxLayout(container)
@@ -437,7 +589,7 @@ def test_matrix_bar_controls_live_in_theme_editor_not_settings(tmp_path: Path) -
     from PySide6 import QtGui, QtWidgets
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-    theme_manager = ThemeManager(ROOT, {"theme_layout": {"selected_theme": "matrix"}})
+    theme_manager = ThemeManager(ROOT, {"theme_layout": {"selected_theme": "default_matrix"}})
     layout_manager = LayoutManager(ROOT, {"theme_layout": {"selected_layout": "default"}})
     settings_dialog = QtSettingsDialog(
         {"matrix_background": False, "matrix_bar": {"style": "gif", "glyphs": "ABC"}},
@@ -498,7 +650,7 @@ def test_theme_editor_splash_customization_updates_preview_and_theme() -> None:
     from PySide6 import QtWidgets
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-    theme_manager = ThemeManager(ROOT, {"theme_layout": {"selected_theme": "matrix"}})
+    theme_manager = ThemeManager(ROOT, {"theme_layout": {"selected_theme": "default_matrix"}})
     layout_manager = LayoutManager(ROOT, {"theme_layout": {"selected_layout": "default"}})
     editor = ThemeEditorWindow(theme_manager, layout_manager)
     try:
@@ -573,7 +725,7 @@ def test_theme_editor_programmatic_close_skips_dirty_prompt() -> None:
     from PySide6 import QtWidgets
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-    theme_manager = ThemeManager(ROOT, {"theme_layout": {"selected_theme": "matrix"}})
+    theme_manager = ThemeManager(ROOT, {"theme_layout": {"selected_theme": "default_matrix"}})
     layout_manager = LayoutManager(ROOT, {"theme_layout": {"selected_layout": "default"}})
     editor = ThemeEditorWindow(theme_manager, layout_manager)
     try:
@@ -603,6 +755,19 @@ def test_matrix_bar_media_is_header_only_and_crop_aware() -> None:
     assert "matrixBar.cropX" in inspect.getsource(QtGhostRiggerMainWindow._matrix_bar_settings)
 
 
+def test_main_window_native_theme_keeps_dock_separator_grip() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    native_source = inspect.getsource(QtGhostRiggerMainWindow.apply_native_theme)
+
+    assert "QMainWindow::separator" in native_source
+    assert "panel.border" in native_source
+    assert "width: 4px" in native_source
+    assert "height: 4px" in native_source
+
+
 def test_main_window_reserves_fixed_command_bar_height() -> None:
     import inspect
 
@@ -618,7 +783,7 @@ def test_main_window_reserves_fixed_command_bar_height() -> None:
 
 
 def test_viewport_chrome_and_renderer_use_theme_tokens() -> None:
-    theme = ThemeLoader().load_file(ROOT / "config" / "themes" / "themes" / "classic.xml")
+    theme = ThemeLoader().load_file(ROOT / "config" / "themes" / "themes" / "default_classic.xml")
     assert theme is not None
 
     stylesheet = transform_bar_stylesheet(theme)
@@ -626,12 +791,7 @@ def test_viewport_chrome_and_renderer_use_theme_tokens() -> None:
     assert theme.color("input.background") in stylesheet
     assert theme.color("button.checked") in stylesheet
     app_stylesheet = QtStylesheetBuilder().build(theme)
-    assert "QDoubleSpinBox::up-button" in app_stylesheet
-    assert "QSpinBox::down-button" in app_stylesheet
-    assert "spin_up_dark.svg" in app_stylesheet
-    assert "spin_down_dark.svg" in app_stylesheet
-    assert theme.color("spinbox.buttonBorder") in app_stylesheet
-    assert theme.color("spinbox.buttonBackground") in app_stylesheet
+    assert app_stylesheet == ""
 
     renderer = FrameRenderer(ArcBallCamera())
     renderer.set_theme_colors(theme)
@@ -642,6 +802,152 @@ def test_viewport_chrome_and_renderer_use_theme_tokens() -> None:
     assert renderer.viewport_background == expected_background
     assert renderer.grid_minor_color == expected_grid
     assert renderer.grid_x_axis_color == expected_axis
+
+
+def test_wgpu_renderer_uses_theme_tokens_for_viewport_overlays() -> None:
+    from src.gui.rendering.renderer_backend import RendererBackend
+    from src.gui.rendering.wgpu_renderer import WgpuRenderer
+
+    theme = ThemeLoader().load_file(ROOT / "config" / "themes" / "themes" / "default_classic.xml")
+    assert theme is not None
+    renderer = WgpuRenderer(RendererBackend.WGPU_AUTO)
+
+    renderer.set_theme_colors(theme)
+
+    assert renderer.viewport_background == pytest.approx(_rgb_float(theme.color("viewport.background")))
+    assert renderer.grid_minor_color == pytest.approx(_rgb_float(theme.color("viewport.gridMinor")))
+    assert renderer.grid_major_color == pytest.approx(_rgb_float(theme.color("viewport.gridMajor")))
+    assert renderer.wire_color == pytest.approx(_rgb_float(theme.color("accent.primary")))
+    assert renderer.hovered_edge_color == pytest.approx(_rgb_float(theme.color("viewport.helper.meshHover")))
+    assert renderer.selected_edge_color == pytest.approx(_rgb_float(theme.color("viewport.selection")))
+    assert renderer.hidden_line_color == pytest.approx(_rgb_float(theme.color("viewport.border")))
+    assert renderer.missing_texture_color_b == pytest.approx(_rgb_float(theme.color("viewport.background")))
+    assert renderer.get_diagnostics()["viewport_theme_colors"]["wire"] == pytest.approx(renderer.wire_color)
+
+
+def test_wgpu_renderer_uses_native_palette_for_viewport_overlays() -> None:
+    from src.gui.rendering.renderer_backend import RendererBackend
+    from src.gui.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer(RendererBackend.WGPU_AUTO)
+
+    renderer.set_native_palette_colors(
+        base=(235, 238, 242),
+        text=(30, 34, 40),
+        highlight=(0, 120, 215),
+    )
+
+    assert renderer.viewport_background == pytest.approx((235 / 255.0, 238 / 255.0, 242 / 255.0))
+    assert renderer.grid_minor_color == pytest.approx((198 / 255.0, 201 / 255.0, 206 / 255.0))
+    assert renderer.grid_major_color == pytest.approx((174 / 255.0, 177 / 255.0, 181 / 255.0))
+    assert renderer.wire_color == pytest.approx((0.0, 120 / 255.0, 215 / 255.0))
+    assert renderer.hovered_edge_color == pytest.approx((0.0, 215 / 255.0, 181 / 255.0))
+    assert renderer.selected_edge_color == pytest.approx((1.0, 210 / 255.0, 63 / 255.0))
+    assert renderer.missing_texture_color_a == pytest.approx(renderer.wire_color)
+    assert renderer.missing_texture_color_b == pytest.approx(renderer.viewport_background)
+
+
+def test_wgpu_renderer_linearizes_viewport_colours_for_srgb_surfaces() -> None:
+    from src.gui.rendering.renderer_backend import RendererBackend
+    from src.gui.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer(RendererBackend.WGPU_AUTO)
+    renderer.format = "bgra8unorm-srgb"
+    background = (23 / 255.0, 25 / 255.0, 28 / 255.0)
+
+    assert renderer._target_rgb(background) == pytest.approx(tuple(_srgb_to_linear(channel) for channel in background))
+    assert renderer._target_rgba((*background, 1.0))[:3] == pytest.approx(renderer._target_rgb(background))
+
+    mvp = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+    color = (1 / 255.0, 0.0, 0.0, 1.0)
+    pick_uniform = renderer._line_uniform_bytes(mvp, color, target_color=False)
+    assert struct.unpack("4f", pick_uniform[64:80]) == pytest.approx(color)
+
+    renderer.format = "bgra8unorm"
+    assert renderer._target_rgb(background) == pytest.approx(background)
+
+
+def test_viewport_emits_persistent_render_state_status() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.rendering.renderer_backend import RendererBackend
+    from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    viewport = QtViewportWidget()
+    seen: list[str] = []
+    viewport.renderStateChanged.connect(seen.append)
+    try:
+        initial = viewport.render_state_status_text()
+        assert "Renderer:" in initial
+        assert "Display:" in initial
+
+        viewport.set_shade_mode("wire")
+
+        assert seen
+        assert "Renderer:" in seen[-1]
+        assert "Display: Wireframe" in seen[-1]
+
+        viewport.set_renderer_settings(RendererSettings(backend=RendererBackend.WGPU_VULKAN))
+        assert "Renderer: WGPU Vulkan" in viewport.render_state_status_text()
+    finally:
+        viewport.deleteLater()
+        app.processEvents()
+
+
+def test_viewport_renderer_settings_noop_does_not_recreate_wgpu_surface() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    class FakeRenderer:
+        backend_id = "wgpu_d3d12"
+
+        def __init__(self) -> None:
+            self.canvas = None
+            self.set_settings_calls = 0
+            self.created_surfaces = 0
+
+        @property
+        def active_renderer(self):
+            return self
+
+        def get_diagnostics(self):
+            return {"backend_id": self.backend_id, "name": "WGPU Direct3D 12"}
+
+        def create_surface_widget(self, parent=None):
+            self.created_surfaces += 1
+            self.canvas = QtWidgets.QLabel("surface", parent)
+            return self.canvas
+
+        def set_settings(self, settings):
+            self.set_settings_calls += 1
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    viewport = QtViewportWidget()
+    renderer = FakeRenderer()
+    try:
+        surface = QtWidgets.QLabel("existing", viewport.canvas)
+        renderer.canvas = surface
+        viewport._gpu_renderer = renderer
+        viewport._owns_gpu_renderer = True
+        viewport.canvas.set_renderer_surface(surface, backend_id="wgpu_d3d12", live_surface=True)
+
+        viewport.set_renderer_settings(RendererSettings())
+        viewport._sync_renderer_surface(force=True)
+
+        assert renderer.set_settings_calls == 0
+        assert renderer.created_surfaces == 0
+        assert viewport.canvas.current_surface() is surface
+    finally:
+        viewport.deleteLater()
+        app.processEvents()
 
 
 def test_renderer_has_native_theme_overlay_defaults_without_theme_apply() -> None:
@@ -678,7 +984,7 @@ def test_native_viewport_theme_keeps_overlay_render_path_available() -> None:
     app.setPalette(native_palette)
     viewport = QtViewportWidget()
     try:
-        themed = ThemeLoader().load_file(ROOT / "config" / "themes" / "themes" / "classic.xml")
+        themed = ThemeLoader().load_file(ROOT / "config" / "themes" / "themes" / "default_classic.xml")
         assert themed is not None
         viewport.apply_ghost_theme(themed)
         assert viewport._renderer.hud_fill != (30, 34, 40)

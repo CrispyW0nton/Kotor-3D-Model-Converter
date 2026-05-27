@@ -1,0 +1,73 @@
+{
+  "module": "K2:001ebo1",
+  "backend": "wgpu_d3d12",
+  "desktop_visible": true,
+  "available_cpu_hit_meshes": [
+    "AniScr1",
+    "AniScr2",
+    "AniScr3",
+    "CM_Details1",
+    "CM_Details2",
+    "CM_Floor",
+    "CM_Junk1",
+    "CM_Junk2",
+    "CM_Panels2",
+    "CM_Panels3",
+    "CM_Walls1",
+    "CM_Walls2"
+  ],
+  "steps": [
+    {
+      "target_cpu_mesh": "CM_Details1",
+      "hovered_before_click": "",
+      "selected_mesh": "CM_Details1",
+      "hovered_after_click": "",
+      "hover_is_selected_after_click": false,
+      "ok": true,
+      "screenshot": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\d3d_viewport_mesh_selection_hover_fix_001ebo1\\01_CM_Details1_selected_no_hover_stack.png"
+    },
+    {
+      "target_cpu_mesh": "CM_Floor",
+      "hovered_before_click": "CM_Floor",
+      "selected_mesh": "CM_Floor",
+      "hovered_after_click": "CM_Floor",
+      "hover_is_selected_after_click": true,
+      "ok": true,
+      "screenshot": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\d3d_viewport_mesh_selection_hover_fix_001ebo1\\02_CM_Floor_selected_no_hover_stack.png"
+    },
+    {
+      "target_cpu_mesh": "CM_Details2",
+      "hovered_before_click": "CM_Details2",
+      "selected_mesh": "CM_Details2",
+      "hovered_after_click": "CM_Details2",
+      "hover_is_selected_after_click": true,
+      "ok": true,
+      "screenshot": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\d3d_viewport_mesh_selection_hover_fix_001ebo1\\03_CM_Details2_selected_no_hover_stack.png"
+    },
+    {
+      "target_cpu_mesh": "CM_Walls1",
+      "hovered_before_click": "CM_Walls1",
+      "selected_mesh": "CM_Walls1",
+      "hovered_after_click": "CM_Walls1",
+      "hover_is_selected_after_click": true,
+      "ok": true,
+      "screenshot": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\d3d_viewport_mesh_selection_hover_fix_001ebo1\\04_CM_Walls1_selected_no_hover_stack.png"
+    }
+  ],
+  "all_viewport_clicks_selected_cpu_hit_mesh": true,
+  "hover_edge_alpha": 0.45,
+  "show_mesh_hover_edges": false,
+  "last_render_counts": {
+    "opaque": 17,
+    "cutout": 0,
+    "blended": 0,
+    "edges": 0,
+    "hovered_edges": 0,
+    "selected_edges": 3205,
+    "skeleton_lines": 0,
+    "joint_markers": 0,
+    "light_helper_lines": 128,
+    "light_volume_lines": 672,
+    "gizmo_lines": 6
+  }
+}

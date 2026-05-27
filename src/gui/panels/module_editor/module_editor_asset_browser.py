@@ -42,7 +42,39 @@ class ModuleEditorAssetBrowser(QtWidgets.QWidget):
         self.search_edit.setPlaceholderText("Filter assets")
         self.search_edit.textChanged.connect(self._apply_filter)
         self.category_combo = QtWidgets.QComboBox()
-        self.category_combo.addItems(["All", "Module", "Creature", "Character", "Item/Armor/Weapons", "Other", "Template"])
+        self.category_combo.addItems([
+            "All",
+            "Player Characters",
+            "Party Members",
+            "Commoners",
+            "NPCs",
+            "Droids",
+            "Turrets",
+            "Creatures",
+            "Holograms",
+            "Supermodels",
+            "Modules",
+            "Level Assets",
+            "Environment",
+            "Skyboxes",
+            "Minigame",
+            "Menus",
+            "GUI",
+            "Placeables",
+            "Doors",
+            "Engine Items",
+            "Inventory",
+            "Weapons",
+            "Item/Armor/Weapons",
+            "Visual FX",
+            "Visuals",
+            "Planets",
+            "Misc Models",
+            "Stunts",
+            "Uncategorised",
+            "Other",
+            "Templates",
+        ])
         self.category_combo.currentTextChanged.connect(self._apply_filter)
         filter_row.addWidget(self.search_edit, 1)
         filter_row.addWidget(self.category_combo)

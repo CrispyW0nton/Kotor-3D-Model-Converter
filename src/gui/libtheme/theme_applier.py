@@ -63,6 +63,8 @@ class ThemeApplier(QtCore.QObject):
         self._worker_target: QtWidgets.QWidget | None = None
 
     def build_stylesheet(self, theme: Theme) -> str:
+        if theme.is_native() or theme.is_palette_only():
+            return ""
         key = self._theme_cache_key(theme)
         cached = self._cached_stylesheet(key)
         if cached is not None:
@@ -158,6 +160,11 @@ class ThemeApplier(QtCore.QObject):
             self.themeApplyProgress.emit("Applying cached stylesheet...", 2, 3)
             self._pump_ui_events()
             self._apply_theme_now(theme, target, cached, 0.0)
+            return
+        if theme.is_native() or theme.is_palette_only():
+            self.themeApplyProgress.emit("Applying native widget palette...", 2, 3)
+            self._pump_ui_events()
+            self._apply_theme_now(theme, target, "", 0.0)
             return
         self.themeApplyProgress.emit("Building theme stylesheet in background...", 1, 3)
         self._pump_ui_events()
@@ -306,6 +313,16 @@ class ThemeApplier(QtCore.QObject):
                     native_hook()
                 else:
                     self._clear_widget_styles(widget)
+            self.themeChanged.emit(theme)
+            return
+        if theme.is_palette_only():
+            for widget in list(self._aware_widgets):
+                if widget is None:
+                    continue
+                self._clear_widget_styles(widget)
+                hook = getattr(widget, "apply_ghost_theme", None)
+                if callable(hook):
+                    hook(theme)
             self.themeChanged.emit(theme)
             return
         for widget in list(self._aware_widgets):

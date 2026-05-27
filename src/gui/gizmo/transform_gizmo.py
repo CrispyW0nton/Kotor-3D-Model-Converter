@@ -142,6 +142,14 @@ class TransformGizmo:
             self._last_depth = float(center[2])
         return self.renderer.draw(draw, self, camera, projector, width, height)
 
+    def build_render_data(self, camera, projector, width: int, height: int):
+        self.update_from_selection()
+        center = projector(self.position[0], self.position[1], self.position[2], width, height)
+        if center is not None:
+            self._last_center_screen = (float(center[0]), float(center[1]))
+            self._last_depth = float(center[2])
+        return self.renderer.build_render_data(self, camera, projector, width, height)
+
     def hit_test(self, mouse_pos: tuple[int, int], camera=None) -> str | None:
         self.hovered_handle = self.picker.hit_test(mouse_pos, self.renderer.handles)
         return self.hovered_handle

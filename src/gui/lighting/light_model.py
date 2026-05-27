@@ -130,6 +130,11 @@ class GhostRiggerLight:
                 setattr(obj, attr, value)
             except Exception:
                 pass
+        try:
+            current_revision = int(getattr(obj, "_gr_light_revision", 0) or 0)
+            setattr(obj, "_gr_light_revision", current_revision + 1)
+        except Exception:
+            pass
 
     def copy_generated(self, *, name: str | None = None) -> "GhostRiggerLight":
         data = GhostRiggerLight(

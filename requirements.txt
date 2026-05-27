@@ -109,6 +109,11 @@ watchdog>=4.0.0
 # Correct OS-specific app data/cache/config folders.
 platformdirs>=4.0.0
 
+# CPU brand / instruction-set diagnostics for the Settings Hardware tab.
+# GhostRigger only reports these as hardware capabilities; Python code does
+# not directly use SIMD unless NumPy/native libraries do.
+py-cpuinfo>=9.0.0
+
 # ── Build / packaging ───────────────────────────────────────────────────────
 # PyInstaller supports Python 3.8–3.14 and bundles PySide6 out of the box.
 pyinstaller>=6.0

@@ -1,9 +1,13 @@
-<theme id="dark" name="Dark" version="1">
+<theme id="default_dark" name="Default Dark" version="1">
     <metadata>
         <author>GhostRigger</author>
-        <description>Professional dark theme with quieter contrast than Matrix.</description>
+        <description>Default native UI geometry with the dark palette.</description>
         <mode>dark</mode>
     </metadata>
+    <styles>
+        <style name="application.paletteOnly" value="true"/>
+        <style name="splash.surfaceStyle" value="matte"/>
+    </styles>
     <colors>
         <color name="window.background" value="#15181D"/>
         <color name="panel.background" value="#1E232A"/>
@@ -12,6 +16,13 @@
         <color name="viewport.background" value="#101318"/>
         <color name="viewport.border" value="#364151"/>
         <color name="viewport.text" value="#AAB5C2"/>
+        <color name="viewport.helper.meshHover" value="#00D7B5"/>
+        <color name="viewport.helper.light" value="#FFD24A"/>
+        <color name="viewport.helper.lightSelected" value="#D7EBFF"/>
+        <color name="viewport.helper.camera" value="#AAB5C2"/>
+        <color name="viewport.helper.cameraSelected" value="#F5B84B"/>
+        <color name="viewport.helper.null" value="#9AA8BA"/>
+        <color name="viewport.helper.nullSelected" value="#F5B84B"/>
         <color name="toolbar.background" value="#202630"/>
         <color name="toolbar.border" value="#3A4654"/>
         <color name="button.background" value="#27303A"/>
@@ -57,25 +68,17 @@
         <size role="toolbar" value="18"/>
         <size role="largeToolbar" value="24"/>
     </icons>
-    <styles>
-        <style name="tab.mode" value="standard"/>
-    </styles>
     <metrics>
-        <metric name="toolbar.height" value="40"/>
+        <metric name="toolbar.height" value="34"/>
         <metric name="toolbar.iconSize" value="18"/>
-        <metric name="toolbar.spacing" value="6"/>
+        <metric name="toolbar.spacing" value="4"/>
         <metric name="button.height" value="16"/>
         <metric name="button.minWidth" value="64"/>
         <metric name="button.paddingH" value="6"/>
         <metric name="button.paddingV" value="1"/>
-        <metric name="panel.margin" value="6"/>
-        <metric name="panel.spacing" value="6"/>
-        <metric name="panel.minWidth" value="300"/>
-        <metric name="panel.preferredWidth" value="390"/>
-        <metric name="splitter.handleWidth" value="7"/>
-        <metric name="bottom.preferredHeight" value="230"/>
-        <metric name="bottom.minHeight" value="130"/>
-        <metric name="viewport.minWidth" value="540"/>
-        <metric name="border.radius" value="4"/>
+        <metric name="panel.margin" value="4"/>
+        <metric name="panel.spacing" value="4"/>
+        <metric name="splitter.handleWidth" value="6"/>
+        <metric name="tab.height" value="14"/>
     </metrics>
 </theme>

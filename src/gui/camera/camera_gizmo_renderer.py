@@ -12,6 +12,67 @@ class CameraGizmoRenderer:
         self.show_camera_helpers = True
         self.show_camera_frustums = True
         self.show_focus_plane = True
+        self.reset_theme_colors()
+
+    @staticmethod
+    def _hex_to_rgba(value: str, fallback: tuple[int, int, int, int], alpha: int | None = None) -> tuple[int, int, int, int]:
+        text = str(value or "").strip().lstrip("#")
+        try:
+            if len(text) not in {6, 8}:
+                raise ValueError
+            r = int(text[0:2], 16)
+            g = int(text[2:4], 16)
+            b = int(text[4:6], 16)
+            a = int(text[6:8], 16) if len(text) == 8 else fallback[3]
+            return (r, g, b, int(alpha if alpha is not None else a))
+        except Exception:
+            return fallback if alpha is None else (fallback[0], fallback[1], fallback[2], int(alpha))
+
+    @staticmethod
+    def _blend(a: tuple[int, int, int], b: tuple[int, int, int], t: float) -> tuple[int, int, int]:
+        t = max(0.0, min(1.0, float(t)))
+        return tuple(int(round(float(a[i]) * (1.0 - t) + float(b[i]) * t)) for i in range(3))
+
+    def set_theme_colors(self, theme) -> None:
+        self.camera_color = self._hex_to_rgba(theme.color("viewport.helper.camera", theme.color("viewport.text")), self.camera_color)
+        self.camera_selected_color = self._hex_to_rgba(
+            theme.color("viewport.helper.cameraSelected", theme.color("selection.background")),
+            self.camera_selected_color,
+        )
+        self.camera_active_color = self._hex_to_rgba(theme.color("accent.secondary", theme.color("accent.primary")), self.camera_active_color)
+        self.camera_fill = self._hex_to_rgba(theme.color("viewport.helper.camera", theme.color("viewport.text")), self.camera_fill, alpha=55)
+        self.camera_selected_fill = self._hex_to_rgba(
+            theme.color("viewport.helper.cameraSelected", theme.color("selection.background")),
+            self.camera_selected_fill,
+            alpha=68,
+        )
+        self.camera_active_fill = self._hex_to_rgba(theme.color("accent.secondary", theme.color("accent.primary")), self.camera_active_fill, alpha=70)
+
+    def reset_theme_colors(self) -> None:
+        self.camera_color = (180, 210, 220, 210)
+        self.camera_selected_color = (255, 214, 88, 245)
+        self.camera_active_color = (98, 190, 255, 245)
+        self.camera_fill = (80, 100, 110, 55)
+        self.camera_selected_fill = (255, 214, 88, 68)
+        self.camera_active_fill = (98, 190, 255, 70)
+
+    def set_native_palette_colors(
+        self,
+        *,
+        base: tuple[int, int, int],
+        text: tuple[int, int, int],
+        highlight: tuple[int, int, int],
+    ) -> None:
+        bg = tuple(int(v) for v in base[:3])
+        fg = tuple(int(v) for v in text[:3])
+        hi = tuple(int(v) for v in highlight[:3])
+        camera = self._blend(bg, fg, 0.72)
+        self.camera_color = (*camera, 210)
+        self.camera_selected_color = (255, 214, 88, 245)
+        self.camera_active_color = (*hi, 245)
+        self.camera_fill = (*camera, 55)
+        self.camera_selected_fill = (255, 214, 88, 68)
+        self.camera_active_fill = (*hi, 70)
 
     def draw(self, draw, cameras, active_camera_id: str, projector, width: int, height: int) -> None:
         if not self.show_camera_helpers:
@@ -27,8 +88,8 @@ class CameraGizmoRenderer:
         if p is None:
             return
         selected = bool(getattr(camera, "selected", False))
-        color = (98, 190, 255, 245) if active else ((255, 214, 88, 245) if selected else (180, 210, 220, 210))
-        fill = (98, 190, 255, 70) if active else ((255, 214, 88, 68) if selected else (80, 100, 110, 55))
+        color = self.camera_active_color if active else (self.camera_selected_color if selected else self.camera_color)
+        fill = self.camera_active_fill if active else (self.camera_selected_fill if selected else self.camera_fill)
         x, y = int(p[0]), int(p[1])
         r = 7 if selected or active else 5
         draw.rectangle([x - r, y - r, x + r, y + r], outline=color, fill=fill, width=2 if selected or active else 1)

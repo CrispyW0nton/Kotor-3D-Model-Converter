@@ -640,6 +640,47 @@ def test_skin_node_palette_auto_profile_uses_compact_qbone_for_local_arrays(
     assert palette[0, 0, 3] == pytest.approx(2.0, abs=1e-6)
 
 
+@pytest.mark.parametrize(("game", "install_path"), [("k1", K1_PATH), ("k2", K2_PATH)])
+def test_bastila_import_remaps_torso_lower_limb_bone_map(game, install_path, monkeypatch) -> None:
+    from src.core.qt_core.game.import_normalisation import apply_known_skin_bone_map_normalisations
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
+    from src.core.qt_core.game.kotor_loader import load_model_from_bytes
+
+    assert callable(apply_known_skin_bone_map_normalisations)
+    if not install_path.exists():
+        pytest.skip(f"{game.upper()} install not available")
+
+    monkeypatch.delenv("GHOSTRIGGER_SKIN_FORMULA", raising=False)
+    mdl, mdx = _raw_model(game, "p_bastilabb")
+    model = load_model_from_bytes(mdl, mdx, game_version=None)
+    torso = next(node for node in model.all_nodes() if getattr(node, "name", "").lower() == "torso")
+
+    expected = {
+        6: "lthigh_g",
+        7: "rthigh_g",
+        10: "lshin_g",
+        11: "lfoot_g",
+        12: "lfootT_g",
+        13: "rshin_g",
+        14: "rfoot_g",
+        15: "rfootT_g",
+    }
+    for slot, bone_name in expected.items():
+        assert torso.bone_map[slot] == bone_name
+    assert getattr(torso, "_gr_bone_map_override", "") == "p_bastilabb_torso_lower_limb"
+
+    uploader = MatrixPaletteUploader(max_bones=32)
+    uploader.build_inverse_bind_pose(model)
+    uploader.compute_skin_node_palette(torso, SimpleNamespace(nodes={}))
+
+    assert uploader._skin_palette_formula == "G5_FULL_REF"
+    assert uploader._skin_inverse_bind_source == "qBone_tBone_dfs_indexed_TR_no_invert"
+    assert uploader.palette[6].bone_name == "lthigh_g"
+    assert uploader.palette[7].bone_name == "rthigh_g"
+    assert uploader.palette[10].bone_name == "lshin_g"
+    assert uploader.palette[11].bone_name == "lfoot_g"
+
+
 def test_skinning_species_classifier_covers_primary_character_families() -> None:
     from src.core.qt_core.animation.gpu_skinning import (
         SKINNING_SPECIES_PROFILES,
@@ -688,7 +729,8 @@ def test_skin_node_palette_records_species_profile_reason(monkeypatch) -> None:
     uploader.compute_skin_node_palette(skin_node, SimpleNamespace(nodes={}))
 
     assert uploader._skin_species == "bith"
-    assert uploader._skin_species_profile.label == "Bith"
+    assert uploader._skin_species_profile.label in {"Bith", "K1 n_bith Skinning"}
+    assert uploader._skin_species_profile.resref in {"", "n_bith"}
     assert uploader._skin_palette_formula == "G5_FULL_REF"
     assert "species:bith" in uploader._skin_profile_reason
     assert "auto:dfs_qbone" in uploader._skin_profile_reason
@@ -1867,6 +1909,74 @@ def test_owned_reader_handles_k2_nonzero_mdx_offsets() -> None:
         node = nodes.get(name)
         assert node is not None, f"Loaded model missing node {name!r}"
         assert len(node.mesh.vertex_positions) == bin_node.trimesh.vertex_count
+
+
+@pytest.mark.skipif(not K1_PATH.exists(), reason="K1 install not available")
+def test_bastila_body_skin_nodes_keep_authored_root_parent_and_bind_collapse() -> None:
+    from src.core.qt_core.animation.gpu_skinning import (
+        MatrixPaletteUploader,
+        _mat4_mul_py,
+    )
+    from src.core.qt_core.game.kotor_loader import load_model_from_bytes
+
+    mdl, mdx = _raw_model("k1", "p_bastilabb")
+    model = load_model_from_bytes(mdl, mdx, game_version=None)
+    uploader = MatrixPaletteUploader(max_bones=32)
+    uploader.build_inverse_bind_pose(model)
+    root_name = model.root_node.name
+    checked = 0
+    max_collapse_diff = 0.0
+
+    for skin_node in [node for node in model.all_nodes() if getattr(node, "is_skin", False)]:
+        assert getattr(getattr(skin_node, "parent", None), "name", "") == root_name
+        static_bind = uploader._static_skin_bind_data(skin_node, "G5_FULL_REF")
+        skin_bind = static_bind["skin_bind"]
+        inv_by_slot = dict(static_bind["inv_by_slot"])
+        for slot, bone_name in enumerate(getattr(skin_node, "bone_map", []) or []):
+            if not bone_name:
+                continue
+            bone_world = uploader._world_pose_matrix(str(bone_name).lower(), {}, {})
+            collapse = _mat4_mul_py(bone_world, inv_by_slot[slot])
+            max_collapse_diff = max(
+                max_collapse_diff,
+                max(
+                    abs(float(collapse[row][col]) - float(skin_bind[row][col]))
+                    for row in range(4)
+                    for col in range(4)
+                ),
+            )
+            checked += 1
+
+    assert checked >= 16
+    assert max_collapse_diff <= 1.0e-5
+
+
+@pytest.mark.skipif(not K1_PATH.exists(), reason="K1 install not available")
+def test_t3m3_duplicate_foot_names_use_node_index_for_rigid_animation() -> None:
+    from src.core.qt_core.animation.animation_engine import AnimationEngine
+    from src.core.qt_core.game.kotor_loader import load_model_from_bytes
+    from src.gui.rendering.mesh_render_data import _animated_node_world_transform
+
+    mdl, mdx = _raw_model("k1", "p_t3m3")
+    model = load_model_from_bytes(mdl, mdx, game_version=None)
+    engine = AnimationEngine(model)
+    assert engine.play("walk", loop=True, blend=False)
+    pose = engine.evaluate(0.3)
+
+    foot_l_nodes = [node for node in model.all_nodes() if node.name.lower() == "footl"]
+    assert len(foot_l_nodes) == 2
+    assert "footl" in pose.duplicate_node_names
+
+    front_foot = next(node for node in foot_l_nodes if getattr(getattr(node, "parent", None), "name", "") == "ArmL")
+    back_foot = next(node for node in foot_l_nodes if getattr(getattr(node, "parent", None), "name", "") == "body")
+    assert front_foot.index not in pose.nodes_by_index
+    assert back_foot.index in pose.nodes_by_index
+
+    front_world, _front_rot = _animated_node_world_transform(front_foot, pose)
+    back_world, _back_rot = _animated_node_world_transform(back_foot, pose)
+
+    assert front_world[1] > 0.3
+    assert back_world[1] < -0.2
 
 
 @pytest.mark.skipif(not K1_PATH.exists(), reason="K1 install not available")

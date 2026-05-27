@@ -4727,6 +4727,12 @@ class GpuRenderer:
         finally:
             ctx.depth_mask = True
 
+    def _is_node_selected_for_render(self, node) -> bool:
+        if node is getattr(self, "selected_node", None) or bool(getattr(node, "_gr_selected", False)):
+            return True
+        selected_ids = {id(_n) for _n in (getattr(self, "selected_nodes", []) or [])}
+        return id(node) in selected_ids
+
     def _draw_light_gizmos(self, ctx, mvp, nodes, get_world_transform) -> None:
         if not bool(getattr(self, "show_light_gizmos", True)):
             return
@@ -4789,7 +4795,7 @@ class GpuRenderer:
                 base = tuple(c * 0.38 for c in base)
             if bool(getattr(node, "_gr_light_selected", False)):
                 base = tuple(min(1.0, c * LIGHT_HELPER_SELECTED_BOOST) for c in base)
-            if node is selected or bool(getattr(node, "_gr_light_metadata", {}).get("active_selection", False)):
+            if self._is_node_selected_for_render(node) or bool(getattr(node, "_gr_light_metadata", {}).get("active_selection", False)):
                 base = (0.90, 0.95, 1.0)
 
             _ring(rows, pos, right, up, LIGHT_HELPER_MARKER_RADIUS, base, steps=16)
@@ -4830,7 +4836,7 @@ class GpuRenderer:
                 if not draw_volumes:
                     continue
                 display_radius = LIGHT_HELPER_POINT_RADIUS
-                if node is selected or bool(getattr(node, "_gr_light_selected", False)):
+                if self._is_node_selected_for_render(node) or bool(getattr(node, "_gr_light_selected", False)):
                     display_radius = LIGHT_HELPER_POINT_RADIUS * 1.2
                 _ring(rows, pos, (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), display_radius, base, steps=28)
                 _ring(rows, pos, (1.0, 0.0, 0.0), (0.0, 0.0, 1.0), display_radius, base, steps=28)
@@ -4991,7 +4997,8 @@ class GpuRenderer:
                textures: Optional[Dict[str, 'Image.Image']] = None,
                anim_pose=None,
                anim_time: float = 0.0,
-               anim_base_pose=None) -> Optional['Image.Image']:
+               anim_base_pose=None,
+               display_options=None) -> Optional['Image.Image']:
         """
         Render `model` from `camera` into a W×H PIL RGBA image.
 
@@ -5016,6 +5023,8 @@ class GpuRenderer:
         if W <= 0 or H <= 0:
             return None
         textures = textures or {}
+        if display_options is not None:
+            self.display_options = display_options
 
         if self._ensure_context():
             result = self._render_gpu(model, camera, W, H, textures, anim_pose, anim_time,
@@ -5888,12 +5897,7 @@ class GpuRenderer:
                 if 'u_wire_color' in _u:
                     _u['u_wire_color'].value = tuple(self.wire_color)
                 if 'u_selected' in _u:
-                    _selected_ids = {id(_n) for _n in (getattr(self, 'selected_nodes', []) or [])}
-                    _u['u_selected'].value = 1 if (
-                        node is getattr(self, 'selected_node', None)
-                        or id(node) in _selected_ids
-                        or bool(getattr(node, '_gr_selected', False))
-                    ) else 0
+                    _u['u_selected'].value = 1 if self._is_node_selected_for_render(node) else 0
                 _u['u_diffuse'].value = diff
                 _u['u_selfillum'].value = tuple(
                     max(0.0, min(2.0, float(c))) for c in selfillum[:3])

@@ -54,6 +54,31 @@ def test_valid_animation_slots_include_local_overrides_and_inherited_slots() -> 
     assert inherited_slot.cumulative_scale == 2.0
 
 
+def test_animation_entries_classify_local_inherited_and_override_sources() -> None:
+    from src.core.animation.animation_engine import AnimationEngine
+
+    target = _model("P_BastilaH", supermodel="P_BastilaBB", anims=("talk", "listen"))
+    body = _model("P_BastilaBB", supermodel="S_Female03")
+    female = _model("S_Female03", anims=("talk", "walk"))
+    SuperModelResolver.prime_cache("P_BastilaBB", body)
+    SuperModelResolver.prime_cache("S_Female03", female)
+
+    entries = {
+        str(entry["name"]).lower(): entry
+        for entry in AnimationEngine(target).list_all_animations()
+    }
+
+    assert entries["listen"]["source_type"] == "local"
+    assert entries["listen"]["source_scope"] == "local"
+    assert entries["listen"]["overrides_inherited"] is False
+    assert entries["talk"]["source_type"] == "override"
+    assert entries["talk"]["source_scope"] == "local"
+    assert entries["talk"]["overrides_inherited"] is True
+    assert entries["walk"]["source_type"] == "inherited"
+    assert entries["walk"]["source_scope"] == "inherited"
+    assert entries["walk"]["inherited"] is True
+
+
 def test_load_supermodel_chain_reports_loaded_and_missing_entries() -> None:
     target = _model("pmbam", supermodel="S_Male02")
     supermodel = _model("S_Male02", supermodel="S_Missing")

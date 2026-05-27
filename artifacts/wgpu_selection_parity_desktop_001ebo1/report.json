@@ -1,0 +1,138 @@
+{
+  "module": "K2:001ebo1",
+  "desktop_visible": true,
+  "steps": [
+    {
+      "name": "startup renders 001EBO1 under WGPU D3D12",
+      "ok": true,
+      "backend": "wgpu_d3d12",
+      "initialized": true,
+      "meshes": 19,
+      "nodes": 61
+    },
+    {
+      "name": "viewport mesh click selects mesh, yellow/edge highlight, Properties/Nodes/Module Mesh sync",
+      "ok": false,
+      "point": [
+        646,
+        140
+      ],
+      "mesh": "CM_Floor",
+      "selected": "CM_Details1",
+      "module_rows": [
+        "CM_Details1"
+      ],
+      "properties": null,
+      "nodes_panel": [
+        "001EBO1"
+      ],
+      "selected_edges": 1942,
+      "highlight_status": "ready",
+      "selection_color": [
+        0.9098039215686274,
+        0.06666666666666667,
+        0.13725490196078433
+      ],
+      "last_pick": {
+        "method": "WGPU GPU ID",
+        "x": 646,
+        "y": 140,
+        "viewport_size": [
+          1664,
+          580
+        ],
+        "device_pixel_ratio": 1.0,
+        "pipeline_status": "ready",
+        "candidate_count": 19,
+        "drawn_triangles": 3639,
+        "pick_pass_ms": 29.617,
+        "raw_rgba": [
+          19,
+          0,
+          0,
+          255
+        ],
+        "pick_id": 19,
+        "result": "CM_Details1",
+        "hit_kind": "mesh"
+      }
+    },
+    {
+      "name": "Module Mesh row click selects/highlights WGPU viewport mesh",
+      "ok": false,
+      "row": "Mesh115",
+      "selected": "CM_Details1",
+      "viewport_meshes": [
+        "CM_Details1"
+      ]
+    },
+    {
+      "name": "Module Mesh visibility toggle updates WGPU rendering/picking",
+      "ok": false,
+      "row": "Mesh115",
+      "hidden_after_toggle": false
+    },
+    {
+      "name": "viewport light helper selects light and Lighting panel row",
+      "ok": true,
+      "point": [
+        654,
+        378
+      ],
+      "light": "AuroraLight04",
+      "panel_selected": "AuroraLight04",
+      "selected": "AuroraLight04",
+      "lighting": {
+        "mode": "scene",
+        "complexity": "off",
+        "rig": "kotor_original",
+        "total_scene_lights": 8,
+        "enabled_lights": 8,
+        "uploaded_lights": 8,
+        "max_wgpu_lights": 64,
+        "helpers_visible": true,
+        "volumes_visible": true,
+        "selected_light": "AuroraLight04",
+        "selected_light_id": 1,
+        "light_buffer_revision": 1758651529,
+        "light_buffer_upload_time_ms": 4.879,
+        "wgpu_light_shader_status": "active",
+        "unsupported_light_types_count": 0,
+        "last_lighting_error": "",
+        "last_redraw_reason": "",
+        "helper_draw_calls": 2,
+        "volume_draw_calls": 2,
+        "lighting_shader_active": true,
+        "light_buffer_updates": 1,
+        "diffuse_enabled": true,
+        "specular_enabled": true,
+        "normal_enabled": true,
+        "environment_enabled": true,
+        "lightmap_enabled": false,
+        "lm_intensity": 0.55,
+        "lm_mode": "disabled"
+      }
+    },
+    {
+      "name": "Lighting panel row selects WGPU light and redraws on radius edit",
+      "ok": false,
+      "light": "AuroraLight05",
+      "selected": "AuroraLight04",
+      "radius_restored": 3.0
+    }
+  ],
+  "screenshots": {
+    "01_loaded_wgpu_d3d12_001ebo1": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\wgpu_selection_parity_desktop_001ebo1\\01_loaded_wgpu_d3d12_001ebo1.png",
+    "02_viewport_mesh_selection_panel_sync": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\wgpu_selection_parity_desktop_001ebo1\\02_viewport_mesh_selection_panel_sync.png",
+    "03_module_mesh_panel_to_viewport": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\wgpu_selection_parity_desktop_001ebo1\\03_module_mesh_panel_to_viewport.png",
+    "04_viewport_light_selection_lighting_panel": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\wgpu_selection_parity_desktop_001ebo1\\04_viewport_light_selection_lighting_panel.png",
+    "05_lighting_panel_to_viewport": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\wgpu_selection_parity_desktop_001ebo1\\05_lighting_panel_to_viewport.png",
+    "99_final_window_state": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\wgpu_selection_parity_desktop_001ebo1\\99_final_window_state.png"
+  },
+  "errors": [
+    {
+      "error": "'types.SimpleNamespace' object has no attribute 'world_transform'",
+      "traceback": "Traceback (most recent call last):\n  File \"<stdin>\", line 174, in <module>\n  File \"P:\\OAI\\Agent\\GhostRiggerGH\\src\\gui\\viewports\\qt_viewport.py\", line 2402, in create_scene_camera\n    self.set_selected_node(camera.original_ref)\n    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^\n  File \"P:\\OAI\\Agent\\GhostRiggerGH\\src\\gui\\viewports\\qt_viewport.py\", line 3327, in set_selected_node\n    wp = self._gizmo_world_position(node)\n  File \"P:\\OAI\\Agent\\GhostRiggerGH\\src\\gui\\viewports\\qt_viewport.py\", line 784, in _gizmo_world_position\n    wp, _wo, _is_id = self._renderer._node_world_transform(node)\n                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^\n  File \"P:\\OAI\\Agent\\GhostRiggerGH\\src\\gui\\rendering\\viewport_core.py\", line 4763, in _node_world_transform\n    wp, wo = node.world_transform()\n             ^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'types.SimpleNamespace' object has no attribute 'world_transform'\n"
+    }
+  ]
+}

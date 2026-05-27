@@ -1,0 +1,175 @@
+{
+  "module": "K2:001ebo1",
+  "desktop_visible": true,
+  "steps": [
+    {
+      "name": "startup WGPU D3D12 renders 001EBO1",
+      "ok": true,
+      "backend": "wgpu_d3d12",
+      "meshes": 19,
+      "nodes": 61,
+      "selection_color": [
+        1.0,
+        0.8235294117647058,
+        0.24705882352941178
+      ]
+    },
+    {
+      "name": "viewport mesh click syncs Module Meshes, Nodes, Properties, yellow highlight",
+      "ok": true,
+      "point": [
+        270,
+        140
+      ],
+      "selected": "CM_Details1",
+      "module_rows": [
+        "CM_Details1"
+      ],
+      "properties": [
+        "Scene Object: 001EBO1",
+        "Type: model"
+      ],
+      "selected_edges": 1942,
+      "last_pick": {
+        "method": "WGPU GPU ID",
+        "x": 270,
+        "y": 140,
+        "viewport_size": [
+          892,
+          580
+        ],
+        "device_pixel_ratio": 1.0,
+        "pipeline_status": "ready",
+        "candidate_count": 19,
+        "drawn_triangles": 3639,
+        "pick_pass_ms": 23.821,
+        "raw_rgba": [
+          19,
+          0,
+          0,
+          255
+        ],
+        "pick_id": 19,
+        "result": "CM_Details1",
+        "hit_kind": "mesh"
+      }
+    },
+    {
+      "name": "visible Module Mesh row selects viewport and visibility toggle updates WGPU",
+      "ok": true,
+      "row": "Mesh115",
+      "selected": "Mesh115",
+      "hidden_after_toggle": true
+    },
+    {
+      "name": "viewport light helper selects light and Lighting panel",
+      "ok": true,
+      "light": "AuroraLight04",
+      "point": [
+        268,
+        378
+      ],
+      "panel_selected": "AuroraLight04"
+    },
+    {
+      "name": "visible Lighting row selects WGPU light and redraws on edit",
+      "ok": false,
+      "light": "AuroraLight04",
+      "selected": "",
+      "radius": 3.0
+    },
+    {
+      "name": "Camera panel selection and camera helper click sync viewport",
+      "ok": true,
+      "camera": "Camera001",
+      "panel_to_viewport": true,
+      "helper_click": true,
+      "point": [
+        18,
+        397
+      ],
+      "selected": "Camera001"
+    },
+    {
+      "name": "viewport helper/dummy click selects helper",
+      "ok": true,
+      "helper": "door_02",
+      "candidates": 32,
+      "point": [
+        607,
+        241
+      ],
+      "selected": "door_02"
+    },
+    {
+      "name": "selected highlight works across WGPU display modes",
+      "ok": true,
+      "modes": [
+        {
+          "mode": "solid",
+          "selected_edges": 1942,
+          "edge_status": "ready"
+        },
+        {
+          "mode": "shaded",
+          "selected_edges": 1942,
+          "edge_status": "ready"
+        },
+        {
+          "mode": "textured",
+          "selected_edges": 1942,
+          "edge_status": "ready"
+        },
+        {
+          "mode": "textured_lightmapped",
+          "selected_edges": 1942,
+          "edge_status": "ready"
+        },
+        {
+          "mode": "full_material",
+          "selected_edges": 1942,
+          "edge_status": "ready"
+        },
+        {
+          "mode": "wireframe",
+          "selected_edges": 1942,
+          "edge_status": "ready"
+        },
+        {
+          "mode": "hidden_line",
+          "selected_edges": 1942,
+          "edge_status": "ready"
+        },
+        {
+          "mode": "edged_faces",
+          "selected_edges": 1942,
+          "edge_status": "ready"
+        }
+      ]
+    },
+    {
+      "name": "ViewCube and zoom remain functional",
+      "ok": true,
+      "viewcube_visible": true,
+      "old_distance": 12.310825760830946,
+      "new_distance": 11.079743184747851
+    }
+  ],
+  "screenshots": {
+    "01_startup": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\wgpu_selection_parity_desktop_001ebo1_final\\01_startup.png",
+    "02_mesh_viewport": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\wgpu_selection_parity_desktop_001ebo1_final\\02_mesh_viewport.png",
+    "03_module_panel": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\wgpu_selection_parity_desktop_001ebo1_final\\03_module_panel.png",
+    "04_light_viewport": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\wgpu_selection_parity_desktop_001ebo1_final\\04_light_viewport.png",
+    "05_light_panel": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\wgpu_selection_parity_desktop_001ebo1_final\\05_light_panel.png",
+    "06_camera": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\wgpu_selection_parity_desktop_001ebo1_final\\06_camera.png",
+    "07_helper": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\wgpu_selection_parity_desktop_001ebo1_final\\07_helper.png",
+    "08_display_modes": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\wgpu_selection_parity_desktop_001ebo1_final\\08_display_modes.png",
+    "99_final": "P:\\OAI\\Agent\\GhostRiggerGH\\artifacts\\wgpu_selection_parity_desktop_001ebo1_final\\99_final.png"
+  },
+  "errors": [
+    {
+      "error": "'str' object is not callable",
+      "traceback": "Traceback (most recent call last):\n  File \"<stdin>\", line 108, in <module>\nTypeError: 'str' object is not callable\n"
+    }
+  ]
+}

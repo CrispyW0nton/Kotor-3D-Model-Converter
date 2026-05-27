@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import time
 from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from src.core.animation.animation_engine import AnimPose, NodePose
+from src.core.animation.animation_engine import AnimationEngine, AnimPose, NodePose
 from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationRetargetPanel
-from src.gui.qt_lib.rendering.qt_gpu_renderer import create_viewport_renderer
 from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.viewports.qt_viewport import QtRetargetViewportWidget, QtViewportWidget
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
@@ -50,6 +50,11 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self._target_game = "K1"
         self._navigation_profile = DEFAULT_VIEWPORT_NAVIGATION_PROFILE
         self._renderer_settings = RendererSettings.from_settings(getattr(parent, "settings_data", {}) or {})
+        self._source_preview_engine: AnimationEngine | None = None
+        self._source_preview_last_tick: float | None = None
+        self._source_preview_timer = QtCore.QTimer(self)
+        self._source_preview_timer.setInterval(33)
+        self._source_preview_timer.timeout.connect(self._tick_source_animation_preview)
         self._source_clip_preview_clip = None
         self._source_clip_mesh_model = None
         self._source_clip_play_name = ""
@@ -194,9 +199,6 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.target_viewport = QtRetargetViewportWidget(self)
         self.source_viewport.set_renderer_settings(self._renderer_settings)
         self.target_viewport.set_renderer_settings(self._renderer_settings)
-        self._shared_gpu_renderer = create_viewport_renderer(self._renderer_settings)
-        self.source_viewport.set_shared_gpu_renderer(self._shared_gpu_renderer)
-        self.target_viewport.set_shared_gpu_renderer(self._shared_gpu_renderer)
         self.source_viewport.set_dual_viewport_mode(True)
         self.target_viewport.set_dual_viewport_mode(True)
         self.source_viewport.set_navigation_profile(self._navigation_profile)
@@ -218,6 +220,9 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.panel.pauseRequested.connect(self._pause_requested)
         self.panel.stopRequested.connect(self._stop_requested)
         self.panel.sourceAnimationPlayRequested.connect(self._source_animation_play_requested)
+        self.panel.animationPreviewRequested.connect(self.preview_source_animation)
+        self.panel.animationPauseRequested.connect(self.pause_source_animation_preview)
+        self.panel.animationStopPreviewRequested.connect(self.stop_source_animation_preview)
 
         viewport_split = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         viewport_split.setChildrenCollapsible(False)
@@ -235,9 +240,6 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
 
     def set_renderer_settings(self, settings: RendererSettings | dict | None) -> None:
         self._renderer_settings = settings if isinstance(settings, RendererSettings) else RendererSettings.from_settings(settings or {})
-        apply_settings = getattr(getattr(self, "_shared_gpu_renderer", None), "set_settings", None)
-        if callable(apply_settings):
-            apply_settings(self._renderer_settings)
         for viewport in (getattr(self, "source_viewport", None), getattr(self, "target_viewport", None)):
             if viewport is not None:
                 viewport.set_renderer_settings(self._renderer_settings)
@@ -477,6 +479,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self._target_game = (game_tag or "K1").upper()
 
     def set_source_model(self, model, game_tag: str = "") -> None:
+        self.stop_source_animation_preview(clear_pose=True)
         self._source_clip_preview_clip = None
         self._source_clip_mesh_model = None
         if game_tag:
@@ -490,6 +493,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.statusBar().showMessage(f"Source: {getattr(model, 'name', 'None') if model else 'None'}")
 
     def set_source_clip_preview(self, clip, mesh_model=None) -> None:
+        self.stop_source_animation_preview(clear_pose=True)
         self._source_clip_preview_clip = clip
         if mesh_model is None:
             mesh_model = self._source_clip_mesh_model
@@ -587,6 +591,92 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             return
         self._set_source_clip_pose(clip, time_seconds)
 
+    def preview_source_animation(self, animation_name: str, loop: bool = True) -> None:
+        clip = self._source_clip_preview_clip
+        current_clip_name = str(getattr(clip, "clip_name", "") or "") if clip is not None else ""
+        if clip is not None and (not animation_name or animation_name == current_clip_name):
+            self.play_source_clip_animation(animation_name)
+            return
+        model = getattr(self.panel, "_source_model", None)
+        anim_name = str(animation_name or self.selected_animation() or "").strip()
+        if model is None:
+            self.statusBar().showMessage("Load a source model before previewing an animation.")
+            return
+        if not anim_name:
+            self.statusBar().showMessage("Select a source animation to preview.")
+            return
+        engine = AnimationEngine(model)
+        if not engine.play(anim_name, loop=bool(loop), blend=False):
+            self.statusBar().showMessage(f"Source animation not found: {anim_name}")
+            return
+        self._source_preview_engine = engine
+        self._source_preview_last_tick = None
+        try:
+            if hasattr(self.source_viewport, "set_anim_base_pose"):
+                self.source_viewport.set_anim_base_pose(engine.evaluate(0.0))
+        except Exception:
+            pass
+        self._apply_source_animation_pose()
+        self._source_preview_timer.start()
+        self.statusBar().showMessage(f"Previewing source animation: {anim_name}")
+
+    def pause_source_animation_preview(self) -> None:
+        engine = self._source_preview_engine
+        if engine is None or engine.current_animation is None:
+            if self._source_clip_play_timer.isActive():
+                self.pause_source_clip_animation()
+            return
+        engine.pause()
+        if engine.is_playing:
+            self._source_preview_last_tick = None
+            self._source_preview_timer.start()
+            self.statusBar().showMessage(f"Resumed source animation: {engine.current_animation.name}")
+        else:
+            self._source_preview_timer.stop()
+            self._source_preview_last_tick = None
+            self.statusBar().showMessage(f"Paused source animation: {engine.current_animation.name}")
+
+    def stop_source_animation_preview(self, *, clear_pose: bool = False) -> None:
+        self._source_preview_timer.stop()
+        self._source_preview_last_tick = None
+        if self._source_preview_engine is not None:
+            self._source_preview_engine.stop()
+        self._source_preview_engine = None
+        self._source_clip_play_timer.stop()
+        self._source_clip_play_name = ""
+        if clear_pose and hasattr(self, "source_viewport"):
+            self.source_viewport.clear_animation_pose()
+        elif hasattr(self, "statusBar"):
+            self.statusBar().showMessage("Source animation preview stopped")
+
+    def _tick_source_animation_preview(self) -> None:
+        engine = self._source_preview_engine
+        if engine is None or not engine.is_playing:
+            self._source_preview_timer.stop()
+            self._source_preview_last_tick = None
+            return
+        now = time.perf_counter()
+        dt = 1.0 / 30.0 if self._source_preview_last_tick is None else max(1.0 / 120.0, min(now - self._source_preview_last_tick, 0.15))
+        self._source_preview_last_tick = now
+        still_playing = engine.advance(dt)
+        self._apply_source_animation_pose()
+        if not still_playing:
+            self._source_preview_timer.stop()
+            self._source_preview_last_tick = None
+
+    def _apply_source_animation_pose(self) -> None:
+        engine = self._source_preview_engine
+        if engine is None or engine.current_animation is None:
+            return
+        pose = engine.evaluate()
+        length = float(getattr(engine.current_animation, "length", 0.0) or 0.0)
+        self.source_viewport.set_animation_pose(
+            pose,
+            name=str(getattr(engine.current_animation, "name", "") or ""),
+            time=float(getattr(engine, "current_time", 0.0) or 0.0),
+            length=length,
+        )
+
     def play_source_clip_animation(self, animation_name: str) -> None:
         clip = self._source_clip_preview_clip
         if clip is None:
@@ -654,6 +744,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.target_viewport.set_animation_pose(pose, name=name, time=time, length=length)
 
     def clear_poses(self) -> None:
+        self.stop_source_animation_preview(clear_pose=False)
         self._source_clip_play_timer.stop()
         self.source_viewport.clear_animation_pose()
         self.target_viewport.clear_animation_pose()
@@ -716,11 +807,14 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         if clip is not None and (not animation_name or animation_name == current_name):
             self.play_source_clip_animation(animation_name)
         else:
+            self.stop_source_animation_preview(clear_pose=False)
             self.statusBar().showMessage(f"Loading source animation: {animation_name}")
         self.sourceAnimationPlayRequested.emit(animation_name)
 
     def _pause_requested(self) -> None:
-        self.pause_source_clip_animation()
+        self.pause_source_animation_preview()
+        if self._source_clip_play_timer.isActive():
+            self.pause_source_clip_animation()
         self.pauseRequested.emit()
 
     def _stop_requested(self) -> None:

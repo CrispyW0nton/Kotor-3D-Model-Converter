@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import logging
 import os
 import pathlib
 import sys
@@ -65,6 +66,54 @@ _VIEWPORT_CORE = _GUI_DIR / "rendering" / "viewport_core.py"
 # tree is now Qt-only, so the roster is empty and the cross-check tests
 # below assert that nothing in src/gui/ imports tkinter any more.
 _FROZEN_TK_FILES: set[pathlib.Path] = set()
+
+
+def _console_record(level: int, message: str) -> logging.LogRecord:
+    return logging.LogRecord(
+        name="src.gui.rendering.wgpu_renderer",
+        level=level,
+        pathname="main.py",
+        lineno=1,
+        msg=message,
+        args=(),
+        exc_info=None,
+    )
+
+
+def test_console_formatter_keeps_plain_table_layout_without_color():
+    import main
+
+    formatter = main._ConsoleFormatter(color=False)
+    rendered = formatter.format(_console_record(logging.INFO, "device created"))
+
+    assert "\033[" not in rendered
+    assert "INFO" in rendered
+    assert "src.gui.rendering.wgpu_renderer" in rendered
+    assert rendered.endswith("device created")
+    assert "  " in rendered
+
+
+def test_console_formatter_colors_warning_rows_when_enabled():
+    import main
+
+    formatter = main._ConsoleFormatter(color=True)
+    rendered = formatter.format(_console_record(logging.WARNING, "Forcing backend: D3D12"))
+
+    assert "\033[33m" in rendered
+    assert "\033[34m" in rendered
+    assert "WARNING" in rendered
+    assert "Forcing backend: D3D12" in rendered
+
+
+def test_theme_precache_uses_startup_logger_instead_of_direct_console_prints():
+    import inspect
+    import main
+
+    source = inspect.getsource(main._precache_themes)
+
+    assert "print(" not in source
+    assert "log.info(" in source
+    assert "Theme precache built %s in %.1f ms" in source
 
 
 def test_log_panel_embeds_python_terminal():

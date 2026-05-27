@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -46,9 +47,25 @@ class MeshRenderData:
     material_color: tuple[float, float, float, float]
     world_matrix: object
     source_revision: tuple[int, int, int]
+    bone_indices: object | None = None
+    bone_weights: object | None = None
+    max_influences: int = 0
+    skeleton_id: int = 0
+    skin_revision: int = 0
+    bind_shape_matrix: object | None = None
+    is_skinned: bool = False
+    skinning_cpu_fallback: bool = False
+    skinning_warning: str = ""
 
 
-def iter_mesh_render_data(model, *, anim_pose=None, textures: dict | None = None) -> Iterable[MeshRenderData]:
+def iter_mesh_render_data(
+    model,
+    *,
+    anim_pose=None,
+    anim_base_pose=None,
+    textures: dict | None = None,
+    allow_cpu_skinning: bool = True,
+) -> Iterable[MeshRenderData]:
     """Yield mesh draw data without storing renderer resources on scene nodes."""
 
     if model is None:
@@ -63,12 +80,57 @@ def iter_mesh_render_data(model, *, anim_pose=None, textures: dict | None = None
         if not _node_is_renderable_mesh(node):
             continue
         try:
-            positions, normals, uvs0, uvs1, indices = _extract_node_arrays(node, anim_pose=anim_pose)
+            (
+                positions,
+                normals,
+                uvs0,
+                uvs1,
+                indices,
+                vbo_bone_indices,
+                vbo_bone_weights,
+                world_matrix,
+            ) = _extract_node_arrays(node, anim_pose=anim_pose)
         except Exception:
             continue
         if positions is None or len(positions) == 0:
             continue
+        skinning = _extract_skinning(
+            node,
+            len(positions),
+            skeleton_id=id(model),
+            bone_indices=vbo_bone_indices,
+            bone_weights=vbo_bone_weights,
+        )
+        skinning_cpu_fallback = False
+        if allow_cpu_skinning and anim_pose is not None and getattr(skinning, "is_skinned", False):
+            try:
+                from src.gui.rendering.skeleton_render_data import cpu_skin_vbo_arrays
+
+                skinned_positions, skinned_normals = cpu_skin_vbo_arrays(
+                    node,
+                    positions,
+                    normals,
+                    skinning,
+                    anim_pose,
+                    model=model,
+                )
+                if skinned_positions is not positions:
+                    positions = skinned_positions
+                    normals = skinned_normals
+                    skinning_cpu_fallback = True
+            except Exception:
+                pass
         material = _material_data(node, textures)
+        source_revision = _node_revision(node)
+        if getattr(skinning, "is_skinned", False):
+            skin_lbs_input_mode = 1 if anim_pose is not None else 0
+            source_revision = (
+                *source_revision,
+                int(getattr(skinning, "skin_revision", 0) or 0),
+                skin_lbs_input_mode,
+            )
+        if skinning_cpu_fallback:
+            source_revision = (*source_revision, int(round(float(getattr(anim_pose, "time", 0.0) or 0.0) * 1000.0)))
         rows.append(
             MeshRenderData(
                 mesh_id=id(node),
@@ -80,8 +142,17 @@ def iter_mesh_render_data(model, *, anim_pose=None, textures: dict | None = None
                 indices=np.asarray(indices, dtype=np.uint32) if indices is not None else None,
                 material=material,
                 material_color=material.base_color_rgba,
-                world_matrix=np.eye(4, dtype=np.float32),
-                source_revision=_node_revision(node),
+                world_matrix=np.asarray(world_matrix, dtype=np.float32),
+                source_revision=source_revision,
+                bone_indices=getattr(skinning, "bone_indices", None),
+                bone_weights=getattr(skinning, "bone_weights", None),
+                max_influences=int(getattr(skinning, "max_influences", 0) or 0),
+                skeleton_id=int(getattr(skinning, "skeleton_id", 0) or 0),
+                skin_revision=int(getattr(skinning, "skin_revision", 0) or 0),
+                bind_shape_matrix=getattr(skinning, "bind_shape_matrix", None),
+                is_skinned=bool(getattr(skinning, "is_skinned", False)),
+                skinning_cpu_fallback=bool(skinning_cpu_fallback),
+                skinning_warning=str(getattr(skinning, "warning", "") or ""),
             )
         )
     return rows
@@ -121,29 +192,211 @@ def _extract_node_arrays(node, *, anim_pose=None):
     except Exception:
         _build_vbo_data = None
 
-    world_pos, world_orient = _node_world_transform(node)
+    is_skin = bool(getattr(node, "is_skin", False))
+    world_pos, world_orient = _node_world_transform(node, anim_pose=anim_pose)
+    world_matrix = node_world_matrix(node, anim_pose=anim_pose)
     if _build_vbo_data is not None:
-        vdata, idx_arr = _build_vbo_data(node, world_pos, world_orient, anim_pose_node=None)
+        skin_can_lbs = bool(
+            anim_pose is not None
+            and is_skin
+            and getattr(node, "bone_map", None)
+            and getattr(node, "skin_data", None)
+        )
+        vbo_world_pos = world_pos
+        vbo_world_orient = world_orient
+        if not is_skin:
+            vbo_world_pos = (0.0, 0.0, 0.0)
+            vbo_world_orient = (0.0, 0.0, 0.0, 1.0)
+        vdata, idx_arr = _build_vbo_data(
+            node,
+            vbo_world_pos,
+            vbo_world_orient,
+            anim_pose_node=None,
+            apply_skin_node_transform_for_bind=not skin_can_lbs,
+        )
         if vdata is not None:
             positions = np.asarray(vdata[:, 0:3], dtype=np.float32)
             normals = np.asarray(vdata[:, 3:6], dtype=np.float32) if vdata.shape[1] >= 6 else None
             uvs0 = np.asarray(vdata[:, 6:8], dtype=np.float32) if vdata.shape[1] >= 8 else None
             uvs1 = np.asarray(vdata[:, 8:10], dtype=np.float32) if vdata.shape[1] >= 10 else None
             indices = np.asarray(idx_arr, dtype=np.uint32) if idx_arr is not None and len(idx_arr) else None
-            return positions, normals, uvs0, uvs1, indices
+            normals = smooth_render_normals(positions, normals, indices)
+            bone_indices = None
+            bone_weights = None
+            if getattr(node, "is_skin", False) and vdata.shape[1] >= 22:
+                bone_indices = np.rint(vdata[:, 14:18]).astype(np.uint16)
+                bone_weights = np.asarray(vdata[:, 18:22], dtype=np.float32)
+            return positions, normals, uvs0, uvs1, indices, bone_indices, bone_weights, world_matrix
 
     verts = np.asarray(getattr(node, "vertices", getattr(node, "verts", [])) or [], dtype=np.float32)
     if verts.ndim != 2 or verts.shape[1] != 3:
-        return None, None, None, None, None
+        return None, None, None, None, None, None, None, world_matrix
     normals = np.asarray(getattr(node, "normals", []) or [], dtype=np.float32)
     if normals.ndim != 2 or normals.shape[1] != 3 or len(normals) != len(verts):
-        normals = np.zeros_like(verts, dtype=np.float32)
-        normals[:, 2] = 1.0
+        normals = None
     uvs0 = _node_uv_array(node, "uvs", len(verts))
     uvs1 = _node_uv_array(node, "uvs_lm", len(verts))
     faces = getattr(node, "faces", []) or []
     indices = np.asarray([int(i) for face in faces for i in tuple(face)[:3]], dtype=np.uint32)
-    return verts, normals, uvs0, uvs1, indices
+    normals = smooth_render_normals(verts, normals, indices)
+    return verts, normals, uvs0, uvs1, indices, None, None, world_matrix
+
+
+def smooth_render_normals(
+    positions,
+    normals=None,
+    indices=None,
+    *,
+    crease_degrees: float = 62.0,
+    position_epsilon: float = 1.0e-5,
+):
+    """Return render normals smoothed across compatible coincident vertices.
+
+    KotOR binary meshes often duplicate positions at UV/lightmap seams. Averaging
+    compatible duplicate normals removes artificial D3D faceting while the crease
+    test preserves intentional hard edges, which is the smoothing-group behavior
+    WGPU needs before buffer upload.
+    """
+
+    import numpy as np
+
+    pos = np.asarray(positions, dtype=np.float32)
+    if pos.ndim != 2 or pos.shape[1] != 3 or len(pos) == 0:
+        return normals
+
+    authored = _coerce_normal_array(normals, len(pos))
+    face_accum = _area_weighted_normal_accum(pos, indices)
+    base = authored if authored is not None else face_accum
+    base = _normalize_rows(base, fallback=face_accum)
+
+    buckets: dict[tuple[int, int, int], list[int]] = {}
+    scale = 1.0 / max(float(position_epsilon), 1.0e-9)
+    for idx, vertex in enumerate(pos):
+        key = tuple(int(round(float(component) * scale)) for component in vertex[:3])
+        buckets.setdefault(key, []).append(idx)
+
+    cos_crease = math.cos(math.radians(max(0.0, min(180.0, float(crease_degrees)))))
+    smoothed = base.copy()
+    weights = np.linalg.norm(face_accum, axis=1)
+    weights = np.where(weights > 1.0e-8, weights, 1.0)
+    for members in buckets.values():
+        if len(members) <= 1:
+            continue
+        member_normals = base[members]
+        for member in members:
+            ref = base[member]
+            dots = member_normals @ ref
+            compatible = [members[i] for i, dot in enumerate(dots) if float(dot) >= cos_crease]
+            if len(compatible) <= 1:
+                continue
+            accum = np.zeros(3, dtype=np.float64)
+            for other in compatible:
+                accum += base[other].astype(np.float64) * float(weights[other])
+            length = float(np.linalg.norm(accum))
+            if length > 1.0e-8:
+                smoothed[member] = (accum / length).astype(np.float32)
+
+    return _normalize_rows(smoothed, fallback=base).astype(np.float32)
+
+
+def _coerce_normal_array(normals, count: int):
+    import numpy as np
+
+    if normals is None:
+        return None
+    try:
+        arr = np.asarray(normals, dtype=np.float32)
+    except Exception:
+        return None
+    if arr.ndim != 2 or arr.shape[1] < 3 or len(arr) != count:
+        return None
+    arr = arr[:, :3]
+    if not np.all(np.isfinite(arr)):
+        arr = arr.copy()
+        arr[~np.all(np.isfinite(arr), axis=1)] = 0.0
+    if np.count_nonzero(np.linalg.norm(arr, axis=1) > 1.0e-8) == 0:
+        return None
+    return arr
+
+
+def _area_weighted_normal_accum(positions, indices):
+    import numpy as np
+
+    pos = np.asarray(positions, dtype=np.float64)
+    accum = np.zeros((len(pos), 3), dtype=np.float64)
+    if indices is None:
+        tri_indices = np.arange(len(pos), dtype=np.uint32)
+    else:
+        tri_indices = np.asarray(indices, dtype=np.uint32).reshape(-1)
+    usable = (len(tri_indices) // 3) * 3
+    for i0, i1, i2 in tri_indices[:usable].reshape((-1, 3)):
+        if int(i0) >= len(pos) or int(i1) >= len(pos) or int(i2) >= len(pos):
+            continue
+        if i0 == i1 or i1 == i2 or i0 == i2:
+            continue
+        v0 = pos[int(i0)]
+        v1 = pos[int(i1)]
+        v2 = pos[int(i2)]
+        normal = np.cross(v1 - v0, v2 - v0)
+        if float(np.dot(normal, normal)) <= 1.0e-18:
+            continue
+        accum[int(i0)] += normal
+        accum[int(i1)] += normal
+        accum[int(i2)] += normal
+    return accum.astype(np.float32)
+
+
+def _normalize_rows(values, *, fallback=None):
+    import numpy as np
+
+    arr = np.asarray(values, dtype=np.float32).copy()
+    if arr.ndim != 2 or arr.shape[1] != 3:
+        return arr
+    fallback_arr = np.asarray(fallback, dtype=np.float32) if fallback is not None else None
+    for idx in range(len(arr)):
+        row = arr[idx]
+        length = float(np.linalg.norm(row))
+        if length <= 1.0e-8 and fallback_arr is not None and idx < len(fallback_arr):
+            row = fallback_arr[idx]
+            length = float(np.linalg.norm(row))
+        if length <= 1.0e-8:
+            arr[idx] = (0.0, 0.0, 1.0)
+        else:
+            arr[idx] = row / length
+    return arr
+
+
+def _extract_skinning(
+    node,
+    vertex_count: int,
+    *,
+    skeleton_id: int = 0,
+    bone_indices=None,
+    bone_weights=None,
+):
+    try:
+        from src.gui.rendering.skeleton_render_data import extract_skinning_arrays
+
+        return extract_skinning_arrays(
+            node,
+            vertex_count,
+            skeleton_id=skeleton_id,
+            bone_indices=bone_indices,
+            bone_weights=bone_weights,
+        )
+    except Exception:
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            bone_indices=None,
+            bone_weights=None,
+            max_influences=0,
+            skeleton_id=skeleton_id,
+            skin_revision=0,
+            bind_shape_matrix=None,
+            is_skinned=False,
+            warning="skin adapter unavailable",
+        )
 
 
 def texture_image_to_rgba8(texture_data: TextureRenderData | None) -> tuple[int, int, bytes] | None:
@@ -291,7 +544,12 @@ def _alpha_mode(node) -> str:
     return "OPAQUE"
 
 
-def _node_world_transform(node) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
+def _node_world_transform(node, *, anim_pose=None) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
+    if anim_pose is not None:
+        try:
+            return _animated_node_world_transform(node, anim_pose)
+        except Exception:
+            pass
     try:
         wp, wo = node.world_transform()
         return tuple(float(v) for v in wp[:3]), tuple(float(v) for v in wo[:4])
@@ -301,6 +559,118 @@ def _node_world_transform(node) -> tuple[tuple[float, float, float], tuple[float
             return tuple(float(v) for v in wp[:3]), (0.0, 0.0, 0.0, 1.0)
         except Exception:
             return (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)
+
+
+def node_world_matrix(node, *, anim_pose=None):
+    import numpy as np
+
+    pos, quat = _node_world_transform(node, anim_pose=anim_pose)
+    x, y, z, w = (float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3]))
+    length_sq = x * x + y * y + z * z + w * w
+    if length_sq > 1e-9:
+        inv_len = 1.0 / math.sqrt(length_sq)
+        x, y, z, w = x * inv_len, y * inv_len, z * inv_len, w * inv_len
+    else:
+        x, y, z, w = 0.0, 0.0, 0.0, 1.0
+    xx, yy, zz = x * x, y * y, z * z
+    xy, xz, yz = x * y, x * z, y * z
+    wx, wy, wz = w * x, w * y, w * z
+    matrix = np.array(
+        [
+            [1.0 - 2.0 * (yy + zz), 2.0 * (xy - wz), 2.0 * (xz + wy), float(pos[0])],
+            [2.0 * (xy + wz), 1.0 - 2.0 * (xx + zz), 2.0 * (yz - wx), float(pos[1])],
+            [2.0 * (xz - wy), 2.0 * (yz + wx), 1.0 - 2.0 * (xx + yy), float(pos[2])],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+        dtype=np.float32,
+    )
+    return matrix
+
+
+def _animated_node_world_transform(node, anim_pose) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
+    import math
+
+    from src.core.qt_core.geometry.model_data import (
+        _quat_mul,
+        _quat_normalize,
+        _quat_normalize_bind,
+        _quat_rotate,
+    )
+
+    cache = getattr(anim_pose, "_gr_mesh_world_cache", None)
+    if not isinstance(cache, dict):
+        cache = {}
+        try:
+            setattr(anim_pose, "_gr_mesh_world_cache", cache)
+        except Exception:
+            pass
+    cached = cache.get(id(node))
+    if cached is not None:
+        return cached
+
+    chain = []
+    current = node
+    visited: set[int] = set()
+    while current is not None:
+        node_id = id(current)
+        if node_id in visited or len(chain) > 512:
+            break
+        visited.add(node_id)
+        chain.append(current)
+        current = getattr(current, "parent", None)
+    chain.reverse()
+
+    wx = wy = wz = 0.0
+    parent_orientation = [0.0, 0.0, 0.0, 1.0]
+    pose_nodes = getattr(anim_pose, "nodes", {}) or {}
+    pose_nodes_by_index = getattr(anim_pose, "nodes_by_index", {}) or {}
+    duplicate_node_names = set(getattr(anim_pose, "duplicate_node_names", set()) or set())
+    last_i = len(chain) - 1
+    for index, chain_node in enumerate(chain):
+        is_leaf = index == last_i
+        node_name_key = str(getattr(chain_node, "name", "") or "").lower()
+        pose_node = None
+        try:
+            pose_node = pose_nodes_by_index.get(int(getattr(chain_node, "index", -1)))
+        except Exception:
+            pose_node = None
+        if pose_node is None and node_name_key not in duplicate_node_names:
+            pose_node = pose_nodes.get(node_name_key)
+        if pose_node is not None:
+            lx, ly, lz = getattr(pose_node, "position", getattr(chain_node, "position", (0.0, 0.0, 0.0)))
+            if not (math.isfinite(lx) and math.isfinite(ly) and math.isfinite(lz)):
+                lx, ly, lz = getattr(chain_node, "position", (0.0, 0.0, 0.0))
+            rot = list(getattr(pose_node, "rotation", getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0))))
+            if not all(math.isfinite(v) for v in rot):
+                rot = list(getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+            if is_leaf:
+                length_sq = rot[0] * rot[0] + rot[1] * rot[1] + rot[2] * rot[2] + rot[3] * rot[3]
+                node_rot = [rot[0] / math.sqrt(length_sq), rot[1] / math.sqrt(length_sq), rot[2] / math.sqrt(length_sq), rot[3] / math.sqrt(length_sq)] if length_sq > 1e-9 else [0.0, 0.0, 0.0, 1.0]
+            else:
+                node_rot = _quat_normalize_bind(rot)
+        else:
+            lx, ly, lz = getattr(chain_node, "position", (0.0, 0.0, 0.0))
+            rot = list(getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+            node_rot = _quat_normalize(rot) if is_leaf else _quat_normalize_bind(rot)
+
+        rx, ry, rz = _quat_rotate(parent_orientation, (lx, ly, lz))
+        wx += rx
+        wy += ry
+        wz += rz
+        parent_orientation = _quat_mul(parent_orientation, node_rot)
+
+    if not (math.isfinite(wx) and math.isfinite(wy) and math.isfinite(wz)):
+        wp, wo = node.world_transform()
+        result = (tuple(float(v) for v in wp[:3]), tuple(float(v) for v in wo[:4]))
+    else:
+        wo = tuple(parent_orientation)
+        length_sq = sum(float(v) * float(v) for v in wo[:4])
+        if length_sq > 1e-9 and abs(length_sq - 1.0) > 1e-4:
+            scale = 1.0 / math.sqrt(length_sq)
+            wo = tuple(float(v) * scale for v in wo[:4])
+        result = ((float(wx), float(wy), float(wz)), tuple(float(v) for v in wo[:4]))
+    cache[id(node)] = result
+    return result
 
 
 def _material_color(node) -> tuple[float, float, float, float]:

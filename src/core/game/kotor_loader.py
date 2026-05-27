@@ -51,6 +51,7 @@ from ..geometry.model_data import (
     KotorModel, ModelNode, NodeFlags, ResolvedAnimationSlot,
     SupermodelChain, SupermodelChainEntry, VertexSkinData,
 )
+from .import_normalisation import apply_known_skin_bone_map_normalisations
 
 # ── MDLNodeType → NodeFlags ───────────────────────────────────────────────────
 # These flag values must match what the old pykotor_bridge.py produced, since
@@ -1039,6 +1040,7 @@ def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
             pk_n = id_to_pknode.get(nid)
             gr.bone_map.append(pk_n.name if pk_n else '')
 
+    apply_known_skin_bone_map_normalisations(gr, skin, id_to_pknode)
     n_bones = len(gr.bone_map)
 
     # Some shipped creature skins use vertex palette indices beyond the fixed

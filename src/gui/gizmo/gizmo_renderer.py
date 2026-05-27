@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 
+from .gizmo_draw_data import GizmoDrawCommand, GizmoRenderData, rgba255_to_float
 from .gizmo_mode import GizmoMode
 
 
@@ -52,6 +53,72 @@ class GizmoRenderer:
             self._draw_scale(draw, gizmo, projector, width, height, (cx, cy), center, axes)
         return self.handles
 
+    def build_render_data(self, gizmo, camera, projector, width: int, height: int) -> GizmoRenderData:
+        """Build world-space commands that renderers can draw without owning tool policy."""
+
+        if not gizmo.visible or gizmo.selected_object is None:
+            return GizmoRenderData()
+        center = gizmo.position
+        cp = projector(center[0], center[1], center[2], width, height)
+        if cp is None:
+            return GizmoRenderData(origin=tuple(float(v) for v in center), active_tool=gizmo.mode.value)
+        _cx, _cy, depth = cp
+        world_per_px = (2.0 * max(0.5, float(depth)) * math.tan(math.radians(float(camera.fov)) * 0.5)) / max(1, height)
+        arm_world = 82.0 * world_per_px
+        basis = getattr(gizmo, "axis_basis", None) or {}
+        axes = {
+            axis: self._scaled_axis(basis.get(axis) or fallback, arm_world)
+            for axis, fallback in {
+                "X": (1.0, 0.0, 0.0),
+                "Y": (0.0, 1.0, 0.0),
+                "Z": (0.0, 0.0, 1.0),
+            }.items()
+        }
+        commands: list[GizmoDrawCommand] = []
+        if gizmo.mode == GizmoMode.TRANSLATE:
+            for axis, delta in axes.items():
+                name = f"TRANSLATE_{axis}"
+                commands.append(self._line_command(center, delta, self._color(gizmo, name, axis), name))
+            commands.extend(self._pivot_marker(center, arm_world * 0.06, "TRANSLATE_VIEW"))
+        elif gizmo.mode == GizmoMode.SCALE:
+            uniform_active = "SCALE_UNIFORM" in (gizmo.hovered_handle, gizmo.active_handle)
+            for axis, delta in axes.items():
+                name = f"SCALE_{axis}"
+                color = self.HILITE if uniform_active else self._color(gizmo, name, axis)
+                commands.append(self._line_command(center, delta, color, name))
+                endpoint = (center[0] + delta[0], center[1] + delta[1], center[2] + delta[2])
+                commands.extend(self._pivot_marker(endpoint, arm_world * 0.045, name))
+            commands.extend(self._pivot_marker(center, arm_world * 0.07, "SCALE_UNIFORM"))
+        elif gizmo.mode == GizmoMode.ROTATE:
+            ring_axes = {
+                "X": (axes["Y"], axes["Z"]),
+                "Y": (axes["X"], axes["Z"]),
+                "Z": (axes["X"], axes["Y"]),
+            }
+            for axis, (u, v) in ring_axes.items():
+                name = f"ROTATE_{axis}"
+                commands.append(
+                    GizmoDrawCommand(
+                        kind="polyline",
+                        points=tuple(self._world_ring_points(center, arm_world, u, v, steps=72, normalize=True)),
+                        colour=rgba255_to_float(self._color(gizmo, name, axis)),
+                        thickness=3.0 if name in (gizmo.hovered_handle, gizmo.active_handle) else 2.0,
+                        pick_id=name,
+                    )
+                )
+            commands.extend(self._pivot_marker(center, arm_world * 0.05, "ROTATE_CENTER"))
+        return GizmoRenderData(
+            origin=tuple(float(v) for v in center),
+            orientation=getattr(gizmo, "orientation", None),
+            scale=float(arm_world),
+            active_tool=gizmo.mode.value,
+            active_axis=getattr(gizmo, "active_handle", None),
+            hover_axis=getattr(gizmo, "hovered_handle", None),
+            axis_mode=str(getattr(getattr(gizmo, "transform_space", None), "value", "world")),
+            commands=tuple(commands),
+            handle_count=len(self.handles),
+        )
+
     def _color(self, gizmo, handle: str, axis: str):
         return self.HILITE if handle in (gizmo.hovered_handle, gizmo.active_handle) else self.AXIS_COLORS[axis]
 
@@ -72,6 +139,35 @@ class GizmoRenderer:
         center_col = self.HILITE if center_name in (gizmo.hovered_handle, gizmo.active_handle) else (235, 235, 235, 255)
         draw.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], fill=center_col, outline=(30, 32, 36, 255), width=2)
         self.handles.append({"name": center_name, "kind": "point", "pos": (cx, cy), "radius": 14, "priority": 10})
+
+    @staticmethod
+    def _scaled_axis(axis, length: float):
+        ax, ay, az = float(axis[0]), float(axis[1]), float(axis[2])
+        mag = max(1.0e-9, math.sqrt(ax * ax + ay * ay + az * az))
+        return (ax / mag * length, ay / mag * length, az / mag * length)
+
+    @staticmethod
+    def _line_command(center, delta, color, pick_id: str) -> GizmoDrawCommand:
+        return GizmoDrawCommand(
+            kind="line",
+            points=(
+                (float(center[0]), float(center[1]), float(center[2])),
+                (float(center[0] + delta[0]), float(center[1] + delta[1]), float(center[2] + delta[2])),
+            ),
+            colour=rgba255_to_float(color),
+            thickness=3.0,
+            pick_id=pick_id,
+        )
+
+    def _pivot_marker(self, center, radius: float, pick_id: str) -> list[GizmoDrawCommand]:
+        cx, cy, cz = float(center[0]), float(center[1]), float(center[2])
+        r = float(radius)
+        color = rgba255_to_float((235, 235, 235, 255))
+        return [
+            GizmoDrawCommand(kind="line", points=((cx - r, cy, cz), (cx + r, cy, cz)), colour=color, pick_id=pick_id),
+            GizmoDrawCommand(kind="line", points=((cx, cy - r, cz), (cx, cy + r, cz)), colour=color, pick_id=pick_id),
+            GizmoDrawCommand(kind="line", points=((cx, cy, cz - r), (cx, cy, cz + r)), colour=color, pick_id=pick_id),
+        ]
 
     def _draw_scale(self, draw, gizmo, projector, width, height, center_screen, center_world, axes) -> None:
         cx, cy = center_screen

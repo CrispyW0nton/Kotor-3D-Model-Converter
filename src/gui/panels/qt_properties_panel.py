@@ -307,6 +307,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         self.module_mesh_tree.setHeaderLabels(["Mesh", "Verts", "Faces", "Texture", "Visible", "Group"])
         self.module_mesh_tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         self.module_mesh_tree.itemSelectionChanged.connect(self._on_module_mesh_selection_changed)
+        self.module_mesh_tree.itemClicked.connect(self._on_module_mesh_item_clicked)
         self.module_mesh_tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.module_mesh_tree.customContextMenuRequested.connect(self._show_module_browser_context_menu)
         self.module_mesh_tree.setRootIsDecorated(False)
@@ -334,6 +335,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         self.module_null_mesh_tree.setHeaderLabels(["NULL Mesh", "Verts", "Faces", "Texture", "Visible", "Group"])
         self.module_null_mesh_tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         self.module_null_mesh_tree.itemSelectionChanged.connect(self._on_module_mesh_selection_changed)
+        self.module_null_mesh_tree.itemClicked.connect(self._on_module_mesh_item_clicked)
         self.module_null_mesh_tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.module_null_mesh_tree.customContextMenuRequested.connect(self._show_module_browser_context_menu)
         self.module_null_mesh_tree.setRootIsDecorated(False)
@@ -361,6 +363,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         self.module_walkmesh_tree.setHeaderLabels(["Walkmesh", "Verts", "Faces", "Texture", "Visible", "Group"])
         self.module_walkmesh_tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         self.module_walkmesh_tree.itemSelectionChanged.connect(self._on_module_mesh_selection_changed)
+        self.module_walkmesh_tree.itemClicked.connect(self._on_module_mesh_item_clicked)
         self.module_walkmesh_tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.module_walkmesh_tree.customContextMenuRequested.connect(self._show_module_browser_context_menu)
         self.module_walkmesh_tree.setRootIsDecorated(False)
@@ -935,6 +938,21 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         self.moduleMeshesSelected.emit(nodes)
         if node is not None:
             self.moduleMeshSelected.emit(node)
+
+    def _on_module_mesh_item_clicked(self, item: QtWidgets.QTreeWidgetItem, _column: int) -> None:
+        if self._suppress_mesh_signal or item is None:
+            return
+        nodes = self._selected_module_meshes()
+        if not nodes:
+            for items in (self._mesh_items, self._null_mesh_items, self._walkmesh_items):
+                node = items.get(item)
+                if node is not None:
+                    nodes = [node]
+                    break
+        if not nodes:
+            return
+        self.moduleMeshesSelected.emit(nodes)
+        self.moduleMeshSelected.emit(nodes[0])
 
     def select_module_mesh(self, node) -> None:
         self.select_module_meshes([node] if node is not None else [])
