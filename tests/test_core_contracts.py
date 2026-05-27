@@ -239,6 +239,8 @@ def test_qt_viewport_performance_overlay_stacks_above_stats_badge() -> None:
     assert "max(12, H - 28)" in stats_source
     assert "h - 50" in perf_source
     assert "_draw_hud_pill" in perf_source
+    assert "max_width = max(80, w - 16)" in perf_source
+    assert "_hud_pill_width(label, max_width=max_width)" in perf_source
 
 
 def test_viewport_animation_hud_sits_under_model_stats_not_fps_overlay() -> None:
@@ -248,12 +250,36 @@ def test_viewport_animation_hud_sits_under_model_stats_not_fps_overlay() -> None
 
     stats_source = inspect.getsource(FrameRenderer._draw_stats)
 
-    assert "animation_row_y = 56" in stats_source
+    assert "hud_right_limit = max(hud_left + 120, W - 172)" in stats_source
+    assert "max_width=hud_max_width" in stats_source
+    assert "animation_row_y = stats_row_y + hud_row_step" in stats_source
     assert "12,\n                animation_row_y," in stats_source
     assert "Show animation progress without overlapping the bottom-right FPS indicator" in stats_source
     assert "H - 52" not in stats_source
     assert "txt_w = len(anim_txt)" not in stats_source
-    assert "warn_y = 80 if (self._anim_pose is not None and self._anim_name) else 58" in stats_source
+    assert "warn_y = animation_row_y + hud_row_step" in stats_source
+
+
+def test_viewport_hud_state_changes_dirty_overlay_immediately() -> None:
+    import inspect
+
+    from src.gui.qt_lib.rendering.renderer_performance import ViewportFrameGovernor
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    load_source = inspect.getsource(QtViewportWidget.load_model)
+    shade_source = inspect.getsource(QtViewportWidget.set_shade_mode)
+    render_mode_source = inspect.getsource(QtViewportWidget.set_render_mode)
+    texture_source = inspect.getsource(QtViewportWidget.toggle_texture)
+    animation_source = inspect.getsource(QtViewportWidget.set_animation_pose)
+    skip_source = inspect.getsource(QtViewportWidget._can_skip_live_overlay_rebuild)
+
+    assert "hud" in ViewportFrameGovernor.DIRTY_FLAGS
+    assert "hud=True" in load_source
+    assert "hud=True" in shade_source
+    assert "hud=True" in render_mode_source
+    assert "hud=True" in texture_source
+    assert "hud=True" in animation_source
+    assert '"hud"' in skip_source
 
 
 def test_qt_gpu_viewport_resets_render_targets_on_model_load() -> None:

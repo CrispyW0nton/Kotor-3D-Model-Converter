@@ -105,6 +105,7 @@ class ViewportFrameGovernor:
         "lighting",
         "gizmo",
         "diagnostics",
+        "hud",
     )
 
     def __init__(self, target_fps: int = 60, *, idle_mode: str = "dirty_only") -> None:

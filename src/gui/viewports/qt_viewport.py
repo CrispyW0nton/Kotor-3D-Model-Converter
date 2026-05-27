@@ -847,7 +847,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             self.axis_mode_control.set_axis_mode(resolved)
         if self._pick_reference_waiting:
             self.statusMessage.emit("Pick an object to use as transform reference.")
-        self._request_render(fast=True)
+        self._request_render(fast=True, reason="model loaded", resources=True, overlay=True, hud=True)
 
     def axis_mode(self) -> AxisMode:
         return self.transform_reference_controller.get_axis_mode()
@@ -1659,7 +1659,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             # T403: clear the thumbnail when no model is loaded.
             self._refresh_thumbnail_safe()
             self.modelChanged.emit(None)
-            self._request_render(fast=True)
+            self._request_render(fast=True, reason="model cleared", resources=True, overlay=True, hud=True)
             return
         self._gpu_upload_model_id = id(model)
         self._gpu_upload_total = int(getattr(model, "_gr_gpu_prebuilt_mesh_count", 0) or 0)
@@ -2280,7 +2280,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._renderer.show_solid = True
             self._renderer.show_wireframe = False
         self._set_display_options(self._rebuild_display_options_from_renderer())
-        self._request_render()
+        self._request_render(fast=True, reason="shade mode changed", scene=True, overlay=True, hud=True)
 
     def _sync_shade_buttons(self) -> None:
         state = {
@@ -2303,7 +2303,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._renderer.render_mode = mode_key
         self.toggle_gpu_renderer(True)
         self._set_display_options(self._rebuild_display_options_from_renderer())
-        self._request_render(fast=True)
+        self._request_render(fast=True, reason="render mode changed", scene=True, overlay=True, hud=True)
 
     def _sync_render_mode_buttons(self) -> None:
         active = getattr(self._renderer, "render_mode", "realistic") or "realistic"
@@ -2326,7 +2326,7 @@ class QtViewportWidget(QtWidgets.QWidget):
     def toggle_texture(self, checked: Optional[bool] = None) -> None:
         self._renderer.show_texture = bool(checked) if checked is not None else not self._renderer.show_texture
         self._set_display_options(self._rebuild_display_options_from_renderer())
-        self._request_render()
+        self._request_render(fast=True, reason="texture mode changed", scene=True, overlay=True, hud=True)
 
     def toggle_grid(self, checked: Optional[bool] = None) -> None:
         enabled = bool(checked) if checked is not None else not bool(getattr(self._renderer, "show_grid", True))
@@ -4322,19 +4322,19 @@ class QtViewportWidget(QtWidgets.QWidget):
         if pose is not None:
             self._clear_mesh_hover(request=False, reason="animation pose active")
         self._fast_frame_until = max(self._fast_frame_until, time_module.perf_counter() + 0.12)
-        self._request_render(fast=True)
+        self._request_render(fast=True, reason="animation pose changed", scene=True, overlay=True, hud=True)
 
     def set_animation_playback_active(self, active: bool, reason: str = "animation playback") -> None:
         self._frame_governor.set_animation_playing(bool(active), reason)
         if active:
             self._clear_mesh_hover(request=False, reason=reason)
-            self._request_render(fast=True, reason=reason, scene=True)
+            self._request_render(fast=True, reason=reason, scene=True, overlay=True, hud=True)
 
     def clear_animation_pose(self) -> None:
         self._renderer.set_animation_pose(None)
         self._frame_governor.set_animation_playing(False)
         self._fast_frame_until = 0.0
-        self._request_render()
+        self._request_render(reason="animation pose cleared", scene=True, overlay=True, hud=True)
 
     def load_walkmesh(self, wok_data_or_path, world_offset=(0.0, 0.0, 0.0)) -> None:
         self._renderer.load_walkmesh(wok_data_or_path, world_offset)
@@ -5171,7 +5171,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             return False
         governor = getattr(self, "_frame_governor", None)
         dirty_flags = dict(getattr(governor, "dirty_flags", {}) or {})
-        if any(bool(dirty_flags.get(name, False)) for name in ("camera", "overlay", "resources", "selection", "lighting", "gizmo", "diagnostics")):
+        if any(bool(dirty_flags.get(name, False)) for name in ("camera", "overlay", "resources", "selection", "lighting", "gizmo", "diagnostics", "hud")):
             return False
         if bool(getattr(self, "_xray_mode", False) or getattr(self, "_weight_heatmap_enabled", False)):
             return False
@@ -6093,8 +6093,13 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._last_performance_overlay_label = f"{fps:4.0f} fps  {self._last_render_ms:4.0f} ms  {mode}"
                 self._last_performance_overlay_update_wall = now
             label = self._last_performance_overlay_label
-            text_w = self._renderer._hud_text_width(label) if hasattr(self._renderer, "_hud_text_width") else len(label) * 7
-            x = max(8, w - text_w - 20)
+            max_width = max(80, w - 16)
+            text_w = (
+                self._renderer._hud_pill_width(label, max_width=max_width)
+                if hasattr(self._renderer, "_hud_pill_width")
+                else min(max_width, len(label) * 7 + 14)
+            )
+            x = max(8, w - text_w - 8)
             y = max(8, h - 50)
             self._renderer._draw_hud_pill(
                 draw,
@@ -6104,6 +6109,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 fill=(18, 22, 27),
                 fg=(156, 232, 184),
                 outline=(42, 90, 62),
+                max_width=max_width,
             )
             return img
         except Exception as exc:
