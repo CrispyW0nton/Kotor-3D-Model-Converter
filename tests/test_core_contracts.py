@@ -913,7 +913,10 @@ def test_qt_viewport_mesh_pick_requires_real_triangle_and_hover_outline() -> Non
     assert "_mesh_hit_test_detail(x, y, allow_gpu=False)" in release_source
     assert "_draw_selected_model_outline(draw, w, h)" in overlay_source
     hover_outline_source = inspect.getsource(QtViewportWidget._draw_hovered_mesh_outline)
-    assert "_draw_hovered_mesh_outline(draw, w, h)" in inspect.getsource(QtViewportWidget._draw_selected_model_outline)
+    selected_outline_source = inspect.getsource(QtViewportWidget._draw_selected_model_outline)
+    assert "_draw_hovered_mesh_outline(draw, w, h)" in selected_outline_source
+    assert "hull =" not in selected_outline_source
+    assert "255, 212, 0, 230" not in selected_outline_source
     assert 'node is getattr(self._renderer, "selected_node", None)' in hover_outline_source
     assert "_ray_triangle_intersection" in source
     assert "allow_gpu: bool = True" in pick_source

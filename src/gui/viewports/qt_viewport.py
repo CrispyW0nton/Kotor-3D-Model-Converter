@@ -5353,7 +5353,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         This intentionally does not call FrameRenderer.render() or any CPU mesh
         rasterizer.  It only restores the interactive overlay layer that lives
         above the GPU scene: gimbal tools, transform gizmo, HUD stats, axes,
-        selection outlines, measurement/camera helpers, and editor markers.
+        hover outlines, subobject selection, measurement/camera helpers, and editor markers.
         """
         if img is None:
             return None
@@ -5527,7 +5527,6 @@ class QtViewportWidget(QtWidgets.QWidget):
             "selected_display_name": str(getattr(active, "_gr_scene_object_name", getattr(active, "name", "")) or ""),
             "selection_source": str(getattr(self, "_last_selection_source", "") or ""),
             "selected_ids": selected_ids,
-            "selected_yellow_rgba": (255, 212, 0, 230),
             "selected_object_count": 1 if active is not None and not selected else len(selected),
             "selected_node_count": len(getattr(self, "_selected_joint_nodes", []) or []),
             "gizmo_hover_target": getattr(self._transform_gizmo, "hovered_handle", None),
@@ -7638,57 +7637,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             log.debug("Hovered mesh outline draw failed: %s", exc)
 
     def _draw_selected_model_outline(self, draw, w: int, h: int) -> None:
-        if self.model is None or not self._is_selected_model_root(getattr(self._renderer, "selected_node", None)):
-            self._draw_hovered_mesh_outline(draw, w, h)
-            return
-        if (
-            self.canvas.is_live_surface()
-            and getattr(self._renderer, "_anim_pose", None) is not None
-            and any(bool(getattr(node, "is_skin", False)) for node in (self.model.mesh_nodes() if hasattr(self.model, "mesh_nodes") else []))
-        ):
-            return
-        try:
-            mesh_nodes = self.model.mesh_nodes() if hasattr(self.model, "mesh_nodes") else []
-            points: list[tuple[float, float]] = []
-            for node in mesh_nodes:
-                if getattr(node, "_gr_hidden", False):
-                    continue
-                bounds = self._projected_mesh_bounds(node, w, h)
-                if bounds is None:
-                    continue
-                _min_x, _min_y, _max_x, _max_y, _world_verts, projected = bounds
-                for point in projected:
-                    if point is not None:
-                        points.append((float(point[0]), float(point[1])))
-            if len(points) < 3:
-                return
-
-            unique = sorted(set(points))
-
-            def cross(o, a, b) -> float:
-                return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
-
-            lower: list[tuple[float, float]] = []
-            for point in unique:
-                while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0:
-                    lower.pop()
-                lower.append(point)
-            upper: list[tuple[float, float]] = []
-            for point in reversed(unique):
-                while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0:
-                    upper.pop()
-                upper.append(point)
-            hull = lower[:-1] + upper[:-1]
-            if len(hull) < 3:
-                return
-
-            shadow = (0, 0, 0, 155)
-            glow = (255, 212, 0, 230)
-            closed = hull + [hull[0]]
-            draw.line(closed, fill=shadow, width=6)
-            draw.line(closed, fill=glow, width=2)
-        except Exception as exc:
-            log.debug("Selected model outline draw failed: %s", exc)
+        self._draw_hovered_mesh_outline(draw, w, h)
 
     def _draw_mesh_subobject_selection(self, draw, w: int, h: int) -> None:
         state = getattr(self, "mesh_selection_state", None)
