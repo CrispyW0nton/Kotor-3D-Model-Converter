@@ -8090,6 +8090,21 @@ class FrameRenderer:
             x += self._draw_hud_pill(draw, x, y, f"Bones {bc}", fill=warning_fill, fg=warning_text, outline=hud_outline) + 6
         compact_stats = f"V {vc:,}  F {fc:,}  Skin {skin_nodes}  UV {uv_ok}/{uv_mesh}  Tex {tex_ok}/{tex_total}"
         self._draw_hud_pill(draw, 12, 34, compact_stats, fill=hud_fill, fg=hud_muted, outline=hud_outline)
+        animation_row_y = 56
+        if self._anim_pose is not None and self._anim_name:
+            anim_txt = f"\u25b6 {self._anim_name}"
+            if self._anim_length > 0:
+                pct = int(100 * self._anim_time / self._anim_length)
+                anim_txt += f"  {self._anim_time:.3f}/{self._anim_length:.3f}s  [{pct}%]"
+            self._draw_hud_pill(
+                draw,
+                12,
+                animation_row_y,
+                anim_txt,
+                fill=success_fill,
+                fg=success_text,
+                outline=hud_outline,
+            )
         # Show render bounds info — use CACHED value (not recomputed every frame)
         rbb_min, rbb_max = self._get_render_bounds()
         dx = rbb_max[0]-rbb_min[0]; dy = rbb_max[1]-rbb_min[1]; dz = rbb_max[2]-rbb_min[2]
@@ -8227,26 +8242,11 @@ class FrameRenderer:
             draw.text((W//2 - 220, H//2 - 8), warn, fill=warn_col)
         elif self.show_texture and tex_ok == 0 and tex_total > 0:
             warn = f"⚠ {tex_total} texture(s) referenced but none loaded – set texture directory"
-            self._draw_hud_pill(draw, 12, 58, warn, fill=warning_fill, fg=warning_text, outline=hud_outline)
+            warn_y = 80 if (self._anim_pose is not None and self._anim_name) else 58
+            self._draw_hud_pill(draw, 12, warn_y, warn, fill=warning_fill, fg=warning_text, outline=hud_outline)
 
-        # Show animation state in bottom-right corner
+        # Show animation progress without overlapping the bottom-right FPS indicator.
         if self._anim_pose is not None and self._anim_name:
-            anim_txt = f"\u25b6 {self._anim_name}"
-            if self._anim_length > 0:
-                pct = int(100 * self._anim_time / self._anim_length)
-                anim_txt += f"  {self._anim_time:.3f}/{self._anim_length:.3f}s  [{pct}%]"
-            # Estimate text width (~6px per char at 8pt font) and right-align
-            txt_w = len(anim_txt) * 6
-            self._draw_hud_pill(
-                draw,
-                max(12, W - txt_w - 24),
-                max(12, H - 52),
-                anim_txt,
-                fill=success_fill,
-                fg=success_text,
-                outline=hud_outline,
-            )
-            # Draw a progress bar at the very bottom of the frame
             bar_h = 4
             bar_y = H - bar_h
             draw.rectangle([0, bar_y, W, H], fill=hud_fill)

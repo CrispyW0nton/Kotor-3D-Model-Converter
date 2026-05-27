@@ -241,6 +241,21 @@ def test_qt_viewport_performance_overlay_stacks_above_stats_badge() -> None:
     assert "_draw_hud_pill" in perf_source
 
 
+def test_viewport_animation_hud_sits_under_model_stats_not_fps_overlay() -> None:
+    import inspect
+
+    from src.gui.qt_lib.rendering.viewport_core import FrameRenderer
+
+    stats_source = inspect.getsource(FrameRenderer._draw_stats)
+
+    assert "animation_row_y = 56" in stats_source
+    assert "12,\n                animation_row_y," in stats_source
+    assert "Show animation progress without overlapping the bottom-right FPS indicator" in stats_source
+    assert "H - 52" not in stats_source
+    assert "txt_w = len(anim_txt)" not in stats_source
+    assert "warn_y = 80 if (self._anim_pose is not None and self._anim_name) else 58" in stats_source
+
+
 def test_qt_gpu_viewport_resets_render_targets_on_model_load() -> None:
     import inspect
 
