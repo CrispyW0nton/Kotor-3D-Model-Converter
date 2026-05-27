@@ -65,6 +65,7 @@ _PROFILE_TYPE_MODULES: tuple[str, ...] = (
     "types.droids.t3m4",
     "types.droids.utilitydroid",
     "types.specialcase.kreia",
+    "types.specialcase.bastila",
     "types.specialcase.malak",
     "types.specialcase.nihlus",
     "types.specialcase.revan",

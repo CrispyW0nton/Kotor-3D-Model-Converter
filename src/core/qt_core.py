@@ -50,6 +50,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
     ),
     "game": (
         "game_library_ext",
+        "import_normalisation",
         "kotor_install",
         "kotor_loader",
         "pykotor_bridge",

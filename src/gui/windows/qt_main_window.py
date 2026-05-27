@@ -6064,14 +6064,15 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                     continue
                 inherited = bool(entry.get("inherited"))
                 source = str(entry.get("source") or getattr(model, "name", ""))
-                inherited_text = f"\nInherited from: {source}" if inherited else ""
+                source_type = str(entry.get("source_type") or ("inherited" if inherited else "local"))
+                source_text = f"\nSource: {source_type} ({source})"
                 self.animations_panel.info.setPlainText(
                     f"{anim_name}\n"
                     f"Length: {float(entry.get('length') or 0.0):.3f} s\n"
                     f"Keys: {int(entry.get('key_count') or 0)}  "
                     f"Nodes: {int(entry.get('node_count') or 0)}  "
                     f"Events: {int(entry.get('event_count') or 0)}"
-                    f"{inherited_text}"
+                    f"{source_text}"
                 )
                 self.animations_panel.seek.blockSignals(True)
                 self.animations_panel.seek.setValue(0)

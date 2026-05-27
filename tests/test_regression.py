@@ -640,6 +640,47 @@ def test_skin_node_palette_auto_profile_uses_compact_qbone_for_local_arrays(
     assert palette[0, 0, 3] == pytest.approx(2.0, abs=1e-6)
 
 
+@pytest.mark.parametrize(("game", "install_path"), [("k1", K1_PATH), ("k2", K2_PATH)])
+def test_bastila_import_remaps_torso_lower_limb_bone_map(game, install_path, monkeypatch) -> None:
+    from src.core.qt_core.game.import_normalisation import apply_known_skin_bone_map_normalisations
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
+    from src.core.qt_core.game.kotor_loader import load_model_from_bytes
+
+    assert callable(apply_known_skin_bone_map_normalisations)
+    if not install_path.exists():
+        pytest.skip(f"{game.upper()} install not available")
+
+    monkeypatch.delenv("GHOSTRIGGER_SKIN_FORMULA", raising=False)
+    mdl, mdx = _raw_model(game, "p_bastilabb")
+    model = load_model_from_bytes(mdl, mdx, game_version=None)
+    torso = next(node for node in model.all_nodes() if getattr(node, "name", "").lower() == "torso")
+
+    expected = {
+        6: "lthigh_g",
+        7: "rthigh_g",
+        10: "lshin_g",
+        11: "lfoot_g",
+        12: "lfootT_g",
+        13: "rshin_g",
+        14: "rfoot_g",
+        15: "rfootT_g",
+    }
+    for slot, bone_name in expected.items():
+        assert torso.bone_map[slot] == bone_name
+    assert getattr(torso, "_gr_bone_map_override", "") == "p_bastilabb_torso_lower_limb"
+
+    uploader = MatrixPaletteUploader(max_bones=32)
+    uploader.build_inverse_bind_pose(model)
+    uploader.compute_skin_node_palette(torso, SimpleNamespace(nodes={}))
+
+    assert uploader._skin_palette_formula == "G5_FULL_REF"
+    assert uploader._skin_inverse_bind_source == "qBone_tBone_dfs_indexed_TR_no_invert"
+    assert uploader.palette[6].bone_name == "lthigh_g"
+    assert uploader.palette[7].bone_name == "rthigh_g"
+    assert uploader.palette[10].bone_name == "lshin_g"
+    assert uploader.palette[11].bone_name == "lfoot_g"
+
+
 def test_skinning_species_classifier_covers_primary_character_families() -> None:
     from src.core.qt_core.animation.gpu_skinning import (
         SKINNING_SPECIES_PROFILES,

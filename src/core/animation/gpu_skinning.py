@@ -138,7 +138,6 @@ SKINNING_SPECIES_PROFILES: Dict[str, SkinningSpeciesProfile] = {
     "unknown": SkinningSpeciesProfile("unknown", "Unknown"),
 }
 
-
 def classify_skinning_species(model_name: str = "", supermodel: str = "",
                               node_names: Optional[List[str]] = None) -> str:
     """Classify a model into a species skinning profile.

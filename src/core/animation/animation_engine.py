@@ -251,6 +251,59 @@ class SuperModelResolver:
 
         return sorted(entries.values(), key=lambda tup: tup[0].lower())
 
+    @classmethod
+    def animation_source_type(
+        cls,
+        model: KotorModel,
+        anim_name: str,
+        source_model_name: str,
+        game: Optional[str] = None,
+    ) -> str:
+        """Classify an effective animation source as local, inherited, or override.
+
+        ``override`` means the effective source wins over a same-named clip
+        later in the supermodel chain. Bastila's local head animations are a
+        common example: the clips live on ``P_BastilaH`` but shadow shared
+        supermodel clips of the same names.
+        """
+        name_key = str(anim_name or "").lower()
+        source_key = str(source_model_name or "").lower()
+        own_key = str(getattr(model, "name", "") or "").lower()
+        if not name_key or not source_key:
+            return "inherited"
+
+        chain: list[KotorModel] = []
+        visited: set[str] = set()
+        current: Optional[KotorModel] = model
+        while current is not None:
+            current_key = str(getattr(current, "name", "") or "").lower()
+            if not current_key or current_key in visited:
+                break
+            visited.add(current_key)
+            chain.append(current)
+            super_ref = getattr(current, "supermodel", "")
+            current = cls.load_supermodel(super_ref, game)
+
+        source_index = -1
+        for index, chain_model in enumerate(chain):
+            if str(getattr(chain_model, "name", "") or "").lower() == source_key:
+                source_index = index
+                break
+
+        shadows_ancestor = False
+        if source_index >= 0:
+            for chain_model in chain[source_index + 1:]:
+                for anim in getattr(chain_model, "animations", []) or []:
+                    if str(getattr(anim, "name", "") or "").lower() == name_key:
+                        shadows_ancestor = True
+                        break
+                if shadows_ancestor:
+                    break
+
+        if source_key == own_key:
+            return "override" if shadows_ancestor else "local"
+        return "override" if shadows_ancestor else "inherited"
+
 
 # ─────────────────────────────────────────────────────────────────
 #  Interpolation helpers
@@ -1220,6 +1273,9 @@ class AnimationEngine:
                 'event_count':len(a.events),
                 'anim_root':  a.anim_root,
                 'source':     self.model.name,
+                'source_type': 'local',
+                'source_scope': 'local',
+                'overrides_inherited': False,
                 'inherited':  False,
                 'anim_scale': 1.0,
             })
@@ -1237,6 +1293,7 @@ class AnimationEngine:
         returned by :meth:`list_animations`:
 
         ``source``      name of the model that actually stores the clip.
+        ``source_type`` one of ``local``, ``inherited``, or ``override``.
         ``inherited``   True when ``source`` differs from ``self.model.name``.
         ``anim_scale``  cumulative anim_scale for POSITION-delta playback;
                         always 1.0 for own animations.
@@ -1263,6 +1320,13 @@ class AnimationEngine:
                 for n in anim.nodes
                 for c in n.controllers
             )
+            source_type = SuperModelResolver.animation_source_type(
+                self.model,
+                anim.name,
+                source,
+                game_tag,
+            )
+            inherited = source.lower() != own_name_lower
             result.append({
                 'name':        anim.name,
                 'length':      anim.length,
@@ -1272,7 +1336,10 @@ class AnimationEngine:
                 'event_count': len(anim.events),
                 'anim_root':   anim.anim_root,
                 'source':      source,
-                'inherited':   source.lower() != own_name_lower,
+                'source_type':  source_type,
+                'source_scope': 'inherited' if inherited else 'local',
+                'overrides_inherited': source_type == 'override',
+                'inherited':   inherited,
                 'anim_scale':  scale,
             })
         return result
