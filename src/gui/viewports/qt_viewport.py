@@ -4319,12 +4319,15 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def set_animation_pose(self, pose, name: str = "", time: float = 0.0, length: float = 0.0) -> None:
         self._renderer.set_animation_pose(pose, name=name, time=time, length=length)
+        if pose is not None:
+            self._clear_mesh_hover(request=False, reason="animation pose active")
         self._fast_frame_until = max(self._fast_frame_until, time_module.perf_counter() + 0.12)
         self._request_render(fast=True)
 
     def set_animation_playback_active(self, active: bool, reason: str = "animation playback") -> None:
         self._frame_governor.set_animation_playing(bool(active), reason)
         if active:
+            self._clear_mesh_hover(request=False, reason=reason)
             self._request_render(fast=True, reason=reason, scene=True)
 
     def clear_animation_pose(self) -> None:
@@ -6207,6 +6210,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         except Exception:
             return 0.0
 
+    def _mesh_hover_suppressed_for_animation(self) -> bool:
+        return getattr(getattr(self, "_renderer", None), "_anim_pose", None) is not None
+
     def _projected_mesh_bounds(self, node, width: int, height: int):
         world_verts = self._renderer._get_world_verts_for_node(node)
         if not world_verts:
@@ -6757,6 +6763,9 @@ class QtViewportWidget(QtWidgets.QWidget):
     def _update_mesh_hover(self, event) -> None:
         if not self.mesh_hover_enabled:
             self._clear_mesh_hover(reason="mesh hover disabled")
+            return
+        if self._mesh_hover_suppressed_for_animation():
+            self._clear_mesh_hover(reason="animation hover suppressed")
             return
         if self.model is None:
             self._clear_mesh_hover(reason="mesh hover model cleared")
@@ -7586,6 +7595,8 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def _draw_hovered_mesh_outline(self, draw, w: int, h: int) -> None:
         if not self.mesh_hover_enabled:
+            return
+        if self._mesh_hover_suppressed_for_animation():
             return
         node = getattr(self, "_hovered_mesh_node", None)
         if node is None or getattr(node, "_gr_hidden", False):

@@ -913,11 +913,18 @@ def test_qt_viewport_mesh_pick_requires_real_triangle_and_hover_outline() -> Non
     assert "_mesh_hit_test_detail(x, y, allow_gpu=False)" in release_source
     assert "_draw_selected_model_outline(draw, w, h)" in overlay_source
     hover_outline_source = inspect.getsource(QtViewportWidget._draw_hovered_mesh_outline)
+    hover_update_source = inspect.getsource(QtViewportWidget._update_mesh_hover)
+    projected_bounds_source = inspect.getsource(QtViewportWidget._projected_mesh_bounds)
     selected_outline_source = inspect.getsource(QtViewportWidget._draw_selected_model_outline)
     assert "_draw_hovered_mesh_outline(draw, w, h)" in selected_outline_source
     assert "hull =" not in selected_outline_source
     assert "255, 212, 0, 230" not in selected_outline_source
     assert 'node is getattr(self._renderer, "selected_node", None)' in hover_outline_source
+    assert "_mesh_hover_suppressed_for_animation()" in hover_outline_source
+    assert "_mesh_hover_suppressed_for_animation()" in hover_update_source
+    assert "animation hover suppressed" in hover_update_source
+    assert "self._renderer._get_world_verts_for_node(node)" in projected_bounds_source
+    assert "cpu_skin_vbo_arrays" not in source
     assert "_ray_triangle_intersection" in source
     assert "allow_gpu: bool = True" in pick_source
     assert "if allow_gpu:" in pick_source
@@ -1485,6 +1492,42 @@ def test_qt_mesh_hover_uses_cpu_pick_even_when_gpu_pick_is_available() -> None:
     assert viewport._hovered_mesh_node is hovered
     assert calls[-1][0:2] == ("render", True)
     assert calls[-1][2]["reason"] == "mesh hover changed"
+
+
+def test_qt_mesh_hover_is_suppressed_while_animation_pose_is_active() -> None:
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    calls = []
+
+    class _Position:
+        def x(self):
+            return 42
+
+        def y(self):
+            return 64
+
+    viewport = SimpleNamespace(
+        mesh_hover_enabled=True,
+        model=object(),
+        _renderer=SimpleNamespace(_anim_pose=object()),
+        _transform_gizmo=SimpleNamespace(hovered_handle=None),
+        _measurement_mode=False,
+        _hovered_mesh_node=object(),
+        _hovered_mesh_face_bounds=((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)),
+        _gpu_renderer=SimpleNamespace(hovered_node=object()),
+        meshHovered=SimpleNamespace(emit=lambda node: calls.append(("hover", node))),
+        _request_render=lambda fast=False, **kwargs: calls.append(("render", fast, kwargs)),
+        _mesh_hit_test_detail=lambda *args, **kwargs: calls.append(("pick", args, kwargs)),
+    )
+
+    QtViewportWidget._update_mesh_hover(viewport, SimpleNamespace(position=lambda: _Position()))
+
+    assert viewport._hovered_mesh_node is None
+    assert viewport._hovered_mesh_face_bounds is None
+    assert viewport._gpu_renderer.hovered_node is None
+    assert not any(call[0] == "pick" for call in calls)
+    assert calls[-1][0:2] == ("render", True)
+    assert calls[-1][2]["reason"] == "animation hover suppressed"
 
 
 def test_qt_viewport_clears_mesh_hover_during_camera_navigation() -> None:
