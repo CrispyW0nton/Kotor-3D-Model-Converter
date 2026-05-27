@@ -3128,6 +3128,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
         try:
             import numpy as np
 
+            if bool(getattr(mesh_data, "is_skinned", False)) and self._active_anim_pose is not None:
+                return False
             positions = np.asarray(getattr(mesh_data, "positions", None), dtype=np.float32)
             if positions.ndim != 2 or positions.shape[1] < 3 or len(positions) <= 0:
                 return False
@@ -3207,6 +3209,9 @@ class WgpuRenderer(NullDiagnosticRenderer):
         fov = float(getattr(camera, "fov", 45.0)) if camera is not None else 45.0
         near = float(getattr(camera, "near", getattr(camera, "_near", 0.01))) if camera is not None else 0.01
         far = float(getattr(camera, "far", getattr(camera, "_far", 2000.0))) if camera is not None else 2000.0
+        view_distance = _point_distance(eye, target)
+        near = max(0.001, min(max(0.001, near), max(0.001, view_distance * 0.02)))
+        far = max(near + 1.0, far, view_distance * 4.0 + 1.0)
         proj = _mat4_perspective_wgpu(math.radians(fov), width / max(1, height), near, far)
         view = _mat4_lookat(eye, target, up)
         return (proj @ view @ np.eye(4, dtype=np.float32)).astype(np.float32)

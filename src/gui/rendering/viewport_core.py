@@ -1538,6 +1538,13 @@ class ArcBallCamera:
 
     def zoom(self, steps: float):
         self.distance = max(0.05, self.distance * (0.9 ** steps))
+        self._sync_close_clip_plane()
+
+    def _sync_close_clip_plane(self):
+        """Keep close zooms from slicing animated/inspected geometry."""
+        close_near = max(0.001, float(self.distance) * 0.02)
+        self._near = max(0.001, min(float(self._near), close_near))
+        self._far = max(float(self._far), float(self.distance) * 4.0 + 1.0)
 
     def pan(self, dx_px: float, dy_px: float, viewport_h: int):
         right, up, fwd, eye = self._view_matrix()
@@ -1631,6 +1638,7 @@ class ArcBallCamera:
         diag_extent = max(0.01, diag)
         self._near = max(0.001, min(nearest_depth * 0.25, diag_extent * 0.001, 0.05))
         self._far = max(1000.0, farthest_depth * 2.0)
+        self._sync_close_clip_plane()
 
     # ── projection helpers ────────────────────────────────────────────
 

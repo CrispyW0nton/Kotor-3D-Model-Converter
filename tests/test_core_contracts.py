@@ -4072,6 +4072,20 @@ def test_arcball_frame_bounds_expands_clip_range_for_large_assets() -> None:
     assert camera._near < max(0.001, camera.distance - 200.0)
 
 
+def test_arcball_zoom_tightens_near_clip_for_close_animation_inspection() -> None:
+    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera
+
+    camera = ArcBallCamera()
+    camera._near = 0.05
+    camera.distance = 1.0
+
+    camera.zoom(30.0)
+
+    assert camera.distance < 0.1
+    assert camera._near == pytest.approx(0.001)
+    assert camera._far > camera.distance
+
+
 def test_wgpu_frustum_culling_uses_world_space_mesh_bounds() -> None:
     from types import SimpleNamespace
 
@@ -4092,6 +4106,31 @@ def test_wgpu_frustum_culling_uses_world_space_mesh_bounds() -> None:
             dtype=np.float32,
         ),
         is_skinned=False,
+    )
+    unit_cube_planes = (
+        (1.0, 0.0, 0.0, 1.0),
+        (-1.0, 0.0, 0.0, 1.0),
+        (0.0, 1.0, 0.0, 1.0),
+        (0.0, -1.0, 0.0, 1.0),
+        (0.0, 0.0, 1.0, 1.0),
+        (0.0, 0.0, -1.0, 1.0),
+    )
+
+    assert renderer._mesh_data_outside_frustum(mesh, unit_cube_planes) is False
+
+
+def test_wgpu_frustum_culling_keeps_animated_skinned_meshes_visible() -> None:
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    renderer._active_anim_pose = SimpleNamespace(time=1.0)
+    mesh = SimpleNamespace(
+        positions=np.asarray([(50.0, 50.0, 50.0), (51.0, 51.0, 51.0)], dtype=np.float32),
+        is_skinned=True,
     )
     unit_cube_planes = (
         (1.0, 0.0, 0.0, 1.0),
