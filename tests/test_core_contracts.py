@@ -4055,3 +4055,48 @@ def test_gpu_vbo_splits_skin_bind_and_animated_input_space() -> None:
     assert "apply_skin_node_transform_for_bind" in source
     assert "not is_skin or bool(apply_skin_node_transform_for_bind)" in source
     assert "elif _node_vs == 1 or is_skin" in source
+
+
+def test_arcball_frame_bounds_expands_clip_range_for_large_assets() -> None:
+    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera
+
+    camera = ArcBallCamera()
+    camera.frame_bounds((-1200.0, -900.0, -200.0), (1200.0, 900.0, 200.0), reset_view=True)
+
+    assert camera._far > 1000.0
+    assert camera._far > camera.distance
+    assert 0.001 <= camera._near <= 0.05
+    assert camera._near < max(0.001, camera.distance - 200.0)
+
+
+def test_wgpu_frustum_culling_uses_world_space_mesh_bounds() -> None:
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    mesh = SimpleNamespace(
+        positions=np.asarray([(10.0, 10.0, 10.0), (11.0, 11.0, 11.0)], dtype=np.float32),
+        world_matrix=np.asarray(
+            [
+                [1.0, 0.0, 0.0, -10.5],
+                [0.0, 1.0, 0.0, -10.5],
+                [0.0, 0.0, 1.0, -10.5],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+            dtype=np.float32,
+        ),
+        is_skinned=False,
+    )
+    unit_cube_planes = (
+        (1.0, 0.0, 0.0, 1.0),
+        (-1.0, 0.0, 0.0, 1.0),
+        (0.0, 1.0, 0.0, 1.0),
+        (0.0, -1.0, 0.0, 1.0),
+        (0.0, 0.0, 1.0, 1.0),
+        (0.0, 0.0, -1.0, 1.0),
+    )
+
+    assert renderer._mesh_data_outside_frustum(mesh, unit_cube_planes) is False

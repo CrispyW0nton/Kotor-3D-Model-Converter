@@ -1622,6 +1622,16 @@ class ArcBallCamera:
 
         self.distance = max(fitted_dist, min_dist)
 
+        # Keep GPU projection clipping in step with the framed asset.  The
+        # software path only rejects against the near plane, but WGPU/D3D also
+        # uses the far plane for depth and frustum culling; large modules can
+        # easily outgrow the default 1000-unit clip range.
+        nearest_depth = max(0.001, self.distance - max_depth)
+        farthest_depth = max(1.0, self.distance + max_depth)
+        diag_extent = max(0.01, diag)
+        self._near = max(0.001, min(nearest_depth * 0.25, diag_extent * 0.001, 0.05))
+        self._far = max(1000.0, farthest_depth * 2.0)
+
     # ── projection helpers ────────────────────────────────────────────
 
     def _view_matrix(self):

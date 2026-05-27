@@ -3133,6 +3133,24 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 return False
             mins = tuple(float(v) for v in positions[:, :3].min(axis=0))
             maxs = tuple(float(v) for v in positions[:, :3].max(axis=0))
+            if not bool(getattr(mesh_data, "is_skinned", False)):
+                model = np.asarray(self._mesh_model_matrix(mesh_data), dtype=np.float32).reshape(4, 4)
+                corners = np.asarray(
+                    [
+                        (mins[0], mins[1], mins[2], 1.0),
+                        (maxs[0], mins[1], mins[2], 1.0),
+                        (mins[0], maxs[1], mins[2], 1.0),
+                        (maxs[0], maxs[1], mins[2], 1.0),
+                        (mins[0], mins[1], maxs[2], 1.0),
+                        (maxs[0], mins[1], maxs[2], 1.0),
+                        (mins[0], maxs[1], maxs[2], 1.0),
+                        (maxs[0], maxs[1], maxs[2], 1.0),
+                    ],
+                    dtype=np.float32,
+                )
+                world = (model @ corners.T).T[:, :3]
+                mins = tuple(float(v) for v in world.min(axis=0))
+                maxs = tuple(float(v) for v in world.max(axis=0))
             return not bounds_intersects_frustum((mins, maxs), frustum_planes)
         except Exception:
             return False
