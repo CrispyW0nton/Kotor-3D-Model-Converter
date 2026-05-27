@@ -1373,6 +1373,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
             raise RuntimeError(f"failed to create WGPU Qt surface: {exc}") from exc
         widget = QRenderWidget(parent)
         widget.setObjectName("WgpuViewportSurface")
+        widget.setAttribute(QtCore.Qt.WA_StyledBackground, False)
+        widget.setAutoFillBackground(False)
         widget.setFocusPolicy(QtCore.Qt.StrongFocus)
         widget.setMouseTracking(True)
         log.info("WgpuRenderer: rendercanvas QRenderWidget created")

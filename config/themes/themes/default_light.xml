@@ -1,9 +1,13 @@
-<theme id="light" name="Light" version="1">
+<theme id="default_light" name="Default Light" version="1">
     <metadata>
         <author>GhostRigger</author>
-        <description>Readable native-friendly light theme.</description>
+        <description>Default native UI geometry with the light palette.</description>
         <mode>light</mode>
     </metadata>
+    <styles>
+        <style name="application.paletteOnly" value="true"/>
+        <style name="splash.surfaceStyle" value="matte"/>
+    </styles>
     <colors>
         <color name="window.background" value="#F6F7F9"/>
         <color name="window.text" value="#1D2733"/>
@@ -94,25 +98,17 @@
         <size role="toolbar" value="18"/>
         <size role="largeToolbar" value="24"/>
     </icons>
-    <styles>
-        <style name="tab.mode" value="flat"/>
-    </styles>
     <metrics>
-        <metric name="toolbar.height" value="40"/>
+        <metric name="toolbar.height" value="34"/>
         <metric name="toolbar.iconSize" value="18"/>
-        <metric name="toolbar.spacing" value="6"/>
+        <metric name="toolbar.spacing" value="4"/>
         <metric name="button.height" value="16"/>
         <metric name="button.minWidth" value="64"/>
         <metric name="button.paddingH" value="6"/>
         <metric name="button.paddingV" value="1"/>
-        <metric name="panel.margin" value="6"/>
-        <metric name="panel.spacing" value="6"/>
-        <metric name="panel.minWidth" value="300"/>
-        <metric name="panel.preferredWidth" value="390"/>
-        <metric name="splitter.handleWidth" value="7"/>
-        <metric name="bottom.preferredHeight" value="230"/>
-        <metric name="bottom.minHeight" value="130"/>
-        <metric name="viewport.minWidth" value="540"/>
-        <metric name="border.radius" value="4"/>
+        <metric name="panel.margin" value="4"/>
+        <metric name="panel.spacing" value="4"/>
+        <metric name="splitter.handleWidth" value="6"/>
+        <metric name="tab.height" value="14"/>
     </metrics>
 </theme>

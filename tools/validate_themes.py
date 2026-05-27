@@ -52,12 +52,12 @@ def main() -> int:
             failures.extend(f"{theme.id}: {warning}" for warning in warnings)
         if missing_tokens:
             failures.append(f"{theme.id}: missing tokens {', '.join(missing_tokens)}")
-        if theme.is_native():
+        if theme.is_native() or theme.is_palette_only():
             if stylesheet != "":
-                failures.append(f"{theme.id}: native theme should not build a stylesheet")
+                failures.append(f"{theme.id}: native/palette-only theme should not build a stylesheet")
         elif "QMainWindow" not in stylesheet:
             failures.append(f"{theme.id}: stylesheet did not build")
-        if theme.id in {"light", "classic"}:
+        if theme.id in {"default_light", "default_classic"}:
             pairs = [
                 ("text.primary", "window.background"),
                 ("text.secondary", "panel.background"),

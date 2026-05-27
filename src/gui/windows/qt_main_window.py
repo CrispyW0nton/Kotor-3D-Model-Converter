@@ -1504,7 +1504,6 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._build_toolbar()
         self._build_layout()
         self.theme_manager.register_theme_aware_widget(self)
-        self.theme_manager.register_theme_aware_widget(self.viewport)
         self.theme_manager.apply_current_theme(self)
         self.layout_manager.apply_current_layout(self)
         self._build_statusbar()

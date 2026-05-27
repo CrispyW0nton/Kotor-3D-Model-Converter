@@ -600,7 +600,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self.theme_combo = QtWidgets.QComboBox()
         for theme in self.theme_manager.available_themes():
             self.theme_combo.addItem(theme.name, theme.id)
-        self.theme_combo.currentIndexChanged.connect(lambda _=0: self._load_theme(str(self.theme_combo.currentData() or "matrix")))
+        self.theme_combo.currentIndexChanged.connect(lambda _=0: self._load_theme(str(self.theme_combo.currentData() or "default")))
         self.theme_name = QtWidgets.QLineEdit()
         self.theme_id = QtWidgets.QLineEdit()
         self.theme_version = QtWidgets.QLineEdit()

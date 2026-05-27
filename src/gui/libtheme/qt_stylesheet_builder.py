@@ -21,7 +21,7 @@ class QtStylesheetBuilder:
         return (0.2126 * r + 0.7152 * g + 0.0722 * b) >= 128
 
     def build(self, theme: Theme) -> str:
-        if theme.is_native():
+        if theme.is_native() or theme.is_palette_only():
             return ""
         c = theme.color
         m = theme.metric
@@ -57,6 +57,10 @@ class QtStylesheetBuilder:
             color: {c('window.text', c('text.primary'))};
             font-family: {default_font.family}, Segoe UI, sans-serif;
             font-size: {default_font.size}pt;
+        }}
+        QWidget#WgpuViewportSurface {{
+            background: transparent;
+            border: 0;
         }}
         QMenuBar, QMenu, QToolBar, QStatusBar {{
             background: {c('toolbar.background')};

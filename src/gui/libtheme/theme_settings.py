@@ -9,9 +9,9 @@ from pathlib import Path
 @dataclass(slots=True)
 class ThemeLayoutSettings:
     theme_mode: str = "manual"
-    selected_theme: str = "matrix"
-    os_light_theme: str = "light"
-    os_dark_theme: str = "dark"
+    selected_theme: str = "default"
+    os_light_theme: str = "default_light"
+    os_dark_theme: str = "default_dark"
     selected_layout: str = "default"
     button_mode_override: str = ""
     icon_size_override: int = 0
@@ -30,9 +30,9 @@ class ThemeLayoutSettings:
         raw = dict(settings.get("theme_layout") or settings)
         return cls(
             theme_mode=str(raw.get("theme_mode") or "manual"),
-            selected_theme=str(raw.get("selected_theme") or "matrix"),
-            os_light_theme=str(raw.get("os_light_theme") or "light"),
-            os_dark_theme=str(raw.get("os_dark_theme") or "dark"),
+            selected_theme=str(raw.get("selected_theme") or "default"),
+            os_light_theme=str(raw.get("os_light_theme") or "default_light"),
+            os_dark_theme=str(raw.get("os_dark_theme") or "default_dark"),
             selected_layout=str(raw.get("selected_layout") or "default"),
             button_mode_override=str(raw.get("button_mode_override") or ""),
             icon_size_override=int(raw.get("icon_size_override") or 0),

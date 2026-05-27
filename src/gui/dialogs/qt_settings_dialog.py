@@ -560,11 +560,11 @@ class QtSettingsDialog(QtWidgets.QDialog):
         self.setUpdatesEnabled(False)
         try:
             if self.theme_mode_combo.currentData() == "follow_os":
-                self.theme_manager.settings.os_light_theme = str(self.light_theme_combo.currentData() or "light")
-                self.theme_manager.settings.os_dark_theme = str(self.dark_theme_combo.currentData() or "dark")
+                self.theme_manager.settings.os_light_theme = str(self.light_theme_combo.currentData() or "default_light")
+                self.theme_manager.settings.os_dark_theme = str(self.dark_theme_combo.currentData() or "default_dark")
                 self.theme_manager.set_follow_os(True, target=self)
             else:
-                self.theme_manager.select_theme(str(self.theme_combo.currentData() or "matrix"), target=self)
+                self.theme_manager.select_theme(str(self.theme_combo.currentData() or "default"), target=self)
             values = self.values()
             self.theme_layout_settings = ThemeLayoutSettings.from_settings(values)
             self.settingsSaved.emit(values)

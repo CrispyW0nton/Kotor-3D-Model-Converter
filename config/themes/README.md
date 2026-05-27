@@ -7,15 +7,20 @@ readable by modders.
 Built-in themes are:
 
 - `default.xml`: platform/native Qt styling; no generated GhostRigger QSS.
-- `matrix.xml`: high-contrast GhostRigger Matrix green.
-- `droid.xml`: dark graphite droid console, grey controls, Matrix-green accents.
-- `dark.xml`: quieter professional dark UI.
-- `light.xml`: modern light UI.
-- `classic.xml`: traditional light DCC/tool UI.
+- `default_matrix.xml`: Default/native widget geometry with Matrix colours.
+- `default_droid.xml`: Default/native widget geometry with Droid colours.
+- `default_dark.xml`: Default/native widget geometry with Dark colours.
+- `default_light.xml`: Default/native widget geometry with Light colours.
+- `default_classic.xml`: Default/native widget geometry with Classic colours.
 
 The Default/native theme uses neutral native-style colour tokens, not Matrix
 fallback colours. `ThemeLoader` also repairs stale Matrix fallback values when
 older user overrides of a native theme are loaded.
+The `default_*` themes are palette-only variants: they keep the same native
+widget structure and layout behaviour as Default, skip generated QSS, and apply
+theme colours through the Qt palette plus GhostRigger's custom widget hooks.
+Use these as the stable packaged colour themes. The older Matrix/Droid/Dark/
+Light/Classic generated-QSS packaged themes have been removed.
 
 Themes define colours, fonts, icon provider defaults, Matrix bar style, and visual tokens.
 Layouts define window size, panel widths, splitter proportions, toolbar

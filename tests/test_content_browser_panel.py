@@ -733,12 +733,12 @@ def test_startup_splash_registers_with_theme_manager() -> None:
 
     manager = ThemeManager(
         _REPO_ROOT,
-        {"theme_layout": {"theme_mode": "manual", "selected_theme": "matrix"}},
+        {"theme_layout": {"theme_mode": "manual", "selected_theme": "default_matrix"}},
     )
     splash = QtStartupSplash(_REPO_ROOT, theme_manager=manager)
     matrix_style = splash.styleSheet()
 
-    manager.themeChanged.emit(manager.get_theme("light"))
+    manager.themeChanged.emit(manager.get_theme("default_light"))
     for _ in range(8):
         QtWidgets.QApplication.processEvents()
     light_style = splash.styleSheet()

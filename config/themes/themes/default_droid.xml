@@ -1,10 +1,14 @@
-<theme id="droid" name="Droid" version="1" highContrast="true">
+<theme id="default_droid" name="Default Droid" version="1" highContrast="true">
     <metadata>
         <author>GhostRigger</author>
-        <description>Dark industrial droid console theme inspired by the pre-apply startup palette.</description>
+        <description>Default native UI geometry with Droid console colors.</description>
         <mode>dark</mode>
         <highContrast>true</highContrast>
     </metadata>
+    <styles>
+        <style name="application.paletteOnly" value="true"/>
+        <style name="splash.surfaceStyle" value="matte"/>
+    </styles>
     <colors>
         <color name="window.background" value="#1D1D1D"/>
         <color name="window.text" value="#F4F4F4"/>
@@ -84,12 +88,9 @@
         <color name="info" value="#00D7B5"/>
     </colors>
     <fonts>
-        <font role="default" family="Consolas" size="9"/>
+        <font role="default" family="Segoe UI" size="9"/>
         <font role="monospace" family="Consolas" size="9"/>
         <font role="heading" family="Segoe UI" size="10" weight="bold"/>
-        <font role="small" family="Consolas" size="8"/>
-        <font role="viewport" family="Consolas" size="9"/>
-        <font role="terminal" family="Consolas" size="9"/>
         <font role="matrix" family="Aurebesh AF" size="9"/>
     </fonts>
     <icons>
@@ -98,38 +99,17 @@
         <size role="toolbar" value="18"/>
         <size role="largeToolbar" value="24"/>
     </icons>
-    <styles>
-        <style name="tab.mode" value="beveled"/>
-    </styles>
     <metrics>
-        <metric name="toolbar.height" value="38"/>
+        <metric name="toolbar.height" value="34"/>
         <metric name="toolbar.iconSize" value="18"/>
-        <metric name="toolbar.spacing" value="5"/>
+        <metric name="toolbar.spacing" value="4"/>
         <metric name="button.height" value="16"/>
         <metric name="button.minWidth" value="64"/>
         <metric name="button.paddingH" value="6"/>
         <metric name="button.paddingV" value="1"/>
-        <metric name="button.paddingX" value="6"/>
-        <metric name="button.paddingY" value="1"/>
-        <metric name="input.height" value="22"/>
-        <metric name="combo.height" value="22"/>
-        <metric name="spinbox.height" value="22"/>
         <metric name="panel.margin" value="4"/>
         <metric name="panel.spacing" value="4"/>
-        <metric name="panel.minWidth" value="280"/>
-        <metric name="panel.preferredWidth" value="380"/>
-        <metric name="splitter.handleWidth" value="8"/>
-        <metric name="bottom.preferredHeight" value="220"/>
-        <metric name="bottom.minHeight" value="120"/>
-        <metric name="viewport.minWidth" value="500"/>
-        <metric name="table.rowHeight" value="22"/>
-        <metric name="tree.rowHeight" value="22"/>
+        <metric name="splitter.handleWidth" value="6"/>
         <metric name="tab.height" value="14"/>
-        <metric name="tab.width" value="96"/>
-        <metric name="tab.paddingX" value="6"/>
-        <metric name="tab.paddingY" value="1"/>
-        <metric name="tab.marginX" value="0"/>
-        <metric name="tab.marginY" value="0"/>
-        <metric name="border.radius" value="3"/>
     </metrics>
 </theme>

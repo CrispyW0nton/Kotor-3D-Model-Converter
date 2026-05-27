@@ -271,6 +271,7 @@ def test_viewport_hud_state_changes_dirty_overlay_immediately() -> None:
     render_mode_source = inspect.getsource(QtViewportWidget.set_render_mode)
     texture_source = inspect.getsource(QtViewportWidget.toggle_texture)
     animation_source = inspect.getsource(QtViewportWidget.set_animation_pose)
+    event_filter_source = inspect.getsource(QtViewportWidget.eventFilter)
     skip_source = inspect.getsource(QtViewportWidget._can_skip_live_overlay_rebuild)
 
     assert "hud" in ViewportFrameGovernor.DIRTY_FLAGS
@@ -279,6 +280,7 @@ def test_viewport_hud_state_changes_dirty_overlay_immediately() -> None:
     assert "hud=True" in render_mode_source
     assert "hud=True" in texture_source
     assert "hud=True" in animation_source
+    assert 'reason="viewport resized", overlay=True, hud=True' in event_filter_source
     assert '"hud"' in skip_source
 
 

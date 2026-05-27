@@ -55,7 +55,7 @@ class ThemeManager(QtCore.QObject):
         self.themes = themes
         self.diagnostics = diagnostics
         if not self.themes:
-            fallback = self.loader.load_file(self.packaged_theme_dir / "matrix.xml")
+            fallback = self.loader.load_file(self.packaged_theme_dir / "default.xml")
             if fallback is not None:
                 self.themes[fallback.id] = fallback
 
@@ -71,7 +71,12 @@ class ThemeManager(QtCore.QObject):
 
     def get_theme(self, theme_id: str | None = None) -> Theme:
         requested = theme_id or self.resolve_theme_id()
-        return self.themes.get(requested) or self.themes.get("matrix") or next(iter(self.themes.values()))
+        return (
+            self.themes.get(requested)
+            or self.themes.get("default")
+            or self.themes.get("default_matrix")
+            or next(iter(self.themes.values()))
+        )
 
     def apply_current_theme(self, target: QtWidgets.QWidget | None = None) -> Theme:
         theme = self.get_theme()
@@ -82,7 +87,7 @@ class ThemeManager(QtCore.QObject):
 
     def select_theme(self, theme_id: str, *, apply: bool = True, target: QtWidgets.QWidget | None = None) -> Theme:
         self.settings.theme_mode = "manual"
-        self.settings.selected_theme = theme_id if theme_id in self.themes else "matrix"
+        self.settings.selected_theme = theme_id if theme_id in self.themes else "default"
         theme = self.get_theme(self.settings.selected_theme)
         if apply:
             if self.current_theme is not None and self.current_theme.id == theme.id and self.current_theme.version == theme.version:

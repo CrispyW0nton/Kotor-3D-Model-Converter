@@ -1342,13 +1342,19 @@ class QtViewportWidget(QtWidgets.QWidget):
         if not backend_id:
             backend_id = str(getattr(self._gpu_renderer, "backend_id", "") or "")
         live_surface = self._renderer_uses_live_surface(backend_id)
+        current_surface = self.canvas.current_surface()
         if (
-            not force
-            and self.canvas.current_surface() is not None
+            current_surface is not None
             and self.canvas.surface_backend_id() == backend_id
             and self.canvas.is_live_surface() == live_surface
         ):
-            return
+            active_renderer = getattr(self._gpu_renderer, "active_renderer", None) or self._gpu_renderer
+            renderer_surface = getattr(active_renderer, "canvas", None) if live_surface else current_surface
+            if not live_surface or renderer_surface is current_surface:
+                self.canvas.install_input_bridge(self)
+                return
+            if not force:
+                return
         if live_surface:
             create_surface = getattr(self._gpu_renderer, "create_surface_widget", None)
             if callable(create_surface):
@@ -1358,10 +1364,12 @@ class QtViewportWidget(QtWidgets.QWidget):
                     live_surface = self._renderer_uses_live_surface(backend_id)
                     self.canvas.set_renderer_surface(surface, backend_id=backend_id, live_surface=live_surface)
                     self.canvas.install_input_bridge(self)
+                    self._apply_canvas_theme()
                     return
                 except Exception as exc:
                     log.info("WGPU surface creation failed, falling back through renderer factory: %s", exc)
         self._install_label_renderer_surface(backend_id or "modern_gl")
+        self._apply_canvas_theme()
 
     def take_viewport_toolbar(self) -> QtWidgets.QWidget | None:
         """Detach the viewport tool strip so the application shell can host it."""
@@ -1478,6 +1486,21 @@ class QtViewportWidget(QtWidgets.QWidget):
         button.setToolTip(tooltip or text)
         return button
 
+    def _apply_canvas_theme(self) -> None:
+        theme = getattr(self, "_current_theme", None)
+        if theme is None or not hasattr(self, "canvas"):
+            return
+        if self.canvas.is_live_surface():
+            self.canvas.setAttribute(QtCore.Qt.WA_StyledBackground, False)
+            self.canvas.setStyleSheet("background: transparent; border: 0;")
+            return
+        self.canvas.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.canvas.setStyleSheet(
+            f"background:{theme.color('viewport.background')}; "
+            f"color:{theme.color('viewport.text')}; "
+            f"border:1px solid {theme.color('viewport.border')};"
+        )
+
     def apply_ghost_theme(self, theme) -> None:
         self._current_theme = theme
         toolbar = self.findChild(QtWidgets.QFrame, "ViewportToolbar")
@@ -1511,11 +1534,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         for sep in self.findChildren(QtWidgets.QFrame):
             if sep.frameShape() == QtWidgets.QFrame.VLine:
                 sep.setStyleSheet(f"background:{theme.color('panel.border')};")
-        self.canvas.setStyleSheet(
-            f"background:{theme.color('viewport.background')}; "
-            f"color:{theme.color('viewport.text')}; "
-            f"border:1px solid {theme.color('viewport.border')};"
-        )
+        self._apply_canvas_theme()
         if hasattr(self._renderer, "set_theme_colors"):
             self._renderer.set_theme_colors(theme)
         if self._gpu_renderer is not None and hasattr(self._gpu_renderer, "set_theme_colors"):
@@ -2062,10 +2081,11 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._emit_render_state_changed()
 
     def set_renderer_settings(self, settings: RendererSettings | dict | None) -> None:
+        old_settings = getattr(self, "_renderer_settings", None)
         if isinstance(settings, RendererSettings):
-            self._renderer_settings = settings
+            new_settings = settings
         elif all(hasattr(settings, attr) for attr in ("backend", "preferred_windows_backend", "allow_fallback", "show_renderer_diagnostics", "force_safe_mode")):
-            self._renderer_settings = RendererSettings(
+            new_settings = RendererSettings(
                 backend=self._normalized_renderer_backend(getattr(settings, "backend", None)),
                 preferred_windows_backend=self._normalized_renderer_backend(getattr(settings, "preferred_windows_backend", None)),
                 allow_fallback=bool(getattr(settings, "allow_fallback", True)),
@@ -2078,11 +2098,13 @@ class QtViewportWidget(QtWidgets.QWidget):
                 overlay_dirty_rendering=bool(getattr(settings, "overlay_dirty_rendering", True)),
             )
         else:
-            self._renderer_settings = RendererSettings.from_settings(settings or {})
+            new_settings = RendererSettings.from_settings(settings or {})
+        settings_changed = old_settings != new_settings
+        self._renderer_settings = new_settings
         if hasattr(self, "_frame_governor"):
             self._frame_governor.set_target_fps(self._renderer_settings.target_fps)
             self._frame_governor.set_idle_mode(self._renderer_settings.idle_render_mode)
-        if self._gpu_renderer is not None and self._owns_gpu_renderer:
+        if settings_changed and self._gpu_renderer is not None and self._owns_gpu_renderer:
             apply_settings = getattr(self._gpu_renderer, "set_settings", None)
             if callable(apply_settings):
                 apply_settings(self._renderer_settings)
@@ -2091,7 +2113,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 if callable(shutdown):
                     shutdown()
                 self._gpu_renderer = None
-        if self._gpu_renderer is not None:
+        if settings_changed and self._gpu_renderer is not None:
             self._sync_renderer_surface(force=True)
         self._emit_render_state_changed()
         self._request_render(fast=True)
@@ -4376,7 +4398,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 size = (event.size().width(), event.size().height())
                 if size != self._last_canvas_size:
                     self._last_canvas_size = size
-                    self._request_render()
+                    self._request_render(fast=True, reason="viewport resized", overlay=True, hud=True)
                 # Keep the ViewCube pinned to the viewport overlay corner.
                 self._reposition_viewcube()
                 # Keep the mini-thumbnail nearby without covering the cube.
