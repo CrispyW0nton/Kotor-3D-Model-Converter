@@ -40,6 +40,7 @@ from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel
 from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
 from src.gui.qt_lib.panels.qt_camera_panel import QtCameraPanel
 from src.gui.qt_lib.panels.qt_mesh_tools_panel import QtMeshToolsPanel
+from src.gui.qt_lib.panels.qt_sprite_material_panel import QtSpriteMaterialPanel
 from src.gui.qt_lib.panels.adjust_pivot_panel import AdjustPivotPanel
 from src.gui.qt_lib.assets.qt_theme import (
     make_scrollable_panel,
@@ -2090,6 +2091,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             "module_meshes",
             lambda: self._show_workspace_dock("module_meshes"),
         )
+        self.sprite_materials_panel_action = QtGui.QAction(self._icon("sprite_materials"), "Open Sprite Materials", self)
+        self._configure_dock_toggle_action(
+            self.sprite_materials_panel_action,
+            "sprite_materials",
+            lambda: self._show_workspace_dock("sprite_materials"),
+        )
         self.adjust_pivot_panel_action = QtGui.QAction(self._icon("viewport_gimbal"), "Open Adjust Pivot", self)
         self._configure_dock_toggle_action(
             self.adjust_pivot_panel_action,
@@ -2225,6 +2232,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         modules_menu.addAction(self.lighting_panel_action)
         modules_menu.addAction(self.camera_panel_action)
         modules_menu.addAction(self.module_meshes_panel_action)
+        modules_menu.addAction(self.sprite_materials_panel_action)
         modules_menu.addAction(self.adjust_pivot_panel_action)
         modules_menu.addAction(self.twoda_panel_action)
         modules_menu.addAction(self.resources_panel_action)
@@ -2411,6 +2419,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._tool_button("Lighting", self.lighting_panel_action, "lights", compact=True))
         layout.addWidget(self._tool_button("Cameras", self.camera_panel_action, "cameras", compact=True))
         layout.addWidget(self._tool_button("Module Meshes", self.module_meshes_panel_action, "module_meshes", compact=True))
+        layout.addWidget(self._tool_button("Sprite Materials", self.sprite_materials_panel_action, "sprite_materials", compact=True))
         layout.addWidget(self._tool_button("Adjust Pivot", self.adjust_pivot_panel_action, "viewport_gimbal", compact=True))
         layout.addWidget(self._tool_button("2DA Browser", self.twoda_panel_action, "twoda", compact=True))
         layout.addWidget(self._tool_button("Resource Browser", self.resources_panel_action, "resources", compact=True))
@@ -3090,6 +3099,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             "lighting": "lighting",
             "cameras": "cameras",
             "module_meshes": "moduleMeshes",
+            "sprite_materials": "spriteMaterials",
             "mesh_tools": "meshTools",
             "adjust_pivot": "adjustPivot",
             "2das": "2das",
@@ -3246,6 +3256,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
         self.scene_outliner_panel = QtSceneOutlinerPanel(self)
         self.scene_outliner_panel.objectSelected.connect(self._select_scene_object)
+        self.scene_outliner_panel.helperNodeSelected.connect(self._on_scene_outliner_helper_node_selected)
+        self.scene_outliner_panel.lightNodeSelected.connect(self._on_scene_outliner_light_node_selected)
         self.scene_outliner_panel.objectDeleteRequested.connect(self._delete_scene_object)
         self.scene_outliner_panel.objectDuplicateRequested.connect(self._duplicate_scene_object)
         self.scene_outliner_panel.objectFocusRequested.connect(self._focus_scene_object)
@@ -3255,6 +3267,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.skeleton_panel = QtSkeletonPanel(self)
         self.lighting_panel = QtLightingPanel(self)
         self.camera_panel = QtCameraPanel(self)
+        self.sprite_materials_panel = QtSpriteMaterialPanel(self)
         self.properties_panel = QtPropertiesPanel(self, module_browser_enabled=False)
         self.module_geometry_panel = QtPropertiesPanel(self)
         self.module_geometry_panel.set_module_browser_only(True)
@@ -3337,6 +3350,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             "lighting": (420, 620),
             "cameras": (460, 680),
             "module_meshes": (620, 720),
+            "sprite_materials": (560, 680),
             "mesh_tools": (420, 760),
             "adjust_pivot": (320, 420),
             "2das": (980, 640),
@@ -3376,6 +3390,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._create_detachable_panel("lighting", "Lighting", self.lighting_panel, QtCore.Qt.RightDockWidgetArea)
         self._create_detachable_panel("cameras", "Cameras", self.camera_panel, QtCore.Qt.RightDockWidgetArea)
         self._create_detachable_panel("module_meshes", "Module Meshes", self.module_geometry_panel, QtCore.Qt.RightDockWidgetArea)
+        self._create_detachable_panel("sprite_materials", "Sprite Materials", self.sprite_materials_panel, QtCore.Qt.RightDockWidgetArea)
         self.mesh_tools_dock = self._create_detachable_panel("mesh_tools", "Mesh Tools", self.mesh_tools_panel, QtCore.Qt.RightDockWidgetArea)
         self.adjust_pivot_dock = self._create_detachable_panel("adjust_pivot", "Adjust Pivot", self.adjust_pivot_panel, QtCore.Qt.RightDockWidgetArea)
         self._create_detachable_panel("2das", "2DA Browser", self.twoda_panel, QtCore.Qt.LeftDockWidgetArea)
@@ -3453,6 +3468,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.lighting_panel.lightSelected.connect(lambda node: self.viewport.set_selected_node(node, source="lighting panel"))
         self.lighting_panel.lightmapBakeRequested.connect(self._open_lightmap_baker)
         self.viewport.nodeSelected.connect(self.lighting_panel.select_light)
+        self.sprite_materials_panel.spriteSelected.connect(self._on_sprite_material_selected)
+        self.sprite_materials_panel.spriteRenderChanged.connect(self._on_sprite_materials_changed)
         self._sync_lighting_helper_visibility_to_viewport()
         self.camera_panel.cameraSelected.connect(lambda node: self.viewport.set_selected_node(node, source="camera panel"))
         self.camera_panel.cameraChanged.connect(self._on_camera_panel_changed)
@@ -4200,6 +4217,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
     def _refresh_scene_view(self) -> None:
         scene = self.scene_manager.active_scene
+        for obj in getattr(scene, "objects", []) or []:
+            model = (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
+            if model is not None:
+                self._apply_sprite_material_overrides(model)
         if hasattr(self, "viewport"):
             self._configure_viewport_resources()
             self.viewport.load_scene_instances(
@@ -4217,6 +4238,137 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         viewport = getattr(self, "viewport", None)
         model = getattr(viewport, "model", None) if viewport is not None else None
         return model or getattr(self, "_current_model", None)
+
+    def _sprite_persistence_path(self) -> Path:
+        return self.app_root / "config" / "sprite_material_overrides.json"
+
+    def _load_sprite_material_overrides(self) -> dict:
+        cached = getattr(self, "_sprite_material_overrides", None)
+        if isinstance(cached, dict):
+            return cached
+        path = self._sprite_persistence_path()
+        try:
+            data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        except Exception:
+            log.warning("Could not read sprite material override file: %s", path, exc_info=True)
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        data.setdefault("version", 1)
+        data.setdefault("models", {})
+        self._sprite_material_overrides = data
+        return data
+
+    def _save_sprite_material_overrides(self) -> None:
+        data = self._load_sprite_material_overrides()
+        path = self._sprite_persistence_path()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        except Exception:
+            log.warning("Could not save sprite material override file: %s", path, exc_info=True)
+
+    def _sprite_model_key(self, model=None) -> str:
+        model = model or self._active_viewport_model()
+        game = str(getattr(self, "_current_game", "") or self._infer_game_from_model(model) or "").upper()
+        name = str(getattr(model, "name", "") or getattr(model, "resref", "") or getattr(model, "resource_name", "") or "").strip()
+        path = str(getattr(self, "_model_path", "") or "").strip()
+        if ":" in path and not name:
+            name = path.split(":", 1)[-1]
+        return f"{game}:{name or path or 'model'}".lower()
+
+    @staticmethod
+    def _sprite_node_key(node) -> str:
+        texture = str(getattr(node, "texture", "") or "")
+        if not texture:
+            names = getattr(node, "texture_names", None) or []
+            texture = str(names[0]) if names else ""
+        return f"{getattr(node, 'name', '')}|{texture}".lower()
+
+    @staticmethod
+    def _sprite_material_payload(node) -> dict:
+        return {
+            "mesh": str(getattr(node, "name", "") or ""),
+            "texture": str(getattr(node, "texture", "") or ""),
+            "category": str(getattr(node, "_gr_sprite_category", "") or ""),
+            "hidden": bool(getattr(node, "_gr_hidden", False)),
+            "txi_blending": int(getattr(node, "txi_blending", 0) or 0),
+            "txi_alpha_test": float(getattr(node, "txi_alpha_test", 0.0) or 0.0),
+            "txi_wateralpha": float(getattr(node, "txi_wateralpha", 1.0) or 1.0),
+            "txi_decal": bool(getattr(node, "txi_decal", False)),
+            "transparency_hint": int(getattr(node, "transparency_hint", 0) or 0),
+            "alpha": float(getattr(node, "alpha", 1.0) or 1.0),
+            "sprite_alpha_source": str(getattr(node, "_gr_sprite_alpha_source", "") or ""),
+            "sprite_glow": float(getattr(node, "_gr_sprite_glow", 0.0) or 0.0),
+        }
+
+    @staticmethod
+    def _sprite_node_has_explicit_override(node) -> bool:
+        if bool(getattr(node, "_gr_hidden", False)):
+            return True
+        if str(getattr(node, "_gr_sprite_category", "") or ""):
+            return True
+        if str(getattr(node, "_gr_sprite_alpha_source", "") or ""):
+            return True
+        try:
+            if abs(float(getattr(node, "_gr_sprite_glow", 0.0) or 0.0)) > 0.001:
+                return True
+        except Exception:
+            pass
+        original = getattr(node, "_gr_sprite_original_material", None)
+        if isinstance(original, dict):
+            for attr in ("txi_blending", "txi_alpha_test", "txi_wateralpha", "txi_decal", "transparency_hint", "alpha"):
+                if getattr(node, attr, None) != original.get(attr):
+                    return True
+        return False
+
+    def _iter_sprite_mesh_nodes(self, model) -> list:
+        if model is None:
+            return []
+        sources = []
+        if hasattr(model, "mesh_nodes"):
+            sources.append(model.mesh_nodes() or [])
+        if hasattr(model, "all_nodes"):
+            sources.append(model.all_nodes() or [])
+        sources.append(getattr(model, "_gr_extra_module_mesh_nodes", []) or [])
+        result = []
+        seen: set[int] = set()
+        for source in sources:
+            for node in source:
+                if node is None or id(node) in seen or not getattr(node, "is_mesh", False):
+                    continue
+                seen.add(id(node))
+                result.append(node)
+        return result
+
+    def _apply_sprite_material_overrides(self, model) -> int:
+        data = self._load_sprite_material_overrides()
+        model_overrides = (data.get("models") or {}).get(self._sprite_model_key(model), {})
+        if not isinstance(model_overrides, dict):
+            return 0
+        applied = 0
+        for node in self._iter_sprite_mesh_nodes(model):
+            payload = model_overrides.get(self._sprite_node_key(node))
+            if not isinstance(payload, dict):
+                continue
+            if not hasattr(node, "_gr_sprite_original_material"):
+                setattr(node, "_gr_sprite_original_material", {
+                    name: getattr(node, name, None)
+                    for name in ("txi_blending", "txi_alpha_test", "txi_wateralpha", "txi_decal", "transparency_hint", "alpha", "_gr_sprite_alpha_source", "_gr_sprite_glow")
+                })
+            setattr(node, "_gr_sprite_category", str(payload.get("category") or ""))
+            setattr(node, "_gr_hidden", bool(payload.get("hidden", False)))
+            setattr(node, "txi_blending", int(payload.get("txi_blending", getattr(node, "txi_blending", 0)) or 0))
+            setattr(node, "txi_alpha_test", float(payload.get("txi_alpha_test", getattr(node, "txi_alpha_test", 0.0)) or 0.0))
+            setattr(node, "txi_wateralpha", float(payload.get("txi_wateralpha", getattr(node, "txi_wateralpha", 1.0)) or 1.0))
+            setattr(node, "txi_decal", bool(payload.get("txi_decal", getattr(node, "txi_decal", False))))
+            setattr(node, "transparency_hint", int(payload.get("transparency_hint", getattr(node, "transparency_hint", 0)) or 0))
+            setattr(node, "alpha", float(payload.get("alpha", getattr(node, "alpha", 1.0)) or 1.0))
+            setattr(node, "_gr_sprite_alpha_source", str(payload.get("sprite_alpha_source") or ""))
+            setattr(node, "_gr_sprite_glow", float(payload.get("sprite_glow", 0.0) or 0.0))
+            setattr(node, "_gr_revision", int(getattr(node, "_gr_revision", 0) or 0) + 1)
+            applied += 1
+        return applied
 
     def _sync_lighting_helper_visibility_to_viewport(self) -> None:
         panel = getattr(self, "lighting_panel", None)
@@ -4364,17 +4516,40 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             log.debug("Could not sync scene object root into skeleton panel", exc_info=True)
 
     def _on_skeleton_node_selected(self, node) -> None:
-        obj = self._scene_object_for_runtime_node(node)
-        if obj is not None and node is getattr(self._runtime_model_for_scene_object(obj), "root_node", None):
-            if not getattr(self, "_syncing_scene_skeleton_selection", False):
-                self._syncing_scene_skeleton_selection = True
-                try:
-                    self._select_scene_object_impl(obj.id)
-                finally:
-                    self._syncing_scene_skeleton_selection = False
-            return
         if hasattr(self, "viewport"):
-            self.viewport.set_selected_node(node)
+            self.viewport.set_selected_node(node, source="nodes panel")
+
+    def _on_scene_outliner_helper_node_selected(self, node) -> None:
+        if node is None:
+            return
+        obj = self._scene_object_for_runtime_node(node)
+        if obj is not None:
+            self._activate_scene_object_model(obj)
+        if hasattr(self, "viewport"):
+            self.viewport.set_selected_node(node, source="scene outliner helper")
+        if hasattr(self, "properties_panel"):
+            self.properties_panel.show_node(node)
+        if hasattr(self, "skeleton_panel") and obj is not None:
+            model = self._runtime_model_for_scene_object(obj)
+            try:
+                if model is not None and getattr(self.skeleton_panel, "_current_model", None) is not model:
+                    self.skeleton_panel.load_model(model)
+                self.skeleton_panel.select_node(node, emit=False)
+            except Exception:
+                log.debug("Could not sync scene outliner helper into skeleton panel", exc_info=True)
+
+    def _on_scene_outliner_light_node_selected(self, node) -> None:
+        if node is None:
+            return
+        obj = self._scene_object_for_runtime_node(node)
+        if obj is not None:
+            self._activate_scene_object_model(obj)
+        if hasattr(self, "viewport"):
+            self.viewport.set_selected_node(node, source="scene outliner light")
+        if hasattr(self, "lighting_panel"):
+            self.lighting_panel.select_light(node)
+        if hasattr(self, "properties_panel"):
+            self.properties_panel.show_node(node)
 
     def _delete_scene_object(self, object_id: str) -> None:
         self.scene_manager.remove_object(object_id)
@@ -4658,6 +4833,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self.properties_panel.show_model(None)
             if hasattr(self, "module_geometry_panel"):
                 self.module_geometry_panel.show_model(None)
+            if hasattr(self, "sprite_materials_panel"):
+                self.sprite_materials_panel.set_model(None)
             if hasattr(self, "animations_panel"):
                 self.animations_panel.load_model(None)
             if hasattr(self, "animation_retarget_panel"):
@@ -4834,6 +5011,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.properties_panel.show_model(model)
         if hasattr(self, "module_geometry_panel"):
             self.module_geometry_panel.show_model(self._active_viewport_model())
+        if hasattr(self, "sprite_materials_panel"):
+            self.sprite_materials_panel.set_model(self._active_viewport_model())
         if hasattr(self, "animations_panel"):
             self._load_animation_panel_model(model)
         if hasattr(self, "animation_retarget_panel"):
@@ -8226,6 +8405,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.properties_panel.show_model(model)
         if hasattr(self, "module_geometry_panel"):
             self.module_geometry_panel.show_model(self._active_viewport_model())
+        if hasattr(self, "sprite_materials_panel"):
+            self.sprite_materials_panel.set_model(self._active_viewport_model())
         if hasattr(self, "animations_panel"):
             self._load_animation_panel_model(model)
         if hasattr(self, "animation_retarget_panel"):
@@ -8453,6 +8634,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.viewport._request_render()
             if hasattr(self, "module_geometry_panel"):
                 self.module_geometry_panel.show_model(self._active_viewport_model())
+            if hasattr(self, "sprite_materials_panel"):
+                self.sprite_materials_panel.set_model(self._active_viewport_model())
             self._log(f"Walkmesh loaded: {label}", "success")
             return True
         except Exception as exc:
@@ -8468,6 +8651,50 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self.viewport.set_selected_meshes(selected, source="module mesh panel")
             except TypeError:
                 self.viewport.set_selected_meshes(selected)
+
+    def _on_sprite_material_selected(self, node) -> None:
+        if node is None or bool(getattr(node, "_gr_hidden", False)):
+            return
+        if hasattr(self, "viewport"):
+            self.viewport.set_selected_node(node, source="sprite materials panel")
+        if hasattr(self, "module_geometry_panel"):
+            self.module_geometry_panel.select_module_meshes([node])
+        if hasattr(self, "properties_panel"):
+            self.properties_panel.show_node(node)
+
+    def _on_sprite_materials_changed(self, nodes: list) -> None:
+        changed = [node for node in (nodes or []) if node is not None]
+        if changed:
+            data = self._load_sprite_material_overrides()
+            model_key = self._sprite_model_key()
+            models = data.setdefault("models", {})
+            model_overrides = models.setdefault(model_key, {})
+            for node in changed:
+                node_key = self._sprite_node_key(node)
+                if self._sprite_node_has_explicit_override(node):
+                    model_overrides[node_key] = self._sprite_material_payload(node)
+                else:
+                    model_overrides.pop(node_key, None)
+            if not model_overrides:
+                models.pop(model_key, None)
+            self._save_sprite_material_overrides()
+        if hasattr(self, "viewport"):
+            renderer = getattr(self.viewport, "_renderer", None)
+            if renderer is not None and hasattr(renderer, "invalidate_node_cache"):
+                renderer.invalidate_node_cache()
+            gpu_renderer = getattr(self.viewport, "_gpu_renderer", None)
+            if gpu_renderer is not None:
+                for node in changed:
+                    invalidate_node = getattr(gpu_renderer, "invalidate_node", None)
+                    if callable(invalidate_node):
+                        invalidate_node(node)
+                invalidate_cache = getattr(gpu_renderer, "invalidate_node_cache", None)
+                if callable(invalidate_cache):
+                    invalidate_cache()
+            self.viewport.refresh_view()
+        if hasattr(self, "module_geometry_panel"):
+            self.module_geometry_panel.refresh_module_mesh_rows()
+        self._invalidate_renderer_resources("sprite material render settings changed")
 
     def _sync_walkmesh_overlay_visibility(self) -> None:
         renderer = getattr(getattr(self, "viewport", None), "_renderer", None)

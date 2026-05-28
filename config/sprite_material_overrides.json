@@ -1,0 +1,37 @@
+{
+  "models": {
+    "k1:untitled scene": {
+      "rfoot_g|null": {
+        "alpha": 1.0,
+        "category": "",
+        "hidden": false,
+        "mesh": "rfoot_g",
+        "sprite_alpha_source": "",
+        "sprite_glow": 0.0,
+        "texture": "null",
+        "transparency_hint": 1,
+        "txi_alpha_test": 0.5,
+        "txi_blending": 2,
+        "txi_decal": false,
+        "txi_wateralpha": 1.0
+      }
+    },
+    "k2:untitled scene": {
+      "lghtsbr09|w_shortsbr_001": {
+        "alpha": 1.0,
+        "category": "sprite",
+        "hidden": false,
+        "mesh": "LghtSbr09",
+        "sprite_alpha_source": "",
+        "sprite_glow": 0.0,
+        "texture": "w_shortsbr_001",
+        "transparency_hint": 0,
+        "txi_alpha_test": 0.5,
+        "txi_blending": 0,
+        "txi_decal": false,
+        "txi_wateralpha": 1.0
+      }
+    }
+  },
+  "version": 1
+}

@@ -200,6 +200,9 @@ def test_packaged_layouts_load_and_affect_metrics() -> None:
     assert layouts["profile_clean"].panel("pythonTerminal").visible is True
     assert layouts["profile_clean"].panel("outputLog").preferred_height < layouts["default"].panel("outputLog").preferred_height
     assert layouts["profile_mesh_editing"].panel("nodes").visible is False
+    assert layouts["default"].panel("spriteMaterials").visible is False
+    assert layouts["profile_mesh_editing"].panel("spriteMaterials").visible is True
+    assert layouts["profile_cinegraphics"].panel("spriteMaterials").visible is True
 
 
 def test_visual_profile_dock_groups_stay_workflow_scoped() -> None:

@@ -9,6 +9,25 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from src.gui.qt_lib.assets.qt_theme import C, heading
 
 
+def node_browser_role(node, node_type: str | None = None) -> str:
+    """Shared role classification used by the Nodes browser and linked panels."""
+    node_type = str(node_type if node_type is not None else getattr(node, "type_label", "") or "node")
+    if getattr(node, "is_light", False) or node_type == "light":
+        return "Light"
+    if getattr(node, "is_emitter", False) or node_type == "emitter":
+        return "Emitter"
+    if getattr(node, "is_skin", False) or node_type == "skin":
+        return "Skin"
+    name = str(getattr(node, "name", "") or "").lower()
+    if name.endswith("hook") or "hook" in name:
+        return "Hook"
+    if node_type == "dummy":
+        return "Bone"
+    if getattr(node, "is_mesh", False):
+        return "Mesh"
+    return node_type[:1].upper() + node_type[1:] if node_type else "Node"
+
+
 class _NodeTreeDelegate(QtWidgets.QStyledItemDelegate):
     """Gives the node browser enough vertical air for icons and dense labels."""
 
@@ -128,27 +147,7 @@ class QtSkeletonPanel(QtWidgets.QWidget):
         stack = [(root_node, None)]
         while stack:
             node, parent_item = stack.pop()
-            node_type = str(getattr(node, "type_label", "") or "node")
-            role = self._node_role(node, node_type)
-            mesh_label = self._mesh_label(node, node_type)
-            verts = len(getattr(node, "vertices", []) or []) if getattr(node, "is_mesh", False) else ""
-            faces = len(getattr(node, "faces", []) or []) if getattr(node, "is_mesh", False) else ""
-            children = len(getattr(node, "children", []) or [])
-            attachments = self._attachment_count(node)
-            item = QtWidgets.QTreeWidgetItem([
-                str(getattr(node, "name", "") or "(unnamed)"),
-                role,
-                mesh_label,
-                str(verts),
-                str(faces),
-                str(children) if children else "",
-                str(attachments) if attachments else "",
-            ])
-            item.setIcon(0, self._icon_for_role(role, node_type))
-            item.setToolTip(0, self._node_tooltip(node, node_type, role, children, attachments))
-            item.setData(0, QtCore.Qt.UserRole, node)
-            for numeric_column in (3, 4, 5, 6):
-                item.setTextAlignment(numeric_column, QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+            item = self._make_node_item(node)
             if parent_item is None:
                 self.tree.addTopLevelItem(item)
             else:
@@ -156,6 +155,30 @@ class QtSkeletonPanel(QtWidgets.QWidget):
             self._all_items[item] = node
             for child in reversed(getattr(node, "children", []) or []):
                 stack.append((child, item))
+
+    def _make_node_item(self, node, *, child_count: int | None = None) -> QtWidgets.QTreeWidgetItem:
+        node_type = str(getattr(node, "type_label", "") or "node")
+        role = self._node_role(node, node_type)
+        mesh_label = self._mesh_label(node, node_type)
+        verts = len(getattr(node, "vertices", []) or []) if getattr(node, "is_mesh", False) else ""
+        faces = len(getattr(node, "faces", []) or []) if getattr(node, "is_mesh", False) else ""
+        children = len(getattr(node, "children", []) or []) if child_count is None else child_count
+        attachments = self._attachment_count(node)
+        item = QtWidgets.QTreeWidgetItem([
+            str(getattr(node, "name", "") or "(unnamed)"),
+            role,
+            mesh_label,
+            str(verts),
+            str(faces),
+            str(children) if children else "",
+            str(attachments) if attachments else "",
+        ])
+        item.setIcon(0, self._icon_for_role(role, node_type))
+        item.setToolTip(0, self._node_tooltip(node, node_type, role, children, attachments))
+        item.setData(0, QtCore.Qt.UserRole, node)
+        for numeric_column in (3, 4, 5, 6):
+            item.setTextAlignment(numeric_column, QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        return item
 
     def _on_selection_changed(self) -> None:
         selected = self.tree.selectedItems()
@@ -231,20 +254,7 @@ class QtSkeletonPanel(QtWidgets.QWidget):
             self.tree.resizeColumnToContents(column)
 
     def _node_role(self, node, node_type: str) -> str:
-        if getattr(node, "is_light", False) or node_type == "light":
-            return "Light"
-        if getattr(node, "is_emitter", False) or node_type == "emitter":
-            return "Emitter"
-        if getattr(node, "is_skin", False) or node_type == "skin":
-            return "Skin"
-        if getattr(node, "is_mesh", False):
-            return "Mesh"
-        name = str(getattr(node, "name", "") or "").lower()
-        if name.endswith("hook") or "hook" in name:
-            return "Hook"
-        if node_type == "dummy":
-            return "Bone"
-        return node_type[:1].upper() + node_type[1:] if node_type else "Node"
+        return node_browser_role(node, node_type)
 
     def _mesh_label(self, node, node_type: str) -> str:
         if not getattr(node, "is_mesh", False):

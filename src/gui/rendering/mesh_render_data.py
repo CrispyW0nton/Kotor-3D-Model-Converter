@@ -28,6 +28,9 @@ class MaterialRenderData:
     base_color_rgba: tuple[float, float, float, float]
     alpha_mode: str
     alpha_cutoff: float
+    blend_mode: str
+    sprite_alpha_source: int
+    sprite_glow: float
     double_sided: bool
     unlit: bool
     has_transparency: bool
@@ -454,6 +457,9 @@ def _material_data(node, textures: dict) -> MaterialRenderData:
     base_color = _material_color(node)
     alpha_cutoff = _clamp01(float(getattr(node, "txi_alpha_test", 0.0) or 0.0) or 0.5)
     alpha_mode = _alpha_mode(node)
+    blend_mode = _blend_mode(node)
+    sprite_alpha_source = _sprite_alpha_source(node)
+    sprite_glow = _sprite_glow(node)
     double_sided = bool(
         getattr(node, "is_dangly", False)
         or int(getattr(node, "transparency_hint", 0) or 0) in (1, 2)
@@ -465,7 +471,10 @@ def _material_data(node, textures: dict) -> MaterialRenderData:
             diffuse_name,
             lightmap_name,
             alpha_mode,
+            blend_mode,
             f"{alpha_cutoff:.3f}",
+            str(sprite_alpha_source),
+            f"{sprite_glow:.3f}",
             str(double_sided),
         ]
     )
@@ -473,7 +482,7 @@ def _material_data(node, textures: dict) -> MaterialRenderData:
         int(getattr(node, "_gr_revision", 0) or 0),
         id(diffuse_texture.source) if diffuse_texture is not None else 0,
         id(lightmap_texture.source) if lightmap_texture is not None else 0,
-        hash((base_color, alpha_mode, alpha_cutoff, double_sided)),
+        hash((base_color, alpha_mode, blend_mode, alpha_cutoff, sprite_alpha_source, round(sprite_glow, 3), double_sided)),
     )
     return MaterialRenderData(
         material_id=material_id,
@@ -487,6 +496,9 @@ def _material_data(node, textures: dict) -> MaterialRenderData:
         base_color_rgba=base_color,
         alpha_mode=alpha_mode,
         alpha_cutoff=alpha_cutoff,
+        blend_mode=blend_mode,
+        sprite_alpha_source=sprite_alpha_source,
+        sprite_glow=sprite_glow,
         double_sided=double_sided,
         unlit=any(abs(float(c)) > 1e-6 for c in tuple(getattr(node, "selfillum", (0.0, 0.0, 0.0)) or ())[:3]),
         has_transparency=alpha_mode in {"MASK", "CUTOUT", "BLEND"} or base_color[3] < 0.999,
@@ -532,16 +544,60 @@ def _alpha_mode(node) -> str:
     txi_blend = int(getattr(node, "txi_blending", 0) or 0)
     alpha_test = float(getattr(node, "txi_alpha_test", 0.0) or 0.0)
     transparency_hint = int(getattr(node, "transparency_hint", 0) or 0)
-    if txi_blend == 2 or (txi_blend == 0 and alpha_test > 0.0 and transparency_hint > 0):
+    sprite_alpha = _sprite_alpha_source(node)
+    if txi_blend == 2 or (txi_blend == 0 and transparency_hint > 0):
         return "MASK"
     if (
         node_alpha < 0.999
         or float(getattr(node, "txi_wateralpha", 1.0) or 1.0) < 0.999
         or bool(getattr(node, "txi_decal", False))
         or txi_blend in (1, 3)
+        or sprite_alpha
     ):
         return "BLEND"
     return "OPAQUE"
+
+
+def _blend_mode(node) -> str:
+    txi_blend = int(getattr(node, "txi_blending", 0) or 0)
+    if txi_blend == 1:
+        return "ADDITIVE"
+    if txi_blend == 3:
+        return "LIGHTEN"
+    if _sprite_alpha_source(node) and _sprite_glow(node) > 0.001:
+        return "ADDITIVE"
+    return "ALPHA"
+
+
+def _sprite_alpha_source(node) -> int:
+    source = str(getattr(node, "_gr_sprite_alpha_source", "") or "").lower()
+    if source in {"luminance", "brightness", "matte", "black_key"}:
+        return 1
+    if _is_saber_hilt(node):
+        return 0
+    text = f"{getattr(node, 'name', '')} {getattr(node, 'texture', '')}".lower()
+    return 1 if any(token in text for token in ("saber", "sabre", "lsabre", "blade", "glow", "flare", "beam")) else 0
+
+
+def _sprite_glow(node) -> float:
+    explicit = getattr(node, "_gr_sprite_glow", None)
+    if explicit is not None:
+        try:
+            return max(0.0, min(4.0, float(explicit)))
+        except Exception:
+            return 0.0
+    if _is_saber_hilt(node):
+        return 0.0
+    text = f"{getattr(node, 'name', '')} {getattr(node, 'texture', '')}".lower()
+    return 1.6 if any(token in text for token in ("saber", "sabre", "lsabre", "blade", "glow", "flare", "beam")) else 0.0
+
+
+def _is_saber_hilt(node) -> bool:
+    name = str(getattr(node, "name", "") or "").lower()
+    texture = str(getattr(node, "texture", "") or "").lower()
+    if texture.startswith(("w_lghtsbr", "w_shortsbr", "w_dblsbr")):
+        return True
+    return name.startswith(("lghtsbr", "lshandle")) or "handle" in name
 
 
 def _node_world_transform(node, *, anim_pose=None) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:

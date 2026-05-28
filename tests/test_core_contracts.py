@@ -750,6 +750,211 @@ def test_module_mesh_properties_panel_supports_multi_select_all() -> None:
     assert selected_batches[-1] == meshes
 
 
+def test_module_mesh_panel_reports_when_node_exists_for_external_selection_sync() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    mesh = SimpleNamespace(
+        name="Object76",
+        is_mesh=True,
+        vertices=[(0, 0, 0)],
+        faces=[(0, 0, 0)],
+        texture="lhr_wall107",
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    helper = SimpleNamespace(name="headhook", is_mesh=False, vertices=[], faces=[])
+    model = SimpleNamespace(
+        name="m01aa_01a",
+        game_version="K1",
+        supermodel="NULL",
+        classification="tile",
+        animations=[],
+        mesh_nodes=lambda: [mesh],
+        all_nodes=lambda: [mesh, helper],
+        bone_nodes=lambda: [],
+        texture_list=lambda: ["lhr_wall107"],
+    )
+    panel = QtPropertiesPanel()
+    panel.show_model(model)
+
+    assert panel.has_module_mesh(mesh) is True
+    assert panel.has_module_mesh(helper) is False
+    assert panel.select_module_meshes([mesh]) is True
+    assert panel._selected_module_meshes() == [mesh]
+    assert panel.select_module_meshes([helper]) is False
+    assert panel._selected_module_meshes() == []
+
+
+def test_sprite_material_panel_detects_and_edits_alpha_card_meshes() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtCore, QtWidgets
+
+    from src.gui.qt_lib.panels.qt_sprite_material_panel import QtSpriteMaterialPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    blade = SimpleNamespace(
+        name="blade01",
+        texture="w_lsabreblue",
+        is_mesh=True,
+        txi_blending=1,
+        txi_alpha_test=0.0,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=1,
+        alpha=1.0,
+    )
+    body = SimpleNamespace(
+        name="hilt",
+        texture="metal01",
+        is_mesh=True,
+        txi_blending=0,
+        txi_alpha_test=0.0,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=0,
+        alpha=1.0,
+    )
+    null_texture_card = SimpleNamespace(
+        name="torso_g",
+        texture="null",
+        is_mesh=True,
+        type_label="trimesh",
+        txi_blending=0,
+        txi_alpha_test=0.5,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=1,
+        alpha=1.0,
+    )
+    dummy_bone = SimpleNamespace(
+        name="weaponhook",
+        texture="p_zaalbar02",
+        is_mesh=True,
+        type_label="dummy",
+        txi_blending=0,
+        txi_alpha_test=0.5,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=1,
+        alpha=1.0,
+    )
+    saber_hilt = SimpleNamespace(
+        name="LghtSbr09",
+        texture="w_shortsbr_001",
+        is_mesh=True,
+        type_label="trimesh",
+        txi_blending=0,
+        txi_alpha_test=0.5,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=0,
+        alpha=1.0,
+    )
+    model = SimpleNamespace(
+        mesh_nodes=lambda: [blade, body, null_texture_card, dummy_bone, saber_hilt],
+        all_nodes=lambda: [blade, body, null_texture_card, dummy_bone, saber_hilt],
+    )
+    panel = QtSpriteMaterialPanel()
+    changed = []
+    selected = []
+    panel.spriteRenderChanged.connect(changed.append)
+    panel.spriteSelected.connect(selected.append)
+    panel.set_model(model)
+
+    names = [panel.tree.topLevelItem(index).text(1) for index in range(panel.tree.topLevelItemCount())]
+    assert panel.tree.topLevelItemCount() == 2
+    assert names == ["blade01", "LghtSbr09"]
+    assert "torso_g" not in names
+    assert "weaponhook" not in names
+    assert panel.tree.topLevelItem(0).text(4) == "Additive"
+    assert panel.tree.topLevelItem(0).text(7) == "blend 1, hint 1, key, glow 1.6"
+    assert panel.tree.topLevelItem(1).text(3) == "Hilt"
+    assert panel.tree.topLevelItem(1).text(4) == "Opaque"
+    assert panel.tree.topLevelItem(1).text(7) == "hilt"
+
+    panel.tree.setCurrentItem(panel.tree.topLevelItem(0))
+    assert selected[-1] is blade
+    assert panel.key_matte_check.isChecked() is True
+    assert panel.glow_spin.value() == pytest.approx(1.6)
+    panel._set_combo_value(panel.mode_combo, "cutout")
+    panel.cutoff_spin.setValue(0.375)
+
+    assert blade.txi_blending == 2
+    assert blade.txi_alpha_test == pytest.approx(0.375)
+    assert blade._gr_sprite_alpha_source == "luminance"
+    assert blade._gr_sprite_glow == pytest.approx(1.6)
+    assert getattr(blade, "_gr_revision", 0) > 0
+    assert changed[-1] == [blade]
+
+    panel.tree.topLevelItem(0).setCheckState(0, QtCore.Qt.Unchecked)
+    assert blade._gr_hidden is True
+    panel._reset_selected()
+    assert blade.txi_blending == 1
+    assert blade._gr_hidden is False
+
+
+def test_wgpu_material_data_promotes_sprite_alpha_cards_to_alpha_queues() -> None:
+    from src.gui.qt_lib.rendering.mesh_render_data import _material_data
+
+    alpha_card = SimpleNamespace(
+        name="torso_g",
+        texture="p_zaalbar01",
+        is_mesh=True,
+        alpha=1.0,
+        txi_blending=0,
+        txi_alpha_test=0.0,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=1,
+        vertices=[],
+        faces=[],
+    )
+    saber_card = SimpleNamespace(
+        name="plane329",
+        texture="w_lsabreturq01",
+        is_mesh=True,
+        alpha=1.0,
+        txi_blending=0,
+        txi_alpha_test=0.0,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=0,
+        vertices=[],
+        faces=[],
+    )
+    hilt = SimpleNamespace(
+        name="LghtSbr09",
+        texture="w_shortsbr_001",
+        is_mesh=True,
+        alpha=1.0,
+        txi_blending=0,
+        txi_alpha_test=0.5,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=0,
+        vertices=[],
+        faces=[],
+    )
+
+    assert _material_data(alpha_card, {}).alpha_mode == "MASK"
+    saber_material = _material_data(saber_card, {})
+    assert saber_material.alpha_mode == "BLEND"
+    assert saber_material.blend_mode == "ADDITIVE"
+    assert saber_material.sprite_alpha_source == 1
+    assert saber_material.sprite_glow == pytest.approx(1.6)
+    hilt_material = _material_data(hilt, {})
+    assert hilt_material.alpha_mode == "OPAQUE"
+    assert hilt_material.blend_mode == "ALPHA"
+    assert hilt_material.sprite_alpha_source == 0
+    assert hilt_material.sprite_glow == 0.0
+
+
 def test_module_mesh_properties_panel_splits_meshes_nulls_and_walkmeshes() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -2255,7 +2460,7 @@ def test_wgpu_material_uniforms_respect_diffuse_toggle_and_display_options() -> 
 
     renderer.show_diffuse_map = False
     data = renderer._mesh_uniform_bytes(np.eye(4, dtype=np.float32), (1.0, 1.0, 1.0, 1.0), material, options)
-    assert len(data) == 176
+    assert len(data) == 192
     flags = np.frombuffer(data[144:160], dtype=np.float32)
     assert flags[0] == 0.0
 
@@ -2267,7 +2472,14 @@ def test_wgpu_material_uniforms_respect_diffuse_toggle_and_display_options() -> 
     shaded = ViewportDisplayOptions(display_mode=ViewportDisplayMode.SHADED)
     data = renderer._mesh_uniform_bytes(np.eye(4, dtype=np.float32), (1.0, 1.0, 1.0, 1.0), material, shaded)
     params = np.frombuffer(data[160:176], dtype=np.float32)
+    sprite = np.frombuffer(data[176:192], dtype=np.float32)
     assert params[1] == 2.0
+    assert sprite[2] == 1.0
+
+    flat = ViewportDisplayOptions(display_mode=ViewportDisplayMode.SOLID, force_flat_colour=True)
+    data = renderer._mesh_uniform_bytes(np.eye(4, dtype=np.float32), (1.0, 1.0, 1.0, 1.0), material, flat)
+    sprite = np.frombuffer(data[176:192], dtype=np.float32)
+    assert sprite[2] == 0.0
 
     model_matrix = np.eye(4, dtype=np.float32)
     model_matrix[0, 3] = 7.0
@@ -2280,6 +2492,20 @@ def test_wgpu_material_uniforms_respect_diffuse_toggle_and_display_options() -> 
     )
     decoded_model = np.frombuffer(data[64:128], dtype=np.float32).reshape(4, 4).T
     assert decoded_model[0, 3] == 7.0
+
+    sprite_material = SimpleNamespace(
+        diffuse_texture_resource=object(),
+        has_lightmap=False,
+        alpha_mode="BLEND",
+        alpha_cutoff=0.25,
+        sprite_alpha_source=1,
+        sprite_glow=1.6,
+    )
+    data = renderer._mesh_uniform_bytes(np.eye(4, dtype=np.float32), (1.0, 1.0, 1.0, 1.0), sprite_material, options)
+    sprite = np.frombuffer(data[176:192], dtype=np.float32)
+    assert sprite[0] == 1.0
+    assert sprite[1] == pytest.approx(1.6)
+    assert sprite[2] == 2.0
 
 
 def test_wgpu_mesh_uniform_marks_selected_mesh_for_shader_fill() -> None:
@@ -2323,8 +2549,37 @@ def test_wgpu_mesh_shaders_apply_moderngl_selected_yellow_fill() -> None:
 
     assert expected in wgpu_renderer._load_mesh_shader()
     assert expected in wgpu_renderer._load_skinned_mesh_shader()
+    assert "sprite_keyed_alpha" in wgpu_renderer._load_mesh_shader()
+    assert "material_quality > 1.5 && locals.sprite.y" in wgpu_renderer._load_mesh_shader()
+    assert "out_color.rgb * soft_shade, out_color.a" in wgpu_renderer._load_mesh_shader()
     assert "locals.model * vec4<f32>(input.position, 1.0)" in wgpu_renderer._load_mesh_shader()
     assert "locals.model * skin_position(input)" in wgpu_renderer._load_skinned_mesh_shader()
+
+
+def test_wgpu_routes_saber_sprites_through_additive_blend_pass() -> None:
+    import inspect
+
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.gui.qt_lib.rendering.viewport_display import ViewportDisplayMode
+
+    create_source = inspect.getsource(WgpuRenderer._create_textured_pipeline)
+    mesh_source = inspect.getsource(WgpuRenderer._draw_meshes)
+    skin_source = inspect.getsource(WgpuRenderer._skinned_pipeline_for_pass)
+
+    assert "dst_factor\": wgpu.BlendFactor.one if additive else wgpu.BlendFactor.one_minus_src_alpha" in create_source
+    assert "blend_mode = str(getattr(material_data, \"blend_mode\", \"ALPHA\")" in mesh_source
+    assert 'item[0] == "BLEND" and item[1] == "ADDITIVE"' in mesh_source
+    assert 'draw_pass("additive", additive, self.pipeline_mesh_additive' in mesh_source
+    assert 'pass_name).lower() == "additive"' in skin_source
+    assert "self._should_draw_selected_mesh_edges(item, mode, edge_overlay)" in mesh_source
+
+    renderer = WgpuRenderer.__new__(WgpuRenderer)
+    glow_card = SimpleNamespace(material=SimpleNamespace(blend_mode="ADDITIVE", sprite_alpha_source=1))
+    opaque_mesh = SimpleNamespace(material=SimpleNamespace(blend_mode="ALPHA", sprite_alpha_source=0))
+    assert renderer._should_draw_selected_mesh_edges(glow_card, ViewportDisplayMode.TEXTURED, False) is False
+    assert renderer._should_draw_selected_mesh_edges(glow_card, ViewportDisplayMode.TEXTURED, True) is True
+    assert renderer._should_draw_selected_mesh_edges(glow_card, ViewportDisplayMode.WIREFRAME, False) is True
+    assert renderer._should_draw_selected_mesh_edges(opaque_mesh, ViewportDisplayMode.TEXTURED, False) is True
 
 
 def test_wgpu_mesh_draw_uses_per_draw_uniforms_for_selected_fill() -> None:
@@ -2401,14 +2656,16 @@ def test_qt_lighting_panel_select_light_syncs_from_viewport_without_emitting() -
     panel.set_model(SimpleNamespace(all_nodes=lambda: [first, second]))
     emitted.clear()
 
-    panel.select_light(second)
+    assert panel.has_light(second) is True
+    assert panel.select_light(second) is True
 
     assert emitted == []
     assert panel._selected is second
     assert panel.tree.currentItem().data(0, QtCore.Qt.UserRole) is second
     assert panel.radius_spin.value() == 11.75
 
-    panel.select_light(None)
+    assert panel.has_light(SimpleNamespace(name="NotALight", is_light=False)) is False
+    assert panel.select_light(None) is False
 
     assert emitted == []
     assert panel._selected is None
@@ -2524,7 +2781,189 @@ def test_qt_skeleton_panel_uses_detailed_browser_columns_and_icons() -> None:
     assert mesh_item.isHidden() is False
 
 
-def test_main_window_routes_scene_root_skeleton_selection_through_scene_object() -> None:
+def test_qt_skeleton_panel_preserves_module_node_hierarchy() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_skeleton_panel import QtSkeletonPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    root = SimpleNamespace(name="M01aa_01a", type_label="dummy", is_mesh=False, children=[])
+    door = SimpleNamespace(name="Door_16", type_label="dummy", is_mesh=False, children=[])
+    hook = SimpleNamespace(name="cameraHook", type_label="dummy", is_mesh=False, children=[])
+    light = SimpleNamespace(name="AuroraLight273", type_label="light", is_light=True, is_mesh=False, children=[])
+    meshes = [
+        SimpleNamespace(name=f"Object{index}", type_label="trimesh", is_mesh=True, vertices=[(0, 0, 0)], faces=[(0, 0, 0)], children=[])
+        for index in range(12)
+    ]
+    for child in [door, hook, light, *meshes]:
+        child.parent = root
+    root.children = [door, hook, light, *meshes]
+    model = SimpleNamespace(root_node=root, node_count=lambda: len(root.children) + 1, mesh_nodes=lambda: meshes)
+
+    panel = QtSkeletonPanel()
+    panel.load_model(model)
+
+    root_item = panel.tree.topLevelItem(0)
+    assert root_item.text(0) == "M01aa_01a"
+    assert root_item.childCount() == len(root.children)
+    assert [root_item.child(index).text(0) for index in range(4)] == [
+        "Door_16",
+        "cameraHook",
+        "AuroraLight273",
+        "Object0",
+    ]
+    assert root_item.child(0).text(1) == "Bone"
+    assert root_item.child(1).text(1) == "Hook"
+    assert root_item.child(2).text(1) == "Light"
+    assert root_item.child(3).text(1) == "Mesh"
+    assert all(root_item.child(index).text(0) not in {"Bones", "Lights", "Helpers", "Meshes"} for index in range(root_item.childCount()))
+
+    selected = []
+    panel.nodeSelected.connect(selected.append)
+    panel.tree.setCurrentItem(root_item.child(3))
+    assert selected[-1] is meshes[0]
+
+
+def test_qt_scene_outliner_uses_detailed_browser_columns_icons_and_filter() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtGui, QtWidgets
+
+    from src.gui.qt_lib.panels.qt_scene_outliner_panel import QtSceneOutlinerPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    ref = SimpleNamespace(resref="P_Zaalbar", original_name="", source_module="", source_archive="", source_path="", resource_type="model")
+    root_node = SimpleNamespace(name="P_Zaalbar", type_label="dummy", is_mesh=False, children=[])
+    head_hook = SimpleNamespace(name="headhook", type_label="dummy", is_mesh=False, children=[], index=4)
+    saber_hook = SimpleNamespace(name="rhand", type_label="dummy", is_mesh=False, children=[], index=12)
+    aurora_light = SimpleNamespace(
+        name="AuroraLight331",
+        type_label="light",
+        is_light=True,
+        is_mesh=False,
+        children=[],
+        index=44,
+        light_kind="aurora_point",
+        light_radius=12.0,
+    )
+    torso_mesh = SimpleNamespace(name="torso", type_label="skin", is_mesh=True, is_skin=True, children=[], index=2)
+    head_hook.parent = root_node
+    saber_hook.parent = root_node
+    aurora_light.parent = root_node
+    torso_mesh.parent = root_node
+    root_node.children = [torso_mesh, head_hook, saber_hook, aurora_light]
+    runtime_model = SimpleNamespace(root_node=root_node, all_nodes=lambda: [root_node, torso_mesh, head_hook, saber_hook, aurora_light])
+    model = SimpleNamespace(
+        id="model-001",
+        name="P_Zaalbar",
+        object_type="model",
+        visible=True,
+        locked=False,
+        selected=True,
+        source_ref=ref,
+        metadata={"node_count": 87, "_runtime_model": runtime_model},
+        group_id="party",
+    )
+    hidden_light = SimpleNamespace(
+        id="light-001",
+        name="KeyLight",
+        object_type="light",
+        visible=False,
+        locked=True,
+        selected=False,
+        source_ref=SimpleNamespace(resref="", original_name="", source_module="", source_archive="", source_path="", resource_type="light"),
+        metadata={},
+        group_id="",
+    )
+    scene = SimpleNamespace(
+        id="scene-001",
+        name="Untitled Scene",
+        display_name="Untitled Scene",
+        game="K1",
+        dirty=False,
+        objects=[model, hidden_light],
+    )
+
+    panel = QtSceneOutlinerPanel()
+    emitted = []
+    helper_emitted = []
+    light_emitted = []
+    panel.objectSelected.connect(emitted.append)
+    panel.helperNodeSelected.connect(helper_emitted.append)
+    panel.lightNodeSelected.connect(light_emitted.append)
+    panel.set_scene(scene)
+
+    assert [panel.tree.headerItem().text(index) for index in range(panel.tree.columnCount())] == [
+        "Object",
+        "Kind",
+        "State",
+        "Children",
+        "Source",
+        "ID",
+    ]
+    assert panel.tree.header().sectionResizeMode(0) == QtWidgets.QHeaderView.Stretch
+    assert panel.tree.header().sectionResizeMode(1) == QtWidgets.QHeaderView.ResizeToContents
+    assert panel.count_label.text() == "1 models  2 lights  0 cameras  2 helpers"
+
+    root_item = panel.tree.topLevelItem(0)
+    models_bucket = root_item.child(0)
+    model_item = models_bucket.child(0)
+    lights_bucket = root_item.child(1)
+    light_item = lights_bucket.child(0)
+    runtime_light_item = lights_bucket.child(1)
+    helpers_bucket = root_item.child(3)
+    assert not root_item.icon(0).isNull()
+    assert model_item.text(1) == "Model"
+    assert model_item.text(2) == "visible, selected"
+    assert model_item.text(3) == "87"
+    assert model_item.text(4) == "P_Zaalbar"
+    assert model_item.childCount() == 0
+    assert helpers_bucket.text(0) == "Helpers"
+    assert helpers_bucket.text(3) == "2"
+    assert helpers_bucket.child(0).text(0) == "headhook"
+    assert helpers_bucket.child(0).text(1) == "Helper"
+    assert helpers_bucket.child(0).text(2) == "dummy"
+    assert lights_bucket.text(3) == "2"
+    assert light_item.text(2) == "hidden, locked"
+    assert runtime_light_item.text(0) == "AuroraLight331"
+    assert runtime_light_item.text(1) == "Light"
+    assert runtime_light_item.text(2) == "enabled, visible"
+    assert runtime_light_item.text(4) == "P_Zaalbar"
+    option = QtWidgets.QStyleOptionViewItem()
+    option.initFrom(panel.tree)
+    option.fontMetrics = QtGui.QFontMetrics(panel.tree.font())
+    assert panel.tree.itemDelegate().sizeHint(option, panel.tree.model().index(0, 0)).height() >= 24
+
+    panel._filter("zaalbar")
+    assert root_item.isHidden() is False
+    assert models_bucket.isHidden() is False
+    assert model_item.isHidden() is False
+    assert lights_bucket.isHidden() is False
+    assert light_item.isHidden() is True
+    assert runtime_light_item.isHidden() is False
+    assert helpers_bucket.isHidden() is False
+
+    panel._filter("")
+    panel.tree.setCurrentItem(root_item)
+    emitted.clear()
+    panel.tree.setCurrentItem(model_item)
+    assert emitted == ["model-001"]
+    emitted.clear()
+    helper_emitted.clear()
+    panel.tree.setCurrentItem(helpers_bucket.child(0))
+    assert emitted == []
+    assert helper_emitted == [head_hook]
+    helper_emitted.clear()
+    light_emitted.clear()
+    panel.tree.setCurrentItem(runtime_light_item)
+    assert emitted == []
+    assert helper_emitted == []
+    assert light_emitted == [aurora_light]
+
+
+def test_main_window_keeps_cross_panel_selection_sync_on_scene_outliner() -> None:
     import inspect
 
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
@@ -2535,10 +2974,17 @@ def test_main_window_routes_scene_root_skeleton_selection_through_scene_object()
     viewport_source = inspect.getsource(QtGhostRiggerMainWindow._on_viewport_scene_node_selected)
 
     assert "self.skeleton_panel.nodeSelected.connect(self._on_skeleton_node_selected)" in init_source
+    assert "self.scene_outliner_panel.helperNodeSelected.connect(self._on_scene_outliner_helper_node_selected)" in init_source
+    assert "self.scene_outliner_panel.lightNodeSelected.connect(self._on_scene_outliner_light_node_selected)" in init_source
     assert "self._sync_skeleton_root_for_scene_object(obj)" in select_source
-    assert "node is getattr(self._runtime_model_for_scene_object(obj), \"root_node\", None)" in skeleton_source
-    assert "self._select_scene_object_impl(obj.id)" in skeleton_source
-    assert "self.viewport.set_selected_node(node)" in skeleton_source
+    assert 'self.viewport.set_selected_node(node, source="nodes panel")' in skeleton_source
+    assert "_select_lighting_node_from_node" not in inspect.getsource(QtGhostRiggerMainWindow)
+    assert "_select_module_mesh_from_node" not in inspect.getsource(QtGhostRiggerMainWindow)
+    assert "def _on_scene_outliner_helper_node_selected(self, node)" in inspect.getsource(QtGhostRiggerMainWindow)
+    assert 'self.viewport.set_selected_node(node, source="scene outliner helper")' in inspect.getsource(QtGhostRiggerMainWindow)
+    assert "def _on_scene_outliner_light_node_selected(self, node)" in inspect.getsource(QtGhostRiggerMainWindow)
+    assert 'self.viewport.set_selected_node(node, source="scene outliner light")' in inspect.getsource(QtGhostRiggerMainWindow)
+    assert "self.lighting_panel.select_light(node)" in inspect.getsource(QtGhostRiggerMainWindow)
     assert "self._sync_skeleton_root_for_scene_object(obj)" in viewport_source
 
 
@@ -2832,6 +3278,38 @@ def test_main_window_exposes_module_meshes_as_detachable_dock() -> None:
     assert "meshHovered.connect(self.module_geometry_panel" not in layout_source
     assert (Path("src/gui/icons/module_meshes.svg")).exists()
     assert hasattr(QtPropertiesPanel, "set_module_browser_only")
+
+
+def test_main_window_exposes_sprite_materials_as_rendering_dock() -> None:
+    import inspect
+    from pathlib import Path
+
+    from src.gui.qt_lib.panels.qt_sprite_material_panel import QtSpriteMaterialPanel
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    actions_source = inspect.getsource(QtGhostRiggerMainWindow._build_actions)
+    menu_source = inspect.getsource(QtGhostRiggerMainWindow._build_menu)
+    refresh_source = inspect.getsource(QtGhostRiggerMainWindow._refresh_all)
+    changed_source = inspect.getsource(QtGhostRiggerMainWindow._on_sprite_materials_changed)
+    persistence_source = inspect.getsource(QtGhostRiggerMainWindow._apply_sprite_material_overrides)
+    scene_source = inspect.getsource(QtGhostRiggerMainWindow._refresh_scene_view)
+
+    assert "self.sprite_materials_panel = QtSpriteMaterialPanel(self)" in layout_source
+    assert '"sprite_materials"' in layout_source
+    assert "self.sprite_materials_panel_action" in actions_source
+    assert 'self._icon("sprite_materials")' in actions_source
+    assert "modules_menu.addAction(self.sprite_materials_panel_action)" in menu_source
+    assert "self.sprite_materials_panel.set_model(self._active_viewport_model())" in refresh_source
+    assert "self.sprite_materials_panel.spriteRenderChanged.connect(self._on_sprite_materials_changed)" in layout_source
+    assert "renderer.invalidate_node_cache()" in changed_source
+    assert "self.viewport.refresh_view()" in changed_source
+    assert "self._save_sprite_material_overrides()" in changed_source
+    assert "sprite_material_overrides.json" in inspect.getsource(QtGhostRiggerMainWindow._sprite_persistence_path)
+    assert "setattr(node, \"_gr_sprite_alpha_source\"" in persistence_source
+    assert "self._apply_sprite_material_overrides(model)" in scene_source
+    assert (Path("src/gui/icons/sprite_materials.svg")).exists()
+    assert hasattr(QtSpriteMaterialPanel, "spriteRenderChanged")
 
 
 def test_main_window_exposes_adjust_pivot_in_modules_menu() -> None:

@@ -74,7 +74,7 @@ Required root attributes:
 
 Known panel ids include `contentBrowser`, `scene`, `library`, `modules`,
 `properties`, `animationLibrary`, `meshTools`, `nodes`, `lighting`, `cameras`,
-`moduleMeshes`, `adjustPivot`, `2das`, `resources`, `outputLog`, and
+`moduleMeshes`, `spriteMaterials`, `adjustPivot`, `2das`, `resources`, `outputLog`, and
 `pythonTerminal`. The `contentBrowser`, `scene`, and `properties` ids control
 top-level dock widgets around the central viewport; the older `library` and
 `animationLibrary` ids remain valid for user layout compatibility. Unknown ids
@@ -83,7 +83,7 @@ warn but do not crash, so future panels can be added safely.
 Dock topology is optional and lives under `<dockLayout>`. Groups can be
 `tabbed`, `vertical`, or `horizontal`, and use runtime dock keys:
 `content_browser`, `scene`, `properties`, `animations`, `nodes`, `lighting`,
-`cameras`, `module_meshes`, `mesh_tools`, `adjust_pivot`, `2das`, and
+`cameras`, `module_meshes`, `sprite_materials`, `mesh_tools`, `adjust_pivot`, `2das`, and
 `resources`.
 
 ```xml

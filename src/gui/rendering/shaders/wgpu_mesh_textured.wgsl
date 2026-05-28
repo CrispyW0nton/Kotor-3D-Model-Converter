@@ -4,6 +4,7 @@ struct Locals {
     color: vec4<f32>,
     flags: vec4<f32>,
     params: vec4<f32>,
+    sprite: vec4<f32>,
 };
 
 @group(0) @binding(0)
@@ -137,12 +138,22 @@ fn shader_complexity_color(complexity_id: i32, has_diffuse: f32, has_lightmap: f
     return vec3<f32>(0.16, 0.72, 0.30);
 }
 
+fn sprite_keyed_alpha(sampled: vec4<f32>) -> f32 {
+    let keyed_alpha = clamp(max(max(sampled.r, sampled.g), sampled.b) * 1.35, 0.0, 1.0);
+    return select(keyed_alpha, min(sampled.a, keyed_alpha), sampled.a < 0.999);
+}
+
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let diffuse_sample = textureSample(diffuse_tex, diffuse_sampler, input.uv0);
     var sampled = diffuse_sample;
     if (locals.flags.x < 0.5) {
         sampled = vec4<f32>(1.0, 1.0, 1.0, 1.0);
+    }
+    let material_quality = locals.sprite.z;
+    if (locals.sprite.x > 0.5) {
+        let keyed_alpha = sprite_keyed_alpha(sampled);
+        sampled = vec4<f32>(sampled.rgb, keyed_alpha);
     }
     var out_color = vec4<f32>(sampled.rgb * locals.color.rgb, sampled.a * locals.color.a);
     let n = normalize(input.normal);
@@ -173,7 +184,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let light = normalize(vec3<f32>(0.45, 0.35, 0.82));
         let ndotl = max(dot(n, light), 0.0);
         let soft_shade = clamp(0.76 + ndotl * 0.24, 0.70, 1.0);
-        out_color = vec4<f32>(out_color.rgb * soft_shade, 1.0);
+        out_color = vec4<f32>(out_color.rgb * soft_shade, out_color.a);
     }
 
     if (locals.flags.y > 0.5 && mode_id != 1 && mode_id != 2 && mode_id != 3 && mode_id != 4 && mode_id != 5 && mode_id != 6 && mode_id != 7 && mode_id != 8) {
@@ -193,7 +204,10 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
-    if (mode_id != 3 && mode_id != 5 && mode_id != 8) {
+    if (mode_id != 3 && mode_id != 5 && mode_id != 8 && material_quality > 0.5) {
+        if (material_quality > 1.5 && locals.sprite.y > 0.001) {
+            out_color = vec4<f32>(out_color.rgb * (1.0 + locals.sprite.y), out_color.a);
+        }
         out_color = vec4<f32>(odyssey_display_tone(out_color.rgb), out_color.a);
     }
 

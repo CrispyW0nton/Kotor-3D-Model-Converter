@@ -811,17 +811,30 @@ class QtPropertiesPanel(QtWidgets.QWidget):
     def select_module_mesh(self, node) -> None:
         self.select_module_meshes([node] if node is not None else [])
 
-    def select_module_meshes(self, nodes: list) -> None:
+    def has_module_mesh(self, node) -> bool:
+        if not self._module_browser_enabled or self.module_tab is None or node is None:
+            return False
+        if not self._is_module_mesh_candidate(node):
+            return False
+        node_id = id(node)
+        return any(
+            id(candidate) == node_id
+            for items in (self._mesh_items, self._null_mesh_items, self._walkmesh_items)
+            for candidate in items.values()
+        )
+
+    def select_module_meshes(self, nodes: list) -> bool:
         if not self._module_browser_enabled or self.module_tab is None or self._suppress_mesh_signal:
-            return
+            return False
         node_ids = {id(node) for node in nodes if node is not None and self._is_module_mesh_candidate(node)}
+        selected_any = False
         self._suppress_mesh_signal = True
         try:
             self.module_mesh_tree.clearSelection()
             self.module_null_mesh_tree.clearSelection()
             self.module_walkmesh_tree.clearSelection()
             if not node_ids:
-                return
+                return False
             for tree, items, tab in (
                 (self.module_mesh_tree, self._mesh_items, 0),
                 (self.module_null_mesh_tree, self._null_mesh_items, 1),
@@ -832,7 +845,9 @@ class QtPropertiesPanel(QtWidgets.QWidget):
                         item.setSelected(True)
                         tree.setCurrentItem(item)
                         self.module_browser_tabs.setCurrentIndex(tab)
+                        selected_any = True
             self.tabs.setCurrentWidget(self.module_tab)
+            return selected_any
         finally:
             self._suppress_mesh_signal = False
 

@@ -277,8 +277,15 @@ def group_render_batches(items: Iterable[tuple], *, pipeline_key: str, category:
     batches: dict[RenderBatchKey, RenderBatch] = {}
     order: list[RenderBatchKey] = []
     for item in items:
-        mesh_data = item[2] if len(item) >= 4 else item[0]
-        material_data = item[3] if len(item) >= 4 else getattr(mesh_data, "material", None)
+        if len(item) >= 5:
+            mesh_data = item[3]
+            material_data = item[4]
+        elif len(item) >= 4:
+            mesh_data = item[2]
+            material_data = item[3]
+        else:
+            mesh_data = item[0]
+            material_data = getattr(mesh_data, "material", None)
         if material_data is None:
             continue
         key = batch_key_for_mesh(mesh_data, material_data, pipeline_key=pipeline_key, category=category)
@@ -294,8 +301,15 @@ def group_render_batches(items: Iterable[tuple], *, pipeline_key: str, category:
 def instancing_summary(items: Iterable[tuple]) -> dict[str, int]:
     groups: dict[tuple, int] = {}
     for item in items:
-        mesh_data = item[2] if len(item) >= 4 else item[0]
-        material_data = item[3] if len(item) >= 4 else getattr(mesh_data, "material", None)
+        if len(item) >= 5:
+            mesh_data = item[3]
+            material_data = item[4]
+        elif len(item) >= 4:
+            mesh_data = item[2]
+            material_data = item[3]
+        else:
+            mesh_data = item[0]
+            material_data = getattr(mesh_data, "material", None)
         positions = getattr(mesh_data, "positions", ())
         indices = getattr(mesh_data, "indices", ())
         geometry_key = (

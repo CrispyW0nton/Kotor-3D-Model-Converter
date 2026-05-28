@@ -36,7 +36,10 @@ Visual profile layouts are packaged as normal layout XML files:
 toolbar Visual Profile dropdown and the Settings layout selector. Dock group
 entries use the runtime dock keys `content_browser`, `scene`, `properties`,
 `animations`, `nodes`, `lighting`, `cameras`, `module_meshes`, `mesh_tools`,
-`adjust_pivot`, `2das`, and `resources`.
+`sprite_materials`, `adjust_pivot`, `2das`, and `resources`.
+`sprite_materials` maps to the stable `spriteMaterials` layout panel id and
+owns alpha-card/sprite material display controls for cutout, blended, additive,
+window/foliage/fur, and lightsaber-style meshes.
 The older `library` and `animationLibrary` ids remain in packaged layouts for
 user layout compatibility, but new Library and Animation Library entry points
 route through `contentBrowser`.
