@@ -7,7 +7,11 @@ from typing import Any
 
 from PySide6 import QtCore, QtWidgets
 
-from src.gui.qt_lib.panels.qt_library_panel import enrich_library_rows, infer_model_category
+from src.gui.qt_lib.panels.qt_library_panel import (
+    MODEL_SUBCATEGORY_ORDER,
+    enrich_library_rows,
+    infer_model_category,
+)
 
 
 class ModuleEditorAssetItem(QtWidgets.QListWidgetItem):
@@ -47,21 +51,85 @@ class ModuleEditorAssetBrowser(QtWidgets.QWidget):
         self.category_combo.addItems([
             "All",
             "Player Characters",
+            *[
+                f"Player Characters / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Player Characters"]
+            ],
             "Party Members",
+            *[
+                f"Party Members / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Party Members"]
+            ],
             "Commoners",
+            *[
+                f"Commoners / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Commoners"]
+            ],
             "NPCs",
+            *[
+                f"NPCs / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["NPCs"]
+            ],
             "Droids",
+            *[
+                f"Droids / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Droids"]
+            ],
             "Turrets",
+            *[
+                f"Turrets / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Turrets"]
+            ],
             "Creatures",
+            *[
+                f"Creatures / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Creatures"]
+            ],
             "Holograms",
+            *[
+                f"Holograms / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Holograms"]
+            ],
             "Supermodels",
+            *[
+                f"Supermodels / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Supermodels"]
+            ],
             "Modules",
+            *[
+                f"Modules / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Modules"]
+            ],
             "Level Assets",
+            *[
+                f"Level Assets / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Level Assets"]
+            ],
             "Environment",
+            *[
+                f"Environment / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Environment"]
+            ],
             "Skyboxes",
+            *[
+                f"Skyboxes / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Skyboxes"]
+            ],
             "Minigame",
+            *[
+                f"Minigame / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Minigame"]
+            ],
             "Menus",
+            *[
+                f"Menus / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Menus"]
+            ],
             "GUI",
+            *[
+                f"GUI / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["GUI"]
+            ],
             "Placeables",
             "Placeables / Containers",
             "Placeables / Computers & Panels",
@@ -97,6 +165,10 @@ class ModuleEditorAssetBrowser(QtWidgets.QWidget):
             "Doors / Generic Doors",
             "Doors / Unknown Doors",
             "Engine Items",
+            *[
+                f"Engine Items / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Engine Items"]
+            ],
             "Armor",
             "Armor / Clothing",
             "Armor / Jedi Robes",
@@ -147,13 +219,37 @@ class ModuleEditorAssetBrowser(QtWidgets.QWidget):
             "Weapons / Misc Weapons",
             "Item/Armor/Weapons",
             "Visual FX",
+            *[
+                f"Visual FX / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Visual FX"]
+            ],
             "Visuals",
+            *[
+                f"Visuals / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Visuals"]
+            ],
             "Planets",
+            *[
+                f"Planets / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Planets"]
+            ],
             "Misc Models",
+            *[
+                f"Misc Models / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Misc Models"]
+            ],
             "Stunts",
+            *[
+                f"Stunts / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Stunts"]
+            ],
             "Uncategorised",
             "Other",
             "Templates",
+            *[
+                f"Templates / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Templates"]
+            ],
         ])
         self.category_combo.currentTextChanged.connect(self._apply_filter)
         filter_row.addWidget(self.search_edit, 1)

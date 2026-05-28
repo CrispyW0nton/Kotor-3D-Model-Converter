@@ -324,21 +324,85 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self.tag_filter.addItems([
             "All Tags",
             "Player Characters",
+            *[
+                f"Player Characters / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Player Characters"]
+            ],
             "Party Members",
+            *[
+                f"Party Members / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Party Members"]
+            ],
             "Commoners",
+            *[
+                f"Commoners / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Commoners"]
+            ],
             "NPCs",
+            *[
+                f"NPCs / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["NPCs"]
+            ],
             "Droids",
+            *[
+                f"Droids / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Droids"]
+            ],
             "Turrets",
+            *[
+                f"Turrets / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Turrets"]
+            ],
             "Creatures",
+            *[
+                f"Creatures / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Creatures"]
+            ],
             "Holograms",
+            *[
+                f"Holograms / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Holograms"]
+            ],
             "Supermodels",
+            *[
+                f"Supermodels / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Supermodels"]
+            ],
             "Modules",
+            *[
+                f"Modules / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Modules"]
+            ],
             "Level Assets",
+            *[
+                f"Level Assets / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Level Assets"]
+            ],
             "Environment",
+            *[
+                f"Environment / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Environment"]
+            ],
             "Skyboxes",
+            *[
+                f"Skyboxes / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Skyboxes"]
+            ],
             "Minigame",
+            *[
+                f"Minigame / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Minigame"]
+            ],
             "Menus",
+            *[
+                f"Menus / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Menus"]
+            ],
             "GUI",
+            *[
+                f"GUI / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["GUI"]
+            ],
             "Placeables",
             "Placeables / Containers",
             "Placeables / Computers & Panels",
@@ -374,6 +438,10 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
             "Doors / Generic Doors",
             "Doors / Unknown Doors",
             "Engine Items",
+            *[
+                f"Engine Items / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Engine Items"]
+            ],
             "Armor",
             "Armor / Clothing",
             "Armor / Jedi Robes",
@@ -423,12 +491,36 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
             "Weapons / Two-Handed Weapons",
             "Weapons / Misc Weapons",
             "Visual FX",
+            *[
+                f"Visual FX / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Visual FX"]
+            ],
             "Visuals",
+            *[
+                f"Visuals / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Visuals"]
+            ],
             "Planets",
+            *[
+                f"Planets / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Planets"]
+            ],
             "Misc Models",
+            *[
+                f"Misc Models / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Misc Models"]
+            ],
             "Stunts",
+            *[
+                f"Stunts / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Stunts"]
+            ],
             "Uncategorised",
             "Templates",
+            *[
+                f"Templates / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Templates"]
+            ],
             "Current Model",
         ])
         self.tag_filter.currentTextChanged.connect(self._apply_filter)
@@ -674,7 +766,6 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
                     subchild.setData(0, QtCore.Qt.UserRole, ("subcategory", f"{category}\0{subcategory}"))
                     child.addChild(subchild)
             folders.setExpanded(True)
-        self.nav_tree.expandAll()
         self.nav_tree.blockSignals(False)
         self._select_navigation(*self._active_nav)
 
@@ -762,6 +853,12 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self._update_details()
 
     def _matches_tag(self, asset: ContentAssetDescriptor, tag: str) -> bool:
+        if " / " in tag:
+            category, subcategory = tag.split(" / ", 1)
+            return (
+                asset.category.lower() == category.lower()
+                and str(asset.metadata.get("subcategory", "")).lower() == subcategory.lower()
+            )
         haystack = " ".join([asset.category, asset.source, *asset.tags]).lower()
         mapping = {
             "Player Characters": "player characters",
