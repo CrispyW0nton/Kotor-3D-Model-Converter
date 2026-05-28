@@ -11,6 +11,7 @@ from PySide6 import QtCore, QtWidgets
 from src.gui.qt_lib.assets.qt_theme import icon
 from src.gui.qt_lib.panels.qt_library_panel import (
     MODEL_CATEGORY_ORDER,
+    MODEL_SUBCATEGORY_ORDER,
     content_browser_metadata_for_resref,
     enrich_library_rows,
     infer_model_category,
@@ -54,6 +55,9 @@ def descriptor_from_library_row(row: dict) -> ContentAssetDescriptor:
     source = str(item.get("source", ""))
     name = str(item.get("resref", ""))
     taxonomy_metadata = content_browser_metadata_for_resref(name, category)
+    subcategory = str(item.get("subcategory") or taxonomy_metadata.get("subcategory") or "")
+    if subcategory:
+        taxonomy_metadata["subcategory"] = subcategory
     return ContentAssetDescriptor(
         asset_type=asset_type,
         name=name,
@@ -65,9 +69,36 @@ def descriptor_from_library_row(row: dict) -> ContentAssetDescriptor:
             "area": item.get("area_label") or item.get("area_name") or "",
             "module": item.get("module_code") or "",
             "class": item.get("model_class") or "",
+            "template": item.get("item_template_resref") or item.get("placeable_template_resref") or "",
+            "tag": item.get("item_tag") or item.get("placeable_tag") or "",
+            "door template": item.get("door_template_resref") or "",
+            "door tag": item.get("door_tag") or "",
+            "door type": item.get("door_generic_type") or "",
+            "open lock dc": item.get("door_open_lock_dc") or "",
+            "key": item.get("door_key_name") or "",
+            "linked to": item.get("door_linked_to") or "",
+            "base item": item.get("item_baseitem") or "",
+            "model variation": item.get("item_model_variation") or "",
+            "appearance": item.get("placeable_appearance") or "",
+            "metadata source": item.get("metadata_source") or "",
             **taxonomy_metadata,
         },
-        tags=tuple(str(value) for value in (category, *taxonomy_metadata.values(), item.get("location", "")) if value),
+        tags=tuple(
+            str(value)
+            for value in (
+                category,
+                subcategory,
+                *taxonomy_metadata.values(),
+                item.get("item_template_resref", ""),
+                item.get("placeable_template_resref", ""),
+                item.get("door_template_resref", ""),
+                item.get("item_tag", ""),
+                item.get("placeable_tag", ""),
+                item.get("door_tag", ""),
+                item.get("location", ""),
+            )
+            if value
+        ),
     )
 
 
@@ -309,10 +340,88 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
             "Menus",
             "GUI",
             "Placeables",
+            "Placeables / Containers",
+            "Placeables / Computers & Panels",
+            "Placeables / Doors & Transitions",
+            "Placeables / Furniture",
+            "Placeables / Lights & VFX",
+            "Placeables / Traps & Hazards",
+            "Placeables / Environmental Props",
+            "Placeables / Misc Placeables",
             "Doors",
+            "Doors / Taris",
+            "Doors / Dantooine",
+            "Doors / Tatooine",
+            "Doors / Kashyyyk",
+            "Doors / Manaan",
+            "Doors / Korriban",
+            "Doors / Leviathan",
+            "Doors / Star Forge",
+            "Doors / Rakata",
+            "Doors / Yavin",
+            "Doors / Endar Spire",
+            "Doors / Ebon Hawk",
+            "Doors / Peragus",
+            "Doors / Telos",
+            "Doors / Harbinger",
+            "Doors / Nar Shaddaa",
+            "Doors / Dxun",
+            "Doors / Onderon",
+            "Doors / Malachor",
+            "Doors / Ravager",
+            "Doors / Droid Planet",
+            "Doors / Force Fields",
+            "Doors / Generic Doors",
+            "Doors / Unknown Doors",
             "Engine Items",
+            "Armor",
+            "Armor / Clothing",
+            "Armor / Jedi Robes",
+            "Armor / Light Armor",
+            "Armor / Medium Armor",
+            "Armor / Heavy Armor",
+            "Armor / Environmental Suits",
+            "Armor / Disguises",
+            "Armor / Misc Armor",
             "Inventory",
+            "Inventory / Security Spikes",
+            "Inventory / Computer Spikes",
+            "Inventory / Parts",
+            "Inventory / Mines",
+            "Inventory / Spikes",
+            "Inventory / Traps",
+            "Inventory / Medkits",
+            "Inventory / Masks",
+            "Inventory / Implants",
+            "Inventory / Gauntlets",
+            "Inventory / Armbands",
+            "Inventory / Droid Items",
+            "Inventory / Belts",
+            "Inventory / Stims",
+            "Inventory / Adrenal Stims",
+            "Inventory / Combat Shots",
+            "Inventory / Credits",
+            "Inventory / Upgrades",
+            "Inventory / Datapads",
+            "Inventory / Pazaak",
+            "Inventory / Quest Items",
+            "Inventory / Misc Items",
             "Weapons",
+            "Weapons / Grenades",
+            "Weapons / Lightsabers",
+            "Weapons / Double-Bladed Lightsabers",
+            "Weapons / Short Lightsabers",
+            "Weapons / Lightsaber Crystals",
+            "Weapons / Vibroblades",
+            "Weapons / Double-Bladed Melee",
+            "Weapons / Blasters",
+            "Weapons / Heavy Blasters",
+            "Weapons / Blaster Rifles",
+            "Weapons / Heavy Weapons",
+            "Weapons / Creature Weapons",
+            "Weapons / Single-Handed Melee",
+            "Weapons / Two-Handed Weapons",
+            "Weapons / Misc Weapons",
             "Visual FX",
             "Visuals",
             "Planets",
@@ -552,6 +661,18 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
                 child = QtWidgets.QTreeWidgetItem([category])
                 child.setData(0, QtCore.Qt.UserRole, ("category", category))
                 folders.addChild(child)
+                subcategories = sorted(
+                    {
+                        str(asset.metadata.get("subcategory") or "")
+                        for asset in self._assets
+                        if asset.category == category and asset.metadata.get("subcategory")
+                    },
+                    key=lambda value, cat=category: self._subcategory_sort_key(cat, value),
+                )
+                for subcategory in subcategories:
+                    subchild = QtWidgets.QTreeWidgetItem([subcategory])
+                    subchild.setData(0, QtCore.Qt.UserRole, ("subcategory", f"{category}\0{subcategory}"))
+                    child.addChild(subchild)
             folders.setExpanded(True)
         self.nav_tree.expandAll()
         self.nav_tree.blockSignals(False)
@@ -567,15 +688,25 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
     def _walk_nav_items(self):
         for index in range(self.nav_tree.topLevelItemCount()):
             root = self.nav_tree.topLevelItem(index)
-            yield root
-            for child_index in range(root.childCount()):
-                yield root.child(child_index)
+            yield from self._walk_nav_branch(root)
+
+    def _walk_nav_branch(self, item: QtWidgets.QTreeWidgetItem):
+        yield item
+        for child_index in range(item.childCount()):
+            yield from self._walk_nav_branch(item.child(child_index))
 
     def _category_sort_key(self, category: str) -> tuple[int, str]:
         try:
             return (MODEL_CATEGORY_ORDER.index(category), category)
         except ValueError:
             return (len(MODEL_CATEGORY_ORDER), category)
+
+    def _subcategory_sort_key(self, category: str, subcategory: str) -> tuple[int, str]:
+        order = MODEL_SUBCATEGORY_ORDER.get(category, ())
+        try:
+            return (order.index(subcategory), subcategory)
+        except ValueError:
+            return (len(order), subcategory)
 
     def _on_navigation_changed(self) -> None:
         item = self.nav_tree.currentItem()
@@ -610,6 +741,10 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
                 continue
             if nav_key == "category" and asset.category != nav_value:
                 continue
+            if nav_key == "subcategory":
+                nav_category, _, nav_subcategory = nav_value.partition("\0")
+                if asset.category != nav_category or asset.metadata.get("subcategory") != nav_subcategory:
+                    continue
             if tag != "All Tags" and not self._matches_tag(asset, tag):
                 continue
             if compatibility == "Current Game" and game != "All" and asset.game and asset.game != game:
@@ -648,8 +783,86 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
             "Placeables": "placeables",
             "Doors": "doors",
             "Engine Items": "engine items",
+            "Armor": "armor",
+            "Armor / Clothing": "clothing",
+            "Armor / Jedi Robes": "jedi robes",
+            "Armor / Light Armor": "light armor",
+            "Armor / Medium Armor": "medium armor",
+            "Armor / Heavy Armor": "heavy armor",
+            "Armor / Environmental Suits": "environmental suits",
+            "Armor / Disguises": "disguises",
+            "Armor / Misc Armor": "misc armor",
             "Inventory": "inventory",
+            "Inventory / Security Spikes": "security spikes",
+            "Inventory / Computer Spikes": "computer spikes",
+            "Inventory / Parts": "parts",
+            "Inventory / Mines": "mines",
+            "Inventory / Spikes": "spikes",
+            "Inventory / Traps": "traps",
+            "Inventory / Medkits": "medkits",
+            "Inventory / Masks": "masks",
+            "Inventory / Implants": "implants",
+            "Inventory / Gauntlets": "gauntlets",
+            "Inventory / Armbands": "armbands",
+            "Inventory / Droid Items": "droid items",
+            "Inventory / Belts": "belts",
+            "Inventory / Stims": "stims",
+            "Inventory / Adrenal Stims": "adrenal stims",
+            "Inventory / Combat Shots": "combat shots",
+            "Inventory / Credits": "credits",
+            "Inventory / Upgrades": "upgrades",
+            "Inventory / Datapads": "datapads",
+            "Inventory / Pazaak": "pazaak",
+            "Inventory / Quest Items": "quest items",
+            "Inventory / Misc Items": "misc items",
             "Weapons": "weapons",
+            "Weapons / Grenades": "grenades",
+            "Weapons / Lightsabers": "lightsabers",
+            "Weapons / Double-Bladed Lightsabers": "double-bladed lightsabers",
+            "Weapons / Short Lightsabers": "short lightsabers",
+            "Weapons / Lightsaber Crystals": "lightsaber crystals",
+            "Weapons / Vibroblades": "vibroblades",
+            "Weapons / Double-Bladed Melee": "double-bladed melee",
+            "Weapons / Blasters": "blasters",
+            "Weapons / Heavy Blasters": "heavy blasters",
+            "Weapons / Blaster Rifles": "blaster rifles",
+            "Weapons / Heavy Weapons": "heavy weapons",
+            "Weapons / Creature Weapons": "creature weapons",
+            "Weapons / Single-Handed Melee": "single-handed melee",
+            "Weapons / Two-Handed Weapons": "two-handed weapons",
+            "Weapons / Misc Weapons": "misc weapons",
+            "Placeables / Containers": "containers",
+            "Placeables / Computers & Panels": "computers & panels",
+            "Placeables / Doors & Transitions": "doors & transitions",
+            "Placeables / Furniture": "furniture",
+            "Placeables / Lights & VFX": "lights & vfx",
+            "Placeables / Traps & Hazards": "traps & hazards",
+            "Placeables / Environmental Props": "environmental props",
+            "Placeables / Misc Placeables": "misc placeables",
+            "Doors / Taris": "taris",
+            "Doors / Dantooine": "dantooine",
+            "Doors / Tatooine": "tatooine",
+            "Doors / Kashyyyk": "kashyyyk",
+            "Doors / Manaan": "manaan",
+            "Doors / Korriban": "korriban",
+            "Doors / Leviathan": "leviathan",
+            "Doors / Star Forge": "star forge",
+            "Doors / Rakata": "rakata",
+            "Doors / Yavin": "yavin",
+            "Doors / Endar Spire": "endar spire",
+            "Doors / Ebon Hawk": "ebon hawk",
+            "Doors / Peragus": "peragus",
+            "Doors / Telos": "telos",
+            "Doors / Harbinger": "harbinger",
+            "Doors / Nar Shaddaa": "nar shaddaa",
+            "Doors / Dxun": "dxun",
+            "Doors / Onderon": "onderon",
+            "Doors / Malachor": "malachor",
+            "Doors / Ravager": "ravager",
+            "Doors / Droid Planet": "droid planet",
+            "Doors / Force Fields": "force fields",
+            "Doors / Generic Doors": "generic doors",
+            "Doors / Unknown Doors": "unknown doors",
             "Visual FX": "visual fx",
             "Visuals": "visuals",
             "Planets": "planets",
@@ -672,7 +885,7 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
             return icon("cat_creature", 16)
         if asset.category in {"NPCs", "Party Members", "Player Characters", "Commoners", "Supermodels"}:
             return icon("cat_character", 16)
-        if asset.category in {"Inventory", "Weapons", "Placeables", "Item/Armor/Weapons"}:
+        if asset.category in {"Armor", "Inventory", "Weapons", "Placeables", "Item/Armor/Weapons"}:
             return icon("cat_item", 16)
         if asset.category in {
             "Environment", "Doors", "Engine Items", "Visual FX", "Visuals", "Planets",

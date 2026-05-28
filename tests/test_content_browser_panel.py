@@ -14,6 +14,23 @@ def _qapp():
     return QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
 
+def _minimal_gff(file_type: str, fields: dict[str, tuple[str, object]]) -> bytes:
+    from src.formats.gff_types import GffFieldType, GffFile, GffStruct, ResRef
+    from src.formats.gff_writer import GffWriter
+
+    root = GffStruct()
+    for label, (kind, value) in fields.items():
+        if kind == "resref":
+            root.set(label, GffFieldType.RESREF, ResRef(str(value)))
+        elif kind == "string":
+            root.set(label, GffFieldType.CEXOSTRING, str(value))
+        elif kind == "uint32":
+            root.set(label, GffFieldType.UINT32, int(value))
+        else:
+            raise AssertionError(f"Unsupported test GFF kind: {kind}")
+    return GffWriter(GffFile(file_type=file_type, root=root)).serialize()
+
+
 def test_content_browser_merges_models_modules_templates_and_animations() -> None:
     _qapp()
 
@@ -263,6 +280,7 @@ def test_content_browser_refines_kotor_model_categories_and_metadata() -> None:
     assert by_name["i_mask_001"].category == "Inventory"
     assert by_name["w_blstrpstl_001"].category == "Weapons"
     assert by_name["dor_metal01"].category == "Doors"
+    assert by_name["dor_metal01"].metadata["subcategory"] == "Generic Doors"
     assert by_name["fx_explosion"].category == "Visual FX"
     assert by_name["fxmuzzle"].category == "Visual FX"
     assert by_name["fxc_droid_arm"].category == "Visual FX"
@@ -331,6 +349,297 @@ def test_content_browser_refines_kotor_model_categories_and_metadata() -> None:
         "Uncategorised",
         "Templates",
     ]
+
+
+def test_content_browser_sorts_items_weapons_and_placeables_into_subcategories() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {"game": "K1", "resref": "i_spike_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_trap_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_medpac_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_mask_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_implant_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_gauntlet_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_armband_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_drdpart_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_belt_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_stim_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_datapad_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_progspike_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_secspike_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_parts_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_trapkit_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_grenade_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_lghtsbr_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_dblsbr_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_shortsbr_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_vbroswrd_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_vbrdblswd_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_blstrpstl_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_hvyblstr_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_blstrrfl_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_hvrptbltr_001", "source": "swkotor"},
+        {"game": "K1", "resref": "a_robe_001", "category": "Armor", "source": "swkotor"},
+        {"game": "K1", "resref": "a_light_001", "category": "Armor", "source": "swkotor"},
+        {"game": "K1", "resref": "a_medium_001", "category": "Armor", "source": "swkotor"},
+        {"game": "K1", "resref": "a_heavy_001", "category": "Armor", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_footlker", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_comppanel", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_chair01", "source": "swkotor"},
+    ])
+
+    by_name = {asset.name: asset for asset in panel.visible_assets()}
+    assert by_name["i_spike_001"].metadata["subcategory"] == "Spikes"
+    assert by_name["i_trap_001"].metadata["subcategory"] == "Traps"
+    assert by_name["i_medpac_001"].metadata["subcategory"] == "Medkits"
+    assert by_name["i_mask_001"].metadata["subcategory"] == "Masks"
+    assert by_name["i_implant_001"].metadata["subcategory"] == "Implants"
+    assert by_name["i_gauntlet_001"].metadata["subcategory"] == "Gauntlets"
+    assert by_name["i_armband_001"].metadata["subcategory"] == "Armbands"
+    assert by_name["i_drdpart_001"].metadata["subcategory"] == "Droid Items"
+    assert by_name["i_belt_001"].metadata["subcategory"] == "Belts"
+    assert by_name["i_stim_001"].metadata["subcategory"] == "Stims"
+    assert by_name["i_datapad_001"].metadata["subcategory"] == "Datapads"
+    assert by_name["i_progspike_001"].metadata["subcategory"] == "Computer Spikes"
+    assert by_name["i_secspike_001"].metadata["subcategory"] == "Security Spikes"
+    assert by_name["i_parts_001"].metadata["subcategory"] == "Parts"
+    assert by_name["i_trapkit_001"].metadata["subcategory"] == "Mines"
+    assert by_name["w_grenade_001"].metadata["subcategory"] == "Grenades"
+    assert by_name["w_lghtsbr_001"].metadata["subcategory"] == "Lightsabers"
+    assert by_name["w_dblsbr_001"].metadata["subcategory"] == "Double-Bladed Lightsabers"
+    assert by_name["w_shortsbr_001"].metadata["subcategory"] == "Short Lightsabers"
+    assert by_name["w_vbroswrd_001"].metadata["subcategory"] == "Vibroblades"
+    assert by_name["w_vbrdblswd_001"].metadata["subcategory"] == "Double-Bladed Melee"
+    assert by_name["w_blstrpstl_001"].metadata["subcategory"] == "Blasters"
+    assert by_name["w_hvyblstr_001"].metadata["subcategory"] == "Heavy Blasters"
+    assert by_name["w_blstrrfl_001"].metadata["subcategory"] == "Blaster Rifles"
+    assert by_name["w_hvrptbltr_001"].metadata["subcategory"] == "Heavy Weapons"
+    assert by_name["a_robe_001"].metadata["subcategory"] == "Jedi Robes"
+    assert by_name["a_light_001"].metadata["subcategory"] == "Light Armor"
+    assert by_name["a_medium_001"].metadata["subcategory"] == "Medium Armor"
+    assert by_name["a_heavy_001"].metadata["subcategory"] == "Heavy Armor"
+    assert by_name["plc_footlker"].metadata["subcategory"] == "Containers"
+    assert by_name["plc_comppanel"].metadata["subcategory"] == "Computers & Panels"
+    assert by_name["plc_chair01"].metadata["subcategory"] == "Furniture"
+
+    folders = [
+        panel.nav_tree.topLevelItem(index)
+        for index in range(panel.nav_tree.topLevelItemCount())
+        if panel.nav_tree.topLevelItem(index).text(0) == "Folders / Categories"
+    ][0]
+    inventory = next(folders.child(index) for index in range(folders.childCount()) if folders.child(index).text(0) == "Inventory")
+    weapons = next(folders.child(index) for index in range(folders.childCount()) if folders.child(index).text(0) == "Weapons")
+    armor = next(folders.child(index) for index in range(folders.childCount()) if folders.child(index).text(0) == "Armor")
+    placeables = next(folders.child(index) for index in range(folders.childCount()) if folders.child(index).text(0) == "Placeables")
+
+    assert [inventory.child(index).text(0) for index in range(inventory.childCount())] == [
+        "Security Spikes",
+        "Computer Spikes",
+        "Parts",
+        "Mines",
+        "Spikes",
+        "Traps",
+        "Medkits",
+        "Masks",
+        "Implants",
+        "Gauntlets",
+        "Armbands",
+        "Droid Items",
+        "Belts",
+        "Stims",
+        "Datapads",
+    ]
+    assert [weapons.child(index).text(0) for index in range(weapons.childCount())] == [
+        "Grenades",
+        "Lightsabers",
+        "Double-Bladed Lightsabers",
+        "Short Lightsabers",
+        "Vibroblades",
+        "Double-Bladed Melee",
+        "Blasters",
+        "Heavy Blasters",
+        "Blaster Rifles",
+        "Heavy Weapons",
+    ]
+    assert [armor.child(index).text(0) for index in range(armor.childCount())] == [
+        "Jedi Robes",
+        "Light Armor",
+        "Medium Armor",
+        "Heavy Armor",
+    ]
+    assert [placeables.child(index).text(0) for index in range(placeables.childCount())] == [
+        "Containers",
+        "Computers & Panels",
+        "Furniture",
+    ]
+
+    panel.tag_filter.setCurrentText("Weapons / Blaster Rifles")
+    assert [asset.name for asset in panel.visible_assets()] == ["w_blstrrfl_001"]
+
+    panel.tag_filter.setCurrentText("All Tags")
+    panel._select_navigation("subcategory", "Inventory\0Masks")
+    assert [asset.name for asset in panel.visible_assets()] == ["i_mask_001"]
+
+
+def test_content_browser_uses_item_template_metadata_for_subcategories() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+    from src.gui.qt_lib.panels.qt_library_panel import enrich_library_rows
+
+    rows = enrich_library_rows([
+        {
+            "game": "K1",
+            "resref": "a_generic_001",
+            "item_template_resref": "g_a_class4001",
+            "item_tag": "G_A_CLASS4001",
+            "item_baseitem": "38",
+            "item_model_variation": "1",
+            "metadata_source": "UTI",
+        },
+        {
+            "game": "K1",
+            "resref": "w_generic_001",
+            "category": "Weapons",
+            "item_template_resref": "g_w_blstrrfl001",
+            "item_tag": "G_W_BLSTRRFL001",
+            "item_baseitem": "77",
+            "item_model_variation": "1",
+            "metadata_source": "UTI",
+        },
+    ])
+
+    assert rows[0]["category"] == "Armor"
+    assert rows[0]["subcategory"] == "Light Armor"
+    assert rows[1]["subcategory"] == "Blaster Rifles"
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows(rows)
+    by_name = {asset.name: asset for asset in panel.visible_assets()}
+
+    assert by_name["a_generic_001"].category == "Armor"
+    assert by_name["a_generic_001"].metadata["subcategory"] == "Light Armor"
+    assert by_name["a_generic_001"].metadata["template"] == "g_a_class4001"
+    assert by_name["a_generic_001"].metadata["metadata source"] == "UTI"
+    assert by_name["w_generic_001"].metadata["subcategory"] == "Blaster Rifles"
+
+
+def test_content_browser_sorts_doors_by_level_metadata_and_prefixes() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+    from src.gui.qt_lib.panels.qt_library_panel import enrich_library_rows
+
+    rows = enrich_library_rows([
+        {"game": "K1", "resref": "dor_lta01", "source": "swkotor"},
+        {"game": "K1", "resref": "dor_lda01", "source": "swkotor"},
+        {"game": "K1", "resref": "dor_lka01", "source": "swkotor"},
+        {"game": "K1", "resref": "dor_lko01", "source": "swkotor"},
+        {"game": "K1", "resref": "dor_lma01", "source": "swkotor"},
+        {"game": "K1", "resref": "dor_lsf01", "source": "swkotor"},
+        {"game": "K1", "resref": "dor_lhr01", "source": "swkotor"},
+        {"game": "K1", "resref": "dor_ukn01", "source": "swkotor"},
+        {
+            "game": "K2",
+            "resref": "door_droid01",
+            "category": "Doors",
+            "door_template_resref": "door_droid01",
+            "door_tag": "DroidPlanetDoor01",
+            "door_generic_type": "90",
+            "metadata_source": "UTD",
+        },
+        {
+            "game": "K2",
+            "resref": "door_narshad01",
+            "category": "Doors",
+            "door_template_resref": "door_narshad01",
+            "door_tag": "NarShaddaaDoor01",
+            "door_generic_type": "73",
+            "metadata_source": "UTD",
+        },
+    ])
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows(rows)
+    by_name = {asset.name: asset for asset in panel.visible_assets()}
+
+    assert by_name["dor_lta01"].metadata["subcategory"] == "Taris"
+    assert by_name["dor_lda01"].metadata["subcategory"] == "Dantooine"
+    assert by_name["dor_lka01"].metadata["subcategory"] == "Kashyyyk"
+    assert by_name["dor_lko01"].metadata["subcategory"] == "Korriban"
+    assert by_name["dor_lma01"].metadata["subcategory"] == "Manaan"
+    assert by_name["dor_lsf01"].metadata["subcategory"] == "Star Forge"
+    assert by_name["dor_lhr01"].metadata["subcategory"] == "Endar Spire"
+    assert by_name["dor_ukn01"].metadata["subcategory"] == "Unknown Doors"
+    assert by_name["door_droid01"].metadata["subcategory"] == "Droid Planet"
+    assert by_name["door_droid01"].metadata["metadata source"] == "UTD"
+    assert by_name["door_narshad01"].metadata["subcategory"] == "Nar Shaddaa"
+
+    folders = [
+        panel.nav_tree.topLevelItem(index)
+        for index in range(panel.nav_tree.topLevelItemCount())
+        if panel.nav_tree.topLevelItem(index).text(0) == "Folders / Categories"
+    ][0]
+    doors = next(folders.child(index) for index in range(folders.childCount()) if folders.child(index).text(0) == "Doors")
+    assert [doors.child(index).text(0) for index in range(doors.childCount())] == [
+        "Taris",
+        "Dantooine",
+        "Kashyyyk",
+        "Manaan",
+        "Korriban",
+        "Star Forge",
+        "Endar Spire",
+        "Nar Shaddaa",
+        "Droid Planet",
+        "Unknown Doors",
+    ]
+
+    panel._select_navigation("subcategory", "Doors\0Droid Planet")
+    assert [asset.name for asset in panel.visible_assets()] == ["door_droid01"]
+
+
+def test_library_scan_maps_utd_door_templates_to_display_models() -> None:
+    from src.gui.qt_lib.panels.qt_library_panel import enrich_library_rows, enrich_library_rows_with_resource_metadata
+
+    class FakeInstall:
+        def list_resrefs(self, res_type: int) -> list[str]:
+            return ["door_droid01"] if res_type == 2042 else []
+
+    class FakeResourceManager:
+        def get_k1(self):
+            return None
+
+        def get_k2(self):
+            return FakeInstall()
+
+        def get(self, name: str, res_type: int, game: str = "K1"):
+            assert (name, res_type, game) == ("door_droid01", 2042, "K2")
+            return _minimal_gff(
+                "UTD ",
+                {
+                    "TemplateResRef": ("resref", "door_droid01"),
+                    "Tag": ("string", "DroidPlanetDoor01"),
+                    "GenericType": ("uint32", 90),
+                    "OpenLockDC": ("uint32", 28),
+                    "KeyName": ("string", ""),
+                    "LinkedTo": ("string", ""),
+                },
+            )
+
+    rows = enrich_library_rows(enrich_library_rows_with_resource_metadata([
+        {"game": "K2", "resref": "dor_dro01", "source": "swkotor2"},
+    ], FakeResourceManager()))
+    row = next(row for row in rows if row.get("resref") == "dor_dro01")
+
+    assert row["category"] == "Doors"
+    assert row["subcategory"] == "Droid Planet"
+    assert row["door_template_resref"] == "door_droid01"
+    assert row["door_generic_type"] == "90"
+    assert row["metadata_source"] == "UTD"
 
 
 def test_content_browser_primary_activation_requests_clear_scene_load() -> None:

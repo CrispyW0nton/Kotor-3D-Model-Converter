@@ -15,7 +15,9 @@ class ModuleEditorAssetItem(QtWidgets.QListWidgetItem):
         resref = str(row.get("resref") or "")
         game = str(row.get("game") or "?")
         category = str(row.get("category") or infer_model_category(resref, str(row.get("model_class", ""))))
-        label = f"[{game}] {category}  {resref}"
+        subcategory = str(row.get("subcategory") or "")
+        category_label = f"{category} / {subcategory}" if subcategory else category
+        label = f"[{game}] {category_label}  {resref}"
         if row.get("area_label"):
             label = f"{label} - {row.get('area_label')}"
         super().__init__(label)
@@ -61,10 +63,88 @@ class ModuleEditorAssetBrowser(QtWidgets.QWidget):
             "Menus",
             "GUI",
             "Placeables",
+            "Placeables / Containers",
+            "Placeables / Computers & Panels",
+            "Placeables / Doors & Transitions",
+            "Placeables / Furniture",
+            "Placeables / Lights & VFX",
+            "Placeables / Traps & Hazards",
+            "Placeables / Environmental Props",
+            "Placeables / Misc Placeables",
             "Doors",
+            "Doors / Taris",
+            "Doors / Dantooine",
+            "Doors / Tatooine",
+            "Doors / Kashyyyk",
+            "Doors / Manaan",
+            "Doors / Korriban",
+            "Doors / Leviathan",
+            "Doors / Star Forge",
+            "Doors / Rakata",
+            "Doors / Yavin",
+            "Doors / Endar Spire",
+            "Doors / Ebon Hawk",
+            "Doors / Peragus",
+            "Doors / Telos",
+            "Doors / Harbinger",
+            "Doors / Nar Shaddaa",
+            "Doors / Dxun",
+            "Doors / Onderon",
+            "Doors / Malachor",
+            "Doors / Ravager",
+            "Doors / Droid Planet",
+            "Doors / Force Fields",
+            "Doors / Generic Doors",
+            "Doors / Unknown Doors",
             "Engine Items",
+            "Armor",
+            "Armor / Clothing",
+            "Armor / Jedi Robes",
+            "Armor / Light Armor",
+            "Armor / Medium Armor",
+            "Armor / Heavy Armor",
+            "Armor / Environmental Suits",
+            "Armor / Disguises",
+            "Armor / Misc Armor",
             "Inventory",
+            "Inventory / Security Spikes",
+            "Inventory / Computer Spikes",
+            "Inventory / Parts",
+            "Inventory / Mines",
+            "Inventory / Spikes",
+            "Inventory / Traps",
+            "Inventory / Medkits",
+            "Inventory / Masks",
+            "Inventory / Implants",
+            "Inventory / Gauntlets",
+            "Inventory / Armbands",
+            "Inventory / Droid Items",
+            "Inventory / Belts",
+            "Inventory / Stims",
+            "Inventory / Adrenal Stims",
+            "Inventory / Combat Shots",
+            "Inventory / Credits",
+            "Inventory / Upgrades",
+            "Inventory / Datapads",
+            "Inventory / Pazaak",
+            "Inventory / Quest Items",
+            "Inventory / Misc Items",
             "Weapons",
+            "Weapons / Grenades",
+            "Weapons / Lightsabers",
+            "Weapons / Double-Bladed Lightsabers",
+            "Weapons / Short Lightsabers",
+            "Weapons / Lightsaber Crystals",
+            "Weapons / Vibroblades",
+            "Weapons / Double-Bladed Melee",
+            "Weapons / Blasters",
+            "Weapons / Heavy Blasters",
+            "Weapons / Blaster Rifles",
+            "Weapons / Heavy Weapons",
+            "Weapons / Creature Weapons",
+            "Weapons / Single-Handed Melee",
+            "Weapons / Two-Handed Weapons",
+            "Weapons / Misc Weapons",
             "Item/Armor/Weapons",
             "Visual FX",
             "Visuals",
@@ -118,8 +198,15 @@ class ModuleEditorAssetBrowser(QtWidgets.QWidget):
         for row in self._rows:
             resref = str(row.get("resref") or "")
             row_category = str(row.get("category") or infer_model_category(resref, str(row.get("model_class", ""))))
-            haystack = " ".join(str(row.get(key, "")) for key in ("game", "resref", "category", "area_label", "source")).lower()
-            if category != "All" and row_category != category:
+            row_subcategory = str(row.get("subcategory") or "")
+            row_category_path = f"{row_category} / {row_subcategory}" if row_subcategory else row_category
+            haystack = " ".join(
+                str(row.get(key, ""))
+                for key in ("game", "resref", "category", "subcategory", "area_label", "source")
+            ).lower()
+            if category != "All" and row_category not in {category, category.split(" / ", 1)[0]}:
+                continue
+            if " / " in category and row_category_path != category:
                 continue
             if needle and needle not in haystack:
                 continue
@@ -134,7 +221,10 @@ class ModuleEditorAssetBrowser(QtWidgets.QWidget):
         if not row:
             return
         source = Path(str(row.get("source", ""))).name if row.get("source") else ""
-        parts = [str(row.get("resref", "")), str(row.get("game", "")), str(row.get("category", ""))]
+        category = str(row.get("category", ""))
+        subcategory = str(row.get("subcategory", ""))
+        category_label = f"{category} / {subcategory}" if subcategory else category
+        parts = [str(row.get("resref", "")), str(row.get("game", "")), category_label]
         if row.get("area_label"):
             parts.append(str(row.get("area_label")))
         if source:

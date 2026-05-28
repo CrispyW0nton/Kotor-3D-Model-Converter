@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from PySide6 import QtCore, QtWidgets
 
@@ -36,6 +37,7 @@ MODEL_CATEGORY_ORDER = (
     "Placeables",
     "Doors",
     "Engine Items",
+    "Armor",
     "Inventory",
     "Weapons",
     "Item/Armor/Weapons",
@@ -48,6 +50,96 @@ MODEL_CATEGORY_ORDER = (
     "Other",
     "Templates",
 )
+
+MODEL_SUBCATEGORY_ORDER = {
+    "Inventory": (
+        "Security Spikes",
+        "Computer Spikes",
+        "Parts",
+        "Mines",
+        "Spikes",
+        "Traps",
+        "Medkits",
+        "Masks",
+        "Implants",
+        "Gauntlets",
+        "Armbands",
+        "Droid Items",
+        "Belts",
+        "Stims",
+        "Adrenal Stims",
+        "Combat Shots",
+        "Credits",
+        "Upgrades",
+        "Datapads",
+        "Pazaak",
+        "Quest Items",
+        "Misc Items",
+    ),
+    "Weapons": (
+        "Grenades",
+        "Lightsabers",
+        "Double-Bladed Lightsabers",
+        "Short Lightsabers",
+        "Lightsaber Crystals",
+        "Vibroblades",
+        "Double-Bladed Melee",
+        "Blasters",
+        "Heavy Blasters",
+        "Blaster Rifles",
+        "Heavy Weapons",
+        "Creature Weapons",
+        "Single-Handed Melee",
+        "Two-Handed Weapons",
+        "Misc Weapons",
+    ),
+    "Armor": (
+        "Clothing",
+        "Jedi Robes",
+        "Light Armor",
+        "Medium Armor",
+        "Heavy Armor",
+        "Environmental Suits",
+        "Disguises",
+        "Misc Armor",
+    ),
+    "Placeables": (
+        "Containers",
+        "Computers & Panels",
+        "Doors & Transitions",
+        "Furniture",
+        "Lights & VFX",
+        "Traps & Hazards",
+        "Environmental Props",
+        "Misc Placeables",
+    ),
+    "Doors": (
+        "Taris",
+        "Dantooine",
+        "Tatooine",
+        "Kashyyyk",
+        "Manaan",
+        "Korriban",
+        "Leviathan",
+        "Star Forge",
+        "Rakata",
+        "Yavin",
+        "Endar Spire",
+        "Ebon Hawk",
+        "Peragus",
+        "Telos",
+        "Harbinger",
+        "Nar Shaddaa",
+        "Dxun",
+        "Onderon",
+        "Malachor",
+        "Ravager",
+        "Droid Planet",
+        "Force Fields",
+        "Generic Doors",
+        "Unknown Doors",
+    ),
+}
 
 _PARTY_MEMBER_NAMES = {
     "bastila", "carth", "mission", "zaalbar", "canderous", "jolee", "juhani",
@@ -77,6 +169,163 @@ _LEVEL_ASSET_NAMES = {
     "l_repoffm", "l_selkath", "l_sithhoff_f", "l_sithoff_m", "l_sithsoldier",
     "l_twilekf", "l_twilekm", "l_wookie", "l_wookief",
 }
+
+_RES_UTI = 2025
+_RES_UTD = 2042
+_RES_UTP = 2044
+
+_BASEITEM_CATEGORIES = {
+    **{baseitem: "Weapons" for baseitem in range(0, 35)},
+    **{baseitem: "Armor" for baseitem in range(35, 44)},
+    **{baseitem: "Inventory" for baseitem in range(44, 77)},
+    **{baseitem: "Weapons" for baseitem in range(77, 84)},
+    84: "Inventory",
+    85: "Armor",
+    86: "Inventory",
+    87: "Inventory",
+    88: "Inventory",
+    89: "Armor",
+    90: "Armor",
+    91: "Inventory",
+    92: "Weapons",
+    93: "Weapons",
+    94: "Inventory",
+    95: "Inventory",
+    96: "Inventory",
+    98: "Armor",
+    100: "Armor",
+    101: "Armor",
+    102: "Armor",
+    103: "Armor",
+}
+
+_BASEITEM_SUBCATEGORIES = {
+    0: "Two-Handed Weapons",
+    1: "Single-Handed Melee",
+    2: "Single-Handed Melee",
+    3: "Vibroblades",
+    4: "Single-Handed Melee",
+    5: "Vibroblades",
+    6: "Double-Bladed Melee",
+    7: "Double-Bladed Melee",
+    8: "Lightsabers",
+    9: "Double-Bladed Lightsabers",
+    10: "Short Lightsabers",
+    11: "Lightsaber Crystals",
+    12: "Blasters",
+    13: "Heavy Blasters",
+    14: "Heavy Blasters",
+    15: "Blasters",
+    16: "Blasters",
+    17: "Blasters",
+    18: "Blaster Rifles",
+    19: "Blaster Rifles",
+    20: "Blaster Rifles",
+    21: "Blaster Rifles",
+    22: "Blaster Rifles",
+    23: "Blaster Rifles",
+    24: "Heavy Weapons",
+    25: "Grenades",
+    26: "Grenades",
+    27: "Grenades",
+    28: "Grenades",
+    29: "Grenades",
+    30: "Grenades",
+    31: "Grenades",
+    32: "Grenades",
+    33: "Grenades",
+    34: "Grenades",
+    35: "Jedi Robes",
+    36: "Jedi Robes",
+    37: "Jedi Robes",
+    38: "Light Armor",
+    39: "Light Armor",
+    40: "Medium Armor",
+    41: "Medium Armor",
+    42: "Heavy Armor",
+    43: "Heavy Armor",
+    44: "Masks",
+    45: "Gauntlets",
+    46: "Armbands",
+    47: "Belts",
+    48: "Implants",
+    49: "Implants",
+    50: "Implants",
+    53: "Stims",
+    54: "Combat Shots",
+    55: "Medkits",
+    56: "Droid Items",
+    57: "Credits",
+    58: "Mines",
+    59: "Security Spikes",
+    60: "Computer Spikes",
+    61: "Misc Items",
+    62: "Misc Items",
+    63: "Misc Items",
+    64: "Upgrades",
+    65: "Pazaak",
+    66: "Droid Items",
+    67: "Droid Items",
+    68: "Droid Items",
+    69: "Droid Items",
+    70: "Droid Items",
+    71: "Droid Items",
+    72: "Droid Items",
+    73: "Droid Items",
+    74: "Droid Items",
+    75: "Droid Items",
+    76: "Droid Items",
+    77: "Blaster Rifles",
+    78: "Two-Handed Weapons",
+    79: "Single-Handed Melee",
+    80: "Single-Handed Melee",
+    81: "Creature Weapons",
+    82: "Creature Weapons",
+    83: "Creature Weapons",
+    84: "Misc Items",
+    85: "Clothing",
+    86: "Pazaak",
+    87: "Pazaak",
+    88: "Belts",
+    89: "Jedi Robes",
+    90: "Disguises",
+    91: "Medkits",
+    92: "Heavy Weapons",
+    93: "Single-Handed Melee",
+    94: "Medkits",
+    95: "Quest Items",
+    96: "Quest Items",
+    98: "Environmental Suits",
+    100: "Clothing",
+    101: "Environmental Suits",
+    102: "Jedi Robes",
+    103: "Disguises",
+}
+
+_DOOR_TOKEN_SUBCATEGORIES = (
+    (("taris", "tar_", "lta", "lts"), "Taris"),
+    (("dantooine", "dan", "lda"), "Dantooine"),
+    (("tatooine", "tat"), "Tatooine"),
+    (("kashyyyk", "kash", "lka"), "Kashyyyk"),
+    (("manaan", "lma"), "Manaan"),
+    (("korriban", "kor", "kban", "lko"), "Korriban"),
+    (("leviathan", "lza"), "Leviathan"),
+    (("starforge", "star_forge", "lsf"), "Star Forge"),
+    (("rakata", "rakatan", "lrk"), "Rakata"),
+    (("yavin", "lyv"), "Yavin"),
+    (("endar", "spier", "spire", "lhr"), "Endar Spire"),
+    (("ebon", "hawk", "eh1"), "Ebon Hawk"),
+    (("peragus", "per"), "Peragus"),
+    (("telos", "tel"), "Telos"),
+    (("harbinger", "har"), "Harbinger"),
+    (("narshaddaa", "nar_shaddaa", "narshad", "nar"), "Nar Shaddaa"),
+    (("dxun", "dxn"), "Dxun"),
+    (("onderon", "ond"), "Onderon"),
+    (("malachor", "mal"), "Malachor"),
+    (("ravager", "nih"), "Ravager"),
+    (("droidplanet", "droid_planet", "droid", "dro"), "Droid Planet"),
+    (("ffield", "forcefield", "force_field"), "Force Fields"),
+)
 
 
 def _looks_like_minigame(resref: str) -> bool:
@@ -132,6 +381,8 @@ def infer_model_category(resref: str, model_class: str = "") -> str:
         return "Misc Models"
     if r.startswith("or_") or r in _ENVIRONMENT_MODEL_NAMES:
         return "Environment"
+    if r.startswith(("a_robe", "a_jedirobe", "a_light", "a_medium", "a_heavy", "a_class", "g_a_", "d_armor")):
+        return "Armor"
     if r.startswith(("gi_", "a_")):
         return "Engine Items"
     if r.startswith("plc_"):
@@ -204,6 +455,210 @@ def infer_model_category(resref: str, model_class: str = "") -> str:
     return "Uncategorised"
 
 
+def _stripped_resource_token(resref: str) -> str:
+    r = (resref or "").lower()
+    for prefix in ("g_w_", "g_i_", "g_a_", "iw_", "ia_", "w_", "i_", "plc_"):
+        if r.startswith(prefix):
+            return r[len(prefix):]
+    return r
+
+
+def _metadata_int(metadata: dict[str, Any], key: str) -> Optional[int]:
+    value = metadata.get(key)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _subcategory_from_item_metadata(metadata: dict[str, Any]) -> str:
+    haystack = " ".join(
+        str(metadata.get(key, ""))
+        for key in (
+            "item_template_resref",
+            "item_tag",
+            "template_resref",
+            "tag",
+            "resref",
+        )
+    ).lower()
+    baseitem = _metadata_int(metadata, "item_baseitem")
+    if "secspike" in haystack:
+        return "Security Spikes"
+    if "progspike" in haystack:
+        return "Computer Spikes"
+    if "parts" in haystack:
+        return "Parts"
+    if any(part in haystack for part in ("parts", "drd", "droid", "repair", "shield")):
+        return "Droid Items"
+    if any(part in haystack for part in ("mine", "trapkit")):
+        return "Mines"
+    if "trap" in haystack:
+        return "Traps"
+    if any(part in haystack for part in ("medpac", "medpack", "medkit", "med_")):
+        return "Medkits"
+    if "adrnaline" in haystack or "adrenal" in haystack:
+        return "Adrenal Stims"
+    if "stim" in haystack:
+        return "Stims"
+    return _BASEITEM_SUBCATEGORIES.get(baseitem, "") if baseitem is not None else ""
+
+
+def _category_from_item_metadata(metadata: dict[str, Any]) -> str:
+    baseitem = _metadata_int(metadata, "item_baseitem")
+    if baseitem is not None:
+        return _BASEITEM_CATEGORIES.get(baseitem, "")
+    return ""
+
+
+def _subcategory_from_door_metadata(metadata: dict[str, Any]) -> str:
+    haystack = " ".join(
+        str(metadata.get(key, ""))
+        for key in (
+            "door_template_resref",
+            "door_tag",
+            "template_resref",
+            "tag",
+            "resref",
+        )
+    ).lower().replace(" ", "")
+    for tokens, subcategory in _DOOR_TOKEN_SUBCATEGORIES:
+        if any(token in haystack for token in tokens):
+            return subcategory
+    return ""
+
+
+def infer_model_subcategory(resref: str, category: str = "", metadata: Optional[dict[str, Any]] = None) -> str:
+    """Return a game-style browser subcategory for known item and placeable rows."""
+    r = (resref or "").lower()
+    token = _stripped_resource_token(r)
+    cat = category or infer_model_category(resref)
+    if metadata:
+        if cat == "Doors":
+            metadata_subcategory = _subcategory_from_door_metadata({**metadata, "resref": resref})
+            if metadata_subcategory:
+                return metadata_subcategory
+        metadata_subcategory = _subcategory_from_item_metadata({**metadata, "resref": resref})
+        if metadata_subcategory and cat in {"Armor", "Inventory", "Weapons", "Item/Armor/Weapons"}:
+            return metadata_subcategory
+    if cat == "Inventory":
+        if "secspike" in token:
+            return "Security Spikes"
+        if "progspike" in token:
+            return "Computer Spikes"
+        if "spike" in token:
+            return "Spikes"
+        if "parts" in token:
+            return "Parts"
+        if any(part in token for part in ("trapkit", "mine")):
+            return "Mines"
+        if "trap" in token:
+            return "Traps"
+        if any(part in token for part in ("medpac", "medpack", "medkit", "med_")):
+            return "Medkits"
+        if "mask" in token:
+            return "Masks"
+        if "implant" in token:
+            return "Implants"
+        if any(part in token for part in ("gauntlet", "glove")):
+            return "Gauntlets"
+        if "armband" in token:
+            return "Armbands"
+        if any(part in token for part in ("drd", "droid", "parts", "prog")):
+            return "Droid Items"
+        if "belt" in token:
+            return "Belts"
+        if "stim" in token:
+            return "Stims"
+        if "adrnaline" in token or "adrenal" in token:
+            return "Adrenal Stims"
+        if "credit" in token:
+            return "Credits"
+        if "datapad" in token:
+            return "Datapads"
+        if "paz" in token:
+            return "Pazaak"
+        if any(part in token for part in ("upgrade", "chem", "compont", "crystal")):
+            return "Upgrades"
+        return "Misc Items"
+    if cat == "Weapons":
+        if any(part in token for part in ("gren", "grenade")):
+            return "Grenades"
+        if any(part in token for part in ("dblsbr", "double_saber")):
+            return "Double-Bladed Lightsabers"
+        if any(part in token for part in ("shortsbr", "short_saber")):
+            return "Short Lightsabers"
+        if "sbrcrstl" in token or "crystal" in token:
+            return "Lightsaber Crystals"
+        if any(part in token for part in ("lghtsbr", "lightsbr", "saber", "sabre", "sbr")):
+            return "Lightsabers"
+        if any(part in token for part in ("dblswrd", "vbrdblswd", "double", "staff")):
+            return "Double-Bladed Melee"
+        if any(part in token for part in ("vbro", "vibro", "shortswrd", "lngswrd", "dblswrd", "sword")):
+            return "Vibroblades"
+        if any(part in token for part in ("hvyblstr", "hldoblstr")):
+            return "Heavy Blasters"
+        if any(part in token for part in ("hvrpt", "rocket")):
+            return "Heavy Weapons"
+        if any(part in token for part in ("blstrrfl", "bowcstr", "rptnblstr", "hvyrptr", "rifle")):
+            return "Blaster Rifles"
+        if any(part in token for part in ("blstrpstl", "hldoblstr", "pistol", "blaster")):
+            return "Blasters"
+        if any(part in token for part in ("dbl", "double", "staff", "rfl", "rifle", "bow")):
+            return "Two-Handed Weapons"
+        if any(part in token for part in ("pstl", "pistol", "short")):
+            return "Single-Handed Melee"
+        return "Misc Weapons"
+    if cat == "Armor":
+        if "robe" in token:
+            return "Jedi Robes"
+        if "light" in token:
+            return "Light Armor"
+        if "medium" in token:
+            return "Medium Armor"
+        if "heavy" in token:
+            return "Heavy Armor"
+        if any(part in token for part in ("env", "space", "under", "suit")):
+            return "Environmental Suits"
+        if any(part in token for part in ("disguise", "uniform", "sandper")):
+            return "Disguises"
+        if "cloth" in token:
+            return "Clothing"
+        return "Misc Armor"
+    if cat == "Placeables":
+        if any(part in token for part in ("footlker", "locker", "container", "crate", "chest", "box")):
+            return "Containers"
+        if any(part in token for part in ("comp", "panel", "terminal", "console")):
+            return "Computers & Panels"
+        if any(part in token for part in ("door", "trans", "elev", "ramp")):
+            return "Doors & Transitions"
+        if any(part in token for part in ("chair", "table", "desk", "bed", "bench", "shelf")):
+            return "Furniture"
+        if any(part in token for part in ("light", "lamp", "fx", "fire", "flame", "spark")):
+            return "Lights & VFX"
+        if any(part in token for part in ("trap", "mine", "gas", "poison", "hazard")):
+            return "Traps & Hazards"
+        if any(part in token for part in ("rock", "tree", "plant", "sign", "statue", "debris", "barrel")):
+            return "Environmental Props"
+        return "Misc Placeables"
+    if cat == "Doors":
+        subcategory = _subcategory_from_door_metadata({"resref": resref})
+        if subcategory:
+            return subcategory
+        if "ukn" in token or "unknown" in token:
+            return "Unknown Doors"
+        return "Generic Doors"
+    return ""
+
+
+def _subcategory_sort_key(category: str, subcategory: str) -> tuple[int, str]:
+    order = MODEL_SUBCATEGORY_ORDER.get(category, ())
+    try:
+        return (order.index(subcategory), subcategory)
+    except ValueError:
+        return (len(order), subcategory)
+
+
 def content_browser_metadata_for_resref(resref: str, category: str) -> dict[str, str]:
     """Return lightweight taxonomy tags for library rows without loading MDLs."""
     r = (resref or "").lower()
@@ -211,7 +666,7 @@ def content_browser_metadata_for_resref(resref: str, category: str) -> dict[str,
     if category in {
         "Droids", "Turrets", "Creatures", "Holograms", "NPCs", "Party Members",
         "Player Characters", "Supermodels", "Environment", "Placeables", "Doors",
-        "Engine Items", "Inventory", "Weapons", "Visual FX", "Visuals", "Commoners",
+        "Engine Items", "Armor", "Inventory", "Weapons", "Visual FX", "Visuals", "Commoners",
         "Planets", "Misc Models", "Stunts", "Skyboxes", "Minigame", "Menus", "GUI",
         "Level Assets", "Uncategorised",
     }:
@@ -230,6 +685,9 @@ def content_browser_metadata_for_resref(resref: str, category: str) -> dict[str,
         metadata["role"] = "Environment Asset"
     if category == "Commoners":
         metadata["role"] = "Commoner"
+    subcategory = infer_model_subcategory(resref, category)
+    if subcategory:
+        metadata["subcategory"] = subcategory
     return metadata
 
 
@@ -242,6 +700,178 @@ def _module_info_for_row(resref: str, game: str = ""):
     return None
 
 
+def _as_gff_dict(raw: Optional[bytes]) -> dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        from src.core.game.game_library_ext import GFFReader
+
+        parsed = GFFReader.from_bytes(raw)
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        return {}
+
+
+def _template_field_text(gff: dict[str, Any], field: str, fallback: str = "") -> str:
+    value = gff.get(field, fallback)
+    return str(value or fallback or "").strip()
+
+
+def _template_model_candidates(template_resref: str, model_variation: Any) -> set[str]:
+    template = str(template_resref or "").strip().lower()
+    candidates = {template} if template else set()
+    if not template:
+        return candidates
+    stem = template
+    for prefix in ("g1_", "g2_", "g3_", "g_"):
+        if stem.startswith(prefix):
+            stem = stem[len(prefix):]
+            candidates.add(stem)
+            break
+    try:
+        variation = int(model_variation)
+    except (TypeError, ValueError):
+        variation = 0
+    match = re.search(r"(\d+)$", stem)
+    if match and variation <= 0:
+        try:
+            variation = int(match.group(1))
+        except ValueError:
+            variation = 0
+    if match and variation > 0:
+        suffix_len = len(match.group(1))
+        trimmed_len = 3 if suffix_len >= 3 else suffix_len
+        base = stem[:-trimmed_len].rstrip("_")
+        if base:
+            candidates.add(f"{base}_{variation:03d}")
+            candidates.add(f"{base}{variation:03d}")
+    return {candidate for candidate in candidates if candidate}
+
+
+def _door_model_candidates(template_resref: str, tag: str = "") -> set[str]:
+    values = {
+        str(template_resref or "").strip().lower(),
+        str(tag or "").strip().lower().replace(" ", "_"),
+        str(tag or "").strip().lower().replace(" ", ""),
+    }
+    candidates = {value for value in values if value}
+    for value in list(candidates):
+        if value.startswith("door_"):
+            stem = value[5:]
+            replacements = (
+                ("dxun", "dxn"),
+                ("droid", "dro"),
+                ("narshad", "nar"),
+            )
+            candidates.add(f"dor_{stem}")
+            for old, new in replacements:
+                if stem.startswith(old):
+                    candidates.add(f"dor_{new}{stem[len(old):]}")
+        if value.startswith("sw_door_"):
+            candidates.add(value[3:])
+    return {candidate for candidate in candidates if candidate}
+
+
+def _template_metadata_index_for_game(resource_manager: Any, game: str) -> dict[str, dict[str, str]]:
+    install = resource_manager.get_k1() if game == "K1" else resource_manager.get_k2()
+    if install is None or not hasattr(install, "list_resrefs"):
+        return {}
+    index: dict[str, dict[str, str]] = {}
+    try:
+        item_resrefs = install.list_resrefs(_RES_UTI)
+    except Exception:
+        item_resrefs = []
+    for template_resref in item_resrefs:
+        gff = _as_gff_dict(resource_manager.get(template_resref, _RES_UTI, game))
+        if not gff:
+            continue
+        model_variation = gff.get("ModelVariation", "")
+        baseitem = gff.get("BaseItem", "")
+        template = _template_field_text(gff, "TemplateResRef", template_resref).lower()
+        metadata = {
+            "item_template_resref": template,
+            "item_tag": _template_field_text(gff, "Tag", template),
+            "item_baseitem": str(baseitem) if baseitem not in ("", None) else "",
+            "item_model_variation": str(model_variation) if model_variation not in ("", None) else "",
+            "metadata_source": "UTI",
+        }
+        subcategory = infer_model_subcategory(template, infer_model_category(template), metadata)
+        if subcategory:
+            metadata["subcategory"] = subcategory
+        for candidate in _template_model_candidates(template, model_variation):
+            existing = index.get(candidate)
+            if existing is None or (metadata.get("subcategory") and not existing.get("subcategory")):
+                index[candidate] = dict(metadata)
+
+    try:
+        placeable_resrefs = install.list_resrefs(_RES_UTP)
+    except Exception:
+        placeable_resrefs = []
+    for template_resref in placeable_resrefs:
+        gff = _as_gff_dict(resource_manager.get(template_resref, _RES_UTP, game))
+        if not gff:
+            continue
+        tag = _template_field_text(gff, "Tag", template_resref)
+        template = _template_field_text(gff, "TemplateResRef", template_resref).lower()
+        metadata = {
+            "placeable_template_resref": template,
+            "placeable_tag": tag,
+            "placeable_appearance": str(gff.get("Appearance", "")),
+            "metadata_source": "UTP",
+        }
+        subcategory = infer_model_subcategory(tag or template, "Placeables")
+        if subcategory:
+            metadata["subcategory"] = subcategory
+        for candidate in (template, tag.lower()):
+            if candidate:
+                index.setdefault(candidate, dict(metadata))
+
+    try:
+        door_resrefs = install.list_resrefs(_RES_UTD)
+    except Exception:
+        door_resrefs = []
+    for template_resref in door_resrefs:
+        gff = _as_gff_dict(resource_manager.get(template_resref, _RES_UTD, game))
+        if not gff:
+            continue
+        tag = _template_field_text(gff, "Tag", template_resref)
+        template = _template_field_text(gff, "TemplateResRef", template_resref).lower()
+        generic_type = gff.get("GenericType", gff.get("Appearance", ""))
+        metadata = {
+            "door_template_resref": template,
+            "door_tag": tag,
+            "door_generic_type": str(generic_type) if generic_type not in ("", None) else "",
+            "door_open_lock_dc": str(gff.get("OpenLockDC", "")),
+            "door_key_name": _template_field_text(gff, "KeyName", ""),
+            "door_linked_to": _template_field_text(gff, "LinkedTo", ""),
+            "metadata_source": "UTD",
+        }
+        subcategory = infer_model_subcategory(tag or template, "Doors", metadata)
+        if subcategory:
+            metadata["subcategory"] = subcategory
+        for candidate in _door_model_candidates(template, tag):
+            if candidate:
+                index.setdefault(candidate, dict(metadata))
+    return index
+
+
+def enrich_library_rows_with_resource_metadata(rows: list[dict], resource_manager: Any) -> list[dict]:
+    """Attach optional UTI/UTP metadata to library model rows from indexed game files."""
+    indices: dict[str, dict[str, dict[str, str]]] = {}
+    enriched: list[dict] = []
+    for row in rows:
+        item = dict(row)
+        game = str(item.get("game", "")).upper()
+        if game in {"K1", "K2"}:
+            if game not in indices:
+                indices[game] = _template_metadata_index_for_game(resource_manager, game)
+            metadata = indices[game].get(str(item.get("resref", "")).lower())
+            if metadata:
+                item.update({key: value for key, value in metadata.items() if value not in ("", None)})
+        enriched.append(item)
+    return enriched
+
+
 def enrich_library_rows(rows: list[dict]) -> list[dict]:
     """Copy rows, add category/area fields, and append built-in templates."""
     enriched: list[dict] = []
@@ -251,7 +881,17 @@ def enrich_library_rows(rows: list[dict]) -> list[dict]:
         resref = str(item.get("resref", ""))
         game = str(item.get("game", ""))
         module_info = _module_info_for_row(resref, game)
-        item["category"] = "Modules" if module_info is not None else infer_model_category(resref, str(item.get("model_class", "")))
+        supplied_category = str(item.get("category", ""))
+        metadata_category = _category_from_item_metadata(item)
+        item["category"] = (
+            "Modules" if module_info is not None
+            else metadata_category
+            or (supplied_category if supplied_category in MODEL_CATEGORY_ORDER and supplied_category not in {"Character", "Creature"} else "")
+            or infer_model_category(resref, str(item.get("model_class", "")))
+        )
+        subcategory = infer_model_subcategory(resref, str(item.get("category", "")), item)
+        if subcategory:
+            item["subcategory"] = subcategory
         if module_info is not None:
             item.setdefault("module_code", module_info.module_code)
             item.setdefault("location", module_info.location)
@@ -275,7 +915,14 @@ def enrich_library_rows(rows: list[dict]) -> list[dict]:
                 "template": True,
             }
         )
-    enriched.sort(key=lambda item: (str(item.get("game", "")), _category_sort_key(str(item.get("category", ""))), str(item.get("resref", ""))))
+    enriched.sort(
+        key=lambda item: (
+            str(item.get("game", "")),
+            _category_sort_key(str(item.get("category", ""))),
+            _subcategory_sort_key(str(item.get("category", "")), str(item.get("subcategory", ""))),
+            str(item.get("resref", "")),
+        )
+    )
     return enriched
 
 

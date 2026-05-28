@@ -35,7 +35,7 @@ except Exception:  # pragma: no cover - defensive fallback for unusual PySide in
     shiboken6 = None
 
 from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
-from src.gui.qt_lib.panels.qt_library_panel import enrich_library_rows
+from src.gui.qt_lib.panels.qt_library_panel import enrich_library_rows, enrich_library_rows_with_resource_metadata
 from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel
 from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
 from src.gui.qt_lib.panels.qt_camera_panel import QtCameraPanel
@@ -509,7 +509,7 @@ def _index_game_libraries_sync(k1_dir: str = "", k2_dir: str = "") -> tuple[obje
         if ok:
             for resref, _restype in mgr.list_models("K2"):
                 rows.append({"game": "K2", "resref": resref, "source": k2_dir})
-    rows = enrich_library_rows(rows)
+    rows = enrich_library_rows(enrich_library_rows_with_resource_metadata(rows, mgr))
     rows.sort(key=lambda item: (item["game"], item["resref"]))
     return mgr, rows
 
