@@ -119,6 +119,14 @@ fn odyssey_display_tone(color: vec3<f32>) -> vec3<f32> {
     return pow(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), vec3<f32>(1.18));
 }
 
+fn sprite_emission_tint(color: vec3<f32>) -> vec3<f32> {
+    let peak = max(max(color.r, color.g), color.b);
+    if (peak <= 0.001) {
+        return color;
+    }
+    return mix(color, color / peak, 0.35);
+}
+
 fn shader_complexity_color(complexity_id: i32, has_diffuse: f32, has_lightmap: f32, scene_enabled: f32, light_count: f32, alpha: f32) -> vec3<f32> {
     if (complexity_id == 2) {
         return vec3<f32>(0.08, clamp(0.20 + alpha * 0.65, 0.0, 1.0), 0.95);
@@ -151,6 +159,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         sampled = vec4<f32>(1.0, 1.0, 1.0, 1.0);
     }
     let material_quality = locals.sprite.z;
+    let sprite_emissive = locals.sprite.x > 0.5 && locals.sprite.y > 0.001;
     if (locals.sprite.x > 0.5) {
         let keyed_alpha = sprite_keyed_alpha(sampled);
         sampled = vec4<f32>(sampled.rgb, keyed_alpha);
@@ -178,16 +187,16 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         out_color = vec4<f32>(vec3<f32>(0.035), out_color.a);
     } else if (mode_id == 1 || mode_id == 2 || mode_id == 4) {
         out_color = vec4<f32>(out_color.rgb, out_color.a);
-    } else if (lighting_state.flags.y > 0.5) {
+    } else if (!sprite_emissive && lighting_state.flags.y > 0.5) {
         out_color = vec4<f32>(out_color.rgb * scene_light_shade(n, input.world_position), out_color.a);
-    } else if (locals.params.y > 1.5) {
+    } else if (!sprite_emissive && locals.params.y > 1.5) {
         let light = normalize(vec3<f32>(0.45, 0.35, 0.82));
         let ndotl = max(dot(n, light), 0.0);
         let soft_shade = clamp(0.76 + ndotl * 0.24, 0.70, 1.0);
         out_color = vec4<f32>(out_color.rgb * soft_shade, out_color.a);
     }
 
-    if (locals.flags.y > 0.5 && mode_id != 1 && mode_id != 2 && mode_id != 3 && mode_id != 4 && mode_id != 5 && mode_id != 6 && mode_id != 7 && mode_id != 8) {
+    if (!sprite_emissive && locals.flags.y > 0.5 && mode_id != 1 && mode_id != 2 && mode_id != 3 && mode_id != 4 && mode_id != 5 && mode_id != 6 && mode_id != 7 && mode_id != 8) {
         let lightmap_sample = textureSample(lightmap_tex, lightmap_sampler, input.uv1);
         let lm_strength = clamp(locals.params.x, 0.0, 4.0);
         if (locals.params.z > 2.5) {
@@ -204,10 +213,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
-    if (mode_id != 3 && mode_id != 5 && mode_id != 8 && material_quality > 0.5) {
-        if (material_quality > 1.5 && locals.sprite.y > 0.001) {
-            out_color = vec4<f32>(out_color.rgb * (1.0 + locals.sprite.y), out_color.a);
-        }
+    if (sprite_emissive && mode_id != 3 && mode_id != 5 && mode_id != 8 && material_quality > 0.5) {
+        let tint = sprite_emission_tint(out_color.rgb);
+        let emission = max(out_color.rgb, tint * (0.45 + out_color.a * 0.55));
+        out_color = vec4<f32>(clamp(emission * (1.0 + locals.sprite.y), vec3<f32>(0.0), vec3<f32>(1.0)), out_color.a);
+    } else if (mode_id != 3 && mode_id != 5 && mode_id != 8 && material_quality > 0.5) {
         out_color = vec4<f32>(odyssey_display_tone(out_color.rgb), out_color.a);
     }
 

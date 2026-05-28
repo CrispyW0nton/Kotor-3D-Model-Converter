@@ -802,11 +802,11 @@ def test_sprite_material_panel_detects_and_edits_alpha_card_meshes() -> None:
         name="blade01",
         texture="w_lsabreblue",
         is_mesh=True,
-        txi_blending=1,
+        txi_blending=0,
         txi_alpha_test=0.0,
         txi_wateralpha=1.0,
         txi_decal=False,
-        transparency_hint=1,
+        transparency_hint=0,
         alpha=1.0,
     )
     body = SimpleNamespace(
@@ -856,9 +856,23 @@ def test_sprite_material_panel_detects_and_edits_alpha_card_meshes() -> None:
         transparency_hint=0,
         alpha=1.0,
     )
+    saber_helper = SimpleNamespace(
+        name="plane242",
+        texture="w_lsabreblue01",
+        is_mesh=True,
+        is_saber=True,
+        type_label="lightsaber",
+        txi_blending=0,
+        txi_alpha_test=0.0,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=0,
+        alpha=1.0,
+    )
+    nodes = [blade, body, null_texture_card, dummy_bone, saber_hilt, saber_helper]
     model = SimpleNamespace(
-        mesh_nodes=lambda: [blade, body, null_texture_card, dummy_bone, saber_hilt],
-        all_nodes=lambda: [blade, body, null_texture_card, dummy_bone, saber_hilt],
+        mesh_nodes=lambda: nodes,
+        all_nodes=lambda: nodes,
     )
     panel = QtSpriteMaterialPanel()
     changed = []
@@ -872,8 +886,9 @@ def test_sprite_material_panel_detects_and_edits_alpha_card_meshes() -> None:
     assert names == ["blade01", "LghtSbr09"]
     assert "torso_g" not in names
     assert "weaponhook" not in names
-    assert panel.tree.topLevelItem(0).text(4) == "Additive"
-    assert panel.tree.topLevelItem(0).text(7) == "blend 1, hint 1, key, glow 1.6"
+    assert "plane242" not in names
+    assert panel.tree.topLevelItem(0).text(4) == "Lighten"
+    assert panel.tree.topLevelItem(0).text(7) == "key, glow 1.6"
     assert panel.tree.topLevelItem(1).text(3) == "Hilt"
     assert panel.tree.topLevelItem(1).text(4) == "Opaque"
     assert panel.tree.topLevelItem(1).text(7) == "hilt"
@@ -895,7 +910,7 @@ def test_sprite_material_panel_detects_and_edits_alpha_card_meshes() -> None:
     panel.tree.topLevelItem(0).setCheckState(0, QtCore.Qt.Unchecked)
     assert blade._gr_hidden is True
     panel._reset_selected()
-    assert blade.txi_blending == 1
+    assert blade.txi_blending == 0
     assert blade._gr_hidden is False
 
 
@@ -945,7 +960,7 @@ def test_wgpu_material_data_promotes_sprite_alpha_cards_to_alpha_queues() -> Non
     assert _material_data(alpha_card, {}).alpha_mode == "MASK"
     saber_material = _material_data(saber_card, {})
     assert saber_material.alpha_mode == "BLEND"
-    assert saber_material.blend_mode == "ADDITIVE"
+    assert saber_material.blend_mode == "LIGHTEN"
     assert saber_material.sprite_alpha_source == 1
     assert saber_material.sprite_glow == pytest.approx(1.6)
     hilt_material = _material_data(hilt, {})
@@ -1143,6 +1158,7 @@ def test_hidden_module_mesh_panel_selection_is_not_forwarded_to_viewport() -> No
 def test_qt_viewport_exposes_mesh_multiselect_box_and_ctrl_a() -> None:
     import inspect
 
+    from src.gui.qt_lib.panels.qt_skeleton_panel import node_browser_role
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     source = inspect.getsource(QtViewportWidget)
@@ -1158,6 +1174,8 @@ def test_qt_viewport_exposes_mesh_multiselect_box_and_ctrl_a() -> None:
     assert "QtWidgets.QRubberBand" in source
     assert "def _front_facing_score" in source
     assert "def _point_in_triangle" in source
+    assert QtViewportWidget._is_selectable_mesh_node(SimpleNamespace(is_saber=True, vertices=[1], faces=[1])) is False
+    assert node_browser_role(SimpleNamespace(is_saber=True, is_mesh=True), "lightsaber") == "Lightsaber"
 
 
 def test_qt_viewport_mesh_pick_requires_real_triangle_and_hover_outline() -> None:
@@ -2550,7 +2568,8 @@ def test_wgpu_mesh_shaders_apply_moderngl_selected_yellow_fill() -> None:
     assert expected in wgpu_renderer._load_mesh_shader()
     assert expected in wgpu_renderer._load_skinned_mesh_shader()
     assert "sprite_keyed_alpha" in wgpu_renderer._load_mesh_shader()
-    assert "material_quality > 1.5 && locals.sprite.y" in wgpu_renderer._load_mesh_shader()
+    assert "sprite_emission_tint" in wgpu_renderer._load_mesh_shader()
+    assert "!sprite_emissive && lighting_state.flags.y" in wgpu_renderer._load_mesh_shader()
     assert "out_color.rgb * soft_shade, out_color.a" in wgpu_renderer._load_mesh_shader()
     assert "locals.model * vec4<f32>(input.position, 1.0)" in wgpu_renderer._load_mesh_shader()
     assert "locals.model * skin_position(input)" in wgpu_renderer._load_skinned_mesh_shader()
@@ -2558,7 +2577,9 @@ def test_wgpu_mesh_shaders_apply_moderngl_selected_yellow_fill() -> None:
 
 def test_wgpu_routes_saber_sprites_through_additive_blend_pass() -> None:
     import inspect
+    import numpy as np
 
+    from src.gui.qt_lib.rendering import wgpu_renderer
     from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
     from src.gui.qt_lib.rendering.viewport_display import ViewportDisplayMode
 
@@ -2566,20 +2587,41 @@ def test_wgpu_routes_saber_sprites_through_additive_blend_pass() -> None:
     mesh_source = inspect.getsource(WgpuRenderer._draw_meshes)
     skin_source = inspect.getsource(WgpuRenderer._skinned_pipeline_for_pass)
 
+    assert "src_factor\": wgpu.BlendFactor.one if additive else wgpu.BlendFactor.src_alpha" in create_source
     assert "dst_factor\": wgpu.BlendFactor.one if additive else wgpu.BlendFactor.one_minus_src_alpha" in create_source
     assert "blend_mode = str(getattr(material_data, \"blend_mode\", \"ALPHA\")" in mesh_source
     assert 'item[0] == "BLEND" and item[1] == "ADDITIVE"' in mesh_source
     assert 'draw_pass("additive", additive, self.pipeline_mesh_additive' in mesh_source
     assert 'pass_name).lower() == "additive"' in skin_source
     assert "self._should_draw_selected_mesh_edges(item, mode, edge_overlay)" in mesh_source
+    assert "_uses_sprite_wire_hull" in inspect.getsource(wgpu_renderer.WgpuResourceCache.upload_mesh)
 
     renderer = WgpuRenderer.__new__(WgpuRenderer)
     glow_card = SimpleNamespace(material=SimpleNamespace(blend_mode="ADDITIVE", sprite_alpha_source=1))
+    lighten_glow_card = SimpleNamespace(material=SimpleNamespace(blend_mode="LIGHTEN", sprite_alpha_source=1))
     opaque_mesh = SimpleNamespace(material=SimpleNamespace(blend_mode="ALPHA", sprite_alpha_source=0))
     assert renderer._should_draw_selected_mesh_edges(glow_card, ViewportDisplayMode.TEXTURED, False) is False
+    assert renderer._should_draw_selected_mesh_edges(lighten_glow_card, ViewportDisplayMode.TEXTURED, False) is False
     assert renderer._should_draw_selected_mesh_edges(glow_card, ViewportDisplayMode.TEXTURED, True) is True
     assert renderer._should_draw_selected_mesh_edges(glow_card, ViewportDisplayMode.WIREFRAME, False) is True
+    assert renderer._should_draw_selected_mesh_edges(lighten_glow_card, ViewportDisplayMode.WIREFRAME, False) is True
     assert renderer._should_draw_selected_mesh_edges(opaque_mesh, ViewportDisplayMode.TEXTURED, False) is True
+
+    cache = wgpu_renderer.WgpuResourceCache.__new__(wgpu_renderer.WgpuResourceCache)
+    positions = np.asarray(
+        [
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ],
+        dtype=np.float32,
+    )
+    hull = cache._build_edge_indices(None, len(positions), positions=positions, geometric=True)
+    assert hull is not None
+    assert len(hull) == 8
 
 
 def test_wgpu_mesh_draw_uses_per_draw_uniforms_for_selected_fill() -> None:

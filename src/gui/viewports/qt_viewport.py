@@ -3737,6 +3737,8 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     @staticmethod
     def _is_selectable_mesh_node(node) -> bool:
+        if bool(getattr(node, "is_saber", False)):
+            return False
         verts = getattr(node, "vertices", getattr(node, "verts", [])) or []
         faces = getattr(node, "faces", []) or []
         return bool(verts and faces)

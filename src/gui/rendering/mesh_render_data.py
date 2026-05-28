@@ -182,6 +182,8 @@ def _node_is_renderable_mesh(node) -> bool:
         return False
     if getattr(node, "render", True) is False:
         return False
+    if bool(getattr(node, "is_saber", False)):
+        return False
     if int(getattr(node, "vertex_space", 0) or 0) == 2:
         return False
     return bool(getattr(node, "vertices", getattr(node, "verts", [])) and getattr(node, "faces", []))
@@ -559,13 +561,20 @@ def _alpha_mode(node) -> str:
 
 
 def _blend_mode(node) -> str:
+    explicit = str(getattr(node, "_gr_sprite_render_mode", "") or "").lower()
+    if explicit == "additive":
+        return "ADDITIVE"
+    if explicit == "lighten":
+        return "LIGHTEN"
+    if explicit in {"opaque", "cutout", "blend"}:
+        return "ALPHA"
     txi_blend = int(getattr(node, "txi_blending", 0) or 0)
+    if _sprite_alpha_source(node) and _sprite_glow(node) > 0.001:
+        return "LIGHTEN"
     if txi_blend == 1:
         return "ADDITIVE"
     if txi_blend == 3:
         return "LIGHTEN"
-    if _sprite_alpha_source(node) and _sprite_glow(node) > 0.001:
-        return "ADDITIVE"
     return "ALPHA"
 
 

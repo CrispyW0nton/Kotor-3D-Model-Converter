@@ -415,8 +415,15 @@ class GhostRiggerMDLBinaryReader(_iom.MDLBinaryReader):
 
         bin_node = self._gr_bin_nodes.get(offset)
         if bin_node is not None:
+            self._preserve_raw_node_flags(node, bin_node)
             self._fill_mdx_offset_zero_vertices(node, bin_node)
         return node
+
+    def _preserve_raw_node_flags(self, node, bin_node: GhostRiggerNode) -> None:
+        """Restore semantic node types that PyKotor collapses during conversion."""
+
+        if int(bin_node.header.type_id) & int(_iom.MDLNodeFlags.SABER):
+            node.node_type = _iom.MDLNodeType.SABER
 
     def _fill_mdx_offset_zero_vertices(self, node, bin_node: GhostRiggerNode) -> None:
         trimesh = bin_node.trimesh

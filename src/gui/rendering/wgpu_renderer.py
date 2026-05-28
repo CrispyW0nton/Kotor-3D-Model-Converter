@@ -450,14 +450,15 @@ class WgpuResourceCache:
         index_count = 0
         edge_index_buffer = None
         edge_index_count = 0
+        sprite_wire_hull = self._uses_sprite_wire_hull(getattr(mesh_data, "material", None))
         if mesh_data.indices is not None and len(mesh_data.indices):
             indices = np.ascontiguousarray(mesh_data.indices, dtype=np.uint32)
             index_buffer = device.create_buffer_with_data(data=indices, usage=wgpu.BufferUsage.INDEX)
             self.buffer_upload_count += 1
             index_count = int(len(indices))
-            edge_indices = self._build_edge_indices(indices, len(positions))
+            edge_indices = self._build_edge_indices(indices, len(positions), positions=positions, geometric=sprite_wire_hull)
         else:
-            edge_indices = self._build_edge_indices(None, len(positions))
+            edge_indices = self._build_edge_indices(None, len(positions), positions=positions, geometric=sprite_wire_hull)
         if edge_indices is not None and len(edge_indices):
             edge_index_buffer = device.create_buffer_with_data(data=edge_indices, usage=wgpu.BufferUsage.INDEX)
             self.buffer_upload_count += 1
@@ -554,7 +555,15 @@ class WgpuResourceCache:
             self.cache_hits += 1
         return cached
 
-    def _build_edge_indices(self, indices, vertex_count: int):
+    @staticmethod
+    def _uses_sprite_wire_hull(material) -> bool:
+        if material is None:
+            return False
+        blend_mode = str(getattr(material, "blend_mode", "") or "").upper()
+        sprite_alpha = int(getattr(material, "sprite_alpha_source", 0) or 0)
+        return blend_mode in {"ADDITIVE", "LIGHTEN"} and sprite_alpha > 0
+
+    def _build_edge_indices(self, indices, vertex_count: int, *, positions=None, geometric: bool = False):
         import numpy as np
 
         if vertex_count <= 1:
@@ -565,9 +574,13 @@ class WgpuResourceCache:
             tri_indices = np.asarray(indices, dtype=np.uint32).reshape(-1)
         if len(tri_indices) < 3:
             return None
+        usable = len(tri_indices) - (len(tri_indices) % 3)
+        if geometric and positions is not None:
+            hull = self._build_geometric_boundary_edges(tri_indices[:usable], positions, vertex_count)
+            if hull is not None and len(hull):
+                return hull
         edge_set: set[tuple[int, int]] = set()
         out: list[int] = []
-        usable = len(tri_indices) - (len(tri_indices) % 3)
         for i in range(0, usable, 3):
             tri = [int(tri_indices[i]), int(tri_indices[i + 1]), int(tri_indices[i + 2])]
             if any(v < 0 or v >= vertex_count for v in tri):
@@ -578,6 +591,44 @@ class WgpuResourceCache:
                     continue
                 edge_set.add(key)
                 out.extend((a, b))
+        if not out:
+            return None
+        return np.ascontiguousarray(out, dtype=np.uint32)
+
+    @staticmethod
+    def _build_geometric_boundary_edges(tri_indices, positions, vertex_count: int):
+        import numpy as np
+
+        pos = np.asarray(positions, dtype=np.float32)
+        tri = np.asarray(tri_indices, dtype=np.uint32).reshape(-1)
+        if pos.ndim != 2 or pos.shape[1] < 3 or len(tri) < 3:
+            return None
+
+        def key(vertex_index: int) -> tuple[int, int, int]:
+            vertex = pos[int(vertex_index), :3]
+            return tuple(int(round(float(component) * 100000.0)) for component in vertex)
+
+        edge_counts: dict[tuple[tuple[int, int, int], tuple[int, int, int]], int] = {}
+        edge_representatives: dict[tuple[tuple[int, int, int], tuple[int, int, int]], tuple[int, int]] = {}
+        for i in range(0, (len(tri) // 3) * 3, 3):
+            face = [int(tri[i]), int(tri[i + 1]), int(tri[i + 2])]
+            if any(v < 0 or v >= vertex_count for v in face):
+                continue
+            for left, right in ((face[0], face[1]), (face[1], face[2]), (face[2], face[0])):
+                a = key(left)
+                b = key(right)
+                if a == b:
+                    continue
+                edge_key = (a, b) if a <= b else (b, a)
+                edge_counts[edge_key] = edge_counts.get(edge_key, 0) + 1
+                edge_representatives.setdefault(edge_key, (left, right))
+
+        out: list[int] = []
+        for edge_key, count in edge_counts.items():
+            if count != 1:
+                continue
+            left, right = edge_representatives[edge_key]
+            out.extend((left, right))
         if not out:
             return None
         return np.ascontiguousarray(out, dtype=np.uint32)
@@ -1762,7 +1813,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             additive = str(blend).lower() == "additive"
             target["blend"] = {
                 "color": {
-                    "src_factor": wgpu.BlendFactor.src_alpha,
+                    "src_factor": wgpu.BlendFactor.one if additive else wgpu.BlendFactor.src_alpha,
                     "dst_factor": wgpu.BlendFactor.one if additive else wgpu.BlendFactor.one_minus_src_alpha,
                     "operation": wgpu.BlendOperation.add,
                 },
@@ -2489,7 +2540,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         material = getattr(mesh_data, "material", None)
         blend_mode = str(getattr(material, "blend_mode", "ALPHA") or "ALPHA").upper()
         sprite_alpha = int(getattr(material, "sprite_alpha_source", 0) or 0)
-        return not (blend_mode == "ADDITIVE" and sprite_alpha)
+        return not (blend_mode in {"ADDITIVE", "LIGHTEN"} and sprite_alpha)
 
     def _is_hovered_mesh_data(self, mesh_data) -> bool:
         if not bool(getattr(self, "show_mesh_hover", True)):

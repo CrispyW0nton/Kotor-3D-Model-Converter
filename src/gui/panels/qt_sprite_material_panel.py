@@ -29,6 +29,7 @@ class QtSpriteMaterialPanel(QtWidgets.QWidget):
         "txi_decal",
         "transparency_hint",
         "alpha",
+        "_gr_sprite_render_mode",
         "_gr_sprite_alpha_source",
         "_gr_sprite_glow",
     )
@@ -258,6 +259,7 @@ class QtSpriteMaterialPanel(QtWidgets.QWidget):
                     node is None
                     or id(node) in seen
                     or not getattr(node, "is_mesh", False)
+                    or bool(getattr(node, "is_saber", False))
                     or not self._has_valid_texture(node)
                     or self._node_role(node) not in {"Mesh", "Skin"}
                 ):
@@ -344,8 +346,14 @@ class QtSpriteMaterialPanel(QtWidgets.QWidget):
             setattr(node, "_gr_sprite_category", category)
             setattr(node, "_gr_hidden", hidden)
             if mode == "auto":
+                if hasattr(node, "_gr_sprite_render_mode"):
+                    try:
+                        delattr(node, "_gr_sprite_render_mode")
+                    except Exception:
+                        setattr(node, "_gr_sprite_render_mode", "")
                 self._restore_original(node)
             else:
+                setattr(node, "_gr_sprite_render_mode", mode)
                 self._apply_render_mode(node, mode, cutoff, opacity, decal)
             setattr(node, "_gr_sprite_alpha_source", alpha_source)
             setattr(node, "_gr_sprite_glow", max(0.0, min(4.0, glow)))
@@ -537,6 +545,13 @@ class QtSpriteMaterialPanel(QtWidgets.QWidget):
         return any(keyword in text for keyword in keywords)
 
     def _render_mode(self, node) -> str:
+        explicit = str(getattr(node, "_gr_sprite_render_mode", "") or "").lower()
+        if explicit in {"opaque", "cutout", "blend", "additive", "lighten"}:
+            return explicit
+        if self._is_saber_hilt(node):
+            return "opaque"
+        if self._auto_uses_matte_key(node):
+            return "lighten"
         blend = int(getattr(node, "txi_blending", 0) or 0)
         if blend == 1:
             return "additive"
@@ -544,10 +559,6 @@ class QtSpriteMaterialPanel(QtWidgets.QWidget):
             return "cutout"
         if blend == 3:
             return "lighten"
-        if self._is_saber_hilt(node):
-            return "opaque"
-        if self._auto_uses_matte_key(node):
-            return "additive"
         if (
             float(getattr(node, "txi_wateralpha", 1.0) or 1.0) < 0.999
             or float(getattr(node, "alpha", 1.0) or 1.0) < 0.999

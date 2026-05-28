@@ -4292,6 +4292,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             "texture": str(getattr(node, "texture", "") or ""),
             "category": str(getattr(node, "_gr_sprite_category", "") or ""),
             "hidden": bool(getattr(node, "_gr_hidden", False)),
+            "render_mode": str(getattr(node, "_gr_sprite_render_mode", "") or ""),
             "txi_blending": int(getattr(node, "txi_blending", 0) or 0),
             "txi_alpha_test": float(getattr(node, "txi_alpha_test", 0.0) or 0.0),
             "txi_wateralpha": float(getattr(node, "txi_wateralpha", 1.0) or 1.0),
@@ -4307,6 +4308,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if bool(getattr(node, "_gr_hidden", False)):
             return True
         if str(getattr(node, "_gr_sprite_category", "") or ""):
+            return True
+        if str(getattr(node, "_gr_sprite_render_mode", "") or ""):
             return True
         if str(getattr(node, "_gr_sprite_alpha_source", "") or ""):
             return True
@@ -4354,10 +4357,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             if not hasattr(node, "_gr_sprite_original_material"):
                 setattr(node, "_gr_sprite_original_material", {
                     name: getattr(node, name, None)
-                    for name in ("txi_blending", "txi_alpha_test", "txi_wateralpha", "txi_decal", "transparency_hint", "alpha", "_gr_sprite_alpha_source", "_gr_sprite_glow")
+                    for name in ("txi_blending", "txi_alpha_test", "txi_wateralpha", "txi_decal", "transparency_hint", "alpha", "_gr_sprite_render_mode", "_gr_sprite_alpha_source", "_gr_sprite_glow")
                 })
             setattr(node, "_gr_sprite_category", str(payload.get("category") or ""))
             setattr(node, "_gr_hidden", bool(payload.get("hidden", False)))
+            setattr(node, "_gr_sprite_render_mode", str(payload.get("render_mode") or ""))
             setattr(node, "txi_blending", int(payload.get("txi_blending", getattr(node, "txi_blending", 0)) or 0))
             setattr(node, "txi_alpha_test", float(payload.get("txi_alpha_test", getattr(node, "txi_alpha_test", 0.0)) or 0.0))
             setattr(node, "txi_wateralpha", float(payload.get("txi_wateralpha", getattr(node, "txi_wateralpha", 1.0)) or 1.0))

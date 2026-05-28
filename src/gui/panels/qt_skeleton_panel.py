@@ -18,6 +18,8 @@ def node_browser_role(node, node_type: str | None = None) -> str:
         return "Emitter"
     if getattr(node, "is_skin", False) or node_type == "skin":
         return "Skin"
+    if getattr(node, "is_saber", False) or node_type == "lightsaber":
+        return "Lightsaber"
     name = str(getattr(node, "name", "") or "").lower()
     if name.endswith("hook") or "hook" in name:
         return "Hook"
