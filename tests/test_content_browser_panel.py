@@ -1736,6 +1736,27 @@ def test_progress_toast_reapplies_active_theme_on_show() -> None:
     assert hasattr(QtProgressToast, "apply_native_theme")
 
 
+def test_progress_toast_is_compact_and_anchored_to_viewport_canvas() -> None:
+    import inspect
+
+    import src.gui.qt_lib.windows.qt_main_window as main_window_module
+    from src.gui.qt_lib.windows import progress_toast as progress_toast_module
+    from src.gui.qt_lib.windows.qt_main_window import QtProgressToast
+
+    toast_source = inspect.getsource(QtProgressToast)
+    main_source = inspect.getsource(main_window_module)
+
+    assert main_window_module.QtProgressToast is progress_toast_module.QtProgressToast
+    assert "from src.gui.qt_lib.windows.progress_toast import QtProgressPanel, QtProgressToast" in main_source
+    assert "class QtProgressToast" not in main_source
+    assert "setFixedWidth(280)" in toast_source
+    assert "QtProgressPanel(self, compact=True)" in toast_source
+    assert 'getattr(parent, "viewport", None)' in toast_source
+    assert 'getattr(viewport, "canvas", None)' in toast_source
+    assert "rect.bottom() - self.height()" in toast_source
+    assert "target.mapToGlobal" in toast_source
+
+
 def test_progress_panel_stylesheet_tracks_theme_tokens() -> None:
     _qapp()
 

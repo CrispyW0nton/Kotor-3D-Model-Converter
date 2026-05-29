@@ -206,6 +206,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
     ),
     "windows": (
         "module_editor_window",
+        "progress_toast",
         "qt_blueprint_editor",
         "qt_character_builder_window",
         "qt_main_window",

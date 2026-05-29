@@ -322,7 +322,7 @@ def main(argv: list[str] | None = None):
     log = logging.getLogger("ghostrigger.main")
 
     log.info("=" * 60)
-    log.info(f"GhostRigger-K1-K2 starting — Python {sys.version.split()[0]}")
+    log.info(f"GhostRiggerIDE starting — Python {sys.version.split()[0]}")
     log.info(f"Session log: {logfile or 'DISABLED (could not open log file)'}")
     log.info(f"App directory: {_APP_DIR}")
     log.info("=" * 60)
