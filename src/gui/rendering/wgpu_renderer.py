@@ -1059,6 +1059,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.pipeline_lines = None
         self.pipeline_lines_skinned = None
         self.pipeline_gizmo_lines = None
+        self.pipeline_gizmo_triangles = None
         self.pipeline_pick = None
         self.skeleton_resource: WgpuSkeletonResource | None = None
         self.mesh_pipeline_layout = None
@@ -1499,6 +1500,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 self._create_gizmo_line_pipeline()
             except Exception as exc:
                 self.pipeline_gizmo_lines = None
+                self.pipeline_gizmo_triangles = None
                 self.gizmo_pipeline_status = f"unavailable: {exc}"
                 log.warning("WgpuRenderer: gizmo line pipeline unavailable: %s", exc)
             try:
@@ -2020,34 +2022,44 @@ class WgpuRenderer(NullDiagnosticRenderer):
             self._create_line_pipeline()
         pipeline_layout = self.device.create_pipeline_layout(bind_group_layouts=[self.line_bind_group_layout])
         shader = self.device.create_shader_module(code=_LINE_WGSL)
-        self.pipeline_gizmo_lines = self.device.create_render_pipeline(
-            label="WGPU gizmo overlay lines",
-            layout=pipeline_layout,
-            vertex={
-                "module": shader,
-                "entry_point": "vs_main",
-                "buffers": [
-                    {
-                        "array_stride": 12,
-                        "step_mode": wgpu.VertexStepMode.vertex,
-                        "attributes": [
-                            {"format": wgpu.VertexFormat.float32x3, "offset": 0, "shader_location": 0},
-                        ],
-                    }
-                ],
-            },
-            primitive={"topology": wgpu.PrimitiveTopology.line_list},
-            depth_stencil={
-                "format": self.depth_format,
-                "depth_write_enabled": False,
-                "depth_compare": wgpu.CompareFunction.always,
-            },
-            multisample=None,
-            fragment={
-                "module": shader,
-                "entry_point": "fs_main",
-                "targets": [{"format": self.format}],
-            },
+        def create_pipeline(label: str, topology):
+            return self.device.create_render_pipeline(
+                label=label,
+                layout=pipeline_layout,
+                vertex={
+                    "module": shader,
+                    "entry_point": "vs_main",
+                    "buffers": [
+                        {
+                            "array_stride": 12,
+                            "step_mode": wgpu.VertexStepMode.vertex,
+                            "attributes": [
+                                {"format": wgpu.VertexFormat.float32x3, "offset": 0, "shader_location": 0},
+                            ],
+                        }
+                    ],
+                },
+                primitive={"topology": topology},
+                depth_stencil={
+                    "format": self.depth_format,
+                    "depth_write_enabled": False,
+                    "depth_compare": wgpu.CompareFunction.always,
+                },
+                multisample=None,
+                fragment={
+                    "module": shader,
+                    "entry_point": "fs_main",
+                    "targets": [{"format": self.format}],
+                },
+            )
+
+        self.pipeline_gizmo_lines = create_pipeline(
+            "WGPU gizmo overlay lines",
+            wgpu.PrimitiveTopology.line_list,
+        )
+        self.pipeline_gizmo_triangles = create_pipeline(
+            "WGPU gizmo overlay filled handles",
+            wgpu.PrimitiveTopology.triangle_list,
         )
         self.gizmo_pipeline_status = "ready"
 
@@ -2884,9 +2896,37 @@ class WgpuRenderer(NullDiagnosticRenderer):
             import wgpu
 
             mvp = self._camera_mvp_matrix(self._active_camera, width, height)
-            render_pass.set_pipeline(self.pipeline_gizmo_lines)
             drawn = 0
-            for command in commands:
+            line_commands = [command for command in commands if str(getattr(command, "kind", "line") or "line").lower() != "triangles"]
+            triangle_commands = [command for command in commands if str(getattr(command, "kind", "line") or "line").lower() == "triangles"]
+
+            if self.pipeline_gizmo_triangles is not None:
+                render_pass.set_pipeline(self.pipeline_gizmo_triangles)
+                for command in triangle_commands:
+                    cache_key = self._gizmo_command_cache_key(command)
+                    cached = self._gizmo_line_cache.get(cache_key)
+                    if cached is None:
+                        points = [tuple(float(v) for v in tuple(point)[:3]) for point in (getattr(command, "points", ()) or ())]
+                        if len(points) < 3:
+                            continue
+                        data = np.asarray(points, dtype=np.float32).reshape(-1, 3)
+                        vertex_buffer = self.device.create_buffer_with_data(data=data, usage=wgpu.BufferUsage.VERTEX)
+                        cached = (vertex_buffer, int(len(data)))
+                        if len(self._gizmo_line_cache) > 256:
+                            self._gizmo_line_cache.clear()
+                        self._gizmo_line_cache[cache_key] = cached
+                        self.resource_cache.buffer_upload_count += 1
+                    vertex_buffer, vertex_count = cached
+                    if vertex_count <= 0:
+                        continue
+                    color = tuple(float(v) for v in getattr(command, "colour", (1.0, 1.0, 1.0, 1.0))[:4])
+                    self._set_line_uniform(render_pass, mvp, color)
+                    render_pass.set_vertex_buffer(0, vertex_buffer)
+                    render_pass.draw(int(vertex_count), 1, 0, 0)
+                    self.profiler.add("draw_calls", 1)
+
+            render_pass.set_pipeline(self.pipeline_gizmo_lines)
+            for command in line_commands:
                 cache_key = self._gizmo_command_cache_key(command)
                 cached = self._gizmo_line_cache.get(cache_key)
                 if cached is None:
@@ -3956,6 +3996,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.pipeline_lines = None
         self.pipeline_lines_skinned = None
         self.pipeline_gizmo_lines = None
+        self.pipeline_gizmo_triangles = None
         self.pipeline_pick = None
         self.skeleton_resource = None
         self.mesh_pipeline_layout = None

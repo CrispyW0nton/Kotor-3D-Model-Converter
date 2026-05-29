@@ -60,11 +60,17 @@ def test_gizmo_builds_renderer_neutral_draw_commands_for_wgpu() -> None:
     translate_data = gizmo.build_render_data(DummyCamera(), _projector, 200, 160)
     assert translate_data.active_tool == "translate"
     assert {"TRANSLATE_X", "TRANSLATE_Y", "TRANSLATE_Z"}.issubset({cmd.pick_id for cmd in translate_data.commands})
+    assert any(cmd.kind == "triangles" for cmd in translate_data.commands)
+    assert translate_data.handle_count >= 4
+    assert gizmo.hit_test((100, 80), DummyCamera()) == "TRANSLATE_VIEW"
 
     gizmo.set_mode(GizmoMode.ROTATE)
     rotate_data = gizmo.build_render_data(DummyCamera(), _projector, 200, 160)
     assert {"ROTATE_X", "ROTATE_Y", "ROTATE_Z"}.issubset({cmd.pick_id for cmd in rotate_data.commands})
+    assert rotate_data.handle_count >= 3
 
     gizmo.set_mode(GizmoMode.SCALE)
     scale_data = gizmo.build_render_data(DummyCamera(), _projector, 200, 160)
     assert {"SCALE_X", "SCALE_Y", "SCALE_Z", "SCALE_UNIFORM"}.issubset({cmd.pick_id for cmd in scale_data.commands})
+    assert any(cmd.kind == "triangles" for cmd in scale_data.commands)
+    assert scale_data.handle_count >= 7

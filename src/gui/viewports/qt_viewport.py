@@ -5415,6 +5415,15 @@ class QtViewportWidget(QtWidgets.QWidget):
             return False
         governor = getattr(self, "_frame_governor", None)
         dirty_flags = dict(getattr(governor, "dirty_flags", {}) or {})
+        if (
+            self._gpu_renderer_supports_native_gizmo_drawing()
+            and bool(dirty_flags.get("gizmo", False))
+            and not any(
+                bool(dirty_flags.get(name, False))
+                for name in ("camera", "overlay", "resources", "selection", "lighting", "diagnostics", "hud")
+            )
+        ):
+            return True
         if any(bool(dirty_flags.get(name, False)) for name in ("camera", "overlay", "resources", "selection", "lighting", "gizmo", "diagnostics", "hud")):
             return False
         if bool(getattr(self, "_xray_mode", False) or getattr(self, "_weight_heatmap_enabled", False)):
@@ -5640,7 +5649,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._renderer._draw_walkmesh_overlay(draw, w, h)
             self._draw_camera_helpers(draw, w, h)
             self._draw_wgpu_helper_markers(draw, w, h)
-            if self._ensure_renderer_gimbal_state():
+            if self._ensure_renderer_gimbal_state() and not self._gpu_renderer_supports_native_gizmo_drawing():
                 self._draw_transform_gizmo(draw, w, h)
             self._draw_measurement_overlay(draw, w, h)
             self._draw_selected_model_outline(draw, w, h)
@@ -5822,6 +5831,19 @@ class QtViewportWidget(QtWidgets.QWidget):
         try:
             caps = renderer.get_capabilities() if hasattr(renderer, "get_capabilities") else None
             return bool(getattr(caps, "supports_gpu_id_picking", False))
+        except Exception:
+            return False
+
+    def _gpu_renderer_supports_native_gizmo_drawing(self) -> bool:
+        renderer = getattr(self, "_gpu_renderer", None)
+        if renderer is None:
+            return False
+        backend_id = str(getattr(renderer, "backend_id", "") or "").lower()
+        if not backend_id.startswith("wgpu_"):
+            return False
+        try:
+            caps = renderer.get_capabilities() if hasattr(renderer, "get_capabilities") else None
+            return bool(getattr(caps, "supports_gizmo_drawing", False))
         except Exception:
             return False
 
@@ -7492,10 +7514,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         x, y = int(event.position().x()), int(event.position().y())
         if self._transform_gizmo_dragging:
             self._transform_gizmo.drag((x, y), self.camera, self.canvas.height())
-            node = getattr(self._renderer, "selected_node", None)
-            if node is not None:
-                self._notify_node_moved(node)
-            self._request_render(fast=True, reason="gizmo drag", gizmo=True, camera=True, overlay=True)
+            self._request_render(fast=True, reason="gizmo drag", scene=True, gizmo=True)
             return
         if self._gimbal_dragging and self._renderer.selected_node:
             if (

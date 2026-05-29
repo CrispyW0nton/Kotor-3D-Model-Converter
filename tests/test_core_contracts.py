@@ -172,10 +172,16 @@ def test_qt_gpu_viewport_uses_overlay_not_cpu_textured_fallback() -> None:
     import inspect
 
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
 
     frame_source = inspect.getsource(QtViewportWidget._render_frame)
     source = inspect.getsource(QtViewportWidget._draw_gpu_viewport_overlays)
     legacy_source = inspect.getsource(QtViewportWidget._draw_cpu_overlays)
+    native_gizmo_source = inspect.getsource(QtViewportWidget._gpu_renderer_supports_native_gizmo_drawing)
+    drag_source = inspect.getsource(QtViewportWidget._drag_lmb)
+    skip_source = inspect.getsource(QtViewportWidget._can_skip_live_overlay_rebuild)
+    wgpu_draw_source = inspect.getsource(WgpuRenderer._draw_gizmo_lines)
+    wgpu_pipeline_source = inspect.getsource(WgpuRenderer._create_gizmo_line_pipeline)
 
     assert "_draw_gpu_viewport_overlays" in frame_source
     assert "_draw_performance_overlay" in frame_source
@@ -186,6 +192,14 @@ def test_qt_gpu_viewport_uses_overlay_not_cpu_textured_fallback() -> None:
     assert "_draw_grid" in source
     assert "_draw_stats" in source
     assert "_draw_transform_gizmo" in source
+    assert "not self._gpu_renderer_supports_native_gizmo_drawing()" in source
+    assert 'backend_id.startswith("wgpu_")' in native_gizmo_source
+    assert "supports_gizmo_drawing" in native_gizmo_source
+    assert 'reason="gizmo drag", scene=True, gizmo=True' in drag_source
+    assert "self._notify_node_moved(node)" not in drag_source
+    assert "_gpu_renderer_supports_native_gizmo_drawing()" in skip_source
+    assert "pipeline_gizmo_triangles" in wgpu_pipeline_source
+    assert '"triangles"' in wgpu_draw_source
     assert "_draw_axes" in source
     assert "return self._draw_gpu_viewport_overlays" in legacy_source
 

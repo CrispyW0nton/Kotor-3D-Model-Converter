@@ -8,6 +8,22 @@ from .gizmo_draw_data import GizmoDrawCommand, GizmoRenderData, rgba255_to_float
 from .gizmo_mode import GizmoMode
 
 
+class _NullDraw:
+    """Collect gizmo handles through the PIL draw path without painting."""
+
+    def line(self, *args, **kwargs) -> None:
+        return None
+
+    def ellipse(self, *args, **kwargs) -> None:
+        return None
+
+    def rectangle(self, *args, **kwargs) -> None:
+        return None
+
+    def polygon(self, *args, **kwargs) -> None:
+        return None
+
+
 class GizmoRenderer:
     """Draws a stable screen-size transform gizmo and caches pick handles."""
 
@@ -74,21 +90,27 @@ class GizmoRenderer:
                 "Z": (0.0, 0.0, 1.0),
             }.items()
         }
+        self.draw(_NullDraw(), gizmo, camera, projector, width, height)
         commands: list[GizmoDrawCommand] = []
         if gizmo.mode == GizmoMode.TRANSLATE:
             for axis, delta in axes.items():
                 name = f"TRANSLATE_{axis}"
-                commands.append(self._line_command(center, delta, self._color(gizmo, name, axis), name))
-            commands.extend(self._pivot_marker(center, arm_world * 0.06, "TRANSLATE_VIEW"))
+                color = self._color(gizmo, name, axis)
+                commands.extend(self._thick_line_commands(center, delta, color, name, camera, projector, width, height, thickness=4 if name in (gizmo.hovered_handle, gizmo.active_handle) else 3))
+                commands.extend(self._arrowhead_commands(center, delta, color, name, camera, projector, width, height))
+            center_name = "TRANSLATE_VIEW"
+            center_col = self.HILITE if center_name in (gizmo.hovered_handle, gizmo.active_handle) else (235, 235, 235, 255)
+            commands.extend(self._disk_commands(center, 6.0, center_col, center_name, camera, height))
         elif gizmo.mode == GizmoMode.SCALE:
             uniform_active = "SCALE_UNIFORM" in (gizmo.hovered_handle, gizmo.active_handle)
             for axis, delta in axes.items():
                 name = f"SCALE_{axis}"
                 color = self.HILITE if uniform_active else self._color(gizmo, name, axis)
-                commands.append(self._line_command(center, delta, color, name))
+                commands.extend(self._thick_line_commands(center, delta, color, name, camera, projector, width, height, thickness=4 if uniform_active or name == gizmo.active_handle else 3))
                 endpoint = (center[0] + delta[0], center[1] + delta[1], center[2] + delta[2])
-                commands.extend(self._pivot_marker(endpoint, arm_world * 0.045, name))
-            commands.extend(self._pivot_marker(center, arm_world * 0.07, "SCALE_UNIFORM"))
+                commands.extend(self._square_commands(endpoint, 6.0, color, name, camera, height))
+            uniform_col = self.HILITE if uniform_active else (235, 235, 235, 255)
+            commands.extend(self._square_commands(center, 7.0, uniform_col, "SCALE_UNIFORM", camera, height))
         elif gizmo.mode == GizmoMode.ROTATE:
             ring_axes = {
                 "X": (axes["Y"], axes["Z"]),
@@ -168,6 +190,106 @@ class GizmoRenderer:
             GizmoDrawCommand(kind="line", points=((cx, cy - r, cz), (cx, cy + r, cz)), colour=color, pick_id=pick_id),
             GizmoDrawCommand(kind="line", points=((cx, cy, cz - r), (cx, cy, cz + r)), colour=color, pick_id=pick_id),
         ]
+
+    def _thick_line_commands(self, center, delta, color, pick_id: str, camera, projector, width: int, height: int, *, thickness: float) -> list[GizmoDrawCommand]:
+        line = self._line_command(center, delta, color, pick_id)
+        start = (float(center[0]), float(center[1]), float(center[2]))
+        end = (float(center[0] + delta[0]), float(center[1] + delta[1]), float(center[2] + delta[2]))
+        sp0 = projector(start[0], start[1], start[2], width, height)
+        sp1 = projector(end[0], end[1], end[2], width, height)
+        if sp0 is None or sp1 is None:
+            return [line]
+        dx = float(sp1[0]) - float(sp0[0])
+        dy = float(sp1[1]) - float(sp0[1])
+        length = math.hypot(dx, dy)
+        if length <= 1.0:
+            return [line]
+        px = -dy / length * float(thickness) * 0.5
+        py = dx / length * float(thickness) * 0.5
+        s0 = self._offset_world(start, camera, sp0[2], height, px, py)
+        s1 = self._offset_world(start, camera, sp0[2], height, -px, -py)
+        e0 = self._offset_world(end, camera, sp1[2], height, px, py)
+        e1 = self._offset_world(end, camera, sp1[2], height, -px, -py)
+        return [
+            GizmoDrawCommand(
+                kind="triangles",
+                points=(s0, e0, e1, s0, e1, s1),
+                colour=rgba255_to_float(color),
+                pick_id=pick_id,
+            ),
+            line,
+        ]
+
+    def _arrowhead_commands(self, center, delta, color, pick_id: str, camera, projector, width: int, height: int) -> list[GizmoDrawCommand]:
+        start = (float(center[0]), float(center[1]), float(center[2]))
+        end = (float(center[0] + delta[0]), float(center[1] + delta[1]), float(center[2] + delta[2]))
+        sp0 = projector(start[0], start[1], start[2], width, height)
+        sp1 = projector(end[0], end[1], end[2], width, height)
+        if sp0 is None or sp1 is None:
+            return []
+        dx = float(sp1[0]) - float(sp0[0])
+        dy = float(sp1[1]) - float(sp0[1])
+        length = math.hypot(dx, dy)
+        if length <= 1.0:
+            return []
+        ux, uy = dx / length, dy / length
+        px, py = -uy * 6.0, ux * 6.0
+        p0 = end
+        p1 = self._offset_world(end, camera, sp1[2], height, -ux * 13.0 + px, -uy * 13.0 + py)
+        p2 = self._offset_world(end, camera, sp1[2], height, -ux * 13.0 - px, -uy * 13.0 - py)
+        return [GizmoDrawCommand(kind="triangles", points=(p0, p1, p2), colour=rgba255_to_float(color), pick_id=pick_id)]
+
+    def _square_commands(self, center, radius_px: float, color, pick_id: str, camera, height: int) -> list[GizmoDrawCommand]:
+        c = tuple(float(v) for v in tuple(center)[:3])
+        depth = max(0.5, self._camera_depth(c, camera))
+        r = float(radius_px)
+        p0 = self._offset_world(c, camera, depth, height, -r, -r)
+        p1 = self._offset_world(c, camera, depth, height, r, -r)
+        p2 = self._offset_world(c, camera, depth, height, r, r)
+        p3 = self._offset_world(c, camera, depth, height, -r, r)
+        return [GizmoDrawCommand(kind="triangles", points=(p0, p1, p2, p0, p2, p3), colour=rgba255_to_float(color), pick_id=pick_id)]
+
+    def _disk_commands(self, center, radius_px: float, color, pick_id: str, camera, height: int, steps: int = 20) -> list[GizmoDrawCommand]:
+        c = tuple(float(v) for v in tuple(center)[:3])
+        depth = max(0.5, self._camera_depth(c, camera))
+        points = []
+        for i in range(steps):
+            a0 = math.tau * float(i) / float(steps)
+            a1 = math.tau * float(i + 1) / float(steps)
+            points.extend(
+                (
+                    c,
+                    self._offset_world(c, camera, depth, height, math.cos(a0) * radius_px, math.sin(a0) * radius_px),
+                    self._offset_world(c, camera, depth, height, math.cos(a1) * radius_px, math.sin(a1) * radius_px),
+                )
+            )
+        return [GizmoDrawCommand(kind="triangles", points=tuple(points), colour=rgba255_to_float(color), pick_id=pick_id)]
+
+    @staticmethod
+    def _camera_depth(point, camera) -> float:
+        _right, _up, fwd, eye = GizmoRenderer._camera_basis(camera)
+        return (
+            (float(point[0]) - float(eye[0])) * float(fwd[0])
+            + (float(point[1]) - float(eye[1])) * float(fwd[1])
+            + (float(point[2]) - float(eye[2])) * float(fwd[2])
+        )
+
+    @staticmethod
+    def _offset_world(point, camera, depth: float, height: int, dx_px: float, dy_px: float):
+        right, up, _fwd, _eye = GizmoRenderer._camera_basis(camera)
+        world_per_px = (2.0 * max(0.5, float(depth)) * math.tan(math.radians(float(camera.fov)) * 0.5)) / max(1, int(height))
+        return (
+            float(point[0]) + (float(right[0]) * float(dx_px) + float(up[0]) * -float(dy_px)) * world_per_px,
+            float(point[1]) + (float(right[1]) * float(dx_px) + float(up[1]) * -float(dy_px)) * world_per_px,
+            float(point[2]) + (float(right[2]) * float(dx_px) + float(up[2]) * -float(dy_px)) * world_per_px,
+        )
+
+    @staticmethod
+    def _camera_basis(camera):
+        view_matrix = getattr(camera, "_view_matrix", None)
+        if callable(view_matrix):
+            return view_matrix()
+        return (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, -1.0), (0.0, 0.0, 10.0)
 
     def _draw_scale(self, draw, gizmo, projector, width, height, center_screen, center_world, axes) -> None:
         cx, cy = center_screen
