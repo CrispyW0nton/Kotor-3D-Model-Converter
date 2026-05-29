@@ -3634,6 +3634,7 @@ def test_bas_ignores_anatomical_hand_placeholders() -> None:
     calls = []
     window = SimpleNamespace(
         _show_workspace_dock=lambda name: calls.append(("dock", name)),
+        body_attachment_panel=SimpleNamespace(set_status=lambda text: calls.append(("status", text))),
         _bas_attachments={},
         _bas_attachment_resrefs={},
     )
@@ -3641,7 +3642,7 @@ def test_bas_ignores_anatomical_hand_placeholders() -> None:
     QtGhostRiggerMainWindow._handle_bas_attach_requested(window, "left_hand", "w_vbroblade_001")
     QtGhostRiggerMainWindow._handle_bas_clear_requested(window, "right_hand")
 
-    assert calls == [("dock", "content_browser")]
+    assert calls == [("status", "Hand slots are sockets; attach items through L. Weapon or R. Weapon.")]
     assert window._bas_attachments == {}
 
 
