@@ -78,6 +78,79 @@ def test_content_browser_search_and_game_filter_keep_library_rows_visible() -> N
     assert panel.selected_row()["resref"] == "c_boma"
 
 
+def test_content_browser_rows_show_display_name_before_asset_name_without_source_column() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {
+            "game": "K1",
+            "resref": "plc_bodyranc",
+            "category": "Placeables",
+            "source": "swkotor",
+            "placeable_tag": "RancorCorpse",
+        },
+    ])
+
+    headers = [
+        panel.asset_view.headerItem().text(index)
+        for index in range(panel.asset_view.columnCount())
+    ]
+    assert headers == ["Display Name", "Asset Name", "Type", "Game", "Category", "Meta"]
+
+    item = next(
+        panel.asset_view.topLevelItem(index)
+        for index in range(panel.asset_view.topLevelItemCount())
+        if panel.asset_view.topLevelItem(index).text(1) == "plc_bodyranc"
+    )
+    assert item.text(0) == "Rancor Corpse"
+    assert item.text(1) == "plc_bodyranc"
+    assert "Source" not in headers
+
+    panel.asset_view.setCurrentItem(item)
+    assert panel.detail_title.text() == "Rancor Corpse"
+    assert "Asset Name: plc_bodyranc" in panel.detail_text.toPlainText()
+    assert "Source: swkotor" in panel.detail_text.toPlainText()
+
+
+def test_content_browser_display_names_decode_character_model_resrefs() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {"game": "K1", "resref": "pmhc", "source": "swkotor"},
+        {"game": "K1", "resref": "pfbb", "source": "swkotor"},
+        {"game": "K2", "resref": "visasbb", "source": "swkotor2"},
+        {"game": "K1", "resref": "joleeba", "source": "swkotor"},
+        {"game": "K1", "resref": "wookief", "category": "NPCs", "source": "swkotor"},
+        {"game": "K1", "resref": "wookiem", "category": "NPCs", "source": "swkotor"},
+        {"game": "K1", "resref": "n_sithappr_a", "category": "NPCs", "source": "swkotor"},
+        {"game": "K1", "resref": "n_jedmast01", "category": "NPCs", "source": "swkotor"},
+        {"game": "K1", "resref": "n_jedmast2h", "category": "NPCs", "source": "swkotor"},
+        {"game": "K1", "resref": "n_swoopgang", "category": "NPCs", "source": "swkotor"},
+        {"game": "K1", "resref": "n_swoopgang_a", "category": "NPCs", "source": "swkotor"},
+        {"game": "K1", "resref": "spawnpoint", "category": "Engine Items", "source": "swkotor"},
+    ])
+
+    by_name = {asset.name: asset for asset in panel.visible_assets()}
+    assert by_name["pmhc"].display_name == "Player Male Head C"
+    assert by_name["pfbb"].display_name == "Player Female Body B"
+    assert by_name["visasbb"].display_name == "Visas Body B"
+    assert by_name["joleeba"].display_name == "Jolee Body A"
+    assert by_name["wookief"].display_name == "Wookiee Female"
+    assert by_name["wookiem"].display_name == "Wookiee Male"
+    assert by_name["n_sithappr_a"].display_name == "Sith Apprentice A"
+    assert by_name["n_jedmast01"].display_name == "Jedi Master 01"
+    assert by_name["n_jedmast2h"].display_name == "Jedi Master 02 Head"
+    assert by_name["n_swoopgang"].display_name == "Swoop Gang Member"
+    assert by_name["n_swoopgang_a"].display_name == "Swoop Gang Member A"
+    assert by_name["spawnpoint"].display_name == "Waypoint"
+
+
 def test_content_browser_splitter_keeps_user_adjusted_pane_sizes() -> None:
     _qapp()
 
@@ -895,6 +968,57 @@ def test_content_browser_sorts_items_weapons_and_placeables_into_subcategories()
     assert [asset.name for asset in panel.visible_assets()] == ["i_mask_001"]
 
 
+def test_content_browser_sorts_misc_placeables_into_specific_subcategories() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {"game": "K1", "resref": "plc_backpack", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_bodyranc", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_chunkybit01", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_brokndrd", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_lndspdr1", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_fccage", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_banner", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_starmap", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_oilpudle", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_stmventc", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_cjar01", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_rnepillr", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_rakatflg", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_sithsarc", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_koltank", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_beer01", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_pwrcond", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_cp1", "source": "swkotor"},
+    ])
+
+    by_name = {asset.name: asset for asset in panel.visible_assets()}
+    assert by_name["plc_backpack"].metadata["subcategory"] == "Bags & Loot"
+    assert by_name["plc_bodyranc"].metadata["subcategory"] == "Corpses & Remains"
+    assert by_name["plc_chunkybit01"].metadata["subcategory"] == "Junk & Rubble"
+    assert by_name["plc_brokndrd"].metadata["subcategory"] == "Droids & Broken Droids"
+    assert by_name["plc_lndspdr1"].metadata["subcategory"] == "Speeders & Vehicles"
+    assert by_name["plc_fccage"].metadata["subcategory"] == "Cages & Restraints"
+    assert by_name["plc_banner"].metadata["subcategory"] == "Signs, Banners & Flags"
+    assert by_name["plc_starmap"].metadata["subcategory"] == "Holograms & Star Maps"
+    assert by_name["plc_oilpudle"].metadata["subcategory"] == "Liquids & Puddles"
+    assert by_name["plc_stmventc"].metadata["subcategory"] == "Fire, Smoke & Vents"
+    assert by_name["plc_cjar01"].metadata["subcategory"] == "Ceramics & Decor"
+    assert by_name["plc_rnepillr"].metadata["subcategory"] == "Ruins & Monuments"
+    assert by_name["plc_rakatflg"].metadata["subcategory"] == "Rakatan Props"
+    assert by_name["plc_sithsarc"].metadata["subcategory"] == "Sith Props"
+    assert by_name["plc_koltank"].metadata["subcategory"] == "Medical & Kolto"
+    assert by_name["plc_beer01"].metadata["subcategory"] == "Food & Drink"
+    assert by_name["plc_pwrcond"].metadata["subcategory"] == "Machinery & Equipment"
+    assert by_name["plc_cp1"].metadata["subcategory"] == "Placeable Helpers"
+
+    panel.tag_filter.setCurrentText("Placeables / Corpses & Remains")
+    assert [asset.name for asset in panel.visible_assets()] == ["plc_bodyranc"]
+
+
 def test_content_browser_uses_item_template_metadata_for_subcategories() -> None:
     _qapp()
 
@@ -1064,7 +1188,12 @@ def test_content_browser_primary_activation_requests_clear_scene_load() -> None:
     panel.primarySceneLoadRequested.connect(lambda row: emitted.append(row))
     panel.loadRequested.connect(lambda resref, game: legacy_loads.append((resref, game)))
 
-    panel.asset_view.setCurrentItem(panel.asset_view.topLevelItem(0))
+    item = next(
+        panel.asset_view.topLevelItem(index)
+        for index in range(panel.asset_view.topLevelItemCount())
+        if panel.asset_view.topLevelItem(index).text(1) == "n_darthmalak"
+    )
+    panel.asset_view.setCurrentItem(item)
     panel._activate_selected()
 
     assert emitted and emitted[0]["resref"] == "n_darthmalak"

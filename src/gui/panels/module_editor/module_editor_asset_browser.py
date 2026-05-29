@@ -131,14 +131,10 @@ class ModuleEditorAssetBrowser(QtWidgets.QWidget):
                 for subcategory in MODEL_SUBCATEGORY_ORDER["GUI"]
             ],
             "Placeables",
-            "Placeables / Containers",
-            "Placeables / Computers & Panels",
-            "Placeables / Doors & Transitions",
-            "Placeables / Furniture",
-            "Placeables / Lights & VFX",
-            "Placeables / Traps & Hazards",
-            "Placeables / Environmental Props",
-            "Placeables / Misc Placeables",
+            *[
+                f"Placeables / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Placeables"]
+            ],
             "Doors",
             "Doors / Taris",
             "Doors / Dantooine",

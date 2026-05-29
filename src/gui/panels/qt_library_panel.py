@@ -325,12 +325,31 @@ MODEL_SUBCATEGORY_ORDER = {
     ),
     "Placeables": (
         "Containers",
+        "Bags & Loot",
         "Computers & Panels",
         "Doors & Transitions",
         "Furniture",
         "Lights & VFX",
         "Traps & Hazards",
         "Environmental Props",
+        "Corpses & Remains",
+        "Junk & Rubble",
+        "Machinery & Equipment",
+        "Droids & Broken Droids",
+        "Speeders & Vehicles",
+        "Cages & Restraints",
+        "Signs, Banners & Flags",
+        "Holograms & Star Maps",
+        "Liquids & Puddles",
+        "Fire, Smoke & Vents",
+        "Ceramics & Decor",
+        "Ruins & Monuments",
+        "Rakatan Props",
+        "Sith Props",
+        "Medical & Kolto",
+        "Food & Drink",
+        "Creature Props",
+        "Placeable Helpers",
         "Misc Placeables",
     ),
     "Doors": (
@@ -1560,20 +1579,58 @@ def infer_model_subcategory(resref: str, category: str = "", metadata: Optional[
             return "Clothing"
         return "Misc Armor"
     if cat == "Placeables":
-        if any(part in token for part in ("footlker", "locker", "container", "crate", "chest", "box")):
+        if any(part in token for part in ("backpack", "bag", "datapad", "equppack", "pazaak", "scrys", "envrsuit", "spcsuit", "riflepts")):
+            return "Bags & Loot"
+        if any(part in token for part in ("corpse", "corps", "crps", "crp", "cps", "skel", "bones", "remains", "sevrd", "body", "chewd", "chwd")):
+            return "Corpses & Remains"
+        if any(part in token for part in ("rancoregg", "knrthegg", "egg", "buzzbugs", "firixa", "animal", "creature")):
+            return "Creature Props"
+        if any(part in token for part in ("holo", "starmap")):
+            return "Holograms & Star Maps"
+        if any(part in token for part in ("rakat", "rak_", "starforge")):
+            return "Rakatan Props"
+        if "sith" in token:
+            return "Sith Props"
+        if any(part in token for part in ("rneetbl", "rneholo", "rnepill", "rnepnl", "rneoblsk", "ruin", "puzpillr", "monument", "obelisk", "statue", "stat")):
+            return "Ruins & Monuments"
+        if any(part in token for part in ("footlker", "locker", "container", "crate", "chest", "box", "cont", "strg", "plstccrt", "filecab", "trashcom", "medcan", "ebcont", "ebstrg", "inveb", "armoire", "cht", "dblk")):
             return "Containers"
-        if any(part in token for part in ("comp", "panel", "terminal", "console")):
+        if any(part in token for part in ("comp", "panel", "terminal", "console", "infoterm", "kiosk", "screen", "btnpnl", "flpnl", "wallpnl", "cputer", "nadcom")):
             return "Computers & Panels"
         if any(part in token for part in ("door", "trans", "elev", "ramp")):
             return "Doors & Transitions"
+        if any(part in token for part in ("kol", "patient", "oilbath", "medbay", "medical", "med_")):
+            return "Medical & Kolto"
+        if any(part in token for part in ("brokndrd", "bdroid", "subdroid", "robo", "droid")):
+            return "Droids & Broken Droids"
+        if any(part in token for part in ("lndspdr", "jnkspdr", "hvrsled", "swpbike", "swpengin", "swpmon", "spddist", "speeder", "gwing", "ship")):
+            return "Speeders & Vehicles"
+        if any(part in token for part in ("cage", "ring", "stock", "bars", "restraint")):
+            return "Cages & Restraints"
+        if any(part in token for part in ("banner", "ban", "flag", "flg", "sign", "marker")):
+            return "Signs, Banners & Flags"
+        if any(part in token for part in ("acid", "acd", "bldpdl", "puddle", "pudl", "oilpud", "dripwatr", "wtrlvl", "water", "sludge")):
+            return "Liquids & Puddles"
+        if any(part in token for part in ("smoke", "smk", "mist", "steam", "stmvent", "stmvnt", "vent", "fire", "flame", "flm", "firpit", "lghtbeam", "dkfrcsmk", "shutdark")):
+            return "Fire, Smoke & Vents"
+        if any(part in token for part in ("beer", "food", "dung", "meal", "drink")):
+            return "Food & Drink"
+        if any(part in token for part in ("drive", "hyper", "pwrcond", "reptab", "partpile", "tools", "repequip", "officeeq", "mstation", "mdetect", "permadet", "pgen", "maintoff", "sonicdev", "generator", "machine", "workbench", "fan", "lever", "pulchain", "mstrevap", "mantab", "swire", "windmil")):
+            return "Machinery & Equipment"
+        if any(part in token for part in ("chunk", "burnjunk", "junk", "jnk", "rubble", "roof", "deadfall", "blockage", "shpjnk", "wreck", "debris", "rub", "rfl", "rf")):
+            return "Junk & Rubble"
+        if any(part in token for part in ("cjar", "deco", "carpet", "braz", "gong", "fntn", "pot", "tmat", "wallhang", "wallha", "telscaf", "art", "sarc", "ragp")):
+            return "Ceramics & Decor"
         if any(part in token for part in ("chair", "table", "desk", "bed", "bench", "shelf")):
             return "Furniture"
-        if any(part in token for part in ("light", "lamp", "fx", "fire", "flame", "spark")):
+        if any(part in token for part in ("light", "lamp", "fx", "spark", "glow")):
             return "Lights & VFX"
         if any(part in token for part in ("trap", "mine", "gas", "poison", "hazard")):
             return "Traps & Hazards"
-        if any(part in token for part in ("rock", "tree", "plant", "sign", "statue", "debris", "barrel")):
+        if any(part in token for part in ("rock", "tree", "plant", "barrel", "fntn", "grass", "bush", "vine", "dnglvine", "knrthvin")):
             return "Environmental Props"
+        if re.fullmatch(r"(cp|d|h|p|rb)\d+", token) or any(part in token for part in ("invis", "invcalo", "dummy", "placeholder", "helper", "ends", "levind", "noready")):
+            return "Placeable Helpers"
         return "Misc Placeables"
     if cat == "Doors":
         subcategory = _subcategory_from_door_metadata({"resref": resref})

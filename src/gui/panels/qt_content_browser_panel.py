@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
+import re
 from typing import Optional
 
 from PySide6 import QtCore, QtWidgets
@@ -21,12 +21,377 @@ from src.gui.qt_lib.panels.qt_library_panel import (
 ASSET_TYPES = ("All", "Model", "Animation", "Texture", "Blueprint", "Module", "Scene")
 
 
+_READABLE_RESREF_OVERRIDES = {
+    "plc_backpack": "Backpack",
+    "plc_bodyranc": "Rancor Corpse",
+    "plc_brokndrd": "Broken Droid",
+    "plc_fccage": "Force Cage",
+    "plc_koltank": "Kolto Tank",
+    "plc_lndspdr": "Landspeeder",
+    "plc_oilpudle": "Oil Puddle",
+    "plc_pwrcond": "Power Conduit",
+    "plc_rakatflg": "Rakatan Flag",
+    "plc_rnepillr": "Ruined Pillar",
+    "plc_sithsarc": "Sith Sarcophagus",
+    "plc_starmap": "Star Map",
+    "plc_stmvent": "Steam Vent",
+    "plc_wookcrps": "Wookiee Corpse",
+}
+
+_READABLE_PREFIXES = (
+    "g_w_", "g_i_", "g_a_", "iw_", "ia_", "uti_", "plc_", "dor_", "door_", "w_", "i_",
+    "a_", "n_", "c_", "p_", "s_", "l_", "fx_", "v_",
+)
+
+_READABLE_WORDS = {
+    "acd": "Acid",
+    "ban": "Banner",
+    "blstr": "Blaster",
+    "btnpnl": "Button Panel",
+    "cjar": "Ceramic Jar",
+    "comp": "Computer",
+    "crps": "Corpse",
+    "dbl": "Double",
+    "drd": "Droid",
+    "fx": "FX",
+    "holo": "Hologram",
+    "hvy": "Heavy",
+    "jnk": "Junk",
+    "lght": "Light",
+    "lghtsbr": "Lightsaber",
+    "pnl": "Panel",
+    "rakat": "Rakatan",
+    "rfl": "Rifle",
+    "sbr": "Saber",
+    "spchunk": "Ship Chunk",
+    "spc": "Space",
+    "swy": "Swoop",
+    "vbr": "Vibro",
+}
+
+_DISPLAY_MEMBER_NAMES = (
+    (("bastila",), "Bastila"),
+    (("carth",), "Carth"),
+    (("mission",), "Mission"),
+    (("zaalbar",), "Zaalbar"),
+    (("canderous", "p_cand"), "Canderous"),
+    (("jolee",), "Jolee"),
+    (("juhani",), "Juhani"),
+    (("hk47", "hk_47"), "HK-47"),
+    (("t3m4", "t3_m4", "t3m3"), "T3-M4"),
+    (("kreia",), "Kreia"),
+    (("atton",), "Atton"),
+    (("baodur", "bao_dur", "bao-dur", "bao"), "Bao-Dur"),
+    (("handmaiden",), "Handmaiden"),
+    (("disciple", "mical"), "Disciple"),
+    (("visas",), "Visas"),
+    (("mira",), "Mira"),
+    (("hanharr",), "Hanharr"),
+    (("mandalore", "mandra"), "Mandalore"),
+    (("g0t0", "goto"), "G0-T0"),
+    (("atris",), "Atris"),
+)
+
+_SPECIES_SINGULAR = {
+    "Aqualish": "Aqualish",
+    "Bith": "Bith",
+    "Devaronians": "Devaronian",
+    "Duros": "Duros",
+    "Gamorreans": "Gamorrean",
+    "Gand": "Gand",
+    "Gran": "Gran",
+    "Ithorians": "Ithorian",
+    "Quarren": "Quarren",
+    "Rakata": "Rakata",
+    "Rodians": "Rodian",
+    "Selkath": "Selkath",
+    "Sullustans": "Sullustan",
+    "Trandoshans": "Trandoshan",
+    "Tusken Raiders": "Tusken Raider",
+    "Twi'leks": "Twi'lek",
+    "Weequay": "Weequay",
+    "Wookiees": "Wookiee",
+    "Yoda Species": "Yoda Species",
+}
+
+
+def _display_name_from_library_row(row: dict, category: str, resref: str, metadata: dict[str, str]) -> str:
+    encoded = _encoded_display_name(category, resref, metadata)
+    if encoded:
+        return encoded
+    candidates = (
+        row.get("display_name"),
+        row.get("localized_name"),
+        row.get("name_label"),
+        row.get("area_label") if category == "Modules" else "",
+        row.get("area_name") if category == "Modules" else "",
+        row.get("placeable_tag"),
+        row.get("door_tag"),
+        row.get("item_tag"),
+        row.get("template_name"),
+    )
+    for candidate in candidates:
+        text = str(candidate or "").strip()
+        if text and text.lower() != resref.lower():
+            return _humanize_asset_name(text)
+    return _humanize_asset_name(resref)
+
+
+def _encoded_display_name(category: str, resref: str, metadata: dict[str, str]) -> str:
+    r = (resref or "").lower()
+    if category == "Modules":
+        return str(metadata.get("area") or "").strip()
+    if category == "Player Characters":
+        return _player_display_name(r, metadata)
+    if category == "Party Members":
+        return _party_display_name(r, metadata)
+    if category in {"Commoners", "NPCs", "Level Assets", "Misc Models"}:
+        species = _species_gender_display_name(r, metadata)
+        if species:
+            return species
+    if category == "Commoners":
+        commoner = str(metadata.get("commoner_type") or "").strip()
+        return _with_variant(f"{commoner} Commoner".strip(), _letter_or_number_variant(r))
+    if category == "NPCs":
+        return _npc_display_name(r, metadata)
+    if category == "Droids":
+        return _droid_display_name(r, metadata)
+    if category == "Creatures":
+        creature = str(metadata.get("creature_type") or "").strip()
+        return _with_variant(creature, _letter_or_number_variant(r))
+    if category == "Supermodels":
+        supermodel = str(metadata.get("supermodel_type") or "").strip()
+        return f"{supermodel} Supermodel".strip()
+    if category == "Turrets":
+        turret = str(metadata.get("turret_type") or "").strip()
+        return f"{turret} Turret".strip()
+    if category == "Holograms":
+        holo = str(metadata.get("hologram_type") or "").strip()
+        return f"{holo} Hologram".strip()
+    if category == "Engine Items":
+        return _with_variant(str(metadata.get("engine_type") or "").strip(), _letter_or_number_variant(r))
+    if category == "Environment":
+        return _with_variant(str(metadata.get("environment_type") or "").strip(), _letter_or_number_variant(r))
+    if category == "GUI":
+        return _with_variant(str(metadata.get("gui_type") or "").strip(), _letter_or_number_variant(r))
+    if category == "Level Assets":
+        asset_type = str(metadata.get("level_asset_type") or "").strip()
+        return _with_variant(asset_type, _letter_or_number_variant(r))
+    if category == "Minigame":
+        return _with_variant(str(metadata.get("minigame_type") or "").strip(), _letter_or_number_variant(r))
+    if category == "Menus":
+        return _with_variant(str(metadata.get("menu_type") or "").strip(), _letter_or_number_variant(r))
+    if category == "Visual FX":
+        fx_type = str(metadata.get("fx_type") or "").strip()
+        return _with_variant(f"{fx_type} FX".strip(), _letter_or_number_variant(r))
+    if category == "Visuals":
+        visual_type = str(metadata.get("visual_type") or "").strip()
+        return _with_variant(f"{visual_type} Visual".strip(), _letter_or_number_variant(r))
+    if category == "Planets":
+        return _with_variant(str(metadata.get("planet_type") or "").strip(), _letter_or_number_variant(r))
+    if category == "Stunts":
+        return _with_variant(str(metadata.get("stunt_type") or "").strip(), _letter_or_number_variant(r))
+    if category == "Templates":
+        return _with_variant(str(metadata.get("template_type") or "").strip() + " Template", _letter_or_number_variant(r))
+    return ""
+
+
+def _player_display_name(resref: str, metadata: dict[str, str]) -> str:
+    r = resref[3:] if resref.startswith("k1_") else resref
+    if not r.startswith(("pm", "pf")):
+        return ""
+    gender = str(metadata.get("player_gender") or ("Male" if r.startswith("pm") else "Female"))
+    part = str(metadata.get("player_part") or "")
+    class_code = str(metadata.get("player_class") or "").replace("Class ", "").strip()
+    variant = str(metadata.get("player_variant") or "").strip()
+    pieces = ["Player", gender]
+    if part and part != "Model":
+        pieces.append(part)
+    if class_code:
+        pieces.append(class_code)
+    if variant and not variant.startswith("Head "):
+        pieces.append(variant)
+    elif variant.startswith("Head "):
+        pieces.append(variant.replace("Head ", ""))
+    return " ".join(pieces)
+
+
+def _party_display_name(resref: str, metadata: dict[str, str]) -> str:
+    member = str(metadata.get("party_member") or "").strip()
+    if not member:
+        for tokens, label in _DISPLAY_MEMBER_NAMES:
+            if any(token in resref for token in tokens):
+                member = label
+                break
+    if not member:
+        return ""
+    part = str(metadata.get("party_model_part") or "").strip()
+    if not part:
+        if re.search(r"h\d*$", resref):
+            part = "Head"
+        elif re.search(r"b[a-z]?$", resref):
+            part = "Body"
+        else:
+            part = "Model"
+    variant = _party_variant(resref, part)
+    return _with_variant(f"{member} {part}".strip(), variant)
+
+
+def _npc_display_name(resref: str, metadata: dict[str, str]) -> str:
+    species = _species_gender_display_name(resref, metadata)
+    if species:
+        return species
+    variant = _npc_variant(resref)
+    if any(token in resref for token in ("sithappr", "sith_app", "apprent")):
+        return _with_variant("Sith Apprentice", variant)
+    if any(token in resref for token in ("sithsold", "sithsoldier")):
+        return _with_variant("Sith Soldier", variant)
+    if any(token in resref for token in ("sithoff", "sith_off")):
+        return _with_variant("Sith Officer", variant)
+    if any(token in resref for token in ("sithass", "assassin")):
+        return _with_variant("Sith Assassin", variant)
+    if any(token in resref for token in ("jedmast", "jedi_master", "jedimaster", "master")):
+        return _with_variant("Jedi Master", variant)
+    if any(token in resref for token in ("padawan",)):
+        return _with_variant("Jedi Padawan", variant)
+    if any(token in resref for token in ("swoop", "gadon", "gendar", "brejik", "deadeye")):
+        return _with_variant("Swoop Gang Member", variant)
+    if any(token in resref for token in ("blackvulkar", "vulkar")):
+        return _with_variant("Black Vulkar Gang Member", variant)
+    if "bek" in resref:
+        return _with_variant("Hidden Bek Gang Member", variant)
+    role = str(metadata.get("npc_role") or "").strip()
+    if role:
+        return _with_variant(role, variant)
+    faction = str(metadata.get("npc_faction") or "").strip()
+    if faction and faction != "Named":
+        part = str(metadata.get("npc_model_part") or "").strip()
+        return _with_variant(f"{faction} {part}".strip(), variant)
+    return ""
+
+
+def _droid_display_name(resref: str, metadata: dict[str, str]) -> str:
+    if "hk47" in resref or "hk_47" in resref:
+        return "HK-47"
+    if "t3m4" in resref or "t3_m4" in resref:
+        return "T3-M4"
+    if "g0t0" in resref or "goto" in resref:
+        return "G0-T0"
+    droid_type = str(metadata.get("droid_type") or "").strip()
+    return _with_variant(f"{droid_type} Droid".strip(), _letter_or_number_variant(resref))
+
+
+def _species_gender_display_name(resref: str, metadata: dict[str, str]) -> str:
+    species = str(metadata.get("npc_species") or metadata.get("creature_type") or "").strip()
+    if not species:
+        for token, label in (
+            ("wookie", "Wookiee"),
+            ("wook", "Wookiee"),
+            ("twilek", "Twi'lek"),
+            ("twi", "Twi'lek"),
+            ("selkath", "Selkath"),
+            ("rakata", "Rakata"),
+            ("rodian", "Rodian"),
+            ("jawa", "Jawa"),
+            ("ithorian", "Ithorian"),
+            ("trandoshan", "Trandoshan"),
+        ):
+            if token in resref:
+                species = label
+                break
+    species = _SPECIES_SINGULAR.get(species, species)
+    if not species:
+        return ""
+    gender = ""
+    if resref.endswith("f") or "_f" in resref or "female" in resref:
+        gender = "Female"
+    elif resref.endswith("m") or "_m" in resref or "male" in resref:
+        gender = "Male"
+    return " ".join(part for part in (species, gender) if part)
+
+
+def _party_variant(resref: str, part: str) -> str:
+    if part == "Head":
+        match = re.search(r"h(\d+)$", resref)
+        if match:
+            return f"Head {int(match.group(1)):02d}"
+    if part == "Body":
+        match = re.search(r"b([a-z])$", resref)
+        if match:
+            return match.group(1).upper()
+    return _letter_or_number_variant(resref)
+
+
+def _letter_or_number_variant(resref: str) -> str:
+    base = resref.lower().strip()
+    match = re.search(r"(?:_|-)([a-z])(\d*)$", base)
+    if match:
+        letter, number = match.groups()
+        if number:
+            return f"{letter.upper()}{number}"
+        if letter not in {"m", "f"}:
+            return letter.upper()
+    match = re.search(r"(\d+)$", base)
+    if match:
+        return f"{int(match.group(1)):02d}"
+    return ""
+
+
+def _npc_variant(resref: str) -> str:
+    separated = _letter_or_number_variant(resref)
+    if separated:
+        return separated
+    match = re.search(r"(\d+)(h|b)$", resref)
+    if match:
+        part = "Head" if match.group(2) == "h" else "Body"
+        return f"{int(match.group(1)):02d} {part}"
+    match = re.search(r"(?:swoopgang|blackvulkar|vulkar|bek)([a-z])$", resref)
+    if match:
+        return match.group(1).upper()
+    return ""
+
+
+def _with_variant(label: str, variant: str) -> str:
+    label = label.strip()
+    variant = variant.strip()
+    if not label:
+        return ""
+    if not variant or label.endswith(f" {variant}"):
+        return label
+    return f"{label} {variant}"
+
+
+def _humanize_asset_name(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    lowered = text.lower()
+    for prefix, label in _READABLE_RESREF_OVERRIDES.items():
+        if lowered.startswith(prefix):
+            suffix = lowered[len(prefix):]
+            number = suffix if suffix.isdigit() else ""
+            return f"{label} {number}".strip()
+    for prefix in _READABLE_PREFIXES:
+        if lowered.startswith(prefix):
+            text = text[len(prefix):]
+            lowered = text.lower()
+            break
+    text = text.replace("_", " ").replace("-", " ")
+    text = "".join(" " + char if index and char.isupper() and not text[index - 1].isspace() else char for index, char in enumerate(text))
+    text = re.sub(r"(?<=[A-Za-z])(?=\d)", " ", text)
+    text = re.sub(r"(?<=\d)(?=[A-Za-z])", " ", text)
+    words = [word for word in re.split(r"\s+", text) if word]
+    readable = [_READABLE_WORDS.get(word.lower(), word) for word in words]
+    return " ".join(word.upper() if word.lower() in {"fx", "gui", "hk", "t3", "tsf"} else word[:1].upper() + word[1:] for word in readable)
+
+
 @dataclass(slots=True)
 class ContentAssetDescriptor:
     """Small UI descriptor that keeps source data lossless for callers."""
 
     asset_type: str
     name: str
+    display_name: str = ""
     game: str = ""
     category: str = ""
     source: str = ""
@@ -39,6 +404,7 @@ class ContentAssetDescriptor:
         values = [
             self.asset_type,
             self.name,
+            self.display_name,
             self.game,
             self.category,
             self.source,
@@ -58,31 +424,33 @@ def descriptor_from_library_row(row: dict) -> ContentAssetDescriptor:
     subcategory = str(item.get("subcategory") or taxonomy_metadata.get("subcategory") or "")
     if subcategory:
         taxonomy_metadata["subcategory"] = subcategory
+    metadata = {
+        "area": item.get("area_label") or item.get("area_name") or "",
+        "module": item.get("module_code") or "",
+        "class": item.get("model_class") or "",
+        "template": item.get("item_template_resref") or item.get("placeable_template_resref") or "",
+        "tag": item.get("item_tag") or item.get("placeable_tag") or "",
+        "door template": item.get("door_template_resref") or "",
+        "door tag": item.get("door_tag") or "",
+        "door type": item.get("door_generic_type") or "",
+        "open lock dc": item.get("door_open_lock_dc") or "",
+        "key": item.get("door_key_name") or "",
+        "linked to": item.get("door_linked_to") or "",
+        "base item": item.get("item_baseitem") or "",
+        "model variation": item.get("item_model_variation") or "",
+        "appearance": item.get("placeable_appearance") or "",
+        "metadata source": item.get("metadata_source") or "",
+        **taxonomy_metadata,
+    }
     return ContentAssetDescriptor(
         asset_type=asset_type,
         name=name,
+        display_name=_display_name_from_library_row(item, category, name, metadata),
         game=str(item.get("game", "")),
         category=category,
         source=source,
         row=item,
-        metadata={
-            "area": item.get("area_label") or item.get("area_name") or "",
-            "module": item.get("module_code") or "",
-            "class": item.get("model_class") or "",
-            "template": item.get("item_template_resref") or item.get("placeable_template_resref") or "",
-            "tag": item.get("item_tag") or item.get("placeable_tag") or "",
-            "door template": item.get("door_template_resref") or "",
-            "door tag": item.get("door_tag") or "",
-            "door type": item.get("door_generic_type") or "",
-            "open lock dc": item.get("door_open_lock_dc") or "",
-            "key": item.get("door_key_name") or "",
-            "linked to": item.get("door_linked_to") or "",
-            "base item": item.get("item_baseitem") or "",
-            "model variation": item.get("item_model_variation") or "",
-            "appearance": item.get("placeable_appearance") or "",
-            "metadata source": item.get("metadata_source") or "",
-            **taxonomy_metadata,
-        },
+        metadata=metadata,
         tags=tuple(
             str(value)
             for value in (
@@ -113,6 +481,7 @@ def descriptor_from_animation_entry(entry: dict) -> ContentAssetDescriptor:
     return ContentAssetDescriptor(
         asset_type="Animation",
         name=anim or model,
+        display_name=_humanize_asset_name(anim or model),
         game=game,
         category="Animation",
         source=source,
@@ -132,13 +501,11 @@ def descriptor_from_animation_entry(entry: dict) -> ContentAssetDescriptor:
 class QtContentAssetItem(QtWidgets.QTreeWidgetItem):
     def __init__(self, asset: ContentAssetDescriptor):
         model_or_meta = str(asset.metadata.get("model") or asset.metadata.get("area") or asset.category or "")
-        has_path_separator = bool(asset.source) and ("\\" in asset.source or "/" in asset.source)
-        source_name = Path(asset.source).name if has_path_separator else asset.source
         super().__init__([
+            asset.display_name or asset.name,
             asset.name,
             asset.asset_type,
             asset.game,
-            source_name,
             asset.category,
             model_or_meta,
         ])
@@ -235,8 +602,9 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self._build_filters(center_layout)
         self.asset_view = QtWidgets.QTreeWidget()
         self.asset_view.setObjectName("contentBrowserAssets")
-        self.asset_view.setHeaderLabels(["Name", "Type", "Game", "Source", "Category", "Meta"])
+        self.asset_view.setHeaderLabels(["Display Name", "Asset Name", "Type", "Game", "Category", "Meta"])
         self.asset_view.setSortingEnabled(True)
+        self.asset_view.sortByColumn(0, QtCore.Qt.AscendingOrder)
         self.asset_view.setRootIsDecorated(False)
         self.asset_view.setAlternatingRowColors(True)
         self.asset_view.header().setStretchLastSection(False)
@@ -404,14 +772,10 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
                 for subcategory in MODEL_SUBCATEGORY_ORDER["GUI"]
             ],
             "Placeables",
-            "Placeables / Containers",
-            "Placeables / Computers & Panels",
-            "Placeables / Doors & Transitions",
-            "Placeables / Furniture",
-            "Placeables / Lights & VFX",
-            "Placeables / Traps & Hazards",
-            "Placeables / Environmental Props",
-            "Placeables / Misc Placeables",
+            *[
+                f"Placeables / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Placeables"]
+            ],
             "Doors",
             "Doors / Taris",
             "Doors / Dantooine",
@@ -999,8 +1363,9 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
             self.detail_text.setPlainText("")
             self._set_action_state(None)
             return
-        self.detail_title.setText(asset.name)
+        self.detail_title.setText(asset.display_name or asset.name)
         lines = [
+            f"Asset Name: {asset.name}",
             f"Type: {asset.asset_type}",
             f"Game: {asset.game or 'Any'}",
             f"Category: {asset.category or 'Uncategorized'}",
