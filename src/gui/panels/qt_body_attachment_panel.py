@@ -11,7 +11,10 @@ from src.gui.qt_lib.assets.qt_theme import heading
 
 BAS_SLOT_LABELS: dict[str, str] = {
     "head": "HEAD",
+    "mask": "MASK",
+    "goggles": "GOGGLES",
     "body": "BODY",
+    "belt": "BELT",
     "left_hand": "L. HAND",
     "right_hand": "R. HAND",
     "left_weapon": "L. Weapon",
@@ -20,10 +23,13 @@ BAS_SLOT_LABELS: dict[str, str] = {
 
 BAS_SLOT_POSITIONS: dict[str, tuple[int, int]] = {
     "head": (1, 1),
+    "mask": (1, 0),
+    "goggles": (1, 2),
     "left_hand": (2, 0),
     "body": (2, 1),
     "right_hand": (2, 2),
     "left_weapon": (3, 0),
+    "belt": (3, 1),
     "right_weapon": (3, 2),
 }
 
@@ -44,6 +50,23 @@ BAS_PRESET_MODELS: dict[str, tuple[tuple[str, str], ...]] = {
         ("Blaster Rifle", "w_blstrrfl_001"),
         ("Lightsaber", "w_lghtsbr_001"),
     ),
+    "mask": (
+        ("Infragoggles", "i_mask_001"),
+        ("Motion Goggles", "i_mask_002"),
+    ),
+    "goggles": (
+        ("Infragoggles", "i_mask_001"),
+        ("Motion Goggles", "i_mask_002"),
+    ),
+    "belt": (
+        ("Cardio Power System", "i_belt_001"),
+        ("Stealth Field Generator", "i_belt_010"),
+    ),
+}
+
+BAS_MODE_LABELS: dict[str, str] = {
+    "headless_body": "Headless Body",
+    "full_body": "Full Body",
 }
 
 
@@ -54,12 +77,14 @@ class QtBodyAttachmentPanel(QtWidgets.QWidget):
     clearRequested = QtCore.Signal(str)
     saveBuildRequested = QtCore.Signal()
     slotSelected = QtCore.Signal(str)
+    modeChanged = QtCore.Signal(str)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self._slot_buttons: dict[str, QtWidgets.QToolButton] = {}
         self._slot_models: dict[str, str] = {}
         self._selected_slot = "head"
+        self._mode = "headless_body"
         self._syncing_layer_selection = False
         self._build()
         self.set_selected_slot("head")
@@ -68,6 +93,14 @@ class QtBodyAttachmentPanel(QtWidgets.QWidget):
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(6, 6, 6, 6)
         root.addWidget(heading("Body Attachment System"))
+
+        mode_form = QtWidgets.QFormLayout()
+        self.mode_combo = QtWidgets.QComboBox()
+        for key, label in BAS_MODE_LABELS.items():
+            self.mode_combo.addItem(label, key)
+        self.mode_combo.currentIndexChanged.connect(self._handle_mode_changed)
+        mode_form.addRow("Mode", self.mode_combo)
+        root.addLayout(mode_form)
 
         grid = QtWidgets.QGridLayout()
         grid.setHorizontalSpacing(6)
@@ -128,6 +161,26 @@ class QtBodyAttachmentPanel(QtWidgets.QWidget):
     def selected_slot(self) -> str:
         return self._selected_slot
 
+    def selected_mode(self) -> str:
+        return self._mode
+
+    def set_mode(self, mode: str) -> None:
+        mode = mode if mode in BAS_MODE_LABELS else "headless_body"
+        if self._mode == mode:
+            return
+        self._mode = mode
+        index = self.mode_combo.findData(mode)
+        if index >= 0 and self.mode_combo.currentIndex() != index:
+            self.mode_combo.blockSignals(True)
+            self.mode_combo.setCurrentIndex(index)
+            self.mode_combo.blockSignals(False)
+        if mode == "full_body" and self._selected_slot == "head":
+            self.set_selected_slot("mask")
+        else:
+            self.set_selected_slot(self._selected_slot)
+        self._refresh_layers()
+        self.modeChanged.emit(mode)
+
     def selected_model_resref(self) -> str:
         text = str(self.model_combo.currentText() or "").strip()
         if text and text != str(self.model_combo.itemText(self.model_combo.currentIndex()) or "").strip():
@@ -141,7 +194,7 @@ class QtBodyAttachmentPanel(QtWidgets.QWidget):
             button.setChecked(key == slot)
         self.slot_label.setText(BAS_SLOT_LABELS[slot])
         self._populate_model_combo(slot)
-        attachable = slot not in {"body", "left_hand", "right_hand"}
+        attachable = slot not in {"body", "left_hand", "right_hand"} and not (slot == "head" and self._mode == "full_body")
         self.model_combo.setEnabled(attachable)
         self.attach_button.setEnabled(attachable)
         self.clear_button.setEnabled(slot != "body" and attachable)
@@ -175,7 +228,9 @@ class QtBodyAttachmentPanel(QtWidgets.QWidget):
         self.model_combo.blockSignals(False)
 
     def _emit_attach(self) -> None:
-        if self._selected_slot in {"body", "left_hand", "right_hand"}:
+        if self._selected_slot in {"body", "left_hand", "right_hand"} or (
+            self._selected_slot == "head" and self._mode == "full_body"
+        ):
             return
         self.attachRequested.emit(self._selected_slot, self.selected_model_resref())
 
@@ -192,7 +247,7 @@ class QtBodyAttachmentPanel(QtWidgets.QWidget):
         tree = getattr(self, "layer_tree", None)
         if tree is None:
             return
-        order = ("body", "head", "left_hand", "right_hand", "left_weapon", "right_weapon")
+        order = ("body", "head", "mask", "goggles", "left_hand", "right_hand", "left_weapon", "belt", "right_weapon")
         tree.blockSignals(True)
         tree.clear()
         for slot in order:
@@ -200,7 +255,7 @@ class QtBodyAttachmentPanel(QtWidgets.QWidget):
             if slot == "body":
                 model = model or "BODY"
                 state = "Base"
-            elif slot in {"left_hand", "right_hand"}:
+            elif slot in {"left_hand", "right_hand"} or (slot == "head" and self._mode == "full_body"):
                 state = "Socket"
             else:
                 state = "Attached" if model else "Empty"
@@ -235,6 +290,9 @@ class QtBodyAttachmentPanel(QtWidgets.QWidget):
         slot = str(item.data(0, QtCore.Qt.UserRole) or "") if item is not None else ""
         if slot:
             self.set_selected_slot(slot)
+
+    def _handle_mode_changed(self) -> None:
+        self.set_mode(str(self.mode_combo.currentData() or "headless_body"))
 
     def layer_rows(self) -> list[tuple[str, str, str]]:
         rows: list[tuple[str, str, str]] = []

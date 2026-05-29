@@ -3938,6 +3938,7 @@ def test_body_attachment_panel_exposes_bas_slots_and_attach_signal() -> None:
     assert emitted[-1] == ("right_weapon", "w_lghtsbr_001")
     assert "HEAD" in {button.text().splitlines()[0] for button in panel.findChildren(QtWidgets.QToolButton)}
     assert "BODY" in {button.text().splitlines()[0] for button in panel.findChildren(QtWidgets.QToolButton)}
+    assert {"MASK", "GOGGLES", "BELT"} <= {button.text().splitlines()[0] for button in panel.findChildren(QtWidgets.QToolButton)}
 
     panel.set_selected_slot("left_weapon")
     preset_resrefs = {str(panel.model_combo.itemData(index) or "") for index in range(panel.model_combo.count())}
@@ -3949,6 +3950,12 @@ def test_body_attachment_panel_exposes_bas_slots_and_attach_signal() -> None:
     panel.attach_button.click()
 
     assert emitted[-1] == ("right_weapon", "w_lghtsbr_001")
+    assert panel.attach_button.isEnabled() is False
+
+    panel.set_mode("full_body")
+    assert panel.selected_mode() == "full_body"
+    assert panel.selected_slot() != "head"
+    panel.set_selected_slot("head")
     assert panel.attach_button.isEnabled() is False
 
 
@@ -3969,6 +3976,9 @@ def test_body_attachment_panel_tracks_attachment_layers() -> None:
     rows = panel.layer_rows()
     assert rows[0] == ("BODY", "PMBAM", "Base")
     assert ("HEAD", "pmhc01", "Attached") in rows
+    assert ("MASK", "", "Empty") in rows
+    assert ("GOGGLES", "", "Empty") in rows
+    assert ("BELT", "", "Empty") in rows
     assert ("R. Wep", "w_lghtsbr_001", "Attached") in rows
     assert ("L. Weapon", "", "Empty") in rows
     assert ("L. HAND", "", "Socket") in rows
@@ -4036,6 +4046,44 @@ def test_bas_attach_seeds_weapon_alignment_without_overwriting_same_model_adjust
 
     QtGhostRiggerMainWindow._handle_bas_attach_requested(window, "right_weapon", "w_lghtsbr_001")
     assert window._bas_attachment_transforms["right_weapon"]["position"] == [0.0, 0.0, 0.0]
+
+
+def test_bas_mask_goggles_and_belt_slots_use_socket_layers() -> None:
+    from types import MethodType
+
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    root = ModelNode(name="bodyroot")
+    headhook = ModelNode(name="headhook", parent=root)
+    pelvis = ModelNode(name="pelvis_g", parent=root)
+    root.children.extend([headhook, pelvis])
+    body = KotorModel(name="Body", root_node=root)
+    head_root = ModelNode(name="headroot")
+    mask_hook = ModelNode(name="MaskHook", parent=head_root)
+    goggle_hook = ModelNode(name="GoggleHook", parent=head_root)
+    head_root.children.extend([mask_hook, goggle_hook])
+    head = KotorModel(name="Head", root_node=head_root)
+    mask = KotorModel(name="Mask", root_node=ModelNode(name="maskroot"))
+    goggles = KotorModel(name="Goggles", root_node=ModelNode(name="goggleroot"))
+    belt = KotorModel(name="Belt", root_node=ModelNode(name="beltroot"))
+
+    window = SimpleNamespace()
+    window._find_model_node = MethodType(QtGhostRiggerMainWindow._find_model_node, window)
+    window._reset_bas_model_node_traversal = MethodType(QtGhostRiggerMainWindow._reset_bas_model_node_traversal, window)
+    window._prepare_bas_layer_root = MethodType(QtGhostRiggerMainWindow._prepare_bas_layer_root, window)
+    window._tag_bas_attachment_subtree = MethodType(QtGhostRiggerMainWindow._tag_bas_attachment_subtree, window)
+
+    assert QtGhostRiggerMainWindow._attach_bas_item_to_preview(window, body, head, "headhook", slot="head") is True
+    attached_head = headhook.children[-1]
+    assert QtGhostRiggerMainWindow._attach_bas_item_to_preview(window, body, mask, "MaskHook", slot="mask") is True
+    assert QtGhostRiggerMainWindow._attach_bas_item_to_preview(window, body, goggles, "GoggleHook", slot="goggles") is True
+    assert QtGhostRiggerMainWindow._attach_bas_item_to_preview(window, body, belt, "pelvis_g", slot="belt") is True
+
+    assert attached_head.children[0].children[-1]._gr_bas_socket_name == "MaskHook"
+    assert attached_head.children[1].children[-1]._gr_bas_socket_name == "GoggleHook"
+    assert pelvis.children[-1]._gr_bas_socket_name == "pelvis_g"
+    assert pelvis.children[-1]._gr_bas_attachment_layer is True
 
 
 def test_qt_animations_panel_exposes_inheritance_supermodel_selector() -> None:
@@ -4286,11 +4334,13 @@ def test_bas_model_recipe_preserves_body_layers_sockets_and_resrefs() -> None:
     body = SimpleNamespace(name="P_CarthBB", _gr_source_resref="p_carthbb", _gr_source_game="K1", supermodel="S_Male02")
     head = SimpleNamespace(name="pmha01", _gr_source_resref="pmha01", _gr_source_game="K1")
     weapon = SimpleNamespace(name="w_blstrpstl_001", _gr_source_resref="w_blstrpstl_001", _gr_source_game="K1")
+    mask = SimpleNamespace(name="i_mask_001", _gr_source_resref="i_mask_001", _gr_source_game="K1")
+    belt = SimpleNamespace(name="i_belt_001", _gr_source_resref="i_belt_001", _gr_source_game="K1")
 
     recipe = build_bas_model_recipe(
         body_model=body,
-        attachment_models={"head": head, "right_weapon": weapon},
-        attachment_resrefs={"head": "pmha01", "right_weapon": "w_blstrpstl_001"},
+        attachment_models={"head": head, "mask": mask, "belt": belt, "right_weapon": weapon},
+        attachment_resrefs={"head": "pmha01", "mask": "i_mask_001", "belt": "i_belt_001", "right_weapon": "w_blstrpstl_001"},
         attachment_transforms={
             "head": {"position": [0.0, 0.0, 1.25], "rotation": [0.0, 0.0, 0.0, 1.0], "scale": [1.0, 1.0, 1.0]},
             "right_weapon": {"position": [0.1, -0.2, 0.3], "rotation": [0.0, 0.0, 0.707, 0.707], "scale": [1.0, 1.0, 1.0]},
@@ -4309,11 +4359,16 @@ def test_bas_model_recipe_preserves_body_layers_sockets_and_resrefs() -> None:
     assert layers["head"]["state"] == "attached"
     assert layers["head"]["socket"] == "headhook"
     assert layers["head"]["transform"]["position"] == [0.0, 0.0, 1.25]
+    assert layers["mask"]["resref"] == "i_mask_001"
+    assert layers["mask"]["socket"] == "MaskHook"
+    assert layers["belt"]["resref"] == "i_belt_001"
+    assert layers["belt"]["socket"] == "pelvis_g"
     assert layers["right_weapon"]["resref"] == "w_blstrpstl_001"
     assert layers["right_weapon"]["socket"] == "rhand"
     assert layers["right_weapon"]["transform"]["rotation"] == [0.0, 0.0, 0.707, 0.707]
     assert layers["left_hand"]["state"] == "socket"
     assert layers["left_weapon"]["state"] == "empty"
+    assert recipe["mode"] == "headless_body"
     assert recipe["runtime"]["attachment_transform_mode"] == "socket_follower"
 
 

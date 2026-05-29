@@ -109,7 +109,13 @@ from src.core.scene.kmax_scene_manager import KMaxSceneManager
 from src.core.scene.axis_mode import AxisMode
 from src.core.scene.scene_object import Transform
 from src.core.scene.scene_resource_ref import SceneResourceRef
-from src.systems.bas.model_recipe import build_bas_model_recipe, load_bas_model_recipe, save_bas_model_recipe
+from src.systems.bas.model_recipe import (
+    BAS_SLOT_ORDER,
+    BAS_SOCKET_BY_SLOT,
+    build_bas_model_recipe,
+    load_bas_model_recipe,
+    save_bas_model_recipe,
+)
 
 
 C = dict(LEGACY_MATRIX_COLORS)
@@ -1482,6 +1488,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._bas_attachment_resrefs: dict[str, str] = {}
         self._bas_attachment_transforms: dict[str, dict[str, list[float]]] = {}
         self._bas_active_build_name = ""
+        self._bas_mode = "headless_body"
         self._current_head_model = None
         self._current_attachment_model = None
         self._model_path = ""
@@ -3319,6 +3326,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.body_attachment_panel.attachRequested.connect(self._handle_bas_attach_requested)
         self.body_attachment_panel.clearRequested.connect(self._handle_bas_clear_requested)
         self.body_attachment_panel.saveBuildRequested.connect(self._handle_bas_save_build_requested)
+        self.body_attachment_panel.modeChanged.connect(self._handle_bas_mode_changed)
         self.animation_library_panel = self.content_browser_panel
         self.animation_retarget_window = QtAnimationRetargetWindow(self)
         self.animation_retarget_window.set_navigation_profile(
@@ -4880,6 +4888,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._bas_attachment_resrefs.clear()
             self._bas_attachment_transforms.clear()
             self._bas_active_build_name = ""
+            self._bas_mode = "headless_body"
             self._current_head_model = None
             self._current_attachment_model = None
             self._model_path = ""
@@ -4902,8 +4911,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             if hasattr(self, "sprite_materials_panel"):
                 self.sprite_materials_panel.set_model(None)
             if hasattr(self, "body_attachment_panel"):
+                if hasattr(self.body_attachment_panel, "set_mode"):
+                    self.body_attachment_panel.set_mode("headless_body")
                 self.body_attachment_panel.set_body_model(None)
-                for slot in ("head", "left_hand", "right_hand", "left_weapon", "right_weapon"):
+                for slot in BAS_SLOT_ORDER:
+                    if slot == "body":
+                        continue
                     self.body_attachment_panel.clear_slot_model(slot)
                 self.body_attachment_panel.set_status("")
             if hasattr(self, "animations_panel"):
@@ -6727,6 +6740,30 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 return model
         return None
 
+    def _handle_bas_mode_changed(self, mode: str) -> None:
+        mode_key = str(mode or "headless_body").strip().lower()
+        if mode_key not in {"headless_body", "full_body"}:
+            mode_key = "headless_body"
+        self._bas_mode = mode_key
+        if mode_key == "full_body" and "head" in getattr(self, "_bas_attachments", {}):
+            self._bas_attachments.pop("head", None)
+            self._bas_attachment_resrefs.pop("head", None)
+            self._bas_attachment_transforms.pop("head", None)
+            self._current_head_model = None
+            if hasattr(self, "body_attachment_panel"):
+                self.body_attachment_panel.clear_slot_model("head")
+        result = self._rebuild_bas_preview()
+        if hasattr(self, "body_attachment_panel"):
+            self.body_attachment_panel.set_status(result or f"BAS mode: {mode_key.replace('_', ' ')}.")
+
+    def _bas_mode_for_model(self, model) -> str:
+        try:
+            from src.core.qt_core.geometry.model_data import CharacterMode, detect_character_mode
+
+            return "headless_body" if detect_character_mode(model) == CharacterMode.HEADLESS_BODY else "full_body"
+        except Exception:
+            return "headless_body"
+
     def _handle_bas_attach_requested(self, slot: str, resref: str) -> None:
         slot = str(slot or "").strip().lower()
         resref = str(resref or "").strip()
@@ -6736,6 +6773,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if slot in {"left_hand", "right_hand"}:
             if hasattr(self, "body_attachment_panel"):
                 self.body_attachment_panel.set_status("Hand slots are sockets; attach items through L. Weapon or R. Weapon.")
+            return
+        if slot == "head" and getattr(self, "_bas_mode", "headless_body") == "full_body":
+            if hasattr(self, "body_attachment_panel"):
+                self.body_attachment_panel.set_status("Full Body BAS mode uses the existing head hooks; attach masks or goggles instead.")
             return
         body = getattr(self, "_bas_body_model", None) or getattr(self, "_current_model", None)
         if body is None:
@@ -6819,17 +6860,20 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             if head is not None:
                 if not self._attach_bas_item_to_preview(preview, head, "headhook", slot="head", transform=self._bas_attachment_transforms.get("head")):
                     return "Head attachment failed: body has no headhook socket."
-            for slot in ("left_weapon", "right_weapon"):
+            for slot in ("mask", "goggles", "left_weapon", "belt", "right_weapon"):
                 item = self._bas_attachments.get(slot)
                 if item is None:
                     continue
-                self._attach_bas_item_to_preview(
+                socket_name = self._bas_socket_for_slot(slot)
+                if not self._attach_bas_item_to_preview(
                     preview,
                     item,
-                    self._bas_socket_for_slot(slot),
+                    socket_name,
                     slot=slot,
                     transform=self._bas_attachment_transforms.get(slot),
-                )
+                ):
+                    label = slot.replace("_", " ")
+                    return f"{label.title()} attachment failed: model has no {socket_name} socket."
             preview.name = str(getattr(self, "_bas_active_build_name", "") or f"{getattr(body, 'name', 'body')}_bas")
             self._apply_bas_preview_to_viewport(preview, previous_preview=previous_preview)
             attached = ", ".join(self._bas_attachment_resrefs.get(key, key) for key in self._bas_attachments)
@@ -6876,6 +6920,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 attachment_transforms=dict(getattr(self, "_bas_attachment_transforms", {}) or {}),
                 game=game,
                 build_name=build_name or getattr(self, "_bas_active_build_name", ""),
+                mode=getattr(self, "_bas_mode", "headless_body"),
             )
             path = save_bas_model_recipe(recipe, self.app_root / "src" / "systems" / "bas" / "models")
             self._last_bas_model_recipe_path = path
@@ -7002,7 +7047,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         return None
 
     def _bas_socket_for_slot(self, slot: str) -> str:
-        return "lhand" if str(slot).startswith("left") else "rhand"
+        slot_key = str(slot or "").strip().lower()
+        return BAS_SOCKET_BY_SLOT.get(slot_key, "lhand" if slot_key.startswith("left") else "rhand")
 
     def _bas_target_scene_object(self, previous_preview=None):
         scene_manager = getattr(self, "scene_manager", None)
@@ -7045,6 +7091,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             target_object.metadata.setdefault("body_attachment_system", {})
             target_object.metadata["body_attachment_system"].update({
                 "active": True,
+                "mode": getattr(self, "_bas_mode", "headless_body"),
                 "attachments": dict(self._bas_attachment_resrefs),
                 "layers": [
                     {
@@ -7052,7 +7099,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                         "resref": self._bas_attachment_resrefs.get(slot, ""),
                         "enabled": True,
                     }
-                    for slot in ("head", "left_weapon", "right_weapon")
+                    for slot in BAS_SLOT_ORDER
                     if slot in self._bas_attachments
                 ],
             })
@@ -8903,6 +8950,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._bas_attachment_resrefs.clear()
         self._bas_attachment_transforms.clear()
         self._bas_active_build_name = str(recipe.get("display_name") or recipe.get("build_name") or path.stem).strip()
+        self._bas_mode = str(recipe.get("mode") or (recipe.get("runtime") or {}).get("body_mode") or "headless_body").strip().lower()
+        if self._bas_mode not in {"headless_body", "full_body"}:
+            self._bas_mode = "headless_body"
         self._current_head_model = None
         self._current_attachment_model = None
 
@@ -8932,8 +8982,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         result = self._rebuild_bas_preview()
         preview = getattr(self, "_bas_preview_model", None)
         if hasattr(self, "body_attachment_panel"):
+            if hasattr(self.body_attachment_panel, "set_mode"):
+                self.body_attachment_panel.set_mode(self._bas_mode)
             self.body_attachment_panel.set_body_model(body)
-            for slot in ("head", "left_hand", "right_hand", "left_weapon", "right_weapon"):
+            for slot in BAS_SLOT_ORDER:
+                if slot == "body":
+                    continue
                 if slot in self._bas_attachments:
                     self.body_attachment_panel.set_slot_model(slot, self._bas_attachments[slot], resref=self._bas_attachment_resrefs.get(slot, ""))
                 else:
@@ -9122,6 +9176,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._bas_attachment_resrefs.clear()
         self._bas_attachment_transforms.clear()
         self._bas_active_build_name = ""
+        self._bas_mode = self._bas_mode_for_model(model)
         self._current_head_model = None
         self._current_attachment_model = None
         self._retarget_target_model = model
@@ -9161,8 +9216,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if hasattr(self, "sprite_materials_panel"):
             self.sprite_materials_panel.set_model(self._active_viewport_model())
         if hasattr(self, "body_attachment_panel"):
+            if hasattr(self.body_attachment_panel, "set_mode"):
+                self.body_attachment_panel.set_mode(self._bas_mode)
             self.body_attachment_panel.set_body_model(model)
-            for slot in ("head", "left_hand", "right_hand", "left_weapon", "right_weapon"):
+            for slot in BAS_SLOT_ORDER:
+                if slot == "body":
+                    continue
                 self.body_attachment_panel.clear_slot_model(slot)
             self.body_attachment_panel.set_status(f"Body: {name}")
         if hasattr(self, "animations_panel"):
