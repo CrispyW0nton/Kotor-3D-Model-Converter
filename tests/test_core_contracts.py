@@ -3590,6 +3590,7 @@ def test_bas_preview_applies_as_layer_and_restores_animation_pose() -> None:
         window,
     )
     window._request_bas_viewport_refresh = MethodType(QtGhostRiggerMainWindow._request_bas_viewport_refresh, window)
+    window._sync_bas_body_animation_engine = MethodType(QtGhostRiggerMainWindow._sync_bas_body_animation_engine, window)
 
     QtGhostRiggerMainWindow._apply_bas_preview_to_viewport(window, preview)
 
@@ -3626,6 +3627,43 @@ def test_animation_source_model_uses_bas_composite_preview_for_body_source() -> 
     window._animation_source_key = MethodType(QtGhostRiggerMainWindow._animation_source_key, window)
 
     assert QtGhostRiggerMainWindow._animation_source_model(window) is preview
+
+
+def test_bas_animation_engine_moves_to_layered_preview_without_losing_time() -> None:
+    from src.core.qt_core.animation.animation_engine import AnimationEngine
+    from src.core.qt_core.geometry.model_data import Animation, KotorModel
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    body = KotorModel(name="Body")
+    preview = KotorModel(name="Body_bas")
+    body.animations = [Animation(name="walk", length=2.0)]
+    preview.animations = [Animation(name="walk", length=2.0)]
+    engine = AnimationEngine(body)
+    assert engine.play("walk", loop=True, blend=False) is True
+    engine.seek(0.75)
+
+    @contextmanager
+    def resolution_context(_model, _game, _supermodel=""):
+        yield
+
+    window = SimpleNamespace(
+        _animation_engine=engine,
+        _animation_loop=True,
+        animations_panel=SimpleNamespace(selected_animation_source=lambda: "body"),
+        _get_resource_manager=lambda: None,
+        _animation_inheritance_game=lambda _model: "K1",
+        _animation_inheritance_supermodel=lambda _model: "",
+        _animation_resolution_context=resolution_context,
+        _apply_animation_resolution_game=lambda _model, _game: None,
+    )
+    window._animation_source_key = MethodType(QtGhostRiggerMainWindow._animation_source_key, window)
+
+    QtGhostRiggerMainWindow._sync_bas_body_animation_engine(window, preview)
+
+    assert window._animation_engine.model is preview
+    assert window._animation_engine.current_animation.name == "walk"
+    assert window._animation_engine.current_time == pytest.approx(0.75)
+    assert window._animation_engine.is_playing is True
 
 
 def test_bas_ignores_anatomical_hand_placeholders() -> None:
