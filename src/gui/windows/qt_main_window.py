@@ -1880,6 +1880,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             ("diag", getattr(self, "diag_action", None)),
             ("scene", getattr(self, "scene_panel_action", None)),
             ("props", getattr(self, "properties_panel_action", None)),
+            ("body_attachment", getattr(self, "body_attachment_panel_action", None)),
             ("sequence", getattr(self, "sequence_editor_action", None)),
             ("lights", getattr(self, "lighting_panel_action", None)),
             ("cameras", getattr(self, "camera_panel_action", None)),
@@ -2042,7 +2043,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             "animations",
             lambda: self._show_workspace_dock("animations"),
         )
-        self.body_attachment_panel_action = QtGui.QAction(self._icon("props"), "Body Attachment System", self)
+        self.body_attachment_panel_action = QtGui.QAction(self._icon("body_attachment"), "Body Attachment System", self)
         self._configure_dock_toggle_action(
             self.body_attachment_panel_action,
             "body_attachment",
@@ -2301,6 +2302,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     def _icon(self, name: str, size: int = 16) -> QtGui.QIcon:
         if hasattr(self, "theme_manager"):
             return self.theme_manager.icon(name, size)
+        svg = _GUI_DIR / "icons" / f"{name}.svg"
+        if svg.exists():
+            return QtGui.QIcon(str(svg))
         path = _GUI_DIR / "icons" / f"{name}_{size}.png"
         if path.exists():
             return QtGui.QIcon(str(path))
@@ -2436,7 +2440,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._tool_button("Content", self.content_browser_action, "library", compact=True))
         layout.addWidget(self._tool_button("Scene Information", self.scene_panel_action, "scene", compact=True))
         layout.addWidget(self._tool_button("Properties", self.properties_panel_action, "props", compact=True))
-        layout.addWidget(self._tool_button("BAS", self.body_attachment_panel_action, "props", compact=True))
+        layout.addWidget(self._tool_button("BAS", self.body_attachment_panel_action, "body_attachment", compact=True))
         layout.addWidget(self._tool_button("Sequence Editor", self.sequence_editor_action, "sequence", compact=True))
         layout.addWidget(self._tool_button("Animation Browser", self.animation_browser_dock_action, "anims", compact=True))
         layout.addWidget(self._tool_button("Nodes", self.nodes_panel_action, "skeleton", compact=True))

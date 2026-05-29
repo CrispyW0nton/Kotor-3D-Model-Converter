@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import os
 from contextlib import contextmanager
+from pathlib import Path
 from types import MethodType, SimpleNamespace
 
 import pytest
@@ -1634,6 +1635,93 @@ def test_wgpu_helper_hit_test_selects_screen_space_helpers_before_meshes() -> No
         viewport.deleteLater()
 
 
+def test_viewport_toolbar_exposes_helper_toggle_and_selection_mode_menu() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    viewport = QtViewportWidget()
+    try:
+        helper_button = viewport.findChild(QtWidgets.QPushButton, "ViewportDummyHelpersButton")
+        mode_button = viewport.findChild(QtWidgets.QToolButton, "ViewportSelectionModeButton")
+
+        assert helper_button is viewport.dummy_helpers_button
+        assert viewport.dummy_helpers_button.isCheckable()
+        assert viewport.dummy_helpers_button.isChecked() is True
+        assert bool(getattr(viewport._renderer, "show_dummy_helpers", False)) is True
+        assert mode_button is viewport.selection_mode_button
+        assert [action.data() for action in mode_button.menu().actions()] == [
+            "object",
+            "mesh",
+            "helpers",
+            "lights",
+            "cameras",
+        ]
+
+        viewport.set_viewport_selection_mode("helpers")
+        assert viewport._viewport_selection_mode == "helpers"
+        assert mode_button.toolTip() == "Viewport selection mode: Helpers"
+        assert not mode_button.icon().isNull()
+
+        viewport.set_dummy_helper_visibility(False)
+        assert viewport.dummy_helpers_button.isChecked() is False
+        assert bool(getattr(viewport._renderer, "show_dummy_helpers", True)) is False
+    finally:
+        viewport.deleteLater()
+
+
+def test_viewport_selection_mode_filters_click_targets() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtCore, QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    class _Position:
+        def x(self) -> int:
+            return 100
+
+        def y(self) -> int:
+            return 100
+
+    class _Event:
+        def position(self):
+            return _Position()
+
+        def modifiers(self):
+            return QtCore.Qt.NoModifier
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    viewport = QtViewportWidget()
+    mesh = SimpleNamespace(name="Mesh", is_mesh=True)
+    helper = SimpleNamespace(name="Waypoint_Helper", type_label="dummy")
+    light = SimpleNamespace(name="AuroraLight001", is_light=True)
+    camera = SimpleNamespace(name="Camera001", is_camera=True)
+    selected: list[object | None] = []
+    viewport.set_selected_node = lambda node, *args, **kwargs: selected.append(node)
+    viewport._mesh_hit_test_detail = lambda *args, **kwargs: (mesh, None)
+    viewport._helper_hit_test = lambda *args, **kwargs: helper
+    viewport._light_hit_test = lambda *args, **kwargs: light
+    viewport._camera_hit_test = lambda *args, **kwargs: camera
+    viewport._renderer.show_bones = False
+    try:
+        viewport.set_viewport_selection_mode("helpers")
+        viewport._release_lmb(_Event())
+        viewport.set_viewport_selection_mode("lights")
+        viewport._release_lmb(_Event())
+        viewport.set_viewport_selection_mode("cameras")
+        viewport._release_lmb(_Event())
+        viewport.set_viewport_selection_mode("mesh")
+        viewport._release_lmb(_Event())
+
+        assert selected == [helper, light, camera, mesh]
+    finally:
+        viewport.deleteLater()
+
+
 def test_qt_viewport_preserves_light_node_selection_under_scene_root_tags() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -2634,10 +2722,12 @@ def test_main_model_load_uses_inherited_animation_panel_loader() -> None:
     assert "QtBodyAttachmentPanel(self)" in layout_source
     assert '"Body Attachment System"' in layout_source
     assert "body_attachment_panel_action" in actions_source
+    assert 'self.body_attachment_panel_action = QtGui.QAction(self._icon("body_attachment"), "Body Attachment System", self)' in actions_source
     assert "modules_menu.addAction(self.body_attachment_panel_action)" in menu_source
     assert "_animation_source_model(model)" in loader_source
     assert "_animation_inheritance_supermodel(model)" in loader_source
     assert "_animation_resolution_context(model, inheritance_game, inheritance_supermodel)" in loader_source
+    assert Path("src/gui/icons/body_attachment.svg").exists()
 
 
 def test_wgpu_external_lighting_snapshot_receives_renderer_helper_palette(monkeypatch) -> None:
@@ -3467,12 +3557,27 @@ def test_qt_animations_panel_displays_readable_names_with_raw_animation_slots() 
             SimpleNamespace(name="pause1"),
             SimpleNamespace(name="animloop03"),
             SimpleNamespace(name="b1a1"),
+            SimpleNamespace(name="b5a1"),
+            SimpleNamespace(name="b6a1"),
+            SimpleNamespace(name="b7a1"),
+            SimpleNamespace(name="b8a1"),
             SimpleNamespace(name="c10n3"),
+            SimpleNamespace(name="c2a1"),
             SimpleNamespace(name="f2p4a"),
+            SimpleNamespace(name="g1a1"),
+            SimpleNamespace(name="g2f1"),
+            SimpleNamespace(name="g2r1"),
+            SimpleNamespace(name="g2w1"),
             SimpleNamespace(name="g3w1"),
+            SimpleNamespace(name="g5a1"),
+            SimpleNamespace(name="g6a1"),
+            SimpleNamespace(name="g7a1"),
+            SimpleNamespace(name="g8a1"),
+            SimpleNamespace(name="g9a1"),
             SimpleNamespace(name="g3x1"),
             SimpleNamespace(name="g3y1"),
             SimpleNamespace(name="g3z1"),
+            SimpleNamespace(name="m2d1"),
             SimpleNamespace(name="m4d2"),
         ]
     )
@@ -3485,14 +3590,33 @@ def test_qt_animations_panel_displays_readable_names_with_raw_animation_slots() 
     assert panel.listbox.item(0).text() == "Idle 1 [pause1]"
     assert panel.listbox.item(1).text() == "Ambient Loop 03 [animloop03]"
     assert panel.listbox.item(2).text() == "Blaster Set 1 Attack 1 [b1a1]"
-    assert panel.listbox.item(3).text() == "Combat Set 10 Block 3 [c10n3]"
-    assert panel.listbox.item(4).text() == "Fists Set 2 Parry 4 Form A [f2p4a]"
-    assert panel.listbox.item(5).text() == "General Weapon Set 3 Activate Weapon 1 [g3w1]"
-    assert panel.listbox.item(6).text() == "General Weapon Set 3 Fall Through Air 1 [g3x1]"
-    assert panel.listbox.item(7).text() == "General Weapon Set 3 Air-To-Ground Fall 1 [g3y1]"
-    assert panel.listbox.item(8).text() == "General Weapon Set 3 Get Back Up 1 [g3z1]"
-    assert panel.listbox.item(9).text() == "Melee Set 4 Defend 2 [m4d2]"
+    assert panel.listbox.item(3).text() == "Blaster Set 5 (Single Hand Blasters) Attack 1 [b5a1]"
+    assert panel.listbox.item(4).text() == "Blaster Set 6 (Dual Blasters: L + R) Attack 1 [b6a1]"
+    assert panel.listbox.item(5).text() == "Blaster Set 7 (Blaster Rifles: Both Hands) Attack 1 [b7a1]"
+    assert panel.listbox.item(6).text() == "Blaster Set 8 (Assault Cannons: Both Hands) Attack 1 [b8a1]"
+    assert panel.listbox.item(7).text() == "Combat Set 10 Block 3 [c10n3]"
+    assert panel.listbox.item(8).text() == "Combat Set 2 (Single Hand Melee: Vibrosword, Short Sword) Attack 1 [c2a1]"
+    assert panel.listbox.item(9).text() == "Fists Set 2 Parry 4 Form A [f2p4a]"
+    assert panel.listbox.item(10).text() == "General Weapon Set 1 (Single Hand Melee: Shortsword) Attack 1 [g1a1]"
+    assert panel.listbox.item(11).text() == "General Weapon Set 2 (Single Hand Melee: Lightsaber, Melee) Flurry 1 [g2f1]"
+    assert panel.listbox.item(12).text() == "General Weapon Set 2 (Single Hand Melee: Lightsaber, Melee) Idle (On Guard Pose) 1 [g2r1]"
+    assert panel.listbox.item(13).text() == "General Weapon Set 2 (Single Hand Melee: Lightsaber, Melee) Activate Lightsaber 1 [g2w1]"
+    assert panel.listbox.item(14).text() == "General Weapon Set 3 Activate Weapon 1 [g3w1]"
+    assert panel.listbox.item(15).text() == "General Weapon Set 5 (Blaster Pistol) Attack 1 [g5a1]"
+    assert panel.listbox.item(16).text() == "General Weapon Set 6 (Dual Blasters) Attack 1 [g6a1]"
+    assert panel.listbox.item(17).text() == "General Weapon Set 7 (Blaster Rifles) Attack 1 [g7a1]"
+    assert panel.listbox.item(18).text() == "General Weapon Set 8 (Hand to Hand Combat) Attack 1 [g8a1]"
+    assert panel.listbox.item(19).text() == "General Weapon Set 9 (Assault Cannons) Attack 1 [g9a1]"
+    assert panel.listbox.item(20).text() == "General Weapon Set 3 Fall Through Air 1 [g3x1]"
+    assert panel.listbox.item(21).text() == "General Weapon Set 3 Air-To-Ground Fall 1 [g3y1]"
+    assert panel.listbox.item(22).text() == "General Weapon Set 3 Get Back Up 1 [g3z1]"
+    assert panel.listbox.item(23).text() == "Melee Set 2 (Vibroswords, Shortswords) Defend 1 [m2d1]"
+    assert panel.listbox.item(24).text() == "Melee Set 4 Defend 2 [m4d2]"
     assert animation_row_label("c10a1", game="K2") == "Combat Set 10 Attack 1 [c10a1] [K2]"
+    assert animation_row_label("b8a1", game="K1") == "Blaster Set 8 (Assault Cannons: Both Hands) Attack 1 [b8a1] [K1]"
+    assert animation_row_label("b8a1", game="K2") == "Blaster Set 8 Attack 1 [b8a1] [K2]"
+    assert animation_row_label("b9a1", game="K1") == "Blaster Set 9 Attack 1 [b9a1] [K1]"
+    assert animation_row_label("b9a1", game="K2") == "Blaster Set 9 (Assault Cannons: Both Hands) Attack 1 [b9a1] [K2]"
     assert panel.selected_animation() == "b1a1"
     assert emitted[-1] == "b1a1"
     assert panel.select_animation("pause1") is True
@@ -4773,6 +4897,7 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
 
     assert 'layout.addWidget(self._tool_button("Scene Information", self.scene_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Properties", self.properties_panel_action' in command_source
+    assert 'layout.addWidget(self._tool_button("BAS", self.body_attachment_panel_action, "body_attachment"' in command_source
     assert 'layout.addWidget(self._tool_button("Sequence Editor", self.sequence_editor_action' in command_source
     assert 'layout.addWidget(self._tool_button("Animation Browser", self.animation_browser_dock_action' in command_source
     assert 'layout.addWidget(self._tool_button("Nodes", self.nodes_panel_action' in command_source

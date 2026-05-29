@@ -72,23 +72,52 @@ _ANIMATION_FAMILY_LABELS = {
 _ANIMATION_ACTION_LABELS = {
     "a": "Attack",
     "d": "Defend",
+    "f": "Flurry",
     "g": "Get Hit",
     "n": "Block",
     "p": "Parry",
+    "r": "Idle",
     "w": "Activate Weapon",
     "x": "Fall Through Air",
     "y": "Air-To-Ground Fall",
     "z": "Get Back Up",
 }
 
+_ANIMATION_SET_LABELS = {
+    ("g", 1): "Single Hand Melee: Shortsword",
+    ("g", 2): "Single Hand Melee: Lightsaber, Melee",
+    ("g", 5): "Blaster Pistol",
+    ("g", 6): "Dual Blasters",
+    ("g", 7): "Blaster Rifles",
+    ("g", 8): "Hand to Hand Combat",
+    ("g", 9): "Assault Cannons",
+    ("m", 2): "Vibroswords, Shortswords",
+    ("c", 2): "Single Hand Melee: Vibrosword, Short Sword",
+    ("b", 5): "Single Hand Blasters",
+    ("b", 6): "Dual Blasters: L + R",
+    ("b", 7): "Blaster Rifles: Both Hands",
+    ("b", 8): "Assault Cannons: Both Hands",
+    ("b", 9): "Assault Cannons: Both Hands",
+}
 
-def animation_display_name(anim_name: str, *, inherited: bool = False, source: str = "") -> str:
+_ANIMATION_GAME_SET_LABELS = {
+    ("b", 8, "K2"): "",
+    ("b", 9, "K1"): "",
+}
+
+_ANIMATION_CONTEXT_ACTION_LABELS = {
+    ("g", 2, "r"): "Idle (On Guard Pose)",
+    ("g", 2, "w"): "Activate Lightsaber",
+}
+
+
+def animation_display_name(anim_name: str, *, inherited: bool = False, source: str = "", game: str = "") -> str:
     """Return a readable label while preserving the raw KOTOR slot elsewhere."""
     raw = str(anim_name or "").strip()
     if not raw:
         return ""
     key = raw.lower()
-    label = _animation_base_display_name(key, raw)
+    label = _animation_base_display_name(key, raw, game=game)
     if inherited:
         source = str(source or "").strip()
         label = f"{label} (Inherited" + (f" from {source}" if source else "") + ")"
@@ -97,16 +126,16 @@ def animation_display_name(anim_name: str, *, inherited: bool = False, source: s
 
 def animation_row_label(anim_name: str, *, inherited: bool = False, source: str = "", game: str = "") -> str:
     raw = str(anim_name or "").strip()
-    display = animation_display_name(raw, inherited=inherited, source=source)
+    game_label = _animation_game_label(game)
+    display = animation_display_name(raw, inherited=inherited, source=source, game=game_label)
     if raw:
         display = f"{display} [{raw}]"
-    game = _animation_game_label(game)
-    if game:
-        display = f"{display} [{game}]"
+    if game_label:
+        display = f"{display} [{game_label}]"
     return display
 
 
-def _animation_base_display_name(key: str, raw: str) -> str:
+def _animation_base_display_name(key: str, raw: str, *, game: str = "") -> str:
     if key in _ANIMATION_EXACT_LABELS:
         return _ANIMATION_EXACT_LABELS[key]
     match = re.fullmatch(r"pause(\d+)", key)
@@ -118,11 +147,14 @@ def _animation_base_display_name(key: str, raw: str) -> str:
     match = re.fullmatch(r"([bcfgm])(\d+)([a-z])(\d*)([a-z]?)", key)
     if match:
         family_code, set_number, action_code, variant, form_code = match.groups()
+        set_int = int(set_number)
         family = _ANIMATION_FAMILY_LABELS.get(family_code, f"Move Family {family_code.upper()}")
-        action = _ANIMATION_ACTION_LABELS.get(action_code, f"Action {action_code.upper()}")
+        set_label = _animation_set_context(family_code, set_int, game)
+        action = _animation_action_label(family_code, set_int, action_code)
         suffix = f" {int(variant)}" if variant else ""
         form = f" Form {form_code.upper()}" if form_code else ""
-        return f"{family} Set {int(set_number)} {action}{suffix}{form}"
+        context = f" ({set_label})" if set_label else ""
+        return f"{family} Set {set_int}{context} {action}{suffix}{form}"
     match = re.fullmatch(r"([a-z]+)(\d+)", key)
     if match:
         prefix, variant = match.groups()
@@ -130,6 +162,21 @@ def _animation_base_display_name(key: str, raw: str) -> str:
             if prefix.startswith(token):
                 return f"{label} {int(variant)}"
     return _humanize_animation_slot(raw)
+
+
+def _animation_set_context(family_code: str, set_number: int, game: str = "") -> str:
+    game_label = _animation_game_label(game)
+    game_specific = _ANIMATION_GAME_SET_LABELS.get((family_code, set_number, game_label))
+    if game_specific is not None:
+        return game_specific
+    return _ANIMATION_SET_LABELS.get((family_code, set_number), "")
+
+
+def _animation_action_label(family_code: str, set_number: int, action_code: str) -> str:
+    return _ANIMATION_CONTEXT_ACTION_LABELS.get(
+        (family_code, set_number, action_code),
+        _ANIMATION_ACTION_LABELS.get(action_code, f"Action {action_code.upper()}"),
+    )
 
 
 def _humanize_animation_slot(raw: str) -> str:
