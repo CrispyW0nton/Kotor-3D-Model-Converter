@@ -478,6 +478,81 @@ def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinnin
     assert uploader._skin_inverse_bind_source == "qBone_tBone_dfs_indexed_TR_no_invert"
 
 
+def test_kmax_scene_composite_keeps_bas_layers_out_of_body_dfs_indices() -> None:
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    root = ModelNode(name="P_CarthBB", flags=int(NodeFlags.HEADER))
+    spine = ModelNode(name="torso_g", flags=int(NodeFlags.HEADER), parent=root)
+    headhook = ModelNode(name="headhook", flags=int(NodeFlags.HEADER), parent=root)
+    after_hook = ModelNode(name="rhand", flags=int(NodeFlags.HEADER), parent=root)
+    body_skin = ModelNode(name="torso", flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH) | int(NodeFlags.SKIN), parent=root)
+    body_skin.bone_map = ["P_CarthBB", "torso_g", "headhook", "rhand"]
+    body_skin.qbone_list = [(1.0, 0.0, 0.0, 0.0)] * 5
+    body_skin.tbone_list = [(0.0, 0.0, 0.0)] * 5
+    root.children.extend([spine, headhook, after_hook, body_skin])
+    body = KotorModel(name="P_CarthBB", root_node=root)
+
+    head_root = ModelNode(name="pmha01")
+    head_mesh = ModelNode(
+        name="head",
+        flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH) | int(NodeFlags.SKIN),
+        parent=head_root,
+    )
+    head_root.children.append(head_mesh)
+    head = KotorModel(name="pmha01", root_node=head_root)
+
+    window = SimpleNamespace()
+    window._find_model_node = MethodType(QtGhostRiggerMainWindow._find_model_node, window)
+    window._reset_bas_model_node_traversal = MethodType(QtGhostRiggerMainWindow._reset_bas_model_node_traversal, window)
+    window._prepare_bas_layer_root = MethodType(QtGhostRiggerMainWindow._prepare_bas_layer_root, window)
+    window._tag_bas_attachment_subtree = MethodType(QtGhostRiggerMainWindow._tag_bas_attachment_subtree, window)
+    assert QtGhostRiggerMainWindow._attach_bas_item_to_preview(window, body, head, "headhook", slot="head") is True
+
+    fake_viewport = SimpleNamespace()
+    fake_viewport._tag_scene_object_nodes = MethodType(QtViewportWidget._tag_scene_object_nodes, fake_viewport)
+    fake_viewport._tag_scene_source_indices = MethodType(QtViewportWidget._tag_scene_source_indices, fake_viewport)
+    fake_viewport._euler_degrees_to_quat = QtViewportWidget._euler_degrees_to_quat
+    instance = SimpleNamespace(
+        id="bas-preview",
+        name="P_CarthBB BAS",
+        visible=True,
+        metadata={"_runtime_model": body},
+        transform=SimpleNamespace(position=(0.0, 0.0, 0.0), rotation=(0.0, 0.0, 0.0)),
+    )
+
+    composite = QtViewportWidget._build_scene_composite_model(fake_viewport, [instance], "BAS Preview")
+    placed_root = composite.root_node.children[0]
+    stack = [placed_root]
+    placed_root_nodes = []
+    while stack:
+        node = stack.pop()
+        placed_root_nodes.append(node)
+        stack.extend(reversed(getattr(node, "children", []) or []))
+    placed_nodes = {
+        getattr(node, "name", ""): node
+        for node in placed_root_nodes
+        if not bool(getattr(node, "_gr_bas_attachment_layer", False))
+    }
+
+    assert getattr(placed_nodes["P_CarthBB"], "_gr_source_dfs_index") == 0
+    assert getattr(placed_nodes["torso_g"], "_gr_source_dfs_index") == 1
+    assert getattr(placed_nodes["headhook"], "_gr_source_dfs_index") == 2
+    assert getattr(placed_nodes["rhand"], "_gr_source_dfs_index") == 3
+    assert getattr(placed_nodes["torso"], "_gr_source_dfs_index") == 4
+
+    uploader = MatrixPaletteUploader(max_bones=8)
+    uploader.build_inverse_bind_pose(composite)
+    assert uploader._name_to_dfs_index["rhand"] == 3
+    assert uploader._name_to_dfs_index["torso"] == 4
+    assert uploader._model_node_count == 5
+    assert "pmha01" not in uploader._name_to_dfs_index
+    uploader.compute_skin_node_palette(placed_nodes["torso"], SimpleNamespace(nodes={}))
+    assert uploader._skin_inverse_bind_source == "qBone_tBone_dfs_indexed_TR_no_invert"
+
+
 def test_kmax_scene_gpu_transform_uses_authored_vbo_basis() -> None:
     from src.gui.rendering.gpu_renderer import _scene_authored_world_transform, _scene_gpu_model_matrix
 
@@ -1968,6 +2043,113 @@ def test_wgpu_scene_lighting_only_drives_realistic_base_modes() -> None:
     assert renderer._scene_lighting_enabled(lighting, ViewportDisplayOptions(display_mode=ViewportDisplayMode.SOLID)) is False
 
 
+def test_wgpu_bas_attachment_follows_animated_socket_matrix() -> None:
+    import numpy as np
+
+    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    renderer._active_anim_pose = SimpleNamespace(
+        nodes={
+            "rhand": SimpleNamespace(
+                position=(2.0, 3.0, 4.0),
+                rotation=(0.0, 0.0, 0.0, 1.0),
+            )
+        },
+        nodes_by_index={},
+        duplicate_node_names=set(),
+    )
+    prepared = np.eye(4, dtype=np.float32)
+    prepared[0, 3] = 12.5
+    body = ModelNode(name="body")
+    socket = ModelNode(name="rhand", parent=body)
+    body.children.append(socket)
+    weapon_root = ModelNode(name="weaponroot", parent=socket)
+    weapon_root._gr_bas_attachment_root = True
+    weapon_root._gr_bas_attachment_layer = True
+    weapon_root._gr_bas_socket_name = "rhand"
+    socket.children.append(weapon_root)
+    blade = ModelNode(name="blade", parent=weapon_root)
+    blade.position = (0.0, 0.0, 0.25)
+    blade._gr_bas_attachment_layer = True
+    blade._gr_bas_attachment_root_ref = weapon_root
+    weapon_root.children.append(blade)
+    mesh_data = SimpleNamespace(source=blade, is_skinned=False, world_matrix=prepared)
+
+    matrix = renderer._mesh_model_matrix(mesh_data)
+
+    assert matrix[0, 3] == pytest.approx(2.0)
+    assert matrix[1, 3] == pytest.approx(3.0)
+    assert matrix[2, 3] == pytest.approx(4.25)
+
+
+def test_wgpu_bas_head_skin_uses_animated_socket_root_not_head_node_offset() -> None:
+    import numpy as np
+
+    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    renderer._active_anim_pose = SimpleNamespace(
+        nodes={
+            "headhook": SimpleNamespace(
+                position=(0.25, -0.5, 1.75),
+                rotation=(0.0, 0.0, 0.0, 1.0),
+            )
+        },
+        nodes_by_index={},
+        duplicate_node_names=set(),
+    )
+    prepared = np.eye(4, dtype=np.float32)
+    body = ModelNode(name="body")
+    socket = ModelNode(name="headhook", parent=body)
+    body.children.append(socket)
+    head_root = ModelNode(name="pmha01", parent=socket)
+    head_root._gr_bas_attachment_root = True
+    head_root._gr_bas_attachment_layer = True
+    head_root._gr_bas_socket_name = "headhook"
+    socket.children.append(head_root)
+    head_skin = ModelNode(name="head", parent=head_root, flags=0x61)
+    head_skin.position = (0.0, 0.0, 2.0)
+    head_skin._gr_bas_attachment_layer = True
+    head_skin._gr_bas_attachment_root_ref = head_root
+    head_root.children.append(head_skin)
+    mesh_data = SimpleNamespace(source=head_skin, is_skinned=False, world_matrix=prepared)
+
+    matrix = renderer._mesh_model_matrix(mesh_data)
+
+    np.testing.assert_allclose(matrix[:3, 3], np.asarray([0.25, -0.5, 1.75], dtype=np.float32), atol=1e-6)
+
+
+def test_bas_runtime_contract_is_documented_and_guarded() -> None:
+    import inspect
+    from pathlib import Path
+
+    from src.gui.rendering import gpu_renderer, mesh_render_data, wgpu_renderer
+
+    contract_path = Path(__file__).resolve().parents[1] / "src" / "systems" / "bas" / "README.md"
+    contract = contract_path.read_text(encoding="utf-8")
+    assert "BAS layers follow the animated socket transform every frame" in contract
+    assert "BAS skin meshes stay out of the body skin palette" in contract
+    assert "WGPU/D3D and ModernGL/OpenGL" in contract
+
+    wgpu_source = inspect.getsource(wgpu_renderer.WgpuRenderer._mesh_model_matrix)
+    assert "_gr_bas_attachment_layer" in wgpu_source
+    assert "self._active_anim_pose is not None" in wgpu_source
+    assert "node_world_matrix(matrix_source, anim_pose=self._active_anim_pose)" in wgpu_source
+    assert "render-queue bind matrix" in wgpu_source
+
+    modern_gl_source = inspect.getsource(gpu_renderer)
+    assert "_bas_attachment_local_transform_np" in modern_gl_source
+    assert "not bool(getattr(node, \"_gr_bas_attachment_layer\", False))" in modern_gl_source
+    assert "BAS attachment skins are socket followers" in modern_gl_source
+
+    mesh_source = inspect.getsource(mesh_render_data._extract_skinning)
+    assert "_gr_bas_attachment_layer" in mesh_source
+    assert "BAS attachment layers follow sockets outside body skinning" in mesh_source
+
+
 def test_qt_viewport_shader_complexity_does_not_override_lighting_mode() -> None:
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
@@ -3400,8 +3582,13 @@ def test_body_attachment_panel_exposes_bas_slots_and_attach_signal() -> None:
     assert "HEAD" in {button.text().splitlines()[0] for button in panel.findChildren(QtWidgets.QToolButton)}
     assert "BODY" in {button.text().splitlines()[0] for button in panel.findChildren(QtWidgets.QToolButton)}
 
+    panel.set_selected_slot("left_weapon")
+    preset_resrefs = {str(panel.model_combo.itemData(index) or "") for index in range(panel.model_combo.count())}
+    assert "w_vbroswrd_001" in preset_resrefs
+    assert "w_vbroblade_001" not in preset_resrefs
+
     panel.set_selected_slot("left_hand")
-    panel.model_combo.setCurrentText("w_vbroblade_001")
+    panel.model_combo.setCurrentText("w_vbroswrd_001")
     panel.attach_button.click()
 
     assert emitted[-1] == ("right_weapon", "w_lghtsbr_001")
@@ -3434,6 +3621,64 @@ def test_body_attachment_panel_tracks_attachment_layers() -> None:
     panel.layer_tree.setCurrentItem(panel.layer_tree.topLevelItem(head_row))
 
     assert panel.selected_slot() == "head"
+
+
+def test_body_attachment_panel_exposes_save_build_signal() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_body_attachment_panel import QtBodyAttachmentPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtBodyAttachmentPanel()
+    calls = []
+    panel.saveBuildRequested.connect(lambda: calls.append("save"))
+
+    panel.save_build_button.click()
+
+    assert calls == ["save"]
+
+
+def test_bas_weapon_alignment_defaults_keep_sabers_identity() -> None:
+    from src.systems.bas.attachment_alignment import default_bas_attachment_transform
+
+    assert default_bas_attachment_transform("right_weapon", "w_lghtsbr_001")["position"] == [0.0, 0.0, 0.0]
+    assert default_bas_attachment_transform("right_weapon", "w_blstrrfl_001")["position"] == [0.0, 0.06, 0.09]
+    assert default_bas_attachment_transform("left_weapon", "w_vbroshort_001")["position"] == [0.0, 0.0, 0.035]
+    assert default_bas_attachment_transform("left_weapon", "w_vbroswrd_001")["position"] == [0.0, 0.0, 0.055]
+
+
+def test_bas_attach_seeds_weapon_alignment_without_overwriting_same_model_adjustment() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    calls = []
+    body = SimpleNamespace(name="P_CarthBB")
+    panel = SimpleNamespace(
+        set_status=lambda text: calls.append(("status", text)),
+        set_slot_model=lambda slot, model, resref="": calls.append(("slot", slot, resref)),
+    )
+    window = SimpleNamespace(
+        _bas_body_model=body,
+        _current_model=body,
+        _bas_attachments={},
+        _bas_attachment_resrefs={},
+        _bas_attachment_transforms={},
+        body_attachment_panel=panel,
+        _load_bas_attachment_model=lambda resref: SimpleNamespace(name=resref),
+        _rebuild_bas_preview=lambda: "BAS preview updated.",
+        _refresh_bas_animation_panel_after_layer_change=lambda slot: calls.append(("anim", slot)),
+    )
+
+    QtGhostRiggerMainWindow._handle_bas_attach_requested(window, "right_weapon", "w_blstrrfl_001")
+    assert window._bas_attachment_transforms["right_weapon"]["position"] == [0.0, 0.06, 0.09]
+
+    window._bas_attachment_transforms["right_weapon"]["position"] = [0.25, 0.0, 0.0]
+    QtGhostRiggerMainWindow._handle_bas_attach_requested(window, "right_weapon", "w_blstrrfl_001")
+    assert window._bas_attachment_transforms["right_weapon"]["position"] == [0.25, 0.0, 0.0]
+
+    QtGhostRiggerMainWindow._handle_bas_attach_requested(window, "right_weapon", "w_lghtsbr_001")
+    assert window._bas_attachment_transforms["right_weapon"]["position"] == [0.0, 0.0, 0.0]
 
 
 def test_qt_animations_panel_exposes_inheritance_supermodel_selector() -> None:
@@ -3505,12 +3750,349 @@ def test_bas_attachment_preview_parents_item_to_body_socket() -> None:
     item = KotorModel(name="Weapon", root_node=item_root)
     window = SimpleNamespace()
     window._find_model_node = MethodType(QtGhostRiggerMainWindow._find_model_node, window)
+    window._reset_bas_model_node_traversal = MethodType(QtGhostRiggerMainWindow._reset_bas_model_node_traversal, window)
+    window._prepare_bas_layer_root = MethodType(QtGhostRiggerMainWindow._prepare_bas_layer_root, window)
+    window._tag_bas_attachment_subtree = MethodType(QtGhostRiggerMainWindow._tag_bas_attachment_subtree, window)
 
     assert QtGhostRiggerMainWindow._attach_bas_item_to_preview(window, body, item, "rhand") is True
 
     assert len(rhand.children) == 1
     assert rhand.children[0].name == "weaponroot"
     assert rhand.children[0].parent is rhand
+    assert rhand.children[0]._gr_bas_attachment_root is True
+    assert rhand.children[0]._gr_bas_socket_name == "rhand"
+    assert rhand.children[0]._gr_bas_attachment_layer is True
+
+
+def test_bas_attachment_socket_layer_follows_body_dummy_without_skinning() -> None:
+    from types import MethodType
+
+    import pytest
+
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+    from src.gui.rendering.mesh_render_data import _extract_skinning, node_world_matrix
+
+    root = ModelNode(name="bodyroot")
+    headhook = ModelNode(name="headhook", parent=root)
+    headhook.position = (0.0, 0.0, 1.5)
+    root.children.append(headhook)
+    body = KotorModel(name="Body", root_node=root)
+    head_root = ModelNode(name="headroot")
+    head_root.position = (0.0, 0.0, -1.5)
+    head_mesh = ModelNode(name="head", parent=head_root, flags=0x61, vertices=[(0.0, 0.0, 0.25)], faces=[(0, 0, 0)])
+    head_mesh.bone_map = ["head_g"]
+    head_mesh.skin_data = [object()]
+    head_root.children.append(head_mesh)
+    head = KotorModel(name="Head", root_node=head_root)
+    window = SimpleNamespace()
+    window._find_model_node = MethodType(QtGhostRiggerMainWindow._find_model_node, window)
+    window._reset_bas_model_node_traversal = MethodType(QtGhostRiggerMainWindow._reset_bas_model_node_traversal, window)
+    window._prepare_bas_layer_root = MethodType(QtGhostRiggerMainWindow._prepare_bas_layer_root, window)
+    window._tag_bas_attachment_subtree = MethodType(QtGhostRiggerMainWindow._tag_bas_attachment_subtree, window)
+
+    assert QtGhostRiggerMainWindow._attach_bas_item_to_preview(window, body, head, "headhook", slot="head") is True
+
+    attached_root = headhook.children[-1]
+    assert attached_root.position == pytest.approx((0.0, 0.0, 0.0))
+    assert attached_root._gr_bas_socket_name == "headhook"
+    matrix = node_world_matrix(attached_root)
+    assert matrix[2, 3] == pytest.approx(1.5)
+    attached_mesh = attached_root.children[0]
+    skinning = _extract_skinning(attached_mesh, 1, skeleton_id=id(body))
+    assert skinning.is_skinned is False
+
+
+def test_bas_head_skin_uses_attachment_root_local_bind_space_when_weapon_is_added() -> None:
+    from types import MethodType
+
+    import numpy as np
+    import pytest
+
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+    from src.gui.rendering.mesh_render_data import _extract_node_arrays
+
+    root = ModelNode(name="bodyroot")
+    headhook = ModelNode(name="headhook", parent=root)
+    headhook.position = (0.0, 0.0, 10.0)
+    rhand = ModelNode(name="rhand", parent=root)
+    rhand.position = (1.0, 0.0, 1.0)
+    root.children.extend([headhook, rhand])
+    body = KotorModel(name="Body", root_node=root)
+
+    head_root = ModelNode(name="headroot")
+    head_mesh = ModelNode(
+        name="head",
+        parent=head_root,
+        flags=0x61,
+        vertices=[(0.0, 0.0, -2.0), (0.0, 0.5, -1.5), (0.25, 0.0, -1.0)],
+        faces=[(0, 1, 2)],
+    )
+    head_mesh.position = (0.0, 0.0, 2.0)
+    head_mesh.bone_map = ["head_g"]
+    head_mesh.skin_data = [object(), object(), object()]
+    head_root.children.append(head_mesh)
+    head = KotorModel(name="Head", root_node=head_root)
+
+    weapon_root = ModelNode(name="weaponroot")
+    weapon_mesh = ModelNode(name="weaponmesh", parent=weapon_root, flags=0x20, vertices=[(0, 0, 0)], faces=[(0, 0, 0)])
+    weapon_root.children.append(weapon_mesh)
+    weapon = KotorModel(name="Weapon", root_node=weapon_root)
+
+    window = SimpleNamespace()
+    window._find_model_node = MethodType(QtGhostRiggerMainWindow._find_model_node, window)
+    window._reset_bas_model_node_traversal = MethodType(QtGhostRiggerMainWindow._reset_bas_model_node_traversal, window)
+    window._prepare_bas_layer_root = MethodType(QtGhostRiggerMainWindow._prepare_bas_layer_root, window)
+    window._tag_bas_attachment_subtree = MethodType(QtGhostRiggerMainWindow._tag_bas_attachment_subtree, window)
+
+    assert QtGhostRiggerMainWindow._attach_bas_item_to_preview(window, body, head, "headhook", slot="head") is True
+    assert QtGhostRiggerMainWindow._attach_bas_item_to_preview(window, body, weapon, "rhand", slot="right_weapon") is True
+
+    attached_head_mesh = headhook.children[-1].children[0]
+    positions, _normals, _uvs0, _uvs1, _indices, _bones, _weights, world_matrix = _extract_node_arrays(attached_head_mesh)
+
+    np.testing.assert_allclose(
+        positions,
+        np.asarray([(0.0, 0.0, 0.0), (0.0, 0.5, 0.5), (0.25, 0.0, 1.0)], dtype=np.float32),
+        atol=1e-6,
+    )
+    assert world_matrix[2, 3] == pytest.approx(10.0)
+    assert float(positions[:, 2].min()) >= -1e-6
+
+
+def test_moderngl_bas_head_skin_uses_root_local_vbo_and_socket_draw_matrix() -> None:
+    import inspect
+
+    import numpy as np
+    import pytest
+
+    from src.gui.rendering import gpu_renderer
+    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.gui.rendering.gpu_renderer import (
+        _bas_attachment_local_transform_np,
+        _build_vbo_data,
+        _mat4_from_pos_quat_scale,
+    )
+
+    headhook = ModelNode(name="headhook")
+    headhook.position = (0.0, 0.0, 10.0)
+    head_root = ModelNode(name="headroot", parent=headhook)
+    head_root._gr_bas_attachment_root = True
+    head_root._gr_bas_attachment_layer = True
+    head_root._gr_bas_socket_name = "headhook"
+    headhook.children.append(head_root)
+    head_mesh = ModelNode(
+        name="head",
+        parent=head_root,
+        flags=0x61,
+        vertices=[(0.0, 0.0, -2.0), (0.0, 0.5, -1.5), (0.25, 0.0, -1.0)],
+        faces=[(0, 1, 2)],
+    )
+    head_mesh.position = (0.0, 0.0, 2.0)
+    head_mesh._gr_bas_attachment_layer = True
+    head_mesh._gr_bas_attachment_root_ref = head_root
+    head_mesh.bone_map = ["head_g"]
+    head_mesh.skin_data = [object(), object(), object()]
+    head_root.children.append(head_mesh)
+
+    local_wp, local_wo = _bas_attachment_local_transform_np(head_mesh, head_root)
+    vdata, _idx = _build_vbo_data(
+        head_mesh,
+        local_wp,
+        local_wo,
+        apply_skin_node_transform_for_bind=True,
+    )
+    assert vdata is not None
+    np.testing.assert_allclose(
+        vdata[:, 0:3],
+        np.asarray([(0.0, 0.0, 0.0), (0.0, 0.5, 0.5), (0.25, 0.0, 1.0)], dtype=np.float32),
+        atol=1e-6,
+    )
+
+    draw_matrix = _mat4_from_pos_quat_scale(headhook.position, headhook.rotation, (1.0, 1.0, 1.0))
+    assert draw_matrix[2, 3] == pytest.approx(10.0)
+    drawn = np.asarray([draw_matrix @ np.asarray([*row[:3], 1.0]) for row in vdata], dtype=np.float32)
+    np.testing.assert_allclose(
+        drawn[:, 0:3],
+        np.asarray([(0.0, 0.0, 10.0), (0.0, 0.5, 10.5), (0.25, 0.0, 11.0)], dtype=np.float32),
+        atol=1e-6,
+    )
+    source = inspect.getsource(gpu_renderer)
+    assert "if _skin_can_lbs:" in source
+    assert "BAS attachment skins are socket followers" in source
+
+
+def test_bas_model_recipe_preserves_body_layers_sockets_and_resrefs() -> None:
+    from src.systems.bas.model_recipe import build_bas_model_recipe
+
+    body = SimpleNamespace(name="P_CarthBB", _gr_source_resref="p_carthbb", _gr_source_game="K1", supermodel="S_Male02")
+    head = SimpleNamespace(name="pmha01", _gr_source_resref="pmha01", _gr_source_game="K1")
+    weapon = SimpleNamespace(name="w_blstrpstl_001", _gr_source_resref="w_blstrpstl_001", _gr_source_game="K1")
+
+    recipe = build_bas_model_recipe(
+        body_model=body,
+        attachment_models={"head": head, "right_weapon": weapon},
+        attachment_resrefs={"head": "pmha01", "right_weapon": "w_blstrpstl_001"},
+        attachment_transforms={
+            "head": {"position": [0.0, 0.0, 1.25], "rotation": [0.0, 0.0, 0.0, 1.0], "scale": [1.0, 1.0, 1.0]},
+            "right_weapon": {"position": [0.1, -0.2, 0.3], "rotation": [0.0, 0.0, 0.707, 0.707], "scale": [1.0, 1.0, 1.0]},
+        },
+        game="K1",
+        build_name="Carth Test Build",
+    )
+
+    layers = {layer["slot"]: layer for layer in recipe["layers"]}
+    assert recipe["schema"] == "ghostrigger.bas.model"
+    assert recipe["recipe_id"] == "carth_test_build"
+    assert recipe["display_name"] == "Carth Test Build"
+    assert recipe["body"]["resref"] == "p_carthbb"
+    assert recipe["body"]["supermodel"] == "S_Male02"
+    assert layers["body"]["state"] == "base"
+    assert layers["head"]["state"] == "attached"
+    assert layers["head"]["socket"] == "headhook"
+    assert layers["head"]["transform"]["position"] == [0.0, 0.0, 1.25]
+    assert layers["right_weapon"]["resref"] == "w_blstrpstl_001"
+    assert layers["right_weapon"]["socket"] == "rhand"
+    assert layers["right_weapon"]["transform"]["rotation"] == [0.0, 0.0, 0.707, 0.707]
+    assert layers["left_hand"]["state"] == "socket"
+    assert layers["left_weapon"]["state"] == "empty"
+    assert recipe["runtime"]["attachment_transform_mode"] == "socket_follower"
+
+
+def test_main_window_saves_bas_model_recipe_into_system_models_dir(tmp_path) -> None:
+    import json
+    from types import MethodType
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    body = SimpleNamespace(name="P_CarthBB", _gr_source_resref="p_carthbb", _gr_source_game="K1")
+    head = SimpleNamespace(name="pmha01", _gr_source_resref="pmha01", _gr_source_game="K1")
+    window = SimpleNamespace(
+        app_root=tmp_path,
+        _current_game="K1",
+        _bas_attachments={"head": head},
+        _bas_attachment_resrefs={"head": "pmha01"},
+        _infer_game_from_model=lambda _model: "K1",
+    )
+    window._save_bas_model_recipe = MethodType(QtGhostRiggerMainWindow._save_bas_model_recipe, window)
+
+    path = window._save_bas_model_recipe(body)
+
+    assert path == tmp_path / "src" / "systems" / "bas" / "models" / "k1_p_carthbb_pmha01.json"
+    assert path.exists()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["body"]["resref"] == "p_carthbb"
+    assert data["attachments"] == {"head": "pmha01"}
+    assert data["layers"][1]["socket"] == "headhook"
+    assert data["layers"][1]["transform"]["position"] == [0.0, 0.0, 0.0]
+
+
+def test_main_window_loads_bas_recipe_as_composed_preview_model(tmp_path) -> None:
+    import json
+    from types import MethodType
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    body = SimpleNamespace(name="P_CarthBB", _gr_source_resref="p_carthbb", _gr_source_game="K1")
+    head = SimpleNamespace(name="pmha01", _gr_source_resref="pmha01", _gr_source_game="K1")
+    recipe = {
+        "schema": "ghostrigger.bas.model",
+        "version": 1,
+        "game": "K1",
+        "display_name": "Carth BAS Named",
+        "body": {"resref": "p_carthbb", "name": "P_CarthBB", "game": "K1"},
+        "layers": [
+            {"slot": "body", "state": "base", "resref": "p_carthbb"},
+            {
+                "slot": "head",
+                "state": "attached",
+                "resref": "pmha01",
+                "game": "K1",
+                "socket": "headhook",
+                "transform": {"position": [0.0, 0.0, 1.25], "rotation": [0.0, 0.0, 0.0, 1.0], "scale": [1.0, 1.0, 1.0]},
+            },
+        ],
+    }
+    path = tmp_path / "carth_bas_named.json"
+    path.write_text(json.dumps(recipe), encoding="utf-8")
+    calls = []
+    manager = SimpleNamespace(load_model=lambda resref, game: {"p_carthbb": body, "pmha01": head}[resref])
+    timer = SimpleNamespace(stop=lambda: calls.append("stop"))
+    panel = SimpleNamespace(
+        set_body_model=lambda model: calls.append(("body", model)),
+        set_slot_model=lambda slot, model=None, resref="": calls.append(("slot", slot, resref)),
+        clear_slot_model=lambda slot: calls.append(("clear", slot)),
+        set_status=lambda message: calls.append(("status", message)),
+    )
+    window = SimpleNamespace(
+        _get_resource_manager=lambda: manager,
+        _animation_timer=timer,
+        _retarget_timer=timer,
+        _animation_engine=None,
+        _animation_last_tick=None,
+        _retarget_engine=None,
+        _retarget_last_tick=None,
+        _bas_attachments={},
+        _bas_attachment_resrefs={},
+        _bas_attachment_transforms={},
+        _add_loaded_model_to_scene=lambda model, label: calls.append(("scene", model, label)),
+        _rebuild_bas_preview=lambda: calls.append("rebuild") or "BAS preview updated.",
+        body_attachment_panel=panel,
+        _load_animation_panel_model=lambda model: calls.append(("animations", model)),
+        animations_panel=object(),
+        _populate_animation_library_from_current_model=lambda: calls.append("library"),
+        _log=lambda message, kind="info": calls.append(("log", kind, message)),
+    )
+    window._load_bas_model_recipe_from_path = MethodType(QtGhostRiggerMainWindow._load_bas_model_recipe_from_path, window)
+
+    result = window._load_bas_model_recipe_from_path(path)
+
+    assert result is None
+    assert window._current_model is body
+    assert window._bas_body_model is body
+    assert window._bas_attachments == {"head": head}
+    assert window._bas_attachment_resrefs == {"head": "pmha01"}
+    assert window._bas_attachment_transforms["head"]["position"] == [0.0, 0.0, 1.25]
+    assert window._bas_active_build_name == "Carth BAS Named"
+    assert ("scene", body, "K1:p_carthbb") in calls
+    assert "rebuild" in calls
+
+
+def test_bas_resets_stale_camera_node_wrapper_before_attaching_layers() -> None:
+    import copy
+
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.gui.camera.camera_manager import CameraManager
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    root = ModelNode(name="bodyroot")
+    lhand = ModelNode(name="lhand", parent=root)
+    root.children.append(lhand)
+    body = KotorModel(name="Body", root_node=root)
+    manager = CameraManager()
+    manager.model = body
+    manager._install_all_nodes_wrapper()
+
+    preview = copy.deepcopy(body)
+    weapon_root = ModelNode(name="weaponroot")
+    weapon_mesh = ModelNode(name="weaponmesh", parent=weapon_root, flags=0x20, vertices=[(0, 0, 0)], faces=[(0, 0, 0)])
+    weapon_root.children.append(weapon_mesh)
+    weapon = KotorModel(name="Weapon", root_node=weapon_root)
+    window = SimpleNamespace()
+    window._find_model_node = MethodType(QtGhostRiggerMainWindow._find_model_node, window)
+    window._reset_bas_model_node_traversal = MethodType(QtGhostRiggerMainWindow._reset_bas_model_node_traversal, window)
+    window._prepare_bas_layer_root = MethodType(QtGhostRiggerMainWindow._prepare_bas_layer_root, window)
+    window._tag_bas_attachment_subtree = MethodType(QtGhostRiggerMainWindow._tag_bas_attachment_subtree, window)
+
+    QtGhostRiggerMainWindow._reset_bas_model_node_traversal(window, preview)
+    assert QtGhostRiggerMainWindow._attach_bas_item_to_preview(window, preview, weapon, "lhand") is True
+    assert "weaponmesh" in {node.name for node in preview.all_nodes()}
+    assert "weaponmesh" in {node.name for node in type(preview).all_nodes(preview)}
+
+    manager.set_model(preview)
+
+    assert "weaponmesh" in {node.name for node in preview.all_nodes()}
 
 
 def test_bas_preview_targets_body_scene_object_not_arbitrary_selection() -> None:
@@ -3613,7 +4195,7 @@ def test_bas_preview_applies_as_layer_and_restores_animation_pose() -> None:
     assert "refresh_view" in calls
 
 
-def test_animation_source_model_uses_bas_composite_preview_for_body_source() -> None:
+def test_animation_source_model_keeps_bas_body_as_animation_owner() -> None:
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
     body = SimpleNamespace(name="Body")
@@ -3626,10 +4208,10 @@ def test_animation_source_model_uses_bas_composite_preview_for_body_source() -> 
     )
     window._animation_source_key = MethodType(QtGhostRiggerMainWindow._animation_source_key, window)
 
-    assert QtGhostRiggerMainWindow._animation_source_model(window) is preview
+    assert QtGhostRiggerMainWindow._animation_source_model(window) is body
 
 
-def test_bas_animation_engine_moves_to_layered_preview_without_losing_time() -> None:
+def test_bas_animation_engine_returns_to_body_without_losing_time() -> None:
     from src.core.qt_core.animation.animation_engine import AnimationEngine
     from src.core.qt_core.geometry.model_data import Animation, KotorModel
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
@@ -3638,7 +4220,7 @@ def test_bas_animation_engine_moves_to_layered_preview_without_losing_time() -> 
     preview = KotorModel(name="Body_bas")
     body.animations = [Animation(name="walk", length=2.0)]
     preview.animations = [Animation(name="walk", length=2.0)]
-    engine = AnimationEngine(body)
+    engine = AnimationEngine(preview)
     assert engine.play("walk", loop=True, blend=False) is True
     engine.seek(0.75)
 
@@ -3655,15 +4237,89 @@ def test_bas_animation_engine_moves_to_layered_preview_without_losing_time() -> 
         _animation_inheritance_supermodel=lambda _model: "",
         _animation_resolution_context=resolution_context,
         _apply_animation_resolution_game=lambda _model, _game: None,
+        _current_model=body,
+        _bas_body_model=body,
     )
     window._animation_source_key = MethodType(QtGhostRiggerMainWindow._animation_source_key, window)
 
     QtGhostRiggerMainWindow._sync_bas_body_animation_engine(window, preview)
 
-    assert window._animation_engine.model is preview
+    assert window._animation_engine.model is body
     assert window._animation_engine.current_animation.name == "walk"
     assert window._animation_engine.current_time == pytest.approx(0.75)
     assert window._animation_engine.is_playing is True
+
+
+def test_bas_layer_change_does_not_reload_body_animation_panel() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    calls = []
+    body = SimpleNamespace(name="Body")
+    window = SimpleNamespace(
+        _bas_body_model=body,
+        _current_model=body,
+        animations_panel=SimpleNamespace(
+            selected_animation_source=lambda: "body",
+            selected_animation=lambda: "pause2",
+        ),
+        _load_animation_panel_model=lambda model, select_name="": calls.append((model, select_name)),
+    )
+    window._animation_source_key = MethodType(QtGhostRiggerMainWindow._animation_source_key, window)
+
+    QtGhostRiggerMainWindow._refresh_bas_animation_panel_after_layer_change(window, "right_weapon")
+
+    assert calls == []
+
+
+def test_bas_layer_change_refreshes_matching_attachment_animation_panel() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    calls = []
+    body = SimpleNamespace(name="Body")
+    window = SimpleNamespace(
+        _bas_body_model=body,
+        _current_model=body,
+        animations_panel=SimpleNamespace(
+            selected_animation_source=lambda: "attachment",
+            selected_animation=lambda: "activate",
+        ),
+        _load_animation_panel_model=lambda model, select_name="": calls.append((model, select_name)),
+    )
+    window._animation_source_key = MethodType(QtGhostRiggerMainWindow._animation_source_key, window)
+
+    QtGhostRiggerMainWindow._refresh_bas_animation_panel_after_layer_change(window, "right_weapon")
+
+    assert calls == [(body, "activate")]
+
+
+def test_bas_scene_object_activation_preserves_body_animation_panel() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    calls = []
+    body = SimpleNamespace(name="Body")
+    preview = SimpleNamespace(name="Body_bas")
+    obj = SimpleNamespace(
+        metadata={
+            "_runtime_model": preview,
+            "_runtime_bas_body_model": body,
+            "_runtime_bas_preview_model": preview,
+            "body_attachment_system": {"active": True},
+        }
+    )
+    window = SimpleNamespace(
+        _bas_body_model=body,
+        _bas_preview_model=preview,
+        _current_model=None,
+        animations_panel=SimpleNamespace(selected_animation_source=lambda: "body"),
+        animation_retarget_panel=object(),
+        _load_animation_panel_model=lambda model, select_name="": calls.append(("animations", model, select_name)),
+    )
+    window._animation_source_key = MethodType(QtGhostRiggerMainWindow._animation_source_key, window)
+
+    QtGhostRiggerMainWindow._activate_scene_object_model(window, obj)
+
+    assert window._current_model is body
+    assert calls == []
 
 
 def test_bas_ignores_anatomical_hand_placeholders() -> None:
@@ -3677,7 +4333,7 @@ def test_bas_ignores_anatomical_hand_placeholders() -> None:
         _bas_attachment_resrefs={},
     )
 
-    QtGhostRiggerMainWindow._handle_bas_attach_requested(window, "left_hand", "w_vbroblade_001")
+    QtGhostRiggerMainWindow._handle_bas_attach_requested(window, "left_hand", "w_vbroswrd_001")
     QtGhostRiggerMainWindow._handle_bas_clear_requested(window, "right_hand")
 
     assert calls == [("status", "Hand slots are sockets; attach items through L. Weapon or R. Weapon.")]

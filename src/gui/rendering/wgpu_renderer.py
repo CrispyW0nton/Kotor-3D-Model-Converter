@@ -2498,6 +2498,29 @@ class WgpuRenderer(NullDiagnosticRenderer):
     def _mesh_model_matrix(self, mesh_data):
         import numpy as np
 
+        def stored_world_matrix():
+            try:
+                return np.asarray(getattr(mesh_data, "world_matrix", None), dtype=np.float32).reshape(4, 4)
+            except Exception:
+                return np.eye(4, dtype=np.float32)
+
+        source = getattr(mesh_data, "source", None)
+        if bool(getattr(source, "_gr_bas_attachment_layer", False)):
+            if self._active_anim_pose is not None:
+                try:
+                    from src.gui.rendering.mesh_render_data import _bas_attachment_root_for_node, node_world_matrix
+
+                    bas_root = _bas_attachment_root_for_node(source)
+                    # BAS layers are socket followers. Never use the cached
+                    # render-queue bind matrix while body animation is active.
+                    matrix_source = bas_root if bool(getattr(source, "is_skin", False)) and bas_root is not None else source
+                    return np.asarray(
+                        node_world_matrix(matrix_source, anim_pose=self._active_anim_pose),
+                        dtype=np.float32,
+                    ).reshape(4, 4)
+                except Exception:
+                    pass
+            return stored_world_matrix()
         if bool(getattr(mesh_data, "is_skinned", False)):
             return np.eye(4, dtype=np.float32)
         if self._active_anim_pose is not None:
@@ -2510,10 +2533,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 )
             except Exception:
                 pass
-        try:
-            return np.asarray(getattr(mesh_data, "world_matrix", None), dtype=np.float32).reshape(4, 4)
-        except Exception:
-            return np.eye(4, dtype=np.float32)
+        return stored_world_matrix()
 
     def _mesh_mvp_matrix(self, mvp, mesh_data):
         import numpy as np

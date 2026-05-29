@@ -470,7 +470,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
             ("Blaster rifle - w_blstrcrbn_001", "w_blstrcrbn_001"),
             ("Short sword - w_vbroshort_001", "w_vbroshort_001"),
             ("Lightsaber - w_lghtsbr_001", "w_lghtsbr_001"),
-            ("Vibroblade - w_vbroblade_001", "w_vbroblade_001"),
+            ("Vibroblade - w_vbroswrd_001", "w_vbroswrd_001"),
         ]:
             item_combo.addItem(label, value)
         attach_layout.addWidget(QtWidgets.QLabel("Model:"), 1, 0)

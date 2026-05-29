@@ -20,7 +20,7 @@ import copy
 import importlib
 from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 from typing import Optional
 
 log = logging.getLogger(__name__)
@@ -83,6 +83,10 @@ from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditorWindow
 from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
 from src.gui.qt_lib.rendering.hardware_info import collect_hardware_diagnostics
+from src.systems.bas.attachment_alignment import (
+    default_bas_attachment_transform,
+    normalize_bas_transform,
+)
 from src.gui.qt_lib.rendering.renderer_backend import RendererBackend, renderer_backend_label
 from src.gui.qt_lib.rendering.renderer_factory import renderer_capabilities_snapshot
 from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
@@ -105,6 +109,7 @@ from src.core.scene.kmax_scene_manager import KMaxSceneManager
 from src.core.scene.axis_mode import AxisMode
 from src.core.scene.scene_object import Transform
 from src.core.scene.scene_resource_ref import SceneResourceRef
+from src.systems.bas.model_recipe import build_bas_model_recipe, load_bas_model_recipe, save_bas_model_recipe
 
 
 C = dict(LEGACY_MATRIX_COLORS)
@@ -1475,6 +1480,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._bas_preview_model = None
         self._bas_attachments: dict[str, object] = {}
         self._bas_attachment_resrefs: dict[str, str] = {}
+        self._bas_attachment_transforms: dict[str, dict[str, list[float]]] = {}
+        self._bas_active_build_name = ""
         self._current_head_model = None
         self._current_attachment_model = None
         self._model_path = ""
@@ -3307,6 +3314,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.body_attachment_panel = QtBodyAttachmentPanel(self)
         self.body_attachment_panel.attachRequested.connect(self._handle_bas_attach_requested)
         self.body_attachment_panel.clearRequested.connect(self._handle_bas_clear_requested)
+        self.body_attachment_panel.saveBuildRequested.connect(self._handle_bas_save_build_requested)
         self.animation_library_panel = self.content_browser_panel
         self.animation_retarget_window = QtAnimationRetargetWindow(self)
         self.animation_retarget_window.set_navigation_profile(
@@ -4449,13 +4457,25 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         return entries
 
     def _activate_scene_object_model(self, obj) -> None:
-        model = (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
+        metadata = getattr(obj, "metadata", {}) or {}
+        model = metadata.get("_runtime_model")
         if model is None:
             return
-        self._current_model = model
+        bas_preview = metadata.get("_runtime_bas_preview_model")
+        bas_body = metadata.get("_runtime_bas_body_model") or getattr(self, "_bas_body_model", None)
+        is_bas_preview = bool(
+            (bas_preview is not None and model is bas_preview)
+            or (metadata.get("body_attachment_system") or {}).get("active")
+        )
+        body_source_active = self._animation_source_key() == "body" if hasattr(self, "_animation_source_key") else True
+        preserve_bas_body_animation = bool(is_bas_preview and body_source_active and bas_body is not None)
+        self._current_model = bas_body if preserve_bas_body_animation else model
         if hasattr(self, "animations_panel"):
-            self._load_animation_panel_model(model)
+            if not preserve_bas_body_animation:
+                self._load_animation_panel_model(model)
         if hasattr(self, "animation_retarget_panel"):
+            if preserve_bas_body_animation:
+                return
             game = str(getattr(getattr(obj, "source_ref", None), "game", "") or self._infer_game_from_model(model)).upper()
             self.animation_retarget_panel.set_texture_dir(self._texture_dir)
             if self._supports_animation_retarget_target(model):
@@ -4854,6 +4874,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._bas_preview_model = None
             self._bas_attachments.clear()
             self._bas_attachment_resrefs.clear()
+            self._bas_attachment_transforms.clear()
+            self._bas_active_build_name = ""
             self._current_head_model = None
             self._current_attachment_model = None
             self._model_path = ""
@@ -6685,8 +6707,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         source = self._animation_source_key()
         if source == "body":
             return (
-                getattr(self, "_bas_preview_model", None)
-                or getattr(self, "_bas_body_model", None)
+                getattr(self, "_bas_body_model", None)
                 or fallback_model
                 or getattr(self, "_current_model", None)
             )
@@ -6723,9 +6744,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if model is None:
             self.body_attachment_panel.set_status(f"Could not load {resref}.")
             return
+        previous_resref = str(self._bas_attachment_resrefs.get(slot, "") or "").strip().lower()
         self._bas_body_model = body
         self._bas_attachments[slot] = model
         self._bas_attachment_resrefs[slot] = resref
+        if slot not in self._bas_attachment_transforms or previous_resref != resref.lower():
+            self._bas_attachment_transforms[slot] = default_bas_attachment_transform(slot, resref)
         if slot == "head":
             self._current_head_model = model
         else:
@@ -6734,7 +6758,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if result:
             self.body_attachment_panel.set_slot_model(slot, model, resref=resref)
             self.body_attachment_panel.set_status(result)
-            self._load_animation_panel_model(self._bas_body_model)
+            self._refresh_bas_animation_panel_after_layer_change(slot)
 
     def _handle_bas_clear_requested(self, slot: str) -> None:
         slot = str(slot or "").strip().lower()
@@ -6742,6 +6766,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return
         self._bas_attachments.pop(slot, None)
         self._bas_attachment_resrefs.pop(slot, None)
+        self._bas_attachment_transforms.pop(slot, None)
         self.body_attachment_panel.clear_slot_model(slot)
         if slot == "head":
             self._current_head_model = None
@@ -6749,7 +6774,23 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._current_attachment_model = None
         result = self._rebuild_bas_preview()
         self.body_attachment_panel.set_status(result or f"Cleared {slot}.")
-        self._load_animation_panel_model(self._bas_body_model or self._current_model)
+        self._refresh_bas_animation_panel_after_layer_change(slot)
+
+    def _refresh_bas_animation_panel_after_layer_change(self, slot: str) -> None:
+        if not hasattr(self, "animations_panel"):
+            return
+        selected = ""
+        if hasattr(self.animations_panel, "selected_animation"):
+            try:
+                selected = str(self.animations_panel.selected_animation() or "")
+            except Exception:
+                selected = ""
+        source = self._animation_source_key() if hasattr(self, "_animation_source_key") else "body"
+        if source == "body":
+            return
+        if (source == "head" and slot == "head") or (source == "attachment" and slot != "head"):
+            model = getattr(self, "_bas_body_model", None) or getattr(self, "_current_model", None)
+            self._load_animation_panel_model(model, select_name=selected)
 
     def _load_bas_attachment_model(self, resref: str):
         game = (getattr(self, "_current_game", "") or self._infer_game_from_model(self._bas_body_model or self._current_model) or "K1").upper()
@@ -6769,26 +6810,23 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         try:
             previous_preview = getattr(self, "_bas_preview_model", None)
             preview = copy.deepcopy(body)
+            self._reset_bas_model_node_traversal(preview)
             head = self._bas_attachments.get("head")
             if head is not None:
-                from src.core.qt_core.characters import creature_appearance as creature_appearance
-
-                snap = creature_appearance.snap_head_onto_body(
-                    preview,
-                    head,
-                    scale_head=False,
-                    merge_animations=False,
-                )
-                if snap.get("ok") and snap.get("model") is not None:
-                    preview = snap["model"]
-                else:
-                    return str(snap.get("message") or "Head attachment failed.")
+                if not self._attach_bas_item_to_preview(preview, head, "headhook", slot="head", transform=self._bas_attachment_transforms.get("head")):
+                    return "Head attachment failed: body has no headhook socket."
             for slot in ("left_weapon", "right_weapon"):
                 item = self._bas_attachments.get(slot)
                 if item is None:
                     continue
-                self._attach_bas_item_to_preview(preview, item, self._bas_socket_for_slot(slot))
-            preview.name = f"{getattr(body, 'name', 'body')}_bas"
+                self._attach_bas_item_to_preview(
+                    preview,
+                    item,
+                    self._bas_socket_for_slot(slot),
+                    slot=slot,
+                    transform=self._bas_attachment_transforms.get(slot),
+                )
+            preview.name = str(getattr(self, "_bas_active_build_name", "") or f"{getattr(body, 'name', 'body')}_bas")
             self._apply_bas_preview_to_viewport(preview, previous_preview=previous_preview)
             attached = ", ".join(self._bas_attachment_resrefs.get(key, key) for key in self._bas_attachments)
             return f"BAS preview updated: {attached or 'body only'}."
@@ -6796,20 +6834,156 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             log.exception("BAS preview rebuild failed")
             return f"BAS preview failed: {exc}"
 
-    def _attach_bas_item_to_preview(self, preview, item, socket_name: str) -> bool:
+    def _handle_bas_save_build_requested(self) -> None:
+        body = getattr(self, "_bas_body_model", None) or getattr(self, "_current_model", None)
+        if body is None:
+            if hasattr(self, "body_attachment_panel"):
+                self.body_attachment_panel.set_status("No body model loaded.")
+            return
+        default_name = str(getattr(self, "_bas_active_build_name", "") or f"{getattr(body, 'name', 'body')}_bas")
+        name, accepted = QtWidgets.QInputDialog.getText(self, "Save BAS Build", "Model name", text=default_name)
+        if not accepted:
+            return
+        build_name = str(name or "").strip()
+        if not build_name:
+            if hasattr(self, "body_attachment_panel"):
+                self.body_attachment_panel.set_status("Save cancelled: model name is required.")
+            return
+        self._bas_active_build_name = build_name
+        rebuild_status = self._rebuild_bas_preview()
+        if str(rebuild_status or "").lower().startswith("bas preview failed"):
+            if hasattr(self, "body_attachment_panel"):
+                self.body_attachment_panel.set_status(rebuild_status)
+            return
+        path = self._save_bas_model_recipe(body, build_name=build_name)
+        if hasattr(self, "body_attachment_panel"):
+            if path is not None:
+                self.body_attachment_panel.set_status(f"Saved BAS build: {path.name}")
+            else:
+                self.body_attachment_panel.set_status("Could not save BAS build.")
+
+    def _save_bas_model_recipe(self, body, *, build_name: str = "") -> Path | None:
+        try:
+            game = (getattr(self, "_current_game", "") or self._infer_game_from_model(body) or "").upper()
+            recipe = build_bas_model_recipe(
+                body_model=body,
+                attachment_models=dict(getattr(self, "_bas_attachments", {}) or {}),
+                attachment_resrefs=dict(getattr(self, "_bas_attachment_resrefs", {}) or {}),
+                attachment_transforms=dict(getattr(self, "_bas_attachment_transforms", {}) or {}),
+                game=game,
+                build_name=build_name or getattr(self, "_bas_active_build_name", ""),
+            )
+            path = save_bas_model_recipe(recipe, self.app_root / "src" / "systems" / "bas" / "models")
+            self._last_bas_model_recipe_path = path
+            log.info("Saved BAS model recipe: %s", path)
+            return path
+        except Exception:
+            log.debug("Could not save BAS model recipe", exc_info=True)
+            self._last_bas_model_recipe_path = None
+            return None
+
+    def _reset_bas_model_node_traversal(self, model) -> None:
+        if model is None:
+            return
+        base_all_nodes = getattr(type(model), "all_nodes", None)
+        if callable(base_all_nodes):
+            try:
+                setattr(model, "all_nodes", MethodType(base_all_nodes, model))
+            except Exception:
+                pass
+        for attr in ("_gr_original_all_nodes", "_gr_generated_cameras", "_gr_generated_lights"):
+            try:
+                if hasattr(model, attr):
+                    delattr(model, attr)
+            except Exception:
+                pass
+
+    def _attach_bas_item_to_preview(self, preview, item, socket_name: str, slot: str = "", transform: dict | None = None) -> bool:
         socket = self._find_model_node(preview, socket_name)
-        item_root = getattr(copy.deepcopy(item), "root_node", None)
+        item_copy = copy.deepcopy(item)
+        self._reset_bas_model_node_traversal(item_copy)
+        item_root = getattr(item_copy, "root_node", None)
         if socket is None or item_root is None:
             return False
+        self._prepare_bas_layer_root(item_root, socket, slot or socket_name)
+        if not transform:
+            item_root.rotation = (0.0, 0.0, 0.0, 1.0)
+        if transform:
+            self._apply_bas_layer_transform(item_root, transform)
+        if slot:
+            try:
+                self._bas_attachment_transforms[slot] = self._bas_layer_transform_from_model(item_copy)
+            except Exception:
+                pass
         item_root.parent = socket
-        item_root.position = (0.0, 0.0, 0.0)
-        item_root.rotation = (0.0, 0.0, 0.0, 1.0)
         children = getattr(socket, "children", None)
         if children is None:
             socket.children = []
             children = socket.children
         children.append(item_root)
         return True
+
+    def _bas_layer_transform_from_model(self, model) -> dict[str, list[float]]:
+        root = getattr(model, "root_node", model)
+        position = getattr(root, "position", (0.0, 0.0, 0.0))
+        rotation = getattr(root, "rotation", (0.0, 0.0, 0.0, 1.0))
+        scale = getattr(root, "scale", (1.0, 1.0, 1.0))
+        try:
+            scale_values = list(scale)[:3]
+        except Exception:
+            scale_values = [float(scale or 1.0)] * 3
+        return {
+            "position": [float(value) for value in list(position)[:3]],
+            "rotation": [float(value) for value in list(rotation)[:4]],
+            "scale": [float(value) for value in scale_values[:3]],
+        }
+
+    def _apply_bas_layer_transform(self, root, transform: dict) -> None:
+        if root is None:
+            return
+        for attr, fallback, count in (
+            ("position", (0.0, 0.0, 0.0), 3),
+            ("rotation", (0.0, 0.0, 0.0, 1.0), 4),
+            ("scale", (1.0, 1.0, 1.0), 3),
+        ):
+            values = transform.get(attr, fallback) if isinstance(transform, dict) else fallback
+            try:
+                coerced = [float(value) for value in list(values)[:count]]
+            except Exception:
+                coerced = []
+            while len(coerced) < count:
+                coerced.append(float(fallback[len(coerced)]))
+            try:
+                setattr(root, attr, tuple(coerced))
+            except Exception:
+                pass
+
+    def _prepare_bas_layer_root(self, item_root, socket, slot: str) -> None:
+        socket_name = str(getattr(socket, "name", "") or "").strip()
+        if str(slot or "").lower() == "head":
+            pos = tuple(float(v) for v in getattr(item_root, "position", (0.0, 0.0, 0.0))[:3])
+            try:
+                socket_world = socket.world_position()
+            except Exception:
+                socket_world = (0.0, 0.0, 0.0)
+            if abs(float(pos[2]) + float(socket_world[2])) < 0.25 and abs(float(pos[2])) > 0.5:
+                item_root.position = (pos[0], pos[1], 0.0)
+        setattr(item_root, "_gr_bas_attachment_root", True)
+        setattr(item_root, "_gr_bas_attachment_slot", str(slot or "attachment"))
+        setattr(item_root, "_gr_bas_socket_name", socket_name)
+        self._tag_bas_attachment_subtree(item_root, item_root)
+
+    def _tag_bas_attachment_subtree(self, node, root) -> None:
+        stack = [node]
+        visited = set()
+        while stack:
+            current = stack.pop()
+            if current is None or id(current) in visited:
+                continue
+            visited.add(id(current))
+            setattr(current, "_gr_bas_attachment_layer", True)
+            setattr(current, "_gr_bas_attachment_root_ref", root)
+            stack.extend(getattr(current, "children", []) or [])
 
     def _find_model_node(self, model, name: str):
         target = str(name or "").lower()
@@ -6886,7 +7060,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.viewport.load_model(preview)
         else:
             self._bas_preview_model = preview
-        self._sync_bas_body_animation_engine(preview)
+        self._sync_bas_body_animation_engine()
         self._restore_bas_animation_pose_after_viewport_refresh()
         self._request_bas_viewport_refresh()
         if hasattr(self, "skeleton_panel"):
@@ -6896,18 +7070,19 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if hasattr(self, "sprite_materials_panel"):
             self.sprite_materials_panel.set_model(preview)
 
-    def _sync_bas_body_animation_engine(self, preview) -> None:
-        if preview is None:
-            return
+    def _sync_bas_body_animation_engine(self, preview=None) -> None:
         try:
             source_key = self._animation_source_key() if hasattr(self, "_animation_source_key") else "body"
         except Exception:
             source_key = "body"
         if source_key != "body":
             return
+        body = getattr(self, "_bas_body_model", None) or getattr(self, "_current_model", None)
+        if body is None:
+            return
         engine = getattr(self, "_animation_engine", None)
         current = getattr(engine, "current_animation", None) if engine is not None else None
-        if engine is None or current is None or not hasattr(engine, "model") or getattr(engine, "model", None) is preview:
+        if engine is None or current is None or not hasattr(engine, "model") or getattr(engine, "model", None) is body:
             return
         anim_name = str(getattr(current, "name", "") or "")
         if not anim_name:
@@ -6921,10 +7096,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             t = float(getattr(engine, "current_time", 0.0) or 0.0)
             was_playing = bool(getattr(engine, "is_playing", False))
             loop = bool(getattr(engine, "_loop", getattr(self, "_animation_loop", False)))
-            inheritance_game = self._animation_inheritance_game(preview)
-            inheritance_supermodel = self._animation_inheritance_supermodel(preview)
-            with self._animation_resolution_context(preview, inheritance_game, inheritance_supermodel):
-                replacement = AnimationEngine(preview)
+            inheritance_game = self._animation_inheritance_game(body)
+            inheritance_supermodel = self._animation_inheritance_supermodel(body)
+            with self._animation_resolution_context(body, inheritance_game, inheritance_supermodel):
+                replacement = AnimationEngine(body)
                 if not replacement.play(anim_name, loop=loop, blend=False):
                     return
                 replacement.seek(t)
@@ -6932,7 +7107,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                     replacement.stop()
             self._animation_engine = replacement
         except Exception:
-            log.debug("Could not retarget BAS animation engine to preview", exc_info=True)
+            log.debug("Could not restore BAS animation engine to body model", exc_info=True)
 
     def _restore_bas_animation_pose_after_viewport_refresh(self) -> None:
         engine = getattr(self, "_animation_engine", None)
@@ -8675,7 +8850,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self,
             "Open ASCII MDL" if ascii_only else "Open KotOR MDL",
             str(Path(self.settings_data.get("last_import") or self.app_root)),
-            "ASCII MDL (*.mdl);;All files (*.*)" if ascii_only else "KotOR MDL (*.mdl);;All files (*.*)",
+            "ASCII MDL (*.mdl);;All files (*.*)" if ascii_only else "KotOR MDL or BAS Build (*.mdl *.json);;KotOR MDL (*.mdl);;BAS Build JSON (*.json);;All files (*.*)",
         )
         if not path:
             return
@@ -8694,6 +8869,86 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._start_model_load(mdl_path, mdx_path=mdx_path, texture_dir=texture_dir, game=game)
         if textures:
             self._log(f"Startup texture context: {len(textures)} file(s)", "info")
+
+    def _load_bas_model_recipe_from_path(self, path: Path):
+        recipe = load_bas_model_recipe(path)
+        game = str(recipe.get("game") or (recipe.get("body") or {}).get("game") or "K1").upper()
+        body_info = recipe.get("body") or {}
+        body_resref = str(body_info.get("resref") or "").strip()
+        if not body_resref:
+            raise ValueError("BAS build is missing its body resref.")
+        manager = self._get_resource_manager()
+        if manager is None:
+            raise RuntimeError("No resource manager is available for BAS build import.")
+
+        body = manager.load_model(body_resref, game)
+        if body is None:
+            raise FileNotFoundError(f"{game}:{body_resref}.mdl")
+        self._animation_timer.stop()
+        self._animation_engine = None
+        self._animation_last_tick = None
+        self._retarget_timer.stop()
+        self._retarget_engine = None
+        self._retarget_last_tick = None
+        self._model_path = str(path)
+        self._current_game = game
+        self._current_model = body
+        self._bas_body_model = body
+        self._bas_preview_model = None
+        self._bas_attachments.clear()
+        self._bas_attachment_resrefs.clear()
+        self._bas_attachment_transforms.clear()
+        self._bas_active_build_name = str(recipe.get("display_name") or recipe.get("build_name") or path.stem).strip()
+        self._current_head_model = None
+        self._current_attachment_model = None
+
+        for layer in recipe.get("layers") or []:
+            slot = str((layer or {}).get("slot") or "").strip().lower()
+            if slot in {"", "body", "left_hand", "right_hand"}:
+                continue
+            resref = str((layer or {}).get("resref") or "").strip()
+            if not resref or str((layer or {}).get("state") or "").lower() != "attached":
+                continue
+            layer_game = str((layer or {}).get("game") or game).upper()
+            model = manager.load_model(resref, layer_game)
+            if model is None:
+                raise FileNotFoundError(f"{layer_game}:{resref}.mdl")
+            self._bas_attachments[slot] = model
+            self._bas_attachment_resrefs[slot] = resref
+            self._bas_attachment_transforms[slot] = normalize_bas_transform(
+                (layer or {}).get("transform") or default_bas_attachment_transform(slot, resref)
+            )
+            if slot == "head":
+                self._current_head_model = model
+            else:
+                self._current_attachment_model = model
+
+        if hasattr(self, "_add_loaded_model_to_scene"):
+            self._add_loaded_model_to_scene(body, f"{game}:{body_resref}")
+        result = self._rebuild_bas_preview()
+        preview = getattr(self, "_bas_preview_model", None)
+        if hasattr(self, "body_attachment_panel"):
+            self.body_attachment_panel.set_body_model(body)
+            for slot in ("head", "left_hand", "right_hand", "left_weapon", "right_weapon"):
+                if slot in self._bas_attachments:
+                    self.body_attachment_panel.set_slot_model(slot, self._bas_attachments[slot], resref=self._bas_attachment_resrefs.get(slot, ""))
+                else:
+                    self.body_attachment_panel.clear_slot_model(slot)
+            self.body_attachment_panel.set_status(f"Loaded BAS build: {self._bas_active_build_name}")
+        if hasattr(self, "skeleton_panel") and preview is not None:
+            self.skeleton_panel.load_model(preview)
+        if hasattr(self, "properties_panel"):
+            self.properties_panel.show_model(body)
+        if hasattr(self, "animations_panel"):
+            self._load_animation_panel_model(body)
+        if hasattr(self, "sprite_materials_panel") and preview is not None:
+            self.sprite_materials_panel.set_model(preview)
+        if hasattr(self, "_populate_animation_library_from_current_model"):
+            self._populate_animation_library_from_current_model()
+        if hasattr(self, "statusBar"):
+            self.statusBar().showMessage(result or f"Loaded BAS build: {self._bas_active_build_name}")
+        self._log(f"Loaded BAS build {path.name}", "success")
+        return preview
 
     def _start_model_load(
         self,
@@ -8714,6 +8969,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if not mdl.exists():
             self._log(f"Startup model not found: {path}", "error")
             self.statusBar().showMessage("Model file not found")
+            return
+        if mdl.suffix.lower() == ".json":
+            try:
+                self._load_bas_model_recipe_from_path(mdl)
+            except Exception:
+                self._log(f"BAS build load failed:\n{traceback.format_exc()}", "error")
+                self.statusBar().showMessage("BAS build load failed")
             return
         if mdx_path and not Path(mdx_path).exists():
             self._log(f"MDX file not found, using sibling lookup: {mdx_path}", "warning")
@@ -8854,6 +9116,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._bas_preview_model = None
         self._bas_attachments.clear()
         self._bas_attachment_resrefs.clear()
+        self._bas_attachment_transforms.clear()
+        self._bas_active_build_name = ""
         self._current_head_model = None
         self._current_attachment_model = None
         self._retarget_target_model = model

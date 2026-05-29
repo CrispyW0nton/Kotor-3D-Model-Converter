@@ -35,7 +35,7 @@ BAS_PRESET_MODELS: dict[str, tuple[tuple[str, str], ...]] = {
         ("Player Female Head C 01", "pfhc01"),
     ),
     "left_weapon": (
-        ("Vibroblade", "w_vbroblade_001"),
+        ("Vibroblade", "w_vbroswrd_001"),
         ("Short Sword", "w_vbroshort_001"),
         ("Lightsaber", "w_lghtsbr_001"),
     ),
@@ -52,6 +52,7 @@ class QtBodyAttachmentPanel(QtWidgets.QWidget):
 
     attachRequested = QtCore.Signal(str, str)
     clearRequested = QtCore.Signal(str)
+    saveBuildRequested = QtCore.Signal()
     slotSelected = QtCore.Signal(str)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
@@ -104,6 +105,10 @@ class QtBodyAttachmentPanel(QtWidgets.QWidget):
         controls.addWidget(self.attach_button)
         controls.addWidget(self.clear_button)
         root.addLayout(controls)
+
+        self.save_build_button = QtWidgets.QPushButton("Save Build")
+        self.save_build_button.clicked.connect(self.saveBuildRequested.emit)
+        root.addWidget(self.save_build_button)
 
         self.layer_tree = QtWidgets.QTreeWidget()
         self.layer_tree.setHeaderLabels(["Layer", "Model", "State"])

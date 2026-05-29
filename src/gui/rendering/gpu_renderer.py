@@ -3340,6 +3340,48 @@ def _scene_gpu_model_matrix(node) -> Optional[np.ndarray]:
     )
 
 
+def _bas_attachment_local_transform_np(node, bas_root):
+    wx = wy = wz = 0.0
+    parent_q = np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float64)
+    chain = []
+    current = node
+    visited = set()
+    while current is not None:
+        if id(current) in visited or len(chain) > 512:
+            break
+        visited.add(id(current))
+        chain.append(current)
+        if current is bas_root:
+            break
+        current = getattr(current, "parent", None)
+    chain.reverse()
+    for chain_node in chain:
+        lx, ly, lz = getattr(chain_node, "position", (0.0, 0.0, 0.0))
+        rot = list(getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        r2 = rot[0]**2 + rot[1]**2 + rot[2]**2 + rot[3]**2
+        if r2 > 1e-9 and abs(r2 - 1.0) > 1e-4:
+            rs = r2 ** 0.5
+            rot = [rot[0] / rs, rot[1] / rs, rot[2] / rs, rot[3] / rs]
+        rotated = _quat_rotate_batch(parent_q, np.array([[lx, ly, lz]], dtype=np.float64))[0]
+        wx += float(rotated[0])
+        wy += float(rotated[1])
+        wz += float(rotated[2])
+        px, py, pz, pw = parent_q
+        nx, ny, nz, nw = np.array(rot, dtype=np.float64)
+        parent_q = np.array([
+            pw * nx + px * nw + py * nz - pz * ny,
+            pw * ny - px * nz + py * nw + pz * nx,
+            pw * nz + px * ny - py * nx + pz * nw,
+            pw * nw - px * nx - py * ny - pz * nz,
+        ], dtype=np.float64)
+    q_len = float(np.linalg.norm(parent_q))
+    if q_len > 1e-9:
+        parent_q = parent_q / q_len
+    else:
+        parent_q = np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float64)
+    return (float(wx), float(wy), float(wz)), tuple(float(v) for v in parent_q.tolist())
+
+
 def _quat_multiply_xyzw(parent, child) -> tuple[float, float, float, float]:
     px, py, pz, pw = (float(v) for v in tuple(parent)[:4])
     cx, cy, cz, cw = (float(v) for v in tuple(child)[:4])
@@ -5373,6 +5415,38 @@ class GpuRenderer:
             # Local alias for closure capture
             _wt_cache = self._wt_cache
 
+            def _bas_attachment_root_for_node(nd):
+                _cur = nd
+                _seen = set()
+                while _cur is not None and id(_cur) not in _seen:
+                    _seen.add(id(_cur))
+                    if bool(getattr(_cur, "_gr_bas_attachment_root", False)):
+                        return _cur
+                    _cur = getattr(_cur, "parent", None)
+                return None
+
+            def _bas_attachment_socket_node(_bas_root):
+                _socket_name = str(getattr(_bas_root, "_gr_bas_socket_name", "") or "").lower()
+                _body_root = getattr(_bas_root, "parent", None)
+                if _body_root is None or not _socket_name:
+                    return None
+                if str(getattr(_body_root, "name", "") or "").lower() == _socket_name:
+                    return _body_root
+                _stack = [_body_root]
+                _seen = {id(_bas_root)}
+                while _stack:
+                    _cur = _stack.pop()
+                    if _cur is None or id(_cur) in _seen:
+                        continue
+                    _seen.add(id(_cur))
+                    if str(getattr(_cur, "name", "") or "").lower() == _socket_name:
+                        return _cur
+                    for _child in reversed(getattr(_cur, "children", []) or []):
+                        if bool(getattr(_child, "_gr_bas_attachment_root", False)):
+                            continue
+                        _stack.append(_child)
+                return None
+
             def _get_world_transform(nd):
                 """Return (world_pos, world_orient) with persistent memoization.
 
@@ -5399,6 +5473,48 @@ class GpuRenderer:
                            xoreos modelnode.cpp:805 (skin pass separation).
                 """
                 nid = id(nd)
+                _bas_root = _bas_attachment_root_for_node(nd)
+                if _bas_root is not None:
+                    _socket = _bas_attachment_socket_node(_bas_root)
+                    if _socket is not None:
+                        _base_wp, _base_wo = _get_world_transform(_socket)
+                    else:
+                        _base_wp, _base_wo = (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)
+                    _chain = []
+                    _cur = nd
+                    _seen = set()
+                    while _cur is not None:
+                        if id(_cur) in _seen or len(_chain) > 512:
+                            break
+                        _seen.add(id(_cur))
+                        _chain.append(_cur)
+                        if _cur is _bas_root:
+                            break
+                        _cur = getattr(_cur, "parent", None)
+                    _chain.reverse()
+                    _awx, _awy, _awz = (float(_base_wp[0]), float(_base_wp[1]), float(_base_wp[2]))
+                    _aparent_q = np.array([float(v) for v in _base_wo[:4]], dtype=np.float64)
+                    for _cn in _chain:
+                        _lx, _ly, _lz = getattr(_cn, "position", (0.0, 0.0, 0.0))
+                        _rot = list(getattr(_cn, "rotation", (0.0, 0.0, 0.0, 1.0)))
+                        _r2 = _rot[0]**2 + _rot[1]**2 + _rot[2]**2 + _rot[3]**2
+                        if _r2 > 1e-9 and abs(_r2 - 1.0) > 1e-4:
+                            _rs = _r2 ** 0.5
+                            _rot = [_rot[0]/_rs, _rot[1]/_rs, _rot[2]/_rs, _rot[3]/_rs]
+                        _local_pos = np.array([[_lx, _ly, _lz]], dtype=np.float64)
+                        _rotated = _quat_rotate_batch(_aparent_q, _local_pos)[0]
+                        _awx += _rotated[0]
+                        _awy += _rotated[1]
+                        _awz += _rotated[2]
+                        _px, _py, _pz, _pw = _aparent_q
+                        _nx, _ny, _nz, _nw = np.array(_rot, dtype=np.float64)
+                        _aparent_q = np.array([
+                            _pw*_nx + _px*_nw + _py*_nz - _pz*_ny,
+                            _pw*_ny - _px*_nz + _py*_nw + _pz*_nx,
+                            _pw*_nz + _px*_ny - _py*_nx + _pz*_nw,
+                            _pw*_nw - _px*_nx - _py*_ny - _pz*_nz,
+                        ], dtype=np.float64)
+                    return ((_awx, _awy, _awz), tuple(_aparent_q.tolist()))
                 if anim_pose is not None:
                     _is_skin_nd = bool(getattr(nd, 'is_skin', False))
                     if not _is_skin_nd:
@@ -5721,8 +5837,19 @@ class GpuRenderer:
                 # accessories) move when their parent bone is animated even if they
                 # themselves have no animation keys.
                 _nd_is_skin = bool(getattr(node, 'is_skin', False))
+                _bas_root_for_draw = _bas_attachment_root_for_node(node)
+                _bas_skin_draw_mat = None
+                if _nd_is_skin and _bas_root_for_draw is not None:
+                    vbo_wp, vbo_wo = _bas_attachment_local_transform_np(node, _bas_root_for_draw)
+                    _bas_root_wp, _bas_root_wo = _get_world_transform(_bas_root_for_draw)
+                    _bas_skin_draw_mat = _mat4_from_pos_quat_scale(
+                        _bas_root_wp,
+                        _bas_root_wo,
+                        (1.0, 1.0, 1.0),
+                    )
                 _skin_can_lbs = bool(
                     _nd_is_skin
+                    and not bool(getattr(node, "_gr_bas_attachment_layer", False))
                     and _has_skin_nodes
                     and self._skin_uploader is not None
                     and anim_pose is not None
@@ -6251,8 +6378,10 @@ class GpuRenderer:
                 if txi_decal:           _feat_mask |= (1 << 11)  # FEAT_DECAL
                 if txi_blend == 2:      _feat_mask |= (1 << 12)  # FEAT_PUNCHTHRU
                 if txi_blend == 1:      _feat_mask |= (1 << 13)  # FEAT_ADDITIVE
-                # Phase A: Set FEAT_SKIN bit when GPU skinning is active
-                if _nd_is_skin and _has_skin_nodes and self._skin_uploader is not None:
+                # Phase A: Set FEAT_SKIN bit only when this draw is actually
+                # palette-skinned. BAS attachment skins are socket followers,
+                # so their VBO data is already root-local and must pass through.
+                if _skin_can_lbs:
                     _feat_mask |= (1 << 10)  # FEAT_SKIN
                 _u['u_features'].value = _feat_mask
 
@@ -6272,9 +6401,7 @@ class GpuRenderer:
                 # GPU skinning should only activate when anim_pose provides
                 # world-pose matrices that differ from the bind pose.
                 _skin_local_bone_count = 0
-                if (_nd_is_skin and _has_skin_nodes
-                        and self._skin_uploader is not None
-                        and anim_pose is not None
+                if (_skin_can_lbs
                         and 'u_skin_enabled' in _u
                         and 'u_bone_count' in _u):
                     try:
@@ -6356,8 +6483,16 @@ class GpuRenderer:
                             'Skin parity dump',
                         )
 
-                draw_model_mat = scene_gpu_mat if scene_gpu_mat is not None else model_mat
+                draw_model_mat = model_mat
+                if _bas_skin_draw_mat is not None:
+                    draw_model_mat = _bas_skin_draw_mat
                 if scene_gpu_mat is not None:
+                    draw_model_mat = (
+                        _mat4_mul(scene_gpu_mat, draw_model_mat)
+                        if _bas_skin_draw_mat is not None
+                        else scene_gpu_mat
+                    )
+                if scene_gpu_mat is not None or _bas_skin_draw_mat is not None:
                     _u['u_model'].write(_mat4_tobytes(draw_model_mat))
                     _u['u_normal_mat'].write(_mat3_normal(draw_model_mat).T.astype(np.float32).tobytes())
                 else:

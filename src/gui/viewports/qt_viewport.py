@@ -1880,6 +1880,10 @@ class QtViewportWidget(QtWidgets.QWidget):
             source_nodes = list(source_model.all_nodes()) if hasattr(source_model, "all_nodes") else []
         except Exception:
             source_nodes = []
+        source_nodes = [
+            node for node in source_nodes
+            if not bool(getattr(node, "_gr_bas_attachment_layer", False))
+        ]
         if not source_nodes:
             return
 
@@ -1891,13 +1895,18 @@ class QtViewportWidget(QtWidgets.QWidget):
             if current is None or id(current) in visited:
                 continue
             visited.add(id(current))
+            if bool(getattr(current, "_gr_bas_attachment_layer", False)):
+                continue
             copied_nodes.append(current)
             stack.extend(reversed(getattr(current, "children", []) or []))
 
         for idx, current in enumerate(copied_nodes):
             if idx >= len(source_nodes):
                 break
-            setattr(current, "_gr_source_dfs_index", idx)
+            source_idx = getattr(source_nodes[idx], "_gr_source_dfs_index", None)
+            if not isinstance(source_idx, int) or source_idx < 0:
+                source_idx = idx
+            setattr(current, "_gr_source_dfs_index", source_idx)
             setattr(current, "_gr_source_model_id", id(source_model))
             setattr(current, "_gr_source_node_name", getattr(source_nodes[idx], "name", ""))
 
