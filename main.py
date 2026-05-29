@@ -361,7 +361,7 @@ def main(argv: list[str] | None = None):
 
         from src.gui.qt_lib.windows.qt_main_window import run as _run_qt
 
-        log.info("Qt main window starting.")
+        log.info("Qt launcher starting.")
         rc = _run_qt(_APP_DIR, startup_input=vars(args))
         log.info("Qt main window exited cleanly.")
         _flush_all_handlers()

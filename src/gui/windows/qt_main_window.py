@@ -613,6 +613,39 @@ def _build_prelaunch_library_input(
     return payload
 
 
+def _collect_prewindow_startup_diagnostics(settings_data: dict) -> dict:
+    """Collect renderer/hardware diagnostics before the main window exists."""
+
+    payload = {"renderer_capabilities": [], "hardware_diagnostics": {}}
+    renderer_settings = RendererSettings.from_settings(settings_data)
+    log.info("Startup renderer scan beginning before Qt main-window initialization.")
+    try:
+        caps = renderer_capabilities_snapshot()
+        payload["renderer_capabilities"] = [entry.to_dict() for entry in caps]
+        for entry in caps:
+            status = "available" if entry.available else f"unavailable: {entry.reason or 'no reason reported'}"
+            log.info("Startup renderer scan: %s is %s.", entry.name, status)
+    except Exception as exc:
+        log.warning("Startup renderer scan failed before main-window initialization: %s", exc, exc_info=True)
+
+    log.info("Startup hardware scan beginning before Qt main-window initialization.")
+    try:
+        hardware = collect_hardware_diagnostics(
+            renderer_diagnostics={
+                "backend_id": renderer_settings.backend.value,
+                "name": renderer_settings.backend.value,
+            },
+            target_fps=renderer_settings.target_fps,
+        )
+        payload["hardware_diagnostics"] = hardware.to_dict()
+        for line in hardware.lines():
+            log.info("Startup hardware scan: %s", line)
+    except Exception as exc:
+        log.warning("Startup hardware scan failed before main-window initialization: %s", exc, exc_info=True)
+        payload["hardware_diagnostics"] = {"unavailable_reason": str(exc)}
+    return payload
+
+
 class AnimationLibraryScanWorker(QtCore.QObject):
     progress = QtCore.Signal(str, int, int)
     finished = QtCore.Signal(list, str)
@@ -9779,6 +9812,7 @@ def run(app_root: Optional[str] = None, startup_input: Optional[dict] = None) ->
             break
     root = Path(app_root) if app_root else Path(__file__).resolve().parents[2]
     settings_data = _read_settings_file(root / "settings.json")
+    startup_diagnostics = _collect_prewindow_startup_diagnostics(settings_data)
     startup_theme_manager = ThemeManager(root, settings_data)
     splash = QtStartupSplash(root, theme_manager=startup_theme_manager)
     splash.show()
@@ -9790,28 +9824,10 @@ def run(app_root: Optional[str] = None, startup_input: Optional[dict] = None) ->
         splash.raise_()
         app.processEvents()
 
-    update_prelaunch_status("Preparing startup", "Detecting game installs before the main window opens...")
+    update_prelaunch_status("Preparing startup", "Checking saved game-library settings...")
     prepared_input = _build_prelaunch_library_input(root, startup_input, update_prelaunch_status)
-    update_prelaunch_status("Scanning renderers", "Capturing renderer backend availability before Settings opens...")
-    try:
-        prepared_input["renderer_capabilities"] = [caps.to_dict() for caps in renderer_capabilities_snapshot()]
-    except Exception as exc:
-        log.warning("Renderer capability pre-start scan failed: %s", exc)
-        prepared_input["renderer_capabilities"] = []
-    update_prelaunch_status("Scanning hardware", "Capturing CPU, GPU, renderer, and frame pacing diagnostics...")
-    renderer_settings = RendererSettings.from_settings(settings_data)
-    try:
-        hardware = collect_hardware_diagnostics(
-            renderer_diagnostics={
-                "backend_id": renderer_settings.backend.value,
-                "name": renderer_settings.backend.value,
-            },
-            target_fps=renderer_settings.target_fps,
-        )
-        prepared_input["hardware_diagnostics"] = hardware.to_dict()
-    except Exception as exc:
-        log.warning("Hardware diagnostics pre-start scan failed: %s", exc)
-        prepared_input["hardware_diagnostics"] = {"unavailable_reason": str(exc)}
+    prepared_input.update(startup_diagnostics)
+    update_prelaunch_status("Opening workspace", "Starting the main window.")
     app.processEvents()
     win = QtGhostRiggerMainWindow(root, startup_input=prepared_input)
     win.show()

@@ -9,6 +9,12 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-05-30
+
+- Startup splash diagnostics deferral: Moved renderer capability probing and hardware diagnostics out of the splash-screen status path and into a terminal-logged pre-window startup phase. Renderer probing now completes before the Qt main window/viewport initializes, while the splash stays on library/startup readiness messages instead of showing renderer or hardware scans. No roadmap task ID applies.
+  Affected areas: `main.py`, `src/gui/windows/qt_main_window.py`, startup/splash regression coverage.
+  Verification: `python -m py_compile main.py src/gui/windows/qt_main_window.py tests/test_content_browser_panel.py`; `python -m pytest -q tests/test_content_browser_panel.py::test_startup_renderer_and_hardware_scans_log_before_main_window_not_splash`.
+
 ## 2026-05-29
 
 - WGPU/D3D transform gizmo GPU overlay parity and drag responsiveness: Rebuilt the WGPU/D3D gizmo overlay so the old CPU-painted look is represented by GPU geometry: filled center disks, scale squares, arrowheads, and thick axis shafts are emitted as WGPU triangle primitives while line/ring commands stay in the GPU overlay pass. The drag loop no longer emits full node-moved notifications on every mouse event, and live WGPU surfaces can skip CPU overlay pixmap rebuilds during native gizmo-only redraws. No roadmap task ID applies.

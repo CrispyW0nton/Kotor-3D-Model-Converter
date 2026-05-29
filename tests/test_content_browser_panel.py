@@ -1508,6 +1508,28 @@ def test_preloaded_library_skips_post_show_auto_detect_timer() -> None:
     )
 
 
+def test_startup_renderer_and_hardware_scans_log_before_main_window_not_splash() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows import qt_main_window
+    from src.gui.qt_lib.windows.qt_main_window import _collect_prewindow_startup_diagnostics
+
+    run_source = inspect.getsource(qt_main_window.run)
+    diagnostics_source = inspect.getsource(_collect_prewindow_startup_diagnostics)
+
+    assert "Scanning renderers" not in run_source
+    assert "Scanning hardware" not in run_source
+    assert "startup_diagnostics = _collect_prewindow_startup_diagnostics(settings_data)" in run_source
+    assert "splash = QtStartupSplash" in run_source
+    assert "win.show()" in run_source
+    assert run_source.index("_collect_prewindow_startup_diagnostics(settings_data)") < run_source.index("splash = QtStartupSplash")
+    assert run_source.index("_collect_prewindow_startup_diagnostics(settings_data)") < run_source.index("win = QtGhostRiggerMainWindow")
+    assert "renderer_capabilities_snapshot()" in diagnostics_source
+    assert "collect_hardware_diagnostics(" in diagnostics_source
+    assert "Startup renderer scan" in diagnostics_source
+    assert "before Qt main-window initialization" in diagnostics_source
+
+
 def test_startup_windows_use_primary_screen_not_cursor_screen() -> None:
     import inspect
 
