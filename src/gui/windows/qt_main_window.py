@@ -56,6 +56,7 @@ from src.gui.qt_lib.panels.qt_animation_panel import (
     QtAnimationsPanel,
     animation_row_label,
 )
+from src.gui.qt_lib.panels.qt_body_attachment_panel import QtBodyAttachmentPanel
 from src.gui.qt_lib.windows.qt_blueprint_editor import QtBlueprintEditorWindow
 from src.gui.qt_lib.panels.qt_character_builder_panel import QtCharacterBuilderWindow
 from src.gui.qt_lib.panels.qt_diagnostics_panel import QtDiagnosticsPanel, QtDiagnosticsWindow
@@ -1470,6 +1471,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._session_model_double_click_choice = ""
         self._syncing_scene_skeleton_selection = False
         self._current_model = None
+        self._bas_body_model = None
+        self._bas_preview_model = None
+        self._bas_attachments: dict[str, object] = {}
+        self._bas_attachment_resrefs: dict[str, str] = {}
+        self._current_head_model = None
+        self._current_attachment_model = None
         self._model_path = ""
         self._current_game = ""
         self._resource_manager = None
@@ -2028,6 +2035,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             "animations",
             lambda: self._show_workspace_dock("animations"),
         )
+        self.body_attachment_panel_action = QtGui.QAction(self._icon("props"), "Body Attachment System", self)
+        self._configure_dock_toggle_action(
+            self.body_attachment_panel_action,
+            "body_attachment",
+            lambda: self._show_workspace_dock("body_attachment"),
+        )
         self.retarget_workbench_action = QtGui.QAction(self._icon("anims"), "Animation Retargeting Workbench...", self)
         self.retarget_workbench_action.setShortcut("Ctrl+Shift+A")
         self.retarget_workbench_action.triggered.connect(self._open_animation_retarget_window)
@@ -2230,6 +2243,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         modules_menu.addAction(self.content_browser_action)
         modules_menu.addAction(self.scene_panel_action)
         modules_menu.addAction(self.properties_panel_action)
+        modules_menu.addAction(self.body_attachment_panel_action)
         modules_menu.addAction(self.nodes_panel_action)
         modules_menu.addAction(self.lighting_panel_action)
         modules_menu.addAction(self.camera_panel_action)
@@ -2415,6 +2429,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._tool_button("Content", self.content_browser_action, "library", compact=True))
         layout.addWidget(self._tool_button("Scene Information", self.scene_panel_action, "scene", compact=True))
         layout.addWidget(self._tool_button("Properties", self.properties_panel_action, "props", compact=True))
+        layout.addWidget(self._tool_button("BAS", self.body_attachment_panel_action, "props", compact=True))
         layout.addWidget(self._tool_button("Sequence Editor", self.sequence_editor_action, "sequence", compact=True))
         layout.addWidget(self._tool_button("Animation Browser", self.animation_browser_dock_action, "anims", compact=True))
         layout.addWidget(self._tool_button("Nodes", self.nodes_panel_action, "skeleton", compact=True))
@@ -3289,6 +3304,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.animations_panel.inheritanceGameChanged.connect(self._handle_animation_inheritance_game_changed)
         self.animations_panel.inheritanceSupermodelChanged.connect(self._handle_animation_inheritance_game_changed)
         self.animations_panel.seekRequested.connect(self._handle_animation_seek)
+        self.body_attachment_panel = QtBodyAttachmentPanel(self)
+        self.body_attachment_panel.attachRequested.connect(self._handle_bas_attach_requested)
+        self.body_attachment_panel.clearRequested.connect(self._handle_bas_clear_requested)
         self.animation_library_panel = self.content_browser_panel
         self.animation_retarget_window = QtAnimationRetargetWindow(self)
         self.animation_retarget_window.set_navigation_profile(
@@ -3388,6 +3406,13 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             "animations",
             "Animation Browser",
             self.animations_panel,
+            QtCore.Qt.RightDockWidgetArea,
+            scroll=False,
+        )
+        self.body_attachment_dock = self._create_detachable_panel(
+            "body_attachment",
+            "Body Attachment System",
+            self.body_attachment_panel,
             QtCore.Qt.RightDockWidgetArea,
             scroll=False,
         )
@@ -4825,6 +4850,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._retarget_target_model = None
             self._retarget_last_tick = None
             self._current_model = None
+            self._bas_body_model = None
+            self._bas_preview_model = None
+            self._bas_attachments.clear()
+            self._bas_attachment_resrefs.clear()
+            self._current_head_model = None
+            self._current_attachment_model = None
             self._model_path = ""
             self.model_pill.setText(f"// {self.scene_manager.active_scene.display_name}")
             self.model_pill.setToolTip("Active KMAX scene.")
@@ -4844,6 +4875,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self.module_geometry_panel.show_model(None)
             if hasattr(self, "sprite_materials_panel"):
                 self.sprite_materials_panel.set_model(None)
+            if hasattr(self, "body_attachment_panel"):
+                self.body_attachment_panel.set_body_model(None)
+                for slot in ("head", "left_hand", "right_hand", "left_weapon", "right_weapon"):
+                    self.body_attachment_panel.clear_slot_model(slot)
+                self.body_attachment_panel.set_status("")
             if hasattr(self, "animations_panel"):
                 self.animations_panel.load_model(None)
             if hasattr(self, "animation_retarget_panel"):
@@ -5022,6 +5058,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.module_geometry_panel.show_model(self._active_viewport_model())
         if hasattr(self, "sprite_materials_panel"):
             self.sprite_materials_panel.set_model(self._active_viewport_model())
+        if hasattr(self, "body_attachment_panel"):
+            self.body_attachment_panel.set_body_model(getattr(self, "_bas_body_model", None) or model)
         if hasattr(self, "animations_panel"):
             self._load_animation_panel_model(model)
         if hasattr(self, "animation_retarget_panel"):
@@ -6646,7 +6684,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
     def _animation_source_model(self, fallback_model=None):
         source = self._animation_source_key()
         if source == "body":
-            return fallback_model if fallback_model is not None else getattr(self, "_current_model", None)
+            return (
+                getattr(self, "_bas_preview_model", None)
+                or getattr(self, "_bas_body_model", None)
+                or fallback_model
+                or getattr(self, "_current_model", None)
+            )
         if source == "head":
             for attr in ("_current_head_model", "_attached_head_model", "_head_model"):
                 model = getattr(self, attr, None)
@@ -6658,6 +6701,269 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             if model is not None:
                 return model
         return None
+
+    def _handle_bas_attach_requested(self, slot: str, resref: str) -> None:
+        slot = str(slot or "").strip().lower()
+        resref = str(resref or "").strip()
+        if slot == "body":
+            self._show_workspace_dock("content_browser")
+            return
+        if slot in {"left_hand", "right_hand"}:
+            if hasattr(self, "body_attachment_panel"):
+                self.body_attachment_panel.set_status("Hand slots are sockets; attach items through L. Weapon or R. Weapon.")
+            return
+        body = getattr(self, "_bas_body_model", None) or getattr(self, "_current_model", None)
+        if body is None:
+            self.body_attachment_panel.set_status("No body model loaded.")
+            return
+        if not resref:
+            self.body_attachment_panel.set_status("No attachment model selected.")
+            return
+        model = self._load_bas_attachment_model(resref)
+        if model is None:
+            self.body_attachment_panel.set_status(f"Could not load {resref}.")
+            return
+        self._bas_body_model = body
+        self._bas_attachments[slot] = model
+        self._bas_attachment_resrefs[slot] = resref
+        if slot == "head":
+            self._current_head_model = model
+        else:
+            self._current_attachment_model = model
+        result = self._rebuild_bas_preview()
+        if result:
+            self.body_attachment_panel.set_slot_model(slot, model, resref=resref)
+            self.body_attachment_panel.set_status(result)
+            self._load_animation_panel_model(self._bas_body_model)
+
+    def _handle_bas_clear_requested(self, slot: str) -> None:
+        slot = str(slot or "").strip().lower()
+        if slot in {"body", "left_hand", "right_hand"}:
+            return
+        self._bas_attachments.pop(slot, None)
+        self._bas_attachment_resrefs.pop(slot, None)
+        self.body_attachment_panel.clear_slot_model(slot)
+        if slot == "head":
+            self._current_head_model = None
+        elif not any(key != "head" for key in self._bas_attachments):
+            self._current_attachment_model = None
+        result = self._rebuild_bas_preview()
+        self.body_attachment_panel.set_status(result or f"Cleared {slot}.")
+        self._load_animation_panel_model(self._bas_body_model or self._current_model)
+
+    def _load_bas_attachment_model(self, resref: str):
+        game = (getattr(self, "_current_game", "") or self._infer_game_from_model(self._bas_body_model or self._current_model) or "K1").upper()
+        manager = self._get_resource_manager()
+        if manager is None:
+            return None
+        try:
+            return manager.load_model(resref, game)
+        except Exception:
+            log.debug("BAS attachment load failed for %s:%s", game, resref, exc_info=True)
+            return None
+
+    def _rebuild_bas_preview(self) -> str:
+        body = getattr(self, "_bas_body_model", None) or getattr(self, "_current_model", None)
+        if body is None:
+            return "No body model loaded."
+        try:
+            previous_preview = getattr(self, "_bas_preview_model", None)
+            preview = copy.deepcopy(body)
+            head = self._bas_attachments.get("head")
+            if head is not None:
+                from src.core.qt_core.characters import creature_appearance as creature_appearance
+
+                snap = creature_appearance.snap_head_onto_body(
+                    preview,
+                    head,
+                    scale_head=False,
+                    merge_animations=False,
+                )
+                if snap.get("ok") and snap.get("model") is not None:
+                    preview = snap["model"]
+                else:
+                    return str(snap.get("message") or "Head attachment failed.")
+            for slot in ("left_weapon", "right_weapon"):
+                item = self._bas_attachments.get(slot)
+                if item is None:
+                    continue
+                self._attach_bas_item_to_preview(preview, item, self._bas_socket_for_slot(slot))
+            preview.name = f"{getattr(body, 'name', 'body')}_bas"
+            self._apply_bas_preview_to_viewport(preview, previous_preview=previous_preview)
+            attached = ", ".join(self._bas_attachment_resrefs.get(key, key) for key in self._bas_attachments)
+            return f"BAS preview updated: {attached or 'body only'}."
+        except Exception as exc:
+            log.exception("BAS preview rebuild failed")
+            return f"BAS preview failed: {exc}"
+
+    def _attach_bas_item_to_preview(self, preview, item, socket_name: str) -> bool:
+        socket = self._find_model_node(preview, socket_name)
+        item_root = getattr(copy.deepcopy(item), "root_node", None)
+        if socket is None or item_root is None:
+            return False
+        item_root.parent = socket
+        item_root.position = (0.0, 0.0, 0.0)
+        item_root.rotation = (0.0, 0.0, 0.0, 1.0)
+        children = getattr(socket, "children", None)
+        if children is None:
+            socket.children = []
+            children = socket.children
+        children.append(item_root)
+        return True
+
+    def _find_model_node(self, model, name: str):
+        target = str(name or "").lower()
+        try:
+            nodes = model.all_nodes()
+        except Exception:
+            nodes = []
+        by_lower = {str(getattr(node, "name", "") or "").lower(): node for node in nodes}
+        for candidate in (target, "rhand_g" if target == "rhand" else "", "lhand_g" if target == "lhand" else ""):
+            if candidate and candidate in by_lower:
+                return by_lower[candidate]
+        return None
+
+    def _bas_socket_for_slot(self, slot: str) -> str:
+        return "lhand" if str(slot).startswith("left") else "rhand"
+
+    def _bas_target_scene_object(self, previous_preview=None):
+        scene_manager = getattr(self, "scene_manager", None)
+        scene = getattr(scene_manager, "active_scene", None)
+        if scene is None:
+            return None
+        body = getattr(self, "_bas_body_model", None) or getattr(self, "_current_model", None)
+        current_preview = getattr(self, "_bas_preview_model", None)
+        candidate_models = [model for model in (body, getattr(self, "_current_model", None), previous_preview, current_preview) if model is not None]
+        body_marker = str(id(body)) if body is not None else ""
+
+        for obj in getattr(scene, "objects", []) or []:
+            metadata = getattr(obj, "metadata", {}) or {}
+            if body_marker and str(metadata.get("_runtime_bas_body_model_id") or "") == body_marker:
+                return obj
+
+        selected = scene_manager.get_selected_objects() if hasattr(scene_manager, "get_selected_objects") else []
+        for obj in selected:
+            runtime = (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
+            if any(runtime is model for model in candidate_models):
+                return obj
+
+        for obj in getattr(scene, "objects", []) or []:
+            runtime = (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
+            if any(runtime is model for model in candidate_models):
+                return obj
+        return None
+
+    def _apply_bas_preview_to_viewport(self, preview, previous_preview=None) -> None:
+        target_object = None
+        if hasattr(self, "scene_manager"):
+            target_object = self._bas_target_scene_object(previous_preview=previous_preview)
+        if target_object is not None:
+            target_object.metadata["_runtime_model"] = preview
+            target_object.metadata["_runtime_bas_body_model"] = getattr(self, "_bas_body_model", None) or getattr(self, "_current_model", None)
+            target_object.metadata["_runtime_bas_body_model_id"] = str(
+                id(getattr(self, "_bas_body_model", None) or getattr(self, "_current_model", None))
+            )
+            target_object.metadata["_runtime_bas_preview_model"] = preview
+            target_object.metadata.setdefault("body_attachment_system", {})
+            target_object.metadata["body_attachment_system"].update({
+                "active": True,
+                "attachments": dict(self._bas_attachment_resrefs),
+                "layers": [
+                    {
+                        "slot": slot,
+                        "resref": self._bas_attachment_resrefs.get(slot, ""),
+                        "enabled": True,
+                    }
+                    for slot in ("head", "left_weapon", "right_weapon")
+                    if slot in self._bas_attachments
+                ],
+            })
+            self._bas_preview_model = preview
+            self.scene_manager.mark_dirty()
+            self._refresh_scene_view()
+        elif hasattr(self, "viewport"):
+            self._bas_preview_model = preview
+            self.viewport.load_model(preview)
+        else:
+            self._bas_preview_model = preview
+        self._sync_bas_body_animation_engine(preview)
+        self._restore_bas_animation_pose_after_viewport_refresh()
+        self._request_bas_viewport_refresh()
+        if hasattr(self, "skeleton_panel"):
+            self.skeleton_panel.load_model(preview)
+        if hasattr(self, "module_geometry_panel"):
+            self.module_geometry_panel.show_model(preview)
+        if hasattr(self, "sprite_materials_panel"):
+            self.sprite_materials_panel.set_model(preview)
+
+    def _sync_bas_body_animation_engine(self, preview) -> None:
+        if preview is None:
+            return
+        try:
+            source_key = self._animation_source_key() if hasattr(self, "_animation_source_key") else "body"
+        except Exception:
+            source_key = "body"
+        if source_key != "body":
+            return
+        engine = getattr(self, "_animation_engine", None)
+        current = getattr(engine, "current_animation", None) if engine is not None else None
+        if engine is None or current is None or not hasattr(engine, "model") or getattr(engine, "model", None) is preview:
+            return
+        anim_name = str(getattr(current, "name", "") or "")
+        if not anim_name:
+            return
+        try:
+            from src.core.qt_core.animation.animation_engine import AnimationEngine, SuperModelResolver
+
+            mgr = self._get_resource_manager()
+            if mgr is not None:
+                SuperModelResolver.configure(mgr)
+            t = float(getattr(engine, "current_time", 0.0) or 0.0)
+            was_playing = bool(getattr(engine, "is_playing", False))
+            loop = bool(getattr(engine, "_loop", getattr(self, "_animation_loop", False)))
+            inheritance_game = self._animation_inheritance_game(preview)
+            inheritance_supermodel = self._animation_inheritance_supermodel(preview)
+            with self._animation_resolution_context(preview, inheritance_game, inheritance_supermodel):
+                replacement = AnimationEngine(preview)
+                if not replacement.play(anim_name, loop=loop, blend=False):
+                    return
+                replacement.seek(t)
+                if not was_playing:
+                    replacement.stop()
+            self._animation_engine = replacement
+        except Exception:
+            log.debug("Could not retarget BAS animation engine to preview", exc_info=True)
+
+    def _restore_bas_animation_pose_after_viewport_refresh(self) -> None:
+        engine = getattr(self, "_animation_engine", None)
+        current = getattr(engine, "current_animation", None) if engine is not None else None
+        if engine is None or current is None or not hasattr(self, "viewport"):
+            return
+        try:
+            t = float(getattr(engine, "current_time", 0.0) or 0.0)
+            pose = engine.evaluate(t)
+            self.viewport.set_animation_pose(
+                pose,
+                name=str(getattr(current, "name", "") or ""),
+                time=t,
+                length=float(getattr(current, "length", 0.0) or 0.0),
+            )
+            if hasattr(self.viewport, "set_animation_playback_active"):
+                self.viewport.set_animation_playback_active(bool(getattr(engine, "is_playing", False)))
+        except Exception:
+            log.debug("Could not restore BAS animation pose after viewport refresh", exc_info=True)
+
+    def _request_bas_viewport_refresh(self) -> None:
+        viewport = getattr(self, "viewport", None)
+        if viewport is None:
+            return
+        try:
+            if hasattr(viewport, "refresh_view"):
+                viewport.refresh_view()
+            elif hasattr(viewport, "_request_render"):
+                viewport._request_render(fast=True, reason="body attachment updated", scene=True, overlay=True, hud=True)
+        except Exception:
+            log.debug("Could not request BAS viewport refresh", exc_info=True)
 
     def _animation_model_game(self, model) -> str:
         return str(getattr(self, "_current_game", "") or self._infer_game_from_model(model) or "").upper()
@@ -8544,6 +8850,12 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._retarget_engine = None
         self._retarget_last_tick = None
         self._current_model = model
+        self._bas_body_model = model
+        self._bas_preview_model = None
+        self._bas_attachments.clear()
+        self._bas_attachment_resrefs.clear()
+        self._current_head_model = None
+        self._current_attachment_model = None
         self._retarget_target_model = model
         self._retarget_mapping_report = None
         if path:
@@ -8580,6 +8892,11 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.module_geometry_panel.show_model(self._active_viewport_model())
         if hasattr(self, "sprite_materials_panel"):
             self.sprite_materials_panel.set_model(self._active_viewport_model())
+        if hasattr(self, "body_attachment_panel"):
+            self.body_attachment_panel.set_body_model(model)
+            for slot in ("head", "left_hand", "right_hand", "left_weapon", "right_weapon"):
+                self.body_attachment_panel.clear_slot_model(slot)
+            self.body_attachment_panel.set_status(f"Body: {name}")
         if hasattr(self, "animations_panel"):
             self._load_animation_panel_model(model)
         if hasattr(self, "animation_retarget_panel"):

@@ -2445,8 +2445,14 @@ def test_main_model_load_uses_inherited_animation_panel_loader() -> None:
     assert "self._load_animation_panel_model(model)" in library_source
     loader_source = inspect.getsource(QtGhostRiggerMainWindow._load_animation_panel_model)
     layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    actions_source = inspect.getsource(QtGhostRiggerMainWindow._build_actions)
+    menu_source = inspect.getsource(QtGhostRiggerMainWindow._build_menu)
     assert '"Animation Browser"' in layout_source
     assert "animationSourceChanged.connect(self._handle_animation_source_changed)" in layout_source
+    assert "QtBodyAttachmentPanel(self)" in layout_source
+    assert '"Body Attachment System"' in layout_source
+    assert "body_attachment_panel_action" in actions_source
+    assert "modules_menu.addAction(self.body_attachment_panel_action)" in menu_source
     assert "_animation_source_model(model)" in loader_source
     assert "_animation_inheritance_supermodel(model)" in loader_source
     assert "_animation_resolution_context(model, inheritance_game, inheritance_supermodel)" in loader_source
@@ -3373,6 +3379,63 @@ def test_qt_animations_panel_exposes_animation_source_selector() -> None:
     assert panel.selected_animation_source() == "attachment"
 
 
+def test_body_attachment_panel_exposes_bas_slots_and_attach_signal() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_body_attachment_panel import QtBodyAttachmentPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtBodyAttachmentPanel()
+    emitted = []
+    panel.attachRequested.connect(lambda slot, resref: emitted.append((slot, resref)))
+
+    panel.set_selected_slot("right_weapon")
+    panel.model_combo.setCurrentText("w_lghtsbr_001")
+    panel.attach_button.click()
+
+    assert panel.selected_slot() == "right_weapon"
+    assert emitted[-1] == ("right_weapon", "w_lghtsbr_001")
+    assert "HEAD" in {button.text().splitlines()[0] for button in panel.findChildren(QtWidgets.QToolButton)}
+    assert "BODY" in {button.text().splitlines()[0] for button in panel.findChildren(QtWidgets.QToolButton)}
+
+    panel.set_selected_slot("left_hand")
+    panel.model_combo.setCurrentText("w_vbroblade_001")
+    panel.attach_button.click()
+
+    assert emitted[-1] == ("right_weapon", "w_lghtsbr_001")
+    assert panel.attach_button.isEnabled() is False
+
+
+def test_body_attachment_panel_tracks_attachment_layers() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_body_attachment_panel import QtBodyAttachmentPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtBodyAttachmentPanel()
+
+    panel.set_body_model(SimpleNamespace(name="PMBAM"))
+    panel.set_slot_model("head", resref="pmhc01")
+    panel.set_slot_model("right_weapon", resref="w_lghtsbr_001")
+
+    rows = panel.layer_rows()
+    assert rows[0] == ("BODY", "PMBAM", "Base")
+    assert ("HEAD", "pmhc01", "Attached") in rows
+    assert ("R. Wep", "w_lghtsbr_001", "Attached") in rows
+    assert ("L. Weapon", "", "Empty") in rows
+    assert ("L. HAND", "", "Socket") in rows
+    assert ("R. HAND", "", "Socket") in rows
+
+    head_row = next(index for index, row in enumerate(rows) if row[0] == "HEAD")
+    panel.layer_tree.setCurrentItem(panel.layer_tree.topLevelItem(head_row))
+
+    assert panel.selected_slot() == "head"
+
+
 def test_qt_animations_panel_exposes_inheritance_supermodel_selector() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -3426,6 +3489,160 @@ def test_animation_resolution_context_temporarily_overrides_supermodel() -> None
 
     assert model.supermodel == "S_Male02"
     assert model.game_version == GameVersion.K1
+
+
+def test_bas_attachment_preview_parents_item_to_body_socket() -> None:
+    from types import MethodType
+
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    root = ModelNode(name="bodyroot")
+    rhand = ModelNode(name="rhand", parent=root)
+    root.children.append(rhand)
+    body = KotorModel(name="Body", root_node=root)
+    item_root = ModelNode(name="weaponroot")
+    item = KotorModel(name="Weapon", root_node=item_root)
+    window = SimpleNamespace()
+    window._find_model_node = MethodType(QtGhostRiggerMainWindow._find_model_node, window)
+
+    assert QtGhostRiggerMainWindow._attach_bas_item_to_preview(window, body, item, "rhand") is True
+
+    assert len(rhand.children) == 1
+    assert rhand.children[0].name == "weaponroot"
+    assert rhand.children[0].parent is rhand
+
+
+def test_bas_preview_targets_body_scene_object_not_arbitrary_selection() -> None:
+    from types import MethodType
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    body_model = SimpleNamespace(name="Body")
+    previous_preview = SimpleNamespace(name="Body_bas_old")
+    selected_other = SimpleNamespace(selected=True, metadata={"_runtime_model": SimpleNamespace(name="Other")})
+    body_object = SimpleNamespace(selected=False, metadata={"_runtime_model": body_model})
+    scene_manager = SimpleNamespace(
+        active_scene=SimpleNamespace(objects=[selected_other, body_object]),
+        get_selected_objects=lambda: [selected_other],
+    )
+    window = SimpleNamespace(
+        scene_manager=scene_manager,
+        _bas_body_model=body_model,
+        _current_model=body_model,
+        _bas_preview_model=previous_preview,
+    )
+
+    target = QtGhostRiggerMainWindow._bas_target_scene_object(window, previous_preview=previous_preview)
+
+    assert target is body_object
+
+
+def test_bas_preview_applies_as_layer_and_restores_animation_pose() -> None:
+    from types import MethodType
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    calls = []
+    body_model = SimpleNamespace(name="Body")
+    preview = SimpleNamespace(name="Body_bas")
+    selected_other = SimpleNamespace(selected=True, metadata={"_runtime_model": SimpleNamespace(name="Other")})
+    body_object = SimpleNamespace(selected=False, metadata={"_runtime_model": body_model})
+    scene_manager = SimpleNamespace(
+        active_scene=SimpleNamespace(objects=[selected_other, body_object]),
+        get_selected_objects=lambda: [selected_other],
+        mark_dirty=lambda: calls.append("dirty"),
+    )
+
+    class Viewport:
+        def set_animation_pose(self, pose, name="", time=0.0, length=0.0):
+            calls.append(("pose", pose, name, time, length))
+
+        def set_animation_playback_active(self, active, reason=""):
+            calls.append(("active", active, reason))
+
+        def refresh_view(self):
+            calls.append("refresh_view")
+
+    class Engine:
+        current_animation = SimpleNamespace(name="walk", length=1.5)
+        current_time = 0.5
+        is_playing = True
+
+        def evaluate(self, t=0.0):
+            calls.append(("evaluate", t))
+            return "pose-at-current-time"
+
+    window = SimpleNamespace(
+        scene_manager=scene_manager,
+        viewport=Viewport(),
+        _bas_body_model=body_model,
+        _current_model=body_model,
+        _bas_preview_model=None,
+        _bas_attachments={"head": object(), "right_weapon": object()},
+        _bas_attachment_resrefs={"head": "pmhc01", "right_weapon": "w_lghtsbr_001"},
+        _animation_engine=Engine(),
+        _refresh_scene_view=lambda: calls.append("refresh_scene"),
+    )
+    window._bas_target_scene_object = MethodType(QtGhostRiggerMainWindow._bas_target_scene_object, window)
+    window._restore_bas_animation_pose_after_viewport_refresh = MethodType(
+        QtGhostRiggerMainWindow._restore_bas_animation_pose_after_viewport_refresh,
+        window,
+    )
+    window._request_bas_viewport_refresh = MethodType(QtGhostRiggerMainWindow._request_bas_viewport_refresh, window)
+
+    QtGhostRiggerMainWindow._apply_bas_preview_to_viewport(window, preview)
+
+    assert selected_other.metadata["_runtime_model"].name == "Other"
+    assert body_object.metadata["_runtime_model"] is preview
+    assert body_object.metadata["_runtime_bas_body_model"] is body_model
+    assert body_object.metadata["_runtime_bas_preview_model"] is preview
+    assert body_object.metadata["body_attachment_system"]["attachments"] == {
+        "head": "pmhc01",
+        "right_weapon": "w_lghtsbr_001",
+    }
+    assert body_object.metadata["body_attachment_system"]["layers"] == [
+        {"slot": "head", "resref": "pmhc01", "enabled": True},
+        {"slot": "right_weapon", "resref": "w_lghtsbr_001", "enabled": True},
+    ]
+    assert "refresh_scene" in calls
+    assert ("evaluate", 0.5) in calls
+    assert ("pose", "pose-at-current-time", "walk", 0.5, 1.5) in calls
+    assert ("active", True, "") in calls
+    assert "refresh_view" in calls
+
+
+def test_animation_source_model_uses_bas_composite_preview_for_body_source() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    body = SimpleNamespace(name="Body")
+    preview = SimpleNamespace(name="Body_bas")
+    window = SimpleNamespace(
+        _bas_preview_model=preview,
+        _bas_body_model=body,
+        _current_model=body,
+        animations_panel=SimpleNamespace(selected_animation_source=lambda: "body"),
+    )
+    window._animation_source_key = MethodType(QtGhostRiggerMainWindow._animation_source_key, window)
+
+    assert QtGhostRiggerMainWindow._animation_source_model(window) is preview
+
+
+def test_bas_ignores_anatomical_hand_placeholders() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    calls = []
+    window = SimpleNamespace(
+        _show_workspace_dock=lambda name: calls.append(("dock", name)),
+        _bas_attachments={},
+        _bas_attachment_resrefs={},
+    )
+
+    QtGhostRiggerMainWindow._handle_bas_attach_requested(window, "left_hand", "w_vbroblade_001")
+    QtGhostRiggerMainWindow._handle_bas_clear_requested(window, "right_hand")
+
+    assert calls == [("dock", "content_browser")]
+    assert window._bas_attachments == {}
 
 
 def test_animation_selection_previews_first_frame_without_starting_playback() -> None:
