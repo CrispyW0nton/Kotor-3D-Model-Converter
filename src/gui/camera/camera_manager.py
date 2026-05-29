@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 from typing import Iterable
 
 from .camera_model import GhostRiggerCamera
@@ -240,8 +240,20 @@ class CameraManager:
         model = self.model
         if model is None or not hasattr(model, "all_nodes"):
             return
-        if not hasattr(model, "_gr_original_all_nodes"):
-            setattr(model, "_gr_original_all_nodes", getattr(model, "all_nodes"))
+        base_all_nodes = None
+        model_type_all_nodes = getattr(type(model), "all_nodes", None)
+        if callable(model_type_all_nodes):
+            try:
+                base_all_nodes = MethodType(model_type_all_nodes, model)
+            except Exception:
+                base_all_nodes = None
+        if base_all_nodes is None:
+            current_all_nodes = getattr(model, "all_nodes")
+            if getattr(current_all_nodes, "__name__", "") == "_all_nodes_with_generated":
+                base_all_nodes = getattr(model, "_gr_original_all_nodes", current_all_nodes)
+            else:
+                base_all_nodes = current_all_nodes
+        setattr(model, "_gr_original_all_nodes", base_all_nodes)
 
         def _all_nodes_with_generated(_model=model):
             base = list(_model._gr_original_all_nodes())

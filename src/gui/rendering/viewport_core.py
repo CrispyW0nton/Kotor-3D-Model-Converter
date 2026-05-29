@@ -4711,6 +4711,12 @@ class FrameRenderer:
             from core.qt_core.geometry.model_data import (_quat_rotate as _qr, _quat_normalize_bind,  # type: ignore
                                          _quat_normalize, _quat_mul)
 
+        bas_root = self._bas_attachment_root_for_node(node)
+        if bas_root is not None:
+            result = self._bas_attachment_world_transform(node, bas_root, _qr, _quat_normalize_bind, _quat_normalize, _quat_mul)
+            self._wt_cache[nid] = result
+            return result
+
         if self._anim_pose is not None:
             # Always walk the full ancestor chain when a pose is active.
             # Substitute animated values for nodes that have pose entries;
@@ -4809,6 +4815,120 @@ class FrameRenderer:
         result = (wp, wo, is_id)
         self._wt_cache[nid] = result
         return result
+
+    @staticmethod
+    def _bas_attachment_root_for_node(node):
+        current = node
+        visited = set()
+        while current is not None and id(current) not in visited:
+            visited.add(id(current))
+            if bool(getattr(current, "_gr_bas_attachment_root", False)):
+                return current
+            current = getattr(current, "parent", None)
+        return None
+
+    def _bas_attachment_socket_node(self, bas_root):
+        socket_name = str(getattr(bas_root, "_gr_bas_socket_name", "") or "").lower()
+        body_root = getattr(bas_root, "parent", None)
+        if body_root is None or not socket_name:
+            return None
+        if str(getattr(body_root, "name", "") or "").lower() == socket_name:
+            return body_root
+        stack = [body_root]
+        visited = {id(bas_root)}
+        while stack:
+            current = stack.pop()
+            if current is None or id(current) in visited:
+                continue
+            visited.add(id(current))
+            if str(getattr(current, "name", "") or "").lower() == socket_name:
+                return current
+            for child in reversed(getattr(current, "children", []) or []):
+                if bool(getattr(child, "_gr_bas_attachment_root", False)):
+                    continue
+                stack.append(child)
+        return None
+
+    def _bas_attachment_world_transform(self, node, bas_root, _qr, _quat_normalize_bind, _quat_normalize, _quat_mul):
+        socket = self._bas_attachment_socket_node(bas_root)
+        if socket is not None:
+            socket_wp, socket_wo, _ = self._node_world_transform(socket)
+            wx, wy, wz = socket_wp
+            parent_orientation = list(socket_wo)
+        else:
+            wx = wy = wz = 0.0
+            parent_orientation = [0.0, 0.0, 0.0, 1.0]
+
+        chain = []
+        current = node
+        visited = set()
+        while current is not None:
+            if id(current) in visited or len(chain) > 512:
+                break
+            visited.add(id(current))
+            chain.append(current)
+            if current is bas_root:
+                break
+            current = getattr(current, "parent", None)
+        chain.reverse()
+        last_i = len(chain) - 1
+        for index, chain_node in enumerate(chain):
+            is_leaf = index == last_i
+            lx, ly, lz = getattr(chain_node, "position", (0.0, 0.0, 0.0))
+            rot = list(getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+            node_rot = _quat_normalize(rot) if is_leaf else _quat_normalize_bind(rot)
+            rx, ry, rz = _qr(parent_orientation, (lx, ly, lz))
+            wx += rx
+            wy += ry
+            wz += rz
+            parent_orientation = _quat_mul(parent_orientation, node_rot)
+
+        import math as _math
+
+        wo = tuple(parent_orientation)
+        wo_len2 = wo[0]*wo[0] + wo[1]*wo[1] + wo[2]*wo[2] + wo[3]*wo[3]
+        if wo_len2 > 1e-9 and abs(wo_len2 - 1.0) > 1e-4:
+            scale = 1.0 / _math.sqrt(wo_len2)
+            wo = (wo[0]*scale, wo[1]*scale, wo[2]*scale, wo[3]*scale)
+        wo_rot = _math.sqrt(wo[0]*wo[0] + wo[1]*wo[1] + wo[2]*wo[2])
+        return ((float(wx), float(wy), float(wz)), wo, wo_rot < 0.001)
+
+    def _bas_attachment_local_transform(self, node, bas_root, _qr, _quat_normalize_bind, _quat_normalize, _quat_mul):
+        wx = wy = wz = 0.0
+        parent_orientation = [0.0, 0.0, 0.0, 1.0]
+        chain = []
+        current = node
+        visited = set()
+        while current is not None:
+            if id(current) in visited or len(chain) > 512:
+                break
+            visited.add(id(current))
+            chain.append(current)
+            if current is bas_root:
+                break
+            current = getattr(current, "parent", None)
+        chain.reverse()
+        last_i = len(chain) - 1
+        for index, chain_node in enumerate(chain):
+            is_leaf = index == last_i
+            lx, ly, lz = getattr(chain_node, "position", (0.0, 0.0, 0.0))
+            rot = list(getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+            node_rot = _quat_normalize(rot) if is_leaf else _quat_normalize_bind(rot)
+            rx, ry, rz = _qr(parent_orientation, (lx, ly, lz))
+            wx += rx
+            wy += ry
+            wz += rz
+            parent_orientation = _quat_mul(parent_orientation, node_rot)
+
+        import math as _math
+
+        wo = tuple(parent_orientation)
+        wo_len2 = wo[0]*wo[0] + wo[1]*wo[1] + wo[2]*wo[2] + wo[3]*wo[3]
+        if wo_len2 > 1e-9 and abs(wo_len2 - 1.0) > 1e-4:
+            scale = 1.0 / _math.sqrt(wo_len2)
+            wo = (wo[0]*scale, wo[1]*scale, wo[2]*scale, wo[3]*scale)
+        wo_rot = _math.sqrt(wo[0]*wo[0] + wo[1]*wo[1] + wo[2]*wo[2])
+        return ((float(wx), float(wy), float(wz)), wo, wo_rot < 0.001)
 
     @staticmethod
     def _apply_vertex_transform(node: 'ModelNode', v, wp, wo, is_identity_rot: bool):
@@ -5258,7 +5378,8 @@ class FrameRenderer:
 
         # Imported FBX skins are stored in model/world bind coordinates, but
         # still need LBS when a live pose is driving their bone_map.
-        if node.is_skin and self._anim_pose is not None and node.bone_map and node.skin_data:
+        is_bas_attachment = bool(getattr(node, "_gr_bas_attachment_layer", False))
+        if node.is_skin and self._anim_pose is not None and node.bone_map and node.skin_data and not is_bas_attachment:
             gpu_parity_verts = self._gpu_parity_skinned_world_verts_for_node(node)
             if gpu_parity_verts is not None:
                 return gpu_parity_verts
@@ -5288,7 +5409,7 @@ class FrameRenderer:
 
         # ── SKIN nodes: authored bind frame, optionally deformed by LBS ───────
         if node.is_skin:
-            if self._anim_pose is not None and node.bone_map and node.skin_data:
+            if self._anim_pose is not None and node.bone_map and node.skin_data and not is_bas_attachment:
                 gpu_parity_verts = self._gpu_parity_skinned_world_verts_for_node(node)
                 if gpu_parity_verts is not None:
                     return gpu_parity_verts
@@ -5296,6 +5417,35 @@ class FrameRenderer:
                 if bone_transforms:
                     return [self._lbs_vertex(node, i, bone_transforms)
                             for i in range(len(verts))]
+            if is_bas_attachment:
+                bas_root = self._bas_attachment_root_for_node(node)
+                if bas_root is not None:
+                    try:
+                        from src.core.qt_core.geometry.model_data import (
+                            _quat_mul,
+                            _quat_normalize,
+                            _quat_normalize_bind,
+                            _quat_rotate as _qr,
+                        )
+                    except ImportError:
+                        from core.qt_core.geometry.model_data import (  # type: ignore
+                            _quat_mul,
+                            _quat_normalize,
+                            _quat_normalize_bind,
+                            _quat_rotate as _qr,
+                        )
+                    local_wp, local_wo, local_is_id = self._bas_attachment_local_transform(
+                        node,
+                        bas_root,
+                        _qr,
+                        _quat_normalize_bind,
+                        _quat_normalize,
+                        _quat_mul,
+                    )
+                    root_wp, root_wo, root_is_id = self._node_world_transform(bas_root)
+                    xfm = self._apply_vertex_transform
+                    root_local = [xfm(node, v, local_wp, local_wo, local_is_id) for v in verts]
+                    return [xfm(node, v, root_wp, root_wo, root_is_id) for v in root_local]
             wp, wo, is_id = self._node_world_transform(node)
             _gr_probe('CPU-skin-bind', node, wp, wo, is_id)
             xfm = self._apply_vertex_transform

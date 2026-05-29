@@ -12,6 +12,7 @@
         <panel id="properties" region="right" visible="true" minWidth="320" preferredWidth="420"/>
         <panel id="animationLibrary" region="right" visible="true" minWidth="320" preferredWidth="420"/>
         <panel id="meshTools" region="farRight" visible="true" minWidth="300" preferredWidth="420"/>
+        <panel id="spriteMaterials" region="right" visible="false" minWidth="360" preferredWidth="560"/>
         <panel id="outputLog" region="bottom" visible="true" minHeight="140" preferredHeight="240"/>
         <panel id="pythonTerminal" region="bottom" visible="true" minHeight="140" preferredHeight="240"/>
     </panels>

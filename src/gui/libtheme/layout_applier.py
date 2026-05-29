@@ -161,6 +161,7 @@ class LayoutApplier(QtCore.QObject):
                 ("lighting", "lighting"),
                 ("cameras", "cameras"),
                 ("module_meshes", "moduleMeshes"),
+                ("sprite_materials", "spriteMaterials"),
                 ("mesh_tools", "meshTools"),
                 ("adjust_pivot", "adjustPivot"),
                 ("2das", "2das"),

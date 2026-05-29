@@ -70,7 +70,7 @@ class SuperModelResolver:
     # Class-level cache: lower(resref) → KotorModel | None
     # ``None`` is stored for known-missing resrefs so repeated lookups are
     # still O(1).  Tests can invoke ``clear_cache()`` between runs.
-    _cache: Dict[str, Optional[KotorModel]] = {}
+    _cache: Dict[Tuple[str, str], Optional[KotorModel]] = {}
 
     # Configured by ``configure()``.  When None, the resolver still works
     # for in-memory / pre-loaded models but cannot load chains from disk.
@@ -92,9 +92,22 @@ class SuperModelResolver:
         cls._cache.clear()
 
     @classmethod
-    def prime_cache(cls, resref: str, model: Optional[KotorModel]) -> None:
+    def prime_cache(cls, resref: str, model: Optional[KotorModel], game: Optional[str] = None) -> None:
         """Inject a pre-loaded model into the cache (used by tests)."""
-        cls._cache[resref.lower()] = model
+        cls._cache[(cls._cache_game_key(game), resref.lower())] = model
+
+    @classmethod
+    def _cache_game_key(cls, game: Optional[str]) -> str:
+        text = str(game or "").strip().upper()
+        if text in {"K1", "K2"}:
+            return text
+        if text in {"1", "GAMEVERSION.K1"}:
+            return "K1"
+        if text in {"2", "GAMEVERSION.K2"}:
+            return "K2"
+        if "KOTOR2" in text or "KOTOR 2" in text or "KOTOR II" in text:
+            return "K2"
+        return "K1"
 
     @classmethod
     def _is_null_ref(cls, resref: Optional[str]) -> bool:
@@ -118,7 +131,8 @@ class SuperModelResolver:
         """
         if cls._is_null_ref(resref):
             return None
-        key = resref.lower()
+        game_tag = cls._cache_game_key(game)
+        key = (game_tag, resref.lower())
         if key in cls._cache:
             return cls._cache[key]
 
@@ -132,7 +146,7 @@ class SuperModelResolver:
 
         try:
             super_model = cls._resource_manager.load_model(
-                resref, game or 'K1',
+                resref, game_tag,
             )
         except Exception as exc:  # pragma: no cover - defensive
             log.debug(
@@ -144,7 +158,7 @@ class SuperModelResolver:
         cls._cache[key] = super_model
         # Proactively pre-load the rest of the chain so later lookups are hot.
         if super_model is not None and not cls._is_null_ref(super_model.supermodel):
-            cls.load_supermodel(super_model.supermodel, game)
+            cls.load_supermodel(super_model.supermodel, game_tag)
         return super_model
 
     @classmethod

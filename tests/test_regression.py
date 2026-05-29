@@ -1992,6 +1992,37 @@ def test_read_mdl_safe_k1_control_model() -> None:
 
 
 @pytest.mark.skipif(not K1_PATH.exists(), reason="K1 install not available")
+def test_read_mdl_safe_preserves_stock_lightsaber_saber_helpers() -> None:
+    from pykotor.resource.formats.mdl.mdl_data import MDLNodeType
+
+    from src.core.qt_core.game.kotor_loader import load_model_from_bytes
+    from src.core.qt_core.mdl.mdl_reader_wrapper import read_mdl_safe
+    from src.gui.qt_lib.rendering.mesh_render_data import iter_mesh_render_data
+
+    mdl, mdx = _raw_model("k1", "w_lghtsbr_001")
+    raw_model = read_mdl_safe(mdl, source_ext=mdx)
+    raw_nodes = _nodes_by_name(raw_model)
+
+    assert int(raw_nodes["plane242"].node_type) == int(MDLNodeType.SABER)
+    assert int(raw_nodes["plane239"].node_type) == int(MDLNodeType.SABER)
+    assert int(raw_nodes["plane241"].node_type) != int(MDLNodeType.SABER)
+    assert int(raw_nodes["plane240"].node_type) != int(MDLNodeType.SABER)
+
+    model = load_model_from_bytes(mdl, mdx)
+    nodes = _nodes_by_name(model)
+
+    assert nodes["plane242"].is_saber is True
+    assert nodes["plane239"].is_saber is True
+    assert nodes["plane241"].is_saber is False
+    assert nodes["plane240"].is_saber is False
+
+    render_names = {row.source.name.lower() for row in iter_mesh_render_data(model)}
+    assert "plane242" not in render_names
+    assert "plane239" not in render_names
+    assert {"plane241", "plane240"}.issubset(render_names)
+
+
+@pytest.mark.skipif(not K1_PATH.exists(), reason="K1 install not available")
 def test_read_mdl_safe_k1_supermodel_node_order_uses_logical_offsets() -> None:
     from src.core.qt_core.mdl.mdl_reader_wrapper import read_mdl_safe
 

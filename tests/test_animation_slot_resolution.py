@@ -95,6 +95,20 @@ def test_load_supermodel_chain_reports_loaded_and_missing_entries() -> None:
     assert chain.loaded_models() == ["S_Male02"]
 
 
+def test_supermodel_resolver_cache_is_game_specific() -> None:
+    class Manager:
+        def load_model(self, resref: str, game: str = "K1"):
+            return _model(resref, anims=(f"{game.lower()}only",))
+
+    SuperModelResolver.configure(Manager())
+
+    k1_model = SuperModelResolver.load_supermodel("S_Male02", "K1")
+    k2_model = SuperModelResolver.load_supermodel("S_Male02", "K2")
+
+    assert [anim.name for anim in k1_model.animations] == ["k1only"]
+    assert [anim.name for anim in k2_model.animations] == ["k2only"]
+
+
 def test_resolve_animation_slot_can_require_valid_slot() -> None:
     target = _model("pmbam", anims=("pause1",))
 

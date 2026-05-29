@@ -359,7 +359,10 @@ class QtLightingPanel(QtWidgets.QWidget):
         for widget in widgets:
             widget.setEnabled(enabled)
 
-    def select_light(self, node) -> None:
+    def has_light(self, node) -> bool:
+        return node is not None and bool(getattr(node, "is_light", False)) and self.manager.find_by_original(node) is not None
+
+    def select_light(self, node) -> bool:
         if node is not None and not bool(getattr(node, "is_light", False)):
             node = None
         light = self.manager.find_by_original(node)
@@ -379,6 +382,7 @@ class QtLightingPanel(QtWidgets.QWidget):
         else:
             self._load_editor([])
         self._updating = was_updating
+        return light is not None
 
     def _on_tree_selection(self) -> None:
         if self._updating:

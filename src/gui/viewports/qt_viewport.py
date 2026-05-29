@@ -172,6 +172,17 @@ def _navigation_profile_icon(profile: object) -> QtGui.QIcon:
     return QtGui.QIcon()
 
 
+VIEWPORT_SELECTION_MODES: tuple[tuple[str, str, str], ...] = (
+    ("object", "Object", "viewport_select_object"),
+    ("mesh", "Mesh", "viewport_select_mesh"),
+    ("helpers", "Helpers", "viewport_select_helpers"),
+    ("lights", "Lights", "viewport_select_lights"),
+    ("cameras", "Cameras", "viewport_select_cameras"),
+)
+VIEWPORT_SELECTION_MODE_LABELS = {mode: label for mode, label, _icon_name in VIEWPORT_SELECTION_MODES}
+VIEWPORT_SELECTION_MODE_ICONS = {mode: icon_name for mode, _label, icon_name in VIEWPORT_SELECTION_MODES}
+
+
 # ── T401: Joint-dot overlay constants ──────────────────────────────────────
 # AccuRig-style color-coded joint dots painted over the mesh during character
 # rigging.  Colors match the M4 roadmap spec (knowledge_base/roadmap/
@@ -586,6 +597,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._mesh_hover_enabled = True
         self._hovered_mesh_node = None
         self._hovered_mesh_face_bounds = None
+        self._dummy_helpers_visible = True
+        self._viewport_selection_mode = "object"
         self._suspend_mesh_hover_during_animation = False
         self._pan_dragging = False
         self._nav_dragging = ""
@@ -933,6 +946,12 @@ class QtViewportWidget(QtWidgets.QWidget):
             return "viewport_scale"
         return "viewport_translate"
 
+    def _selection_mode_icon_name(self) -> str:
+        return VIEWPORT_SELECTION_MODE_ICONS.get(self._viewport_selection_mode, "viewport_select_object")
+
+    def _selection_mode_label(self) -> str:
+        return VIEWPORT_SELECTION_MODE_LABELS.get(self._viewport_selection_mode, "Object")
+
     def _sync_gimbal_mode_button(self) -> None:
         button = getattr(self, "gimbal_mode_button", None)
         if button is None:
@@ -940,6 +959,58 @@ class QtViewportWidget(QtWidgets.QWidget):
         button.setIcon(_icon(self._gimbal_mode_icon_name()))
         button.setText("")
         button.setToolTip(f"Cycle gimbal mode: {self._transform_gizmo.mode.value.title()}")
+
+    def _sync_selection_mode_button(self) -> None:
+        button = getattr(self, "selection_mode_button", None)
+        if button is None:
+            return
+        button.setIcon(_icon(self._selection_mode_icon_name()))
+        button.setText("")
+        label = self._selection_mode_label()
+        button.setToolTip(f"Viewport selection mode: {label}")
+        menu = button.menu()
+        if menu is not None:
+            for action in menu.actions():
+                action.setChecked(action.data() == self._viewport_selection_mode)
+
+    def _build_selection_mode_menu(self) -> QtWidgets.QMenu:
+        menu = QtWidgets.QMenu(self)
+        for mode, label, icon_name in VIEWPORT_SELECTION_MODES:
+            action = menu.addAction(_icon(icon_name), label)
+            action.setCheckable(True)
+            action.setData(mode)
+            action.triggered.connect(lambda _checked=False, value=mode: self.set_viewport_selection_mode(value))
+        return menu
+
+    def set_viewport_selection_mode(self, mode: str) -> None:
+        value = str(mode or "object").strip().lower()
+        if value not in VIEWPORT_SELECTION_MODE_LABELS:
+            value = "object"
+        if value == self._viewport_selection_mode:
+            self._sync_selection_mode_button()
+            return
+        self._viewport_selection_mode = value
+        self._sync_selection_mode_button()
+        self.statusMessage.emit(f"Selection: {self._selection_mode_label()}")
+
+    def toggle_dummy_helpers(self, checked: bool = False) -> None:
+        self.set_dummy_helper_visibility(bool(checked))
+
+    def set_dummy_helper_visibility(self, visible: bool) -> None:
+        self._dummy_helpers_visible = bool(visible)
+        for target in (self._renderer, self._gpu_renderer):
+            if target is not None:
+                setattr(target, "show_dummy_helpers", self._dummy_helpers_visible)
+        button = getattr(self, "dummy_helpers_button", None)
+        if button is not None:
+            button.blockSignals(True)
+            button.setChecked(self._dummy_helpers_visible)
+            button.blockSignals(False)
+        selected = getattr(self._renderer, "selected_node", None)
+        if not self._dummy_helpers_visible and self._is_general_helper_node(selected):
+            self.set_selected_node(None)
+        self.statusMessage.emit("Dummy helpers visible" if self._dummy_helpers_visible else "Dummy helpers hidden")
+        self._request_render(fast=True, reason="dummy helper visibility changed", overlay=True, selection=True)
 
     def _navigation_tooltip(self) -> str:
         label = viewport_profile_label(self._navigation_profile)
@@ -1042,6 +1113,15 @@ class QtViewportWidget(QtWidgets.QWidget):
             active=True,
             tooltip="Mesh hover highlight",
         )
+        self.dummy_helpers_button = self._icon_button(
+            "Dummy Helpers",
+            self.toggle_dummy_helpers,
+            "viewport_helpers",
+            checkable=True,
+            active=True,
+            tooltip="Show or hide dummy helper markers",
+        )
+        self.dummy_helpers_button.setObjectName("ViewportDummyHelpersButton")
         self.bones_button = self._icon_button(
             "Bones  B",
             self.toggle_bones,
@@ -1093,6 +1173,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         row.addWidget(self.wire_button)
         row.addWidget(self.solid_wire_button)
         row.addWidget(self.mesh_hover_button)
+        row.addWidget(self.dummy_helpers_button)
         row.addWidget(self.bones_button)
         row.addWidget(self.texture_button)
         row.addWidget(self.grid_button)
@@ -1153,6 +1234,16 @@ class QtViewportWidget(QtWidgets.QWidget):
         )
         self._sync_gimbal_mode_button()
         row.addWidget(self.gimbal_mode_button)
+        self.selection_mode_button = QtWidgets.QToolButton()
+        self.selection_mode_button.setObjectName("ViewportSelectionModeButton")
+        self.selection_mode_button.setProperty("_gr_ignore_layout_button_mode", True)
+        self.selection_mode_button.setFixedSize(34, 22)
+        self.selection_mode_button.setIconSize(QtCore.QSize(20, 18))
+        self.selection_mode_button.setCursor(QtCore.Qt.PointingHandCursor)
+        self.selection_mode_button.setPopupMode(QtWidgets.QToolButton.InstantPopup)
+        self.selection_mode_button.setMenu(self._build_selection_mode_menu())
+        self._sync_selection_mode_button()
+        row.addWidget(self.selection_mode_button)
         self.measure_button = self._icon_button(
             "Measure",
             self.toggle_measurement_mode,
@@ -1207,6 +1298,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._renderer.show_solid = True
         self._renderer.show_wireframe = False
         self._renderer.show_grid = self.grid_button.isChecked()
+        self._renderer.show_dummy_helpers = self.dummy_helpers_button.isChecked()
         self._renderer.render_mode = "realistic"
         self._set_display_options(self._rebuild_display_options_from_renderer(), announce=False)
         self._sync_shade_buttons()
@@ -1880,6 +1972,10 @@ class QtViewportWidget(QtWidgets.QWidget):
             source_nodes = list(source_model.all_nodes()) if hasattr(source_model, "all_nodes") else []
         except Exception:
             source_nodes = []
+        source_nodes = [
+            node for node in source_nodes
+            if not bool(getattr(node, "_gr_bas_attachment_layer", False))
+        ]
         if not source_nodes:
             return
 
@@ -1891,13 +1987,18 @@ class QtViewportWidget(QtWidgets.QWidget):
             if current is None or id(current) in visited:
                 continue
             visited.add(id(current))
+            if bool(getattr(current, "_gr_bas_attachment_layer", False)):
+                continue
             copied_nodes.append(current)
             stack.extend(reversed(getattr(current, "children", []) or []))
 
         for idx, current in enumerate(copied_nodes):
             if idx >= len(source_nodes):
                 break
-            setattr(current, "_gr_source_dfs_index", idx)
+            source_idx = getattr(source_nodes[idx], "_gr_source_dfs_index", None)
+            if not isinstance(source_idx, int) or source_idx < 0:
+                source_idx = idx
+            setattr(current, "_gr_source_dfs_index", source_idx)
             setattr(current, "_gr_source_model_id", id(source_model))
             setattr(current, "_gr_source_node_name", getattr(source_nodes[idx], "name", ""))
 
@@ -3737,6 +3838,8 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     @staticmethod
     def _is_selectable_mesh_node(node) -> bool:
+        if bool(getattr(node, "is_saber", False)):
+            return False
         verts = getattr(node, "vertices", getattr(node, "verts", [])) or []
         faces = getattr(node, "faces", []) or []
         return bool(verts and faces)
@@ -5253,6 +5356,7 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gpu_renderer.lightmap_mode = str(getattr(self._renderer, "lightmap_mode", "baked") or "baked")
         self._gpu_renderer.show_light_gizmos = bool(getattr(self._renderer, "show_light_gizmos", True))
         self._gpu_renderer.show_light_radius_volumes = bool(getattr(self._renderer, "show_light_radius_volumes", False))
+        self._gpu_renderer.show_dummy_helpers = bool(getattr(self._renderer, "show_dummy_helpers", True))
         self._gpu_renderer.show_wireframe = bool(self._renderer.show_wireframe)
         self._gpu_renderer.render_mode = str(getattr(self._renderer, "render_mode", "realistic") or "realistic")
         self._gpu_renderer.display_options = self.display_options
@@ -5625,6 +5729,8 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def _draw_wgpu_helper_markers(self, draw, w: int, h: int) -> None:
         if not self._renderer_is_wgpu_like() or self.model is None:
+            return
+        if not bool(getattr(self._renderer, "show_dummy_helpers", getattr(self, "_dummy_helpers_visible", True))):
             return
         try:
             nodes = list(self.model.all_nodes()) if hasattr(self.model, "all_nodes") else []
@@ -6554,6 +6660,8 @@ class QtViewportWidget(QtWidgets.QWidget):
     def _helper_hit_test(self, sx: int, sy: int, radius: int = 12):
         if self.model is None or not self._renderer_is_wgpu_like():
             return None
+        if not bool(getattr(self._renderer, "show_dummy_helpers", getattr(self, "_dummy_helpers_visible", True))):
+            return None
         width = max(1, self.canvas.width())
         height = max(1, self.canvas.height())
         try:
@@ -7252,6 +7360,70 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._request_render(fast=True)
             else:
                 self.statusMessage.emit("Pick an object to use as transform reference.")
+            return
+
+        selection_mode = str(getattr(self, "_viewport_selection_mode", "object") or "object").lower()
+
+        if selection_mode == "helpers":
+            helper_node = self._helper_hit_test(x, y)
+            if helper_node is not None:
+                self.set_selected_node(helper_node)
+                if self.on_bone_selected:
+                    self.on_bone_selected(None)
+                return
+            self.set_selected_node(None)
+            if self.on_bone_selected:
+                self.on_bone_selected(None)
+            return
+
+        if selection_mode == "lights":
+            light_node = self._light_hit_test(x, y)
+            if light_node is not None:
+                self.set_selected_node(light_node)
+                if self.on_bone_selected:
+                    self.on_bone_selected(None)
+                return
+            self.set_selected_node(None)
+            if self.on_bone_selected:
+                self.on_bone_selected(None)
+            return
+
+        if selection_mode == "cameras":
+            camera_node = self._camera_hit_test(x, y)
+            if camera_node is not None:
+                if event.modifiers() & (QtCore.Qt.ControlModifier | QtCore.Qt.ShiftModifier):
+                    camera = self.camera_manager.find_by_original(camera_node)
+                    if camera is not None:
+                        self.camera_manager.select_camera(camera.id, additive=True)
+                        self.cameraSelectionChanged.emit(camera_node)
+                self.set_selected_node(camera_node)
+                if self.on_bone_selected:
+                    self.on_bone_selected(None)
+                return
+            self.set_selected_node(None)
+            if self.on_bone_selected:
+                self.on_bone_selected(None)
+            return
+
+        if selection_mode == "mesh":
+            if self.mesh_selection_state.mode is not MeshSelectionMode.OBJECT:
+                if self._apply_mesh_subobject_hit(
+                    self._mesh_subobject_hit_test(x, y),
+                    event.modifiers(),
+                ):
+                    if self.on_bone_selected:
+                        self.on_bone_selected(None)
+                    return
+            mesh_hit = self._mesh_hit_test_detail(x, y, allow_gpu=False)
+            if mesh_hit is not None:
+                mesh_node, face_bounds = mesh_hit
+                self.set_selected_node(mesh_node, orbit_bounds=face_bounds)
+                if self.on_bone_selected:
+                    self.on_bone_selected(None)
+                return
+            self.set_selected_node(None)
+            if self.on_bone_selected:
+                self.on_bone_selected(None)
             return
 
         if self._renderer.show_bones:

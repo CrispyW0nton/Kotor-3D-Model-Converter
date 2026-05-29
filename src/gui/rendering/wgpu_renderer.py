@@ -97,6 +97,9 @@ class WgpuMaterialResource:
     lightmap_texture_resource: WgpuTextureResource
     alpha_mode: str
     alpha_cutoff: float
+    blend_mode: str
+    sprite_alpha_source: int
+    sprite_glow: float
     double_sided: bool
     has_lightmap: bool
     source_revision: tuple[int, int, int, int]
@@ -447,14 +450,15 @@ class WgpuResourceCache:
         index_count = 0
         edge_index_buffer = None
         edge_index_count = 0
+        sprite_wire_hull = self._uses_sprite_wire_hull(getattr(mesh_data, "material", None))
         if mesh_data.indices is not None and len(mesh_data.indices):
             indices = np.ascontiguousarray(mesh_data.indices, dtype=np.uint32)
             index_buffer = device.create_buffer_with_data(data=indices, usage=wgpu.BufferUsage.INDEX)
             self.buffer_upload_count += 1
             index_count = int(len(indices))
-            edge_indices = self._build_edge_indices(indices, len(positions))
+            edge_indices = self._build_edge_indices(indices, len(positions), positions=positions, geometric=sprite_wire_hull)
         else:
-            edge_indices = self._build_edge_indices(None, len(positions))
+            edge_indices = self._build_edge_indices(None, len(positions), positions=positions, geometric=sprite_wire_hull)
         if edge_indices is not None and len(edge_indices):
             edge_index_buffer = device.create_buffer_with_data(data=edge_indices, usage=wgpu.BufferUsage.INDEX)
             self.buffer_upload_count += 1
@@ -551,7 +555,15 @@ class WgpuResourceCache:
             self.cache_hits += 1
         return cached
 
-    def _build_edge_indices(self, indices, vertex_count: int):
+    @staticmethod
+    def _uses_sprite_wire_hull(material) -> bool:
+        if material is None:
+            return False
+        blend_mode = str(getattr(material, "blend_mode", "") or "").upper()
+        sprite_alpha = int(getattr(material, "sprite_alpha_source", 0) or 0)
+        return blend_mode in {"ADDITIVE", "LIGHTEN"} and sprite_alpha > 0
+
+    def _build_edge_indices(self, indices, vertex_count: int, *, positions=None, geometric: bool = False):
         import numpy as np
 
         if vertex_count <= 1:
@@ -562,9 +574,13 @@ class WgpuResourceCache:
             tri_indices = np.asarray(indices, dtype=np.uint32).reshape(-1)
         if len(tri_indices) < 3:
             return None
+        usable = len(tri_indices) - (len(tri_indices) % 3)
+        if geometric and positions is not None:
+            hull = self._build_geometric_boundary_edges(tri_indices[:usable], positions, vertex_count)
+            if hull is not None and len(hull):
+                return hull
         edge_set: set[tuple[int, int]] = set()
         out: list[int] = []
-        usable = len(tri_indices) - (len(tri_indices) % 3)
         for i in range(0, usable, 3):
             tri = [int(tri_indices[i]), int(tri_indices[i + 1]), int(tri_indices[i + 2])]
             if any(v < 0 or v >= vertex_count for v in tri):
@@ -575,6 +591,44 @@ class WgpuResourceCache:
                     continue
                 edge_set.add(key)
                 out.extend((a, b))
+        if not out:
+            return None
+        return np.ascontiguousarray(out, dtype=np.uint32)
+
+    @staticmethod
+    def _build_geometric_boundary_edges(tri_indices, positions, vertex_count: int):
+        import numpy as np
+
+        pos = np.asarray(positions, dtype=np.float32)
+        tri = np.asarray(tri_indices, dtype=np.uint32).reshape(-1)
+        if pos.ndim != 2 or pos.shape[1] < 3 or len(tri) < 3:
+            return None
+
+        def key(vertex_index: int) -> tuple[int, int, int]:
+            vertex = pos[int(vertex_index), :3]
+            return tuple(int(round(float(component) * 100000.0)) for component in vertex)
+
+        edge_counts: dict[tuple[tuple[int, int, int], tuple[int, int, int]], int] = {}
+        edge_representatives: dict[tuple[tuple[int, int, int], tuple[int, int, int]], tuple[int, int]] = {}
+        for i in range(0, (len(tri) // 3) * 3, 3):
+            face = [int(tri[i]), int(tri[i + 1]), int(tri[i + 2])]
+            if any(v < 0 or v >= vertex_count for v in face):
+                continue
+            for left, right in ((face[0], face[1]), (face[1], face[2]), (face[2], face[0])):
+                a = key(left)
+                b = key(right)
+                if a == b:
+                    continue
+                edge_key = (a, b) if a <= b else (b, a)
+                edge_counts[edge_key] = edge_counts.get(edge_key, 0) + 1
+                edge_representatives.setdefault(edge_key, (left, right))
+
+        out: list[int] = []
+        for edge_key, count in edge_counts.items():
+            if count != 1:
+                continue
+            left, right = edge_representatives[edge_key]
+            out.extend((left, right))
         if not out:
             return None
         return np.ascontiguousarray(out, dtype=np.uint32)
@@ -734,6 +788,9 @@ class WgpuResourceCache:
                 lightmap_texture_resource=lightmap,
                 alpha_mode=str(getattr(material_data, "alpha_mode", "OPAQUE") or "OPAQUE"),
                 alpha_cutoff=float(getattr(material_data, "alpha_cutoff", 0.5) or 0.5),
+                blend_mode=str(getattr(material_data, "blend_mode", "ALPHA") or "ALPHA").upper(),
+                sprite_alpha_source=int(getattr(material_data, "sprite_alpha_source", 0) or 0),
+                sprite_glow=float(getattr(material_data, "sprite_glow", 0.0) or 0.0),
                 double_sided=bool(getattr(material_data, "double_sided", False)),
                 has_lightmap=has_lightmap,
                 source_revision=source_revision,
@@ -994,9 +1051,11 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.pipeline_mesh = None
         self.pipeline_mesh_cutout = None
         self.pipeline_mesh_blend = None
+        self.pipeline_mesh_additive = None
         self.pipeline_mesh_skinned = None
         self.pipeline_mesh_skinned_cutout = None
         self.pipeline_mesh_skinned_blend = None
+        self.pipeline_mesh_skinned_additive = None
         self.pipeline_lines = None
         self.pipeline_lines_skinned = None
         self.pipeline_gizmo_lines = None
@@ -1097,6 +1156,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             "opaque": 0,
             "cutout": 0,
             "blended": 0,
+            "additive": 0,
             "edges": 0,
             "hovered_edges": 0,
             "selected_edges": 0,
@@ -1603,7 +1663,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                     "buffer": {
                         "type": wgpu.BufferBindingType.uniform,
                         "has_dynamic_offset": True,
-                        "min_binding_size": 176,
+                        "min_binding_size": 192,
                     },
                 },
                 {
@@ -1656,7 +1716,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             entries=[
                 {
                     "binding": 0,
-                    "resource": {"buffer": self.mesh_uniform_buffer, "offset": 0, "size": 176},
+                    "resource": {"buffer": self.mesh_uniform_buffer, "offset": 0, "size": 192},
                 },
                 {
                     "binding": 1,
@@ -1693,6 +1753,12 @@ class WgpuRenderer(NullDiagnosticRenderer):
             depth_write=False,
             alpha_label="blend",
         )
+        self.pipeline_mesh_additive = self._create_textured_pipeline(
+            shader,
+            blend="additive",
+            depth_write=False,
+            alpha_label="additive",
+        )
         self.mesh_pipeline_status = "ready"
         self.textured_mesh_pipeline_status = "ready"
         self.alpha_pipeline_status = "ready"
@@ -1719,32 +1785,41 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 alpha_label="skinned blend",
                 skinned=True,
             )
+            self.pipeline_mesh_skinned_additive = self._create_textured_pipeline(
+                skinned_shader,
+                blend="additive",
+                depth_write=False,
+                alpha_label="skinned additive",
+                skinned=True,
+            )
             self.skinned_mesh_pipeline_status = "ready"
             self.gpu_skinning_status = "ready"
         except Exception as exc:
             self.pipeline_mesh_skinned = None
             self.pipeline_mesh_skinned_cutout = None
             self.pipeline_mesh_skinned_blend = None
+            self.pipeline_mesh_skinned_additive = None
             self.skinned_mesh_pipeline_status = f"unavailable: {exc}"
             self.gpu_skinning_status = "unavailable"
             self.last_skinning_error = f"WGPU skinned shader unavailable: {exc}"
             log.warning("WgpuRenderer: skinned mesh pipeline unavailable: %s", exc)
         log.info("WgpuRenderer: textured mesh pipeline created")
 
-    def _create_textured_pipeline(self, shader, *, blend: bool, depth_write: bool, alpha_label: str, skinned: bool = False):
+    def _create_textured_pipeline(self, shader, *, blend: bool | str, depth_write: bool, alpha_label: str, skinned: bool = False):
         import wgpu
 
         target = {"format": self.format}
         if blend:
+            additive = str(blend).lower() == "additive"
             target["blend"] = {
                 "color": {
-                    "src_factor": wgpu.BlendFactor.src_alpha,
-                    "dst_factor": wgpu.BlendFactor.one_minus_src_alpha,
+                    "src_factor": wgpu.BlendFactor.one if additive else wgpu.BlendFactor.src_alpha,
+                    "dst_factor": wgpu.BlendFactor.one if additive else wgpu.BlendFactor.one_minus_src_alpha,
                     "operation": wgpu.BlendOperation.add,
                 },
                 "alpha": {
                     "src_factor": wgpu.BlendFactor.one,
-                    "dst_factor": wgpu.BlendFactor.one_minus_src_alpha,
+                    "dst_factor": wgpu.BlendFactor.one if additive else wgpu.BlendFactor.one_minus_src_alpha,
                     "operation": wgpu.BlendOperation.add,
                 },
             }
@@ -2205,7 +2280,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 elif force_no_lightmaps:
                     material_data = self._without_lightmap_material(material_data)
                 center = self._mesh_sort_center(mesh_data)
-                draw_rows.append((alpha_mode, center, mesh_data, material_data))
+                blend_mode = str(getattr(material_data, "blend_mode", "ALPHA") or "ALPHA").upper()
+                draw_rows.append((alpha_mode, blend_mode, center, mesh_data, material_data))
                 edge_rows.append(mesh_data)
             return draw_rows, edge_rows, {
                 "total_mesh_count": total,
@@ -2230,27 +2306,30 @@ class WgpuRenderer(NullDiagnosticRenderer):
         cpu_skinned_mesh_count = int(queue_meta.get("cpu_skinned_mesh_count", 0) or 0)
         draw_items = []
         edge_items = []
-        for alpha_mode, center, mesh_data, material_data in draw_items_all:
+        for alpha_mode, blend_mode, center, mesh_data, material_data in draw_items_all:
             if frustum_planes is not None and self._mesh_data_outside_frustum(mesh_data, frustum_planes):
                 culled_mesh_count += 1
                 continue
             visible_mesh_count += 1
             sort_depth = self._mesh_sort_depth_from_center(center, self._active_camera) if alpha_mode == "BLEND" else 0.0
-            draw_items.append((alpha_mode, sort_depth, mesh_data, material_data))
+            draw_items.append((alpha_mode, blend_mode, sort_depth, mesh_data, material_data))
             edge_items.append(mesh_data)
 
         opaque = [item for item in draw_items if item[0] == "OPAQUE"]
         cutout = [item for item in draw_items if item[0] in {"MASK", "CUTOUT"}]
-        blended = [item for item in draw_items if item[0] == "BLEND"]
+        additive = [item for item in draw_items if item[0] == "BLEND" and item[1] == "ADDITIVE"]
+        blended = [item for item in draw_items if item[0] == "BLEND" and item[1] != "ADDITIVE"]
         alpha_sort_started = time.perf_counter()
-        blended.sort(key=lambda item: item[1], reverse=True)
+        blended.sort(key=lambda item: item[2], reverse=True)
+        additive.sort(key=lambda item: item[2], reverse=True)
         self._last_alpha_sort_ms = (time.perf_counter() - alpha_sort_started) * 1000.0
-        self._last_alpha_object_count = len(blended)
+        self._last_alpha_object_count = len(blended) + len(additive)
         instance_stats = instancing_summary(draw_items) if bool(getattr(self, "enable_instancing", True)) else {"instance_group_count": 0, "instance_count": 0}
         counts = {
             "opaque": 0,
             "cutout": 0,
             "blended": 0,
+            "additive": 0,
             "edges": 0,
             "hovered_edges": 0,
             "selected_edges": 0,
@@ -2278,7 +2357,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             if last_pipeline_key != pipeline_key:
                 pipeline_switch_count += 1
                 last_pipeline_key = pipeline_key
-            for _alpha_mode, _depth, mesh_data, material_data in ordered_items:
+            for _alpha_mode, _blend_mode, _depth, mesh_data, material_data in ordered_items:
                 material_group_keys.add(str(getattr(material_data, "material_id", "") or id(material_data)))
                 tri_count += self._draw_mesh_item(render_pass, pipeline, mesh_data, material_data, mvp, pass_name, display_options)
                 counts[pass_name] += 1
@@ -2287,6 +2366,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             draw_pass("opaque", opaque, self.pipeline_mesh)
             draw_pass("cutout", cutout, self.pipeline_mesh_cutout or self.pipeline_mesh)
             draw_pass("blended", blended, self.pipeline_mesh_blend or self.pipeline_mesh)
+            draw_pass("additive", additive, self.pipeline_mesh_additive or self.pipeline_mesh_blend or self.pipeline_mesh)
         if edge_overlay:
             counts["edges"] = self._draw_edge_items(render_pass, edge_items, mvp, mode)
         hovered_edge_items = [
@@ -2301,7 +2381,12 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 mode,
                 color=(*tuple(self.hovered_edge_color[:3]), float(getattr(self, "hovered_edge_alpha", 0.45))),
             )
-        selected_edge_items = [item for item in edge_items if self._is_selected_mesh_data(item)]
+        selected_edge_items = [
+            item
+            for item in edge_items
+            if self._is_selected_mesh_data(item)
+            and self._should_draw_selected_mesh_edges(item, mode, edge_overlay)
+        ]
         if selected_edge_items:
             counts["selected_edges"] = self._draw_edge_items(
                 render_pass,
@@ -2338,7 +2423,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 "WgpuRenderer: rendered opaque=%s cutout=%s blended=%s",
                 counts["opaque"],
                 counts["cutout"],
-                counts["blended"],
+                counts["blended"] + counts.get("additive", 0),
             )
 
     def _draw_mesh_item(self, render_pass, pipeline, mesh_data, material_data, mvp, pass_name: str, display_options: ViewportDisplayOptions) -> int:
@@ -2404,6 +2489,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
     def _skinned_pipeline_for_pass(self, pass_name: str):
         if str(pass_name).lower() == "cutout":
             return self.pipeline_mesh_skinned_cutout or self.pipeline_mesh_skinned
+        if str(pass_name).lower() == "additive":
+            return self.pipeline_mesh_skinned_additive or self.pipeline_mesh_skinned_blend or self.pipeline_mesh_skinned
         if str(pass_name).lower() == "blended":
             return self.pipeline_mesh_skinned_blend or self.pipeline_mesh_skinned
         return self.pipeline_mesh_skinned
@@ -2411,6 +2498,29 @@ class WgpuRenderer(NullDiagnosticRenderer):
     def _mesh_model_matrix(self, mesh_data):
         import numpy as np
 
+        def stored_world_matrix():
+            try:
+                return np.asarray(getattr(mesh_data, "world_matrix", None), dtype=np.float32).reshape(4, 4)
+            except Exception:
+                return np.eye(4, dtype=np.float32)
+
+        source = getattr(mesh_data, "source", None)
+        if bool(getattr(source, "_gr_bas_attachment_layer", False)):
+            if self._active_anim_pose is not None:
+                try:
+                    from src.gui.rendering.mesh_render_data import _bas_attachment_root_for_node, node_world_matrix
+
+                    bas_root = _bas_attachment_root_for_node(source)
+                    # BAS layers are socket followers. Never use the cached
+                    # render-queue bind matrix while body animation is active.
+                    matrix_source = bas_root if bool(getattr(source, "is_skin", False)) and bas_root is not None else source
+                    return np.asarray(
+                        node_world_matrix(matrix_source, anim_pose=self._active_anim_pose),
+                        dtype=np.float32,
+                    ).reshape(4, 4)
+                except Exception:
+                    pass
+            return stored_world_matrix()
         if bool(getattr(mesh_data, "is_skinned", False)):
             return np.eye(4, dtype=np.float32)
         if self._active_anim_pose is not None:
@@ -2423,10 +2533,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                 )
             except Exception:
                 pass
-        try:
-            return np.asarray(getattr(mesh_data, "world_matrix", None), dtype=np.float32).reshape(4, 4)
-        except Exception:
-            return np.eye(4, dtype=np.float32)
+        return stored_world_matrix()
 
     def _mesh_mvp_matrix(self, mvp, mesh_data):
         import numpy as np
@@ -2446,6 +2553,14 @@ class WgpuRenderer(NullDiagnosticRenderer):
         selected_ids = {id(item) for item in (getattr(self, "selected_nodes", []) or [])}
         selected = getattr(self, "selected_node", None)
         return bool(node is selected or id(node) in selected_ids or getattr(node, "_gr_selected", False))
+
+    def _should_draw_selected_mesh_edges(self, mesh_data, mode: ViewportDisplayMode, edge_overlay: bool) -> bool:
+        if edge_overlay or mode in {ViewportDisplayMode.WIREFRAME, ViewportDisplayMode.HIDDEN_LINE}:
+            return True
+        material = getattr(mesh_data, "material", None)
+        blend_mode = str(getattr(material, "blend_mode", "ALPHA") or "ALPHA").upper()
+        sprite_alpha = int(getattr(material, "sprite_alpha_source", 0) or 0)
+        return not (blend_mode in {"ADDITIVE", "LIGHTEN"} and sprite_alpha)
 
     def _is_hovered_mesh_data(self, mesh_data) -> bool:
         if not bool(getattr(self, "show_mesh_hover", True)):
@@ -3364,12 +3479,29 @@ class WgpuRenderer(NullDiagnosticRenderer):
         lm_mode = {"baked": 0.0, "dynamic_preview": 1.0, "hybrid": 2.0, "debug": 3.0, "phong": 1.0, "emissive": 2.0}.get(lm_mode_name, 0.0)
         lm_intensity = max(0.0, min(4.0, float(getattr(self._active_lighting_render_data, "lm_intensity", getattr(self, "lightmap_intensity", 0.55)) or 0.0)))
         params = np.asarray((lm_intensity, shade_mode, lm_mode, 1.0 if selected else 0.0), dtype=np.float32)
+        material_quality = (
+            0.0
+            if display_options.force_flat_colour or mode is ViewportDisplayMode.SOLID
+            else 1.0
+            if mode in {ViewportDisplayMode.SHADED, ViewportDisplayMode.SMOOTH_SHADED}
+            else 2.0
+        )
+        sprite_params = np.asarray(
+            (
+                float(getattr(material, "sprite_alpha_source", 0) or 0),
+                max(0.0, min(4.0, float(getattr(material, "sprite_glow", 0.0) or 0.0))),
+                material_quality,
+                0.0,
+            ),
+            dtype=np.float32,
+        )
         return (
             np.asarray(mvp, dtype=np.float32).reshape(4, 4).T.tobytes()
             + np.asarray(model_matrix if model_matrix is not None else np.eye(4, dtype=np.float32), dtype=np.float32).reshape(4, 4).T.tobytes()
             + np.asarray(color, dtype=np.float32).tobytes()
             + flags.tobytes()
             + params.tobytes()
+            + sprite_params.tobytes()
         )
 
     def _line_uniform_bytes(self, mvp, color: tuple[float, float, float, float], *, target_color: bool = True) -> bytes:
@@ -3438,7 +3570,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.mesh_bind_group = self.device.create_bind_group(
             layout=self.mesh_bind_group_layout,
             entries=[
-                {"binding": 0, "resource": {"buffer": self.mesh_uniform_buffer, "offset": 0, "size": 176}},
+                {"binding": 0, "resource": {"buffer": self.mesh_uniform_buffer, "offset": 0, "size": 192}},
                 {"binding": 1, "resource": {"buffer": self.light_buffer, "offset": 0, "size": int(self.max_wgpu_lights) * 64}},
                 {"binding": 2, "resource": {"buffer": self.lighting_uniform_buffer, "offset": 0, "size": 32}},
             ],
@@ -3620,9 +3752,11 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.pipeline_mesh = None
         self.pipeline_mesh_cutout = None
         self.pipeline_mesh_blend = None
+        self.pipeline_mesh_additive = None
         self.pipeline_mesh_skinned = None
         self.pipeline_mesh_skinned_cutout = None
         self.pipeline_mesh_skinned_blend = None
+        self.pipeline_mesh_skinned_additive = None
         self.pipeline_lines = None
         self.pipeline_lines_skinned = None
         self.pipeline_gizmo_lines = None

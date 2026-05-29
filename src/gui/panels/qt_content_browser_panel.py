@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
+import re
 from typing import Optional
 
 from PySide6 import QtCore, QtWidgets
@@ -11,6 +11,7 @@ from PySide6 import QtCore, QtWidgets
 from src.gui.qt_lib.assets.qt_theme import icon
 from src.gui.qt_lib.panels.qt_library_panel import (
     MODEL_CATEGORY_ORDER,
+    MODEL_SUBCATEGORY_ORDER,
     content_browser_metadata_for_resref,
     enrich_library_rows,
     infer_model_category,
@@ -20,12 +21,377 @@ from src.gui.qt_lib.panels.qt_library_panel import (
 ASSET_TYPES = ("All", "Model", "Animation", "Texture", "Blueprint", "Module", "Scene")
 
 
+_READABLE_RESREF_OVERRIDES = {
+    "plc_backpack": "Backpack",
+    "plc_bodyranc": "Rancor Corpse",
+    "plc_brokndrd": "Broken Droid",
+    "plc_fccage": "Force Cage",
+    "plc_koltank": "Kolto Tank",
+    "plc_lndspdr": "Landspeeder",
+    "plc_oilpudle": "Oil Puddle",
+    "plc_pwrcond": "Power Conduit",
+    "plc_rakatflg": "Rakatan Flag",
+    "plc_rnepillr": "Ruined Pillar",
+    "plc_sithsarc": "Sith Sarcophagus",
+    "plc_starmap": "Star Map",
+    "plc_stmvent": "Steam Vent",
+    "plc_wookcrps": "Wookiee Corpse",
+}
+
+_READABLE_PREFIXES = (
+    "g_w_", "g_i_", "g_a_", "iw_", "ia_", "uti_", "plc_", "dor_", "door_", "w_", "i_",
+    "a_", "n_", "c_", "p_", "s_", "l_", "fx_", "v_",
+)
+
+_READABLE_WORDS = {
+    "acd": "Acid",
+    "ban": "Banner",
+    "blstr": "Blaster",
+    "btnpnl": "Button Panel",
+    "cjar": "Ceramic Jar",
+    "comp": "Computer",
+    "crps": "Corpse",
+    "dbl": "Double",
+    "drd": "Droid",
+    "fx": "FX",
+    "holo": "Hologram",
+    "hvy": "Heavy",
+    "jnk": "Junk",
+    "lght": "Light",
+    "lghtsbr": "Lightsaber",
+    "pnl": "Panel",
+    "rakat": "Rakatan",
+    "rfl": "Rifle",
+    "sbr": "Saber",
+    "spchunk": "Ship Chunk",
+    "spc": "Space",
+    "swy": "Swoop",
+    "vbr": "Vibro",
+}
+
+_DISPLAY_MEMBER_NAMES = (
+    (("bastila",), "Bastila"),
+    (("carth",), "Carth"),
+    (("mission",), "Mission"),
+    (("zaalbar",), "Zaalbar"),
+    (("canderous", "p_cand"), "Canderous"),
+    (("jolee",), "Jolee"),
+    (("juhani",), "Juhani"),
+    (("hk47", "hk_47"), "HK-47"),
+    (("t3m4", "t3_m4", "t3m3"), "T3-M4"),
+    (("kreia",), "Kreia"),
+    (("atton",), "Atton"),
+    (("baodur", "bao_dur", "bao-dur", "bao"), "Bao-Dur"),
+    (("handmaiden",), "Handmaiden"),
+    (("disciple", "mical"), "Disciple"),
+    (("visas",), "Visas"),
+    (("mira",), "Mira"),
+    (("hanharr",), "Hanharr"),
+    (("mandalore", "mandra"), "Mandalore"),
+    (("g0t0", "goto"), "G0-T0"),
+    (("atris",), "Atris"),
+)
+
+_SPECIES_SINGULAR = {
+    "Aqualish": "Aqualish",
+    "Bith": "Bith",
+    "Devaronians": "Devaronian",
+    "Duros": "Duros",
+    "Gamorreans": "Gamorrean",
+    "Gand": "Gand",
+    "Gran": "Gran",
+    "Ithorians": "Ithorian",
+    "Quarren": "Quarren",
+    "Rakata": "Rakata",
+    "Rodians": "Rodian",
+    "Selkath": "Selkath",
+    "Sullustans": "Sullustan",
+    "Trandoshans": "Trandoshan",
+    "Tusken Raiders": "Tusken Raider",
+    "Twi'leks": "Twi'lek",
+    "Weequay": "Weequay",
+    "Wookiees": "Wookiee",
+    "Yoda Species": "Yoda Species",
+}
+
+
+def _display_name_from_library_row(row: dict, category: str, resref: str, metadata: dict[str, str]) -> str:
+    encoded = _encoded_display_name(category, resref, metadata)
+    if encoded:
+        return encoded
+    candidates = (
+        row.get("display_name"),
+        row.get("localized_name"),
+        row.get("name_label"),
+        row.get("area_label") if category == "Modules" else "",
+        row.get("area_name") if category == "Modules" else "",
+        row.get("placeable_tag"),
+        row.get("door_tag"),
+        row.get("item_tag"),
+        row.get("template_name"),
+    )
+    for candidate in candidates:
+        text = str(candidate or "").strip()
+        if text and text.lower() != resref.lower():
+            return _humanize_asset_name(text)
+    return _humanize_asset_name(resref)
+
+
+def _encoded_display_name(category: str, resref: str, metadata: dict[str, str]) -> str:
+    r = (resref or "").lower()
+    if category == "Modules":
+        return str(metadata.get("area") or "").strip()
+    if category == "Player Characters":
+        return _player_display_name(r, metadata)
+    if category == "Party Members":
+        return _party_display_name(r, metadata)
+    if category in {"Commoners", "NPCs", "Level Assets", "Misc Models"}:
+        species = _species_gender_display_name(r, metadata)
+        if species:
+            return species
+    if category == "Commoners":
+        commoner = str(metadata.get("commoner_type") or "").strip()
+        return _with_variant(f"{commoner} Commoner".strip(), _letter_or_number_variant(r))
+    if category == "NPCs":
+        return _npc_display_name(r, metadata)
+    if category == "Droids":
+        return _droid_display_name(r, metadata)
+    if category == "Creatures":
+        creature = str(metadata.get("creature_type") or "").strip()
+        return _with_variant(creature, _letter_or_number_variant(r))
+    if category == "Supermodels":
+        supermodel = str(metadata.get("supermodel_type") or "").strip()
+        return f"{supermodel} Supermodel".strip()
+    if category == "Turrets":
+        turret = str(metadata.get("turret_type") or "").strip()
+        return f"{turret} Turret".strip()
+    if category == "Holograms":
+        holo = str(metadata.get("hologram_type") or "").strip()
+        return f"{holo} Hologram".strip()
+    if category == "Engine Items":
+        return _with_variant(str(metadata.get("engine_type") or "").strip(), _letter_or_number_variant(r))
+    if category == "Environment":
+        return _with_variant(str(metadata.get("environment_type") or "").strip(), _letter_or_number_variant(r))
+    if category == "GUI":
+        return _with_variant(str(metadata.get("gui_type") or "").strip(), _letter_or_number_variant(r))
+    if category == "Level Assets":
+        asset_type = str(metadata.get("level_asset_type") or "").strip()
+        return _with_variant(asset_type, _letter_or_number_variant(r))
+    if category == "Minigame":
+        return _with_variant(str(metadata.get("minigame_type") or "").strip(), _letter_or_number_variant(r))
+    if category == "Menus":
+        return _with_variant(str(metadata.get("menu_type") or "").strip(), _letter_or_number_variant(r))
+    if category == "Visual FX":
+        fx_type = str(metadata.get("fx_type") or "").strip()
+        return _with_variant(f"{fx_type} FX".strip(), _letter_or_number_variant(r))
+    if category == "Visuals":
+        visual_type = str(metadata.get("visual_type") or "").strip()
+        return _with_variant(f"{visual_type} Visual".strip(), _letter_or_number_variant(r))
+    if category == "Planets":
+        return _with_variant(str(metadata.get("planet_type") or "").strip(), _letter_or_number_variant(r))
+    if category == "Stunts":
+        return _with_variant(str(metadata.get("stunt_type") or "").strip(), _letter_or_number_variant(r))
+    if category == "Templates":
+        return _with_variant(str(metadata.get("template_type") or "").strip() + " Template", _letter_or_number_variant(r))
+    return ""
+
+
+def _player_display_name(resref: str, metadata: dict[str, str]) -> str:
+    r = resref[3:] if resref.startswith("k1_") else resref
+    if not r.startswith(("pm", "pf")):
+        return ""
+    gender = str(metadata.get("player_gender") or ("Male" if r.startswith("pm") else "Female"))
+    part = str(metadata.get("player_part") or "")
+    class_code = str(metadata.get("player_class") or "").replace("Class ", "").strip()
+    variant = str(metadata.get("player_variant") or "").strip()
+    pieces = ["Player", gender]
+    if part and part != "Model":
+        pieces.append(part)
+    if class_code:
+        pieces.append(class_code)
+    if variant and not variant.startswith("Head "):
+        pieces.append(variant)
+    elif variant.startswith("Head "):
+        pieces.append(variant.replace("Head ", ""))
+    return " ".join(pieces)
+
+
+def _party_display_name(resref: str, metadata: dict[str, str]) -> str:
+    member = str(metadata.get("party_member") or "").strip()
+    if not member:
+        for tokens, label in _DISPLAY_MEMBER_NAMES:
+            if any(token in resref for token in tokens):
+                member = label
+                break
+    if not member:
+        return ""
+    part = str(metadata.get("party_model_part") or "").strip()
+    if not part:
+        if re.search(r"h\d*$", resref):
+            part = "Head"
+        elif re.search(r"b[a-z]?$", resref):
+            part = "Body"
+        else:
+            part = "Model"
+    variant = _party_variant(resref, part)
+    return _with_variant(f"{member} {part}".strip(), variant)
+
+
+def _npc_display_name(resref: str, metadata: dict[str, str]) -> str:
+    species = _species_gender_display_name(resref, metadata)
+    if species:
+        return species
+    variant = _npc_variant(resref)
+    if any(token in resref for token in ("sithappr", "sith_app", "apprent")):
+        return _with_variant("Sith Apprentice", variant)
+    if any(token in resref for token in ("sithsold", "sithsoldier")):
+        return _with_variant("Sith Soldier", variant)
+    if any(token in resref for token in ("sithoff", "sith_off")):
+        return _with_variant("Sith Officer", variant)
+    if any(token in resref for token in ("sithass", "assassin")):
+        return _with_variant("Sith Assassin", variant)
+    if any(token in resref for token in ("jedmast", "jedi_master", "jedimaster", "master")):
+        return _with_variant("Jedi Master", variant)
+    if any(token in resref for token in ("padawan",)):
+        return _with_variant("Jedi Padawan", variant)
+    if any(token in resref for token in ("swoop", "gadon", "gendar", "brejik", "deadeye")):
+        return _with_variant("Swoop Gang Member", variant)
+    if any(token in resref for token in ("blackvulkar", "vulkar")):
+        return _with_variant("Black Vulkar Gang Member", variant)
+    if "bek" in resref:
+        return _with_variant("Hidden Bek Gang Member", variant)
+    role = str(metadata.get("npc_role") or "").strip()
+    if role:
+        return _with_variant(role, variant)
+    faction = str(metadata.get("npc_faction") or "").strip()
+    if faction and faction != "Named":
+        part = str(metadata.get("npc_model_part") or "").strip()
+        return _with_variant(f"{faction} {part}".strip(), variant)
+    return ""
+
+
+def _droid_display_name(resref: str, metadata: dict[str, str]) -> str:
+    if "hk47" in resref or "hk_47" in resref:
+        return "HK-47"
+    if "t3m4" in resref or "t3_m4" in resref:
+        return "T3-M4"
+    if "g0t0" in resref or "goto" in resref:
+        return "G0-T0"
+    droid_type = str(metadata.get("droid_type") or "").strip()
+    return _with_variant(f"{droid_type} Droid".strip(), _letter_or_number_variant(resref))
+
+
+def _species_gender_display_name(resref: str, metadata: dict[str, str]) -> str:
+    species = str(metadata.get("npc_species") or metadata.get("creature_type") or "").strip()
+    if not species:
+        for token, label in (
+            ("wookie", "Wookiee"),
+            ("wook", "Wookiee"),
+            ("twilek", "Twi'lek"),
+            ("twi", "Twi'lek"),
+            ("selkath", "Selkath"),
+            ("rakata", "Rakata"),
+            ("rodian", "Rodian"),
+            ("jawa", "Jawa"),
+            ("ithorian", "Ithorian"),
+            ("trandoshan", "Trandoshan"),
+        ):
+            if token in resref:
+                species = label
+                break
+    species = _SPECIES_SINGULAR.get(species, species)
+    if not species:
+        return ""
+    gender = ""
+    if resref.endswith("f") or "_f" in resref or "female" in resref:
+        gender = "Female"
+    elif resref.endswith("m") or "_m" in resref or "male" in resref:
+        gender = "Male"
+    return " ".join(part for part in (species, gender) if part)
+
+
+def _party_variant(resref: str, part: str) -> str:
+    if part == "Head":
+        match = re.search(r"h(\d+)$", resref)
+        if match:
+            return f"Head {int(match.group(1)):02d}"
+    if part == "Body":
+        match = re.search(r"b([a-z])$", resref)
+        if match:
+            return match.group(1).upper()
+    return _letter_or_number_variant(resref)
+
+
+def _letter_or_number_variant(resref: str) -> str:
+    base = resref.lower().strip()
+    match = re.search(r"(?:_|-)([a-z])(\d*)$", base)
+    if match:
+        letter, number = match.groups()
+        if number:
+            return f"{letter.upper()}{number}"
+        if letter not in {"m", "f"}:
+            return letter.upper()
+    match = re.search(r"(\d+)$", base)
+    if match:
+        return f"{int(match.group(1)):02d}"
+    return ""
+
+
+def _npc_variant(resref: str) -> str:
+    separated = _letter_or_number_variant(resref)
+    if separated:
+        return separated
+    match = re.search(r"(\d+)(h|b)$", resref)
+    if match:
+        part = "Head" if match.group(2) == "h" else "Body"
+        return f"{int(match.group(1)):02d} {part}"
+    match = re.search(r"(?:swoopgang|blackvulkar|vulkar|bek)([a-z])$", resref)
+    if match:
+        return match.group(1).upper()
+    return ""
+
+
+def _with_variant(label: str, variant: str) -> str:
+    label = label.strip()
+    variant = variant.strip()
+    if not label:
+        return ""
+    if not variant or label.endswith(f" {variant}"):
+        return label
+    return f"{label} {variant}"
+
+
+def _humanize_asset_name(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    lowered = text.lower()
+    for prefix, label in _READABLE_RESREF_OVERRIDES.items():
+        if lowered.startswith(prefix):
+            suffix = lowered[len(prefix):]
+            number = suffix if suffix.isdigit() else ""
+            return f"{label} {number}".strip()
+    for prefix in _READABLE_PREFIXES:
+        if lowered.startswith(prefix):
+            text = text[len(prefix):]
+            lowered = text.lower()
+            break
+    text = text.replace("_", " ").replace("-", " ")
+    text = "".join(" " + char if index and char.isupper() and not text[index - 1].isspace() else char for index, char in enumerate(text))
+    text = re.sub(r"(?<=[A-Za-z])(?=\d)", " ", text)
+    text = re.sub(r"(?<=\d)(?=[A-Za-z])", " ", text)
+    words = [word for word in re.split(r"\s+", text) if word]
+    readable = [_READABLE_WORDS.get(word.lower(), word) for word in words]
+    return " ".join(word.upper() if word.lower() in {"fx", "gui", "hk", "t3", "tsf"} else word[:1].upper() + word[1:] for word in readable)
+
+
 @dataclass(slots=True)
 class ContentAssetDescriptor:
     """Small UI descriptor that keeps source data lossless for callers."""
 
     asset_type: str
     name: str
+    display_name: str = ""
     game: str = ""
     category: str = ""
     source: str = ""
@@ -38,6 +404,7 @@ class ContentAssetDescriptor:
         values = [
             self.asset_type,
             self.name,
+            self.display_name,
             self.game,
             self.category,
             self.source,
@@ -54,20 +421,52 @@ def descriptor_from_library_row(row: dict) -> ContentAssetDescriptor:
     source = str(item.get("source", ""))
     name = str(item.get("resref", ""))
     taxonomy_metadata = content_browser_metadata_for_resref(name, category)
+    subcategory = str(item.get("subcategory") or taxonomy_metadata.get("subcategory") or "")
+    if subcategory:
+        taxonomy_metadata["subcategory"] = subcategory
+    metadata = {
+        "area": item.get("area_label") or item.get("area_name") or "",
+        "module": item.get("module_code") or "",
+        "class": item.get("model_class") or "",
+        "template": item.get("item_template_resref") or item.get("placeable_template_resref") or "",
+        "tag": item.get("item_tag") or item.get("placeable_tag") or "",
+        "door template": item.get("door_template_resref") or "",
+        "door tag": item.get("door_tag") or "",
+        "door type": item.get("door_generic_type") or "",
+        "open lock dc": item.get("door_open_lock_dc") or "",
+        "key": item.get("door_key_name") or "",
+        "linked to": item.get("door_linked_to") or "",
+        "base item": item.get("item_baseitem") or "",
+        "model variation": item.get("item_model_variation") or "",
+        "appearance": item.get("placeable_appearance") or "",
+        "metadata source": item.get("metadata_source") or "",
+        **taxonomy_metadata,
+    }
     return ContentAssetDescriptor(
         asset_type=asset_type,
         name=name,
+        display_name=_display_name_from_library_row(item, category, name, metadata),
         game=str(item.get("game", "")),
         category=category,
         source=source,
         row=item,
-        metadata={
-            "area": item.get("area_label") or item.get("area_name") or "",
-            "module": item.get("module_code") or "",
-            "class": item.get("model_class") or "",
-            **taxonomy_metadata,
-        },
-        tags=tuple(str(value) for value in (category, *taxonomy_metadata.values(), item.get("location", "")) if value),
+        metadata=metadata,
+        tags=tuple(
+            str(value)
+            for value in (
+                category,
+                subcategory,
+                *taxonomy_metadata.values(),
+                item.get("item_template_resref", ""),
+                item.get("placeable_template_resref", ""),
+                item.get("door_template_resref", ""),
+                item.get("item_tag", ""),
+                item.get("placeable_tag", ""),
+                item.get("door_tag", ""),
+                item.get("location", ""),
+            )
+            if value
+        ),
     )
 
 
@@ -82,6 +481,7 @@ def descriptor_from_animation_entry(entry: dict) -> ContentAssetDescriptor:
     return ContentAssetDescriptor(
         asset_type="Animation",
         name=anim or model,
+        display_name=_humanize_asset_name(anim or model),
         game=game,
         category="Animation",
         source=source,
@@ -101,13 +501,11 @@ def descriptor_from_animation_entry(entry: dict) -> ContentAssetDescriptor:
 class QtContentAssetItem(QtWidgets.QTreeWidgetItem):
     def __init__(self, asset: ContentAssetDescriptor):
         model_or_meta = str(asset.metadata.get("model") or asset.metadata.get("area") or asset.category or "")
-        has_path_separator = bool(asset.source) and ("\\" in asset.source or "/" in asset.source)
-        source_name = Path(asset.source).name if has_path_separator else asset.source
         super().__init__([
+            asset.display_name or asset.name,
             asset.name,
             asset.asset_type,
             asset.game,
-            source_name,
             asset.category,
             model_or_meta,
         ])
@@ -204,8 +602,9 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self._build_filters(center_layout)
         self.asset_view = QtWidgets.QTreeWidget()
         self.asset_view.setObjectName("contentBrowserAssets")
-        self.asset_view.setHeaderLabels(["Name", "Type", "Game", "Source", "Category", "Meta"])
+        self.asset_view.setHeaderLabels(["Display Name", "Asset Name", "Type", "Game", "Category", "Meta"])
         self.asset_view.setSortingEnabled(True)
+        self.asset_view.sortByColumn(0, QtCore.Qt.AscendingOrder)
         self.asset_view.setRootIsDecorated(False)
         self.asset_view.setAlternatingRowColors(True)
         self.asset_view.header().setStretchLastSection(False)
@@ -293,33 +692,199 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self.tag_filter.addItems([
             "All Tags",
             "Player Characters",
+            *[
+                f"Player Characters / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Player Characters"]
+            ],
             "Party Members",
+            *[
+                f"Party Members / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Party Members"]
+            ],
             "Commoners",
+            *[
+                f"Commoners / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Commoners"]
+            ],
             "NPCs",
+            *[
+                f"NPCs / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["NPCs"]
+            ],
             "Droids",
+            *[
+                f"Droids / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Droids"]
+            ],
             "Turrets",
+            *[
+                f"Turrets / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Turrets"]
+            ],
             "Creatures",
+            *[
+                f"Creatures / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Creatures"]
+            ],
             "Holograms",
+            *[
+                f"Holograms / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Holograms"]
+            ],
             "Supermodels",
+            *[
+                f"Supermodels / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Supermodels"]
+            ],
             "Modules",
+            *[
+                f"Modules / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Modules"]
+            ],
             "Level Assets",
+            *[
+                f"Level Assets / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Level Assets"]
+            ],
             "Environment",
+            *[
+                f"Environment / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Environment"]
+            ],
             "Skyboxes",
+            *[
+                f"Skyboxes / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Skyboxes"]
+            ],
             "Minigame",
+            *[
+                f"Minigame / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Minigame"]
+            ],
             "Menus",
+            *[
+                f"Menus / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Menus"]
+            ],
             "GUI",
+            *[
+                f"GUI / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["GUI"]
+            ],
             "Placeables",
+            *[
+                f"Placeables / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Placeables"]
+            ],
             "Doors",
+            "Doors / Taris",
+            "Doors / Dantooine",
+            "Doors / Tatooine",
+            "Doors / Kashyyyk",
+            "Doors / Manaan",
+            "Doors / Korriban",
+            "Doors / Leviathan",
+            "Doors / Star Forge",
+            "Doors / Rakata",
+            "Doors / Yavin",
+            "Doors / Endar Spire",
+            "Doors / Ebon Hawk",
+            "Doors / Peragus",
+            "Doors / Telos",
+            "Doors / Harbinger",
+            "Doors / Nar Shaddaa",
+            "Doors / Dxun",
+            "Doors / Onderon",
+            "Doors / Malachor",
+            "Doors / Ravager",
+            "Doors / Droid Planet",
+            "Doors / Force Fields",
+            "Doors / Generic Doors",
+            "Doors / Unknown Doors",
             "Engine Items",
+            *[
+                f"Engine Items / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Engine Items"]
+            ],
+            "Armor",
+            "Armor / Clothing",
+            "Armor / Jedi Robes",
+            "Armor / Light Armor",
+            "Armor / Medium Armor",
+            "Armor / Heavy Armor",
+            "Armor / Environmental Suits",
+            "Armor / Disguises",
+            "Armor / Misc Armor",
             "Inventory",
+            "Inventory / Security Spikes",
+            "Inventory / Computer Spikes",
+            "Inventory / Parts",
+            "Inventory / Mines",
+            "Inventory / Spikes",
+            "Inventory / Traps",
+            "Inventory / Medkits",
+            "Inventory / Masks",
+            "Inventory / Implants",
+            "Inventory / Gauntlets",
+            "Inventory / Armbands",
+            "Inventory / Droid Items",
+            "Inventory / Belts",
+            "Inventory / Stims",
+            "Inventory / Adrenal Stims",
+            "Inventory / Combat Shots",
+            "Inventory / Credits",
+            "Inventory / Upgrades",
+            "Inventory / Datapads",
+            "Inventory / Pazaak",
+            "Inventory / Quest Items",
+            "Inventory / Misc Items",
             "Weapons",
+            "Weapons / Grenades",
+            "Weapons / Lightsabers",
+            "Weapons / Double-Bladed Lightsabers",
+            "Weapons / Short Lightsabers",
+            "Weapons / Lightsaber Crystals",
+            "Weapons / Vibroblades",
+            "Weapons / Double-Bladed Melee",
+            "Weapons / Blasters",
+            "Weapons / Heavy Blasters",
+            "Weapons / Blaster Rifles",
+            "Weapons / Heavy Weapons",
+            "Weapons / Creature Weapons",
+            "Weapons / Single-Handed Melee",
+            "Weapons / Two-Handed Weapons",
+            "Weapons / Misc Weapons",
             "Visual FX",
+            *[
+                f"Visual FX / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Visual FX"]
+            ],
             "Visuals",
+            *[
+                f"Visuals / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Visuals"]
+            ],
             "Planets",
+            *[
+                f"Planets / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Planets"]
+            ],
             "Misc Models",
+            *[
+                f"Misc Models / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Misc Models"]
+            ],
             "Stunts",
+            *[
+                f"Stunts / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Stunts"]
+            ],
             "Uncategorised",
             "Templates",
+            *[
+                f"Templates / {subcategory}"
+                for subcategory in MODEL_SUBCATEGORY_ORDER["Templates"]
+            ],
             "Current Model",
         ])
         self.tag_filter.currentTextChanged.connect(self._apply_filter)
@@ -552,8 +1117,19 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
                 child = QtWidgets.QTreeWidgetItem([category])
                 child.setData(0, QtCore.Qt.UserRole, ("category", category))
                 folders.addChild(child)
+                subcategories = sorted(
+                    {
+                        str(asset.metadata.get("subcategory") or "")
+                        for asset in self._assets
+                        if asset.category == category and asset.metadata.get("subcategory")
+                    },
+                    key=lambda value, cat=category: self._subcategory_sort_key(cat, value),
+                )
+                for subcategory in subcategories:
+                    subchild = QtWidgets.QTreeWidgetItem([subcategory])
+                    subchild.setData(0, QtCore.Qt.UserRole, ("subcategory", f"{category}\0{subcategory}"))
+                    child.addChild(subchild)
             folders.setExpanded(True)
-        self.nav_tree.expandAll()
         self.nav_tree.blockSignals(False)
         self._select_navigation(*self._active_nav)
 
@@ -567,15 +1143,25 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
     def _walk_nav_items(self):
         for index in range(self.nav_tree.topLevelItemCount()):
             root = self.nav_tree.topLevelItem(index)
-            yield root
-            for child_index in range(root.childCount()):
-                yield root.child(child_index)
+            yield from self._walk_nav_branch(root)
+
+    def _walk_nav_branch(self, item: QtWidgets.QTreeWidgetItem):
+        yield item
+        for child_index in range(item.childCount()):
+            yield from self._walk_nav_branch(item.child(child_index))
 
     def _category_sort_key(self, category: str) -> tuple[int, str]:
         try:
             return (MODEL_CATEGORY_ORDER.index(category), category)
         except ValueError:
             return (len(MODEL_CATEGORY_ORDER), category)
+
+    def _subcategory_sort_key(self, category: str, subcategory: str) -> tuple[int, str]:
+        order = MODEL_SUBCATEGORY_ORDER.get(category, ())
+        try:
+            return (order.index(subcategory), subcategory)
+        except ValueError:
+            return (len(order), subcategory)
 
     def _on_navigation_changed(self) -> None:
         item = self.nav_tree.currentItem()
@@ -610,6 +1196,10 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
                 continue
             if nav_key == "category" and asset.category != nav_value:
                 continue
+            if nav_key == "subcategory":
+                nav_category, _, nav_subcategory = nav_value.partition("\0")
+                if asset.category != nav_category or asset.metadata.get("subcategory") != nav_subcategory:
+                    continue
             if tag != "All Tags" and not self._matches_tag(asset, tag):
                 continue
             if compatibility == "Current Game" and game != "All" and asset.game and asset.game != game:
@@ -627,6 +1217,12 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self._update_details()
 
     def _matches_tag(self, asset: ContentAssetDescriptor, tag: str) -> bool:
+        if " / " in tag:
+            category, subcategory = tag.split(" / ", 1)
+            return (
+                asset.category.lower() == category.lower()
+                and str(asset.metadata.get("subcategory", "")).lower() == subcategory.lower()
+            )
         haystack = " ".join([asset.category, asset.source, *asset.tags]).lower()
         mapping = {
             "Player Characters": "player characters",
@@ -648,8 +1244,86 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
             "Placeables": "placeables",
             "Doors": "doors",
             "Engine Items": "engine items",
+            "Armor": "armor",
+            "Armor / Clothing": "clothing",
+            "Armor / Jedi Robes": "jedi robes",
+            "Armor / Light Armor": "light armor",
+            "Armor / Medium Armor": "medium armor",
+            "Armor / Heavy Armor": "heavy armor",
+            "Armor / Environmental Suits": "environmental suits",
+            "Armor / Disguises": "disguises",
+            "Armor / Misc Armor": "misc armor",
             "Inventory": "inventory",
+            "Inventory / Security Spikes": "security spikes",
+            "Inventory / Computer Spikes": "computer spikes",
+            "Inventory / Parts": "parts",
+            "Inventory / Mines": "mines",
+            "Inventory / Spikes": "spikes",
+            "Inventory / Traps": "traps",
+            "Inventory / Medkits": "medkits",
+            "Inventory / Masks": "masks",
+            "Inventory / Implants": "implants",
+            "Inventory / Gauntlets": "gauntlets",
+            "Inventory / Armbands": "armbands",
+            "Inventory / Droid Items": "droid items",
+            "Inventory / Belts": "belts",
+            "Inventory / Stims": "stims",
+            "Inventory / Adrenal Stims": "adrenal stims",
+            "Inventory / Combat Shots": "combat shots",
+            "Inventory / Credits": "credits",
+            "Inventory / Upgrades": "upgrades",
+            "Inventory / Datapads": "datapads",
+            "Inventory / Pazaak": "pazaak",
+            "Inventory / Quest Items": "quest items",
+            "Inventory / Misc Items": "misc items",
             "Weapons": "weapons",
+            "Weapons / Grenades": "grenades",
+            "Weapons / Lightsabers": "lightsabers",
+            "Weapons / Double-Bladed Lightsabers": "double-bladed lightsabers",
+            "Weapons / Short Lightsabers": "short lightsabers",
+            "Weapons / Lightsaber Crystals": "lightsaber crystals",
+            "Weapons / Vibroblades": "vibroblades",
+            "Weapons / Double-Bladed Melee": "double-bladed melee",
+            "Weapons / Blasters": "blasters",
+            "Weapons / Heavy Blasters": "heavy blasters",
+            "Weapons / Blaster Rifles": "blaster rifles",
+            "Weapons / Heavy Weapons": "heavy weapons",
+            "Weapons / Creature Weapons": "creature weapons",
+            "Weapons / Single-Handed Melee": "single-handed melee",
+            "Weapons / Two-Handed Weapons": "two-handed weapons",
+            "Weapons / Misc Weapons": "misc weapons",
+            "Placeables / Containers": "containers",
+            "Placeables / Computers & Panels": "computers & panels",
+            "Placeables / Doors & Transitions": "doors & transitions",
+            "Placeables / Furniture": "furniture",
+            "Placeables / Lights & VFX": "lights & vfx",
+            "Placeables / Traps & Hazards": "traps & hazards",
+            "Placeables / Environmental Props": "environmental props",
+            "Placeables / Misc Placeables": "misc placeables",
+            "Doors / Taris": "taris",
+            "Doors / Dantooine": "dantooine",
+            "Doors / Tatooine": "tatooine",
+            "Doors / Kashyyyk": "kashyyyk",
+            "Doors / Manaan": "manaan",
+            "Doors / Korriban": "korriban",
+            "Doors / Leviathan": "leviathan",
+            "Doors / Star Forge": "star forge",
+            "Doors / Rakata": "rakata",
+            "Doors / Yavin": "yavin",
+            "Doors / Endar Spire": "endar spire",
+            "Doors / Ebon Hawk": "ebon hawk",
+            "Doors / Peragus": "peragus",
+            "Doors / Telos": "telos",
+            "Doors / Harbinger": "harbinger",
+            "Doors / Nar Shaddaa": "nar shaddaa",
+            "Doors / Dxun": "dxun",
+            "Doors / Onderon": "onderon",
+            "Doors / Malachor": "malachor",
+            "Doors / Ravager": "ravager",
+            "Doors / Droid Planet": "droid planet",
+            "Doors / Force Fields": "force fields",
+            "Doors / Generic Doors": "generic doors",
+            "Doors / Unknown Doors": "unknown doors",
             "Visual FX": "visual fx",
             "Visuals": "visuals",
             "Planets": "planets",
@@ -672,7 +1346,7 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
             return icon("cat_creature", 16)
         if asset.category in {"NPCs", "Party Members", "Player Characters", "Commoners", "Supermodels"}:
             return icon("cat_character", 16)
-        if asset.category in {"Inventory", "Weapons", "Placeables", "Item/Armor/Weapons"}:
+        if asset.category in {"Armor", "Inventory", "Weapons", "Placeables", "Item/Armor/Weapons"}:
             return icon("cat_item", 16)
         if asset.category in {
             "Environment", "Doors", "Engine Items", "Visual FX", "Visuals", "Planets",
@@ -689,8 +1363,9 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
             self.detail_text.setPlainText("")
             self._set_action_state(None)
             return
-        self.detail_title.setText(asset.name)
+        self.detail_title.setText(asset.display_name or asset.name)
         lines = [
+            f"Asset Name: {asset.name}",
             f"Type: {asset.asset_type}",
             f"Game: {asset.game or 'Any'}",
             f"Category: {asset.category or 'Uncategorized'}",

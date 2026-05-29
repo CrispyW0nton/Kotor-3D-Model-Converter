@@ -28,6 +28,9 @@ class MaterialRenderData:
     base_color_rgba: tuple[float, float, float, float]
     alpha_mode: str
     alpha_cutoff: float
+    blend_mode: str
+    sprite_alpha_source: int
+    sprite_glow: float
     double_sided: bool
     unlit: bool
     has_transparency: bool
@@ -179,6 +182,8 @@ def _node_is_renderable_mesh(node) -> bool:
         return False
     if getattr(node, "render", True) is False:
         return False
+    if bool(getattr(node, "is_saber", False)):
+        return False
     if int(getattr(node, "vertex_space", 0) or 0) == 2:
         return False
     return bool(getattr(node, "vertices", getattr(node, "verts", [])) and getattr(node, "faces", []))
@@ -193,18 +198,31 @@ def _extract_node_arrays(node, *, anim_pose=None):
         _build_vbo_data = None
 
     is_skin = bool(getattr(node, "is_skin", False))
+    is_bas_attachment = bool(getattr(node, "_gr_bas_attachment_layer", False))
+    bas_root = _bas_attachment_root_for_node(node) if is_bas_attachment else None
     world_pos, world_orient = _node_world_transform(node, anim_pose=anim_pose)
     world_matrix = node_world_matrix(node, anim_pose=anim_pose)
+    if is_skin and bas_root is not None:
+        # BAS skin attachments must stay out of the body palette, but their
+        # bind-shape should remain local to the attachment root.  Keeping large
+        # negative skin-local vertices plus a compensating full-node matrix makes
+        # heads look deformed as more layers are added.
+        world_pos, world_orient = _bas_attachment_local_transform(node, bas_root)
+        world_matrix = node_world_matrix(bas_root, anim_pose=anim_pose)
     if _build_vbo_data is not None:
         skin_can_lbs = bool(
             anim_pose is not None
             and is_skin
+            and not is_bas_attachment
             and getattr(node, "bone_map", None)
             and getattr(node, "skin_data", None)
         )
         vbo_world_pos = world_pos
         vbo_world_orient = world_orient
-        if not is_skin:
+        if not is_skin or (is_bas_attachment and bas_root is None):
+            vbo_world_pos = (0.0, 0.0, 0.0)
+            vbo_world_orient = (0.0, 0.0, 0.0, 1.0)
+        elif is_bas_attachment and not is_skin:
             vbo_world_pos = (0.0, 0.0, 0.0)
             vbo_world_orient = (0.0, 0.0, 0.0, 1.0)
         vdata, idx_arr = _build_vbo_data(
@@ -374,6 +392,19 @@ def _extract_skinning(
     bone_indices=None,
     bone_weights=None,
 ):
+    if bool(getattr(node, "_gr_bas_attachment_layer", False)):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            bone_indices=None,
+            bone_weights=None,
+            max_influences=0,
+            skeleton_id=skeleton_id,
+            skin_revision=0,
+            bind_shape_matrix=None,
+            is_skinned=False,
+            warning="BAS attachment layers follow sockets outside body skinning",
+        )
     try:
         from src.gui.rendering.skeleton_render_data import extract_skinning_arrays
 
@@ -454,6 +485,9 @@ def _material_data(node, textures: dict) -> MaterialRenderData:
     base_color = _material_color(node)
     alpha_cutoff = _clamp01(float(getattr(node, "txi_alpha_test", 0.0) or 0.0) or 0.5)
     alpha_mode = _alpha_mode(node)
+    blend_mode = _blend_mode(node)
+    sprite_alpha_source = _sprite_alpha_source(node)
+    sprite_glow = _sprite_glow(node)
     double_sided = bool(
         getattr(node, "is_dangly", False)
         or int(getattr(node, "transparency_hint", 0) or 0) in (1, 2)
@@ -465,7 +499,10 @@ def _material_data(node, textures: dict) -> MaterialRenderData:
             diffuse_name,
             lightmap_name,
             alpha_mode,
+            blend_mode,
             f"{alpha_cutoff:.3f}",
+            str(sprite_alpha_source),
+            f"{sprite_glow:.3f}",
             str(double_sided),
         ]
     )
@@ -473,7 +510,7 @@ def _material_data(node, textures: dict) -> MaterialRenderData:
         int(getattr(node, "_gr_revision", 0) or 0),
         id(diffuse_texture.source) if diffuse_texture is not None else 0,
         id(lightmap_texture.source) if lightmap_texture is not None else 0,
-        hash((base_color, alpha_mode, alpha_cutoff, double_sided)),
+        hash((base_color, alpha_mode, blend_mode, alpha_cutoff, sprite_alpha_source, round(sprite_glow, 3), double_sided)),
     )
     return MaterialRenderData(
         material_id=material_id,
@@ -487,6 +524,9 @@ def _material_data(node, textures: dict) -> MaterialRenderData:
         base_color_rgba=base_color,
         alpha_mode=alpha_mode,
         alpha_cutoff=alpha_cutoff,
+        blend_mode=blend_mode,
+        sprite_alpha_source=sprite_alpha_source,
+        sprite_glow=sprite_glow,
         double_sided=double_sided,
         unlit=any(abs(float(c)) > 1e-6 for c in tuple(getattr(node, "selfillum", (0.0, 0.0, 0.0)) or ())[:3]),
         has_transparency=alpha_mode in {"MASK", "CUTOUT", "BLEND"} or base_color[3] < 0.999,
@@ -532,19 +572,76 @@ def _alpha_mode(node) -> str:
     txi_blend = int(getattr(node, "txi_blending", 0) or 0)
     alpha_test = float(getattr(node, "txi_alpha_test", 0.0) or 0.0)
     transparency_hint = int(getattr(node, "transparency_hint", 0) or 0)
-    if txi_blend == 2 or (txi_blend == 0 and alpha_test > 0.0 and transparency_hint > 0):
+    sprite_alpha = _sprite_alpha_source(node)
+    if txi_blend == 2 or (txi_blend == 0 and transparency_hint > 0):
         return "MASK"
     if (
         node_alpha < 0.999
         or float(getattr(node, "txi_wateralpha", 1.0) or 1.0) < 0.999
         or bool(getattr(node, "txi_decal", False))
         or txi_blend in (1, 3)
+        or sprite_alpha
     ):
         return "BLEND"
     return "OPAQUE"
 
 
+def _blend_mode(node) -> str:
+    explicit = str(getattr(node, "_gr_sprite_render_mode", "") or "").lower()
+    if explicit == "additive":
+        return "ADDITIVE"
+    if explicit == "lighten":
+        return "LIGHTEN"
+    if explicit in {"opaque", "cutout", "blend"}:
+        return "ALPHA"
+    txi_blend = int(getattr(node, "txi_blending", 0) or 0)
+    if _sprite_alpha_source(node) and _sprite_glow(node) > 0.001:
+        return "LIGHTEN"
+    if txi_blend == 1:
+        return "ADDITIVE"
+    if txi_blend == 3:
+        return "LIGHTEN"
+    return "ALPHA"
+
+
+def _sprite_alpha_source(node) -> int:
+    source = str(getattr(node, "_gr_sprite_alpha_source", "") or "").lower()
+    if source in {"luminance", "brightness", "matte", "black_key"}:
+        return 1
+    if _is_saber_hilt(node):
+        return 0
+    text = f"{getattr(node, 'name', '')} {getattr(node, 'texture', '')}".lower()
+    return 1 if any(token in text for token in ("saber", "sabre", "lsabre", "blade", "glow", "flare", "beam")) else 0
+
+
+def _sprite_glow(node) -> float:
+    explicit = getattr(node, "_gr_sprite_glow", None)
+    if explicit is not None:
+        try:
+            return max(0.0, min(4.0, float(explicit)))
+        except Exception:
+            return 0.0
+    if _is_saber_hilt(node):
+        return 0.0
+    text = f"{getattr(node, 'name', '')} {getattr(node, 'texture', '')}".lower()
+    return 1.6 if any(token in text for token in ("saber", "sabre", "lsabre", "blade", "glow", "flare", "beam")) else 0.0
+
+
+def _is_saber_hilt(node) -> bool:
+    name = str(getattr(node, "name", "") or "").lower()
+    texture = str(getattr(node, "texture", "") or "").lower()
+    if texture.startswith(("w_lghtsbr", "w_shortsbr", "w_dblsbr")):
+        return True
+    return name.startswith(("lghtsbr", "lshandle")) or "handle" in name
+
+
 def _node_world_transform(node, *, anim_pose=None) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
+    bas_root = _bas_attachment_root_for_node(node)
+    if bas_root is not None:
+        try:
+            return _bas_attachment_world_transform(node, bas_root, anim_pose=anim_pose)
+        except Exception:
+            pass
     if anim_pose is not None:
         try:
             return _animated_node_world_transform(node, anim_pose)
@@ -585,6 +682,131 @@ def node_world_matrix(node, *, anim_pose=None):
         dtype=np.float32,
     )
     return matrix
+
+
+def _bas_attachment_root_for_node(node):
+    current = node
+    visited: set[int] = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        if bool(getattr(current, "_gr_bas_attachment_root", False)):
+            return current
+        current = getattr(current, "parent", None)
+    return None
+
+
+def _bas_attachment_socket_node(bas_root):
+    socket_name = str(getattr(bas_root, "_gr_bas_socket_name", "") or "").lower()
+    body_root = getattr(bas_root, "parent", None)
+    if body_root is None or not socket_name:
+        return None
+    if str(getattr(body_root, "name", "") or "").lower() == socket_name:
+        return body_root
+    stack = [body_root]
+    visited = {id(bas_root)}
+    while stack:
+        current = stack.pop()
+        if current is None or id(current) in visited:
+            continue
+        visited.add(id(current))
+        if str(getattr(current, "name", "") or "").lower() == socket_name:
+            return current
+        for child in reversed(getattr(current, "children", []) or []):
+            if bool(getattr(child, "_gr_bas_attachment_root", False)):
+                continue
+            stack.append(child)
+    return None
+
+
+def _bas_attachment_world_transform(node, bas_root, *, anim_pose=None):
+    from src.core.qt_core.geometry.model_data import (
+        _quat_mul,
+        _quat_normalize,
+        _quat_normalize_bind,
+        _quat_rotate,
+    )
+
+    socket = _bas_attachment_socket_node(bas_root)
+    if socket is not None:
+        socket_wp, socket_wo = _node_world_transform(socket, anim_pose=anim_pose)
+        wx, wy, wz = socket_wp
+        parent_orientation = list(socket_wo)
+    else:
+        wx = wy = wz = 0.0
+        parent_orientation = [0.0, 0.0, 0.0, 1.0]
+
+    chain = []
+    current = node
+    visited: set[int] = set()
+    while current is not None:
+        if id(current) in visited or len(chain) > 512:
+            break
+        visited.add(id(current))
+        chain.append(current)
+        if current is bas_root:
+            break
+        current = getattr(current, "parent", None)
+    chain.reverse()
+
+    last_i = len(chain) - 1
+    for index, chain_node in enumerate(chain):
+        is_leaf = index == last_i
+        lx, ly, lz = getattr(chain_node, "position", (0.0, 0.0, 0.0))
+        rot = list(getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        node_rot = _quat_normalize(rot) if is_leaf else _quat_normalize_bind(rot)
+        rx, ry, rz = _quat_rotate(parent_orientation, (lx, ly, lz))
+        wx += rx
+        wy += ry
+        wz += rz
+        parent_orientation = _quat_mul(parent_orientation, node_rot)
+
+    length_sq = sum(float(v) * float(v) for v in parent_orientation[:4])
+    if length_sq > 1e-9 and abs(length_sq - 1.0) > 1e-4:
+        scale = 1.0 / math.sqrt(length_sq)
+        parent_orientation = [float(v) * scale for v in parent_orientation[:4]]
+    return (float(wx), float(wy), float(wz)), tuple(float(v) for v in parent_orientation[:4])
+
+
+def _bas_attachment_local_transform(node, bas_root):
+    from src.core.qt_core.geometry.model_data import (
+        _quat_mul,
+        _quat_normalize,
+        _quat_normalize_bind,
+        _quat_rotate,
+    )
+
+    wx = wy = wz = 0.0
+    parent_orientation = [0.0, 0.0, 0.0, 1.0]
+    chain = []
+    current = node
+    visited: set[int] = set()
+    while current is not None:
+        if id(current) in visited or len(chain) > 512:
+            break
+        visited.add(id(current))
+        chain.append(current)
+        if current is bas_root:
+            break
+        current = getattr(current, "parent", None)
+    chain.reverse()
+
+    last_i = len(chain) - 1
+    for index, chain_node in enumerate(chain):
+        is_leaf = index == last_i
+        lx, ly, lz = getattr(chain_node, "position", (0.0, 0.0, 0.0))
+        rot = list(getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        node_rot = _quat_normalize(rot) if is_leaf else _quat_normalize_bind(rot)
+        rx, ry, rz = _quat_rotate(parent_orientation, (lx, ly, lz))
+        wx += rx
+        wy += ry
+        wz += rz
+        parent_orientation = _quat_mul(parent_orientation, node_rot)
+
+    length_sq = sum(float(v) * float(v) for v in parent_orientation[:4])
+    if length_sq > 1e-9 and abs(length_sq - 1.0) > 1e-4:
+        scale = 1.0 / math.sqrt(length_sq)
+        parent_orientation = [float(v) * scale for v in parent_orientation[:4]]
+    return (float(wx), float(wy), float(wz)), tuple(float(v) for v in parent_orientation[:4])
 
 
 def _animated_node_world_transform(node, anim_pose) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:

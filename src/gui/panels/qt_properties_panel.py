@@ -1,4 +1,4 @@
-"""Qt skeleton and properties panels for the GhostRigger migration."""
+"""Qt properties panel for the GhostRigger migration."""
 
 from __future__ import annotations
 
@@ -38,152 +38,6 @@ _CHARACTER_MODE_BADGE_COLORS = {
     "mode_ambiguous":     "#7F8C8D",   # grey
     "mode_unsupported":   "#C0392B",   # red
 }
-
-
-class QtSkeletonPanel(QtWidgets.QWidget):
-    nodeSelected = QtCore.Signal(object)
-    nodesSelected = QtCore.Signal(list)
-
-    def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
-        super().__init__(parent)
-        self._all_items: dict[QtWidgets.QTreeWidgetItem, object] = {}
-        self._suppress_selection_emit = False
-        self._build()
-
-    def _build(self) -> None:
-        root = QtWidgets.QVBoxLayout(self)
-        root.setContentsMargins(6, 6, 6, 6)
-        root.setSpacing(4)
-
-        header = QtWidgets.QHBoxLayout()
-        header.addWidget(heading("Skeleton / Nodes"))
-        self.count_label = QtWidgets.QLabel("")
-        self.count_label.setStyleSheet(f"color:{C['text2']}; font-size:8pt;")
-        header.addWidget(self.count_label)
-        root.addLayout(header)
-
-        search_row = QtWidgets.QHBoxLayout()
-        self.search_edit = QtWidgets.QLineEdit()
-        self.search_edit.setPlaceholderText("Search nodes")
-        self.search_edit.textChanged.connect(self._filter)
-        clear = QtWidgets.QPushButton("x")
-        clear.setProperty("compact", True)
-        clear.clicked.connect(self.search_edit.clear)
-        search_row.addWidget(self.search_edit)
-        search_row.addWidget(clear)
-        root.addLayout(search_row)
-
-        action_row = QtWidgets.QHBoxLayout()
-        select_all = QtWidgets.QPushButton("Select All Bones")
-        select_all.setProperty("compact", True)
-        select_all.clicked.connect(self.select_all_nodes)
-        clear_sel = QtWidgets.QPushButton("Clear")
-        clear_sel.setProperty("compact", True)
-        clear_sel.clicked.connect(self.clear_selection)
-        self.selection_label = QtWidgets.QLabel("")
-        self.selection_label.setStyleSheet(f"color:{C['gold']}; font-size:8pt;")
-        action_row.addWidget(select_all)
-        action_row.addWidget(clear_sel)
-        action_row.addStretch(1)
-        action_row.addWidget(self.selection_label)
-        root.addLayout(action_row)
-
-        self.tree = QtWidgets.QTreeWidget()
-        self.tree.setHeaderLabels(["Name", "Type", "Verts", "Faces"])
-        self.tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
-        self.tree.itemSelectionChanged.connect(self._on_selection_changed)
-        root.addWidget(self.tree, 1)
-
-    def load_model(self, model) -> None:
-        self._current_model = model
-        self.tree.clear()
-        self._all_items.clear()
-        if not model or not getattr(model, "root_node", None):
-            self.count_label.setText("")
-            return
-        n_nodes = model.node_count() if hasattr(model, "node_count") else 0
-        n_mesh = len(model.mesh_nodes()) if hasattr(model, "mesh_nodes") else 0
-        self.count_label.setText(f"{n_nodes} nodes  {n_mesh} mesh")
-        self._insert_node_iterative(model.root_node)
-        self.tree.expandToDepth(0)
-
-    def _insert_node_iterative(self, root_node) -> None:
-        icon_map = {
-            "trimesh": "[M]",
-            "skin": "[S]",
-            "danglymesh": "[D]",
-            "dummy": "[.]",
-            "light": "[L]",
-            "emitter": "[E]",
-            "lightsaber": "[B]",
-            "reference": "[R]",
-        }
-        stack = [(root_node, None)]
-        while stack:
-            node, parent_item = stack.pop()
-            node_type = getattr(node, "type_label", "")
-            icon = icon_map.get(node_type, "*")
-            verts = len(getattr(node, "vertices", []) or []) if getattr(node, "is_mesh", False) else ""
-            faces = len(getattr(node, "faces", []) or []) if getattr(node, "is_mesh", False) else ""
-            item = QtWidgets.QTreeWidgetItem([
-                f"{icon} {getattr(node, 'name', '')}",
-                str(node_type),
-                str(verts),
-                str(faces),
-            ])
-            if parent_item is None:
-                self.tree.addTopLevelItem(item)
-            else:
-                parent_item.addChild(item)
-            self._all_items[item] = node
-            for child in reversed(getattr(node, "children", []) or []):
-                stack.append((child, item))
-
-    def _on_selection_changed(self) -> None:
-        selected = self.tree.selectedItems()
-        self.selection_label.setText(f"{len(selected)} selected" if len(selected) > 1 else "")
-        if self._suppress_selection_emit:
-            return
-        nodes = [self._all_items[item] for item in selected if item in self._all_items]
-        if nodes:
-            self.nodeSelected.emit(nodes[0])
-        if len(nodes) > 1:
-            self.nodesSelected.emit(nodes)
-
-    def _filter(self, text: str) -> None:
-        needle = text.lower().strip()
-        if not needle:
-            for item in self._all_items:
-                item.setHidden(False)
-            return
-        for item, node in self._all_items.items():
-            name = getattr(node, "name", "").lower()
-            item.setHidden(needle not in name)
-
-    def select_all_nodes(self) -> None:
-        self.tree.selectAll()
-
-    def clear_selection(self) -> None:
-        self.tree.clearSelection()
-
-    def select_node(self, node, *, emit: bool = True) -> None:
-        self._suppress_selection_emit = not emit
-        try:
-            self.tree.clearSelection()
-            if node is None:
-                self.selection_label.setText("")
-                return
-            for item, candidate in self._all_items.items():
-                if candidate is node:
-                    self.tree.setCurrentItem(item)
-                    item.setSelected(True)
-                    self.tree.scrollToItem(item)
-                    break
-        finally:
-            self._suppress_selection_emit = False
-
-    def get_selected_nodes(self) -> list:
-        return [self._all_items[item] for item in self.tree.selectedItems() if item in self._all_items]
 
 
 class QtPropertiesPanel(QtWidgets.QWidget):
@@ -957,17 +811,30 @@ class QtPropertiesPanel(QtWidgets.QWidget):
     def select_module_mesh(self, node) -> None:
         self.select_module_meshes([node] if node is not None else [])
 
-    def select_module_meshes(self, nodes: list) -> None:
+    def has_module_mesh(self, node) -> bool:
+        if not self._module_browser_enabled or self.module_tab is None or node is None:
+            return False
+        if not self._is_module_mesh_candidate(node):
+            return False
+        node_id = id(node)
+        return any(
+            id(candidate) == node_id
+            for items in (self._mesh_items, self._null_mesh_items, self._walkmesh_items)
+            for candidate in items.values()
+        )
+
+    def select_module_meshes(self, nodes: list) -> bool:
         if not self._module_browser_enabled or self.module_tab is None or self._suppress_mesh_signal:
-            return
+            return False
         node_ids = {id(node) for node in nodes if node is not None and self._is_module_mesh_candidate(node)}
+        selected_any = False
         self._suppress_mesh_signal = True
         try:
             self.module_mesh_tree.clearSelection()
             self.module_null_mesh_tree.clearSelection()
             self.module_walkmesh_tree.clearSelection()
             if not node_ids:
-                return
+                return False
             for tree, items, tab in (
                 (self.module_mesh_tree, self._mesh_items, 0),
                 (self.module_null_mesh_tree, self._null_mesh_items, 1),
@@ -978,7 +845,9 @@ class QtPropertiesPanel(QtWidgets.QWidget):
                         item.setSelected(True)
                         tree.setCurrentItem(item)
                         self.module_browser_tabs.setCurrentIndex(tab)
+                        selected_any = True
             self.tabs.setCurrentWidget(self.module_tab)
+            return selected_any
         finally:
             self._suppress_mesh_signal = False
 

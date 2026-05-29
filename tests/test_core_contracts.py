@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import inspect
 import os
+from contextlib import contextmanager
+from pathlib import Path
 from types import MethodType, SimpleNamespace
 
 import pytest
@@ -477,6 +479,81 @@ def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinnin
     assert uploader._skin_inverse_bind_source == "qBone_tBone_dfs_indexed_TR_no_invert"
 
 
+def test_kmax_scene_composite_keeps_bas_layers_out_of_body_dfs_indices() -> None:
+    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    root = ModelNode(name="P_CarthBB", flags=int(NodeFlags.HEADER))
+    spine = ModelNode(name="torso_g", flags=int(NodeFlags.HEADER), parent=root)
+    headhook = ModelNode(name="headhook", flags=int(NodeFlags.HEADER), parent=root)
+    after_hook = ModelNode(name="rhand", flags=int(NodeFlags.HEADER), parent=root)
+    body_skin = ModelNode(name="torso", flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH) | int(NodeFlags.SKIN), parent=root)
+    body_skin.bone_map = ["P_CarthBB", "torso_g", "headhook", "rhand"]
+    body_skin.qbone_list = [(1.0, 0.0, 0.0, 0.0)] * 5
+    body_skin.tbone_list = [(0.0, 0.0, 0.0)] * 5
+    root.children.extend([spine, headhook, after_hook, body_skin])
+    body = KotorModel(name="P_CarthBB", root_node=root)
+
+    head_root = ModelNode(name="pmha01")
+    head_mesh = ModelNode(
+        name="head",
+        flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH) | int(NodeFlags.SKIN),
+        parent=head_root,
+    )
+    head_root.children.append(head_mesh)
+    head = KotorModel(name="pmha01", root_node=head_root)
+
+    window = SimpleNamespace()
+    window._find_model_node = MethodType(QtGhostRiggerMainWindow._find_model_node, window)
+    window._reset_bas_model_node_traversal = MethodType(QtGhostRiggerMainWindow._reset_bas_model_node_traversal, window)
+    window._prepare_bas_layer_root = MethodType(QtGhostRiggerMainWindow._prepare_bas_layer_root, window)
+    window._tag_bas_attachment_subtree = MethodType(QtGhostRiggerMainWindow._tag_bas_attachment_subtree, window)
+    assert QtGhostRiggerMainWindow._attach_bas_item_to_preview(window, body, head, "headhook", slot="head") is True
+
+    fake_viewport = SimpleNamespace()
+    fake_viewport._tag_scene_object_nodes = MethodType(QtViewportWidget._tag_scene_object_nodes, fake_viewport)
+    fake_viewport._tag_scene_source_indices = MethodType(QtViewportWidget._tag_scene_source_indices, fake_viewport)
+    fake_viewport._euler_degrees_to_quat = QtViewportWidget._euler_degrees_to_quat
+    instance = SimpleNamespace(
+        id="bas-preview",
+        name="P_CarthBB BAS",
+        visible=True,
+        metadata={"_runtime_model": body},
+        transform=SimpleNamespace(position=(0.0, 0.0, 0.0), rotation=(0.0, 0.0, 0.0)),
+    )
+
+    composite = QtViewportWidget._build_scene_composite_model(fake_viewport, [instance], "BAS Preview")
+    placed_root = composite.root_node.children[0]
+    stack = [placed_root]
+    placed_root_nodes = []
+    while stack:
+        node = stack.pop()
+        placed_root_nodes.append(node)
+        stack.extend(reversed(getattr(node, "children", []) or []))
+    placed_nodes = {
+        getattr(node, "name", ""): node
+        for node in placed_root_nodes
+        if not bool(getattr(node, "_gr_bas_attachment_layer", False))
+    }
+
+    assert getattr(placed_nodes["P_CarthBB"], "_gr_source_dfs_index") == 0
+    assert getattr(placed_nodes["torso_g"], "_gr_source_dfs_index") == 1
+    assert getattr(placed_nodes["headhook"], "_gr_source_dfs_index") == 2
+    assert getattr(placed_nodes["rhand"], "_gr_source_dfs_index") == 3
+    assert getattr(placed_nodes["torso"], "_gr_source_dfs_index") == 4
+
+    uploader = MatrixPaletteUploader(max_bones=8)
+    uploader.build_inverse_bind_pose(composite)
+    assert uploader._name_to_dfs_index["rhand"] == 3
+    assert uploader._name_to_dfs_index["torso"] == 4
+    assert uploader._model_node_count == 5
+    assert "pmha01" not in uploader._name_to_dfs_index
+    uploader.compute_skin_node_palette(placed_nodes["torso"], SimpleNamespace(nodes={}))
+    assert uploader._skin_inverse_bind_source == "qBone_tBone_dfs_indexed_TR_no_invert"
+
+
 def test_kmax_scene_gpu_transform_uses_authored_vbo_basis() -> None:
     from src.gui.rendering.gpu_renderer import _scene_authored_world_transform, _scene_gpu_model_matrix
 
@@ -750,6 +827,226 @@ def test_module_mesh_properties_panel_supports_multi_select_all() -> None:
     assert selected_batches[-1] == meshes
 
 
+def test_module_mesh_panel_reports_when_node_exists_for_external_selection_sync() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    mesh = SimpleNamespace(
+        name="Object76",
+        is_mesh=True,
+        vertices=[(0, 0, 0)],
+        faces=[(0, 0, 0)],
+        texture="lhr_wall107",
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    helper = SimpleNamespace(name="headhook", is_mesh=False, vertices=[], faces=[])
+    model = SimpleNamespace(
+        name="m01aa_01a",
+        game_version="K1",
+        supermodel="NULL",
+        classification="tile",
+        animations=[],
+        mesh_nodes=lambda: [mesh],
+        all_nodes=lambda: [mesh, helper],
+        bone_nodes=lambda: [],
+        texture_list=lambda: ["lhr_wall107"],
+    )
+    panel = QtPropertiesPanel()
+    panel.show_model(model)
+
+    assert panel.has_module_mesh(mesh) is True
+    assert panel.has_module_mesh(helper) is False
+    assert panel.select_module_meshes([mesh]) is True
+    assert panel._selected_module_meshes() == [mesh]
+    assert panel.select_module_meshes([helper]) is False
+    assert panel._selected_module_meshes() == []
+
+
+def test_sprite_material_panel_detects_and_edits_alpha_card_meshes() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtCore, QtWidgets
+
+    from src.gui.qt_lib.panels.qt_sprite_material_panel import QtSpriteMaterialPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    blade = SimpleNamespace(
+        name="blade01",
+        texture="w_lsabreblue",
+        is_mesh=True,
+        txi_blending=0,
+        txi_alpha_test=0.0,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=0,
+        alpha=1.0,
+    )
+    body = SimpleNamespace(
+        name="hilt",
+        texture="metal01",
+        is_mesh=True,
+        txi_blending=0,
+        txi_alpha_test=0.0,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=0,
+        alpha=1.0,
+    )
+    null_texture_card = SimpleNamespace(
+        name="torso_g",
+        texture="null",
+        is_mesh=True,
+        type_label="trimesh",
+        txi_blending=0,
+        txi_alpha_test=0.5,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=1,
+        alpha=1.0,
+    )
+    dummy_bone = SimpleNamespace(
+        name="weaponhook",
+        texture="p_zaalbar02",
+        is_mesh=True,
+        type_label="dummy",
+        txi_blending=0,
+        txi_alpha_test=0.5,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=1,
+        alpha=1.0,
+    )
+    saber_hilt = SimpleNamespace(
+        name="LghtSbr09",
+        texture="w_shortsbr_001",
+        is_mesh=True,
+        type_label="trimesh",
+        txi_blending=0,
+        txi_alpha_test=0.5,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=0,
+        alpha=1.0,
+    )
+    saber_helper = SimpleNamespace(
+        name="plane242",
+        texture="w_lsabreblue01",
+        is_mesh=True,
+        is_saber=True,
+        type_label="lightsaber",
+        txi_blending=0,
+        txi_alpha_test=0.0,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=0,
+        alpha=1.0,
+    )
+    nodes = [blade, body, null_texture_card, dummy_bone, saber_hilt, saber_helper]
+    model = SimpleNamespace(
+        mesh_nodes=lambda: nodes,
+        all_nodes=lambda: nodes,
+    )
+    panel = QtSpriteMaterialPanel()
+    changed = []
+    selected = []
+    panel.spriteRenderChanged.connect(changed.append)
+    panel.spriteSelected.connect(selected.append)
+    panel.set_model(model)
+
+    names = [panel.tree.topLevelItem(index).text(1) for index in range(panel.tree.topLevelItemCount())]
+    assert panel.tree.topLevelItemCount() == 2
+    assert names == ["blade01", "LghtSbr09"]
+    assert "torso_g" not in names
+    assert "weaponhook" not in names
+    assert "plane242" not in names
+    assert panel.tree.topLevelItem(0).text(4) == "Lighten"
+    assert panel.tree.topLevelItem(0).text(7) == "key, glow 1.6"
+    assert panel.tree.topLevelItem(1).text(3) == "Hilt"
+    assert panel.tree.topLevelItem(1).text(4) == "Opaque"
+    assert panel.tree.topLevelItem(1).text(7) == "hilt"
+
+    panel.tree.setCurrentItem(panel.tree.topLevelItem(0))
+    assert selected[-1] is blade
+    assert panel.key_matte_check.isChecked() is True
+    assert panel.glow_spin.value() == pytest.approx(1.6)
+    panel._set_combo_value(panel.mode_combo, "cutout")
+    panel.cutoff_spin.setValue(0.375)
+
+    assert blade.txi_blending == 2
+    assert blade.txi_alpha_test == pytest.approx(0.375)
+    assert blade._gr_sprite_alpha_source == "luminance"
+    assert blade._gr_sprite_glow == pytest.approx(1.6)
+    assert getattr(blade, "_gr_revision", 0) > 0
+    assert changed[-1] == [blade]
+
+    panel.tree.topLevelItem(0).setCheckState(0, QtCore.Qt.Unchecked)
+    assert blade._gr_hidden is True
+    panel._reset_selected()
+    assert blade.txi_blending == 0
+    assert blade._gr_hidden is False
+
+
+def test_wgpu_material_data_promotes_sprite_alpha_cards_to_alpha_queues() -> None:
+    from src.gui.qt_lib.rendering.mesh_render_data import _material_data
+
+    alpha_card = SimpleNamespace(
+        name="torso_g",
+        texture="p_zaalbar01",
+        is_mesh=True,
+        alpha=1.0,
+        txi_blending=0,
+        txi_alpha_test=0.0,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=1,
+        vertices=[],
+        faces=[],
+    )
+    saber_card = SimpleNamespace(
+        name="plane329",
+        texture="w_lsabreturq01",
+        is_mesh=True,
+        alpha=1.0,
+        txi_blending=0,
+        txi_alpha_test=0.0,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=0,
+        vertices=[],
+        faces=[],
+    )
+    hilt = SimpleNamespace(
+        name="LghtSbr09",
+        texture="w_shortsbr_001",
+        is_mesh=True,
+        alpha=1.0,
+        txi_blending=0,
+        txi_alpha_test=0.5,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=0,
+        vertices=[],
+        faces=[],
+    )
+
+    assert _material_data(alpha_card, {}).alpha_mode == "MASK"
+    saber_material = _material_data(saber_card, {})
+    assert saber_material.alpha_mode == "BLEND"
+    assert saber_material.blend_mode == "LIGHTEN"
+    assert saber_material.sprite_alpha_source == 1
+    assert saber_material.sprite_glow == pytest.approx(1.6)
+    hilt_material = _material_data(hilt, {})
+    assert hilt_material.alpha_mode == "OPAQUE"
+    assert hilt_material.blend_mode == "ALPHA"
+    assert hilt_material.sprite_alpha_source == 0
+    assert hilt_material.sprite_glow == 0.0
+
+
 def test_module_mesh_properties_panel_splits_meshes_nulls_and_walkmeshes() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -938,6 +1235,7 @@ def test_hidden_module_mesh_panel_selection_is_not_forwarded_to_viewport() -> No
 def test_qt_viewport_exposes_mesh_multiselect_box_and_ctrl_a() -> None:
     import inspect
 
+    from src.gui.qt_lib.panels.qt_skeleton_panel import node_browser_role
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     source = inspect.getsource(QtViewportWidget)
@@ -953,6 +1251,8 @@ def test_qt_viewport_exposes_mesh_multiselect_box_and_ctrl_a() -> None:
     assert "QtWidgets.QRubberBand" in source
     assert "def _front_facing_score" in source
     assert "def _point_in_triangle" in source
+    assert QtViewportWidget._is_selectable_mesh_node(SimpleNamespace(is_saber=True, vertices=[1], faces=[1])) is False
+    assert node_browser_role(SimpleNamespace(is_saber=True, is_mesh=True), "lightsaber") == "Lightsaber"
 
 
 def test_qt_viewport_mesh_pick_requires_real_triangle_and_hover_outline() -> None:
@@ -1331,6 +1631,93 @@ def test_wgpu_helper_hit_test_selects_screen_space_helpers_before_meshes() -> No
     try:
         assert viewport._helper_hit_test(104, 103) is helper
         assert viewport._helper_hit_test(150, 150) is None
+    finally:
+        viewport.deleteLater()
+
+
+def test_viewport_toolbar_exposes_helper_toggle_and_selection_mode_menu() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    viewport = QtViewportWidget()
+    try:
+        helper_button = viewport.findChild(QtWidgets.QPushButton, "ViewportDummyHelpersButton")
+        mode_button = viewport.findChild(QtWidgets.QToolButton, "ViewportSelectionModeButton")
+
+        assert helper_button is viewport.dummy_helpers_button
+        assert viewport.dummy_helpers_button.isCheckable()
+        assert viewport.dummy_helpers_button.isChecked() is True
+        assert bool(getattr(viewport._renderer, "show_dummy_helpers", False)) is True
+        assert mode_button is viewport.selection_mode_button
+        assert [action.data() for action in mode_button.menu().actions()] == [
+            "object",
+            "mesh",
+            "helpers",
+            "lights",
+            "cameras",
+        ]
+
+        viewport.set_viewport_selection_mode("helpers")
+        assert viewport._viewport_selection_mode == "helpers"
+        assert mode_button.toolTip() == "Viewport selection mode: Helpers"
+        assert not mode_button.icon().isNull()
+
+        viewport.set_dummy_helper_visibility(False)
+        assert viewport.dummy_helpers_button.isChecked() is False
+        assert bool(getattr(viewport._renderer, "show_dummy_helpers", True)) is False
+    finally:
+        viewport.deleteLater()
+
+
+def test_viewport_selection_mode_filters_click_targets() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtCore, QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    class _Position:
+        def x(self) -> int:
+            return 100
+
+        def y(self) -> int:
+            return 100
+
+    class _Event:
+        def position(self):
+            return _Position()
+
+        def modifiers(self):
+            return QtCore.Qt.NoModifier
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    viewport = QtViewportWidget()
+    mesh = SimpleNamespace(name="Mesh", is_mesh=True)
+    helper = SimpleNamespace(name="Waypoint_Helper", type_label="dummy")
+    light = SimpleNamespace(name="AuroraLight001", is_light=True)
+    camera = SimpleNamespace(name="Camera001", is_camera=True)
+    selected: list[object | None] = []
+    viewport.set_selected_node = lambda node, *args, **kwargs: selected.append(node)
+    viewport._mesh_hit_test_detail = lambda *args, **kwargs: (mesh, None)
+    viewport._helper_hit_test = lambda *args, **kwargs: helper
+    viewport._light_hit_test = lambda *args, **kwargs: light
+    viewport._camera_hit_test = lambda *args, **kwargs: camera
+    viewport._renderer.show_bones = False
+    try:
+        viewport.set_viewport_selection_mode("helpers")
+        viewport._release_lmb(_Event())
+        viewport.set_viewport_selection_mode("lights")
+        viewport._release_lmb(_Event())
+        viewport.set_viewport_selection_mode("cameras")
+        viewport._release_lmb(_Event())
+        viewport.set_viewport_selection_mode("mesh")
+        viewport._release_lmb(_Event())
+
+        assert selected == [helper, light, camera, mesh]
     finally:
         viewport.deleteLater()
 
@@ -1742,6 +2129,113 @@ def test_wgpu_scene_lighting_only_drives_realistic_base_modes() -> None:
     assert renderer._scene_lighting_enabled(lighting, ViewportDisplayOptions(display_mode=ViewportDisplayMode.TEXTURED)) is True
     assert renderer._scene_lighting_enabled(lighting, ViewportDisplayOptions(display_mode=ViewportDisplayMode.SHADED)) is False
     assert renderer._scene_lighting_enabled(lighting, ViewportDisplayOptions(display_mode=ViewportDisplayMode.SOLID)) is False
+
+
+def test_wgpu_bas_attachment_follows_animated_socket_matrix() -> None:
+    import numpy as np
+
+    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    renderer._active_anim_pose = SimpleNamespace(
+        nodes={
+            "rhand": SimpleNamespace(
+                position=(2.0, 3.0, 4.0),
+                rotation=(0.0, 0.0, 0.0, 1.0),
+            )
+        },
+        nodes_by_index={},
+        duplicate_node_names=set(),
+    )
+    prepared = np.eye(4, dtype=np.float32)
+    prepared[0, 3] = 12.5
+    body = ModelNode(name="body")
+    socket = ModelNode(name="rhand", parent=body)
+    body.children.append(socket)
+    weapon_root = ModelNode(name="weaponroot", parent=socket)
+    weapon_root._gr_bas_attachment_root = True
+    weapon_root._gr_bas_attachment_layer = True
+    weapon_root._gr_bas_socket_name = "rhand"
+    socket.children.append(weapon_root)
+    blade = ModelNode(name="blade", parent=weapon_root)
+    blade.position = (0.0, 0.0, 0.25)
+    blade._gr_bas_attachment_layer = True
+    blade._gr_bas_attachment_root_ref = weapon_root
+    weapon_root.children.append(blade)
+    mesh_data = SimpleNamespace(source=blade, is_skinned=False, world_matrix=prepared)
+
+    matrix = renderer._mesh_model_matrix(mesh_data)
+
+    assert matrix[0, 3] == pytest.approx(2.0)
+    assert matrix[1, 3] == pytest.approx(3.0)
+    assert matrix[2, 3] == pytest.approx(4.25)
+
+
+def test_wgpu_bas_head_skin_uses_animated_socket_root_not_head_node_offset() -> None:
+    import numpy as np
+
+    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+
+    renderer = WgpuRenderer()
+    renderer._active_anim_pose = SimpleNamespace(
+        nodes={
+            "headhook": SimpleNamespace(
+                position=(0.25, -0.5, 1.75),
+                rotation=(0.0, 0.0, 0.0, 1.0),
+            )
+        },
+        nodes_by_index={},
+        duplicate_node_names=set(),
+    )
+    prepared = np.eye(4, dtype=np.float32)
+    body = ModelNode(name="body")
+    socket = ModelNode(name="headhook", parent=body)
+    body.children.append(socket)
+    head_root = ModelNode(name="pmha01", parent=socket)
+    head_root._gr_bas_attachment_root = True
+    head_root._gr_bas_attachment_layer = True
+    head_root._gr_bas_socket_name = "headhook"
+    socket.children.append(head_root)
+    head_skin = ModelNode(name="head", parent=head_root, flags=0x61)
+    head_skin.position = (0.0, 0.0, 2.0)
+    head_skin._gr_bas_attachment_layer = True
+    head_skin._gr_bas_attachment_root_ref = head_root
+    head_root.children.append(head_skin)
+    mesh_data = SimpleNamespace(source=head_skin, is_skinned=False, world_matrix=prepared)
+
+    matrix = renderer._mesh_model_matrix(mesh_data)
+
+    np.testing.assert_allclose(matrix[:3, 3], np.asarray([0.25, -0.5, 1.75], dtype=np.float32), atol=1e-6)
+
+
+def test_bas_runtime_contract_is_documented_and_guarded() -> None:
+    import inspect
+    from pathlib import Path
+
+    from src.gui.rendering import gpu_renderer, mesh_render_data, wgpu_renderer
+
+    contract_path = Path(__file__).resolve().parents[1] / "src" / "systems" / "bas" / "README.md"
+    contract = contract_path.read_text(encoding="utf-8")
+    assert "BAS layers follow the animated socket transform every frame" in contract
+    assert "BAS skin meshes stay out of the body skin palette" in contract
+    assert "WGPU/D3D and ModernGL/OpenGL" in contract
+
+    wgpu_source = inspect.getsource(wgpu_renderer.WgpuRenderer._mesh_model_matrix)
+    assert "_gr_bas_attachment_layer" in wgpu_source
+    assert "self._active_anim_pose is not None" in wgpu_source
+    assert "node_world_matrix(matrix_source, anim_pose=self._active_anim_pose)" in wgpu_source
+    assert "render-queue bind matrix" in wgpu_source
+
+    modern_gl_source = inspect.getsource(gpu_renderer)
+    assert "_bas_attachment_local_transform_np" in modern_gl_source
+    assert "not bool(getattr(node, \"_gr_bas_attachment_layer\", False))" in modern_gl_source
+    assert "BAS attachment skins are socket followers" in modern_gl_source
+
+    mesh_source = inspect.getsource(mesh_render_data._extract_skinning)
+    assert "_gr_bas_attachment_layer" in mesh_source
+    assert "BAS attachment layers follow sockets outside body skinning" in mesh_source
 
 
 def test_qt_viewport_shader_complexity_does_not_override_lighting_mode() -> None:
@@ -2219,6 +2713,21 @@ def test_main_model_load_uses_inherited_animation_panel_loader() -> None:
     assert "self.animations_panel.load_model(model)" not in loaded_source
     assert "self._load_animation_panel_model(model)" in retarget_source
     assert "self._load_animation_panel_model(model)" in library_source
+    loader_source = inspect.getsource(QtGhostRiggerMainWindow._load_animation_panel_model)
+    layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    actions_source = inspect.getsource(QtGhostRiggerMainWindow._build_actions)
+    menu_source = inspect.getsource(QtGhostRiggerMainWindow._build_menu)
+    assert '"Animation Browser"' in layout_source
+    assert "animationSourceChanged.connect(self._handle_animation_source_changed)" in layout_source
+    assert "QtBodyAttachmentPanel(self)" in layout_source
+    assert '"Body Attachment System"' in layout_source
+    assert "body_attachment_panel_action" in actions_source
+    assert 'self.body_attachment_panel_action = QtGui.QAction(self._icon("body_attachment"), "Body Attachment System", self)' in actions_source
+    assert "modules_menu.addAction(self.body_attachment_panel_action)" in menu_source
+    assert "_animation_source_model(model)" in loader_source
+    assert "_animation_inheritance_supermodel(model)" in loader_source
+    assert "_animation_resolution_context(model, inheritance_game, inheritance_supermodel)" in loader_source
+    assert Path("src/gui/icons/body_attachment.svg").exists()
 
 
 def test_wgpu_external_lighting_snapshot_receives_renderer_helper_palette(monkeypatch) -> None:
@@ -2255,7 +2764,7 @@ def test_wgpu_material_uniforms_respect_diffuse_toggle_and_display_options() -> 
 
     renderer.show_diffuse_map = False
     data = renderer._mesh_uniform_bytes(np.eye(4, dtype=np.float32), (1.0, 1.0, 1.0, 1.0), material, options)
-    assert len(data) == 176
+    assert len(data) == 192
     flags = np.frombuffer(data[144:160], dtype=np.float32)
     assert flags[0] == 0.0
 
@@ -2267,7 +2776,14 @@ def test_wgpu_material_uniforms_respect_diffuse_toggle_and_display_options() -> 
     shaded = ViewportDisplayOptions(display_mode=ViewportDisplayMode.SHADED)
     data = renderer._mesh_uniform_bytes(np.eye(4, dtype=np.float32), (1.0, 1.0, 1.0, 1.0), material, shaded)
     params = np.frombuffer(data[160:176], dtype=np.float32)
+    sprite = np.frombuffer(data[176:192], dtype=np.float32)
     assert params[1] == 2.0
+    assert sprite[2] == 1.0
+
+    flat = ViewportDisplayOptions(display_mode=ViewportDisplayMode.SOLID, force_flat_colour=True)
+    data = renderer._mesh_uniform_bytes(np.eye(4, dtype=np.float32), (1.0, 1.0, 1.0, 1.0), material, flat)
+    sprite = np.frombuffer(data[176:192], dtype=np.float32)
+    assert sprite[2] == 0.0
 
     model_matrix = np.eye(4, dtype=np.float32)
     model_matrix[0, 3] = 7.0
@@ -2280,6 +2796,20 @@ def test_wgpu_material_uniforms_respect_diffuse_toggle_and_display_options() -> 
     )
     decoded_model = np.frombuffer(data[64:128], dtype=np.float32).reshape(4, 4).T
     assert decoded_model[0, 3] == 7.0
+
+    sprite_material = SimpleNamespace(
+        diffuse_texture_resource=object(),
+        has_lightmap=False,
+        alpha_mode="BLEND",
+        alpha_cutoff=0.25,
+        sprite_alpha_source=1,
+        sprite_glow=1.6,
+    )
+    data = renderer._mesh_uniform_bytes(np.eye(4, dtype=np.float32), (1.0, 1.0, 1.0, 1.0), sprite_material, options)
+    sprite = np.frombuffer(data[176:192], dtype=np.float32)
+    assert sprite[0] == 1.0
+    assert sprite[1] == pytest.approx(1.6)
+    assert sprite[2] == 2.0
 
 
 def test_wgpu_mesh_uniform_marks_selected_mesh_for_shader_fill() -> None:
@@ -2323,8 +2853,61 @@ def test_wgpu_mesh_shaders_apply_moderngl_selected_yellow_fill() -> None:
 
     assert expected in wgpu_renderer._load_mesh_shader()
     assert expected in wgpu_renderer._load_skinned_mesh_shader()
+    assert "sprite_keyed_alpha" in wgpu_renderer._load_mesh_shader()
+    assert "sprite_emission_tint" in wgpu_renderer._load_mesh_shader()
+    assert "!sprite_emissive && lighting_state.flags.y" in wgpu_renderer._load_mesh_shader()
+    assert "out_color.rgb * soft_shade, out_color.a" in wgpu_renderer._load_mesh_shader()
     assert "locals.model * vec4<f32>(input.position, 1.0)" in wgpu_renderer._load_mesh_shader()
     assert "locals.model * skin_position(input)" in wgpu_renderer._load_skinned_mesh_shader()
+
+
+def test_wgpu_routes_saber_sprites_through_additive_blend_pass() -> None:
+    import inspect
+    import numpy as np
+
+    from src.gui.qt_lib.rendering import wgpu_renderer
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.gui.qt_lib.rendering.viewport_display import ViewportDisplayMode
+
+    create_source = inspect.getsource(WgpuRenderer._create_textured_pipeline)
+    mesh_source = inspect.getsource(WgpuRenderer._draw_meshes)
+    skin_source = inspect.getsource(WgpuRenderer._skinned_pipeline_for_pass)
+
+    assert "src_factor\": wgpu.BlendFactor.one if additive else wgpu.BlendFactor.src_alpha" in create_source
+    assert "dst_factor\": wgpu.BlendFactor.one if additive else wgpu.BlendFactor.one_minus_src_alpha" in create_source
+    assert "blend_mode = str(getattr(material_data, \"blend_mode\", \"ALPHA\")" in mesh_source
+    assert 'item[0] == "BLEND" and item[1] == "ADDITIVE"' in mesh_source
+    assert 'draw_pass("additive", additive, self.pipeline_mesh_additive' in mesh_source
+    assert 'pass_name).lower() == "additive"' in skin_source
+    assert "self._should_draw_selected_mesh_edges(item, mode, edge_overlay)" in mesh_source
+    assert "_uses_sprite_wire_hull" in inspect.getsource(wgpu_renderer.WgpuResourceCache.upload_mesh)
+
+    renderer = WgpuRenderer.__new__(WgpuRenderer)
+    glow_card = SimpleNamespace(material=SimpleNamespace(blend_mode="ADDITIVE", sprite_alpha_source=1))
+    lighten_glow_card = SimpleNamespace(material=SimpleNamespace(blend_mode="LIGHTEN", sprite_alpha_source=1))
+    opaque_mesh = SimpleNamespace(material=SimpleNamespace(blend_mode="ALPHA", sprite_alpha_source=0))
+    assert renderer._should_draw_selected_mesh_edges(glow_card, ViewportDisplayMode.TEXTURED, False) is False
+    assert renderer._should_draw_selected_mesh_edges(lighten_glow_card, ViewportDisplayMode.TEXTURED, False) is False
+    assert renderer._should_draw_selected_mesh_edges(glow_card, ViewportDisplayMode.TEXTURED, True) is True
+    assert renderer._should_draw_selected_mesh_edges(glow_card, ViewportDisplayMode.WIREFRAME, False) is True
+    assert renderer._should_draw_selected_mesh_edges(lighten_glow_card, ViewportDisplayMode.WIREFRAME, False) is True
+    assert renderer._should_draw_selected_mesh_edges(opaque_mesh, ViewportDisplayMode.TEXTURED, False) is True
+
+    cache = wgpu_renderer.WgpuResourceCache.__new__(wgpu_renderer.WgpuResourceCache)
+    positions = np.asarray(
+        [
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ],
+        dtype=np.float32,
+    )
+    hull = cache._build_edge_indices(None, len(positions), positions=positions, geometric=True)
+    assert hull is not None
+    assert len(hull) == 8
 
 
 def test_wgpu_mesh_draw_uses_per_draw_uniforms_for_selected_fill() -> None:
@@ -2401,14 +2984,16 @@ def test_qt_lighting_panel_select_light_syncs_from_viewport_without_emitting() -
     panel.set_model(SimpleNamespace(all_nodes=lambda: [first, second]))
     emitted.clear()
 
-    panel.select_light(second)
+    assert panel.has_light(second) is True
+    assert panel.select_light(second) is True
 
     assert emitted == []
     assert panel._selected is second
     assert panel.tree.currentItem().data(0, QtCore.Qt.UserRole) is second
     assert panel.radius_spin.value() == 11.75
 
-    panel.select_light(None)
+    assert panel.has_light(SimpleNamespace(name="NotALight", is_light=False)) is False
+    assert panel.select_light(None) is False
 
     assert emitted == []
     assert panel._selected is None
@@ -2444,7 +3029,7 @@ def test_qt_skeleton_panel_can_sync_root_without_emitting_selection() -> None:
 
     from PySide6 import QtWidgets
 
-    from src.gui.qt_lib.panels.qt_properties_panel import QtSkeletonPanel
+    from src.gui.qt_lib.panels.qt_skeleton_panel import QtSkeletonPanel
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     child = SimpleNamespace(name="head", type_label="dummy", is_mesh=False, children=[])
@@ -2466,7 +3051,247 @@ def test_qt_skeleton_panel_can_sync_root_without_emitting_selection() -> None:
     assert panel.get_selected_nodes() == [root]
 
 
-def test_main_window_routes_scene_root_skeleton_selection_through_scene_object() -> None:
+def test_qt_skeleton_panel_uses_detailed_browser_columns_and_icons() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtGui, QtWidgets
+
+    from src.gui.qt_lib.panels.qt_skeleton_panel import QtSkeletonPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    hook = SimpleNamespace(name="rhandhook", type_label="dummy", is_mesh=False, children=[], attachments=["w_lghtsbr"])
+    mesh = SimpleNamespace(
+        name="torso_g",
+        type_label="trimesh",
+        is_mesh=True,
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+        faces=[(0, 1, 1)],
+        children=[],
+    )
+    root = SimpleNamespace(name="P_CarthBB", type_label="dummy", is_mesh=False, children=[hook, mesh])
+    hook.parent = root
+    mesh.parent = root
+    model = SimpleNamespace(root_node=root, node_count=lambda: 3, mesh_nodes=lambda: [mesh])
+
+    panel = QtSkeletonPanel()
+    panel.load_model(model)
+
+    assert [panel.tree.headerItem().text(index) for index in range(panel.tree.columnCount())] == [
+        "Node",
+        "Role",
+        "Mesh",
+        "Verts",
+        "Faces",
+        "Children",
+        "Attach",
+    ]
+    assert panel.tree.header().sectionResizeMode(0) == QtWidgets.QHeaderView.Stretch
+    assert panel.tree.header().sectionResizeMode(1) == QtWidgets.QHeaderView.ResizeToContents
+
+    root_item = panel.tree.topLevelItem(0)
+    hook_item = root_item.child(0)
+    mesh_item = root_item.child(1)
+    assert not root_item.icon(0).isNull()
+    assert hook_item.text(1) == "Hook"
+    assert hook_item.text(6) == "1"
+    assert mesh_item.text(1) == "Mesh"
+    assert mesh_item.text(2) == "trimesh"
+    assert mesh_item.text(3) == "2"
+    assert mesh_item.text(4) == "1"
+    option = QtWidgets.QStyleOptionViewItem()
+    option.initFrom(panel.tree)
+    option.fontMetrics = QtGui.QFontMetrics(panel.tree.font())
+    assert panel.tree.itemDelegate().sizeHint(option, panel.tree.model().index(0, 0)).height() >= 24
+
+    panel._filter("torso")
+    assert root_item.isHidden() is False
+    assert hook_item.isHidden() is True
+    assert mesh_item.isHidden() is False
+
+
+def test_qt_skeleton_panel_preserves_module_node_hierarchy() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_skeleton_panel import QtSkeletonPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    root = SimpleNamespace(name="M01aa_01a", type_label="dummy", is_mesh=False, children=[])
+    door = SimpleNamespace(name="Door_16", type_label="dummy", is_mesh=False, children=[])
+    hook = SimpleNamespace(name="cameraHook", type_label="dummy", is_mesh=False, children=[])
+    light = SimpleNamespace(name="AuroraLight273", type_label="light", is_light=True, is_mesh=False, children=[])
+    meshes = [
+        SimpleNamespace(name=f"Object{index}", type_label="trimesh", is_mesh=True, vertices=[(0, 0, 0)], faces=[(0, 0, 0)], children=[])
+        for index in range(12)
+    ]
+    for child in [door, hook, light, *meshes]:
+        child.parent = root
+    root.children = [door, hook, light, *meshes]
+    model = SimpleNamespace(root_node=root, node_count=lambda: len(root.children) + 1, mesh_nodes=lambda: meshes)
+
+    panel = QtSkeletonPanel()
+    panel.load_model(model)
+
+    root_item = panel.tree.topLevelItem(0)
+    assert root_item.text(0) == "M01aa_01a"
+    assert root_item.childCount() == len(root.children)
+    assert [root_item.child(index).text(0) for index in range(4)] == [
+        "Door_16",
+        "cameraHook",
+        "AuroraLight273",
+        "Object0",
+    ]
+    assert root_item.child(0).text(1) == "Bone"
+    assert root_item.child(1).text(1) == "Hook"
+    assert root_item.child(2).text(1) == "Light"
+    assert root_item.child(3).text(1) == "Mesh"
+    assert all(root_item.child(index).text(0) not in {"Bones", "Lights", "Helpers", "Meshes"} for index in range(root_item.childCount()))
+
+    selected = []
+    panel.nodeSelected.connect(selected.append)
+    panel.tree.setCurrentItem(root_item.child(3))
+    assert selected[-1] is meshes[0]
+
+
+def test_qt_scene_outliner_uses_detailed_browser_columns_icons_and_filter() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtGui, QtWidgets
+
+    from src.gui.qt_lib.panels.qt_scene_outliner_panel import QtSceneOutlinerPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    ref = SimpleNamespace(resref="P_Zaalbar", original_name="", source_module="", source_archive="", source_path="", resource_type="model")
+    root_node = SimpleNamespace(name="P_Zaalbar", type_label="dummy", is_mesh=False, children=[])
+    head_hook = SimpleNamespace(name="headhook", type_label="dummy", is_mesh=False, children=[], index=4)
+    saber_hook = SimpleNamespace(name="rhand", type_label="dummy", is_mesh=False, children=[], index=12)
+    aurora_light = SimpleNamespace(
+        name="AuroraLight331",
+        type_label="light",
+        is_light=True,
+        is_mesh=False,
+        children=[],
+        index=44,
+        light_kind="aurora_point",
+        light_radius=12.0,
+    )
+    torso_mesh = SimpleNamespace(name="torso", type_label="skin", is_mesh=True, is_skin=True, children=[], index=2)
+    head_hook.parent = root_node
+    saber_hook.parent = root_node
+    aurora_light.parent = root_node
+    torso_mesh.parent = root_node
+    root_node.children = [torso_mesh, head_hook, saber_hook, aurora_light]
+    runtime_model = SimpleNamespace(root_node=root_node, all_nodes=lambda: [root_node, torso_mesh, head_hook, saber_hook, aurora_light])
+    model = SimpleNamespace(
+        id="model-001",
+        name="P_Zaalbar",
+        object_type="model",
+        visible=True,
+        locked=False,
+        selected=True,
+        source_ref=ref,
+        metadata={"node_count": 87, "_runtime_model": runtime_model},
+        group_id="party",
+    )
+    hidden_light = SimpleNamespace(
+        id="light-001",
+        name="KeyLight",
+        object_type="light",
+        visible=False,
+        locked=True,
+        selected=False,
+        source_ref=SimpleNamespace(resref="", original_name="", source_module="", source_archive="", source_path="", resource_type="light"),
+        metadata={},
+        group_id="",
+    )
+    scene = SimpleNamespace(
+        id="scene-001",
+        name="Untitled Scene",
+        display_name="Untitled Scene",
+        game="K1",
+        dirty=False,
+        objects=[model, hidden_light],
+    )
+
+    panel = QtSceneOutlinerPanel()
+    emitted = []
+    helper_emitted = []
+    light_emitted = []
+    panel.objectSelected.connect(emitted.append)
+    panel.helperNodeSelected.connect(helper_emitted.append)
+    panel.lightNodeSelected.connect(light_emitted.append)
+    panel.set_scene(scene)
+
+    assert [panel.tree.headerItem().text(index) for index in range(panel.tree.columnCount())] == [
+        "Object",
+        "Kind",
+        "State",
+        "Children",
+        "Source",
+        "ID",
+    ]
+    assert panel.tree.header().sectionResizeMode(0) == QtWidgets.QHeaderView.Stretch
+    assert panel.tree.header().sectionResizeMode(1) == QtWidgets.QHeaderView.ResizeToContents
+    assert panel.count_label.text() == "1 models  2 lights  0 cameras  2 helpers"
+
+    root_item = panel.tree.topLevelItem(0)
+    models_bucket = root_item.child(0)
+    model_item = models_bucket.child(0)
+    lights_bucket = root_item.child(1)
+    light_item = lights_bucket.child(0)
+    runtime_light_item = lights_bucket.child(1)
+    helpers_bucket = root_item.child(3)
+    assert not root_item.icon(0).isNull()
+    assert model_item.text(1) == "Model"
+    assert model_item.text(2) == "visible, selected"
+    assert model_item.text(3) == "87"
+    assert model_item.text(4) == "P_Zaalbar"
+    assert model_item.childCount() == 0
+    assert helpers_bucket.text(0) == "Helpers"
+    assert helpers_bucket.text(3) == "2"
+    assert helpers_bucket.child(0).text(0) == "headhook"
+    assert helpers_bucket.child(0).text(1) == "Helper"
+    assert helpers_bucket.child(0).text(2) == "dummy"
+    assert lights_bucket.text(3) == "2"
+    assert light_item.text(2) == "hidden, locked"
+    assert runtime_light_item.text(0) == "AuroraLight331"
+    assert runtime_light_item.text(1) == "Light"
+    assert runtime_light_item.text(2) == "enabled, visible"
+    assert runtime_light_item.text(4) == "P_Zaalbar"
+    option = QtWidgets.QStyleOptionViewItem()
+    option.initFrom(panel.tree)
+    option.fontMetrics = QtGui.QFontMetrics(panel.tree.font())
+    assert panel.tree.itemDelegate().sizeHint(option, panel.tree.model().index(0, 0)).height() >= 24
+
+    panel._filter("zaalbar")
+    assert root_item.isHidden() is False
+    assert models_bucket.isHidden() is False
+    assert model_item.isHidden() is False
+    assert lights_bucket.isHidden() is False
+    assert light_item.isHidden() is True
+    assert runtime_light_item.isHidden() is False
+    assert helpers_bucket.isHidden() is False
+
+    panel._filter("")
+    panel.tree.setCurrentItem(root_item)
+    emitted.clear()
+    panel.tree.setCurrentItem(model_item)
+    assert emitted == ["model-001"]
+    emitted.clear()
+    helper_emitted.clear()
+    panel.tree.setCurrentItem(helpers_bucket.child(0))
+    assert emitted == []
+    assert helper_emitted == [head_hook]
+    helper_emitted.clear()
+    light_emitted.clear()
+    panel.tree.setCurrentItem(runtime_light_item)
+    assert emitted == []
+    assert helper_emitted == []
+    assert light_emitted == [aurora_light]
+
+
+def test_main_window_keeps_cross_panel_selection_sync_on_scene_outliner() -> None:
     import inspect
 
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
@@ -2477,10 +3302,17 @@ def test_main_window_routes_scene_root_skeleton_selection_through_scene_object()
     viewport_source = inspect.getsource(QtGhostRiggerMainWindow._on_viewport_scene_node_selected)
 
     assert "self.skeleton_panel.nodeSelected.connect(self._on_skeleton_node_selected)" in init_source
+    assert "self.scene_outliner_panel.helperNodeSelected.connect(self._on_scene_outliner_helper_node_selected)" in init_source
+    assert "self.scene_outliner_panel.lightNodeSelected.connect(self._on_scene_outliner_light_node_selected)" in init_source
     assert "self._sync_skeleton_root_for_scene_object(obj)" in select_source
-    assert "node is getattr(self._runtime_model_for_scene_object(obj), \"root_node\", None)" in skeleton_source
-    assert "self._select_scene_object_impl(obj.id)" in skeleton_source
-    assert "self.viewport.set_selected_node(node)" in skeleton_source
+    assert 'self.viewport.set_selected_node(node, source="nodes panel")' in skeleton_source
+    assert "_select_lighting_node_from_node" not in inspect.getsource(QtGhostRiggerMainWindow)
+    assert "_select_module_mesh_from_node" not in inspect.getsource(QtGhostRiggerMainWindow)
+    assert "def _on_scene_outliner_helper_node_selected(self, node)" in inspect.getsource(QtGhostRiggerMainWindow)
+    assert 'self.viewport.set_selected_node(node, source="scene outliner helper")' in inspect.getsource(QtGhostRiggerMainWindow)
+    assert "def _on_scene_outliner_light_node_selected(self, node)" in inspect.getsource(QtGhostRiggerMainWindow)
+    assert 'self.viewport.set_selected_node(node, source="scene outliner light")' in inspect.getsource(QtGhostRiggerMainWindow)
+    assert "self.lighting_panel.select_light(node)" in inspect.getsource(QtGhostRiggerMainWindow)
     assert "self._sync_skeleton_root_for_scene_object(obj)" in viewport_source
 
 
@@ -2707,7 +3539,983 @@ def test_qt_animations_panel_can_select_loaded_animation() -> None:
     panel.load_model(model, select_name="walkss")
 
     assert panel.selected_animation() == "walkss"
+    assert panel.listbox.currentItem().text() == "Walkss [walkss]"
     assert panel.info.toPlainText() == "2 animation(s)"
+
+
+def test_qt_animations_panel_displays_readable_names_with_raw_animation_slots() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationsPanel, animation_display_name, animation_row_label
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtAnimationsPanel()
+    model = SimpleNamespace(
+        animations=[
+            SimpleNamespace(name="pause1"),
+            SimpleNamespace(name="animloop03"),
+            SimpleNamespace(name="b1a1"),
+            SimpleNamespace(name="b5a1"),
+            SimpleNamespace(name="b6a1"),
+            SimpleNamespace(name="b7a1"),
+            SimpleNamespace(name="b8a1"),
+            SimpleNamespace(name="c10n3"),
+            SimpleNamespace(name="c2a1"),
+            SimpleNamespace(name="f2p4a"),
+            SimpleNamespace(name="g1a1"),
+            SimpleNamespace(name="g2f1"),
+            SimpleNamespace(name="g2r1"),
+            SimpleNamespace(name="g2w1"),
+            SimpleNamespace(name="g3w1"),
+            SimpleNamespace(name="g5a1"),
+            SimpleNamespace(name="g6a1"),
+            SimpleNamespace(name="g7a1"),
+            SimpleNamespace(name="g8a1"),
+            SimpleNamespace(name="g9a1"),
+            SimpleNamespace(name="g3x1"),
+            SimpleNamespace(name="g3y1"),
+            SimpleNamespace(name="g3z1"),
+            SimpleNamespace(name="m2d1"),
+            SimpleNamespace(name="m4d2"),
+        ]
+    )
+    emitted = []
+    panel.animationSelected.connect(emitted.append)
+
+    panel.load_model(model, select_name="b1a1")
+
+    assert animation_display_name("pause1") == "Idle 1"
+    assert panel.listbox.item(0).text() == "Idle 1 [pause1]"
+    assert panel.listbox.item(1).text() == "Ambient Loop 03 [animloop03]"
+    assert panel.listbox.item(2).text() == "Blaster Set 1 Attack 1 [b1a1]"
+    assert panel.listbox.item(3).text() == "Blaster Set 5 (Single Hand Blasters) Attack 1 [b5a1]"
+    assert panel.listbox.item(4).text() == "Blaster Set 6 (Dual Blasters: L + R) Attack 1 [b6a1]"
+    assert panel.listbox.item(5).text() == "Blaster Set 7 (Blaster Rifles: Both Hands) Attack 1 [b7a1]"
+    assert panel.listbox.item(6).text() == "Blaster Set 8 (Assault Cannons: Both Hands) Attack 1 [b8a1]"
+    assert panel.listbox.item(7).text() == "Combat Set 10 Block 3 [c10n3]"
+    assert panel.listbox.item(8).text() == "Combat Set 2 (Single Hand Melee: Vibrosword, Short Sword) Attack 1 [c2a1]"
+    assert panel.listbox.item(9).text() == "Fists Set 2 Parry 4 Form A [f2p4a]"
+    assert panel.listbox.item(10).text() == "General Weapon Set 1 (Single Hand Melee: Shortsword) Attack 1 [g1a1]"
+    assert panel.listbox.item(11).text() == "General Weapon Set 2 (Single Hand Melee: Lightsaber, Melee) Flurry 1 [g2f1]"
+    assert panel.listbox.item(12).text() == "General Weapon Set 2 (Single Hand Melee: Lightsaber, Melee) Idle (On Guard Pose) 1 [g2r1]"
+    assert panel.listbox.item(13).text() == "General Weapon Set 2 (Single Hand Melee: Lightsaber, Melee) Activate Lightsaber 1 [g2w1]"
+    assert panel.listbox.item(14).text() == "General Weapon Set 3 Activate Weapon 1 [g3w1]"
+    assert panel.listbox.item(15).text() == "General Weapon Set 5 (Blaster Pistol) Attack 1 [g5a1]"
+    assert panel.listbox.item(16).text() == "General Weapon Set 6 (Dual Blasters) Attack 1 [g6a1]"
+    assert panel.listbox.item(17).text() == "General Weapon Set 7 (Blaster Rifles) Attack 1 [g7a1]"
+    assert panel.listbox.item(18).text() == "General Weapon Set 8 (Hand to Hand Combat) Attack 1 [g8a1]"
+    assert panel.listbox.item(19).text() == "General Weapon Set 9 (Assault Cannons) Attack 1 [g9a1]"
+    assert panel.listbox.item(20).text() == "General Weapon Set 3 Fall Through Air 1 [g3x1]"
+    assert panel.listbox.item(21).text() == "General Weapon Set 3 Air-To-Ground Fall 1 [g3y1]"
+    assert panel.listbox.item(22).text() == "General Weapon Set 3 Get Back Up 1 [g3z1]"
+    assert panel.listbox.item(23).text() == "Melee Set 2 (Vibroswords, Shortswords) Defend 1 [m2d1]"
+    assert panel.listbox.item(24).text() == "Melee Set 4 Defend 2 [m4d2]"
+    assert animation_row_label("c10a1", game="K2") == "Combat Set 10 Attack 1 [c10a1] [K2]"
+    assert animation_row_label("b8a1", game="K1") == "Blaster Set 8 (Assault Cannons: Both Hands) Attack 1 [b8a1] [K1]"
+    assert animation_row_label("b8a1", game="K2") == "Blaster Set 8 Attack 1 [b8a1] [K2]"
+    assert animation_row_label("b9a1", game="K1") == "Blaster Set 9 Attack 1 [b9a1] [K1]"
+    assert animation_row_label("b9a1", game="K2") == "Blaster Set 9 (Assault Cannons: Both Hands) Attack 1 [b9a1] [K2]"
+    assert panel.selected_animation() == "b1a1"
+    assert emitted[-1] == "b1a1"
+    assert panel.select_animation("pause1") is True
+    assert panel.selected_animation() == "pause1"
+
+
+def test_qt_animations_panel_marks_inherited_readable_names_with_raw_slots() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationsPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtAnimationsPanel()
+
+    panel.add_effective_animation({"name": "pause1", "inherited": True, "source": "S_Male02", "game": "K1"})
+
+    item = panel.listbox.item(0)
+    assert item.text() == "Idle 1 (Inherited from S_Male02) [pause1] [K1]"
+    panel.listbox.setCurrentItem(item)
+    assert panel.selected_animation() == "pause1"
+
+
+def test_qt_animations_panel_exposes_inheritance_game_selector() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationsPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtAnimationsPanel()
+    changes = []
+    panel.inheritanceGameChanged.connect(changes.append)
+
+    panel.set_inheritance_game("K2")
+
+    assert panel.selected_inheritance_game() == "K2"
+    assert changes[-1] == "K2"
+
+    panel.set_inheritance_game("")
+
+    assert panel.selected_inheritance_game() == ""
+
+
+def test_qt_animations_panel_exposes_animation_source_selector() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationsPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtAnimationsPanel()
+    changes = []
+    panel.animationSourceChanged.connect(changes.append)
+
+    panel.set_animation_source("head")
+
+    assert panel.selected_animation_source() == "head"
+    assert changes[-1] == "head"
+
+    panel.set_animation_source("attachment")
+
+    assert panel.selected_animation_source() == "attachment"
+
+
+def test_body_attachment_panel_exposes_bas_slots_and_attach_signal() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_body_attachment_panel import QtBodyAttachmentPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtBodyAttachmentPanel()
+    emitted = []
+    panel.attachRequested.connect(lambda slot, resref: emitted.append((slot, resref)))
+
+    panel.set_selected_slot("right_weapon")
+    panel.model_combo.setCurrentText("w_lghtsbr_001")
+    panel.attach_button.click()
+
+    assert panel.selected_slot() == "right_weapon"
+    assert emitted[-1] == ("right_weapon", "w_lghtsbr_001")
+    assert "HEAD" in {button.text().splitlines()[0] for button in panel.findChildren(QtWidgets.QToolButton)}
+    assert "BODY" in {button.text().splitlines()[0] for button in panel.findChildren(QtWidgets.QToolButton)}
+
+    panel.set_selected_slot("left_weapon")
+    preset_resrefs = {str(panel.model_combo.itemData(index) or "") for index in range(panel.model_combo.count())}
+    assert "w_vbroswrd_001" in preset_resrefs
+    assert "w_vbroblade_001" not in preset_resrefs
+
+    panel.set_selected_slot("left_hand")
+    panel.model_combo.setCurrentText("w_vbroswrd_001")
+    panel.attach_button.click()
+
+    assert emitted[-1] == ("right_weapon", "w_lghtsbr_001")
+    assert panel.attach_button.isEnabled() is False
+
+
+def test_body_attachment_panel_tracks_attachment_layers() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_body_attachment_panel import QtBodyAttachmentPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtBodyAttachmentPanel()
+
+    panel.set_body_model(SimpleNamespace(name="PMBAM"))
+    panel.set_slot_model("head", resref="pmhc01")
+    panel.set_slot_model("right_weapon", resref="w_lghtsbr_001")
+
+    rows = panel.layer_rows()
+    assert rows[0] == ("BODY", "PMBAM", "Base")
+    assert ("HEAD", "pmhc01", "Attached") in rows
+    assert ("R. Wep", "w_lghtsbr_001", "Attached") in rows
+    assert ("L. Weapon", "", "Empty") in rows
+    assert ("L. HAND", "", "Socket") in rows
+    assert ("R. HAND", "", "Socket") in rows
+
+    head_row = next(index for index, row in enumerate(rows) if row[0] == "HEAD")
+    panel.layer_tree.setCurrentItem(panel.layer_tree.topLevelItem(head_row))
+
+    assert panel.selected_slot() == "head"
+
+
+def test_body_attachment_panel_exposes_save_build_signal() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_body_attachment_panel import QtBodyAttachmentPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtBodyAttachmentPanel()
+    calls = []
+    panel.saveBuildRequested.connect(lambda: calls.append("save"))
+
+    panel.save_build_button.click()
+
+    assert calls == ["save"]
+
+
+def test_bas_weapon_alignment_defaults_keep_sabers_identity() -> None:
+    from src.systems.bas.attachment_alignment import default_bas_attachment_transform
+
+    assert default_bas_attachment_transform("right_weapon", "w_lghtsbr_001")["position"] == [0.0, 0.0, 0.0]
+    assert default_bas_attachment_transform("right_weapon", "w_blstrrfl_001")["position"] == [0.0, 0.06, 0.09]
+    assert default_bas_attachment_transform("left_weapon", "w_vbroshort_001")["position"] == [0.0, 0.0, 0.035]
+    assert default_bas_attachment_transform("left_weapon", "w_vbroswrd_001")["position"] == [0.0, 0.0, 0.055]
+
+
+def test_bas_attach_seeds_weapon_alignment_without_overwriting_same_model_adjustment() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    calls = []
+    body = SimpleNamespace(name="P_CarthBB")
+    panel = SimpleNamespace(
+        set_status=lambda text: calls.append(("status", text)),
+        set_slot_model=lambda slot, model, resref="": calls.append(("slot", slot, resref)),
+    )
+    window = SimpleNamespace(
+        _bas_body_model=body,
+        _current_model=body,
+        _bas_attachments={},
+        _bas_attachment_resrefs={},
+        _bas_attachment_transforms={},
+        body_attachment_panel=panel,
+        _load_bas_attachment_model=lambda resref: SimpleNamespace(name=resref),
+        _rebuild_bas_preview=lambda: "BAS preview updated.",
+        _refresh_bas_animation_panel_after_layer_change=lambda slot: calls.append(("anim", slot)),
+    )
+
+    QtGhostRiggerMainWindow._handle_bas_attach_requested(window, "right_weapon", "w_blstrrfl_001")
+    assert window._bas_attachment_transforms["right_weapon"]["position"] == [0.0, 0.06, 0.09]
+
+    window._bas_attachment_transforms["right_weapon"]["position"] = [0.25, 0.0, 0.0]
+    QtGhostRiggerMainWindow._handle_bas_attach_requested(window, "right_weapon", "w_blstrrfl_001")
+    assert window._bas_attachment_transforms["right_weapon"]["position"] == [0.25, 0.0, 0.0]
+
+    QtGhostRiggerMainWindow._handle_bas_attach_requested(window, "right_weapon", "w_lghtsbr_001")
+    assert window._bas_attachment_transforms["right_weapon"]["position"] == [0.0, 0.0, 0.0]
+
+
+def test_qt_animations_panel_exposes_inheritance_supermodel_selector() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationsPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtAnimationsPanel()
+    changes = []
+    panel.inheritanceSupermodelChanged.connect(changes.append)
+
+    panel.set_inheritance_supermodel("S_Female03")
+
+    assert panel.selected_inheritance_supermodel() == "S_Female03"
+    assert changes[-1] == "S_Female03"
+
+    panel.set_inheritance_supermodel("")
+
+    assert panel.selected_inheritance_supermodel() == ""
+
+
+def test_animation_resolution_game_override_preserves_model_source_game() -> None:
+    from src.core.qt_core.geometry.model_data import GameVersion, KotorModel
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    model = KotorModel(name="OverrideSourceGame")
+    model._gr_source_game = "K2"
+
+    QtGhostRiggerMainWindow._apply_animation_resolution_game(None, model, "K1")
+
+    assert model.game_version == GameVersion.K1
+    assert model._gr_source_game == "K2"
+
+
+def test_animation_resolution_context_temporarily_overrides_supermodel() -> None:
+    from src.core.qt_core.geometry.model_data import GameVersion, KotorModel
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    model = KotorModel(name="OverrideSupermodel", supermodel="S_Male02")
+    model.game_version = GameVersion.K1
+
+    class Window:
+        _apply_animation_resolution_game = QtGhostRiggerMainWindow._apply_animation_resolution_game
+
+    window = Window()
+
+    with QtGhostRiggerMainWindow._animation_resolution_context(window, model, "K2", "S_Female03"):
+        assert model.supermodel == "S_Female03"
+        assert model.game_version == GameVersion.K2
+
+    assert model.supermodel == "S_Male02"
+    assert model.game_version == GameVersion.K1
+
+
+def test_bas_attachment_preview_parents_item_to_body_socket() -> None:
+    from types import MethodType
+
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    root = ModelNode(name="bodyroot")
+    rhand = ModelNode(name="rhand", parent=root)
+    root.children.append(rhand)
+    body = KotorModel(name="Body", root_node=root)
+    item_root = ModelNode(name="weaponroot")
+    item = KotorModel(name="Weapon", root_node=item_root)
+    window = SimpleNamespace()
+    window._find_model_node = MethodType(QtGhostRiggerMainWindow._find_model_node, window)
+    window._reset_bas_model_node_traversal = MethodType(QtGhostRiggerMainWindow._reset_bas_model_node_traversal, window)
+    window._prepare_bas_layer_root = MethodType(QtGhostRiggerMainWindow._prepare_bas_layer_root, window)
+    window._tag_bas_attachment_subtree = MethodType(QtGhostRiggerMainWindow._tag_bas_attachment_subtree, window)
+
+    assert QtGhostRiggerMainWindow._attach_bas_item_to_preview(window, body, item, "rhand") is True
+
+    assert len(rhand.children) == 1
+    assert rhand.children[0].name == "weaponroot"
+    assert rhand.children[0].parent is rhand
+    assert rhand.children[0]._gr_bas_attachment_root is True
+    assert rhand.children[0]._gr_bas_socket_name == "rhand"
+    assert rhand.children[0]._gr_bas_attachment_layer is True
+
+
+def test_bas_attachment_socket_layer_follows_body_dummy_without_skinning() -> None:
+    from types import MethodType
+
+    import pytest
+
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+    from src.gui.rendering.mesh_render_data import _extract_skinning, node_world_matrix
+
+    root = ModelNode(name="bodyroot")
+    headhook = ModelNode(name="headhook", parent=root)
+    headhook.position = (0.0, 0.0, 1.5)
+    root.children.append(headhook)
+    body = KotorModel(name="Body", root_node=root)
+    head_root = ModelNode(name="headroot")
+    head_root.position = (0.0, 0.0, -1.5)
+    head_mesh = ModelNode(name="head", parent=head_root, flags=0x61, vertices=[(0.0, 0.0, 0.25)], faces=[(0, 0, 0)])
+    head_mesh.bone_map = ["head_g"]
+    head_mesh.skin_data = [object()]
+    head_root.children.append(head_mesh)
+    head = KotorModel(name="Head", root_node=head_root)
+    window = SimpleNamespace()
+    window._find_model_node = MethodType(QtGhostRiggerMainWindow._find_model_node, window)
+    window._reset_bas_model_node_traversal = MethodType(QtGhostRiggerMainWindow._reset_bas_model_node_traversal, window)
+    window._prepare_bas_layer_root = MethodType(QtGhostRiggerMainWindow._prepare_bas_layer_root, window)
+    window._tag_bas_attachment_subtree = MethodType(QtGhostRiggerMainWindow._tag_bas_attachment_subtree, window)
+
+    assert QtGhostRiggerMainWindow._attach_bas_item_to_preview(window, body, head, "headhook", slot="head") is True
+
+    attached_root = headhook.children[-1]
+    assert attached_root.position == pytest.approx((0.0, 0.0, 0.0))
+    assert attached_root._gr_bas_socket_name == "headhook"
+    matrix = node_world_matrix(attached_root)
+    assert matrix[2, 3] == pytest.approx(1.5)
+    attached_mesh = attached_root.children[0]
+    skinning = _extract_skinning(attached_mesh, 1, skeleton_id=id(body))
+    assert skinning.is_skinned is False
+
+
+def test_bas_head_skin_uses_attachment_root_local_bind_space_when_weapon_is_added() -> None:
+    from types import MethodType
+
+    import numpy as np
+    import pytest
+
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+    from src.gui.rendering.mesh_render_data import _extract_node_arrays
+
+    root = ModelNode(name="bodyroot")
+    headhook = ModelNode(name="headhook", parent=root)
+    headhook.position = (0.0, 0.0, 10.0)
+    rhand = ModelNode(name="rhand", parent=root)
+    rhand.position = (1.0, 0.0, 1.0)
+    root.children.extend([headhook, rhand])
+    body = KotorModel(name="Body", root_node=root)
+
+    head_root = ModelNode(name="headroot")
+    head_mesh = ModelNode(
+        name="head",
+        parent=head_root,
+        flags=0x61,
+        vertices=[(0.0, 0.0, -2.0), (0.0, 0.5, -1.5), (0.25, 0.0, -1.0)],
+        faces=[(0, 1, 2)],
+    )
+    head_mesh.position = (0.0, 0.0, 2.0)
+    head_mesh.bone_map = ["head_g"]
+    head_mesh.skin_data = [object(), object(), object()]
+    head_root.children.append(head_mesh)
+    head = KotorModel(name="Head", root_node=head_root)
+
+    weapon_root = ModelNode(name="weaponroot")
+    weapon_mesh = ModelNode(name="weaponmesh", parent=weapon_root, flags=0x20, vertices=[(0, 0, 0)], faces=[(0, 0, 0)])
+    weapon_root.children.append(weapon_mesh)
+    weapon = KotorModel(name="Weapon", root_node=weapon_root)
+
+    window = SimpleNamespace()
+    window._find_model_node = MethodType(QtGhostRiggerMainWindow._find_model_node, window)
+    window._reset_bas_model_node_traversal = MethodType(QtGhostRiggerMainWindow._reset_bas_model_node_traversal, window)
+    window._prepare_bas_layer_root = MethodType(QtGhostRiggerMainWindow._prepare_bas_layer_root, window)
+    window._tag_bas_attachment_subtree = MethodType(QtGhostRiggerMainWindow._tag_bas_attachment_subtree, window)
+
+    assert QtGhostRiggerMainWindow._attach_bas_item_to_preview(window, body, head, "headhook", slot="head") is True
+    assert QtGhostRiggerMainWindow._attach_bas_item_to_preview(window, body, weapon, "rhand", slot="right_weapon") is True
+
+    attached_head_mesh = headhook.children[-1].children[0]
+    positions, _normals, _uvs0, _uvs1, _indices, _bones, _weights, world_matrix = _extract_node_arrays(attached_head_mesh)
+
+    np.testing.assert_allclose(
+        positions,
+        np.asarray([(0.0, 0.0, 0.0), (0.0, 0.5, 0.5), (0.25, 0.0, 1.0)], dtype=np.float32),
+        atol=1e-6,
+    )
+    assert world_matrix[2, 3] == pytest.approx(10.0)
+    assert float(positions[:, 2].min()) >= -1e-6
+
+
+def test_moderngl_bas_head_skin_uses_root_local_vbo_and_socket_draw_matrix() -> None:
+    import inspect
+
+    import numpy as np
+    import pytest
+
+    from src.gui.rendering import gpu_renderer
+    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.gui.rendering.gpu_renderer import (
+        _bas_attachment_local_transform_np,
+        _build_vbo_data,
+        _mat4_from_pos_quat_scale,
+    )
+
+    headhook = ModelNode(name="headhook")
+    headhook.position = (0.0, 0.0, 10.0)
+    head_root = ModelNode(name="headroot", parent=headhook)
+    head_root._gr_bas_attachment_root = True
+    head_root._gr_bas_attachment_layer = True
+    head_root._gr_bas_socket_name = "headhook"
+    headhook.children.append(head_root)
+    head_mesh = ModelNode(
+        name="head",
+        parent=head_root,
+        flags=0x61,
+        vertices=[(0.0, 0.0, -2.0), (0.0, 0.5, -1.5), (0.25, 0.0, -1.0)],
+        faces=[(0, 1, 2)],
+    )
+    head_mesh.position = (0.0, 0.0, 2.0)
+    head_mesh._gr_bas_attachment_layer = True
+    head_mesh._gr_bas_attachment_root_ref = head_root
+    head_mesh.bone_map = ["head_g"]
+    head_mesh.skin_data = [object(), object(), object()]
+    head_root.children.append(head_mesh)
+
+    local_wp, local_wo = _bas_attachment_local_transform_np(head_mesh, head_root)
+    vdata, _idx = _build_vbo_data(
+        head_mesh,
+        local_wp,
+        local_wo,
+        apply_skin_node_transform_for_bind=True,
+    )
+    assert vdata is not None
+    np.testing.assert_allclose(
+        vdata[:, 0:3],
+        np.asarray([(0.0, 0.0, 0.0), (0.0, 0.5, 0.5), (0.25, 0.0, 1.0)], dtype=np.float32),
+        atol=1e-6,
+    )
+
+    draw_matrix = _mat4_from_pos_quat_scale(headhook.position, headhook.rotation, (1.0, 1.0, 1.0))
+    assert draw_matrix[2, 3] == pytest.approx(10.0)
+    drawn = np.asarray([draw_matrix @ np.asarray([*row[:3], 1.0]) for row in vdata], dtype=np.float32)
+    np.testing.assert_allclose(
+        drawn[:, 0:3],
+        np.asarray([(0.0, 0.0, 10.0), (0.0, 0.5, 10.5), (0.25, 0.0, 11.0)], dtype=np.float32),
+        atol=1e-6,
+    )
+    source = inspect.getsource(gpu_renderer)
+    assert "if _skin_can_lbs:" in source
+    assert "BAS attachment skins are socket followers" in source
+
+
+def test_bas_model_recipe_preserves_body_layers_sockets_and_resrefs() -> None:
+    from src.systems.bas.model_recipe import build_bas_model_recipe
+
+    body = SimpleNamespace(name="P_CarthBB", _gr_source_resref="p_carthbb", _gr_source_game="K1", supermodel="S_Male02")
+    head = SimpleNamespace(name="pmha01", _gr_source_resref="pmha01", _gr_source_game="K1")
+    weapon = SimpleNamespace(name="w_blstrpstl_001", _gr_source_resref="w_blstrpstl_001", _gr_source_game="K1")
+
+    recipe = build_bas_model_recipe(
+        body_model=body,
+        attachment_models={"head": head, "right_weapon": weapon},
+        attachment_resrefs={"head": "pmha01", "right_weapon": "w_blstrpstl_001"},
+        attachment_transforms={
+            "head": {"position": [0.0, 0.0, 1.25], "rotation": [0.0, 0.0, 0.0, 1.0], "scale": [1.0, 1.0, 1.0]},
+            "right_weapon": {"position": [0.1, -0.2, 0.3], "rotation": [0.0, 0.0, 0.707, 0.707], "scale": [1.0, 1.0, 1.0]},
+        },
+        game="K1",
+        build_name="Carth Test Build",
+    )
+
+    layers = {layer["slot"]: layer for layer in recipe["layers"]}
+    assert recipe["schema"] == "ghostrigger.bas.model"
+    assert recipe["recipe_id"] == "carth_test_build"
+    assert recipe["display_name"] == "Carth Test Build"
+    assert recipe["body"]["resref"] == "p_carthbb"
+    assert recipe["body"]["supermodel"] == "S_Male02"
+    assert layers["body"]["state"] == "base"
+    assert layers["head"]["state"] == "attached"
+    assert layers["head"]["socket"] == "headhook"
+    assert layers["head"]["transform"]["position"] == [0.0, 0.0, 1.25]
+    assert layers["right_weapon"]["resref"] == "w_blstrpstl_001"
+    assert layers["right_weapon"]["socket"] == "rhand"
+    assert layers["right_weapon"]["transform"]["rotation"] == [0.0, 0.0, 0.707, 0.707]
+    assert layers["left_hand"]["state"] == "socket"
+    assert layers["left_weapon"]["state"] == "empty"
+    assert recipe["runtime"]["attachment_transform_mode"] == "socket_follower"
+
+
+def test_main_window_saves_bas_model_recipe_into_system_models_dir(tmp_path) -> None:
+    import json
+    from types import MethodType
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    body = SimpleNamespace(name="P_CarthBB", _gr_source_resref="p_carthbb", _gr_source_game="K1")
+    head = SimpleNamespace(name="pmha01", _gr_source_resref="pmha01", _gr_source_game="K1")
+    window = SimpleNamespace(
+        app_root=tmp_path,
+        _current_game="K1",
+        _bas_attachments={"head": head},
+        _bas_attachment_resrefs={"head": "pmha01"},
+        _infer_game_from_model=lambda _model: "K1",
+    )
+    window._save_bas_model_recipe = MethodType(QtGhostRiggerMainWindow._save_bas_model_recipe, window)
+
+    path = window._save_bas_model_recipe(body)
+
+    assert path == tmp_path / "src" / "systems" / "bas" / "models" / "k1_p_carthbb_pmha01.json"
+    assert path.exists()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["body"]["resref"] == "p_carthbb"
+    assert data["attachments"] == {"head": "pmha01"}
+    assert data["layers"][1]["socket"] == "headhook"
+    assert data["layers"][1]["transform"]["position"] == [0.0, 0.0, 0.0]
+
+
+def test_main_window_loads_bas_recipe_as_composed_preview_model(tmp_path) -> None:
+    import json
+    from types import MethodType
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    body = SimpleNamespace(name="P_CarthBB", _gr_source_resref="p_carthbb", _gr_source_game="K1")
+    head = SimpleNamespace(name="pmha01", _gr_source_resref="pmha01", _gr_source_game="K1")
+    recipe = {
+        "schema": "ghostrigger.bas.model",
+        "version": 1,
+        "game": "K1",
+        "display_name": "Carth BAS Named",
+        "body": {"resref": "p_carthbb", "name": "P_CarthBB", "game": "K1"},
+        "layers": [
+            {"slot": "body", "state": "base", "resref": "p_carthbb"},
+            {
+                "slot": "head",
+                "state": "attached",
+                "resref": "pmha01",
+                "game": "K1",
+                "socket": "headhook",
+                "transform": {"position": [0.0, 0.0, 1.25], "rotation": [0.0, 0.0, 0.0, 1.0], "scale": [1.0, 1.0, 1.0]},
+            },
+        ],
+    }
+    path = tmp_path / "carth_bas_named.json"
+    path.write_text(json.dumps(recipe), encoding="utf-8")
+    calls = []
+    manager = SimpleNamespace(load_model=lambda resref, game: {"p_carthbb": body, "pmha01": head}[resref])
+    timer = SimpleNamespace(stop=lambda: calls.append("stop"))
+    panel = SimpleNamespace(
+        set_body_model=lambda model: calls.append(("body", model)),
+        set_slot_model=lambda slot, model=None, resref="": calls.append(("slot", slot, resref)),
+        clear_slot_model=lambda slot: calls.append(("clear", slot)),
+        set_status=lambda message: calls.append(("status", message)),
+    )
+    window = SimpleNamespace(
+        _get_resource_manager=lambda: manager,
+        _animation_timer=timer,
+        _retarget_timer=timer,
+        _animation_engine=None,
+        _animation_last_tick=None,
+        _retarget_engine=None,
+        _retarget_last_tick=None,
+        _bas_attachments={},
+        _bas_attachment_resrefs={},
+        _bas_attachment_transforms={},
+        _add_loaded_model_to_scene=lambda model, label: calls.append(("scene", model, label)),
+        _rebuild_bas_preview=lambda: calls.append("rebuild") or "BAS preview updated.",
+        body_attachment_panel=panel,
+        _load_animation_panel_model=lambda model: calls.append(("animations", model)),
+        animations_panel=object(),
+        _populate_animation_library_from_current_model=lambda: calls.append("library"),
+        _log=lambda message, kind="info": calls.append(("log", kind, message)),
+    )
+    window._load_bas_model_recipe_from_path = MethodType(QtGhostRiggerMainWindow._load_bas_model_recipe_from_path, window)
+
+    result = window._load_bas_model_recipe_from_path(path)
+
+    assert result is None
+    assert window._current_model is body
+    assert window._bas_body_model is body
+    assert window._bas_attachments == {"head": head}
+    assert window._bas_attachment_resrefs == {"head": "pmha01"}
+    assert window._bas_attachment_transforms["head"]["position"] == [0.0, 0.0, 1.25]
+    assert window._bas_active_build_name == "Carth BAS Named"
+    assert ("scene", body, "K1:p_carthbb") in calls
+    assert "rebuild" in calls
+
+
+def test_bas_resets_stale_camera_node_wrapper_before_attaching_layers() -> None:
+    import copy
+
+    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.gui.camera.camera_manager import CameraManager
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    root = ModelNode(name="bodyroot")
+    lhand = ModelNode(name="lhand", parent=root)
+    root.children.append(lhand)
+    body = KotorModel(name="Body", root_node=root)
+    manager = CameraManager()
+    manager.model = body
+    manager._install_all_nodes_wrapper()
+
+    preview = copy.deepcopy(body)
+    weapon_root = ModelNode(name="weaponroot")
+    weapon_mesh = ModelNode(name="weaponmesh", parent=weapon_root, flags=0x20, vertices=[(0, 0, 0)], faces=[(0, 0, 0)])
+    weapon_root.children.append(weapon_mesh)
+    weapon = KotorModel(name="Weapon", root_node=weapon_root)
+    window = SimpleNamespace()
+    window._find_model_node = MethodType(QtGhostRiggerMainWindow._find_model_node, window)
+    window._reset_bas_model_node_traversal = MethodType(QtGhostRiggerMainWindow._reset_bas_model_node_traversal, window)
+    window._prepare_bas_layer_root = MethodType(QtGhostRiggerMainWindow._prepare_bas_layer_root, window)
+    window._tag_bas_attachment_subtree = MethodType(QtGhostRiggerMainWindow._tag_bas_attachment_subtree, window)
+
+    QtGhostRiggerMainWindow._reset_bas_model_node_traversal(window, preview)
+    assert QtGhostRiggerMainWindow._attach_bas_item_to_preview(window, preview, weapon, "lhand") is True
+    assert "weaponmesh" in {node.name for node in preview.all_nodes()}
+    assert "weaponmesh" in {node.name for node in type(preview).all_nodes(preview)}
+
+    manager.set_model(preview)
+
+    assert "weaponmesh" in {node.name for node in preview.all_nodes()}
+
+
+def test_bas_preview_targets_body_scene_object_not_arbitrary_selection() -> None:
+    from types import MethodType
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    body_model = SimpleNamespace(name="Body")
+    previous_preview = SimpleNamespace(name="Body_bas_old")
+    selected_other = SimpleNamespace(selected=True, metadata={"_runtime_model": SimpleNamespace(name="Other")})
+    body_object = SimpleNamespace(selected=False, metadata={"_runtime_model": body_model})
+    scene_manager = SimpleNamespace(
+        active_scene=SimpleNamespace(objects=[selected_other, body_object]),
+        get_selected_objects=lambda: [selected_other],
+    )
+    window = SimpleNamespace(
+        scene_manager=scene_manager,
+        _bas_body_model=body_model,
+        _current_model=body_model,
+        _bas_preview_model=previous_preview,
+    )
+
+    target = QtGhostRiggerMainWindow._bas_target_scene_object(window, previous_preview=previous_preview)
+
+    assert target is body_object
+
+
+def test_bas_preview_applies_as_layer_and_restores_animation_pose() -> None:
+    from types import MethodType
+
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    calls = []
+    body_model = SimpleNamespace(name="Body")
+    preview = SimpleNamespace(name="Body_bas")
+    selected_other = SimpleNamespace(selected=True, metadata={"_runtime_model": SimpleNamespace(name="Other")})
+    body_object = SimpleNamespace(selected=False, metadata={"_runtime_model": body_model})
+    scene_manager = SimpleNamespace(
+        active_scene=SimpleNamespace(objects=[selected_other, body_object]),
+        get_selected_objects=lambda: [selected_other],
+        mark_dirty=lambda: calls.append("dirty"),
+    )
+
+    class Viewport:
+        def set_animation_pose(self, pose, name="", time=0.0, length=0.0):
+            calls.append(("pose", pose, name, time, length))
+
+        def set_animation_playback_active(self, active, reason=""):
+            calls.append(("active", active, reason))
+
+        def refresh_view(self):
+            calls.append("refresh_view")
+
+    class Engine:
+        current_animation = SimpleNamespace(name="walk", length=1.5)
+        current_time = 0.5
+        is_playing = True
+
+        def evaluate(self, t=0.0):
+            calls.append(("evaluate", t))
+            return "pose-at-current-time"
+
+    window = SimpleNamespace(
+        scene_manager=scene_manager,
+        viewport=Viewport(),
+        _bas_body_model=body_model,
+        _current_model=body_model,
+        _bas_preview_model=None,
+        _bas_attachments={"head": object(), "right_weapon": object()},
+        _bas_attachment_resrefs={"head": "pmhc01", "right_weapon": "w_lghtsbr_001"},
+        _animation_engine=Engine(),
+        _refresh_scene_view=lambda: calls.append("refresh_scene"),
+    )
+    window._bas_target_scene_object = MethodType(QtGhostRiggerMainWindow._bas_target_scene_object, window)
+    window._restore_bas_animation_pose_after_viewport_refresh = MethodType(
+        QtGhostRiggerMainWindow._restore_bas_animation_pose_after_viewport_refresh,
+        window,
+    )
+    window._request_bas_viewport_refresh = MethodType(QtGhostRiggerMainWindow._request_bas_viewport_refresh, window)
+    window._sync_bas_body_animation_engine = MethodType(QtGhostRiggerMainWindow._sync_bas_body_animation_engine, window)
+
+    QtGhostRiggerMainWindow._apply_bas_preview_to_viewport(window, preview)
+
+    assert selected_other.metadata["_runtime_model"].name == "Other"
+    assert body_object.metadata["_runtime_model"] is preview
+    assert body_object.metadata["_runtime_bas_body_model"] is body_model
+    assert body_object.metadata["_runtime_bas_preview_model"] is preview
+    assert body_object.metadata["body_attachment_system"]["attachments"] == {
+        "head": "pmhc01",
+        "right_weapon": "w_lghtsbr_001",
+    }
+    assert body_object.metadata["body_attachment_system"]["layers"] == [
+        {"slot": "head", "resref": "pmhc01", "enabled": True},
+        {"slot": "right_weapon", "resref": "w_lghtsbr_001", "enabled": True},
+    ]
+    assert "refresh_scene" in calls
+    assert ("evaluate", 0.5) in calls
+    assert ("pose", "pose-at-current-time", "walk", 0.5, 1.5) in calls
+    assert ("active", True, "") in calls
+    assert "refresh_view" in calls
+
+
+def test_animation_source_model_keeps_bas_body_as_animation_owner() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    body = SimpleNamespace(name="Body")
+    preview = SimpleNamespace(name="Body_bas")
+    window = SimpleNamespace(
+        _bas_preview_model=preview,
+        _bas_body_model=body,
+        _current_model=body,
+        animations_panel=SimpleNamespace(selected_animation_source=lambda: "body"),
+    )
+    window._animation_source_key = MethodType(QtGhostRiggerMainWindow._animation_source_key, window)
+
+    assert QtGhostRiggerMainWindow._animation_source_model(window) is body
+
+
+def test_bas_animation_engine_returns_to_body_without_losing_time() -> None:
+    from src.core.qt_core.animation.animation_engine import AnimationEngine
+    from src.core.qt_core.geometry.model_data import Animation, KotorModel
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    body = KotorModel(name="Body")
+    preview = KotorModel(name="Body_bas")
+    body.animations = [Animation(name="walk", length=2.0)]
+    preview.animations = [Animation(name="walk", length=2.0)]
+    engine = AnimationEngine(preview)
+    assert engine.play("walk", loop=True, blend=False) is True
+    engine.seek(0.75)
+
+    @contextmanager
+    def resolution_context(_model, _game, _supermodel=""):
+        yield
+
+    window = SimpleNamespace(
+        _animation_engine=engine,
+        _animation_loop=True,
+        animations_panel=SimpleNamespace(selected_animation_source=lambda: "body"),
+        _get_resource_manager=lambda: None,
+        _animation_inheritance_game=lambda _model: "K1",
+        _animation_inheritance_supermodel=lambda _model: "",
+        _animation_resolution_context=resolution_context,
+        _apply_animation_resolution_game=lambda _model, _game: None,
+        _current_model=body,
+        _bas_body_model=body,
+    )
+    window._animation_source_key = MethodType(QtGhostRiggerMainWindow._animation_source_key, window)
+
+    QtGhostRiggerMainWindow._sync_bas_body_animation_engine(window, preview)
+
+    assert window._animation_engine.model is body
+    assert window._animation_engine.current_animation.name == "walk"
+    assert window._animation_engine.current_time == pytest.approx(0.75)
+    assert window._animation_engine.is_playing is True
+
+
+def test_bas_layer_change_does_not_reload_body_animation_panel() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    calls = []
+    body = SimpleNamespace(name="Body")
+    window = SimpleNamespace(
+        _bas_body_model=body,
+        _current_model=body,
+        animations_panel=SimpleNamespace(
+            selected_animation_source=lambda: "body",
+            selected_animation=lambda: "pause2",
+        ),
+        _load_animation_panel_model=lambda model, select_name="": calls.append((model, select_name)),
+    )
+    window._animation_source_key = MethodType(QtGhostRiggerMainWindow._animation_source_key, window)
+
+    QtGhostRiggerMainWindow._refresh_bas_animation_panel_after_layer_change(window, "right_weapon")
+
+    assert calls == []
+
+
+def test_bas_layer_change_refreshes_matching_attachment_animation_panel() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    calls = []
+    body = SimpleNamespace(name="Body")
+    window = SimpleNamespace(
+        _bas_body_model=body,
+        _current_model=body,
+        animations_panel=SimpleNamespace(
+            selected_animation_source=lambda: "attachment",
+            selected_animation=lambda: "activate",
+        ),
+        _load_animation_panel_model=lambda model, select_name="": calls.append((model, select_name)),
+    )
+    window._animation_source_key = MethodType(QtGhostRiggerMainWindow._animation_source_key, window)
+
+    QtGhostRiggerMainWindow._refresh_bas_animation_panel_after_layer_change(window, "right_weapon")
+
+    assert calls == [(body, "activate")]
+
+
+def test_bas_scene_object_activation_preserves_body_animation_panel() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    calls = []
+    body = SimpleNamespace(name="Body")
+    preview = SimpleNamespace(name="Body_bas")
+    obj = SimpleNamespace(
+        metadata={
+            "_runtime_model": preview,
+            "_runtime_bas_body_model": body,
+            "_runtime_bas_preview_model": preview,
+            "body_attachment_system": {"active": True},
+        }
+    )
+    window = SimpleNamespace(
+        _bas_body_model=body,
+        _bas_preview_model=preview,
+        _current_model=None,
+        animations_panel=SimpleNamespace(selected_animation_source=lambda: "body"),
+        animation_retarget_panel=object(),
+        _load_animation_panel_model=lambda model, select_name="": calls.append(("animations", model, select_name)),
+    )
+    window._animation_source_key = MethodType(QtGhostRiggerMainWindow._animation_source_key, window)
+
+    QtGhostRiggerMainWindow._activate_scene_object_model(window, obj)
+
+    assert window._current_model is body
+    assert calls == []
+
+
+def test_bas_ignores_anatomical_hand_placeholders() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    calls = []
+    window = SimpleNamespace(
+        _show_workspace_dock=lambda name: calls.append(("dock", name)),
+        body_attachment_panel=SimpleNamespace(set_status=lambda text: calls.append(("status", text))),
+        _bas_attachments={},
+        _bas_attachment_resrefs={},
+    )
+
+    QtGhostRiggerMainWindow._handle_bas_attach_requested(window, "left_hand", "w_vbroswrd_001")
+    QtGhostRiggerMainWindow._handle_bas_clear_requested(window, "right_hand")
+
+    assert calls == [("status", "Hand slots are sockets; attach items through L. Weapon or R. Weapon.")]
+    assert window._bas_attachments == {}
+
+
+def test_animation_selection_previews_first_frame_without_starting_playback() -> None:
+    from types import SimpleNamespace
+
+    from src.core.qt_core.geometry.model_data import Animation, KotorModel
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    model = KotorModel(name="PreviewModel")
+    model.animations = [Animation(name="pause1", length=1.25)]
+    calls = []
+
+    class Viewport:
+        def set_animation_pose(self, pose, name="", time=0.0, length=0.0):
+            calls.append(("pose", pose, name, time, length))
+
+        def set_animation_playback_active(self, active, reason=""):
+            calls.append(("active", active, reason))
+
+    class Timer:
+        def __init__(self):
+            self.stopped = False
+
+        def stop(self):
+            self.stopped = True
+
+    @contextmanager
+    def resolution_context(_model, _game, _supermodel=""):
+        yield
+
+    window = SimpleNamespace(
+        _animation_engine=None,
+        _animation_timer=Timer(),
+        _animation_last_tick="old",
+        _animation_status_last_update=12.0,
+        viewport=Viewport(),
+        _get_resource_manager=lambda: None,
+        _log=lambda *_args, **_kwargs: None,
+        _animation_inheritance_game=lambda _model: "K1",
+        _animation_inheritance_supermodel=lambda _model: "",
+        _animation_resolution_context=resolution_context,
+        _apply_animation_resolution_game=lambda _model, _game: None,
+    )
+
+    assert QtGhostRiggerMainWindow._preview_selected_animation_first_frame(window, model, "pause1") is True
+
+    pose_call = calls[0]
+    assert pose_call[0] == "pose"
+    assert pose_call[2:] == ("pause1", 0.0, 1.25)
+    assert calls[1] == ("active", False, "")
+    assert window._animation_timer.stopped is True
+    assert window._animation_engine.is_playing is False
+    assert window._animation_last_tick is None
+    assert window._animation_status_last_update == 0.0
 
 
 def test_qt_animations_panel_exposes_bake_and_binary_export_actions() -> None:
@@ -2774,6 +4582,38 @@ def test_main_window_exposes_module_meshes_as_detachable_dock() -> None:
     assert "meshHovered.connect(self.module_geometry_panel" not in layout_source
     assert (Path("src/gui/icons/module_meshes.svg")).exists()
     assert hasattr(QtPropertiesPanel, "set_module_browser_only")
+
+
+def test_main_window_exposes_sprite_materials_as_rendering_dock() -> None:
+    import inspect
+    from pathlib import Path
+
+    from src.gui.qt_lib.panels.qt_sprite_material_panel import QtSpriteMaterialPanel
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    actions_source = inspect.getsource(QtGhostRiggerMainWindow._build_actions)
+    menu_source = inspect.getsource(QtGhostRiggerMainWindow._build_menu)
+    refresh_source = inspect.getsource(QtGhostRiggerMainWindow._refresh_all)
+    changed_source = inspect.getsource(QtGhostRiggerMainWindow._on_sprite_materials_changed)
+    persistence_source = inspect.getsource(QtGhostRiggerMainWindow._apply_sprite_material_overrides)
+    scene_source = inspect.getsource(QtGhostRiggerMainWindow._refresh_scene_view)
+
+    assert "self.sprite_materials_panel = QtSpriteMaterialPanel(self)" in layout_source
+    assert '"sprite_materials"' in layout_source
+    assert "self.sprite_materials_panel_action" in actions_source
+    assert 'self._icon("sprite_materials")' in actions_source
+    assert "modules_menu.addAction(self.sprite_materials_panel_action)" in menu_source
+    assert "self.sprite_materials_panel.set_model(self._active_viewport_model())" in refresh_source
+    assert "self.sprite_materials_panel.spriteRenderChanged.connect(self._on_sprite_materials_changed)" in layout_source
+    assert "renderer.invalidate_node_cache()" in changed_source
+    assert "self.viewport.refresh_view()" in changed_source
+    assert "self._save_sprite_material_overrides()" in changed_source
+    assert "sprite_material_overrides.json" in inspect.getsource(QtGhostRiggerMainWindow._sprite_persistence_path)
+    assert "setattr(node, \"_gr_sprite_alpha_source\"" in persistence_source
+    assert "self._apply_sprite_material_overrides(model)" in scene_source
+    assert (Path("src/gui/icons/sprite_materials.svg")).exists()
+    assert hasattr(QtSpriteMaterialPanel, "spriteRenderChanged")
 
 
 def test_main_window_exposes_adjust_pivot_in_modules_menu() -> None:
@@ -3057,6 +4897,7 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
 
     assert 'layout.addWidget(self._tool_button("Scene Information", self.scene_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Properties", self.properties_panel_action' in command_source
+    assert 'layout.addWidget(self._tool_button("BAS", self.body_attachment_panel_action, "body_attachment"' in command_source
     assert 'layout.addWidget(self._tool_button("Sequence Editor", self.sequence_editor_action' in command_source
     assert 'layout.addWidget(self._tool_button("Animation Browser", self.animation_browser_dock_action' in command_source
     assert 'layout.addWidget(self._tool_button("Nodes", self.nodes_panel_action' in command_source

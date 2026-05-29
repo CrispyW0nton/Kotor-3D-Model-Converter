@@ -14,6 +14,23 @@ def _qapp():
     return QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
 
+def _minimal_gff(file_type: str, fields: dict[str, tuple[str, object]]) -> bytes:
+    from src.formats.gff_types import GffFieldType, GffFile, GffStruct, ResRef
+    from src.formats.gff_writer import GffWriter
+
+    root = GffStruct()
+    for label, (kind, value) in fields.items():
+        if kind == "resref":
+            root.set(label, GffFieldType.RESREF, ResRef(str(value)))
+        elif kind == "string":
+            root.set(label, GffFieldType.CEXOSTRING, str(value))
+        elif kind == "uint32":
+            root.set(label, GffFieldType.UINT32, int(value))
+        else:
+            raise AssertionError(f"Unsupported test GFF kind: {kind}")
+    return GffWriter(GffFile(file_type=file_type, root=root)).serialize()
+
+
 def test_content_browser_merges_models_modules_templates_and_animations() -> None:
     _qapp()
 
@@ -59,6 +76,79 @@ def test_content_browser_search_and_game_filter_keep_library_rows_visible() -> N
     item = panel.asset_view.topLevelItem(0)
     panel.asset_view.setCurrentItem(item)
     assert panel.selected_row()["resref"] == "c_boma"
+
+
+def test_content_browser_rows_show_display_name_before_asset_name_without_source_column() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {
+            "game": "K1",
+            "resref": "plc_bodyranc",
+            "category": "Placeables",
+            "source": "swkotor",
+            "placeable_tag": "RancorCorpse",
+        },
+    ])
+
+    headers = [
+        panel.asset_view.headerItem().text(index)
+        for index in range(panel.asset_view.columnCount())
+    ]
+    assert headers == ["Display Name", "Asset Name", "Type", "Game", "Category", "Meta"]
+
+    item = next(
+        panel.asset_view.topLevelItem(index)
+        for index in range(panel.asset_view.topLevelItemCount())
+        if panel.asset_view.topLevelItem(index).text(1) == "plc_bodyranc"
+    )
+    assert item.text(0) == "Rancor Corpse"
+    assert item.text(1) == "plc_bodyranc"
+    assert "Source" not in headers
+
+    panel.asset_view.setCurrentItem(item)
+    assert panel.detail_title.text() == "Rancor Corpse"
+    assert "Asset Name: plc_bodyranc" in panel.detail_text.toPlainText()
+    assert "Source: swkotor" in panel.detail_text.toPlainText()
+
+
+def test_content_browser_display_names_decode_character_model_resrefs() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {"game": "K1", "resref": "pmhc", "source": "swkotor"},
+        {"game": "K1", "resref": "pfbb", "source": "swkotor"},
+        {"game": "K2", "resref": "visasbb", "source": "swkotor2"},
+        {"game": "K1", "resref": "joleeba", "source": "swkotor"},
+        {"game": "K1", "resref": "wookief", "category": "NPCs", "source": "swkotor"},
+        {"game": "K1", "resref": "wookiem", "category": "NPCs", "source": "swkotor"},
+        {"game": "K1", "resref": "n_sithappr_a", "category": "NPCs", "source": "swkotor"},
+        {"game": "K1", "resref": "n_jedmast01", "category": "NPCs", "source": "swkotor"},
+        {"game": "K1", "resref": "n_jedmast2h", "category": "NPCs", "source": "swkotor"},
+        {"game": "K1", "resref": "n_swoopgang", "category": "NPCs", "source": "swkotor"},
+        {"game": "K1", "resref": "n_swoopgang_a", "category": "NPCs", "source": "swkotor"},
+        {"game": "K1", "resref": "spawnpoint", "category": "Engine Items", "source": "swkotor"},
+    ])
+
+    by_name = {asset.name: asset for asset in panel.visible_assets()}
+    assert by_name["pmhc"].display_name == "Player Male Head C"
+    assert by_name["pfbb"].display_name == "Player Female Body B"
+    assert by_name["visasbb"].display_name == "Visas Body B"
+    assert by_name["joleeba"].display_name == "Jolee Body A"
+    assert by_name["wookief"].display_name == "Wookiee Female"
+    assert by_name["wookiem"].display_name == "Wookiee Male"
+    assert by_name["n_sithappr_a"].display_name == "Sith Apprentice A"
+    assert by_name["n_jedmast01"].display_name == "Jedi Master 01"
+    assert by_name["n_jedmast2h"].display_name == "Jedi Master 02 Head"
+    assert by_name["n_swoopgang"].display_name == "Swoop Gang Member"
+    assert by_name["n_swoopgang_a"].display_name == "Swoop Gang Member A"
+    assert by_name["spawnpoint"].display_name == "Waypoint"
 
 
 def test_content_browser_splitter_keeps_user_adjusted_pane_sizes() -> None:
@@ -109,6 +199,30 @@ def test_content_browser_stacks_navigation_and_details_in_left_sidebar() -> None
 
     labels = {label.text() for label in panel.findChildren(QtWidgets.QLabel)}
     assert {"Asset Type", "Game", "Source", "Tags", "Updated", "Compatibility"} <= labels
+
+
+def test_content_browser_category_subfolders_start_collapsed() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {"game": "K1", "resref": "i_mask_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_blstrrfl_001", "source": "swkotor"},
+        {"game": "K1", "resref": "m02aa_01a", "model_class": "tile", "source": "swkotor"},
+    ])
+
+    folders = [
+        panel.nav_tree.topLevelItem(index)
+        for index in range(panel.nav_tree.topLevelItemCount())
+        if panel.nav_tree.topLevelItem(index).text(0) == "Folders / Categories"
+    ][0]
+    assert folders.isExpanded()
+
+    categories = [folders.child(index) for index in range(folders.childCount())]
+    assert categories
+    assert all(not category.isExpanded() for category in categories)
 
 
 def test_content_browser_docked_layout_can_shrink_without_stealing_viewport() -> None:
@@ -237,16 +351,31 @@ def test_content_browser_refines_kotor_model_categories_and_metadata() -> None:
 
     by_name = {asset.name: asset for asset in panel.visible_assets()}
     assert by_name["c_turret02"].category == "Turrets"
+    assert by_name["c_turret02"].metadata["subcategory"] == "Generic Turrets"
     assert by_name["c_mk2_drd"].category == "Droids"
     assert by_name["c_mk2_drd"].metadata["species"] == "Droid"
+    assert by_name["c_mk2_drd"].metadata["subcategory"] == "Combat Droids"
     assert by_name["c_holominer01"].category == "Holograms"
     assert by_name["c_holominer01"].metadata["variant"] == "Hologram"
     assert by_name["c_rancor"].category == "Creatures"
+    assert by_name["c_rancor"].metadata["subcategory"] == "Rancors"
     assert by_name["n_darthmalak"].category == "NPCs"
+    assert by_name["n_darthmalak"].metadata["subcategory"] == "Sith"
     assert by_name["pmbam"].category == "Player Characters"
+    assert by_name["pmbam"].metadata["subcategory"] == "Male Bodies - Class A"
+    assert by_name["pmbam"].metadata["player_gender"] == "Male"
+    assert by_name["pmbam"].metadata["player_part"] == "Body"
+    assert by_name["pmbam"].metadata["player_class"] == "Class A"
+    assert by_name["pmbam"].metadata["player_variant"] == "Medium"
     assert by_name["p_kreia"].category == "Party Members"
+    assert by_name["p_kreia"].metadata["subcategory"] == "Kreia"
+    assert by_name["p_kreia"].metadata["party_member"] == "Kreia"
     for name in ("p_candh03", "p_candh", "p_candbb", "p_candba", "p_atrisbb"):
         assert by_name[name].category == "Party Members"
+    assert by_name["p_candh03"].metadata["subcategory"] == "Canderous"
+    assert by_name["p_candh03"].metadata["party_model_part"] == "Head"
+    assert by_name["p_candbb"].metadata["party_model_part"] == "Body"
+    assert by_name["p_atrisbb"].metadata["subcategory"] == "Atris"
     assert by_name["s_female02"].category == "Supermodels"
     assert by_name["or_tatroom"].category == "Environment"
     assert by_name["tree_base"].category == "Environment"
@@ -263,14 +392,18 @@ def test_content_browser_refines_kotor_model_categories_and_metadata() -> None:
     assert by_name["i_mask_001"].category == "Inventory"
     assert by_name["w_blstrpstl_001"].category == "Weapons"
     assert by_name["dor_metal01"].category == "Doors"
+    assert by_name["dor_metal01"].metadata["subcategory"] == "Generic Doors"
     assert by_name["fx_explosion"].category == "Visual FX"
     assert by_name["fxmuzzle"].category == "Visual FX"
     assert by_name["fxc_droid_arm"].category == "Visual FX"
     assert by_name["v_skybox01"].category == "Visuals"
     assert by_name["comm_w_m01"].category == "Commoners"
     assert by_name["comm_w_m01"].metadata["role"] == "Commoner"
+    assert by_name["comm_w_m01"].metadata["subcategory"] == "Male Commoners"
     for name in ("child_f", "child_m", "czerka_com_h"):
         assert by_name[name].category == "Commoners"
+    assert by_name["child_f"].metadata["subcategory"] == "Children"
+    assert by_name["czerka_com_h"].metadata["subcategory"] == "Czerka Commoners"
     assert by_name["planet_taris"].category == "Planets"
     assert by_name["watersuit"].category == "Misc Models"
     assert by_name["spacesuit"].category == "Misc Models"
@@ -281,6 +414,7 @@ def test_content_browser_refines_kotor_model_categories_and_metadata() -> None:
     assert by_name["stunt_escape01"].category == "Stunts"
     assert by_name["l_astro02"].category == "Droids"
     assert by_name["l_atromech"].category == "Droids"
+    assert by_name["l_astro02"].metadata["subcategory"] == "Astromechs"
     assert by_name["skyboxbase"].category == "Skyboxes"
     for name in ("mgf_swoop", "mgb_turret", "mg_track"):
         assert by_name[name].category == "Minigame"
@@ -333,6 +467,715 @@ def test_content_browser_refines_kotor_model_categories_and_metadata() -> None:
     ]
 
 
+def test_content_browser_sorts_player_characters_by_gender_part_and_class() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {"game": "K1", "resref": "pmbam", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "pfbal", "category": "Character", "source": "swkotor"},
+        {"game": "K2", "resref": "pmha01", "category": "Character", "source": "swkotor2"},
+        {"game": "K2", "resref": "pfhc02", "category": "Character", "source": "swkotor2"},
+    ])
+
+    by_name = {asset.name: asset for asset in panel.visible_assets()}
+    assert by_name["pmbam"].metadata["subcategory"] == "Male Bodies - Class A"
+    assert by_name["pmbam"].metadata["player_variant"] == "Medium"
+    assert by_name["pfbal"].metadata["subcategory"] == "Female Bodies - Class A"
+    assert by_name["pfbal"].metadata["player_variant"] == "Large"
+    assert by_name["pmha01"].metadata["subcategory"] == "Male Heads - Class A"
+    assert by_name["pmha01"].metadata["player_variant"] == "Head 01"
+    assert by_name["pfhc02"].metadata["subcategory"] == "Female Heads - Class C"
+    assert by_name["pfhc02"].metadata["player_variant"] == "Head 02"
+
+    folders = [
+        panel.nav_tree.topLevelItem(index)
+        for index in range(panel.nav_tree.topLevelItemCount())
+        if panel.nav_tree.topLevelItem(index).text(0) == "Folders / Categories"
+    ][0]
+    players = next(folders.child(index) for index in range(folders.childCount()) if folders.child(index).text(0) == "Player Characters")
+    assert [players.child(index).text(0) for index in range(players.childCount())] == [
+        "Male Bodies - Class A",
+        "Female Bodies - Class A",
+        "Male Heads - Class A",
+        "Female Heads - Class C",
+    ]
+
+    panel.tag_filter.setCurrentText("Player Characters / Female Heads - Class C")
+    assert [asset.name for asset in panel.visible_assets()] == ["pfhc02"]
+
+    panel.tag_filter.setCurrentText("All Tags")
+    panel._select_navigation("subcategory", "Player Characters\0Male Bodies - Class A")
+    assert [asset.name for asset in panel.visible_assets()] == ["pmbam"]
+
+
+def test_content_browser_sorts_party_members_by_companion_name() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {"game": "K1", "resref": "p_bastila", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "p_candh03", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "p_candbb", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "hk47", "category": "Character", "source": "swkotor"},
+        {"game": "K2", "resref": "p_kreia", "category": "Character", "source": "swkotor2"},
+        {"game": "K2", "resref": "p_atton", "category": "Character", "source": "swkotor2"},
+        {"game": "K2", "resref": "p_baodur", "category": "Character", "source": "swkotor2"},
+        {"game": "K2", "resref": "p_g0t0", "category": "Character", "source": "swkotor2"},
+    ])
+
+    by_name = {asset.name: asset for asset in panel.visible_assets()}
+    assert by_name["p_bastila"].metadata["subcategory"] == "Bastila"
+    assert by_name["p_candh03"].metadata["subcategory"] == "Canderous"
+    assert by_name["p_candh03"].metadata["party_model_part"] == "Head"
+    assert by_name["p_candbb"].metadata["subcategory"] == "Canderous"
+    assert by_name["p_candbb"].metadata["party_model_part"] == "Body"
+    assert by_name["hk47"].metadata["subcategory"] == "HK-47"
+    assert by_name["p_kreia"].metadata["subcategory"] == "Kreia"
+    assert by_name["p_atton"].metadata["subcategory"] == "Atton"
+    assert by_name["p_baodur"].metadata["subcategory"] == "Bao-Dur"
+    assert by_name["p_g0t0"].metadata["subcategory"] == "G0-T0"
+
+    folders = [
+        panel.nav_tree.topLevelItem(index)
+        for index in range(panel.nav_tree.topLevelItemCount())
+        if panel.nav_tree.topLevelItem(index).text(0) == "Folders / Categories"
+    ][0]
+    party = next(folders.child(index) for index in range(folders.childCount()) if folders.child(index).text(0) == "Party Members")
+    assert [party.child(index).text(0) for index in range(party.childCount())] == [
+        "Bastila",
+        "Canderous",
+        "HK-47",
+        "Kreia",
+        "Atton",
+        "Bao-Dur",
+        "G0-T0",
+    ]
+
+    panel.tag_filter.setCurrentText("Party Members / Canderous")
+    assert sorted(asset.name for asset in panel.visible_assets()) == ["p_candbb", "p_candh03"]
+
+    panel.tag_filter.setCurrentText("All Tags")
+    panel._select_navigation("subcategory", "Party Members\0Bao-Dur")
+    assert [asset.name for asset in panel.visible_assets()] == ["p_baodur"]
+
+
+def test_content_browser_sorts_modules_by_location_metadata() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {"game": "K1", "resref": "m01aa_01a", "model_class": "tile", "source": "swkotor"},
+        {"game": "K1", "resref": "m02aa_01a", "model_class": "tile", "source": "swkotor"},
+        {"game": "K1", "resref": "m14aa_01a", "model_class": "tile", "source": "swkotor"},
+        {"game": "K2", "resref": "101per_01a", "model_class": "tile", "source": "swkotor2"},
+        {"game": "K2", "resref": "301nar_01a", "model_class": "tile", "source": "swkotor2"},
+    ])
+
+    by_name = {asset.name: asset for asset in panel.visible_assets()}
+    assert by_name["m01aa_01a"].category == "Modules"
+    assert by_name["m01aa_01a"].metadata["subcategory"] == "Endar Spire"
+    assert by_name["m01aa_01a"].metadata["area"] == "Endar Spire - Command Module"
+    assert by_name["m01aa_01a"].metadata["module"] == "end_m01aa"
+    assert by_name["m02aa_01a"].metadata["subcategory"] == "Taris"
+    assert by_name["m14aa_01a"].metadata["subcategory"] == "Dantooine"
+    assert by_name["101per_01a"].metadata["subcategory"] == "Peragus"
+    assert by_name["301nar_01a"].metadata["subcategory"] == "Nar Shaddaa"
+
+    folders = [
+        panel.nav_tree.topLevelItem(index)
+        for index in range(panel.nav_tree.topLevelItemCount())
+        if panel.nav_tree.topLevelItem(index).text(0) == "Folders / Categories"
+    ][0]
+    modules = next(folders.child(index) for index in range(folders.childCount()) if folders.child(index).text(0) == "Modules")
+    assert [modules.child(index).text(0) for index in range(modules.childCount())] == [
+        "Endar Spire",
+        "Taris",
+        "Dantooine",
+        "Peragus",
+        "Nar Shaddaa",
+    ]
+
+    panel.tag_filter.setCurrentText("Modules / Taris")
+    assert [asset.name for asset in panel.visible_assets()] == ["m02aa_01a"]
+
+    panel.tag_filter.setCurrentText("All Tags")
+    panel._select_navigation("subcategory", "Modules\0Nar Shaddaa")
+    assert [asset.name for asset in panel.visible_assets()] == ["301nar_01a"]
+
+
+def test_content_browser_sorts_commoners_npcs_droids_creatures_supermodels_and_turrets() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {"game": "K1", "resref": "child_f", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "n_child_m", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "czerka_com_h", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "comm_w_m01", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "n_commkidf", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "comm_w_f01", "category": "Commoners", "source": "swkotor"},
+        {"game": "K1", "resref": "n_darthmalak", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "n_djedi_h", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "darkjedi_m01", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "rep_soldier", "category": "NPCs", "source": "swkotor"},
+        {"game": "K1", "resref": "n_rodian", "category": "Character", "source": "swkotor"},
+        {"game": "K2", "resref": "n_czerkaoff", "category": "Character", "source": "swkotor2"},
+        {"game": "K2", "resref": "n_tsfoffh", "category": "Character", "source": "swkotor2"},
+        {"game": "K2", "resref": "n_ondoffm1", "category": "Character", "source": "swkotor2"},
+        {"game": "K2", "resref": "n_handsis", "category": "Character", "source": "swkotor2"},
+        {"game": "K2", "resref": "n_walrusman", "category": "Character", "source": "swkotor2"},
+        {"game": "K2", "resref": "n_opochano", "category": "Character", "source": "swkotor2"},
+        {"game": "K1", "resref": "n_guard01", "category": "Character", "source": "swkotor"},
+        {"game": "K2", "resref": "c_mk2_drd", "category": "Creature", "source": "swkotor2"},
+        {"game": "K1", "resref": "l_astro02", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "c_rancor", "category": "Creature", "source": "swkotor"},
+        {"game": "K1", "resref": "c_bantha", "category": "Creature", "source": "swkotor"},
+        {"game": "K1", "resref": "c_firixa", "category": "Creature", "source": "swkotor"},
+        {"game": "K1", "resref": "c_khounda", "category": "Creature", "source": "swkotor"},
+        {"game": "K2", "resref": "c_malbeast", "category": "Creature", "source": "swkotor2"},
+        {"game": "K2", "resref": "c_minefloating", "category": "Creature", "source": "swkotor2"},
+        {"game": "K1", "resref": "c_twohead", "category": "Creature", "source": "swkotor"},
+        {"game": "K1", "resref": "c_bmspecdiff", "category": "Creature", "source": "swkotor"},
+        {"game": "K2", "resref": "c_boma", "category": "Creature", "source": "swkotor2"},
+        {"game": "K2", "resref": "c_kinrath", "category": "Creature", "source": "swkotor2"},
+        {"game": "K2", "resref": "s_female02", "category": "Character", "source": "swkotor2"},
+        {"game": "K1", "resref": "s_male01", "category": "Character", "source": "swkotor"},
+        {"game": "K1", "resref": "c_turret02", "category": "Creature", "source": "swkotor"},
+        {"game": "K1", "resref": "c_turret_ceiling", "category": "Turrets", "source": "swkotor"},
+    ])
+
+    by_name = {asset.name: asset for asset in panel.visible_assets()}
+    assert by_name["child_f"].metadata["subcategory"] == "Children"
+    assert by_name["n_child_m"].category == "Commoners"
+    assert by_name["n_child_m"].metadata["subcategory"] == "Children"
+    assert by_name["czerka_com_h"].metadata["subcategory"] == "Czerka Commoners"
+    assert by_name["n_commkidf"].category == "Commoners"
+    assert by_name["n_commkidf"].metadata["subcategory"] == "Children"
+    assert by_name["comm_w_m01"].metadata["subcategory"] == "Male Commoners"
+    assert by_name["comm_w_f01"].metadata["subcategory"] == "Female Commoners"
+    assert by_name["n_darthmalak"].metadata["subcategory"] == "Sith"
+    assert by_name["n_djedi_h"].metadata["subcategory"] == "Dark Jedi"
+    assert by_name["n_djedi_h"].metadata["npc_model_part"] == "Head"
+    assert by_name["darkjedi_m01"].metadata["subcategory"] == "Dark Jedi"
+    assert by_name["rep_soldier"].metadata["subcategory"] == "Republic"
+    assert by_name["n_rodian"].metadata["subcategory"] == "Rodians"
+    assert by_name["n_czerkaoff"].metadata["subcategory"] == "Czerka"
+    assert by_name["n_tsfoffh"].metadata["subcategory"] == "TSF"
+    assert by_name["n_ondoffm1"].metadata["subcategory"] == "Onderon Military"
+    assert by_name["n_handsis"].metadata["subcategory"] == "Handmaiden Sisters"
+    assert by_name["n_walrusman"].metadata["subcategory"] == "Aqualish"
+    assert by_name["n_opochano"].metadata["subcategory"] == "Ithorians"
+    assert by_name["n_guard01"].metadata["subcategory"] == "Soldiers"
+    assert by_name["c_mk2_drd"].metadata["subcategory"] == "Combat Droids"
+    assert by_name["l_astro02"].metadata["subcategory"] == "Astromechs"
+    assert by_name["c_rancor"].metadata["subcategory"] == "Rancors"
+    assert by_name["c_bantha"].metadata["subcategory"] == "Banthas"
+    assert by_name["c_firixa"].metadata["subcategory"] == "Firaxan Sharks"
+    assert by_name["c_khounda"].metadata["subcategory"] == "Kath Hounds"
+    assert by_name["c_malbeast"].metadata["subcategory"] == "Malachor Beasts"
+    assert by_name["c_minefloating"].metadata["subcategory"] == "Creature Hazards"
+    assert by_name["c_twohead"].metadata["subcategory"] == "Two-Headed Aliens"
+    assert by_name["c_bmspecdiff"].metadata["subcategory"] == "Creature Helpers & Placeholders"
+    assert by_name["c_boma"].metadata["subcategory"] == "Bomas"
+    assert by_name["c_kinrath"].metadata["subcategory"] == "Kinrath"
+    assert by_name["s_female02"].metadata["subcategory"] == "Female Supermodels"
+    assert by_name["s_male01"].metadata["subcategory"] == "Male Supermodels"
+    assert by_name["c_turret02"].metadata["subcategory"] == "Generic Turrets"
+    assert by_name["c_turret_ceiling"].metadata["subcategory"] == "Ceiling Turrets"
+
+    folders = [
+        panel.nav_tree.topLevelItem(index)
+        for index in range(panel.nav_tree.topLevelItemCount())
+        if panel.nav_tree.topLevelItem(index).text(0) == "Folders / Categories"
+    ][0]
+    by_folder = {
+        folders.child(index).text(0): folders.child(index)
+        for index in range(folders.childCount())
+    }
+    assert [by_folder["Commoners"].child(index).text(0) for index in range(by_folder["Commoners"].childCount())] == [
+        "Children",
+        "Czerka Commoners",
+        "Male Commoners",
+        "Female Commoners",
+    ]
+    assert [by_folder["NPCs"].child(index).text(0) for index in range(by_folder["NPCs"].childCount())] == [
+        "Sith",
+        "Republic",
+        "Dark Jedi",
+        "Czerka",
+        "TSF",
+        "Soldiers",
+        "Onderon Military",
+        "Handmaiden Sisters",
+        "Aqualish",
+        "Ithorians",
+        "Rodians",
+    ]
+    assert [by_folder["Droids"].child(index).text(0) for index in range(by_folder["Droids"].childCount())] == [
+        "Astromechs",
+        "Combat Droids",
+    ]
+    assert [by_folder["Creatures"].child(index).text(0) for index in range(by_folder["Creatures"].childCount())] == [
+        "Banthas",
+        "Bomas",
+        "Firaxan Sharks",
+        "Kath Hounds",
+        "Kinrath",
+        "Malachor Beasts",
+        "Rancors",
+        "Two-Headed Aliens",
+        "Creature Hazards",
+        "Creature Helpers & Placeholders",
+    ]
+    assert [by_folder["Supermodels"].child(index).text(0) for index in range(by_folder["Supermodels"].childCount())] == [
+        "Male Supermodels",
+        "Female Supermodels",
+    ]
+    assert [by_folder["Turrets"].child(index).text(0) for index in range(by_folder["Turrets"].childCount())] == [
+        "Ceiling Turrets",
+        "Generic Turrets",
+    ]
+
+    panel.tag_filter.setCurrentText("Creatures / Rancors")
+    assert [asset.name for asset in panel.visible_assets()] == ["c_rancor"]
+
+    panel.tag_filter.setCurrentText("All Tags")
+    panel._select_navigation("subcategory", "NPCs\0Sith")
+    assert [asset.name for asset in panel.visible_assets()] == ["n_darthmalak"]
+
+
+def test_content_browser_promotes_known_uncategorised_model_patterns() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {"game": "K1", "resref": "3dgui", "source": "swkotor"},
+        {"game": "K1", "resref": "cgbody_light", "source": "swkotor"},
+        {"game": "K1", "resref": "m03mg_mgo01", "source": "swkotor"},
+        {"game": "K1", "resref": "m13aa_01a", "source": "swkotor"},
+        {"game": "K1", "resref": "m13aa_c01_cam", "source": "swkotor"},
+        {"game": "K1", "resref": "gidy_sun", "source": "swkotor"},
+        {"game": "K1", "resref": "it_bag", "source": "swkotor"},
+        {"game": "K1", "resref": "lqa_dewback", "source": "swkotor"},
+        {"game": "K2", "resref": "k1_pfbim", "source": "swkotor2"},
+        {"game": "K2", "resref": "spacesuit01", "source": "swkotor2"},
+    ])
+
+    by_name = {asset.name: asset for asset in panel.visible_assets()}
+    assert by_name["3dgui"].category == "GUI"
+    assert by_name["cgbody_light"].category == "GUI"
+    assert by_name["m03mg_mgo01"].category == "Minigame"
+    assert by_name["m13aa_01a"].category == "Level Assets"
+    assert by_name["m13aa_c01_cam"].category == "Level Assets"
+    assert by_name["gidy_sun"].category == "Engine Items"
+    assert by_name["it_bag"].category == "Inventory"
+    assert by_name["lqa_dewback"].category == "Creatures"
+    assert by_name["lqa_dewback"].metadata["subcategory"] == "Dewbacks"
+    assert by_name["k1_pfbim"].category == "Player Characters"
+    assert by_name["spacesuit01"].category == "Misc Models"
+    assert "Uncategorised" not in {asset.category for asset in by_name.values()}
+
+
+def test_content_browser_sorts_remaining_support_categories_into_subcategories() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {"game": "K1", "resref": "gi_waypoint01", "source": "swkotor"},
+        {"game": "K1", "resref": "or_medshrub01", "source": "swkotor"},
+        {"game": "K1", "resref": "cgbody_light", "source": "swkotor"},
+        {"game": "K1", "resref": "c_holovandar", "source": "swkotor"},
+        {"game": "K1", "resref": "l_twilekf", "source": "swkotor"},
+        {"game": "K1", "resref": "m12ab_mgt01", "source": "swkotor"},
+        {"game": "K1", "resref": "m03mg_mgt01", "source": "swkotor"},
+        {"game": "K2", "resref": "mainmenu03", "source": "swkotor2"},
+        {"game": "K1", "resref": "fx_droid01", "source": "swkotor"},
+        {"game": "K1", "resref": "v_blastdef_imp", "source": "swkotor"},
+        {"game": "K1", "resref": "lplanet_01", "source": "swkotor"},
+        {"game": "K1", "resref": "skyboxbase", "source": "swkotor"},
+        {"game": "K1", "resref": "old_a_f", "source": "swkotor"},
+        {"game": "K1", "resref": "stunt_crowd01", "source": "swkotor"},
+    ])
+
+    by_name = {asset.name: asset for asset in panel.visible_assets()}
+    assert by_name["gi_waypoint01"].metadata["subcategory"] == "Waypoints & Spawn Points"
+    assert by_name["or_medshrub01"].metadata["subcategory"] == "Shrubs"
+    assert by_name["cgbody_light"].metadata["subcategory"] == "Character Generation"
+    assert by_name["c_holovandar"].metadata["subcategory"] == "Jedi Holograms"
+    assert by_name["l_twilekf"].metadata["subcategory"] == "Alien Standees"
+    assert by_name["m12ab_mgt01"].metadata["subcategory"] == "Area Props"
+    assert by_name["m03mg_mgt01"].metadata["subcategory"] == "Minigame Tracks"
+    assert by_name["mainmenu03"].metadata["subcategory"] == "Menu Variants"
+    assert by_name["fx_droid01"].metadata["subcategory"] == "Droid FX"
+    assert by_name["v_blastdef_imp"].metadata["subcategory"] == "Impact Visuals"
+    assert by_name["lplanet_01"].metadata["subcategory"] == "Loading Planet Models"
+    assert by_name["skyboxbase"].metadata["subcategory"] == "Base Skyboxes"
+    assert by_name["old_a_f"].metadata["subcategory"] == "Old Commoners"
+    assert by_name["stunt_crowd01"].metadata["subcategory"] == "Crowd Stunts"
+
+    panel.tag_filter.setCurrentText("Visual FX / Droid FX")
+    assert [asset.name for asset in panel.visible_assets()] == ["fx_droid01"]
+
+    panel.tag_filter.setCurrentText("All Tags")
+    panel._select_navigation("subcategory", "GUI\0Character Generation")
+    assert [asset.name for asset in panel.visible_assets()] == ["cgbody_light"]
+
+
+def test_content_browser_sorts_items_weapons_and_placeables_into_subcategories() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {"game": "K1", "resref": "i_spike_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_trap_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_medpac_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_mask_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_implant_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_gauntlet_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_armband_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_drdpart_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_belt_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_stim_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_datapad_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_progspike_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_secspike_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_parts_001", "source": "swkotor"},
+        {"game": "K1", "resref": "i_trapkit_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_grenade_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_lghtsbr_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_dblsbr_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_shortsbr_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_vbroswrd_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_vbrdblswd_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_blstrpstl_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_hvyblstr_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_blstrrfl_001", "source": "swkotor"},
+        {"game": "K1", "resref": "w_hvrptbltr_001", "source": "swkotor"},
+        {"game": "K1", "resref": "a_robe_001", "category": "Armor", "source": "swkotor"},
+        {"game": "K1", "resref": "a_light_001", "category": "Armor", "source": "swkotor"},
+        {"game": "K1", "resref": "a_medium_001", "category": "Armor", "source": "swkotor"},
+        {"game": "K1", "resref": "a_heavy_001", "category": "Armor", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_footlker", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_comppanel", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_chair01", "source": "swkotor"},
+    ])
+
+    by_name = {asset.name: asset for asset in panel.visible_assets()}
+    assert by_name["i_spike_001"].metadata["subcategory"] == "Spikes"
+    assert by_name["i_trap_001"].metadata["subcategory"] == "Traps"
+    assert by_name["i_medpac_001"].metadata["subcategory"] == "Medkits"
+    assert by_name["i_mask_001"].metadata["subcategory"] == "Masks"
+    assert by_name["i_implant_001"].metadata["subcategory"] == "Implants"
+    assert by_name["i_gauntlet_001"].metadata["subcategory"] == "Gauntlets"
+    assert by_name["i_armband_001"].metadata["subcategory"] == "Armbands"
+    assert by_name["i_drdpart_001"].metadata["subcategory"] == "Droid Items"
+    assert by_name["i_belt_001"].metadata["subcategory"] == "Belts"
+    assert by_name["i_stim_001"].metadata["subcategory"] == "Stims"
+    assert by_name["i_datapad_001"].metadata["subcategory"] == "Datapads"
+    assert by_name["i_progspike_001"].metadata["subcategory"] == "Computer Spikes"
+    assert by_name["i_secspike_001"].metadata["subcategory"] == "Security Spikes"
+    assert by_name["i_parts_001"].metadata["subcategory"] == "Parts"
+    assert by_name["i_trapkit_001"].metadata["subcategory"] == "Mines"
+    assert by_name["w_grenade_001"].metadata["subcategory"] == "Grenades"
+    assert by_name["w_lghtsbr_001"].metadata["subcategory"] == "Lightsabers"
+    assert by_name["w_dblsbr_001"].metadata["subcategory"] == "Double-Bladed Lightsabers"
+    assert by_name["w_shortsbr_001"].metadata["subcategory"] == "Short Lightsabers"
+    assert by_name["w_vbroswrd_001"].metadata["subcategory"] == "Vibroblades"
+    assert by_name["w_vbrdblswd_001"].metadata["subcategory"] == "Double-Bladed Melee"
+    assert by_name["w_blstrpstl_001"].metadata["subcategory"] == "Blasters"
+    assert by_name["w_hvyblstr_001"].metadata["subcategory"] == "Heavy Blasters"
+    assert by_name["w_blstrrfl_001"].metadata["subcategory"] == "Blaster Rifles"
+    assert by_name["w_hvrptbltr_001"].metadata["subcategory"] == "Heavy Weapons"
+    assert by_name["a_robe_001"].metadata["subcategory"] == "Jedi Robes"
+    assert by_name["a_light_001"].metadata["subcategory"] == "Light Armor"
+    assert by_name["a_medium_001"].metadata["subcategory"] == "Medium Armor"
+    assert by_name["a_heavy_001"].metadata["subcategory"] == "Heavy Armor"
+    assert by_name["plc_footlker"].metadata["subcategory"] == "Containers"
+    assert by_name["plc_comppanel"].metadata["subcategory"] == "Computers & Panels"
+    assert by_name["plc_chair01"].metadata["subcategory"] == "Furniture"
+
+    folders = [
+        panel.nav_tree.topLevelItem(index)
+        for index in range(panel.nav_tree.topLevelItemCount())
+        if panel.nav_tree.topLevelItem(index).text(0) == "Folders / Categories"
+    ][0]
+    inventory = next(folders.child(index) for index in range(folders.childCount()) if folders.child(index).text(0) == "Inventory")
+    weapons = next(folders.child(index) for index in range(folders.childCount()) if folders.child(index).text(0) == "Weapons")
+    armor = next(folders.child(index) for index in range(folders.childCount()) if folders.child(index).text(0) == "Armor")
+    placeables = next(folders.child(index) for index in range(folders.childCount()) if folders.child(index).text(0) == "Placeables")
+
+    assert [inventory.child(index).text(0) for index in range(inventory.childCount())] == [
+        "Security Spikes",
+        "Computer Spikes",
+        "Parts",
+        "Mines",
+        "Spikes",
+        "Traps",
+        "Medkits",
+        "Masks",
+        "Implants",
+        "Gauntlets",
+        "Armbands",
+        "Droid Items",
+        "Belts",
+        "Stims",
+        "Datapads",
+    ]
+    assert [weapons.child(index).text(0) for index in range(weapons.childCount())] == [
+        "Grenades",
+        "Lightsabers",
+        "Double-Bladed Lightsabers",
+        "Short Lightsabers",
+        "Vibroblades",
+        "Double-Bladed Melee",
+        "Blasters",
+        "Heavy Blasters",
+        "Blaster Rifles",
+        "Heavy Weapons",
+    ]
+    assert [armor.child(index).text(0) for index in range(armor.childCount())] == [
+        "Jedi Robes",
+        "Light Armor",
+        "Medium Armor",
+        "Heavy Armor",
+    ]
+    assert [placeables.child(index).text(0) for index in range(placeables.childCount())] == [
+        "Containers",
+        "Computers & Panels",
+        "Furniture",
+    ]
+
+    panel.tag_filter.setCurrentText("Weapons / Blaster Rifles")
+    assert [asset.name for asset in panel.visible_assets()] == ["w_blstrrfl_001"]
+
+    panel.tag_filter.setCurrentText("All Tags")
+    panel._select_navigation("subcategory", "Inventory\0Masks")
+    assert [asset.name for asset in panel.visible_assets()] == ["i_mask_001"]
+
+
+def test_content_browser_sorts_misc_placeables_into_specific_subcategories() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {"game": "K1", "resref": "plc_backpack", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_bodyranc", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_chunkybit01", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_brokndrd", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_lndspdr1", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_fccage", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_banner", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_starmap", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_oilpudle", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_stmventc", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_cjar01", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_rnepillr", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_rakatflg", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_sithsarc", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_koltank", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_beer01", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_pwrcond", "source": "swkotor"},
+        {"game": "K1", "resref": "plc_cp1", "source": "swkotor"},
+    ])
+
+    by_name = {asset.name: asset for asset in panel.visible_assets()}
+    assert by_name["plc_backpack"].metadata["subcategory"] == "Bags & Loot"
+    assert by_name["plc_bodyranc"].metadata["subcategory"] == "Corpses & Remains"
+    assert by_name["plc_chunkybit01"].metadata["subcategory"] == "Junk & Rubble"
+    assert by_name["plc_brokndrd"].metadata["subcategory"] == "Droids & Broken Droids"
+    assert by_name["plc_lndspdr1"].metadata["subcategory"] == "Speeders & Vehicles"
+    assert by_name["plc_fccage"].metadata["subcategory"] == "Cages & Restraints"
+    assert by_name["plc_banner"].metadata["subcategory"] == "Signs, Banners & Flags"
+    assert by_name["plc_starmap"].metadata["subcategory"] == "Holograms & Star Maps"
+    assert by_name["plc_oilpudle"].metadata["subcategory"] == "Liquids & Puddles"
+    assert by_name["plc_stmventc"].metadata["subcategory"] == "Fire, Smoke & Vents"
+    assert by_name["plc_cjar01"].metadata["subcategory"] == "Ceramics & Decor"
+    assert by_name["plc_rnepillr"].metadata["subcategory"] == "Ruins & Monuments"
+    assert by_name["plc_rakatflg"].metadata["subcategory"] == "Rakatan Props"
+    assert by_name["plc_sithsarc"].metadata["subcategory"] == "Sith Props"
+    assert by_name["plc_koltank"].metadata["subcategory"] == "Medical & Kolto"
+    assert by_name["plc_beer01"].metadata["subcategory"] == "Food & Drink"
+    assert by_name["plc_pwrcond"].metadata["subcategory"] == "Machinery & Equipment"
+    assert by_name["plc_cp1"].metadata["subcategory"] == "Placeable Helpers"
+
+    panel.tag_filter.setCurrentText("Placeables / Corpses & Remains")
+    assert [asset.name for asset in panel.visible_assets()] == ["plc_bodyranc"]
+
+
+def test_content_browser_uses_item_template_metadata_for_subcategories() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+    from src.gui.qt_lib.panels.qt_library_panel import enrich_library_rows
+
+    rows = enrich_library_rows([
+        {
+            "game": "K1",
+            "resref": "a_generic_001",
+            "item_template_resref": "g_a_class4001",
+            "item_tag": "G_A_CLASS4001",
+            "item_baseitem": "38",
+            "item_model_variation": "1",
+            "metadata_source": "UTI",
+        },
+        {
+            "game": "K1",
+            "resref": "w_generic_001",
+            "category": "Weapons",
+            "item_template_resref": "g_w_blstrrfl001",
+            "item_tag": "G_W_BLSTRRFL001",
+            "item_baseitem": "77",
+            "item_model_variation": "1",
+            "metadata_source": "UTI",
+        },
+    ])
+
+    assert rows[0]["category"] == "Armor"
+    assert rows[0]["subcategory"] == "Light Armor"
+    assert rows[1]["subcategory"] == "Blaster Rifles"
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows(rows)
+    by_name = {asset.name: asset for asset in panel.visible_assets()}
+
+    assert by_name["a_generic_001"].category == "Armor"
+    assert by_name["a_generic_001"].metadata["subcategory"] == "Light Armor"
+    assert by_name["a_generic_001"].metadata["template"] == "g_a_class4001"
+    assert by_name["a_generic_001"].metadata["metadata source"] == "UTI"
+    assert by_name["w_generic_001"].metadata["subcategory"] == "Blaster Rifles"
+
+
+def test_content_browser_sorts_doors_by_level_metadata_and_prefixes() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+    from src.gui.qt_lib.panels.qt_library_panel import enrich_library_rows
+
+    rows = enrich_library_rows([
+        {"game": "K1", "resref": "dor_lta01", "source": "swkotor"},
+        {"game": "K1", "resref": "dor_lda01", "source": "swkotor"},
+        {"game": "K1", "resref": "dor_lka01", "source": "swkotor"},
+        {"game": "K1", "resref": "dor_lko01", "source": "swkotor"},
+        {"game": "K1", "resref": "dor_lma01", "source": "swkotor"},
+        {"game": "K1", "resref": "dor_lsf01", "source": "swkotor"},
+        {"game": "K1", "resref": "dor_lhr01", "source": "swkotor"},
+        {"game": "K1", "resref": "dor_ukn01", "source": "swkotor"},
+        {
+            "game": "K2",
+            "resref": "door_droid01",
+            "category": "Doors",
+            "door_template_resref": "door_droid01",
+            "door_tag": "DroidPlanetDoor01",
+            "door_generic_type": "90",
+            "metadata_source": "UTD",
+        },
+        {
+            "game": "K2",
+            "resref": "door_narshad01",
+            "category": "Doors",
+            "door_template_resref": "door_narshad01",
+            "door_tag": "NarShaddaaDoor01",
+            "door_generic_type": "73",
+            "metadata_source": "UTD",
+        },
+    ])
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows(rows)
+    by_name = {asset.name: asset for asset in panel.visible_assets()}
+
+    assert by_name["dor_lta01"].metadata["subcategory"] == "Taris"
+    assert by_name["dor_lda01"].metadata["subcategory"] == "Dantooine"
+    assert by_name["dor_lka01"].metadata["subcategory"] == "Kashyyyk"
+    assert by_name["dor_lko01"].metadata["subcategory"] == "Korriban"
+    assert by_name["dor_lma01"].metadata["subcategory"] == "Manaan"
+    assert by_name["dor_lsf01"].metadata["subcategory"] == "Star Forge"
+    assert by_name["dor_lhr01"].metadata["subcategory"] == "Endar Spire"
+    assert by_name["dor_ukn01"].metadata["subcategory"] == "Unknown Doors"
+    assert by_name["door_droid01"].metadata["subcategory"] == "Droid Planet"
+    assert by_name["door_droid01"].metadata["metadata source"] == "UTD"
+    assert by_name["door_narshad01"].metadata["subcategory"] == "Nar Shaddaa"
+
+    folders = [
+        panel.nav_tree.topLevelItem(index)
+        for index in range(panel.nav_tree.topLevelItemCount())
+        if panel.nav_tree.topLevelItem(index).text(0) == "Folders / Categories"
+    ][0]
+    doors = next(folders.child(index) for index in range(folders.childCount()) if folders.child(index).text(0) == "Doors")
+    assert [doors.child(index).text(0) for index in range(doors.childCount())] == [
+        "Taris",
+        "Dantooine",
+        "Kashyyyk",
+        "Manaan",
+        "Korriban",
+        "Star Forge",
+        "Endar Spire",
+        "Nar Shaddaa",
+        "Droid Planet",
+        "Unknown Doors",
+    ]
+
+    panel._select_navigation("subcategory", "Doors\0Droid Planet")
+    assert [asset.name for asset in panel.visible_assets()] == ["door_droid01"]
+
+
+def test_library_scan_maps_utd_door_templates_to_display_models() -> None:
+    from src.gui.qt_lib.panels.qt_library_panel import enrich_library_rows, enrich_library_rows_with_resource_metadata
+
+    class FakeInstall:
+        def list_resrefs(self, res_type: int) -> list[str]:
+            return ["door_droid01"] if res_type == 2042 else []
+
+    class FakeResourceManager:
+        def get_k1(self):
+            return None
+
+        def get_k2(self):
+            return FakeInstall()
+
+        def get(self, name: str, res_type: int, game: str = "K1"):
+            assert (name, res_type, game) == ("door_droid01", 2042, "K2")
+            return _minimal_gff(
+                "UTD ",
+                {
+                    "TemplateResRef": ("resref", "door_droid01"),
+                    "Tag": ("string", "DroidPlanetDoor01"),
+                    "GenericType": ("uint32", 90),
+                    "OpenLockDC": ("uint32", 28),
+                    "KeyName": ("string", ""),
+                    "LinkedTo": ("string", ""),
+                },
+            )
+
+    rows = enrich_library_rows(enrich_library_rows_with_resource_metadata([
+        {"game": "K2", "resref": "dor_dro01", "source": "swkotor2"},
+    ], FakeResourceManager()))
+    row = next(row for row in rows if row.get("resref") == "dor_dro01")
+
+    assert row["category"] == "Doors"
+    assert row["subcategory"] == "Droid Planet"
+    assert row["door_template_resref"] == "door_droid01"
+    assert row["door_generic_type"] == "90"
+    assert row["metadata_source"] == "UTD"
+
+
 def test_content_browser_primary_activation_requests_clear_scene_load() -> None:
     _qapp()
 
@@ -345,7 +1188,12 @@ def test_content_browser_primary_activation_requests_clear_scene_load() -> None:
     panel.primarySceneLoadRequested.connect(lambda row: emitted.append(row))
     panel.loadRequested.connect(lambda resref, game: legacy_loads.append((resref, game)))
 
-    panel.asset_view.setCurrentItem(panel.asset_view.topLevelItem(0))
+    item = next(
+        panel.asset_view.topLevelItem(index)
+        for index in range(panel.asset_view.topLevelItemCount())
+        if panel.asset_view.topLevelItem(index).text(1) == "n_darthmalak"
+    )
+    panel.asset_view.setCurrentItem(item)
     panel._activate_selected()
 
     assert emitted and emitted[0]["resref"] == "n_darthmalak"
