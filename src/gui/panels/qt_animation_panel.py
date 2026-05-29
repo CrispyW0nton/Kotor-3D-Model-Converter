@@ -11,9 +11,164 @@ from src.core.retargeting.retarget_output_naming import KotorOutputAnimationName
 from src.gui.qt_lib.assets.qt_theme import C, heading
 
 
+ANIMATION_NAME_ROLE = QtCore.Qt.UserRole
+ANIMATION_SOURCE_ROLE = QtCore.Qt.UserRole + 1
+
+
+_ANIMATION_EXACT_LABELS = {
+    "active": "Active Idle",
+    "default": "Default Pose",
+    "pause": "Idle",
+    "pause1": "Idle 1",
+    "pause2": "Idle 2",
+    "walk": "Walk",
+    "walkinj": "Injured Walk",
+    "walkback": "Walk Backward",
+    "run": "Run",
+    "runinj": "Injured Run",
+    "ready": "Ready",
+    "talk": "Talk",
+    "listen": "Listen",
+    "usecomp": "Use Computer",
+    "unlock": "Unlock",
+    "open": "Open",
+    "close": "Close",
+    "die": "Die",
+    "dead": "Dead",
+    "deadloop": "Dead Loop",
+    "damage": "Damage Reaction",
+    "dodge": "Dodge",
+    "parry": "Parry",
+    "taunt": "Taunt",
+    "throw": "Throw",
+    "cast": "Cast Force Power",
+}
+
+_ANIMATION_PREFIX_LABELS = (
+    ("talk", "Talk"),
+    ("listen", "Listen"),
+    ("gesture", "Gesture"),
+    ("walk", "Walk"),
+    ("run", "Run"),
+    ("dance", "Dance"),
+    ("dead", "Dead"),
+    ("die", "Die"),
+    ("dodge", "Dodge"),
+    ("parry", "Parry"),
+    ("damage", "Damage Reaction"),
+    ("throwgrenade", "Throw Grenade"),
+    ("throw", "Throw"),
+    ("cast", "Cast Force Power"),
+)
+
+_ANIMATION_FAMILY_LABELS = {
+    "b": "Blaster",
+    "c": "Combat",
+    "f": "Fists",
+    "g": "General Weapon",
+    "m": "Melee",
+}
+
+_ANIMATION_ACTION_LABELS = {
+    "a": "Attack",
+    "d": "Defend",
+    "g": "Get Hit",
+    "n": "Block",
+    "p": "Parry",
+    "w": "Activate Weapon",
+    "x": "Fall Through Air",
+    "y": "Air-To-Ground Fall",
+    "z": "Get Back Up",
+}
+
+
+def animation_display_name(anim_name: str, *, inherited: bool = False, source: str = "") -> str:
+    """Return a readable label while preserving the raw KOTOR slot elsewhere."""
+    raw = str(anim_name or "").strip()
+    if not raw:
+        return ""
+    key = raw.lower()
+    label = _animation_base_display_name(key, raw)
+    if inherited:
+        source = str(source or "").strip()
+        label = f"{label} (Inherited" + (f" from {source}" if source else "") + ")"
+    return label
+
+
+def animation_row_label(anim_name: str, *, inherited: bool = False, source: str = "", game: str = "") -> str:
+    raw = str(anim_name or "").strip()
+    display = animation_display_name(raw, inherited=inherited, source=source)
+    if raw:
+        display = f"{display} [{raw}]"
+    game = _animation_game_label(game)
+    if game:
+        display = f"{display} [{game}]"
+    return display
+
+
+def _animation_base_display_name(key: str, raw: str) -> str:
+    if key in _ANIMATION_EXACT_LABELS:
+        return _ANIMATION_EXACT_LABELS[key]
+    match = re.fullmatch(r"pause(\d+)", key)
+    if match:
+        return f"Idle {int(match.group(1))}"
+    match = re.fullmatch(r"animloop(\d+)", key)
+    if match:
+        return f"Ambient Loop {int(match.group(1)):02d}"
+    match = re.fullmatch(r"([bcfgm])(\d+)([a-z])(\d*)([a-z]?)", key)
+    if match:
+        family_code, set_number, action_code, variant, form_code = match.groups()
+        family = _ANIMATION_FAMILY_LABELS.get(family_code, f"Move Family {family_code.upper()}")
+        action = _ANIMATION_ACTION_LABELS.get(action_code, f"Action {action_code.upper()}")
+        suffix = f" {int(variant)}" if variant else ""
+        form = f" Form {form_code.upper()}" if form_code else ""
+        return f"{family} Set {int(set_number)} {action}{suffix}{form}"
+    match = re.fullmatch(r"([a-z]+)(\d+)", key)
+    if match:
+        prefix, variant = match.groups()
+        for token, label in _ANIMATION_PREFIX_LABELS:
+            if prefix.startswith(token):
+                return f"{label} {int(variant)}"
+    return _humanize_animation_slot(raw)
+
+
+def _humanize_animation_slot(raw: str) -> str:
+    text = raw.replace("_", " ").replace("-", " ")
+    text = re.sub(r"(?<=[A-Za-z])(?=\d)", " ", text)
+    text = re.sub(r"(?<=\d)(?=[A-Za-z])", " ", text)
+    text = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", text)
+    words = [word for word in text.split() if word]
+    return " ".join(word[:1].upper() + word[1:] for word in words) or raw
+
+
+def _animation_game_label(game: str) -> str:
+    text = str(game or "").strip().upper()
+    if text in {"K1", "K2"}:
+        return text
+    if "KOTOR2" in text or "KOTOR 2" in text or "KOTOR II" in text:
+        return "K2"
+    if "KOTOR1" in text or "KOTOR 1" in text or "KOTOR" in text:
+        return "K1"
+    return ""
+
+
+def _game_from_model(model) -> str:
+    for attr in ("_gr_source_game", "game", "game_tag", "game_version"):
+        value = getattr(model, attr, "")
+        if hasattr(value, "value"):
+            value = value.value
+        label = _animation_game_label(str(value or ""))
+        if label:
+            return label
+    return ""
+
+
 class QtAnimationsPanel(QtWidgets.QWidget):
     animationSelected = QtCore.Signal(str)
     animationActionRequested = QtCore.Signal(str, str)
+    animationSourceChanged = QtCore.Signal(str)
+    inheritanceGameChanged = QtCore.Signal(str)
+    inheritanceSupermodelChanged = QtCore.Signal(str)
     seekRequested = QtCore.Signal(int)
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
@@ -23,9 +178,52 @@ class QtAnimationsPanel(QtWidgets.QWidget):
     def _build(self) -> None:
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(6, 6, 6, 6)
-        root.addWidget(heading("Animations"))
+        root.addWidget(heading("Animation Browser"))
+        source_row = QtWidgets.QHBoxLayout()
+        source_row.addWidget(QtWidgets.QLabel("Source"))
+        self.animation_source_combo = QtWidgets.QComboBox()
+        for label, value in (
+            ("Body", "body"),
+            ("Head", "head"),
+            ("Attachment / Weapon", "attachment"),
+        ):
+            self.animation_source_combo.addItem(label, value)
+        self.animation_source_combo.setToolTip("Choose which attached model's animations to inspect and preview.")
+        self.animation_source_combo.currentTextChanged.connect(
+            lambda _text: self.animationSourceChanged.emit(self.selected_animation_source())
+        )
+        source_row.addWidget(self.animation_source_combo, 1)
+        root.addLayout(source_row)
+        inheritance_row = QtWidgets.QHBoxLayout()
+        inheritance_row.addWidget(QtWidgets.QLabel("Game"))
+        self.inheritance_game_combo = QtWidgets.QComboBox()
+        self.inheritance_game_combo.addItems(["Auto", "K1", "K2"])
+        self.inheritance_game_combo.setToolTip("Choose which game's supermodel chain supplies inherited animations.")
+        self.inheritance_game_combo.currentTextChanged.connect(self.inheritanceGameChanged.emit)
+        inheritance_row.addWidget(self.inheritance_game_combo, 1)
+        root.addLayout(inheritance_row)
+        supermodel_row = QtWidgets.QHBoxLayout()
+        supermodel_row.addWidget(QtWidgets.QLabel("Supermodel"))
+        self.inheritance_supermodel_combo = QtWidgets.QComboBox()
+        for label, value in (
+            ("Auto", ""),
+            ("Male - S_Male02", "S_Male02"),
+            ("Female - S_Female03", "S_Female03"),
+            ("Female Base - S_Female02", "S_Female02"),
+            ("Female Core - S_Female01", "S_Female01"),
+            ("Male Base - S_Male01", "S_Male01"),
+        ):
+            self.inheritance_supermodel_combo.addItem(label, value)
+        self.inheritance_supermodel_combo.setToolTip(
+            "Choose the root supermodel used for inherited animation lookup."
+        )
+        self.inheritance_supermodel_combo.currentTextChanged.connect(
+            lambda _text: self.inheritanceSupermodelChanged.emit(self.selected_inheritance_supermodel())
+        )
+        supermodel_row.addWidget(self.inheritance_supermodel_combo, 1)
+        root.addLayout(supermodel_row)
         self.listbox = QtWidgets.QListWidget()
-        self.listbox.currentTextChanged.connect(self.animationSelected.emit)
+        self.listbox.currentItemChanged.connect(lambda item, _prev: self.animationSelected.emit(self._name_for_item(item)))
         self.listbox.itemDoubleClicked.connect(lambda _item: self._emit_action("Play"))
         root.addWidget(self.listbox, 1)
         self.info = QtWidgets.QPlainTextEdit()
@@ -49,31 +247,117 @@ class QtAnimationsPanel(QtWidgets.QWidget):
             output_controls.addWidget(button)
         root.addLayout(output_controls)
 
-    def load_model(self, model, select_name: str = "") -> None:
+    def load_model(self, model, select_name: str = "", game: str = "") -> None:
         self.listbox.clear()
         animations = getattr(model, "animations", []) or [] if model else []
+        game = game or _game_from_model(model)
         for anim in animations:
-            self.listbox.addItem(getattr(anim, "name", str(anim)))
+            self._add_animation_item(getattr(anim, "name", str(anim)), anim=anim, game=game)
         if select_name:
             self.select_animation(select_name)
         self.info.setPlainText(f"{len(animations)} animation(s)")
 
     def selected_animation(self) -> str:
-        item = self.listbox.currentItem()
-        return item.text() if item else ""
+        return self._name_for_item(self.listbox.currentItem())
+
+    def selected_animation_source(self) -> str:
+        if not hasattr(self, "animation_source_combo"):
+            return "body"
+        value = self.animation_source_combo.currentData()
+        return str(value or "body")
+
+    def set_animation_source(self, source: str) -> None:
+        target = str(source or "body").strip().lower()
+        for index in range(self.animation_source_combo.count()):
+            if str(self.animation_source_combo.itemData(index) or "").lower() == target:
+                self.animation_source_combo.setCurrentIndex(index)
+                return
+        self.animation_source_combo.setCurrentIndex(0)
+
+    def selected_inheritance_game(self) -> str:
+        if not hasattr(self, "inheritance_game_combo"):
+            return ""
+        value = self.inheritance_game_combo.currentText().strip().upper()
+        return value if value in {"K1", "K2"} else ""
+
+    def selected_inheritance_supermodel(self) -> str:
+        if not hasattr(self, "inheritance_supermodel_combo"):
+            return ""
+        value = self.inheritance_supermodel_combo.currentData()
+        if value:
+            return str(value).strip()
+        text = self.inheritance_supermodel_combo.currentText().strip()
+        return "" if text.lower() == "auto" else text
+
+    def set_inheritance_game(self, game: str) -> None:
+        value = str(game or "").strip().upper()
+        text = value if value in {"K1", "K2"} else "Auto"
+        index = self.inheritance_game_combo.findText(text)
+        if index >= 0:
+            self.inheritance_game_combo.setCurrentIndex(index)
+
+    def set_inheritance_supermodel(self, supermodel: str) -> None:
+        value = str(supermodel or "").strip()
+        target = value.lower()
+        for index in range(self.inheritance_supermodel_combo.count()):
+            item_value = str(self.inheritance_supermodel_combo.itemData(index) or "").lower()
+            if item_value == target:
+                self.inheritance_supermodel_combo.setCurrentIndex(index)
+                return
+        self.inheritance_supermodel_combo.setCurrentIndex(0)
 
     def select_animation(self, anim_name: str) -> bool:
         if not anim_name:
             return False
-        matches = self.listbox.findItems(anim_name, QtCore.Qt.MatchExactly)
-        if not matches:
+        needle = str(anim_name)
+        for index in range(self.listbox.count()):
+            item = self.listbox.item(index)
+            if self._name_for_item(item).lower() == needle.lower():
+                self.listbox.setCurrentItem(item)
+                self.listbox.scrollToItem(item)
+                return True
+        return False
+
+    def add_effective_animation(self, entry: dict) -> bool:
+        name = str(entry.get("name") or "")
+        if not name:
             return False
-        self.listbox.setCurrentItem(matches[0])
-        self.listbox.scrollToItem(matches[0])
+        inherited = bool(entry.get("inherited"))
+        source = str(entry.get("source") or "")
+        game = str(entry.get("game") or "")
+        self._add_animation_item(name, entry=entry, inherited=inherited, source=source, game=game)
         return True
 
     def _emit_action(self, action: str) -> None:
         self.animationActionRequested.emit(action, self.selected_animation())
+
+    def _add_animation_item(
+        self,
+        anim_name: str,
+        *,
+        anim=None,
+        entry: dict | None = None,
+        inherited: bool = False,
+        source: str = "",
+        game: str = "",
+    ) -> QtWidgets.QListWidgetItem:
+        name = str(anim_name or "")
+        item = QtWidgets.QListWidgetItem(animation_row_label(name, inherited=inherited, source=source, game=game))
+        item.setData(ANIMATION_NAME_ROLE, name)
+        item.setData(ANIMATION_SOURCE_ROLE, dict(entry or {}))
+        if anim is not None:
+            item.setData(ANIMATION_SOURCE_ROLE, {"animation": anim})
+        tooltip = f"Animation slot: {name}"
+        if inherited:
+            tooltip += f"\nInherited from: {source or 'supermodel'}"
+        item.setToolTip(tooltip)
+        self.listbox.addItem(item)
+        return item
+
+    def _name_for_item(self, item: QtWidgets.QListWidgetItem | None) -> str:
+        if item is None:
+            return ""
+        return str(item.data(ANIMATION_NAME_ROLE) or item.text() or "")
 
 
 class QtAnimationLibraryPanel(QtWidgets.QWidget):
@@ -111,7 +395,7 @@ class QtAnimationLibraryPanel(QtWidgets.QWidget):
         for entry in entries:
             item = QtWidgets.QTreeWidgetItem([
                 str(entry.get("model", "")),
-                str(entry.get("animation", "")),
+                self._animation_tree_label(entry),
                 str(entry.get("frames", "")),
                 str(entry.get("source", "")),
             ])
@@ -121,6 +405,15 @@ class QtAnimationLibraryPanel(QtWidgets.QWidget):
     def selected_entry(self) -> Optional[dict]:
         item = self.tree.currentItem()
         return item.data(0, QtCore.Qt.UserRole) if item else None
+
+    def _animation_tree_label(self, entry: dict) -> str:
+        name = str(entry.get("animation", ""))
+        return animation_row_label(
+            name,
+            inherited=bool(entry.get("inherited")),
+            source=str(entry.get("source", "")),
+            game=str(entry.get("game", "")),
+        )
 
 
 class QtAnimationLibraryCombinedPanel(QtWidgets.QWidget):
@@ -588,9 +881,10 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
         mode = self._coerce_output_mode(assignment.get("output_mode"))
         output_name = str(assignment.get("output_name") or "").strip() or self._safe_custom_output_name(source_name)
         mode_label = "custom patch" if mode == KotorOutputAnimationNameMode.CUSTOM_PATCH else "vanilla slot"
-        item.setText(f"{source_name}  ->  {output_name} ({mode_label})")
+        source_label = animation_row_label(source_name)
+        item.setText(f"{source_label}  ->  {output_name} ({mode_label})")
         tooltip = (
-            f"Source animation: {source_name}\n"
+            f"Source animation: {source_label}\n"
             f"Target output animation: {output_name}\n"
             f"Output type: {mode_label}"
         )

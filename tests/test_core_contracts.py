@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import os
+from contextlib import contextmanager
 from types import MethodType, SimpleNamespace
 
 import pytest
@@ -2442,6 +2443,13 @@ def test_main_model_load_uses_inherited_animation_panel_loader() -> None:
     assert "self.animations_panel.load_model(model)" not in loaded_source
     assert "self._load_animation_panel_model(model)" in retarget_source
     assert "self._load_animation_panel_model(model)" in library_source
+    loader_source = inspect.getsource(QtGhostRiggerMainWindow._load_animation_panel_model)
+    layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    assert '"Animation Browser"' in layout_source
+    assert "animationSourceChanged.connect(self._handle_animation_source_changed)" in layout_source
+    assert "_animation_source_model(model)" in loader_source
+    assert "_animation_inheritance_supermodel(model)" in loader_source
+    assert "_animation_resolution_context(model, inheritance_game, inheritance_supermodel)" in loader_source
 
 
 def test_wgpu_external_lighting_snapshot_receives_renderer_helper_palette(monkeypatch) -> None:
@@ -3253,7 +3261,225 @@ def test_qt_animations_panel_can_select_loaded_animation() -> None:
     panel.load_model(model, select_name="walkss")
 
     assert panel.selected_animation() == "walkss"
+    assert panel.listbox.currentItem().text() == "Walkss [walkss]"
     assert panel.info.toPlainText() == "2 animation(s)"
+
+
+def test_qt_animations_panel_displays_readable_names_with_raw_animation_slots() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationsPanel, animation_display_name, animation_row_label
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtAnimationsPanel()
+    model = SimpleNamespace(
+        animations=[
+            SimpleNamespace(name="pause1"),
+            SimpleNamespace(name="animloop03"),
+            SimpleNamespace(name="b1a1"),
+            SimpleNamespace(name="c10n3"),
+            SimpleNamespace(name="f2p4a"),
+            SimpleNamespace(name="g3w1"),
+            SimpleNamespace(name="g3x1"),
+            SimpleNamespace(name="g3y1"),
+            SimpleNamespace(name="g3z1"),
+            SimpleNamespace(name="m4d2"),
+        ]
+    )
+    emitted = []
+    panel.animationSelected.connect(emitted.append)
+
+    panel.load_model(model, select_name="b1a1")
+
+    assert animation_display_name("pause1") == "Idle 1"
+    assert panel.listbox.item(0).text() == "Idle 1 [pause1]"
+    assert panel.listbox.item(1).text() == "Ambient Loop 03 [animloop03]"
+    assert panel.listbox.item(2).text() == "Blaster Set 1 Attack 1 [b1a1]"
+    assert panel.listbox.item(3).text() == "Combat Set 10 Block 3 [c10n3]"
+    assert panel.listbox.item(4).text() == "Fists Set 2 Parry 4 Form A [f2p4a]"
+    assert panel.listbox.item(5).text() == "General Weapon Set 3 Activate Weapon 1 [g3w1]"
+    assert panel.listbox.item(6).text() == "General Weapon Set 3 Fall Through Air 1 [g3x1]"
+    assert panel.listbox.item(7).text() == "General Weapon Set 3 Air-To-Ground Fall 1 [g3y1]"
+    assert panel.listbox.item(8).text() == "General Weapon Set 3 Get Back Up 1 [g3z1]"
+    assert panel.listbox.item(9).text() == "Melee Set 4 Defend 2 [m4d2]"
+    assert animation_row_label("c10a1", game="K2") == "Combat Set 10 Attack 1 [c10a1] [K2]"
+    assert panel.selected_animation() == "b1a1"
+    assert emitted[-1] == "b1a1"
+    assert panel.select_animation("pause1") is True
+    assert panel.selected_animation() == "pause1"
+
+
+def test_qt_animations_panel_marks_inherited_readable_names_with_raw_slots() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationsPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtAnimationsPanel()
+
+    panel.add_effective_animation({"name": "pause1", "inherited": True, "source": "S_Male02", "game": "K1"})
+
+    item = panel.listbox.item(0)
+    assert item.text() == "Idle 1 (Inherited from S_Male02) [pause1] [K1]"
+    panel.listbox.setCurrentItem(item)
+    assert panel.selected_animation() == "pause1"
+
+
+def test_qt_animations_panel_exposes_inheritance_game_selector() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationsPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtAnimationsPanel()
+    changes = []
+    panel.inheritanceGameChanged.connect(changes.append)
+
+    panel.set_inheritance_game("K2")
+
+    assert panel.selected_inheritance_game() == "K2"
+    assert changes[-1] == "K2"
+
+    panel.set_inheritance_game("")
+
+    assert panel.selected_inheritance_game() == ""
+
+
+def test_qt_animations_panel_exposes_animation_source_selector() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationsPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtAnimationsPanel()
+    changes = []
+    panel.animationSourceChanged.connect(changes.append)
+
+    panel.set_animation_source("head")
+
+    assert panel.selected_animation_source() == "head"
+    assert changes[-1] == "head"
+
+    panel.set_animation_source("attachment")
+
+    assert panel.selected_animation_source() == "attachment"
+
+
+def test_qt_animations_panel_exposes_inheritance_supermodel_selector() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationsPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtAnimationsPanel()
+    changes = []
+    panel.inheritanceSupermodelChanged.connect(changes.append)
+
+    panel.set_inheritance_supermodel("S_Female03")
+
+    assert panel.selected_inheritance_supermodel() == "S_Female03"
+    assert changes[-1] == "S_Female03"
+
+    panel.set_inheritance_supermodel("")
+
+    assert panel.selected_inheritance_supermodel() == ""
+
+
+def test_animation_resolution_game_override_preserves_model_source_game() -> None:
+    from src.core.qt_core.geometry.model_data import GameVersion, KotorModel
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    model = KotorModel(name="OverrideSourceGame")
+    model._gr_source_game = "K2"
+
+    QtGhostRiggerMainWindow._apply_animation_resolution_game(None, model, "K1")
+
+    assert model.game_version == GameVersion.K1
+    assert model._gr_source_game == "K2"
+
+
+def test_animation_resolution_context_temporarily_overrides_supermodel() -> None:
+    from src.core.qt_core.geometry.model_data import GameVersion, KotorModel
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    model = KotorModel(name="OverrideSupermodel", supermodel="S_Male02")
+    model.game_version = GameVersion.K1
+
+    class Window:
+        _apply_animation_resolution_game = QtGhostRiggerMainWindow._apply_animation_resolution_game
+
+    window = Window()
+
+    with QtGhostRiggerMainWindow._animation_resolution_context(window, model, "K2", "S_Female03"):
+        assert model.supermodel == "S_Female03"
+        assert model.game_version == GameVersion.K2
+
+    assert model.supermodel == "S_Male02"
+    assert model.game_version == GameVersion.K1
+
+
+def test_animation_selection_previews_first_frame_without_starting_playback() -> None:
+    from types import SimpleNamespace
+
+    from src.core.qt_core.geometry.model_data import Animation, KotorModel
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    model = KotorModel(name="PreviewModel")
+    model.animations = [Animation(name="pause1", length=1.25)]
+    calls = []
+
+    class Viewport:
+        def set_animation_pose(self, pose, name="", time=0.0, length=0.0):
+            calls.append(("pose", pose, name, time, length))
+
+        def set_animation_playback_active(self, active, reason=""):
+            calls.append(("active", active, reason))
+
+    class Timer:
+        def __init__(self):
+            self.stopped = False
+
+        def stop(self):
+            self.stopped = True
+
+    @contextmanager
+    def resolution_context(_model, _game, _supermodel=""):
+        yield
+
+    window = SimpleNamespace(
+        _animation_engine=None,
+        _animation_timer=Timer(),
+        _animation_last_tick="old",
+        _animation_status_last_update=12.0,
+        viewport=Viewport(),
+        _get_resource_manager=lambda: None,
+        _log=lambda *_args, **_kwargs: None,
+        _animation_inheritance_game=lambda _model: "K1",
+        _animation_inheritance_supermodel=lambda _model: "",
+        _animation_resolution_context=resolution_context,
+        _apply_animation_resolution_game=lambda _model, _game: None,
+    )
+
+    assert QtGhostRiggerMainWindow._preview_selected_animation_first_frame(window, model, "pause1") is True
+
+    pose_call = calls[0]
+    assert pose_call[0] == "pose"
+    assert pose_call[2:] == ("pause1", 0.0, 1.25)
+    assert calls[1] == ("active", False, "")
+    assert window._animation_timer.stopped is True
+    assert window._animation_engine.is_playing is False
+    assert window._animation_last_tick is None
+    assert window._animation_status_last_update == 0.0
 
 
 def test_qt_animations_panel_exposes_bake_and_binary_export_actions() -> None:

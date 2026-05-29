@@ -18,6 +18,7 @@ import time
 import traceback
 import copy
 import importlib
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Optional
@@ -53,6 +54,7 @@ from src.gui.qt_lib.panels.qt_scene_outliner_panel import QtSceneOutlinerPanel
 from src.gui.qt_lib.viewports.qt_viewport import QtMainViewportWidget
 from src.gui.qt_lib.panels.qt_animation_panel import (
     QtAnimationsPanel,
+    animation_row_label,
 )
 from src.gui.qt_lib.windows.qt_blueprint_editor import QtBlueprintEditorWindow
 from src.gui.qt_lib.panels.qt_character_builder_panel import QtCharacterBuilderWindow
@@ -3283,6 +3285,9 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self.animations_panel = QtAnimationsPanel(self)
         self.animations_panel.animationSelected.connect(self._handle_animation_selected)
         self.animations_panel.animationActionRequested.connect(self._handle_animation_action)
+        self.animations_panel.animationSourceChanged.connect(self._handle_animation_source_changed)
+        self.animations_panel.inheritanceGameChanged.connect(self._handle_animation_inheritance_game_changed)
+        self.animations_panel.inheritanceSupermodelChanged.connect(self._handle_animation_inheritance_game_changed)
         self.animations_panel.seekRequested.connect(self._handle_animation_seek)
         self.animation_library_panel = self.content_browser_panel
         self.animation_retarget_window = QtAnimationRetargetWindow(self)
@@ -3381,7 +3386,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         )
         self.animations_dock = self._create_detachable_panel(
             "animations",
-            "Animations",
+            "Animation Browser",
             self.animations_panel,
             QtCore.Qt.RightDockWidgetArea,
             scroll=False,
@@ -6395,25 +6400,36 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self._retarget_stop()
 
     def _handle_animation_selected(self, anim_name: str):
-        model = self._current_model
+        model = self._animation_source_model()
         if not model or not anim_name:
             return
+        model_game = self._animation_model_game(model)
+        inheritance_game = self._animation_inheritance_game(model)
+        inheritance_supermodel = self._animation_inheritance_supermodel(model)
         try:
             from src.core.qt_core.animation.animation_engine import AnimationEngine, SuperModelResolver
 
             mgr = self._get_resource_manager()
             if mgr is not None:
                 SuperModelResolver.configure(mgr)
-            engine = AnimationEngine(model)
-            for entry in engine.list_all_animations():
+            with self._animation_resolution_context(model, inheritance_game, inheritance_supermodel):
+                engine = AnimationEngine(model)
+                entries = engine.list_all_animations()
+            for entry in entries:
                 if str(entry.get("name", "") or "") != anim_name:
                     continue
                 inherited = bool(entry.get("inherited"))
                 source = str(entry.get("source") or getattr(model, "name", ""))
                 source_type = str(entry.get("source_type") or ("inherited" if inherited else "local"))
                 source_text = f"\nSource: {source_type} ({source})"
+                display_name = animation_row_label(
+                    anim_name,
+                    inherited=inherited,
+                    source=source if inherited else "",
+                    game=inheritance_game if inherited else model_game,
+                )
                 self.animations_panel.info.setPlainText(
-                    f"{anim_name}\n"
+                    f"{display_name}\n"
                     f"Length: {float(entry.get('length') or 0.0):.3f} s\n"
                     f"Keys: {int(entry.get('key_count') or 0)}  "
                     f"Nodes: {int(entry.get('node_count') or 0)}  "
@@ -6423,6 +6439,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 self.animations_panel.seek.blockSignals(True)
                 self.animations_panel.seek.setValue(0)
                 self.animations_panel.seek.blockSignals(False)
+                self._preview_selected_animation_first_frame(model, anim_name)
                 return
         except Exception:
             log.debug("Inherited animation metadata lookup failed", exc_info=True)
@@ -6436,18 +6453,60 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             for node_anim in node_anims.values() if hasattr(node_anims, "values") else []:
                 for attr in ("position_keys", "rotation_keys", "scale_keys"):
                     key_count += len(getattr(node_anim, attr, []) or [])
+            display_name = animation_row_label(anim_name, game=model_game)
             self.animations_panel.info.setPlainText(
-                f"{anim_name}\nLength: {length:.3f} s\nKeys: {key_count}  Nodes: {len(node_anims)}  Events: {len(events)}"
+                f"{display_name}\nLength: {length:.3f} s\nKeys: {key_count}  Nodes: {len(node_anims)}  Events: {len(events)}"
             )
             self.animations_panel.seek.blockSignals(True)
             self.animations_panel.seek.setValue(0)
             self.animations_panel.seek.blockSignals(False)
+            self._preview_selected_animation_first_frame(model, anim_name)
             return
 
+    def _preview_selected_animation_first_frame(self, model, anim_name: str) -> bool:
+        if model is None or not anim_name:
+            return False
+        inheritance_game = self._animation_inheritance_game(model)
+        inheritance_supermodel = self._animation_inheritance_supermodel(model)
+        try:
+            from src.core.qt_core.animation.animation_engine import AnimationEngine, SuperModelResolver
+
+            mgr = self._get_resource_manager()
+            if mgr is not None:
+                SuperModelResolver.configure(mgr)
+            with self._animation_resolution_context(model, inheritance_game, inheritance_supermodel):
+                if self._animation_engine is None or getattr(self._animation_engine, "model", None) is not model:
+                    self._animation_engine = AnimationEngine(model)
+                if not self._animation_engine.play(anim_name, loop=False, blend=False):
+                    return False
+                pose = self._animation_engine.evaluate(0.0)
+                current = self._animation_engine.current_animation
+            length = float(getattr(current, "length", 0.0) or 0.0) if current is not None else 0.0
+            self._animation_engine.seek(0.0)
+            self._animation_engine.stop()
+            self._animation_timer.stop()
+            self._animation_last_tick = None
+            self._animation_status_last_update = 0.0
+            if hasattr(self, "viewport"):
+                self.viewport.set_animation_pose(pose, name=anim_name, time=0.0, length=length)
+                if hasattr(self.viewport, "set_animation_playback_active"):
+                    self.viewport.set_animation_playback_active(False)
+            return True
+        except Exception as exc:
+            self._log(f"Animation first-frame preview error: {exc}", "error")
+            return False
+
     def _handle_animation_action(self, action: str, anim_name: str):
-        model = self._require_model("Animations")
-        if model is None:
+        body_model = self._require_model("Animations")
+        if body_model is None:
             return
+        model = self._animation_source_model(body_model)
+        if model is None:
+            QtWidgets.QMessageBox.information(self, "Animations", "No animation source is loaded for this part.")
+            return
+        model_game = self._animation_model_game(model)
+        inheritance_game = self._animation_inheritance_game(model)
+        inheritance_supermodel = self._animation_inheritance_supermodel(model)
         if action == "Export Binary MDL":
             self._export_mdl_binary()
             return
@@ -6457,9 +6516,10 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             mgr = self._get_resource_manager()
             if mgr is not None:
                 SuperModelResolver.configure(mgr)
-            if self._animation_engine is None or getattr(self._animation_engine, "model", None) is not model:
-                self._animation_engine = AnimationEngine(model)
-            animation_entries = self._animation_engine.list_all_animations()
+            with self._animation_resolution_context(model, inheritance_game, inheritance_supermodel):
+                if self._animation_engine is None or getattr(self._animation_engine, "model", None) is not model:
+                    self._animation_engine = AnimationEngine(model)
+                animation_entries = self._animation_engine.list_all_animations()
         except Exception:
             animation_entries = []
         if not animation_entries and not (getattr(model, "animations", []) or []):
@@ -6470,7 +6530,8 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             return
         try:
             if action == "Play":
-                ok = self._animation_engine.play(anim_name, loop=self._animation_loop, blend=False)
+                with self._animation_resolution_context(model, inheritance_game, inheritance_supermodel):
+                    ok = self._animation_engine.play(anim_name, loop=self._animation_loop, blend=False)
                 if ok:
                     try:
                         self.viewport.set_anim_base_pose(self._animation_engine.evaluate(0.0))
@@ -6482,7 +6543,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                     self._animation_status_last_update = 0.0
                     self._animation_timer.start()
                 self.animations_panel.info.setPlainText(
-                    f"Playing {anim_name}" if ok else f"Animation not found: {anim_name}"
+                    f"Playing {animation_row_label(anim_name, game=model_game)}" if ok else f"Animation not found: {anim_name}"
                 )
                 self._log(f"Animation play: {anim_name}", "success" if ok else "warning")
             elif action == "Stop":
@@ -6509,7 +6570,17 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.critical(self, "Animations", str(exc))
 
     def _load_animation_panel_model(self, model, select_name: str = "") -> None:
-        self.animations_panel.load_model(model, select_name=select_name)
+        source_model = self._animation_source_model(model)
+        if source_model is None:
+            self.animations_panel.load_model(None)
+            source = self._animation_source_label()
+            self.animations_panel.info.setPlainText(f"No {source.lower()} animation source loaded.")
+            return
+        model = source_model
+        model_game = self._animation_model_game(model)
+        inheritance_game = self._animation_inheritance_game(model)
+        inheritance_supermodel = self._animation_inheritance_supermodel(model)
+        self.animations_panel.load_model(model, select_name=select_name, game=model_game)
         if model is None:
             return
         try:
@@ -6518,21 +6589,25 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             mgr = self._get_resource_manager()
             if mgr is not None:
                 SuperModelResolver.configure(mgr)
-            engine = AnimationEngine(model)
-            entries = engine.list_all_animations()
+            with self._animation_resolution_context(model, inheritance_game, inheritance_supermodel):
+                engine = AnimationEngine(model)
+                entries = engine.list_all_animations()
         except Exception:
             log.debug("Inherited animation panel load failed", exc_info=True)
             return
-        existing = {
-            self.animations_panel.listbox.item(index).text().lower()
-            for index in range(self.animations_panel.listbox.count())
-        }
+        existing = set()
+        for index in range(self.animations_panel.listbox.count()):
+            item = self.animations_panel.listbox.item(index)
+            existing.add(str(item.data(QtCore.Qt.UserRole) or item.text()).lower())
         inherited_count = 0
         for entry in entries:
             name = str(entry.get("name") or "")
             if not name or name.lower() in existing:
                 continue
-            self.animations_panel.listbox.addItem(name)
+            entry_game = inheritance_game if bool(entry.get("inherited")) else model_game
+            if entry_game:
+                entry = {**entry, "game": entry_game}
+            self.animations_panel.add_effective_animation(entry)
             existing.add(name.lower())
             if bool(entry.get("inherited")):
                 inherited_count += 1
@@ -6543,6 +6618,93 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             self.animations_panel.info.setPlainText(f"{total} animation(s)")
         if select_name:
             self.animations_panel.select_animation(select_name)
+
+    def _handle_animation_inheritance_game_changed(self, _game: str) -> None:
+        model = getattr(self, "_current_model", None)
+        if model is None:
+            return
+        selected = self.animations_panel.selected_animation() if hasattr(self, "animations_panel") else ""
+        self._animation_engine = None
+        self._load_animation_panel_model(model, select_name=selected)
+
+    def _handle_animation_source_changed(self, _source: str) -> None:
+        model = getattr(self, "_current_model", None)
+        self._animation_engine = None
+        self._load_animation_panel_model(model)
+
+    def _animation_source_key(self) -> str:
+        if hasattr(self, "animations_panel") and hasattr(self.animations_panel, "selected_animation_source"):
+            return str(self.animations_panel.selected_animation_source() or "body").lower()
+        return "body"
+
+    def _animation_source_label(self) -> str:
+        return {
+            "head": "Head",
+            "attachment": "Attachment / Weapon",
+        }.get(self._animation_source_key(), "Body")
+
+    def _animation_source_model(self, fallback_model=None):
+        source = self._animation_source_key()
+        if source == "body":
+            return fallback_model if fallback_model is not None else getattr(self, "_current_model", None)
+        if source == "head":
+            for attr in ("_current_head_model", "_attached_head_model", "_head_model"):
+                model = getattr(self, attr, None)
+                if model is not None:
+                    return model
+            return None
+        for attr in ("_current_attachment_model", "_current_weapon_model", "_attached_weapon_model", "_attachment_model"):
+            model = getattr(self, attr, None)
+            if model is not None:
+                return model
+        return None
+
+    def _animation_model_game(self, model) -> str:
+        return str(getattr(self, "_current_game", "") or self._infer_game_from_model(model) or "").upper()
+
+    def _animation_inheritance_game(self, model) -> str:
+        selected = ""
+        if hasattr(self, "animations_panel") and hasattr(self.animations_panel, "selected_inheritance_game"):
+            selected = self.animations_panel.selected_inheritance_game()
+        return str(selected or self._animation_model_game(model) or "K1").upper()
+
+    def _animation_inheritance_supermodel(self, model) -> str:
+        selected = ""
+        if hasattr(self, "animations_panel") and hasattr(self.animations_panel, "selected_inheritance_supermodel"):
+            selected = self.animations_panel.selected_inheritance_supermodel()
+        return str(selected or getattr(model, "supermodel", "") or "").strip()
+
+    @contextmanager
+    def _animation_resolution_context(self, model, game: str, supermodel: str = ""):
+        if model is None:
+            yield
+            return
+        had_game_version = hasattr(model, "game_version")
+        original_game_version = getattr(model, "game_version", None)
+        original_supermodel = getattr(model, "supermodel", None)
+        try:
+            self._apply_animation_resolution_game(model, game)
+            if supermodel:
+                model.supermodel = supermodel
+            yield
+        finally:
+            if original_supermodel is not None or hasattr(model, "supermodel"):
+                model.supermodel = original_supermodel
+            if had_game_version:
+                model.game_version = original_game_version
+
+    def _apply_animation_resolution_game(self, model, game: str) -> None:
+        if model is None:
+            return
+        game = str(game or "").upper()
+        if game not in {"K1", "K2"}:
+            return
+        try:
+            from src.core.qt_core.geometry.model_data import GameVersion
+
+            model.game_version = GameVersion.K2 if game == "K2" else GameVersion.K1
+        except Exception:
+            pass
 
     def _request_bake_animation_options(self, anim_name: str) -> Optional[dict]:
         dialog = QtWidgets.QDialog(self)
@@ -6746,21 +6908,28 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         return baked
 
     def _handle_animation_seek(self, percent: int):
-        model = self._current_model
+        model = self._animation_source_model()
         anim_name = self.animations_panel.selected_animation() if hasattr(self, "animations_panel") else ""
         if model is None or not anim_name:
             return
+        inheritance_game = self._animation_inheritance_game(model)
+        inheritance_supermodel = self._animation_inheritance_supermodel(model)
         try:
-            from src.core.qt_core.animation.animation_engine import AnimationEngine
+            from src.core.qt_core.animation.animation_engine import AnimationEngine, SuperModelResolver
 
-            if self._animation_engine is None or getattr(self._animation_engine, "model", None) is not model:
-                self._animation_engine = AnimationEngine(model)
-            current = self._animation_engine.current_animation
-            if current is None or getattr(current, "name", "") != anim_name:
-                if not self._animation_engine.play(anim_name, loop=self._animation_loop, blend=False):
-                    return
-                self._animation_engine.stop()
+            mgr = self._get_resource_manager()
+            if mgr is not None:
+                SuperModelResolver.configure(mgr)
+
+            with self._animation_resolution_context(model, inheritance_game, inheritance_supermodel):
+                if self._animation_engine is None or getattr(self._animation_engine, "model", None) is not model:
+                    self._animation_engine = AnimationEngine(model)
                 current = self._animation_engine.current_animation
+                if current is None or getattr(current, "name", "") != anim_name:
+                    if not self._animation_engine.play(anim_name, loop=self._animation_loop, blend=False):
+                        return
+                    self._animation_engine.stop()
+                    current = self._animation_engine.current_animation
             length = float(getattr(current, "length", 0.0) or 0.0) if current else 0.0
             if length <= 0.0:
                 return
