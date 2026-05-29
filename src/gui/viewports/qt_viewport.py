@@ -594,9 +594,13 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._mesh_box_start = None
         self._mesh_box_selecting = False
         self._selected_meshes: list = []
+        self._selected_viewport_nodes: list = []
+        self._marquee_base_selection: list = []
         self._mesh_hover_enabled = True
         self._hovered_mesh_node = None
         self._hovered_mesh_face_bounds = None
+        self._hovered_helper_node = None
+        self._hovered_camera_node = None
         self._dummy_helpers_visible = True
         self._viewport_selection_mode = "object"
         self._suspend_mesh_hover_during_animation = False
@@ -1739,6 +1743,10 @@ class QtViewportWidget(QtWidgets.QWidget):
         self.model = model
         self._hovered_mesh_node = None
         self._hovered_mesh_face_bounds = None
+        self._hovered_helper_node = None
+        self._hovered_camera_node = None
+        self._selected_viewport_nodes = []
+        self._marquee_base_selection = []
         self._renderer.set_model(model)
         self.camera_manager.set_model(model)
         self._camera_view_active = False
@@ -3434,6 +3442,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._last_selection_source = str(source or "viewport")
         if node is not None and self._renderer.is_hidden_bone_name(getattr(node, "name", "")):
             node = None
+        self._clear_auxiliary_selection_flags(clear_cameras=not (node is not None and bool(getattr(node, "is_camera", False))))
+        self._selected_viewport_nodes = [node] if node is not None else []
         if node is not None and bool(getattr(node, "is_camera", False)):
             camera = self.camera_manager.find_by_original(node)
             if camera is not None:
@@ -3836,6 +3846,32 @@ class QtViewportWidget(QtWidgets.QWidget):
             except Exception:
                 pass
 
+    def _clear_auxiliary_selection_flags(self, *, clear_cameras: bool = True) -> None:
+        nodes = list(getattr(self, "_selected_viewport_nodes", []) or [])
+        try:
+            if self.model is not None and hasattr(self.model, "all_nodes"):
+                nodes.extend(list(self.model.all_nodes()))
+        except Exception:
+            pass
+        seen: set[int] = set()
+        for node in nodes:
+            if node is None or id(node) in seen:
+                continue
+            seen.add(id(node))
+            for attr in ("_gr_selected", "_gr_light_selected"):
+                try:
+                    setattr(node, attr, False)
+                except Exception:
+                    pass
+            try:
+                metadata = getattr(node, "_gr_light_metadata", None)
+                if isinstance(metadata, dict):
+                    metadata["active_selection"] = False
+            except Exception:
+                pass
+        if clear_cameras and hasattr(self, "camera_manager"):
+            self.camera_manager.clear_camera_selection()
+
     @staticmethod
     def _is_selectable_mesh_node(node) -> bool:
         if bool(getattr(node, "is_saber", False)):
@@ -3846,6 +3882,7 @@ class QtViewportWidget(QtWidgets.QWidget):
 
     def set_selected_meshes(self, nodes: list, orbit_bounds=None, *, source: str = "viewport") -> None:
         self._last_selection_source = str(source or "viewport")
+        self._clear_auxiliary_selection_flags(clear_cameras=True)
         clean_nodes = []
         seen = set()
         for node in nodes or []:
@@ -3860,6 +3897,7 @@ class QtViewportWidget(QtWidgets.QWidget):
             clean_nodes.append(node)
         self._clear_mesh_selection_flags()
         self._selected_meshes = clean_nodes
+        self._selected_viewport_nodes = list(clean_nodes)
         for node in clean_nodes:
             setattr(node, "_gr_selected", True)
         active = clean_nodes[0] if clean_nodes else None
@@ -3883,6 +3921,86 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._emit_mesh_subobject_selection()
         self._sync_transform_typein_bar()
         self._request_render()
+
+    def set_selected_viewport_nodes(self, nodes: list, *, source: str = "viewport") -> None:
+        self._last_selection_source = str(source or "viewport")
+        clean_nodes = []
+        seen = set()
+        for node in nodes or []:
+            if node is None or bool(getattr(node, "_gr_hidden", False)) or bool(getattr(node, "_gr_scene_object_locked", False)):
+                continue
+            nid = id(node)
+            if nid in seen:
+                continue
+            seen.add(nid)
+            clean_nodes.append(node)
+        self._clear_mesh_selection_flags()
+        self._clear_auxiliary_selection_flags(clear_cameras=True)
+        self._selected_viewport_nodes = clean_nodes
+        mesh_nodes = [node for node in clean_nodes if self._is_selectable_mesh_node(node)]
+        self._selected_meshes = mesh_nodes
+        for node in mesh_nodes:
+            setattr(node, "_gr_selected", True)
+        helper_nodes = [node for node in clean_nodes if self._is_general_helper_node(node)]
+        for node in helper_nodes:
+            try:
+                setattr(node, "_gr_selected", True)
+            except Exception:
+                pass
+        light_nodes = [node for node in clean_nodes if bool(getattr(node, "is_light", False))]
+        for node in light_nodes:
+            try:
+                setattr(node, "_gr_light_selected", True)
+            except Exception:
+                pass
+        camera_models = []
+        for node in clean_nodes:
+            if not bool(getattr(node, "is_camera", False)):
+                continue
+            camera = self.camera_manager.find_by_original(node)
+            if camera is not None:
+                camera_models.append(camera)
+        active = clean_nodes[0] if clean_nodes else None
+        active_camera = self.camera_manager.find_by_original(active) if active is not None else None
+        if camera_models:
+            self.camera_manager.select_many(camera_models, active=active_camera or camera_models[0])
+            self.cameraSelectionChanged.emit(getattr(active_camera or camera_models[0], "original_ref", None))
+        else:
+            self.camera_manager.clear_camera_selection()
+            self.cameraSelectionChanged.emit(None)
+        if active is not None and bool(getattr(active, "is_light", False)):
+            try:
+                metadata = getattr(active, "_gr_light_metadata", None)
+                if not isinstance(metadata, dict):
+                    metadata = {}
+                    setattr(active, "_gr_light_metadata", metadata)
+                metadata["active_selection"] = True
+            except Exception:
+                pass
+        self._set_selection_orbit_bounds(active, None)
+        self._renderer.selected_node = active
+        if self._gpu_renderer is not None:
+            self._gpu_renderer.selected_node = active
+            self._gpu_renderer.selected_nodes = list(mesh_nodes)
+        if active is None:
+            self._selected_joint_nodes = []
+            self._renderer._ext_skel_selected_node = None
+            self._renderer._ext_skel_selected_ids = set()
+            self._transform_gizmo.clear_selection()
+        else:
+            self._selected_joint_nodes = [] if self._is_selectable_mesh_node(active) else [active]
+            self._sync_transform_reference_for_node(active)
+            wp = self._gizmo_world_position(active)
+            if wp is not None:
+                setattr(active, "_gr_gizmo_world_position", wp)
+            self._transform_gizmo.set_selected_object(active)
+        if self._uv_viewer is not None:
+            self._uv_viewer.set_selected_node(active)
+        self.nodeSelected.emit(active)
+        self.meshSelectionChanged.emit(list(mesh_nodes))
+        self._emit_mesh_subobject_selection()
+        self._sync_transform_typein_bar()
+        self._request_render(fast=True, reason="viewport selection changed", selection=True, overlay=True)
 
     def _set_selection_orbit_bounds(self, node, bounds) -> None:
         if node is None or bounds is None:
@@ -4512,7 +4630,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 self._snap_key_down = False
                 return False
             if et == QtCore.QEvent.Leave:
-                self._clear_mesh_hover(reason="viewport leave")
+                self._clear_viewport_hover(reason="viewport leave")
                 return False
             if et == QtCore.QEvent.MouseButtonPress:
                 self.canvas.setFocus()
@@ -4557,7 +4675,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 if self.is_camera_view_active() and not self._lock_view_to_camera:
                     return True
                 steps = event.angleDelta().y() / 120.0
-                hover_cleared = self._clear_mesh_hover(request=False)
+                hover_cleared = self._clear_viewport_hover(request=False)
                 self.camera.zoom(steps)
                 if self.is_camera_view_active() and self._lock_view_to_camera:
                     self.update_camera_from_view()
@@ -5716,6 +5834,8 @@ class QtViewportWidget(QtWidgets.QWidget):
     def _draw_camera_helpers(self, draw, w: int, h: int) -> None:
         try:
             active_id = self.camera_manager.active_camera_id
+            hovered = self.camera_manager.find_by_original(getattr(self, "_hovered_camera_node", None))
+            self._camera_helper_renderer.hovered_camera_id = getattr(hovered, "id", "") if hovered is not None else ""
             self._camera_helper_renderer.draw(
                 draw,
                 self.camera_manager.get_all_cameras(),
@@ -5737,8 +5857,11 @@ class QtViewportWidget(QtWidgets.QWidget):
         except Exception:
             return
         selected = getattr(self._renderer, "selected_node", None)
+        selected_ids = {id(node) for node in getattr(self, "_selected_viewport_nodes", []) or []}
+        hovered = getattr(self, "_hovered_helper_node", None)
         base = tuple(int(v) for v in tuple(getattr(self._camera_helper_renderer, "camera_color", (180, 210, 220, 210)))[:4])
         selected_color = (255, 212, 0, 235)
+        hovered_color = (0, 215, 181, 235)
         for node in nodes:
             if not self._is_general_helper_node(node):
                 continue
@@ -5748,12 +5871,14 @@ class QtViewportWidget(QtWidgets.QWidget):
                 x, y, _depth = self._renderer._proj(*self._helper_world_position(node), w, h)
             except Exception:
                 continue
-            size = 7 if node is selected else 5
-            color = selected_color if node is selected else base
-            fill = (color[0], color[1], color[2], 65 if node is selected else 42)
+            is_selected = node is selected or id(node) in selected_ids or bool(getattr(node, "_gr_selected", False))
+            is_hovered = node is hovered
+            size = 7 if is_selected or is_hovered else 5
+            color = selected_color if is_selected else (hovered_color if is_hovered else base)
+            fill = (color[0], color[1], color[2], 65 if is_selected or is_hovered else 42)
             pts = [(x, y - size), (x + size, y), (x, y + size), (x - size, y), (x, y - size)]
             draw.polygon(pts, fill=fill)
-            draw.line(pts, fill=color, width=2 if node is selected else 1)
+            draw.line(pts, fill=color, width=2 if is_selected or is_hovered else 1)
 
     def _draw_active_camera_overlays(self, draw, w: int, h: int) -> None:
         try:
@@ -6814,6 +6939,8 @@ class QtViewportWidget(QtWidgets.QWidget):
             nodes = list(self._renderer._iter_visible_mesh_nodes())
         except Exception:
             nodes = []
+        if not nodes:
+            nodes = self._all_geometry_nodes()
         selected = []
         norm_rect = rect.normalized()
         for node in nodes:
@@ -6833,6 +6960,202 @@ class QtViewportWidget(QtWidgets.QWidget):
             except Exception:
                 continue
         return selected
+
+    def _current_viewport_selection_for_mode(self, mode: str) -> list:
+        value = str(mode or "object").strip().lower()
+        if value == "mesh":
+            return list(getattr(self, "_selected_meshes", []) or [])
+        if value == "helpers":
+            return [node for node in getattr(self, "_selected_viewport_nodes", []) or [] if self._is_general_helper_node(node)]
+        if value == "lights":
+            try:
+                nodes = list(self.model.all_nodes()) if self.model is not None and hasattr(self.model, "all_nodes") else []
+            except Exception:
+                nodes = []
+            selected = [
+                node for node in getattr(self, "_selected_viewport_nodes", []) or []
+                if bool(getattr(node, "is_light", False))
+            ]
+            selected_ids = {id(node) for node in selected}
+            selected.extend(
+                node for node in nodes
+                if id(node) not in selected_ids
+                and bool(getattr(node, "is_light", False))
+                and bool(getattr(node, "_gr_light_selected", False))
+            )
+            return selected
+        if value == "cameras":
+            return [camera.original_ref for camera in self.camera_manager.selected_cameras() if getattr(camera, "original_ref", None) is not None]
+        return list(getattr(self, "_selected_viewport_nodes", []) or [])
+
+    def _gpu_marquee_pick_nodes(self, rect: QtCore.QRect, mode: str) -> list | None:
+        renderer = getattr(self, "_gpu_renderer", None)
+        if renderer is None:
+            return None
+        picker = getattr(renderer, "marquee_pick", None)
+        if not callable(picker):
+            return None
+        try:
+            dpr = float(self.canvas.devicePixelRatioF())
+        except Exception:
+            dpr = 1.0
+        norm = rect.normalized()
+        request = PickRequest(
+            x=int(norm.x()),
+            y=int(norm.y()),
+            viewport_width=max(1, int(self.canvas.width())),
+            viewport_height=max(1, int(self.canvas.height())),
+            device_pixel_ratio=dpr,
+            camera=self.camera,
+            selection_mode=str(mode or "object"),
+            include_hidden=False,
+            include_locked=False,
+            display_options=getattr(self, "display_options", None),
+        )
+        try:
+            hits = picker(request, self.model, self.camera, norm)
+        except Exception as exc:
+            self._last_pick_diagnostics = {
+                "method": "GPU marquee",
+                "result": "error",
+                "error": str(exc),
+            }
+            log.debug("GPU marquee picking failed: %s", exc)
+            return []
+        nodes = []
+        seen = set()
+        for hit in hits or []:
+            node = getattr(hit, "object_ref", None)
+            if node is None or id(node) in seen:
+                continue
+            seen.add(id(node))
+            nodes.append(node)
+        self._last_pick_diagnostics = {
+            "method": "GPU marquee",
+            "result": f"{len(nodes)} node(s)",
+            "selection_mode": str(mode or "object"),
+        }
+        return nodes
+
+    def _selection_nodes_in_rect(self, rect: QtCore.QRect, mode: str | None = None, *, allow_cpu: bool = True) -> list:
+        value = str(mode or getattr(self, "_viewport_selection_mode", "object") or "object").strip().lower()
+        if self.model is None:
+            return []
+        if self._renderer_is_wgpu_like() and value in {"mesh", "object"}:
+            gpu_nodes = self._gpu_marquee_pick_nodes(rect, value)
+            if gpu_nodes is not None:
+                if value == "mesh":
+                    return [node for node in gpu_nodes if self._is_selectable_mesh_node(node)]
+                if value == "object":
+                    return gpu_nodes
+                return []
+            if not allow_cpu:
+                self._last_pick_diagnostics = {
+                    "method": "GPU marquee",
+                    "result": "unavailable",
+                    "reason": "CPU marquee fallback disabled for WGPU/D3D",
+                    "selection_mode": value,
+                }
+                return []
+        if value == "mesh":
+            return self._mesh_nodes_in_rect(rect)
+        if value == "helpers":
+            return self._helper_nodes_in_rect(rect)
+        if value == "lights":
+            return self._light_nodes_in_rect(rect)
+        if value == "cameras":
+            return self._camera_nodes_in_rect(rect)
+        nodes = []
+        seen = set()
+        for group in (
+            self._mesh_nodes_in_rect(rect),
+            self._camera_nodes_in_rect(rect),
+            self._light_nodes_in_rect(rect),
+            self._helper_nodes_in_rect(rect),
+        ):
+            for node in group:
+                if node is None or id(node) in seen:
+                    continue
+                seen.add(id(node))
+                nodes.append(node)
+        return nodes
+
+    def _projected_point_in_rect(self, point, rect: QtCore.QRect, *, width: int, height: int) -> bool:
+        try:
+            proj = self._renderer._proj(float(point[0]), float(point[1]), float(point[2]), width, height)
+        except Exception:
+            proj = None
+        if proj is None:
+            return False
+        return rect.normalized().contains(QtCore.QPoint(int(proj[0]), int(proj[1])))
+
+    def _helper_nodes_in_rect(self, rect: QtCore.QRect) -> list:
+        if self.model is None or not bool(getattr(self._renderer, "show_dummy_helpers", True)):
+            return []
+        width = max(1, self.canvas.width())
+        height = max(1, self.canvas.height())
+        try:
+            nodes = list(self.model.all_nodes()) if hasattr(self.model, "all_nodes") else []
+        except Exception:
+            nodes = []
+        return [
+            node for node in nodes
+            if self._is_general_helper_node(node)
+            and not bool(getattr(node, "_gr_hidden", False))
+            and self._projected_point_in_rect(self._helper_world_position(node), rect, width=width, height=height)
+        ]
+
+    def _light_nodes_in_rect(self, rect: QtCore.QRect) -> list:
+        if self.model is None or not bool(getattr(self._renderer, "show_light_gizmos", True)):
+            return []
+        width = max(1, self.canvas.width())
+        height = max(1, self.canvas.height())
+        try:
+            nodes = list(self.model.all_nodes()) if hasattr(self.model, "all_nodes") else []
+        except Exception:
+            nodes = []
+        result = []
+        for node in nodes:
+            if not bool(getattr(node, "is_light", False)):
+                continue
+            if bool(getattr(node, "_gr_light_hidden", False)) or bool(getattr(node, "_gr_light_deleted", False)):
+                continue
+            try:
+                wp, _wo, _is_id = self._renderer._node_world_transform(node)
+            except Exception:
+                wp = getattr(node, "position", (0.0, 0.0, 0.0))
+            if self._projected_point_in_rect(wp, rect, width=width, height=height):
+                result.append(node)
+        return result
+
+    def _camera_nodes_in_rect(self, rect: QtCore.QRect) -> list:
+        width = max(1, self.canvas.width())
+        height = max(1, self.canvas.height())
+        result = []
+        for camera in self.camera_manager.get_all_cameras():
+            if not bool(getattr(camera, "visible", True)) or bool(getattr(camera, "deleted", False)):
+                continue
+            node = getattr(camera, "original_ref", None)
+            if node is None:
+                continue
+            if self._projected_point_in_rect(getattr(camera, "position", (0.0, 0.0, 0.0)), rect, width=width, height=height):
+                result.append(node)
+        return result
+
+    def _apply_marquee_selection(self, rect: QtCore.QRect, modifiers, *, live: bool = False) -> None:
+        if live:
+            return
+        mode = str(getattr(self, "_viewport_selection_mode", "object") or "object").lower()
+        nodes = self._selection_nodes_in_rect(rect, mode, allow_cpu=True)
+        if modifiers & (QtCore.Qt.ControlModifier | QtCore.Qt.ShiftModifier):
+            current_ids = {id(node) for node in getattr(self, "_marquee_base_selection", []) or []}
+            nodes = list(getattr(self, "_marquee_base_selection", []) or []) + [
+                node for node in nodes if id(node) not in current_ids
+            ]
+        if mode == "mesh":
+            self.set_selected_meshes(nodes)
+        else:
+            self.set_selected_viewport_nodes(nodes)
 
     def _show_mesh_context_menu(self, event) -> None:
         x, y = int(event.position().x()), int(event.position().y())
@@ -6897,37 +7220,91 @@ class QtViewportWidget(QtWidgets.QWidget):
             self._request_render(fast=True, reason=reason, overlay=True, selection=True)
         return True
 
+    def _clear_viewport_hover(self, *, request: bool = True, reason: str = "viewport hover cleared") -> bool:
+        changed = self._clear_mesh_hover(request=False, reason=reason)
+        if getattr(self, "_hovered_helper_node", None) is not None:
+            self._hovered_helper_node = None
+            changed = True
+        if getattr(self, "_hovered_camera_node", None) is not None:
+            self._hovered_camera_node = None
+            try:
+                self._camera_helper_renderer.hovered_camera_id = ""
+            except Exception:
+                pass
+            changed = True
+        if getattr(self._renderer, "_hovered_light", None) is not None:
+            self._renderer._hovered_light = None
+            changed = True
+        if request and changed:
+            self._request_render(fast=True, reason=reason, overlay=True, selection=True)
+        return changed
+
+    def _set_viewport_hover(self, node, face_bounds=None, *, reason: str = "viewport hover changed") -> None:
+        mesh_node = node if node is not None and self._is_selectable_mesh_node(node) else None
+        helper_node = node if node is not None and self._is_general_helper_node(node) else None
+        light_node = node if node is not None and bool(getattr(node, "is_light", False)) else None
+        camera_node = node if node is not None and bool(getattr(node, "is_camera", False)) else None
+        changed = (
+            mesh_node is not self._hovered_mesh_node
+            or face_bounds != self._hovered_mesh_face_bounds
+            or helper_node is not getattr(self, "_hovered_helper_node", None)
+            or light_node is not getattr(self._renderer, "_hovered_light", None)
+            or camera_node is not getattr(self, "_hovered_camera_node", None)
+        )
+        if not changed:
+            return
+        self._hovered_mesh_node = mesh_node
+        self._hovered_mesh_face_bounds = face_bounds if mesh_node is not None else None
+        self._hovered_helper_node = helper_node
+        self._hovered_camera_node = camera_node
+        self._renderer._hovered_light = light_node
+        try:
+            camera = self.camera_manager.find_by_original(camera_node) if camera_node is not None else None
+            self._camera_helper_renderer.hovered_camera_id = getattr(camera, "id", "") if camera is not None else ""
+        except Exception:
+            pass
+        self.meshHovered.emit(mesh_node)
+        self._request_render(fast=True, reason=reason, overlay=True, selection=True)
+
     def _update_mesh_hover(self, event) -> None:
         if not self.mesh_hover_enabled:
-            self._clear_mesh_hover(reason="mesh hover disabled")
+            self._clear_viewport_hover(reason="mesh hover disabled")
             return
         if QtViewportWidget._mesh_hover_suppressed_for_animation(self):
-            QtViewportWidget._clear_mesh_hover(self, reason="animation hover suppressed")
+            QtViewportWidget._clear_viewport_hover(self, reason="animation hover suppressed")
             return
         if self.model is None:
-            self._clear_mesh_hover(reason="mesh hover model cleared")
+            self._clear_viewport_hover(reason="mesh hover model cleared")
             return
         if (
             self._suspend_mesh_hover_during_animation
             and getattr(self._renderer, "_anim_pose", None) is not None
         ):
-            if self._hovered_mesh_node is not None:
-                self._hovered_mesh_node = None
-                self._hovered_mesh_face_bounds = None
-                self._request_render(fast=True)
+            self._clear_viewport_hover(reason="animation hover suspended")
             return
         if self._transform_gizmo.hovered_handle or self._measurement_mode:
             return
         x, y = int(event.position().x()), int(event.position().y())
-        hit = self._mesh_hit_test_detail(x, y, allow_gpu=False)
-        node = hit[0] if hit is not None else None
-        face_bounds = hit[1] if hit is not None else None
-        if node is self._hovered_mesh_node and face_bounds == self._hovered_mesh_face_bounds:
-            return
-        self._hovered_mesh_node = node
-        self._hovered_mesh_face_bounds = face_bounds
-        self.meshHovered.emit(node)
-        self._request_render(fast=True, reason="mesh hover changed", overlay=True, selection=True)
+        mode = str(getattr(self, "_viewport_selection_mode", "object") or "object").lower()
+        node = None
+        face_bounds = None
+        if mode == "helpers":
+            node = self._helper_hit_test(x, y)
+        elif mode == "lights":
+            node = self._light_hit_test(x, y)
+        elif mode == "cameras":
+            node = self._camera_hit_test(x, y)
+        elif mode == "mesh":
+            hit = self._mesh_hit_test_detail(x, y, allow_gpu=False)
+            node = hit[0] if hit is not None else None
+            face_bounds = hit[1] if hit is not None else None
+        else:
+            hit = self._mesh_hit_test_detail(x, y, allow_gpu=False)
+            if hit is not None:
+                node, face_bounds = hit
+            else:
+                node = self._camera_hit_test(x, y) or self._light_hit_test(x, y) or self._helper_hit_test(x, y)
+        self._set_viewport_hover(node, face_bounds, reason="viewport hover changed")
 
     def _begin_transform_gizmo_drag(self, x: int, y: int) -> bool:
         node = self._active_gizmo_node()
@@ -7008,6 +7385,9 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._joint_marquee_current = (x, y)
         self._mesh_box_start = None
         self._mesh_box_selecting = False
+        self._marquee_base_selection = self._current_viewport_selection_for_mode(
+            getattr(self, "_viewport_selection_mode", "object")
+        )
         if hasattr(self, "_selection_rubber_band"):
             self._selection_rubber_band.hide()
 
@@ -7170,6 +7550,7 @@ class QtViewportWidget(QtWidgets.QWidget):
                 rect = QtCore.QRect(self._mesh_box_start, QtCore.QPoint(x, y)).normalized()
                 self._selection_rubber_band.setGeometry(rect)
                 self._selection_rubber_band.show()
+                self._apply_marquee_selection(rect, event.modifiers(), live=True)
 
     def _release_lmb(self, event) -> None:
         x, y = int(event.position().x()), int(event.position().y())
@@ -7331,19 +7712,17 @@ class QtViewportWidget(QtWidgets.QWidget):
             if self._mesh_box_selecting and self._mesh_box_start is not None:
                 rect = QtCore.QRect(self._mesh_box_start, QtCore.QPoint(x, y)).normalized()
                 self._selection_rubber_band.hide()
-                nodes = self._mesh_nodes_in_rect(rect)
-                if event.modifiers() & (QtCore.Qt.ControlModifier | QtCore.Qt.ShiftModifier):
-                    current_ids = {id(node) for node in self._selected_meshes}
-                    nodes = list(self._selected_meshes) + [node for node in nodes if id(node) not in current_ids]
-                self.set_selected_meshes(nodes)
+                self._apply_marquee_selection(rect, event.modifiers(), live=False)
                 self._mesh_box_start = None
                 self._mesh_box_selecting = False
+                self._marquee_base_selection = []
                 self._is_dragging = False
                 return
             if hasattr(self, "_selection_rubber_band"):
                 self._selection_rubber_band.hide()
             self._mesh_box_start = None
             self._mesh_box_selecting = False
+            self._marquee_base_selection = []
             self._is_dragging = False
             self._request_render()
             return

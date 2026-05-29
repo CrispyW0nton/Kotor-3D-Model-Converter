@@ -321,6 +321,8 @@ def _helper_color(light: SceneLightRenderData, palette: dict[str, Color] | None 
     color = tuple(max(0.0, min(1.0, float(base[i]))) for i in range(3))
     if not light.enabled:
         color = tuple(c * 0.38 for c in color)
+    if light.selected and not light.active_selected:
+        color = tuple(min(1.0, c * LIGHT_HELPER_SELECTED_BOOST) for c in color)
     if light.hovered:
         color = tuple(min(1.0, c * LIGHT_HELPER_SELECTED_BOOST) for c in color)
     if light.active_selected:

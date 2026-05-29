@@ -1696,7 +1696,7 @@ def test_viewport_selection_mode_filters_click_targets() -> None:
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     viewport = QtViewportWidget()
-    mesh = SimpleNamespace(name="Mesh", is_mesh=True)
+    mesh = SimpleNamespace(name="Mesh", is_mesh=True, vertices=[(0, 0, 0)], faces=[(0, 0, 0)])
     helper = SimpleNamespace(name="Waypoint_Helper", type_label="dummy")
     light = SimpleNamespace(name="AuroraLight001", is_light=True)
     camera = SimpleNamespace(name="Camera001", is_camera=True)
@@ -1718,6 +1718,239 @@ def test_viewport_selection_mode_filters_click_targets() -> None:
         viewport._release_lmb(_Event())
 
         assert selected == [helper, light, camera, mesh]
+    finally:
+        viewport.deleteLater()
+
+
+def test_viewport_marquee_selection_respects_active_selection_mode() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtCore, QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    mesh = SimpleNamespace(name="Mesh", is_mesh=True, vertices=[(0, 0, 0)], faces=[(0, 0, 0)])
+    helper = SimpleNamespace(name="Waypoint_Helper", type_label="dummy", position=(10, 10, 0))
+    light = SimpleNamespace(name="AuroraLight001", is_light=True, position=(20, 20, 0))
+    camera_node = SimpleNamespace(name="Camera001", is_camera=True, position=(30, 30, 0))
+    camera = SimpleNamespace(
+        id="cam1",
+        original_ref=camera_node,
+        position=(30, 30, 0),
+        visible=True,
+        deleted=False,
+        selected=False,
+        metadata={},
+        apply_to_original=lambda: None,
+    )
+    viewport = QtViewportWidget()
+    viewport.model = SimpleNamespace(all_nodes=lambda: [mesh, helper, light, camera_node])
+    viewport.camera_manager.cameras = [camera]
+    viewport._renderer._node_world_transform = lambda node: (getattr(node, "position", (0, 0, 0)), (0, 0, 0, 1), True)
+    viewport._renderer._proj = lambda x, y, z, w, h: (x, y, 1.0)
+    viewport._projected_mesh_bounds = lambda node, width, height: (0, 0, 5, 5, [], []) if node is mesh else None
+    rect = QtCore.QRect(QtCore.QPoint(0, 0), QtCore.QPoint(25, 25))
+    try:
+        viewport.set_viewport_selection_mode("helpers")
+        viewport._apply_marquee_selection(rect, QtCore.Qt.NoModifier)
+        assert viewport._renderer.selected_node is helper
+        assert getattr(helper, "_gr_selected", False) is True
+        assert getattr(light, "_gr_light_selected", False) is False
+
+        viewport.set_viewport_selection_mode("lights")
+        viewport._apply_marquee_selection(rect, QtCore.Qt.NoModifier)
+        assert viewport._renderer.selected_node is light
+        assert getattr(light, "_gr_light_selected", False) is True
+        assert getattr(helper, "_gr_selected", False) is False
+
+        viewport.set_viewport_selection_mode("cameras")
+        viewport._apply_marquee_selection(QtCore.QRect(QtCore.QPoint(25, 25), QtCore.QPoint(35, 35)), QtCore.Qt.NoModifier)
+        assert viewport._renderer.selected_node is camera_node
+        assert camera.selected is True
+
+        viewport.set_viewport_selection_mode("object")
+        viewport._apply_marquee_selection(rect, QtCore.Qt.NoModifier)
+        assert mesh in viewport._selected_viewport_nodes
+        assert helper in viewport._selected_viewport_nodes
+        assert light in viewport._selected_viewport_nodes
+        assert camera_node not in viewport._selected_viewport_nodes
+    finally:
+        viewport.deleteLater()
+
+
+def test_viewport_hover_respects_active_selection_mode() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    class _Position:
+        def x(self) -> int:
+            return 100
+
+        def y(self) -> int:
+            return 100
+
+    class _Event:
+        def position(self):
+            return _Position()
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    viewport = QtViewportWidget()
+    mesh = SimpleNamespace(name="Mesh", is_mesh=True, vertices=[(0, 0, 0)], faces=[(0, 0, 0)])
+    helper = SimpleNamespace(name="Waypoint_Helper", type_label="dummy")
+    light = SimpleNamespace(name="AuroraLight001", is_light=True)
+    camera = SimpleNamespace(name="Camera001", is_camera=True)
+    viewport.model = SimpleNamespace()
+    viewport._mesh_hit_test_detail = lambda *args, **kwargs: (mesh, None)
+    viewport._helper_hit_test = lambda *args, **kwargs: helper
+    viewport._light_hit_test = lambda *args, **kwargs: light
+    viewport._camera_hit_test = lambda *args, **kwargs: camera
+    try:
+        viewport.set_viewport_selection_mode("helpers")
+        viewport._update_mesh_hover(_Event())
+        assert viewport._hovered_helper_node is helper
+        assert viewport._hovered_mesh_node is None
+
+        viewport.set_viewport_selection_mode("lights")
+        viewport._update_mesh_hover(_Event())
+        assert viewport._renderer._hovered_light is light
+        assert viewport._hovered_helper_node is None
+
+        viewport.set_viewport_selection_mode("cameras")
+        viewport._update_mesh_hover(_Event())
+        assert viewport._hovered_camera_node is camera
+
+        viewport.set_viewport_selection_mode("mesh")
+        viewport._update_mesh_hover(_Event())
+        assert viewport._hovered_mesh_node is mesh
+        assert viewport._hovered_camera_node is None
+    finally:
+        viewport.deleteLater()
+
+
+def test_viewport_marquee_drag_only_updates_rubber_band_before_release() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtCore, QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    class _Position:
+        def __init__(self, x: int, y: int) -> None:
+            self._x = x
+            self._y = y
+
+        def x(self) -> int:
+            return self._x
+
+        def y(self) -> int:
+            return self._y
+
+    class _Event:
+        def __init__(self, x: int, y: int, buttons=QtCore.Qt.LeftButton) -> None:
+            self._position = _Position(x, y)
+            self._buttons = buttons
+
+        def position(self):
+            return self._position
+
+        def modifiers(self):
+            return QtCore.Qt.NoModifier
+
+        def buttons(self):
+            return self._buttons
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    helper = SimpleNamespace(name="Waypoint_Helper", type_label="dummy", position=(15, 15, 0))
+    viewport = QtViewportWidget()
+    viewport.model = SimpleNamespace(all_nodes=lambda: [helper])
+    viewport._renderer.show_bones = False
+    viewport._renderer._node_world_transform = lambda node: (getattr(node, "position", (0, 0, 0)), (0, 0, 0, 1), True)
+    viewport._renderer._proj = lambda x, y, z, w, h: (x, y, 1.0)
+    try:
+        viewport.set_viewport_selection_mode("helpers")
+        viewport._press_lmb(_Event(0, 0))
+        viewport._drag_lmb(_Event(25, 25))
+
+        assert viewport._mesh_box_selecting is True
+        assert viewport._renderer.selected_node is None
+        assert getattr(helper, "_gr_selected", False) is False
+
+        viewport._release_lmb(_Event(25, 25, buttons=QtCore.Qt.NoButton))
+        assert viewport._renderer.selected_node is helper
+        assert getattr(helper, "_gr_selected", False) is True
+    finally:
+        viewport.deleteLater()
+
+
+def test_wgpu_helper_marquee_selects_on_release_without_live_cpu_projection() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtCore, QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    helper = SimpleNamespace(name="Waypoint_Helper", type_label="dummy", position=(15, 15, 0))
+    viewport = QtViewportWidget()
+    viewport.model = SimpleNamespace(all_nodes=lambda: [helper])
+    viewport._gpu_renderer = SimpleNamespace(selected_node=None, selected_nodes=[], backend_id="wgpu_d3d12")
+    calls = {"helper_rect": 0}
+
+    def helper_nodes_in_rect(rect):
+        calls["helper_rect"] += 1
+        return [helper]
+
+    viewport._helper_nodes_in_rect = helper_nodes_in_rect
+    rect = QtCore.QRect(QtCore.QPoint(0, 0), QtCore.QPoint(25, 25))
+    try:
+        viewport.set_viewport_selection_mode("helpers")
+        viewport._apply_marquee_selection(rect, QtCore.Qt.NoModifier, live=True)
+        assert calls["helper_rect"] == 0
+        assert viewport._renderer.selected_node is None
+
+        viewport._apply_marquee_selection(rect, QtCore.Qt.NoModifier, live=False)
+        assert calls["helper_rect"] == 1
+        assert viewport._renderer.selected_node is helper
+        assert getattr(helper, "_gr_selected", False) is True
+    finally:
+        viewport.deleteLater()
+
+
+def test_wgpu_marquee_selection_uses_gpu_picker_for_mesh_mode() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtCore, QtWidgets
+
+    from src.gui.qt_lib.rendering.picking import PickHit
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    mesh = SimpleNamespace(name="Mesh", is_mesh=True, vertices=[(0, 0, 0)], faces=[(0, 0, 0)])
+
+    def marquee_pick(request, scene, camera, rect):
+        return [PickHit(hit=True, kind="mesh", object_ref=mesh)]
+
+    viewport = QtViewportWidget()
+    viewport.model = SimpleNamespace(all_nodes=lambda: [mesh])
+    viewport._gpu_renderer = SimpleNamespace(
+        selected_node=None,
+        selected_nodes=[],
+        backend_id="wgpu_d3d12",
+        marquee_pick=marquee_pick,
+    )
+    viewport._mesh_nodes_in_rect = lambda rect: (_ for _ in ()).throw(AssertionError("CPU mesh marquee was used"))
+    rect = QtCore.QRect(QtCore.QPoint(0, 0), QtCore.QPoint(25, 25))
+    try:
+        viewport.set_viewport_selection_mode("mesh")
+        viewport._apply_marquee_selection(rect, QtCore.Qt.NoModifier, live=False)
+
+        assert viewport._renderer.selected_node is mesh
+        assert viewport._selected_meshes == [mesh]
+        assert getattr(mesh, "_gr_selected", False) is True
     finally:
         viewport.deleteLater()
 

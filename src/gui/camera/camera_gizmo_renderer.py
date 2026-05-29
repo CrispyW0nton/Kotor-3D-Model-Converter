@@ -51,10 +51,13 @@ class CameraGizmoRenderer:
     def reset_theme_colors(self) -> None:
         self.camera_color = (180, 210, 220, 210)
         self.camera_selected_color = (255, 214, 88, 245)
+        self.camera_hovered_color = (0, 215, 181, 240)
         self.camera_active_color = (98, 190, 255, 245)
         self.camera_fill = (80, 100, 110, 55)
         self.camera_selected_fill = (255, 214, 88, 68)
+        self.camera_hovered_fill = (0, 215, 181, 62)
         self.camera_active_fill = (98, 190, 255, 70)
+        self.hovered_camera_id = ""
 
     def set_native_palette_colors(
         self,
@@ -69,9 +72,11 @@ class CameraGizmoRenderer:
         camera = self._blend(bg, fg, 0.72)
         self.camera_color = (*camera, 210)
         self.camera_selected_color = (255, 214, 88, 245)
+        self.camera_hovered_color = (*hi, 230)
         self.camera_active_color = (*hi, 245)
         self.camera_fill = (*camera, 55)
         self.camera_selected_fill = (255, 214, 88, 68)
+        self.camera_hovered_fill = (*hi, 58)
         self.camera_active_fill = (*hi, 70)
 
     def draw(self, draw, cameras, active_camera_id: str, projector, width: int, height: int) -> None:
@@ -88,11 +93,12 @@ class CameraGizmoRenderer:
         if p is None:
             return
         selected = bool(getattr(camera, "selected", False))
-        color = self.camera_active_color if active else (self.camera_selected_color if selected else self.camera_color)
-        fill = self.camera_active_fill if active else (self.camera_selected_fill if selected else self.camera_fill)
+        hovered = str(getattr(camera, "id", "") or "") == str(getattr(self, "hovered_camera_id", "") or "")
+        color = self.camera_active_color if active else (self.camera_selected_color if selected else (self.camera_hovered_color if hovered else self.camera_color))
+        fill = self.camera_active_fill if active else (self.camera_selected_fill if selected else (self.camera_hovered_fill if hovered else self.camera_fill))
         x, y = int(p[0]), int(p[1])
-        r = 7 if selected or active else 5
-        draw.rectangle([x - r, y - r, x + r, y + r], outline=color, fill=fill, width=2 if selected or active else 1)
+        r = 7 if selected or active or hovered else 5
+        draw.rectangle([x - r, y - r, x + r, y + r], outline=color, fill=fill, width=2 if selected or active or hovered else 1)
         draw.line([x + r, y - 3, x + r + 7, y - 7, x + r + 7, y + 7, x + r, y + 3], fill=color, width=1)
         if self.show_camera_frustums:
             self._draw_frustum(draw, camera, color, projector, width, height)

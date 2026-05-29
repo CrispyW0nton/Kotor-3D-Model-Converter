@@ -3203,6 +3203,202 @@ class WgpuRenderer(NullDiagnosticRenderer):
             diagnostic=diagnostic,
         )
 
+    def marquee_pick(self, request, scene=None, camera=None, rect=None) -> list[PickHit]:
+        """GPU object-ID rectangle picking for WGPU surfaces.
+
+        This intentionally mirrors the single-pixel ID pass and only reads back
+        the selected rectangle. The viewport owns mode filtering and selection
+        policy; this method reports unique mesh/object hits from the GPU ID map.
+        """
+
+        import wgpu
+
+        pick_started = time.perf_counter()
+        self._begin_uniform_frame()
+
+        scene = scene if scene is not None else self._active_scene
+        camera = camera if camera is not None else getattr(request, "camera", None) or self._active_camera
+        width = max(1, int(getattr(request, "viewport_width", 0) or self._last_size[0] or 1))
+        height = max(1, int(getattr(request, "viewport_height", 0) or self._last_size[1] or 1))
+        if rect is None:
+            x0 = max(0, min(width - 1, int(getattr(request, "x", 0) or 0)))
+            y0 = max(0, min(height - 1, int(getattr(request, "y", 0) or 0)))
+            x1 = x0
+            y1 = y0
+        else:
+            normalized = rect.normalized() if hasattr(rect, "normalized") else rect
+            x0 = int(normalized.left() if hasattr(normalized, "left") else 0)
+            y0 = int(normalized.top() if hasattr(normalized, "top") else 0)
+            x1 = int(normalized.right() if hasattr(normalized, "right") else x0)
+            y1 = int(normalized.bottom() if hasattr(normalized, "bottom") else y0)
+            x0 = max(0, min(width - 1, x0))
+            y0 = max(0, min(height - 1, y0))
+            x1 = max(0, min(width - 1, x1))
+            y1 = max(0, min(height - 1, y1))
+        rect_width = max(1, x1 - x0 + 1)
+        rect_height = max(1, y1 - y0 + 1)
+        bytes_per_row = ((rect_width * 4 + 255) // 256) * 256
+        diagnostic = {
+            "method": "WGPU GPU ID marquee",
+            "rect": (x0, y0, rect_width, rect_height),
+            "viewport_size": (width, height),
+            "device_pixel_ratio": float(getattr(request, "device_pixel_ratio", 1.0) or 1.0),
+            "pipeline_status": self.pick_pipeline_status,
+        }
+        if scene is None or camera is None:
+            diagnostic["result"] = "unavailable"
+            diagnostic["reason"] = "missing scene or camera"
+            self.last_pick_diagnostics = diagnostic
+            return []
+        if self.device is None or self.queue is None or not self.initialized:
+            diagnostic["result"] = "unavailable"
+            diagnostic["reason"] = "WGPU renderer is not initialized"
+            self.last_pick_diagnostics = diagnostic
+            return []
+        if self.pipeline_pick is None or self.line_uniform_buffer is None or self.line_bind_group is None:
+            diagnostic["result"] = "unavailable"
+            diagnostic["reason"] = self.pick_pipeline_status or "pick pipeline unavailable"
+            self.last_pick_diagnostics = diagnostic
+            return []
+
+        try:
+            from src.gui.rendering.mesh_render_data import iter_mesh_render_data
+        except Exception as exc:
+            diagnostic["result"] = "unavailable"
+            diagnostic["reason"] = f"mesh adapter unavailable: {exc}"
+            self.last_pick_diagnostics = diagnostic
+            return []
+
+        id_to_mesh: dict[int, object] = {}
+        mesh_rows = []
+        next_id = 1
+        for mesh_data in iter_mesh_render_data(
+            scene,
+            anim_pose=self._active_anim_pose,
+            anim_base_pose=self._active_anim_base_pose,
+            textures={},
+            allow_cpu_skinning=False,
+        ):
+            node = getattr(mesh_data, "source", None)
+            if node is None:
+                continue
+            if not bool(getattr(request, "include_hidden", False)) and bool(getattr(node, "_gr_hidden", False)):
+                continue
+            if not bool(getattr(request, "include_locked", False)) and bool(getattr(node, "_gr_scene_object_locked", False)):
+                continue
+            if next_id > 0xFFFFFF:
+                break
+            id_to_mesh[next_id] = mesh_data
+            mesh_rows.append((next_id, mesh_data))
+            next_id += 1
+        diagnostic["candidate_count"] = len(mesh_rows)
+        if not mesh_rows:
+            diagnostic["result"] = "miss"
+            self.last_pick_diagnostics = diagnostic
+            return []
+
+        resources = self._ensure_pick_resources(width, height)
+        pick_texture = resources.pick_texture
+        depth_texture = resources.depth_texture
+        read_buffer = self.device.create_buffer(
+            size=bytes_per_row * rect_height,
+            usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ,
+        )
+        encoder = self.device.create_command_encoder()
+        render_pass = encoder.begin_render_pass(
+            color_attachments=[
+                {
+                    "view": pick_texture.create_view(),
+                    "resolve_target": None,
+                    "clear_value": (0.0, 0.0, 0.0, 1.0),
+                    "load_op": wgpu.LoadOp.clear,
+                    "store_op": wgpu.StoreOp.store,
+                }
+            ],
+            depth_stencil_attachment={
+                "view": depth_texture.create_view(),
+                "depth_clear_value": 1.0,
+                "depth_load_op": wgpu.LoadOp.clear,
+                "depth_store_op": wgpu.StoreOp.store,
+            },
+        )
+        mvp = self._camera_mvp_matrix(camera, width, height)
+        render_pass.set_pipeline(self.pipeline_pick)
+        drawn = 0
+        for pick_id, mesh_data in mesh_rows:
+            try:
+                resource = self.resource_cache.get_or_upload_mesh(mesh_data)
+                if resource is None:
+                    continue
+                color = self._pick_id_to_color(pick_id)
+                self._set_line_uniform(render_pass, self._mesh_mvp_matrix(mvp, mesh_data), color, target_color=False)
+                render_pass.set_vertex_buffer(0, resource.vertex_buffer)
+                if resource.index_buffer is not None and resource.index_count > 0:
+                    render_pass.set_index_buffer(resource.index_buffer, wgpu.IndexFormat.uint32)
+                    render_pass.draw_indexed(resource.index_count, 1, 0, 0, 0)
+                    drawn += resource.index_count // 3
+                else:
+                    render_pass.draw(resource.vertex_count, 1, 0, 0)
+                    drawn += resource.vertex_count // 3
+            except Exception as exc:
+                diagnostic.setdefault("skipped", []).append(str(exc))
+                continue
+        render_pass.end()
+        encoder.copy_texture_to_buffer(
+            {"texture": pick_texture, "origin": (x0, y0, 0)},
+            {"buffer": read_buffer, "offset": 0, "bytes_per_row": bytes_per_row, "rows_per_image": rect_height},
+            (rect_width, rect_height, 1),
+        )
+        self.queue.submit([encoder.finish()])
+        read_buffer.map_sync(wgpu.MapMode.READ, 0, bytes_per_row * rect_height)
+        try:
+            raw = bytes(read_buffer.read_mapped(0, bytes_per_row * rect_height, copy=True))
+        finally:
+            read_buffer.unmap()
+
+        hit_ids: list[int] = []
+        seen_ids: set[int] = set()
+        for row in range(rect_height):
+            row_start = row * bytes_per_row
+            for col in range(rect_width):
+                offset = row_start + col * 4
+                pick_id = self._pick_id_from_rgba(raw[offset : offset + 4])
+                if pick_id and pick_id not in seen_ids:
+                    seen_ids.add(pick_id)
+                    hit_ids.append(pick_id)
+
+        hits: list[PickHit] = []
+        for pick_id in hit_ids:
+            mesh_data = id_to_mesh.get(pick_id)
+            node = getattr(mesh_data, "source", None) if mesh_data is not None else None
+            if node is None:
+                continue
+            hits.append(
+                PickHit(
+                    hit=True,
+                    kind="mesh",
+                    object_id=id(node),
+                    object_ref=node,
+                    mesh_id=id(node),
+                    node_id=getattr(node, "name", id(node)),
+                    screen_position=(x0, y0),
+                    hit_kind="mesh",
+                    source_backend=self.backend_id,
+                    raw_id=int(pick_id),
+                    renderer_backend=self.backend_id,
+                    diagnostic=diagnostic,
+                )
+            )
+
+        pick_ms = (time.perf_counter() - pick_started) * 1000.0
+        diagnostic["drawn_triangles"] = drawn
+        diagnostic["pick_pass_ms"] = round(pick_ms, 3)
+        diagnostic["hit_count"] = len(hits)
+        diagnostic["result"] = f"{len(hits)} hit(s)" if hits else "miss"
+        self.last_pick_diagnostics = diagnostic
+        self.profiler.last.pick_pass_ms = pick_ms
+        return hits
+
     def _ensure_pick_resources(self, width: int, height: int) -> WgpuPickResources:
         import wgpu
 
