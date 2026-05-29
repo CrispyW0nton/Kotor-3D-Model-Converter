@@ -743,6 +743,8 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._gpu_texture_snapshot_key = None
         self._gpu_texture_snapshot_cache: dict = {}
         self._gpu_texture_snapshot_rebuilds = 0
+        self._gpu_baked_lightmap_snapshot_model_id = 0
+        self._gpu_baked_lightmap_snapshot: tuple[tuple[str, str, float], ...] = ()
 
         self._render_timer = QtCore.QTimer(self)
         self._render_timer.setTimerType(QtCore.Qt.PreciseTimer)
@@ -1753,6 +1755,10 @@ class QtViewportWidget(QtWidgets.QWidget):
         self._refresh_camera_view_combo()
         self._clear_edit_history()
         self._gpu_tex_preload_model_id = 0
+        self._gpu_texture_snapshot_key = None
+        self._gpu_texture_snapshot_cache = {}
+        self._gpu_baked_lightmap_snapshot_model_id = 0
+        self._gpu_baked_lightmap_snapshot = ()
         if self._gpu_renderer is not None:
             self._gpu_renderer.clear_caches()
             self._gpu_renderer.reset_framebuffers()
@@ -6407,29 +6413,37 @@ class QtViewportWidget(QtWidgets.QWidget):
         tex_cache = getattr(self._renderer, "tex_cache", None)
         cache = getattr(tex_cache, "_cache", {}) if tex_cache is not None else {}
         live_items = tuple(sorted((str(key), id(value)) for key, value in cache.items() if value is not None))
-        baked_items: list[tuple[str, str, float]] = []
-        try:
-            nodes = self.model.all_nodes() if hasattr(self.model, "all_nodes") else []
-            for node in nodes:
-                override_path = str(getattr(node, "_gr_baked_lightmap_preview_path", "") or getattr(node, "_gr_baked_lightmap_path", "") or "")
-                override_name = str(getattr(node, "_gr_baked_lightmap_preview_name", "") or "")
-                if override_path and override_name and os.path.isfile(override_path):
-                    try:
-                        mtime = os.path.getmtime(override_path)
-                    except OSError:
-                        mtime = 0.0
-                    baked_items.append((override_name.lower(), override_path, float(mtime)))
-        except Exception:
-            baked_items = []
-        key = (live_items, tuple(sorted(baked_items)))
+        model_id = id(self.model) if self.model is not None else 0
+        governor = getattr(self, "_frame_governor", None)
+        dirty_flags = getattr(governor, "dirty_flags", {}) if governor is not None else {}
+        if bool(dirty_flags.get("resources", False)):
+            self._gpu_baked_lightmap_snapshot_model_id = 0
+        if model_id != self._gpu_baked_lightmap_snapshot_model_id:
+            baked_items: list[tuple[str, str, float]] = []
+            try:
+                nodes = self.model.all_nodes() if hasattr(self.model, "all_nodes") else []
+                for node in nodes:
+                    override_path = str(getattr(node, "_gr_baked_lightmap_preview_path", "") or getattr(node, "_gr_baked_lightmap_path", "") or "")
+                    override_name = str(getattr(node, "_gr_baked_lightmap_preview_name", "") or "")
+                    if override_path and override_name and os.path.isfile(override_path):
+                        try:
+                            mtime = os.path.getmtime(override_path)
+                        except OSError:
+                            mtime = 0.0
+                        baked_items.append((override_name.lower(), override_path, float(mtime)))
+            except Exception:
+                baked_items = []
+            self._gpu_baked_lightmap_snapshot_model_id = model_id
+            self._gpu_baked_lightmap_snapshot = tuple(sorted(baked_items))
+        key = (live_items, self._gpu_baked_lightmap_snapshot)
         if key == self._gpu_texture_snapshot_key:
             return self._gpu_texture_snapshot_cache
         textures = {key: value for key, value in cache.items() if value is not None}
-        if baked_items:
+        if self._gpu_baked_lightmap_snapshot:
             try:
                 from PIL import Image
 
-                for override_name, override_path, _mtime in baked_items:
+                for override_name, override_path, _mtime in self._gpu_baked_lightmap_snapshot:
                     textures[override_name] = Image.open(override_path).convert("RGBA")
             except Exception:
                 pass

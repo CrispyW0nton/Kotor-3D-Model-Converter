@@ -211,6 +211,7 @@ def test_qt_gpu_viewport_keeps_gpu_for_wire_and_texture_off_modes() -> None:
 
     frame_source = inspect.getsource(QtViewportWidget._render_frame)
     gpu_source = inspect.getsource(QtViewportWidget._render_gpu_frame)
+    texture_snapshot_source = inspect.getsource(QtViewportWidget._gpu_texture_snapshot)
 
     assert "gpu_can_match_mode" not in frame_source
     assert "self._render_gpu_frame(w, h)" in frame_source
@@ -218,6 +219,35 @@ def test_qt_gpu_viewport_keeps_gpu_for_wire_and_texture_off_modes() -> None:
     assert "and self._renderer.show_texture" not in frame_source
     assert "show_texture = bool(self._renderer.show_texture)" in gpu_source
     assert "show_wireframe = bool(self._renderer.show_wireframe)" in gpu_source
+    assert 'dirty_flags.get("resources", False)' in texture_snapshot_source
+    assert "_gpu_baked_lightmap_snapshot_model_id" in texture_snapshot_source
+
+
+def test_wgpu_renderer_defers_uncached_uploads_without_caching_fallback_materials() -> None:
+    import inspect
+
+    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer, WgpuResourceCache
+
+    init_source = inspect.getsource(WgpuRenderer.__init__)
+    budget_source = inspect.getsource(WgpuRenderer._begin_upload_budget)
+    consume_source = inspect.getsource(WgpuRenderer._consume_upload_budget)
+    cache_source = inspect.getsource(WgpuResourceCache.get_or_upload_mesh)
+    texture_source = inspect.getsource(WgpuResourceCache.get_or_upload_texture)
+    material_source = inspect.getsource(WgpuResourceCache.get_or_create_material)
+    render_source = inspect.getsource(WgpuRenderer.render)
+    diagnostics_source = inspect.getsource(WgpuRenderer.get_diagnostics)
+
+    assert "self.deferred_mesh_uploads = False" in init_source
+    assert "self._frame_upload_budget_remaining" in init_source
+    assert "self._pending_uploads_count = 0" in budget_source
+    assert "budget = min(budget, 4)" in budget_source
+    assert "self._defer_resource_upload(kind, key)" in consume_source
+    assert 'self._renderer._consume_upload_budget("mesh", mesh_id)' in cache_source
+    assert 'self._renderer._consume_upload_budget("texture", texture_id)' in texture_source
+    assert "deferred_after == deferred_before" in material_source
+    assert "self.materials[material_id] = resource" in material_source
+    assert "self._begin_upload_budget()" in render_source
+    assert '"upload_budget_used"' in diagnostics_source
 
 
 def test_qt_viewport_grid_toggle_controls_cpu_and_gpu_paths() -> None:

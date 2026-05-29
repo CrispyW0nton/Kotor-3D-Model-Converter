@@ -248,7 +248,11 @@ def test_external_dcc_imports_disable_kotor_uv_seam_repair() -> None:
 
 def test_gpu_renderer_clamps_single_tile_character_atlases_like_cpu_renderer() -> None:
     viewport = _read("src/gui/rendering/viewport_core.py")
-    gpu = _read("src/gui/rendering/gpu_renderer.py")
+    gpu = (
+        _read("src/gui/rendering/gpu_core/diagnostics.py")
+        + _read("src/gui/rendering/gpu_core/resources.py")
+        + _read("src/gui/rendering/gpu_core/renderer.py")
+    )
 
     assert "FIX-EDGEBLEED (CPU)" in viewport
     assert "FIX-EDGEBLEED (GPU)" in viewport
