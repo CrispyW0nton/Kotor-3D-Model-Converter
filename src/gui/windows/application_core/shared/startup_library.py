@@ -12,7 +12,7 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
 
 from src.gui.qt_lib.dialogs.qt_settings_dialog import save_settings
 from src.gui.qt_lib.windows.progress_toast import QtProgressToast
-from src.gui.windows.application_core.shared.workers import AutoDetectWorker, LibraryBatchExportWorker
+from src.gui.windows.application_core.application_core_lib.shared.workers import AutoDetectWorker, LibraryBatchExportWorker
 
 
 class StartupLibraryMixin:

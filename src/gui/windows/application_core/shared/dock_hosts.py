@@ -7,7 +7,7 @@ try:
 except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
     raise RuntimeError("PySide6 is required for the Qt shell") from exc
 
-from src.gui.windows.application_core.shared.qt_helpers import _qt_object_alive
+from src.gui.windows.application_core.application_core_lib.functions.qt_helpers import _qt_object_alive
 
 class QtFloatingDockHost(QtWidgets.QMainWindow):
     """Real top-level window that can host one or more detachable dock panels."""

@@ -131,8 +131,8 @@ _WGPU_BACKEND_TYPES = {
     RendererBackend.WGPU_OPENGL.value: "OpenGL",
 }
 
-from src.gui.windows.application_core.shared.dock_hosts import QtDetachableDockWidget, QtFloatingDockHost
-from src.gui.windows.application_core.shared.geometry import (
+from src.gui.windows.application_core.application_core_lib.shared.dock_hosts import QtDetachableDockWidget, QtFloatingDockHost
+from src.gui.windows.application_core.application_core_lib.functions.geometry import (
     _bounds_center,
     _bounds_from_points,
     _bounds_overlap_xy,
@@ -141,39 +141,38 @@ from src.gui.windows.application_core.shared.geometry import (
     _walkmesh_overlay_offset_for_model,
     _walkmesh_reference_bounds,
 )
-from src.gui.windows.application_core.shared.log_panel import GhostRiggerLogPanel
-from src.gui.windows.application_core.shared.qt_helpers import (
+from src.gui.windows.application_core.application_core_lib.shared.log_panel import GhostRiggerLogPanel
+from src.gui.windows.application_core.application_core_lib.functions.qt_helpers import (
     _primary_screen_available_geometry,
     _qt_object_alive,
     _wgpu_backend_type,
     _wgpu_backend_restart_required,
 )
-from src.gui.windows.application_core.shared.splash import (
-    QtStartupSplash,
-    _ThemeColorOverride,
+from src.gui.windows.application_core.application_core_lib.shared.splash import QtStartupSplash, _ThemeColorOverride
+from src.gui.windows.application_core.application_core_lib.functions.splash_theme import (
     _darken_hex,
     _lighten_hex,
     _native_splash_palette_colors,
     _palette_hex,
     _surface_fill,
 )
-from src.gui.windows.application_core.shared.scene_workflow import SceneWorkflowMixin
-from src.gui.windows.application_core.shared.viewport_tools import ViewportToolsMixin
-from src.gui.windows.application_core.shared.model_io import ModelIoMixin
-from src.gui.windows.application_core.shared.retarget_workflow import RetargetWorkflowMixin
-from src.gui.windows.application_core.shared.animation_workflow import AnimationWorkflowMixin
-from src.gui.windows.application_core.shared.bas_workflow import BasWorkflowMixin
-from src.gui.windows.application_core.shared.resource_panels import ResourcePanelsMixin
-from src.gui.windows.application_core.shared.retarget_window_workflow import RetargetWindowWorkflowMixin
-from src.gui.windows.application_core.shared.resource_loading import ResourceLoadingMixin
-from src.gui.windows.application_core.shared.window_lifecycle import WindowLifecycleMixin
-from src.gui.windows.application_core.shared.editor_services import EditorServicesMixin
-from src.gui.windows.application_core.shared.startup_library import StartupLibraryMixin
-from src.gui.windows.application_core.shared.main_layout import MainWindowLayoutMixin
-from src.gui.windows.application_core.shared.window_chrome import WindowChromeMixin
-from src.gui.windows.application_core.shared.theme_layout import ThemeLayoutMixin
-from src.gui.windows.application_core.toolboxes.workspace_docks import WorkspaceDockMixin
-from src.gui.windows.application_core.shared.workers import (
+from src.gui.windows.application_core.application_core_lib.shared.scene_workflow import SceneWorkflowMixin
+from src.gui.windows.application_core.application_core_lib.shared.viewport_tools import ViewportToolsMixin
+from src.gui.windows.application_core.application_core_lib.shared.model_io import ModelIoMixin
+from src.gui.windows.application_core.application_core_lib.shared.retarget_workflow import RetargetWorkflowMixin
+from src.gui.windows.application_core.application_core_lib.shared.animation_workflow import AnimationWorkflowMixin
+from src.gui.windows.application_core.application_core_lib.shared.bas_workflow import BasWorkflowMixin
+from src.gui.windows.application_core.application_core_lib.shared.resource_panels import ResourcePanelsMixin
+from src.gui.windows.application_core.application_core_lib.shared.retarget_window_workflow import RetargetWindowWorkflowMixin
+from src.gui.windows.application_core.application_core_lib.shared.resource_loading import ResourceLoadingMixin
+from src.gui.windows.application_core.application_core_lib.shared.window_lifecycle import WindowLifecycleMixin
+from src.gui.windows.application_core.application_core_lib.shared.editor_services import EditorServicesMixin
+from src.gui.windows.application_core.application_core_lib.shared.startup_library import StartupLibraryMixin
+from src.gui.windows.application_core.application_core_lib.shared.main_layout import MainWindowLayoutMixin
+from src.gui.windows.application_core.application_core_lib.shared.window_chrome import WindowChromeMixin
+from src.gui.windows.application_core.application_core_lib.shared.theme_layout import ThemeLayoutMixin
+from src.gui.windows.application_core.application_core_lib.toolboxes.workspace_docks import WorkspaceDockMixin
+from src.gui.windows.application_core.application_core_lib.shared.workers import (
     AnimationLibraryScanWorker,
     AutoDetectWorker,
     LibraryBatchExportWorker,
@@ -181,6 +180,9 @@ from src.gui.windows.application_core.shared.workers import (
     ModelListItem,
     ModelLoadWorker,
     ResourceModelLoadWorker,
+)
+from src.gui.windows.application_core.application_core_lib.functions.app_runner import run_qt_application
+from src.gui.windows.application_core.application_core_lib.functions.startup_library import (
     _build_prelaunch_library_input as _build_prelaunch_library_input_impl,
     _collect_prewindow_startup_diagnostics,
     _index_game_libraries_sync as _index_game_libraries_sync_impl,
@@ -773,33 +775,12 @@ class QtGhostRiggerMainWindow(
 
 
 def run(app_root: Optional[str] = None, startup_input: Optional[dict] = None) -> int:
-    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
-    app.setApplicationName("GhostRigger")
-    app.setStyle("Fusion")
-    for family in ("Consolas", "Lucida Console", "Courier New"):
-        if family in QtGui.QFontDatabase.families():
-            app.setFont(QtGui.QFont(family, 9))
-            break
-    root = Path(app_root) if app_root else Path(__file__).resolve().parents[2]
-    settings_data = _read_settings_file(root / "settings.json")
-    startup_diagnostics = _collect_prewindow_startup_diagnostics(settings_data)
-    startup_theme_manager = ThemeManager(root, settings_data)
-    splash = QtStartupSplash(root, theme_manager=startup_theme_manager)
-    splash.show()
-
-    def update_prelaunch_status(title: str, detail: str) -> None:
-        finished = title.lower().endswith("ready")
-        splash.set_status(title, detail, finished=finished)
-        splash.show()
-        splash.raise_()
-        app.processEvents()
-
-    update_prelaunch_status("Preparing startup", "Checking saved game-library settings...")
-    prepared_input = _build_prelaunch_library_input(root, startup_input, update_prelaunch_status)
-    prepared_input.update(startup_diagnostics)
-    update_prelaunch_status("Opening workspace", "Starting the main window.")
-    app.processEvents()
-    win = QtGhostRiggerMainWindow(root, startup_input=prepared_input)
-    win.show()
-    splash.close()
-    return app.exec()
+    return run_qt_application(
+        app_root,
+        startup_input,
+        window_cls=QtGhostRiggerMainWindow,
+        splash_cls=QtStartupSplash,
+        read_settings=_read_settings_file,
+        collect_startup_diagnostics=_collect_prewindow_startup_diagnostics,
+        build_prelaunch_library_input=_build_prelaunch_library_input,
+    )

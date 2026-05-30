@@ -11,8 +11,8 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
 
 from src.gui.qt_lib.assets.qt_theme import make_scrollable_panel
 from src.gui.qt_lib.dialogs.qt_settings_dialog import save_settings
-from src.gui.windows.application_core.shared.dock_hosts import QtDetachableDockWidget, QtFloatingDockHost
-from src.gui.windows.application_core.shared.qt_helpers import _qt_object_alive
+from src.gui.windows.application_core.application_core_lib.shared.dock_hosts import QtDetachableDockWidget, QtFloatingDockHost
+from src.gui.windows.application_core.application_core_lib.functions.qt_helpers import _qt_object_alive
 
 
 class WorkspaceDockMixin:

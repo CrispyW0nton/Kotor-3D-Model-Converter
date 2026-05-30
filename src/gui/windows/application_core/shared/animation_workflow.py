@@ -16,7 +16,7 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
     raise RuntimeError("PySide6 is required for the Qt shell") from exc
 
 from src.gui.qt_lib.panels.qt_animation_panel import animation_row_label
-from src.gui.windows.application_core.shared.workers import AnimationLibraryScanWorker
+from src.gui.windows.application_core.application_core_lib.shared.workers import AnimationLibraryScanWorker
 
 log = logging.getLogger(__name__)
 

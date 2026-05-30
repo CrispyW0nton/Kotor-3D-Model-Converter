@@ -33,7 +33,7 @@ from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
 from src.gui.qt_lib.windows.qt_retarget_workbench_controller import RetargetWorkbenchController
 from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditorWindow
-from src.gui.windows.application_core.shared.qt_helpers import _qt_object_alive
+from src.gui.windows.application_core.application_core_lib.functions.qt_helpers import _qt_object_alive
 
 
 class MainWindowLayoutMixin:

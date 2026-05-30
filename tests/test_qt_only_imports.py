@@ -619,6 +619,43 @@ def test_qt_main_window_imports_without_tkinter(monkeypatch):
     importlib.import_module("src.gui.qt_lib.windows.qt_main_window")
 
 
+def test_application_core_imports_route_through_application_core_lib() -> None:
+    """Application-core internals should use the central facade route."""
+
+    application_core = _GUI_DIR / "windows" / "application_core"
+    forbidden_prefixes = (
+        "src.gui.windows.application_core.functions",
+        "src.gui.windows.application_core.shared",
+        "src.gui.windows.application_core.toolboxes",
+    )
+    violations: list[str] = []
+    for path in sorted(application_core.rglob("*.py")):
+        if path.name == "application_core_lib.py":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                if module.startswith(forbidden_prefixes):
+                    violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno}: {module}")
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.startswith(forbidden_prefixes):
+                        violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno}: {alias.name}")
+
+    assert violations == []
+
+
+def test_application_core_lib_exposes_canonical_groups() -> None:
+    from src.gui.windows.application_core.application_core_lib.functions.geometry import _bounds_center
+    from src.gui.windows.application_core.application_core_lib.shared.workers import ModelLoadWorker
+    from src.gui.windows.application_core.application_core_lib.toolboxes.workspace_docks import WorkspaceDockMixin
+
+    assert _bounds_center(((0, 0, 0), (2, 4, 6))) == (1.0, 2.0, 3.0)
+    assert ModelLoadWorker.__name__ == "ModelLoadWorker"
+    assert WorkspaceDockMixin.__name__ == "WorkspaceDockMixin"
+
+
 @pytest.mark.skipif(
     not _runtime_deps_available(),
     reason="PySide6 / pykotor / moderngl / numpy / PIL not installed in this env",
@@ -675,7 +712,13 @@ def test_fbx_sdk_loader_accepts_fbx_without_fbxcommon(monkeypatch):
 
 
 def test_main_window_routes_fbx_menu_to_optional_sdk_bridge():
-    text = (_REPO_ROOT / "src/gui/windows/qt_main_window.py").read_text(encoding="utf-8")
+    text = "\n".join(
+        [
+            (_REPO_ROOT / "src/gui/windows/qt_main_window.py").read_text(encoding="utf-8"),
+            (_REPO_ROOT / "src/gui/windows/application_core/shared/model_io.py").read_text(encoding="utf-8"),
+            (_REPO_ROOT / "src/gui/windows/application_core/shared/window_chrome.py").read_text(encoding="utf-8"),
+        ]
+    )
 
     assert "def _auto_detect_fbx_import_backend" in text
     assert "def _choose_fbx_import_backend" in text

@@ -16,11 +16,11 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
 from src.core.scene.scene_object import Transform
 from src.core.scene.scene_resource_ref import SceneResourceRef
 from src.gui.qt_lib.dialogs.add_model_to_scene_dialog import AddModelToSceneChoice, AddModelToSceneDialog
-from src.gui.windows.application_core.shared.geometry import (
+from src.gui.windows.application_core.application_core_lib.functions.geometry import (
     _walkmesh_overlay_node_from_wok,
     _walkmesh_overlay_offset_for_model,
 )
-from src.gui.windows.application_core.shared.workers import (
+from src.gui.windows.application_core.application_core_lib.shared.workers import (
     LibraryScanWorker,
     ModelListItem,
     ModelLoadWorker,

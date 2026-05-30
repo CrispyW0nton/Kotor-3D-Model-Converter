@@ -19,7 +19,7 @@ from src.gui.qt_lib.panels.qt_log_panel import QtLogPanelHandler
 from src.gui.qt_lib.rendering.renderer_backend import renderer_backend_label
 from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.viewports.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
-from src.gui.windows.application_core.shared.qt_helpers import _wgpu_backend_restart_required
+from src.gui.windows.application_core.application_core_lib.functions.qt_helpers import _wgpu_backend_restart_required
 from src.measurement.unit_settings import MeasurementSettings
 
 log = logging.getLogger(__name__)
