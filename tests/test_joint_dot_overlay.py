@@ -755,7 +755,7 @@ def test_t404_ortho_button_label_tracks_state():
 
 def test_external_import_joint_dots_use_preserved_gltf_world_positions():
     """External FBX/glTF skeleton overlays should not use KotOR-only bind math."""
-    source = (_REPO_ROOT / "src" / "gui" / "viewports" / "frame_core" / "renderer.py").read_text(
+    source = (_REPO_ROOT / "src" / "gui" / "rendering" / "frame_core" / "renderer_overlays.py").read_text(
         encoding="utf-8"
     )
 
@@ -764,7 +764,7 @@ def test_external_import_joint_dots_use_preserved_gltf_world_positions():
 
 
 def test_external_template_skeleton_overlay_is_scaled_and_uncluttered():
-    source = (_REPO_ROOT / "src" / "gui" / "viewports" / "frame_core" / "renderer.py").read_text(
+    source = (_REPO_ROOT / "src" / "gui" / "rendering" / "frame_core" / "renderer_overlays.py").read_text(
         encoding="utf-8"
     )
 
@@ -774,7 +774,7 @@ def test_external_template_skeleton_overlay_is_scaled_and_uncluttered():
 
 
 def test_viewport_texture_cache_loads_common_external_dcc_images():
-    source = (_REPO_ROOT / "src" / "gui" / "viewports" / "frame_core" / "renderer.py").read_text(
+    source = (_REPO_ROOT / "src" / "gui" / "rendering" / "frame_core" / "texture_cache.py").read_text(
         encoding="utf-8"
     )
 

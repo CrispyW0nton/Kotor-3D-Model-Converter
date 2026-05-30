@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from .dependencies import *  # noqa: F401,F403
-from .math_helpers import _clamp, _cross, _dot, _normalize, _sub
+import math
+
+from src.gui.rendering.frame_core.math_helpers import _clamp, _cross, _dot, _normalize, _sub
 
 # ─────────────────────────────────────────────────────────────────────
 #  Arc-ball Camera (Maya style)

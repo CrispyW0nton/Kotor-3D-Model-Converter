@@ -2,8 +2,8 @@
 tpc_render_utils.py — Pure-Python TPC/DXT texture and triangle rendering utilities.
 
 This module contains ONLY headless-safe, GUI-free utility functions originally
-extracted from the legacy viewport.py (deleted in M3/T302) and now living next
-to viewport_core.py. It has zero tkinter dependency and can be imported anywhere.
+extracted from the legacy viewport.py (deleted in M3/T302) and now living under
+the texture system. It has zero tkinter dependency and can be imported anywhere.
 
 Functions exported:
   _is_tpc_data(data)             → bool

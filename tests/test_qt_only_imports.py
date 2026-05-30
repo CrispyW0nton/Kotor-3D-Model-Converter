@@ -53,9 +53,9 @@ _GUI_DIR = _REPO_ROOT / "src" / "gui"
 
 # Files that MUST remain Tk-free.
 #   * Every qt_*.py — the canonical Qt UI subtree.
-#   * frame_core/renderer.py - the Tk-free viewport rendering split from T001.
+#   * rendering/frame_core/*.py - the Tk-free viewport frame-rendering backend split.
 _QT_FILES = sorted(_GUI_DIR.rglob("qt_*.py"))
-_VIEWPORT_CORE = _GUI_DIR / "viewports" / "frame_core" / "renderer.py"
+_VIEWPORT_CORE_FILES = sorted((_GUI_DIR / "rendering" / "frame_core").glob("*.py"))
 
 # Files that are EXPECTED to import tkinter — empty after M3/T302.
 #
@@ -299,11 +299,12 @@ def test_qt_subtree_has_no_tkinter_imports(path: pathlib.Path):
     )
 
 
-def test_viewport_core_has_no_tkinter_imports():
-    """src/gui/viewports/frame_core/renderer.py is the Tk-free rendering split."""
-    hits = _collect_tkinter_imports(_VIEWPORT_CORE)
+@pytest.mark.parametrize("path", _VIEWPORT_CORE_FILES, ids=lambda p: p.name)
+def test_viewport_core_has_no_tkinter_imports(path: pathlib.Path):
+    """src/gui/rendering/frame_core/*.py is the Tk-free rendering split."""
+    hits = _collect_tkinter_imports(path)
     assert hits == [], (
-        f"viewport_core.py must remain Tk-free; offending lines:\n  "
+        f"{path.name} must remain Tk-free; offending lines:\n  "
         + "\n  ".join(f"L{ln}: {stmt}" for ln, stmt in hits)
     )
 

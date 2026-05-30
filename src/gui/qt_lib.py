@@ -48,6 +48,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "tool_integration_registry",
     ),
     "camera": (
+        "arcball_camera",
         "camera_controller",
         "camera_gizmo_renderer",
         "camera_manager",
@@ -191,7 +192,9 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "qt_tex_atlas",
         "qt_tpc_render_utils",
         "tex_atlas",
+        "tpc",
         "tpc_render_utils",
+        "txi",
     ),
     "viewports": (
         "frame_renderer",

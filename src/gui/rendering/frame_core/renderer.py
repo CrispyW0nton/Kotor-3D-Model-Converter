@@ -25,7 +25,7 @@ from .math_helpers import (
     _vflip_nontiled,
     _vflip_tiled,
 )
-from .tpc import (
+from src.gui.textures.tpc import (
     _decompress_dxt1_bytes,
     _decompress_dxt5_bytes,
     _ensure_bottom_up,
@@ -37,13 +37,13 @@ from .tpc import (
     _load_tpc_bytes_legacy,
     _load_tpc_bytes_legacy_inner,
 )
-from .txi import (
+from src.gui.textures.txi import (
     _apply_txi_to_node,
     _compute_flipbook_uv,
     _extract_alpha_test_from_tpc,
     _parse_txi_string,
 )
-from .camera import ArcBallCamera
+from src.gui.camera.arcball_camera import ArcBallCamera
 from .texture_cache import TextureCache
 from .rasterizer import _rasterize_triangle_textured
 from .colors import (
@@ -77,6 +77,26 @@ class FrameRenderer(
     RendererOverlayMixin,
 ):
     """Tk-free frame renderer composed from focused mixin modules."""
+
+    MAX_TRIS = 80_000
+    MAX_TRIS_TEXTURED = 5_000
+    MAX_TRIS_TEXTURED_ACCEL = 10_000
+    MAX_TRIS_TEXTURED_STILL = 50_000
+    MAX_TRIS_INTERACTIVE = 10_000
+    _DEPTH_EPSILON = 0.0001
+    _DANGLY_PIN_THRESHOLD: float = 0.999
+    _KEY_JOINT_NAMES = frozenset({
+        "root", "rootdummy", "pelvis", "pelvis_g", "hip", "hips",
+        "spine", "spine_01", "spine_02", "spine_03", "spine_04", "spine_05",
+        "torso_g", "torsoupr_g", "neck", "neck_g", "necklwr_g",
+        "neck_01", "neck_02", "head", "head_g",
+        "clavicle_l", "clavicle_r", "upperarm_l", "upperarm_r",
+        "lowerarm_l", "lowerarm_r", "hand_l", "hand_r", "lhand", "rhand",
+        "lbicep_g", "rbicep_g", "lforearm_g", "rforearm_g", "lhand_g", "rhand_g",
+        "thigh_l", "thigh_r", "calf_l", "calf_r", "foot_l", "foot_r",
+        "ball_l", "ball_r", "lthigh_g", "rthigh_g", "lshin_g", "rshin_g",
+        "lfoot_g", "rfoot_g", "lfoott_g", "rfoott_g",
+    })
 
 
 __all__ = (

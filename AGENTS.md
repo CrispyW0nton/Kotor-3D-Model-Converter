@@ -111,6 +111,9 @@ Import `FrameRenderer`, `ArcBallCamera`, `_load_tpc_bytes`, `_is_tpc_data`,
   `_clean_tex_name`, etc. through `src.gui.qt_lib.viewports.frame_renderer`.
   Viewport display and navigation modules live under `src/gui/viewports/`;
   do not add new viewport-owned modules under `src/gui/rendering/`.
+  The software frame-renderer backend lives under `src/gui/rendering/frame_core/`,
+  ArcBall camera state under `src/gui/camera/`, and TPC/TXI texture helpers under
+  `src/gui/textures/`. Keep the `src/gui/viewports/frame_renderer.py` facade thin.
 
 ## Qt viewport module structure
 

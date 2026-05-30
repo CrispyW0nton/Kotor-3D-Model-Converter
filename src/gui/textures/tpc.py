@@ -2,7 +2,17 @@
 
 from __future__ import annotations
 
-from .dependencies import *  # noqa: F401,F403
+import logging
+import struct
+from typing import Optional
+
+log = logging.getLogger(__name__)
+
+try:
+    from PIL import Image
+    _PIL = True
+except ImportError:
+    _PIL = False
 
 # ─────────────────────────────────────────────────────────────────────
 #  TPC detection & loading helpers

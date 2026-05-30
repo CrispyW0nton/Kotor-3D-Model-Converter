@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from .dependencies import *  # noqa: F401,F403
-from .math_helpers import _clean_tex_name
+import logging
+import struct
+
+from src.gui.rendering.frame_core.math_helpers import _clean_tex_name
 from .tpc import _extract_txi_from_tpc
+
+log = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────
 #  TXI Metadata Parser

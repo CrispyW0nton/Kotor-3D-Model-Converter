@@ -19,9 +19,10 @@ modules.
 Implementation files are organized by category:
 
 - `assets/` - theme, icons, and visual background helpers
+- `camera/` - camera models, controllers, overlays, and ArcBall camera state
 - `dialogs/` - Qt dialogs and dialog helpers
 - `panels/` - reusable Qt panels and dock-style UI sections
-- `rendering/` - renderer backends, rasterizer acceleration, and GPU-facing helpers
-- `textures/` - texture atlas and TPC rendering utilities
-- `viewports/` - Qt viewport widgets, frame display state, camera navigation, and frame rendering facades
+- `rendering/` - renderer backends, software frame rendering, rasterizer acceleration, and GPU-facing helpers
+- `textures/` - texture atlas, TPC/TXI parsing, and texture rendering utilities
+- `viewports/` - Qt viewport widgets, frame display state, navigation profiles, and thin viewport facades
 - `windows/` - top-level Qt windows and workbench-style tools
