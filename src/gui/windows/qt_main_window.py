@@ -52,6 +52,7 @@ from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
 from src.gui.qt_lib.panels.qt_skeleton_panel import QtSkeletonPanel
 from src.gui.qt_lib.panels.qt_scene_outliner_panel import QtSceneOutlinerPanel
 from src.gui.qt_lib.viewports.qt_viewport import QtMainViewportWidget
+from src.gui.viewports.viewport_core.widget_scaffold import create_custom_viewport_widget
 from src.gui.qt_lib.panels.qt_animation_panel import (
     QtAnimationsPanel,
     animation_row_label,
@@ -5065,6 +5066,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             stop_animation=self._terminal_stop_animation,
             seek_animation=self._terminal_seek_animation,
             override_animation=self._terminal_override_animation,
+            create_viewport_widget=self._terminal_create_viewport_widget,
         )
 
     def _terminal_model(self):
@@ -5146,6 +5148,23 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._show_content_browser("Animation")
         self._log(f"Animation override: {source_name} -> {target_name}", "success")
         return target_name
+
+    def _terminal_create_viewport_widget(
+        self,
+        name: str,
+        *,
+        kind: str = "widget",
+        overwrite: bool = False,
+        public_export: bool = False,
+    ) -> dict[str, object]:
+        result = create_custom_viewport_widget(
+            name,
+            kind=kind,
+            overwrite=overwrite,
+            public_export=public_export,
+        )
+        self._log(f"Created viewport {result['kind']} scaffold: {result['path']}", "success")
+        return result
 
     def _open_texture_tool_window(self):
         window = getattr(self, "texture_tool_window", None)

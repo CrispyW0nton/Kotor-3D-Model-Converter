@@ -11,6 +11,10 @@ For each completed change, add a dated entry with:
 
 ## 2026-05-30
 
+- Viewport custom widget scaffold tool: Added a headless viewport widget scaffolder and exposed it in the embedded GhostRigger Python terminal as `create_viewport_widget(...)`. The tool creates focused widget or mixin modules under `src/gui/viewports/viewport_core/widgets/`, refuses accidental overwrites by default, returns the generated module/class/path plus next steps, and keeps public lazy facade edits explicit. Updated the terminal cheatsheet with pasteable examples. No roadmap task ID applies.
+  Affected areas: `src/gui/viewports/viewport_core/widget_scaffold.py`, `src/gui/windows/qt_main_window.py`, `CHEETSHEET.md`, terminal/scaffold regression coverage.
+  Verification: `python -m py_compile src/gui/viewports/viewport_core/widget_scaffold.py src/gui/windows/qt_main_window.py tests/test_core_contracts.py`; `python -m pytest -q tests/test_core_contracts.py::test_main_window_exposes_animation_helpers_to_python_terminal tests/test_core_contracts.py::test_viewport_widget_scaffold_creates_focused_modules`; `python -m pytest -q tests/test_qt_only_imports.py::test_qt_lib_facade_imports_grouped_modules tests/test_qt_only_imports.py::test_qt_main_window_imports_without_tkinter`; direct scaffold smoke created a temporary `quick_test_widget.py` with the expected class and next-step payload. Pytest emitted the existing Windows temp symlink cleanup warning after success.
+
 - Agent viewport structure guidance: Documented the new Qt viewport split in `AGENTS.md`, including the lazy `qt_viewport.py` and `viewport_core/widget.py` facades, the `viewport_core/shared/` helper modules, the `viewport_core/widgets/` widget and mixin modules, and the rule that new viewport widgets/features must follow this structure instead of rebuilding a giant viewport file. No roadmap task ID applies.
   Affected areas: `AGENTS.md`, viewport maintenance guidance.
   Verification: Documentation-only change; reviewed the updated guidance against the current viewport module layout.

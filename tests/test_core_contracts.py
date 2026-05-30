@@ -5371,6 +5371,7 @@ def test_main_window_exposes_animation_helpers_to_python_terminal() -> None:
         "stop_animation=self._terminal_stop_animation",
         "seek_animation=self._terminal_seek_animation",
         "override_animation=self._terminal_override_animation",
+        "create_viewport_widget=self._terminal_create_viewport_widget",
     ):
         assert helper in context_source
 
@@ -5380,7 +5381,36 @@ def test_main_window_exposes_animation_helpers_to_python_terminal() -> None:
     override_source = inspect.getsource(QtGhostRiggerMainWindow._terminal_override_animation)
     assert "copy.deepcopy(source_anim)" in override_source
     assert "model.animations = animations" in override_source
-    assert "self.animations_panel.load_model(model, select_name=target_name)" in override_source
+    assert "self._load_animation_panel_model(model, select_name=target_name)" in override_source
+
+    scaffold_source = inspect.getsource(QtGhostRiggerMainWindow._terminal_create_viewport_widget)
+    assert "create_custom_viewport_widget(" in scaffold_source
+    assert "Created viewport" in scaffold_source
+
+
+def test_viewport_widget_scaffold_creates_focused_modules(tmp_path) -> None:
+    from src.gui.viewports.viewport_core.widget_scaffold import create_custom_viewport_widget
+
+    result = create_custom_viewport_widget("Orbit Gizmo", target_root=tmp_path)
+
+    assert result["kind"] == "widget"
+    assert result["module_name"] == "orbit_gizmo"
+    assert result["class_name"] == "OrbitGizmoWidget"
+    widget_path = Path(result["path"])
+    assert widget_path == tmp_path / "orbit_gizmo.py"
+    text = widget_path.read_text(encoding="utf-8")
+    assert "class OrbitGizmoWidget(QtWidgets.QWidget)" in text
+    assert "apply_ghost_theme" in text
+    assert "apply_ghost_layout" in text
+
+    with pytest.raises(FileExistsError):
+        create_custom_viewport_widget("Orbit Gizmo", target_root=tmp_path)
+
+    mixin = create_custom_viewport_widget("orbit selection", kind="mixin", target_root=tmp_path)
+    mixin_text = Path(mixin["path"]).read_text(encoding="utf-8")
+    assert mixin["class_name"] == "OrbitSelectionMixin"
+    assert "class OrbitSelectionMixin" in mixin_text
+    assert "_install_orbit_selection_hooks" in mixin_text
 
 
 def test_qt_main_window_builds_baked_animation_clip() -> None:
