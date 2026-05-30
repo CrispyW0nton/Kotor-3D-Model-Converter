@@ -688,7 +688,7 @@ def test_t404_snap_to_view_unknown_preset_is_noop():
 
 def test_t404_viewcube_actions_match_legacy_orientation_presets():
     """The ViewCube action map preserves the old F/B/L/R/T/Bo targets."""
-    from src.gui.qt_lib.viewports.viewcube_math import ViewAction
+    from src.math.viewcube_math import ViewAction
 
     app, w = _make_widget()
     expected = {
@@ -797,7 +797,7 @@ def test_t404_snap_view_hidden_when_canvas_too_narrow():
 
 def test_t404_viewcube_face_region_requests_orientation():
     """ViewCube face regions request the same target as the old view buttons."""
-    from src.gui.qt_lib.viewports.viewcube_math import FACE_DIRECTIONS, ViewAction, ViewCubeRegion
+    from src.math.viewcube_math import FACE_DIRECTIONS, ViewAction, ViewCubeRegion
 
     app, w = _make_widget()
     try:

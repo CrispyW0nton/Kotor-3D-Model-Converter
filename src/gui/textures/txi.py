@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import struct
 
-from src.gui.rendering.frame_core.math_helpers import _clean_tex_name
+from src.math.frame_math import _clean_tex_name
 from .tpc import _extract_txi_from_tpc
 
 log = logging.getLogger(__name__)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from .debug_tables import *  # noqa: F401,F403
 from .diagnostics import *  # noqa: F401,F403
-from .math_helpers import *  # noqa: F401,F403
+from src.math.gpu_math import *  # noqa: F401,F403
 from .resources import *  # noqa: F401,F403
 from .shaders import *  # noqa: F401,F403
 class GpuRenderer:

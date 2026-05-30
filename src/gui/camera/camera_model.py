@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 from uuid import uuid4
 
-from .camera_math import (
+from src.math.camera_math import (
     Vec3,
     Quat,
     clamp,

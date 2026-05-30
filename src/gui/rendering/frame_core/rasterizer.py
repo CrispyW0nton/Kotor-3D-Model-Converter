@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .dependencies import *  # noqa: F401,F403
-from .math_helpers import _clamp
+from src.math.frame_math import _clamp
 
 # ─────────────────────────────────────────────────────────────────────
 #  Triangle rasterizer helper  (KotOR shader-accurate)

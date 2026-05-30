@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from .camera_math import add, camera_forward, length, look_at_quaternion, mul, sub
+from src.math.camera_math import add, camera_forward, length, look_at_quaternion, mul, sub
 from .camera_model import GhostRiggerCamera
 
 

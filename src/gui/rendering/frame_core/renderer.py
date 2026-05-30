@@ -9,7 +9,7 @@ detail.
 from __future__ import annotations
 
 from .diagnostics import _GR_VIEWPORT_PROBE, _GR_VIEWPORT_PROBE_SEEN, _gr_probe, log
-from .math_helpers import (
+from src.math.frame_math import (
     _add,
     _clamp,
     _clean_tex_name,

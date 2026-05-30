@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from typing import Callable
 
-from .camera_math import length, sub
+from src.math.camera_math import length, sub
 
 
 class CameraPicker:

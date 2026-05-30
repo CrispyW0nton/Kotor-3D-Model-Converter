@@ -26,3 +26,6 @@ Implementation files are organized by category:
 - `textures/` - texture atlas, TPC/TXI parsing, and texture rendering utilities
 - `viewports/` - Qt viewport widgets, frame display state, navigation profiles, and thin viewport facades
 - `windows/` - top-level Qt windows and workbench-style tools
+
+Shared math helper modules are not owned by GUI categories. Add or consume them
+through `src/math/` and keep GUI-side math files as compatibility shims only.

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .diagnostics import *  # noqa: F401,F403
-from .math_helpers import *  # noqa: F401,F403
+from src.math.gpu_math import *  # noqa: F401,F403
 class _GlTexCache:
     """Caches PIL Image → GL Texture2D upload to avoid re-uploading unchanged textures.
 

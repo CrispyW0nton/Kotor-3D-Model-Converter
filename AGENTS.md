@@ -115,6 +115,16 @@ Import `FrameRenderer`, `ArcBallCamera`, `_load_tpc_bytes`, `_is_tpc_data`,
   ArcBall camera state under `src/gui/camera/`, and TPC/TXI texture helpers under
   `src/gui/textures/`. Keep the `src/gui/viewports/frame_renderer.py` facade thin.
 
+## Math helpers
+
+- Shared project math helpers live under `src/math/`.
+- Do not add new math helper modules under `src/gui/`, renderer backend folders,
+  viewport folders, camera folders, or gizmo folders. Keep those old paths as
+  compatibility shims only when needed.
+- Import canonical math helpers directly from `src.math.*`, for example
+  `src.math.frame_math`, `src.math.gpu_math`, `src.math.camera_math`,
+  `src.math.transform_math`, and `src.math.viewcube_math`.
+
 ## Qt viewport module structure
 
 - Keep `src/gui/viewports/qt_viewport.py` as a lazy public compatibility

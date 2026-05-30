@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from .camera_math import add, camera_forward, cross, length, mul, normalize, rotate_vector
+from src.math.camera_math import add, camera_forward, cross, length, mul, normalize, rotate_vector
 
 
 class CameraGizmoRenderer:

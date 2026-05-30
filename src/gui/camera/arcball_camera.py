@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from src.gui.rendering.frame_core.math_helpers import _clamp, _cross, _dot, _normalize, _sub
+from src.math.frame_math import _clamp, _cross, _dot, _normalize, _sub
 
 # ─────────────────────────────────────────────────────────────────────
 #  Arc-ball Camera (Maya style)

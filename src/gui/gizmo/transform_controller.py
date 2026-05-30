@@ -7,7 +7,7 @@ import math
 from typing import Callable, Optional
 
 from .gizmo_mode import GizmoMode
-from .transform_math import (
+from src.math.transform_math import (
     AXIS_VECTORS,
     axis_drag_delta,
     axis_quaternion,
