@@ -13,8 +13,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+_VIEWPORT_SOURCE_FILES = (
+    "src/gui/viewports/viewport_core/shared/dependencies.py",
+    "src/gui/viewports/viewport_core/shared/icons.py",
+    "src/gui/viewports/viewport_core/shared/joint_palette.py",
+    "src/gui/viewports/viewport_core/shared/selection_modes.py",
+    "src/gui/viewports/viewport_core/shared/weight_heatmap.py",
+    "src/gui/viewports/viewport_core/widgets/mini_thumbnail.py",
+    "src/gui/viewports/viewport_core/widgets/snap_view_bar.py",
+    "src/gui/viewports/viewport_core/widgets/viewport_widget.py",
+    "src/gui/viewports/viewport_core/widgets/variants.py",
+)
+
 
 def _read(relpath: str) -> str:
+    if relpath == "src/gui/viewports/qt_viewport.py":
+        return "\n".join((ROOT / path).read_text(encoding="utf-8") for path in _VIEWPORT_SOURCE_FILES)
     return (ROOT / relpath).read_text(encoding="utf-8")
 
 
@@ -217,12 +231,16 @@ def test_external_template_skeleton_is_selectable_and_symmetry_aware() -> None:
 def test_selected_imported_mesh_outline_uses_projected_mesh_hull_not_bbox() -> None:
     viewport = _read("src/gui/viewports/qt_viewport.py")
 
-    outline_start = viewport.index("def _draw_selected_model_outline")
-    outline_end = viewport.index("def _evict_transform_cache", outline_start)
-    outline_src = viewport[outline_start:outline_end]
+    helper_start = viewport.index("def _draw_hovered_mesh_outline")
+    helper_end = viewport.index("def _draw_selected_model_outline", helper_start)
+    outline_src = viewport[helper_start:helper_end]
+    selected_start = viewport.index("def _draw_selected_model_outline")
+    selected_end = viewport.index("def _draw_mesh_subobject_selection", selected_start)
+    selected_src = viewport[selected_start:selected_end]
 
-    assert "mesh_nodes()" in outline_src
-    assert "hull = lower[:-1] + upper[:-1]" in outline_src
+    assert "self._draw_hovered_mesh_outline(draw, w, h)" in selected_src
+    assert "_projected_mesh_bounds(node, w, h)" in outline_src
+    assert "edge_faces" in outline_src
     assert "_get_render_bounds()" not in outline_src
 
 

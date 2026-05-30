@@ -7,8 +7,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+_VIEWPORT_SOURCE_FILES = (
+    "src/gui/viewports/viewport_core/shared/dependencies.py",
+    "src/gui/viewports/viewport_core/shared/icons.py",
+    "src/gui/viewports/viewport_core/shared/joint_palette.py",
+    "src/gui/viewports/viewport_core/shared/selection_modes.py",
+    "src/gui/viewports/viewport_core/shared/weight_heatmap.py",
+    "src/gui/viewports/viewport_core/widgets/mini_thumbnail.py",
+    "src/gui/viewports/viewport_core/widgets/snap_view_bar.py",
+    "src/gui/viewports/viewport_core/widgets/viewport_widget.py",
+    "src/gui/viewports/viewport_core/widgets/variants.py",
+)
+
 
 def _read(relpath: str) -> str:
+    if relpath == "src/gui/viewports/qt_viewport.py":
+        return "\n".join((ROOT / path).read_text(encoding="utf-8") for path in _VIEWPORT_SOURCE_FILES)
     return (ROOT / relpath).read_text(encoding="utf-8")
 
 

@@ -1311,7 +1311,7 @@ def test_qt_viewport_mesh_pick_requires_real_triangle_and_hover_outline() -> Non
 
     assert "self._hovered_mesh_node = None" in source
     assert "_update_mesh_hover(event)" in source
-    assert "self.meshHovered.emit(node)" in source
+    assert "self.meshHovered.emit(mesh_node)" in source
     assert "self.meshHovered.emit(None)" in source
     assert "_mesh_hit_test_detail(x, y, allow_gpu=False)" in source
     assert "_mesh_hit_test_detail(x, y, allow_gpu=False)" in release_source
@@ -1332,7 +1332,8 @@ def test_qt_viewport_mesh_pick_requires_real_triangle_and_hover_outline() -> Non
     assert "_ray_triangle_intersection" in source
     assert "allow_gpu: bool = True" in pick_source
     assert "if allow_gpu:" in pick_source
-    assert release_source.index("_mesh_hit_test_detail(x, y, allow_gpu=False)") < release_source.index("_light_hit_test(x, y)")
+    default_pick_source = release_source[release_source.index("if self._renderer.show_bones:"):]
+    assert default_pick_source.index("_mesh_hit_test_detail(x, y, allow_gpu=False)") < default_pick_source.index("_light_hit_test(x, y)")
     assert "area + dist2" not in pick_source
     assert "_hit_test_model_bounds" not in release_source
 
@@ -2265,8 +2266,8 @@ def test_qt_viewport_clears_mesh_hover_during_camera_navigation() -> None:
     hover_source = inspect.getsource(QtViewportWidget._update_mesh_hover)
 
     assert "_clear_mesh_hover" in source
-    assert "_clear_mesh_hover(request=False)" in wheel_source
-    assert "mesh hover changed" in hover_source
+    assert "_clear_viewport_hover(request=False)" in wheel_source
+    assert "viewport hover changed" in hover_source
     assert "snap view animation" not in hover_source
 
     calls = []
