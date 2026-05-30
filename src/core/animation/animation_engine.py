@@ -678,6 +678,12 @@ class AnimationEngine:
 
     def __init__(self, model: KotorModel):
         self.model    = model
+        try:
+            from .skinning_profiles import resolve_skinning_profile
+            self.skinning_profile = resolve_skinning_profile(model)
+        except Exception as exc:
+            log.debug("Skinning profile resolution failed for %s: %s", getattr(model, "name", ""), exc)
+            self.skinning_profile = None
         self._current_anim: Optional[Animation] = None
         self._loop    = True
         self._playing = False

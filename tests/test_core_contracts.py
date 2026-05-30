@@ -1523,6 +1523,37 @@ def test_qt_viewport_selection_does_not_auto_recenter_but_z_frames_selection() -
     assert viewport.camera.target == pytest.approx([11.0, 1.0, 0.0])
 
 
+def test_qt_viewport_transform_typein_commits_mesh_vertices_without_type_error() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    viewport = QtViewportWidget()
+    node = SimpleNamespace(
+        name="typein_mesh",
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        faces=[(0, 1, 2)],
+    )
+    try:
+        viewport._renderer.selected_node = node
+        viewport._sync_transform_typein_bar()
+
+        viewport._on_transform_typein_edited("X", "1.25")
+
+        assert node.position == pytest.approx((1.25, 0.0, 0.0))
+        assert viewport.undo() is True
+        assert node.position == pytest.approx((0.0, 0.0, 0.0))
+        assert viewport.redo() is True
+        assert node.position == pytest.approx((1.25, 0.0, 0.0))
+    finally:
+        viewport.deleteLater()
+
+
 def test_qt_lighting_panel_editor_refresh_preserves_selected_light() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -2241,7 +2272,7 @@ def test_qt_mesh_hover_uses_cpu_pick_even_when_gpu_pick_is_available() -> None:
     assert ("pick", 42, 64, False) in calls
     assert viewport._hovered_mesh_node is hovered
     assert calls[-1][0:2] == ("render", True)
-    assert calls[-1][2]["reason"] == "mesh hover changed"
+    assert calls[-1][2]["reason"] == "viewport hover changed"
 
 
 def test_qt_mesh_hover_is_suppressed_while_animation_pose_is_active() -> None:
@@ -2517,7 +2548,8 @@ def test_bas_runtime_contract_is_documented_and_guarded() -> None:
     import inspect
     from pathlib import Path
 
-    from src.gui.rendering import gpu_renderer, mesh_render_data, wgpu_renderer
+    from src.gui.rendering import mesh_render_data, wgpu_renderer
+    from src.gui.rendering.gpu_core import renderer as gpu_renderer_impl
 
     contract_path = Path(__file__).resolve().parents[1] / "src" / "systems" / "bas" / "README.md"
     contract = contract_path.read_text(encoding="utf-8")
@@ -2531,7 +2563,7 @@ def test_bas_runtime_contract_is_documented_and_guarded() -> None:
     assert "node_world_matrix(matrix_source, anim_pose=self._active_anim_pose)" in wgpu_source
     assert "render-queue bind matrix" in wgpu_source
 
-    modern_gl_source = inspect.getsource(gpu_renderer)
+    modern_gl_source = inspect.getsource(gpu_renderer_impl)
     assert "_bas_attachment_local_transform_np" in modern_gl_source
     assert "not bool(getattr(node, \"_gr_bas_attachment_layer\", False))" in modern_gl_source
     assert "BAS attachment skins are socket followers" in modern_gl_source
@@ -4342,7 +4374,7 @@ def test_moderngl_bas_head_skin_uses_root_local_vbo_and_socket_draw_matrix() -> 
     import numpy as np
     import pytest
 
-    from src.gui.rendering import gpu_renderer
+    from src.gui.rendering.gpu_core import renderer as gpu_renderer_impl
     from src.core.qt_core.geometry.model_data import ModelNode
     from src.gui.rendering.gpu_renderer import (
         _bas_attachment_local_transform_np,
@@ -4393,7 +4425,7 @@ def test_moderngl_bas_head_skin_uses_root_local_vbo_and_socket_draw_matrix() -> 
         np.asarray([(0.0, 0.0, 10.0), (0.0, 0.5, 10.5), (0.25, 0.0, 11.0)], dtype=np.float32),
         atol=1e-6,
     )
-    source = inspect.getsource(gpu_renderer)
+    source = inspect.getsource(gpu_renderer_impl)
     assert "if _skin_can_lbs:" in source
     assert "BAS attachment skins are socket followers" in source
 

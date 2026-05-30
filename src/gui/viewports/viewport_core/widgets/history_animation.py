@@ -8,6 +8,7 @@ from .snap_view_bar import *  # noqa: F401,F403
 
 
 class ViewportHistoryAnimationMixin:
+    @staticmethod
     def _state_changed(before_pos, before_rot, after_pos, after_rot, before_vertices=None, after_vertices=None) -> bool:
         values = tuple(before_pos) + tuple(before_rot) + tuple(after_pos) + tuple(after_rot)
         if any(not math.isfinite(float(v)) for v in values):

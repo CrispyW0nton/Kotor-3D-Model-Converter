@@ -836,20 +836,53 @@ class ViewportPickingHoverMixin:
         self._request_render(fast=True, reason=reason, overlay=True, selection=True)
 
     def _update_mesh_hover(self, event) -> None:
+        def clear_hover(reason: str) -> None:
+            clear_viewport_hover = getattr(self, "_clear_viewport_hover", None)
+            if callable(clear_viewport_hover):
+                clear_viewport_hover(reason=reason)
+                return
+            self._hovered_mesh_node = None
+            self._hovered_mesh_face_bounds = None
+            gpu_renderer = getattr(self, "_gpu_renderer", None)
+            if gpu_renderer is not None and hasattr(gpu_renderer, "hovered_node"):
+                gpu_renderer.hovered_node = None
+            mesh_hovered = getattr(self, "meshHovered", None)
+            emit = getattr(mesh_hovered, "emit", None)
+            if callable(emit):
+                emit(None)
+            request_render = getattr(self, "_request_render", None)
+            if callable(request_render):
+                request_render(fast=True, reason=reason, overlay=True, selection=True)
+
+        def set_hover(node, face_bounds, *, reason: str) -> None:
+            set_viewport_hover = getattr(self, "_set_viewport_hover", None)
+            if callable(set_viewport_hover):
+                set_viewport_hover(node, face_bounds, reason=reason)
+                return
+            self._hovered_mesh_node = node
+            self._hovered_mesh_face_bounds = face_bounds if node is not None else None
+            mesh_hovered = getattr(self, "meshHovered", None)
+            emit = getattr(mesh_hovered, "emit", None)
+            if callable(emit):
+                emit(node)
+            request_render = getattr(self, "_request_render", None)
+            if callable(request_render):
+                request_render(fast=True, reason=reason, overlay=True, selection=True)
+
         if not self.mesh_hover_enabled:
-            self._clear_viewport_hover(reason="mesh hover disabled")
+            clear_hover("mesh hover disabled")
             return
-        if self._mesh_hover_suppressed_for_animation():
-            self._clear_viewport_hover(reason="animation hover suppressed")
+        if hasattr(self, "_mesh_hover_suppressed_for_animation"):
+            animation_hover_suppressed = bool(self._mesh_hover_suppressed_for_animation())
+        elif hasattr(self, "_renderer"):
+            animation_hover_suppressed = getattr(self._renderer, "_anim_pose", None) is not None
+        else:
+            animation_hover_suppressed = False
+        if animation_hover_suppressed:
+            clear_hover("animation hover suppressed")
             return
         if self.model is None:
-            self._clear_viewport_hover(reason="mesh hover model cleared")
-            return
-        if (
-            self._suspend_mesh_hover_during_animation
-            and getattr(self._renderer, "_anim_pose", None) is not None
-        ):
-            self._clear_viewport_hover(reason="animation hover suspended")
+            clear_hover("mesh hover model cleared")
             return
         if self._transform_gizmo.hovered_handle or self._measurement_mode:
             return
@@ -873,6 +906,6 @@ class ViewportPickingHoverMixin:
                 node, face_bounds = hit
             else:
                 node = self._camera_hit_test(x, y) or self._light_hit_test(x, y) or self._helper_hit_test(x, y)
-        self._set_viewport_hover(node, face_bounds, reason="viewport hover changed")
+        set_hover(node, face_bounds, reason="viewport hover changed")
 
 __all__ = ("ViewportPickingHoverMixin",)

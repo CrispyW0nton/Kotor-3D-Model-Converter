@@ -8,6 +8,7 @@ from .snap_view_bar import *  # noqa: F401,F403
 
 
 class ViewportTransformCameraMixin:
+    @staticmethod
     def _snapshot_vertices(node):
         vertices = getattr(node, "vertices", None)
         if vertices is None:
