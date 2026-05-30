@@ -18,7 +18,8 @@ from src.gui.libtheme.theme_loader import ThemeLoader
 from src.gui.libtheme.theme_manager import ThemeManager
 from src.gui.libtheme.layout_manager import LayoutManager
 from src.gui.qt_lib.dialogs.qt_settings_dialog import QtSettingsDialog
-from src.gui.qt_lib.viewports.frame_renderer import ArcBallCamera, FrameRenderer
+from src.gui.camera.arcball_camera import ArcBallCamera
+from src.gui.rendering.frame_core.renderer import FrameRenderer
 from src.gui.qt_lib.viewports.qt_transform_typein_bar import transform_bar_stylesheet
 
 

@@ -130,24 +130,10 @@ def _apply_txi_from_textures_to_model(model, textures: dict) -> None:
     """
     if not textures:
         return
-    _extract_txi_from_tpc = None
-    _parse_txi_string = None
-    _apply_txi_to_node = None
-    for _import_path in ('src.gui.viewports.frame_renderer', 'src.gui.qt_lib.viewports.frame_renderer'):
-        try:
-            import importlib as _il
-            _m = _il.import_module(_import_path)
-            _extract_txi_from_tpc = getattr(_m, '_extract_txi_from_tpc', None)
-            _parse_txi_string     = getattr(_m, '_parse_txi_string', None)
-            _apply_txi_to_node    = getattr(_m, '_apply_txi_to_node', None)
-            if _extract_txi_from_tpc and _parse_txi_string and _apply_txi_to_node:
-                break
-        except ImportError:
-            pass
-    _have_txi_tools = bool(_extract_txi_from_tpc and _parse_txi_string and _apply_txi_to_node)
+    from src.gui.textures.tpc import _extract_txi_from_tpc
+    from src.gui.textures.txi import _apply_txi_to_node, _parse_txi_string
 
-    if not _have_txi_tools:
-        return
+    _have_txi_tools = True
 
     # Build tex_name → TXI string and alpha_test mappings from available sources.
     # FIX-ALPHATEST: Also capture per-texture alpha_test from TPC header (bytes 4-7).

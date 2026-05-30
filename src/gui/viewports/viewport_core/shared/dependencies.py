@@ -32,7 +32,8 @@ from src.gui.qt_lib.viewports.viewport_display import (
 )
 from src.gui.qt_lib.viewports.qt_uv_viewer import QtUVViewerWindow
 from src.gui.qt_lib.viewports.viewport_host import RendererSurfaceHost
-from src.gui.qt_lib.viewports.frame_renderer import ArcBallCamera, FrameRenderer
+from src.gui.camera.arcball_camera import ArcBallCamera
+from src.gui.rendering.frame_core.renderer import FrameRenderer
 from src.gui.qt_lib.viewports.viewport_navigation import (
     DEFAULT_VIEWPORT_NAVIGATION_PROFILE,
     has_modifier,
@@ -42,7 +43,7 @@ from src.gui.qt_lib.viewports.viewport_navigation import (
 from src.gui.qt_lib.gizmo.gizmo_mode import GizmoMode
 from src.gui.qt_lib.gizmo.transform_controller import TransformController
 from src.gui.qt_lib.gizmo.transform_gizmo import TransformGizmo
-from src.gui.qt_lib.gizmo.transform_math import multiply_quaternions, ray_from_mouse, rotate_vector
+from src.math.transform_math import multiply_quaternions, ray_from_mouse, rotate_vector
 from src.gui.qt_lib.viewports.qt_transform_typein_bar import QtTransformTypeInBar
 from src.gui.qt_lib.viewports.viewcube import (
     VIEWCUBE_MARGIN,
@@ -50,7 +51,7 @@ from src.gui.qt_lib.viewports.viewcube import (
     VIEWCUBE_MIN_CANVAS_W,
     ViewCubeWidget,
 )
-from src.gui.qt_lib.viewports.viewcube_math import (
+from src.math.viewcube_math import (
     ViewAction,
     action_from_view_name,
     target_for_action,

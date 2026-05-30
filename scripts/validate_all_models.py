@@ -41,7 +41,8 @@ def _validate_model(game: str, resref: str) -> dict[str, Any]:
         }
 
     try:
-        from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
+        from src.gui.camera.arcball_camera import ArcBallCamera
+        from src.gui.rendering.frame_core.renderer import FrameRenderer
 
         renderer = FrameRenderer(ArcBallCamera())
         renderer.set_model(model)
@@ -176,4 +177,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

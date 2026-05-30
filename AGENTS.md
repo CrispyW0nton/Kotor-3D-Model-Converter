@@ -99,7 +99,9 @@ if a new file under `src/gui/` imports tkinter.
 
 ## Qt imports
 
-- `src.gui.qt_lib.viewports.frame_renderer` - Tk-free rendering core.
+- `src.gui.rendering.frame_core.renderer` - Tk-free software frame-rendering backend.
+- `src.gui.camera.arcball_camera` - ArcBall camera state.
+- `src.gui.textures.tpc` / `src.gui.textures.txi` - TPC/TXI texture helpers.
 - `src.gui.qt_lib.viewports.viewport_display` - viewport display mode state.
 - `src.gui.qt_lib.viewports.viewport_navigation` - viewport navigation profiles.
 - `src.gui.qt_lib.viewports.qt_viewport` - Qt viewport widgets.
@@ -108,7 +110,7 @@ if a new file under `src/gui/` imports tkinter.
 
 Do not add `from .viewport import ...` anywhere; that shim no longer exists.
 Import `FrameRenderer`, `ArcBallCamera`, `_load_tpc_bytes`, `_is_tpc_data`,
-  `_clean_tex_name`, etc. through `src.gui.qt_lib.viewports.frame_renderer`.
+  `_clean_tex_name`, etc. through `src.math.frame_math`.
   Viewport display and navigation modules live under `src/gui/viewports/`;
   do not add new viewport-owned modules under `src/gui/rendering/`.
   The software frame-renderer backend lives under `src/gui/rendering/frame_core/`,

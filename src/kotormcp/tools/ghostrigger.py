@@ -444,12 +444,9 @@ async def handle_render_model(arguments: Dict[str, Any]) -> Dict[str, Any]:
         # modules from before the GUI package was grouped under src.gui.rendering.
         # Drop only those known aliases before importing the canonical modules.
         for _mod_name in (
-            "src.gui.rendering.gpu_renderer",
-            "src.gui.viewports.frame_renderer",
-            "src.gui.rendering",
-            "src.gui.qt_lib.rendering.gpu_renderer",
-            "src.gui.qt_lib.viewports.frame_renderer",
-            "src.gui.qt_lib.rendering",
+            "src.gui.rendering.gpu_core.renderer",
+            "src.gui.rendering.gpu_core.scene_helpers",
+            "src.gui.rendering.frame_core.renderer",
         ):
             _mod = sys.modules.get(_mod_name)
             _target = str(getattr(_mod, "_target", "") or "")
@@ -457,41 +454,10 @@ async def handle_render_model(arguments: Dict[str, Any]) -> Dict[str, Any]:
                 _mod_name == "src.gui.rendering" and getattr(_mod, "__path__", None) == []
             ):
                 sys.modules.pop(_mod_name, None)
-        _qt_lib = sys.modules.get("src.gui.qt_lib")
-        _aliases = getattr(_qt_lib, "_ALIASES", None)
-        if isinstance(_aliases, dict):
-            for _alias in list(_aliases):
-                if _alias.startswith("src.gui.rendering."):
-                    _aliases.pop(_alias, None)
-
-        import importlib.util as _importlib_util  # noqa: PLC0415
-
-        def _load_gui_module(_name: str, _rel_path: str):
-            _path = os.path.join(_project_root, _rel_path)
-            _spec = _importlib_util.spec_from_file_location(_name, _path)
-            if _spec is None or _spec.loader is None:
-                raise ImportError(f"Could not load {_name} from {_path}")
-            _module = _importlib_util.module_from_spec(_spec)
-            sys.modules[_name] = _module
-            _spec.loader.exec_module(_module)
-            return _module
-
-        _viewport_core = _load_gui_module(
-            "src.gui.viewports.frame_renderer",
-            os.path.join("src", "gui", "viewports", "frame_renderer.py"),
-        )
-        sys.modules["src.gui.viewport_core"] = _viewport_core
-        _gpu_renderer = _load_gui_module(
-            "src.gui.rendering.gpu_renderer",
-            os.path.join("src", "gui", "rendering", "gpu_renderer.py"),
-        )
-        sys.modules["src.gui.gpu_renderer"] = _gpu_renderer
-
-        GpuRenderer = _gpu_renderer.GpuRenderer
-        render_model_autoframe = _gpu_renderer.render_model_autoframe
-        ArcBallCamera = _viewport_core.ArcBallCamera
-        _load_tpc_bytes = _viewport_core._load_tpc_bytes
-        _is_tpc_data = _viewport_core._is_tpc_data
+        from src.gui.camera.arcball_camera import ArcBallCamera
+        from src.gui.rendering.gpu_core.renderer import GpuRenderer
+        from src.gui.rendering.gpu_core.scene_helpers import render_model_autoframe
+        from src.gui.textures.tpc import _is_tpc_data, _load_tpc_bytes
 
         # ── Build texture dict from model nodes + game library ─────────────────
         # Collect all texture names referenced by the model

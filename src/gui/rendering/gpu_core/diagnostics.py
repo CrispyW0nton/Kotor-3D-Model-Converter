@@ -155,7 +155,7 @@ Performance notes
   – The GPU path is ~300× faster for fully textured rendering.
 
 Triangle throughput benchmark is included at the bottom of this file
-(run directly: python -m src.gui.gpu_renderer benchmark).
+(run directly: python -m src.gui.rendering.gpu_renderer benchmark).
 
 References
 ----------

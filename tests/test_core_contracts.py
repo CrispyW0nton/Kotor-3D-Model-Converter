@@ -278,7 +278,7 @@ def test_wgpu_renderer_defers_uncached_uploads_without_caching_fallback_material
 def test_qt_viewport_grid_toggle_controls_cpu_and_gpu_paths() -> None:
     import inspect
 
-    from src.gui.qt_lib.viewports.frame_renderer import FrameRenderer
+    from src.gui.rendering.frame_core.renderer import FrameRenderer
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
@@ -318,7 +318,7 @@ def test_main_window_help_menu_uses_real_about_dialog() -> None:
 def test_qt_viewport_performance_overlay_stacks_above_stats_badge() -> None:
     import inspect
 
-    from src.gui.qt_lib.viewports.frame_renderer import FrameRenderer
+    from src.gui.rendering.frame_core.renderer import FrameRenderer
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     stats_source = inspect.getsource(FrameRenderer._draw_stats)
@@ -334,7 +334,7 @@ def test_qt_viewport_performance_overlay_stacks_above_stats_badge() -> None:
 def test_viewport_animation_hud_sits_under_model_stats_not_fps_overlay() -> None:
     import inspect
 
-    from src.gui.qt_lib.viewports.frame_renderer import FrameRenderer
+    from src.gui.rendering.frame_core.renderer import FrameRenderer
 
     stats_source = inspect.getsource(FrameRenderer._draw_stats)
 
@@ -455,7 +455,7 @@ def test_gpu_static_mesh_prebuild_uses_ram_and_chunked_uploads() -> None:
     from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
     from src.gui.qt_lib.rendering import gpu_renderer
     from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
-    from src.gui.qt_lib.viewports.frame_renderer import FrameRenderer
+    from src.gui.rendering.frame_core.renderer import FrameRenderer
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     node = ModelNode(
@@ -5688,7 +5688,8 @@ def test_quinn_control_bones_do_not_enter_viewport_skeleton_overlay() -> None:
 
     from PIL import Image, ImageDraw
 
-    from src.gui.qt_lib.viewports.frame_renderer import ArcBallCamera, FrameRenderer
+    from src.gui.camera.arcball_camera import ArcBallCamera
+    from src.gui.rendering.frame_core.renderer import FrameRenderer
     from src.unreal.quinn import QUINN_FBX, load_quinn_fbx_model, load_quinn_skeleton_asset
 
     if not QUINN_FBX.exists():
@@ -5847,7 +5848,8 @@ def test_unreal_viewport_hides_dummy_and_hook_helpers_from_bone_overlay() -> Non
     from PIL import Image, ImageDraw
 
     from src.core.qt_core.geometry.model_data import Animation, KotorModel, ModelNode
-    from src.gui.qt_lib.viewports.frame_renderer import ArcBallCamera, FrameRenderer
+    from src.gui.camera.arcball_camera import ArcBallCamera
+    from src.gui.rendering.frame_core.renderer import FrameRenderer
 
     root = ModelNode(name="root")
     pelvis = ModelNode(name="pelvis_g", position=(0.0, 0.0, 1.0))
@@ -5887,7 +5889,8 @@ def test_unreal_viewport_hidden_helper_selection_does_not_draw_gimbal() -> None:
     from PIL import Image, ImageDraw
 
     from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
-    from src.gui.qt_lib.viewports.frame_renderer import ArcBallCamera, FrameRenderer
+    from src.gui.camera.arcball_camera import ArcBallCamera
+    from src.gui.rendering.frame_core.renderer import FrameRenderer
 
     root = ModelNode(name="root")
     rootdummy = ModelNode(name="rootdummy", position=(0.0, 0.0, 1.0))
@@ -6422,7 +6425,7 @@ def test_gpu_vbo_splits_skin_bind_and_animated_input_space() -> None:
 
 
 def test_arcball_frame_bounds_expands_clip_range_for_large_assets() -> None:
-    from src.gui.qt_lib.viewports.frame_renderer import ArcBallCamera
+    from src.gui.camera.arcball_camera import ArcBallCamera
 
     camera = ArcBallCamera()
     camera.frame_bounds((-1200.0, -900.0, -200.0), (1200.0, 900.0, 200.0), reset_view=True)
@@ -6434,7 +6437,7 @@ def test_arcball_frame_bounds_expands_clip_range_for_large_assets() -> None:
 
 
 def test_arcball_zoom_tightens_near_clip_for_close_animation_inspection() -> None:
-    from src.gui.qt_lib.viewports.frame_renderer import ArcBallCamera
+    from src.gui.camera.arcball_camera import ArcBallCamera
 
     camera = ArcBallCamera()
     camera._near = 0.05

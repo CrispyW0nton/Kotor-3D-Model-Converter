@@ -383,6 +383,56 @@ def test_gui_root_only_keeps_central_qt_lib():
 
 
 
+def test_internal_imports_use_canonical_module_owners():
+    """Code should import owning modules directly instead of compatibility shims."""
+    shim_modules = {
+        "src.gui.camera.camera_math",
+        "src.gui.gizmo.transform_math",
+        "src.gui.rendering.frame_core.math_helpers",
+        "src.gui.rendering.gpu_core.math_helpers",
+        "src.gui.rendering.viewport_core",
+        "src.gui.rendering.viewport_display",
+        "src.gui.rendering.viewport_navigation",
+        "src.gui.qt_lib.gizmo.transform_math",
+        "src.gui.qt_lib.rendering.viewport_core",
+        "src.gui.qt_lib.rendering.viewport_display",
+        "src.gui.qt_lib.rendering.viewport_navigation",
+        "src.gui.qt_lib.viewports.frame_renderer",
+        "src.gui.qt_lib.viewports.viewcube_math",
+        "src.gui.viewports.frame_renderer",
+        "src.gui.viewports.viewcube_math",
+    }
+    scan_roots = [
+        _REPO_ROOT / "main.py",
+        _REPO_ROOT / "scripts",
+        _REPO_ROOT / "src",
+        _REPO_ROOT / "tests",
+    ]
+    offenders: list[tuple[pathlib.Path, int, str]] = []
+    for root in scan_roots:
+        paths = [root] if root.is_file() else sorted(root.rglob("*.py"))
+        for path in paths:
+            if any(part == "__pycache__" for part in path.parts):
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    mod = node.module or ""
+                    if mod in shim_modules:
+                        offenders.append((path, node.lineno, f"from {mod} import ..."))
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name in shim_modules:
+                            offenders.append((path, node.lineno, f"import {alias.name}"))
+    assert not offenders, (
+        "Import canonical owner modules instead of compatibility shims:\n  "
+        + "\n  ".join(
+            f"{path.relative_to(_REPO_ROOT)}:{lineno}: {stmt}"
+            for path, lineno, stmt in offenders
+        )
+    )
+
+
 def test_application_imports_use_central_qt_lib():
     """Runnable code should not import deleted root GUI modules."""
     old_roots = {
@@ -580,8 +630,8 @@ def test_viewport_core_imports_without_tkinter(monkeypatch):
     for mod_name in list(sys.modules):
         if mod_name == "src.gui.qt_lib" or mod_name.startswith("src.gui.qt_lib."):
             sys.modules.pop(mod_name, None)
-    sys.modules.pop("src.gui.viewports.frame_renderer", None)
-    importlib.import_module("src.gui.qt_lib.viewports.frame_renderer")
+    sys.modules.pop("src.gui.rendering.frame_core.renderer", None)
+    importlib.import_module("src.gui.rendering.frame_core.renderer")
 
 
 def test_fbx_sdk_loader_reports_missing_without_import_crash(monkeypatch):

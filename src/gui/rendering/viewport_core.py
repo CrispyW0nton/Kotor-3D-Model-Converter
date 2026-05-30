@@ -1,6 +1,6 @@
 """Compatibility shim for the viewport frame-rendering core.
 
-The implementation lives under :mod:`src.gui.viewports.frame_renderer`.
+The implementation lives under :mod:`src.gui.rendering.frame_core.renderer`.
 Rendering backends should not grow viewport interaction code in this package.
 """
 
@@ -9,9 +9,9 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
-from src.gui.viewports.frame_renderer import __all__ as __all__
+from src.gui.rendering.frame_core.renderer import __all__ as __all__
 
-_TARGET = "src.gui.viewports.frame_renderer"
+_TARGET = "src.gui.rendering.frame_core.renderer"
 
 
 def __getattr__(name: str) -> Any:

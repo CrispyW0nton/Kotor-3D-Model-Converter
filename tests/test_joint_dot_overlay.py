@@ -1100,7 +1100,8 @@ def _model_t407(name: str, child):
 
 def test_t407_animation_supermodel_mesh_helpers_are_not_visible():
     from core.qt_core.geometry.model_data import is_animation_supermodel
-    from src.gui.qt_lib.viewports.frame_renderer import ArcBallCamera, FrameRenderer
+    from src.gui.camera.arcball_camera import ArcBallCamera
+    from src.gui.rendering.frame_core.renderer import FrameRenderer
 
     model = _model_t407("s_male02", _mesh_node_t407("eyeRA"))
     model.animations = [object()]
@@ -1113,7 +1114,8 @@ def test_t407_animation_supermodel_mesh_helpers_are_not_visible():
 
 
 def test_t407_normal_head_inner_geometry_still_renders():
-    from src.gui.qt_lib.viewports.frame_renderer import ArcBallCamera, FrameRenderer
+    from src.gui.camera.arcball_camera import ArcBallCamera
+    from src.gui.rendering.frame_core.renderer import FrameRenderer
 
     model = _model_t407("pmhc01", _mesh_node_t407("eyeRA"))
 

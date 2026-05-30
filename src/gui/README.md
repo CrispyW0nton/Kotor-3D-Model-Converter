@@ -9,7 +9,7 @@ GUI code outside the category folders should import through the stable
 
 ```python
 from src.gui.qt_lib.panels.qt_common_panels import QtToolPanel
-from src.gui.qt_lib.viewports.frame_renderer import FrameRenderer
+from src.gui.rendering.frame_core.renderer import FrameRenderer
 ```
 
 The `src.gui.qt_lib.<category>.<module>` aliases mirror the grouped

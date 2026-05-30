@@ -1,9 +1,7 @@
 """Lazy-composed viewport frame renderer public implementation module.
 
 The large historical renderer body is split across focused frame_core modules.
-Import through ``src.gui.qt_lib.viewports.frame_renderer`` or
-``src.gui.viewports.frame_renderer`` so this module remains an implementation
-detail.
+Import this backend directly when code needs the software ``FrameRenderer``.
 """
 
 from __future__ import annotations
