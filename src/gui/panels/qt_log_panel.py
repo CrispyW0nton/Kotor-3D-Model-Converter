@@ -58,14 +58,14 @@ class PythonLogSyntaxHighlighter(QtGui.QSyntaxHighlighter):
         super().__init__(document)
         self._colors = {
             "time": QtGui.QColor(C["accent2"]),
-            "debug": QtGui.QColor("#7f8c8d"),
+            "debug": QtGui.QColor(C["text2"]),
             "info": QtGui.QColor(C["text2"]),
             "success": QtGui.QColor(C["success"]),
             "warning": QtGui.QColor(C["warning"]),
             "error": QtGui.QColor(C["error"]),
-            "path": QtGui.QColor("#8ab4f8"),
-            "call": QtGui.QColor("#c792ea"),
-            "line": QtGui.QColor("#f6c177"),
+            "path": QtGui.QColor(C["accent2"]),
+            "call": QtGui.QColor(C["accent"]),
+            "line": QtGui.QColor(C["gold"]),
         }
         self._rules = [
             (re.compile(r"^\[\d{2}:\d{2}:\d{2}\]"), "time"),
@@ -456,7 +456,7 @@ class QtLogPanel(QtWidgets.QWidget):
         rows = []
         for stamp, msg, level in self._lines:
             css = {
-                "debug": "#7f8c8d",
+                "debug": C["text2"],
                 "info": C["text2"],
                 "success": C["success"],
                 "warning": C["warning"],

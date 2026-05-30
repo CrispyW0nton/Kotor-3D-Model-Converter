@@ -884,7 +884,7 @@ class ViewportDragInteractionsMixin:
     def _draw_hovered_mesh_outline(self, draw, w: int, h: int) -> None:
         if not self.mesh_hover_enabled:
             return
-        if QtViewportWidget._mesh_hover_suppressed_for_animation(self):
+        if self._mesh_hover_suppressed_for_animation():
             return
         node = getattr(self, "_hovered_mesh_node", None)
         if node is None or getattr(node, "_gr_hidden", False):

@@ -839,8 +839,8 @@ class ViewportPickingHoverMixin:
         if not self.mesh_hover_enabled:
             self._clear_viewport_hover(reason="mesh hover disabled")
             return
-        if QtViewportWidget._mesh_hover_suppressed_for_animation(self):
-            QtViewportWidget._clear_viewport_hover(self, reason="animation hover suppressed")
+        if self._mesh_hover_suppressed_for_animation():
+            self._clear_viewport_hover(reason="animation hover suppressed")
             return
         if self.model is None:
             self._clear_viewport_hover(reason="mesh hover model cleared")

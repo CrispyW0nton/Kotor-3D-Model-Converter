@@ -48,7 +48,7 @@ class ViewportDisplayControlsMixin:
     @staticmethod
     def _renderer_label_for_backend(backend: object) -> str:
         try:
-            return renderer_backend_label(QtViewportWidget._normalized_renderer_backend(backend))
+            return renderer_backend_label(normalize_renderer_backend(getattr(backend, "value", backend)))
         except Exception:
             return str(backend or "Unknown Renderer").replace("_", " ").title()
 
