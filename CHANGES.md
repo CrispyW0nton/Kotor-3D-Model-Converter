@@ -11,6 +11,10 @@ For each completed change, add a dated entry with:
 
 ## 2026-05-30
 
+- Agent viewport structure guidance: Documented the new Qt viewport split in `AGENTS.md`, including the lazy `qt_viewport.py` and `viewport_core/widget.py` facades, the `viewport_core/shared/` helper modules, the `viewport_core/widgets/` widget and mixin modules, and the rule that new viewport widgets/features must follow this structure instead of rebuilding a giant viewport file. No roadmap task ID applies.
+  Affected areas: `AGENTS.md`, viewport maintenance guidance.
+  Verification: Documentation-only change; reviewed the updated guidance against the current viewport module layout.
+
 - Qt viewport widget mixin split: Broke the remaining large `viewport_core/widgets/viewport_widget.py` class body into focused widget mixin modules for state helpers, construction, scene/model loading, display controls, camera workflow, measurement/type-in controls, transform/camera helpers, selection/mesh tools, history/animation, event navigation, rendering, overlay layers, picking/hover, drag interactions, and resource/cache helpers. `viewport_widget.py` now keeps the Qt class shell, signals, initialization state, and mixin composition while preserving the public `QtViewportWidget` import. No roadmap task ID applies.
   Affected areas: `src/gui/viewports/viewport_core/widgets/`, `src/gui/viewports/qt_viewport.py`, viewport source-contract coverage.
   Verification: `python -m py_compile` over every `src/gui/viewports/viewport_core/**/*.py` module plus `src/gui/viewports/qt_viewport.py` and touched tests; `python -m pytest -q tests/test_skeleton_template_hud_wiring.py tests/test_guide_edit_persistence_wiring.py tests/test_head_camera_preset.py`; targeted viewport/core contracts for render loop, GPU overlay paths, grid state, mesh picking/hover, animation overlay skip, statusbar render state, and cinematic camera workflow; Qt facade/import checks; toolbar/widget checks; shared display-state construction check; method-module smoke confirmed representative `QtViewportWidget` methods now resolve from the intended mixin modules.
