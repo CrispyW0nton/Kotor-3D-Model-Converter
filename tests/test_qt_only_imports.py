@@ -116,18 +116,65 @@ def test_theme_precache_uses_startup_logger_instead_of_direct_console_prints():
     assert "Theme precache built %s in %.1f ms" in source
 
 
+def test_startup_log_cleanup_removes_prior_run_logs(monkeypatch, tmp_path):
+    import main
+
+    log_dir = tmp_path / "Logs"
+    log_dir.mkdir()
+    for name in (
+        "ghostrigger_2026-05-29_231500.log",
+        "pykotor.log",
+        "debug_pykotor.LOG",
+    ):
+        (log_dir / name).write_text("old run\n", encoding="utf-8")
+    (log_dir / "keep.txt").write_text("not a log\n", encoding="utf-8")
+    archive_dir = log_dir / "archive"
+    archive_dir.mkdir()
+    (archive_dir / "nested.log").write_text("not in root\n", encoding="utf-8")
+
+    monkeypatch.setattr(main, "_LOG_DIR", str(log_dir))
+
+    assert main._clear_startup_logs() == 3
+    assert [path.name for path in log_dir.iterdir() if path.is_file() and path.suffix.lower() == ".log"] == []
+    assert (log_dir / "keep.txt").exists()
+    assert (archive_dir / "nested.log").exists()
+
+
+def test_exit_log_prune_keeps_only_current_run_log(monkeypatch, tmp_path):
+    import main
+
+    log_dir = tmp_path / "Logs"
+    log_dir.mkdir()
+    current = log_dir / "ghostrigger_2026-05-30_130000.log"
+    stale = log_dir / "ghostrigger_2026-05-30_125900.log"
+    pykotor = log_dir / "pykotor.log"
+    for path in (current, stale, pykotor):
+        path.write_text("run\n", encoding="utf-8")
+    (log_dir / "notes.txt").write_text("keep\n", encoding="utf-8")
+
+    monkeypatch.setattr(main, "_LOG_DIR", str(log_dir))
+
+    assert main._prune_non_current_logs(str(current)) == 2
+    assert current.exists()
+    assert not stale.exists()
+    assert not pykotor.exists()
+    assert (log_dir / "notes.txt").exists()
+
+
 def test_log_panel_embeds_python_terminal():
     """The bottom output area should split log output and a live Python console."""
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     pytest.importorskip("PySide6")
     from PySide6 import QtWidgets
-    from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel, QtPythonTerminalPanel
+    from src.gui.qt_lib.panels.qt_log_panel import PythonLogSyntaxHighlighter, QtLogPanel, QtPythonTerminalPanel
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     panel = QtLogPanel()
     try:
         assert panel.content_splitter.count() == 2
         assert isinstance(panel.terminal, QtPythonTerminalPanel)
+        assert isinstance(panel.highlighter, PythonLogSyntaxHighlighter)
+        assert panel.text.objectName() == "PythonLogInspector"
         assert panel.save_button.parent().objectName() == "LogFooter"
         assert panel.terminal.run_button.parent().objectName() == "PythonTerminalInputRow"
         for button in (panel.save_button, panel.copy_button, panel.clear_button):
@@ -180,6 +227,42 @@ def test_log_panel_embeds_python_terminal():
         panel.terminal._execute_input()
         assert "3" in panel.terminal.output.toPlainText()
     finally:
+        panel.deleteLater()
+
+
+def test_log_panel_handler_surfaces_python_exceptions():
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    pytest.importorskip("PySide6")
+    from PySide6 import QtWidgets
+    from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel, QtLogPanelHandler
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtLogPanel()
+    handler = QtLogPanelHandler(panel)
+    try:
+        panel.show()
+        app.processEvents()
+        try:
+            raise RuntimeError("tool inspector crash")
+        except RuntimeError:
+            record = logging.LogRecord(
+                name="tests.log_inspector",
+                level=logging.ERROR,
+                pathname="tests/test_qt_only_imports.py",
+                lineno=1,
+                msg="Exception while running inspector",
+                args=(),
+                exc_info=sys.exc_info(),
+            )
+            handler.emit(record)
+        app.processEvents()
+        text = panel.get_text()
+        assert "ERROR  tests.log_inspector  Exception while running inspector" in text
+        assert "Traceback (most recent call last):" in text
+        assert "RuntimeError: tool inspector crash" in text
+        assert panel.text.hasFocus()
+    finally:
+        handler.close()
         panel.deleteLater()
 
 

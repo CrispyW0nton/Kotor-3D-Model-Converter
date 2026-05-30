@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import codeop
 import contextlib
+import html
 import io
 import logging
 from pathlib import Path
+import re
 import sys
 import traceback
 from typing import Optional
@@ -16,6 +18,117 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from src.gui.qt_lib.assets.qt_theme import C, icon
 
 log = logging.getLogger(__name__)
+
+
+_EXCEPTION_RE = re.compile(r"\b(?:Traceback \(most recent call last\)|[A-Za-z_][\w.]*Error:|Exception:|CRITICAL|ERROR)\b")
+
+
+def _normalise_log_level(level: str | int) -> str:
+    if isinstance(level, int):
+        if level >= logging.ERROR:
+            return "error"
+        if level >= logging.WARNING:
+            return "warning"
+        if level <= logging.DEBUG:
+            return "debug"
+        return "info"
+    text = str(level or "info").strip().lower()
+    if text in {"critical", "fatal", "exception", "error"}:
+        return "error"
+    if text in {"warn", "warning"}:
+        return "warning"
+    if text in {"success", "debug"}:
+        return text
+    return "info"
+
+
+def _detect_log_level(message: str, level: str | int = "info") -> str:
+    normalised = _normalise_log_level(level)
+    if normalised != "info":
+        return normalised
+    if _EXCEPTION_RE.search(message):
+        return "error"
+    return normalised
+
+
+class PythonLogSyntaxHighlighter(QtGui.QSyntaxHighlighter):
+    """Syntax highlighting for Python logging output and tracebacks."""
+
+    def __init__(self, document: QtGui.QTextDocument):
+        super().__init__(document)
+        self._colors = {
+            "time": QtGui.QColor(C["accent2"]),
+            "debug": QtGui.QColor("#7f8c8d"),
+            "info": QtGui.QColor(C["text2"]),
+            "success": QtGui.QColor(C["success"]),
+            "warning": QtGui.QColor(C["warning"]),
+            "error": QtGui.QColor(C["error"]),
+            "path": QtGui.QColor("#8ab4f8"),
+            "call": QtGui.QColor("#c792ea"),
+            "line": QtGui.QColor("#f6c177"),
+        }
+        self._rules = [
+            (re.compile(r"^\[\d{2}:\d{2}:\d{2}\]"), "time"),
+            (re.compile(r"\bDEBUG\b"), "debug"),
+            (re.compile(r"\bINFO\b"), "info"),
+            (re.compile(r"\bSUCCESS\b"), "success"),
+            (re.compile(r"\b(?:WARNING|WARN)\b"), "warning"),
+            (re.compile(r"\b(?:ERROR|CRITICAL|FATAL)\b"), "error"),
+            (re.compile(r"Traceback \(most recent call last\):"), "error"),
+            (re.compile(r"\b[A-Za-z_][\w.]*Error:"), "error"),
+            (re.compile(r"\b(?:Exception|RuntimeError|ValueError|ImportError|TypeError|AttributeError):"), "error"),
+            (re.compile(r'File ".*?", line \d+'), "path"),
+            (re.compile(r"\bline \d+\b"), "line"),
+            (re.compile(r"\bin [A-Za-z_][\w.<>]*"), "call"),
+        ]
+
+    def _format(self, color_name: str, *, bold: bool = False) -> QtGui.QTextCharFormat:
+        fmt = QtGui.QTextCharFormat()
+        fmt.setForeground(self._colors[color_name])
+        if bold:
+            fmt.setFontWeight(QtGui.QFont.Bold)
+        return fmt
+
+    def highlightBlock(self, text: str) -> None:  # noqa: N802
+        block_level = ""
+        if re.search(r"\b(?:ERROR|CRITICAL|FATAL)\b|Traceback \(most recent call last\):|[A-Za-z_][\w.]*Error:", text):
+            block_level = "error"
+        elif re.search(r"\b(?:WARNING|WARN)\b", text):
+            block_level = "warning"
+        elif re.search(r"\bSUCCESS\b", text):
+            block_level = "success"
+        elif re.search(r"\bDEBUG\b", text):
+            block_level = "debug"
+        if block_level:
+            self.setFormat(0, len(text), self._format(block_level))
+
+        for pattern, color_name in self._rules:
+            fmt = self._format(color_name, bold=color_name in {"error", "warning"})
+            for match in pattern.finditer(text):
+                self.setFormat(match.start(), match.end() - match.start(), fmt)
+
+
+class _GuiLogEmitter(QtCore.QObject):
+    record = QtCore.Signal(str, str)
+
+
+class QtLogPanelHandler(logging.Handler):
+    """Qt-safe logging handler that forwards Python log records to a log panel."""
+
+    def __init__(self, panel: "QtLogPanel"):
+        super().__init__(logging.DEBUG)
+        self.panel = panel
+        self.emitter = _GuiLogEmitter(panel)
+        self.emitter.record.connect(panel.log)
+        self.setFormatter(logging.Formatter("%(levelname)s  %(name)s  %(message)s"))
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            message = self.format(record)
+            level = _normalise_log_level(record.levelno)
+            self.emitter.record.emit(message, level)
+        except Exception:
+            self.handleError(record)
 
 
 class _PythonInput(QtWidgets.QLineEdit):
@@ -286,10 +399,13 @@ class QtLogPanel(QtWidgets.QWidget):
         self.copy_button.clicked.connect(self._copy_to_clipboard)
         self.clear_button.clicked.connect(self.clear)
 
-        self.text = QtWidgets.QTextEdit()
+        self.text = QtWidgets.QPlainTextEdit()
         self.text.setReadOnly(True)
         self.text.setMinimumHeight(0)
         self.text.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self.text.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        self.text.setObjectName("PythonLogInspector")
+        self.highlighter = PythonLogSyntaxHighlighter(self.text.document())
 
         self.log_footer = QtWidgets.QFrame()
         self.log_footer.setObjectName("LogFooter")
@@ -325,13 +441,32 @@ class QtLogPanel(QtWidgets.QWidget):
 
     def log(self, msg: str, level: str = "info") -> None:
         stamp = QtCore.QTime.currentTime().toString("HH:mm:ss")
+        level = _detect_log_level(msg, level)
         self._lines.append((stamp, msg, level))
         if len(self._lines) > self.MAX_LOG_LINES:
             self._lines = self._lines[-self.MAX_LOG_LINES :]
         self._render()
+        if level == "error":
+            self._surface_error_log()
 
     def get_text(self) -> str:
         return "\n".join(f"[{stamp}] {msg}" for stamp, msg, _level in self._lines)
+
+    def get_html(self) -> str:
+        rows = []
+        for stamp, msg, level in self._lines:
+            css = {
+                "debug": "#7f8c8d",
+                "info": C["text2"],
+                "success": C["success"],
+                "warning": C["warning"],
+                "error": C["error"],
+            }.get(level, C["text2"])
+            rows.append(
+                f'<div class="log-row {level}"><span class="stamp">[{html.escape(stamp)}]</span> '
+                f'<span style="color:{css}">{html.escape(msg)}</span></div>'
+            )
+        return "\n".join(rows)
 
     def clear(self) -> None:
         self._lines.clear()
@@ -342,21 +477,15 @@ class QtLogPanel(QtWidgets.QWidget):
         self.content_splitter.setVisible(not self._collapsed)
 
     def _render(self) -> None:
-        colors = {
-            "info": C["text2"],
-            "success": C["success"],
-            "warning": C["warning"],
-            "error": C["error"],
-        }
-        html = []
-        for stamp, msg, level in self._lines:
-            color = colors.get(level, C["text2"])
-            html.append(
-                f'<span style="color:{C["accent2"]}; font-size:8pt">[{stamp}]</span> '
-                f'<span style="color:{color}">{msg}</span>'
-            )
-        self.text.setHtml("<br>".join(html))
+        self.text.setPlainText(self.get_text())
         self.text.moveCursor(QtGui.QTextCursor.End)
+
+    def _surface_error_log(self) -> None:
+        if self._collapsed:
+            self._toggle_collapse()
+        self.content_splitter.show()
+        self.text.setFocus(QtCore.Qt.OtherFocusReason)
+        self.text.raise_()
 
     def _copy_to_clipboard(self) -> None:
         QtWidgets.QApplication.clipboard().setText(self.get_text())
@@ -376,4 +505,4 @@ class QtLogPanel(QtWidgets.QWidget):
             log.error("Log save failed: %s", exc)
 
 
-__all__ = ["QtLogPanel", "QtPythonTerminalPanel"]
+__all__ = ["PythonLogSyntaxHighlighter", "QtLogPanel", "QtLogPanelHandler", "QtPythonTerminalPanel"]

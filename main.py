@@ -4,13 +4,14 @@ GhostRigger-K1-K2 – Entry Point
 
 Logging policy
 --------------
-Every session writes a rotating log to  <app_dir>/Logs/ghostrigger_<date>.log
+Every session writes a fresh log to  <app_dir>/Logs/ghostrigger_<date>.log
 All logging.* output (DEBUG and above) is captured, plus:
   - Unhandled Python exceptions   (sys.excepthook)
   - Graceful on-exit flush        (atexit)
 
 The Logs/ folder is created automatically if it does not exist.
-Old log files beyond LOG_KEEP_FILES are auto-rotated (newest kept).
+Existing log files are cleared at startup so only the current application
+run leaves logs behind.
 
 History
 -------
@@ -27,8 +28,7 @@ sys.path.insert(0, _APP_DIR)
 
 # ── Logs folder ───────────────────────────────────────────────────────────
 _LOG_DIR        = os.path.join(_APP_DIR, "Logs")
-_LOG_KEEP_FILES = 20          # keep the 20 most-recent session logs
-_LOG_MAX_BYTES  = 10_000_000  # 10 MB per file before rotation
+_CURRENT_LOGFILE: str | None = None
 
 
 def _env_enabled(name: str, default: bool = False) -> bool:
@@ -131,21 +131,43 @@ def _make_log_dir():
               file=sys.stderr)
 
 
-def _rotate_old_logs():
-    """Delete oldest log files when more than _LOG_KEEP_FILES exist."""
+def _clear_startup_logs() -> int:
+    """Delete prior application log files before the current run starts."""
+    removed = 0
     try:
-        files = sorted(
-            [f for f in os.listdir(_LOG_DIR) if f.startswith("ghostrigger_") and f.endswith(".log")],
-            key=lambda f: os.path.getmtime(os.path.join(_LOG_DIR, f))
-        )
-        while len(files) >= _LOG_KEEP_FILES:
-            oldest = files.pop(0)
+        for entry in os.scandir(_LOG_DIR):
+            if not entry.is_file() or not entry.name.lower().endswith(".log"):
+                continue
             try:
-                os.remove(os.path.join(_LOG_DIR, oldest))
+                os.remove(entry.path)
+                removed += 1
             except OSError:
                 pass
     except Exception:
         pass
+    return removed
+
+
+def _prune_non_current_logs(current_logfile: str | None) -> int:
+    """Delete stale log files while preserving the current run log."""
+    if not current_logfile:
+        return 0
+    current_path = os.path.abspath(current_logfile)
+    removed = 0
+    try:
+        for entry in os.scandir(_LOG_DIR):
+            if not entry.is_file() or not entry.name.lower().endswith(".log"):
+                continue
+            if os.path.abspath(entry.path) == current_path:
+                continue
+            try:
+                os.remove(entry.path)
+                removed += 1
+            except OSError:
+                pass
+    except Exception:
+        pass
+    return removed
 
 
 def _setup_logging():
@@ -156,7 +178,7 @@ def _setup_logging():
     Returns the path of the current session log file.
     """
     _make_log_dir()
-    _rotate_old_logs()
+    _clear_startup_logs()
 
     stamp   = datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S")
     logfile = os.path.join(_LOG_DIR, f"ghostrigger_{stamp}.log")
@@ -178,6 +200,9 @@ def _setup_logging():
         print(f"[GhostRigger] WARNING: cannot open log file {logfile}: {e}",
               file=sys.stderr)
         logfile = None
+
+    global _CURRENT_LOGFILE
+    _CURRENT_LOGFILE = logfile
 
     # ── Console handler: INFO+ ────────────────────────────────────────────
     sh = logging.StreamHandler(sys.stderr)
@@ -233,6 +258,7 @@ def _install_atexit_flush():
     def _atexit_flush():
         _log.info("GhostRigger atexit flush.")
         _flush_all_handlers()
+        _prune_non_current_logs(_CURRENT_LOGFILE)
 
     atexit.register(_atexit_flush)
 

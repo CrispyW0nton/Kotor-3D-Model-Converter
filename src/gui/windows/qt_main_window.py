@@ -37,7 +37,7 @@ except Exception:  # pragma: no cover - defensive fallback for unusual PySide in
 
 from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
 from src.gui.qt_lib.panels.qt_library_panel import enrich_library_rows, enrich_library_rows_with_resource_metadata
-from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel
+from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel, QtLogPanelHandler
 from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
 from src.gui.qt_lib.panels.qt_camera_panel import QtCameraPanel
 from src.gui.qt_lib.panels.qt_mesh_tools_panel import QtMeshToolsPanel
@@ -1367,6 +1367,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         self._resource_manager = None
         self._resource_manager_dirs: tuple[str, str] = ("", "")
         self._progress_toast: Optional[QtProgressToast] = None
+        self._gui_log_handler: Optional[QtLogPanelHandler] = None
         self._pending_gpu_upload_model_id = 0
         self._pending_gpu_upload_total = 0
         self._texture_dir = ""
@@ -3447,6 +3448,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
 
         self.log_panel = QtLogPanel(self)
         self.log_panel.setMinimumHeight(96)
+        self._install_gui_log_handler()
         self._configure_python_terminal_context()
         vertical_splitter.addWidget(self.log_panel)
         vertical_splitter.setStretchFactor(0, 1)
@@ -9645,11 +9647,28 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
         if not self._prompt_save_dirty_scene():
             event.ignore()
             return
+        self._remove_gui_log_handler()
         try:
             self._matrix_engine.stop()
         except Exception:
             pass
         super().closeEvent(event)
+
+    def _install_gui_log_handler(self) -> None:
+        if self._gui_log_handler is not None or not hasattr(self, "log_panel"):
+            return
+        handler = QtLogPanelHandler(self.log_panel)
+        handler.setLevel(logging.WARNING)
+        logging.getLogger().addHandler(handler)
+        self._gui_log_handler = handler
+
+    def _remove_gui_log_handler(self) -> None:
+        handler = self._gui_log_handler
+        if handler is None:
+            return
+        logging.getLogger().removeHandler(handler)
+        handler.close()
+        self._gui_log_handler = None
 
     def _log(self, msg: str, level: str = "info"):
         if hasattr(self, "log_panel"):
