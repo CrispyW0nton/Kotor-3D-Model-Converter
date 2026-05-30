@@ -6559,7 +6559,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 SuperModelResolver.configure(mgr)
             with self._animation_resolution_context(model, inheritance_game, inheritance_supermodel):
                 engine = AnimationEngine(model)
-                entries = engine.list_all_animations()
+                entries = self._filter_animation_browser_entries(model, engine.list_all_animations())
         except Exception:
             log.debug("Inherited animation panel load failed", exc_info=True)
             return
@@ -6611,6 +6611,22 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             "attachment": "Attachment / Weapon",
         }.get(self._animation_source_key(), "Body")
 
+    @staticmethod
+    def _is_head_animation_slot(anim_name: str) -> bool:
+        key = str(anim_name or "").strip().lower()
+        return key.startswith(("talk", "tlk", "listen", "look"))
+
+    def _model_is_head_animation_source(self, model) -> bool:
+        if model is None:
+            return False
+        try:
+            from src.core.qt_core.geometry.model_data import CharacterMode, detect_character_mode
+
+            return detect_character_mode(model) == CharacterMode.HEAD
+        except Exception:
+            name = str(getattr(model, "name", "") or "").lower()
+            return name.startswith(("pmh", "pfh")) or name.endswith("head")
+
     def _animation_source_model(self, fallback_model=None):
         source = self._animation_source_key()
         if source == "body":
@@ -6624,12 +6640,29 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
                 model = getattr(self, attr, None)
                 if model is not None:
                     return model
+            for model in (fallback_model, getattr(self, "_current_model", None)):
+                if self._model_is_head_animation_source(model):
+                    return model
             return None
         for attr in ("_current_attachment_model", "_current_weapon_model", "_attached_weapon_model", "_attachment_model"):
             model = getattr(self, attr, None)
             if model is not None:
                 return model
         return None
+
+    def _filter_animation_browser_entries(self, model, entries: list[dict]) -> list[dict]:
+        if self._animation_source_key() != "head" or not self._model_is_head_animation_source(model):
+            return entries
+        filtered: list[dict] = []
+        for entry in entries:
+            inherited = bool(entry.get("inherited"))
+            source_scope = str(entry.get("source_scope") or "").lower()
+            source_type = str(entry.get("source_type") or "").lower()
+            if inherited or source_scope == "inherited" or source_type == "inherited":
+                if not self._is_head_animation_slot(str(entry.get("name") or "")):
+                    continue
+            filtered.append(entry)
+        return filtered
 
     def _handle_bas_mode_changed(self, mode: str) -> None:
         mode_key = str(mode or "headless_body").strip().lower()

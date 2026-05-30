@@ -4020,6 +4020,76 @@ def test_qt_animations_panel_exposes_animation_source_selector() -> None:
     assert panel.selected_animation_source() == "attachment"
 
 
+def test_main_window_head_animation_source_accepts_standalone_head() -> None:
+    from src.core.geometry.model_data import KotorModel
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    class Panel:
+        def selected_animation_source(self) -> str:
+            return "head"
+
+    window = QtGhostRiggerMainWindow.__new__(QtGhostRiggerMainWindow)
+    window.animations_panel = Panel()
+    window._current_head_model = None
+    window._current_model = KotorModel(name="PMHC01", supermodel="S_Female02")
+
+    assert window._animation_source_model() is window._current_model
+
+    window._current_model = KotorModel(name="PMBAM", supermodel="S_Male02")
+
+    assert window._animation_source_model() is None
+
+
+def test_main_window_loads_inherited_animations_for_standalone_head() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.core.animation.animation_engine import SuperModelResolver
+    from src.core.geometry.model_data import Animation, KotorModel
+    from src.gui.qt_lib.panels.qt_animation_panel import ANIMATION_NAME_ROLE, QtAnimationsPanel
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    SuperModelResolver.clear_cache()
+    SuperModelResolver.configure(None)
+    SuperModelResolver.prime_cache(
+        "S_Female02",
+        KotorModel(
+            name="S_Female02",
+            animations=[
+                Animation(name="b5a1", length=1.0),
+                Animation(name="lookr", length=1.0),
+                Animation(name="tlknorm", length=1.0),
+                Animation(name="walk", length=1.0),
+            ],
+        ),
+    )
+    try:
+        head = KotorModel(name="PMHC01", supermodel="S_Female02")
+        head.animations = [Animation(name="custom_face_pose", length=1.0)]
+        window = QtGhostRiggerMainWindow.__new__(QtGhostRiggerMainWindow)
+        window.animations_panel = QtAnimationsPanel()
+        window.animations_panel.set_animation_source("head")
+        window._current_model = head
+        window._current_head_model = None
+        window._current_game = "K1"
+        window._get_resource_manager = lambda: None
+
+        window._load_animation_panel_model(head)
+
+        assert window.animations_panel.select_animation("tlknorm") is True
+        assert "Inherited from S_Female02" in window.animations_panel.listbox.currentItem().text()
+        shown = {
+            window.animations_panel.listbox.item(index).data(ANIMATION_NAME_ROLE)
+            for index in range(window.animations_panel.listbox.count())
+        }
+        assert shown == {"custom_face_pose", "lookr", "tlknorm"}
+    finally:
+        SuperModelResolver.clear_cache()
+        SuperModelResolver.configure(None)
+
+
 def test_body_attachment_panel_exposes_bas_slots_and_attach_signal() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
