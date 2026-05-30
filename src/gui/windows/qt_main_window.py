@@ -82,7 +82,7 @@ from src.gui.qt_lib.dialogs.qt_settings_dialog import QtSettingsDialog, save_set
 from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow
 from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditorWindow
-from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
+from src.gui.qt_lib.viewports.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
 from src.gui.qt_lib.rendering.hardware_info import collect_hardware_diagnostics
 from src.systems.bas.attachment_alignment import (
     default_bas_attachment_transform,
@@ -784,7 +784,7 @@ class LibraryBatchExportWorker(QtCore.QObject):
                         MDLAsciiWriter().write(model, os.path.join(self.out_dir, f"{resref}.mdl"))
                         ok += 1
                     elif self.fmt == "tga":
-                        from src.gui.qt_lib.rendering.viewport_core import _load_tpc_bytes
+                        from src.gui.qt_lib.viewports.frame_renderer import _load_tpc_bytes
 
                         tex_names = {
                             str(getattr(node, "texture", "") or "").strip()
@@ -3704,7 +3704,7 @@ class QtGhostRiggerMainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.critical(self, "Extract", str(exc))
 
     def _extract_model_resource(self, row: dict, out_dir: str) -> list[str]:
-        from src.gui.qt_lib.rendering.viewport_core import _is_tpc_data
+        from src.gui.qt_lib.viewports.frame_renderer import _is_tpc_data
 
         mgr = self._get_resource_manager()
         if mgr is None:

@@ -39,7 +39,7 @@ from src.gui.rendering.renderer_performance import (
 from src.gui.rendering.renderer_profiler import RendererProfiler
 from src.gui.rendering.renderer_settings import RendererSettings
 from src.gui.rendering.picking import PickHit
-from src.gui.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions, normalize_display_mode
+from src.gui.viewports.viewport_display import ViewportDisplayMode, ViewportDisplayOptions, normalize_display_mode
 from src.gui.lighting.light_gizmo_renderer import LIGHT_HELPER_COLORS
 
 log = logging.getLogger(__name__)

@@ -156,7 +156,7 @@ def test_gpu_vbo_handles_module_mesh_without_uvs() -> None:
 
 def test_k1_m02aa_01a_module_model_loads_and_renders_without_crashing() -> None:
     from src.core.qt_core.game.kotor_loader import load_model_from_bytes
-    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
+    from src.gui.qt_lib.viewports.frame_renderer import ArcBallCamera, FrameRenderer
 
     mdl, mdx = _raw_model("k1", "m02aa_01a")
     model = load_model_from_bytes(mdl, mdx)
@@ -1122,7 +1122,7 @@ def test_gpu_renderer_uploads_skin_node_local_palette() -> None:
 
 def test_hover_overlay_skin_vertices_match_gpu_palette_path(monkeypatch) -> None:
     from src.core.qt_core.geometry.model_data import BoneWeight, VertexSkinData
-    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
+    from src.gui.qt_lib.viewports.frame_renderer import ArcBallCamera, FrameRenderer
 
     root = SimpleNamespace(
         name="Root",
@@ -1190,7 +1190,7 @@ def test_hover_overlay_skin_vertices_match_gpu_palette_path(monkeypatch) -> None
 
 
 def test_cpu_skin_bind_pose_applies_node_local_transform() -> None:
-    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
+    from src.gui.qt_lib.viewports.frame_renderer import ArcBallCamera, FrameRenderer
 
     node = SimpleNamespace(
         name="body_skin",
@@ -1855,7 +1855,7 @@ def test_k2_rgba_lightmap_txi_starts_at_clean_boundary(caplog) -> None:
     import logging
 
     from src.core.qt_core.assets.resource_manager import RES_TPC, _tpc_uncompressed_txi
-    from src.gui.qt_lib.rendering.viewport_core import _parse_txi_string
+    from src.gui.qt_lib.viewports.frame_renderer import _parse_txi_string
 
     manager = _resource_manager()
     raw = manager.get("101peras_lm0", RES_TPC, "K2")

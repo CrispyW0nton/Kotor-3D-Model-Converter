@@ -440,7 +440,7 @@ class _DebugSession:
             return {"ok": False, "error": "No renderer available"}
 
         try:
-            from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera
+            from src.gui.qt_lib.viewports.frame_renderer import ArcBallCamera
             camera = ArcBallCamera()
             camera.azimuth = self.camera_azimuth
             camera.elevation = self.camera_elevation

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from src.gui.rendering.viewport_display import ViewportDisplayMode, display_mode_values
+from src.gui.viewports.viewport_display import ViewportDisplayMode, display_mode_values
 
 
 @dataclass(frozen=True)

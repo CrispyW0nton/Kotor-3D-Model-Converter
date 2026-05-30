@@ -300,8 +300,8 @@ def test_source_clip_preview_model_preserves_fbx_skin_weights_for_playback() -> 
 def test_renderer_caches_numpy_skin_arrays_for_large_imported_preview_meshes() -> None:
     from src.converters.blender_fbx_mesh_importer import model_from_blender_fbx_mesh_payload
     from src.core.geometry.model_data import GameVersion
-    from src.gui.qt_lib.rendering.viewport_core import FrameRenderer
-    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera
+    from src.gui.qt_lib.viewports.frame_renderer import FrameRenderer
+    from src.gui.qt_lib.viewports.frame_renderer import ArcBallCamera
     from src.gui.qt_lib.windows.qt_source_clip_preview_model import build_source_clip_preview_model
 
     mesh_model = model_from_blender_fbx_mesh_payload(

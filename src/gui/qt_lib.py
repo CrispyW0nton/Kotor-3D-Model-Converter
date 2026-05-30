@@ -173,9 +173,6 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "renderer_profiler",
         "renderer_settings",
         "skeleton_render_data",
-        "viewport_display",
-        "viewport_core",
-        "viewport_navigation",
         "wgpu_renderer",
     ),
     "sequence_editor": (
@@ -197,10 +194,13 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "tpc_render_utils",
     ),
     "viewports": (
+        "frame_renderer",
         "qt_transform_typein_bar",
         "qt_uv_viewer",
         "qt_viewport",
+        "viewport_display",
         "viewport_host",
+        "viewport_navigation",
         "viewcube",
         "viewcube_math",
     ),
@@ -318,5 +318,19 @@ if not any(isinstance(_finder, _AliasFinder) for _finder in sys.meta_path):
 
 for _group, _modules in _GROUPS.items():
     _register_group(_group, _modules)
+
+_COMPAT_ALIASES: dict[str, str] = {
+    "rendering.viewport_core": "src.gui.rendering.viewport_core",
+    "rendering.viewport_display": "src.gui.rendering.viewport_display",
+    "rendering.viewport_navigation": "src.gui.rendering.viewport_navigation",
+}
+
+for _alias_suffix, _target in _COMPAT_ALIASES.items():
+    _alias = f"{__name__}.{_alias_suffix}"
+    _module = _register_alias(_alias, _target)
+    _package_name, _, _attr_name = _alias.rpartition(".")
+    _package = sys.modules.get(_package_name)
+    if _package is not None:
+        setattr(_package, _attr_name, _module)
 
 __all__ = [*_GROUPS.keys()]

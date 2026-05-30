@@ -133,7 +133,7 @@ def _apply_txi_from_textures_to_model(model, textures: dict) -> None:
     _extract_txi_from_tpc = None
     _parse_txi_string = None
     _apply_txi_to_node = None
-    for _import_path in ('src.gui.rendering.viewport_core', 'src.gui.qt_lib.rendering.viewport_core'):
+    for _import_path in ('src.gui.viewports.frame_renderer', 'src.gui.qt_lib.viewports.frame_renderer'):
         try:
             import importlib as _il
             _m = _il.import_module(_import_path)

@@ -13,7 +13,7 @@ from src.gui.libtheme import LayoutManager, ThemeManager
 from src.gui.libtheme.style_tokens import VALID_BUTTON_MODES
 from src.gui.libtheme.theme_editor_window import ThemeEditorWindow
 from src.gui.libtheme.theme_settings import ThemeLayoutSettings
-from src.gui.qt_lib.rendering.viewport_navigation import (
+from src.gui.qt_lib.viewports.viewport_navigation import (
     DEFAULT_VIEWPORT_NAVIGATION_PROFILE,
     VIEWPORT_NAVIGATION_PROFILES,
     normalize_viewport_navigation_profile,

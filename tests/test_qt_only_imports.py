@@ -2,7 +2,7 @@
 tests/test_qt_only_imports.py — Qt-only imports guard (M0/T005, M3/T305)
 
 Guard rail: every module in the Qt subtree (``src/gui/qt_*.py``) and the
-new Tk-free rendering core (``src/gui/viewport_core.py``) MUST import
+Tk-free viewport frame-rendering core MUST import
 without ``tkinter`` being available. After M3/T302 deleted the legacy
 Tk modules this is extended to ``src/gui/*.py`` — no file under
 ``src/gui/`` may import tkinter — and to a guard that the eight deleted
@@ -53,9 +53,9 @@ _GUI_DIR = _REPO_ROOT / "src" / "gui"
 
 # Files that MUST remain Tk-free.
 #   * Every qt_*.py — the canonical Qt UI subtree.
-#   * viewport_core.py — the Tk-free rendering split from T001.
+#   * frame_core/renderer.py - the Tk-free viewport rendering split from T001.
 _QT_FILES = sorted(_GUI_DIR.rglob("qt_*.py"))
-_VIEWPORT_CORE = _GUI_DIR / "rendering" / "viewport_core.py"
+_VIEWPORT_CORE = _GUI_DIR / "viewports" / "frame_core" / "renderer.py"
 
 # Files that are EXPECTED to import tkinter — empty after M3/T302.
 #
@@ -300,7 +300,7 @@ def test_qt_subtree_has_no_tkinter_imports(path: pathlib.Path):
 
 
 def test_viewport_core_has_no_tkinter_imports():
-    """src/gui/viewport_core.py is the Tk-free rendering split (T001)."""
+    """src/gui/viewports/frame_core/renderer.py is the Tk-free rendering split."""
     hits = _collect_tkinter_imports(_VIEWPORT_CORE)
     assert hits == [], (
         f"viewport_core.py must remain Tk-free; offending lines:\n  "
@@ -579,8 +579,8 @@ def test_viewport_core_imports_without_tkinter(monkeypatch):
     for mod_name in list(sys.modules):
         if mod_name == "src.gui.qt_lib" or mod_name.startswith("src.gui.qt_lib."):
             sys.modules.pop(mod_name, None)
-    sys.modules.pop("src.gui.rendering.viewport_core", None)
-    importlib.import_module("src.gui.qt_lib.rendering.viewport_core")
+    sys.modules.pop("src.gui.viewports.frame_renderer", None)
+    importlib.import_module("src.gui.qt_lib.viewports.frame_renderer")
 
 
 def test_fbx_sdk_loader_reports_missing_without_import_crash(monkeypatch):

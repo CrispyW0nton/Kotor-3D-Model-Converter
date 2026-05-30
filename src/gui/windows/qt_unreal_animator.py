@@ -18,7 +18,7 @@ from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.assets.qt_theme import heading
 from src.gui.qt_lib.panels.qt_ue5_rig_export_panel import QtUE5RigExportPanel
 from src.gui.qt_lib.viewports.qt_viewport import QtUnrealAnimatorViewportWidget
-from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+from src.gui.qt_lib.viewports.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 
 
 _UNREAL_STYLE = """

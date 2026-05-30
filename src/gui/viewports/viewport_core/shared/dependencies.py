@@ -26,14 +26,14 @@ from src.gui.qt_lib.rendering.renderer_backend import normalize_renderer_backend
 from src.gui.qt_lib.rendering.renderer_performance import ViewportFrameGovernor
 from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.rendering.picking import CpuMeshPickingProvider, PickRequest, ray_triangle_intersection
-from src.gui.qt_lib.rendering.viewport_display import (
+from src.gui.qt_lib.viewports.viewport_display import (
     ViewportDisplayMode,
     ViewportDisplayOptions,
 )
 from src.gui.qt_lib.viewports.qt_uv_viewer import QtUVViewerWindow
 from src.gui.qt_lib.viewports.viewport_host import RendererSurfaceHost
-from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
-from src.gui.qt_lib.rendering.viewport_navigation import (
+from src.gui.qt_lib.viewports.frame_renderer import ArcBallCamera, FrameRenderer
+from src.gui.qt_lib.viewports.viewport_navigation import (
     DEFAULT_VIEWPORT_NAVIGATION_PROFILE,
     has_modifier,
     normalize_viewport_navigation_profile,

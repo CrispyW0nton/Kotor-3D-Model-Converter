@@ -11,7 +11,7 @@ from src.core.animation.animation_engine import AnimationEngine, AnimPose, NodeP
 from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationRetargetPanel
 from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.viewports.qt_viewport import QtRetargetViewportWidget, QtViewportWidget
-from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+from src.gui.qt_lib.viewports.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 from src.gui.qt_lib.windows.qt_source_clip_preview_model import (
     build_source_clip_preview_model,
     source_clip_parent_local_position,

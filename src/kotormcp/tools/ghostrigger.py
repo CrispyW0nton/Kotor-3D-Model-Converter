@@ -445,10 +445,10 @@ async def handle_render_model(arguments: Dict[str, Any]) -> Dict[str, Any]:
         # Drop only those known aliases before importing the canonical modules.
         for _mod_name in (
             "src.gui.rendering.gpu_renderer",
-            "src.gui.rendering.viewport_core",
+            "src.gui.viewports.frame_renderer",
             "src.gui.rendering",
             "src.gui.qt_lib.rendering.gpu_renderer",
-            "src.gui.qt_lib.rendering.viewport_core",
+            "src.gui.qt_lib.viewports.frame_renderer",
             "src.gui.qt_lib.rendering",
         ):
             _mod = sys.modules.get(_mod_name)
@@ -477,8 +477,8 @@ async def handle_render_model(arguments: Dict[str, Any]) -> Dict[str, Any]:
             return _module
 
         _viewport_core = _load_gui_module(
-            "src.gui.rendering.viewport_core",
-            os.path.join("src", "gui", "rendering", "viewport_core.py"),
+            "src.gui.viewports.frame_renderer",
+            os.path.join("src", "gui", "viewports", "frame_renderer.py"),
         )
         sys.modules["src.gui.viewport_core"] = _viewport_core
         _gpu_renderer = _load_gui_module(

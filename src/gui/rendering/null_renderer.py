@@ -6,7 +6,7 @@ import time
 
 from src.gui.rendering.renderer_backend import RendererBackend
 from src.gui.rendering.renderer_capabilities import DIAGNOSTIC_DISPLAY_MODES, RendererCapabilities
-from src.gui.rendering.viewport_display import ViewportDisplayOptions
+from src.gui.viewports.viewport_display import ViewportDisplayOptions
 from src.gui.rendering.renderer_interface import IViewportRenderer
 
 

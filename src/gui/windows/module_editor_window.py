@@ -22,7 +22,7 @@ from src.gui.panels.module_editor.rooms_tab import RoomsTab
 from src.gui.panels.module_editor.validation_panel import ModuleValidationPanel
 from src.gui.panels.module_editor.walkmesh_tab import WalkmeshTab
 from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
-from src.gui.qt_lib.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+from src.gui.qt_lib.viewports.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 
 
 class ModuleEditorWindow(QtWidgets.QMainWindow):
