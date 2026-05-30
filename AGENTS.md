@@ -108,6 +108,32 @@ Do not add `from .viewport import ...` anywhere; that shim no longer exists.
 Import `FrameRenderer`, `ArcBallCamera`, `_load_tpc_bytes`, `_is_tpc_data`,
 `_clean_tex_name`, etc. through `src.gui.qt_lib.rendering.viewport_core`.
 
+## Qt viewport module structure
+
+- Keep `src/gui/viewports/qt_viewport.py` as a lazy public compatibility
+  facade. Do not put implementation back into this file.
+- Keep `src/gui/viewports/viewport_core/widget.py` as a lazy widget facade.
+  Do not grow it into another large implementation module.
+- Shared viewport imports and helper APIs belong under
+  `src/gui/viewports/viewport_core/shared/`, split by responsibility:
+  dependency imports, icon helpers, selection-mode constants, joint-dot
+  palette helpers, weight heat-map helpers, and similar non-widget support.
+- Actual viewport widgets belong under `src/gui/viewports/viewport_core/widgets/`.
+  New standalone viewport widgets should be added as focused modules there and
+  exported through the lazy facade when they are part of the public viewport API.
+- `QtViewportWidget` behavior is composed from focused mixin modules in
+  `viewport_core/widgets/` (`construction`, `scene_models`, `display_controls`,
+  `camera_workflow`, `measurement_controls`, `transform_camera`,
+  `selection_mesh`, `history_animation`, `event_navigation`,
+  `rendering_pipeline`, `overlay_layers`, `picking_hover`,
+  `drag_interactions`, `resource_cache`, and `state_helpers`). Patch the owning
+  mixin module instead of editing unrelated viewport behavior.
+- If a new viewport feature needs many methods, create a new focused mixin
+  module and add it to `QtViewportWidget` deliberately. Preserve the existing
+  public import path through `src.gui.qt_lib.viewports.qt_viewport`.
+- Update the source-contract tests that assemble viewport source from split
+  files when adding a new viewport module that those contracts need to inspect.
+
 ## UI/workbench boundaries
 
 - Respect separate modules, panels, and standalone workbench windows. Before
