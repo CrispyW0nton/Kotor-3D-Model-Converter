@@ -9,6 +9,31 @@ from types import MethodType, SimpleNamespace
 import pytest
 
 
+ROOT = Path(__file__).resolve().parents[1]
+_VIEWPORT_WIDGET_SOURCE_FILES = (
+    "src/gui/viewports/viewport_core/widgets/viewport_widget.py",
+    "src/gui/viewports/viewport_core/widgets/state_helpers.py",
+    "src/gui/viewports/viewport_core/widgets/construction.py",
+    "src/gui/viewports/viewport_core/widgets/scene_models.py",
+    "src/gui/viewports/viewport_core/widgets/display_controls.py",
+    "src/gui/viewports/viewport_core/widgets/camera_workflow.py",
+    "src/gui/viewports/viewport_core/widgets/measurement_controls.py",
+    "src/gui/viewports/viewport_core/widgets/transform_camera.py",
+    "src/gui/viewports/viewport_core/widgets/selection_mesh.py",
+    "src/gui/viewports/viewport_core/widgets/history_animation.py",
+    "src/gui/viewports/viewport_core/widgets/event_navigation.py",
+    "src/gui/viewports/viewport_core/widgets/rendering_pipeline.py",
+    "src/gui/viewports/viewport_core/widgets/overlay_layers.py",
+    "src/gui/viewports/viewport_core/widgets/picking_hover.py",
+    "src/gui/viewports/viewport_core/widgets/drag_interactions.py",
+    "src/gui/viewports/viewport_core/widgets/resource_cache.py",
+)
+
+
+def _qt_viewport_widget_source() -> str:
+    return "\n".join((ROOT / path).read_text(encoding="utf-8") for path in _VIEWPORT_WIDGET_SOURCE_FILES)
+
+
 def test_vertex_space_enum_contract() -> None:
     from src.core.qt_core.geometry.vertex_space import VertexSpace
 
@@ -1282,7 +1307,7 @@ def test_qt_viewport_exposes_mesh_multiselect_box_and_ctrl_a() -> None:
     from src.gui.qt_lib.panels.qt_skeleton_panel import node_browser_role
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
-    source = inspect.getsource(QtViewportWidget)
+    source = _qt_viewport_widget_source()
 
     assert "meshSelectionChanged = QtCore.Signal(list)" in source
     assert "meshHovered = QtCore.Signal(object)" in source
@@ -1304,7 +1329,7 @@ def test_qt_viewport_mesh_pick_requires_real_triangle_and_hover_outline() -> Non
 
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
-    source = inspect.getsource(QtViewportWidget)
+    source = _qt_viewport_widget_source()
     pick_source = inspect.getsource(QtViewportWidget._mesh_hit_test_detail)
     release_source = inspect.getsource(QtViewportWidget._release_lmb)
     overlay_source = inspect.getsource(QtViewportWidget._draw_gpu_viewport_overlays)
@@ -2955,7 +2980,7 @@ def test_qt_viewport_exposes_animation_playback_governor_and_live_overlay_skip()
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
-    viewport_source = inspect.getsource(QtViewportWidget)
+    viewport_source = _qt_viewport_widget_source()
     init_source = inspect.getsource(QtGhostRiggerMainWindow.__init__)
     play_source = inspect.getsource(QtGhostRiggerMainWindow._handle_animation_action)
     tick_source = inspect.getsource(QtGhostRiggerMainWindow._tick_animation)
@@ -3598,7 +3623,7 @@ def test_main_statusbar_has_persistent_viewport_render_state() -> None:
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
-    viewport_source = inspect.getsource(QtViewportWidget)
+    viewport_source = _qt_viewport_widget_source()
     layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
     status_source = inspect.getsource(QtGhostRiggerMainWindow._build_statusbar)
 
@@ -3675,7 +3700,7 @@ def test_qt_viewport_exposes_cinematic_camera_workflow_methods() -> None:
 
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
-    source = inspect.getsource(QtViewportWidget)
+    source = _qt_viewport_widget_source()
 
     assert "self.camera_manager = CameraManager()" in source
     assert "def switch_to_camera" in source

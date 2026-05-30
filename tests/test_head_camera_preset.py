@@ -252,7 +252,7 @@ def test_t605_apply_method_exists_on_viewport_class():
     the source via :mod:`importlib.util` to confirm it's defined
     without booting OpenGL.
     """
-    text = pathlib.Path("src/gui/viewports/viewport_core/widgets/viewport_widget.py").read_text()
+    text = pathlib.Path("src/gui/viewports/viewport_core/widgets/transform_camera.py").read_text()
     assert "def apply_head_camera_preset" in text, (
         "QtViewportWidget.apply_head_camera_preset is missing"
     )
