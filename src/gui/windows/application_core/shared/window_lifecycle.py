@@ -46,6 +46,11 @@ class WindowLifecycleMixin:
         self._character_builder_window.show()
         self._character_builder_window.raise_()
         self._character_builder_window.activateWindow()
+    def _send_library_row_to_character_builder(self, row: dict) -> None:
+        self._open_qt_character_builder_window()
+        resref = str(row.get("resref") or "asset")
+        game = str(row.get("game") or "")
+        self._log(f"Character Builder <- {game}:{resref}", "success")
     def _open_settings_dialog(self):
         dialog = getattr(self, "_settings_dialog", None)
         if dialog is None:

@@ -225,6 +225,24 @@ class StartupLibraryMixin:
             self._log(f"Extract failed: {exc}", "error")
             QtWidgets.QMessageBox.critical(self, "Extract", str(exc))
 
+    def _handle_content_browser_asset_action(self, action: str, row: dict) -> None:
+        resref = str(row.get("resref") or "")
+        game = str(row.get("game") or "K1").upper()
+        if action == "extract_fbx_openfbx":
+            QtWidgets.QMessageBox.information(
+                self,
+                "Extract FBX",
+                "OpenFBX export for content-browser assets is not wired yet.",
+            )
+            self._log(f"OpenFBX asset export requested for {game}:{resref}", "info")
+        elif action == "extract_fbx_autodesk":
+            QtWidgets.QMessageBox.information(
+                self,
+                "Extract FBX",
+                "Autodesk FBX export for content-browser assets requires an installed SDK and is not wired from this menu yet.",
+            )
+            self._log(f"Autodesk FBX asset export requested for {game}:{resref}", "info")
+
     def _extract_model_resource(self, row: dict, out_dir: str) -> list[str]:
         from src.core.graphics.tpc import _is_tpc_data
 

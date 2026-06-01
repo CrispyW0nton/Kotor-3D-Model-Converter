@@ -518,9 +518,13 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
 
     loadRequested = QtCore.Signal(str, str)
     primarySceneLoadRequested = QtCore.Signal(dict)
+    addToCurrentSceneRequested = QtCore.Signal(dict)
     extractRequested = QtCore.Signal(dict)
+    assetActionRequested = QtCore.Signal(str, dict)
     retargetSourceRequested = QtCore.Signal(dict)
     retargetTargetRequested = QtCore.Signal(dict)
+    characterBuilderRequested = QtCore.Signal(dict)
+    levelEditorNewRequested = QtCore.Signal(dict)
     levelEditorImportRequested = QtCore.Signal(dict)
     batchRequested = QtCore.Signal(str, list)
     scanRequested = QtCore.Signal()
@@ -1042,10 +1046,35 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         if row:
             self.extractRequested.emit(row)
 
+    def open_selected_as_new_scene(self) -> None:
+        row = self.selected_row()
+        if row:
+            self.primarySceneLoadRequested.emit(row)
+
+    def add_selected_to_current_scene(self) -> None:
+        row = self.selected_row()
+        if row:
+            self.addToCurrentSceneRequested.emit(row)
+
+    def open_selected_in_new_level_editor(self) -> None:
+        row = self.selected_row()
+        if row:
+            self.levelEditorNewRequested.emit(row)
+
     def import_selected_to_level(self) -> None:
         row = self.selected_row()
         if row:
             self.levelEditorImportRequested.emit(row)
+
+    def open_selected_in_character_builder(self) -> None:
+        row = self.selected_row()
+        if row:
+            self.characterBuilderRequested.emit(row)
+
+    def request_selected_asset_action(self, action: str) -> None:
+        row = self.selected_row()
+        if row:
+            self.assetActionRequested.emit(action, row)
 
     def apply_ghost_theme(self, theme) -> None:
         return None
@@ -1391,6 +1420,9 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         for button in (self.extract_button, self.level_button, self.source_button, self.target_button):
             button.setEnabled(has_model_row)
 
+    def _asset_supports_character_builder(self, asset: ContentAssetDescriptor) -> bool:
+        return asset.asset_type == "Model" and asset.category in {"Player Characters", "NPCs"}
+
     def _activate_selected(self) -> None:
         asset = self.selected_asset()
         if asset is None:
@@ -1401,6 +1433,76 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         row = asset.row
         if row.get("resref"):
             self.primarySceneLoadRequested.emit(dict(row))
+
+    def _context_action(
+        self,
+        menu: QtWidgets.QMenu,
+        text: str,
+        icon_name: str,
+        action_id: str,
+    ):
+        action = menu.addAction(icon(icon_name, 22), text)
+        action.setData(action_id)
+        return action
+
+    def _build_model_context_menu(self, asset: ContentAssetDescriptor) -> tuple[QtWidgets.QMenu, dict[str, object]]:
+        menu = QtWidgets.QMenu(self)
+        menu.setStyleSheet("QMenu { icon-size: 22px; }")
+        actions: dict[str, object] = {}
+        actions["open_new_scene"] = self._context_action(menu, "Open as New Scene", "new_scene", "open_new_scene")
+        actions["add_current_scene"] = self._context_action(menu, "Add to Current Scene", "scene_add", "add_current_scene")
+        actions["level_new"] = self._context_action(menu, "Open In Level Editor (New)", "level_editor_new", "level_new")
+        actions["level_existing"] = self._context_action(
+            menu,
+            "Add to Level Editor (Existing Level)",
+            "level_editor_add",
+            "level_existing",
+        )
+        if self._asset_supports_character_builder(asset):
+            actions["character_builder_new"] = self._context_action(
+                menu,
+                "Open in Character Builder (New)",
+                "charbuilder",
+                "character_builder_new",
+            )
+        menu.addSeparator()
+        asset_menu = QtWidgets.QMenu("Asset Actions", menu)
+        asset_menu.setIcon(icon("asset_actions", 22))
+        menu.addMenu(asset_menu)
+        menu._gr_asset_actions_menu = asset_menu
+        asset_menu.setStyleSheet("QMenu { icon-size: 22px; }")
+        actions["extract_mdl_mdx"] = self._context_action(
+            asset_menu,
+            "Extract (.MDL/.MDX)",
+            "extract_mdl_mdx",
+            "extract_mdl_mdx",
+        )
+        actions["extract_fbx_openfbx"] = self._context_action(
+            asset_menu,
+            "Extract (.FBX) (openfbx)",
+            "extract_fbx_openfbx",
+            "extract_fbx_openfbx",
+        )
+        actions["extract_fbx_autodesk"] = self._context_action(
+            asset_menu,
+            "Extract (.FBX) (autodesk if installed)",
+            "extract_fbx_autodesk",
+            "extract_fbx_autodesk",
+        )
+        menu.addSeparator()
+        actions["retarget_source"] = self._context_action(
+            menu,
+            "Send to Retarget Workbench (Source)",
+            "anims",
+            "retarget_source",
+        )
+        actions["retarget_target"] = self._context_action(
+            menu,
+            "Send to Retarget Workbench (Target)",
+            "rig",
+            "retarget_target",
+        )
+        return menu, actions
 
     def _show_context_menu(self, pos: QtCore.QPoint) -> None:
         item = self.asset_view.itemAt(pos)
@@ -1425,22 +1527,26 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
             elif chosen is export_action:
                 self.libraryActionRequested.emit("Export")
             return
-        load_action = menu.addAction("Open Model")
-        add_to_level_action = menu.addAction("Add to Scene / Level Editor")
-        extract_action = menu.addAction("Extract")
-        menu.addSeparator()
-        source_action = menu.addAction("Send to Retarget Workbench (Source)")
-        target_action = menu.addAction("Send to Retarget Workbench (Target)")
+        menu, actions = self._build_model_context_menu(asset)
         chosen = menu.exec(self.asset_view.mapToGlobal(pos))
-        if chosen is load_action:
-            self.load_selected()
-        elif chosen is add_to_level_action:
+        action_id = chosen.data() if chosen is not None else ""
+        if action_id == "open_new_scene":
+            self.open_selected_as_new_scene()
+        elif action_id == "add_current_scene":
+            self.add_selected_to_current_scene()
+        elif action_id == "level_new":
+            self.open_selected_in_new_level_editor()
+        elif action_id == "level_existing":
             self.import_selected_to_level()
-        elif chosen is extract_action:
+        elif action_id == "character_builder_new":
+            self.open_selected_in_character_builder()
+        elif action_id == "extract_mdl_mdx":
             self.extract_selected()
-        elif chosen is source_action:
+        elif action_id in {"extract_fbx_openfbx", "extract_fbx_autodesk"}:
+            self.request_selected_asset_action(str(action_id))
+        elif action_id == "retarget_source":
             self._emit_retarget("source")
-        elif chosen is target_action:
+        elif action_id == "retarget_target":
             self._emit_retarget("target")
 
     def _emit_retarget(self, role: str) -> None:

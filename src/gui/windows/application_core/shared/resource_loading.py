@@ -139,6 +139,11 @@ class ResourceLoadingMixin:
         game = str(row.get("game") or "")
         if resref:
             self._start_resource_load(resref, game, import_action="clear")
+    def _add_content_browser_model_to_current_scene(self, row: dict) -> None:
+        resref = str(row.get("resref") or "")
+        game = str(row.get("game") or "")
+        if resref:
+            self._start_resource_load(resref, game, import_action="add")
     def _start_resource_load(self, resref: str, game: str, import_action: str = ""):
         if self._model_worker_is_running():
             self._log("A model is already loading.", "warning")

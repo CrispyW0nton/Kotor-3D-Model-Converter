@@ -283,6 +283,19 @@ class ResourcePanelsMixin:
         resref = str(row.get("resref") or "asset")
         game = str(row.get("game") or "")
         self._log(f"Level Editor <- {game}:{resref}", "success")
+    def _send_library_row_to_new_module_editor(self, row: dict) -> None:
+        self._open_module_editor_window()
+        window = getattr(self, "module_editor_window", None)
+        if window is None:
+            return
+        if not window._confirm_discard_or_save():
+            return
+        window.controller.new_project()
+        window._refresh_all("Created new KMAP project.")
+        window.import_library_asset(row)
+        resref = str(row.get("resref") or "asset")
+        game = str(row.get("game") or "")
+        self._log(f"New Level Editor <- {game}:{resref}", "success")
     def _open_rig_window(self):
         window = getattr(self, "rig_window", None)
         if window is None:

@@ -79,8 +79,12 @@ class MainWindowLayoutMixin:
         self.content_browser_panel.deepScanRequested.connect(self._scan_library)
         self.content_browser_panel.loadRequested.connect(self._start_resource_load)
         self.content_browser_panel.primarySceneLoadRequested.connect(self._load_content_browser_primary_scene_model)
+        self.content_browser_panel.addToCurrentSceneRequested.connect(self._add_content_browser_model_to_current_scene)
         self.content_browser_panel.extractRequested.connect(self._extract_library_row)
+        self.content_browser_panel.assetActionRequested.connect(self._handle_content_browser_asset_action)
+        self.content_browser_panel.levelEditorNewRequested.connect(self._send_library_row_to_new_module_editor)
         self.content_browser_panel.levelEditorImportRequested.connect(self._send_library_row_to_module_editor)
+        self.content_browser_panel.characterBuilderRequested.connect(self._send_library_row_to_character_builder)
         self.content_browser_panel.retargetSourceRequested.connect(
             lambda row: self._send_library_row_to_retarget(row, "source")
         )
