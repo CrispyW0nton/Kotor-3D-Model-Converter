@@ -1,11 +1,30 @@
 from pathlib import Path
 
+from src.core.ports import FileWriterPort
 from src.core.retargeting.fbx_exporter import ClipManifestEntry, FBXExportManifest, compute_sha256
 from src.workbench import ue5_rig_export
 from src.workbench.ue5_rig_export import UE5RigExportRequest, export_ue5_rig
 
 
 TEST_OUT = Path(".pytest_tmp_ue5_rig_export")
+
+
+class _RecordingWriter(FileWriterPort):
+    def __init__(self):
+        self.text_paths: list[Path] = []
+        self.byte_paths: list[Path] = []
+
+    def write_bytes(self, path: str | Path, data: bytes) -> None:
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        self.byte_paths.append(target)
+
+    def write_text(self, path: str | Path, text: str, *, encoding: str = "utf-8") -> None:
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding=encoding)
+        self.text_paths.append(target)
 
 
 def _fake_export_manifest(fbx_path: Path) -> FBXExportManifest:
@@ -119,6 +138,16 @@ def test_manifest_schema_valid(monkeypatch):
     assert '"character_name": "pmbam"' in manifest
     assert '"all_gates_passed": true' in manifest
     assert '"all_19_humanoid_bones_present": true' in manifest
+
+
+def test_successful_export_uses_request_file_writer(monkeypatch):
+    _patch_success(monkeypatch)
+    writer = _RecordingWriter()
+    result = export_ue5_rig(UE5RigExportRequest("pmbam", "g1a1", TEST_OUT / "writer", file_writer=writer))
+
+    assert result.success is True
+    assert result.manifest_path in writer.text_paths
+    assert result.ue5_setup_notes_path in writer.text_paths
 
 
 def test_ue5_setup_notes_contains_character_specifics(monkeypatch):

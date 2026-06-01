@@ -223,6 +223,8 @@ devlog/
 !/tools/model_inspector.py
 !/tools/validate_themes.py
 scripts/
+!src/adapters/scripts/
+!src/adapters/scripts/*.py
 !/scripts/
 !/scripts/generate_manifest.py
 !/scripts/full_scan.py

@@ -447,6 +447,63 @@ def test_renderer_factory_proxy_uses_viewport_renderer_port_boundary() -> None:
     assert isinstance(create_viewport_renderer(None), ViewportRendererPort)
 
 
+def test_unavailable_script_compiler_implements_script_compiler_port() -> None:
+    """Script workflows should have a concrete port fallback when no compiler exists."""
+    from src.adapters.scripts import UnavailableScriptCompiler
+    from src.core.ports import ScriptCompilerPort
+    from src.core.validation.validation_bus import ValidationSeverity, ValidationSubsystem
+
+    source = (ROOT / "src/adapters/scripts/unavailable_compiler.py").read_text(encoding="utf-8")
+    compiler = UnavailableScriptCompiler()
+    result = compiler.compile_script("k_ptar_load.nss", game="K1")
+
+    assert "from src.core.ports import ScriptCompileResult, ScriptCompilerPort" in source
+    assert isinstance(compiler, ScriptCompilerPort)
+    assert result.output == b""
+    assert result.report.has_blocking
+    assert result.report.issues[0].severity == ValidationSeverity.BLOCKING
+    assert result.report.issues[0].subsystem == ValidationSubsystem.SCRIPT
+    assert result.report.issues[0].code == "script.compiler.unavailable"
+    assert result.metadata["available"] is False
+
+
+def test_local_file_writer_implements_file_writer_port() -> None:
+    """Plain filesystem writes should go through a concrete file-writer adapter."""
+    from src.adapters.files import LocalFileWriter
+    from src.core.ports import FileWriterPort
+
+    source = (ROOT / "src/adapters/files/local_file_writer.py").read_text(encoding="utf-8")
+    workbench_source = (ROOT / "src/workbench/ue5_rig_export.py").read_text(encoding="utf-8")
+
+    assert "from src.core.ports import FileWriterPort" in source
+    assert isinstance(LocalFileWriter(), FileWriterPort)
+    assert "file_writer: FileWriterPort | None = None" in workbench_source
+    assert "request.file_writer or LocalFileWriter()" in workbench_source
+    assert "file_writer.write_text(" in workbench_source
+
+
+def test_required_script_adapter_modules_are_not_gitignored() -> None:
+    """Script compiler adapter sources must not be hidden by broad scripts ignores."""
+    result = subprocess.run(
+        [
+            "git",
+            "ls-files",
+            "--others",
+            "--ignored",
+            "--exclude-standard",
+            "--",
+            "src/adapters/scripts/__init__.py",
+            "src/adapters/scripts/unavailable_compiler.py",
+        ],
+        cwd=ROOT,
+        text=True,
+        check=True,
+        capture_output=True,
+    )
+
+    assert result.stdout.strip() == ""
+
+
 def test_gui_backend_compatibility_paths_stay_thin() -> None:
     """Old GUI backend-like paths should stay facades unless explicitly exempted."""
     checked_roots = (
