@@ -1376,7 +1376,7 @@ def ghostrigger_render_uv_checker(model_name: str = "", size: int = 512) -> list
                 checker_textures[tex] = checker
 
         # Render
-        from src.gui.rendering.gpu_renderer import render_model_autoframe
+        from src.adapters.rendering.moderngl_scene_helpers import render_model_autoframe
         views = render_model_autoframe(model, W=size, H=size,
                                         textures=checker_textures,
                                         views=['front'])

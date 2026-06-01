@@ -21,11 +21,11 @@ _EXPORT_MODULES: tuple[str, ...] = (
     "src.core.rendering.gpu_vbo_layout",
     "src.math.gpu_math",
     "src.adapters.gpu.viewport_probe",
+    "src.adapters.rendering.moderngl_benchmark",
+    "src.adapters.rendering.moderngl_cli",
+    "src.adapters.rendering.moderngl_scene_helpers",
     "src.gui.rendering.gpu_core.resources",
     "src.gui.rendering.gpu_core.renderer",
-    "src.gui.rendering.gpu_core.scene_helpers",
-    "src.gui.rendering.gpu_core.benchmark",
-    "src.gui.rendering.gpu_core.cli",
 )
 
 _EXPORTS: dict[str, str] = {
@@ -38,9 +38,9 @@ _EXPORTS: dict[str, str] = {
     "clear_prebuilt_static_gpu_mesh_data": "src.gui.rendering.gpu_core.resources",
     "clear_prebuilt_static_gpu_model_data": "src.gui.rendering.gpu_core.resources",
     "prebuild_static_gpu_mesh_data": "src.gui.rendering.gpu_core.resources",
-    "render_model_autoframe": "src.gui.rendering.gpu_core.scene_helpers",
-    "_benchmark": "src.gui.rendering.gpu_core.benchmark",
-    "_main": "src.gui.rendering.gpu_core.cli",
+    "render_model_autoframe": "src.adapters.rendering.moderngl_scene_helpers",
+    "_benchmark": "src.adapters.rendering.moderngl_benchmark",
+    "_main": "src.adapters.rendering.moderngl_cli",
     "_VERT_SRC": "src.core.rendering.gpu_shaders",
     "_FRAG_SRC": "src.core.rendering.gpu_shaders",
     "_GRID_VERT_SRC": "src.core.rendering.gpu_shaders",

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 def create_viewport_frame_renderer(viewport):
     """Create the still-frame renderer that renders through an existing Qt viewport."""
-    from src.gui.camera.frame_renderer import FrameRenderer
+    from src.adapters.qt_viewport.still_frame_renderer import FrameRenderer
 
     return FrameRenderer(viewport)
 

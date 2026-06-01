@@ -59,12 +59,12 @@ from src.math.viewcube_math import (
 )
 from src.gui.qt_lib.panels.axis_mode_control import AxisModeControl
 from src.core.camera.camera_controller import CameraController
+from src.adapters.qt_viewport.camera_overlays import CameraOverlays
 from src.gui.camera.camera_gizmo_renderer import CameraGizmoRenderer
 from src.core.camera.camera_manager import CameraManager
-from src.gui.camera.camera_overlays import CameraOverlays
 from src.core.camera.camera_picker import CameraPicker
 from src.core.camera.camera_viewport_adapter import CameraViewportAdapter
-from src.gui.camera.frame_renderer import FrameRenderer as CameraFrameRenderer
+from src.adapters.qt_viewport.still_frame_renderer import FrameRenderer as CameraFrameRenderer
 from src.core.lighting.light_picker import LightPicker
 from src.measurement.angle_snap import AngleSnap
 from src.measurement.dimension_calculator import DimensionCalculator

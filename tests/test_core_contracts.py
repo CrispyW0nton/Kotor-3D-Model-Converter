@@ -65,6 +65,35 @@ def test_backend_packages_do_not_import_gui_directly() -> None:
     assert not violations
 
 
+def test_adapter_gui_imports_are_explicit_boundary_bridges() -> None:
+    """Adapter packages may touch GUI code only through named bridge modules."""
+    allowed = {
+        Path("src/adapters/qt_viewport/frame_renderer.py"),
+        Path("src/adapters/rendering/moderngl_legacy_bridge.py"),
+    }
+    violations: list[str] = []
+
+    for path in (ROOT / "src/adapters").rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        rel_path = path.relative_to(ROOT)
+        for node in ast.walk(tree):
+            imports_gui = False
+            imported = ""
+            if isinstance(node, ast.ImportFrom):
+                imported = node.module or ""
+                imports_gui = imported == "src.gui" or imported.startswith("src.gui.")
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    imported = alias.name
+                    imports_gui = imported == "src.gui" or imported.startswith("src.gui.")
+                    if imports_gui:
+                        break
+            if imports_gui and rel_path not in allowed:
+                violations.append(f"{rel_path}:{node.lineno}: {imported}")
+
+    assert not violations
+
+
 def test_texture_format_helpers_are_backend_owned() -> None:
     """TPC/TXI parsing belongs to core graphics, with GUI paths as facades."""
     from src.core.graphics.tpc import _is_tpc_data as core_is_tpc_data
@@ -331,6 +360,7 @@ def test_gpu_shader_sources_are_backend_owned() -> None:
 
 def test_gpu_scene_helpers_are_backend_owned() -> None:
     """Model bounds, texture TXI application, and composite-model helpers belong to core rendering."""
+    from src.adapters.rendering.moderngl_scene_helpers import render_model_autoframe as AdapterRenderAutoframe
     from src.core.qt_core.rendering.gpu_scene_helpers import _CompositeModel as FacadeCompositeModel
     from src.core.qt_core.rendering.gpu_scene_helpers import _compute_model_bounds as facade_compute_bounds
     from src.core.rendering.gpu_scene_helpers import _CompositeModel as CoreCompositeModel
@@ -338,9 +368,11 @@ def test_gpu_scene_helpers_are_backend_owned() -> None:
     from src.core.rendering.gpu_scene_helpers import _compute_model_bounds as core_compute_bounds
     from src.gui.rendering.gpu_core.scene_helpers import _CompositeModel as GuiCompositeModel
     from src.gui.rendering.gpu_core.scene_helpers import _compute_model_bounds as gui_compute_bounds
+    from src.gui.rendering.gpu_core.scene_helpers import render_model_autoframe as GuiRenderAutoframe
     from src.gui.rendering.gpu_renderer import _CompositeModel as PublicCompositeModel
     from src.gui.rendering.gpu_renderer import _apply_txi_from_textures_to_model as public_apply_txi
     from src.gui.rendering.gpu_renderer import _compute_model_bounds as public_compute_bounds
+    from src.gui.rendering.gpu_renderer import render_model_autoframe as PublicRenderAutoframe
 
     assert GuiCompositeModel is CoreCompositeModel
     assert FacadeCompositeModel is CoreCompositeModel
@@ -349,32 +381,60 @@ def test_gpu_scene_helpers_are_backend_owned() -> None:
     assert facade_compute_bounds is core_compute_bounds
     assert public_compute_bounds is core_compute_bounds
     assert public_apply_txi is core_apply_txi
+    assert GuiRenderAutoframe is AdapterRenderAutoframe
+    assert PublicRenderAutoframe is AdapterRenderAutoframe
 
     core_source = (ROOT / "src/core/rendering/gpu_scene_helpers.py").read_text(encoding="utf-8")
     for forbidden in ("src.gui.", "PySide6", "QtWidgets", "QtGui", "QtCore", "moderngl", "GpuRenderer"):
         assert forbidden not in core_source
 
+    adapter_scene_source = (ROOT / "src/adapters/rendering/moderngl_scene_helpers.py").read_text(encoding="utf-8")
     gui_scene_source = (ROOT / "src/gui/rendering/gpu_core/scene_helpers.py").read_text(encoding="utf-8")
     public_facade = (ROOT / "src/gui/rendering/gpu_renderer.py").read_text(encoding="utf-8")
+    mcp_tool_source = (ROOT / "src/kotormcp/tools/ghostrigger.py").read_text(encoding="utf-8")
+    debug_materials_source = (ROOT / "src/kotormcp/tools/debug_materials.py").read_text(encoding="utf-8")
+    assert "from src.adapters.rendering.moderngl_legacy_bridge import GpuRenderer" in adapter_scene_source
+    assert "from src.core.rendering.gpu_scene_helpers import" in adapter_scene_source
+    assert "src.gui." not in adapter_scene_source
     assert "from src.core.rendering.gpu_scene_helpers import" in gui_scene_source
+    assert "from src.adapters.rendering.moderngl_scene_helpers import render_model_autoframe" in gui_scene_source
     assert "from .renderer import *" not in gui_scene_source
-    assert "render_model_autoframe" in gui_scene_source
+    assert "def render_model_autoframe" not in gui_scene_source
     assert '"_compute_model_bounds": "src.core.rendering.gpu_scene_helpers"' in public_facade
-    assert '"render_model_autoframe": "src.gui.rendering.gpu_core.scene_helpers"' in public_facade
+    assert '"render_model_autoframe": "src.adapters.rendering.moderngl_scene_helpers"' in public_facade
+    assert "from src.adapters.rendering.moderngl_scene_helpers import render_model_autoframe" in mcp_tool_source
+    assert "from src.adapters.rendering.moderngl_scene_helpers import render_model_autoframe" in debug_materials_source
 
 
 def test_gpu_benchmark_adapter_imports_renderer_dependencies_explicitly() -> None:
     """The ModernGL benchmark adapter should not rely on scene-helper wildcard side effects."""
+    from src.adapters.rendering.moderngl_benchmark import _benchmark as adapter_benchmark
+    from src.adapters.rendering.moderngl_cli import _main as adapter_main
     from src.gui.rendering.gpu_core.benchmark import _benchmark as direct_benchmark
+    from src.gui.rendering.gpu_core.cli import _main as direct_main
     from src.gui.rendering.gpu_renderer import _benchmark as public_benchmark
+    from src.gui.rendering.gpu_renderer import _main as public_main
 
-    assert public_benchmark is direct_benchmark
+    assert direct_benchmark is adapter_benchmark
+    assert public_benchmark is adapter_benchmark
+    assert direct_main is adapter_main
+    assert public_main is adapter_main
 
-    benchmark_source = (ROOT / "src/gui/rendering/gpu_core/benchmark.py").read_text(encoding="utf-8")
+    benchmark_source = (ROOT / "src/adapters/rendering/moderngl_benchmark.py").read_text(encoding="utf-8")
+    cli_source = (ROOT / "src/adapters/rendering/moderngl_cli.py").read_text(encoding="utf-8")
+    gui_benchmark_source = (ROOT / "src/gui/rendering/gpu_core/benchmark.py").read_text(encoding="utf-8")
+    gui_cli_source = (ROOT / "src/gui/rendering/gpu_core/cli.py").read_text(encoding="utf-8")
+    public_facade = (ROOT / "src/gui/rendering/gpu_renderer.py").read_text(encoding="utf-8")
     assert "from .scene_helpers import *" not in benchmark_source
-    assert "from .renderer import GpuRenderer" in benchmark_source
+    assert "from src.adapters.rendering.moderngl_legacy_bridge import GpuRenderer" in benchmark_source
     assert "import numpy as np" in benchmark_source
     assert "from PIL import Image" in benchmark_source
+    assert "from src.adapters.rendering.moderngl_benchmark import _benchmark" in cli_source
+    assert "from src.adapters.rendering.moderngl_legacy_bridge import GpuRenderer" in cli_source
+    assert "from src.adapters.rendering.moderngl_benchmark import *" in gui_benchmark_source
+    assert "from src.adapters.rendering.moderngl_cli import *" in gui_cli_source
+    assert '"_benchmark": "src.adapters.rendering.moderngl_benchmark"' in public_facade
+    assert '"_main": "src.adapters.rendering.moderngl_cli"' in public_facade
 
 
 def test_gpu_diagnostics_config_is_backend_owned() -> None:
@@ -401,6 +461,11 @@ def test_gpu_diagnostics_config_is_backend_owned() -> None:
     diagnostics_source = (ROOT / "src/gui/rendering/gpu_core/diagnostics.py").read_text(encoding="utf-8")
     public_facade = (ROOT / "src/gui/rendering/gpu_renderer.py").read_text(encoding="utf-8")
     assert "from src.core.rendering.gpu_diagnostics_config import *" in diagnostics_source
+    assert "from src.core.rendering.gpu_diagnostics_records import *" in diagnostics_source
+    assert "from src.adapters.gpu.moderngl_runtime import *" in diagnostics_source
+    assert "def " not in diagnostics_source
+    assert "class " not in diagnostics_source
+    assert len(diagnostics_source.splitlines()) < 40
     assert "def _gl_state_trace_path" not in diagnostics_source
     assert '"_gl_state_trace_path": "src.core.rendering.gpu_diagnostics_config"' in public_facade
 
@@ -1115,11 +1180,15 @@ def test_light_picker_is_backend_owned() -> None:
 def test_backend_renderer_dependencies_use_qt_viewport_adapter() -> None:
     """Backend renderer callers should depend on the explicit Qt viewport adapter."""
     adapter_source = (ROOT / "src/adapters/qt_viewport/frame_renderer.py").read_text(encoding="utf-8")
+    still_frame_source = (ROOT / "src/adapters/qt_viewport/still_frame_renderer.py").read_text(encoding="utf-8")
     sequence_source = (ROOT / "src/sequence/sequence_render.py").read_text(encoding="utf-8")
     validator_source = (ROOT / "src/core/validation/viewport_validator.py").read_text(encoding="utf-8")
 
-    assert "from src.gui.camera.frame_renderer import FrameRenderer" in adapter_source
+    assert "from src.adapters.qt_viewport.still_frame_renderer import FrameRenderer" in adapter_source
     assert "from src.core.rendering.frame_core.renderer import FrameRenderer" in adapter_source
+    assert "class FrameRenderer" in still_frame_source
+    assert "from src.core.camera.camera_render_settings import RenderSettings" in still_frame_source
+    assert "src.gui.camera.frame_renderer" not in adapter_source
     assert "src.adapters.qt_viewport.frame_renderer" in sequence_source
     assert "src.adapters.qt_viewport.frame_renderer" in validator_source
     assert "from src.gui" not in sequence_source
@@ -1222,6 +1291,8 @@ def test_viewport_renderer_adapters_have_explicit_owner() -> None:
     import src.adapters.rendering.wgpu_core.renderer as adapter_wgpu_renderer
     import src.gui.rendering.renderer_factory as gui_factory
     import src.gui.rendering.wgpu_core.renderer as gui_wgpu_renderer
+    from src.adapters.rendering.moderngl_legacy_bridge import _build_vbo_data as bridged_vbo_builder
+    from src.adapters.rendering.moderngl_legacy_bridge import moderngl_runtime_available
     from src.adapters.rendering.direct3d_renderer import Direct3DRenderer as AdapterDirect3DRenderer
     from src.adapters.rendering.moderngl_renderer import ModernGLRenderer as AdapterModernGLRenderer
     from src.adapters.rendering.null_renderer import NullDiagnosticRenderer as AdapterNullDiagnosticRenderer
@@ -1231,6 +1302,7 @@ def test_viewport_renderer_adapters_have_explicit_owner() -> None:
     from src.gui.rendering.direct3d_renderer import Direct3DRenderer as GuiDirect3DRenderer
     from src.gui.rendering.moderngl_renderer import ModernGLRenderer as GuiModernGLRenderer
     from src.gui.rendering.null_renderer import NullDiagnosticRenderer as GuiNullDiagnosticRenderer
+    from src.gui.rendering.gpu_renderer import _build_vbo_data as public_vbo_builder
     from src.gui.rendering.qt_gpu_renderer import create_viewport_renderer as qt_gpu_create_renderer
     from src.gui.rendering.wgpu_core.resources import WgpuResourceCache as GuiWgpuResourceCache
     from src.gui.rendering.wgpu_renderer import WgpuRenderer as PublicWgpuRenderer
@@ -1242,6 +1314,8 @@ def test_viewport_renderer_adapters_have_explicit_owner() -> None:
     assert GuiNullDiagnosticRenderer is AdapterNullDiagnosticRenderer
     assert PublicWgpuRenderer is AdapterWgpuRenderer
     assert GuiWgpuResourceCache is AdapterWgpuResourceCache
+    assert bridged_vbo_builder is public_vbo_builder
+    assert isinstance(moderngl_runtime_available(), bool)
     assert qt_gpu_create_renderer is adapter_create_renderer
 
     adapter_source = (ROOT / "src/adapters/rendering/renderer_factory.py").read_text(encoding="utf-8")
@@ -1256,6 +1330,15 @@ def test_viewport_renderer_adapters_have_explicit_owner() -> None:
         "from src.gui.rendering.wgpu_renderer",
     ):
         assert forbidden not in adapter_source
+
+    bridge_source = (ROOT / "src/adapters/rendering/moderngl_legacy_bridge.py").read_text(encoding="utf-8")
+    assert "from src.gui.rendering.gpu_core import renderer as _gpu_renderer_impl" in bridge_source
+    assert "from src.gui.rendering.gpu_core.renderer import GpuRenderer" in bridge_source
+    assert "from src.gui.rendering.gpu_core.resources import _build_vbo_data" in bridge_source
+
+    adapter_wgpu_source = (ROOT / "src/adapters/rendering/wgpu_core/renderer.py").read_text(encoding="utf-8")
+    assert "from src.adapters.rendering.moderngl_legacy_bridge import _build_vbo_data" in adapter_wgpu_source
+    assert "from src.gui.rendering.gpu_renderer import _build_vbo_data" not in adapter_wgpu_source
 
     for source_path in (
         "src/gui/rendering/direct3d_renderer.py",
@@ -5068,17 +5151,34 @@ def test_qt_viewport_exposes_cinematic_camera_workflow_methods() -> None:
 def test_camera_letterbox_render_burns_opaque_black_bars() -> None:
     from PIL import Image, ImageDraw
 
+    from src.adapters.qt_viewport.camera_overlays import CameraOverlays as AdapterCameraOverlays
     from src.gui.camera.camera_model import GhostRiggerCamera
-    from src.gui.camera.camera_overlays import CameraOverlays
+    from src.gui.camera.camera_overlays import CameraOverlays as GuiCameraOverlays
+
+    assert GuiCameraOverlays is AdapterCameraOverlays
 
     camera = GhostRiggerCamera(show_letterbox=True, letterbox_ratio=4.0)
     image = Image.new("RGBA", (100, 100), (64, 64, 64, 255))
-    overlays = CameraOverlays()
+    overlays = AdapterCameraOverlays()
     draw = ImageDraw.Draw(image, "RGBA")
 
     overlays.draw_letterbox(draw, overlays.active_frame_rect(camera, 100, 100), 100, 100, opaque=True)
 
     assert image.getpixel((50, 5)) == (0, 0, 0, 255)
+
+
+def test_camera_overlays_are_qt_viewport_adapter_owned() -> None:
+    """Camera overlay drawing is adapter-owned, with the old GUI path as a facade."""
+    adapter_source = (ROOT / "src/adapters/qt_viewport/camera_overlays.py").read_text(encoding="utf-8")
+    gui_source = (ROOT / "src/gui/camera/camera_overlays.py").read_text(encoding="utf-8")
+    dependencies_source = (ROOT / "src/gui/viewports/viewport_core/shared/dependencies.py").read_text(encoding="utf-8")
+    still_frame_source = (ROOT / "src/adapters/qt_viewport/still_frame_renderer.py").read_text(encoding="utf-8")
+
+    assert "class CameraOverlays" in adapter_source
+    assert "from src.adapters.qt_viewport.camera_overlays import *" in gui_source
+    assert "from src.adapters.qt_viewport.camera_overlays import CameraOverlays" in dependencies_source
+    assert "from src.adapters.qt_viewport.camera_overlays import CameraOverlays" in still_frame_source
+    assert "src.gui.camera.camera_overlays" not in still_frame_source
 
 
 def test_still_frame_renderer_suppresses_viewport_camera_overlays() -> None:
@@ -5088,7 +5188,10 @@ def test_still_frame_renderer_suppresses_viewport_camera_overlays() -> None:
 
     from src.gui.camera.camera_model import GhostRiggerCamera
     from src.gui.camera.camera_render_settings import RenderSettings
-    from src.gui.camera.frame_renderer import FrameRenderer
+    from src.adapters.qt_viewport.still_frame_renderer import FrameRenderer as AdapterFrameRenderer
+    from src.gui.camera.frame_renderer import FrameRenderer as GuiFrameRenderer
+
+    assert GuiFrameRenderer is AdapterFrameRenderer
 
     calls = []
     viewport = SimpleNamespace(
@@ -5103,7 +5206,7 @@ def test_still_frame_renderer_suppresses_viewport_camera_overlays() -> None:
         return Image.new("RGBA", (width, height), (32, 32, 32, 255))
 
     viewport._render_frame = _render_frame
-    renderer = FrameRenderer(viewport)
+    renderer = AdapterFrameRenderer(viewport)
     settings = RenderSettings(
         resolution_source="custom",
         resolution_width=32,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.gui.rendering.gpu_renderer import GpuRenderer
+from src.adapters.rendering.moderngl_legacy_bridge import GpuRenderer, moderngl_runtime_available
 from src.core.rendering.renderer_backend import RendererBackend
 from src.core.rendering.renderer_capabilities import MODERNGL_DISPLAY_MODES, RendererCapabilities
 
@@ -15,9 +15,7 @@ class ModernGLRenderer(GpuRenderer):
 
     def is_available(self) -> bool:
         try:
-            from src.gui.rendering import gpu_renderer
-
-            return bool(getattr(gpu_renderer, "_MODERNGL", False) and getattr(gpu_renderer, "_NUMPY", False))
+            return moderngl_runtime_available()
         except Exception:
             return False
 

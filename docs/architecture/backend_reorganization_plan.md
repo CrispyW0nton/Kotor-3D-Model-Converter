@@ -43,6 +43,8 @@ but facades must stay lazy or logic-free.
 | `src.gui.rendering.gpu_core.diagnostics._matrix_from_pos_quat_np` | `src.math.gpu_math._matrix_from_pos_quat_np` | Matrix construction is shared GPU math, not GUI diagnostics ownership. | Keep the old diagnostics module attribute by importing the canonical math helper. | `py_compile`; `tests/test_core_contracts.py::test_gpu_matrix_helper_is_math_owned`. |
 | `src.gui.lighting.lightmap_export_bridge` | `src.core.lighting.lightmap_export_bridge` | Generated-lightmap export manifests are headless conversion/export logic. | Keep the old GUI path as a logic-free re-export facade until callers migrate. | `py_compile`; `tests/test_core_contracts.py::test_lightmap_export_bridge_is_backend_owned`; `tests/test_lightmap_baker.py::test_lightmap_export_bridge_discovers_generated_assignments`. |
 | Direct backend imports of Qt viewport renderers | `src.adapters.qt_viewport.frame_renderer` | Sequence image export and validation capture still rely on Qt/viewport rendering, so the dependency should be an explicit adapter boundary. | Backend callers import adapter factory functions; the adapter imports GUI implementation details. | `py_compile`; `tests/test_core_contracts.py::test_backend_renderer_dependencies_use_qt_viewport_adapter`; targeted sequence/validation import checks. |
+| `src.gui.camera.frame_renderer` | `src.adapters.qt_viewport.still_frame_renderer` | Still-frame export drives the active Qt viewport render pipeline and therefore belongs to the explicit Qt viewport adapter boundary rather than GUI camera DTO ownership. | Preserve `src.gui.camera.frame_renderer` as a compatibility facade; viewport shared dependencies and adapter factories import the adapter owner directly. | `py_compile`; import smoke for old/new paths; `tests/test_core_contracts.py::test_still_frame_renderer_suppresses_viewport_camera_overlays`; Qt facade checks. |
+| `src.gui.camera.camera_overlays` | `src.adapters.qt_viewport.camera_overlays` | Letterbox/safe-frame/guide overlay drawing is part of Qt viewport capture/presentation, not reusable camera domain ownership, and adapter code should not import it from GUI. | Preserve `src.gui.camera.camera_overlays` and `src.gui.qt_lib.camera.camera_overlays` as compatibility facades; viewport dependencies and still-frame export import the adapter owner directly. | `py_compile`; import smoke for old/new paths; `tests/test_core_contracts.py::test_camera_overlays_are_qt_viewport_adapter_owned`; still-frame overlay regression. |
 | `src.gui.lighting.lightmap_*` support modules, UV atlas/channel helpers, and raycast helpers | `src.core.lighting` | Lightmap settings/jobs, manifests, output, padding, rasterization, UV validation, atlas generation, sampling, denoise/compare, and lighting/shadow solve helpers are headless services. | GUI panels/workers call backend services; the GPU-context solver now lives behind an explicit adapter. Old GUI support-module paths remain facades. | `py_compile`; import smoke for old and new paths; `tests/test_core_contracts.py::test_lightmap_bake_support_helpers_are_backend_owned`; `tests/test_lightmap_baker.py`. |
 | `src.gui.lighting.lightmap_baker` pipeline | `src.core.lighting.lightmap_baker` plus GUI GPU-solver adapter | The bake orchestration pipeline is a headless service over core lightmap dependencies. The GUI path should only preserve the existing GPU-solver default. | `src.core.lighting.lightmap_baker.LightmapBaker` defaults to the CPU lighting solver; `src.gui.lighting.lightmap_baker.LightmapBaker` subclasses it and injects `LightmapGpuSolver`. | `py_compile`; import smoke for core/facade/GUI paths; `tests/test_core_contracts.py::test_lightmap_baker_pipeline_is_backend_owned_with_gui_gpu_adapter`; `tests/test_lightmap_baker.py`. |
 | `src.gui.lighting.lightmap_gpu_solver` | `src.adapters.gpu.lightmap_gpu_solver` | The ModernGL direct-light solver is a concrete GPU adapter over core lightmap buffers and solver fallback, not GUI lighting product logic. | Keep the old GUI and `src.gui.qt_lib` routes as facades; GUI baker imports the adapter owner directly. | `py_compile`; import smoke for adapter/old GUI/qt_lib paths; `tests/test_core_contracts.py::test_lightmap_gpu_solver_is_explicit_gpu_adapter`; focused lightmap GPU fallback test. |
@@ -54,16 +56,19 @@ but facades must stay lazy or logic-free.
 | Duplicate renderer `_hex_to_rgb_float` helpers | `src.core.rendering.color_utils` | Hex color parsing is renderer-neutral support shared by ModernGL and WGPU adapters, not GUI diagnostics or WGPU resource ownership. | GPU diagnostics and WGPU shared import the backend helper; public GPU/WGPU renderer facades route the helper to core. | `py_compile`; import smoke for old/public/new paths; `tests/test_core_contracts.py::test_renderer_color_utils_are_backend_owned`. |
 | `src.gui.rendering.gpu_core.debug_tables` | `src.core.rendering.gpu_debug_tables` | Per-model material/UV/texture diagnostic table generation is backend rendering diagnostics, not GUI adapter logic. | Preserve the old GPU-core path as a facade; ModernGL renderer imports the backend owner directly and the public `gpu_renderer` facade exports the backend route. | `py_compile`; import smoke for old/public/new paths; `tests/test_core_contracts.py::test_gpu_debug_tables_are_backend_owned`; targeted diagnostic table smoke. |
 | Environment/config subset of `src.gui.rendering.gpu_core.diagnostics` | `src.core.rendering.gpu_diagnostics_config` | Diagnostic trace/dump paths and debug visualization mode selectors are environment-driven backend configuration, not GUI adapter logic. | GUI diagnostics imports and re-exports the backend owner; public `gpu_renderer` facade routes these helpers to core. | `py_compile`; import smoke for old/public/new paths; `tests/test_core_contracts.py::test_gpu_diagnostics_config_is_backend_owned`; focused diagnostic env regression tests. |
-| Pure heuristic/record subset of `src.gui.rendering.gpu_core.diagnostics` | `src.core.rendering.gpu_diagnostics_records` | Diagnostic data-shaping helpers and renderer-neutral heuristics should be reusable backend rendering support, while ModernGL context probes remain adapter-owned. | GUI diagnostics imports and re-exports backend-owned helpers; public `gpu_renderer` facade routes migrated helpers to core. | `py_compile`; import smoke for old/public/new paths; `tests/test_core_contracts.py::test_gpu_diagnostics_records_are_backend_owned`; focused GPU diagnostic regression tests. |
+| Pure heuristic/record subset of `src.gui.rendering.gpu_core.diagnostics` | `src.core.rendering.gpu_diagnostics_records` | Diagnostic data-shaping helpers and renderer-neutral heuristics should be reusable backend rendering support, while ModernGL context/runtime/probe behavior remains adapter-owned. | Keep `src.gui.rendering.gpu_core.diagnostics` as a compact logic-free compatibility facade; public `gpu_renderer` facade routes migrated helpers to core or adapters. | `py_compile`; import smoke for old/public/new paths; `tests/test_core_contracts.py::test_gpu_diagnostics_records_are_backend_owned`; focused GPU diagnostic regression tests. |
 | GPU VBO layout constants and `_split_vbo_attributes_for_gpu` from `src.gui.rendering.gpu_core.resources` | `src.core.rendering.gpu_vbo_layout` | The split between packed float attributes and integer bone IDs is a pure renderer data-layout contract shared by diagnostics, resources, and public facades, not GUI resource-cache ownership. | Keep `_build_vbo_data` in the existing ModernGL resource adapter for now; GPU resources, diagnostics records, public `gpu_renderer`, and `src.core.qt_core` import or route the backend layout owner. | `py_compile`; import smoke for old/public/new paths; `tests/test_core_contracts.py::test_gpu_vbo_layout_helpers_are_backend_owned`; focused GPU skin VBO layout regressions. |
 | `src.gui.rendering.gpu_core.shaders` | `src.core.rendering.gpu_shaders` | ModernGL shader source strings are renderer backend data and do not depend on a GUI surface or GL context. | Preserve the old GPU-core path as a facade; ModernGL renderer imports the backend owner directly and the public `gpu_renderer` facade exports the backend route. | `py_compile`; import smoke for old/public/new paths; `tests/test_core_contracts.py::test_gpu_shader_sources_are_backend_owned`; shader contract tests. |
-| Pure helper subset of `src.gui.rendering.gpu_core.scene_helpers` | `src.core.rendering.gpu_scene_helpers` | Model bounds, TPC/TXI metadata application, base-skeleton constant re-export, and supermodel composite wrappers are model/texture helpers used by render adapters, not GUI presentation. | Keep `render_model_autoframe` in the GUI scene-helper adapter because it creates a concrete `GpuRenderer`; old GUI and public facade paths re-export pure helpers from core. | `py_compile`; import smoke for old/public/new paths; `tests/test_core_contracts.py::test_gpu_scene_helpers_are_backend_owned`; focused GPU renderer/autoframe import checks. |
+| Pure helper subset of `src.gui.rendering.gpu_core.scene_helpers` | `src.core.rendering.gpu_scene_helpers` | Model bounds, TPC/TXI metadata application, base-skeleton constant re-export, and supermodel composite wrappers are model/texture helpers used by render adapters, not GUI presentation. | Old GUI and public facade paths re-export pure helpers from core; the concrete autoframe renderer now has its own adapter owner. | `py_compile`; import smoke for old/public/new paths; `tests/test_core_contracts.py::test_gpu_scene_helpers_are_backend_owned`; focused GPU renderer/autoframe import checks. |
+| `src.gui.rendering.gpu_core.scene_helpers.render_model_autoframe` | `src.adapters.rendering.moderngl_scene_helpers` | Autoframe rendering creates and drives a concrete ModernGL `GpuRenderer`, so it belongs to the renderer adapter boundary rather than GUI package ownership. | Preserve `src.gui.rendering.gpu_core.scene_helpers` and `src.gui.rendering.gpu_renderer` as compatibility facades; MCP/debug tooling imports the adapter owner directly. | `py_compile`; import smoke for old/public/new paths; `tests/test_core_contracts.py::test_gpu_scene_helpers_are_backend_owned`; targeted Qt facade checks. |
 | `src.gui.rendering.wgpu_core.shaders` and `src/gui/rendering/shaders/*.wgsl` | `src.core.rendering.wgpu_shaders` and `src/core/rendering/shaders/*.wgsl` | WGPU shader source loading, inline fallback strings, and WGSL assets are renderer backend data and do not depend on a GUI surface or WGPU device. | Preserve the old WGPU-core Python path as a facade; WGPU renderer imports the backend owner directly and the public `wgpu_renderer` facade exports the backend route. | `py_compile`; import smoke for old/public/new paths; `tests/test_core_contracts.py::test_wgpu_shader_sources_are_backend_owned`; focused WGPU shader source tests. |
 | Pure DTO/helper subset of `src.gui.rendering.wgpu_core.shared` | `src.core.rendering.wgpu_shared` | WGPU resource records, backend-selection constants, color conversion, projection/view matrix helpers, and adapter-info extraction are pure renderer support, while Qt/rendercanvas probing remains GUI adapter-owned. | Keep `src.gui.rendering.wgpu_core.shared` as the WGPU adapter surface that re-exports backend helpers and owns the probe script; public `wgpu_renderer` exports pure helpers from `src.core.rendering.wgpu_shared`. | `py_compile`; import smoke for old/public/new paths; `tests/test_core_contracts.py::test_wgpu_shared_dtos_and_helpers_are_backend_owned`; focused WGPU color/backend-selection tests. |
 | `src.gui.rendering.skeleton_render_data` | `src.core.rendering.skeleton_render_data` | Skeleton overlay DTOs, skinning arrays, and CPU skinning fallback helpers are backend render data, not widget code. | Preserve `src.gui.rendering.skeleton_render_data` as a facade while runtime callers migrate to `src.core.rendering`. | `py_compile`; `tests/test_core_contracts.py::test_skeleton_render_data_is_backend_owned`; `tests/test_wgpu_stage7_render_data.py` focused cases. |
 | `src.gui.rendering.mesh_render_data` | `src.core.rendering.mesh_render_data` plus GUI VBO-builder adapter | Mesh/material render-data DTOs, material extraction, texture conversion, world-matrix helpers, normal smoothing, and BAS attachment transforms are backend render-data support. The existing ModernGL VBO builder remains GUI/GPU-owned for now and is injected where needed. | Preserve `src.gui.rendering.mesh_render_data` as a facade/adapter that injects `_build_vbo_data`; WGPU runtime callers import `src.core.rendering.mesh_render_data` and pass the GUI VBO builder explicitly. | `py_compile`; `tests/test_core_contracts.py::test_mesh_render_data_is_backend_owned_with_gui_vbo_adapter`; WGPU stage render-data cases; focused regression cases for `_build_vbo_data` parity through the GUI facade. |
 | `src.gui.rendering.renderer_factory`, `null_renderer`, `moderngl_renderer`, and `direct3d_renderer` | `src.adapters.rendering` | Backend selection and concrete viewport renderer adapters are runtime adapter wiring, not GUI package ownership or core renderer contracts. | Preserve the old GUI renderer paths as compatibility facades; alias the old renderer-factory module to the adapter owner so monkeypatch/import workflows keep targeting the implementation module. | `py_compile`; import smoke for old/new paths; `tests/test_core_contracts.py::test_viewport_renderer_adapters_have_explicit_owner`; focused renderer backend-selection tests. |
 | `src.gui.rendering.wgpu_core` and WGPU renderer implementation route in `src.gui.rendering.wgpu_renderer` | `src.adapters.rendering.wgpu_core` | The WGPU renderer owns Qt/rendercanvas surface creation and wgpu device resources, so it is a concrete viewport renderer adapter rather than reusable GUI presentation or core rendering logic. | Preserve old `src.gui.rendering.wgpu_core.*` module paths as aliases and keep `src.gui.rendering.wgpu_renderer` as the public lazy facade; route WGPU implementation exports to the adapter owner. | `py_compile`; import smoke for old/public/new paths; `tests/test_core_contracts.py::test_viewport_renderer_adapters_have_explicit_owner`; focused WGPU renderer/backend tests. |
+| Remaining ModernGL implementation and VBO-builder dependency used by renderer adapters | `src.adapters.rendering.moderngl_legacy_bridge` until a dedicated ModernGL adapter move | The large ModernGL renderer still contains transform/skinning-sensitive `_build_vbo_data` code. Until that code is migrated with MCP-backed validation, other adapters should use one explicit bridge instead of importing GUI renderer internals directly. | Keep the bridge as the only allowed adapter-to-GUI renderer dependency, and protect the exception with an import-boundary contract. | `py_compile`; import smoke for bridge/public paths; `tests/test_core_contracts.py::test_adapter_gui_imports_are_explicit_boundary_bridges`; focused renderer backend-selection tests. |
+| `src.gui.rendering.gpu_core.benchmark` and `src.gui.rendering.gpu_core.cli` | `src.adapters.rendering.moderngl_benchmark` and `src.adapters.rendering.moderngl_cli` | The ModernGL throughput benchmark and command-line smoke entry point are adapter tooling over the concrete renderer, not GUI package logic. | Preserve old GPU-core module paths as facades and route public `src.gui.rendering.gpu_renderer` exports to the adapter modules. | `py_compile`; import smoke for old/public/new paths; `tests/test_core_contracts.py::test_gpu_benchmark_adapter_imports_renderer_dependencies_explicitly`; tiny benchmark smoke. |
 | `src.gui.gizmo` transform gizmo mode, draw-data, picker, renderer, controller, and coordinator | `src.core.gizmo` | Transform gizmo state, screen-space picking policy, renderer-neutral draw commands, command generation, and drag application are headless transform workflow support. | Preserve old GUI gizmo paths as compatibility facades; viewport shared dependencies import `src.core.gizmo` directly. | `py_compile`; import smoke for old and new paths; `tests/test_core_contracts.py::test_transform_gizmo_helpers_are_backend_owned`; focused gizmo mode/transform tests. |
 | `src.gui.rendering.frame_core` | `src.core.rendering.frame_core` | The PIL/software `FrameRenderer`, rasterizer, texture cache, colors, diagnostics, and mixins are Tk-free software-render backend code used by validation, scripts, and viewport hosts. | Preserve old `src.gui.rendering.frame_core.*`, `src.gui.rendering.viewport_core`, and `src.gui.viewports.frame_renderer` paths as thin facades; runtime callers import the backend owner directly. | `py_compile`; `tests/test_core_contracts.py::test_software_frame_renderer_is_backend_owned`; focused frame-renderer contracts; Qt import facade check. |
 | GPU/ModernGL/WGPU adapters | GUI or `src.adapters` where backend-specific | Qt/OpenGL/WGPU host integration remains adapter-owned until renderer ports are introduced. | Keep renderer adapters at explicit GUI/adapter boundaries and move reusable pieces to core when they become renderer-neutral. | Renderer backend/picking/stage tests tied to moved modules. |
@@ -103,6 +108,19 @@ renderer adapter. The old `src/gui/rendering/wgpu_core/` modules now alias the
 adapter owner, and the public `src/gui/rendering/wgpu_renderer.py` facade routes
 `WgpuRenderer` and `WgpuResourceCache` to the adapter package while continuing
 to expose core-owned WGPU DTOs and shader helpers.
+
+Isolated the remaining renderer-adapter imports of the still-GUI-owned
+ModernGL implementation and `_build_vbo_data` behind
+`src/adapters/rendering/moderngl_legacy_bridge.py`. This keeps the current
+transform/skinning-sensitive ModernGL code in place until a separate
+MCP-backed migration, while making all adapter-to-GUI renderer dependencies
+auditable through one named bridge.
+
+Moved the ModernGL benchmark and command-line smoke helpers into
+`src/adapters/rendering/moderngl_benchmark.py` and
+`src/adapters/rendering/moderngl_cli.py`. The old GPU-core paths remain
+compatibility facades, and the public `gpu_renderer` facade routes `_benchmark`
+and `_main` to the adapter modules.
 
 ### Texture Format Helpers
 
@@ -230,6 +248,12 @@ backend callers that still need Qt viewport rendering. `src/sequence` and
 `src/core/validation` now import adapter factory functions instead of importing
 `src.gui` renderer modules directly.
 
+Moved the still-frame renderer that drives an existing Qt viewport into
+`src/adapters/qt_viewport/still_frame_renderer.py`. The old
+`src/gui/camera/frame_renderer.py` path remains a compatibility facade, while
+viewport shared dependencies and adapter factories import the adapter owner
+directly.
+
 ### Renderer Contracts And Display DTOs
 
 Moved renderer backend identifiers, capabilities, settings, interface contracts,
@@ -277,6 +301,11 @@ GPU renderer facade re-exporting the backend functions. The remaining GUI
 diagnostics ownership is limited to concrete ModernGL context/probe adapter
 behavior.
 
+Collapsed `src/gui/rendering/gpu_core/diagnostics.py` into a compact
+logic-free compatibility facade. Diagnostic config and records remain
+backend-owned in `src/core/rendering/`, while ModernGL context/runtime/probe
+exports come from `src/adapters/gpu/`.
+
 ### GPU VBO Layout Helpers
 
 Moved the pure ModernGL VBO layout constants and
@@ -298,10 +327,22 @@ owner directly.
 
 Moved model-bound computation, texture TXI metadata application, base-skeleton
 constant re-export, and supermodel composite wrapper support into
-`src/core/rendering/gpu_scene_helpers.py`. The GUI
-`src/gui/rendering/gpu_core/scene_helpers.py` module now keeps the concrete
-`render_model_autoframe` adapter because it creates `GpuRenderer`, and it
-imports the backend helper functions directly.
+`src/core/rendering/gpu_scene_helpers.py`.
+
+### ModernGL Autoframe Adapter
+
+Moved the concrete `render_model_autoframe` helper into
+`src/adapters/rendering/moderngl_scene_helpers.py` because it creates and
+drives the ModernGL renderer. The old GUI scene-helper path remains a thin
+compatibility facade over the adapter-owned render helper and the backend-owned
+pure scene helpers.
+
+### Qt Viewport Camera Overlays
+
+Moved letterbox, safe-frame, and camera-guide overlay drawing into
+`src/adapters/qt_viewport/camera_overlays.py`. The old GUI camera path remains
+a compatibility facade, while viewport dependencies and still-frame export use
+the adapter owner directly.
 
 ### WGPU Shader Sources
 

@@ -1212,7 +1212,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             return
         try:
             from src.core.rendering.mesh_render_data import iter_mesh_render_data
-            from src.gui.rendering.gpu_renderer import _build_vbo_data
+            from src.adapters.rendering.moderngl_legacy_bridge import _build_vbo_data
         except Exception as exc:
             self.last_error = f"mesh adapter unavailable: {exc}"
             return
@@ -2113,7 +2113,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
 
         try:
             from src.core.rendering.mesh_render_data import iter_mesh_render_data
-            from src.gui.rendering.gpu_renderer import _build_vbo_data
+            from src.adapters.rendering.moderngl_legacy_bridge import _build_vbo_data
         except Exception as exc:
             diagnostic["result"] = "unavailable"
             diagnostic["reason"] = f"mesh adapter unavailable: {exc}"
@@ -2305,7 +2305,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
 
         try:
             from src.core.rendering.mesh_render_data import iter_mesh_render_data
-            from src.gui.rendering.gpu_renderer import _build_vbo_data
+            from src.adapters.rendering.moderngl_legacy_bridge import _build_vbo_data
         except Exception as exc:
             diagnostic["result"] = "unavailable"
             diagnostic["reason"] = f"mesh adapter unavailable: {exc}"
